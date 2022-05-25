@@ -1,4 +1,5 @@
 package eo
+package profunctor
 
 import cats.arrow._
 

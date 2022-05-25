@@ -1,4 +1,7 @@
 package eo
+package optics
+
+import data._
 
 import cats.{Applicative, Functor}
 import cats.arrow.Profunctor

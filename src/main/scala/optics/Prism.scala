@@ -1,4 +1,5 @@
 package eo
+package optics
 
 object Prism {
   def apply[S, T, A, B, F[_, _]](

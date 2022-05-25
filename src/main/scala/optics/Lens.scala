@@ -1,4 +1,5 @@
 package eo
+package optics
 
 import cats.syntax.arrow._
 

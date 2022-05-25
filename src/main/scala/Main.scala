@@ -1,5 +1,7 @@
 package eo
 
+import optics._
+
 import cats.instances.list._
 import cats.syntax.either._
 
@@ -23,8 +25,13 @@ case class UP(a: Int, b: Boolean)
   println(split(UP(4, false)))
   println(bm((3, true)))
 
+  val fd: (Int => Int) => Double => Double =
+    f => d => f(d.toInt).toDouble
+
   val l = List(1, 2, 3)
   println(t.all(l))
   println(t.modify(_ + 1)(l))
-  println(t.modifyA( a => (a % 2).asRight[String])(l))
+  println(t.modifyA(a => (a % 2).asRight[String])(l))
+  println(Fold.select[Int](_ % 2 == 0).to(4))
+  println(Setter[Double, Double, Int, Int](fd).modify(_ + 1)(1.23))
 }

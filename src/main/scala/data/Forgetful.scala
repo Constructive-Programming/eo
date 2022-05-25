@@ -1,4 +1,5 @@
 package eo
+package data
 
 import cats.{Applicative, Invariant}
 import cats.syntax.functor._
