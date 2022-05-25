@@ -20,6 +20,8 @@ case class UP(a: Int, b: Boolean)
   val split = aPrism.modifyA(i => if (i % 4 == 0) None else Some(i + 3))
 
   val t = Traversal.each[List, Int]
+  val s0 = Traversal.each[List, List[Int]]
+  val s1 = Traversal.over[List, Int, Int](_ + 3)
 
   println(mod(UP(1, false)))
   println(split(UP(4, false)))
@@ -29,7 +31,7 @@ case class UP(a: Int, b: Boolean)
     f => d => f(d.toInt).toDouble
 
   val l = List(1, 2, 3)
-  println(t.all(l))
+  println(s0.andThen(s1).modify(_ - 1)(List(l, l, l)))
   println(t.modify(_ + 1)(l))
   println(t.modifyA(a => (a % 2).asRight[String])(l))
   println(Fold.select[Int](_ % 2 == 0).to(4))

@@ -17,9 +17,11 @@ object Forgetful {
     def reverseGet[A]: [X] => A => Forgetful[X, A] =
       [X] => (a: A) => a
 
-  given traverse: ForgetfulTraverse[Forgetful, Invariant] with
+  given map: ForgetfulFunctor[Forgetful] with
     def map[X, A, B]: Forgetful[X, A] => (A => B) => Forgetful[X, B] =
       a => f => f(a)
+
+  given traverse: ForgetfulTraverse[Forgetful, Invariant] with
     def traverse[X, A, B, G[_]: Invariant]
         : Forgetful[X, A] => (A => G[B]) => G[Forgetful[X, B]] =
       fa => _(fa)
