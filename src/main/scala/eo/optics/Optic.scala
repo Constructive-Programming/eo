@@ -96,6 +96,27 @@ object Optic {
 
   }
 
+  extension [S, T, A, B, D, F[_, _]](
+    o: Optic[S, T, A, B, F]
+  )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, D]) {
+    def transform(f: D => B): T => T =
+      t => o.from(FF.map(ev(t))(f))
+
+    def place(b: B): T => T =
+      transform(_ => b)
+
+    def transfer[C](f: C => B): T => C => T =
+      t => c => place(f(c))(t)
+
+  }
+
+  extension [S, T, A, B, F[_, _]](
+    o: Optic[S, T, A, B, F]
+  )(using FF: ForgetfulApplicative[F]) {
+    def put(f: A => B): A => T =
+      a => o.from(FF.pure(f(a)))
+  }
+
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Functor]) {

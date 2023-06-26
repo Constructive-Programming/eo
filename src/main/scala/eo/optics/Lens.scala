@@ -28,5 +28,7 @@ object Lens {
    def from: ((X, B)) => (A, B) = identity
  }
 
+ given tupleInterchangeable[A, B]: (((A, B)) => (B, A)) with
+     def apply(t: (A, B)): (B, A) = t.swap
 
 }
