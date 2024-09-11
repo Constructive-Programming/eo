@@ -1,15 +1,19 @@
 package eo
 
+import data._
 import optics._
 
 import cats.instances.list._
 import cats.syntax.either._
+import eo.data
 
 case class UP(a: Int, b: Boolean)
 
-@main def main = {
+@main def main =
 
   import Lens.given
+  import Optic.*
+  import Forgetful.given
 
   val aLens = Lens[UP, UP, Int, Int](_.a, (s, b) => s.copy(a = b))
   val bLens = Lens.second[Int, Boolean]
@@ -28,9 +32,7 @@ case class UP(a: Int, b: Boolean)
   val bplace = bLens.place(true)
   val cplace  = cLens.place(56)
 
-  val t = Traversal.each[List, Int]
-  val s0 = Traversal.each[List, List[Int]]
-  val s1 = Traversal.over[List, Int, Int](_ + 3)
+  val t = Traversal.each[List, Int, Int]
 
   println(mod(UP(1, false)))
   println(split(UP(4, false)))
@@ -43,9 +45,7 @@ case class UP(a: Int, b: Boolean)
     f => d => f(d.toInt).toDouble
 
   val l = List(1, 2, 3)
-  println(s0.andThen(s1).modify(_ - 1)(List(l, l, l)))
   println(t.modify(_ + 1)(l))
   println(t.modifyA(a => (a % 2).asRight[String])(l))
   println(Fold.select[Int](_ % 2 == 0).to(4))
   println(Setter[Double, Double, Int, Int](fd).modify(_ + 1)(1.23))
-}

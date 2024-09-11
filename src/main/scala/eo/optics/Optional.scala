@@ -11,5 +11,5 @@ object Optional:
   ) =
     new Optic[S, T, A, B, Affine]:
       type X = (T, S)
-      def to: S => Either[T, (S, A)] = s => getOrModify(s).map(s -> _)
-      def from: Either[T, (S, B)] => T = _.fold(identity, reverseGet)
+      def to: S => Affine[X, A] = s => Affine(getOrModify(s).map(s -> _))
+      def from: Affine[X, B] => T = _.affine.fold(identity, reverseGet)

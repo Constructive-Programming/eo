@@ -9,8 +9,7 @@ object Setter:
     new Optic[S, T, A, B, SetterF]:
       type X = (S, A)
 
-      def to: S => (S, A => A) = s => (s, identity[A])
+      def to: S => SetterF[X, A] = s => SetterF(s, identity[A])
 
-      def from: SetterF[X, B] => T = {
-        case (s, f) => modify(f)(s)
-      }
+      def from: SetterF[X, B] => T =
+        (s: SetterF[X, B]) => modify(s.setter._2)(s.setter._1)

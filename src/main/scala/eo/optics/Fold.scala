@@ -1,26 +1,22 @@
 package eo
 package optics
 
-import data.AffineTraversal
+import cats.Foldable
+import eo.data.Forget
+import eo.data.Forgetful
 
-import cats.{Applicative, Foldable}
-import cats.instances.option._
+object Fold:
 
-object Fold {
   import Function.const
 
-  def select[A](p: A => Boolean): Optic[A, Unit, A, A, AffineTraversal[Option]#Travel] =
-    new Optic[A, Unit, A, A, AffineTraversal[Option]#Travel] {
-      type X = Option[A]
+  def apply[F[_]: Foldable, A]: Optic[F[A], Unit, A, A, Forget[F]] =
+    new Optic[F[A], Unit, A, A, Forget[F]]:
+      type X = Nothing
+      def to: F[A] => F[A] = identity
+      def from: F[A] => Unit = const(())
+
+  def select[A](p: A => Boolean): Optic[A, Unit, A, A, Forget[Option]] =
+    new Optic[A, Unit, A, A, Forget[Option]]:
+      type X = Nothing
       def to: A => Option[A] = Option(_).filter(p)
       def from: Option[A] => Unit = const(())
-    }
-
-  def folding[T[_]: Foldable, A]: Optic[T[A], Unit, A, A, AffineTraversal[T]#Travel] =
-    new Optic[T[A], Unit, A, A, AffineTraversal[T]#Travel] {
-      type X = T[A]
-      def to: T[A] => T[A] = identity
-      def from: T[A] => Unit = const(())
-
-    }
-}
