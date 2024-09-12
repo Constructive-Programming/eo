@@ -22,10 +22,10 @@ object Traversal:
       reverse: (B, B) => T,
   ): Optic[S, T, A, B, FixedTraversal[2]] =
     new Optic[S, T, A, B, FixedTraversal[2]]:
-      type X = Unit
-      def to: S => (A, A, Unit) = s => (a(s), b(s), ())
+      type X = EmptyTuple
+      def to: S => (A, A) = s => (a(s), b(s))
       def from: FixedTraversal[2][X, B] => T =
-        case (b0, b1, _) => reverse(b0, b1)
+        case (b0, b1) => reverse(b0, b1)
 
   def three[S, T, A, B](
       a: S => A,
@@ -34,10 +34,10 @@ object Traversal:
       reverse: (B, B, B) => T,
   ): Optic[S, T, A, B, FixedTraversal[3]] =
     new Optic[S, T, A, B, FixedTraversal[3]]:
-      type X = Unit
-      def to: S => (A, A, A, Unit) = s => (a(s), b(s), c(s), ())
+      type X = EmptyTuple
+      def to: S => (A, A, A) = s => (a(s), b(s), c(s))
       def from: FixedTraversal[3][X, B] => T =
-        case (b0, b1, b2, _) => reverse(b0, b1, b2)
+        case (b0, b1, b2) => reverse(b0, b1, b2)
 
 
   def four[S, T, A, B](
@@ -49,6 +49,6 @@ object Traversal:
   ): Optic[S, T, A, B, FixedTraversal[4]] =
     new Optic[S, T, A, B, FixedTraversal[4]]:
       type X = Unit
-      def to: S => (A, A, A, A, Unit) = s => (a(s), b(s), c(s), d(s), ())
+      def to: S => (A, A, A, A) = s => (a(s), b(s), c(s), d(s))
       def from: FixedTraversal[4][X, B] => T =
-        case (b0, b1, b2, b3, _) => reverse(b0, b1, b2, b3)
+        case (b0, b1, b2, b3) => reverse(b0, b1, b2, b3)
