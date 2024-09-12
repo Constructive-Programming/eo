@@ -2,10 +2,15 @@ package eo
 
 import cats.syntax.either._
 
-trait AssociativeFunctor[F[_, _], X, Y]:
+trait LeftAssociativeFunctor[F[_, _], X, Y]:
   type Z
   def associateLeft[S, A, C]: (S, S => F[X, A], A => F[Y, C]) => F[Z, C]
+
+trait RightAssociativeFunctor[F[_, _], X, Y]:
+  type Z
   def associateRight[D, B, T]: (F[Z, D], F[Y, D] => B, F[X, B] => T) => T
+
+trait AssociativeFunctor[F[_, _], X, Y] extends LeftAssociativeFunctor[F, X, Y], RightAssociativeFunctor[F, X, Y]
 
 object AssociativeFunctor:
 
