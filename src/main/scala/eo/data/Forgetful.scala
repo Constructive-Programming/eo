@@ -1,8 +1,11 @@
 package eo
 package data
 
-import cats.{Applicative, Bifunctor, Functor, Invariant, Traverse}
+import optics.Optic
+
+import cats.{Applicative, Bifunctor, FlatMap, Functor, Invariant, Traverse}
 import cats.syntax.functor._
+import cats.syntax.flatMap._
 import cats.syntax.traverse._
 
 type Forgetful[X, A] = A
@@ -36,9 +39,30 @@ object Forgetful:
     def traverse[X, A, B, G[_]: Applicative]: Forget[F][X, A] => (A => G[B]) => G[Forget[F][X, B]] =
       fa => f => fa.traverse(f)
 
+  given assocForget[F[_]: FlatMap, X, Y]: AssociativeFunctor[Forget[F], X, Y] with
+    type Z = Nothing
+    def associateLeft[S, A, C]: (S, S => F[A], A => F[C]) => F[C] =
+      case (s, f, g) => f(s).flatMap(g)
+    def associateRight[D, B, T]: (F[D], F[D] => B, F[B] => T) => T =
+      case (d, g, f) => ???
+
   given assoc[X, Y]: AssociativeFunctor[Forgetful, X, Y] with
     type Z = Nothing
     def associateLeft[S, A, C]: (S, S => A, A => C) => C =
       case (s, f, g) => g(f(s))
     def associateRight[D, B, T]: (D, D => B, B => T) => T =
       case (d, g, f) => f(g(d))
+
+  given tuple2forget[F[_]: Applicative]: Composer[Tuple2, Forget[F]] with
+    def to[S, T, A, B](o: Optic[S, T, A, B, [T1, T2] =>> (T1, T2)]): Optic[S, T, A, B, Forget[F]] =
+      new Optic[S, T, A, B, Forget[F]]:
+        type X = Nothing
+        def to: S => F[A] = o.get.andThen(Applicative[F].pure)
+        def from: F[B] => T = ???
+
+  given tuple2forgetful: Composer[Tuple2, Forgetful] with
+    def to[S, T, A, B](o: Optic[S, T, A, B, [T1, T2] =>> (T1, T2)]): Optic[S, T, A, B, Forgetful] =
+      new Optic[S, T, A, B, Forgetful]:
+        type X = Nothing
+        def to: S => A = o.get
+        def from: B => T = ???
