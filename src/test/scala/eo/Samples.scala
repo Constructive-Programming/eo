@@ -9,13 +9,13 @@ import eo.data
 
 case class UP(a: Int, b: Boolean)
 
-@main def main =
+@main def samples =
 
   import Lens.given
   import Optic.*
   import Forgetful.given
 
-  val aLens = Lens[UP, UP, Int, Int](_.a, (s, b) => s.copy(a = b))
+  val aLens = Lens[UP, Int](_.a, (s, b) => s.copy(a = b))
   val bLens = Lens.second[Int, Boolean]
   val cLens = Lens.first[Int, Boolean]
 
@@ -23,7 +23,7 @@ case class UP(a: Int, b: Boolean)
       def apply(up: UP): (aLens.X, Int) = (up, up.a)
 
   val aPrism =
-    Prism.optional[UP, Int, Int](u => Some(u.a).filter(_ % 2 == 0), UP(_, false))
+    Prism.optional[UP, Int](u => Some(u.a).filter(_ % 2 == 0), UP(_, false))
 
   val mod = aLens.modifyF(i => if (i % 2 == 0) None else Some(i + 1))
   val bm = bLens.replace(false)
