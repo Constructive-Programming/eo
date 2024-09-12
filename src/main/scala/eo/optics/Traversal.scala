@@ -7,7 +7,10 @@ import cats.Traverse
 
 object Traversal:
 
-  def each[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
+  def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, Forget[T]] =
+    pEach[T, A, A]
+
+  def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
     new Optic[T[A], T[B], A, B, Forget[T]]:
       type X = Nothing
       def to: T[A] => T[A] = identity
