@@ -52,17 +52,3 @@ object Forgetful:
       case (s, f, g) => g(f(s))
     def associateRight[D, B, T]: (D, D => B, B => T) => T =
       case (d, g, f) => f(g(d))
-
-  given tuple2forget[F[_]: Applicative]: Composer[Tuple2, Forget[F]] with
-    def to[S, T, A, B](o: Optic[S, T, A, B, [T1, T2] =>> (T1, T2)]): Optic[S, T, A, B, Forget[F]] =
-      new Optic[S, T, A, B, Forget[F]]:
-        type X = Nothing
-        def to: S => F[A] = o.get.andThen(Applicative[F].pure)
-        def from: F[B] => T = ???
-
-  given tuple2forgetful: Composer[Tuple2, Forgetful] with
-    def to[S, T, A, B](o: Optic[S, T, A, B, [T1, T2] =>> (T1, T2)]): Optic[S, T, A, B, Forgetful] =
-      new Optic[S, T, A, B, Forgetful]:
-        type X = Nothing
-        def to: S => A = o.get
-        def from: B => T = ???
