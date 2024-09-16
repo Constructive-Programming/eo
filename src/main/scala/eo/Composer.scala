@@ -2,6 +2,12 @@ package eo
 
 import optics.Optic
 
+trait LeftComposer[F[_, _], G[_, _]]:
+  def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, Nothing, A, Nothing, G]
+
+trait RightComposer[F[_, _], G[_, _]]:
+  def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[Nothing, T, Nothing, B, G]
+
 trait Composer[F[_, _], G[_, _]]:
   def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, G]
 
