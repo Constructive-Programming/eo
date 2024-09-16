@@ -4,7 +4,7 @@ val Typelevel = "org.typelevel"
 
 lazy val cats = Typelevel %% "cats-core" % "2.12.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
-lazy val scodec = "org.scodec" %% "scodec-core" % "2.3.1"
+lazy val circe = "io.circe" %% "circe-core" % "0.14.10"
 
 lazy val root = project
   .in(file("."))
@@ -15,6 +15,6 @@ lazy val root = project
     scalaVersion := scala3Version,
 
     libraryDependencies += cats,
-    libraryDependencies += scodec % Test,
+    libraryDependencies += circe % Test,
     libraryDependencies += discipline % Test
   )
