@@ -21,6 +21,6 @@ object ForgetfulFold:
         case Left(_) => Monoid[M].empty
         case Right((_, a: A)) => f(a)
 
-  given foldFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
+  given forgetFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
     def foldMap[X, A, M: Monoid]: (A => M) => F[A] => M =
       f => fa => Foldable[F].foldMap(fa)(f)
