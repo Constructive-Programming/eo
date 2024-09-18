@@ -1,20 +1,25 @@
 package eo
 package optics
 
-import data.{FixedTraversal, Forget}
+import data.{FixedTraversal, PowerSeries, Vect}
 
-import cats.Traverse
+import cats.{Applicative, Monad, Traverse, MonoidK}
+import cats.syntax.foldable.*
+import cats.Applicative
 
 object Traversal:
 
-  def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, Forget[T]] =
+  def each[T[_]: Traverse: Applicative: MonoidK, A]: Optic[T[A], T[A], A, A, PowerSeries] =
     pEach[T, A, A]
 
-  def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
-    new Optic[T[A], T[B], A, B, Forget[T]]:
-      type X = Nothing
-      def to: T[A] => T[A] = identity
-      def from: T[B] => T[B] = identity
+  def pEach[T[_]: Traverse: Applicative: MonoidK, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
+    new Optic[T[A], T[B], A, B, PowerSeries]:
+      type X = (Int, Unit)
+      def to: T[A] => PowerSeries[X, A] =
+        ta => PowerSeries(() -> Traverse[T].foldLeft(ta, Vect.nil[Int, A])(
+                            (v, a) => (v :+ a).asInstanceOf))
+      def from: PowerSeries[X, B] => T[B] =
+        ps => Vect.trav[Int].foldMapK(ps.ps._2)(Applicative[T].pure[B])
 
   def two[S, T, A, B](
       a: S => A,
