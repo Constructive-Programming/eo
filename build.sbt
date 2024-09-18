@@ -1,5 +1,7 @@
 val scala3Version = "3.5.0"
 
+ThisBuild / scalaVersion := scala3Version
+
 val Typelevel = "org.typelevel"
 
 lazy val cats = Typelevel %% "cats-core" % "2.12.0"
@@ -11,8 +13,6 @@ lazy val root = project
   .settings(
     name := "cats-eo",
     version := "0.1.0-SNAPSHOT",
-
-    scalaVersion := scala3Version,
 
     libraryDependencies += cats,
     libraryDependencies += circe % Test,
