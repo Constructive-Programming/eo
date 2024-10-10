@@ -32,7 +32,7 @@ case class UP(a: Int, b: Boolean)
   val bplace = bLens.place(true)
   val cplace  = cLens.place(56)
 
-  val t = Traversal.each[List, Int, Int]
+  val t = Traversal.each[List, Int]
 
   println(mod(UP(1, false)))
   println(split(UP(4, false)))

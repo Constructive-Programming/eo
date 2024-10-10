@@ -1,8 +1,13 @@
 package eo
 package data
 
-import cats.{Applicative, Bifunctor, Functor, Invariant, Traverse}
+import optics.Optic
+
+import cats.{Applicative, Bifunctor, Comonad, FlatMap, Functor, Invariant, Traverse}
+import cats.syntax.comonad._
+import cats.syntax.coflatMap._
 import cats.syntax.functor._
+import cats.syntax.flatMap._
 import cats.syntax.traverse._
 
 type Forgetful[X, A] = A
@@ -39,6 +44,23 @@ object Forgetful:
   given assoc[X, Y]: AssociativeFunctor[Forgetful, X, Y] with
     type Z = Nothing
     def associateLeft[S, A, C]: (S, S => A, A => C) => C =
-      case (s, f, g) => g(f(s))
+      (s, f, g) => g(f(s))
     def associateRight[D, B, T]: (D, D => B, B => T) => T =
-      case (d, g, f) => f(g(d))
+      (d, g, f) => f(g(d))
+
+  given leftAssocForget[F[_]: FlatMap, X, Y]: LeftAssociativeFunctor[Forget[F], X, Y] with
+    type Z = Nothing
+    def associateLeft[S, A, C]: (S, S => F[A], A => F[C]) => F[C] =
+      (s, f, g) => f(s).flatMap(g)
+
+  given rightAssocForget[F[_]: Comonad, X, Y]: RightAssociativeFunctor[Forget[F], X, Y] with
+    type Z = Nothing
+    def associateRight[D, B, T]: (F[D], F[D] => B, F[B] => T) => T =
+      (d, g, f) => f(d.coflatMap(g))
+
+  given assocForget[F[_]: FlatMap: Comonad, X, Y]: AssociativeFunctor[Forget[F], X, Y] with
+    type Z = Nothing
+    def associateLeft[S, A, C]: (S, S => F[A], A => F[C]) => F[C] =
+      (s, f, g) => f(s).flatMap(g)
+    def associateRight[D, B, T]: (F[D], F[D] => B, F[B] => T) => T =
+      (d, g, f) => f(d.coflatMap(g))
