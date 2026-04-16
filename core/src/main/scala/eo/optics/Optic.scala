@@ -17,10 +17,27 @@ import cats.syntax.functor._
   */
 trait Optic[S, T, A, B, F[_, _]]:
   self =>
+    import Function.const
     type X
 
     def to: S => F[X, A]
     def from: F[X, B] => T
+
+    def andThenLeft[C](o: Optic[A, Nothing, C, Nothing, F])(using
+      laf: LeftAssociativeFunctor[F, self.X, o.X]
+    ): Optic[S, Nothing, C, Nothing, F] =
+      new Optic:
+        type X = laf.Z
+        def to: S => F[X, C] = s => laf.associateLeft(s, self.to, o.to)
+        def from: F[X, Nothing] => Nothing = ???
+
+    def andThenRight[D](o: Optic[Nothing, B, Nothing, D, F])(using
+      af: RightAssociativeFunctor[F, self.X, o.X]
+    ): Optic[Nothing, T, Nothing, D, F] =
+      new Optic:
+        type X = af.Z
+        def to: Nothing => F[X, Nothing] = ???
+        def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
 
     def andThen[C, D](o: Optic[A, B, C, D, F])(using
       af: AssociativeFunctor[F, self.X, o.X]
@@ -29,6 +46,12 @@ trait Optic[S, T, A, B, F[_, _]]:
         type X = af.Z
         def to: S => F[X, C] = s => af.associateLeft(s, self.to, o.to)
         def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
+
+    def morphLeft[G[_, _]](using cf: LeftComposer[F, G]): Optic[S, Nothing, A, Nothing, G] =
+      cf.to(self)
+
+    def morphRight[G[_, _]](using cf: RightComposer[F, G]): Optic[Nothing, T, Nothing, B, G] =
+      cf.to(self)
 
     def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
       cf.to(self)

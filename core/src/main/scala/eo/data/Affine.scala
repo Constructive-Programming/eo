@@ -61,16 +61,16 @@ object Affine:
         f(s).affine.fold(fLeft, fRight)
 
     def associateRight[D, B, T]: (Affine[Z, D], Affine[Y, D] => B, Affine[X, B] => T) => T =
-      case (az, f, g) =>
+      case (az, g, f) =>
         inline def zLeft(z: Either[Fst[X], (Snd[X], Fst[Y])]): T =
           z.fold(yLeft, yRight)
         inline def zRight(z: ((Snd[X], Snd[Y]), D)): T =
-          val b: B = f(ofRight(z._1._2 -> z._2))
-          g(ofRight(z._1._1 -> b))
-        inline def yLeft(y: Fst[X]): T = g(ofLeft(y))
+          val b: B = g(ofRight(z._1._2 -> z._2))
+          f(ofRight(z._1._1 -> b))
+        inline def yLeft(y: Fst[X]): T = f(ofLeft(y))
         inline def yRight(y: (Snd[X], Fst[Y])): T =
-          val b: B = f(ofLeft(y._2))
-          g(ofRight(y._1 -> b))
+          val b: B = g(ofLeft(y._2))
+          f(ofRight(y._1 -> b))
         az.affine.fold(zLeft, zRight)
 
   given tuple2affine: Composer[Tuple2, Affine] with

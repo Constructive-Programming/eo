@@ -19,6 +19,6 @@ object ForgetfulFold:
     def foldMap[X, A, M: Monoid]: (A => M) => Affine[X, A] => M =
       f => fa => fa.affine.fold(_ => Monoid[M].empty, p => f(p._2))
 
-  given foldFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
+  given forgetFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
     def foldMap[X, A, M: Monoid]: (A => M) => F[A] => M =
       f => fa => Foldable[F].foldMap(fa)(f)

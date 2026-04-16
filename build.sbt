@@ -4,6 +4,7 @@ val Typelevel     = "org.typelevel"
 val ScalaCheckOrg = "org.scalacheck"
 val Optics        = "dev.optics"
 val Kubuszok      = "com.kubuszok"
+val Circe         = "io.circe"
 
 lazy val cats           = Typelevel     %% "cats-core"         % "2.13.0"
 lazy val disciplineCore = Typelevel     %% "discipline-core"   % "1.7.0"
@@ -11,6 +12,7 @@ lazy val discipline     = Typelevel     %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck     = ScalaCheckOrg %% "scalacheck"        % "1.17.1"
 lazy val monocle        = Optics        %% "monocle-core"      % "3.3.0"
 lazy val hearth         = Kubuszok      %% "hearth"            % "0.3.0"
+lazy val circe          = Circe         %% "circe-core"        % "0.14.10"
 
 lazy val commonSettings = Seq(
   version      := "0.1.0-SNAPSHOT",
@@ -57,6 +59,11 @@ lazy val tests: Project = project
     name := "cats-eo-tests",
     publish / skip := true,
     libraryDependencies += discipline % Test,
+    // circe-core powers the JsonOptic demo spec ported from the
+    // `unthreaded` branch -- the behaviour specs there traverse a
+    // circe Json AST to show how Optic.modify composes over a
+    // recursive parser output.
+    libraryDependencies += circe % Test,
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,
