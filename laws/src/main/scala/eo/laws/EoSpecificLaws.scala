@@ -210,13 +210,54 @@ object EoSpecificLaws:
           forAll((s: S) => laws.foldMapEmpty(s)),
       )
 
-  // H1 (place = transform const) is deliberately NOT a reusable law
-  // here: the `transform` / `place` extensions need an implicit
-  // `T => F[X, D]` whose type depends on the optic's existential `X`,
-  // and abstracting over that would require a `val lens` with
-  // per-instance identity givens — more plumbing than payoff. The
-  // matching EoSpecificLawsSpec in cats-eo-tests tests H1 directly on
-  // a concrete Lens.
+  // ================= H2 + H4: transform / place / transfer =========
+  //
+  // The `transform` extension requires an implicit `ev: T => F[o.X, D]`
+  // whose type depends on the optic's existential `X`. That forced us
+  // to test H1 inline rather than as a reusable law, but H2 (transfer
+  // ≡ curried place) and H4 (transform identity) are cleanly
+  // expressible once we:
+  //
+  //   * declare `optic` as a `val` so `optic.X` is a stable path-
+  //     dependent type, and
+  //   * leave the `given transformEv` abstract so each concrete
+  //     subclass supplies the S => (optic.X, A) evidence (identity for
+  //     Lens.second, swap for Lens.first, …).
+
+  trait TransformLaws[S, A, X0]:
+    /** The lens-shaped optic under test, with its existential `X`
+      * surfaced as the explicit `X0` parameter so the `ev` given can
+      * refer to it without path-dependent shenanigans. */
+    val optic: Optic[S, S, A, A, Tuple2] { type X = X0 }
+
+    /** Evidence that `S` can be viewed as `(X0, A)`. Concrete subclass
+      * supplies this — `identity` for `Lens.second`, `_.swap` for
+      * `Lens.first`, etc. */
+    given transformEv: (S => (X0, A))
+
+    /** H4 — transform identity is a no-op. */
+    def transformIdentity(t: S): Boolean =
+      optic.transform(identity[A])(t) == t
+
+    /** H2 — `transfer(f)(t)(c)` equals `place(f(c))(t)`. */
+    def transferIsCurriedPlace(t: S, c: A, f: A => A): Boolean =
+      optic.transfer(f)(t)(c) == optic.place(f(c))(t)
+
+  abstract class TransformTests[S, A, X0] extends Laws:
+    def laws: TransformLaws[S, A, X0]
+
+    def transform(using
+        Arbitrary[S], Arbitrary[A], Cogen[A]
+    ): RuleSet =
+      new SimpleRuleSet(
+        "Lens transform / place / transfer",
+        "transform(identity) == identity" ->
+          forAll((t: S) => laws.transformIdentity(t)),
+        "transfer(f)(t)(c) == place(f(c))(t)" ->
+          forAll((t: S, c: A, f: A => A) =>
+            laws.transferIsCurriedPlace(t, c, f)
+          ),
+      )
 
   // ================= H3: put ≡ reverseGet ∘ pure ===================
 

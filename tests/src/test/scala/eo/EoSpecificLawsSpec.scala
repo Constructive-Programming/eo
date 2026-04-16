@@ -130,13 +130,26 @@ class EoSpecificLawsSpec extends Specification with Discipline:
     .putIsReverseGet,
   )
 
+  // =============== H2 + H4 — transform laws (reusable) =============
+
+  checkAll(
+    "Lens.second: transform identity & transfer=curried place",
+    new TransformTests[(Int, Boolean), Boolean, Int]:
+      val laws = new TransformLaws[(Int, Boolean), Boolean, Int]:
+        val optic: Optic[
+          (Int, Boolean), (Int, Boolean), Boolean, Boolean, Tuple2
+        ] { type X = Int } = Lens.second[Int, Boolean]
+        given transformEv: (((Int, Boolean)) => (Int, Boolean)) =
+          identity
+    .transform,
+  )
+
   // =============== H1 — place = transform const (inline) ===========
   //
-  // `transform` needs `ev: T => F[X, D]`. For `Lens.second[Int, A]` the
-  // type works out to `(Int, A) => (Int, A)` = identity. Providing that
-  // given is trivially local; abstracting over it in a law trait would
-  // need a `val lens` with a path-dependent type, which outweighs the
-  // benefit for one optic.
+  // Still tested inline because phrasing H1 as a reusable law would
+  // need the same `val lens` + abstract given setup as the trait above
+  // — but with `B` in the place signature forcing another layer of type
+  // params that abstract over what stays identity in Lens.second.
 
   "Lens.place a == Lens.transform (_ => a)" >> {
     val secondLens = Lens.second[Int, Boolean]
