@@ -35,10 +35,8 @@ object Affine:
     Affine[X, B](r.asRight[Fst[X]])
 
   given map: ForgetfulFunctor[Affine] with
-    def map[X, A, B]: Affine[X, A] => (A => B) => Affine[X, B] =
-      (fa: Affine[X, A]) =>
-        (f: A => B) =>
-          fa.aFold[B](_.asLeft[(Snd[X], B)], _.map(f).asRight[Fst[X]])
+    def map[X, A, B](fa: Affine[X, A], f: A => B): Affine[X, B] =
+      fa.aFold[B](_.asLeft[(Snd[X], B)], _.map(f).asRight[Fst[X]])
 
   given traverse: ForgetfulTraverse[Affine, Applicative] with
     def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =

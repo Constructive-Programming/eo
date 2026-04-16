@@ -33,7 +33,7 @@ class LensBench:
 
   val person: Person = Person("Alice", 30)
 
-  val eoAge: Optic[Person, Person, Int, Int, Tuple2] =
+  val eoAge =
     EoLens[Person, Int](_.age, (p, a) => p.copy(age = a))
 
   val mAge: MLens[Person, Int] =
@@ -64,7 +64,7 @@ class PrismBench:
   val absent:  Option[Int] = None
   val raw:     Int         = 7
 
-  val eoSome: Optic[Option[Int], Option[Int], Int, Int, Either] =
+  val eoSome =
     EoPrism[Option[Int], Int](_.toRight(None), Some(_))
 
   val mSome: MPrism[Option[Int], Int] =

@@ -26,8 +26,7 @@ object PowerSeries:
     ps.ps
 
   given map: ForgetfulFunctor[PowerSeries] with
-    def map[X, A, B]: PowerSeries[X, A] => (A => B) => PowerSeries[X, B] =
-      psa => f =>
+    def map[X, A, B](psa: PowerSeries[X, A], f: A => B): PowerSeries[X, B] =
          val v = psa.ps._2
          PowerSeries(psa.ps._1 -> Vect.functor[v.Size].map(v)(f))
 

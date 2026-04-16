@@ -75,14 +75,16 @@ object Optic:
     )(f: D => B)(g: A => C): Optic[S, T, C, D, F] =
       new Optic[S, T, C, D, F]:
         type X = o.X
-        def to: S => F[X, C] = o.to.andThen(F.map(_)(g))
-        def from: F[X, D] => T = o.from.compose(F.map(_)(f))
+        def to: S => F[X, C] = s => F.map(o.to(s), g)
+        def from: F[X, D] => T = d => o.from(F.map(d, f))
 
   def id[A]: Optic[A, A, A, A, Forgetful] =
     new Optic[A, A, A, A, Forgetful]:
       type X = Nothing
       def to: A => A = identity
       def from: A => A = identity
+
+  // ---- Generic Optic extensions -------------------------------------
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
@@ -112,15 +114,15 @@ object Optic:
       o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F])
     inline def modify[X](f: A => B): S => T =
-      o.to.andThen(FF.map(_)(f)).andThen(o.from)
+      s => o.from(FF.map(o.to(s), f))
     inline def replace[X](b: B): S => T =
-      modify[X](_ => b)
+      s => o.from(FF.map(o.to(s), _ => b))
 
   extension [S, T, A, B, D, F[_, _]](
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, D])
     inline def transform(f: D => B): T => T =
-      t => o.from(FF.map(ev(t))(f))
+      t => o.from(FF.map(ev(t), f))
     inline def place(b: B): T => T =
       transform(_ => b)
     inline def transfer[C](f: C => B): T => C => T =
@@ -130,19 +132,19 @@ object Optic:
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulApplicative[F])
     inline def put(f: A => B): A => T =
-      a => o.from(FF.pure(f(a)))
+      a => o.from(FF.pure[o.X, B](f(a)))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Functor])
     inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
-      o.to.andThen(FT.traverse(using G)(_)(f)).andThen(_.map(o.from))
+      s => FT.traverse(using G)(o.to(s))(f).map(o.from)
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Applicative])
     inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
-      o.to.andThen(FT.traverse(using G)(_)(f)).andThen(_.map(o.from))
+      s => FT.traverse(using G)(o.to(s))(f).map(o.from)
     inline def all(s: S): List[F[o.X, A]] =
       FT.traverse(using Applicative[List])(o.to(s))(List(_))
 
@@ -150,4 +152,4 @@ object Optic:
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFold[F])
     inline def foldMap[M: Monoid](f: A => M): S => M =
-      o.to.andThen(FF.foldMap(using Monoid[M])(f))
+      s => FF.foldMap(using Monoid[M])(f)(o.to(s))

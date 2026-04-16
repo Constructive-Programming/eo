@@ -25,9 +25,9 @@ object Forgetful:
       [X] => (a: A) => a
 
   given applicative: ForgetfulApplicative[Forgetful] with
-    def map[X, A, B]: Forgetful[X, A] => (A => B) => Forgetful[X, B] =
-      a => f => f(a)
-    def pure[X, A]: A => Forgetful[X, A] = a => a
+    def map[X, A, B](fa: Forgetful[X, A], f: A => B): Forgetful[X, B] =
+      f(fa)
+    def pure[X, A](a: A): Forgetful[X, A] = a
 
   given bifunctor[F[_]: Functor]: Bifunctor[Forget[F]] with
     def bimap[A, B, C, D](fab: Forget[F][A, B])(f: A => C, g: B => D): Forget[F][C, D] =

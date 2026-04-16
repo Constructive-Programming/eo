@@ -9,8 +9,8 @@ class SetterF[A, B](val setter: (Fst[A], Snd[A] => B)) extends AnyVal
 
 object SetterF:
   given map[S, A]: ForgetfulFunctor[SetterF] with
-    def map[X, B, C]: SetterF[X, B] => (B => C) => SetterF[X, C] =
-      s => g => SetterF(s.setter._1, s.setter._2.andThen(g))
+    def map[X, B, C](fa: SetterF[X, B], f: B => C): SetterF[X, C] =
+      SetterF(fa.setter._1, fa.setter._2.andThen(f))
 
   given traverse[S, A]: ForgetfulTraverse[SetterF, Distributive] with
     def traverse[X, B, C, G[_]](using
