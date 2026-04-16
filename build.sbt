@@ -28,6 +28,10 @@ lazy val core: Project = project
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
+    // Minimal Test dep so core can run its own in-module smoke specs
+    // (currently just FoldSpec) without needing the cross-module
+    // `tests` project. The richer suites all live in cats-eo-tests.
+    libraryDependencies += discipline % Test,
   )
 
 lazy val laws: Project = project

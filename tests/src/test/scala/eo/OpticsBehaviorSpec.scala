@@ -144,6 +144,25 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
   }
 
+  // ----- Optional.foldMap exercises the Affine ForgetfulFold --------
+  //
+  // ForgetfulFold.affineFFold was cold — no test called foldMap on an
+  // Optional. A partial Optional (focus is the first Int only when it's
+  // even) hits both branches of the Affine foldMap: Right yields f(a),
+  // Left yields Monoid[M].empty.
+
+  "Optional.foldMap returns the focus when matched, empty otherwise" >> {
+    val evenFstOpt: Optic[(Int, Int), (Int, Int), Int, Int, Affine] =
+      Optional[(Int, Int), (Int, Int), Int, Int, Tuple2](
+        { case (a, b) => if a % 2 == 0 then Right(a) else Left((a, b)) },
+        { case ((_, b), newA) => (newA, b) },
+      )
+    forAll((a: Int, b: Int) =>
+      evenFstOpt.foldMap(identity[Int])((a, b)) ==
+        (if a % 2 == 0 then a else 0)
+    )
+  }
+
   // ----- Fold.select predicate semantics ---------------------------
   //
   // Pins the `Option(_).filter(p)` in Fold.select so stryker detects a
