@@ -16,6 +16,11 @@ type FixedTraversal[C] = [A, B] =>> FixedTraversal_[C, A, B]
   * `A *: A *: … *: X *: EmptyTuple` — `N` element slots followed by the
   * phantom `X`. Mapping therefore rewrites the first `N` positions and
   * leaves the phantom alone.
+  *
+  * IMPORTANT: each pattern match below is manually coupled to the
+  * type-level definition of `FixedTraversal_` above. If the tuple
+  * element ordering ever changes, these patterns must be updated in
+  * lockstep — the compiler cannot check that they stay in sync.
   */
 object FixedTraversal:
 

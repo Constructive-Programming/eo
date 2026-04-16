@@ -174,7 +174,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
                 o: Optic[S, T, A, B, Tuple2]
             ): Optic[S, T, A, B, Tuple2] = o
           given accessorF: data.Accessor[Forgetful] =
-            Forgetful.accesor
+            Forgetful.accessor
           given accessorH: data.Accessor[Tuple2] =
             data.Accessor.tupleAccessor
     .chainAccessor,

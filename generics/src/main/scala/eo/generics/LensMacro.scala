@@ -60,6 +60,7 @@ private final class HearthLensMacro(q: Quotes)
       report.errorAndAbort(
         s"""lens[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]: selector must be a
            |single-field accessor like `_.fieldName`.
+           |Nested paths (e.g. `_.a.b`) are not yet supported.
            |Got: ${selector.asTerm.show}""".stripMargin
       )
     }

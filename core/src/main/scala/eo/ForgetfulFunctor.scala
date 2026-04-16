@@ -14,7 +14,12 @@ object ForgetfulFunctor:
     * (`Optic.modify` / `Optic.replace`) avoids the extra closure
     * `bimap(_)(identity, f)` allocates. Being more specific than
     * `bifunctorFF[F]` (no `using Bifunctor[F]` constraint), this
-    * given out-ranks the generic derivation in implicit search.
+    * given out-ranks the generic derivation in Scala 3 implicit
+    * search (concrete type beats constrained type parameter).
+    *
+    * Do not define competing `ForgetfulFunctor[Tuple2]` instances
+    * downstream — doing so could cause ambiguity and silently
+    * regress Lens performance back to the Bifunctor path.
     */
   given directTuple: ForgetfulFunctor[Tuple2] with
     def map[X, A, B]: ((X, A)) => (A => B) => (X, B) =

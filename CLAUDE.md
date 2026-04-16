@@ -3,12 +3,25 @@
 ## Project
 
 `cats-eo` — an Existential Optics library for Scala 3, built on top of
-[cats](https://typelevel.org/cats/). Sources under `src/main/scala/eo/`, tests
-under `src/test/scala/`. Scala `3.8.3` via sbt `1.12.9` (`project/build.properties`),
-runs on JDK 17 or JDK 21.
+[cats](https://typelevel.org/cats/). Scala `3.8.3` via sbt `1.12.9`
+(`project/build.properties`), runs on JDK 17 or JDK 21.
 
 Runtime dependency: `org.typelevel:cats-core_3:2.13.0`.
 Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
+
+### Module structure
+
+| Module | Directory | Artifact | Purpose |
+|--------|-----------|----------|---------|
+| `core` | `core/` | `cats-eo` | Hand-written optics and data structures |
+| `laws` | `laws/` | `cats-eo-laws` | Discipline-style law definitions (reusable by downstream projects) |
+| `tests` | `tests/` | — (not published) | Law-based and behavioural test suites |
+| `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |
+| `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
+
+The root project aggregates `core`, `laws`, `tests`, and `generics`.
+`sbt compile` and `sbt test` cover those four; benchmarks must be invoked
+explicitly (see below).
 
 ## Toolchain
 
@@ -40,7 +53,7 @@ the `version` pin in `.scalafmt.conf`), `scalafix 0.14.6`, `metals 1.6.7`,
 
 ```sh
 sbt compile                           # full project compile
-sbt test                              # run the discipline-specs2 laws
+sbt test                              # run all test suites (core, tests, generics)
 sbt "~compile"                        # watch compile
 scalafmt                              # format in place per .scalafmt.conf
 scalafmt --check                      # CI-style verify
@@ -56,7 +69,7 @@ coverage:
 
 ```sh
 sbt "clean; coverage; tests/test; coverageReport"
-# HTML + XML under core/target/scala-<ver>/scoverage-report/
+# HTML + XML under tests/target/scala-<ver>/scoverage-report/
 ```
 
 The report directory sits under `target/` and is `.gitignore`d.
@@ -104,9 +117,9 @@ benchmark classes — `LensBench`, `PrismBench`, `IsoBench`,
 report row gives the side-by-side comparison.
 
 JMH's own caveats apply: trustworthy numbers need a quiet machine, a
-fork count of at least 1, the `-prof` profilers when investigating
-specific suspicions, and the usual reminder that "the numbers below are
-just data".
+fork count of at least 3 (the annotation defaults are `@Fork(3)`), the
+`-prof` profilers when investigating specific suspicions, and the usual
+reminder that "the numbers below are just data".
 
 ### Auto-derivation: `eo-generics`
 

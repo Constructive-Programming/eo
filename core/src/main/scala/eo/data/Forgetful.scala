@@ -11,11 +11,11 @@ type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
 
 object Forgetful:
 
-  given accesor: Accessor[Forgetful] with
+  given accessor: Accessor[Forgetful] with
     def get[A]: [X] => Forgetful[X, A] => A =
       [X] => (fa: Forgetful[X, A]) => fa
 
-  given revaccesor: ReverseAccessor[Forgetful] with
+  given reverseAccessor: ReverseAccessor[Forgetful] with
     def reverseGet[A]: [X] => A => Forgetful[X, A] =
       [X] => (a: A) => a
 

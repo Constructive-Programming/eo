@@ -26,7 +26,7 @@ final case class Person(name: String, age: Int)
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(1)
+@Fork(3)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class LensBench:
@@ -55,7 +55,7 @@ class LensBench:
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(1)
+@Fork(3)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class PrismBench:
@@ -84,7 +84,7 @@ class PrismBench:
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(1)
+@Fork(3)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class IsoBench:
@@ -113,7 +113,7 @@ class IsoBench:
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(1)
+@Fork(3)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class TraversalBench:
@@ -129,7 +129,7 @@ class TraversalBench:
   val mEach: MTraversal[List[Int], Int] =
     MTraversal.fromTraverse[List, Int]
 
-  @Setup(Level.Trial)
+  @Setup(Level.Iteration)
   def init(): Unit =
     xs = List.tabulate(size)(identity)
 
