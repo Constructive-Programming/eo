@@ -50,24 +50,33 @@ scala -e 'println(1 + 2)'             # quick REPL eval
 
 ### Test-suite quality
 
-Two sbt plugins live in [`project/plugins.sbt`](./project/plugins.sbt):
-
-- [`sbt-scoverage`](https://github.com/scoverage/sbt-scoverage) — statement /
-  branch coverage
-- [`sbt-stryker4s`](https://stryker-mutator.io/docs/stryker4s/getting-started/)
-  — mutation testing: regenerates the tree with small semantic changes
-  (mutants) and confirms each mutant is caught by at least one test
+[`sbt-scoverage`](https://github.com/scoverage/sbt-scoverage) lives in
+[`project/plugins.sbt`](./project/plugins.sbt) for statement / branch
+coverage:
 
 ```sh
-sbt clean coverage test coverageReport  # HTML + XML under target/scala-<ver>/scoverage-report/
-sbt coverageOff stryker                 # HTML under target/stryker4s-report/<timestamp>/
+sbt "clean; coverage; tests/test; coverageReport"
+# HTML + XML under core/target/scala-<ver>/scoverage-report/
 ```
 
-Because this project is mostly type-level machinery, statement-rate coverage
-undersells the real story — scoverage instruments very few statements. Use
-stryker4s as the primary quality signal: it surfaces runtime expressions that
-no test pins down. Both report directories sit under `target/` and are
-`.gitignore`d.
+The report directory sits under `target/` and is `.gitignore`d.
+
+Coverage is the project's primary quality signal. The law and behaviour
+suites in `cats-eo-tests` currently reach ~70 %% of core's statements and
+branches — the rest is either pure type-level machinery (no runtime
+footprint) or code reachable only when someone adds the matching carrier
+/ composer instances to core.
+
+**Why not mutation testing?** sbt-stryker4s was evaluated earlier and
+dropped. Because EO is mostly type-level, stryker4s' default mutators
+find exactly **one** mutable runtime expression across the whole
+codebase — not enough signal to justify the plugin, the per-checkout
+`target/stryker4s-report/` directories, or the CI time. *Future work:*
+teaching stryker about EO-specific mutators (e.g. swapping the `to` /
+`from` halves of an `Optic` constructor, or flipping associators in
+`AssociativeFunctor` instances) would make mutation testing a much
+richer signal than the default AST-level mutations. A good project for
+someone who wants to understand stryker's mutator plugin API.
 
 ## Metals MCP (stdio)
 

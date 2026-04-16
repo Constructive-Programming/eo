@@ -16,7 +16,6 @@ lazy val commonSettings = Seq(
 lazy val root: Project = project
   .in(file("."))
   .aggregate(core, laws, tests)
-  .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-root",
@@ -29,16 +28,11 @@ lazy val core: Project = project
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
-    // Minimal Test dep so sbt-stryker4s has a test framework wired up:
-    // the cross-cutting specs live in `tests`, but stryker only runs
-    // core/test, so core needs at least one killer spec on classpath.
-    libraryDependencies += discipline % Test,
   )
 
 lazy val laws: Project = project
   .in(file("laws"))
   .dependsOn(LocalProject("core"))
-  .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-laws",
@@ -50,7 +44,6 @@ lazy val laws: Project = project
 lazy val tests: Project = project
   .in(file("tests"))
   .dependsOn(LocalProject("core"), LocalProject("laws"))
-  .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-tests",
