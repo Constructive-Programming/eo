@@ -322,6 +322,42 @@ object EoSpecificLaws:
           ),
       )
 
+  // ================= F2: Composer.chain preserves Accessor =========
+  //
+  // A 2-hop chain `F → G → H` preserves `get` whenever all three
+  // carriers have an Accessor. Currently core only ships Accessor
+  // instances for Forgetful and Tuple2, so the only non-degenerate
+  // witness is Forgetful → Tuple2 → Tuple2 with an identity composer
+  // at the second hop — testable with a locally-declared identity
+  // Composer in the spec. The trait itself is fully generic and will
+  // gain more witnesses as new Accessor instances are added.
+
+  trait ChainAccessorLaws[S, A, F[_, _], G[_, _], H[_, _]]:
+    def optic: Optic[S, S, A, A, F]
+    def fToG: eo.Composer[F, G]
+    def gToH: eo.Composer[G, H]
+
+    // The `get` extension on both ends needs an Accessor in scope.
+    // Middle-step Accessor isn't required by the law statement but
+    // is useful for sanity-checking intermediates if anyone extends
+    // this spec.
+    given accessorF: eo.data.Accessor[F]
+    given accessorH: eo.data.Accessor[H]
+
+    def chainPreservesGet(s: S): Boolean =
+      gToH.to(fToG.to(optic)).get(s) == optic.get(s)
+
+  abstract class ChainAccessorTests[S, A, F[_, _], G[_, _], H[_, _]]
+      extends Laws:
+    def laws: ChainAccessorLaws[S, A, F, G, H]
+
+    def chainAccessor(using Arbitrary[S]): RuleSet =
+      new SimpleRuleSet(
+        "Composer.chain preserves get",
+        "chain(F→G→H).get(s) == optic.get(s)" ->
+          forAll((s: S) => laws.chainPreservesGet(s)),
+      )
+
   // ================= G1, G2: Optic.all on Forget[T] ================
   //
   // `Optic.all` uses `traverse(List(_))` under the hood, which with
@@ -350,4 +386,32 @@ object EoSpecificLaws:
           forAll((s: T[A]) => laws.allHasLengthOne(s)),
         "all(s).head == s" ->
           forAll((s: T[A]) => laws.allHeadIsInput(s)),
+      )
+
+  // ================= G3: all-then-map ≡ modify on Forget[T] ========
+  //
+  // For a `Forget[T]`-carrier optic, `all(s)` is `List(s)` (a single-
+  // element list holding the whole container — see TraverseAllLaws).
+  // Because `Forget[T][X, A]` type-reduces to `T[A]`, that head is
+  // already an ordinary `T[A]` that `Functor[T].map` can walk. The
+  // law says mapping the head agrees with `modify`, tying `all`'s
+  // reading of the structure to `modify`'s rewriting of it.
+
+  trait ForgetAllModifyLaws[T[_], A](using val T: Traverse[T]):
+    def traversal: Optic[T[A], T[A], A, A, Forget[T]]
+
+    def allMapEqualsModify(s: T[A], f: A => A): Boolean =
+      val head: T[A] = traversal.all(s).head
+      T.map(head)(f) == traversal.modify(f)(s)
+
+  abstract class ForgetAllModifyTests[T[_]: Traverse, A] extends Laws:
+    def laws: ForgetAllModifyLaws[T, A]
+
+    def allMap(using
+        Arbitrary[T[A]], Arbitrary[A], Cogen[A]
+    ): RuleSet =
+      new SimpleRuleSet(
+        "Forget[T]: all-then-map ≡ modify",
+        "T.map(all(s).head)(f) == modify(f)(s)" ->
+          forAll((s: T[A], f: A => A) => laws.allMapEqualsModify(s, f)),
       )

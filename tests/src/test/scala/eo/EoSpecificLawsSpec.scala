@@ -154,6 +154,31 @@ class EoSpecificLawsSpec extends Specification with Discipline:
     .chainPathIndependence,
   )
 
+  // =============== F2 — Composer.chain preserves get ===============
+  //
+  // Forgetful → Tuple2 → Tuple2 with a locally-declared identity
+  // composer at the second hop. Degenerate because Tuple2 is the
+  // only non-Forgetful carrier with Accessor right now, but the
+  // trait is ready to accept more witnesses.
+
+  checkAll(
+    "doubleIso: Forgetful → Tuple2 → Tuple2 chain preserves get",
+    new ChainAccessorTests[Int, Int, Forgetful, Tuple2, Tuple2]:
+      val laws =
+        new ChainAccessorLaws[Int, Int, Forgetful, Tuple2, Tuple2]:
+          val optic = doubleIso
+          val fToG  = Composer.forgetful2tuple
+          val gToH  = new Composer[Tuple2, Tuple2]:
+            def to[S, T, A, B](
+                o: Optic[S, T, A, B, Tuple2]
+            ): Optic[S, T, A, B, Tuple2] = o
+          given accessorF: data.Accessor[Forgetful] =
+            Forgetful.accesor
+          given accessorH: data.Accessor[Tuple2] =
+            data.Accessor.tupleAccessor
+    .chainAccessor,
+  )
+
   // =============== G1 + G2 — Optic.all on Forget[T] ================
 
   checkAll(
@@ -162,4 +187,14 @@ class EoSpecificLawsSpec extends Specification with Discipline:
       val laws = new TraverseAllLaws[List, Int]:
         val traversal = listTraversal
     .traverseAll,
+  )
+
+  // =============== G3 — all-then-map ≡ modify on Forget[T] =========
+
+  checkAll(
+    "Traversal.each[List, Int]: T.map(all(s).head)(f) ≡ modify(f)(s)",
+    new ForgetAllModifyTests[List, Int]:
+      val laws = new ForgetAllModifyLaws[List, Int]:
+        val traversal = listTraversal
+    .allMap,
   )
