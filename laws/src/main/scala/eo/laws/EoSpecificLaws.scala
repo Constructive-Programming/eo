@@ -121,6 +121,114 @@ object EoSpecificLaws:
           forAll((s: S, b: B) => laws.composedReplace(s, b)),
       )
 
+  // ================= C3–C4: Iso ∘ Iso composition ==================
+
+  trait IsoComposeLaws[S, A, B]:
+    def outer: Optic[S, S, A, A, Forgetful]
+    def inner: Optic[A, A, B, B, Forgetful]
+
+    // Forgetful.assoc and Affine.assoc both go by the bare name `assoc`,
+    // so the wildcard `data.*.given` imports at the top of the file let
+    // them shadow each other for by-name implicit search. This alias
+    // pins the Forgetful instance for just this trait's `andThen` calls.
+    private given forgetfulAssoc[X, Y]
+        : AssociativeFunctor[Forgetful, X, Y] = Forgetful.assoc
+
+    def composedGet(s: S): Boolean =
+      outer.andThen(inner).get(s) == inner.get(outer.get(s))
+
+    def composedReverseGet(c: B): Boolean =
+      outer.andThen(inner).reverseGet(c) ==
+        outer.reverseGet(inner.reverseGet(c))
+
+  abstract class IsoComposeTests[S, A, B] extends Laws:
+    def laws: IsoComposeLaws[S, A, B]
+
+    def isoCompose(using
+        Arbitrary[S], Arbitrary[B]
+    ): RuleSet =
+      new SimpleRuleSet(
+        "Iso ∘ Iso",
+        "composed get" ->
+          forAll((s: S) => laws.composedGet(s)),
+        "composed reverseGet" ->
+          forAll((c: B) => laws.composedReverseGet(c)),
+      )
+
+  // ================= C5: Prism ∘ Prism composition =================
+
+  trait PrismComposeLaws[S, A, B]:
+    def outer: Optic[S, S, A, A, Either]
+    def inner: Optic[A, A, B, B, Either]
+
+    private def getOpt[X, Y](
+        p: Optic[X, X, Y, Y, Either], x: X
+    ): Option[Y] = p.to(x).toOption
+
+    /** `(o ∘ i).getOption(s) == o.getOption(s).flatMap(i.getOption)` — the
+      * Kleisli law for Option. */
+    def composedGetOption(s: S): Boolean =
+      getOpt(outer.andThen(inner), s) ==
+        getOpt(outer, s).flatMap(a => getOpt(inner, a))
+
+    /** `(o ∘ i).reverseGet(b) == o.reverseGet(i.reverseGet(b))`. */
+    def composedReverseGet(b: B): Boolean =
+      outer.andThen(inner).reverseGet(b) ==
+        outer.reverseGet(inner.reverseGet(b))
+
+  abstract class PrismComposeTests[S, A, B] extends Laws:
+    def laws: PrismComposeLaws[S, A, B]
+
+    def prismCompose(using
+        Arbitrary[S], Arbitrary[B]
+    ): RuleSet =
+      new SimpleRuleSet(
+        "Prism ∘ Prism",
+        "composed getOption" ->
+          forAll((s: S) => laws.composedGetOption(s)),
+        "composed reverseGet" ->
+          forAll((b: B) => laws.composedReverseGet(b)),
+      )
+
+  // ================= Optional ∘ Optional composition ===============
+
+  trait OptionalComposeLaws[S, A, B]:
+    // Affine's AssociativeFunctor instance requires both Xs to be tuple
+    // subtypes (matching how Optional.apply materialises `type X = (T, S)`).
+    // The refinement surfaces that constraint to the trait boundary.
+    val outer: Optic[S, S, A, A, Affine] { type X <: Tuple }
+    val inner: Optic[A, A, B, B, Affine] { type X <: Tuple }
+
+    // Disambiguate `Affine.assoc` from the ambient `Forgetful.assoc`
+    // wildcard import.
+    private given affineAssoc[X <: Tuple, Y <: Tuple]
+        : AssociativeFunctor[Affine, X, Y] = Affine.assoc
+
+    private def getOpt[X, Y](
+        p: Optic[X, X, Y, Y, Affine], x: X
+    ): Option[Y] = p.to(x).affine.toOption.map(_._2)
+
+    /** `(o ∘ i).getOption(s) == o.getOption(s).flatMap(i.getOption)`. */
+    def composedGetOption(s: S): Boolean =
+      getOpt(outer.andThen(inner), s) ==
+        getOpt(outer, s).flatMap(a => getOpt(inner, a))
+
+    /** `(o ∘ i).modify(identity)(s) == s`. */
+    def composedModifyIdentity(s: S): Boolean =
+      outer.andThen(inner).modify(identity[B])(s) == s
+
+  abstract class OptionalComposeTests[S, A, B] extends Laws:
+    def laws: OptionalComposeLaws[S, A, B]
+
+    def optionalCompose(using Arbitrary[S]): RuleSet =
+      new SimpleRuleSet(
+        "Optional ∘ Optional",
+        "composed getOption" ->
+          forAll((s: S) => laws.composedGetOption(s)),
+        "composed modify(identity) is identity" ->
+          forAll((s: S) => laws.composedModifyIdentity(s)),
+      )
+
   // ================= D1: modifyA at Identity ≡ modify ==============
 
   trait ModifyAIdLaws[S, A, F[_, _]]:

@@ -1,11 +1,12 @@
 package eo
 
-import optics.{Iso, Lens, Prism, Traversal, Optic}
+import optics.{Iso, Lens, Optional, Prism, Traversal, Optic}
 import optics.Optic.*
-import data.{Affine, Forgetful, Forget, SetterF}
+import data.{Affine, FixedTraversal, Forgetful, Forget, SetterF}
 import data.Forgetful.given
 import data.Affine.given
 import data.SetterF.given
+import data.FixedTraversal.given
 import laws.EoSpecificLaws.*
 
 import cats.instances.int.given
@@ -198,3 +199,95 @@ class EoSpecificLawsSpec extends Specification with Discipline:
         val traversal = listTraversal
     .allMap,
   )
+
+  // =============== C3 + C4 — Iso ∘ Iso =============================
+
+  checkAll(
+    "negate ∘ bitwise-not: Iso[Int,Int] ∘ Iso[Int,Int]",
+    new IsoComposeTests[Int, Int, Int]:
+      val laws = new IsoComposeLaws[Int, Int, Int]:
+        val outer: Optic[Int, Int, Int, Int, Forgetful] =
+          Iso[Int, Int, Int, Int](-_, -_)
+        val inner: Optic[Int, Int, Int, Int, Forgetful] =
+          Iso[Int, Int, Int, Int](~_, ~_)
+    .isoCompose,
+  )
+
+  // =============== C5 + Prism ∘ Prism getOption / reverseGet =======
+  //
+  // Two Some-prisms unpack Option[Option[Int]] down to Int.
+
+  val outerSomePrism
+      : Optic[Option[Option[Int]], Option[Option[Int]], Option[Int],
+              Option[Int], Either] =
+    Prism[Option[Option[Int]], Option[Int]](
+      opt => opt.toRight(opt),
+      Some(_),
+    )
+
+  val innerSomePrism
+      : Optic[Option[Int], Option[Int], Int, Int, Either] =
+    Prism[Option[Int], Int](opt => opt.toRight(opt), Some(_))
+
+  checkAll(
+    "Some ∘ Some: Prism[Option[Option[Int]], Int] via composition",
+    new PrismComposeTests[Option[Option[Int]], Option[Int], Int]:
+      val laws = new PrismComposeLaws[Option[Option[Int]], Option[Int], Int]:
+        val outer = outerSomePrism
+        val inner = innerSomePrism
+    .prismCompose,
+  )
+
+  // =============== Optional ∘ Optional =============================
+  //
+  // Two Option-field Optionals nest to give a Some ∘ Some style
+  // Optional on (Int, Option[Int]).
+
+  val outerAffineOptional
+      : Optic[(Int, Option[Int]), (Int, Option[Int]), Option[Int],
+              Option[Int], Affine] { type X <: Tuple } =
+    Optional[(Int, Option[Int]), (Int, Option[Int]), Option[Int],
+             Option[Int], Tuple2](
+      { case (_, opt) => Right(opt) },
+      { case ((i, _), newOpt) => (i, newOpt) },
+    )
+
+  val innerAffineOptional
+      : Optic[Option[Int], Option[Int], Int, Int, Affine] { type X <: Tuple } =
+    Optional[Option[Int], Option[Int], Int, Int, Tuple2](
+      opt => opt.toRight(opt),
+      { case (_, a) => Some(a) },
+    )
+
+  checkAll(
+    "Optional ∘ Optional: (Int, Option[Int]) → Int",
+    new OptionalComposeTests[(Int, Option[Int]), Option[Int], Int]:
+      val laws =
+        new OptionalComposeLaws[(Int, Option[Int]), Option[Int], Int]:
+          val outer = outerAffineOptional
+          val inner = innerAffineOptional
+    .optionalCompose,
+  )
+
+  // =============== Traversal.two: modify now works =================
+  //
+  // With `ForgetfulFunctor[FixedTraversal[2]]` in core, the two/three/
+  // four-arity traversals can finally `modify` and `replace`. Behavior
+  // smoke-test nails down the semantics and lights up the previously-
+  // unreached `from` clauses of those constructors.
+
+  "Traversal.two modifies both components and preserves structure" >> {
+    val t = Traversal.two[(Int, Int), (Int, Int), Int, Int](
+      _._1, _._2, (a, b) => (a, b),
+    )
+    forAll((p: (Int, Int)) => t.modify(_ + 100)(p) == (p._1 + 100, p._2 + 100))
+  }
+
+  "Traversal.three modifies all three components" >> {
+    val t = Traversal.three[(Int, Int, Int), (Int, Int, Int), Int, Int](
+      _._1, _._2, _._3, (a, b, c) => (a, b, c),
+    )
+    forAll((p: (Int, Int, Int)) =>
+      t.modify(_ + 1)(p) == (p._1 + 1, p._2 + 1, p._3 + 1)
+    )
+  }
