@@ -243,6 +243,10 @@ object EoSpecificLaws:
     def transferIsCurriedPlace(t: S, c: A, f: A => A): Boolean =
       optic.transfer(f)(t)(c) == optic.place(f(c))(t)
 
+    /** H1 — `place(a)` equals `transform(_ => a)`. */
+    def placeIsTransformConst(t: S, a: A): Boolean =
+      optic.place(a)(t) == optic.transform(_ => a)(t)
+
   abstract class TransformTests[S, A, X0] extends Laws:
     def laws: TransformLaws[S, A, X0]
 
@@ -257,6 +261,8 @@ object EoSpecificLaws:
           forAll((t: S, c: A, f: A => A) =>
             laws.transferIsCurriedPlace(t, c, f)
           ),
+        "place(a) == transform(_ => a)" ->
+          forAll((t: S, a: A) => laws.placeIsTransformConst(t, a)),
       )
 
   // ================= H3: put ≡ reverseGet ∘ pure ===================

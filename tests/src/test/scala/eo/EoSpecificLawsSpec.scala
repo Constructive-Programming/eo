@@ -130,10 +130,10 @@ class EoSpecificLawsSpec extends Specification with Discipline:
     .putIsReverseGet,
   )
 
-  // =============== H2 + H4 — transform laws (reusable) =============
+  // =============== H1 + H2 + H4 — transform / place / transfer laws
 
   checkAll(
-    "Lens.second: transform identity & transfer=curried place",
+    "Lens.second: transform identity, transfer=curried place, place=transform const",
     new TransformTests[(Int, Boolean), Boolean, Int]:
       val laws = new TransformLaws[(Int, Boolean), Boolean, Int]:
         val optic: Optic[
@@ -143,18 +143,3 @@ class EoSpecificLawsSpec extends Specification with Discipline:
           identity
     .transform,
   )
-
-  // =============== H1 — place = transform const (inline) ===========
-  //
-  // Still tested inline because phrasing H1 as a reusable law would
-  // need the same `val lens` + abstract given setup as the trait above
-  // — but with `B` in the place signature forcing another layer of type
-  // params that abstract over what stays identity in Lens.second.
-
-  "Lens.place a == Lens.transform (_ => a)" >> {
-    val secondLens = Lens.second[Int, Boolean]
-    given ev: (((Int, Boolean)) => (Int, Boolean)) = identity
-    forAll((pair: (Int, Boolean), a: Boolean) =>
-      secondLens.place(a)(pair) == secondLens.transform(_ => a)(pair)
-    )
-  }
