@@ -4,11 +4,10 @@
 
 `cats-eo` — an Existential Optics library for Scala 3, built on top of
 [cats](https://typelevel.org/cats/). Sources under `src/main/scala/eo/`, tests
-under `src/test/scala/`. Scala `3.5.0` via sbt (`build.sbt`); `project/build.properties`
-pins sbt `1.6.2`, which requires **JDK 17** (it does not parse cleanly on
-JDK 21).
+under `src/test/scala/`. Scala `3.8.3` via sbt `1.12.9` (`project/build.properties`),
+runs on JDK 17 or JDK 21.
 
-Runtime dependency: `org.typelevel:cats-core_3:2.12.0`.
+Runtime dependency: `org.typelevel:cats-core_3:2.13.0`.
 Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 
 ## Toolchain
@@ -22,18 +21,18 @@ curl -fLo /usr/local/bin/cs \
   https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz \
   && gunzip -f /usr/local/bin/cs && chmod +x /usr/local/bin/cs
 
-# A JVM that can run sbt 1.6.2 (project pin)
-cs java --jvm temurin:17 --setup        # writes JAVA_HOME into ~/.profile
+# A recent JVM (sbt 1.12 supports JDK 17 and JDK 21)
+cs java --jvm temurin:21 --setup        # writes JAVA_HOME into ~/.profile
 
 # Scala dev tools
 cs install --install-dir /usr/local/bin sbt scala scalafmt scalafix metals metals-mcp
 ```
 
 After `cs java --setup`, open a fresh shell (or `source ~/.profile`) so
-`JAVA_HOME` points at Temurin 17. The project will not build on JDK 21.
+`JAVA_HOME` is on your PATH.
 
-Installed versions in this environment: `sbt 1.6.2`, `scala-runner 1.12.4`
-(Scala `3.8.3` by default, project uses `3.5.0`), `scalafmt 3.11.0` (honours
+Installed versions in this environment: `sbt 1.12.9`, `scala-runner 1.12.4`
+(Scala `3.8.3` by default, matching the project), `scalafmt 3.11.0` (honours
 the `version` pin in `.scalafmt.conf`), `scalafix 0.14.6`, `metals 1.6.7`,
 `metals-mcp 1.6.7`.
 
