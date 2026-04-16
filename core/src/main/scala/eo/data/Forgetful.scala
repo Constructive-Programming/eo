@@ -19,7 +19,7 @@ object Forgetful:
     def reverseGet[A]: [X] => A => Forgetful[X, A] =
       [X] => (a: A) => a
 
-  given map: ForgetfulApplicative[Forgetful] with
+  given applicative: ForgetfulApplicative[Forgetful] with
     def map[X, A, B]: Forgetful[X, A] => (A => B) => Forgetful[X, B] =
       a => f => f(a)
     def pure[X, A]: A => Forgetful[X, A] = a => a
