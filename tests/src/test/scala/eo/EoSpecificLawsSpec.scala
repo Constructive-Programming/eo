@@ -1,0 +1,147 @@
+package eo
+
+import optics.{Iso, Lens, Prism, Traversal, Optic}
+import optics.Optic.*
+import data.{Affine, Forgetful, Forget, SetterF}
+import data.Forgetful.given
+import data.Affine.given
+import data.SetterF.given
+import laws.EoSpecificLaws.*
+
+import cats.instances.int.given
+import cats.instances.list.given
+
+import org.scalacheck.Arbitrary
+import org.scalacheck.Prop.forAll
+import org.specs2.mutable.Specification
+import org.typelevel.discipline.specs2.mutable.Discipline
+
+/** Binds the EO-specific law traits to concrete optic instances. Where
+  * a law is too tangled to abstract over (H1, which depends on the
+  * existential X in a Lens's carrier), it's tested inline as a property
+  * below.
+  */
+class EoSpecificLawsSpec extends Specification with Discipline:
+
+  // ----- Concrete optics used by several checkAlls ---------------
+
+  val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
+    Iso[Int, Int, Int, Int](_ * 2, _ / 2)
+
+  val firstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
+    Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
+
+  val listTraversal: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
+    Traversal.each[List, Int, Int]
+
+  // =============== A1/I1 — morph preserves modify ==================
+
+  checkAll(
+    "Lens.morph[SetterF] preserves modify (I1)",
+    new MorphTests[(Int, String), Int, Tuple2, SetterF]:
+      val laws = new MorphLaws[(Int, String), Int, Tuple2, SetterF]:
+        val optic   = firstLens
+        val morphed = firstLens.morph[SetterF]
+    .morphPreservesModify,
+  )
+
+  checkAll(
+    "Lens.morph[Affine] preserves modify",
+    new MorphTests[(Int, String), Int, Tuple2, Affine]:
+      val laws = new MorphLaws[(Int, String), Int, Tuple2, Affine]:
+        val optic   = firstLens
+        val morphed = firstLens.morph[Affine]
+    .morphPreservesModify,
+  )
+
+  checkAll(
+    "Iso.morph[Tuple2] preserves get",
+    new MorphTests[Int, Int, Forgetful, Tuple2]:
+      val laws = new MorphLaws[Int, Int, Forgetful, Tuple2]:
+        val optic   = doubleIso
+        val morphed = doubleIso.morph[Tuple2]
+    .morphPreservesGet,
+  )
+
+  // =============== B1 — Iso reverse involution =====================
+
+  checkAll(
+    "Iso reverse is involutive",
+    new ReverseInvolutionTests[Int, Int]:
+      val laws = new ReverseInvolutionLaws[Int, Int]:
+        val iso = doubleIso
+    .reverseInvolution,
+  )
+
+  // =============== C1/C2 — Lens ∘ Lens composition =================
+
+  checkAll(
+    "Lens ∘ Lens composes get / replace correctly",
+    new LensComposeTests[((Int, Int), Int), (Int, Int), Int]:
+      val laws = new LensComposeLaws[((Int, Int), Int), (Int, Int), Int]:
+        val outer =
+          Lens[((Int, Int), Int), (Int, Int)](
+            _._1,
+            (s, a) => (a, s._2),
+          )
+        val inner =
+          Lens[(Int, Int), Int](_._1, (s, a) => (a, s._2))
+    .lensCompose,
+  )
+
+  // =============== D1 — modifyA at Id ≡ modify =====================
+
+  checkAll(
+    "Traversal.each modifyA[Id] ≡ modify",
+    new ModifyAIdTests[List[Int], Int, Forget[List]]:
+      val laws = new ModifyAIdLaws[List[Int], Int, Forget[List]]:
+        val optic = listTraversal
+    .modifyAId,
+  )
+
+  // =============== D3 — modifyA at Const ≡ foldMap =================
+
+  checkAll(
+    "Traversal.each modifyA[Const[Int,*]].getConst ≡ foldMap",
+    new ModifyAConstTests[List[Int], Int, Forget[List]]:
+      val laws = new ModifyAConstLaws[List[Int], Int, Forget[List]]:
+        val optic = listTraversal
+    .modifyAConst,
+  )
+
+  // =============== E1 — foldMap Monoid homomorphism ================
+
+  checkAll(
+    "Traversal.each.foldMap is a Monoid[Int] homomorphism",
+    new FoldMapHomomorphismTests[List[Int], Int, Forget[List]]:
+      val laws =
+        new FoldMapHomomorphismLaws[List[Int], Int, Forget[List]]:
+          val optic = listTraversal
+    .foldMapHomomorphism,
+  )
+
+  // =============== H3 — put ≡ reverseGet ∘ pure ====================
+
+  checkAll(
+    "Iso.put ≡ reverseGet ∘ pure",
+    new PutIsReverseGetTests[Int, Int]:
+      val laws = new PutIsReverseGetLaws[Int, Int]:
+        val iso = doubleIso
+    .putIsReverseGet,
+  )
+
+  // =============== H1 — place = transform const (inline) ===========
+  //
+  // `transform` needs `ev: T => F[X, D]`. For `Lens.second[Int, A]` the
+  // type works out to `(Int, A) => (Int, A)` = identity. Providing that
+  // given is trivially local; abstracting over it in a law trait would
+  // need a `val lens` with a path-dependent type, which outweighs the
+  // benefit for one optic.
+
+  "Lens.place a == Lens.transform (_ => a)" >> {
+    val secondLens = Lens.second[Int, Boolean]
+    given ev: (((Int, Boolean)) => (Int, Boolean)) = identity
+    forAll((pair: (Int, Boolean), a: Boolean) =>
+      secondLens.place(a)(pair) == secondLens.transform(_ => a)(pair)
+    )
+  }

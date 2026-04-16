@@ -19,9 +19,10 @@ object Forgetful:
     def reverseGet[A]: [X] => A => Forgetful[X, A] =
       [X] => (a: A) => a
 
-  given map: ForgetfulFunctor[Forgetful] with
+  given map: ForgetfulApplicative[Forgetful] with
     def map[X, A, B]: Forgetful[X, A] => (A => B) => Forgetful[X, B] =
       a => f => f(a)
+    def pure[X, A]: A => Forgetful[X, A] = a => a
 
   given bifunctor[F[_]: Functor]: Bifunctor[Forget[F]] with
     def bimap[A, B, C, D](fab: Forget[F][A, B])(f: A => C, g: B => D): Forget[F][C, D] =

@@ -29,6 +29,10 @@ lazy val core: Project = project
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
+    // Minimal Test dep so sbt-stryker4s has a test framework wired up:
+    // the cross-cutting specs live in `tests`, but stryker only runs
+    // core/test, so core needs at least one killer spec on classpath.
+    libraryDependencies += discipline % Test,
   )
 
 lazy val laws: Project = project
