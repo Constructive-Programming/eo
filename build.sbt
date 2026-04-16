@@ -3,12 +3,14 @@ val scala3Version = "3.8.3"
 val Typelevel     = "org.typelevel"
 val ScalaCheckOrg = "org.scalacheck"
 val Optics        = "dev.optics"
+val Kubuszok      = "com.kubuszok"
 
 lazy val cats           = Typelevel     %% "cats-core"         % "2.13.0"
 lazy val disciplineCore = Typelevel     %% "discipline-core"   % "1.7.0"
 lazy val discipline     = Typelevel     %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck     = ScalaCheckOrg %% "scalacheck"        % "1.17.1"
 lazy val monocle        = Optics        %% "monocle-core"      % "3.3.0"
+lazy val hearth         = Kubuszok      %% "hearth"            % "0.3.0"
 
 lazy val commonSettings = Seq(
   version      := "0.1.0-SNAPSHOT",
@@ -17,7 +19,7 @@ lazy val commonSettings = Seq(
 
 lazy val root: Project = project
   .in(file("."))
-  .aggregate(core, laws, tests)
+  .aggregate(core, laws, tests, generics)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-root",
@@ -54,6 +56,21 @@ lazy val tests: Project = project
   .settings(
     name := "cats-eo-tests",
     publish / skip := true,
+    libraryDependencies += discipline % Test,
+  )
+
+// Auto-derivation of optics for product / sum types via quoted macros,
+// built on Mateusz Kubuszok's `hearth` macro-commons library. Kept out
+// of `core` so agents that only want the hand-written optics don't
+// pull in a macro dep.
+lazy val generics: Project = project
+  .in(file("generics"))
+  .dependsOn(LocalProject("core"), LocalProject("laws") % Test)
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-generics",
+    libraryDependencies += cats,
+    libraryDependencies += hearth,
     libraryDependencies += discipline % Test,
   )
 

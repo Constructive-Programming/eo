@@ -1,0 +1,43 @@
+package eo
+
+import eo.optics.Optic
+
+/** Auto-derivation entry points for EO optics.
+  *
+  * This module contains Scala 3 quoted macros that synthesise the
+  * boilerplate usually written by hand for Lens / Prism.
+  *
+  * The internal scaffolding hooks into Mateusz Kubuszok's
+  * [[com.kubuszok:hearth]] macro-commons library so richer
+  * derivations (recursive lenses, whole-ADT Prism tables, etc.)
+  * can be added without restructuring the call-site surface.
+  */
+package object generics:
+
+  /** Derive a `Lens` from a case-class field accessor.
+    *
+    * Two-step partial application: `lens[Person](_.age)`. This lets
+    * callers pin `S` while letting `A` be inferred from the selector
+    * (the approach Monocle uses for `GenLens[S](_.field)`).
+    *
+    * {{{
+    * case class Person(name: String, age: Int)
+    * val ageLens = lens[Person](_.age)
+    * }}}
+    */
+  def lens[S]: PartiallyAppliedLens[S] = new PartiallyAppliedLens[S]
+
+  final class PartiallyAppliedLens[S]:
+    inline def apply[A](inline selector: S => A): Optic[S, S, A, A, Tuple2] =
+      LensMacro.derive[S, A](selector)
+
+  /** Derive a `Prism` focusing on a single variant of a sealed / enum type.
+    *
+    * {{{
+    * enum Shape:
+    *   case Circle(r: Double), Square(s: Double)
+    * val circleP = prism[Shape, Shape.Circle]
+    * }}}
+    */
+  inline def prism[S, A <: S]: Optic[S, S, A, A, Either] =
+    PrismMacro.derive[S, A]

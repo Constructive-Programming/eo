@@ -108,6 +108,48 @@ fork count of at least 1, the `-prof` profilers when investigating
 specific suspicions, and the usual reminder that "the numbers below are
 just data".
 
+### Auto-derivation: `eo-generics`
+
+`generics/` is a separate sub-project that synthesises boilerplate
+optics at compile time from Scala 3 quoted macros. Two entry points
+so far, both of which compile down to exactly the code you'd write
+by hand:
+
+```scala
+import eo.generics.{lens, prism}
+
+// Product-type Lens (GenLens-style partial application):
+case class Person(name: String, age: Int)
+val ageL  = lens[Person](_.age)            // Optic[Person, Person, Int, Int, Tuple2]
+val nameL = lens[Person](_.name)
+
+// Sum-type Prism from a Scala 3 enum or sealed trait:
+enum Shape:
+  case Circle(r: Double), Square(s: Double), Triangle(b: Double, h: Double)
+
+val circleP = prism[Shape, Shape.Circle]  // Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either]
+```
+
+The emitted setter for `lens` is a `.copy(field = a)` — explicit in
+every field to sidestep default-argument elaboration at the reflect
+layer. The emitted deconstruct for `prism` is `case a: A => Right(a)
+case _ => Left(s)`.
+
+Dependencies: `cats-eo` (runtime) plus Mateusz Kubuszok's
+[`com.kubuszok:hearth_3:0.3.0`](https://github.com/MateuszKubuszok/hearth)
+macro-commons library. Hearth is currently a staged dependency —
+the present macros use vanilla `scala.quoted.*` reflection — but
+is on the classpath so richer derivations (recursive lenses on
+nested paths, whole-ADT Prism tables, product-to-tuple Iso) can
+drop in through
+`generics/src/main/scala/eo/generics/hearth/HearthScaffolding.scala`
+without another round of `build.sbt` surgery.
+
+Behaviour specs in `generics/src/test/scala/eo/generics/GenericsSpec.scala`
+check the three Lens laws and three Prism laws on derived instances
+directly, so `eo-generics` stays independent of `cats-eo-laws` at
+runtime.
+
 ## Metals MCP (stdio)
 
 `metals-mcp` (new in v1.6.7) is registered as a project-local MCP server in
