@@ -111,9 +111,9 @@ just data".
 ### Auto-derivation: `eo-generics`
 
 `generics/` is a separate sub-project that synthesises boilerplate
-optics at compile time from Scala 3 quoted macros. Two entry points
-so far, both of which compile down to exactly the code you'd write
-by hand:
+optics at compile time, built on top of Mateusz Kubuszok's
+[`com.kubuszok:hearth_3:0.3.0`](https://github.com/MateuszKubuszok/hearth)
+macro-commons library. Two entry points so far:
 
 ```scala
 import eo.generics.{lens, prism}
@@ -123,32 +123,47 @@ case class Person(name: String, age: Int)
 val ageL  = lens[Person](_.age)            // Optic[Person, Person, Int, Int, Tuple2]
 val nameL = lens[Person](_.name)
 
-// Sum-type Prism from a Scala 3 enum or sealed trait:
+// Sum-type Prism from a Scala 3 enum, sealed trait, OR union type:
 enum Shape:
   case Circle(r: Double), Square(s: Double), Triangle(b: Double, h: Double)
 
-val circleP = prism[Shape, Shape.Circle]  // Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either]
+val circleP = prism[Shape, Shape.Circle]   // Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either]
+val intP    = prism[Int | String, Int]     // Scala 3 union type works too
+
+// Recursive parameterised ADTs are also fine:
+enum Tree[+N]:
+  case Leaf(value: N)
+  case Branch(left: Tree[N], right: Tree[N])
+
+val branchLeftL = lens[Tree.Branch[Int]](_.left)
+val leafP       = prism[Tree[Int], Tree.Leaf[Int]]
 ```
 
-The emitted setter for `lens` is a `.copy(field = a)` — explicit in
-every field to sidestep default-argument elaboration at the reflect
-layer. The emitted deconstruct for `prism` is `case a: A => Right(a)
-case _ => Left(s)`.
+How the macros use Hearth:
 
-Dependencies: `cats-eo` (runtime) plus Mateusz Kubuszok's
-[`com.kubuszok:hearth_3:0.3.0`](https://github.com/MateuszKubuszok/hearth)
-macro-commons library. Hearth is currently a staged dependency —
-the present macros use vanilla `scala.quoted.*` reflection — but
-is on the classpath so richer derivations (recursive lenses on
-nested paths, whole-ADT Prism tables, product-to-tuple Iso) can
-drop in through
-`generics/src/main/scala/eo/generics/hearth/HearthScaffolding.scala`
-without another round of `build.sbt` surgery.
+- `lens[S](_.field)` parses the selector lambda with vanilla
+  `quotes.reflect`, then routes setter construction through Hearth's
+  `CaseClass.parse[S]` + `caseFieldValuesAt(s)` + `construct[Id]`.
+  The emitted setter calls `new S(...)` (NOT `s.copy(...)`), which
+  means it works uniformly for case classes AND for Scala 3 enum
+  cases — the latter don't expose `.copy` at all.
+
+- `prism[S, A]` recognises sealed traits, enums, and union types
+  through Hearth's `Enum.parse[S]`. The deconstruct is generated
+  by `Enum.matchOn`, which automatically picks `MatchCase.eqValue`
+  for parameterless enum cases (whose erased type would otherwise
+  collide with each other) and `MatchCase.typeMatch` for the rest.
+  The emitted reconstruct is a plain upcast `(a: A) => a: S`.
+
+Macro-generated `new T(...)` calls don't carry an outer accessor,
+so test ADTs live at top level in `generics/src/test/scala/eo/generics/samples/`
+rather than nested inside the spec class — otherwise the back-end
+trips on "missing outer accessor in class GenericsSpec".
 
 Behaviour specs in `generics/src/test/scala/eo/generics/GenericsSpec.scala`
 check the three Lens laws and three Prism laws on derived instances
-directly, so `eo-generics` stays independent of `cats-eo-laws` at
-runtime.
+across all the supported shapes (case class, enum, union, recursive
+parameterised ADT). Independent of `cats-eo-laws` at runtime.
 
 ## Metals MCP (stdio)
 
