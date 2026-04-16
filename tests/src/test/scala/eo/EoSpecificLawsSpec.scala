@@ -143,3 +143,23 @@ class EoSpecificLawsSpec extends Specification with Discipline:
           identity
     .transform,
   )
+
+  // =============== F1 — Composer.chain path independence ===========
+
+  checkAll(
+    "doubleIso: chain through Tuple2 ≡ chain through Either",
+    new ChainPathIndependenceTests[Int, Int]:
+      val laws = new ChainPathIndependenceLaws[Int, Int]:
+        val iso = doubleIso
+    .chainPathIndependence,
+  )
+
+  // =============== G1 + G2 — Optic.all on Forget[T] ================
+
+  checkAll(
+    "Traversal.each[List, Int]: all has length 1 and head == input",
+    new TraverseAllTests[List, Int]:
+      val laws = new TraverseAllLaws[List, Int]:
+        val traversal = listTraversal
+    .traverseAll,
+  )

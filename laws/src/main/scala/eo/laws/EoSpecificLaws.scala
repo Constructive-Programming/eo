@@ -284,3 +284,70 @@ object EoSpecificLaws:
         "put f a == reverseGet (f a)" ->
           forAll((a: A, f: A => A) => laws.putIsReverseGetCompose(a, f)),
       )
+
+  // ================= F1: Composer.chain path independence ==========
+  //
+  // From Forgetful there are two direct composers (→ Tuple2, → Either)
+  // and from each of those a direct composer to Affine. So an Iso can
+  // land in Affine via two distinct chains. They should be modify-
+  // equivalent — otherwise `Composer.chain` would be making the
+  // caller's choice of intermediary observable.
+
+  trait ChainPathIndependenceLaws[S, A]:
+    def iso: Optic[S, S, A, A, Forgetful]
+
+    // Using the composers explicitly sidesteps the implicit-resolution
+    // ambiguity that `iso.morph[Affine]` would hit (Scala can't pick
+    // between Tuple2 and Either for the intermediate G).
+    private def viaTuple2: Optic[S, S, A, A, Affine] =
+      Affine.tuple2affine.to(Composer.forgetful2tuple.to(iso))
+
+    private def viaEither: Optic[S, S, A, A, Affine] =
+      Affine.either2affine.to(Composer.forgetful2either.to(iso))
+
+    def chainPathIndependence(s: S, f: A => A): Boolean =
+      viaTuple2.modify(f)(s) == viaEither.modify(f)(s)
+
+  abstract class ChainPathIndependenceTests[S, A] extends Laws:
+    def laws: ChainPathIndependenceLaws[S, A]
+
+    def chainPathIndependence(using
+        Arbitrary[S], Arbitrary[A], Cogen[A]
+    ): RuleSet =
+      new SimpleRuleSet(
+        "Composer.chain path independence",
+        "Forgetful→Tuple2→Affine ≡ Forgetful→Either→Affine on modify" ->
+          forAll((s: S, f: A => A) =>
+            laws.chainPathIndependence(s, f)
+          ),
+      )
+
+  // ================= G1, G2: Optic.all on Forget[T] ================
+  //
+  // `Optic.all` uses `traverse(List(_))` under the hood, which with
+  // List's cartesian applicative yields a one-element list wrapping
+  // the whole container — not a per-element enumeration. These laws
+  // pin that behaviour down so later changes can't silently break it.
+
+  trait TraverseAllLaws[T[_], A](using val FT: Traverse[T]):
+    def traversal: Optic[T[A], T[A], A, A, Forget[T]]
+
+    /** G1 — `all` always has exactly one element. */
+    def allHasLengthOne(s: T[A]): Boolean =
+      traversal.all(s).length == 1
+
+    /** G2 — that single element is the original container. */
+    def allHeadIsInput(s: T[A]): Boolean =
+      traversal.all(s).head == s
+
+  abstract class TraverseAllTests[T[_]: Traverse, A] extends Laws:
+    def laws: TraverseAllLaws[T, A]
+
+    def traverseAll(using Arbitrary[T[A]]): RuleSet =
+      new SimpleRuleSet(
+        "Optic.all on Forget[T]",
+        "all(s).length == 1" ->
+          forAll((s: T[A]) => laws.allHasLengthOne(s)),
+        "all(s).head == s" ->
+          forAll((s: T[A]) => laws.allHeadIsInput(s)),
+      )
