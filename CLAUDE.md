@@ -48,6 +48,27 @@ scalafix --rules RemoveUnused         # example rewrite
 scala -e 'println(1 + 2)'             # quick REPL eval
 ```
 
+### Test-suite quality
+
+Two sbt plugins live in [`project/plugins.sbt`](./project/plugins.sbt):
+
+- [`sbt-scoverage`](https://github.com/scoverage/sbt-scoverage) — statement /
+  branch coverage
+- [`sbt-stryker4s`](https://stryker-mutator.io/docs/stryker4s/getting-started/)
+  — mutation testing: regenerates the tree with small semantic changes
+  (mutants) and confirms each mutant is caught by at least one test
+
+```sh
+sbt clean coverage test coverageReport  # HTML + XML under target/scala-<ver>/scoverage-report/
+sbt coverageOff stryker                 # HTML under target/stryker4s-report/<timestamp>/
+```
+
+Because this project is mostly type-level machinery, statement-rate coverage
+undersells the real story — scoverage instruments very few statements. Use
+stryker4s as the primary quality signal: it surfaces runtime expressions that
+no test pins down. Both report directories sit under `target/` and are
+`.gitignore`d.
+
 ## Metals MCP (stdio)
 
 `metals-mcp` (new in v1.6.7) is registered as a project-local MCP server in
