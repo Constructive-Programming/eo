@@ -1,0 +1,189 @@
+package eo
+
+import optics.{Fold, Getter, Iso, Lens, Optic, Prism, Setter, Traversal, Optional}
+import optics.Optic.*
+import data.{Affine, Forgetful, Forget}
+import data.Forgetful.given
+import data.Affine.given
+
+import cats.Applicative
+import cats.instances.int.given
+import cats.instances.list.given
+import cats.instances.option.given
+
+import org.scalacheck.Prop.forAll
+import org.specs2.ScalaCheck
+import org.specs2.mutable.Specification
+
+/** Non-law behavioural coverage for EO's optics: exercises the extension
+  * methods (`andThen`, `reverse`, `foldMap`, `modifyA`, `morph`), the
+  * Lens/Prism/Traversal alternative constructors, and `Getter`, all of
+  * which are never reached from the ported Monocle laws but still belong
+  * in any honest description of what the library does.
+  */
+class OpticsBehaviorSpec extends Specification with ScalaCheck:
+
+  // ----- Getter.apply ----------------------------------------------
+
+  "Getter.apply reads the focused value" >> {
+    val g = Getter[(Int, String), Int](_._1)
+    forAll((s: (Int, String)) => g.get(s) == s._1)
+  }
+
+  // ----- Lens alternative constructors -----------------------------
+
+  "Lens.first exposes the first tuple component" >> {
+    val l = Lens.first[Int, String]
+    l.get((1, "a")) === 1
+    l.replace(9)((1, "a")) === (9, "a")
+  }
+
+  "Lens.second exposes the second tuple component" >> {
+    val l = Lens.second[Int, String]
+    l.get((1, "a")) === "a"
+    l.replace("z")((1, "a")) === (1, "z")
+  }
+
+  "Lens.curried is equivalent to Lens.apply" >> {
+    val curried =
+      Lens.curried[(Int, Int), Int](_._1, a => s => (a, s._2))
+    val applied =
+      Lens[(Int, Int), Int](_._1, (s, a) => (a, s._2))
+    forAll((s: (Int, Int), a: Int) =>
+      curried.get(s) == applied.get(s) &&
+        curried.replace(a)(s) == applied.replace(a)(s)
+    )
+  }
+
+  // ----- Lens composition via Optic.andThen ------------------------
+  //
+  // Exercises AssociativeFunctor[Tuple2, X, Y] through andThen.
+
+  "Lens composed with Lens reaches nested pair component" >> {
+    type S = ((Int, Int), Int)
+    val outer: Optic[S, S, (Int, Int), (Int, Int), Tuple2] =
+      Lens[S, (Int, Int)](_._1, (s, a) => (a, s._2))
+    val inner: Optic[(Int, Int), (Int, Int), Int, Int, Tuple2] =
+      Lens[(Int, Int), Int](_._1, (s, a) => (a, s._2))
+    val nested = outer.andThen(inner)
+    nested.get(((1, 2), 3)) === 1
+    nested.replace(9)(((1, 2), 3)) === ((9, 2), 3)
+    nested.modify(_ + 100)(((1, 2), 3)) === ((101, 2), 3)
+  }
+
+  // ----- Iso.reverse -----------------------------------------------
+
+  "Iso.reverse swaps the get / reverseGet directions" >> {
+    val longIso: Optic[Int, Int, Long, Long, Forgetful] =
+      Iso[Int, Int, Long, Long](_.toLong, _.toInt)
+    val rev = longIso.reverse
+    forAll((n: Int) =>
+      // reverse.get undoes longIso.get within Int's range
+      rev.get(n.toLong) == n
+    )
+  }
+
+  // ----- Prism alternative constructors ----------------------------
+
+  "Prism.optional builds a Prism from a partial projection" >> {
+    val posIntPrism = Prism.optional[Int, Int](
+      n => if n >= 0 then Some(n) else None,
+      identity,
+    )
+    posIntPrism.to(5) === Right(5)
+    posIntPrism.to(-1) === Left(-1)
+    posIntPrism.reverseGet(7) === 7
+  }
+
+  // ----- foldMap exercised on Traversal.each -----------------------
+  //
+  // Hits ForgetfulFold.foldFFold[List] and Optic.foldMap.
+
+  "Traversal.each.foldMap totals the list under Monoid[Int]" >> {
+    val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
+      Traversal.each[List, Int, Int]
+    forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
+  }
+
+  // ----- modifyA with the Option applicative -----------------------
+  //
+  // Hits ForgetfulTraverse.traverse2[List] for Forget[List] and
+  // demonstrates that failure short-circuits the whole traversal.
+
+  "Traversal.each.modifyA short-circuits on None" >> {
+    val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
+      Traversal.each[List, Int, Int]
+    val positivesDoubled: Int => Option[Int] =
+      a => if a > 0 then Some(a * 2) else None
+
+    t.modifyA[Option](positivesDoubled)(List(1, 2, 3)) === Some(List(2, 4, 6))
+    t.modifyA[Option](positivesDoubled)(List(1, -2, 3)) === None
+    t.modifyA[Option](positivesDoubled)(Nil)             === Some(Nil)
+  }
+
+  // ----- .morph coerces a Tuple2 carrier (Lens) to an Affine --------
+  //
+  // Hits Composer.tuple2affine in data.Affine.
+
+  "Lens morphed into an Affine behaves like the original Lens" >> {
+    val l: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
+      Lens.first[Int, String]
+    val asAffine: Optic[(Int, String), (Int, String), Int, Int, Affine] =
+      l.morph[Affine]
+
+    forAll((pair: (Int, String), a: Int) =>
+      asAffine.modify(_ => a)(pair) == l.replace(a)(pair)
+    )
+  }
+
+  // ----- Fold.apply for a Foldable ---------------------------------
+
+  "Fold.apply[List] folds all elements" >> {
+    val f: Optic[List[Int], Unit, Int, Int, Forget[List]] =
+      Fold[List, Int]
+    forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
+  }
+
+  // ----- Fold.select predicate semantics ---------------------------
+  //
+  // Pins the `Option(_).filter(p)` in Fold.select so stryker detects a
+  // mutation to `filterNot` here (the whole project has exactly one
+  // stryker-reachable runtime expression, and this is it).
+
+  "Fold.select keeps values matching the predicate, drops the rest" >> {
+    val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] =
+      Fold.select[Int](_ % 2 == 0)
+    forAll((n: Int) =>
+      evenFold.to(n) == (if n % 2 == 0 then Some(n) else None)
+    )
+  }
+
+  // ----- Composer morphs from Forgetful -----------------------------
+  //
+  // Iso's carrier is Forgetful; the three `morph` targets exercise
+  // `forgetful2tuple`, `forgetful2either`, and `chain` (Composer.scala),
+  // which are otherwise unreachable from the ported laws.
+
+  val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
+    Iso[Int, Int, Int, Int](_ * 2, _ / 2)
+
+  "Iso.morph[Tuple2] behaves like a Lens" >> {
+    val asLens = doubleIso.morph[Tuple2]
+    forAll((n: Int) => asLens.get(n) == n * 2)
+  }
+
+  "Iso.morph[Either] behaves like a Prism" >> {
+    val asPrism = doubleIso.morph[Either]
+    // Forgetful → Either always sends to Right
+    asPrism.to(10) === Right(20)
+    asPrism.reverseGet(20) === 10
+  }
+
+  // Chaining morphs (Forgetful -> Tuple2 -> Affine) exercises
+  // Composer.chain for its middle step.
+  "Iso.morph[Tuple2].morph[Affine] is a valid Affine-shaped optic" >> {
+    val asAffine = doubleIso.morph[Tuple2].morph[Affine]
+    forAll((n: Int) =>
+      asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2)
+    )
+  }

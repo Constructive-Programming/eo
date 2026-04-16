@@ -26,6 +26,7 @@ lazy val root: Project = project
 lazy val laws: Project = project
   .in(file("laws"))
   .dependsOn(LocalProject("root"))
+  .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-laws",
