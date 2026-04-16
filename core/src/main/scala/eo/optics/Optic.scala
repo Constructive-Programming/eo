@@ -74,7 +74,12 @@ object Optic:
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using A: Accessor[F], RA: ReverseAccessor[F])
-    inline def reverse =
+    // Intentionally NOT `inline`: the body constructs a fresh `Optic`
+    // anonymous class, and `inline` would duplicate that class definition
+    // at every call site (E197 warning). Since the body already allocates
+    // a new Optic, inlining wouldn't eliminate that allocation -- so we
+    // keep the method as a normal `def` and avoid the bytecode bloat.
+    def reverse: Optic[B, A, T, S, F] =
       new Optic[B, A, T, S, F]:
         type X = o.X
         def to: B => F[X, T] = (b: B) => RA.reverseGet(o.from(RA.reverseGet(b)))
