@@ -15,7 +15,7 @@ import cats.instances.list.given
 import monocle.{Iso => MIso, Lens => MLens, Prism => MPrism, Traversal => MTraversal}
 
 /** Shared sample data used across benchmarks. */
-final case class Person(name: String, age: Int)
+final case class Person(age: Int, name: String)
 
 /** Lens.get / Lens.replace / Lens.modify
   *
@@ -31,7 +31,7 @@ final case class Person(name: String, age: Int)
 @Measurement(iterations = 5, time = 1)
 class LensBench:
 
-  val person: Person = Person("Alice", 30)
+  val person: Person = Person(30, "Alice")
 
   val eoAge =
     EoLens[Person, Int](_.age, (p, a) => p.copy(age = a))
@@ -50,7 +50,11 @@ class LensBench:
 
 /** Prism.getOption / Prism.reverseGet
   *
-  * Some-constructor on `Option[Int]` for both libraries.
+  * Two use cases:
+  *   - `optional`-style prism on `Option[Int]` (Some / None).
+  *   - `Either[String, Int]` prism focusing the Right (Int) branch;
+  *     this is a more natural Prism since the residual type differs
+  *     from the focused type.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -64,22 +68,44 @@ class PrismBench:
   val absent:  Option[Int] = None
   val raw:     Int         = 7
 
-  val eoSome =
-    EoPrism[Option[Int], Int](_.toRight(None), Some(_))
+  val eoSome = EoPrism.optional[Option[Int], Int](identity, Some(_))
 
   val mSome: MPrism[Option[Int], Int] =
     MPrism[Option[Int], Int](identity)(Some(_))
 
-  @Benchmark def eoGetOptionPresent: Option[Int] = eoSome.to(present).toOption
+  @Benchmark def eoGetOptionPresent: Option[Int] = eoSome.getOption(present)
   @Benchmark def mGetOptionPresent:  Option[Int] = mSome.getOption(present)
 
-  @Benchmark def eoGetOptionAbsent: Option[Int] = eoSome.to(absent).toOption
+  @Benchmark def eoGetOptionAbsent: Option[Int] = eoSome.getOption(absent)
   @Benchmark def mGetOptionAbsent:  Option[Int] = mSome.getOption(absent)
 
   @Benchmark def eoReverseGet: Option[Int] = eoSome.reverseGet(raw)
   @Benchmark def mReverseGet:  Option[Int] = mSome.reverseGet(raw)
 
-/** Iso.get / Iso.reverseGet on `Int <-> String`.
+  // ---- Either[String, Int] prism on the Right (Int) branch ---------
+
+  val rightPresent: Either[String, Int] = Right(42)
+  val rightAbsent:  Either[String, Int] = Left("nope")
+
+  val eoRight: EPrism[Either[String, Int], Int] =
+    EoPrism[Either[String, Int], Int](identity, Right(_))
+  val mRight: MPrism[Either[String, Int], Int] =
+    MPrism[Either[String, Int], Int](_.toOption)(Right(_))
+
+  @Benchmark def eoGetRightPresent: Option[Int] = eoRight.getOption(rightPresent)
+  @Benchmark def mGetRightPresent:  Option[Int] = mRight.getOption(rightPresent)
+
+  @Benchmark def eoGetRightAbsent: Option[Int] = eoRight.getOption(rightAbsent)
+  @Benchmark def mGetRightAbsent:  Option[Int] = mRight.getOption(rightAbsent)
+
+  @Benchmark def eoRightReverseGet: Either[String, Int] = eoRight.reverseGet(raw)
+  @Benchmark def mRightReverseGet:  Either[String, Int] = mRight.reverseGet(raw)
+
+/** Iso.get / Iso.reverseGet on `(Int, String) <-> Person(age, name)`.
+  *
+  * A product-to-product isomorphism is a more honest benchmark than
+  * a primitive conversion: every call allocates a new carrier on each
+  * side and exercises the same boxing behaviour a real Iso would.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -89,20 +115,23 @@ class PrismBench:
 @Measurement(iterations = 5, time = 1)
 class IsoBench:
 
-  val n:  Int    = 42
-  val str: String = "42"
+  val tuple:  (Int, String) = (30, "Alice")
+  val person: Person        = Person(30, "Alice")
 
-  val eoIso: Optic[Int, Int, String, String, Forgetful] =
-    EoIso[Int, Int, String, String](_.toString, _.toInt)
+  val eoIso: Optic[(Int, String), (Int, String), Person, Person, Forgetful] =
+    EoIso[(Int, String), (Int, String), Person, Person](
+      t => Person(t._1, t._2),
+      p => (p.age, p.name),
+    )
 
-  val mIso: MIso[Int, String] =
-    MIso[Int, String](_.toString)(_.toInt)
+  val mIso: MIso[(Int, String), Person] =
+    MIso[(Int, String), Person](t => Person(t._1, t._2))(p => (p.age, p.name))
 
-  @Benchmark def eoGet: String = eoIso.get(n)
-  @Benchmark def mGet:  String = mIso.get(n)
+  @Benchmark def eoGet: Person        = eoIso.get(tuple)
+  @Benchmark def mGet:  Person        = mIso.get(tuple)
 
-  @Benchmark def eoReverseGet: Int = eoIso.reverseGet(str)
-  @Benchmark def mReverseGet:  Int = mIso.reverseGet(str)
+  @Benchmark def eoReverseGet: (Int, String) = eoIso.reverseGet(person)
+  @Benchmark def mReverseGet:  (Int, String) = mIso.reverseGet(person)
 
 /** Traversal.modify over a moderately sized List[Int].
   *

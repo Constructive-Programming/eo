@@ -89,12 +89,12 @@ object Optic:
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using A: Accessor[F])
-    inline def get[X](s: S): A = A.get(o.to(s))
+    inline def get(s: S): A = A.get(o.to(s))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using RA: ReverseAccessor[F])
-    inline def reverseGet[X](b: B): T = o.from(RA.reverseGet(b))
+    inline def reverseGet(b: B): T = o.from(RA.reverseGet(b))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
@@ -113,20 +113,25 @@ object Optic:
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F])
-    inline def modify[X](f: A => B): S => T =
+    inline def modify(f: A => B): S => T =
       s => o.from(FF.map(o.to(s), f))
-    inline def replace[X](b: B): S => T =
+    inline def replace(b: B): S => T =
       s => o.from(FF.map(o.to(s), _ => b))
 
+  extension [S, T, A, B, F[_, _]](
+    o: Optic[S, T, A, B, F]
+  )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, B])
+    inline def place(b: B): T => T =
+      t => o.from(FF.map(ev(t), _ => b))
+    inline def transfer[C](f: C => B): T => C => T =
+      t => c => place(f(c))(t)
+
+  /** the more general version of place */
   extension [S, T, A, B, D, F[_, _]](
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, D])
     inline def transform(f: D => B): T => T =
       t => o.from(FF.map(ev(t), f))
-    inline def place(b: B): T => T =
-      transform(_ => b)
-    inline def transfer[C](f: C => B): T => C => T =
-      t => c => place(f(c))(t)
 
   extension [S, T, A, B, F[_, _]](
     o: Optic[S, T, A, B, F]
@@ -153,3 +158,4 @@ object Optic:
   )(using FF: ForgetfulFold[F])
     inline def foldMap[M: Monoid](f: A => M): S => M =
       s => FF.foldMap(using Monoid[M])(f)(o.to(s))
+

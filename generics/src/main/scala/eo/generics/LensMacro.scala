@@ -3,43 +3,57 @@ package generics
 
 import scala.quoted.*
 
-import eo.optics.{Lens, Optic}
+import eo.optics.{Lens, Optic, SplitCombineOptic}
 
-/** Compile-time derivation of a `Lens` from a field-accessor lambda.
+/** Compile-time derivation of a `Lens` as a [[SplitCombineOptic]].
   *
   * Usage:
   * {{{
   * import eo.generics.lens
-  * case class Person(name: String, age: Int)
+  * case class Person(age: Int, name: String)
   * val ageLens = lens[Person](_.age)
-  * // ageLens: Optic[Person, Person, Int, Int, Tuple2]
-  * ageLens.get(Person("a", 30))            // 30
-  * ageLens.replace(40)(Person("a", 30))    // Person("a", 40)
+  * // ageLens: SplitCombineOptic[Person, Int, String]
+  * ageLens.get(Person(30, "Alice"))        // 30
+  * ageLens.replace(40)(Person(30, "Alice"))// Person(40, "Alice")
   * }}}
   *
   * Implementation notes:
+  *   - The macro exposes the actual *structural complement* of `S` as
+  *     the optic's `X` parameter: for a 2-field case class focused on
+  *     one field, `X` is the type of the remaining field. That gives
+  *     `transform`, `place`, and `transfer` the evidence they need for
+  *     free -- no companion `given` required at the call site.
   *   - The selector lambda is parsed with vanilla `quotes.reflect`
   *     pattern matching (Hearth has no surface for "the AST of an
   *     anonymous function").
-  *   - The setter is built through Hearth's [[hearth.typed.Classes]]
+  *   - `combine` is built through Hearth's [[hearth.typed.Classes]]
   *     view: `CaseClass.parse[S]` validates that S is a real case
-  *     class, `caseFieldValuesAt(s)` reads every field off the source
-  *     instance, and `construct[Id]` calls the primary constructor
-  *     with the substitution `field == fieldName ? a : s.field` for
-  *     each parameter.
-  *   - Routing setter construction through Hearth means recursive /
-  *     parameterised types (e.g. `Branch[N]`) and Scala 3 enum cases
-  *     (which lack a `.copy` method) are both handled uniformly --
-  *     `new T(...)` works for both.
+  *     class, and `construct[Id]` emits the primary constructor call
+  *     with `a` at the target position and `x` at the sibling
+  *     position.
+  *   - Routing constructor synthesis through Hearth means recursive /
+  *     parameterised types and Scala 3 enum cases (which lack a
+  *     `.copy` method) are both handled uniformly -- `new T(...)`
+  *     works for both.
+  *   - Only 1-field and 2-field case classes are supported currently.
+  *     Extending to N-field classes (N≥3) requires building a `TupleN`
+  *     complement; tracked as future work.
   */
 object LensMacro:
 
-  inline def derive[S, A](inline selector: S => A): Optic[S, S, A, A, Tuple2] =
+  // `transparent inline` so the specific `XA` that `deriveImpl`
+  // synthesises (EmptyTuple for 1-field records, the sibling field's
+  // type for 2-field records) propagates to the call site. The
+  // declared `? ` wildcard is an upper bound; the call-site type is
+  // always a concrete `SplitCombineOptic[S, S, A, A, <specificXA>]`.
+  transparent inline def derive[S, A](
+      inline selector: S => A,
+  ): SplitCombineOptic[S, S, A, A, ?] =
     ${ deriveImpl[S, A]('selector) }
 
   def deriveImpl[S: Type, A: Type](
-      selector: Expr[S => A]
-  )(using q: Quotes): Expr[Optic[S, S, A, A, Tuple2]] =
+      selector: Expr[S => A],
+  )(using q: Quotes): Expr[SplitCombineOptic[S, S, A, A, ?]] =
     new HearthLensMacro(q).deriveLens[S, A](selector)
 
 /** Hearth-backed Lens macro implementation, extends
@@ -54,8 +68,8 @@ private final class HearthLensMacro(q: Quotes)
   import _root_.hearth.fp.instances.*
 
   def deriveLens[S, A](
-      selector: Expr[S => A]
-  )(using Type[S], Type[A]): Expr[Optic[S, S, A, A, Tuple2]] =
+      selector: Expr[S => A],
+  )(using Type[S], Type[A]): Expr[SplitCombineOptic[S, S, A, A, ?]] =
     val fieldName: String = extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         s"""lens[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]: selector must be a
@@ -76,22 +90,88 @@ private final class HearthLensMacro(q: Quotes)
               + s"field of ${Type.prettyPrint[S]}. Known fields: ${knownFields.mkString(", ")}"
           )
 
-        // (s: S, a: A) => <Hearth-built constructor call substituting
-        //                  `a` for the target field, `s.fi` elsewhere>
-        val setter: Expr[(S, A) => S] =
-          '{ (s: S, a: A) =>
+        val sTpe = TypeRepr.of[S]
+        val otherFieldSyms = sTpe.typeSymbol.caseFields.filter(_.name != fieldName)
+
+        otherFieldSyms.size match
+          case 0 =>
+            buildZeroOther[S, A](cc, fieldName, selector)
+          case 1 =>
+            buildOneOther[S, A](cc, fieldName, selector, sTpe, otherFieldSyms.head)
+          case n =>
+            report.errorAndAbort(
+              s"lens[${Type.prettyPrint[S]}]: structural Lens derivation currently "
+                + s"supports case classes with up to 2 fields (got $n other fields "
+                + s"besides '$fieldName'). Future work: build a TupleN complement "
+                + s"for wider records."
+            )
+
+  /** 1-field case class: complement `XA = EmptyTuple`. */
+  private def buildZeroOther[S: Type, A: Type](
+      cc: CaseClass[S],
+      fieldName: String,
+      selector: Expr[S => A],
+  ): Expr[SplitCombineOptic[S, S, A, A, EmptyTuple]] =
+    val split: Expr[S => (EmptyTuple, A)] =
+      '{ (s: S) => (EmptyTuple, $selector(s)) }
+
+    val combine: Expr[(EmptyTuple, A) => S] =
+      '{ (_: EmptyTuple, a: A) =>
+        ${
+          val constructed: Id[Option[Expr[S]]] = cc.construct[Id] {
+            (param: Parameter) =>
+              if param.name == fieldName then
+                Existential[Expr, A]('{ a }): Expr_??
+              else
+                report.errorAndAbort(
+                  s"lens[${Type.prettyPrint[S]}]: internal error -- "
+                    + s"unexpected parameter '${param.name}'."
+                )
+          }
+          constructed.getOrElse {
+            report.errorAndAbort(
+              s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
+                + s" constructor of ${Type.prettyPrint[S]}."
+            )
+          }
+        }
+      }
+
+    '{ SplitCombineOptic[S, S, A, A, EmptyTuple]($selector, $split, $combine, $split) }
+
+  /** 2-field case class: complement `XA` is the sibling field's type. */
+  private def buildOneOther[S: Type, A: Type](
+      cc: CaseClass[S],
+      fieldName: String,
+      selector: Expr[S => A],
+      sTpe: TypeRepr,
+      otherSym: Symbol,
+  ): Expr[SplitCombineOptic[S, S, A, A, ?]] =
+    val otherName = otherSym.name
+    val otherType = sTpe.memberType(otherSym)
+
+    otherType.asType match
+      case '[xa] =>
+        val split: Expr[S => (xa, A)] =
+          '{ (s: S) =>
+            val x: xa = ${ Select.unique('{ s }.asTerm, otherName).asExprOf[xa] }
+            (x, $selector(s))
+          }
+
+        val combine: Expr[(xa, A) => S] =
+          '{ (x: xa, a: A) =>
             ${
-              val fieldValues = cc.caseFieldValuesAt('{ s })
               val constructed: Id[Option[Expr[S]]] = cc.construct[Id] {
                 (param: Parameter) =>
                   if param.name == fieldName then
-                    // Substitute the new value `a` for the target field.
-                    // The Applicative-derived ConstructField will
-                    // upcast Expr[A] to Expr[field.tpe.Underlying].
                     Existential[Expr, A]('{ a }): Expr_??
+                  else if param.name == otherName then
+                    Existential[Expr, xa]('{ x }): Expr_??
                   else
-                    // Pass through `s.<otherField>` from the source.
-                    fieldValues(param.name)
+                    report.errorAndAbort(
+                      s"lens[${Type.prettyPrint[S]}]: internal error -- "
+                        + s"unexpected parameter '${param.name}'."
+                    )
               }
               constructed.getOrElse {
                 report.errorAndAbort(
@@ -102,7 +182,7 @@ private final class HearthLensMacro(q: Quotes)
             }
           }
 
-        '{ Lens[S, A]($selector, $setter) }
+        '{ SplitCombineOptic[S, S, A, A, xa]($selector, $split, $combine, $split) }
 
   /** Strips Inlined/Typed wrappers and peeks inside the lambda body
     * for a single Select. `Lambda` must be tried before `Block`

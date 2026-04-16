@@ -19,11 +19,10 @@ case class UP(a: Int, b: Boolean)
   val bLens = Lens.second[Int, Boolean]
   val cLens = Lens.first[Int, Boolean]
 
-  given upCompositionEvidence: (UP => (aLens.X, Int)) with
-      def apply(up: UP): (aLens.X, Int) = (up, up.a)
-
   val aPrism =
     Prism.optional[UP, Int](u => Some(u.a).filter(_ % 2 == 0), UP(_, false))
+
+  given aLensTransformEv: (UP => Tuple2[UP, Int]) = u => (u, u.a)
 
   val mod = aLens.modifyF(i => if (i % 2 == 0) None else Some(i + 1))
   val bm = bLens.replace(false)

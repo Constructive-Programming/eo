@@ -1,6 +1,6 @@
 package eo
 
-import eo.optics.Optic
+import eo.optics.{Optic, SplitCombineOptic}
 
 /** Auto-derivation entry points for EO optics.
   *
@@ -28,7 +28,13 @@ package object generics:
   def lens[S]: PartiallyAppliedLens[S] = new PartiallyAppliedLens[S]
 
   final class PartiallyAppliedLens[S]:
-    inline def apply[A](inline selector: S => A): Optic[S, S, A, A, Tuple2] =
+    // `transparent inline` so the specific `XA` the macro synthesises
+    // (EmptyTuple for 1-field, sibling type for 2-field) propagates to
+    // the call site, enabling transform/place/transfer without any
+    // external evidence.
+    transparent inline def apply[A](
+        inline selector: S => A,
+    ): SplitCombineOptic[S, S, A, A, ?] =
       LensMacro.derive[S, A](selector)
 
   /** Derive a `Prism` focusing on a single variant of a sealed / enum type.

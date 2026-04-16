@@ -51,6 +51,38 @@ class GenericsSpec extends Specification with ScalaCheck:
     ageL.modify(_ + 1)(p) == ageL.replace(ageL.get(p) + 1)(p)
   }
 
+  // ---------- place / transfer on a derived Lens ----------
+  //
+  // The macro emits a `SplitCombineOptic[Person, Person, Int, Int,
+  // String]` which carries a `given transformEV: Person => (String,
+  // Int)` in its body. Scala 3 will not discover that given via
+  // implicit-scope search alone, so the idiomatic pattern is
+  // `import ageL.given` at the call site -- one line that brings
+  // the optic's companion givens into local scope, letting the
+  // generic `place` / `transfer` extensions on `Optic` resolve their
+  // `T => F[o.X, D]` evidence.
+
+  "derived Lens.place overwrites the focus, leaving the complement alone" >> forAll { (p: Person, a: Int) =>
+    import ageL.given
+    import nameL.given
+    ageL.place(a)(p) == Person(p.name, a) &&
+      nameL.place("Bob")(p) == Person("Bob", p.age)
+  }
+
+  "derived Lens.transfer lifts a C => A into a focus-replacer" >> forAll { (p: Person, d: Double) =>
+    import ageL.given
+    // For a home-grown `C => A` (`Double => Int`), transfer should
+    // equal place(f(c)) -- i.e. converting the value and replacing.
+    val toInt: Double => Int = _.toInt
+    ageL.transfer(toInt)(p)(d) == Person(p.name, d.toInt)
+  }
+
+  "derived Lens.transfer is curried form of place ∘ f" >> forAll { (p: Person, c: Int) =>
+    import ageL.given
+    val f: Int => Int = _ + 1
+    ageL.transfer(f)(p)(c) == ageL.place(f(c))(p)
+  }
+
   // ---------- Sum-type Prism derivation ----------
 
   val circleP: eo.optics.Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either] =

@@ -30,12 +30,15 @@ sealed trait Vect[N <: Int, A]:
       if (offset + len < init.size) init.slice(offset, len)
       else (init.slice(offset, len - 1) :+ last).asInstanceOf[Vect[L, A]]
 
-case object NilVect extends Vect[0, Nothing]:
+object NilVect extends Vect[0, Nothing]:
     def size = 0
+
 case class ConsVect[N <: Int, H, T <: Vect[N, H]](head: H, tail: T) extends Vect[S[N], H]:
     def size = (tail.size + 1).asInstanceOf[Size]
+
 case class TConsVect[N <: Int, H, T <: Vect[N, H]](init: T, last: H) extends Vect[S[N], H]:
     def size = (init.size + 1).asInstanceOf[Size]
+
 case class AdjacentVect[N <: Int, M <: Int, H, I <: Vect[N, H], T <: Vect[M, H]](init: I, tail: T) extends Vect[N + M, H]:
     def size = (init.size + tail.size).asInstanceOf[Size]
 
@@ -50,16 +53,14 @@ type TupleList[N <: Int, A] = N match
 
 object Vect:
 
-  class Head[N <: Int, A]:
-    def unapply(v: Vect[N, A]): Option[A] = v match
+  object Head:
+    def unapply[N <: Int, A](v: Vect[N, A]): Option[A] = v match
       case NilVect => None
       case ConsVect(h, _) => Some(h)
       case TConsVect(init, l) =>
-        unapply(init.asInstanceOf)
-          .orElse(Some(l))
+        unapply(init).orElse(Some(l))
       case AdjacentVect(init, tail) =>
-        unapply(init.asInstanceOf)
-          .orElse(unapply(tail.asInstanceOf))
+        unapply(init).orElse(unapply(tail))
 
   def nil[N <: Int, A]: Vect[N, A] = NilVect.asInstanceOf
 

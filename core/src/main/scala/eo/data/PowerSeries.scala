@@ -14,14 +14,6 @@ class PowerSeries[A, B](val ps: Tuple2[Snd[A], Vect[Int, B]]) extends AnyVal:
     override def toString(): String = ps.toString()
 
 object PowerSeries:
-  /** Invariant relied on by the `Composer[_, PowerSeries]` givens
-    * below: the `Vect[Int, B]` component of a `PowerSeries` built by
-    * any `to` in this module is always constructed via `Vect.of(a)`,
-    * which produces a `Vect[1, _]`. The `from` halves therefore pull
-    * the single element out with `Vect.Head[1, B]` -- type-correct by
-    * construction, but not runtime-checkable after erasure, hence the
-    * `@unchecked` annotations on the scrutinees.
-    */
   def unapply[A, B](ps: PowerSeries[A, B]): Tuple2[Snd[A], Vect[Int, B]] =
     ps.ps
 
@@ -70,9 +62,8 @@ object PowerSeries:
         type X = (1, o.X)
         def to: S => PowerSeries[X, A] = s =>
           PowerSeries(o.to(s).fmap(Vect.of))
-        @nowarn("msg=cannot be checked at runtime")
         def from: PowerSeries[X, B] => T =
-          case PowerSeries(x, Vect.Head[1, B](b)) => o.from(x -> b)
+          case PowerSeries(x, Vect.Head(b)) => o.from(x -> b)
 
   given either2ps: Composer[Either, PowerSeries] with
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, PowerSeries] =
@@ -87,7 +78,7 @@ object PowerSeries:
         def from: PowerSeries[X, B] => T =
           case PowerSeries(Some(x), _) =>
             o.from(Left(x))
-          case PowerSeries(_, Vect.Head[1, B](b)) =>
+          case PowerSeries(_, Vect.Head(b)) =>
             o.from(Right(b))
 
 
@@ -104,5 +95,5 @@ object PowerSeries:
         def from: PowerSeries[X, B] => T =
           case PowerSeries(Left(fx), _) =>
             o.from(Affine.ofLeft(fx))
-          case PowerSeries(Right(sx), Vect.Head[1, B](b)) =>
+          case PowerSeries(Right(sx), Vect.Head(b)) =>
             o.from(Affine.ofRight(sx -> b))
