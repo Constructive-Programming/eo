@@ -15,17 +15,25 @@ lazy val commonSettings = Seq(
 
 lazy val root: Project = project
   .in(file("."))
-  .aggregate(laws)
+  .aggregate(core, laws, tests)
+  .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-root",
+    publish / skip := true,
+  )
+
+lazy val core: Project = project
+  .in(file("core"))
   .settings(commonSettings *)
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
-    libraryDependencies += discipline % Test,
   )
 
 lazy val laws: Project = project
   .in(file("laws"))
-  .dependsOn(LocalProject("root"))
+  .dependsOn(LocalProject("core"))
   .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
   .settings(commonSettings *)
   .settings(
@@ -33,5 +41,15 @@ lazy val laws: Project = project
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
+  )
+
+lazy val tests: Project = project
+  .in(file("tests"))
+  .dependsOn(LocalProject("core"), LocalProject("laws"))
+  .disablePlugins(stryker4s.sbt.Stryker4sPlugin)
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-tests",
+    publish / skip := true,
     libraryDependencies += discipline % Test,
   )
