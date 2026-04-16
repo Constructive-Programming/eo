@@ -64,17 +64,17 @@ object Optic:
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using A: Accessor[F])
-    def get[X](s: S): A = A.get(o.to(s))
+    inline def get[X](s: S): A = A.get(o.to(s))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using RA: ReverseAccessor[F])
-    def reverseGet[X](b: B): T = o.from(RA.reverseGet(b))
+    inline def reverseGet[X](b: B): T = o.from(RA.reverseGet(b))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using A: Accessor[F], RA: ReverseAccessor[F])
-    def reverse =
+    inline def reverse =
       new Optic[B, A, T, S, F]:
         type X = o.X
         def to: B => F[X, T] = (b: B) => RA.reverseGet(o.from(RA.reverseGet(b)))
@@ -83,43 +83,43 @@ object Optic:
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F])
-    def modify[X](f: A => B): S => T =
+    inline def modify[X](f: A => B): S => T =
       o.to.andThen(FF.map(_)(f)).andThen(o.from)
-    def replace[X](b: B): S => T =
+    inline def replace[X](b: B): S => T =
       modify[X](_ => b)
 
   extension [S, T, A, B, D, F[_, _]](
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, D])
-    def transform(f: D => B): T => T =
+    inline def transform(f: D => B): T => T =
       t => o.from(FF.map(ev(t))(f))
-    def place(b: B): T => T =
+    inline def place(b: B): T => T =
       transform(_ => b)
-    def transfer[C](f: C => B): T => C => T =
+    inline def transfer[C](f: C => B): T => C => T =
       t => c => place(f(c))(t)
 
   extension [S, T, A, B, F[_, _]](
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulApplicative[F])
-    def put(f: A => B): A => T =
+    inline def put(f: A => B): A => T =
       a => o.from(FF.pure(f(a)))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Functor])
-    def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
+    inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
       o.to.andThen(FT.traverse(using G)(_)(f)).andThen(_.map(o.from))
 
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Applicative])
-    def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
+    inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
       o.to.andThen(FT.traverse(using G)(_)(f)).andThen(_.map(o.from))
-    def all(s: S): List[F[o.X, A]] =
+    inline def all(s: S): List[F[o.X, A]] =
       FT.traverse(using Applicative[List])(o.to(s))(List(_))
 
   extension [S, T, A, B, F[_, _]](
     o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFold[F])
-    def foldMap[M: Monoid](f: A => M): S => M =
+    inline def foldMap[M: Monoid](f: A => M): S => M =
       o.to.andThen(FF.foldMap(using Monoid[M])(f))

@@ -1,8 +1,6 @@
 package eo
 package optics
 
-import cats.syntax.arrow._
-
 object Lens:
   import Function.uncurried
 
@@ -15,7 +13,7 @@ object Lens:
   def pLens[S, T, A, B](get: S => A, replace: (S, B) => T) =
     new Optic[S, T, A, B, Tuple2]:
       type X = S
-      def to: S => (S, A) = identity[S] &&& get
+      def to: S => (S, A) = s => (s, get(s))
       def from: ((S, B)) => T = replace.tupled
 
   def curried[S, A](get: S => A, replace: A => S => S) =
