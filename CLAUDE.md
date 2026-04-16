@@ -78,6 +78,36 @@ teaching stryker about EO-specific mutators (e.g. swapping the `to` /
 richer signal than the default AST-level mutations. A good project for
 someone who wants to understand stryker's mutator plugin API.
 
+### Benchmarks (JMH vs Monocle)
+
+A separate `benchmarks/` sub-project, built on
+[`sbt-jmh`](https://github.com/sbt/sbt-jmh), benchmarks EO's optics
+against the equivalent operations on
+[`dev.optics:monocle-core`](https://www.optics.dev/Monocle/). It is
+**not** part of the root aggregate, so `sbt compile` and `sbt test` skip
+it; invoke it explicitly:
+
+```sh
+# Full Lens / Prism / Iso / Traversal sweep:
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 1 -t 1"
+
+# Single benchmark, quick smoke check:
+sbt "benchmarks/Jmh/run -i 1 -wi 1 -f 1 LensBench.eoGet"
+
+# Filter by class or method via regex (sbt-jmh syntax):
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 1 .*PrismBench.*"
+```
+
+`benchmarks/src/main/scala/eo/bench/OpticsBench.scala` defines four
+benchmark classes — `LensBench`, `PrismBench`, `IsoBench`,
+`TraversalBench` — each with paired `eo*` / `m*` methods so a single
+report row gives the side-by-side comparison.
+
+JMH's own caveats apply: trustworthy numbers need a quiet machine, a
+fork count of at least 1, the `-prof` profilers when investigating
+specific suspicions, and the usual reminder that "the numbers below are
+just data".
+
 ## Metals MCP (stdio)
 
 `metals-mcp` (new in v1.6.7) is registered as a project-local MCP server in
