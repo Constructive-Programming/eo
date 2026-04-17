@@ -56,7 +56,7 @@ need more fixtures and why they were scope-deferred.
 | `eo/data/SetterF.scala` | 75 % | n/a | feature (thin) | ≥85 % | close |
 | `eo/data/Vect.scala` | 70 % | 67 % | feature | ≥85 % | close; lifted from 0 % |
 | `eo/data/Affine.scala` | 67 % | 44 % | feature | ≥85 % | lifted from 49 % |
-| `eo/optics/Lens.scala` | 62 % | n/a | feature | ≥85 % | `SplitCombineOptic` under-exercised |
+| `eo/optics/Lens.scala` | 62 % | n/a | feature | ≥85 % | `SimpleLens` / `SplitCombineLens` under-exercised |
 | `eo/optics/Optic.scala` | 55 % | 66 % | feature | ≥80 % | many-extension file; biggest absolute gap |
 | `eo/ForgetfulFunctor.scala` | 53 % | n/a | feature | ≥85 % | SetterF / FixedTraversal mappings under-exercised |
 | `eo/ForgetfulTraverse.scala` | 44 % | n/a | feature | ≥80 % | `tupleFTraverse` (Functor not Applicative) isn't reachable through current ForgetfulTraverseLaws (which pins `Applicative`) |
@@ -75,7 +75,7 @@ that the next pass should close:
 | `ForgetfulTraverse.scala` | 13 % | 44 % | Add `ForgetfulTraverseLaws[F, Functor]` (separate trait from the `[Applicative]` variant); wire a Tuple2 fixture through it. |
 | `ForgetfulFunctor.scala` | 53 % | 53 % | SetterF and FixedTraversal functor fixtures that exercise `map` instead of only `identity`. |
 | `Optic.scala` | 48 % | 55 % | Extensions `modifyF`, `all`, `transfer`, `transform` are exercised but not on every carrier; widen to Affine / PowerSeries. |
-| `Lens.scala` | 62 % | 62 % | `Lens.curried` / `Lens.pCurried` / `SplitCombineOptic` spec. |
+| `Lens.scala` | 62 % | 62 % | `Lens.curried` / `Lens.pCurried` / `SimpleLens` / `SplitCombineLens` spec. |
 | `Affine.scala` | 49 % | 67 % | `affine.fold` + `aFold` with exhaustive Left / Right / Nested right fixtures. |
 
 **Why the ≥85 % target is not met at 0.1.0**: the plan's aspirational
