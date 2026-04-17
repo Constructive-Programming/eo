@@ -17,6 +17,7 @@ sealed trait Vect[N <: Int, A]:
   def :+(l: A): Vect[S[N], A] = TConsVect(this, l)
   def ++[M <: Int](o: Vect[M, A]): Vect[N + M, A] =AdjacentVect(this, o)
   def slice[L <: Int](offset: Int, len: L): Vect[L, A] = this match
+    case _ if len == 0 => Vect.nil[L, A]
     case _ if offset == 0 && len == size => this.asInstanceOf[Vect[L, A]]
     case NilVect => this.asInstanceOf[Vect[L, A]]
     case AdjacentVect(init, tail) =>
