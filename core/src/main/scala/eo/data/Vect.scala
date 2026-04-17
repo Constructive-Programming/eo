@@ -28,7 +28,13 @@ sealed trait Vect[N <: Int, A]:
       if (offset > 0) tail.slice(offset - 1, len)
       else (head +: tail.slice(0, len - 1)).asInstanceOf[Vect[L, A]]
     case TConsVect(init, last) =>
-      if (offset + len < init.size) init.slice(offset, len)
+      // `<=` not `<`: when the slice range lands exactly at the end
+      // of `init` (offset + len == init.size), we want to recurse
+      // into `init` rather than drop a window by one and append
+      // `last`. The `<` form silently took the "cross the boundary"
+      // path for single-element slices at offset 0 on a size-1 init,
+      // returning `[last]` instead of `[init[0]]`.
+      if (offset + len <= init.size) init.slice(offset, len)
       else (init.slice(offset, len - 1) :+ last).asInstanceOf[Vect[L, A]]
 
 object NilVect extends Vect[0, Nothing]:

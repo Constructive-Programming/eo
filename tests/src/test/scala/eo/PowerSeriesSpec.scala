@@ -140,3 +140,54 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
       after.phones(0).number == "555-0001"
     }
   }
+
+  // ---- 3+ .andThen chain regression ----------------------------------
+  //
+  // Before the `Vect.slice` off-by-one fix, a chain with three or more
+  // `.andThen` calls (outer lens → `powerEach` → inner lens → innermost
+  // lens, all lifted to PowerSeries) produced `modify(identity)` results
+  // where each list position got the NEXT element's focus — a shift by
+  // one with the last element repeated. Root cause: TConsVect's slice
+  // branch used `<` instead of `<=` for the "entirely in init" check,
+  // so `slice(0, 1)` on a `TConsVect(TConsVect(Nil, A), B)` returned
+  // `[B]` instead of `[A]`. The pattern appears only when the outer
+  // associator's fold accumulates via `:+`, which is exactly what the
+  // second-level `associateRight` does.
+
+  case class Addr2(zip: String)
+  case class Ord2(ship: Addr2)
+  case class Usr2(orders: List[Ord2])
+
+  private val threeAndThenChain =
+    Lens[Usr2, List[Ord2]](_.orders, (u, os) => u.copy(orders = os))
+      .morph[PowerSeries]
+      .andThen[Ord2, Ord2](Traversal.powerEach[List, Ord2])
+      .andThen(
+        Lens[Ord2, Addr2](_.ship, (o, a) => o.copy(ship = a)).morph[PowerSeries]
+      )
+      .andThen(
+        Lens[Addr2, String](_.zip, (a, z) => a.copy(zip = z)).morph[PowerSeries]
+      )
+
+  "3+ andThen chain on PowerSeries" should {
+    "preserve the order of a 3-element list under modify(identity)" >> {
+      val u = Usr2(List(Ord2(Addr2("A")), Ord2(Addr2("B")), Ord2(Addr2("C"))))
+      threeAndThenChain.modify(identity[String])(u) == u
+    }
+
+    "preserve the order of every N-element list (N = 0..5)" >> {
+      (0 to 5).forall { n =>
+        val items = (0 until n)
+          .map(i => Ord2(Addr2(('A' + i).toChar.toString)))
+          .toList
+        val u = Usr2(items)
+        threeAndThenChain.modify(identity[String])(u) == u
+      }
+    }
+
+    "apply a non-identity modify to every list position" >> {
+      val u = Usr2(List(Ord2(Addr2("a")), Ord2(Addr2("b")), Ord2(Addr2("c"))))
+      val out = threeAndThenChain.modify((z: String) => z.toUpperCase)(u)
+      out.orders.map(_.ship.zip) == List("A", "B", "C")
+    }
+  }
