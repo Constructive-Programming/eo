@@ -121,10 +121,17 @@ lazy val circeIntegration: Project = project
 lazy val benchmarks: Project = project
   .in(file("benchmarks"))
   .enablePlugins(JmhPlugin)
-  .dependsOn(LocalProject("core"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("circeIntegration"),
+  )
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-benchmarks",
     publish / skip := true,
     libraryDependencies += monocle,
+    // circe-parser for the Json round-trip bench; kindlings for the
+    // Codec derivation used by the JsonPrism bench fixture.
+    libraryDependencies += circeParser,
+    libraryDependencies += kindlingsCirce,
   )
