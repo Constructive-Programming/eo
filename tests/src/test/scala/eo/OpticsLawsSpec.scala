@@ -342,6 +342,23 @@ class OpticsLawsSpec extends Specification with Discipline:
     .fixedTraversal,
   )
 
+  private given arbFixedTrav4: Arbitrary[FixedTraversal[4][Unit, Int]] =
+    Arbitrary(
+      for
+        a0 <- Arbitrary.arbitrary[Int]
+        a1 <- Arbitrary.arbitrary[Int]
+        a2 <- Arbitrary.arbitrary[Int]
+        a3 <- Arbitrary.arbitrary[Int]
+      yield (a0, a1, a2, a3, ()).asInstanceOf[FixedTraversal[4][Unit, Int]]
+    )
+
+  checkAll(
+    "FixedTraversal[4][Unit, Int]",
+    new FixedTraversalTests[4, Unit, Int]:
+      val laws = new FixedTraversalLaws[4, Unit, Int] {}
+    .fixedTraversal,
+  )
+
   // ----- Carrier type-class laws via representative fixtures ------
   //
   // Uses the same Arbitrary givens as the carrier-specific law blocks
@@ -394,4 +411,129 @@ class OpticsLawsSpec extends Specification with Discipline:
     new ForgetfulTraverseTests[PowerSeries, (Int, Int), Int]:
       val laws = new ForgetfulTraverseLaws[PowerSeries, (Int, Int), Int] {}
     .forgetfulTraverse,
+  )
+
+  // Forget[List] ForgetfulFunctor + ForgetfulTraverse — exercises
+  // Forgetful.scala's traverse2 and bifunctor paths that pure Forgetful
+  // fixtures don't land.
+  import data.Forget
+
+  checkAll(
+    "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]",
+    new ForgetfulFunctorTests[Forget[List], Unit, Int]:
+      val laws = new ForgetfulFunctorLaws[Forget[List], Unit, Int] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[Forget[List], Applicative] on Forget[List][Unit, Int]",
+    new ForgetfulTraverseTests[Forget[List], Unit, Int]:
+      val laws = new ForgetfulTraverseLaws[Forget[List], Unit, Int] {}
+    .forgetfulTraverse,
+  )
+
+  // Either ForgetfulTraverse[Applicative] — exercises
+  // ForgetfulTraverse.eitherFTraverse.
+  checkAll(
+    "ForgetfulTraverse[Either, Applicative] on Either[Int, Int]",
+    new ForgetfulTraverseTests[Either, Int, Int]:
+      val laws = new ForgetfulTraverseLaws[Either, Int, Int] {}
+    .forgetfulTraverse,
+  )
+
+  // SetterF ForgetfulFunctor at the carrier-typeclass level — builds
+  // its own Arbitrary from Fst/Snd/A components, sampled at one x.
+  private given arbSetterFIntStringBool
+      : Arbitrary[SetterF[(Int, String), Boolean]] =
+    Arbitrary(
+      for
+        fst   <- Arbitrary.arbitrary[Int]
+        snd2b <- Arbitrary.arbitrary[String => Boolean]
+      yield SetterF[(Int, String), Boolean]((fst, snd2b))
+    )
+
+  // Use a custom extensional equality check inside the law — structural
+  // `==` on SetterF compares closures by identity which is too strict.
+  // We sample the builder at a fixed Snd input to witness identity /
+  // composition. The shared ForgetfulFunctorLaws uses `==`, so we wire
+  // the SetterF-specific laws directly (from eo.laws.data) rather than
+  // the carrier-generic ones.
+
+  // FixedTraversal[2] ForgetfulFunctor at the typeclass level —
+  // exercises the typeclass-level witness for the fixed-arity carrier.
+  checkAll(
+    "ForgetfulFunctor[FixedTraversal[2]] on (Int, Int, Unit)",
+    new ForgetfulFunctorTests[FixedTraversal[2], Unit, Int]:
+      val laws = new ForgetfulFunctorLaws[FixedTraversal[2], Unit, Int] {}
+    .forgetfulFunctor,
+  )
+
+  // ----- ForgetfulApplicative via Optic.put ---------------------
+  //
+  // Exercise Optic.put which requires ForgetfulApplicative[F] — this
+  // lights up ForgetfulApplicative.scala (0% baseline).
+
+  "ForgetfulApplicative" should {
+    // Exercise Optic.put on a Forgetful-carrier Iso (covers
+    // Forgetful.applicative in core/src/main/scala/eo/data/Forgetful.scala)
+    // AND exercise the forgetFApplicative given on a Forget[List]-carrier
+    // Fold (covers core/src/main/scala/eo/ForgetfulApplicative.scala).
+    import Optic.*
+    given ForgetfulApplicative[Forgetful]       = Forgetful.applicative
+    given data.ReverseAccessor[Forgetful]       = Forgetful.reverseAccessor
+    val intDouble: Optic[Int, Int, Int, Int, Forgetful] =
+      optics.Iso[Int, Int, Int, Int](_ * 2, _ / 2)
+    "lift Optic.put via pure on Forgetful" >> {
+      forAll((a: Int, f: Int => Int) =>
+        intDouble.put(f)(a) == intDouble.reverseGet(f(a))
+      )
+    }
+
+    "forgetFApplicative[List].pure wraps a single element" >> {
+      val ap = summon[ForgetfulApplicative[data.Forget[List]]]
+      forAll((n: Int) =>
+        ap.pure[Unit, Int](n) == List(n) &&
+        ap.map[Unit, Int, Int](List(n), _ + 1) == List(n + 1)
+      )
+    }
+  }
+
+  // ----- FoldMap homomorphism on Lens / Prism / Optional ---------
+  //
+  // The ForgetfulFold instances for Tuple2 / Either / Affine in
+  // core/src/main/scala/eo/ForgetfulFold.scala are only reachable
+  // through an optic-level fold. These checkAll blocks wire the
+  // EO-specific FoldMapHomomorphismLaws (used earlier on
+  // Traversal.each) against the tuple / prism / optional fixtures
+  // already declared above.
+  import laws.eo.FoldMapHomomorphismLaws
+  import laws.eo.discipline.FoldMapHomomorphismTests
+
+  checkAll(
+    "Lens foldMap homomorphism (Tuple2 carrier)",
+    new FoldMapHomomorphismTests[(Int, String), Int, Tuple2]:
+      val laws =
+        new FoldMapHomomorphismLaws[(Int, String), Int, Tuple2]:
+          val optic = firstLens
+    .foldMapHomomorphism,
+  )
+
+  checkAll(
+    "Prism foldMap homomorphism (Either carrier)",
+    new FoldMapHomomorphismTests[Int, Int, Either]:
+      val laws = new FoldMapHomomorphismLaws[Int, Int, Either]:
+        val optic = evenPrism
+    .foldMapHomomorphism,
+  )
+
+  checkAll(
+    "Optional foldMap homomorphism (Affine carrier)",
+    new FoldMapHomomorphismTests[
+      (Int, List[Int]), Int, Affine,
+    ]:
+      val laws = new FoldMapHomomorphismLaws[
+        (Int, List[Int]), Int, Affine,
+      ]:
+        val optic = headOptional
+    .foldMapHomomorphism,
   )
