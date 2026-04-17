@@ -45,3 +45,22 @@ package object samples:
   enum Tree[+N]:
     case Leaf(value: N)
     case Branch(left: Tree[N], right: Tree[N])
+
+  // 4-field case class for the N-field (>= 3) Lens derivation. The
+  // macro must synthesise an `XA = T1 *: T2 *: T3 *: EmptyTuple`
+  // complement and round-trip it through `_.apply(i).asInstanceOf[t]`
+  // at combine time.
+  final case class Employee(
+      id: Long,
+      name: String,
+      salary: Double,
+      department: String,
+  )
+  object Employee:
+    given Arbitrary[Employee] =
+      Arbitrary(for
+        i <- Gen.choose(1L, 1_000_000L)
+        n <- Gen.alphaNumStr
+        s <- Gen.choose(0.0, 500_000.0)
+        d <- Gen.alphaStr
+      yield Employee(i, n, s, d))

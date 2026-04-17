@@ -4,7 +4,7 @@ package generics
 import eo.optics.Optic.*
 import eo.data.Forgetful.given
 
-import eo.generics.samples.{Person, Shape, Tree}
+import eo.generics.samples.{Employee, Person, Shape, Tree}
 import eo.generics.samples.given
 
 import org.scalacheck.Prop.forAll
@@ -79,6 +79,57 @@ class GenericsSpec extends Specification with ScalaCheck:
     import ageL.given
     val f: Int => Int = _ + 1
     ageL.transfer(f)(p)(c) == ageL.place(f(c))(p)
+  }
+
+  // ---------- N-field (>=3) Lens derivation ----------
+  //
+  // `Employee(id: Long, name: String, salary: Double, department:
+  // String)` has four fields. The macro synthesises the complement
+  // `XA` as a `scala.Tuple` of the three non-focused field types and
+  // threads field values through `Tuple.apply(i).asInstanceOf[T_i]`
+  // at the combine site. Every lens below exercises a different
+  // position (head / middle / tail) so an off-by-one in the index
+  // bookkeeping surfaces.
+
+  val empIdL         = lens[Employee](_.id)
+  val empNameL       = lens[Employee](_.name)
+  val empSalaryL     = lens[Employee](_.salary)
+  val empDepartmentL = lens[Employee](_.department)
+
+  "N-field Lens get reads the right field" >> forAll { (e: Employee) =>
+    empIdL.get(e)         == e.id         &&
+    empNameL.get(e)       == e.name       &&
+    empSalaryL.get(e)     == e.salary     &&
+    empDepartmentL.get(e) == e.department
+  }
+
+  "N-field Lens set-get law" >> forAll {
+      (e: Employee, i: Long, n: String, s: Double, d: String) =>
+    empIdL.get(empIdL.replace(i)(e))                 == i &&
+      empNameL.get(empNameL.replace(n)(e))           == n &&
+      empSalaryL.get(empSalaryL.replace(s)(e))       == s &&
+      empDepartmentL.get(empDepartmentL.replace(d)(e)) == d
+  }
+
+  "N-field Lens get-set law" >> forAll { (e: Employee) =>
+    empIdL.replace(empIdL.get(e))(e)                 == e &&
+      empNameL.replace(empNameL.get(e))(e)           == e &&
+      empSalaryL.replace(empSalaryL.get(e))(e)       == e &&
+      empDepartmentL.replace(empDepartmentL.get(e))(e) == e
+  }
+
+  "N-field Lens preserves non-focused fields under replace" >> forAll {
+      (e: Employee, n: String) =>
+    val after = empNameL.replace(n)(e)
+    after.id == e.id &&
+      after.name == n &&
+      after.salary == e.salary &&
+      after.department == e.department
+  }
+
+  "N-field Lens.modify runs the function on the focus" >> forAll {
+      (e: Employee) =>
+    empSalaryL.modify(_ * 1.1)(e) == e.copy(salary = e.salary * 1.1)
   }
 
   // ---------- Sum-type Prism derivation ----------

@@ -93,85 +93,82 @@ private final class HearthLensMacro(q: Quotes)
         val sTpe = TypeRepr.of[S]
         val otherFieldSyms = sTpe.typeSymbol.caseFields.filter(_.name != fieldName)
 
-        otherFieldSyms.size match
-          case 0 =>
-            buildZeroOther[S, A](cc, fieldName, selector)
-          case 1 =>
-            buildOneOther[S, A](cc, fieldName, selector, sTpe, otherFieldSyms.head)
-          case n =>
-            report.errorAndAbort(
-              s"lens[${Type.prettyPrint[S]}]: structural Lens derivation currently "
-                + s"supports case classes with up to 2 fields (got $n other fields "
-                + s"besides '$fieldName'). Future work: build a TupleN complement "
-                + s"for wider records."
-            )
+        buildLens[S, A](cc, fieldName, selector, sTpe, otherFieldSyms)
 
-  /** 1-field case class: complement `XA = EmptyTuple`. */
-  private def buildZeroOther[S: Type, A: Type](
-      cc: CaseClass[S],
-      fieldName: String,
-      selector: Expr[S => A],
-  ): Expr[SimpleLens[S, A, EmptyTuple]] =
-    val split: Expr[S => (EmptyTuple, A)] =
-      '{ (s: S) => (EmptyTuple, $selector(s)) }
-
-    val combine: Expr[(EmptyTuple, A) => S] =
-      '{ (_: EmptyTuple, a: A) =>
-        ${
-          val constructed: Id[Option[Expr[S]]] = cc.construct[Id] {
-            (param: Parameter) =>
-              if param.name == fieldName then
-                Existential[Expr, A]('{ a }): Expr_??
-              else
-                report.errorAndAbort(
-                  s"lens[${Type.prettyPrint[S]}]: internal error -- "
-                    + s"unexpected parameter '${param.name}'."
-                )
-          }
-          constructed.getOrElse {
-            report.errorAndAbort(
-              s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
-                + s" constructor of ${Type.prettyPrint[S]}."
-            )
-          }
-        }
-      }
-
-    '{ SimpleLens[S, A, EmptyTuple]($selector, $split, $combine) }
-
-  /** 2-field case class: complement `XA` is the sibling field's type. */
-  private def buildOneOther[S: Type, A: Type](
+  /** Build a `SimpleLens[S, A, XA]` for a case class with any number
+    * of fields.
+    *
+    * The complement `XA` is synthesised as a scala.Tuple of the
+    * non-focused field types, preserving their declaration order:
+    *
+    *   * 1-field record  →  `XA = EmptyTuple`
+    *   * 2-field record  →  `XA = Sibling *: EmptyTuple`
+    *   * N-field record  →  `XA = T1 *: T2 *: … *: EmptyTuple`
+    *
+    * `split` reads each non-focused field and packs them with
+    * `Expr.ofTupleFromSeq` (runtime `Tuple.fromIArray` underneath).
+    * `combine` reads back via `Tuple.apply(i).asInstanceOf[T_i]` and
+    * threads the focused value through the primary constructor via
+    * Hearth's `CaseClass.construct`. The `asInstanceOf` is the
+    * customary erased cast the JVM absorbs at zero cost; all values
+    * were already boxed on the way into the tuple. */
+  private def buildLens[S: Type, A: Type](
       cc: CaseClass[S],
       fieldName: String,
       selector: Expr[S => A],
       sTpe: TypeRepr,
-      otherSym: Symbol,
+      otherSyms: List[Symbol],
   ): Expr[SimpleLens[S, A, ?]] =
-    val otherName = otherSym.name
-    val otherType = sTpe.memberType(otherSym)
+    val otherTypes: List[TypeRepr] =
+      otherSyms.map(sym => sTpe.memberType(sym))
 
-    otherType.asType match
+    val xaTpe: TypeRepr =
+      otherTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+
+    xaTpe.asType match
       case '[xa] =>
         val split: Expr[S => (xa, A)] =
           '{ (s: S) =>
-            val x: xa = ${ Select.unique('{ s }.asTerm, otherName).asExprOf[xa] }
+            val x: xa = ${
+              // `Expr.ofTupleFromSeq` is the standard Scala-3 quoted
+              // helper for packing a Seq[Expr[Any]] into an
+              // `Expr[Tuple]` that the caller can then narrow via
+              // `asExprOf`. Fully qualified to avoid shadowing by
+              // Hearth's own `Expr` companion.
+              val otherReads: List[scala.quoted.Expr[Any]] =
+                otherSyms.map { sym =>
+                  Select.unique('{ s }.asTerm, sym.name).asExpr
+                }
+              scala.quoted.Expr.ofTupleFromSeq(otherReads).asExprOf[xa]
+            }
             (x, $selector(s))
           }
 
         val combine: Expr[(xa, A) => S] =
           '{ (x: xa, a: A) =>
             ${
+              val xTerm = '{ x }.asTerm
               val constructed: Id[Option[Expr[S]]] = cc.construct[Id] {
                 (param: Parameter) =>
                   if param.name == fieldName then
                     Existential[Expr, A]('{ a }): Expr_??
-                  else if param.name == otherName then
-                    Existential[Expr, xa]('{ x }): Expr_??
                   else
-                    report.errorAndAbort(
-                      s"lens[${Type.prettyPrint[S]}]: internal error -- "
-                        + s"unexpected parameter '${param.name}'."
-                    )
+                    val idx = otherSyms.indexWhere(_.name == param.name)
+                    if idx < 0 then
+                      report.errorAndAbort(
+                        s"lens[${Type.prettyPrint[S]}]: internal error -- "
+                          + s"unexpected parameter '${param.name}'."
+                      )
+                    val tpe = otherTypes(idx)
+                    tpe.asType match
+                      case '[t] =>
+                        val xExpr = xTerm.asExprOf[Tuple]
+                        val idxExpr = Expr(idx)
+                        val accessor: Expr[t] =
+                          '{ $xExpr.apply($idxExpr).asInstanceOf[t] }
+                        Existential[Expr, t](accessor): Expr_??
               }
               constructed.getOrElse {
                 report.errorAndAbort(
