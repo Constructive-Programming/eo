@@ -2,6 +2,7 @@ package eo
 package bench
 
 import java.util.concurrent.TimeUnit
+import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
@@ -87,8 +88,11 @@ class PrismBench:
   val rightPresent: Either[String, Int] = Right(42)
   val rightAbsent:  Either[String, Int] = Left("nope")
 
-  val eoRight: EPrism[Either[String, Int], Int] =
-    EoPrism[Either[String, Int], Int](identity, Right(_))
+  // Right-prism on Either[String, Int]. Both sides use the `optional`
+  // / `Option`-flavoured constructor so the shapes match across EO and
+  // Monocle.
+  val eoRight =
+    EoPrism.optional[Either[String, Int], Int](_.toOption, Right(_))
   val mRight: MPrism[Either[String, Int], Int] =
     MPrism[Either[String, Int], Int](_.toOption)(Right(_))
 
@@ -148,9 +152,9 @@ class IsoBench:
 class TraversalBench:
 
   @Param(Array("8", "64", "512"))
-  var size: Int = _
+  var size: Int = uninitialized
 
-  var xs: List[Int] = _
+  var xs: List[Int] = uninitialized
 
   val eoEach: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
     EoTraversal.each[List, Int, Int]
