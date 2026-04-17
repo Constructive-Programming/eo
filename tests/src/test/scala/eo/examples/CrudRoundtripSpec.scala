@@ -44,13 +44,13 @@ import org.specs2.mutable.Specification
   *
   * Domain typeclasses (`Codec`, `Show`, `Eq`) are derived by
   * Kubuszok's kindlings library so the boilerplate doesn't distract
-  * from the optic story. Per-field lenses use eo-generics' `lens[S]`
-  * macro where the case class has ≤ 2 fields; wider records fall
-  * back to `Lens.apply` (the macro's 3+-field support is future
-  * work).
+  * from the optic story. Every per-field lens is synthesised by
+  * eo-generics' `lens[S](_.field)` macro — including on the 4-field
+  * `User`, which the macro now supports by packing the complement
+  * into a scala.Tuple of the non-focused fields.
   *
   * The punchline is in [[CrudRoundtripSpec.handleWithOptics]]: every
-  * validation step is one line, `optic.modifyX[Result](validator)`.
+  * validation step is one line, `optic.modifyA[Result](validator)`.
   * Compare with [[CrudRoundtripSpec.handleNaive]], whose order-list
   * traversal has to write the `copy(copy(copy(...)))` chain by hand.
   */
@@ -65,11 +65,12 @@ class CrudRoundtripSpec extends Specification with ScalaCheck:
   "CRUD round-trip — happy path" should {
 
     val alice = User(
+      id = 42L,
       name = "  Alice  ",
-      address = Address("Amsterdam", "01234"),
+      address = Address("Main St", "Amsterdam", "01234"),
       orders = List(
-        Order(Address("Rotterdam", "56789"), List(Item("SKU-A", 2))),
-        Order(Address("Utrecht",   "24680"), List(Item("SKU-B", 1))),
+        Order(1L, Address("Ship1", "Rotterdam", "56789"), List(Item("SKU-A", 2))),
+        Order(2L, Address("Ship2", "Utrecht",   "24680"), List(Item("SKU-B", 1))),
       ),
     )
 
@@ -100,10 +101,11 @@ class CrudRoundtripSpec extends Specification with ScalaCheck:
   "CRUD round-trip — error path" should {
 
     val bob = User(
+      id = 7L,
       name = "Bob",
-      address = Address("Amsterdam", "01234"),
+      address = Address("Main St", "Amsterdam", "01234"),
       orders = List(
-        Order(Address("Rotterdam", "not-a-zip"), Nil),
+        Order(1L, Address("Ship1", "Rotterdam", "not-a-zip"), Nil),
       ),
     )
 
@@ -133,19 +135,24 @@ object CrudRoundtripSpec:
     given Eq[Item]             = Eq.derived
     given Show[Item]           = Show.derived
 
-  case class Address(city: String, zipCode: String)
+  case class Address(street: String, city: String, zipCode: String)
   object Address:
     given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
     given Eq[Address]             = Eq.derived
     given Show[Address]           = Show.derived
 
-  case class Order(shippingAddress: Address, items: List[Item])
+  case class Order(id: Long, shippingAddress: Address, items: List[Item])
   object Order:
     given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
     given Eq[Order]             = Eq.derived
     given Show[Order]           = Show.derived
 
-  case class User(name: String, address: Address, orders: List[Order])
+  case class User(
+      id: Long,
+      name: String,
+      address: Address,
+      orders: List[Order],
+  )
   object User:
     given Codec.AsObject[User] = KindlingsCodecAsObject.derive
     given Eq[User]             = Eq.derived
@@ -198,29 +205,22 @@ object CrudRoundtripSpec:
   // Optic declarations — the heart of the example
   // =====================================================================
   //
-  // Three optics, one per validation target:
+  // Three optics, one per validation target. Every lens below is
+  // macro-derived via `lens[S](_.field)` — including on the 4-field
+  // `User`, which the eo-generics macro now supports by synthesising
+  // the complement as a scala.Tuple of the non-focused field types.
   //
-  //   * userName : Lens[User, String]              — the user's name
-  //   * userZip  : Lens[User, String]              — address.zipCode
-  //   * everyZip : Traversal[User, String]         — every order's
-  //                                                   shippingAddress.zipCode
-  //
-  // `userName` and `userAddress` are hand-written because `User` has
-  // three fields (the macro currently supports ≤ 2). Every other lens
-  // is macro-derived; the composition is pure `andThen`.
+  //   * userName : Lens[User, String]       — the user's name
+  //   * userZip  : Lens[User, String]       — address.zipCode
+  //   * everyZip : Traversal[User, String]  — every order's
+  //                                           shippingAddress.zipCode
   //
 
   val userName: Optic[User, User, String, String, Tuple2] =
-    Lens[User, String](_.name, (u, n) => u.copy(name = n))
-
-  val userAddress: Optic[User, User, Address, Address, Tuple2] =
-    Lens[User, Address](_.address, (u, a) => u.copy(address = a))
-
-  val userOrders: Optic[User, User, List[Order], List[Order], Tuple2] =
-    Lens[User, List[Order]](_.orders, (u, os) => u.copy(orders = os))
+    lens[User](_.name)
 
   val userZip: Optic[User, User, String, String, Tuple2] =
-    userAddress.andThen(lens[Address](_.zipCode))
+    lens[User](_.address).andThen(lens[Address](_.zipCode))
 
   /** `Order → shippingAddress.zipCode` — used as the inner focus of
     * the PowerSeries traversal below. Composed first as a plain
@@ -237,7 +237,7 @@ object CrudRoundtripSpec:
     * in a single `andThen`. A single `modifyA[Result]` then threads
     * an `Either`-effectful validator through every leaf at once. */
   val everyZip: Optic[User, User, String, String, PowerSeries] =
-    userOrders.morph[PowerSeries]
+    lens[User](_.orders).morph[PowerSeries]
       .andThen[Order, Order](Traversal.powerEach[List, Order])
       .andThen(orderShippingZip.morph[PowerSeries])
 
@@ -275,21 +275,19 @@ object CrudRoundtripSpec:
 
   /** Same behaviour as [[handleNaive]], written against the optic
     * declarations above. Every validation step is a single
-    * `optic.modifyX[Result](f)` line — no `.copy(...)` shows up in
+    * `optic.modifyA[Result](f)` line — no `.copy(...)` shows up in
     * the handler, and adding a new validated field is a one-liner
     * (declare the lens, plug it in).
     *
-    * Carrier-aware method choice: Tuple2-carrier lenses satisfy
-    * `ForgetfulTraverse[Tuple2, Functor]` only, so they expose
-    * `modifyF`; the PowerSeries-carrier traversal has
-    * `ForgetfulTraverse[PowerSeries, Applicative]` and exposes
-    * `modifyA`. `Either[Problem, *]` satisfies both constraints,
-    * so the same validator function plugs into both. */
+    * `modifyA` applies uniformly across Tuple2 (Lens) and PowerSeries
+    * (Traversal) carriers because both ship
+    * `ForgetfulTraverse[_, Applicative]` — and `Either[Problem, *]`
+    * is an `Applicative`. */
   def handleWithOptics(db: InMemoryDb, body: Json): Result[Long] =
     for
       user  <- parseUser(body)
-      step1 <- userName.modifyF[Result](normalizeName)(user)
-      step2 <- userZip.modifyF[Result](validateZip)(step1)
+      step1 <- userName.modifyA[Result](normalizeName)(user)
+      step2 <- userZip.modifyA[Result](validateZip)(step1)
       step3 <- everyZip.modifyA[Result](validateZip)(step2)
       id    <- db.store(step3)
     yield id
