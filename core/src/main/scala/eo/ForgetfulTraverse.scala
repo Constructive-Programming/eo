@@ -18,6 +18,17 @@ object ForgetfulTraverse:
         : ((X, A)) => (A => G[B]) => G[(X, B)] =
       fa => f => f(fa._2).map(fa._1 -> _)
 
+  // Focus is on the second tuple component; the body only uses
+  // `Functor[G]`, but Applicative extends Functor so the same
+  // implementation satisfies the stricter bound. Having this
+  // instance lets `Optic.modifyA[G]` apply to Tuple2-carrier optics
+  // (lenses), matching the ergonomics of Affine / PowerSeries /
+  // Forget[F] carriers that already ship `[Applicative]` instances.
+  given tupleFTraverseApplicative: ForgetfulTraverse[Tuple2, Applicative] with
+    def traverse[X, A, B, G[_]: Applicative]
+        : ((X, A)) => (A => G[B]) => G[(X, B)] =
+      fa => f => f(fa._2).map(fa._1 -> _)
+
   given eitherFTraverse: ForgetfulTraverse[Either, Applicative] with
     def traverse[X, A, B, G[_]: Applicative]
         : Either[X, A] => (A => G[B]) => G[Either[X, B]] =
