@@ -98,20 +98,31 @@ private final class HearthLensMacro(q: Quotes)
   /** Build a `SimpleLens[S, A, XA]` for a case class with any number
     * of fields.
     *
-    * The complement `XA` is synthesised as a scala.Tuple of the
-    * non-focused field types, preserving their declaration order:
+    * The complement `XA` is synthesised as a Scala-3
+    * `NamedTuple[Names, Values]` over the non-focused fields. Both
+    * the field names (as singleton-String types) and the field types
+    * are reconstructed at macro time from the primary constructor's
+    * parameter list, preserving declaration order:
     *
-    *   * 1-field record  →  `XA = EmptyTuple`
-    *   * 2-field record  →  `XA = Sibling *: EmptyTuple`
-    *   * N-field record  →  `XA = T1 *: T2 *: … *: EmptyTuple`
+    *   * 1-field record  →  `XA = NamedTuple[EmptyTuple, EmptyTuple]`
+    *   * 2-field record  →  `XA = NamedTuple["sibling" *: EmptyTuple,
+    *                                         Sibling *: EmptyTuple]`
+    *   * N-field record  →  `XA = NamedTuple["n1" *: "n2" *: …,
+    *                                         T1 *: T2 *: …]`
+    *
+    * Since `NamedTuple` is an opaque alias over its `Values` tuple,
+    * the runtime representation is identical to a plain
+    * `T1 *: T2 *: …` — no extra boxing. The upgrade over plain
+    * `Tuple` buys downstream users pattern-match ergonomics
+    * (`x.fieldName` at the call site) without a perf cost.
     *
     * `split` reads each non-focused field and packs them with
-    * `Expr.ofTupleFromSeq` (runtime `Tuple.fromIArray` underneath).
-    * `combine` reads back via `Tuple.apply(i).asInstanceOf[T_i]` and
-    * threads the focused value through the primary constructor via
-    * Hearth's `CaseClass.construct`. The `asInstanceOf` is the
-    * customary erased cast the JVM absorbs at zero cost; all values
-    * were already boxed on the way into the tuple. */
+    * `Expr.ofTupleFromSeq`, then narrows the result to `xa` via
+    * `asExprOf` (safe because the `Values` tuple IS-A `NamedTuple`
+    * through opaque subtyping). `combine` reads back via
+    * `.toTuple.apply(i).asInstanceOf[T_i]` and threads the focused
+    * value through the primary constructor via Hearth's
+    * `CaseClass.construct`. */
   private def buildLens[S: Type, A: Type](
       cc: CaseClass[S],
       fieldName: String,
@@ -122,21 +133,40 @@ private final class HearthLensMacro(q: Quotes)
     val otherTypes: List[TypeRepr] =
       otherSyms.map(sym => sTpe.memberType(sym))
 
-    val xaTpe: TypeRepr =
+    // Names tuple: the singleton-String types of the non-focused
+    // fields, in declaration order.
+    val namesTpe: TypeRepr =
+      otherSyms.foldRight(TypeRepr.of[EmptyTuple]) { (sym, acc) =>
+        val nameLit = ConstantType(StringConstant(sym.name))
+        TypeRepr.of[*:].appliedTo(List(nameLit, acc))
+      }
+
+    // Values tuple: the field types of the non-focused fields, in
+    // declaration order.
+    val valuesTpe: TypeRepr =
       otherTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
         TypeRepr.of[*:].appliedTo(List(t, acc))
       }
+
+    // xa = NamedTuple[namesTpe, valuesTpe] — the full named-tuple
+    // carrier for the complement.
+    val xaTpe: TypeRepr =
+      TypeRepr
+        .of[scala.NamedTuple.NamedTuple]
+        .appliedTo(List(namesTpe, valuesTpe))
 
     xaTpe.asType match
       case '[xa] =>
         val split: Expr[S => (xa, A)] =
           '{ (s: S) =>
             val x: xa = ${
-              // `Expr.ofTupleFromSeq` is the standard Scala-3 quoted
-              // helper for packing a Seq[Expr[Any]] into an
-              // `Expr[Tuple]` that the caller can then narrow via
-              // `asExprOf`. Fully qualified to avoid shadowing by
-              // Hearth's own `Expr` companion.
+              // `Expr.ofTupleFromSeq` packs a Seq[Expr[Any]] into an
+              // `Expr[Tuple]`. Fully qualified to avoid shadowing by
+              // Hearth's own `Expr` companion. The narrowing to `xa`
+              // is sound because the NamedTuple's runtime storage
+              // IS-A Tuple — the opaque-subtype relation
+              // `Values <: NamedTuple[Names, Values]` carries the
+              // value through the asExprOf check.
               val otherReads: List[scala.quoted.Expr[Any]] =
                 otherSyms.map { sym =>
                   Select.unique('{ s }.asTerm, sym.name).asExpr
@@ -164,10 +194,23 @@ private final class HearthLensMacro(q: Quotes)
                     val tpe = otherTypes(idx)
                     tpe.asType match
                       case '[t] =>
-                        val xExpr = xTerm.asExprOf[Tuple]
-                        val idxExpr = Expr(idx)
+                        // NamedTuple's runtime representation IS the
+                        // underlying values tuple (opaque subtyping:
+                        // `Values <: NamedTuple[Names, Values]`), so
+                        // `asInstanceOf[Tuple]` is an erased cast the
+                        // JVM absorbs at zero cost. `.apply(i)` then
+                        // reads the position; the final
+                        // `asInstanceOf[t]` re-types the boxed slot
+                        // back to the field's static type.
+                        val xExpr = xTerm.asExprOf[xa]
+                        val idxExpr = scala.quoted.Expr(idx)
                         val accessor: Expr[t] =
-                          '{ $xExpr.apply($idxExpr).asInstanceOf[t] }
+                          '{
+                            $xExpr
+                              .asInstanceOf[Tuple]
+                              .apply($idxExpr)
+                              .asInstanceOf[t]
+                          }
                         Existential[Expr, t](accessor): Expr_??
               }
               constructed.getOrElse {

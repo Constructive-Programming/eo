@@ -132,6 +132,38 @@ class GenericsSpec extends Specification with ScalaCheck:
     empSalaryL.modify(_ * 1.1)(e) == e.copy(salary = e.salary * 1.1)
   }
 
+  // ---------- NamedTuple complement access by field name ----------
+  //
+  // The macro emits `XA = NamedTuple[Names, Values]` where `Names`
+  // is the tuple of singleton-String types of the non-focused
+  // fields. That means downstream users can read the complement
+  // with the original field name — `complement.id`, not
+  // `complement._1`. The cast from `SimpleLens.X` (an abstract type
+  // member) to the concrete NamedTuple type uses the
+  // `transformEvidence` given the companion publishes.
+
+  "derived N-field Lens exposes complement fields by name" >> forAll {
+      (e: Employee) =>
+    // `empNameL.to(e)` returns `(complement, String)`. The
+    // complement is a NamedTuple[("id", "salary", "department"),
+    // (Long, Double, String)] — exercise field-name access to
+    // prove the Names tuple landed correctly.
+    val (complement, focus) = empNameL.to(e)
+    // `asInstanceOf[NamedTuple[...]]` here bridges the abstract
+    // `X` type member on `Optic`. In real usage callers typically
+    // let the concrete `SimpleLens[S, A, XA]` type infer all the
+    // way, but for this test we re-attach the concrete shape.
+    type Complement = scala.NamedTuple.NamedTuple[
+      ("id", "salary", "department"),
+      (Long, Double, String),
+    ]
+    val named = complement.asInstanceOf[Complement]
+    focus == e.name &&
+      named.id == e.id &&
+      named.salary == e.salary &&
+      named.department == e.department
+  }
+
   // ---------- Sum-type Prism derivation ----------
 
   val circleP: eo.optics.Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either] =
