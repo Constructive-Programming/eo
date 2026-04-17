@@ -2,7 +2,7 @@ package eo
 package laws
 
 import optics.Optic
-import data.Forget
+import _root_.eo.data.Forget
 
 import cats.Functor
 

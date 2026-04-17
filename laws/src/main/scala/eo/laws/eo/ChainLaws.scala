@@ -4,9 +4,9 @@ package eo
 
 import optics.Optic
 import optics.Optic.*
-import data.{Affine, Forgetful}
-import data.Forgetful.given
-import data.Affine.given
+import _root_.eo.data.{Affine, Forgetful}
+import _root_.eo.data.Forgetful.given
+import _root_.eo.data.Affine.given
 
 // Laws governing `Composer.chain` — the mechanism that lifts a series
 // of pairwise `Composer`s into a multi-hop carrier coercion.
@@ -60,8 +60,8 @@ trait ChainAccessorLaws[S, A, F[_, _], G[_, _], H[_, _]]:
   // Middle-step Accessor isn't required by the law statement but
   // is useful for sanity-checking intermediates if anyone extends
   // this spec.
-  given accessorF: data.Accessor[F]
-  given accessorH: data.Accessor[H]
+  given accessorF: _root_.eo.data.Accessor[F]
+  given accessorH: _root_.eo.data.Accessor[H]
 
   def chainPreservesGet(s: S): Boolean =
     gToH.to(fToG.to(optic)).get(s) == optic.get(s)

@@ -29,6 +29,6 @@ trait MorphLaws[S, A, F[_, _], G[_, _]]:
 
   /** A2 — morph preserves get (when both carriers have `Accessor`). */
   def morphPreservesGet(s: S)(using
-      data.Accessor[F], data.Accessor[G]
+      _root_.eo.data.Accessor[F], _root_.eo.data.Accessor[G]
   ): Boolean =
     morphed.get(s) == optic.get(s)

@@ -4,8 +4,8 @@ package eo
 
 import optics.Optic
 import optics.Optic.*
-import data.Forgetful
-import data.Forgetful.given
+import _root_.eo.data.Forgetful
+import _root_.eo.data.Forgetful.given
 
 // EO-specific laws that live at the boundary of the Iso / Lens machinery:
 //

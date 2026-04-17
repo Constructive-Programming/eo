@@ -27,7 +27,7 @@ abstract class MorphTests[S, A, F[_, _], G[_, _]] extends Laws:
 
   def morphPreservesGet(using
       Arbitrary[S], Arbitrary[A],
-      data.Accessor[F], data.Accessor[G],
+      _root_.eo.data.Accessor[F], _root_.eo.data.Accessor[G],
   ): RuleSet =
     new SimpleRuleSet(
       "Morph preserves get",

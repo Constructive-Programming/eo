@@ -3,8 +3,8 @@ package laws
 
 import optics.Optic
 import optics.Optic.*
-import data.SetterF
-import data.SetterF.given
+import _root_.eo.data.SetterF
+import _root_.eo.data.SetterF.given
 
 /** Law equations for a `Setter[S, A]` — `Optic[S, S, A, A, SetterF]`.
   *

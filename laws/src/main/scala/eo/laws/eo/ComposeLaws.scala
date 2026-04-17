@@ -4,9 +4,9 @@ package eo
 
 import optics.Optic
 import optics.Optic.*
-import data.{Affine, Forgetful}
-import data.Forgetful.given
-import data.Affine.given
+import _root_.eo.data.{Affine, Forgetful}
+import _root_.eo.data.Forgetful.given
+import _root_.eo.data.Affine.given
 
 // Laws governing `Optic.andThen` for each pair of like-shaped optics
 // (Lens ∘ Lens, Iso ∘ Iso, Prism ∘ Prism, Optional ∘ Optional).

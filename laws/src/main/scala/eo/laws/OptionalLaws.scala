@@ -3,8 +3,8 @@ package laws
 
 import optics.Optic
 import optics.Optic.*
-import data.Affine
-import data.Affine.given
+import _root_.eo.data.Affine
+import _root_.eo.data.Affine.given
 
 /** Law equations for an `Optional[S, A]` — `Optic[S, S, A, A, Affine]`.
   *

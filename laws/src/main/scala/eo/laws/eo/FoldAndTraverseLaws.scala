@@ -4,7 +4,7 @@ package eo
 
 import optics.Optic
 import optics.Optic.*
-import data.Forget
+import _root_.eo.data.Forget
 
 import cats.Traverse
 

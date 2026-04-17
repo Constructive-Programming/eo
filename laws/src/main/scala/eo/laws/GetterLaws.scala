@@ -3,8 +3,8 @@ package laws
 
 import optics.Optic
 import optics.Optic.*
-import data.Forgetful
-import data.Forgetful.given
+import _root_.eo.data.Forgetful
+import _root_.eo.data.Forgetful.given
 
 /** Law equations for a `Getter[S, A]` — `Optic[S, Unit, A, A,
   * Forgetful]`.
