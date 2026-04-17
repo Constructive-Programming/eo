@@ -24,7 +24,7 @@ lazy val commonSettings = Seq(
 
 lazy val root: Project = project
   .in(file("."))
-  .aggregate(core, laws, tests, generics)
+  .aggregate(core, laws, tests, generics, circeIntegration)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-root",
@@ -93,6 +93,25 @@ lazy val generics: Project = project
     libraryDependencies += cats,
     libraryDependencies += hearth,
     libraryDependencies += discipline % Test,
+  )
+
+// Cross-representation optics that bridge a native Scala source type
+// (a case class) and its circe-serialised form (JsonObject). The
+// flagship is `JsonLens[S, A]` — a polymorphic lens whose write path
+// lets you `transform` a JsonObject field in place without
+// round-tripping through S. Kept in its own module so projects that
+// only want the base library don't pull in circe.
+lazy val circeIntegration: Project = project
+  .in(file("circe"))
+  .dependsOn(LocalProject("core"), LocalProject("generics"))
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-circe",
+    libraryDependencies += cats,
+    libraryDependencies += circe,
+    libraryDependencies += circeParser       % Test,
+    libraryDependencies += kindlingsCirce    % Test,
+    libraryDependencies += discipline        % Test,
   )
 
 // Benchmarks deliberately stay OUT of the root aggregator: they're a
