@@ -83,15 +83,19 @@ object Vect:
         trav[i.Size].traverse(i)(f).map2(trav[t.Size].traverse(t)(f))(_ ++ _)
     def foldLeft[A, B](fa: Vect[N, A], b: B)(f: (B, A) => B): B = fa match
       case NilVect => b
-      case ConsVect(h, t) => f(trav[t.Size].foldLeft(t, b)(f), h)
-      case TConsVect(i, l) => f(trav[i.Size].foldRight(i, Eval.now(b))((a, eb) => eb.map(f(_, a))).value, l)
+      // ConsVect(h, t) is head-first: accumulate h, then foldLeft tail.
+      case ConsVect(h, t) => trav[t.Size].foldLeft(t, f(b, h))(f)
+      // TConsVect(i, l) is init-then-last: foldLeft init, then accumulate l.
+      case TConsVect(i, l) => f(trav[i.Size].foldLeft(i, b)(f), l)
       case AdjacentVect(i, t) =>
         val b2 = trav[i.Size].foldLeft(i, b)(f)
         trav[t.Size].foldLeft(t, b2)(f)
     def foldRight[A, B](fa: Vect[N, A], b: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = fa match
       case NilVect => b
+      // ConsVect(h, t) is head-first: foldRight tail, then combine with h.
       case ConsVect(h, t) => f(h, trav[t.Size].foldRight(t, b)(f))
-      case TConsVect(i, l) => f(l, trav[i.Size].foldLeft(i, b)((b, a) => f(a, b)))
+      // TConsVect(i, l) is init-then-last: foldRight init with f(l, b) accumulator.
+      case TConsVect(i, l) => trav[i.Size].foldRight(i, f(l, b))(f)
       case AdjacentVect(i, t) =>
         val b2 = trav[t.Size].foldRight(t, b)(f)
         trav[i.Size].foldRight(i, b2)(f)
