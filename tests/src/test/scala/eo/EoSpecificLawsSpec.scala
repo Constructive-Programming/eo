@@ -7,7 +7,22 @@ import data.Forgetful.given
 import data.Affine.given
 import data.SetterF.given
 import data.FixedTraversal.given
-import laws.EoSpecificLaws.*
+import laws.eo.{
+  MorphLaws,
+  LensComposeLaws, IsoComposeLaws, PrismComposeLaws, OptionalComposeLaws,
+  ReverseInvolutionLaws, TransformLaws, PutIsReverseGetLaws,
+  ModifyAIdLaws, ModifyAConstLaws,
+  FoldMapHomomorphismLaws, TraverseAllLaws, ForgetAllModifyLaws,
+  ChainPathIndependenceLaws, ChainAccessorLaws,
+}
+import laws.eo.discipline.{
+  MorphTests,
+  LensComposeTests, IsoComposeTests, PrismComposeTests, OptionalComposeTests,
+  ReverseInvolutionTests, TransformTests, PutIsReverseGetTests,
+  ModifyAIdTests, ModifyAConstTests,
+  FoldMapHomomorphismTests, TraverseAllTests, ForgetAllModifyTests,
+  ChainPathIndependenceTests, ChainAccessorTests,
+}
 
 import cats.instances.int.given
 import cats.instances.list.given

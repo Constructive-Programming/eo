@@ -2,7 +2,12 @@ package eo
 
 import optics.{Iso, Lens, Prism, Optional, Setter, Traversal, Optic, Fold}
 import data.{Affine, Forgetful}
-import laws.OpticLaws.*
+import laws.{
+  IsoLaws, LensLaws, PrismLaws, OptionalLaws, SetterLaws, TraversalLaws,
+}
+import laws.discipline.{
+  IsoTests, LensTests, PrismTests, OptionalTests, SetterTests, TraversalTests,
+}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
