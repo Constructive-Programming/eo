@@ -12,7 +12,10 @@ lazy val discipline     = Typelevel     %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck     = ScalaCheckOrg %% "scalacheck"        % "1.17.1"
 lazy val monocle        = Optics        %% "monocle-core"      % "3.3.0"
 lazy val hearth         = Kubuszok      %% "hearth"            % "0.3.0"
+lazy val kindlingsCats  = Kubuszok      %% "kindlings-cats-derivation"  % "0.1.0"
+lazy val kindlingsCirce = Kubuszok      %% "kindlings-circe-derivation" % "0.1.0"
 lazy val circe          = Circe         %% "circe-core"        % "0.14.10"
+lazy val circeParser    = Circe         %% "circe-parser"      % "0.14.10"
 
 lazy val commonSettings = Seq(
   version      := "0.1.0-SNAPSHOT",
@@ -53,7 +56,11 @@ lazy val laws: Project = project
 
 lazy val tests: Project = project
   .in(file("tests"))
-  .dependsOn(LocalProject("core"), LocalProject("laws"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws"),
+    LocalProject("generics") % Test,
+  )
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-tests",
@@ -64,6 +71,13 @@ lazy val tests: Project = project
     // circe Json AST to show how Optic.modify composes over a
     // recursive parser output.
     libraryDependencies += circe % Test,
+    libraryDependencies += circeParser % Test,
+    // Kubuszok's kindlings library provides Hearth-powered derivation
+    // for cats typeclasses (Show / Eq / Monoid / ...) and circe codecs.
+    // Used by the motivating CRUD round-trip example to keep the
+    // typeclass boilerplate out of the way of the optics story.
+    libraryDependencies += kindlingsCats  % Test,
+    libraryDependencies += kindlingsCirce % Test,
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,
