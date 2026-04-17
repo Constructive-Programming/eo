@@ -12,8 +12,8 @@ import laws.discipline.{
   IsoTests, LensTests, PrismTests, OptionalTests, SetterTests, TraversalTests,
   GetterTests, FoldTests,
 }
-import laws.data.{AffineLaws, SetterFLaws}
-import laws.data.discipline.{AffineTests, SetterFTests}
+import laws.data.{AffineLaws, SetterFLaws, VectLaws}
+import laws.data.discipline.{AffineTests, SetterFTests, VectTests}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
@@ -245,4 +245,29 @@ class OpticsLawsSpec extends Specification with Discipline:
     new SetterFTests[(Int, String), Boolean]:
       val laws = new SetterFLaws[(Int, String), Boolean] {}
     .setterF,
+  )
+
+  // ----- Vect carrier laws at N=3, A=Int --------------------------
+  //
+  // Arbitrary[Vect[3, Int]] is constructed by cons-ing three ints onto
+  // a NilVect base; all four constructors (NilVect, ConsVect,
+  // TConsVect, AdjacentVect) are exercised through the behaviour spec
+  // in VectSpec.scala.
+
+  private given arbVect3Int: Arbitrary[data.Vect[3, Int]] =
+    Arbitrary(
+      for
+        a <- Arbitrary.arbitrary[Int]
+        b <- Arbitrary.arbitrary[Int]
+        c <- Arbitrary.arbitrary[Int]
+      yield (a +: b +: c +: data.Vect.nil[0, Int]).asInstanceOf[data.Vect[3, Int]]
+    )
+
+  checkAll(
+    "Vect[3, Int]",
+    new VectTests[3, Int]:
+      val laws = new VectLaws[3, Int]:
+        val F = data.Vect.functor[3]
+        val T = data.Vect.trav[3]
+    .vect,
   )
