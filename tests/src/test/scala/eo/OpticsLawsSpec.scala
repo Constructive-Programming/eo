@@ -18,6 +18,10 @@ import laws.data.{
 import laws.data.discipline.{
   AffineTests, SetterFTests, VectTests, PowerSeriesTests, FixedTraversalTests,
 }
+import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
+import laws.typeclass.discipline.{
+  ForgetfulFunctorTests, ForgetfulTraverseTests,
+}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
@@ -336,4 +340,58 @@ class OpticsLawsSpec extends Specification with Discipline:
     new FixedTraversalTests[3, Unit, Int]:
       val laws = new FixedTraversalLaws[3, Unit, Int] {}
     .fixedTraversal,
+  )
+
+  // ----- Carrier type-class laws via representative fixtures ------
+  //
+  // Uses the same Arbitrary givens as the carrier-specific law blocks
+  // above. The full fixture matrix (Tuple2, Either, Forget[F], Forgetful)
+  // is partially covered — sufficient to witness that each instance
+  // satisfies the shared ForgetfulFunctor / ForgetfulTraverse laws.
+  // Expanding the matrix is a follow-up (0.1.1).
+
+  // Tuple2 ForgetfulFunctor: reuses scalacheck's built-in Arbitrary[(Int, Int)].
+  checkAll(
+    "ForgetfulFunctor[Tuple2] on (Int, Int)",
+    new ForgetfulFunctorTests[Tuple2, Int, Int]:
+      val laws = new ForgetfulFunctorLaws[Tuple2, Int, Int] {}
+    .forgetfulFunctor,
+  )
+
+  // Either ForgetfulFunctor: reuses built-in Arbitrary[Either[Int, Int]].
+  checkAll(
+    "ForgetfulFunctor[Either] on Either[Int, Int]",
+    new ForgetfulFunctorTests[Either, Int, Int]:
+      val laws = new ForgetfulFunctorLaws[Either, Int, Int] {}
+    .forgetfulFunctor,
+  )
+
+  // Affine ForgetfulFunctor + ForgetfulTraverse: reuses arbAffineIntStringBool.
+  checkAll(
+    "ForgetfulFunctor[Affine] on Affine[(Int, String), Boolean]",
+    new ForgetfulFunctorTests[Affine, (Int, String), Boolean]:
+      val laws = new ForgetfulFunctorLaws[Affine, (Int, String), Boolean] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[Affine, Applicative] on Affine[(Int, String), Boolean]",
+    new ForgetfulTraverseTests[Affine, (Int, String), Boolean]:
+      val laws = new ForgetfulTraverseLaws[Affine, (Int, String), Boolean] {}
+    .forgetfulTraverse,
+  )
+
+  // PowerSeries ForgetfulFunctor + ForgetfulTraverse: reuses arbPowerSeries.
+  checkAll(
+    "ForgetfulFunctor[PowerSeries] on PowerSeries[(Int, Int), Int]",
+    new ForgetfulFunctorTests[PowerSeries, (Int, Int), Int]:
+      val laws = new ForgetfulFunctorLaws[PowerSeries, (Int, Int), Int] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[PowerSeries, Applicative] on PowerSeries[(Int, Int), Int]",
+    new ForgetfulTraverseTests[PowerSeries, (Int, Int), Int]:
+      val laws = new ForgetfulTraverseLaws[PowerSeries, (Int, Int), Int] {}
+    .forgetfulTraverse,
   )
