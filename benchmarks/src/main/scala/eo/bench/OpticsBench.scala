@@ -122,7 +122,10 @@ class IsoBench:
   val tuple:  (Int, String) = (30, "Alice")
   val person: Person        = Person(30, "Alice")
 
-  val eoIso: Optic[(Int, String), (Int, String), Person, Person, Forgetful] =
+  // No explicit type annotation: let inference pick BijectionIso, the
+  // concrete EO subclass that stores get / reverseGet directly and
+  // skips the Accessor[Forgetful] / ReverseAccessor[Forgetful] dispatch.
+  val eoIso =
     EoIso[(Int, String), (Int, String), Person, Person](
       t => Person(t._1, t._2),
       p => (p.age, p.name),
