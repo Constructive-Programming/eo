@@ -12,13 +12,13 @@ object Prism:
         getOrModify: S => Either[T, A],
         reverseGet: B => T
     ) =
-    MendTearOptic(getOrModify, reverseGet)
+    MendTearPrism(getOrModify, reverseGet)
 
   def optional[S, A](getOption: S => Option[A], reverseGet: A => S) =
-    PickMendOptic[S, A, A](getOption, reverseGet)
+    PickMendPrism[S, A, A](getOption, reverseGet)
 
   def pOptional[S, A, B](getOption: S => Option[A], reverseGet: B => S) =
-    PickMendOptic[S, A, B](getOption, reverseGet)
+    PickMendPrism[S, A, B](getOption, reverseGet)
 
 /** Concrete Optic subclass that stores `getOrModify` and `reverseGet`
   * directly, enabling fused extensions on [[Optic]] that bypass the
@@ -27,7 +27,7 @@ object Prism:
   * All `Prism.*` constructors return this type so both hand-written
   * and macro-derived prisms benefit from the fused hot path.
   */
-final class MendTearOptic[S, T, A, B](
+final class MendTearPrism[S, T, A, B](
     val tear: S => Either[T, A],
     val mend: B => T,
 ) extends Optic[S, T, A, B, Either]:
@@ -50,12 +50,12 @@ final class MendTearOptic[S, T, A, B](
   *
   * Stores `pick: S => Option[A]` and `mend: B => S` directly. The fused
   * extensions pattern-match on `Option` so the hot path never allocates
-  * the intermediate `Either[S, A]` that the generic `MendTearOptic` must
+  * the intermediate `Either[S, A]` that the generic `MendTearPrism` must
   * build. In particular `getOption` returns the result of `pick` verbatim
   * -- zero allocation when the caller hands in a `Some` and the pick is
   * an identity-shaped function.
   */
-final class PickMendOptic[S, A, B](
+final class PickMendPrism[S, A, B](
     val pick: S => Option[A],
     val mend: B => S,
 ) extends Optic[S, S, A, B, Either]:

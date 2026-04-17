@@ -8,7 +8,7 @@ object Lens:
     def apply(t: (A, B)): (B, A) = t.swap
 
   def pLens[S, T, A, B](get: S => A, enplace: (S, B) => T) =
-    GetReplaceOptic(get, enplace)
+    GetReplaceLens(get, enplace)
 
   def apply[S, A](get: S => A, enplace: (S, A) => S) =
     pLens[S, S, A, A](get, enplace)
@@ -45,7 +45,7 @@ object Lens:
   * [[Lens.pCurried]] so hand-written lenses with opaque complement
   * types still benefit from the fused hot path.
   */
-class GetReplaceOptic[S, T, A, B](
+class GetReplaceLens[S, T, A, B](
     val get: S => A,
     val enplace: (S, B) => T,
 ) extends Optic[S, T, A, B, Tuple2]:
@@ -59,7 +59,7 @@ class GetReplaceOptic[S, T, A, B](
 
 /** Concrete Optic subclass that stores a `split` / `combine` pair,
   * exposing the actual structural complement of `S` as its existential
-  * `X`. Unlike [[GetReplaceOptic]] (which uses `X = S` because the
+  * `X`. Unlike [[GetReplaceLens]] (which uses `X = S` because the
   * complement is unknown), this class carries enough information for
   * `transform`, `place`, and `transfer` to work without any external
   * `T => F[X, D]` evidence.
