@@ -1,12 +1,14 @@
 package eo
 
-import optics.{Iso, Lens, Prism, Optional, Setter, Traversal, Optic, Fold}
+import optics.{Iso, Lens, Prism, Optional, Setter, Traversal, Optic, Fold, Getter}
 import data.{Affine, Forgetful}
 import laws.{
   IsoLaws, LensLaws, PrismLaws, OptionalLaws, SetterLaws, TraversalLaws,
+  GetterLaws, FoldLaws,
 }
 import laws.discipline.{
   IsoTests, LensTests, PrismTests, OptionalTests, SetterTests, TraversalTests,
+  GetterTests, FoldTests,
 }
 
 import cats.instances.list.given
@@ -132,15 +134,79 @@ class OpticsLawsSpec extends Specification with Discipline:
     .traversal,
   )
 
+  // ----- Getter: first projection and a synthetic one ------------
+
+  val firstGetter: Optic[(Int, String), Unit, Int, Int, Forgetful] =
+    Getter[(Int, String), Int](_._1)
+
+  checkAll(
+    "Getter[(Int,String), Int] — first projection",
+    new GetterTests[(Int, String), Int]:
+      val laws = new GetterLaws[(Int, String), Int]:
+        val getter    = firstGetter
+        val reference = (p: (Int, String)) => p._1
+    .getter,
+  )
+
+  val lengthGetter: Optic[String, Unit, Int, Int, Forgetful] =
+    Getter[String, Int](_.length)
+
+  checkAll(
+    "Getter[String, Int] — string length",
+    new GetterTests[String, Int]:
+      val laws = new GetterLaws[String, Int]:
+        val getter    = lengthGetter
+        val reference = (s: String) => s.length
+    .getter,
+  )
+
+  // ----- Fold: Fold.apply over a Foldable + Fold.select ----------
+
+  val listFold: Optic[List[Int], Unit, Int, Int, data.Forget[List]] =
+    Fold[List, Int]
+
+  checkAll(
+    "Fold[List, Int]",
+    new FoldTests[List[Int], Int, data.Forget[List]]:
+      val laws = new FoldLaws[List[Int], Int, data.Forget[List]]:
+        val fold = listFold
+    .fold,
+  )
+
+  val optionFold: Optic[Option[Int], Unit, Int, Int, data.Forget[Option]] =
+    Fold[Option, Int]
+
+  checkAll(
+    "Fold[Option, Int]",
+    new FoldTests[Option[Int], Int, data.Forget[Option]]:
+      val laws = new FoldLaws[Option[Int], Int, data.Forget[Option]]:
+        val fold = optionFold
+    .fold,
+  )
+
   // ----- Fold.select: focuses on values matching a predicate ------
 
-  "Fold.select" should {
-    val evenFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
-      Fold.select[Int](_ % 2 == 0)
+  val evenSelectFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
+    Fold.select[Int](_ % 2 == 0)
 
+  checkAll(
+    "Fold.select[Int](even)",
+    new FoldTests[Int, Int, data.Forget[Option]]:
+      val laws = new FoldLaws[Int, Int, data.Forget[Option]]:
+        val fold = evenSelectFold
+    .fold,
+  )
+
+  "Fold.select" should {
     "expose the value via .to when the predicate holds, None otherwise" >> {
       forAll((n: Int) =>
-        evenFold.to(n) == (if n % 2 == 0 then Some(n) else None)
+        evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None)
       )
+    }
+
+    "for the always-false predicate, foldMap always returns Monoid.empty" >> {
+      val neverFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
+        Fold.select[Int](_ => false)
+      forAll((n: Int) => neverFold.foldMap[Int](identity)(n) == 0)
     }
   }
