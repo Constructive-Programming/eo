@@ -1,7 +1,9 @@
 package eo
 
 import optics.{Iso, Lens, Prism, Optional, Setter, Traversal, Optic, Fold, Getter}
-import data.{Affine, Forgetful}
+import data.{Affine, Forgetful, SetterF}
+import data.Affine.given
+import data.SetterF.given
 import laws.{
   IsoLaws, LensLaws, PrismLaws, OptionalLaws, SetterLaws, TraversalLaws,
   GetterLaws, FoldLaws,
@@ -10,12 +12,28 @@ import laws.discipline.{
   IsoTests, LensTests, PrismTests, OptionalTests, SetterTests, TraversalTests,
   GetterTests, FoldTests,
 }
+import laws.data.{AffineLaws, SetterFLaws}
+import laws.data.discipline.{AffineTests, SetterFTests}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Prop.forAll
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
+
+// Arbitrary[Affine[(Int, String), Boolean]] — picks between the Fst-only
+// left branch and the (Snd, A) right branch with equal weight.
+private given arbAffineIntStringBool
+    : Arbitrary[Affine[(Int, String), Boolean]] =
+  Arbitrary(
+    Gen.oneOf(
+      Arbitrary.arbitrary[Int].map(Affine.ofLeft[(Int, String), Boolean]),
+      for
+        s <- Arbitrary.arbitrary[String]
+        b <- Arbitrary.arbitrary[Boolean]
+      yield Affine.ofRight[(Int, String), Boolean]((s, b)),
+    )
+  )
 
 /** End-to-end check that EO's optics satisfy the Monocle-style discipline
   * laws. Each block constructs a concrete instance and feeds it to the
@@ -210,3 +228,21 @@ class OpticsLawsSpec extends Specification with Discipline:
       forAll((n: Int) => neverFold.foldMap[Int](identity)(n) == 0)
     }
   }
+
+  // ----- Affine carrier laws --------------------------------------
+
+  checkAll(
+    "Affine[(Int, String), Boolean]",
+    new AffineTests[(Int, String), Boolean]:
+      val laws = new AffineLaws[(Int, String), Boolean] {}
+    .affine,
+  )
+
+  // ----- SetterF carrier laws -------------------------------------
+
+  checkAll(
+    "SetterF[(Int, String), Boolean]",
+    new SetterFTests[(Int, String), Boolean]:
+      val laws = new SetterFLaws[(Int, String), Boolean] {}
+    .setterF,
+  )
