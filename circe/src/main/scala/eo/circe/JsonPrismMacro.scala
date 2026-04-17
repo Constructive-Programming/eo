@@ -41,7 +41,7 @@ object JsonPrismMacro:
     }
 
     '{
-      $parent.widenPath[B](_.downField(${ Expr(name) }))(using $encB, $decB)
+      $parent.widenPath[B](${ Expr(name) })(using $encB, $decB)
     }
 
   /** Strip `Inlined` / `Typed` wrappers around a lambda and pull the
