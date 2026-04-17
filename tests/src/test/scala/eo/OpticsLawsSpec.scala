@@ -12,8 +12,12 @@ import laws.discipline.{
   IsoTests, LensTests, PrismTests, OptionalTests, SetterTests, TraversalTests,
   GetterTests, FoldTests,
 }
-import laws.data.{AffineLaws, SetterFLaws, VectLaws}
-import laws.data.discipline.{AffineTests, SetterFTests, VectTests}
+import laws.data.{
+  AffineLaws, SetterFLaws, VectLaws, PowerSeriesLaws, FixedTraversalLaws,
+}
+import laws.data.discipline.{
+  AffineTests, SetterFTests, VectTests, PowerSeriesTests, FixedTraversalTests,
+}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
@@ -270,4 +274,66 @@ class OpticsLawsSpec extends Specification with Discipline:
         val F = data.Vect.functor[3]
         val T = data.Vect.trav[3]
     .vect,
+  )
+
+  // ----- PowerSeries carrier laws ---------------------------------
+
+  import data.PowerSeries
+  import data.PowerSeries.given
+
+  private given arbPowerSeries: Arbitrary[PowerSeries[(Int, Int), Int]] =
+    Arbitrary(
+      for
+        x  <- Arbitrary.arbitrary[Int]
+        a0 <- Arbitrary.arbitrary[Int]
+        a1 <- Arbitrary.arbitrary[Int]
+        a2 <- Arbitrary.arbitrary[Int]
+      yield PowerSeries[(Int, Int), Int]((
+        x,
+        (a0 +: a1 +: a2 +: data.Vect.nil[0, Int])
+          .asInstanceOf[data.Vect[Int, Int]],
+      ))
+    )
+
+  checkAll(
+    "PowerSeries[(Int, Int), Int]",
+    new PowerSeriesTests[(Int, Int), Int]:
+      val laws = new PowerSeriesLaws[(Int, Int), Int] {}
+    .powerSeries,
+  )
+
+  // ----- FixedTraversal carrier laws ------------------------------
+
+  import data.FixedTraversal
+  import data.FixedTraversal.given
+
+  private given arbFixedTrav2: Arbitrary[FixedTraversal[2][Unit, Int]] =
+    Arbitrary(
+      for
+        a0 <- Arbitrary.arbitrary[Int]
+        a1 <- Arbitrary.arbitrary[Int]
+      yield (a0, a1, ()).asInstanceOf[FixedTraversal[2][Unit, Int]]
+    )
+
+  checkAll(
+    "FixedTraversal[2][Unit, Int]",
+    new FixedTraversalTests[2, Unit, Int]:
+      val laws = new FixedTraversalLaws[2, Unit, Int] {}
+    .fixedTraversal,
+  )
+
+  private given arbFixedTrav3: Arbitrary[FixedTraversal[3][Unit, Int]] =
+    Arbitrary(
+      for
+        a0 <- Arbitrary.arbitrary[Int]
+        a1 <- Arbitrary.arbitrary[Int]
+        a2 <- Arbitrary.arbitrary[Int]
+      yield (a0, a1, a2, ()).asInstanceOf[FixedTraversal[3][Unit, Int]]
+    )
+
+  checkAll(
+    "FixedTraversal[3][Unit, Int]",
+    new FixedTraversalTests[3, Unit, Int]:
+      val laws = new FixedTraversalLaws[3, Unit, Int] {}
+    .fixedTraversal,
   )
