@@ -1,6 +1,6 @@
 package eo
 
-import eo.optics.{Optic, SplitCombineOptic}
+import eo.optics.{Optic, SimpleLens}
 
 /** Auto-derivation entry points for EO optics.
   *
@@ -34,7 +34,7 @@ package object generics:
     // external evidence.
     transparent inline def apply[A](
         inline selector: S => A,
-    ): SplitCombineOptic[S, S, A, A, ?] =
+    ): SimpleLens[S, A, ?] =
       LensMacro.derive[S, A](selector)
 
   /** Derive a `Prism` focusing on a single variant of a sealed / enum type.

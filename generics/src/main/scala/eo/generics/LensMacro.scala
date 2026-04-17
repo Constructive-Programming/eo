@@ -3,16 +3,16 @@ package generics
 
 import scala.quoted.*
 
-import eo.optics.{Lens, Optic, SplitCombineOptic}
+import eo.optics.{Lens, Optic, SimpleLens}
 
-/** Compile-time derivation of a `Lens` as a [[SplitCombineOptic]].
+/** Compile-time derivation of a `Lens` as a [[SimpleLens]].
   *
   * Usage:
   * {{{
   * import eo.generics.lens
   * case class Person(age: Int, name: String)
   * val ageLens = lens[Person](_.age)
-  * // ageLens: SplitCombineOptic[Person, Int, String]
+  * // ageLens: SimpleLens[Person, Int, String]
   * ageLens.get(Person(30, "Alice"))        // 30
   * ageLens.replace(40)(Person(30, "Alice"))// Person(40, "Alice")
   * }}}
@@ -45,15 +45,15 @@ object LensMacro:
   // synthesises (EmptyTuple for 1-field records, the sibling field's
   // type for 2-field records) propagates to the call site. The
   // declared `? ` wildcard is an upper bound; the call-site type is
-  // always a concrete `SplitCombineOptic[S, S, A, A, <specificXA>]`.
+  // always a concrete `SimpleLens[S, A, <specificXA>]`.
   transparent inline def derive[S, A](
       inline selector: S => A,
-  ): SplitCombineOptic[S, S, A, A, ?] =
+  ): SimpleLens[S, A, ?] =
     ${ deriveImpl[S, A]('selector) }
 
   def deriveImpl[S: Type, A: Type](
       selector: Expr[S => A],
-  )(using q: Quotes): Expr[SplitCombineOptic[S, S, A, A, ?]] =
+  )(using q: Quotes): Expr[SimpleLens[S, A, ?]] =
     new HearthLensMacro(q).deriveLens[S, A](selector)
 
 /** Hearth-backed Lens macro implementation, extends
@@ -69,7 +69,7 @@ private final class HearthLensMacro(q: Quotes)
 
   def deriveLens[S, A](
       selector: Expr[S => A],
-  )(using Type[S], Type[A]): Expr[SplitCombineOptic[S, S, A, A, ?]] =
+  )(using Type[S], Type[A]): Expr[SimpleLens[S, A, ?]] =
     val fieldName: String = extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         s"""lens[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]: selector must be a
@@ -111,7 +111,7 @@ private final class HearthLensMacro(q: Quotes)
       cc: CaseClass[S],
       fieldName: String,
       selector: Expr[S => A],
-  ): Expr[SplitCombineOptic[S, S, A, A, EmptyTuple]] =
+  ): Expr[SimpleLens[S, A, EmptyTuple]] =
     val split: Expr[S => (EmptyTuple, A)] =
       '{ (s: S) => (EmptyTuple, $selector(s)) }
 
@@ -137,7 +137,7 @@ private final class HearthLensMacro(q: Quotes)
         }
       }
 
-    '{ SplitCombineOptic[S, S, A, A, EmptyTuple]($selector, $split, $combine, $split) }
+    '{ SimpleLens[S, A, EmptyTuple]($selector, $split, $combine) }
 
   /** 2-field case class: complement `XA` is the sibling field's type. */
   private def buildOneOther[S: Type, A: Type](
@@ -146,7 +146,7 @@ private final class HearthLensMacro(q: Quotes)
       selector: Expr[S => A],
       sTpe: TypeRepr,
       otherSym: Symbol,
-  ): Expr[SplitCombineOptic[S, S, A, A, ?]] =
+  ): Expr[SimpleLens[S, A, ?]] =
     val otherName = otherSym.name
     val otherType = sTpe.memberType(otherSym)
 
@@ -182,7 +182,7 @@ private final class HearthLensMacro(q: Quotes)
             }
           }
 
-        '{ SplitCombineOptic[S, S, A, A, xa]($selector, $split, $combine, $split) }
+        '{ SimpleLens[S, A, xa]($selector, $split, $combine) }
 
   /** Strips Inlined/Typed wrappers and peeks inside the lambda body
     * for a single Select. `Lambda` must be tried before `Block`

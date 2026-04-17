@@ -53,14 +53,12 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   // ---------- place / transfer on a derived Lens ----------
   //
-  // The macro emits a `SplitCombineOptic[Person, Person, Int, Int,
-  // String]` which carries a `given transformEV: Person => (String,
-  // Int)` in its body. Scala 3 will not discover that given via
-  // implicit-scope search alone, so the idiomatic pattern is
-  // `import ageL.given` at the call site -- one line that brings
-  // the optic's companion givens into local scope, letting the
-  // generic `place` / `transfer` extensions on `Optic` resolve their
-  // `T => F[o.X, D]` evidence.
+  // The macro emits a `SimpleLens[Person, Int, String]` which
+  // carries `place` / `transfer` directly on its class body — no
+  // external evidence needed. Callers that reach those through the
+  // generic `Optic` extensions instead of the class methods pick up
+  // the `S => (o.X, A)` given that `SimpleLens`'s companion publishes
+  // (derived from `to`).
 
   "derived Lens.place overwrites the focus, leaving the complement alone" >> forAll { (p: Person, a: Int) =>
     import ageL.given
