@@ -48,18 +48,14 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
   // ---- Optic chain: Person → phones → each Phone → isMobile -----
 
   private val personPhones =
-    Lens[Person, ArraySeq[Phone]](
-      _.phones,
-      (s, b) => s.copy(phones = b),
-    )
-      .morph[PowerSeries]
-      .andThen[Phone, Phone](Traversal.powerEach[ArraySeq, Phone])
+    Lens[Person, ArraySeq[Phone]](_.phones, (s, b) => s.copy(phones = b))
+      .andThen(Traversal.powerEach[ArraySeq, Phone])
 
   private val phoneIsMobile =
     Lens[Phone, Boolean](_.isMobile, (s, b) => s.copy(isMobile = b))
 
   private val personAllMobiles =
-    personPhones.andThen(phoneIsMobile.morph[PowerSeries])
+    personPhones.andThen(phoneIsMobile)
 
   // ---- `powerEach` behaviour ------------------------------------
 
@@ -151,14 +147,9 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   private val threeAndThenChain =
     Lens[Usr2, List[Ord2]](_.orders, (u, os) => u.copy(orders = os))
-      .morph[PowerSeries]
-      .andThen[Ord2, Ord2](Traversal.powerEach[List, Ord2])
-      .andThen(
-        Lens[Ord2, Addr2](_.ship, (o, a) => o.copy(ship = a)).morph[PowerSeries]
-      )
-      .andThen(
-        Lens[Addr2, String](_.zip, (a, z) => a.copy(zip = z)).morph[PowerSeries]
-      )
+      .andThen(Traversal.powerEach[List, Ord2])
+      .andThen(Lens[Ord2, Addr2](_.ship, (o, a) => o.copy(ship = a)))
+      .andThen(Lens[Addr2, String](_.zip, (a, z) => a.copy(zip = z)))
 
   "3+ andThen chain on PowerSeries" should {
     "preserve the order of a 3-element list under modify(identity)" >> {

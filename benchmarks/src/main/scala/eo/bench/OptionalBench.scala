@@ -63,16 +63,18 @@ class OptionalBench:
   private val mN5: MLens[Nested5, Nested4] = MLens[Nested5, Nested4](_.n)(v => x => x.copy(n = v))
   private val mN6: MLens[Nested6, Nested5] = MLens[Nested6, Nested5](_.n)(v => x => x.copy(n = v))
 
-  // ---- Composed optionals — Lens chain morphed into Affine, then
-  //      andThen the leaf Optional. Dropping the `<: Tuple` bound on
-  //      `Affine.assoc` made cross-existential composition type-check.
+  // ---- Composed optionals — Lens chain composed directly with the
+  //      leaf Optional via cross-carrier `.andThen`, which summons a
+  //      `Morph[Tuple2, Affine]` (carrying `Composer[Tuple2, Affine]`)
+  //      on the hop from the Lens chain to the Optional. Dropping the
+  //      `<: Tuple` bound on `Affine.assoc` is what lets that
+  //      cross-existential composition type-check.
 
   private val eoOpt3 =
-    eoN3.andThen(eoN2).andThen(eoN1).morph[Affine].andThen(eoFlag)
+    eoN3.andThen(eoN2).andThen(eoN1).andThen(eoFlag)
   private val eoOpt6 =
     eoN6.andThen(eoN5).andThen(eoN4)
       .andThen(eoN3).andThen(eoN2).andThen(eoN1)
-      .morph[Affine]
       .andThen(eoFlag)
 
   private val mOpt3 = mN3.andThen(mN2).andThen(mN1).andThen(mFlag)

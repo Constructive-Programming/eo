@@ -114,7 +114,7 @@ val mainOnly = Optional[Address, Address, String, String, Affine](
 )
 
 val streetIfMain =
-  lens[Person](_.address).morph[Affine].andThen(mainOnly)
+  lens[Person](_.address).andThen(mainOnly)
 
 streetIfMain.modify(_.toUpperCase)(alice)
 // Uppercases only when address.street starts with "M".

@@ -223,24 +223,24 @@ object CrudRoundtripSpec:
     lens[User](_.address).andThen(lens[Address](_.zipCode))
 
   /** `Order → shippingAddress.zipCode` — used as the inner focus of the PowerSeries traversal
-    * below. Composed first as a plain Tuple2 lens so the subsequent `.morph[PowerSeries]` only
-    * lifts once.
+    * below. Kept as a plain Tuple2 lens and let the cross-carrier `.andThen` auto-morph it
+    * into the PowerSeries carrier when composed into the traversal chain.
     */
   val orderShippingZip: Optic[Order, Order, String, String, Tuple2] =
     lens[Order](_.shippingAddress).andThen(lens[Address](_.zipCode))
 
   /** Every `orders → shippingAddress → zipCode` in one composed optic.
     *
-    * This is the flagship cats-eo move: lift the outer Lens into the `PowerSeries` carrier, compose
-    * with a `Traversal.powerEach` over the list, then pre-compose the inner nested lens (also
-    * lifted) in a single `andThen`. A single `modifyA[Result]` then threads an `Either`-effectful
-    * validator through every leaf at once.
+    * This is the flagship cats-eo move: compose the outer Lens with a `Traversal.powerEach`
+    * and then with the inner nested Lens — no explicit `.morph` anywhere. The cross-carrier
+    * `andThen` extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on
+    * each hop. A single `modifyA[Result]` then threads an `Either`-effectful validator through
+    * every leaf at once.
     */
   val everyZip: Optic[User, User, String, String, PowerSeries] =
     lens[User](_.orders)
-      .morph[PowerSeries]
-      .andThen[Order, Order](Traversal.powerEach[List, Order])
-      .andThen(orderShippingZip.morph[PowerSeries])
+      .andThen(Traversal.powerEach[List, Order])
+      .andThen(orderShippingZip)
 
   // =====================================================================
   // Handler #1 — naive, no optics

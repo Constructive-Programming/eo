@@ -60,16 +60,14 @@ trait Optic[S, T, A, B, F[_, _]]:
     */
   def from: F[X, B] => T
 
-  /** Full optic composition — requires an `AssociativeFunctor` instance for the shared carrier
-    * `F`. Same-carrier only: to cross families (e.g. Lens → Optional) morph one side first via
-    * [[morph]], or use the overloaded cross-carrier variant [[andThenC]] to let `andThen`
-    * insert the morph for you.
+  /** Compose with another optic under the shared carrier `F`. Requires an `AssociativeFunctor`
+    * instance for `F`; `Tuple2` / `Either` / `Forgetful` / `Forget[F]` / `Affine` / `PowerSeries`
+    * all ship one.
     *
-    * Carriers may specialise via `AssociativeFunctor.composeTo` / `composeFrom` — e.g.
-    * [[data.PowerSeries]] pattern-matches on its own marker-class optic to skip the per-element
-    * singleton allocations a `lens.morph[PowerSeries]` would otherwise pay inside a traversal
-    * loop. The default path just calls through to `.to` / `.from` on both optics, preserving
-    * behaviour for carriers that don't specialise.
+    * For cross-carrier composition (e.g. `Lens → Optional` or `Lens → Traversal`), use the
+    * cross-carrier overloads of this same method: they take an `o` whose carrier `G` differs
+    * from `F`, summon a `Composer[F, G]` or `Composer[G, F]` to bring both sides under a
+    * common carrier, and then compose under that carrier.
     *
     * @example
     *   {{{
@@ -93,21 +91,12 @@ trait Optic[S, T, A, B, F[_, _]]:
       def to: S => F[X, C]   = s  => af.composeTo(s, outerRef, innerRef)
       def from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
-  /** Re-express this optic over a different carrier `G` — the standard bridge from `Tuple2` (Lens)
-    * to `Affine` (Optional), from `Tuple2` to `SetterF`, etc.
-    *
-    * @example
-    *   {{{
-    * import eo.data.Affine
-    * import eo.optics.Optic.*
-    * import eo.generics.lens
-    *
-    * // Express a Lens as an Optional so it can be composed with
-    * // a downstream Optional via .andThen:
-    * val lensAsOptional = lens[Person](_.address).morph[Affine]
-    *   }}}
+  /** Re-express this optic over a different carrier `G`. Package-private — users compose
+    * cross-carrier via the cross-carrier [[andThen]] overloads above, which invoke this
+    * internally. Still available to law / behaviour specs inside `eo.*` for direct testing
+    * of the `Composer[F, G]` bridges.
     */
-  def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
+  private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
     cf.to(self)
 
 object Optic:
@@ -154,6 +143,37 @@ object Optic:
       type X = Nothing
       def to: A => A = identity
       def from: A => A = identity
+
+  // ---- Cross-carrier composition (auto-morph) -----------------------
+  //
+  // One extension, one typeclass (`Morph[F, G]`), three implicit
+  // directions (same, left-morph via `Composer[F, G]`, right-morph via
+  // `Composer[G, F]`). Scala picks whichever is available; since we
+  // don't ship bidirectional composers, at most one applies per
+  // carrier pair and there's no ambiguity.
+
+  /** Cross-carrier composition — when the two optics carry different `F` and `G`, this
+    * extension picks the direction via a summoned [[Morph]] (which wraps the appropriate
+    * `Composer`) and composes under the resulting shared carrier.
+    *
+    * @example
+    *   {{{
+    * // `lens.andThen(powerEach).andThen(lens)` — no explicit `.morph` anywhere.
+    * lens[Person](_.phones)
+    *   .andThen(Traversal.powerEach[ArraySeq, Phone])
+    *   .andThen(lens[Phone](_.isMobile))
+    *   }}}
+    */
+  extension [S, T, A, B, F[_, _]](self: Optic[S, T, A, B, F])
+    @annotation.targetName("andThenMorphed")
+    inline def andThen[G[_, _], C, D](o: Optic[A, B, C, D, G])(using
+        m: Morph[F, G]
+    ): Optic[S, T, C, D, m.Out] =
+      val morphedSelf = m.morphSelf(self)
+      val morphedO    = m.morphO(o)
+      morphedSelf.andThen(morphedO)(using
+        scala.compiletime.summonInline[AssociativeFunctor[m.Out, morphedSelf.X, morphedO.X]]
+      )
 
   // ---- Generic Optic extensions -------------------------------------
   //

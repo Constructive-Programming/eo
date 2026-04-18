@@ -10,9 +10,10 @@ import data.Affine
   * be there: a predicate-gated access (`street` only when `isValid`), the `Some` case of an
   * `Option` field, a refinement-style narrowing that can fail.
   *
-  * Compose freely with `Lens` via `lens.morph[Affine].andThen(opt)` — the `Affine` carrier admits
-  * unbounded X/Y via [[data.Affine.assoc]], so any abstract existential satisfies the composition
-  * requirement.
+  * Compose freely with `Lens` via `lens.andThen(opt)` — the cross-carrier `.andThen` extension
+  * auto-morphs the Lens into the Affine carrier via `Composer[Tuple2, Affine]`. The `Affine`
+  * carrier admits unbounded X/Y via [[data.Affine.assoc]], so any abstract existential
+  * satisfies the composition requirement.
   */
 object Optional:
 

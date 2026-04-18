@@ -158,8 +158,9 @@ object Affine:
       xd.affine.fold(zLeft, zRight)
 
   /** `Composer[Tuple2, Affine]` — lets a Lens be expressed as an Optional so
-    * `lens.morph[Affine].andThen(optional)` type-checks. The resulting `Optic[…, Affine]` always
-    * takes the "Right" branch at read time: the Lens never fails.
+    * `lens.andThen(optional)` type-checks through cross-carrier `.andThen` (which summons a
+    * `Morph[Tuple2, Affine]` whose resolution picks up this composer). The resulting
+    * `Optic[…, Affine]` always takes the "Right" branch at read time: the Lens never fails.
     *
     * @group Instances
     */

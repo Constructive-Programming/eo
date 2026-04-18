@@ -53,14 +53,14 @@ timeoutL.modify(_ * 2)(Setting("a", None))
 
 ## Compose a Lens with an Optional
 
-Morph the Lens into the Optional's carrier so they share `F`:
+Cross-carrier `.andThen` summons `Morph[Tuple2, Affine]` for you
+— no manual carrier lifting:
 
 ```scala mdoc:silent
 case class AppRoot(setting: Setting)
 
 val appTimeoutL =
   Lens[AppRoot, Setting](_.setting, (a, s) => a.copy(setting = s))
-    .morph[Affine]
     .andThen(timeoutL)
 ```
 
@@ -100,12 +100,8 @@ case class Subscriber(phones: List[Dial])
 
 val everyMobile =
   Lens[Subscriber, List[Dial]](_.phones, (o, ps) => o.copy(phones = ps))
-    .morph[PowerSeries]
-    .andThen[Dial, Dial](Traversal.powerEach[List, Dial])
-    .andThen(
-      Lens[Dial, Boolean](_.isMobile, (p, m) => p.copy(isMobile = m))
-        .morph[PowerSeries]
-    )
+    .andThen(Traversal.powerEach[List, Dial])
+    .andThen(Lens[Dial, Boolean](_.isMobile, (p, m) => p.copy(isMobile = m)))
 ```
 
 ```scala mdoc

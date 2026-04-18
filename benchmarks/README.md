@@ -96,7 +96,7 @@ Not every optic family composes in EO via the universal `Optic.andThen`:
 - **`Iso.andThen(Iso)`** — `Forgetful` carrier, composes cleanly.
 - **`Traversal.andThen` via `PowerSeries`** — works, but pays the
   `PowerSeries` machinery cost (see `PowerSeriesBench`).
-- **`Lens.morph[Affine].andThen(Optional)`** — works. `Affine.assoc[X, Y]` carries no Tuple bound, so the Lens chain can be morphed to the Affine carrier and composed with a leaf `Optional` in the usual shape (`eoChain.morph[Affine].andThen(leafOptional)`).
+- **`Lens.andThen(Optional)`** — works via cross-carrier `.andThen`. `Affine.assoc[X, Y]` carries no Tuple bound, so a `Morph[Tuple2, Affine]` lifts the Lens chain into the Affine carrier automatically; no explicit `.morph` step on the call site.
 - **`Getter.andThen(Getter)`** — blocked: Getter's `T = Unit` vs the outer `B = A` in the `Optic.andThen` slot. The bench nests `get` calls manually: `leaf.get(n1.get(n2.get(...)))`.
 - **`Setter.andThen(Setter)`** — blocked: `SetterF` has no `AssociativeFunctor` instance. The bench nests `modify` calls: `n1.modify(leafSetter.modify(f))`.
 

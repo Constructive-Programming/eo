@@ -199,3 +199,52 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val asAffine = doubleIso.morph[Tuple2].morph[Affine]
     forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
   }
+
+  // ----- Cross-carrier andThen via Morph ------------------------------
+  //
+  // Pins the three Morph instances that rewire `.andThen` across
+  // differing carriers. `leftToRight` and `rightToLeft` are covered
+  // indirectly through the Lens→Optional and Lens→Traversal paths
+  // elsewhere; this block adds explicit coverage plus a regression
+  // for `bothViaAffine`, the low-priority fallback that lifts two
+  // optics with no direct bridge (e.g. `Either` + `Tuple2`) into a
+  // shared `Affine`.
+
+  private enum Shape3:
+    case Tri(side: Int)
+    case Sq(edge: Int)
+
+  private val triP: Optic[Shape3, Shape3, Shape3.Tri, Shape3.Tri, Either] =
+    Prism[Shape3, Shape3.Tri](
+      {
+        case t: Shape3.Tri => Right(t)
+        case other         => Left(other)
+      },
+      identity,
+    )
+
+  private val triSideL: Optic[Shape3.Tri, Shape3.Tri, Int, Int, Tuple2] =
+    Lens[Shape3.Tri, Int](_.side, (t, s) => t.copy(side = s))
+
+  "Prism.andThen(Lens) composes via Morph.bothViaAffine" >> {
+    // Carrier pair (Either, Tuple2) has no direct Composer either way;
+    // bothViaAffine picks Affine as the common target.
+    val triSide: Optic[Shape3, Shape3, Int, Int, Affine] =
+      triP.andThen(triSideL)
+
+    triSide.modify(_ + 10)(Shape3.Tri(3)) === Shape3.Tri(13)
+    triSide.modify(_ + 10)(Shape3.Sq(5))  === Shape3.Sq(5)
+  }
+
+  "Lens.andThen(Prism) composes via Morph.bothViaAffine (symmetric)" >> {
+    case class Wrapper(shape: Shape3)
+    val wrapperShape =
+      Lens[Wrapper, Shape3](_.shape, (w, s) => w.copy(shape = s))
+    val wrappedTri: Optic[Wrapper, Wrapper, Shape3.Tri, Shape3.Tri, Affine] =
+      wrapperShape.andThen(triP)
+
+    wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Tri(3))) ===
+      Wrapper(Shape3.Tri(4))
+    wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ===
+      Wrapper(Shape3.Sq(5))
+  }

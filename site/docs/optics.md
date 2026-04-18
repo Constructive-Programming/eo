@@ -31,10 +31,11 @@ ageL.replace(31)(alice)
 ageL.modify(_ + 1)(alice)
 ```
 
-Composes via `.andThen` with other Lenses. To cross into an
-`Optional` / `Setter` / `PowerSeries` chain, morph the Lens
-first via `.morph[Affine]` / `.morph[SetterF]` /
-`.morph[PowerSeries]`.
+Composes via `.andThen` with other Lenses and — transparently,
+with no extra syntax — with `Optional` / `Setter` / `Traversal`
+optics too. The cross-carrier variant of `.andThen` summons a
+`Composer[F, G]` or `Composer[G, F]` to bring both sides under
+a common carrier.
 
 ## Prism
 
@@ -113,8 +114,10 @@ presentFlag.modify(_.toUpperCase)(Contact(Some("hello")))
 presentFlag.modify(_.toUpperCase)(Contact(None))
 ```
 
-Composition note: `lens.andThen(optional)` needs the Lens to
-carry `Affine`; use `someLens.morph[Affine].andThen(optional)`.
+Composition with a Lens is automatic: `lens.andThen(optional)`
+summons `Composer[Tuple2, Affine]` under the hood and morphs
+the Lens into the Affine carrier. No explicit `.morph` required
+on your end.
 
 ## Setter
 
@@ -218,12 +221,8 @@ case class Owner(phones: List[Phone])
 
 val ownerAllPhonesMobile =
   Lens[Owner, List[Phone]](_.phones, (o, ps) => o.copy(phones = ps))
-    .morph[PowerSeries]
-    .andThen[Phone, Phone](Traversal.powerEach[List, Phone])
-    .andThen(
-      Lens[Phone, Boolean](_.isMobile, (p, m) => p.copy(isMobile = m))
-        .morph[PowerSeries]
-    )
+    .andThen(Traversal.powerEach[List, Phone])
+    .andThen(Lens[Phone, Boolean](_.isMobile, (p, m) => p.copy(isMobile = m)))
 ```
 
 ```scala mdoc

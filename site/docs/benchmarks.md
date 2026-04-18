@@ -72,8 +72,10 @@ direct-call hot path.
 ## Optional (`Affine` carrier)
 
 Composed through a `Nested0..6` chain. The depth-3 / depth-6
-EO variants compose the Lens chain via `.morph[Affine]` and
-`.andThen` directly onto the leaf Optional — made possible by
+EO variants compose the Lens chain directly onto the leaf
+Optional via cross-carrier `.andThen` — the `Morph[Tuple2,
+Affine]` instance auto-lifts each Lens hop into the `Affine`
+carrier, no explicit morph step required. Made possible by
 dropping the `<: Tuple` bound on `Affine.assoc` (see
 [Concepts → Cross-family composition](concepts.md)).
 

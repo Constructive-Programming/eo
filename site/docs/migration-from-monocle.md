@@ -17,8 +17,8 @@ plus a note on where EO diverges.
 | `Fold.fromFoldable[List, Int]`                     | `Fold[List, Int]` (with `cats.instances.list.given`)|
 | `Traversal.fromTraverse[List, Int]`                | `Traversal.each[List, Int, Int]`                    |
 | `lens.andThen(otherLens)`                          | `lens.andThen(otherLens)` — same                    |
-| `lens.andThen(optional)`                           | `lens.morph[Affine].andThen(optional)` — see below  |
-| `traversal.andThen(lens)`                          | `traversal = Traversal.powerEach[…]; traversal.andThen(lens.morph[PowerSeries])` |
+| `lens.andThen(optional)`                           | `lens.andThen(optional)` — cross-carrier `.andThen` lifts via `Composer[Tuple2, Affine]` |
+| `traversal.andThen(lens)`                          | `traversal = Traversal.powerEach[…]; traversal.andThen(lens)` — auto-morph via `Composer[Tuple2, PowerSeries]` |
 | `lens.get(s)`                                      | `lens.get(s)` — same                                |
 | `lens.replace(a)(s)` / `lens.set(a)(s)`            | `lens.replace(a)(s)` — same                         |
 | `lens.modify(f)(s)`                                | `lens.modify(f)(s)` — same                          |
@@ -38,11 +38,16 @@ has the monomorphic forms on the top-level `Lens` / `Prism` /
 `Iso` objects and exposes the polymorphic shapes through
 `PLens` / `PPrism` / `PIso`.
 
-### Cross-family composition requires `.morph`
+### Cross-family composition: `.andThen` auto-morphs
 
 Monocle's `andThen` has implicit overloads for every optic
-pair. cats-eo keeps `Optic.andThen` same-carrier only and
-requires an explicit `.morph[G]` to cross families:
+pair. cats-eo keeps `Optic.andThen` carrier-aware: same-carrier
+composition goes through `AssociativeFunctor[F, X, Y]`, and
+cross-carrier composition routes through a summoned
+`Morph[F, G]` (which picks up a `Composer[F, G]` or
+`Composer[G, F]`) to lift both sides under a shared carrier.
+The upshot at the call site: the same `.andThen` works whether
+the two optics share `F` or not:
 
 ```scala mdoc:silent
 import eo.data.Affine
@@ -61,9 +66,9 @@ val timeoutOpt = Optional[MigConfig, MigConfig, Int, Int, Affine](
 val appConfig =
   Lens[MigApp, MigConfig](_.config, (a, c) => a.copy(config = c))
 
-// Monocle: lens.andThen(optional) just works
-// cats-eo: lift the lens into the Optional's carrier first
-val appTimeout = appConfig.morph[Affine].andThen(timeoutOpt)
+// Cross-carrier `.andThen` lifts the Lens into the Optional's
+// carrier automatically via `Composer[Tuple2, Affine]`.
+val appTimeout = appConfig.andThen(timeoutOpt)
 ```
 
 The payoff: composition is carrier-level (one `Composer` per

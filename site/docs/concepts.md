@@ -79,7 +79,8 @@ instances provide:
 | `ForgetfulTraverse[F, Applicative]`  | `.modifyA[G]`, `.all(s)`                  |
 | `ForgetfulFold[F]`                   | `.foldMap[M](f)`                          |
 | `AssociativeFunctor[F, X, Y]`        | `.andThen(other)` under the same `F`      |
-| `Composer[F, G]`                     | `.morph[G]`                               |
+| `Composer[F, G]`                     | cross-carrier `.andThen` bridge `F → G`   |
+| `Morph[F, G]`                        | picks the morph direction for `.andThen`  |
 
 One optic trait, one instance per operation per carrier. Adding
 a new carrier means supplying the typeclass instances the
@@ -112,10 +113,10 @@ Both pieces live in `Tuple2`; `.andThen` requires
 `AssociativeFunctor[Tuple2, X, Y]`, which is defined globally
 for any `X, Y`.
 
-### Cross-family: `.morph[G]`
+### Cross-family: `.andThen` across carriers
 
-When the downstream optic uses a different carrier, morph the
-upstream optic first via `Composer[F, G]`:
+When the downstream optic uses a different carrier, the same
+`.andThen` still works — no explicit morph step:
 
 ```scala mdoc:silent
 import eo.data.Affine
@@ -132,10 +133,11 @@ val mainOnly = Optional[Maybe, Maybe, String, String, Affine](
 val wrappedMaybe =
   Lens[Wrapped, Maybe](_.maybe, (w, m) => w.copy(maybe = m))
 
-// `.morph[Affine]` lifts the Lens into the Optional's carrier so
-// `.andThen(mainOnly)` type-checks under
-// `AssociativeFunctor[Affine, X, Y]`.
-val mainStreet = wrappedMaybe.morph[Affine].andThen(mainOnly)
+// The Lens (Tuple2) and the Optional (Affine) compose directly;
+// cross-carrier `.andThen` summons `Morph[Tuple2, Affine]`, which
+// in turn picks up `Composer[Tuple2, Affine]` and lifts the Lens
+// into the Affine carrier so the result is an `Optic[..., Affine]`.
+val mainStreet = wrappedMaybe.andThen(mainOnly)
 ```
 
 `Composer[Tuple2, Affine]` is one of the stdlib instances;
@@ -146,7 +148,14 @@ PowerSeries`, `Either → Affine`, `Either → PowerSeries`,
 Either`.
 
 The transitive `Composer.chain` given lets you hop across two
-bridges without naming the intermediate.
+bridges without naming the intermediate. `Morph`'s four
+instances (`same`, `leftToRight`, `rightToLeft`, and the
+low-priority `bothViaAffine`) are what let `.andThen`
+auto-select the morph direction from the available `Composer`s
+between `F` and `G`. `bothViaAffine` fills the gap for pairs
+that have no direct bridge in either direction — a Prism
+(`Either`) composed with a Lens (`Tuple2`), for instance — by
+lifting both sides into `Affine`, which both carriers reach.
 
 ## Why the existential machinery is worth it
 

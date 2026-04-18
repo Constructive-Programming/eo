@@ -43,7 +43,8 @@ object SetterF:
 
   /** Coerce any Tuple2-carrier optic (typically a Lens) into a SetterF optic. Every Lens is-a
     * Setter: modify is `setter.from(SetterF(s, f))`, which re-runs the Lens's get/replace path with
-    * `f` applied to the focus. Enables `lens.morph[SetterF]`.
+    * `f` applied to the focus. Powers cross-carrier `lens.andThen(setter)`, via
+    * `Morph[Tuple2, SetterF]`.
     *
     * @group Instances
     */

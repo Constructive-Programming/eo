@@ -49,18 +49,12 @@ class PowerSeriesBench:
   var person: Person = uninitialized
 
   // Composed once at fixture setup — the bench measures modify only.
+  // Cross-carrier `.andThen` auto-morphs Tuple2 ↔ PowerSeries; no
+  // explicit `.morph[PowerSeries]` anywhere on the call site.
   private val personAllMobiles =
-    EoLens[Person, ArraySeq[Phone]](
-      _.phones,
-      (s, b) => s.copy(phones = b),
-    ).morph[PowerSeries]
-      .andThen[Phone, Phone](EoTraversal.powerEach[ArraySeq, Phone])
-      .andThen(
-        EoLens[Phone, Boolean](
-          _.isMobile,
-          (s, b) => s.copy(isMobile = b),
-        ).morph[PowerSeries]
-      )
+    EoLens[Person, ArraySeq[Phone]](_.phones, (s, b) => s.copy(phones = b))
+      .andThen(EoTraversal.powerEach[ArraySeq, Phone])
+      .andThen(EoLens[Phone, Boolean](_.isMobile, (s, b) => s.copy(isMobile = b)))
 
   @Setup(Level.Iteration)
   def init(): Unit =

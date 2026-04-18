@@ -114,9 +114,8 @@ import eo.data.Affine
 
 val circleCoordsX =
   prism[Shape2, Shape2.Circle]
-    .morph[Affine]
-    .andThen(lens[Shape2.Circle](_.c).morph[Affine])
-    .andThen(lens[Coords](_.x).morph[Affine])
+    .andThen(lens[Shape2.Circle](_.c))
+    .andThen(lens[Coords](_.x))
 ```
 
 ```scala mdoc
