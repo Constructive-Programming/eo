@@ -16,27 +16,17 @@ import monocle.{Lens => MLens, Optional => MOptional}
   * against Monocle's `Optional`.
   *
   * Three depths:
-  *   - `_0`: leaf-only Optional, so a bare Affine round-trip.
+  *   - `_0`: leaf-only Optional, a bare Affine round-trip.
   *   - `_3`, `_6`: the leaf Optional preceded by a `Lens` chain
-  *     through `Nested`.n.n…n. Both the Some and None branches are
-  *     represented at depth 0.
+  *     through `Nested`.n.n…n.  The Lens chain is `.morph`-ed
+  *     into the `Affine` carrier and then `.andThen`-composed
+  *     with the leaf `Optional`, mirroring exactly the shape of
+  *     a Monocle composed `Optional`.
   *
-  * **Why the depth-3 / depth-6 EO benches use `Lens.modify ∘
-  * Optional.modify`** rather than a single `.andThen`-composed
-  * Optic: `Affine.assoc[X <: Tuple, Y <: Tuple]` requires each
-  * input's existential `X` to be provably `<: Tuple`, but that
-  * proof is erased through `.morph[Affine]`, so direct Lens →
-  * Optional `.andThen` composition does not type-check in EO at
-  * present. The by-hand `chain.modify(optional.modify(f))` form
-  * measures the same runtime work that a composed optic would
-  * perform — the lens chain runs top-down, the optional's
-  * modify runs at the leaf — while sidestepping the typeclass
-  * lookup.  Monocle has no such restriction, so its side uses
-  * the composed form directly; the bench pair stays honest
-  * about what each API supports. Filed as EO tech debt — fixing
-  * would require adding a Tuple witness through `morph` or a
-  * dedicated `AssociativeFunctor[Affine, X, Y]` with unbounded
-  * X/Y.
+  * Both None and Some branches are represented at depth 0 (via
+  * `eoModify_0_empty` / `mModify_0_empty`). The deeper benches
+  * exercise the Some branch only — the fixture's depth-3 / -6
+  * records preserve the populated leaf.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -48,7 +38,7 @@ class OptionalBench:
 
   // ---- Leaf optionals -----------------------------------------------
 
-  private val eoFlag: Optic[Nested0, Nested0, String, String, Affine] =
+  private val eoFlag =
     EoOptional[Nested0, Nested0, String, String, Affine](
       getOrModify = n0 => n0.flag.toRight(n0),
       reverseGet  = (pair: (Nested0, String)) => pair._1.copy(flag = Some(pair._2)),
@@ -73,13 +63,17 @@ class OptionalBench:
   private val mN5: MLens[Nested5, Nested4] = MLens[Nested5, Nested4](_.n)(v => x => x.copy(n = v))
   private val mN6: MLens[Nested6, Nested5] = MLens[Nested6, Nested5](_.n)(v => x => x.copy(n = v))
 
-  // ---- EO: Lens-chain composition (Tuple2 stays in Tuple2) ---------
+  // ---- Composed optionals — Lens chain morphed into Affine, then
+  //      andThen the leaf Optional. Dropping the `<: Tuple` bound on
+  //      `Affine.assoc` made cross-existential composition type-check.
 
-  private val eoChain3 = eoN3.andThen(eoN2).andThen(eoN1)
-  private val eoChain6 =
-    eoN6.andThen(eoN5).andThen(eoN4).andThen(eoN3).andThen(eoN2).andThen(eoN1)
-
-  // ---- Monocle: fully composed Optional ----------------------------
+  private val eoOpt3 =
+    eoN3.andThen(eoN2).andThen(eoN1).morph[Affine].andThen(eoFlag)
+  private val eoOpt6 =
+    eoN6.andThen(eoN5).andThen(eoN4)
+      .andThen(eoN3).andThen(eoN2).andThen(eoN1)
+      .morph[Affine]
+      .andThen(eoFlag)
 
   private val mOpt3 = mN3.andThen(mN2).andThen(mN1).andThen(mFlag)
   private val mOpt6 =
@@ -106,13 +100,13 @@ class OptionalBench:
   // ---- Depth 3 ------------------------------------------------------
 
   @Benchmark def eoModify_3: Nested3 =
-    eoChain3.modify(eoFlag.modify(_.toUpperCase))(d3)
+    eoOpt3.modify(_.toUpperCase)(d3)
   @Benchmark def mModify_3:  Nested3 =
     mOpt3.modify(_.toUpperCase)(d3)
 
   // ---- Depth 6 ------------------------------------------------------
 
   @Benchmark def eoModify_6: Nested6 =
-    eoChain6.modify(eoFlag.modify(_.toUpperCase))(d6)
+    eoOpt6.modify(_.toUpperCase)(d6)
   @Benchmark def mModify_6:  Nested6 =
     mOpt6.modify(_.toUpperCase)(d6)

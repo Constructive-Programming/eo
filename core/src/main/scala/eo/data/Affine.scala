@@ -42,8 +42,39 @@ object Affine:
     def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =
       fa => f => fa.aTraverse(f)
 
-  given assoc[X <: Tuple, Y <: Tuple]
-      : AssociativeFunctor[Affine, X, Y] with
+  /** Composition functor for `Affine` carriers.
+    *
+    * The type parameters `X` and `Y` are **deliberately unbounded**.
+    * Affine's internals use `Fst[X]` / `Snd[X]` match types, which
+    * stay inert (they do not reduce, but do not error either) when
+    * `X` is not a `Tuple`; this makes the instance sound for all
+    * concrete optic constructors we ship (`Optional.apply` sets
+    * `type X = (T, S)`; `Composer[Tuple2, Affine].to` sets
+    * `type X = (T, o.X)`; `Composer[Either, Affine].to` sets
+    * `type X = (o.X, S)` — every concrete X is a Tuple2).
+    *
+    * Prior to 0.1.0 this given carried `X <: Tuple, Y <: Tuple`.
+    * The bound was load-bearing *defensively* — it prevented
+    * pathological composition over an Affine whose X isn't a
+    * tuple — but it also blocked legitimate `Lens.andThen(Optional)`
+    * because the post-`morph[Affine]` existential is abstract and
+    * Scala could not prove the bound through the Optic trait's
+    * unbounded `F[_, _]` slot. Dropping the bound preserves
+    * composition at the cost of the defensive guard.
+    *
+    * **Future work — `ValidCarrier[F, X]` witness.** A cleaner
+    * long-term story is to thread a `ValidCarrier[F[_, _], X]`
+    * typeclass through every optic operation, so each carrier can
+    * declare which existentials it admits (`ValidCarrier[Affine, X]`
+    * requires `X <: Tuple`; `ValidCarrier[Tuple2, X]` is universal).
+    * This lives the constraint at the call-site rather than at
+    * the class, and avoids the kind-compatibility wall that
+    * hits any attempt to put the bound on `Affine` itself
+    * (`class Affine[A <: Tuple, B]` produces a kind mismatch when
+    * Affine is passed to `Optic[…, F[_, _]]`). Tracked for a
+    * post-0.1.0 release when the public API is stable enough to
+    * absorb the witness threading. */
+  given assoc[X, Y]: AssociativeFunctor[Affine, X, Y] with
     type Z = (Either[Fst[X], (Snd[X], Fst[Y])], (Snd[X], Snd[Y]))
 
     def associateLeft[S, A, C]: (S, S => Affine[X, A], A => Affine[Y, C]) => Affine[Z, C] =

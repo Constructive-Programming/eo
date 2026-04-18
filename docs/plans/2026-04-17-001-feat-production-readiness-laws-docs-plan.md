@@ -1625,6 +1625,15 @@ following docs are updated in place:
   project for post-1.0.
 - **Nightly benchmarks workflow** with numbers posted to a GitHub
   discussion — better as a 1.0 concern when the API is stable.
+- **`ValidCarrier[F[_, _], X]` witness.** `Affine.assoc` currently
+  admits any `X` / `Y` — a deliberate relaxation taken at the
+  Unit 12 bench work to unblock `Lens.andThen(Optional)` (see the
+  docstring on `Affine.assoc`). The principled fix is to thread
+  a `ValidCarrier[Affine, X]` (requires `X <: Tuple`) through
+  every optic op, with identity witnesses for carriers that admit
+  any existential. Deferred: touches the whole `Optic` extension
+  surface; best landed alongside the Getter/Setter composition
+  gaps so the witness threading pays for all three at once.
 
 ## Sources & References
 

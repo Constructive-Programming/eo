@@ -96,13 +96,13 @@ Not every optic family composes in EO via the universal `Optic.andThen`:
 - **`Iso.andThen(Iso)`** — `Forgetful` carrier, composes cleanly.
 - **`Traversal.andThen` via `PowerSeries`** — works, but pays the
   `PowerSeries` machinery cost (see `PowerSeriesBench`).
-- **`Lens.andThen(Optional)`** — blocked: `Affine.assoc[X <: Tuple, Y <: Tuple]` requires the post-`morph[Affine]` existential to be a proven `<: Tuple`, which current `Composer[Tuple2, Affine]` does not preserve in the type signature. The bench sidesteps via `lensChain.modify(leafOptional.modify(f))`.
+- **`Lens.morph[Affine].andThen(Optional)`** — works. `Affine.assoc[X, Y]` carries no Tuple bound, so the Lens chain can be morphed to the Affine carrier and composed with a leaf `Optional` in the usual shape (`eoChain.morph[Affine].andThen(leafOptional)`).
 - **`Getter.andThen(Getter)`** — blocked: Getter's `T = Unit` vs the outer `B = A` in the `Optic.andThen` slot. The bench nests `get` calls manually: `leaf.get(n1.get(n2.get(...)))`.
 - **`Setter.andThen(Setter)`** — blocked: `SetterF` has no `AssociativeFunctor` instance. The bench nests `modify` calls: `n1.modify(leafSetter.modify(f))`.
 
 For Monocle side, every corresponding `andThen` is first-class on the optic trait.
 
-The workarounds reflect what a user would actually write if composing these families in EO today. The cleaner Monocle side isn't a bench advantage — the work done on both sides is the same Scala code with the same allocations.
+The remaining Getter/Setter workarounds reflect what a user would actually write if composing these families in EO today. The cleaner Monocle side isn't a bench advantage — the work done on both sides is the same Scala code with the same allocations.
 
 ## Interpreting PowerSeries numbers
 
