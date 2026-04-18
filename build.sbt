@@ -172,6 +172,49 @@ lazy val circeIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
+// Docs site — Laika + mdoc via sbt-typelevel-site. Rooted at
+// `site/` on disk, named `docs` in sbt so `sbt docs/tlSite` /
+// `sbt docs/mdoc` / `sbt docs/tlSitePreview` read naturally. Keeps
+// docs out of the root aggregator so plain `sbt compile` / `sbt
+// test` stay fast.
+lazy val docs: Project = project
+  .in(file("site"))
+  .enablePlugins(TypelevelSitePlugin)
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics"),
+    LocalProject("circeIntegration"),
+    LocalProject("laws"),
+  )
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-docs",
+    publish / skip := true,
+    // kindlingsCirce is only in `circeIntegration`'s Test scope, so
+    // docs examples that want circe Codec derivation need it
+    // surfaced here as a Compile-scope dep.
+    libraryDependencies += kindlingsCirce,
+    // Point mdoc at the sub-project's own `docs/` directory. The
+    // plugin's default resolves to the ROOT `docs/` directory,
+    // which already contains internal notes (`plans/`,
+    // `solutions/`, `ci-secrets.md`) that Laika should not ingest.
+    mdocIn := (ThisBuild / baseDirectory).value / "site" / "docs",
+    // mdoc variable substitutions — site pages can reference
+    // `@VERSION@` to always display the current version.
+    mdocVariables ++= Map(
+      "VERSION" -> tlBaseVersion.value,
+    ),
+    // Helium theme config — the plugin needs a home-link URL on
+    // the top nav; without it Laika fails the site build with
+    // "No target for home link found".
+    tlSiteHelium ~= { _.site.topNavigationBar(
+      homeLink = laika.helium.config.ImageLink.external(
+        "https://github.com/Constructive-Programming/eo",
+        laika.ast.Image.external(""),
+      ),
+    )},
+  )
+
 // Benchmarks deliberately stay OUT of the root aggregator: they're a
 // JMH harness rather than a test, and we don't want `sbt test` or
 // `sbt compile` to drag the JMH machinery / monocle dep in. Run them

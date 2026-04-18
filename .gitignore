@@ -9,3 +9,7 @@
 target/
 metals.sbt
 jmh-result.*
+
+# sbt-typelevel-site / Laika output
+site/target/
+/site/laika-helium-icon/

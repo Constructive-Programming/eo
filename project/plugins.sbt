@@ -14,3 +14,9 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.5")
 // every CI build from 0.1.1 onward (0.1.0 has no previous version
 // to compare against; see `mima.sbt`).
 addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.5")
+
+// `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
+// mdoc-compiled markdown under `site/docs/` with the Helium theme
+// configured from build.sbt. Pinned to the same 0.8.5 family as
+// ci-release so they share plugin transitive versions.
+addSbtPlugin("org.typelevel" % "sbt-typelevel-site"       % "0.8.5")
