@@ -20,6 +20,11 @@ lazy val circeParser    = Circe         %% "circe-parser"      % "0.14.10"
 lazy val commonSettings = Seq(
   version      := "0.1.0-SNAPSHOT",
   scalaVersion := scala3Version,
+  // `-groups` renders @group tags as Scaladoc sections. Applied on
+  // every published module so any `@group Constructors` /
+  // `@group Operations` / `@group Instances` bucket on an optic
+  // companion shows up as a collapsible section in the API docs.
+  Compile / doc / scalacOptions ++= Seq("-groups"),
 )
 
 lazy val root: Project = project

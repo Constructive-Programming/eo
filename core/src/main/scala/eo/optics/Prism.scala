@@ -1,22 +1,69 @@
 package eo
 package optics
 
+/** Constructors for `Prism` — the partial single-focus optic, backed
+  * by the `Either` carrier.
+  *
+  * A `Prism[S, A]` (short for `Optic[S, S, A, A, Either]`) encodes a
+  * branch of a sum type: `getOption(s): Option[A]` succeeds when `s`
+  * matches the branch, `reverseGet(a): S` lifts an `a` back into
+  * `S`. Composition with other prisms (via `Optic.andThen` on the
+  * `Either` carrier) produces deeper sum-type drill-downs.
+  *
+  * For derived prisms on enums / sealed traits / union types the
+  * `eo-generics` module exposes the `prism[S, A]` macro.
+  */
 object Prism:
+
+  /** Monomorphic constructor — `S = T`, `A = B`. `getOrModify` returns
+    * `Right(a)` on match and `Left(s)` on miss.
+    *
+    * @group Constructors
+    *
+    * @example
+    * {{{
+    * enum Shape:
+    *   case Circle(r: Double)
+    *   case Square(s: Double)
+    *
+    * val circleP = Prism[Shape, Shape.Circle](
+    *   {
+    *     case c: Shape.Circle => Right(c)
+    *     case other           => Left(other)
+    *   },
+    *   identity,
+    * )
+    * }}} */
   def apply[S, A](
         getOrModify: S => Either[S, A],
         reverseGet: A => S
     ) =
     pPrism(getOrModify, reverseGet)
 
+  /** Polymorphic constructor — allows the miss branch to produce a
+    * different type `T`. Most production code uses [[apply]]; this
+    * form matters for refinement-style conversions.
+    *
+    * @group Constructors */
   def pPrism[S, T, A, B](
         getOrModify: S => Either[T, A],
         reverseGet: B => T
     ) =
     MendTearPrism(getOrModify, reverseGet)
 
+  /** `Option`-shaped constructor — returns a [[PickMendPrism]] whose
+    * fused extensions avoid the intermediate `Either` that the
+    * generic constructor must build. Preferred when the underlying
+    * projection is already `S => Option[A]`.
+    *
+    * @group Constructors */
   def optional[S, A](getOption: S => Option[A], reverseGet: A => S) =
     PickMendPrism[S, A, A](getOption, reverseGet)
 
+  /** Polymorphic counterpart to [[optional]] — allows type change
+    * on write.
+    *
+    * @group Constructors */
   def pOptional[S, A, B](getOption: S => Option[A], reverseGet: B => S) =
     PickMendPrism[S, A, B](getOption, reverseGet)
 

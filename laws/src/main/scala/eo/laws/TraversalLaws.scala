@@ -14,8 +14,8 @@ import cats.Functor
   * We deliberately do NOT port `getAll` / `headOption` here — EO's `Optic.all` returns the whole
   * container wrapped in a single-element list (cartesian-product semantics from
   * `traverse(List(_))`), not the individual elements, so Monocle's phrasing of those laws would not
-  * be testing what the name suggests. See [[eo.laws.eo.FoldAndTraverseLaws.TraverseAllLaws]] for
-  * the EO- specific laws that pin down `all`'s real behaviour.
+  * be testing what the name suggests. See `eo.laws.eo.TraverseAllLaws` for
+  * the EO-specific laws that pin down `all`'s real behaviour.
   */
 trait TraversalLaws[T[_], A](using val FT: Functor[T]):
   def traversal: Optic[T[A], T[A], A, A, Forget[T]]

@@ -10,6 +10,28 @@ import scala.annotation.tailrec
 import scala.compiletime.ops.int.*
 
 
+/** Length-indexed immutable vector: `Vect[N, A]` holds exactly `N`
+  * elements of type `A`, with the length visible at the type level.
+  *
+  * Four constructors encode four algebraic shapes:
+  *   - [[NilVect]] — the empty vector (`N = 0`).
+  *   - [[ConsVect]] — head + tail.
+  *   - [[TConsVect]] — init + last.
+  *   - [[AdjacentVect]] — structurally-concatenated pair.
+  *
+  * `slice` / `++` / `+:` / `:+` all operate at the type level on
+  * the length index, so invalid accesses (`slice(5, 3)` on a
+  * `Vect[2, A]`) are rejected at compile time. The phantom
+  * `N <: Int` is the whole point — runtime bounds checks are not
+  * a substitute.
+  *
+  * Primary consumer is [[PowerSeries]] (per-index composition of
+  * traversals); [[FixedTraversal]] and the `Traversal.two` /
+  * `.three` / `.four` constructors also build on it.
+  *
+  * @tparam N length of the vector (0, 1, 2, …)
+  * @tparam A element type
+  */
 sealed trait Vect[N <: Int, A]:
   type Size = N
   def size: Size

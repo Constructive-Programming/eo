@@ -5,7 +5,7 @@ import scala.quoted.*
 
 import eo.optics.{Lens, Optic, SimpleLens}
 
-/** Compile-time derivation of a `Lens` as a [[SimpleLens]].
+/** Compile-time derivation of a `Lens` as a [[eo.optics.SimpleLens]].
   *
   * Usage:
   * {{{
@@ -35,9 +35,11 @@ import eo.optics.{Lens, Optic, SimpleLens}
   *     parameterised types and Scala 3 enum cases (which lack a
   *     `.copy` method) are both handled uniformly -- `new T(...)`
   *     works for both.
-  *   - Only 1-field and 2-field case classes are supported currently.
-  *     Extending to N-field classes (N≥3) requires building a `TupleN`
-  *     complement; tracked as future work.
+  *   - N-field case classes are supported through a `NamedTuple`
+  *     complement — the per-class sibling fields are encoded as a
+  *     compile-time-known named tuple, so the derived lens carries
+  *     structural evidence for `transform` / `place` / `transfer`
+  *     regardless of the record's arity.
   */
 object LensMacro:
 

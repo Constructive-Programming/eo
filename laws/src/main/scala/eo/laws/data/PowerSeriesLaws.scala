@@ -20,11 +20,11 @@ import cats.{Applicative, Id}
   *   * `ForgetfulTraverse[PowerSeries, Applicative]` at `Id` —
   *     identity.
   *
-  * `AssociativeFunctor[PowerSeries, X, Y]` is exercised at the optic
-  * level through `Composer[Tuple2 → PowerSeries]` / `[Either →
-  * PowerSeries]` / `[Affine → PowerSeries]` bridges; the
-  * end-to-end `modify` equivalence of those chains lives in
-  * [[eo.laws.eo.ChainPathIndependenceLaws]]-style specs (Unit 7).
+  * `AssociativeFunctor` for `PowerSeries` is exercised at the optic
+  * level through the `Composer[Tuple2 → PowerSeries]` /
+  * `[Either → PowerSeries]` / `[Affine → PowerSeries]` bridges;
+  * the end-to-end `modify` equivalence of those chains lives in
+  * `eo.laws.eo.ChainPathIndependenceLaws`-style specs.
   */
 trait PowerSeriesLaws[X, A]:
   def functorIdentity(ps: PowerSeries[X, A])(using

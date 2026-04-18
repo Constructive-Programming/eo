@@ -8,36 +8,85 @@ import cats.syntax.bifunctor._
 import cats.syntax.either._
 import cats.syntax.functor._
 
+/** Extract the first element type of a `Tuple2`. Stays as an
+  * unreduced match type when `T` is not a `Tuple2` — this is load
+  * bearing for [[Affine.assoc]] accepting unbounded existentials.
+  */
 type Fst[T] = T match
   case (f, s) => f
 
+/** Extract the second element type of a `Tuple2`. See [[Fst]]. */
 type Snd[T] = T match
   case (f, s) => s
 
+/** Carrier for the `Optional` family of optics: `Affine[A, B]`
+  * encodes `Either[Fst[A], (Snd[A], B)]` — either a miss branch
+  * carrying the original-shape value (`Fst[A]`), or a hit branch
+  * carrying a leftover (`Snd[A]`) plus the focus (`B`).
+  *
+  * At every constructor site the existential `A` is instantiated
+  * to a concrete `Tuple2` (so `Fst[A]` / `Snd[A]` reduce); when
+  * Affine is carried through the existential position of an
+  * `Optic[…, Affine]` value, `A` becomes abstract and the match
+  * types stay inert. Both uses are supported.
+  *
+  * @tparam A existential leftover tuple — the `Tuple2` encoding of
+  *           the miss and hit contexts
+  * @tparam B focus type the caller reads / writes
+  */
 class Affine[A, B](val affine: Either[Fst[A], (Snd[A], B)]) extends AnyVal:
   import Affine.*
 
+  /** Monoidally fold both branches of the underlying `Either`,
+    * producing a new `Affine[A, C]` over a different focus type. */
   def aFold[C](f: Fst[A] => Either[Fst[A], (Snd[A], C)],
               g: ((Snd[A], B)) => Either[Fst[A], (Snd[A], C)]): Affine[A, C] =
     Affine(affine.fold(f, g))
 
+  /** Effectful traversal over the focus — runs `f` only on the hit
+    * branch, passes the miss branch through unchanged. */
   def aTraverse[C, G[_]: Applicative](f: B => G[C]): G[Affine[A, C]] =
     affine.fold(ofLeft(_).pure[G], _.traverse(f).map(ofRight))
 
+/** Constructors and typeclass instances for [[Affine]]. */
 object Affine:
+
+  /** Convenience wrapping extension — turns a raw
+    * `Either[Fst[X], (Snd[X], B)]` into an `Affine[X, B]` without
+    * writing the constructor call.
+    *
+    * @group Instances */
   extension [X <: Tuple, B](e: Either[Fst[X], (Snd[X], B)])
     def affine: Affine[X, B] = Affine(e)
 
+  /** Miss-branch constructor — produce an `Affine[X, B]` whose
+    * branch is `Left(l)`.
+    *
+    * @group Constructors */
   def ofLeft[X, B](l: Fst[X]): Affine[X, B] =
     Affine[X, B](l.asLeft[(Snd[X], B)])
 
+  /** Hit-branch constructor — produce an `Affine[X, B]` whose
+    * branch is `Right((xa, b))`.
+    *
+    * @group Constructors */
   def ofRight[X, B](r: (Snd[X], B)): Affine[X, B] =
     Affine[X, B](r.asRight[Fst[X]])
 
+  /** `ForgetfulFunctor[Affine]` — maps the focus `B` through `f`
+    * while leaving the miss branch untouched. Unlocks `.modify`
+    * and `.replace` on every Affine-carrier optic.
+    *
+    * @group Instances */
   given map: ForgetfulFunctor[Affine] with
     def map[X, A, B](fa: Affine[X, A], f: A => B): Affine[X, B] =
       fa.aFold[B](_.asLeft[(Snd[X], B)], _.map(f).asRight[Fst[X]])
 
+  /** `ForgetfulTraverse[Affine, Applicative]` — lifts a focus-level
+    * `A => G[B]` into an `Affine[X, A] => G[Affine[X, B]]`. Unlocks
+    * `.modifyA` / `.all` / `.modifyF` on Affine-carrier optics.
+    *
+    * @group Instances */
   given traverse: ForgetfulTraverse[Affine, Applicative] with
     def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =
       fa => f => fa.aTraverse(f)
@@ -73,7 +122,9 @@ object Affine:
     * (`class Affine[A <: Tuple, B]` produces a kind mismatch when
     * Affine is passed to `Optic[…, F[_, _]]`). Tracked for a
     * post-0.1.0 release when the public API is stable enough to
-    * absorb the witness threading. */
+    * absorb the witness threading.
+    *
+    * @group Instances */
   given assoc[X, Y]: AssociativeFunctor[Affine, X, Y] with
     type Z = (Either[Fst[X], (Snd[X], Fst[Y])], (Snd[X], Snd[Y]))
 
@@ -102,6 +153,12 @@ object Affine:
           f(ofRight(y._1 -> b))
         az.affine.fold(zLeft, zRight)
 
+  /** `Composer[Tuple2, Affine]` — lets a Lens be expressed as an
+    * Optional so `lens.morph[Affine].andThen(optional)` type-checks.
+    * The resulting `Optic[…, Affine]` always takes the "Right"
+    * branch at read time: the Lens never fails.
+    *
+    * @group Instances */
   given tuple2affine: Composer[Tuple2, Affine] with
     import optics.Optic
 
@@ -114,6 +171,11 @@ object Affine:
           case Left(t)  => t
           case Right(p) => o.from(p)
 
+  /** `Composer[Either, Affine]` — express a Prism as an Optional
+    * by reusing its `Either` decomposition for Affine's
+    * miss / hit branches.
+    *
+    * @group Instances */
   given either2affine: Composer[Either, Affine] with
     import optics.Optic
 

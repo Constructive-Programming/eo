@@ -10,9 +10,30 @@ import scala.annotation.nowarn
 import scala.runtime.Tuples
 import scala.compiletime.ops.int.*
 
+/** Carrier for the `PowerSeries`-style `Traversal`: pairs an
+  * existential leftover `Snd[A]` with a length-indexed [[Vect]]
+  * of focused elements `B`.
+  *
+  * The design goal is **downstream optic composition through a
+  * traversal**: `traversal.andThen(lens)` only type-checks when
+  * the carrier admits a meaningful `AssociativeFunctor`, and
+  * `Forget[F]` (the `each` carrier) does not. `PowerSeries`
+  * provides that instance — see [[PowerSeries.assoc]] — at a
+  * super-linear runtime cost (indexing, per-element vector
+  * concatenation).
+  *
+  * Rule of thumb: use `Traversal.each[F, A, B]` for plain
+  * element-wise modify; reach for `Traversal.powerEach[F, A]`
+  * only when the chain continues past the traversal with another
+  * optic.
+  *
+  * See `benchmarks/src/main/scala/eo/bench/PowerSeriesBench.scala`
+  * for the runtime cost breakdown.
+  */
 class PowerSeries[A, B](val ps: Tuple2[Snd[A], Vect[Int, B]]) extends AnyVal:
     override def toString(): String = ps.toString()
 
+/** Typeclass instances for [[PowerSeries]]. */
 object PowerSeries:
   def unapply[A, B](ps: PowerSeries[A, B]): Tuple2[Snd[A], Vect[Int, B]] =
     ps.ps

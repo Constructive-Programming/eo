@@ -1,24 +1,74 @@
 package eo
 package optics
 
+/** Constructors and stdlib instances for `Lens` — the always-present
+  * single-focus optic, backed by the `Tuple2` carrier.
+  *
+  * A `Lens[S, A]` (short for `Optic[S, S, A, A, Tuple2]`) encodes a
+  * field of a product type: `get(s): A` reads the field, `modify`
+  * / `replace` rewrite it. The `Tuple2` carrier stores the leftover
+  * structure of `S` alongside the focus so rebuilding is cheap.
+  *
+  * For derived lenses the companion `eo-generics` module exposes
+  * `lens[S](_.field)` which writes both the `get` and the `replace`
+  * half for you.
+  */
 object Lens:
   import Function.uncurried
 
+  /** Witness that a `(A, B)` can be flipped to `(B, A)` — used by
+    * `Composer` bridges to swap `Tuple2`'s sides when threading
+    * Lens-based chains through non-`Tuple2` carriers.
+    *
+    * @group Instances */
   given tupleInterchangeable[A, B]: (((A, B)) => (B, A)) with
     def apply(t: (A, B)): (B, A) = t.swap
 
+  /** Polymorphic constructor — allows `S` and `T` to differ, i.e.
+    * genuine type change on write.
+    *
+    * @group Constructors
+    * @tparam S source type being read
+    * @tparam T result type after the write
+    * @tparam A focus being read out of `S`
+    * @tparam B focus being written back to produce `T` */
   def pLens[S, T, A, B](get: S => A, enplace: (S, B) => T) =
     GetReplaceLens(get, enplace)
 
+  /** Monomorphic constructor — the common case where `S = T` and
+    * `A = B`. Use this for plain field access; [[pLens]] for
+    * type-changing writes.
+    *
+    * @group Constructors
+    *
+    * @example
+    * {{{
+    * case class Person(name: String, age: Int)
+    * val ageL = Lens[Person, Int](_.age, (p, a) => p.copy(age = a))
+    * }}} */
   def apply[S, A](get: S => A, enplace: (S, A) => S) =
     pLens[S, S, A, A](get, enplace)
 
+  /** Curried variant of [[apply]] — accepts `replace: A => S => S`
+    * instead of `(S, A) => S`. Easier to reuse when an existing
+    * `replace` function is already in the user's form.
+    *
+    * @group Constructors */
   def curried[S, A](get: S => A, replace: A => S => S) =
     pLens[S, S, A, A](get, (s, a) => replace(a)(s))
 
+  /** Polymorphic counterpart to [[curried]] — accepts a curried
+    * `replace: B => S => T`.
+    *
+    * @group Constructors */
   def pCurried[S, T, A, B](get: S => A, replace: B => S => T) =
     pLens(get, uncurried(replace))
 
+  /** Lens focusing the first element of a `Tuple2`. Returns a
+    * [[SimpleLens]] so `place` / `transfer` / `transform` all
+    * land without extra evidence.
+    *
+    * @group Constructors */
   // first / second produce a `SimpleLens` so `transform` / `place` /
   // `transfer` land for free — `S = T` and `A = B` in both cases, so
   // the `to` splitter doubles as the `T => (X, A)` evidence that the
@@ -30,6 +80,9 @@ object Lens:
       (b, a) => (a, b),
     )
 
+  /** Lens focusing the second element of a `Tuple2`.
+    *
+    * @group Constructors */
   def second[A, B] =
     SimpleLens[(A, B), B, A](
       _._2,
