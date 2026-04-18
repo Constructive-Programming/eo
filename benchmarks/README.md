@@ -106,8 +106,6 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-`PowerSeriesBench` shows EO's `Traversal.powerEach` scaling **super-linearly** with the traversed-collection size — roughly O(n²) from 32 → 256 elements. The naive comparator (plain `p.copy(phones = p.phones.map(ph => ...))`) scales linearly, as expected.
+`PowerSeriesBench` now shows `Traversal.powerEach` scaling **linearly** with traversed-collection size after the Vect → Vector storage swap — roughly ~30× off the naive `copy`/`map` baseline at every size. The remaining overhead is the Composer chain's per-element `.modify` dispatch, not the data structure.
 
-This is inherent to the current `PowerSeries` representation (it carries per-index `AssociativeFunctor` composition at run time), not a bench artefact. PowerSeries is used today for **correctness of composition** — the ability to `andThen` a `Traversal` with a downstream `Lens` / `Prism` across the same chain, which Monocle's traversal doesn't natively offer. Users who only need a single-pass map over a collection should keep to `Traversal.each[F, A, B]` (the `Forget[F]` carrier), which is linear.
-
-Future work: linearise `PowerSeries.assoc` to drop to O(n). Tracked in `docs/plans/` once picked up.
+Use `Traversal.each[F, A, B]` (the `Forget[F]` carrier) for single-pass element-wise modifies where no downstream optic composition is needed — it's the linear-and-tight fast path. Reach for `Traversal.powerEach` when the chain needs to continue past the traversal.

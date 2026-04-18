@@ -2,7 +2,7 @@ package eo
 
 import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
-import data.{PowerSeries, Vect}
+import data.PowerSeries
 import data.PowerSeries.given
 
 import cats.instances.arraySeq.*
@@ -90,7 +90,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
   // ---- Composer chain round-trip on a single-element container --
 
   "Tuple2 → PowerSeries composer" should {
-    "lift a Lens into a PowerSeries optic whose inner Vect has size 1" >> {
+    "lift a Lens into a PowerSeries optic whose inner Vector has size 1" >> {
       val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
       val morphd = lens.morph[PowerSeries]
       forAll((p: (Int, String)) =>
@@ -139,16 +139,11 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   // ---- 3+ .andThen chain regression ----------------------------------
   //
-  // Before the `Vect.slice` off-by-one fix, a chain with three or more
-  // `.andThen` calls (outer lens → `powerEach` → inner lens → innermost
-  // lens, all lifted to PowerSeries) produced `modify(identity)` results
-  // where each list position got the NEXT element's focus — a shift by
-  // one with the last element repeated. Root cause: TConsVect's slice
-  // branch used `<` instead of `<=` for the "entirely in init" check,
-  // so `slice(0, 1)` on a `TConsVect(TConsVect(Nil, A), B)` returned
-  // `[B]` instead of `[A]`. The pattern appears only when the outer
-  // associator's fold accumulates via `:+`, which is exactly what the
-  // second-level `associateRight` does.
+  // Pins the outer lens → `powerEach` → inner lens → innermost lens
+  // composition against `modify(identity)`, which previously exposed a
+  // slice off-by-one in the now-deleted `Vect` carrier. Kept as a
+  // regression test against future assoc-logic mistakes in the
+  // `ArraySeq`-backed `PowerSeries`.
 
   case class Addr2(zip: String)
   case class Ord2(ship: Addr2)

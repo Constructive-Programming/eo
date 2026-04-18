@@ -1,9 +1,11 @@
 package eo
 package optics
 
-import data.{FixedTraversal, Forget, PowerSeries, Vect}
+import data.{FixedTraversal, Forget, PowerSeries}
 
 import cats.{Applicative, MonoidK, Traverse}
+import cats.instances.vector.given
+import cats.syntax.foldable.*
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
@@ -45,10 +47,10 @@ object Traversal:
       def to: T[A] => T[A] = identity
       def from: T[B] => T[B] = identity
 
-  /** PowerSeries-carrier `each` — enables downstream optic composition but pays the
-    * [[data.PowerSeries]] machinery cost (~O(n²) vs `each`'s O(n)). Require `Applicative` and
-    * `MonoidK` on `T` in addition to `Traverse` so the `from` direction can fold the per-index
-    * [[data.Vect]] back into the container via `foldMapK`.
+  /** PowerSeries-carrier `each` — enables downstream optic composition by threading through the
+    * `PowerSeries` carrier's `AssociativeFunctor` instance. Require `Applicative` and `MonoidK`
+    * on `T` in addition to `Traverse` so the `from` direction can fold the flat per-index
+    * `ArraySeq[A]` back into the container via `foldMapK`.
     *
     * Reach for this when you need to `.andThen` a lens or prism after the traversal; for plain
     * element-wise modify use [[each]].
@@ -69,12 +71,12 @@ object Traversal:
 
       def to: T[A] => PowerSeries[X, A] =
         ta =>
-          PowerSeries(
-            () -> Traverse[T].foldLeft(ta, Vect.nil[Int, A])((v, a) => (v :+ a).asInstanceOf)
-          )
+          val bld = Vector.newBuilder[A]
+          Traverse[T].foldLeft(ta, ())((_, a) => { bld += a; () })
+          PowerSeries(() -> bld.result())
 
       def from: PowerSeries[X, B] => T[B] =
-        ps => Vect.trav[Int].foldMapK(ps.ps._2)(Applicative[T].pure[B])
+        ps => ps.ps._2.foldMapK(Applicative[T].pure[B])
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.

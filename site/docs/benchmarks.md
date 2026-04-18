@@ -190,20 +190,23 @@ EO-only — no Monocle equivalent. Toggles `isMobile` on every
 `Phone` inside a `Person.phones: ArraySeq[Phone]`; the chain
 is `Lens → Traversal.powerEach → Lens`.
 
-| Size |  eo (`powerEach` chain) | naive `copy` / `map` |    ratio |
-|------|------------------------:|---------------------:|---------:|
-| 4    |                 618 ns  |               13 ns  |    47×   |
-| 32   |              21 087 ns  |               80 ns  |   262×   |
-| 256  |          10 021 918 ns  |              753 ns  | 13 309×  |
+| Size |  eo (`powerEach` chain) | naive `copy` / `map` | ratio |
+|------|------------------------:|---------------------:|------:|
+| 4    |                 456 ns  |               13 ns  |  34×  |
+| 32   |               2 447 ns  |               81 ns  |  30×  |
+| 256  |              22 730 ns  |              780 ns  |  29×  |
 
-**PowerSeries is super-linear in the array size** (~O(n²) from
-32 → 256 elements) — a consequence of the current
-`AssociativeFunctor[PowerSeries, X, Y]` implementation which
-threads per-index `Vect` concatenation. For single-pass modify
-of a collection, use `Traversal.each[F, A, B]` (linear) and
-accept that the resulting optic no longer composes downstream.
-`powerEach` is for correctness of composition across a
-traversal, not raw throughput.
+The carrier is now flat `Vector[A]` with an internal
+`Vector.newBuilder` on the `assoc` hot path (swapped from a
+homegrown `Vect[N, A]` that paid O(n²) for persistent concat +
+slice). The result: linear scaling across all sizes, with the
+residual ~29× overhead being the Composer chain's per-element
+`.modify` dispatch — not the storage structure.
+
+For single-pass modify of a collection, `Traversal.each[F, A, B]`
+(linear, no downstream composition) is still the correct choice.
+Reach for `powerEach` when the chain needs to continue past the
+traversal.
 
 See the
 [composition notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes)

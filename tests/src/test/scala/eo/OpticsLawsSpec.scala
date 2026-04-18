@@ -24,13 +24,12 @@ import laws.discipline.{
   SetterTests,
   TraversalTests,
 }
-import laws.data.{AffineLaws, FixedTraversalLaws, PowerSeriesLaws, SetterFLaws, VectLaws}
+import laws.data.{AffineLaws, FixedTraversalLaws, PowerSeriesLaws, SetterFLaws}
 import laws.data.discipline.{
   AffineTests,
   FixedTraversalTests,
   PowerSeriesTests,
   SetterFTests,
-  VectTests,
 }
 import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
 import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
@@ -264,31 +263,6 @@ class OpticsLawsSpec extends Specification with Discipline:
     .setterF,
   )
 
-  // ----- Vect carrier laws at N=3, A=Int --------------------------
-  //
-  // Arbitrary[Vect[3, Int]] is constructed by cons-ing three ints onto
-  // a NilVect base; all four constructors (NilVect, ConsVect,
-  // TConsVect, AdjacentVect) are exercised through the behaviour spec
-  // in VectSpec.scala.
-
-  private given arbVect3Int: Arbitrary[data.Vect[3, Int]] =
-    Arbitrary(
-      for
-        a <- Arbitrary.arbitrary[Int]
-        b <- Arbitrary.arbitrary[Int]
-        c <- Arbitrary.arbitrary[Int]
-      yield (a +: b +: c +: data.Vect.nil[0, Int]).asInstanceOf[data.Vect[3, Int]]
-    )
-
-  checkAll(
-    "Vect[3, Int]",
-    new VectTests[3, Int]:
-      val laws = new VectLaws[3, Int]:
-        val F = data.Vect.functor[3]
-        val T = data.Vect.trav[3]
-    .vect,
-  )
-
   // ----- PowerSeries carrier laws ---------------------------------
 
   import data.PowerSeries
@@ -297,17 +271,11 @@ class OpticsLawsSpec extends Specification with Discipline:
   private given arbPowerSeries: Arbitrary[PowerSeries[(Int, Int), Int]] =
     Arbitrary(
       for
-        x <- Arbitrary.arbitrary[Int]
+        x  <- Arbitrary.arbitrary[Int]
         a0 <- Arbitrary.arbitrary[Int]
         a1 <- Arbitrary.arbitrary[Int]
         a2 <- Arbitrary.arbitrary[Int]
-      yield PowerSeries[(Int, Int), Int](
-        (
-          x,
-          (a0 +: a1 +: a2 +: data.Vect.nil[0, Int])
-            .asInstanceOf[data.Vect[Int, Int]],
-        )
-      )
+      yield PowerSeries[(Int, Int), Int]((x, Vector(a0, a1, a2)))
     )
 
   checkAll(

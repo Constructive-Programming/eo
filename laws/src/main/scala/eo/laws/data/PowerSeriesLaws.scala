@@ -8,14 +8,14 @@ import cats.{Applicative, Id}
 
 /** Carrier-level laws for `PowerSeries[X, A]`.
   *
-  * `PowerSeries[X, A]` wraps `(Snd[X], Vect[Int, A])` — a dynamically- sized vector of focused
-  * values accompanied by a phantom `Snd[X]` that threads back through the
-  * [[eo.data.PowerSeries.AssociativeFunctor]] composition chain.
+  * `PowerSeries[X, A]` wraps `(Snd[X], ArraySeq[A])` — a flat contiguous vector of focused values
+  * accompanied by a phantom `Snd[X]` that threads back through the AssociativeFunctor composition
+  * chain.
   *
   * The laws pin the two cats-style instances that drive runtime behaviour:
   *
-  * * `ForgetfulFunctor[PowerSeries]` — identity and composition. * `ForgetfulTraverse[PowerSeries,
-  * Applicative]` at `Id` — identity.
+  *   - `ForgetfulFunctor[PowerSeries]` — identity and composition.
+  *   - `ForgetfulTraverse[PowerSeries, Applicative]` at `Id` — identity.
   *
   * `AssociativeFunctor` for `PowerSeries` is exercised at the optic level through the
   * `Composer[Tuple2 → PowerSeries]` / `[Either → PowerSeries]` / `[Affine → PowerSeries]` bridges;
