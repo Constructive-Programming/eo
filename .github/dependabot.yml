@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep GitHub Actions pinned versions current. Scala / sbt-plugin
+  # updates are tracked by Scala Steward (to be wired post-0.1.0);
+  # Dependabot doesn't natively understand sbt.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
