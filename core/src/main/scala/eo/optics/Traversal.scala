@@ -1,10 +1,12 @@
 package eo
 package optics
 
+import scala.collection.immutable.ArraySeq
+
 import data.{FixedTraversal, Forget, PowerSeries}
 
 import cats.{Applicative, MonoidK, Traverse}
-import cats.instances.vector.given
+import cats.instances.arraySeq.given
 import cats.syntax.foldable.*
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
@@ -71,9 +73,27 @@ object Traversal:
 
       def to: T[A] => PowerSeries[X, A] =
         ta =>
-          val bld = Vector.newBuilder[A]
-          Traverse[T].foldLeft(ta, ())((_, a) => { bld += a; () })
-          PowerSeries(() -> bld.result())
+          // Hand-rolled Array[AnyRef] grower: no ArrayBuffer indirection,
+          // no final toArray copy. Matches the builder in PowerSeries
+          // object; kept private here because we don't need the fuller
+          // API.
+          var arr: Array[AnyRef] = new Array[AnyRef](16)
+          var len                = 0
+          Traverse[T].foldLeft(ta, ())((_, a) =>
+            if len == arr.length then
+              val newArr = new Array[AnyRef](arr.length * 2)
+              System.arraycopy(arr, 0, newArr, 0, len)
+              arr = newArr
+            arr(len) = a.asInstanceOf[AnyRef]
+            len += 1
+          )
+          val finalArr =
+            if len == arr.length then arr
+            else
+              val trimmed = new Array[AnyRef](len)
+              System.arraycopy(arr, 0, trimmed, 0, len)
+              trimmed
+          PowerSeries(() -> ArraySeq.unsafeWrapArray(finalArr).asInstanceOf[ArraySeq[A]])
 
       def from: PowerSeries[X, B] => T[B] =
         ps => ps.ps._2.foldMapK(Applicative[T].pure[B])

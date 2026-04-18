@@ -192,16 +192,19 @@ is `Lens → Traversal.powerEach → Lens`.
 
 | Size |  eo (`powerEach` chain) | naive `copy` / `map` | ratio |
 |------|------------------------:|---------------------:|------:|
-| 4    |                 456 ns  |               13 ns  |  34×  |
-| 32   |               2 447 ns  |               81 ns  |  30×  |
-| 256  |              22 730 ns  |              780 ns  |  29×  |
+| 4    |                 439 ns  |               14 ns  |  31×  |
+| 32   |               2 332 ns  |               84 ns  |  28×  |
+| 256  |              19 397 ns  |              769 ns  |  25×  |
 
-The carrier is now flat `Vector[A]` with an internal
-`Vector.newBuilder` on the `assoc` hot path (swapped from a
-homegrown `Vect[N, A]` that paid O(n²) for persistent concat +
-slice). The result: linear scaling across all sizes, with the
-residual ~29× overhead being the Composer chain's per-element
-`.modify` dispatch — not the storage structure.
+The carrier is now flat `ArraySeq[A]` (backed by `Array[AnyRef]`)
+with a hand-rolled grow-on-demand builder on the `assoc` hot
+path (swapped from a homegrown `Vect[N, A]` that paid O(n²)
+for persistent concat + slice). The builder avoids both
+`ArrayBuffer`'s final `toArray` copy and `Vector`'s two-level
+trie access; the result is linear scaling across all sizes at a
+consistent ~25-30× overhead over the naive baseline. That
+overhead is the Composer chain's per-element `.modify`
+dispatch, not the storage structure.
 
 For single-pass modify of a collection, `Traversal.each[F, A, B]`
 (linear, no downstream composition) is still the correct choice.

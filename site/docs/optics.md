@@ -191,9 +191,9 @@ element of a container. Two carriers coexist:
 * `Traversal.each[F, A, B]` — carrier `Forget[F]`, linear time,
   no downstream optic composition.
 * `Traversal.powerEach[F, A]` — carrier `PowerSeries`, supports
-  `.andThen` with downstream optics. Linear scaling since the
-  `Vector`-backed rewrite, with a small constant-factor overhead
-  from the Composer chain's per-element dispatch.
+  `.andThen` with downstream optics. Linear scaling with a
+  small constant-factor overhead (~25–30× over a naive
+  `copy`/`map`) from the Composer chain's per-element dispatch.
 
 Use `each` by default:
 

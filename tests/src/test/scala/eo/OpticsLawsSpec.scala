@@ -267,6 +267,7 @@ class OpticsLawsSpec extends Specification with Discipline:
 
   import data.PowerSeries
   import data.PowerSeries.given
+  import scala.collection.immutable.ArraySeq
 
   private given arbPowerSeries: Arbitrary[PowerSeries[(Int, Int), Int]] =
     Arbitrary(
@@ -275,7 +276,7 @@ class OpticsLawsSpec extends Specification with Discipline:
         a0 <- Arbitrary.arbitrary[Int]
         a1 <- Arbitrary.arbitrary[Int]
         a2 <- Arbitrary.arbitrary[Int]
-      yield PowerSeries[(Int, Int), Int]((x, Vector(a0, a1, a2)))
+      yield PowerSeries[(Int, Int), Int]((x, ArraySeq(a0, a1, a2)))
     )
 
   checkAll(
