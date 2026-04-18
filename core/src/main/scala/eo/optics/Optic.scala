@@ -60,31 +60,16 @@ trait Optic[S, T, A, B, F[_, _]]:
     */
   def from: F[X, B] => T
 
-  /** Compose two optics that only expose the "push" side — used by the left-composer family
-    * (prisms, folds). Leaves the result's `B` / `T` open with `Nothing`.
-    */
-  def andThenLeft[C](o: Optic[A, Nothing, C, Nothing, F])(using
-      laf: LeftAssociativeFunctor[F, self.X, o.X]
-  ): Optic[S, Nothing, C, Nothing, F] =
-    new Optic:
-      type X = laf.Z
-      def to: S => F[X, C] = s => laf.associateLeft(s, self.to, o.to)
-      def from: F[X, Nothing] => Nothing = ???
-
-  /** Composition counterpart to [[andThenLeft]]: compose on the "pull" side only. Used by
-    * setter-shaped families.
-    */
-  def andThenRight[D](o: Optic[Nothing, B, Nothing, D, F])(using
-      af: RightAssociativeFunctor[F, self.X, o.X]
-  ): Optic[Nothing, T, Nothing, D, F] =
-    new Optic:
-      type X = af.Z
-      def to: Nothing => F[X, Nothing] = ???
-      def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
-
-  /** Full optic composition — requires an `AssociativeFunctor` instance for the shared carrier `F`.
-    * Same-carrier only: to cross families (e.g. Lens → Optional) morph one side first via
-    * [[morph]].
+  /** Full optic composition — requires an `AssociativeFunctor` instance for the shared carrier
+    * `F`. Same-carrier only: to cross families (e.g. Lens → Optional) morph one side first via
+    * [[morph]], or use the overloaded cross-carrier variant [[andThenC]] to let `andThen`
+    * insert the morph for you.
+    *
+    * Carriers may specialise via `AssociativeFunctor.composeTo` / `composeFrom` — e.g.
+    * [[data.PowerSeries]] pattern-matches on its own marker-class optic to skip the per-element
+    * singleton allocations a `lens.morph[PowerSeries]` would otherwise pay inside a traversal
+    * loop. The default path just calls through to `.to` / `.from` on both optics, preserving
+    * behaviour for carriers that don't specialise.
     *
     * @example
     *   {{{
@@ -101,22 +86,12 @@ trait Optic[S, T, A, B, F[_, _]]:
   def andThen[C, D](o: Optic[A, B, C, D, F])(using
       af: AssociativeFunctor[F, self.X, o.X]
   ): Optic[S, T, C, D, F] =
+    val outerRef = self.asInstanceOf[Optic[S, T, A, B, F] { type X = self.X }]
+    val innerRef = o.asInstanceOf[Optic[A, B, C, D, F] { type X = o.X }]
     new Optic:
       type X = af.Z
-      def to: S => F[X, C] = s => af.associateLeft(s, self.to, o.to)
-      def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
-
-  /** Re-express this optic over a different carrier `G`, using only the carrier's "push" side.
-    * Companion to [[morphRight]] / [[morph]].
-    */
-  def morphLeft[G[_, _]](using cf: LeftComposer[F, G]): Optic[S, Nothing, A, Nothing, G] =
-    cf.to(self)
-
-  /** Re-express this optic over a different carrier `G`, using only the carrier's "pull" side.
-    * Companion to [[morphLeft]] / [[morph]].
-    */
-  def morphRight[G[_, _]](using cf: RightComposer[F, G]): Optic[Nothing, T, Nothing, B, G] =
-    cf.to(self)
+      def to: S => F[X, C]   = s  => af.composeTo(s, outerRef, innerRef)
+      def from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
   /** Re-express this optic over a different carrier `G` — the standard bridge from `Tuple2` (Lens)
     * to `Affine` (Optional), from `Tuple2` to `SetterF`, etc.

@@ -8,6 +8,8 @@ import cats.syntax.bifunctor._
 import cats.syntax.either._
 import cats.syntax.functor._
 
+import optics.Optic
+
 /** Extract the first element type of a `Tuple2`. Stays as an unreduced match type when `T` is not a
   * `Tuple2` — this is load bearing for [[Affine.assoc]] accepting unbounded existentials.
   */
@@ -121,33 +123,39 @@ object Affine:
     *
     * @group Instances
     */
-  given assoc[X, Y]: AssociativeFunctor[Affine, X, Y] with
-    type Z = (Either[Fst[X], (Snd[X], Fst[Y])], (Snd[X], Snd[Y]))
+  given assoc[Xo, Xi]: AssociativeFunctor[Affine, Xo, Xi] with
+    type Z = (Either[Fst[Xo], (Snd[Xo], Fst[Xi])], (Snd[Xo], Snd[Xi]))
 
-    def associateLeft[S, A, C]: (S, S => Affine[X, A], A => Affine[Y, C]) => Affine[Z, C] =
-      case (s, f, g) =>
-        inline def fLeft(x: Fst[X]): Affine[Z, C] =
-          ofLeft(x.asLeft[(Snd[X], Fst[Y])])
-        inline def fRight(xa: (Snd[X], A)): Affine[Z, C] =
-          g(xa._2).affine.fold(gLeft(xa._1), gRight(xa._1))
-        inline def gLeft(x1: Snd[X])(y0: Fst[Y]): Affine[Z, C] =
-          ofLeft((x1, y0).asRight[Fst[X]])
-        inline def gRight(x1: Snd[X])(yc: (Snd[Y], C)): Affine[Z, C] =
-          ofRight((x1, yc._1) -> yc._2)
-        f(s).affine.fold(fLeft, fRight)
+    def composeTo[S, T, A, B, C, D](
+        s:     S,
+        outer: Optic[S, T, A, B, Affine] { type X = Xo },
+        inner: Optic[A, B, C, D, Affine] { type X = Xi },
+    ): Affine[Z, C] =
+      inline def fLeft(x: Fst[Xo]): Affine[Z, C] =
+        ofLeft(x.asLeft[(Snd[Xo], Fst[Xi])])
+      inline def fRight(xa: (Snd[Xo], A)): Affine[Z, C] =
+        inner.to(xa._2).affine.fold(gLeft(xa._1), gRight(xa._1))
+      inline def gLeft(x1: Snd[Xo])(y0: Fst[Xi]): Affine[Z, C] =
+        ofLeft((x1, y0).asRight[Fst[Xo]])
+      inline def gRight(x1: Snd[Xo])(yc: (Snd[Xi], C)): Affine[Z, C] =
+        ofRight((x1, yc._1) -> yc._2)
+      outer.to(s).affine.fold(fLeft, fRight)
 
-    def associateRight[D, B, T]: (Affine[Z, D], Affine[Y, D] => B, Affine[X, B] => T) => T =
-      case (az, g, f) =>
-        inline def zLeft(z: Either[Fst[X], (Snd[X], Fst[Y])]): T =
-          z.fold(yLeft, yRight)
-        inline def zRight(z: ((Snd[X], Snd[Y]), D)): T =
-          val b: B = g(ofRight(z._1._2 -> z._2))
-          f(ofRight(z._1._1 -> b))
-        inline def yLeft(y: Fst[X]): T = f(ofLeft(y))
-        inline def yRight(y: (Snd[X], Fst[Y])): T =
-          val b: B = g(ofLeft(y._2))
-          f(ofRight(y._1 -> b))
-        az.affine.fold(zLeft, zRight)
+    def composeFrom[S, T, A, B, C, D](
+        xd:    Affine[Z, D],
+        inner: Optic[A, B, C, D, Affine] { type X = Xi },
+        outer: Optic[S, T, A, B, Affine] { type X = Xo },
+    ): T =
+      inline def zLeft(z: Either[Fst[Xo], (Snd[Xo], Fst[Xi])]): T =
+        z.fold(yLeft, yRight)
+      inline def zRight(z: ((Snd[Xo], Snd[Xi]), D)): T =
+        val b: B = inner.from(ofRight(z._1._2 -> z._2))
+        outer.from(ofRight(z._1._1 -> b))
+      inline def yLeft(y: Fst[Xo]): T = outer.from(ofLeft(y))
+      inline def yRight(y: (Snd[Xo], Fst[Xi])): T =
+        val b: B = inner.from(ofLeft(y._2))
+        outer.from(ofRight(y._1 -> b))
+      xd.affine.fold(zLeft, zRight)
 
   /** `Composer[Tuple2, Affine]` — lets a Lens be expressed as an Optional so
     * `lens.morph[Affine].andThen(optional)` type-checks. The resulting `Optic[…, Affine]` always

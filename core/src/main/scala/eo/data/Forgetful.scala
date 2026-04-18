@@ -94,52 +94,44 @@ object Forgetful:
     def traverse[X, A, B, G[_]: Applicative]: Forget[F][X, A] => (A => G[B]) => G[Forget[F][X, B]] =
       fa => f => fa.traverse(f)
 
-  /** `AssociativeFunctor[Forgetful, X, Y]` — lets any two `Forgetful`-carrier optics compose via
-    * `Optic.andThen`.
+  /** `AssociativeFunctor[Forgetful, Xo, Xi]` — lets any two `Forgetful`-carrier optics compose via
+    * `Optic.andThen`. Carrier-erasing: the result type `Z = Nothing` since `Forgetful` has no
+    * leftover.
     *
     * @group Instances
     */
-  given assoc[X, Y]: AssociativeFunctor[Forgetful, X, Y] with
+  given assoc[Xo, Xi]: AssociativeFunctor[Forgetful, Xo, Xi] with
     type Z = Nothing
 
-    def associateLeft[S, A, C]: (S, S => A, A => C) => C =
-      (s, f, g) => g(f(s))
+    def composeTo[S, T, A, B, C, D](
+        s:     S,
+        outer: Optic[S, T, A, B, Forgetful] { type X = Xo },
+        inner: Optic[A, B, C, D, Forgetful] { type X = Xi },
+    ): C = inner.to(outer.to(s))
 
-    def associateRight[D, B, T]: (D, D => B, B => T) => T =
-      (d, g, f) => f(g(d))
+    def composeFrom[S, T, A, B, C, D](
+        xd:    D,
+        inner: Optic[A, B, C, D, Forgetful] { type X = Xi },
+        outer: Optic[S, T, A, B, Forgetful] { type X = Xo },
+    ): T = outer.from(inner.from(xd))
 
-  /** `LeftAssociativeFunctor[Forget[F], X, Y]` for any `F` with `FlatMap` — needed by
-    * `Optic.andThenLeft` on Fold chains.
+  /** `AssociativeFunctor[Forget[F], Xo, Xi]` for any `F` with both `FlatMap` (push side) and
+    * `Comonad` (pull side). Powers `traversal.andThen(traversal)` style composition over a
+    * shared container carrier.
     *
     * @group Instances
     */
-  given leftAssocForget[F[_]: FlatMap, X, Y]: LeftAssociativeFunctor[Forget[F], X, Y] with
+  given assocForget[F[_]: FlatMap: Comonad, Xo, Xi]: AssociativeFunctor[Forget[F], Xo, Xi] with
     type Z = Nothing
 
-    def associateLeft[S, A, C]: (S, S => F[A], A => F[C]) => F[C] =
-      (s, f, g) => f(s).flatMap(g)
+    def composeTo[S, T, A, B, C, D](
+        s:     S,
+        outer: Optic[S, T, A, B, Forget[F]] { type X = Xo },
+        inner: Optic[A, B, C, D, Forget[F]] { type X = Xi },
+    ): F[C] = outer.to(s).flatMap(inner.to)
 
-  /** `RightAssociativeFunctor[Forget[F], X, Y]` for any `F` with `Comonad` — the dual of
-    * [[leftAssocForget]].
-    *
-    * @group Instances
-    */
-  given rightAssocForget[F[_]: Comonad, X, Y]: RightAssociativeFunctor[Forget[F], X, Y] with
-    type Z = Nothing
-
-    def associateRight[D, B, T]: (F[D], F[D] => B, F[B] => T) => T =
-      (d, g, f) => f(d.coflatMap(g))
-
-  /** Full `AssociativeFunctor[Forget[F], X, Y]` — sums the left and right variants above. Requires
-    * both `FlatMap` and `Comonad` on `F`.
-    *
-    * @group Instances
-    */
-  given assocForget[F[_]: FlatMap: Comonad, X, Y]: AssociativeFunctor[Forget[F], X, Y] with
-    type Z = Nothing
-
-    def associateLeft[S, A, C]: (S, S => F[A], A => F[C]) => F[C] =
-      (s, f, g) => f(s).flatMap(g)
-
-    def associateRight[D, B, T]: (F[D], F[D] => B, F[B] => T) => T =
-      (d, g, f) => f(d.coflatMap(g))
+    def composeFrom[S, T, A, B, C, D](
+        xd:    F[D],
+        inner: Optic[A, B, C, D, Forget[F]] { type X = Xi },
+        outer: Optic[S, T, A, B, Forget[F]] { type X = Xo },
+    ): T = outer.from(xd.coflatMap(inner.from))

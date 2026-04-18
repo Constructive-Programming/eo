@@ -35,49 +35,6 @@ object PowerSeries:
   def unapply[A, B](ps: PowerSeries[A, B]): Tuple2[Snd[A], ArraySeq[B]] =
     ps.ps
 
-  /** Minimal grow-on-demand `Array[AnyRef]` builder. Hand-rolled rather than using
-    * `ArrayBuffer` so the final freeze is a zero-copy `unsafeWrapArray` on the builder's
-    * own array (with a truncation copy only when the buffer was over-allocated). Doubles
-    * capacity on overflow; inlines the inner-loop arithmetic the JMH hot path benefits from.
-    */
-  private final class ObjArrBuilder(initialCapacity: Int = 16):
-    private var arr: Array[AnyRef] = new Array[AnyRef](math.max(initialCapacity, 1))
-    private var len: Int           = 0
-
-    def size: Int = len
-
-    def append(x: AnyRef): Unit =
-      if len == arr.length then grow(len + 1)
-      arr(len) = x
-      len += 1
-
-    def appendAllFromArraySeq[A](src: ArraySeq[A]): Unit =
-      val n = src.length
-      if len + n > arr.length then grow(len + n)
-      var i = 0
-      while i < n do
-        arr(len + i) = src(i).asInstanceOf[AnyRef]
-        i += 1
-      len += n
-
-    private def grow(minCap: Int): Unit =
-      var newCap = arr.length * 2
-      while newCap < minCap do newCap *= 2
-      val newArr = new Array[AnyRef](newCap)
-      System.arraycopy(arr, 0, newArr, 0, len)
-      arr = newArr
-
-    /** Return the accumulated array exactly-sized. No-copy when the builder filled its
-      * internal array exactly; one arraycopy to truncate when it didn't. */
-    def freezeAs[A]: ArraySeq[A] =
-      val finalArr =
-        if len == arr.length then arr
-        else
-          val trimmed = new Array[AnyRef](len)
-          System.arraycopy(arr, 0, trimmed, 0, len)
-          trimmed
-      ArraySeq.unsafeWrapArray(finalArr).asInstanceOf[ArraySeq[A]]
-
   given map: ForgetfulFunctor[PowerSeries] with
     def map[X, A, B](psa: PowerSeries[X, A], f: A => B): PowerSeries[X, B] =
       val src = psa.ps._2
@@ -95,40 +52,42 @@ object PowerSeries:
         : PowerSeries[X, A] => (A => G[B]) => G[PowerSeries[X, B]] =
       psa => f => psa.ps._2.traverse(f).map(vb => PowerSeries(psa.ps._1 -> vb))
 
-  given assoc[X, Y]: AssociativeFunctor[PowerSeries, X, Y] with
-    type SndZ = (Snd[X], ArraySeq[(Int, Snd[Y])])
+  given assoc[Xo, Xi]: AssociativeFunctor[PowerSeries, Xo, Xi] with
+    type SndZ = (Snd[Xo], ArraySeq[(Int, Snd[Xi])])
     type Z    = (Int, SndZ)
 
-    def associateLeft[S, A, C]
-        : (S, S => PowerSeries[X, A], A => PowerSeries[Y, C]) => PowerSeries[Z, C] =
-      (s, f, g) =>
-        val (x, va)    = f(s).ps
-        val indexBuf   = new ObjArrBuilder(va.length)
-        val flatBuf    = new ObjArrBuilder()
-        var i          = 0
-        while i < va.length do
-          val (y, vy) = g(va(i)).ps
-          indexBuf.append((vy.length, y).asInstanceOf[AnyRef])
-          flatBuf.appendAllFromArraySeq(vy)
-          i += 1
-        PowerSeries(
-          (x, indexBuf.freezeAs[(Int, Snd[Y])]) -> flatBuf.freezeAs[C]
-        )
+    def composeTo[S, T, A, B, C, D](
+        s:     S,
+        outer: Optic[S, T, A, B, PowerSeries] { type X = Xo },
+        inner: Optic[A, B, C, D, PowerSeries] { type X = Xi },
+    ): PowerSeries[Z, C] =
+      val (x, va)  = outer.to(s).ps
+      val indexBuf = new ObjArrBuilder(va.length)
+      val flatBuf  = new ObjArrBuilder()
+      var i        = 0
+      while i < va.length do
+        val (y, vy) = inner.to(va(i)).ps
+        indexBuf.append((vy.length, y).asInstanceOf[AnyRef])
+        flatBuf.appendAllFromArraySeq(vy)
+        i += 1
+      PowerSeries((x, indexBuf.freezeAs[(Int, Snd[Xi])]) -> flatBuf.freezeAs[C])
 
-    def associateRight[D, B, T]
-        : (PowerSeries[Z, D], PowerSeries[Y, D] => B, PowerSeries[X, B] => T) => T =
-      (ps, g, f) =>
-        val ((x, ys), vys) = ps.ps
-        val resultBuf      = new ObjArrBuilder(ys.length)
-        var offset         = 0
-        var i              = 0
-        while i < ys.length do
-          val (len, y) = ys(i)
-          val chunk    = vys.slice(offset, offset + len)
-          resultBuf.append(g(PowerSeries(y -> chunk)).asInstanceOf[AnyRef])
-          offset      += len
-          i           += 1
-        f(PowerSeries(x -> resultBuf.freezeAs[B]))
+    def composeFrom[S, T, A, B, C, D](
+        xd:    PowerSeries[Z, D],
+        inner: Optic[A, B, C, D, PowerSeries] { type X = Xi },
+        outer: Optic[S, T, A, B, PowerSeries] { type X = Xo },
+    ): T =
+      val ((x, ys), vys) = xd.ps
+      val resultBuf      = new ObjArrBuilder(ys.length)
+      var offset         = 0
+      var i              = 0
+      while i < ys.length do
+        val (len, y) = ys(i)
+        val chunk    = vys.slice(offset, offset + len)
+        resultBuf.append(inner.from(PowerSeries(y -> chunk)).asInstanceOf[AnyRef])
+        offset      += len
+        i           += 1
+      outer.from(PowerSeries(x -> resultBuf.freezeAs[B]))
 
   given tuple2ps: Composer[Tuple2, PowerSeries] with
 

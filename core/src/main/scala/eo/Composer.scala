@@ -2,20 +2,9 @@ package eo
 
 import optics.Optic
 
-/** "Push-side" bridge between two carriers: re-express the push half of an `Optic[S, T, A, B, F]`
-  * as `Optic[S, Nothing, A, Nothing, G]`. Powers `Optic.morphLeft`.
-  */
-trait LeftComposer[F[_, _], G[_, _]]:
-  def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, Nothing, A, Nothing, G]
-
-/** "Pull-side" bridge — dual of [[LeftComposer]]. Powers `Optic.morphRight`.
-  */
-trait RightComposer[F[_, _], G[_, _]]:
-  def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[Nothing, T, Nothing, B, G]
-
-/** Full bridge — reshape an `F`-carrier optic into a `G`-carrier optic preserving both halves.
-  * Required by `Optic.morph`; the principal mechanism by which optic families cross boundaries
-  * (Lens → Optional, Lens → Setter, Iso → Lens, …).
+/** Bridge between two carriers — reshape an `F`-carrier optic into a `G`-carrier optic
+  * preserving both halves. Required by `Optic.morph`; the principal mechanism by which optic
+  * families cross boundaries (Lens → Optional, Lens → Setter, Iso → Lens, …).
   *
   * @tparam F
   *   source carrier
@@ -25,8 +14,8 @@ trait RightComposer[F[_, _], G[_, _]]:
 trait Composer[F[_, _], G[_, _]]:
   def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, G]
 
-/** Typeclass instances for [[Composer]]. Additional composers live near the carrier they produce:
-  * `Composer[Tuple2, Affine]` under [[data.Affine]], `Composer[Tuple2, SetterF]` under
+/** Typeclass instances for [[Composer]]. Additional composers live near the carrier they
+  * produce: `Composer[Tuple2, Affine]` under [[data.Affine]], `Composer[Tuple2, SetterF]` under
   * [[data.SetterF]], `Composer[Tuple2, PowerSeries]` under [[data.PowerSeries]], etc.
   */
 object Composer:
@@ -54,7 +43,7 @@ object Composer:
     def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
         type X = Unit
-        def to: S => (X, A) = o.to.andThen(() -> _)
+        def to: S => (X, A)     = o.to.andThen(() -> _)
         def from: ((X, B)) => T = o.from.compose(_._2)
 
   /** Express an Iso (or Getter) as a Prism — always takes the `Right` branch; `Nothing` in the

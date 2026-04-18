@@ -2,71 +2,98 @@ package eo
 
 import cats.syntax.either._
 
-/** "Push" side of optic composition — given two push-directions over a carrier `F`, combine them
-  * into a single push that threads both existentials through a new `Z`.
+import optics.Optic
+
+/** Composition algebra for a two-parameter carrier `F[_, _]` — given two optics that share `F`,
+  * [[composeTo]] produces the combined `F[Z, C]` from a source `S` and [[composeFrom]] unfolds
+  * a combined `F[Z, D]` back through the inner and outer optics.
   *
-  * Required by [[optics.Optic.andThenLeft]]; most users get at this indirectly through
-  * [[AssociativeFunctor]].
+  * The class-level type parameters `Xo` ("outer" X) and `Xi` ("inner" X) are the existentials of
+  * the two optics being composed: `Xo` is the outer optic's existential, `Xi` is the inner's.
+  * Named without shadowing the `type X` member on [[Optic]] so [[composeTo]] and [[composeFrom]]
+  * can refinement-type on them.
+  *
+  * Any carrier that wants to support `Optic.andThen` must supply an instance. Carriers can
+  * specialise on concrete optic shapes by pattern-matching on the `outer` / `inner` arguments.
   *
   * @tparam F
   *   carrier
-  * @tparam X
-  *   left existential
-  * @tparam Y
-  *   right existential
+  * @tparam Xo
+  *   outer-optic existential
+  * @tparam Xi
+  *   inner-optic existential
   */
-trait LeftAssociativeFunctor[F[_, _], X, Y]:
+trait AssociativeFunctor[F[_, _], Xo, Xi]:
   /** Combined existential carried through the composed optic. */
   type Z
-  def associateLeft[S, A, C]: (S, S => F[X, A], A => F[Y, C]) => F[Z, C]
 
-/** Dual of [[LeftAssociativeFunctor]]: "pull" side of optic composition, used by
-  * [[optics.Optic.andThenRight]].
-  */
-trait RightAssociativeFunctor[F[_, _], X, Y]:
-  type Z
-  def associateRight[D, B, T]: (F[Z, D], F[Y, D] => B, F[X, B] => T) => T
+  /** Push-side composition — run `outer.to(s)` to get an `F[Xo, A]`, feed the focus through
+    * `inner.to` to produce `F[Xi, C]`, reassemble as `F[Z, C]`.
+    */
+  def composeTo[S, T, A, B, C, D](
+      s:     S,
+      outer: Optic[S, T, A, B, F] { type X = Xo },
+      inner: Optic[A, B, C, D, F] { type X = Xi },
+  ): F[Z, C]
 
-/** Sum of [[LeftAssociativeFunctor]] and [[RightAssociativeFunctor]] — required by `Optic.andThen`.
-  * Any carrier that wants to support fully-bidirectional composition must supply an instance.
-  */
-trait AssociativeFunctor[F[_, _], X, Y]
-    extends LeftAssociativeFunctor[F, X, Y],
-      RightAssociativeFunctor[F, X, Y]
+  /** Pull-side composition — unfold `F[Z, D]` back through `inner.from` and `outer.from` to
+    * produce `T`. Dual of [[composeTo]].
+    */
+  def composeFrom[S, T, A, B, C, D](
+      xd:    F[Z, D],
+      inner: Optic[A, B, C, D, F] { type X = Xi },
+      outer: Optic[S, T, A, B, F] { type X = Xo },
+  ): T
 
 /** Typeclass instances for [[AssociativeFunctor]]. */
 object AssociativeFunctor:
 
-  /** `AssociativeFunctor[Tuple2, X, Y]` — pairs X and Y into `Z = (X, Y)`. Powers
+  /** `AssociativeFunctor[Tuple2, Xo, Xi]` — pairs Xo and Xi into `Z = (Xo, Xi)`. Powers
     * `lens.andThen(lens)` composition.
     *
     * @group Instances
     */
-  given tupleAssocF[X, Y]: AssociativeFunctor[Tuple2, X, Y] with
-    type Z = (X, Y)
+  given tupleAssocF[Xo, Xi]: AssociativeFunctor[Tuple2, Xo, Xi] with
+    type Z = (Xo, Xi)
 
-    def associateLeft[S, A, C]: (S, S => (X, A), A => (Y, C)) => (Z, C) =
-      case (s, f, g) =>
-        val (x, a) = f(s)
-        val (y, c) = g(a)
-        (x -> y, c)
+    def composeTo[S, T, A, B, C, D](
+        s:     S,
+        outer: Optic[S, T, A, B, Tuple2] { type X = Xo },
+        inner: Optic[A, B, C, D, Tuple2] { type X = Xi },
+    ): (Z, C) =
+      val (x, a) = outer.to(s)
+      val (y, c) = inner.to(a)
+      (x -> y, c)
 
-    def associateRight[D, B, T]: ((Z, D), ((Y, D)) => B, ((X, B)) => T) => T =
-      case (((x, y), d), g, f) => f(x, g(y, d))
+    def composeFrom[S, T, A, B, C, D](
+        xd:    (Z, D),
+        inner: Optic[A, B, C, D, Tuple2] { type X = Xi },
+        outer: Optic[S, T, A, B, Tuple2] { type X = Xo },
+    ): T =
+      val ((x, y), d) = xd
+      outer.from(x, inner.from(y, d))
 
-  /** `AssociativeFunctor[Either, X, Y]` — threads through the `Left` miss branches by bubbling them
-    * up. Powers `prism.andThen(prism)` composition.
+  /** `AssociativeFunctor[Either, Xo, Xi]` — threads `Left` miss branches by bubbling them up.
+    * Powers `prism.andThen(prism)` composition.
     *
     * @group Instances
     */
-  given eitherAssocF[X, Y]: AssociativeFunctor[Either, X, Y] with
-    type Z = Either[X, Y]
+  given eitherAssocF[Xo, Xi]: AssociativeFunctor[Either, Xo, Xi] with
+    type Z = Either[Xo, Xi]
 
-    def associateLeft[S, A, C]: (S, S => Either[X, A], A => Either[Y, C]) => Either[Z, C] =
-      case (s, f, g) =>
-        f(s).fold(_.asLeft[Y].asLeft[C], g(_).leftMap(_.asRight[X]))
+    def composeTo[S, T, A, B, C, D](
+        s:     S,
+        outer: Optic[S, T, A, B, Either] { type X = Xo },
+        inner: Optic[A, B, C, D, Either] { type X = Xi },
+    ): Either[Z, C] =
+      outer.to(s).fold(_.asLeft[Xi].asLeft[C], inner.to(_).leftMap(_.asRight[Xo]))
 
-    def associateRight[D, B, T]: (Either[Z, D], Either[Y, D] => B, Either[X, B] => T) => T =
-      case (Right(d), f, g)       => g(Right(f(Right(d))))
-      case (Left(Right(y)), f, g) => g(Right(f(Left(y))))
-      case (Left(Left(x)), _, g)  => g(Left(x))
+    def composeFrom[S, T, A, B, C, D](
+        xd:    Either[Z, D],
+        inner: Optic[A, B, C, D, Either] { type X = Xi },
+        outer: Optic[S, T, A, B, Either] { type X = Xo },
+    ): T =
+      xd match
+        case Right(d)         => outer.from(Right(inner.from(Right(d))))
+        case Left(Right(y))   => outer.from(Right(inner.from(Left(y))))
+        case Left(Left(x))    => outer.from(Left(x))
