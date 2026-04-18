@@ -7,17 +7,19 @@ import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
 import org.typelevel.discipline.Laws
 
-/** Discipline `RuleSet`s for [[MorphLaws]]. Two entry points —
-  * `morphPreservesModify` and `morphPreservesGet` — because the two
-  * laws require disjoint capabilities on `F` / `G` (ForgetfulFunctor
-  * vs. Accessor) and not every carrier pair satisfies both.
+/** Discipline `RuleSet`s for [[MorphLaws]]. Two entry points — `morphPreservesModify` and
+  * `morphPreservesGet` — because the two laws require disjoint capabilities on `F` / `G`
+  * (ForgetfulFunctor vs. Accessor) and not every carrier pair satisfies both.
   */
 abstract class MorphTests[S, A, F[_, _], G[_, _]] extends Laws:
   def laws: MorphLaws[S, A, F, G]
 
   def morphPreservesModify(using
-      Arbitrary[S], Arbitrary[A], Cogen[A],
-      ForgetfulFunctor[F], ForgetfulFunctor[G],
+      Arbitrary[S],
+      Arbitrary[A],
+      Cogen[A],
+      ForgetfulFunctor[F],
+      ForgetfulFunctor[G],
   ): RuleSet =
     new SimpleRuleSet(
       "Morph preserves modify",
@@ -26,8 +28,10 @@ abstract class MorphTests[S, A, F[_, _], G[_, _]] extends Laws:
     )
 
   def morphPreservesGet(using
-      Arbitrary[S], Arbitrary[A],
-      _root_.eo.data.Accessor[F], _root_.eo.data.Accessor[G],
+      Arbitrary[S],
+      Arbitrary[A],
+      _root_.eo.data.Accessor[F],
+      _root_.eo.data.Accessor[G],
   ): RuleSet =
     new SimpleRuleSet(
       "Morph preserves get",

@@ -12,14 +12,13 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import scala.collection.immutable.ArraySeq
 
-/** Behaviour-level spec for `PowerSeries`, `Traversal.powerEach`, and
-  * the `Composer[Tuple2 → PowerSeries]` bridge. Covers scenarios that
-  * the discipline suite (`PowerSeriesLaws` in `eo.laws.data`) does
-  * not — specifically, end-to-end `modify` / `replace` semantics on
-  * optics that flow through the PowerSeries carrier.
+/** Behaviour-level spec for `PowerSeries`, `Traversal.powerEach`, and the
+  * `Composer[Tuple2 → PowerSeries]` bridge. Covers scenarios that the discipline suite
+  * (`PowerSeriesLaws` in `eo.laws.data`) does not — specifically, end-to-end `modify` / `replace`
+  * semantics on optics that flow through the PowerSeries carrier.
   *
-  * Absorbs the prior `Unthreaded.scala` `@main` demonstration into
-  * real property assertions so it participates in CI.
+  * Absorbs the prior `Unthreaded.scala` `@main` demonstration into real property assertions so it
+  * participates in CI.
   */
 class PowerSeriesSpec extends Specification with ScalaCheck:
 
@@ -40,8 +39,8 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
   private given arbPerson: Arbitrary[Person] =
     Arbitrary(
       for
-        i  <- Arbitrary.arbitrary[Int]
-        n  <- Arbitrary.arbitrary[String]
+        i <- Arbitrary.arbitrary[Int]
+        n <- Arbitrary.arbitrary[String]
         ps <- Gen.listOfN(3, arbPhone.arbitrary)
       yield Person(i, n, ArraySeq.from(ps))
     )
@@ -50,7 +49,8 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   private val personPhones =
     Lens[Person, ArraySeq[Phone]](
-      _.phones, (s, b) => s.copy(phones = b),
+      _.phones,
+      (s, b) => s.copy(phones = b),
     )
       .morph[PowerSeries]
       .andThen[Phone, Phone](Traversal.powerEach[ArraySeq, Phone])
@@ -65,9 +65,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   "Traversal.powerEach" should {
     "leave structure unchanged under modify(identity)" >> {
-      forAll((p: Person) =>
-        personPhones.modify(identity[Phone])(p) == p
-      )
+      forAll((p: Person) => personPhones.modify(identity[Phone])(p) == p)
     }
 
     "distribute a modify across every phone" >> {
@@ -93,7 +91,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   "Tuple2 → PowerSeries composer" should {
     "lift a Lens into a PowerSeries optic whose inner Vect has size 1" >> {
-      val lens   = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
+      val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
       val morphd = lens.morph[PowerSeries]
       forAll((p: (Int, String)) =>
         val vect = morphd.to(p).ps._2
@@ -102,17 +100,15 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
     }
 
     "round-trip modify(identity) through a PowerSeries-lifted Lens" >> {
-      val lens   = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
+      val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
       val morphd = lens.morph[PowerSeries]
       forAll((p: (Int, String)) => morphd.modify(identity[Int])(p) == p)
     }
 
     "modify-through-morph agrees with modify on the original Lens" >> {
-      val lens   = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
+      val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
       val morphd = lens.morph[PowerSeries]
-      forAll((p: (Int, String), f: Int => Int) =>
-        morphd.modify(f)(p) == lens.modify(f)(p)
-      )
+      forAll((p: (Int, String), f: Int => Int) => morphd.modify(f)(p) == lens.modify(f)(p))
     }
   }
 

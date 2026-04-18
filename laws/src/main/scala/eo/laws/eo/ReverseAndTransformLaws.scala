@@ -16,8 +16,9 @@ import _root_.eo.data.Forgetful.given
 // All three families touch the `reverse` / "write back" side of an
 // optic, so they sit together in this file.
 
-/** B1 — Iso `reverse` is involutive: `iso.reverse.reverse` behaves
-  * pointwise like `iso` on both `get` and `reverseGet`. */
+/** B1 — Iso `reverse` is involutive: `iso.reverse.reverse` behaves pointwise like `iso` on both
+  * `get` and `reverseGet`.
+  */
 trait ReverseInvolutionLaws[S, A]:
   def iso: Optic[S, S, A, A, Forgetful]
 
@@ -29,25 +30,22 @@ trait ReverseInvolutionLaws[S, A]:
 
 /** H1/H2/H4 — Lens `transform` / `place` / `transfer` mutually agree.
   *
-  * The `transform` extension requires an implicit `ev: S => F[o.X, A]`
-  * whose type depends on the optic's existential `X`. To make the law
-  * reusable rather than inline, we:
+  * The `transform` extension requires an implicit `ev: S => F[o.X, A]` whose type depends on the
+  * optic's existential `X`. To make the law reusable rather than inline, we:
   *
-  *   * declare `optic` as a `val` so `optic.X` is a stable path-
-  *     dependent type, and
-  *   * leave the `given transformEv` abstract so each concrete
-  *     subclass supplies the `S => (optic.X, A)` evidence (identity
-  *     for `Lens.second`, swap for `Lens.first`, …).
+  * * declare `optic` as a `val` so `optic.X` is a stable path- dependent type, and * leave the
+  * `given transformEv` abstract so each concrete subclass supplies the `S => (optic.X, A)` evidence
+  * (identity for `Lens.second`, swap for `Lens.first`, …).
   */
 trait TransformLaws[S, A, X0]:
-  /** The lens-shaped optic under test, with its existential `X`
-    * surfaced as the explicit `X0` parameter so the `ev` given can
-    * refer to it without path-dependent shenanigans. */
+  /** The lens-shaped optic under test, with its existential `X` surfaced as the explicit `X0`
+    * parameter so the `ev` given can refer to it without path-dependent shenanigans.
+    */
   val optic: Optic[S, S, A, A, Tuple2] { type X = X0 }
 
-  /** Evidence that `S` can be viewed as `(X0, A)`. Concrete subclass
-    * supplies this — `identity` for `Lens.second`, `_.swap` for
-    * `Lens.first`, etc. */
+  /** Evidence that `S` can be viewed as `(X0, A)`. Concrete subclass supplies this — `identity` for
+    * `Lens.second`, `_.swap` for `Lens.first`, etc.
+    */
   given transformEv: (S => (X0, A))
 
   /** H4 — transform identity is a no-op. */

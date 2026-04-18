@@ -1,6 +1,6 @@
 package eo
 
-import data.{Vect, NilVect, ConsVect, TConsVect, AdjacentVect}
+import data.{AdjacentVect, ConsVect, NilVect, TConsVect, Vect}
 
 import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Prop.forAll
@@ -9,15 +9,12 @@ import org.specs2.mutable.Specification
 
 /** Property-based behaviour spec for the `Vect` data-carrier.
   *
-  * Covers invariants that are inherently polymorphic in the `N`
-  * phantom index and therefore can't be expressed as a single-type
-  * discipline RuleSet — see [[eo.laws.data.VectLaws]] for the
-  * per-N `Functor` / `Traverse` equations that sit in the discipline
-  * framework.
+  * Covers invariants that are inherently polymorphic in the `N` phantom index and therefore can't
+  * be expressed as a single-type discipline RuleSet — see [[eo.laws.data.VectLaws]] for the per-N
+  * `Functor` / `Traverse` equations that sit in the discipline framework.
   *
-  * Scenarios land the four constructors (`NilVect`, `ConsVect`,
-  * `TConsVect`, `AdjacentVect`) with concrete fixtures, and exercise
-  * concat (`++`), snoc (`:+`), cons (`+:`), and `slice`.
+  * Scenarios land the four constructors (`NilVect`, `ConsVect`, `TConsVect`, `AdjacentVect`) with
+  * concrete fixtures, and exercise concat (`++`), snoc (`:+`), cons (`+:`), and `slice`.
   */
 class VectSpec extends Specification with ScalaCheck:
 

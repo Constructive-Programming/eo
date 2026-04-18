@@ -29,7 +29,7 @@ case class UP(a: Int, b: Boolean)
   val split = aPrism.modifyA(i => if (i % 4 == 0) None else Some(i + 3))
   val atransfer = aLens.transfer((d: Double) => d.toInt)
   val bplace = bLens.place(true)
-  val cplace  = cLens.place(56)
+  val cplace = cLens.place(56)
 
   val t = Traversal.each[List, Int, Int]
 

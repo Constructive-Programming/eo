@@ -16,9 +16,7 @@ abstract class TraversalTests[T[_]: Functor, A] extends Laws:
       "Traversal",
       "modify identity" -> forAll((s: T[A]) => laws.modifyIdentity(s)),
       "compose modify" ->
-        forAll((s: T[A], f: A => A, g: A => A) =>
-          laws.composeModify(s, f, g)
-        ),
+        forAll((s: T[A], f: A => A, g: A => A) => laws.composeModify(s, f, g)),
       "replace idempotent" ->
         forAll((s: T[A], a: A) => laws.replaceIdempotent(s, a)),
       "consistent replace-modify" ->

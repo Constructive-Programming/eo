@@ -15,7 +15,8 @@ abstract class PowerSeriesTests[X, A] extends Laws:
 
   def powerSeries(using
       Arbitrary[PowerSeries[X, A]],
-      Arbitrary[A], Cogen[A],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulFunctor[PowerSeries],
       ForgetfulTraverse[PowerSeries, Applicative],
   ): RuleSet =
@@ -24,9 +25,7 @@ abstract class PowerSeriesTests[X, A] extends Laws:
       "functor identity" ->
         forAll((ps: PowerSeries[X, A]) => laws.functorIdentity(ps)),
       "functor composition" ->
-        forAll((ps: PowerSeries[X, A], f: A => A, g: A => A) =>
-          laws.functorComposition(ps, f, g)
-        ),
+        forAll((ps: PowerSeries[X, A], f: A => A, g: A => A) => laws.functorComposition(ps, f, g)),
       "traverse[Id] identity" ->
         forAll((ps: PowerSeries[X, A]) => laws.traverseIdentity(ps)),
     )

@@ -7,144 +7,143 @@ import cats.{Applicative, Functor, Monoid}
 import cats.arrow.Profunctor
 import cats.syntax.functor._
 
-/** Existential encoding of a profunctor optic — the single trait
-  * behind every optic family in `cats-eo`.
+/** Existential encoding of a profunctor optic — the single trait behind every optic family in
+  * `cats-eo`.
   *
-  * The profunctor presentation of optics quantifies *universally*
-  * over a profunctor: `type Optic[S, T, A, B] = forall p. Profunctor[p]
-  * => p[A, B] => p[S, T]`. The existential presentation flips the
-  * quantifier: it exposes a carrier `F[_, _]` and an existential
-  * witness `X`, so the optic becomes a plain value — a pair of
-  * functions `(S => F[X, A], F[X, B] => T)` — rather than a
-  * polymorphic method. Each optic family picks a different carrier
-  * (`Tuple2` for Lens, `Either` for Prism, `Affine` for Optional,
-  * …); the existential `X` threads the "leftover" information the
-  * carrier needs to rebuild `T` from a modified `B`.
+  * The profunctor presentation of optics quantifies *universally* over a profunctor: `type Optic[S,
+  * T, A, B] = forall p. Profunctor[p]
+  * => p[A, B] => p[S, T]`. The existential presentation flips the quantifier: it exposes a carrier
+  * `F[_, _]` and an existential witness `X`, so the optic becomes a plain value — a pair of
+  * functions `(S => F[X, A], F[X, B] => T)` — rather than a polymorphic method. Each optic family
+  * picks a different carrier (`Tuple2` for Lens, `Either` for Prism, `Affine` for Optional, …); the
+  * existential `X` threads the "leftover" information the carrier needs to rebuild `T` from a
+  * modified `B`.
   *
-  * A typical call site drives the optic through extension methods
-  * in this companion (`.get`, `.modify`, `.replace`, `.foldMap`,
-  * …); the carrier-specific typeclasses (`Accessor[F]`,
-  * `ForgetfulFunctor[F]`, …) wire each extension to the right
-  * `F[X, A]` manipulation.
+  * A typical call site drives the optic through extension methods in this companion (`.get`,
+  * `.modify`, `.replace`, `.foldMap`, …); the carrier-specific typeclasses (`Accessor[F]`,
+  * `ForgetfulFunctor[F]`, …) wire each extension to the right `F[X, A]` manipulation.
   *
-  * @tparam S source type being observed / modified
-  * @tparam T result type after modification (often `= S`)
-  * @tparam A focus type read out of `S`
-  * @tparam B focus type written back to produce `T` (often `= A`)
-  * @tparam F carrier functor-of-two-arguments; the family's
-  *           carrier determines which operations are available
-  *           (e.g. `Accessor[F]` unlocks `.get`, `ForgetfulFunctor[F]`
-  *           unlocks `.modify` / `.replace`).
+  * @tparam S
+  *   source type being observed / modified
+  * @tparam T
+  *   result type after modification (often `= S`)
+  * @tparam A
+  *   focus type read out of `S`
+  * @tparam B
+  *   focus type written back to produce `T` (often `= A`)
+  * @tparam F
+  *   carrier functor-of-two-arguments; the family's carrier determines which operations are
+  *   available (e.g. `Accessor[F]` unlocks `.get`, `ForgetfulFunctor[F]` unlocks `.modify` /
+  *   `.replace`).
   *
-  * @see [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Setter]],
-  *      [[Traversal]], [[Getter]], [[Fold]]
+  * @see
+  *   [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Setter]], [[Traversal]], [[Getter]], [[Fold]]
   */
 trait Optic[S, T, A, B, F[_, _]]:
   self =>
-    import Function.const
+  import Function.const
 
-    /** Existential "leftover" carried alongside the focus — the
-      * type-level witness each carrier uses to rebuild `T` from a
-      * modified `B`. Concrete at each construction site
-      * (`Lens.apply` sets it to `Tuple2[S, ?]`'s second slot,
-      * `Prism.apply` sets it to `S`, …) and abstract when the
-      * optic is bound to `Optic[…, F]` without further refinement. */
-    type X
+  /** Existential "leftover" carried alongside the focus — the type-level witness each carrier uses
+    * to rebuild `T` from a modified `B`. Concrete at each construction site (`Lens.apply` sets it
+    * to `Tuple2[S, ?]`'s second slot, `Prism.apply` sets it to `S`, …) and abstract when the optic
+    * is bound to `Optic[…, F]` without further refinement.
+    */
+  type X
 
-    /** Push the source `S` into the carrier, extracting the focus
-      * `A` and packing the leftover `X`. Paired with [[from]] to
-      * reconstruct `T`. */
-    def to: S => F[X, A]
+  /** Push the source `S` into the carrier, extracting the focus `A` and packing the leftover `X`.
+    * Paired with [[from]] to reconstruct `T`.
+    */
+  def to: S => F[X, A]
 
-    /** Close the carrier: given a modified focus `B` (and the
-      * leftover `X` already inside the `F`), reassemble the
-      * result `T`. */
-    def from: F[X, B] => T
+  /** Close the carrier: given a modified focus `B` (and the leftover `X` already inside the `F`),
+    * reassemble the result `T`.
+    */
+  def from: F[X, B] => T
 
-    /** Compose two optics that only expose the "push" side — used
-      * by the left-composer family (prisms, folds). Leaves the
-      * result's `B` / `T` open with `Nothing`. */
-    def andThenLeft[C](o: Optic[A, Nothing, C, Nothing, F])(using
+  /** Compose two optics that only expose the "push" side — used by the left-composer family
+    * (prisms, folds). Leaves the result's `B` / `T` open with `Nothing`.
+    */
+  def andThenLeft[C](o: Optic[A, Nothing, C, Nothing, F])(using
       laf: LeftAssociativeFunctor[F, self.X, o.X]
-    ): Optic[S, Nothing, C, Nothing, F] =
-      new Optic:
-        type X = laf.Z
-        def to: S => F[X, C] = s => laf.associateLeft(s, self.to, o.to)
-        def from: F[X, Nothing] => Nothing = ???
+  ): Optic[S, Nothing, C, Nothing, F] =
+    new Optic:
+      type X = laf.Z
+      def to: S => F[X, C] = s => laf.associateLeft(s, self.to, o.to)
+      def from: F[X, Nothing] => Nothing = ???
 
-    /** Composition counterpart to [[andThenLeft]]: compose on the
-      * "pull" side only. Used by setter-shaped families. */
-    def andThenRight[D](o: Optic[Nothing, B, Nothing, D, F])(using
+  /** Composition counterpart to [[andThenLeft]]: compose on the "pull" side only. Used by
+    * setter-shaped families.
+    */
+  def andThenRight[D](o: Optic[Nothing, B, Nothing, D, F])(using
       af: RightAssociativeFunctor[F, self.X, o.X]
-    ): Optic[Nothing, T, Nothing, D, F] =
-      new Optic:
-        type X = af.Z
-        def to: Nothing => F[X, Nothing] = ???
-        def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
+  ): Optic[Nothing, T, Nothing, D, F] =
+    new Optic:
+      type X = af.Z
+      def to: Nothing => F[X, Nothing] = ???
+      def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
 
-    /** Full optic composition — requires an `AssociativeFunctor`
-      * instance for the shared carrier `F`. Same-carrier only:
-      * to cross families (e.g. Lens → Optional) morph one side
-      * first via [[morph]].
-      *
-      * @example
-      * {{{
-      * import eo.optics.Optic.*
-      * import eo.generics.lens
-      *
-      * case class Address(street: String)
-      * case class Person(address: Address)
-      *
-      * val streetLens =
-      *   lens[Person](_.address).andThen(lens[Address](_.street))
-      * }}} */
-    def andThen[C, D](o: Optic[A, B, C, D, F])(using
+  /** Full optic composition — requires an `AssociativeFunctor` instance for the shared carrier `F`.
+    * Same-carrier only: to cross families (e.g. Lens → Optional) morph one side first via
+    * [[morph]].
+    *
+    * @example
+    *   {{{
+    * import eo.optics.Optic.*
+    * import eo.generics.lens
+    *
+    * case class Address(street: String)
+    * case class Person(address: Address)
+    *
+    * val streetLens =
+    *   lens[Person](_.address).andThen(lens[Address](_.street))
+    *   }}}
+    */
+  def andThen[C, D](o: Optic[A, B, C, D, F])(using
       af: AssociativeFunctor[F, self.X, o.X]
-    ): Optic[S, T, C, D, F] =
-      new Optic:
-        type X = af.Z
-        def to: S => F[X, C] = s => af.associateLeft(s, self.to, o.to)
-        def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
+  ): Optic[S, T, C, D, F] =
+    new Optic:
+      type X = af.Z
+      def to: S => F[X, C] = s => af.associateLeft(s, self.to, o.to)
+      def from: F[X, D] => T = xd => af.associateRight(xd, o.from, self.from)
 
-    /** Re-express this optic over a different carrier `G`, using
-      * only the carrier's "push" side. Companion to [[morphRight]]
-      * / [[morph]]. */
-    def morphLeft[G[_, _]](using cf: LeftComposer[F, G]): Optic[S, Nothing, A, Nothing, G] =
-      cf.to(self)
+  /** Re-express this optic over a different carrier `G`, using only the carrier's "push" side.
+    * Companion to [[morphRight]] / [[morph]].
+    */
+  def morphLeft[G[_, _]](using cf: LeftComposer[F, G]): Optic[S, Nothing, A, Nothing, G] =
+    cf.to(self)
 
-    /** Re-express this optic over a different carrier `G`, using
-      * only the carrier's "pull" side. Companion to [[morphLeft]]
-      * / [[morph]]. */
-    def morphRight[G[_, _]](using cf: RightComposer[F, G]): Optic[Nothing, T, Nothing, B, G] =
-      cf.to(self)
+  /** Re-express this optic over a different carrier `G`, using only the carrier's "pull" side.
+    * Companion to [[morphLeft]] / [[morph]].
+    */
+  def morphRight[G[_, _]](using cf: RightComposer[F, G]): Optic[Nothing, T, Nothing, B, G] =
+    cf.to(self)
 
-    /** Re-express this optic over a different carrier `G` — the
-      * standard bridge from `Tuple2` (Lens) to `Affine` (Optional),
-      * from `Tuple2` to `SetterF`, etc.
-      *
-      * @example
-      * {{{
-      * import eo.data.Affine
-      * import eo.optics.Optic.*
-      * import eo.generics.lens
-      *
-      * // Express a Lens as an Optional so it can be composed with
-      * // a downstream Optional via .andThen:
-      * val lensAsOptional = lens[Person](_.address).morph[Affine]
-      * }}} */
-    def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
-      cf.to(self)
+  /** Re-express this optic over a different carrier `G` — the standard bridge from `Tuple2` (Lens)
+    * to `Affine` (Optional), from `Tuple2` to `SetterF`, etc.
+    *
+    * @example
+    *   {{{
+    * import eo.data.Affine
+    * import eo.optics.Optic.*
+    * import eo.generics.lens
+    *
+    * // Express a Lens as an Optional so it can be composed with
+    * // a downstream Optional via .andThen:
+    * val lensAsOptional = lens[Person](_.address).morph[Affine]
+    *   }}}
+    */
+  def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
+    cf.to(self)
 
 object Optic:
 
-  /** Profunctor over `(S, T)` — `dimap` on the outer parameter pair,
-    * letting callers pre-compose the source side and post-compose
-    * the result side of a fixed-focus optic.
+  /** Profunctor over `(S, T)` — `dimap` on the outer parameter pair, letting callers pre-compose
+    * the source side and post-compose the result side of a fixed-focus optic.
     *
     * @group Instances
     */
-  given outerProfunctor[A, B, F[_, _]]
-      : Profunctor[[S, T] =>> Optic[S, T, A, B, F]] with
+  given outerProfunctor[A, B, F[_, _]]: Profunctor[[S, T] =>> Optic[S, T, A, B, F]] with
+
     def dimap[S, T, R, U](
         o: Optic[S, T, A, B, F]
     )(f: R => S)(g: T => U): Optic[R, U, A, B, F] =
@@ -153,15 +152,15 @@ object Optic:
         def to: R => F[X, A] = o.to.compose(f)
         def from: F[X, B] => U = o.from.andThen(g)
 
-  /** Profunctor over `(B, A)` — `dimap` on the inner focus pair.
-    * Requires a `ForgetfulFunctor[F]` so the carrier can map its
-    * focus in place.
+  /** Profunctor over `(B, A)` — `dimap` on the inner focus pair. Requires a `ForgetfulFunctor[F]`
+    * so the carrier can map its focus in place.
     *
     * @group Instances
     */
   given innerProfunctor[S, T, F[_, _]](using
       F: ForgetfulFunctor[F]
   ): Profunctor[[B, A] =>> Optic[S, T, A, B, F]] with
+
     def dimap[B, A, D, C](
         o: Optic[S, T, A, B, F]
     )(f: D => B)(g: A => C): Optic[S, T, C, D, F] =
@@ -170,8 +169,8 @@ object Optic:
         def to: S => F[X, C] = s => F.map(o.to(s), g)
         def from: F[X, D] => T = d => o.from(F.map(d, f))
 
-  /** The identity optic — `S` is its own focus and modification has
-    * no effect. Carrier is [[data.Forgetful]] (no leftover).
+  /** The identity optic — `S` is its own focus and modification has no effect. Carrier is
+    * [[data.Forgetful]] (no leftover).
     *
     * @group Constructors
     */
@@ -187,37 +186,34 @@ object Optic:
   // Read the extension's `(using …)` clause to see which carriers
   // can call which method.
 
-  /** Read the focus out of `s`. Available when the carrier has an
-    * `Accessor[F]` instance (today: `Tuple2` and `Forgetful`).
+  /** Read the focus out of `s`. Available when the carrier has an `Accessor[F]` instance (today:
+    * `Tuple2` and `Forgetful`).
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
-  )(using A: Accessor[F])
-    inline def get(s: S): A = A.get(o.to(s))
+  )(using A: Accessor[F]) inline def get(s: S): A = A.get(o.to(s))
 
-  /** Build the "no context" reverse — takes a fresh `B` and
-    * produces the corresponding `T`. Available when the carrier
-    * has a `ReverseAccessor[F]` instance (today: `Either` and
+  /** Build the "no context" reverse — takes a fresh `B` and produces the corresponding `T`.
+    * Available when the carrier has a `ReverseAccessor[F]` instance (today: `Either` and
     * `Forgetful`).
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
-  )(using RA: ReverseAccessor[F])
-    inline def reverseGet(b: B): T = o.from(RA.reverseGet(b))
+  )(using RA: ReverseAccessor[F]) inline def reverseGet(b: B): T = o.from(RA.reverseGet(b))
 
-  /** Flip the direction of an optic — only defined when the
-    * carrier admits both `Accessor[F]` and `ReverseAccessor[F]`
-    * (i.e. iso-shaped carriers).
+  /** Flip the direction of an optic — only defined when the carrier admits both `Accessor[F]` and
+    * `ReverseAccessor[F]` (i.e. iso-shaped carriers).
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using A: Accessor[F], RA: ReverseAccessor[F])
+
     // Intentionally NOT `inline`: the body constructs a fresh `Optic`
     // anonymous class, and `inline` would duplicate that class definition
     // at every call site (E197 warning). Since the body already allocates
@@ -229,93 +225,96 @@ object Optic:
         def to: B => F[X, T] = (b: B) => RA.reverseGet(o.from(RA.reverseGet(b)))
         def from: F[X, S] => A = (fs: F[X, S]) => A.get(o.to(A.get(fs)))
 
-  /** Modify (`A => B`) or replace (by constant `B`) the focus
-    * in-place. Available for every carrier with a
-    * `ForgetfulFunctor[F]` instance — i.e. every current optic
-    * family.
+  /** Modify (`A => B`) or replace (by constant `B`) the focus in-place. Available for every carrier
+    * with a `ForgetfulFunctor[F]` instance — i.e. every current optic family.
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F])
+
     inline def modify(f: A => B): S => T =
       s => o.from(FF.map(o.to(s), f))
+
     inline def replace(b: B): S => T =
       s => o.from(FF.map(o.to(s), _ => b))
 
-  /** Overwrite a `T`-shaped value at the focus — available when
-    * the carrier can witness `T => F[X, B]` (e.g. `Forgetful`,
-    * where `F[X, B] = B`).  [[transfer]] lifts a `C => B` into
-    * this same shape with an extra `C` argument.
+  /** Overwrite a `T`-shaped value at the focus — available when the carrier can witness `T => F[X,
+    * B]` (e.g. `Forgetful`, where `F[X, B] = B`). [[transfer]] lifts a `C => B` into this same
+    * shape with an extra `C` argument.
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
-    o: Optic[S, T, A, B, F]
+      o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, B])
+
     inline def place(b: B): T => T =
       t => o.from(FF.map(ev(t), _ => b))
+
     inline def transfer[C](f: C => B): T => C => T =
       t => c => place(f(c))(t)
 
-  /** Generalised [[place]]: transform a `D` at the focus via
-    * `D => B` rather than replacing unconditionally.
+  /** Generalised [[place]]: transform a `D` at the focus via `D => B` rather than replacing
+    * unconditionally.
     *
     * @group Operations
     */
   extension [S, T, A, B, D, F[_, _]](
-    o: Optic[S, T, A, B, F]
+      o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFunctor[F], ev: T => F[o.X, D])
+
     inline def transform(f: D => B): T => T =
       t => o.from(FF.map(ev(t), f))
 
-  /** Construct a `T` directly from an `A`, running `f: A => B` at
-    * the focus — available for carriers with a
-    * `ForgetfulApplicative[F]` instance (today: `Forgetful`).
+  /** Construct a `T` directly from an `A`, running `f: A => B` at the focus — available for
+    * carriers with a `ForgetfulApplicative[F]` instance (today: `Forgetful`).
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
-    o: Optic[S, T, A, B, F]
+      o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulApplicative[F])
+
     inline def put(f: A => B): A => T =
       a => o.from(FF.pure[o.X, B](f(a)))
 
-  /** Effectful modify over any `Functor[G]` — generalises [[modify]]
-    * to monadic / effectful `A => G[B]` transformations.
+  /** Effectful modify over any `Functor[G]` — generalises [[modify]] to monadic / effectful `A =>
+    * G[B]` transformations.
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Functor])
+
     inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
       s => FT.traverse(using G)(o.to(s))(f).map(o.from)
 
-  /** Effectful modify over any `Applicative[G]`; unlike [[modifyF]]
-    * this variant also exposes [[all]], which collects every
-    * visited focus via `Applicative[List]`.
+  /** Effectful modify over any `Applicative[G]`; unlike [[modifyF]] this variant also exposes
+    * [[all]], which collects every visited focus via `Applicative[List]`.
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
       o: Optic[S, T, A, B, F]
   )(using FT: ForgetfulTraverse[F, Applicative])
+
     inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
       s => FT.traverse(using G)(o.to(s))(f).map(o.from)
+
     inline def all(s: S): List[F[o.X, A]] =
       FT.traverse(using Applicative[List])(o.to(s))(List(_))
 
-  /** `foldMap` over the focus — the primary consumption path for
-    * [[Fold]] and any other carrier with a `ForgetfulFold[F]`
-    * instance. Combines every focus through `Monoid[M]`.
+  /** `foldMap` over the focus — the primary consumption path for [[Fold]] and any other carrier
+    * with a `ForgetfulFold[F]` instance. Combines every focus through `Monoid[M]`.
     *
     * @group Operations
     */
   extension [S, T, A, B, F[_, _]](
-    o: Optic[S, T, A, B, F]
+      o: Optic[S, T, A, B, F]
   )(using FF: ForgetfulFold[F])
+
     inline def foldMap[M: Monoid](f: A => M): S => M =
       s => FF.foldMap(using Monoid[M])(f)(o.to(s))
-

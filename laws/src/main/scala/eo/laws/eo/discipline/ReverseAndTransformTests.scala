@@ -30,9 +30,7 @@ abstract class TransformTests[S, A, X0] extends Laws:
       "transform(identity) == identity" ->
         forAll((t: S) => laws.transformIdentity(t)),
       "transfer(f)(t)(c) == place(f(c))(t)" ->
-        forAll((t: S, c: A, f: A => A) =>
-          laws.transferIsCurriedPlace(t, c, f)
-        ),
+        forAll((t: S, c: A, f: A => A) => laws.transferIsCurriedPlace(t, c, f)),
       "place(a) == transform(_ => a)" ->
         forAll((t: S, a: A) => laws.placeIsTransformConst(t, a)),
     )

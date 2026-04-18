@@ -1,6 +1,9 @@
 .bloop/
 .bsp/
 .cellar/
+.claude/
+.envrc
+.envrc.local
 .idea/
 .metals/
 target/

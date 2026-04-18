@@ -9,9 +9,8 @@ import _root_.eo.data.Forgetful.given
 
 /** Law equations for a `Prism[S, A]` — `Optic[S, S, A, A, Either]`.
   *
-  * Ported from Monocle's `monocle.law.PrismLaws`. The `getOption`
-  * convenience mirrors Monocle's member of the same name, recovered
-  * from EO's primitive `to: S => Either[S, A]`.
+  * Ported from Monocle's `monocle.law.PrismLaws`. The `getOption` convenience mirrors Monocle's
+  * member of the same name, recovered from EO's primitive `to: S => Either[S, A]`.
   */
 trait PrismLaws[S, A]:
   def prism: Optic[S, S, A, A, Either]
@@ -31,7 +30,7 @@ trait PrismLaws[S, A]:
     prism.modify(identity[A])(s) == s
 
   def composeModify(s: S, f: A => A, g: A => A): Boolean =
-    prism.modify(g)(prism.modify(f)(s)) == prism.modify(f andThen g)(s)
+    prism.modify(g)(prism.modify(f)(s)) == prism.modify(f.andThen(g))(s)
 
   def consistentGetOptionModifyId(s: S): Boolean =
     // Monocle: optional.getOption(prism.modify(identity)(s)) === optional.getOption(s)

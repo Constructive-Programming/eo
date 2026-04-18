@@ -15,7 +15,8 @@ abstract class AffineTests[X, A] extends Laws:
 
   def affine(using
       Arbitrary[Affine[X, A]],
-      Arbitrary[A], Cogen[A],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulFunctor[Affine],
       ForgetfulTraverse[Affine, Applicative],
   ): RuleSet =
@@ -24,9 +25,7 @@ abstract class AffineTests[X, A] extends Laws:
       "functor identity" ->
         forAll((fa: Affine[X, A]) => laws.functorIdentity(fa)),
       "functor composition" ->
-        forAll((fa: Affine[X, A], f: A => A, g: A => A) =>
-          laws.functorComposition(fa, f, g)
-        ),
+        forAll((fa: Affine[X, A], f: A => A, g: A => A) => laws.functorComposition(fa, f, g)),
       "traverse[Id] identity" ->
         forAll((fa: Affine[X, A]) => laws.traverseIdentity(fa)),
     )

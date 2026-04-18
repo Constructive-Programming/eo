@@ -18,9 +18,9 @@ import cats.Traverse
 //           whose head is the whole input container.
 //   G3 — `all`-then-`map` agrees with `modify` on `Forget[T]`.
 
-/** E1 — `optic.foldMap` is a Monoid homomorphism on the target
-  * monoid (tested at `Int` with additive `Monoid[Int]`, which is
-  * enough to witness the law). */
+/** E1 — `optic.foldMap` is a Monoid homomorphism on the target monoid (tested at `Int` with
+  * additive `Monoid[Int]`, which is enough to witness the law).
+  */
 trait FoldMapHomomorphismLaws[S, A, F[_, _]]:
   def optic: Optic[S, S, A, A, F]
 
@@ -33,13 +33,12 @@ trait FoldMapHomomorphismLaws[S, A, F[_, _]]:
   def foldMapEmpty(s: S)(using ForgetfulFold[F]): Boolean =
     optic.foldMap[Int](_ => 0)(s) == 0
 
-/** G1/G2 — `Optic.all` on `Forget[T]` always returns a one-element
-  * list whose head is the whole input container.
+/** G1/G2 — `Optic.all` on `Forget[T]` always returns a one-element list whose head is the whole
+  * input container.
   *
-  * `Optic.all` uses `traverse(List(_))` under the hood, which with
-  * List's cartesian applicative yields a one-element list wrapping
-  * the whole container — not a per-element enumeration. These laws
-  * pin that behaviour down so later changes cannot silently break it.
+  * `Optic.all` uses `traverse(List(_))` under the hood, which with List's cartesian applicative
+  * yields a one-element list wrapping the whole container — not a per-element enumeration. These
+  * laws pin that behaviour down so later changes cannot silently break it.
   */
 trait TraverseAllLaws[T[_], A](using val FT: Traverse[T]):
   def traversal: Optic[T[A], T[A], A, A, Forget[T]]
@@ -54,12 +53,10 @@ trait TraverseAllLaws[T[_], A](using val FT: Traverse[T]):
 
 /** G3 — all-then-map agrees with modify on `Forget[T]`.
   *
-  * For a `Forget[T]`-carrier optic, `all(s)` is `List(s)` — a single-
-  * element list holding the whole container (see [[TraverseAllLaws]]).
-  * Because `Forget[T][X, A]` type-reduces to `T[A]`, that head is
-  * already an ordinary `T[A]` that `Functor[T].map` can walk. The
-  * law says mapping the head agrees with `modify`, tying `all`'s
-  * reading of the structure to `modify`'s rewriting of it.
+  * For a `Forget[T]`-carrier optic, `all(s)` is `List(s)` — a single- element list holding the
+  * whole container (see [[TraverseAllLaws]]). Because `Forget[T][X, A]` type-reduces to `T[A]`,
+  * that head is already an ordinary `T[A]` that `Functor[T].map` can walk. The law says mapping the
+  * head agrees with `modify`, tying `all`'s reading of the structure to `modify`'s rewriting of it.
   */
 trait ForgetAllModifyLaws[T[_], A](using val T: Traverse[T]):
   def traversal: Optic[T[A], T[A], A, A, Forget[T]]

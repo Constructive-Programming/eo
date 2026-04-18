@@ -13,7 +13,9 @@ abstract class ModifyAIdTests[S, A, F[_, _]] extends Laws:
   def laws: ModifyAIdLaws[S, A, F]
 
   def modifyAId(using
-      Arbitrary[S], Arbitrary[A], Cogen[A],
+      Arbitrary[S],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulFunctor[F],
       ForgetfulTraverse[F, Applicative],
   ): RuleSet =
@@ -28,7 +30,9 @@ abstract class ModifyAConstTests[S, A, F[_, _]] extends Laws:
   def laws: ModifyAConstLaws[S, A, F]
 
   def modifyAConst(using
-      Arbitrary[S], Arbitrary[A], Cogen[A],
+      Arbitrary[S],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulFold[F],
       ForgetfulTraverse[F, Applicative],
   ): RuleSet =

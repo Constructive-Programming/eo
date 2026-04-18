@@ -1,24 +1,77 @@
 val scala3Version = "3.8.3"
 
-val Typelevel     = "org.typelevel"
-val ScalaCheckOrg = "org.scalacheck"
-val Optics        = "dev.optics"
-val Kubuszok      = "com.kubuszok"
-val Circe         = "io.circe"
+// ---- Publishing metadata -------------------------------------------
+//
+// `sbt-typelevel-ci-release` derives the project version from git
+// tags (`v0.1.0` → `0.1.0`, untagged commits → a snapshot). The
+// fields below are ThisBuild-scoped so every published sub-module
+// inherits them.
+//
+// TODO before 0.1.0 tag:
+//   1. Register the `dev.constructive` namespace on Sonatype
+//      Central Portal, add the DNS TXT record it asks for on the
+//      `constructive.dev` domain, wait for verification.
+//   2. The repository lives at
+//      `https://github.com/Constructive-Programming/eo` (derived
+//      automatically for `scmInfo`); change `homepage` below if the
+//      project moves to a different host.
+//   3. Generate a project GPG key, upload to keys.openpgp.org,
+//      configure GitHub Secrets (see docs/ci-secrets.md).
 
-lazy val cats           = Typelevel     %% "cats-core"         % "2.13.0"
-lazy val disciplineCore = Typelevel     %% "discipline-core"   % "1.7.0"
-lazy val discipline     = Typelevel     %% "discipline-specs2" % "2.0.0"
-lazy val scalacheck     = ScalaCheckOrg %% "scalacheck"        % "1.17.1"
-lazy val monocle        = Optics        %% "monocle-core"      % "3.3.0"
-lazy val hearth         = Kubuszok      %% "hearth"            % "0.3.0"
-lazy val kindlingsCats  = Kubuszok      %% "kindlings-cats-derivation"  % "0.1.0"
-lazy val kindlingsCirce = Kubuszok      %% "kindlings-circe-derivation" % "0.1.0"
-lazy val circe          = Circe         %% "circe-core"        % "0.14.10"
-lazy val circeParser    = Circe         %% "circe-parser"      % "0.14.10"
+ThisBuild / tlBaseVersion := "0.1"
+ThisBuild / organization := "dev.constructive"
+ThisBuild / organizationName := "Constructive"
+ThisBuild / startYear := Some(2025)
+ThisBuild / licenses := Seq(License.Apache2)
+ThisBuild / homepage := Some(url("https://github.com/Constructive-Programming/eo"))
+ThisBuild / developers := List(
+  tlGitHubDev("kryptt", "Rodolfo Hansen")
+)
+
+// MiMa starts *enforcing* binary compatibility from 0.1.1 onward.
+// 0.1.0 is the first publish, so there is no previous version to
+// compare against.
+ThisBuild / tlMimaPreviousVersions := Set.empty
+
+// GitHub Actions matrix: JDK 17 (LTS) and JDK 21 (current LTS).
+// Scala version comes from the scalaVersion ThisBuild setting
+// below via `crossScalaVersions`.
+ThisBuild / scalaVersion := scala3Version
+ThisBuild / crossScalaVersions := Seq(scala3Version)
+ThisBuild / githubWorkflowJavaVersions := Seq(
+  JavaSpec.temurin("17"),
+  JavaSpec.temurin("21"),
+)
+// Run `sbt test` + `sbt doc` + scalafmt check on every PR. MiMa
+// is wired transitively through sbt-typelevel-ci-release.
+ThisBuild / githubWorkflowBuildPreamble ++= Seq(
+  WorkflowStep.Sbt(
+    List("scalafmtCheckAll", "scalafmtSbtCheck"),
+    name = Some("Check formatting"),
+  )
+)
+
+val Typelevel = "org.typelevel"
+val ScalaCheckOrg = "org.scalacheck"
+val Optics = "dev.optics"
+val Kubuszok = "com.kubuszok"
+val Circe = "io.circe"
+
+lazy val cats = Typelevel %% "cats-core" % "2.13.0"
+lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
+lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
+lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.17.1"
+lazy val monocle = Optics %% "monocle-core" % "3.3.0"
+lazy val hearth = Kubuszok %% "hearth" % "0.3.0"
+lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.1.0"
+lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.1.0"
+lazy val circe = Circe %% "circe-core" % "0.14.10"
+lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
 
 lazy val commonSettings = Seq(
-  version      := "0.1.0-SNAPSHOT",
+  // `version` is NOT set here — sbt-typelevel-ci-release derives it
+  // from the current git tag (`tlBaseVersion` above gives the
+  // untagged snapshot prefix).
   scalaVersion := scala3Version,
   // `-groups` renders @group tags as Scaladoc sections. Applied on
   // every published module so any `@group Constructors` /
@@ -81,7 +134,7 @@ lazy val tests: Project = project
     // for cats typeclasses (Show / Eq / Monoid / ...) and circe codecs.
     // Used by the motivating CRUD round-trip example to keep the
     // typeclass boilerplate out of the way of the optics story.
-    libraryDependencies += kindlingsCats  % Test,
+    libraryDependencies += kindlingsCats % Test,
     libraryDependencies += kindlingsCirce % Test,
   )
 
@@ -114,9 +167,9 @@ lazy val circeIntegration: Project = project
     name := "cats-eo-circe",
     libraryDependencies += cats,
     libraryDependencies += circe,
-    libraryDependencies += circeParser       % Test,
-    libraryDependencies += kindlingsCirce    % Test,
-    libraryDependencies += discipline        % Test,
+    libraryDependencies += circeParser % Test,
+    libraryDependencies += kindlingsCirce % Test,
+    libraryDependencies += discipline % Test,
   )
 
 // Benchmarks deliberately stay OUT of the root aggregator: they're a

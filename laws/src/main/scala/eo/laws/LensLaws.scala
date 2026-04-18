@@ -6,10 +6,9 @@ import optics.Optic.*
 
 /** Law equations for a `Lens[S, A]` — `Optic[S, S, A, A, Tuple2]`.
   *
-  * Ported from Monocle's `monocle.law.LensLaws`. Six equations total:
-  * the three classical get/replace round-trips plus modify identity,
-  * modify composition, and the consistency bridge between `replace`
-  * and `modify`.
+  * Ported from Monocle's `monocle.law.LensLaws`. Six equations total: the three classical
+  * get/replace round-trips plus modify identity, modify composition, and the consistency bridge
+  * between `replace` and `modify`.
   */
 trait LensLaws[S, A]:
   def lens: Optic[S, S, A, A, Tuple2]
@@ -27,7 +26,7 @@ trait LensLaws[S, A]:
     lens.modify(identity[A])(s) == s
 
   def composeModify(s: S, f: A => A, g: A => A): Boolean =
-    lens.modify(g)(lens.modify(f)(s)) == lens.modify(f andThen g)(s)
+    lens.modify(g)(lens.modify(f)(s)) == lens.modify(f.andThen(g))(s)
 
   def consistentReplaceModify(s: S, a: A): Boolean =
     lens.replace(a)(s) == lens.modify(_ => a)(s)

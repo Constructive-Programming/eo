@@ -5,19 +5,19 @@ import org.scalacheck.{Arbitrary, Gen}
 
 /** Top-level test fixtures used by [[eo.generics.GenericsSpec]].
   *
-  * The ADTs here are intentionally NOT defined inside the spec
-  * class. Hearth's `CaseClass.construct` emits `new T(...)` rather
-  * than `s.copy(...)` (so it can handle Scala 3 enum cases that
-  * lack a `.copy`), but `new InnerClass(...)` from a macro splice
-  * loses its outer-accessor wiring and crashes the back-end with
-  * "missing outer accessor in class GenericsSpec". Hoisting these
-  * fixtures to a top-level package sidesteps that entirely.
+  * The ADTs here are intentionally NOT defined inside the spec class. Hearth's
+  * `CaseClass.construct` emits `new T(...)` rather than `s.copy(...)` (so it can handle Scala 3
+  * enum cases that lack a `.copy`), but `new InnerClass(...)` from a macro splice loses its
+  * outer-accessor wiring and crashes the back-end with "missing outer accessor in class
+  * GenericsSpec". Hoisting these fixtures to a top-level package sidesteps that entirely.
   */
 package object samples:
 
   // Plain product type for Lens tests.
   final case class Person(name: String, age: Int)
+
   object Person:
+
     given Arbitrary[Person] =
       Arbitrary(for
         n <- Gen.alphaNumStr
@@ -31,12 +31,15 @@ package object samples:
     case Triangle(base: Double, height: Double)
 
   object Shape:
+
     given Arbitrary[Shape] =
-      Arbitrary(Gen.oneOf(
-        Gen.posNum[Double].map(Circle(_)),
-        Gen.posNum[Double].map(Square(_)),
-        Gen.zip(Gen.posNum[Double], Gen.posNum[Double]).map((b, h) => Triangle(b, h))
-      ))
+      Arbitrary(
+        Gen.oneOf(
+          Gen.posNum[Double].map(Circle(_)),
+          Gen.posNum[Double].map(Square(_)),
+          Gen.zip(Gen.posNum[Double], Gen.posNum[Double]).map((b, h) => Triangle(b, h)),
+        )
+      )
 
   // Recursive parameterised ADT used to exercise that the macros
   // cope with `Tree[N]`-shaped types -- both the `Branch` constructor
@@ -56,7 +59,9 @@ package object samples:
       salary: Double,
       department: String,
   )
+
   object Employee:
+
     given Arbitrary[Employee] =
       Arbitrary(for
         i <- Gen.choose(1L, 1_000_000L)

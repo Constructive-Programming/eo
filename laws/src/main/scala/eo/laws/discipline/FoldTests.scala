@@ -11,7 +11,9 @@ abstract class FoldTests[S, A, F[_, _]] extends Laws:
   def laws: FoldLaws[S, A, F]
 
   def fold(using
-      Arbitrary[S], Arbitrary[A], Cogen[A],
+      Arbitrary[S],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulFold[F],
   ): RuleSet =
     new SimpleRuleSet(
@@ -19,7 +21,5 @@ abstract class FoldTests[S, A, F[_, _]] extends Laws:
       "foldMap(const mempty) == mempty" ->
         forAll((s: S) => laws.foldMapEmpty(s)),
       "foldMap homomorphism" ->
-        forAll((s: S, f: A => Int, g: A => Int) =>
-          laws.foldMapHomomorphism(s, f, g)
-        ),
+        forAll((s: S, f: A => Int, g: A => Int) => laws.foldMapHomomorphism(s, f, g)),
     )

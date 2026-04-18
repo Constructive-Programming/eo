@@ -12,7 +12,9 @@ abstract class ChainPathIndependenceTests[S, A] extends Laws:
   def laws: ChainPathIndependenceLaws[S, A]
 
   def chainPathIndependence(using
-      Arbitrary[S], Arbitrary[A], Cogen[A]
+      Arbitrary[S],
+      Arbitrary[A],
+      Cogen[A],
   ): RuleSet =
     new SimpleRuleSet(
       "Composer.chain path independence",
@@ -21,8 +23,7 @@ abstract class ChainPathIndependenceTests[S, A] extends Laws:
     )
 
 /** Discipline `RuleSet` for [[ChainAccessorLaws]]. */
-abstract class ChainAccessorTests[S, A, F[_, _], G[_, _], H[_, _]]
-    extends Laws:
+abstract class ChainAccessorTests[S, A, F[_, _], G[_, _], H[_, _]] extends Laws:
   def laws: ChainAccessorLaws[S, A, F, G, H]
 
   def chainAccessor(using Arbitrary[S]): RuleSet =

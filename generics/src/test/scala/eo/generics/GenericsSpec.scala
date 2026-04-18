@@ -11,22 +11,20 @@ import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Behavioural specs for macro-derived Lens and Prism. The derived
-  * optics must be observationally identical to hand-written ones, so
-  * we exercise the three Lens laws (get-set / set-get / set-set) and
-  * the three Prism laws (partial-round-trip / round-trip /
-  * reverseGet-then-getOption) directly rather than leaning on the
-  * cross-module law harness. Keeping the checks in-module means
+/** Behavioural specs for macro-derived Lens and Prism. The derived optics must be observationally
+  * identical to hand-written ones, so we exercise the three Lens laws (get-set / set-get / set-set)
+  * and the three Prism laws (partial-round-trip / round-trip / reverseGet-then-getOption) directly
+  * rather than leaning on the cross-module law harness. Keeping the checks in-module means
   * `eo-generics` stays independent of `cats-eo-laws` at runtime.
   *
-  * Test ADTs live in [[eo.generics.samples]] so the macro splice can
-  * emit `new T(...)` without tripping over inner-class outer accessors.
+  * Test ADTs live in [[eo.generics.samples]] so the macro splice can emit `new T(...)` without
+  * tripping over inner-class outer accessors.
   */
 class GenericsSpec extends Specification with ScalaCheck:
 
   // ---------- Product-type Lens derivation ----------
 
-  val ageL  = lens[Person](_.age)
+  val ageL = lens[Person](_.age)
   val nameL = lens[Person](_.name)
 
   "derived Lens has the correct getter" >> forAll { (p: Person) =>
@@ -35,12 +33,12 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   "derived Lens obeys the set-get law" >> forAll { (p: Person, a: Int, s: String) =>
     ageL.get(ageL.replace(a)(p)) == a &&
-      nameL.get(nameL.replace(s)(p)) == s
+    nameL.get(nameL.replace(s)(p)) == s
   }
 
   "derived Lens obeys the get-set law" >> forAll { (p: Person) =>
     ageL.replace(ageL.get(p))(p) == p &&
-      nameL.replace(nameL.get(p))(p) == p
+    nameL.replace(nameL.get(p))(p) == p
   }
 
   "derived Lens obeys the set-set law" >> forAll { (p: Person, a1: Int, a2: Int) =>
@@ -60,10 +58,11 @@ class GenericsSpec extends Specification with ScalaCheck:
   // the `S => (o.X, A)` given that `SimpleLens`'s companion publishes
   // (derived from `to`).
 
-  "derived Lens.place overwrites the focus, leaving the complement alone" >> forAll { (p: Person, a: Int) =>
-    import ageL.given
-    import nameL.given
-    ageL.place(a)(p) == Person(p.name, a) &&
+  "derived Lens.place overwrites the focus, leaving the complement alone" >> forAll {
+    (p: Person, a: Int) =>
+      import ageL.given
+      import nameL.given
+      ageL.place(a)(p) == Person(p.name, a) &&
       nameL.place("Bob")(p) == Person("Bob", p.age)
   }
 
@@ -91,44 +90,41 @@ class GenericsSpec extends Specification with ScalaCheck:
   // position (head / middle / tail) so an off-by-one in the index
   // bookkeeping surfaces.
 
-  val empIdL         = lens[Employee](_.id)
-  val empNameL       = lens[Employee](_.name)
-  val empSalaryL     = lens[Employee](_.salary)
+  val empIdL = lens[Employee](_.id)
+  val empNameL = lens[Employee](_.name)
+  val empSalaryL = lens[Employee](_.salary)
   val empDepartmentL = lens[Employee](_.department)
 
   "N-field Lens get reads the right field" >> forAll { (e: Employee) =>
-    empIdL.get(e)         == e.id         &&
-    empNameL.get(e)       == e.name       &&
-    empSalaryL.get(e)     == e.salary     &&
+    empIdL.get(e) == e.id &&
+    empNameL.get(e) == e.name &&
+    empSalaryL.get(e) == e.salary &&
     empDepartmentL.get(e) == e.department
   }
 
-  "N-field Lens set-get law" >> forAll {
-      (e: Employee, i: Long, n: String, s: Double, d: String) =>
-    empIdL.get(empIdL.replace(i)(e))                 == i &&
-      empNameL.get(empNameL.replace(n)(e))           == n &&
-      empSalaryL.get(empSalaryL.replace(s)(e))       == s &&
-      empDepartmentL.get(empDepartmentL.replace(d)(e)) == d
+  "N-field Lens set-get law" >> forAll { (e: Employee, i: Long, n: String, s: Double, d: String) =>
+    empIdL.get(empIdL.replace(i)(e)) == i &&
+    empNameL.get(empNameL.replace(n)(e)) == n &&
+    empSalaryL.get(empSalaryL.replace(s)(e)) == s &&
+    empDepartmentL.get(empDepartmentL.replace(d)(e)) == d
   }
 
   "N-field Lens get-set law" >> forAll { (e: Employee) =>
-    empIdL.replace(empIdL.get(e))(e)                 == e &&
-      empNameL.replace(empNameL.get(e))(e)           == e &&
-      empSalaryL.replace(empSalaryL.get(e))(e)       == e &&
-      empDepartmentL.replace(empDepartmentL.get(e))(e) == e
+    empIdL.replace(empIdL.get(e))(e) == e &&
+    empNameL.replace(empNameL.get(e))(e) == e &&
+    empSalaryL.replace(empSalaryL.get(e))(e) == e &&
+    empDepartmentL.replace(empDepartmentL.get(e))(e) == e
   }
 
-  "N-field Lens preserves non-focused fields under replace" >> forAll {
-      (e: Employee, n: String) =>
+  "N-field Lens preserves non-focused fields under replace" >> forAll { (e: Employee, n: String) =>
     val after = empNameL.replace(n)(e)
     after.id == e.id &&
-      after.name == n &&
-      after.salary == e.salary &&
-      after.department == e.department
+    after.name == n &&
+    after.salary == e.salary &&
+    after.department == e.department
   }
 
-  "N-field Lens.modify runs the function on the focus" >> forAll {
-      (e: Employee) =>
+  "N-field Lens.modify runs the function on the focus" >> forAll { (e: Employee) =>
     empSalaryL.modify(_ * 1.1)(e) == e.copy(salary = e.salary * 1.1)
   }
 
@@ -142,8 +138,7 @@ class GenericsSpec extends Specification with ScalaCheck:
   // member) to the concrete NamedTuple type uses the
   // `transformEvidence` given the companion publishes.
 
-  "derived N-field Lens exposes complement fields by name" >> forAll {
-      (e: Employee) =>
+  "derived N-field Lens exposes complement fields by name" >> forAll { (e: Employee) =>
     // `empNameL.to(e)` returns `(complement, String)`. The
     // complement is a NamedTuple[("id", "salary", "department"),
     // (Long, Double, String)] — exercise field-name access to
@@ -159,9 +154,9 @@ class GenericsSpec extends Specification with ScalaCheck:
     ]
     val named = complement.asInstanceOf[Complement]
     focus == e.name &&
-      named.id == e.id &&
-      named.salary == e.salary &&
-      named.department == e.department
+    named.id == e.id &&
+    named.salary == e.salary &&
+    named.department == e.department
   }
 
   // ---------- Sum-type Prism derivation ----------
@@ -215,18 +210,18 @@ class GenericsSpec extends Specification with ScalaCheck:
   "derived Prism on a union type focuses the Int alternative" >> forAll { (i: Int) =>
     val u: Int | String = i
     intInUnionP.to(u) == Right(i) &&
-      stringInUnionP.to(u) == Left(u)
+    stringInUnionP.to(u) == Left(u)
   }
 
   "derived Prism on a union type focuses the String alternative" >> forAll { (s: String) =>
     val u: Int | String = s
     stringInUnionP.to(u) == Right(s) &&
-      intInUnionP.to(u) == Left(u)
+    intInUnionP.to(u) == Left(u)
   }
 
   "derived Prism on a union type round-trips on each alternative" >> forAll { (i: Int, s: String) =>
     intInUnionP.reverseGet(i) == (i: Int | String) &&
-      stringInUnionP.reverseGet(s) == (s: Int | String)
+    stringInUnionP.reverseGet(s) == (s: Int | String)
   }
 
   "derived Prism on a union type obeys the partial-round-trip law" >> {
@@ -251,27 +246,29 @@ class GenericsSpec extends Specification with ScalaCheck:
   // that down: a Lens onto a `Tree[N]`-typed child of `Branch`, and a
   // Prism between `Tree[Int]` and one of its variants.
 
-  val leafValueL   = lens[Tree.Leaf[Int]](_.value)
-  val branchLeftL  = lens[Tree.Branch[Int]](_.left)
+  val leafValueL = lens[Tree.Leaf[Int]](_.value)
+  val branchLeftL = lens[Tree.Branch[Int]](_.left)
   val branchRightL = lens[Tree.Branch[Int]](_.right)
 
-  val leafP   = prism[Tree[Int], Tree.Leaf[Int]]
+  val leafP = prism[Tree[Int], Tree.Leaf[Int]]
   val branchP = prism[Tree[Int], Tree.Branch[Int]]
 
   "derived Lens on a recursive type's leaf reads the carried value" >> forAll { (n: Int) =>
     leafValueL.get(Tree.Leaf(n)) == n
   }
 
-  "derived Lens on a recursive type's branch reads the named subtree" >> forAll { (n: Int, m: Int) =>
-    val b: Tree.Branch[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(m))
-    branchLeftL.get(b) == Tree.Leaf(n) &&
+  "derived Lens on a recursive type's branch reads the named subtree" >> forAll {
+    (n: Int, m: Int) =>
+      val b: Tree.Branch[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(m))
+      branchLeftL.get(b) == Tree.Leaf(n) &&
       branchRightL.get(b) == Tree.Leaf(m)
   }
 
-  "derived Lens on a recursive type can replace a deeply nested subtree" >> forAll { (n: Int, m: Int, k: Int) =>
-    val b: Tree.Branch[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(m))
-    val replacement: Tree[Int] = Tree.Branch(Tree.Leaf(k), Tree.Leaf(k))
-    branchLeftL.replace(replacement)(b) == Tree.Branch(replacement, Tree.Leaf(m))
+  "derived Lens on a recursive type can replace a deeply nested subtree" >> forAll {
+    (n: Int, m: Int, k: Int) =>
+      val b: Tree.Branch[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(m))
+      val replacement: Tree[Int] = Tree.Branch(Tree.Leaf(k), Tree.Leaf(k))
+      branchLeftL.replace(replacement)(b) == Tree.Branch(replacement, Tree.Leaf(m))
   }
 
   "derived Lens on a recursive type obeys the set-set law" >> forAll { (n: Int, m: Int, k: Int) =>
@@ -285,9 +282,9 @@ class GenericsSpec extends Specification with ScalaCheck:
     val l: Tree[Int] = Tree.Leaf(n)
     val b: Tree[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(n))
     leafP.to(l) == Right(Tree.Leaf(n)) &&
-      leafP.to(b) == Left(b) &&
-      branchP.to(b).isRight &&
-      branchP.to(l) == Left(l)
+    leafP.to(b) == Left(b) &&
+    branchP.to(b).isRight &&
+    branchP.to(l) == Left(l)
   }
 
   "derived Prism on a recursive ADT round-trips on its own variant" >> forAll { (n: Int) =>

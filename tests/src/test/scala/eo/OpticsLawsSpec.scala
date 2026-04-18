@@ -1,27 +1,39 @@
 package eo
 
-import optics.{Iso, Lens, Prism, Optional, Setter, Traversal, Optic, Fold, Getter}
+import optics.{Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
 import data.{Affine, Forgetful, SetterF}
 import data.Affine.given
 import data.SetterF.given
 import laws.{
-  IsoLaws, LensLaws, PrismLaws, OptionalLaws, SetterLaws, TraversalLaws,
-  GetterLaws, FoldLaws,
+  FoldLaws,
+  GetterLaws,
+  IsoLaws,
+  LensLaws,
+  OptionalLaws,
+  PrismLaws,
+  SetterLaws,
+  TraversalLaws,
 }
 import laws.discipline.{
-  IsoTests, LensTests, PrismTests, OptionalTests, SetterTests, TraversalTests,
-  GetterTests, FoldTests,
+  FoldTests,
+  GetterTests,
+  IsoTests,
+  LensTests,
+  OptionalTests,
+  PrismTests,
+  SetterTests,
+  TraversalTests,
 }
-import laws.data.{
-  AffineLaws, SetterFLaws, VectLaws, PowerSeriesLaws, FixedTraversalLaws,
-}
+import laws.data.{AffineLaws, FixedTraversalLaws, PowerSeriesLaws, SetterFLaws, VectLaws}
 import laws.data.discipline.{
-  AffineTests, SetterFTests, VectTests, PowerSeriesTests, FixedTraversalTests,
+  AffineTests,
+  FixedTraversalTests,
+  PowerSeriesTests,
+  SetterFTests,
+  VectTests,
 }
 import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
-import laws.typeclass.discipline.{
-  ForgetfulFunctorTests, ForgetfulTraverseTests,
-}
+import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
@@ -31,8 +43,7 @@ import org.typelevel.discipline.specs2.mutable.Discipline
 
 // Arbitrary[Affine[(Int, String), Boolean]] — picks between the Fst-only
 // left branch and the (Snd, A) right branch with equal weight.
-private given arbAffineIntStringBool
-    : Arbitrary[Affine[(Int, String), Boolean]] =
+private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] =
   Arbitrary(
     Gen.oneOf(
       Arbitrary.arbitrary[Int].map(Affine.ofLeft[(Int, String), Boolean]),
@@ -43,9 +54,9 @@ private given arbAffineIntStringBool
     )
   )
 
-/** End-to-end check that EO's optics satisfy the Monocle-style discipline
-  * laws. Each block constructs a concrete instance and feeds it to the
-  * matching `*Tests` runner in `eo.laws.OpticLaws`.
+/** End-to-end check that EO's optics satisfy the Monocle-style discipline laws. Each block
+  * constructs a concrete instance and feeds it to the matching `*Tests` runner in
+  * `eo.laws.OpticLaws`.
   */
 class OpticsLawsSpec extends Specification with Discipline:
 
@@ -169,7 +180,7 @@ class OpticsLawsSpec extends Specification with Discipline:
     "Getter[(Int,String), Int] — first projection",
     new GetterTests[(Int, String), Int]:
       val laws = new GetterLaws[(Int, String), Int]:
-        val getter    = firstGetter
+        val getter = firstGetter
         val reference = (p: (Int, String)) => p._1
     .getter,
   )
@@ -181,7 +192,7 @@ class OpticsLawsSpec extends Specification with Discipline:
     "Getter[String, Int] — string length",
     new GetterTests[String, Int]:
       val laws = new GetterLaws[String, Int]:
-        val getter    = lengthGetter
+        val getter = lengthGetter
         val reference = (s: String) => s.length
     .getter,
   )
@@ -225,9 +236,7 @@ class OpticsLawsSpec extends Specification with Discipline:
 
   "Fold.select" should {
     "expose the value via .to when the predicate holds, None otherwise" >> {
-      forAll((n: Int) =>
-        evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None)
-      )
+      forAll((n: Int) => evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None))
     }
 
     "for the always-false predicate, foldMap always returns Monoid.empty" >> {
@@ -288,15 +297,17 @@ class OpticsLawsSpec extends Specification with Discipline:
   private given arbPowerSeries: Arbitrary[PowerSeries[(Int, Int), Int]] =
     Arbitrary(
       for
-        x  <- Arbitrary.arbitrary[Int]
+        x <- Arbitrary.arbitrary[Int]
         a0 <- Arbitrary.arbitrary[Int]
         a1 <- Arbitrary.arbitrary[Int]
         a2 <- Arbitrary.arbitrary[Int]
-      yield PowerSeries[(Int, Int), Int]((
-        x,
-        (a0 +: a1 +: a2 +: data.Vect.nil[0, Int])
-          .asInstanceOf[data.Vect[Int, Int]],
-      ))
+      yield PowerSeries[(Int, Int), Int](
+        (
+          x,
+          (a0 +: a1 +: a2 +: data.Vect.nil[0, Int])
+            .asInstanceOf[data.Vect[Int, Int]],
+        )
+      )
     )
 
   checkAll(
@@ -443,11 +454,10 @@ class OpticsLawsSpec extends Specification with Discipline:
 
   // SetterF ForgetfulFunctor at the carrier-typeclass level — builds
   // its own Arbitrary from Fst/Snd/A components, sampled at one x.
-  private given arbSetterFIntStringBool
-      : Arbitrary[SetterF[(Int, String), Boolean]] =
+  private given arbSetterFIntStringBool: Arbitrary[SetterF[(Int, String), Boolean]] =
     Arbitrary(
       for
-        fst   <- Arbitrary.arbitrary[Int]
+        fst <- Arbitrary.arbitrary[Int]
         snd2b <- Arbitrary.arbitrary[String => Boolean]
       yield SetterF[(Int, String), Boolean]((fst, snd2b))
     )
@@ -479,21 +489,19 @@ class OpticsLawsSpec extends Specification with Discipline:
     // AND exercise the forgetFApplicative given on a Forget[List]-carrier
     // Fold (covers core/src/main/scala/eo/ForgetfulApplicative.scala).
     import Optic.*
-    given ForgetfulApplicative[Forgetful]       = Forgetful.applicative
-    given data.ReverseAccessor[Forgetful]       = Forgetful.reverseAccessor
+    given ForgetfulApplicative[Forgetful] = Forgetful.applicative
+    given data.ReverseAccessor[Forgetful] = Forgetful.reverseAccessor
     val intDouble: Optic[Int, Int, Int, Int, Forgetful] =
       optics.Iso[Int, Int, Int, Int](_ * 2, _ / 2)
     "lift Optic.put via pure on Forgetful" >> {
-      forAll((a: Int, f: Int => Int) =>
-        intDouble.put(f)(a) == intDouble.reverseGet(f(a))
-      )
+      forAll((a: Int, f: Int => Int) => intDouble.put(f)(a) == intDouble.reverseGet(f(a)))
     }
 
     "forgetFApplicative[List].pure wraps a single element" >> {
       val ap = summon[ForgetfulApplicative[data.Forget[List]]]
       forAll((n: Int) =>
         ap.pure[Unit, Int](n) == List(n) &&
-        ap.map[Unit, Int, Int](List(n), _ + 1) == List(n + 1)
+          ap.map[Unit, Int, Int](List(n), _ + 1) == List(n + 1)
       )
     }
   }
@@ -529,10 +537,14 @@ class OpticsLawsSpec extends Specification with Discipline:
   checkAll(
     "Optional foldMap homomorphism (Affine carrier)",
     new FoldMapHomomorphismTests[
-      (Int, List[Int]), Int, Affine,
+      (Int, List[Int]),
+      Int,
+      Affine,
     ]:
       val laws = new FoldMapHomomorphismLaws[
-        (Int, List[Int]), Int, Affine,
+        (Int, List[Int]),
+        Int,
+        Affine,
       ]:
         val optic = headOptional
     .foldMapHomomorphism,

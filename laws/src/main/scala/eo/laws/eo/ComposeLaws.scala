@@ -43,8 +43,7 @@ trait IsoComposeLaws[S, A, B]:
   // so the wildcard `data.*.given` imports at the top of the file let
   // them shadow each other for by-name implicit search. This alias
   // pins the Forgetful instance for just this trait's `andThen` calls.
-  private given forgetfulAssoc[X, Y]
-      : AssociativeFunctor[Forgetful, X, Y] = Forgetful.assoc
+  private given forgetfulAssoc[X, Y]: AssociativeFunctor[Forgetful, X, Y] = Forgetful.assoc
 
   def composedGet(s: S): Boolean =
     outer.andThen(inner).get(s) == inner.get(outer.get(s))
@@ -59,11 +58,12 @@ trait PrismComposeLaws[S, A, B]:
   def inner: Optic[A, A, B, B, Either]
 
   private def getOpt[X, Y](
-      p: Optic[X, X, Y, Y, Either], x: X
+      p: Optic[X, X, Y, Y, Either],
+      x: X,
   ): Option[Y] = p.to(x).toOption
 
-  /** `(o ∘ i).getOption(s) == o.getOption(s).flatMap(i.getOption)` —
-    * the Kleisli law for `Option`. */
+  /** `(o ∘ i).getOption(s) == o.getOption(s).flatMap(i.getOption)` — the Kleisli law for `Option`.
+    */
   def composedGetOption(s: S): Boolean =
     getOpt(outer.andThen(inner), s) ==
       getOpt(outer, s).flatMap(a => getOpt(inner, a))
@@ -84,11 +84,11 @@ trait OptionalComposeLaws[S, A, B]:
 
   // Disambiguate `Affine.assoc` from the ambient `Forgetful.assoc`
   // wildcard import.
-  private given affineAssoc[X <: Tuple, Y <: Tuple]
-      : AssociativeFunctor[Affine, X, Y] = Affine.assoc
+  private given affineAssoc[X <: Tuple, Y <: Tuple]: AssociativeFunctor[Affine, X, Y] = Affine.assoc
 
   private def getOpt[X, Y](
-      p: Optic[X, X, Y, Y, Affine], x: X
+      p: Optic[X, X, Y, Y, Affine],
+      x: X,
   ): Option[Y] = p.to(x).affine.toOption.map(_._2)
 
   /** `(o ∘ i).getOption(s) == o.getOption(s).flatMap(i.getOption)`. */

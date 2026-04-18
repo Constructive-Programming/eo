@@ -14,7 +14,8 @@ abstract class FixedTraversalTests[N <: Int, X, A] extends Laws:
 
   def fixedTraversal(using
       Arbitrary[FixedTraversal[N][X, A]],
-      Arbitrary[A], Cogen[A],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulFunctor[FixedTraversal[N]],
   ): RuleSet =
     new SimpleRuleSet(

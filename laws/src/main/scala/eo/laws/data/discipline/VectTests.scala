@@ -17,13 +17,9 @@ abstract class VectTests[N <: Int, A] extends Laws:
       "functor identity" ->
         forAll((xs: Vect[N, A]) => laws.functorIdentity(xs)),
       "functor composition" ->
-        forAll((xs: Vect[N, A], f: A => A, g: A => A) =>
-          laws.functorComposition(xs, f, g)
-        ),
+        forAll((xs: Vect[N, A], f: A => A, g: A => A) => laws.functorComposition(xs, f, g)),
       "traverse[Id] identity" ->
         forAll((xs: Vect[N, A]) => laws.traverseIdentity(xs)),
       "map preserves size" ->
-        forAll((xs: Vect[N, A], f: A => A) =>
-          laws.mapPreservesSize(xs, f)
-        ),
+        forAll((xs: Vect[N, A], f: A => A) => laws.mapPreservesSize(xs, f)),
     )

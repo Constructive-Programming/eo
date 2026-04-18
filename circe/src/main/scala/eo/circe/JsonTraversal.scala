@@ -4,34 +4,28 @@ import scala.language.dynamics
 
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 
-/** Multi-focus counterpart to [[JsonPrism]]: a Traversal that
-  * walks the JSON from the root down to some array, then applies
-  * the focus update to every element of that array.
+/** Multi-focus counterpart to [[JsonPrism]]: a Traversal that walks the JSON from the root down to
+  * some array, then applies the focus update to every element of that array.
   *
-  * A traversal is the natural result of composing a prism with
-  * `.each` — the path splits at the array into a `prefix` (root
-  * to the array) and a `suffix` (each element to the focused
-  * leaf). Further `.field(_.x)` / `.selectDynamic("x")` / `.at(i)`
-  * composition extends the suffix, so one `JsonTraversal[A]` can
-  * accumulate arbitrarily deep navigation under the iterated
-  * array.
+  * A traversal is the natural result of composing a prism with `.each` — the path splits at the
+  * array into a `prefix` (root to the array) and a `suffix` (each element to the focused leaf).
+  * Further `.field(_.x)` / `.selectDynamic("x")` / `.at(i)` composition extends the suffix, so one
+  * `JsonTraversal[A]` can accumulate arbitrarily deep navigation under the iterated array.
   *
   * Operations on a traversal:
   *
-  *   - [[modify]] — decode every element, apply `f`, re-encode,
-  *     and rebuild the array and the prefix.
-  *   - [[transform]] — apply `f: Json => Json` on the raw Json
-  *     at every element (bypasses Codec).
-  *   - [[getAll]] — collect every element that decodes
-  *     successfully. Failed decodes are silently dropped.
+  *   - [[modify]] — decode every element, apply `f`, re-encode, and rebuild the array and the
+  *     prefix.
+  *   - [[transform]] — apply `f: Json => Json` on the raw Json at every element (bypasses Codec).
+  *   - [[getAll]] — collect every element that decodes successfully. Failed decodes are silently
+  *     dropped.
   *
-  * Failure semantics mirror [[JsonPrism]]: a missing or non-array
-  * prefix leaves the input unchanged; per-element suffix walks
-  * that miss leave that element unchanged.
+  * Failure semantics mirror [[JsonPrism]]: a missing or non-array prefix leaves the input
+  * unchanged; per-element suffix walks that miss leave that element unchanged.
   */
 final class JsonTraversal[A] private[circe] (
-    private[circe] val prefix:  Array[PathStep],
-    private[circe] val suffix:  Array[PathStep],
+    private[circe] val prefix: Array[PathStep],
+    private[circe] val suffix: Array[PathStep],
     private[circe] val encoder: Encoder[A],
     private[circe] val decoder: Decoder[A],
 ) extends Dynamic:
@@ -69,17 +63,17 @@ final class JsonTraversal[A] private[circe] (
   // ---- Path extension (used by field / at / selectDynamic macros) --
 
   private[circe] def widenSuffix[B](
-      step: String,
+      step: String
   )(using encB: Encoder[B], decB: Decoder[B]): JsonTraversal[B] =
     widenSuffixStep[B](PathStep.Field(step))
 
   private[circe] def widenSuffixIndex[B](
-      i: Int,
+      i: Int
   )(using encB: Encoder[B], decB: Decoder[B]): JsonTraversal[B] =
     widenSuffixStep[B](PathStep.Index(i))
 
   private def widenSuffixStep[B](
-      step: PathStep,
+      step: PathStep
   )(using encB: Encoder[B], decB: Decoder[B]): JsonTraversal[B] =
     val newSuffix = new Array[PathStep](suffix.length + 1)
     System.arraycopy(suffix, 0, newSuffix, 0, suffix.length)
@@ -90,7 +84,7 @@ final class JsonTraversal[A] private[circe] (
 
   private def navigateToArray(json: Json): Option[Vector[Json]] =
     var cur: Json = json
-    var i         = 0
+    var i = 0
     while i < prefix.length do
       prefix(i) match
         case PathStep.Field(name) =>
@@ -111,7 +105,7 @@ final class JsonTraversal[A] private[circe] (
 
   private def walkSuffix(elemJson: Json): Option[Json] =
     var cur: Json = elemJson
-    var i         = 0
+    var i = 0
     while i < suffix.length do
       suffix(i) match
         case PathStep.Field(name) =>
@@ -140,15 +134,15 @@ final class JsonTraversal[A] private[circe] (
       updateElementRaw(elem, f)
     }
 
-  /** Walk the prefix, collect parents, then replace the focused
-    * array by mapping every element through `elemUpdate`. Unwinds
-    * the prefix with `rebuildStep`. Returns the input json
-    * unchanged if the prefix walk fails. */
+  /** Walk the prefix, collect parents, then replace the focused array by mapping every element
+    * through `elemUpdate`. Unwinds the prefix with `rebuildStep`. Returns the input json unchanged
+    * if the prefix walk fails.
+    */
   private def mapAtPrefix(json: Json)(elemUpdate: Json => Json): Json =
     val n = prefix.length
     val parents = new Array[AnyRef](n)
     var cur: Json = json
-    var i         = 0
+    var i = 0
     while i < n do
       prefix(i) match
         case PathStep.Field(name) =>
@@ -174,16 +168,16 @@ final class JsonTraversal[A] private[circe] (
     val newArr = arr.map(elemUpdate)
 
     var newChild: Json = Json.fromValues(newArr)
-    var j              = n - 1
+    var j = n - 1
     while j >= 0 do
       newChild = rebuildStep(parents(j), prefix(j), newChild)
       j -= 1
     newChild
 
-  /** For one array element: walk the suffix collecting parents,
-    * decode the leaf, apply `f`, re-encode, and rebuild the
-    * element. On any failure (suffix miss, decode failure) the
-    * original element is returned unchanged. */
+  /** For one array element: walk the suffix collecting parents, decode the leaf, apply `f`,
+    * re-encode, and rebuild the element. On any failure (suffix miss, decode failure) the original
+    * element is returned unchanged.
+    */
   private def updateElementDecoded(elemJson: Json, f: A => A): Json =
     val n = suffix.length
     if n == 0 then
@@ -193,7 +187,7 @@ final class JsonTraversal[A] private[circe] (
     else
       val parents = new Array[AnyRef](n)
       var cur: Json = elemJson
-      var i         = 0
+      var i = 0
       while i < n do
         suffix(i) match
           case PathStep.Field(name) =>
@@ -216,22 +210,22 @@ final class JsonTraversal[A] private[circe] (
         case Left(_)  => elemJson
         case Right(a) =>
           var newChild: Json = encoder(f(a))
-          var j              = n - 1
+          var j = n - 1
           while j >= 0 do
             newChild = rebuildStep(parents(j), suffix(j), newChild)
             j -= 1
           newChild
 
-  /** Raw-Json element update: same walk as
-    * [[updateElementDecoded]] but applies `f` to the Json at the
-    * suffix leaf. Missing leaves receive `Json.Null`. */
+  /** Raw-Json element update: same walk as [[updateElementDecoded]] but applies `f` to the Json at
+    * the suffix leaf. Missing leaves receive `Json.Null`.
+    */
   private def updateElementRaw(elemJson: Json, f: Json => Json): Json =
     val n = suffix.length
     if n == 0 then f(elemJson)
     else
       val parents = new Array[AnyRef](n)
       var cur: Json = elemJson
-      var i         = 0
+      var i = 0
       while i < n do
         suffix(i) match
           case PathStep.Field(name) =>
@@ -249,7 +243,7 @@ final class JsonTraversal[A] private[circe] (
                 cur = arr(idx)
         i += 1
       var newChild: Json = f(cur)
-      var j              = n - 1
+      var j = n - 1
       while j >= 0 do
         newChild = rebuildStep(parents(j), suffix(j), newChild)
         j -= 1
@@ -257,28 +251,30 @@ final class JsonTraversal[A] private[circe] (
 
   private inline def rebuildStep(
       parent: AnyRef,
-      step:   PathStep,
-      child:  Json,
+      step: PathStep,
+      child: Json,
   ): Json =
     step match
       case PathStep.Field(name) =>
         Json.fromJsonObject(parent.asInstanceOf[JsonObject].add(name, child))
-      case PathStep.Index(idx)  =>
+      case PathStep.Index(idx) =>
         Json.fromValues(parent.asInstanceOf[Vector[Json]].updated(idx, child))
 
 object JsonTraversal:
 
-  /** `.field(_.x)` sugar — extend the suffix by a named field.
-    * Analogous to [[JsonPrism.field]]. */
+  /** `.field(_.x)` sugar — extend the suffix by a named field. Analogous to [[JsonPrism.field]].
+    */
   extension [A](t: JsonTraversal[A])
+
     transparent inline def field[B](
-        inline selector: A => B,
+        inline selector: A => B
     )(using encB: Encoder[B], decB: Decoder[B]): JsonTraversal[B] =
       ${ JsonPrismMacro.fieldTraversalImpl[A, B]('t, 'selector, 'encB, 'decB) }
 
-  /** `.at(i)` sugar — extend the suffix by an array index, requiring
-    * the current focus to be a collection. Analogous to
-    * [[JsonPrism.at]]. */
+  /** `.at(i)` sugar — extend the suffix by an array index, requiring the current focus to be a
+    * collection. Analogous to [[JsonPrism.at]].
+    */
   extension [A](t: JsonTraversal[A])
+
     transparent inline def at(i: Int): Any =
       ${ JsonPrismMacro.atTraversalImpl[A]('t, 'i) }

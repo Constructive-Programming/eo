@@ -20,11 +20,10 @@ import _root_.eo.data.Affine.given
 
 /** F1 — `Composer.chain` path independence.
   *
-  * From `Forgetful` there are two direct composers (→ Tuple2,
-  * → Either) and from each of those a direct composer to `Affine`.
-  * So an `Iso` can land in `Affine` via two distinct chains. They
-  * should be modify-equivalent — otherwise `Composer.chain` would be
-  * making the caller's choice of intermediary observable.
+  * From `Forgetful` there are two direct composers (→ Tuple2, → Either) and from each of those a
+  * direct composer to `Affine`. So an `Iso` can land in `Affine` via two distinct chains. They
+  * should be modify-equivalent — otherwise `Composer.chain` would be making the caller's choice of
+  * intermediary observable.
   */
 trait ChainPathIndependenceLaws[S, A]:
   def iso: Optic[S, S, A, A, Forgetful]
@@ -43,13 +42,11 @@ trait ChainPathIndependenceLaws[S, A]:
 
 /** F2 — `Composer.chain` preserves `get`.
   *
-  * A 2-hop chain `F → G → H` preserves `get` whenever all three
-  * carriers have an `Accessor`. Currently core only ships `Accessor`
-  * instances for `Forgetful` and `Tuple2`, so the only non-degenerate
-  * witness is `Forgetful → Tuple2 → Tuple2` with an identity composer
-  * at the second hop — testable with a locally-declared identity
-  * `Composer` in the spec. The trait itself is fully generic and
-  * will gain more witnesses as new `Accessor` instances are added.
+  * A 2-hop chain `F → G → H` preserves `get` whenever all three carriers have an `Accessor`.
+  * Currently core only ships `Accessor` instances for `Forgetful` and `Tuple2`, so the only
+  * non-degenerate witness is `Forgetful → Tuple2 → Tuple2` with an identity composer at the second
+  * hop — testable with a locally-declared identity `Composer` in the spec. The trait itself is
+  * fully generic and will gain more witnesses as new `Accessor` instances are added.
   */
 trait ChainAccessorLaws[S, A, F[_, _], G[_, _], H[_, _]]:
   def optic: Optic[S, S, A, A, F]

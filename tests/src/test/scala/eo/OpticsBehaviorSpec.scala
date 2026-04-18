@@ -1,8 +1,8 @@
 package eo
 
-import optics.{Fold, Getter, Iso, Lens, Optic, Prism, Setter, Traversal, Optional}
+import optics.{Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
 import optics.Optic.*
-import data.{Affine, Forgetful, Forget}
+import data.{Affine, Forget, Forgetful}
 import data.Forgetful.given
 import data.Affine.given
 
@@ -15,11 +15,10 @@ import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Non-law behavioural coverage for EO's optics: exercises the extension
-  * methods (`andThen`, `reverse`, `foldMap`, `modifyA`, `morph`), the
-  * Lens/Prism/Traversal alternative constructors, and `Getter`, all of
-  * which are never reached from the ported Monocle laws but still belong
-  * in any honest description of what the library does.
+/** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
+  * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,
+  * and `Getter`, all of which are never reached from the ported Monocle laws but still belong in
+  * any honest description of what the library does.
   */
 class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
@@ -118,7 +117,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     t.modifyA[Option](positivesDoubled)(List(1, 2, 3)) === Some(List(2, 4, 6))
     t.modifyA[Option](positivesDoubled)(List(1, -2, 3)) === None
-    t.modifyA[Option](positivesDoubled)(Nil)             === Some(Nil)
+    t.modifyA[Option](positivesDoubled)(Nil) === Some(Nil)
   }
 
   // ----- .morph coerces a Tuple2 carrier (Lens) to an Affine --------
@@ -131,9 +130,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val asAffine: Optic[(Int, String), (Int, String), Int, Int, Affine] =
       l.morph[Affine]
 
-    forAll((pair: (Int, String), a: Int) =>
-      asAffine.modify(_ => a)(pair) == l.replace(a)(pair)
-    )
+    forAll((pair: (Int, String), a: Int) => asAffine.modify(_ => a)(pair) == l.replace(a)(pair))
   }
 
   // ----- Fold.apply for a Foldable ---------------------------------
@@ -172,9 +169,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   "Fold.select keeps values matching the predicate, drops the rest" >> {
     val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] =
       Fold.select[Int](_ % 2 == 0)
-    forAll((n: Int) =>
-      evenFold.to(n) == (if n % 2 == 0 then Some(n) else None)
-    )
+    forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
   }
 
   // ----- Composer morphs from Forgetful -----------------------------
@@ -202,7 +197,5 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // Composer.chain for its middle step.
   "Iso.morph[Tuple2].morph[Affine] is a valid Affine-shaped optic" >> {
     val asAffine = doubleIso.morph[Tuple2].morph[Affine]
-    forAll((n: Int) =>
-      asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2)
-    )
+    forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
   }

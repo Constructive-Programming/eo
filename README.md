@@ -1,10 +1,8 @@
 # cats-eo
 
-<!-- Badges are placeholders until Units 13 / 14 wire CI and the Central Portal release.
-[![Build](https://github.com/<org>/cats-eo/actions/workflows/ci.yml/badge.svg)](https://github.com/<org>/cats-eo/actions)
-[![Maven Central](https://img.shields.io/maven-central/v/<org>/cats-eo_3.svg)](https://central.sonatype.com/artifact/<org>/cats-eo_3)
-[![Scaladoc](https://javadoc.io/badge2/<org>/cats-eo_3/scaladoc.svg)](https://javadoc.io/doc/<org>/cats-eo_3)
--->
+[![Build](https://github.com/Constructive-Programming/eo/actions/workflows/ci.yml/badge.svg)](https://github.com/Constructive-Programming/eo/actions)
+[![Maven Central](https://img.shields.io/maven-central/v/dev.constructive/cats-eo_3.svg)](https://central.sonatype.com/artifact/dev.constructive/cats-eo_3)
+[![Scaladoc](https://javadoc.io/badge2/dev.constructive/cats-eo_3/scaladoc.svg)](https://javadoc.io/doc/dev.constructive/cats-eo_3)
 
 An **existential optics** library for Scala 3, built on
 [cats](https://typelevel.org/cats/).
@@ -15,16 +13,18 @@ unifies every optic family. Composition crosses families through
 
 ## Install
 
-> Publishing coordinates are finalised at the 0.1.0 tag. Replace `<org>` with
-> the published `groupId` (posted on the release page).
+> `dev.constructive` namespace registration on Sonatype Central
+> Portal is in flight; the artifacts land there on the 0.1.0 tag
+> push. Until then, `sbt +publishLocal` produces a local-ivy
+> snapshot you can depend on.
 
 ```scala
 // build.sbt
 libraryDependencies ++= Seq(
-  "<org>" %% "cats-eo"          % "0.1.0",
-  "<org>" %% "cats-eo-generics" % "0.1.0",             // optional: macro-derived optics
-  "<org>" %% "cats-eo-circe"    % "0.1.0",             // optional: JSON optics
-  "<org>" %% "cats-eo-laws"     % "0.1.0" % Test,      // discipline law sets
+  "dev.constructive" %% "cats-eo"          % "0.1.0",
+  "dev.constructive" %% "cats-eo-generics" % "0.1.0",             // optional: macro-derived optics
+  "dev.constructive" %% "cats-eo-circe"    % "0.1.0",             // optional: JSON optics
+  "dev.constructive" %% "cats-eo-laws"     % "0.1.0" % Test,      // discipline law sets
 )
 ```
 
