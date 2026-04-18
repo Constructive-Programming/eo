@@ -1,0 +1,64 @@
+name: Deploy docs site
+
+# Builds the Laika/mdoc site via `sbt docs/tlSite` and publishes
+# the resulting static HTML to Cloudflare Pages.
+#
+# Two trigger paths:
+#   - Push to `main`           → preview deployment tagged `main-<sha>`
+#   - Tag push `v*`            → production deployment pinned to
+#                                the release version
+#
+# Both flows use the same Pages project (`cats-eo-docs` by
+# default); Cloudflare assigns each non-production deployment its
+# own preview URL while the production URL always reflects the
+# latest `v*` tag.
+
+on:
+  push:
+    branches: [main]
+    tags: [v*]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    name: Build and deploy to Cloudflare Pages
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      # `pages deploy` only needs a Cloudflare API token, but
+      # keeping permissions minimal closes the "compromised
+      # workflow can push to the repo" blast radius.
+      contents: read
+      deployments: write
+    steps:
+      - name: Checkout current branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Setup Java (temurin@17)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: sbt
+
+      - name: Build site
+        run: sbt 'docs/tlSite'
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: >-
+            pages deploy site/target/docs/site
+            --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'cats-eo-docs' }}
+            --branch=${{ github.ref_name }}

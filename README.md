@@ -153,12 +153,17 @@ Full run instructions, composition notes, and the JMH caveats live in
 
 ## Documentation
 
-A full mdoc-compiled site with concept pages, per-optic reference, and a
-migration guide from Monocle is planned for an early follow-up release.
-Until then the Scaladoc on every public member and the behaviour specs
-under `tests/src/test/scala/` are the primary references. Architecture
-context lives in [`CLAUDE.md`](./CLAUDE.md); the open release plan is in
-[`docs/plans/`](./docs/plans/).
+Full mdoc-compiled site: <https://cats-eo-docs.pages.dev>
+(hosted on Cloudflare Pages, deployed on every push to `main`
+via [`deploy-site.yml`](./.github/workflows/deploy-site.yml);
+setup notes in [`docs/cloudflare-pages-setup.md`](./docs/cloudflare-pages-setup.md)).
+Markdown sources live under [`site/docs/`](./site/docs/) — every code
+fence is verified against the library by `sbt docs/mdoc`.
+
+Scaladoc is published to javadoc.io once an artifact lands on
+Maven Central; until then run `sbt doc` locally. Architecture
+context lives in [`CLAUDE.md`](./CLAUDE.md); the open release plan is
+in [`docs/plans/`](./docs/plans/).
 
 ## Development
 
