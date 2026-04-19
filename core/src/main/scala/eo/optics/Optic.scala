@@ -88,8 +88,8 @@ trait Optic[S, T, A, B, F[_, _]]:
     val innerRef = o.asInstanceOf[Optic[A, B, C, D, F] { type X = o.X }]
     new Optic:
       type X = af.Z
-      def to: S => F[X, C]   = s  => af.composeTo(s, outerRef, innerRef)
-      def from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
+      val to: S => F[X, C]   = s  => af.composeTo(s, outerRef, innerRef)
+      val from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
   /** Re-express this optic over a different carrier `G`. Package-private — users compose
     * cross-carrier via the cross-carrier [[andThen]] overloads above, which invoke this
@@ -113,8 +113,8 @@ object Optic:
     )(f: R => S)(g: T => U): Optic[R, U, A, B, F] =
       new Optic[R, U, A, B, F]:
         type X = o.X
-        def to: R => F[X, A] = o.to.compose(f)
-        def from: F[X, B] => U = o.from.andThen(g)
+        val to: R => F[X, A] = r => o.to(f(r))
+        val from: F[X, B] => U = fxb => g(o.from(fxb))
 
   /** Profunctor over `(B, A)` — `dimap` on the inner focus pair. Requires a `ForgetfulFunctor[F]`
     * so the carrier can map its focus in place.
@@ -130,8 +130,8 @@ object Optic:
     )(f: D => B)(g: A => C): Optic[S, T, C, D, F] =
       new Optic[S, T, C, D, F]:
         type X = o.X
-        def to: S => F[X, C] = s => F.map(o.to(s), g)
-        def from: F[X, D] => T = d => o.from(F.map(d, f))
+        val to: S => F[X, C] = s => F.map(o.to(s), g)
+        val from: F[X, D] => T = d => o.from(F.map(d, f))
 
   /** The identity optic — `S` is its own focus and modification has no effect. Carrier is
     * [[data.Forgetful]] (no leftover).
@@ -141,8 +141,8 @@ object Optic:
   def id[A]: Optic[A, A, A, A, Forgetful] =
     new Optic[A, A, A, A, Forgetful]:
       type X = Nothing
-      def to: A => A = identity
-      def from: A => A = identity
+      val to: A => A = identity
+      val from: A => A = identity
 
   // ---- Cross-carrier composition (auto-morph) -----------------------
   //
@@ -217,8 +217,8 @@ object Optic:
     def reverse: Optic[B, A, T, S, F] =
       new Optic[B, A, T, S, F]:
         type X = o.X
-        def to: B => F[X, T] = (b: B) => RA.reverseGet(o.from(RA.reverseGet(b)))
-        def from: F[X, S] => A = (fs: F[X, S]) => A.get(o.to(A.get(fs)))
+        val to: B => F[X, T] = (b: B) => RA.reverseGet(o.from(RA.reverseGet(b)))
+        val from: F[X, S] => A = (fs: F[X, S]) => A.get(o.to(A.get(fs)))
 
   /** Modify (`A => B`) or replace (by constant `B`) the focus in-place. Available for every carrier
     * with a `ForgetfulFunctor[F]` instance — i.e. every current optic family.

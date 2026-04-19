@@ -95,15 +95,14 @@ object PowerSeries:
       new Optic[S, T, A, B, PowerSeries]:
         type X = (1, o.X)
 
-        def to: S => PowerSeries[X, A] =
-          s =>
-            val (xo, a) = o.to(s)
-            val arr     = new Array[AnyRef](1)
-            arr(0)      = a.asInstanceOf[AnyRef]
-            PowerSeries(xo -> ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
+        val to: S => PowerSeries[X, A] = s =>
+          val (xo, a) = o.to(s)
+          val arr     = new Array[AnyRef](1)
+          arr(0)      = a.asInstanceOf[AnyRef]
+          PowerSeries(xo -> ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
 
-        def from: PowerSeries[X, B] => T =
-          ps => o.from(ps.ps._1 -> ps.ps._2.head)
+        val from: PowerSeries[X, B] => T = ps =>
+          o.from(ps.ps._1 -> ps.ps._2.head)
 
   given either2ps: Composer[Either, PowerSeries] with
 
@@ -111,22 +110,19 @@ object PowerSeries:
       new Optic[S, T, A, B, PowerSeries]:
         type X = (1, Option[o.X])
 
-        def to: S => PowerSeries[X, A] =
-          s =>
-            o.to(s)
-              .fold(
-                x => PowerSeries(Some(x) -> emptyArraySeq[A]),
-                a =>
-                  val arr = new Array[AnyRef](1)
-                  arr(0)  = a.asInstanceOf[AnyRef]
-                  PowerSeries(None -> ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
-                ,
-              )
+        val to: S => PowerSeries[X, A] = s =>
+          o.to(s) match
+            case Left(x) => PowerSeries(Some(x) -> emptyArraySeq[A])
+            case Right(a) =>
+              val arr = new Array[AnyRef](1)
+              arr(0)  = a.asInstanceOf[AnyRef]
+              PowerSeries(None -> ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
 
         @nowarn("msg=cannot be checked at runtime")
-        def from: PowerSeries[X, B] => T =
+        val from: PowerSeries[X, B] => T = {
           case PowerSeries(Some(x), _) => o.from(Left(x))
           case PowerSeries(_, vec)     => o.from(Right(vec.head))
+        }
 
   given affine2ps: Composer[Affine, PowerSeries] with
 
@@ -134,23 +130,19 @@ object PowerSeries:
       new Optic[S, T, A, B, PowerSeries]:
         type X = (1, Either[Fst[o.X], Snd[o.X]])
 
-        def to: S => PowerSeries[X, A] =
-          s =>
-            o.to(s)
-              .affine
-              .fold(
-                x0     => PowerSeries(Left(x0) -> emptyArraySeq[A]),
-                (x1, b) =>
-                  val arr = new Array[AnyRef](1)
-                  arr(0)  = b.asInstanceOf[AnyRef]
-                  PowerSeries(Right(x1) -> ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
-                ,
-              )
+        val to: S => PowerSeries[X, A] = s =>
+          o.to(s).affine match
+            case Left(x0) => PowerSeries(Left(x0) -> emptyArraySeq[A])
+            case Right((x1, b)) =>
+              val arr = new Array[AnyRef](1)
+              arr(0)  = b.asInstanceOf[AnyRef]
+              PowerSeries(Right(x1) -> ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
 
         @nowarn("msg=cannot be checked at runtime")
-        def from: PowerSeries[X, B] => T =
+        val from: PowerSeries[X, B] => T = {
           case PowerSeries(Left(fx), _)    => o.from(Affine.ofLeft(fx))
           case PowerSeries(Right(sx), vec) => o.from(Affine.ofRight(sx -> vec.head))
+        }
 
   /** Shared zero-length `ArraySeq` singleton cast to whatever element type the call site asks
     * for. Empty arrays are type-oblivious — an `Array[AnyRef]` of length 0 is interchangeable

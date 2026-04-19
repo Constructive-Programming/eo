@@ -44,8 +44,8 @@ object Traversal:
   def each[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
     new Optic[T[A], T[B], A, B, Forget[T]]:
       type X = Nothing
-      def to: T[A] => T[A] = identity
-      def from: T[B] => T[B] = identity
+      val to: T[A] => T[A] = identity
+      val from: T[B] => T[B] = identity
 
   /** PowerSeries-carrier `each` — enables downstream optic composition by threading through the
     * `PowerSeries` carrier's `AssociativeFunctor` instance. Require `Applicative` and `MonoidK`
@@ -69,14 +69,13 @@ object Traversal:
     new Optic[T[A], T[B], A, B, PowerSeries]:
       type X = (Int, Unit)
 
-      def to: T[A] => PowerSeries[X, A] =
-        ta =>
-          val buf = new ObjArrBuilder()
-          Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-          PowerSeries(() -> buf.freezeAs[A])
+      val to: T[A] => PowerSeries[X, A] = ta =>
+        val buf = new ObjArrBuilder()
+        Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
+        PowerSeries(() -> buf.freezeAs[A])
 
-      def from: PowerSeries[X, B] => T[B] =
-        ps => ps.ps._2.foldMapK(Applicative[T].pure[B])
+      val from: PowerSeries[X, B] => T[B] = ps =>
+        ps.ps._2.foldMapK(Applicative[T].pure[B])
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.
@@ -90,10 +89,11 @@ object Traversal:
   ): Optic[S, T, A, B, FixedTraversal[2]] =
     new Optic[S, T, A, B, FixedTraversal[2]]:
       type X = Unit
-      def to: S => (A, A, Unit) = s => (a(s), b(s), ())
+      val to: S => (A, A, Unit) = s => (a(s), b(s), ())
 
-      def from: FixedTraversal[2][X, B] => T =
+      val from: FixedTraversal[2][X, B] => T = {
         case (b0, b1, _) => reverse(b0, b1)
+      }
 
   /** Fixed-arity-3 traversal. See [[two]].
     *
@@ -107,10 +107,11 @@ object Traversal:
   ): Optic[S, T, A, B, FixedTraversal[3]] =
     new Optic[S, T, A, B, FixedTraversal[3]]:
       type X = Unit
-      def to: S => (A, A, A, Unit) = s => (a(s), b(s), c(s), ())
+      val to: S => (A, A, A, Unit) = s => (a(s), b(s), c(s), ())
 
-      def from: FixedTraversal[3][X, B] => T =
+      val from: FixedTraversal[3][X, B] => T = {
         case (b0, b1, b2, _) => reverse(b0, b1, b2)
+      }
 
   /** Fixed-arity-4 traversal. See [[two]].
     *
@@ -125,7 +126,8 @@ object Traversal:
   ): Optic[S, T, A, B, FixedTraversal[4]] =
     new Optic[S, T, A, B, FixedTraversal[4]]:
       type X = Unit
-      def to: S => (A, A, A, A, Unit) = s => (a(s), b(s), c(s), d(s), ())
+      val to: S => (A, A, A, A, Unit) = s => (a(s), b(s), c(s), d(s), ())
 
-      def from: FixedTraversal[4][X, B] => T =
+      val from: FixedTraversal[4][X, B] => T = {
         case (b0, b1, b2, b3, _) => reverse(b0, b1, b2, b3)
+      }

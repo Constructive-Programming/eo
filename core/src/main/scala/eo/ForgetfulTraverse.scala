@@ -56,7 +56,12 @@ object ForgetfulTraverse:
   given eitherFTraverse: ForgetfulTraverse[Either, Applicative] with
 
     def traverse[X, A, B, G[_]: Applicative]: Either[X, A] => (A => G[B]) => G[Either[X, B]] =
-      fa => f => fa.fold(_.asLeft[B].pure[G], f.andThen(_.map(_.asRight[X])))
+      fa =>
+        f =>
+          fa.fold(
+            x => x.asLeft[B].pure[G],
+            a => f(a).map(_.asRight[X]),
+          )
 
   /** `Affine` traverse — miss branch lifted via `pure`, hit branch run through `f` and rebuilt.
     * Unlocks `.modifyA` on every Optional-carrier optic.

@@ -78,8 +78,10 @@ final class MendTearPrism[S, T, A, B](
     val mend: B => T,
 ) extends Optic[S, T, A, B, Either]:
   type X = T
-  inline def to: S => Either[T, A] = tear
-  inline def from: Either[T, B] => T = _.fold(identity, mend)
+  val to: S => Either[T, A] = tear
+  val from: Either[T, B] => T = e => e match
+    case Right(b) => mend(b)
+    case Left(t)  => t
 
   inline def modify[X](f: A => B): S => T =
     s =>
@@ -109,8 +111,13 @@ final class PickMendPrism[S, A, B](
     val mend: B => S,
 ) extends Optic[S, S, A, B, Either]:
   type X = S
-  inline def to: S => Either[S, A] = s => pick(s).toRight(s)
-  inline def from: Either[S, B] => S = _.fold(identity, mend)
+  val to: S => Either[S, A] = s =>
+    pick(s) match
+      case Some(a) => Right(a)
+      case None    => Left(s)
+  val from: Either[S, B] => S = e => e match
+    case Right(b) => mend(b)
+    case Left(s)  => s
 
   inline def modify[X](f: A => B): S => S =
     s =>

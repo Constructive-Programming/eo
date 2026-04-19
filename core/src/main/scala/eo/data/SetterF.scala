@@ -26,7 +26,8 @@ object SetterF:
   given map[S, A]: ForgetfulFunctor[SetterF] with
 
     def map[X, B, C](fa: SetterF[X, B], f: B => C): SetterF[X, C] =
-      SetterF(fa.setter._1, fa.setter._2.andThen(f))
+      val inner = fa.setter._2
+      SetterF(fa.setter._1, a => f(inner(a)))
 
   /** `ForgetfulTraverse[SetterF, Distributive]` — lifts an effectful `B => G[C]` through the
     * continuation using `Distributive[G]` (a stronger counterpart to `Applicative` that suits the
@@ -54,9 +55,9 @@ object SetterF:
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, SetterF] =
       new Optic[S, T, A, B, SetterF]:
         type X = (S, A)
-        def to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
 
-        def from: SetterF[X, B] => T = sfxb =>
+        val from: SetterF[X, B] => T = sfxb =>
           val (s, f) = sfxb.setter
           val (xo, a) = o.to(s)
           o.from((xo, f(a)))

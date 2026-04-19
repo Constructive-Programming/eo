@@ -104,9 +104,10 @@ class GetReplaceLens[S, T, A, B](
     val enplace: (S, B) => T,
 ) extends Optic[S, T, A, B, Tuple2]:
   type X = S
-  inline def to: S => (S, A) = s => (s, get(s))
-  inline def from: ((S, B)) => T = enplace.tupled
-  inline def replace: B => S => T = b => enplace(_, b)
+  val to: S => (S, A) = s => (s, get(s))
+  val from: ((S, B)) => T = pair => enplace(pair._1, pair._2)
+
+  inline def replace: B => S => T = b => s => enplace(s, b)
 
   inline def modify(f: A => B): S => T =
     s => enplace(s, f(get(s)))
@@ -125,7 +126,7 @@ class SplitCombineLens[S, T, A, B, XA](
     val combine: (XA, B) => T,
 ) extends Optic[S, T, A, B, Tuple2]:
   type X = XA
-  inline def from: ((XA, B)) => T = combine.tupled
+  val from: ((XA, B)) => T = pair => combine(pair._1, pair._2)
 
   inline def modify(f: A => B): S => T =
     s =>

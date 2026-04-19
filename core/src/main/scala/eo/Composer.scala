@@ -43,8 +43,8 @@ object Composer:
     def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
         type X = Unit
-        def to: S => (X, A)     = o.to.andThen(() -> _)
-        def from: ((X, B)) => T = o.from.compose(_._2)
+        val to: S => (X, A)     = s => ((), o.to(s))
+        val from: ((X, B)) => T = pair => o.from(pair._2)
 
   /** Express an Iso (or Getter) as a Prism — always takes the `Right` branch; `Nothing` in the
     * `Left` slot so the miss branch is uninhabited.
@@ -56,5 +56,7 @@ object Composer:
     def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Either] =
       new Optic[S, T, A, B, Either]:
         type X = Nothing
-        def to: S => Either[X, A] = o.to.andThen(Right(_))
-        def from: Either[X, B] => T = o.from.compose(_.getOrElse(???))
+        val to: S => Either[X, A] = s => Right(o.to(s))
+        val from: Either[X, B] => T = e => e match
+          case Right(b) => o.from(b)
+          case Left(_)  => ???

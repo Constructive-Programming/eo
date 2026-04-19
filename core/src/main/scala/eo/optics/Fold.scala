@@ -34,8 +34,8 @@ object Fold:
   def apply[F[_]: Foldable, A]: Optic[F[A], Unit, A, A, Forget[F]] =
     new Optic[F[A], Unit, A, A, Forget[F]]:
       type X = Nothing
-      def to: F[A] => F[A] = identity
-      def from: F[A] => Unit = const(())
+      val to: F[A] => F[A] = identity
+      val from: F[A] => Unit = _ => ()
 
   /** Filtering Fold — keeps only elements matching `p`. Backed by `Forget[Option]`, so
     * `.foldMap(f)(a)` produces `f(a)` when the predicate holds and `Monoid[M].empty` when it
@@ -46,5 +46,5 @@ object Fold:
   def select[A](p: A => Boolean): Optic[A, Unit, A, A, Forget[Option]] =
     new Optic[A, Unit, A, A, Forget[Option]]:
       type X = Nothing
-      def to: A => Option[A] = Option(_).filter(p)
-      def from: Option[A] => Unit = const(())
+      val to: A => Option[A] = a => Option(a).filter(p)
+      val from: Option[A] => Unit = _ => ()

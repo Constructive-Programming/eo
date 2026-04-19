@@ -51,5 +51,10 @@ object Optional:
   ) =
     new Optic[S, T, A, B, Affine]:
       type X = (T, S)
-      def to: S => Affine[X, A] = s => Affine(getOrModify(s).map(s -> _))
-      def from: Affine[X, B] => T = _.affine.fold(identity, reverseGet)
+      val to: S => Affine[X, A] = s =>
+        Affine(getOrModify(s) match
+          case Right(a) => Right(s -> a)
+          case Left(t)  => Left(t))
+      val from: Affine[X, B] => T = a => a.affine match
+        case Right(p) => reverseGet(p)
+        case Left(t)  => t
