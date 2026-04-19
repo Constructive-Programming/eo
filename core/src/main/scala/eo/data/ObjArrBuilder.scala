@@ -33,6 +33,12 @@ private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
       i += 1
     len += n
 
+  def appendAllFromPSVec[A](src: PSVec[A]): Unit =
+    val n = src.length
+    if len + n > arr.length then grow(len + n)
+    System.arraycopy(src.arr, src.offset, arr, len, n)
+    len += n
+
   private def grow(minCap: Int): Unit =
     var newCap = arr.length * 2
     while newCap < minCap do newCap *= 2
@@ -45,6 +51,11 @@ private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
     */
   def freezeAs[A]: ArraySeq[A] =
     ArraySeq.unsafeWrapArray(freezeArr).asInstanceOf[ArraySeq[A]]
+
+  /** Return the accumulated storage as a [[PSVec]]. Preferred over [[freezeAs]] for PowerSeries
+    * focus storage since `PSVec` supports zero-copy slicing.
+    */
+  def freezeAsPSVec[A]: PSVec[A] = PSVec.unsafeWrap[A](freezeArr)
 
   /** Like [[freezeAs]] but returns the raw `Array[AnyRef]`. Used when the caller wants to keep
     * the array as primitive reference storage — e.g. `PowerSeries.AssocSndZ` which stores

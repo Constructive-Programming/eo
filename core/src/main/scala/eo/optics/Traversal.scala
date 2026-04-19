@@ -4,8 +4,7 @@ package optics
 import data.{FixedTraversal, Forget, ObjArrBuilder, PowerSeries}
 
 import cats.{Applicative, MonoidK, Traverse}
-import cats.instances.arraySeq.given
-import cats.syntax.foldable.*
+import cats.syntax.semigroupk.*
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
@@ -72,10 +71,19 @@ object Traversal:
       val to: T[A] => PowerSeries[X, A] = ta =>
         val buf = new ObjArrBuilder()
         Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-        PowerSeries((), buf.freezeAs[A])
+        PowerSeries((), buf.freezeAsPSVec[A])
 
       val from: PowerSeries[X, B] => T[B] = ps =>
-        ps.vs.foldMapK(Applicative[T].pure[B])
+        val vec   = ps.vs
+        val n     = vec.length
+        val pure  = Applicative[T].pure[B](_)
+        val empty = MonoidK[T].empty[B]
+        var acc   = empty
+        var i     = 0
+        while i < n do
+          acc = acc <+> pure(vec(i))
+          i += 1
+        acc
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.

@@ -1,44 +1,35 @@
 package eo
 package data
 
-import scala.collection.immutable.ArraySeq
-
 import cats.Applicative
-import cats.instances.arraySeq.given
+import cats.syntax.applicative.*
 import cats.syntax.functor.*
-import cats.syntax.traverse.*
 
 import optics.Optic
 
 /** Carrier for the `PowerSeries`-style `Traversal`: pairs an existential leftover `xo: Snd[A]` with
-  * a flat contiguous `ArraySeq[B]` of focused elements.
+  * a flat focus vector `vs: PSVec[B]`.
   *
   * Fields are stored directly (not wrapped in a `Tuple2`) and this class is not `AnyVal` — the
   * Optic trait's generic return slots force every `PowerSeries[A, B]` to reify anyway, so the
   * `AnyVal` wrapper bought nothing and the inner `Tuple2` cost one heap allocation per creation.
   * Two direct fields halves the carrier's per-creation allocation footprint.
   *
-  * Storage is a flat `ArraySeq[B]` backed by a plain `Array[AnyRef]` — iteration and slicing are a
-  * single `arraycopy` each, and hit the JVM's prefetcher well. The `assoc`'s `composeTo` /
-  * `composeFrom` grow internal `Array[AnyRef]` buffers in place (see [[ObjArrBuilder]]) and
-  * publish via `ArraySeq.unsafeWrapArray`, avoiding the buffer→toArray→wrap double-copy path
-  * that `ArrayBuffer` takes.
+  * Focus storage is a [[PSVec]] — an `Array[AnyRef]` plus an `(offset, length)` view — chosen so
+  * that `assoc.composeFrom` can hand each inner reassembly a zero-copy slice of the underlying
+  * flat array. An `ArraySeq[B]` would allocate a fresh backing array per inner slice and dominate
+  * the allocation budget in deeply-composed chains.
   *
   * No `ClassTag[B]` is required at the API boundary. Every generic `B` inside the optic machinery
-  * erases to `Object` on the JVM; the builder stores `Array[AnyRef]` directly and narrows the
-  * runtime type back to `ArraySeq[B]` at publish time.
+  * erases to `Object` on the JVM; [[PSVec]] stores `Array[AnyRef]` directly and narrows the
+  * runtime type back to `B` at read time.
   *
   * See `benchmarks/src/main/scala/eo/bench/PowerSeriesBench.scala` for the runtime profile.
   */
-final case class PowerSeries[A, B](xo: Snd[A], vs: ArraySeq[B])
+final case class PowerSeries[A, B](xo: Snd[A], vs: PSVec[B])
 
 /** Typeclass instances for [[PowerSeries]]. */
 object PowerSeries:
-
-  /** Legacy convenience — accept a `(Snd[A], ArraySeq[B])` tuple. Kept for call sites that spell
-    * the pair out explicitly; prefer the synthesised case-class `apply(xo, vs)` on the hot path.
-    */
-  def apply[A, B](ps: (Snd[A], ArraySeq[B])): PowerSeries[A, B] = PowerSeries(ps._1, ps._2)
 
   given map: ForgetfulFunctor[PowerSeries] with
     def map[X, A, B](psa: PowerSeries[X, A], f: A => B): PowerSeries[X, B] =
@@ -49,13 +40,33 @@ object PowerSeries:
       while i < n do
         arr(i) = f(src(i)).asInstanceOf[AnyRef]
         i += 1
-      PowerSeries(psa.xo, ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[B]])
+      PowerSeries(psa.xo, PSVec.unsafeWrap[B](arr))
 
   given traverse: ForgetfulTraverse[PowerSeries, Applicative] with
 
     def traverse[X, A, B, G[_]: Applicative]
         : PowerSeries[X, A] => (A => G[B]) => G[PowerSeries[X, B]] =
-      psa => f => psa.vs.traverse(f).map(vb => PowerSeries(psa.xo, vb))
+      psa =>
+        f =>
+          val src = psa.vs
+          val n   = src.length
+          if n == 0 then PowerSeries(psa.xo, PSVec.empty[B]).pure[G]
+          else
+            // Build a G[Array[AnyRef]] incrementally with applicative combination
+            // — equivalent to sequence, without materialising an intermediate
+            // List or ArraySeq.
+            val G = Applicative[G]
+            var acc: G[Array[AnyRef]] = G.pure(new Array[AnyRef](n))
+            var i                     = 0
+            while i < n do
+              val idx = i
+              val gb  = f(src(idx))
+              acc = G.map2(acc, gb) { (a, b) =>
+                a(idx) = b.asInstanceOf[AnyRef]
+                a
+              }
+              i += 1
+            G.map(acc)(arr => PowerSeries(psa.xo, PSVec.unsafeWrap[B](arr)))
 
   /** Composed existential leftover for `PowerSeries`-carrier `andThen`. Stores the outer
     * leftover, a primitive `Array[Int]` of per-outer focus counts, and an `Array[AnyRef]` of
@@ -94,10 +105,10 @@ object PowerSeries:
         val vy      = innerPS.vs
         lenBuf.append(vy.length)
         ysBuf.append(innerPS.xo.asInstanceOf[AnyRef])
-        flatBuf.appendAllFromArraySeq(vy)
+        flatBuf.appendAllFromPSVec(vy)
         i += 1
       val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-      PowerSeries(sndZ, flatBuf.freezeAs[C])
+      PowerSeries(sndZ, flatBuf.freezeAsPSVec[C])
 
     def composeFrom[S, T, A, B, C, D](
         xd:    PowerSeries[Z, D],
@@ -113,13 +124,13 @@ object PowerSeries:
       var offset    = 0
       var i         = 0
       while i < n do
-        val len     = lens(i)
-        val y       = ys(i).asInstanceOf[Snd[Xi]]
-        val chunk   = vys.slice(offset, offset + len)
+        val len   = lens(i)
+        val y     = ys(i).asInstanceOf[Snd[Xi]]
+        val chunk = vys.slice(offset, offset + len)
         resultBuf.append(inner.from(PowerSeries(y, chunk)).asInstanceOf[AnyRef])
-        offset     += len
-        i          += 1
-      outer.from(PowerSeries(sndZ.xo, resultBuf.freezeAs[B]))
+        offset += len
+        i      += 1
+      outer.from(PowerSeries(sndZ.xo, resultBuf.freezeAsPSVec[B]))
 
   given tuple2ps: Composer[Tuple2, PowerSeries] with
 
@@ -129,9 +140,7 @@ object PowerSeries:
 
         val to: S => PowerSeries[X, A] = s =>
           val (xo, a) = o.to(s)
-          val arr     = new Array[AnyRef](1)
-          arr(0)      = a.asInstanceOf[AnyRef]
-          PowerSeries(xo, ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
+          PowerSeries(xo, PSVec.singleton[A](a))
 
         val from: PowerSeries[X, B] => T = ps =>
           o.from((ps.xo, ps.vs.head))
@@ -144,11 +153,8 @@ object PowerSeries:
 
         val to: S => PowerSeries[X, A] = s =>
           o.to(s) match
-            case Left(x) => PowerSeries(Some(x), emptyArraySeq[A])
-            case Right(a) =>
-              val arr = new Array[AnyRef](1)
-              arr(0)  = a.asInstanceOf[AnyRef]
-              PowerSeries(None, ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
+            case Left(x)  => PowerSeries(Some(x), PSVec.empty[A])
+            case Right(a) => PowerSeries(None, PSVec.singleton[A](a))
 
         val from: PowerSeries[X, B] => T = ps =>
           ps.xo.asInstanceOf[Option[o.X]] match
@@ -163,21 +169,10 @@ object PowerSeries:
 
         val to: S => PowerSeries[X, A] = s =>
           o.to(s).affine match
-            case Left(x0) => PowerSeries(Left(x0), emptyArraySeq[A])
-            case Right((x1, b)) =>
-              val arr = new Array[AnyRef](1)
-              arr(0)  = b.asInstanceOf[AnyRef]
-              PowerSeries(Right(x1), ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[A]])
+            case Left(x0)       => PowerSeries(Left(x0), PSVec.empty[A])
+            case Right((x1, b)) => PowerSeries(Right(x1), PSVec.singleton[A](b))
 
         val from: PowerSeries[X, B] => T = ps =>
           ps.xo.asInstanceOf[Either[Fst[o.X], Snd[o.X]]] match
             case Left(fx)  => o.from(Affine.ofLeft(fx))
             case Right(sx) => o.from(Affine.ofRight(sx -> ps.vs.head))
-
-  /** Shared zero-length `ArraySeq` singleton cast to whatever element type the call site asks
-    * for. Empty arrays are type-oblivious — an `Array[AnyRef]` of length 0 is interchangeable
-    * with `Array[A]` of length 0 for any reference `A`.
-    */
-  private val emptyObjArr: Array[AnyRef]    = new Array[AnyRef](0)
-  private inline def emptyArraySeq[A]: ArraySeq[A] =
-    ArraySeq.unsafeWrapArray(emptyObjArr).asInstanceOf[ArraySeq[A]]

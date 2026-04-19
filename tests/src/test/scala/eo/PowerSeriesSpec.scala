@@ -91,7 +91,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
       val morphd = lens.morph[PowerSeries]
       forAll((p: (Int, String)) =>
         val vect = morphd.to(p).vs
-        vect.size == 1
+        vect.length == 1
       )
     }
 
