@@ -79,8 +79,8 @@ object ForgetfulTraverse:
               (x, a) => f(a).map(b => Affine((x, b).asRight[Fst[X]])),
             )
 
-  /** `Forget[F]` traverse — delegates to the underlying `Traverse[F]`. The core of `Traversal.each`
-    * and `Fold` in their effectful forms.
+  /** `Forget[F]` traverse — delegates to the underlying `Traverse[F]`. The core of
+    * `Traversal.forEach` and `Fold` in their effectful forms.
     *
     * @group Instances
     */

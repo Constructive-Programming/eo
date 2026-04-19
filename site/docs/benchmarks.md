@@ -147,7 +147,7 @@ adds a small per-element dispatch layer through
 | 64   |   145.7 ns  |             1 352.5 ns   |  9.28×  |
 | 512  | 1 939.5 ns  |            16 214.0 ns   |  8.36×  |
 
-A surprisingly large win — EO's `Traversal.each` keeps the
+A surprisingly large win — EO's `Traversal.forEach` keeps the
 `Forget[T]` carrier linear by delegating straight to
 `Functor[T].map`, while Monocle's `Traversal` wraps each
 element in an `Applicative[Id]` traversal and pays the
@@ -190,28 +190,29 @@ the per-element codec round-trip.
 
 EO-only — no Monocle equivalent. Toggles `isMobile` on every
 `Phone` inside a `Person.phones: ArraySeq[Phone]`; the chain
-is `Lens → Traversal.powerEach → Lens`.
+is `Lens → Traversal.each → Lens`, where `Traversal.each` is
+the `PowerSeries`-backed composable traversal.
 
-| Size |  eo (`powerEach` chain) | naive `copy` / `map` | ratio |
-|------|------------------------:|---------------------:|------:|
-| 4    |                 439 ns  |               14 ns  |  31×  |
-| 32   |               2 332 ns  |               84 ns  |  28×  |
-| 256  |              19 397 ns  |              769 ns  |  25×  |
+| Size |  eo (composed chain) | naive `copy` / `map` | ratio |
+|------|---------------------:|---------------------:|------:|
+| 4    |              201 ns  |               13 ns  |  15×  |
+| 32   |            1 508 ns  |               80 ns  |  19×  |
+| 256  |           14 008 ns  |              728 ns  |  19×  |
 
-The carrier is now flat `ArraySeq[A]` (backed by `Array[AnyRef]`)
-with a hand-rolled grow-on-demand builder on the `assoc` hot
-path (swapped from a homegrown `Vect[N, A]` that paid O(n²)
-for persistent concat + slice). The builder avoids both
-`ArrayBuffer`'s final `toArray` copy and `Vector`'s two-level
-trie access; the result is linear scaling across all sizes at a
-consistent ~25-30× overhead over the naive baseline. That
-overhead is the Composer chain's per-element `.modify`
-dispatch, not the storage structure.
+The focus storage is a `PSVec[B]` view (an `Array[AnyRef]` plus
+a `(offset, length)` window), so the `assoc`'s per-element
+reassembly slice is a pointer update rather than an arraycopy.
+Per-element leftovers are held in parallel `Array[Int]` and
+`Array[AnyRef]` buffers inside `AssocSndZ` — no intermediate
+`(Int, Snd[Xi])` tuple boxing. The result is linear scaling at
+a ~15–20× overhead over the naive `copy`/`map` baseline, down
+from ~25–30× before the `PowerSeries` reshape.
 
-For single-pass modify of a collection, `Traversal.each[F, A, B]`
-(linear, no downstream composition) is still the correct choice.
-Reach for `powerEach` when the chain needs to continue past the
-traversal.
+For single-pass modify of a collection — no downstream optic
+after the traversal — `Traversal.forEach[F, A, B]` (carrier
+`Forget[F]`, identity-shaped, no composition support) is the
+correct choice. Reach for `Traversal.each` / `pEach` when the
+chain needs to continue past the traversal.
 
 See the
 [composition notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes)

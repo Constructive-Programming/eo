@@ -45,7 +45,7 @@ object ForgetfulFold:
       f => fa => fa.affine.fold(_ => Monoid[M].empty, p => f(p._2))
 
   /** `Forget[F]` foldMap — delegates to the underlying `Foldable[F]`. Powers `Fold.apply[F, A]` and
-    * `Traversal.each.foldMap`.
+    * `Traversal.forEach.foldMap`.
     *
     * @group Instances
     */

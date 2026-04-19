@@ -157,13 +157,13 @@ class OpticsLawsSpec extends Specification with Discipline:
     .setter,
   )
 
-  // ----- Traversal.each on List[Int] ------------------------------
+  // ----- Traversal.forEach on List[Int] ---------------------------
 
   val listTraversal: Optic[List[Int], List[Int], Int, Int, data.Forget[List]] =
-    Traversal.each[List, Int, Int]
+    Traversal.forEach[List, Int, Int]
 
   checkAll(
-    "Traversal.each[List, Int]",
+    "Traversal.forEach[List, Int]",
     new TraversalTests[List, Int]:
       val laws = new TraversalLaws[List, Int]:
         val traversal = listTraversal
@@ -486,7 +486,7 @@ class OpticsLawsSpec extends Specification with Discipline:
   // core/src/main/scala/eo/ForgetfulFold.scala are only reachable
   // through an optic-level fold. These checkAll blocks wire the
   // EO-specific FoldMapHomomorphismLaws (used earlier on
-  // Traversal.each) against the tuple / prism / optional fixtures
+  // Traversal.forEach) against the tuple / prism / optional fixtures
   // already declared above.
   import laws.eo.FoldMapHomomorphismLaws
   import laws.eo.discipline.FoldMapHomomorphismTests

@@ -16,7 +16,7 @@ import cats.instances.arraySeq.*
 /** PowerSeries-backed Traversal over a nested focus, paired
   * against a hand-written iterative baseline.
   *
-  * `Traversal.powerEach[ArraySeq, A]` is EO-only — Monocle has
+  * `Traversal.each[ArraySeq, A]` (PowerSeries-backed) is EO-only — Monocle has
   * no direct analog because the PowerSeries carrier is the
   * mechanism by which EO supports multi-focus traversals with
   * full `Composer` bridges into `Tuple2` (Lens), `Either`
@@ -53,7 +53,7 @@ class PowerSeriesBench:
   // explicit `.morph[PowerSeries]` anywhere on the call site.
   private val personAllMobiles =
     EoLens[Person, ArraySeq[Phone]](_.phones, (s, b) => s.copy(phones = b))
-      .andThen(EoTraversal.powerEach[ArraySeq, Phone])
+      .andThen(EoTraversal.each[ArraySeq, Phone])
       .andThen(EoLens[Phone, Boolean](_.isMobile, (s, b) => s.copy(isMobile = b)))
 
   @Setup(Level.Iteration)

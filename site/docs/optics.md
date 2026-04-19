@@ -191,37 +191,50 @@ positive.foldMap(identity[Int])(-3)
 A `Traversal` is the multi-focus modify optic — map over every
 element of a container. Two carriers coexist:
 
-* `Traversal.each[F, A, B]` — carrier `Forget[F]`, linear time,
-  no downstream optic composition.
-* `Traversal.powerEach[F, A]` — carrier `PowerSeries`, supports
-  `.andThen` with downstream optics. Linear scaling with a
-  small constant-factor overhead (~25–30× over a naive
-  `copy`/`map`) from the Composer chain's per-element dispatch.
+* `Traversal.each[F, A]` / `Traversal.pEach[F, A, B]` — carrier
+  `PowerSeries`, the default. Supports `.andThen` with downstream
+  optics. Linear scaling with a small constant-factor overhead
+  (~15–20× over a naive `copy`/`map`) from the Composer chain's
+  per-element dispatch.
+* `Traversal.forEach[F, A, B]` — carrier `Forget[F]`, map-only
+  fast path. Identity-shaped carrier, linear time, no downstream
+  optic composition.
 
-Use `each` by default:
+Use `each` for the composable default — it's what Scala users
+reach for intuitively:
 
 ```scala mdoc:silent
 import eo.optics.Traversal
+import eo.data.PowerSeries
 
-val listEach = Traversal.each[List, Int, Int]
+val listEach = Traversal.pEach[List, Int, Int]
 ```
 
 ```scala mdoc
 listEach.modify(_ + 1)(List(1, 2, 3))
 ```
 
-Reach for `powerEach` when the chain continues past the
-traversal — e.g. "for every phone, toggle `isMobile`":
+Stick with `forEach` when the chain terminates — no downstream
+optics — and you want the tight map-only path:
 
 ```scala mdoc:silent
-import eo.data.PowerSeries
+val listForEach = Traversal.forEach[List, Int, Int]
+```
 
+```scala mdoc
+listForEach.modify(_ + 1)(List(1, 2, 3))
+```
+
+`each` shines when the chain continues past the traversal — e.g.
+"for every phone, toggle `isMobile`":
+
+```scala mdoc:silent
 case class Phone(isMobile: Boolean, number: String)
 case class Owner(phones: List[Phone])
 
 val ownerAllPhonesMobile =
   Lens[Owner, List[Phone]](_.phones, (o, ps) => o.copy(phones = ps))
-    .andThen(Traversal.powerEach[List, Phone])
+    .andThen(Traversal.each[List, Phone])
     .andThen(Lens[Phone, Boolean](_.isMobile, (p, m) => p.copy(isMobile = m)))
 ```
 

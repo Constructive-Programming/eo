@@ -160,7 +160,7 @@ object Optic:
     *   {{{
     * // `lens.andThen(powerEach).andThen(lens)` — no explicit `.morph` anywhere.
     * lens[Person](_.phones)
-    *   .andThen(Traversal.powerEach[ArraySeq, Phone])
+    *   .andThen(Traversal.each[ArraySeq, Phone])
     *   .andThen(lens[Phone](_.isMobile))
     *   }}}
     */

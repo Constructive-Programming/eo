@@ -65,7 +65,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
     Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
 
   val listTraversal: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-    Traversal.each[List, Int, Int]
+    Traversal.forEach[List, Int, Int]
 
   // =============== A1/I1 — morph preserves modify ==================
 
@@ -132,7 +132,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
   // =============== D1 — modifyA at Id ≡ modify =====================
 
   checkAll(
-    "Traversal.each modifyA[Id] ≡ modify",
+    "Traversal.forEach modifyA[Id] ≡ modify",
     new ModifyAIdTests[List[Int], Int, Forget[List]]:
 
       val laws = new ModifyAIdLaws[List[Int], Int, Forget[List]]:
@@ -143,7 +143,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
   // =============== D3 — modifyA at Const ≡ foldMap =================
 
   checkAll(
-    "Traversal.each modifyA[Const[Int,*]].getConst ≡ foldMap",
+    "Traversal.forEach modifyA[Const[Int,*]].getConst ≡ foldMap",
     new ModifyAConstTests[List[Int], Int, Forget[List]]:
 
       val laws = new ModifyAConstLaws[List[Int], Int, Forget[List]]:
@@ -154,7 +154,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
   // =============== E1 — foldMap Monoid homomorphism ================
 
   checkAll(
-    "Traversal.each.foldMap is a Monoid[Int] homomorphism",
+    "Traversal.forEach.foldMap is a Monoid[Int] homomorphism",
     new FoldMapHomomorphismTests[List[Int], Int, Forget[List]]:
 
       val laws =
@@ -239,7 +239,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
   // =============== G1 + G2 — Optic.all on Forget[T] ================
 
   checkAll(
-    "Traversal.each[List, Int]: all has length 1 and head == input",
+    "Traversal.forEach[List, Int]: all has length 1 and head == input",
     new TraverseAllTests[List, Int]:
 
       val laws = new TraverseAllLaws[List, Int]:
@@ -250,7 +250,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
   // =============== G3 — all-then-map ≡ modify on Forget[T] =========
 
   checkAll(
-    "Traversal.each[List, Int]: T.map(all(s).head)(f) ≡ modify(f)(s)",
+    "Traversal.forEach[List, Int]: T.map(all(s).head)(f) ≡ modify(f)(s)",
     new ForgetAllModifyTests[List, Int]:
 
       val laws = new ForgetAllModifyLaws[List, Int]:

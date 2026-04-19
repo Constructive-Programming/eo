@@ -72,7 +72,7 @@ Specifically — the numbers are only meaningful when:
 
 | Bench class             | Subject | Monocle equivalent |
 |-------------------------|---------|--------------------|
-| `PowerSeriesBench`      | `Traversal.powerEach[ArraySeq, A]` chain | None. PowerSeries is the carrier behind EO's cross-optic composition. |
+| `PowerSeriesBench`      | `Traversal.each[ArraySeq, A]` (PowerSeries-backed) chain | None. PowerSeries is the carrier behind EO's cross-optic composition. |
 | `JsonPrismBench`        | `JsonPrism.modify` at depths 1/2/3 | None. Cursor-backed JSON navigation is cats-eo specific. |
 | `JsonPrismWideBench`    | Same on wide (8/14/6 field) records   | None |
 | `JsonTraversalBench`    | `codecPrism[Basket].items.each.name.modify` over N elements | None |
@@ -106,6 +106,6 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-`PowerSeriesBench` now shows `Traversal.powerEach` scaling **linearly** with traversed-collection size after the Vect → Vector storage swap — roughly ~30× off the naive `copy`/`map` baseline at every size. The remaining overhead is the Composer chain's per-element `.modify` dispatch, not the data structure.
+`PowerSeriesBench` shows `Traversal.each` (PowerSeries-backed) scaling **linearly** with traversed-collection size — roughly ~15–20× off the naive `copy`/`map` baseline at every size after the PSVec slice-view refactor. The remaining overhead is the Composer chain's per-element `.modify` dispatch plus the singleton PSVec wrap per Lens-morph hop, not the storage structure.
 
-Use `Traversal.each[F, A, B]` (the `Forget[F]` carrier) for single-pass element-wise modifies where no downstream optic composition is needed — it's the linear-and-tight fast path. Reach for `Traversal.powerEach` when the chain needs to continue past the traversal.
+Use `Traversal.forEach[F, A, B]` (carrier `Forget[F]`) for single-pass element-wise modifies where no downstream optic composition is needed — it's the linear-and-tight fast path. Reach for `Traversal.each` / `pEach` (carrier `PowerSeries`) when the chain needs to continue past the traversal.

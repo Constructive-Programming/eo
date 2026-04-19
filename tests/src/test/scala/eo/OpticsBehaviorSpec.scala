@@ -94,13 +94,13 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     posIntPrism.reverseGet(7) === 7
   }
 
-  // ----- foldMap exercised on Traversal.each -----------------------
+  // ----- foldMap exercised on Traversal.forEach --------------------
   //
   // Hits ForgetfulFold.foldFFold[List] and Optic.foldMap.
 
-  "Traversal.each.foldMap totals the list under Monoid[Int]" >> {
+  "Traversal.forEach.foldMap totals the list under Monoid[Int]" >> {
     val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-      Traversal.each[List, Int, Int]
+      Traversal.forEach[List, Int, Int]
     forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
   }
 
@@ -109,9 +109,9 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // Hits ForgetfulTraverse.traverse2[List] for Forget[List] and
   // demonstrates that failure short-circuits the whole traversal.
 
-  "Traversal.each.modifyA short-circuits on None" >> {
+  "Traversal.forEach.modifyA short-circuits on None" >> {
     val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-      Traversal.each[List, Int, Int]
+      Traversal.forEach[List, Int, Int]
     val positivesDoubled: Int => Option[Int] =
       a => if a > 0 then Some(a * 2) else None
 

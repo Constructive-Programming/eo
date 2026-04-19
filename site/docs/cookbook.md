@@ -71,24 +71,25 @@ appTimeoutL.modify(_ * 2)(AppRoot(Setting("a", None)))
 
 ## Modify every element of a list
 
-`Traversal.each` is the linear-time fast path:
+`Traversal.forEach` is the map-only fast path — use it when the
+chain terminates at the traversal:
 
 ```scala mdoc:silent
 import cats.instances.list.given
 
-val eachInt = Traversal.each[List, Int, Int]
+val forEachInt = Traversal.forEach[List, Int, Int]
 ```
 
 ```scala mdoc
-eachInt.modify(_ + 1)(List(1, 2, 3))
-eachInt.foldMap(identity[Int])(List(1, 2, 3))     // sum
-eachInt.foldMap((_: Int) => 1)(List(1, 2, 3))     // count
+forEachInt.modify(_ + 1)(List(1, 2, 3))
+forEachInt.foldMap(identity[Int])(List(1, 2, 3))     // sum
+forEachInt.foldMap((_: Int) => 1)(List(1, 2, 3))     // count
 ```
 
 ## Modify every element *and* continue through a field
 
-Reach for `Traversal.powerEach` when the chain continues after
-the traversal (see
+Use `Traversal.each` — the composable default — when the chain
+continues past the traversal (see
 [Optics → Traversal](optics.md#traversal) for the cost
 tradeoff):
 
@@ -100,7 +101,7 @@ case class Subscriber(phones: List[Dial])
 
 val everyMobile =
   Lens[Subscriber, List[Dial]](_.phones, (o, ps) => o.copy(phones = ps))
-    .andThen(Traversal.powerEach[List, Dial])
+    .andThen(Traversal.each[List, Dial])
     .andThen(Lens[Dial, Boolean](_.isMobile, (p, m) => p.copy(isMobile = m)))
 ```
 

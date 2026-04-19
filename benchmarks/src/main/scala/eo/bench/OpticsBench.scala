@@ -160,7 +160,7 @@ class TraversalBench:
   var xs: List[Int] = uninitialized
 
   val eoEach: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-    EoTraversal.each[List, Int, Int]
+    EoTraversal.forEach[List, Int, Int]
 
   val mEach: MTraversal[List[Int], Int] =
     MTraversal.fromTraverse[List, Int]

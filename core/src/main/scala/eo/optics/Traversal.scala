@@ -9,14 +9,18 @@ import cats.syntax.semigroupk.*
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
   *
-  *   - [[each]] uses `Forget[T]` — linear time, no intermediate representation, the fast path for
-  *     "map over every element".
-  *   - [[powerEach]] / [[pPowerEach]] use `PowerSeries` — supports downstream composition with
-  *     [[Lens]] / [[Prism]] through the shared `PowerSeries` carrier, but pays a super-linear cost
-  *     relative to `each` (see `benchmarks/PowerSeriesBench`).
+  *   - [[each]] / [[pEach]] use `PowerSeries` — the default. Supports downstream composition
+  *     with [[Lens]] / [[Prism]] through the shared `PowerSeries` carrier. Pays a super-linear
+  *     cost relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the composition
+  *     story is the whole point of having a Traversal in the first place, so `each` is named
+  *     to match what Scala users reach for intuitively.
+  *   - [[forEach]] uses `Forget[T]` — a map-only fast path. Identity-shaped carrier, linear
+  *     time, no downstream composition. Use when the chain terminates at the traversal.
   *
-  * Use `each` by default; reach for `powerEach` when you need to extend the chain past the
-  * traversal (`traversal.andThen(leafLens)`).
+  * Scala naming convention: `each` is the "power" tool that composes; `forEach` is the
+  * "just map" escape hatch. If you ever find yourself writing `Traversal.each.something`
+  * and wishing it were faster, check whether the chain actually continues past the
+  * traversal — if not, [[forEach]] is the cheaper choice.
   *
   * The [[two]] / [[three]] / [[four]] fixed-arity variants expose a Traversal over a fixed number
   * of per-element getters — useful for "every element of this record that happens to share a type"
@@ -24,7 +28,7 @@ import cats.syntax.semigroupk.*
   */
 object Traversal:
 
-  /** `each` on a `Traverse` container, using `Forget[T]` as the carrier.
+  /** Map-only traversal over a `Traverse` container, using `Forget[T]` as the carrier.
     *
     * Linear-time, no downstream composition beyond the focus. The law / behaviour / benchmark
     * suites depend on this exact three-type-param signature — do not refactor without updating all
@@ -36,35 +40,33 @@ object Traversal:
     *   {{{
     * import cats.instances.list.given
     * import eo.optics.Optic.*
-    * val listEach = Traversal.each[List, Int, Int]
-    * listEach.modify(_ + 1)(List(1, 2, 3))   // List(2, 3, 4)
+    * val listForEach = Traversal.forEach[List, Int, Int]
+    * listForEach.modify(_ + 1)(List(1, 2, 3))   // List(2, 3, 4)
     *   }}}
     */
-  def each[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
+  def forEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
     new Optic[T[A], T[B], A, B, Forget[T]]:
       type X = Nothing
       val to: T[A] => T[A] = identity
       val from: T[B] => T[B] = identity
 
-  /** PowerSeries-carrier `each` — enables downstream optic composition by threading through the
-    * `PowerSeries` carrier's `AssociativeFunctor` instance. Require `Applicative` and `MonoidK`
-    * on `T` in addition to `Traverse` so the `from` direction can fold the flat per-index
-    * `ArraySeq[A]` back into the container via `foldMapK`.
+  /** `each` — the composable traversal, built on the `PowerSeries` carrier. Enables
+    * downstream optic composition via the `PowerSeries` `AssociativeFunctor`.
     *
-    * Reach for this when you need to `.andThen` a lens or prism after the traversal; for plain
-    * element-wise modify use [[each]].
+    * Reach for this when the chain continues past the traversal (`.andThen(lens)` etc.);
+    * if the chain terminates, prefer [[forEach]] for the map-only fast path.
     *
     * @group Constructors
     */
-  def powerEach[T[_]: Traverse: Applicative: MonoidK, A]: Optic[T[A], T[A], A, A, PowerSeries] =
-    pPowerEach[T, A, A]
+  def each[T[_]: Traverse: Applicative: MonoidK, A]: Optic[T[A], T[A], A, A, PowerSeries] =
+    pEach[T, A, A]
 
-  /** Polymorphic counterpart to [[powerEach]] — allows the focus to change type along the
+  /** Polymorphic counterpart to [[each]] — allows the focus to change type along the
     * traversal.
     *
     * @group Constructors
     */
-  def pPowerEach[T[_]: Traverse: Applicative: MonoidK, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
+  def pEach[T[_]: Traverse: Applicative: MonoidK, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
     new Optic[T[A], T[B], A, B, PowerSeries]:
       type X = (Int, Unit)
 

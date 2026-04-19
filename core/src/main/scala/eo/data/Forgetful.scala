@@ -20,7 +20,7 @@ type Forgetful[X, A] = A
 
 /** Adapt a `F[_]` container to the two-parameter carrier shape by wrapping it under `Forgetful`.
   * Equivalent to the classic Haskell `newtype Forget r a b = Forget (a -> r)` construction but
-  * applied to a functor `F`. Used by `Fold` and `Traversal.each` to walk every element of an
+  * applied to a functor `F`. Used by `Fold` and `Traversal.forEach` to walk every element of an
   * `F[A]`.
   */
 type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
@@ -85,7 +85,7 @@ object Forgetful:
       fa => _(fa)
 
   /** `ForgetfulTraverse[Forget[F], Applicative]` — lifts the underlying `Traverse[F]` into the
-    * two-parameter carrier shape. This is what makes `Fold` and `Traversal.each` work.
+    * two-parameter carrier shape. This is what makes `Fold` and `Traversal.forEach` work.
     *
     * @group Instances
     */

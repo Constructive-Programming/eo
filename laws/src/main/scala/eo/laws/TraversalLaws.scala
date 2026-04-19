@@ -8,7 +8,7 @@ import cats.Functor
 
 /** Law equations for a `Traversal[T[_], A]` — `Optic[T[A], T[A], A, A, Forget[T]]`.
   *
-  * For `Traversal.each` the carrier is `Forget[T]`, which carries the right `ForgetfulFunctor` /
+  * For `Traversal.forEach` the carrier is `Forget[T]`, which carries the right `ForgetfulFunctor` /
   * `ForgetfulFold` instances to drive the modify-side laws.
   *
   * We deliberately do NOT port `getAll` / `headOption` here — EO's `Optic.all` returns the whole

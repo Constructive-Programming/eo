@@ -12,7 +12,7 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import scala.collection.immutable.ArraySeq
 
-/** Behaviour-level spec for `PowerSeries`, `Traversal.powerEach`, and the
+/** Behaviour-level spec for `PowerSeries`, `Traversal.each`, and the
   * `Composer[Tuple2 → PowerSeries]` bridge. Covers scenarios that the discipline suite
   * (`PowerSeriesLaws` in `eo.laws.data`) does not — specifically, end-to-end `modify` / `replace`
   * semantics on optics that flow through the PowerSeries carrier.
@@ -49,7 +49,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   private val personPhones =
     Lens[Person, ArraySeq[Phone]](_.phones, (s, b) => s.copy(phones = b))
-      .andThen(Traversal.powerEach[ArraySeq, Phone])
+      .andThen(Traversal.each[ArraySeq, Phone])
 
   private val phoneIsMobile =
     Lens[Phone, Boolean](_.isMobile, (s, b) => s.copy(isMobile = b))
@@ -59,7 +59,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   // ---- `powerEach` behaviour ------------------------------------
 
-  "Traversal.powerEach" should {
+  "Traversal.each" should {
     "leave structure unchanged under modify(identity)" >> {
       forAll((p: Person) => personPhones.modify(identity[Phone])(p) == p)
     }
@@ -110,7 +110,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   // ---- Empty and single-element ArraySeq edge cases -------------
 
-  "Traversal.powerEach on an empty ArraySeq" should {
+  "Traversal.each on an empty ArraySeq" should {
     "leave the container unchanged under modify(identity)" >> {
       val empty = Person(0, "noone", ArraySeq.empty[Phone])
       personPhones.modify(identity[Phone])(empty) == empty
@@ -122,7 +122,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
     }
   }
 
-  "Traversal.powerEach on a single-element ArraySeq" should {
+  "Traversal.each on a single-element ArraySeq" should {
     "apply the modify exactly once" >> {
       val one = Person(1, "solo", ArraySeq(Phone(false, "555-0001")))
       val after = personPhones
@@ -147,7 +147,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
   private val threeAndThenChain =
     Lens[Usr2, List[Ord2]](_.orders, (u, os) => u.copy(orders = os))
-      .andThen(Traversal.powerEach[List, Ord2])
+      .andThen(Traversal.each[List, Ord2])
       .andThen(Lens[Ord2, Addr2](_.ship, (o, a) => o.copy(ship = a)))
       .andThen(Lens[Addr2, String](_.zip, (a, z) => a.copy(zip = z)))
 

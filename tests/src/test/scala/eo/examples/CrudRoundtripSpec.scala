@@ -231,7 +231,7 @@ object CrudRoundtripSpec:
 
   /** Every `orders → shippingAddress → zipCode` in one composed optic.
     *
-    * This is the flagship cats-eo move: compose the outer Lens with a `Traversal.powerEach`
+    * This is the flagship cats-eo move: compose the outer Lens with a `Traversal.each`
     * and then with the inner nested Lens — no explicit `.morph` anywhere. The cross-carrier
     * `andThen` extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on
     * each hop. A single `modifyA[Result]` then threads an `Either`-effectful validator through
@@ -239,7 +239,7 @@ object CrudRoundtripSpec:
     */
   val everyZip: Optic[User, User, String, String, PowerSeries] =
     lens[User](_.orders)
-      .andThen(Traversal.powerEach[List, Order])
+      .andThen(Traversal.each[List, Order])
       .andThen(orderShippingZip)
 
   // =====================================================================

@@ -4,7 +4,7 @@ package data
 import scala.collection.immutable.ArraySeq
 
 /** Minimal grow-on-demand `Array[AnyRef]` builder, used by [[PowerSeries]] and
-  * [[optics.Traversal.pPowerEach]] to accumulate focus elements without paying
+  * [[optics.Traversal.pEach]] to accumulate focus elements without paying
   * `ArrayBuffer.toArray`'s final copy. Doubles capacity on overflow; publishes via
   * [[freezeAs]] as an `ArraySeq` that wraps the builder's own array (one truncation copy only
   * when the buffer didn't fill exactly).
