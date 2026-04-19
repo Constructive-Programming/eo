@@ -72,10 +72,10 @@ object Traversal:
       val to: T[A] => PowerSeries[X, A] = ta =>
         val buf = new ObjArrBuilder()
         Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-        PowerSeries(() -> buf.freezeAs[A])
+        PowerSeries((), buf.freezeAs[A])
 
       val from: PowerSeries[X, B] => T[B] = ps =>
-        ps.ps._2.foldMapK(Applicative[T].pure[B])
+        ps.vs.foldMapK(Applicative[T].pure[B])
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.

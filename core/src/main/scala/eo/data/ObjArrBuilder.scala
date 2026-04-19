@@ -44,10 +44,15 @@ private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
     * array exactly; one arraycopy to truncate when it didn't.
     */
   def freezeAs[A]: ArraySeq[A] =
-    val finalArr =
-      if len == arr.length then arr
-      else
-        val trimmed = new Array[AnyRef](len)
-        System.arraycopy(arr, 0, trimmed, 0, len)
-        trimmed
-    ArraySeq.unsafeWrapArray(finalArr).asInstanceOf[ArraySeq[A]]
+    ArraySeq.unsafeWrapArray(freezeArr).asInstanceOf[ArraySeq[A]]
+
+  /** Like [[freezeAs]] but returns the raw `Array[AnyRef]`. Used when the caller wants to keep
+    * the array as primitive reference storage — e.g. `PowerSeries.AssocSndZ` which stores
+    * per-element leftovers as parallel arrays rather than an `ArraySeq`.
+    */
+  def freezeArr: Array[AnyRef] =
+    if len == arr.length then arr
+    else
+      val trimmed = new Array[AnyRef](len)
+      System.arraycopy(arr, 0, trimmed, 0, len)
+      trimmed

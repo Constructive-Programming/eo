@@ -90,7 +90,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
       val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
       val morphd = lens.morph[PowerSeries]
       forAll((p: (Int, String)) =>
-        val vect = morphd.to(p).ps._2
+        val vect = morphd.to(p).vs
         vect.size == 1
       )
     }
