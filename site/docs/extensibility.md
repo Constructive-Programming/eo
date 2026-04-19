@@ -234,10 +234,9 @@ lands at ~2× across depths 1/2/3 and ~1× at the "wide"
 (28-field) shape where the naive decoder already touches
 every field;
 [`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonTraversalBench.scala)
-holds ~2× across array sizes 8 / 64 / 512. See
-[Benchmarks → JsonPrism](benchmarks.md#jsonprism--cursor-backed-json-edit)
-and
-[Benchmarks → JsonTraversal](benchmarks.md#jsontraversal--itemseachname-edits).
+holds ~2× across array sizes 8 / 64 / 512. See the
+[Benchmarks](benchmarks.md) page's JsonPrism and JsonTraversal
+sections for the full tables.
 
 ## When to reach for this pattern
 
