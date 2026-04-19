@@ -3,8 +3,7 @@ package optics
 
 import data.{FixedTraversal, Forget, ObjArrBuilder, PowerSeries}
 
-import cats.{Applicative, MonoidK, Traverse}
-import cats.syntax.semigroupk.*
+import cats.Traverse
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
@@ -58,34 +57,36 @@ object Traversal:
     *
     * @group Constructors
     */
-  def each[T[_]: Traverse: Applicative: MonoidK, A]: Optic[T[A], T[A], A, A, PowerSeries] =
+  def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, PowerSeries] =
     pEach[T, A, A]
 
   /** Polymorphic counterpart to [[each]] — allows the focus to change type along the
     * traversal.
     *
+    * Reassembly uses `Traverse.mapAccumulate` to walk the original container shape exactly
+    * once and plug in the modified focus values at each position — an O(N) reconstruct that
+    * replaces the previous `foldMapK(Applicative[T].pure)` loop's O(N²) `MonoidK.combineK`
+    * concat. The original `T[A]` is stashed in the existential leftover `X = (Int, T[A])`
+    * so the `from` direction has it available; Traverse laws guarantee `to`'s `foldLeft`
+    * and `from`'s `mapAccumulate` walk positions in the same order.
+    *
     * @group Constructors
     */
-  def pEach[T[_]: Traverse: Applicative: MonoidK, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
+  def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
     new Optic[T[A], T[B], A, B, PowerSeries]:
-      type X = (Int, Unit)
+      type X = (Int, T[A])
 
       val to: T[A] => PowerSeries[X, A] = ta =>
         val buf = new ObjArrBuilder()
         Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-        PowerSeries((), buf.freezeAsPSVec[A])
+        PowerSeries(ta, buf.freezeAsPSVec[A])
 
       val from: PowerSeries[X, B] => T[B] = ps =>
-        val vec   = ps.vs
-        val n     = vec.length
-        val pure  = Applicative[T].pure[B](_)
-        val empty = MonoidK[T].empty[B]
-        var acc   = empty
-        var i     = 0
-        while i < n do
-          acc = acc <+> pure(vec(i))
-          i += 1
-        acc
+        val vec = ps.vs
+        val (_, rebuilt) = Traverse[T].mapAccumulate(0, ps.xo) { (i, _) =>
+          (i + 1, vec(i))
+        }
+        rebuilt
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.
