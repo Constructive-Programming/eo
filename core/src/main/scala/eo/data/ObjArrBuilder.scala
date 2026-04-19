@@ -1,17 +1,15 @@
 package eo
 package data
 
-import scala.collection.immutable.ArraySeq
-
 /** Minimal grow-on-demand `Array[AnyRef]` builder, used by [[PowerSeries]] and
   * [[optics.Traversal.pEach]] to accumulate focus elements without paying
-  * `ArrayBuffer.toArray`'s final copy. Doubles capacity on overflow; publishes via
-  * [[freezeAs]] as an `ArraySeq` that wraps the builder's own array (one truncation copy only
-  * when the buffer didn't fill exactly).
+  * `ArrayBuffer.toArray`'s final copy. Doubles capacity on overflow; the `freeze*` methods
+  * each publish the accumulated array in a different shape (raw `Array[AnyRef]`, or a
+  * [[PSVec]] view).
   *
   * No `ClassTag` required: `Array[AnyRef]` is legal storage for every generic `B` on the JVM
-  * (generic parameters erase to `Object`), and the final cast inside [[freezeAs]] is always
-  * safe for reference-typed `B`.
+  * (generic parameters erase to `Object`), and the final cast inside [[freezeAsPSVec]] is
+  * always safe for reference-typed `B`.
   */
 private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
   private var arr: Array[AnyRef] = new Array[AnyRef](math.max(initialCapacity, 1))
@@ -24,20 +22,11 @@ private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
     arr(len) = x
     len += 1
 
-  def appendAllFromArraySeq[A](src: ArraySeq[A]): Unit =
-    val n = src.length
-    if len + n > arr.length then grow(len + n)
-    var i = 0
-    while i < n do
-      arr(len + i) = src(i).asInstanceOf[AnyRef]
-      i += 1
-    len += n
-
   def appendAllFromPSVec[A](src: PSVec[A]): Unit =
     src match
-      case PSVec.Empty      => ()
+      case PSVec.Empty        => ()
       case s: PSVec.Single[?] => append(s.b.asInstanceOf[AnyRef])
-      case s: PSVec.Slice[?] =>
+      case s: PSVec.Slice[?]  =>
         val n = s.length
         if len + n > arr.length then grow(len + n)
         System.arraycopy(s.arr, s.offset, arr, len, n)
@@ -50,20 +39,15 @@ private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
     System.arraycopy(arr, 0, newArr, 0, len)
     arr = newArr
 
-  /** Return the accumulated array exactly-sized. No-copy when the builder filled its internal
-    * array exactly; one arraycopy to truncate when it didn't.
-    */
-  def freezeAs[A]: ArraySeq[A] =
-    ArraySeq.unsafeWrapArray(freezeArr).asInstanceOf[ArraySeq[A]]
-
-  /** Return the accumulated storage as a [[PSVec]]. Preferred over [[freezeAs]] for PowerSeries
-    * focus storage since `PSVec` supports zero-copy slicing.
+  /** Return the accumulated storage as a [[PSVec]]. The PowerSeries focus-storage shape — uses
+    * `PSVec.unsafeWrap` so 0/1-element results are normalised into the `Empty` / `Single`
+    * variant without a backing array.
     */
   def freezeAsPSVec[A]: PSVec[A] = PSVec.unsafeWrap[A](freezeArr)
 
-  /** Like [[freezeAs]] but returns the raw `Array[AnyRef]`. Used when the caller wants to keep
-    * the array as primitive reference storage — e.g. `PowerSeries.AssocSndZ` which stores
-    * per-element leftovers as parallel arrays rather than an `ArraySeq`.
+  /** Return the raw `Array[AnyRef]` exactly-sized. No copy when the builder filled its internal
+    * array exactly; one arraycopy to truncate when it didn't. Used by
+    * `PowerSeries.AssocSndZ`, which stores per-element leftovers as parallel arrays directly.
     */
   def freezeArr: Array[AnyRef] =
     if len == arr.length then arr

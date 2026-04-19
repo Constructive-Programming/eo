@@ -4,7 +4,6 @@ package data
 import cats.Applicative
 import cats.syntax.traverse._
 import cats.syntax.applicative._
-import cats.syntax.bifunctor._
 import cats.syntax.either._
 import cats.syntax.functor._
 

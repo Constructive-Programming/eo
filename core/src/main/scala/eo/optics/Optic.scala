@@ -91,14 +91,6 @@ trait Optic[S, T, A, B, F[_, _]]:
       val to: S => F[X, C]   = s  => af.composeTo(s, outerRef, innerRef)
       val from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
-  /** Re-express this optic over a different carrier `G`. Package-private — users compose
-    * cross-carrier via the cross-carrier [[andThen]] overloads above, which invoke this
-    * internally. Still available to law / behaviour specs inside `eo.*` for direct testing
-    * of the `Composer[F, G]` bridges.
-    */
-  private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
-    cf.to(self)
-
 object Optic:
 
   /** Profunctor over `(S, T)` — `dimap` on the outer parameter pair, letting callers pre-compose
@@ -158,7 +150,7 @@ object Optic:
     *
     * @example
     *   {{{
-    * // `lens.andThen(powerEach).andThen(lens)` — no explicit `.morph` anywhere.
+    * // `lens.andThen(each).andThen(lens)` — no explicit `.morph` anywhere.
     * lens[Person](_.phones)
     *   .andThen(Traversal.each[ArraySeq, Phone])
     *   .andThen(lens[Phone](_.isMobile))
@@ -174,6 +166,14 @@ object Optic:
       morphedSelf.andThen(morphedO)(using
         scala.compiletime.summonInline[AssociativeFunctor[m.Out, morphedSelf.X, morphedO.X]]
       )
+
+    /** Re-express this optic over a different carrier `G`. Package-private — users compose
+      * cross-carrier via the [[andThen]] overload above, which invokes this internally via
+      * the `Composer.to` it summons. Still available to law / behaviour specs inside `eo.*`
+      * for direct testing of the `Composer[F, G]` bridges.
+      */
+    private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
+      cf.to(self)
 
   // ---- Generic Optic extensions -------------------------------------
   //

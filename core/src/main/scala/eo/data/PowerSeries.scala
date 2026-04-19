@@ -2,8 +2,6 @@ package eo
 package data
 
 import cats.Applicative
-import cats.syntax.applicative.*
-import cats.syntax.functor.*
 
 import optics.Optic
 
@@ -50,12 +48,12 @@ object PowerSeries:
         f =>
           val src = psa.vs
           val n   = src.length
-          if n == 0 then PowerSeries(psa.xo, PSVec.empty[B]).pure[G]
+          val G   = Applicative[G]
+          if n == 0 then G.pure(PowerSeries(psa.xo, PSVec.empty[B]))
           else
             // Build a G[Array[AnyRef]] incrementally with applicative combination
             // — equivalent to sequence, without materialising an intermediate
             // List or ArraySeq.
-            val G = Applicative[G]
             var acc: G[Array[AnyRef]] = G.pure(new Array[AnyRef](n))
             var i                     = 0
             while i < n do
