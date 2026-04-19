@@ -46,6 +46,9 @@ types alike.
   `prism[S, A]` macros, backed by Hearth.
 - [Circe integration](circe.md) — `JsonPrism` / `JsonTraversal`,
   cursor-backed navigation into circe `Json` with no full decode.
+- [Extensibility](extensibility.md) — how to ship a custom optic
+  tuned for your domain's hot path without losing the rest of the
+  cats-eo universe.
 - [Cookbook](cookbook.md) — common patterns: option fields,
   composed Lens/Optional, multi-focus modify, JSON path edits.
 - [Migrating from Monocle](migration-from-monocle.md) — a
