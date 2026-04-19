@@ -1,51 +1,34 @@
 package eo
 package data
 
-/** Lightweight array-backed focus vector for [[PowerSeries]]. Stores an `Array[AnyRef]` plus an
-  * `(offset, length)` view, so [[slice]] is a pointer update — no element copy, no new array.
+/** Lightweight array-backed focus vector for [[PowerSeries]]. Specialised into three shape
+  * variants so empty and singleton focus vectors don't pay a backing-array allocation:
   *
-  * This replaces the former `ArraySeq[B]` focus storage purely so that
-  * `PowerSeries.assoc.composeFrom` can hand each inner reassembly a zero-copy view of the
-  * underlying flat focus array. ArraySeq's `slice` would otherwise allocate a fresh backing
-  * array per inner call — `O(N)` extra allocation in a 3-hop chain over N elements, which is
-  * the bulk of what [[PowerSeries]] pays above the naive `copy`/`map` baseline.
+  *   - [[PSVec.Empty]] — zero elements, a shared singleton. Miss-branch Prism / Affine
+  *     morphs into PowerSeries produce this with no heap allocation at all.
+  *   - [[PSVec.Single]] — exactly one element, stored inline in the variant. Lens / Prism /
+  *     Affine morphs into PowerSeries produce these for the hit branch; ~16 B per instance vs
+  *     the ~40 B a backing `Array[AnyRef](1)` + slice-view wrapper would cost.
+  *   - [[PSVec.Slice]] — arbitrary `(arr, offset, length)` view. [[slice]] stays zero-copy —
+  *     a pointer update on the same backing array — which is what `PowerSeries.assoc` relies
+  *     on to feed per-element reassembly without per-element array allocation.
   *
-  * Elements are stored type-erased as `AnyRef` and narrowed on read (the same pattern
-  * [[ObjArrBuilder]] uses); callers must uphold the `B <: AnyRef`-shaped contract the optic
-  * machinery already maintains.
-  *
-  * Equality is value-based: two vectors of the same length whose elements pairwise `==` compare
-  * equal, regardless of underlying offsets. Needed so the `PowerSeries` case-class `equals`
-  * discipline (law-suite sanity checks) keeps working after the carrier reshape.
-  *
-  * @param arr
-  *   backing storage — shared across all slice derivatives of the same vector
-  * @param offset
-  *   first element read is at `arr(offset)`
-  * @param length
-  *   number of elements visible through this view
+  * Equality is value-based across variants: two vectors of the same length whose elements
+  * pairwise `==` compare equal regardless of underlying shape.
   */
-final class PSVec[B] private[data] (
-    private[data] val arr: Array[AnyRef],
-    val offset: Int,
-    val length: Int,
-):
-
-  /** Read the first element. Unchecked: UB if [[length]] == 0. */
-  inline def head: B = arr(offset).asInstanceOf[B]
+sealed trait PSVec[+B]:
+  def length: Int
 
   /** Indexed access. Unchecked: UB if `i < 0 || i >= length`. */
-  inline def apply(i: Int): B = arr(offset + i).asInstanceOf[B]
+  def apply(i: Int): B
 
-  def isEmpty: Boolean = length == 0
+  /** Read the first element. Unchecked: UB if [[length]] == 0. */
+  def head: B
 
-  /** Cheap slice: returns a view over the same backing array with an updated `(offset, length)`.
-    * Out-of-range bounds are clamped to `[0, length]`, matching `ArraySeq.slice`'s behaviour.
-    */
-  def slice(from: Int, until: Int): PSVec[B] =
-    val lo = math.max(0, from)
-    val hi = math.min(length, math.max(lo, until))
-    new PSVec(arr, offset + lo, hi - lo)
+  /** Zero-copy view `[from, until)`, clamped to this vector's bounds. */
+  def slice(from: Int, until: Int): PSVec[B]
+
+  inline def isEmpty: Boolean = length == 0
 
   override def equals(that: Any): Boolean = that match
     case other: PSVec[?] =>
@@ -54,7 +37,7 @@ final class PSVec[B] private[data] (
         var i  = 0
         var eq = true
         while eq && i < length do
-          eq = arr(offset + i) == other.arr(other.offset + i)
+          eq = apply(i) == other.apply(i)
           i += 1
         eq
     case _ => false
@@ -63,7 +46,7 @@ final class PSVec[B] private[data] (
     var h = 1
     var i = 0
     while i < length do
-      val e = arr(offset + i)
+      val e = apply(i)
       h = h * 31 + (if e == null then 0 else e.hashCode)
       i += 1
     h
@@ -73,24 +56,67 @@ final class PSVec[B] private[data] (
     var i = 0
     while i < length do
       if i > 0 then sb.append(", ")
-      sb.append(arr(offset + i))
+      sb.append(apply(i))
       i += 1
     sb.append(")").toString
 
 object PSVec:
 
-  private val emptyArr: Array[AnyRef] = new Array[AnyRef](0)
-
-  /** Wrap an `Array[AnyRef]` verbatim as a PSVec. Shares ownership with the caller. */
-  def unsafeWrap[B](arr: Array[AnyRef]): PSVec[B] = new PSVec(arr, 0, arr.length)
-
-  /** Zero-length shared view. */
-  def empty[B]: PSVec[B] = new PSVec[B](emptyArr, 0, 0)
-
-  /** Single-element view, freshly allocated. Useful for the `Lens`/`Prism`/`Optional` → PowerSeries
-    * composers, which each focus exactly one element.
+  /** Zero-element vector — shared singleton. Miss branches of Prism / Affine morphs into
+    * PowerSeries allocate zero focus storage by returning this.
     */
-  def singleton[B](b: B): PSVec[B] =
-    val arr = new Array[AnyRef](1)
-    arr(0)  = b.asInstanceOf[AnyRef]
-    new PSVec(arr, 0, 1)
+  case object Empty extends PSVec[Nothing]:
+    def length: Int                                   = 0
+    def apply(i: Int): Nothing                        =
+      throw new IndexOutOfBoundsException(s"PSVec.Empty.apply($i)")
+    def head: Nothing                                 =
+      throw new NoSuchElementException("PSVec.Empty.head")
+    def slice(from: Int, until: Int): PSVec[Nothing]  = Empty
+
+  /** Single-element vector — stores the element inline, no backing array. Lens / Prism hit
+    * branches morphed into PowerSeries allocate one of these per element.
+    */
+  final class Single[+B](val b: B) extends PSVec[B]:
+    def length: Int        = 1
+    def apply(i: Int): B   =
+      if i == 0 then b
+      else throw new IndexOutOfBoundsException(s"PSVec.Single.apply($i)")
+    def head: B            = b
+    def slice(from: Int, until: Int): PSVec[B] =
+      val lo = math.max(0, from)
+      val hi = math.min(1, math.max(lo, until))
+      if lo == 0 && hi == 1 then this else Empty
+
+  /** Array-backed view with offset + length. [[slice]] is a pointer update over the shared
+    * backing array — the zero-copy reassembly path that `PowerSeries.assoc` depends on.
+    */
+  final class Slice[+B] private[data] (
+      private[data] val arr:    Array[AnyRef],
+      private[data] val offset: Int,
+      val length:               Int,
+  ) extends PSVec[B]:
+    def apply(i: Int): B = arr(offset + i).asInstanceOf[B]
+    def head: B          = arr(offset).asInstanceOf[B]
+    def slice(from: Int, until: Int): PSVec[B] =
+      val lo = math.max(0, from)
+      val hi = math.min(length, math.max(lo, until))
+      val n  = hi - lo
+      if n == 0 then Empty
+      else if n == 1 then new Single[B](arr(offset + lo).asInstanceOf[B])
+      else new Slice[B](arr, offset + lo, n)
+
+  /** Zero-length shared vector. */
+  def empty[B]: PSVec[B] = Empty
+
+  /** Single-element vector, stored inline (no backing array). */
+  def singleton[B](b: B): PSVec[B] = new Single(b)
+
+  /** Wrap an `Array[AnyRef]` verbatim as a PSVec. Shares ownership with the caller. Returns
+    * the most specialised variant for the array's length so callers need not special-case
+    * empty / singleton themselves.
+    */
+  def unsafeWrap[B](arr: Array[AnyRef]): PSVec[B] =
+    arr.length match
+      case 0 => Empty
+      case 1 => new Single[B](arr(0).asInstanceOf[B])
+      case _ => new Slice[B](arr, 0, arr.length)

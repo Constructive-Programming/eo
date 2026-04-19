@@ -34,10 +34,14 @@ private[eo] final class ObjArrBuilder(initialCapacity: Int = 16):
     len += n
 
   def appendAllFromPSVec[A](src: PSVec[A]): Unit =
-    val n = src.length
-    if len + n > arr.length then grow(len + n)
-    System.arraycopy(src.arr, src.offset, arr, len, n)
-    len += n
+    src match
+      case PSVec.Empty      => ()
+      case s: PSVec.Single[?] => append(s.b.asInstanceOf[AnyRef])
+      case s: PSVec.Slice[?] =>
+        val n = s.length
+        if len + n > arr.length then grow(len + n)
+        System.arraycopy(s.arr, s.offset, arr, len, n)
+        len += n
 
   private def grow(minCap: Int): Unit =
     var newCap = arr.length * 2
