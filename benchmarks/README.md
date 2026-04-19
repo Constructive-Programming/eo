@@ -106,6 +106,6 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-`PowerSeriesBench` shows `Traversal.each` (PowerSeries-backed) scaling **linearly** with traversed-collection size — roughly ~15–20× off the naive `copy`/`map` baseline at every size after the PSVec slice-view refactor. The remaining overhead is the Composer chain's per-element `.modify` dispatch plus the singleton PSVec wrap per Lens-morph hop, not the storage structure.
+`PowerSeriesBench` shows `Traversal.each` (PowerSeries-backed) scaling **linearly** with traversed-collection size — ~7–10× off the naive `copy`/`map` baseline, and the ratio *tightens* with size (10× at N=4, 7× at N=256) as the fixed per-op setup amortises across more elements. The remaining overhead is the Composer chain's per-element `.modify` dispatch plus the singleton PSVec wrap per Lens-morph hop, not the storage structure.
 
 Use `Traversal.forEach[F, A, B]` (carrier `Forget[F]`) for single-pass element-wise modifies where no downstream optic composition is needed — it's the linear-and-tight fast path. Reach for `Traversal.each` / `pEach` (carrier `PowerSeries`) when the chain needs to continue past the traversal.

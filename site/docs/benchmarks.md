@@ -195,18 +195,23 @@ the `PowerSeries`-backed composable traversal.
 
 | Size |  eo (composed chain) | naive `copy` / `map` | ratio |
 |------|---------------------:|---------------------:|------:|
-| 4    |              201 ns  |               13 ns  |  15×  |
-| 32   |            1 508 ns  |               80 ns  |  19×  |
-| 256  |           14 008 ns  |              728 ns  |  19×  |
+| 4    |              131 ns  |               13 ns  |  10×  |
+| 32   |              805 ns  |               80 ns  |  10×  |
+| 256  |            4 996 ns  |              721 ns  |   7×  |
 
-The focus storage is a `PSVec[B]` view (an `Array[AnyRef]` plus
-a `(offset, length)` window), so the `assoc`'s per-element
+Focus storage is a `PSVec[B]` view (an `Array[AnyRef]` plus
+an `(offset, length)` window) — so the `assoc`'s per-element
 reassembly slice is a pointer update rather than an arraycopy.
 Per-element leftovers are held in parallel `Array[Int]` and
-`Array[AnyRef]` buffers inside `AssocSndZ` — no intermediate
-`(Int, Snd[Xi])` tuple boxing. The result is linear scaling at
-a ~15–20× overhead over the naive `copy`/`map` baseline, down
-from ~25–30× before the `PowerSeries` reshape.
+`Array[AnyRef]` buffers inside `AssocSndZ`, avoiding a
+`(Int, Snd[Xi])` boxing per element. The `Traversal.pEach.from`
+rebuild stashes the original `T[A]` in the existential leftover
+and reassembles via `Traverse.mapAccumulate` — a single O(N)
+pass through the original container shape, not the O(N²)
+`MonoidK.combineK` fold an earlier revision used. The result
+is linear scaling at ~7–10× overhead over the naive
+`copy`/`map` baseline, and the ratio *tightens* with size as
+fixed per-op setup amortises.
 
 For single-pass modify of a collection — no downstream optic
 after the traversal — `Traversal.forEach[F, A, B]` (carrier

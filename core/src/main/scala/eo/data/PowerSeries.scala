@@ -5,22 +5,14 @@ import cats.Applicative
 
 import optics.Optic
 
-/** Carrier for the `PowerSeries`-style `Traversal`: pairs an existential leftover `xo: Snd[A]` with
-  * a flat focus vector `vs: PSVec[B]`.
+/** Carrier for the `PowerSeries`-style `Traversal`: pairs an existential leftover `xo: Snd[A]`
+  * with a flat focus vector `vs: PSVec[B]`.
   *
-  * Fields are stored directly (not wrapped in a `Tuple2`) and this class is not `AnyVal` — the
-  * Optic trait's generic return slots force every `PowerSeries[A, B]` to reify anyway, so the
-  * `AnyVal` wrapper bought nothing and the inner `Tuple2` cost one heap allocation per creation.
-  * Two direct fields halves the carrier's per-creation allocation footprint.
-  *
-  * Focus storage is a [[PSVec]] — an `Array[AnyRef]` plus an `(offset, length)` view — chosen so
-  * that `assoc.composeFrom` can hand each inner reassembly a zero-copy slice of the underlying
-  * flat array. An `ArraySeq[B]` would allocate a fresh backing array per inner slice and dominate
-  * the allocation budget in deeply-composed chains.
-  *
-  * No `ClassTag[B]` is required at the API boundary. Every generic `B` inside the optic machinery
-  * erases to `Object` on the JVM; [[PSVec]] stores `Array[AnyRef]` directly and narrows the
-  * runtime type back to `B` at read time.
+  * Focus storage is a [[PSVec]] — an `Array[AnyRef]` plus an `(offset, length)` view — so that
+  * `assoc.composeFrom` can hand each inner reassembly a zero-copy slice of the underlying flat
+  * array. No `ClassTag[B]` is required at the API boundary: every generic `B` inside the optic
+  * machinery erases to `Object`, so `PSVec` stores `Array[AnyRef]` and narrows back to `B` at
+  * read time.
   *
   * See `benchmarks/src/main/scala/eo/bench/PowerSeriesBench.scala` for the runtime profile.
   */
