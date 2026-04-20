@@ -59,3 +59,43 @@ object Optional:
         a.affine match
           case Right(p) => reverseGet(p)
           case Left(t)  => t
+
+  /** Read-only construction — build an `Optic[S, Unit, A, A, Affine]` from just a partial
+    * projection `S => Option[A]`, with no write-back needed.
+    *
+    * Sets `T = Unit` so the type rules out `.modify` / `.replace` at the caller — the resulting
+    * optic only supports `.getOption` and `.foldMap`. Useful when the source shape has no natural
+    * "rebuild the focus into S" path (`headOption` on a List, predicate-gated filters like
+    * `Option.when(p(s))(s)`, etc.), and useful as an API-boundary declaration of "callers cannot
+    * write through this."
+    *
+    * The `ForgetfulFold[Affine]` and `ForgetfulTraverse[Affine, Applicative]` instances (already
+    * shipped for Optional proper) handle the read-side operations unchanged.
+    *
+    * @group Constructors
+    *
+    * @example
+    *   {{{
+    * case class Person(age: Int)
+    * val adultAge: Optic[Person, Unit, Int, Int, Affine] =
+    *   Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
+    * adultAge.getOption(Person(20))    // Some(20)
+    * adultAge.getOption(Person(15))    // None
+    *   }}}
+    */
+  def readOnly[S, A](matches: S => Option[A]): Optic[S, Unit, A, A, Affine] =
+    new Optic[S, Unit, A, A, Affine]:
+      type X = (Unit, S)
+      val to: S => Affine[X, A] = s =>
+        Affine(matches(s) match
+          case Some(a) => Right((s, a))
+          case None    => Left(()))
+      val from: Affine[X, A] => Unit = _ => ()
+
+  /** Filtering read-only Optional — keeps only inputs matching `p`, exposing them via `.getOption`
+    * / `.foldMap`. Mirror of [[Fold.select]] but over a single focus.
+    *
+    * @group Constructors
+    */
+  def selectReadOnly[A](p: A => Boolean): Optic[A, Unit, A, A, Affine] =
+    readOnly(a => Option(a).filter(p))

@@ -119,6 +119,44 @@ summons `Composer[Tuple2, Affine]` under the hood and morphs
 the Lens into the Affine carrier. No explicit `.morph` required
 on your end.
 
+### Read-only construction
+
+`Optional.readOnly(matches: S => Option[A])` builds an
+`Optic[S, Unit, A, A, Affine]` from just a partial projection —
+no write-back required. `T = Unit` statically rules out
+`.modify` / `.replace`, so the resulting optic exposes only the
+read-side operations (`.foldMap`, `.modifyA` for collecting
+effects).
+
+Use this when the source shape has no natural write-back
+(`headOption` on a List, predicate-gated filters like
+`Option.when(p(s))(s)`), or as an API-boundary declaration that
+callers cannot write through the returned optic.
+
+```scala mdoc:silent
+case class Adult(age: Int)
+val adultAge =
+  Optional.readOnly[Adult, Int](p => Option.when(p.age >= 18)(p.age))
+```
+
+```scala mdoc
+import cats.instances.int.given
+adultAge.foldMap(identity[Int])(Adult(20))
+adultAge.foldMap(identity[Int])(Adult(15))
+```
+
+`Optional.selectReadOnly(p)` is the corresponding filter — keep
+only inputs matching `p`:
+
+```scala mdoc:silent
+val evenOpt = Optional.selectReadOnly[Int](_ % 2 == 0)
+```
+
+```scala mdoc
+evenOpt.foldMap(identity[Int])(4)
+evenOpt.foldMap(identity[Int])(3)
+```
+
 ## Setter
 
 A `Setter[S, A]` can modify but not read — a write-only focus
@@ -185,45 +223,6 @@ val positive = Fold.select[Int](_ > 0)
 positive.foldMap(identity[Int])(3)
 positive.foldMap(identity[Int])(-3)
 ```
-
-## AffineFold
-
-An `AffineFold[S, A]` is the read-only counterpart to
-`Optional`: a zero-or-one-focus projection. Carrier: `Affine`
-with `T = Unit`.
-
-```scala mdoc:silent
-import eo.optics.AffineFold
-
-case class Adult(age: Int)
-val adultAge =
-  AffineFold[Adult, Int](p => Option.when(p.age >= 18)(p.age))
-```
-
-```scala mdoc
-adultAge.getOption(Adult(20))
-adultAge.getOption(Adult(15))
-adultAge.foldMap(identity[Int])(Adult(20))
-adultAge.foldMap(identity[Int])(Adult(15))
-```
-
-`AffineFold.select(p)` narrows to values matching a predicate —
-symmetric to `Fold.select` but over a single focus:
-
-```scala mdoc:silent
-val evenAF = AffineFold.select[Int](_ % 2 == 0)
-```
-
-```scala mdoc
-evenAF.getOption(4)
-evenAF.getOption(3)
-```
-
-Composition caveat matches `Fold` / `Getter`: an AffineFold
-doesn't compose with other AffineFolds via `Optic.andThen`
-because its `T = Unit` mismatches the outer `B` slot. For a
-deeper read, compose an `Optional` chain and call `.getOption`
-/ `.foldMap` on the composed optic.
 
 ## Review
 

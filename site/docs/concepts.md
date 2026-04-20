@@ -61,7 +61,7 @@ this optic have?"
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Forgetful`     | `A` — identity; no leftover                    | `Iso`, `Getter`        |
-| `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
+| `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`             |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 | `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`, `Traversal`    |
 | `PowerSeries`   | `(Snd[X], Vect[Int, A])`                       | Composable `Traversal` |

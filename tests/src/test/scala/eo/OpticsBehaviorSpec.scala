@@ -1,7 +1,6 @@
 package eo
 
 import optics.{
-  AffineFold,
   BijectionIso,
   Fold,
   Getter,
@@ -265,35 +264,33 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       Wrapper(Shape3.Sq(5))
   }
 
-  // ----- AffineFold behaviour --------------------------------------
+  // ----- Optional.readOnly behaviour --------------------------------
   //
-  // Read-only 0-or-1-focus optic backed by the Affine carrier with
-  // T = Unit. Exercises the direct .getOption fast path plus the
-  // generic .foldMap that reaches through ForgetfulFold[Affine].
+  // Read-only Optional constructed with no write-back — T = Unit so
+  // .modify / .replace are statically forbidden, only .foldMap and
+  // direct .to / PowerSeries-style access remain. Exercises the
+  // Affine carrier's ForgetfulFold path for the hit/miss branches.
 
   case class AdultPerson(age: Int)
 
-  val adultAge = AffineFold[AdultPerson, Int](p => Option.when(p.age >= 18)(p.age))
+  val adultAge: Optic[AdultPerson, Unit, Int, Int, Affine] =
+    Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
 
-  "AffineFold.getOption returns Some when matches, None otherwise" >> {
-    adultAge.getOption(AdultPerson(20)) === Some(20)
-    adultAge.getOption(AdultPerson(15)) === None
-  }
-
-  "AffineFold.foldMap folds the hit branch, returns empty on miss" >> {
+  "Optional.readOnly.foldMap folds the hit branch, returns empty on miss" >> {
     import cats.instances.int.given
     adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20
     adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0
   }
 
-  "AffineFold.select keeps values matching the predicate, drops the rest" >> {
-    val evenAF = AffineFold.select[Int](_ % 2 == 0)
-    evenAF.getOption(4) === Some(4)
-    evenAF.getOption(3) === None
-    evenAF.getOption(0) === Some(0)
+  "Optional.selectReadOnly keeps values matching the predicate" >> {
+    import cats.instances.int.given
+    val evenAF = Optional.selectReadOnly[Int](_ % 2 == 0)
+    evenAF.foldMap(identity[Int])(4) === 4
+    evenAF.foldMap(identity[Int])(3) === 0
+    evenAF.foldMap(identity[Int])(0) === 0
   }
 
-  "AffineFold.modifyA lifts a hit-branch read under Applicative[G]" >> {
+  "Optional.readOnly.modifyA lifts a hit-branch read under Applicative[G]" >> {
     import cats.instances.option.given
     val mf: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
     adultAge.modifyA[Option](mf)(AdultPerson(20)) === Some(())
