@@ -130,6 +130,16 @@ class GetReplaceLens[S, T, A, B](
       enplace = (s, d) => enplace(s, inner.enplace(get(s), d)),
     )
 
+  /** Fused `GetReplaceLens.andThen(BijectionIso)` — collapses the iso into the lens's shape,
+    * producing another `GetReplaceLens`. Skips the cross-carrier `Composer[Forgetful, Tuple2]` hop
+    * that the generic path would take.
+    */
+  def andThen[C, D](inner: BijectionIso[A, B, C, D]): GetReplaceLens[S, T, C, D] =
+    new GetReplaceLens(
+      get = s => inner.get(get(s)),
+      enplace = (s, d) => enplace(s, inner.reverseGet(d)),
+    )
+
 /** Polymorphic split-combine lens. Encodes a lens as a splitter (`S => (XA, A)`) plus a combiner
   * (`(XA, B) => T`), with the structural complement surfaced as the existential `X = XA`.
   *

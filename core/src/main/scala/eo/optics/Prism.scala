@@ -124,6 +124,39 @@ final class MendTearPrism[S, T, A, B](
       mend = d => mend(inner.mend(d)),
     )
 
+  /** Fused `MendTearPrism.andThen(BijectionIso)` — collapses the inner iso into the outer prism.
+    * Hit branch runs the iso's `get` on the focus; miss branch passes through unchanged. Skips the
+    * cross-carrier `Composer[Forgetful, Either]` hop.
+    */
+  def andThen[C, D](inner: BijectionIso[A, B, C, D]): MendTearPrism[S, T, C, D] =
+    new MendTearPrism(
+      tear = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) => Right(inner.get(a)),
+      mend = d => mend(inner.reverseGet(d)),
+    )
+
+  /** Fused `MendTearPrism.andThen(PickMendPrism)` — when both are monomorphic in the focus (`A = B`
+    * on the outer, inner's S fixed to A = inner.S). Produces a `MendTearPrism` — the more general
+    * Either-carrier shape — since the composition might not preserve `PickMendPrism`'s `T = S`
+    * invariant. Scala's overload resolution picks this path when the type algebra lines up;
+    * otherwise the generic `eitherAssocF` handles the mixed case.
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using
+      ev: A =:= B
+  ): MendTearPrism[S, T, C, D] =
+    new MendTearPrism(
+      tear = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) =>
+            inner.pick(a) match
+              case Some(c) => Right(c)
+              case None    => Left(mend(ev(a))),
+      mend = d => mend(ev(inner.mend(d))),
+    )
+
 /** Concrete Optic subclass for the `Option`-shaped Prism constructor (`Prism.optional` /
   * `Prism.pOptional`).
   *
@@ -162,3 +195,42 @@ final class PickMendPrism[S, A, B](
 
   inline def getOption(s: S): Option[A] = pick(s)
   inline def reverseGet(b: B): S = mend(b)
+
+  /** Fused `PickMendPrism.andThen(PickMendPrism)` — valid when the outer is monomorphic in its
+    * focus (`A = B`). Produces another `PickMendPrism` — keeps the Option-fast-path shape instead
+    * of materialising an intermediate Either. For polymorphic outers (A ≠ B) the generic
+    * `eitherAssocF` handles composition.
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): PickMendPrism[S, C, D] =
+    new PickMendPrism(
+      pick = s => pick(s).flatMap(inner.pick),
+      mend = d => mend(ev(inner.mend(d))),
+    )
+
+  /** Fused `PickMendPrism.andThen(MendTearPrism)` — valid when outer is mono in focus (`A = B`).
+    * Produces a `MendTearPrism` (more general Either-carrier shape). On outer miss, passes through
+    * the original S; on inner miss, uses outer.mend to reconstruct S from the B-shaped leftover.
+    */
+  def andThen[C, D](inner: MendTearPrism[A, B, C, D])(using
+      ev: A =:= B
+  ): MendTearPrism[S, S, C, D] =
+    new MendTearPrism(
+      tear = s =>
+        pick(s) match
+          case None    => Left(s)
+          case Some(a) =>
+            inner.tear(a) match
+              case Left(b)  => Left(mend(b))
+              case Right(c) => Right(c),
+      mend = d => mend(inner.mend(d)),
+    )
+
+  /** Fused `PickMendPrism.andThen(BijectionIso)` — collapses the iso into the PickMendPrism's
+    * focus-side. Polymorphic in A/B on the inner side since PickMendPrism's pick/mend slots align
+    * with the iso's get/reverseGet directions.
+    */
+  def andThen[C, D](inner: BijectionIso[A, B, C, D]): PickMendPrism[S, C, D] =
+    new PickMendPrism(
+      pick = s => pick(s).map(inner.get),
+      mend = d => mend(inner.reverseGet(d)),
+    )

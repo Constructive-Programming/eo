@@ -55,3 +55,34 @@ final class BijectionIso[S, T, A, B](
   inline def replace(b: B): S => T =
     val t = reverseGet(b)
     _ => t
+
+  /** Fused `BijectionIso.andThen(BijectionIso)` — composes `get`s and `reverseGet`s directly,
+    * skipping the generic `Forgetful.assoc` path.
+    */
+  def andThen[C, D](inner: BijectionIso[A, B, C, D]): BijectionIso[S, T, C, D] =
+    new BijectionIso(
+      get = s => inner.get(get(s)),
+      reverseGet = d => reverseGet(inner.reverseGet(d)),
+    )
+
+  /** Fused `BijectionIso.andThen(GetReplaceLens)` — result is a `GetReplaceLens` that threads the
+    * iso around the inner lens. Skips the cross-carrier `Composer[Forgetful, Tuple2]` hop.
+    */
+  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
+    new GetReplaceLens(
+      get = s => inner.get(get(s)),
+      enplace = (s, d) => reverseGet(inner.enplace(get(s), d)),
+    )
+
+  /** Fused `BijectionIso.andThen(MendTearPrism)` — result is a `MendTearPrism`. Skips the
+    * `Composer[Forgetful, Either]` hop. On inner miss, the outer's `reverseGet` lifts the inner's
+    * `B`-shaped leftover back to `T`.
+    */
+  def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
+    new MendTearPrism(
+      tear = s =>
+        inner.tear(get(s)) match
+          case Left(b)  => Left(reverseGet(b))
+          case Right(c) => Right(c),
+      mend = d => reverseGet(inner.mend(d)),
+    )
