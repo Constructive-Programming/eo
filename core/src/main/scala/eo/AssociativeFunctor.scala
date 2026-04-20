@@ -5,13 +5,13 @@ import cats.syntax.either._
 import optics.Optic
 
 /** Composition algebra for a two-parameter carrier `F[_, _]` — given two optics that share `F`,
-  * [[composeTo]] produces the combined `F[Z, C]` from a source `S` and [[composeFrom]] unfolds
-  * a combined `F[Z, D]` back through the inner and outer optics.
+  * [[composeTo]] produces the combined `F[Z, C]` from a source `S` and [[composeFrom]] unfolds a
+  * combined `F[Z, D]` back through the inner and outer optics.
   *
   * The class-level type parameters `Xo` ("outer" X) and `Xi` ("inner" X) are the existentials of
-  * the two optics being composed: `Xo` is the outer optic's existential, `Xi` is the inner's.
-  * Named without shadowing the `type X` member on [[Optic]] so [[composeTo]] and [[composeFrom]]
-  * can refinement-type on them.
+  * the two optics being composed: `Xo` is the outer optic's existential, `Xi` is the inner's. Named
+  * without shadowing the `type X` member on [[Optic]] so [[composeTo]] and [[composeFrom]] can
+  * refinement-type on them.
   *
   * Any carrier that wants to support `Optic.andThen` must supply an instance. Carriers can
   * specialise on concrete optic shapes by pattern-matching on the `outer` / `inner` arguments.
@@ -31,16 +31,16 @@ trait AssociativeFunctor[F[_, _], Xo, Xi]:
     * `inner.to` to produce `F[Xi, C]`, reassemble as `F[Z, C]`.
     */
   def composeTo[S, T, A, B, C, D](
-      s:     S,
+      s: S,
       outer: Optic[S, T, A, B, F] { type X = Xo },
       inner: Optic[A, B, C, D, F] { type X = Xi },
   ): F[Z, C]
 
-  /** Pull-side composition — unfold `F[Z, D]` back through `inner.from` and `outer.from` to
-    * produce `T`. Dual of [[composeTo]].
+  /** Pull-side composition — unfold `F[Z, D]` back through `inner.from` and `outer.from` to produce
+    * `T`. Dual of [[composeTo]].
     */
   def composeFrom[S, T, A, B, C, D](
-      xd:    F[Z, D],
+      xd: F[Z, D],
       inner: Optic[A, B, C, D, F] { type X = Xi },
       outer: Optic[S, T, A, B, F] { type X = Xo },
   ): T
@@ -57,7 +57,7 @@ object AssociativeFunctor:
     type Z = (Xo, Xi)
 
     def composeTo[S, T, A, B, C, D](
-        s:     S,
+        s: S,
         outer: Optic[S, T, A, B, Tuple2] { type X = Xo },
         inner: Optic[A, B, C, D, Tuple2] { type X = Xi },
     ): (Z, C) =
@@ -66,7 +66,7 @@ object AssociativeFunctor:
       (x -> y, c)
 
     def composeFrom[S, T, A, B, C, D](
-        xd:    (Z, D),
+        xd: (Z, D),
         inner: Optic[A, B, C, D, Tuple2] { type X = Xi },
         outer: Optic[S, T, A, B, Tuple2] { type X = Xo },
     ): T =
@@ -82,18 +82,18 @@ object AssociativeFunctor:
     type Z = Either[Xo, Xi]
 
     def composeTo[S, T, A, B, C, D](
-        s:     S,
+        s: S,
         outer: Optic[S, T, A, B, Either] { type X = Xo },
         inner: Optic[A, B, C, D, Either] { type X = Xi },
     ): Either[Z, C] =
       outer.to(s).fold(_.asLeft[Xi].asLeft[C], inner.to(_).leftMap(_.asRight[Xo]))
 
     def composeFrom[S, T, A, B, C, D](
-        xd:    Either[Z, D],
+        xd: Either[Z, D],
         inner: Optic[A, B, C, D, Either] { type X = Xi },
         outer: Optic[S, T, A, B, Either] { type X = Xo },
     ): T =
       xd match
-        case Right(d)         => outer.from(Right(inner.from(Right(d))))
-        case Left(Right(y))   => outer.from(Right(inner.from(Left(y))))
-        case Left(Left(x))    => outer.from(Left(x))
+        case Right(d)       => outer.from(Right(inner.from(Right(d))))
+        case Left(Right(y)) => outer.from(Right(inner.from(Left(y))))
+        case Left(Left(x))  => outer.from(Left(x))

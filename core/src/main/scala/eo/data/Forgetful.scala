@@ -104,20 +104,20 @@ object Forgetful:
     type Z = Nothing
 
     def composeTo[S, T, A, B, C, D](
-        s:     S,
+        s: S,
         outer: Optic[S, T, A, B, Forgetful] { type X = Xo },
         inner: Optic[A, B, C, D, Forgetful] { type X = Xi },
     ): C = inner.to(outer.to(s))
 
     def composeFrom[S, T, A, B, C, D](
-        xd:    D,
+        xd: D,
         inner: Optic[A, B, C, D, Forgetful] { type X = Xi },
         outer: Optic[S, T, A, B, Forgetful] { type X = Xo },
     ): T = outer.from(inner.from(xd))
 
   /** `AssociativeFunctor[Forget[F], Xo, Xi]` for any `F` with both `FlatMap` (push side) and
-    * `Comonad` (pull side). Powers `traversal.andThen(traversal)` style composition over a
-    * shared container carrier.
+    * `Comonad` (pull side). Powers `traversal.andThen(traversal)` style composition over a shared
+    * container carrier.
     *
     * @group Instances
     */
@@ -125,13 +125,13 @@ object Forgetful:
     type Z = Nothing
 
     def composeTo[S, T, A, B, C, D](
-        s:     S,
+        s: S,
         outer: Optic[S, T, A, B, Forget[F]] { type X = Xo },
         inner: Optic[A, B, C, D, Forget[F]] { type X = Xi },
     ): F[C] = outer.to(s).flatMap(inner.to)
 
     def composeFrom[S, T, A, B, C, D](
-        xd:    F[D],
+        xd: F[D],
         inner: Optic[A, B, C, D, Forget[F]] { type X = Xi },
         outer: Optic[S, T, A, B, Forget[F]] { type X = Xo },
     ): T = outer.from(xd.coflatMap(inner.from))

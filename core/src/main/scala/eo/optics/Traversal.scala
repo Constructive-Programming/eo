@@ -8,18 +8,18 @@ import cats.Traverse
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
   *
-  *   - [[each]] / [[pEach]] use `PowerSeries` — the default. Supports downstream composition
-  *     with [[Lens]] / [[Prism]] through the shared `PowerSeries` carrier. Pays a super-linear
-  *     cost relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the composition
-  *     story is the whole point of having a Traversal in the first place, so `each` is named
-  *     to match what Scala users reach for intuitively.
-  *   - [[forEach]] uses `Forget[T]` — a map-only fast path. Identity-shaped carrier, linear
-  *     time, no downstream composition. Use when the chain terminates at the traversal.
+  *   - [[each]] / [[pEach]] use `PowerSeries` — the default. Supports downstream composition with
+  *     [[Lens]] / [[Prism]] through the shared `PowerSeries` carrier. Pays a super-linear cost
+  *     relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the composition story is
+  *     the whole point of having a Traversal in the first place, so `each` is named to match what
+  *     Scala users reach for intuitively.
+  *   - [[forEach]] uses `Forget[T]` — a map-only fast path. Identity-shaped carrier, linear time,
+  *     no downstream composition. Use when the chain terminates at the traversal.
   *
-  * Scala naming convention: `each` is the "power" tool that composes; `forEach` is the
-  * "just map" escape hatch. If you ever find yourself writing `Traversal.each.something`
-  * and wishing it were faster, check whether the chain actually continues past the
-  * traversal — if not, [[forEach]] is the cheaper choice.
+  * Scala naming convention: `each` is the "power" tool that composes; `forEach` is the "just map"
+  * escape hatch. If you ever find yourself writing `Traversal.each.something` and wishing it were
+  * faster, check whether the chain actually continues past the traversal — if not, [[forEach]] is
+  * the cheaper choice.
   *
   * The [[two]] / [[three]] / [[four]] fixed-arity variants expose a Traversal over a fixed number
   * of per-element getters — useful for "every element of this record that happens to share a type"
@@ -49,26 +49,25 @@ object Traversal:
       val to: T[A] => T[A] = identity
       val from: T[B] => T[B] = identity
 
-  /** `each` — the composable traversal, built on the `PowerSeries` carrier. Enables
-    * downstream optic composition via the `PowerSeries` `AssociativeFunctor`.
+  /** `each` — the composable traversal, built on the `PowerSeries` carrier. Enables downstream
+    * optic composition via the `PowerSeries` `AssociativeFunctor`.
     *
-    * Reach for this when the chain continues past the traversal (`.andThen(lens)` etc.);
-    * if the chain terminates, prefer [[forEach]] for the map-only fast path.
+    * Reach for this when the chain continues past the traversal (`.andThen(lens)` etc.); if the
+    * chain terminates, prefer [[forEach]] for the map-only fast path.
     *
     * @group Constructors
     */
   def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, PowerSeries] =
     pEach[T, A, A]
 
-  /** Polymorphic counterpart to [[each]] — allows the focus to change type along the
-    * traversal.
+  /** Polymorphic counterpart to [[each]] — allows the focus to change type along the traversal.
     *
-    * Reassembly uses `Traverse.mapAccumulate` to walk the original container shape exactly
-    * once and plug in the modified focus values at each position — an O(N) reconstruct that
-    * replaces the previous `foldMapK(Applicative[T].pure)` loop's O(N²) `MonoidK.combineK`
-    * concat. The original `T[A]` is stashed in the existential leftover `X = (Int, T[A])`
-    * so the `from` direction has it available; Traverse laws guarantee `to`'s `foldLeft`
-    * and `from`'s `mapAccumulate` walk positions in the same order.
+    * Reassembly uses `Traverse.mapAccumulate` to walk the original container shape exactly once and
+    * plug in the modified focus values at each position — an O(N) reconstruct that replaces the
+    * previous `foldMapK(Applicative[T].pure)` loop's O(N²) `MonoidK.combineK` concat. The original
+    * `T[A]` is stashed in the existential leftover `X = (Int, T[A])` so the `from` direction has it
+    * available; Traverse laws guarantee `to`'s `foldLeft` and `from`'s `mapAccumulate` walk
+    * positions in the same order.
     *
     * @group Constructors
     */

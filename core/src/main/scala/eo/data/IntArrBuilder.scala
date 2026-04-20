@@ -1,19 +1,17 @@
 package eo
 package data
 
-/** Grow-on-demand primitive `Array[Int]` builder. Used by
-  * [[PowerSeries.assoc]] to accumulate per-element focus counts without
-  * boxing each `Int` into an `Integer` (which a `Tuple2[Int, …]` would
-  * force) and without dragging in an `ArrayBuffer[Int]` that would
-  * pay a final `toArray` copy.
+/** Grow-on-demand primitive `Array[Int]` builder. Used by [[PowerSeries.assoc]] to accumulate
+  * per-element focus counts without boxing each `Int` into an `Integer` (which a `Tuple2[Int, …]`
+  * would force) and without dragging in an `ArrayBuffer[Int]` that would pay a final `toArray`
+  * copy.
   *
-  * Doubles capacity on overflow; `freeze` returns the primitive array
-  * exactly-sized (one truncation `arraycopy` only when the builder
-  * didn't fill its internal array exactly).
+  * Doubles capacity on overflow; `freeze` returns the primitive array exactly-sized (one truncation
+  * `arraycopy` only when the builder didn't fill its internal array exactly).
   */
-private[eo] final class IntArrBuilder(initialCapacity: Int = 16):
+final private[eo] class IntArrBuilder(initialCapacity: Int = 16):
   private var arr: Array[Int] = new Array[Int](math.max(initialCapacity, 1))
-  private var len: Int        = 0
+  private var len: Int = 0
 
   def size: Int = len
 

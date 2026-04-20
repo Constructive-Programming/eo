@@ -15,8 +15,8 @@ trait ForgetfulFunctor[F[_, _]]:
 /** Typeclass instances for [[ForgetfulFunctor]].
   *
   * Each supported carrier has a direct instance; the previous generic `Bifunctor` / `Profunctor`
-  * fallback instances were removed because every carrier we ship provides a direct instance and
-  * the fallbacks never fired.
+  * fallback instances were removed because every carrier we ship provides a direct instance and the
+  * fallbacks never fired.
   */
 object ForgetfulFunctor:
 

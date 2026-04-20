@@ -12,8 +12,8 @@ import data.Affine
   *
   * Compose freely with `Lens` via `lens.andThen(opt)` — the cross-carrier `.andThen` extension
   * auto-morphs the Lens into the Affine carrier via `Composer[Tuple2, Affine]`. The `Affine`
-  * carrier admits unbounded X/Y via [[data.Affine.assoc]], so any abstract existential
-  * satisfies the composition requirement.
+  * carrier admits unbounded X/Y via [[data.Affine.assoc]], so any abstract existential satisfies
+  * the composition requirement.
   */
 object Optional:
 
@@ -55,6 +55,7 @@ object Optional:
         Affine(getOrModify(s) match
           case Right(a) => Right(s -> a)
           case Left(t)  => Left(t))
-      val from: Affine[X, B] => T = a => a.affine match
-        case Right(p) => reverseGet(p)
-        case Left(t)  => t
+      val from: Affine[X, B] => T = a =>
+        a.affine match
+          case Right(p) => reverseGet(p)
+          case Left(t)  => t

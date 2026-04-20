@@ -25,12 +25,7 @@ import laws.discipline.{
   TraversalTests,
 }
 import laws.data.{AffineLaws, FixedTraversalLaws, PowerSeriesLaws, SetterFLaws}
-import laws.data.discipline.{
-  AffineTests,
-  FixedTraversalTests,
-  PowerSeriesTests,
-  SetterFTests,
-}
+import laws.data.discipline.{AffineTests, FixedTraversalTests, PowerSeriesTests, SetterFTests}
 import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
 import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
 
@@ -272,15 +267,15 @@ class OpticsLawsSpec extends Specification with Discipline:
   private given arbPowerSeries: Arbitrary[PowerSeries[(Int, Int), Int]] =
     Arbitrary(
       for
-        x  <- Arbitrary.arbitrary[Int]
+        x <- Arbitrary.arbitrary[Int]
         a0 <- Arbitrary.arbitrary[Int]
         a1 <- Arbitrary.arbitrary[Int]
         a2 <- Arbitrary.arbitrary[Int]
       yield
         val arr = new Array[AnyRef](3)
-        arr(0)  = a0.asInstanceOf[AnyRef]
-        arr(1)  = a1.asInstanceOf[AnyRef]
-        arr(2)  = a2.asInstanceOf[AnyRef]
+        arr(0) = a0.asInstanceOf[AnyRef]
+        arr(1) = a1.asInstanceOf[AnyRef]
+        arr(2) = a2.asInstanceOf[AnyRef]
         PowerSeries[(Int, Int), Int](x, PSVec.unsafeWrap[Int](arr))
     )
 

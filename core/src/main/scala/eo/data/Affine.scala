@@ -126,7 +126,7 @@ object Affine:
     type Z = (Either[Fst[Xo], (Snd[Xo], Fst[Xi])], (Snd[Xo], Snd[Xi]))
 
     def composeTo[S, T, A, B, C, D](
-        s:     S,
+        s: S,
         outer: Optic[S, T, A, B, Affine] { type X = Xo },
         inner: Optic[A, B, C, D, Affine] { type X = Xi },
     ): Affine[Z, C] =
@@ -141,7 +141,7 @@ object Affine:
       outer.to(s).affine.fold(fLeft, fRight)
 
     def composeFrom[S, T, A, B, C, D](
-        xd:    Affine[Z, D],
+        xd: Affine[Z, D],
         inner: Optic[A, B, C, D, Affine] { type X = Xi },
         outer: Optic[S, T, A, B, Affine] { type X = Xo },
     ): T =
@@ -171,9 +171,10 @@ object Affine:
         type X = (T, o.X)
         val to: S => Affine[X, A] = s => Affine(Right(o.to(s)))
 
-        val from: Affine[X, B] => T = a => a.affine match
-          case Left(t)  => t
-          case Right(p) => o.from(p)
+        val from: Affine[X, B] => T = a =>
+          a.affine match
+            case Left(t)  => t
+            case Right(p) => o.from(p)
 
   /** `Composer[Either, Affine]` — express a Prism as an Optional by reusing its `Either`
     * decomposition for Affine's miss / hit branches.
@@ -190,6 +191,7 @@ object Affine:
           Affine(o.to(s) match
             case Right(a) => Right(s -> a)
             case Left(x)  => Left(x))
-        val from: Affine[X, B] => T = xb => xb.affine match
-          case Right((_, b)) => o.from(Right(b))
-          case Left(x)       => o.from(Left(x))
+        val from: Affine[X, B] => T = xb =>
+          xb.affine match
+            case Right((_, b)) => o.from(Right(b))
+            case Left(x)       => o.from(Left(x))

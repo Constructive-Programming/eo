@@ -32,5 +32,4 @@ object Setter:
 
       val to: S => SetterF[X, A] = s => SetterF(s, identity[A])
 
-      val from: SetterF[X, B] => T = s =>
-        modify(s.setter._2)(s.setter._1)
+      val from: SetterF[X, B] => T = s => modify(s.setter._2)(s.setter._1)

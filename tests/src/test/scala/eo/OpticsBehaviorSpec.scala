@@ -11,9 +11,9 @@ import optics.{
   Optic,
   Optional,
   Prism,
-  Review,
   ReversedLens,
   ReversedPrism,
+  Review,
   Setter,
   Traversal,
 }
@@ -249,7 +249,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       triP.andThen(triSideL)
 
     triSide.modify(_ + 10)(Shape3.Tri(3)) === Shape3.Tri(13)
-    triSide.modify(_ + 10)(Shape3.Sq(5))  === Shape3.Sq(5)
+    triSide.modify(_ + 10)(Shape3.Sq(5)) === Shape3.Sq(5)
   }
 
   "Lens.andThen(Prism) composes via Morph.bothViaAffine (symmetric)" >> {
@@ -288,29 +288,29 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   "AffineFold.select keeps values matching the predicate, drops the rest" >> {
     val evenAF = AffineFold.select[Int](_ % 2 == 0)
-    evenAF.getOption(4)  === Some(4)
-    evenAF.getOption(3)  === None
-    evenAF.getOption(0)  === Some(0)
+    evenAF.getOption(4) === Some(4)
+    evenAF.getOption(3) === None
+    evenAF.getOption(0) === Some(0)
   }
 
   "AffineFold.modifyA lifts a hit-branch read under Applicative[G]" >> {
     import cats.instances.option.given
     val mf: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
     adultAge.modifyA[Option](mf)(AdultPerson(20)) === Some(())
-    adultAge.modifyA[Option](mf)(AdultPerson(15)) === Some(())  // miss → pure(empty)
+    adultAge.modifyA[Option](mf)(AdultPerson(15)) === Some(()) // miss → pure(empty)
   }
 
   // ----- Review behaviour ------------------------------------------
 
   "Review.apply wraps an A => S build function" >> {
     val toSome = Review[Option[Int], Int](Some(_))
-    toSome.reverseGet(3)  === Some(3)
+    toSome.reverseGet(3) === Some(3)
     toSome.reverseGet(-1) === Some(-1)
   }
 
   "Review.andThen composes right-to-left under reverseGet" >> {
-    val toSome: Review[Option[Int], Int]      = Review(Some(_))
-    val stringify: Review[Int, String]         = Review(_.length)
+    val toSome: Review[Option[Int], Int] = Review(Some(_))
+    val stringify: Review[Int, String] = Review(_.length)
     val composed: Review[Option[Int], String] = toSome.andThen(stringify)
     composed.reverseGet("hello") === Some(5)
   }

@@ -65,9 +65,9 @@ trait Optic[S, T, A, B, F[_, _]]:
     * all ship one.
     *
     * For cross-carrier composition (e.g. `Lens → Optional` or `Lens → Traversal`), use the
-    * cross-carrier overloads of this same method: they take an `o` whose carrier `G` differs
-    * from `F`, summon a `Composer[F, G]` or `Composer[G, F]` to bring both sides under a
-    * common carrier, and then compose under that carrier.
+    * cross-carrier overloads of this same method: they take an `o` whose carrier `G` differs from
+    * `F`, summon a `Composer[F, G]` or `Composer[G, F]` to bring both sides under a common carrier,
+    * and then compose under that carrier.
     *
     * @example
     *   {{{
@@ -88,7 +88,7 @@ trait Optic[S, T, A, B, F[_, _]]:
     val innerRef = o.asInstanceOf[Optic[A, B, C, D, F] { type X = o.X }]
     new Optic:
       type X = af.Z
-      val to: S => F[X, C]   = s  => af.composeTo(s, outerRef, innerRef)
+      val to: S => F[X, C] = s => af.composeTo(s, outerRef, innerRef)
       val from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
 object Optic:
@@ -144,9 +144,9 @@ object Optic:
   // don't ship bidirectional composers, at most one applies per
   // carrier pair and there's no ambiguity.
 
-  /** Cross-carrier composition — when the two optics carry different `F` and `G`, this
-    * extension picks the direction via a summoned [[Morph]] (which wraps the appropriate
-    * `Composer`) and composes under the resulting shared carrier.
+  /** Cross-carrier composition — when the two optics carry different `F` and `G`, this extension
+    * picks the direction via a summoned [[Morph]] (which wraps the appropriate `Composer`) and
+    * composes under the resulting shared carrier.
     *
     * @example
     *   {{{
@@ -157,20 +157,21 @@ object Optic:
     *   }}}
     */
   extension [S, T, A, B, F[_, _]](self: Optic[S, T, A, B, F])
+
     @annotation.targetName("andThenMorphed")
     inline def andThen[G[_, _], C, D](o: Optic[A, B, C, D, G])(using
         m: Morph[F, G]
     ): Optic[S, T, C, D, m.Out] =
       val morphedSelf = m.morphSelf(self)
-      val morphedO    = m.morphO(o)
+      val morphedO = m.morphO(o)
       morphedSelf.andThen(morphedO)(using
         scala.compiletime.summonInline[AssociativeFunctor[m.Out, morphedSelf.X, morphedO.X]]
       )
 
     /** Re-express this optic over a different carrier `G`. Package-private — users compose
-      * cross-carrier via the [[andThen]] overload above, which invokes this internally via
-      * the `Composer.to` it summons. Still available to law / behaviour specs inside `eo.*`
-      * for direct testing of the `Composer[F, G]` bridges.
+      * cross-carrier via the [[andThen]] overload above, which invokes this internally via the
+      * `Composer.to` it summons. Still available to law / behaviour specs inside `eo.*` for direct
+      * testing of the `Composer[F, G]` bridges.
       */
     private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
       cf.to(self)

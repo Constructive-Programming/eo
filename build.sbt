@@ -202,17 +202,23 @@ lazy val docs: Project = project
     // mdoc variable substitutions — site pages can reference
     // `@VERSION@` to always display the current version.
     mdocVariables ++= Map(
-      "VERSION" -> tlBaseVersion.value,
+      "VERSION" -> tlBaseVersion.value
     ),
     // Helium theme config — the plugin needs a home-link URL on
     // the top nav; without it Laika fails the site build with
     // "No target for home link found".
-    tlSiteHelium ~= { _.site.topNavigationBar(
-      homeLink = laika.helium.config.ImageLink.external(
-        "https://github.com/Constructive-Programming/eo",
-        laika.ast.Image.external(""),
-      ),
-    )},
+    tlSiteHelium ~= {
+      _.site.topNavigationBar(
+        homeLink = laika
+          .helium
+          .config
+          .ImageLink
+          .external(
+            "https://github.com/Constructive-Programming/eo",
+            laika.ast.Image.external(""),
+          )
+      )
+    },
   )
 
 // Benchmarks deliberately stay OUT of the root aggregator: they're a

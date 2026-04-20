@@ -19,4 +19,4 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.5")
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
 // configured from build.sbt. Pinned to the same 0.8.5 family as
 // ci-release so they share plugin transitive versions.
-addSbtPlugin("org.typelevel" % "sbt-typelevel-site"       % "0.8.5")
+addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.5")
