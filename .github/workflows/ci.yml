@@ -221,7 +221,7 @@ jobs:
         run: sbt +update
 
       - name: Submit Dependencies
-        uses: scalacenter/sbt-dependency-submission@v2
+        uses: scalacenter/sbt-dependency-submission@v3
         with:
           modules-ignore: cats-eo-docs_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
