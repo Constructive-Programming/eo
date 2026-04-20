@@ -243,11 +243,13 @@ val someIntR = Review[Option[Int], Int](Some(_))
 someIntR.reverseGet(42)
 ```
 
-Reviews compose right-to-left under `reverseGet`:
+Compose by composing the underlying `A => S` functions directly:
 
 ```scala mdoc:silent
 val lengthR = Review[Int, String](_.length)
-val someLen = someIntR.andThen(lengthR)
+val someLen = Review[Option[Int], String](
+  s => someIntR.reverseGet(lengthR.reverseGet(s))
+)
 ```
 
 ```scala mdoc

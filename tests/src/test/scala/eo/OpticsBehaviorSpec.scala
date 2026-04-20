@@ -308,10 +308,11 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     toSome.reverseGet(-1) === Some(-1)
   }
 
-  "Review.andThen composes right-to-left under reverseGet" >> {
-    val toSome: Review[Option[Int], Int] = Review(Some(_))
-    val stringify: Review[Int, String] = Review(_.length)
-    val composed: Review[Option[Int], String] = toSome.andThen(stringify)
+  "Reviews compose via direct function composition" >> {
+    val toSome = Review[Option[Int], Int](Some(_))
+    val stringify = Review[Int, String](_.length)
+    val composed =
+      Review[Option[Int], String](s => toSome.reverseGet(stringify.reverseGet(s)))
     composed.reverseGet("hello") === Some(5)
   }
 
