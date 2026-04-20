@@ -288,9 +288,11 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">someIntR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">Int</span><span>](</span><span class="type-name">Some</span><span>(</span><span class="identifier">_</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">42</span><span>)
 </span><span class="comment">// res23: Option[Int] = Some(42)</span></code></pre>
-        <p>Reviews compose right-to-left under <code>reverseGet</code>:</p>
+        <p>Compose by composing the underlying <code>A =&gt; S</code> functions directly:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">lengthR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">length</span><span>)
-</span><span class="keyword">val</span><span> </span><span class="identifier">someLen</span><span> = </span><span class="identifier">someIntR</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">lengthR</span><span>)</span></code></pre>
+</span><span class="keyword">val</span><span> </span><span class="identifier">someLen</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">String</span><span>](
+  </span><span class="identifier">s</span><span> =&gt; </span><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">lengthR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">s</span><span>))
+)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someLen</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="string-literal">&quot;hello&quot;</span><span>)
 </span><span class="comment">// res24: Option[Int] = Some(5)</span></code></pre>
         <p>Two factory methods pull the natural build direction out of an
