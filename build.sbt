@@ -51,6 +51,64 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   )
 )
 
+// -------------------------------------------------------------------
+// Bump hardcoded GitHub Action versions that sbt-typelevel 0.8.5
+// pins to older releases:
+//
+//   - actions/upload-artifact           v5 → v7
+//   - actions/download-artifact         v6 → v8
+//   - scalacenter/sbt-dependency-submission  v2 → v3
+//
+// Dependabot repeatedly tries to update these by hand-editing
+// ci.yml, which conflicts with sbt-typelevel's `githubWorkflowCheck`
+// gate. Rewriting the generated steps here keeps the emitted ci.yml
+// and Dependabot's expectations aligned.
+//
+// Remove this block (and re-run `sbt githubWorkflowGenerate`) when
+// sbt-typelevel ships a release that already pins these newer
+// versions upstream — see
+// https://github.com/typelevel/sbt-typelevel/releases. The hardcoded
+// references today live in:
+//   - GenerativePlugin.scala (upload @ v5, download @ v6)
+//   - WorkflowStep.scala     (sbt-dependency-submission @ v2)
+// -------------------------------------------------------------------
+
+def bumpActionVersion(
+    owner: String,
+    repo: String,
+    newRef: String,
+): WorkflowStep => WorkflowStep = {
+  case s: WorkflowStep.Use =>
+    s.ref match {
+      case UseRef.Public(o, r, _) if o == owner && r == repo =>
+        s.withRef(UseRef.Public(owner, repo, newRef))
+      case _ => s
+    }
+  case other => other
+}
+
+ThisBuild / githubWorkflowGeneratedUploadSteps ~= { steps =>
+  steps.map(bumpActionVersion("actions", "upload-artifact", "v7"))
+}
+
+ThisBuild / githubWorkflowGeneratedDownloadSteps ~= { steps =>
+  steps.map(bumpActionVersion("actions", "download-artifact", "v8"))
+}
+
+ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
+  jobs.map { job =>
+    if (job.id == "dependency-submission")
+      job.withSteps(
+        job
+          .steps
+          .map(
+            bumpActionVersion("scalacenter", "sbt-dependency-submission", "v3")
+          )
+      )
+    else job
+  }
+}
+
 val Typelevel = "org.typelevel"
 val ScalaCheckOrg = "org.scalacheck"
 val Optics = "dev.optics"
