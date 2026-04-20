@@ -43,7 +43,7 @@ class PowerSeriesBench:
 
   import PowerSeriesBench.*
 
-  @Param(Array("4", "32", "256"))
+  @Param(Array("4", "32", "256", "1024"))
   var size: Int = uninitialized
 
   var person: Person = uninitialized
