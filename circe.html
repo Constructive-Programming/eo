@@ -155,7 +155,7 @@
 // }]
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
-</span><span class="comment">// streetP: JsonPrism[String] = eo.circe.JsonPrism@c708a2e
+</span><span class="comment">// streetP: JsonPrism[String] = eo.circe.JsonPrism@1c0e9f93
 </span><span>
 </span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res0: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;MAIN ST\&quot;,\&quot;zip\&quot;:12345},\&quot;age\&quot;:30,\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
@@ -202,7 +202,7 @@
 // ]]
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">secondName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">at</span><span>(</span><span class="number-literal">1</span><span>).</span><span class="identifier">name</span><span>
-</span><span class="comment">// secondName: JsonPrism[String] = eo.circe.JsonPrism@1610c93d
+</span><span class="comment">// secondName: JsonPrism[String] = eo.circe.JsonPrism@38dc8b16
 </span><span>
 </span><span class="identifier">secondName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res5: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;X\&quot;},{\&quot;name\&quot;:\&quot;Y\&quot;},{\&quot;name\&quot;:\&quot;Z\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
@@ -215,7 +215,7 @@
         <code>.at</code> / selectable-sugar calls on the traversal extend the
         per-element suffix:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">everyName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
-</span><span class="comment">// everyName: JsonTraversal[String] = eo.circe.JsonTraversal@365818dd
+</span><span class="comment">// everyName: JsonTraversal[String] = eo.circe.JsonTraversal@18de283a
 </span><span>
 </span><span class="identifier">everyName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res6: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;X\&quot;},{\&quot;name\&quot;:\&quot;Y\&quot;},{\&quot;name\&quot;:\&quot;Z\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;
