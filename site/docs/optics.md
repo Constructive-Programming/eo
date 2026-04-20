@@ -186,6 +186,107 @@ positive.foldMap(identity[Int])(3)
 positive.foldMap(identity[Int])(-3)
 ```
 
+## AffineFold
+
+An `AffineFold[S, A]` is the read-only counterpart to
+`Optional`: a zero-or-one-focus projection. Carrier: `Affine`
+with `T = Unit`.
+
+```scala mdoc:silent
+import eo.optics.AffineFold
+
+case class Adult(age: Int)
+val adultAge =
+  AffineFold[Adult, Int](p => Option.when(p.age >= 18)(p.age))
+```
+
+```scala mdoc
+adultAge.getOption(Adult(20))
+adultAge.getOption(Adult(15))
+adultAge.foldMap(identity[Int])(Adult(20))
+adultAge.foldMap(identity[Int])(Adult(15))
+```
+
+`AffineFold.select(p)` narrows to values matching a predicate —
+symmetric to `Fold.select` but over a single focus:
+
+```scala mdoc:silent
+val evenAF = AffineFold.select[Int](_ % 2 == 0)
+```
+
+```scala mdoc
+evenAF.getOption(4)
+evenAF.getOption(3)
+```
+
+Composition caveat matches `Fold` / `Getter`: an AffineFold
+doesn't compose with other AffineFolds via `Optic.andThen`
+because its `T = Unit` mismatches the outer `B` slot. For a
+deeper read, compose an `Optional` chain and call `.getOption`
+/ `.foldMap` on the composed optic.
+
+## Review
+
+A `Review[S, A]` is the reverse-only counterpart to `Getter` —
+it wraps an `A => S` build function. Unlike the other families,
+`Review` does **not** extend `Optic` (the Optic trait requires
+an observing `to` that a pure review has none of); it's a
+standalone type with its own composition.
+
+```scala mdoc:silent
+import eo.optics.Review
+
+val someIntR = Review[Option[Int], Int](Some(_))
+```
+
+```scala mdoc
+someIntR.reverseGet(42)
+```
+
+Reviews compose right-to-left under `reverseGet`:
+
+```scala mdoc:silent
+val lengthR = Review[Int, String](_.length)
+val someLen = someIntR.andThen(lengthR)
+```
+
+```scala mdoc
+someLen.reverseGet("hello")
+```
+
+Two factory methods pull the natural build direction out of an
+Iso or a Prism — aliased as `ReversedLens` and `ReversedPrism`
+for users who expect to find those names next to the rest of
+the optics reference:
+
+```scala mdoc:silent
+import eo.optics.{BijectionIso, MendTearPrism, ReversedLens, ReversedPrism}
+
+val doubleIso =
+  BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
+val revIso = ReversedLens(doubleIso)
+
+val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
+  tear = {
+    case Some(n) => Right(n)
+    case other   => Left(other)
+  },
+  mend = Some(_),
+)
+val revPrism = ReversedPrism(somePrism)
+```
+
+```scala mdoc
+revIso.reverseGet(5)
+revPrism.reverseGet(7)
+```
+
+**`ReversedLens` only accepts a bijective Lens** (an
+`BijectionIso`). A general Lens doesn't carry enough
+information to reconstruct its source from the focus alone —
+for that, construct a `Review` directly with your own
+`A => S`.
+
 ## Traversal
 
 A `Traversal` is the multi-focus modify optic — map over every

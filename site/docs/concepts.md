@@ -61,7 +61,7 @@ this optic have?"
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Forgetful`     | `A` — identity; no leftover                    | `Iso`, `Getter`        |
-| `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`             |
+| `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 | `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`, `Traversal`    |
 | `PowerSeries`   | `(Snd[X], Vect[Int, A])`                       | Composable `Traversal` |
@@ -86,6 +86,14 @@ One optic trait, one instance per operation per carrier. Adding
 a new carrier means supplying the typeclass instances the
 operations it wants to support need — not rewriting `Optic` or
 the existing families.
+
+Two **standalone** types — `Review` and the circe-specific
+`JsonTraversal` — deliberately sit *outside* the Optic trait.
+Both would have to invent an artificial `to` to satisfy the
+trait contract (`Review` has no read; `JsonTraversal` has no
+need for `AssociativeFunctor`), and [extending as little as you
+need](extensibility.md) is cheaper than fabricating trait
+members you won't use.
 
 ## Composition
 

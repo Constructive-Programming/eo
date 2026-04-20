@@ -1,6 +1,22 @@
 package eo
 
-import optics.{Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
+import optics.{
+  AffineFold,
+  BijectionIso,
+  Fold,
+  Getter,
+  Iso,
+  Lens,
+  MendTearPrism,
+  Optic,
+  Optional,
+  Prism,
+  Review,
+  ReversedLens,
+  ReversedPrism,
+  Setter,
+  Traversal,
+}
 import optics.Optic.*
 import data.{Affine, Forget, Forgetful}
 import data.Forgetful.given
@@ -247,4 +263,90 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       Wrapper(Shape3.Tri(4))
     wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ===
       Wrapper(Shape3.Sq(5))
+  }
+
+  // ----- AffineFold behaviour --------------------------------------
+  //
+  // Read-only 0-or-1-focus optic backed by the Affine carrier with
+  // T = Unit. Exercises the direct .getOption fast path plus the
+  // generic .foldMap that reaches through ForgetfulFold[Affine].
+
+  case class AdultPerson(age: Int)
+
+  val adultAge = AffineFold[AdultPerson, Int](p => Option.when(p.age >= 18)(p.age))
+
+  "AffineFold.getOption returns Some when matches, None otherwise" >> {
+    adultAge.getOption(AdultPerson(20)) === Some(20)
+    adultAge.getOption(AdultPerson(15)) === None
+  }
+
+  "AffineFold.foldMap folds the hit branch, returns empty on miss" >> {
+    import cats.instances.int.given
+    adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20
+    adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0
+  }
+
+  "AffineFold.select keeps values matching the predicate, drops the rest" >> {
+    val evenAF = AffineFold.select[Int](_ % 2 == 0)
+    evenAF.getOption(4)  === Some(4)
+    evenAF.getOption(3)  === None
+    evenAF.getOption(0)  === Some(0)
+  }
+
+  "AffineFold.modifyA lifts a hit-branch read under Applicative[G]" >> {
+    import cats.instances.option.given
+    val mf: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
+    adultAge.modifyA[Option](mf)(AdultPerson(20)) === Some(())
+    adultAge.modifyA[Option](mf)(AdultPerson(15)) === Some(())  // miss → pure(empty)
+  }
+
+  // ----- Review behaviour ------------------------------------------
+
+  "Review.apply wraps an A => S build function" >> {
+    val toSome = Review[Option[Int], Int](Some(_))
+    toSome.reverseGet(3)  === Some(3)
+    toSome.reverseGet(-1) === Some(-1)
+  }
+
+  "Review.andThen composes right-to-left under reverseGet" >> {
+    val toSome: Review[Option[Int], Int]      = Review(Some(_))
+    val stringify: Review[Int, String]         = Review(_.length)
+    val composed: Review[Option[Int], String] = toSome.andThen(stringify)
+    composed.reverseGet("hello") === Some(5)
+  }
+
+  "Review.fromIso extracts the reverseGet side of a BijectionIso" >> {
+    val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
+      BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
+    val rev = Review.fromIso(doubleIsoConcrete)
+    rev.reverseGet(10) === 5
+  }
+
+  "Review.fromPrism extracts the mend side of a MendTearPrism" >> {
+    val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
+      tear = {
+        case Some(n) => Right(n)
+        case None    => Left(None)
+      },
+      mend = Some(_),
+    )
+    val rev = Review.fromPrism(somePrism)
+    rev.reverseGet(42) === Some(42)
+  }
+
+  "ReversedLens(iso) and ReversedPrism(prism) alias the Review factories" >> {
+    val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
+      BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
+    val fromIso = ReversedLens(doubleIsoConcrete)
+    fromIso.reverseGet(10) === 5
+
+    val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
+      tear = {
+        case Some(n) => Right(n)
+        case None    => Left(None)
+      },
+      mend = Some(_),
+    )
+    val fromPrism = ReversedPrism(somePrism)
+    fromPrism.reverseGet(7) === Some(7)
   }
