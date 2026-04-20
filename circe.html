@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+  <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="Typelevel Laika + Helium Theme" />
+  <title>circe integration</title>
+  
+  <meta name="author" content="Rodolfo Hansen"/>
+  
+  
+  <meta name="description" content="cats-eo-docs"/>
+  
+  
+  
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700">
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono:500">
+  
+  <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
+    <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
+  <script src="helium/site/laika-helium.js"></script>
+  
+  
+  <script> /* for avoiding page load transitions */ </script>
+</head>
+
+  <body>
+
+    <header id="top-bar" class="light-default dark-default">
+
+  <div class="row">
+    <a id="nav-icon">
+      <i class="icofont-laika navigationMenu" title="Navigation">&#xefa2;</i>
+    </a>
+    
+    
+  </div>
+
+  <a class="image-link" href="https://github.com/Constructive-Programming/eo"><img src=""></a>
+
+  <div class="row links">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>  
+
+</header>
+    
+    <nav id="sidebar">
+
+  <div class="row">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="index.html">cats-eo</a></li>
+    <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
+    <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
+    <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
+    <li class="level1 active nav-leaf"><a href="#">circe integration</a></li>
+    <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
+    <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
+    <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
+    <li class="level1 nav-leaf"><a href="migration-from-monocle.html">Migrating from Monocle</a></li>
+  </ul>
+
+</nav>
+
+    <div id="container">
+
+      
+<nav id="page-nav">
+  <p class="header"><a href="#">circe integration</a></p>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#why-this-exists">Why this exists</a></li>
+    <li class="level1 nav-leaf"><a href="#jsonprism">JsonPrism</a></li>
+    <li class="level1 nav-leaf"><a href="#array-indexing">Array indexing</a></li>
+    <li class="level1 nav-leaf"><a href="#jsontraversal-each">JsonTraversal (<code>.each</code>)</a></li>
+    <li class="level1 nav-leaf"><a href="#when-to-reach-for-which">When to reach for which</a></li>
+  </ul>
+
+  <p class="footer"></p>
+</nav>
+
+
+      <main class="content">
+
+        <h1 id="circe-integration" class="title">circe integration</h1>
+        <p>The <code>cats-eo-circe</code> module adds two cursor-backed optics for
+        editing <a href="https://circe.github.io/circe/">circe</a> JSON without
+        paying the cost of a full decode / re-encode round-trip.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">libraryDependencies</span><span> += </span><span class="string-literal">&quot;dev.constructive&quot;</span><span> %% </span><span class="string-literal">&quot;cats-eo-circe&quot;</span><span> % </span><span class="string-literal">&quot;0.1&quot;</span></code></pre>
+        
+        <h2 id="why-this-exists" class="section"><a class="anchor-link left" href="#why-this-exists"><i class="icofont-laika link">&#xef71;</i></a>Why this exists</h2>
+        <p>The classical Scala JSON-edit pattern is:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">json</span><span>.</span><span class="identifier">as</span><span>[</span><span class="type-name">Person</span><span>]                       </span><span class="comment">// decode
+</span><span>    .</span><span class="identifier">map</span><span>(</span><span class="identifier">p</span><span> =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">name</span><span> = </span><span class="identifier">p</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">toUpperCase</span><span>))
+    .</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">asJson</span><span>)                    </span><span class="comment">// re-encode</span></code></pre>
+        <p>That decodes every field of <code>Person</code>, allocates a fresh
+        instance, and re-encodes every field — even if only one
+        leaf is changing. For wide records the work is mostly wasted.</p>
+        <p><code>JsonPrism</code> / <code>JsonTraversal</code> walk a flat path directly through
+        circe&#39;s <code>JsonObject</code> / array representation, modifying only
+        the focused leaf and rebuilding the parents on the way up.
+        The
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala"><code>JsonPrismBench</code></a>
+        and
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonTraversalBench.scala"><code>JsonTraversalBench</code></a>
+        suites document a roughly 2× speedup at every depth and
+        every array size.</p>
+        
+        <h2 id="jsonprism" class="section"><a class="anchor-link left" href="#jsonprism"><i class="icofont-laika link">&#xef71;</i></a>JsonPrism</h2>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="identifier">codecPrism</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="type-name">Codec</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="identifier">syntax</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">hearth</span><span>.</span><span class="identifier">kindlings</span><span>.</span><span class="identifier">circederivation</span><span>.</span><span class="type-name">KindlingsCodecAsObject</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Address</span><span>(</span><span class="identifier">street</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">zip</span><span>: </span><span class="type-name">Int</span><span>)
+</span><span class="keyword">object</span><span> </span><span class="type-name">Address</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Address</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Person</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">address</span><span>: </span><span class="type-name">Address</span><span>)
+</span><span class="keyword">object</span><span> </span><span class="type-name">Person</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Person</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span></code></pre>
+        <p>Construct a Prism to the root type, then drill into fields.
+        The <code>.address.street</code> sugar is macro-powered — it compiles to
+        <code>.field(_.address).field(_.street)</code>:</p>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">alice</span><span>   = </span><span class="type-name">Person</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>, </span><span class="type-name">Address</span><span>(</span><span class="string-literal">&quot;Main St&quot;</span><span>, </span><span class="number-literal">12345</span><span>))
+</span><span class="comment">// alice: Person = Person(
+//   name = &quot;Alice&quot;,
+//   age = 30,
+//   address = Address(street = &quot;Main St&quot;, zip = 12345)
+// )
+</span><span class="keyword">val</span><span> </span><span class="identifier">json</span><span>    = </span><span class="identifier">alice</span><span>.</span><span class="identifier">asJson</span><span>
+</span><span class="comment">// json: Json = JObject(
+//   object[name -&gt; &quot;Alice&quot;,age -&gt; 30,address -&gt; {
+//   &quot;street&quot; : &quot;Main St&quot;,
+//   &quot;zip&quot; : 12345
+// }]
+// )
+</span><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
+</span><span class="comment">// streetP: JsonPrism[String] = eo.circe.JsonPrism@7e0e5933
+</span><span>
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res0: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;MAIN ST\&quot;,\&quot;zip\&quot;:12345},\&quot;age\&quot;:30,\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>Other operations:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">streetP</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="identifier">json</span><span>)
+</span><span class="comment">// res1: Option[String] = Some(&quot;Main St&quot;)
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">place</span><span>(</span><span class="string-literal">&quot;Broadway&quot;</span><span>)(</span><span class="identifier">json</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res2: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;Broadway\&quot;,\&quot;zip\&quot;:12345},\&quot;age\&quot;:30,\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">transform</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">mapString</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">reverse</span><span>))(</span><span class="identifier">json</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res3: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;tS niaM\&quot;,\&quot;zip\&quot;:12345},\&quot;age\&quot;:30,\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>Forgiving semantics — missing paths leave the Json unchanged:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="type-name">Json</span><span>
+</span><span class="keyword">val</span><span> </span><span class="identifier">stump</span><span> = </span><span class="type-name">Json</span><span>.</span><span class="identifier">obj</span><span>(</span><span class="string-literal">&quot;name&quot;</span><span> -&gt; </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>))
+</span><span class="comment">// stump: Json = JObject(object[name -&gt; &quot;Alice&quot;])
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res4: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        
+        <h2 id="array-indexing" class="section"><a class="anchor-link left" href="#array-indexing"><i class="icofont-laika link">&#xef71;</i></a>Array indexing</h2>
+        <p><code>.at(i)</code> drills into the <code>i</code>-th element of a JSON array:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Order</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>)
+</span><span class="keyword">object</span><span> </span><span class="type-name">Order</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Order</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Basket</span><span>(</span><span class="identifier">owner</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">items</span><span>: </span><span class="type-name">Vector</span><span>[</span><span class="type-name">Order</span><span>])
+</span><span class="keyword">object</span><span> </span><span class="type-name">Basket</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Basket</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">basket</span><span>     = </span><span class="type-name">Basket</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">Vector</span><span>(</span><span class="type-name">Order</span><span>(</span><span class="string-literal">&quot;X&quot;</span><span>), </span><span class="type-name">Order</span><span>(</span><span class="string-literal">&quot;Y&quot;</span><span>), </span><span class="type-name">Order</span><span>(</span><span class="string-literal">&quot;Z&quot;</span><span>)))
+</span><span class="comment">// basket: Basket = Basket(
+//   owner = &quot;Alice&quot;,
+//   items = Vector(Order(&quot;X&quot;), Order(&quot;Y&quot;), Order(&quot;Z&quot;))
+// )
+</span><span class="keyword">val</span><span> </span><span class="identifier">basketJson</span><span> = </span><span class="identifier">basket</span><span>.</span><span class="identifier">asJson</span><span>
+</span><span class="comment">// basketJson: Json = JObject(
+//   object[owner -&gt; &quot;Alice&quot;,items -&gt; [
+//   {
+//     &quot;name&quot; : &quot;X&quot;
+//   },
+//   {
+//     &quot;name&quot; : &quot;Y&quot;
+//   },
+//   {
+//     &quot;name&quot; : &quot;Z&quot;
+//   }
+// ]]
+// )
+</span><span class="keyword">val</span><span> </span><span class="identifier">secondName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">at</span><span>(</span><span class="number-literal">1</span><span>).</span><span class="identifier">name</span><span>
+</span><span class="comment">// secondName: JsonPrism[String] = eo.circe.JsonPrism@72d46705
+</span><span>
+</span><span class="identifier">secondName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res5: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;X\&quot;},{\&quot;name\&quot;:\&quot;Y\&quot;},{\&quot;name\&quot;:\&quot;Z\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>Out-of-range / negative / non-array positions pass through
+        unchanged.</p>
+        
+        <h2 id="jsontraversal-each" class="section"><a class="anchor-link left" href="#jsontraversal-each"><i class="icofont-laika link">&#xef71;</i></a>JsonTraversal (<code>.each</code>)</h2>
+        <p><code>.each</code> splits the path at the current array focus and returns
+        a <code>JsonTraversal</code> that walks every element. Further <code>.field</code> /
+        <code>.at</code> / selectable-sugar calls on the traversal extend the
+        per-element suffix:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">everyName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
+</span><span class="comment">// everyName: JsonTraversal[String] = eo.circe.JsonTraversal@5f0c584c
+</span><span>
+</span><span class="identifier">everyName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res6: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;X\&quot;},{\&quot;name\&quot;:\&quot;Y\&quot;},{\&quot;name\&quot;:\&quot;Z\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;
+</span><span class="identifier">everyName</span><span>.</span><span class="identifier">getAll</span><span>(</span><span class="identifier">basketJson</span><span>)
+</span><span class="comment">// res7: Vector[String] = Vector(&quot;X&quot;, &quot;Y&quot;, &quot;Z&quot;)</span></code></pre>
+        <p>Empty arrays and missing paths leave the Json unchanged.</p>
+        
+        <h2 id="when-to-reach-for-which" class="section"><a class="anchor-link left" href="#when-to-reach-for-which"><i class="icofont-laika link">&#xef71;</i></a>When to reach for which</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Use</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Edit one leaf deep in a JSON tree</td>
+              <td><code>JsonPrism</code> via <code>.address.street</code> sugar</td>
+            </tr>
+            <tr>
+              <td>Edit element <code>i</code> of a JSON array</td>
+              <td><code>codecPrism[…].items.at(i).…</code></td>
+            </tr>
+            <tr>
+              <td>Edit every element of a JSON array</td>
+              <td><code>codecPrism[…].items.each.…</code> + <code>modify</code></td>
+            </tr>
+            <tr>
+              <td>Read every element&#39;s focus</td>
+              <td><code>codecPrism[…].items.each.…</code> + <code>getAll</code></td>
+            </tr>
+            <tr>
+              <td>Edit the whole root record (and you have a Codec)</td>
+              <td><code>codecPrism[Person].modify(f)</code></td>
+            </tr>
+          </tbody>
+        </table>
+        <p>For the full failure-mode matrix (missing paths, non-array
+        focuses, empty collections, out-of-range indices), see the
+        behaviour
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/circe/src/test/scala/eo/circe/JsonPrismSpec.scala">spec</a>.</p>
+
+        
+<hr class="footer-rule"/>
+<footer>
+  Site generated by <a href="https://typelevel.org/Laika/">Laika</a> with the Helium theme.
+</footer>
+
+
+      </main>
+
+    </div>
+
+  </body>
+
+</html>

@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+  <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="Typelevel Laika + Helium Theme" />
+  <title>Benchmarks</title>
+  
+  <meta name="author" content="Rodolfo Hansen"/>
+  
+  
+  <meta name="description" content="cats-eo-docs"/>
+  
+  
+  
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700">
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono:500">
+  
+  <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
+    <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
+  <script src="helium/site/laika-helium.js"></script>
+  
+  
+  <script> /* for avoiding page load transitions */ </script>
+</head>
+
+  <body>
+
+    <header id="top-bar" class="light-default dark-default">
+
+  <div class="row">
+    <a id="nav-icon">
+      <i class="icofont-laika navigationMenu" title="Navigation">&#xefa2;</i>
+    </a>
+    
+    
+  </div>
+
+  <a class="image-link" href="https://github.com/Constructive-Programming/eo"><img src=""></a>
+
+  <div class="row links">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>  
+
+</header>
+    
+    <nav id="sidebar">
+
+  <div class="row">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="index.html">cats-eo</a></li>
+    <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
+    <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
+    <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
+    <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
+    <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
+    <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
+    <li class="level1 active nav-leaf"><a href="#">Benchmarks</a></li>
+    <li class="level1 nav-leaf"><a href="migration-from-monocle.html">Migrating from Monocle</a></li>
+  </ul>
+
+</nav>
+
+    <div id="container">
+
+      
+<nav id="page-nav">
+  <p class="header"><a href="#">Benchmarks</a></p>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#reading-the-numbers">Reading the numbers</a></li>
+    <li class="level1 nav-leaf"><a href="#lens-tuple2-carrier">Lens (<code>Tuple2</code> carrier)</a></li>
+    <li class="level1 nav-leaf"><a href="#prism-either-carrier">Prism (<code>Either</code> carrier)</a></li>
+    <li class="level1 nav-leaf"><a href="#iso-forgetful-carrier">Iso (<code>Forgetful</code> carrier)</a></li>
+    <li class="level1 nav-leaf"><a href="#optional-affine-carrier">Optional (<code>Affine</code> carrier)</a></li>
+    <li class="level1 nav-leaf"><a href="#getter-forgetful-carrier-no-write">Getter (<code>Forgetful</code> carrier, no write)</a></li>
+    <li class="level1 nav-leaf"><a href="#setter-setterf-carrier-write-only">Setter (<code>SetterF</code> carrier, write-only)</a></li>
+    <li class="level1 nav-leaf"><a href="#fold-forget-f-carrier">Fold (<code>Forget[F]</code> carrier)</a></li>
+    <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
+    <li class="level1 nav-leaf"><a href="#jsonprism-cursor-backed-json-edit">JsonPrism — cursor-backed JSON edit</a></li>
+    <li class="level1 nav-leaf"><a href="#jsontraversal-items-each-name-edits">JsonTraversal — <code>items.each.name</code> edits</a></li>
+    <li class="level1 nav-leaf"><a href="#powerseries-traversal-with-downstream-composition">PowerSeries — traversal with downstream composition</a></li>
+    <li class="level1 nav-leaf"><a href="#reproducing">Reproducing</a></li>
+  </ul>
+
+  <p class="footer"></p>
+</nav>
+
+
+      <main class="content">
+
+        <h1 id="benchmarks" class="title">Benchmarks</h1>
+        <p>JMH numbers from
+        <a href="https://github.com/Constructive-Programming/eo/tree/main/benchmarks"><code>benchmarks/</code></a>,
+        run side-by-side against <a href="https://www.optics.dev/Monocle/">Monocle</a>
+        where a direct equivalent exists and against a hand-rolled
+        <code>decode → modify → re-encode</code> baseline for the EO-only JSON and
+        PowerSeries optics.</p>
+        
+        <h2 id="reading-the-numbers" class="section"><a class="anchor-link left" href="#reading-the-numbers"><i class="icofont-laika link">&#xef71;</i></a>Reading the numbers</h2>
+        <p>All tables show <strong>average time per operation</strong> (lower is better)
+        with the 99.9 % confidence interval. <code>eo*</code> / <code>m*</code> are the EO and
+        Monocle methods, <code>naive*</code> is a hand-written baseline without any
+        optic machinery.</p>
+        <p>Sample output, run on a Linux 6.19 x86-64 box, JDK 25, JMH 1.37,
+        with <code>-f 1 -i 5 -wi 3 -t 1</code> (one fork, five measurement
+        iterations, three warmups, single thread). Total wall time:
+        ~10 min. The absolute numbers will vary by hardware; the
+        <em>ratios</em> reproduce across machines.</p>
+        <blockquote><strong>JMH caveats.</strong> Trustworthy numbers need a quiet machine,
+        fork count ≥ 3, CPU-frequency scaling locked, and no
+        background builds. The tables below are indicative, not
+        publication-grade.  See
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md"><code>benchmarks/README.md</code></a>
+        for repeatable invocations.</blockquote>
+        
+        <h2 id="lens-tuple2-carrier" class="section"><a class="anchor-link left" href="#lens-tuple2-carrier"><i class="icofont-laika link">&#xef71;</i></a>Lens (<code>Tuple2</code> carrier)</h2>
+        <p><code>Person.age</code> focused via a Lens. Same fixture on both sides.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>eo</th>
+              <th>Monocle</th>
+              <th>ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>get</code></td>
+              <td>0.45 ns</td>
+              <td>0.52 ns</td>
+              <td>1.16×</td>
+            </tr>
+            <tr>
+              <td><code>replace</code></td>
+              <td>1.18 ns</td>
+              <td>1.29 ns</td>
+              <td>1.09×</td>
+            </tr>
+            <tr>
+              <td><code>modify</code></td>
+              <td>1.37 ns</td>
+              <td>1.52 ns</td>
+              <td>1.11×</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The EO <code>GetReplaceLens</code> stores <code>get</code> / <code>enplace</code> as plain
+        fields and specialises its fused <code>modify</code> on the class, so the
+        hot path is a straight two-function composition — no
+        <code>Tuple2</code> allocation for the <code>(X, A)</code> intermediate that the
+        generic extension would materialise.</p>
+        
+        <h2 id="prism-either-carrier" class="section"><a class="anchor-link left" href="#prism-either-carrier"><i class="icofont-laika link">&#xef71;</i></a>Prism (<code>Either</code> carrier)</h2>
+        <p><code>Option[Int]</code> prism plus an <code>Either[String, Int]</code> Right-prism:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>eo</th>
+              <th>Monocle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>getOption</code> (Some)</td>
+              <td>0.42 ns</td>
+              <td>0.46 ns</td>
+            </tr>
+            <tr>
+              <td><code>getOption</code> (None)</td>
+              <td>0.42 ns</td>
+              <td>0.47 ns</td>
+            </tr>
+            <tr>
+              <td><code>reverseGet</code></td>
+              <td>1.06 ns</td>
+              <td>1.10 ns</td>
+            </tr>
+            <tr>
+              <td>Right-<code>getOption</code> (Right)</td>
+              <td>1.17 ns</td>
+              <td>1.29 ns</td>
+            </tr>
+            <tr>
+              <td>Right-<code>getOption</code> (Left)</td>
+              <td>0.46 ns</td>
+              <td>0.80 ns</td>
+            </tr>
+            <tr>
+              <td>Right-<code>reverseGet</code></td>
+              <td>1.06 ns</td>
+              <td>1.11 ns</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <h2 id="iso-forgetful-carrier" class="section"><a class="anchor-link left" href="#iso-forgetful-carrier"><i class="icofont-laika link">&#xef71;</i></a>Iso (<code>Forgetful</code> carrier)</h2>
+        <p><code>(Int, String) ↔ Person(age, name)</code> bijection.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>eo</th>
+              <th>Monocle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>get</code></td>
+              <td>1.63 ns</td>
+              <td>1.67 ns</td>
+            </tr>
+            <tr>
+              <td><code>reverseGet</code></td>
+              <td>1.22 ns</td>
+              <td>1.25 ns</td>
+            </tr>
+          </tbody>
+        </table>
+        <p><code>BijectionIso</code> stores <code>get</code> / <code>reverseGet</code> as plain fields —
+        same storage shape as Monocle&#39;s <code>case class Iso</code>, same
+        direct-call hot path.</p>
+        
+        <h2 id="optional-affine-carrier" class="section"><a class="anchor-link left" href="#optional-affine-carrier"><i class="icofont-laika link">&#xef71;</i></a>Optional (<code>Affine</code> carrier)</h2>
+        <p>Composed through a <code>Nested0..6</code> chain. The depth-3 / depth-6
+        EO variants compose the Lens chain directly onto the leaf
+        Optional via cross-carrier <code>.andThen</code> — the <code>Morph[Tuple2,
+Affine]</code> instance auto-lifts each Lens hop into the <code>Affine</code>
+        carrier, no explicit morph step required. Made possible by
+        dropping the <code>&lt;: Tuple</code> bound on <code>Affine.assoc</code> (see
+        <a href="concepts.html">Concepts → Cross-family composition</a>).</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Operation</th>
+              <th>eo</th>
+              <th>Monocle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>modify_0</code>     (Some leaf)</td>
+              <td>15.11 ns</td>
+              <td>12.52 ns</td>
+            </tr>
+            <tr>
+              <td><code>modify_0_empty</code> (None)</td>
+              <td>0.72 ns</td>
+              <td>0.65 ns</td>
+            </tr>
+            <tr>
+              <td><code>replace_0</code></td>
+              <td>7.96 ns</td>
+              <td>1.74 ns</td>
+            </tr>
+            <tr>
+              <td><code>modify_3</code></td>
+              <td>79.02 ns</td>
+              <td>33.45 ns</td>
+            </tr>
+            <tr>
+              <td><code>modify_6</code></td>
+              <td>121.97 ns</td>
+              <td>52.49 ns</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Both sides are within ~2× of each other across depths — the EO
+        path pays Affine&#39;s branching overhead relative to Monocle&#39;s
+        <code>Option</code>-specialised internals.</p>
+        
+        <h2 id="getter-forgetful-carrier-no-write" class="section"><a class="anchor-link left" href="#getter-forgetful-carrier-no-write"><i class="icofont-laika link">&#xef71;</i></a>Getter (<code>Forgetful</code> carrier, no write)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Depth</th>
+              <th>eo</th>
+              <th>Monocle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>get_0</code></td>
+              <td>0.54 ns</td>
+              <td>0.60 ns</td>
+            </tr>
+            <tr>
+              <td><code>get_3</code></td>
+              <td>1.50 ns</td>
+              <td>7.88 ns</td>
+            </tr>
+            <tr>
+              <td><code>get_6</code></td>
+              <td>2.68 ns</td>
+              <td>16.12 ns</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Monocle&#39;s composed <code>Getter.andThen</code> chain pays per-hop typeclass
+        dispatch Monocle&#39;s side doesn&#39;t optimise away at call-time. EO
+        resolves the <code>.get</code> extension against each carrier&#39;s <code>Accessor</code>
+        statically, so the composed chain inlines to a direct function
+        call.</p>
+        <p>Getter composition isn&#39;t expressible through <code>Optic.andThen</code>
+        in EO today (see
+        <a href="optics.html#getter">Optics → Getter</a>); the <code>_3</code> / <code>_6</code> EO
+        numbers are from nested <code>.get</code> calls. Monocle&#39;s first-class
+        <code>Getter.andThen</code> is the surface for its side.</p>
+        
+        <h2 id="setter-setterf-carrier-write-only" class="section"><a class="anchor-link left" href="#setter-setterf-carrier-write-only"><i class="icofont-laika link">&#xef71;</i></a>Setter (<code>SetterF</code> carrier, write-only)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Depth</th>
+              <th>eo</th>
+              <th>Monocle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>modify_0</code></td>
+              <td>1.45 ns</td>
+              <td>1.27 ns</td>
+            </tr>
+            <tr>
+              <td><code>modify_3</code></td>
+              <td>25.37 ns</td>
+              <td>13.18 ns</td>
+            </tr>
+            <tr>
+              <td><code>modify_6</code></td>
+              <td>50.27 ns</td>
+              <td>27.32 ns</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Same composition caveat as Getter — EO&#39;s deep-modify benches
+        nest <code>modify</code> calls where Monocle composes natively.</p>
+        
+        <h2 id="fold-forget-f-carrier" class="section"><a class="anchor-link left" href="#fold-forget-f-carrier"><i class="icofont-laika link">&#xef71;</i></a>Fold (<code>Forget[F]</code> carrier)</h2>
+        <p><code>foldMap(identity)</code> over <code>List[Int]</code>, sweeping size.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th>eo</th>
+              <th>Monocle</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>8</td>
+              <td>50.8 ns</td>
+              <td>11.4 ns</td>
+            </tr>
+            <tr>
+              <td>64</td>
+              <td>458.4 ns</td>
+              <td>165.1 ns</td>
+            </tr>
+            <tr>
+              <td>512</td>
+              <td>3 868.7 ns</td>
+              <td>2 179.5 ns</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Monocle wins here because its <code>Fold.foldMap</code> reduces to a
+        direct <code>Foldable[F].foldMap</code> call; EO&#39;s <code>Forget[F]</code> carrier
+        adds a small per-element dispatch layer through
+        <code>ForgetfulFold</code>.</p>
+        
+        <h2 id="traversal" class="section"><a class="anchor-link left" href="#traversal"><i class="icofont-laika link">&#xef71;</i></a>Traversal</h2>
+        <p><code>each</code> on <code>List[Int]</code>, plus a <code>modify(_ + 1)</code> sweep:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th>eo (<code>each</code>)</th>
+              <th>Monocle (<code>fromTraverse</code>)</th>
+              <th>speedup</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>8</td>
+              <td>17.8 ns</td>
+              <td>119.4 ns</td>
+              <td>6.71×</td>
+            </tr>
+            <tr>
+              <td>64</td>
+              <td>145.7 ns</td>
+              <td>1 352.5 ns</td>
+              <td>9.28×</td>
+            </tr>
+            <tr>
+              <td>512</td>
+              <td>1 939.5 ns</td>
+              <td>16 214.0 ns</td>
+              <td>8.36×</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>A surprisingly large win — EO&#39;s <code>Traversal.forEach</code> keeps the
+        <code>Forget[T]</code> carrier linear by delegating straight to
+        <code>Functor[T].map</code>, while Monocle&#39;s <code>Traversal</code> wraps each
+        element in an <code>Applicative[Id]</code> traversal and pays the
+        per-element wrapping cost.</p>
+        
+        <h2 id="jsonprism-cursor-backed-json-edit" class="section"><a class="anchor-link left" href="#jsonprism-cursor-backed-json-edit"><i class="icofont-laika link">&#xef71;</i></a>JsonPrism — cursor-backed JSON edit</h2>
+        <p>No Monocle equivalent at this layer. Compared against the
+        classical <code>decode → modify → re-encode</code> baseline.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Depth</th>
+              <th>eo</th>
+              <th>naive</th>
+              <th>speedup</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1</td>
+              <td>69.1 ns</td>
+              <td>155.5 ns</td>
+              <td>2.25×</td>
+            </tr>
+            <tr>
+              <td>2</td>
+              <td>116.1 ns</td>
+              <td>158.8 ns</td>
+              <td>1.37×</td>
+            </tr>
+            <tr>
+              <td>3</td>
+              <td>135.8 ns</td>
+              <td>253.3 ns</td>
+              <td>1.87×</td>
+            </tr>
+            <tr>
+              <td>wide</td>
+              <td>943.5 ns</td>
+              <td>983.6 ns</td>
+              <td>1.04×</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The &quot;wide&quot; variant uses 28-total-field records; at that width
+        the naive decoder has to touch every field. EO&#39;s
+        <code>codecPrism[…].field(_.x).field(_.y)</code> walks only the focused
+        path.</p>
+        
+        <h2 id="jsontraversal-items-each-name-edits" class="section"><a class="anchor-link left" href="#jsontraversal-items-each-name-edits"><i class="icofont-laika link">&#xef71;</i></a>JsonTraversal — <code>items.each.name</code> edits</h2>
+        <p>Uppercasing every <code>items[*].name</code> inside a <code>Basket</code> record, at
+        three array sizes:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Items</th>
+              <th>eo</th>
+              <th>naive</th>
+              <th>speedup</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>8</td>
+              <td>796.1 ns</td>
+              <td>1 802.2 ns</td>
+              <td>2.26×</td>
+            </tr>
+            <tr>
+              <td>64</td>
+              <td>5 977.8 ns</td>
+              <td>12 404.9 ns</td>
+              <td>2.07×</td>
+            </tr>
+            <tr>
+              <td>512</td>
+              <td>47 498.6 ns</td>
+              <td>95 503.5 ns</td>
+              <td>2.01×</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The ratio is roughly constant — the naive path pays a full
+        decode / re-encode for every element, so both scale linearly
+        with array size and EO wins by a constant factor from avoiding
+        the per-element codec round-trip.</p>
+        
+        <h2 id="powerseries-traversal-with-downstream-composition" class="section"><a class="anchor-link left" href="#powerseries-traversal-with-downstream-composition"><i class="icofont-laika link">&#xef71;</i></a>PowerSeries — traversal with downstream composition</h2>
+        <p>EO-only — no Monocle equivalent. Toggles <code>isMobile</code> on every
+        <code>Phone</code> inside a <code>Person.phones: ArraySeq[Phone]</code>; the chain
+        is <code>Lens → Traversal.each → Lens</code>, where <code>Traversal.each</code> is
+        the <code>PowerSeries</code>-backed composable traversal.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th>eo (composed chain)</th>
+              <th>naive <code>copy</code> / <code>map</code></th>
+              <th>ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>4</td>
+              <td>131 ns</td>
+              <td>13 ns</td>
+              <td>10×</td>
+            </tr>
+            <tr>
+              <td>32</td>
+              <td>805 ns</td>
+              <td>80 ns</td>
+              <td>10×</td>
+            </tr>
+            <tr>
+              <td>256</td>
+              <td>4 996 ns</td>
+              <td>721 ns</td>
+              <td>7×</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Focus storage is a <code>PSVec[B]</code> view (an <code>Array[AnyRef]</code> plus
+        an <code>(offset, length)</code> window) — so the <code>assoc</code>&#39;s per-element
+        reassembly slice is a pointer update rather than an arraycopy.
+        Per-element leftovers are held in parallel <code>Array[Int]</code> and
+        <code>Array[AnyRef]</code> buffers inside <code>AssocSndZ</code>, avoiding a
+        <code>(Int, Snd[Xi])</code> boxing per element. The <code>Traversal.pEach.from</code>
+        rebuild stashes the original <code>T[A]</code> in the existential leftover
+        and reassembles via <code>Traverse.mapAccumulate</code> — a single O(N)
+        pass through the original container shape, not the O(N²)
+        <code>MonoidK.combineK</code> fold an earlier revision used. The result
+        is linear scaling at ~7–10× overhead over the naive
+        <code>copy</code>/<code>map</code> baseline, and the ratio <em>tightens</em> with size as
+        fixed per-op setup amortises.</p>
+        <p>For single-pass modify of a collection — no downstream optic
+        after the traversal — <code>Traversal.forEach[F, A, B]</code> (carrier
+        <code>Forget[F]</code>, identity-shaped, no composition support) is the
+        correct choice. Reach for <code>Traversal.each</code> / <code>pEach</code> when the
+        chain needs to continue past the traversal.</p>
+        <p>See the
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes">composition notes</a>
+        for the full tradeoff matrix.</p>
+        
+        <h2 id="reproducing" class="section"><a class="anchor-link left" href="#reproducing"><i class="icofont-laika link">&#xef71;</i></a>Reproducing</h2>
+        <p>From the repo root:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment"># Trustworthy numbers — three forks, five iterations, three warmups.
+</span><span>sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1&quot;</span><span>
+
+</span><span class="comment"># Smoke check — one fork, faster but noisier.
+</span><span>sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1&quot;</span><span>
+
+</span><span class="comment"># Filter by class (JMH regex):
+</span><span>sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*JsonTraversalBench.*&quot;</span></code></pre>
+        <p>JMH&#39;s GC and stack profilers are useful when a number is
+        surprising:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span>sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 5 -wi 3 -f 3 -prof gc .*LensBench.*&quot;</span><span>
+sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 5 -wi 3 -f 3 -prof stack .*PowerSeries.*&quot;</span></code></pre>
+
+        
+<hr class="footer-rule"/>
+<footer>
+  Site generated by <a href="https://typelevel.org/Laika/">Laika</a> with the Helium theme.
+</footer>
+
+
+      </main>
+
+    </div>
+
+  </body>
+
+</html>

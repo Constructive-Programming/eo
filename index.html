@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+  <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="Typelevel Laika + Helium Theme" />
+  <title>cats-eo</title>
+  
+  <meta name="author" content="Rodolfo Hansen"/>
+  
+  
+  <meta name="description" content="cats-eo-docs"/>
+  
+  
+  
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700">
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono:500">
+  
+  <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
+    <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
+  <script src="helium/site/laika-helium.js"></script>
+  
+  
+  <script> /* for avoiding page load transitions */ </script>
+</head>
+
+  <body>
+
+    <header id="top-bar" class="light-default dark-default">
+
+  <div class="row">
+    <a id="nav-icon">
+      <i class="icofont-laika navigationMenu" title="Navigation">&#xefa2;</i>
+    </a>
+    
+    
+  </div>
+
+  <a class="image-link" href="https://github.com/Constructive-Programming/eo"><img src=""></a>
+
+  <div class="row links">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>  
+
+</header>
+    
+    <nav id="sidebar">
+
+  <div class="row">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>
+
+  <ul class="nav-list">
+    <li class="level1 active nav-leaf"><a href="#">cats-eo</a></li>
+    <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
+    <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
+    <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
+    <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
+    <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
+    <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
+    <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
+    <li class="level1 nav-leaf"><a href="migration-from-monocle.html">Migrating from Monocle</a></li>
+  </ul>
+
+</nav>
+
+    <div id="container">
+
+      
+<nav id="page-nav">
+  <p class="header"><a href="#">cats-eo</a></p>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#_60-second-example">60-second example</a></li>
+    <li class="level1 nav-leaf"><a href="#keep-reading">Keep reading</a></li>
+  </ul>
+
+  <p class="footer"></p>
+</nav>
+
+
+      <main class="content">
+
+        <h1 id="cats-eo" class="title">cats-eo</h1>
+        <p>An <strong>existential optics</strong> library for Scala 3, built on
+        <a href="https://typelevel.org/cats/">cats</a>.</p>
+        <p>One <code>Optic[S, T, A, B, F]</code> trait, parameterised over a carrier
+        <code>F[_, _]</code>, unifies every optic family. Composition crosses
+        families through <code>Composer[F, G]</code> bridges rather than N² hand-
+        written <code>.andThen</code> overloads.</p>
+        <p>Current version: 0.1.</p>
+        
+        <h2 id="_60-second-example" class="section"><a class="anchor-link left" href="#_60-second-example"><i class="icofont-laika link">&#xef71;</i></a>60-second example</h2>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.</span><span class="identifier">lens</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Zip</span><span>}
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">street</span><span> =
+  </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>)
+    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">lens</span><span>[</span><span class="type-name">Address</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">street</span><span>))</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">alice</span><span> = </span><span class="type-name">Person</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">Address</span><span>(</span><span class="string-literal">&quot;Main St&quot;</span><span>, </span><span class="type-name">Zip</span><span>(</span><span class="number-literal">12345</span><span>, </span><span class="string-literal">&quot;6789&quot;</span><span>)))
+</span><span class="comment">// alice: Person = Person(
+//   name = &quot;Alice&quot;,
+//   address = Address(
+//     street = &quot;Main St&quot;,
+//     zip = Zip(code = 12345, extension = &quot;6789&quot;)
+//   )
+// )
+</span><span>
+</span><span class="identifier">street</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">alice</span><span>)
+</span><span class="comment">// res0: String = &quot;Main St&quot;
+</span><span class="identifier">street</span><span>.</span><span class="identifier">replace</span><span>(</span><span class="string-literal">&quot;Broadway&quot;</span><span>)(</span><span class="identifier">alice</span><span>)
+</span><span class="comment">// res1: Person = Person(
+//   name = &quot;Alice&quot;,
+//   address = Address(
+//     street = &quot;Broadway&quot;,
+//     zip = Zip(code = 12345, extension = &quot;6789&quot;)
+//   )
+// )
+</span><span class="identifier">street</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">alice</span><span>)
+</span><span class="comment">// res2: Person = Person(
+//   name = &quot;Alice&quot;,
+//   address = Address(
+//     street = &quot;MAIN ST&quot;,
+//     zip = Zip(code = 12345, extension = &quot;6789&quot;)
+//   )
+// )</span></code></pre>
+        <p>No <code>.copy</code> chains, no setter lambdas, no <code>GenLens</code> boilerplate. The
+        <code>lens</code> macro works on plain case classes, Scala 3 enums, and union
+        types alike.</p>
+        
+        <h2 id="keep-reading" class="section"><a class="anchor-link left" href="#keep-reading"><i class="icofont-laika link">&#xef71;</i></a>Keep reading</h2>
+        <ul>
+          <li><a href="getting-started.html">Getting started</a> — install + the 60-second
+          tour expanded.</li>
+          <li><a href="concepts.html">Concepts</a> — what an Optic <em>is</em>, what a carrier is,
+          and how <code>Composer</code> bridges family boundaries.</li>
+          <li><a href="optics.html">Optics reference</a> — one section per family, with
+          runnable examples.</li>
+          <li><a href="generics.html">Generics</a> — the <code>lens[S](_.field)</code> and
+          <code>prism[S, A]</code> macros, backed by Hearth.</li>
+          <li><a href="circe.html">Circe integration</a> — <code>JsonPrism</code> / <code>JsonTraversal</code>,
+          cursor-backed navigation into circe <code>Json</code> with no full decode.</li>
+          <li><a href="extensibility.html">Extensibility</a> — how to ship a custom optic
+          tuned for your domain&#39;s hot path without losing the rest of the
+          cats-eo universe.</li>
+          <li><a href="cookbook.html">Cookbook</a> — common patterns: option fields,
+          composed Lens/Optional, multi-focus modify, JSON path edits.</li>
+          <li><a href="migration-from-monocle.html">Migrating from Monocle</a> — a
+          translation table + where EO diverges.</li>
+        </ul>
+
+        
+<hr class="footer-rule"/>
+<footer>
+  Site generated by <a href="https://typelevel.org/Laika/">Laika</a> with the Helium theme.
+</footer>
+
+
+      </main>
+
+    </div>
+
+  </body>
+
+</html>

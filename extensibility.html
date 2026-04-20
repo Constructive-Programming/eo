@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+  <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="Typelevel Laika + Helium Theme" />
+  <title>Extensibility</title>
+  
+  <meta name="author" content="Rodolfo Hansen"/>
+  
+  
+  <meta name="description" content="cats-eo-docs"/>
+  
+  
+  
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700">
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono:500">
+  
+  <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
+    <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
+  <script src="helium/site/laika-helium.js"></script>
+  
+  
+  <script> /* for avoiding page load transitions */ </script>
+</head>
+
+  <body>
+
+    <header id="top-bar" class="light-default dark-default">
+
+  <div class="row">
+    <a id="nav-icon">
+      <i class="icofont-laika navigationMenu" title="Navigation">&#xefa2;</i>
+    </a>
+    
+    
+  </div>
+
+  <a class="image-link" href="https://github.com/Constructive-Programming/eo"><img src=""></a>
+
+  <div class="row links">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>  
+
+</header>
+    
+    <nav id="sidebar">
+
+  <div class="row">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="index.html">cats-eo</a></li>
+    <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
+    <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
+    <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
+    <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
+    <li class="level1 active nav-leaf"><a href="#">Extensibility</a></li>
+    <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
+    <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
+    <li class="level1 nav-leaf"><a href="migration-from-monocle.html">Migrating from Monocle</a></li>
+  </ul>
+
+</nav>
+
+    <div id="container">
+
+      
+<nav id="page-nav">
+  <p class="header"><a href="#">Extensibility</a></p>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#the-lever">The lever</a></li>
+    <li class="level1 nav-leaf"><a href="#four-axes-of-extension">Four axes of extension</a></li>
+    <li class="level1 nav-node"><a href="#worked-example-jsonprism">Worked example: JsonPrism</a></li>
+    <li class="level2 nav-leaf"><a href="#the-problem">The problem</a></li>
+    <li class="level2 nav-leaf"><a href="#the-design">The design</a></li>
+    <li class="level2 nav-leaf"><a href="#the-fused-hot-path">The fused hot path</a></li>
+    <li class="level2 nav-leaf"><a href="#two-tiers-both-correct">Two tiers, both correct</a></li>
+    <li class="level1 nav-node"><a href="#worked-example-jsontraversal">Worked example: JsonTraversal</a></li>
+    <li class="level2 nav-leaf"><a href="#why-not-powerseries">Why not PowerSeries</a></li>
+    <li class="level2 nav-leaf"><a href="#the-chosen-shape">The chosen shape</a></li>
+    <li class="level1 nav-leaf"><a href="#measurable-outcome">Measurable outcome</a></li>
+    <li class="level1 nav-leaf"><a href="#when-to-reach-for-this-pattern">When to reach for this pattern</a></li>
+    <li class="level1 nav-leaf"><a href="#see-also">See also</a></li>
+  </ul>
+
+  <p class="footer"></p>
+</nav>
+
+
+      <main class="content">
+
+        <h1 id="extensibility" class="title">Extensibility</h1>
+        <p>How you build a custom optic tuned for your domain&#39;s hot path,
+        keep full integration with the rest of the Optic universe, and
+        don&#39;t re-invent typeclass plumbing.</p>
+        
+        <h2 id="the-lever" class="section"><a class="anchor-link left" href="#the-lever"><i class="icofont-laika link">&#xef71;</i></a>The lever</h2>
+        <p>cats-eo&#39;s central trait is:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">trait</span><span> </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">F</span><span>[</span><span class="identifier">_</span><span>, </span><span class="identifier">_</span><span>]]:
+  </span><span class="keyword">type</span><span> </span><span class="type-name">X</span><span>
+  </span><span class="keyword">def</span><span> </span><span class="declaration-name">to</span><span>:   </span><span class="type-name">S</span><span>      =&gt; </span><span class="type-name">F</span><span>[</span><span class="type-name">X</span><span>, </span><span class="type-name">A</span><span>]
+  </span><span class="keyword">def</span><span> </span><span class="declaration-name">from</span><span>: </span><span class="type-name">F</span><span>[</span><span class="type-name">X</span><span>, </span><span class="type-name">B</span><span>] =&gt; </span><span class="type-name">T</span></code></pre>
+        <p>Every built-in family — Lens, Prism, Iso, Optional, Setter,
+        Traversal, Fold — is a concrete subclass that differs only in
+        which carrier <code>F[_, _]</code> it picks. The operations (<code>.get</code>,
+        <code>.modify</code>, <code>.modifyA</code>, <code>.foldMap</code>, <code>.andThen</code>, …) are
+        extensions on <code>Optic</code> that dispatch through carrier-specific
+        typeclasses (<code>Accessor[F]</code>, <code>ForgetfulFunctor[F]</code>,
+        <code>ForgetfulTraverse[F, Applicative]</code>, <code>AssociativeFunctor[F, X,
+Y]</code>, …).</p>
+        <p>That&#39;s the extension point. When you ship an optic tuned for
+        your domain, you don&#39;t rewrite the operations — you pick which
+        existing carrier to reuse and which inline methods to shadow
+        for the hot path. Everything else plugs in automatically.</p>
+        
+        <h2 id="four-axes-of-extension" class="section"><a class="anchor-link left" href="#four-axes-of-extension"><i class="icofont-laika link">&#xef71;</i></a>Four axes of extension</h2>
+        <p>From cheapest to heaviest:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Axis</th>
+              <th>What you write</th>
+              <th>What you get</th>
+              <th>Typical cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>1. <strong>New concrete subclass on an existing carrier</strong></td>
+              <td><code>class MyOptic[...] extends Optic[S, T, A, B, F]</code> — your own <code>type X</code>, <code>to</code>, <code>from</code></td>
+              <td>Every generic extension the carrier already supports (<code>.get</code> / <code>.modify</code> / <code>.modifyA</code> / <code>.foldMap</code>), plus <code>.andThen</code> with every optic family that shares <code>F</code> — and, via cross-carrier <code>Morph</code>, with every family whose carrier has a <code>Composer[F, G]</code> bridge</td>
+              <td>Minutes. Zero runtime overhead versus the built-in subclasses — same typeclass dispatch</td>
+            </tr>
+            <tr>
+              <td>2. <strong>Shadow generic extensions with fused class-level methods</strong></td>
+              <td><code>inline def modify(f: A =&gt; B): S =&gt; T = …</code> on the concrete subclass</td>
+              <td>Callers who bind to the concrete type get the fused code; callers who bind to the generic <code>Optic</code> trait still route through the carrier. Both paths type-check — pick which one you need</td>
+              <td>Per hot-path method. Lets you skip the carrier round-trip without losing the trait contract</td>
+            </tr>
+            <tr>
+              <td>3. <strong>New <code>Composer[F, G]</code> bridge</strong></td>
+              <td>A <code>given Composer[F, G]</code> that expresses an <code>Optic[…, F]</code> as an <code>Optic[…, G]</code></td>
+              <td><code>.andThen</code> between any optic in <code>F</code> and any optic in <code>G</code>, in either direction, via the stock <code>Morph</code> instances</td>
+              <td>Hours. You pick the direction of expression; <code>Morph</code> picks the direction of composition</td>
+            </tr>
+            <tr>
+              <td>4. <strong>New carrier + full typeclass instance set</strong></td>
+              <td>A new <code>F[_, _]</code> plus <code>AssociativeFunctor[F, X, Y]</code> and whichever <code>Forgetful*</code> typeclasses the operations you want require</td>
+              <td>A new carrier that&#39;s a first-class citizen alongside <code>Tuple2</code> / <code>Either</code> / <code>Affine</code> / <code>PowerSeries</code></td>
+              <td>Days. Only when the existing carriers genuinely can&#39;t express your shape</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Axis 1 + 2 together is the sweet spot for most domain optics —
+        you use what already works, and you override only the methods
+        where you&#39;ve measured a specific cost.</p>
+        
+        <h2 id="worked-example-jsonprism" class="section"><a class="anchor-link left" href="#worked-example-jsonprism"><i class="icofont-laika link">&#xef71;</i></a>Worked example: JsonPrism</h2>
+        <p><code>cats-eo-circe</code> ships a <code>JsonPrism[A]</code> that edits a leaf inside
+        circe&#39;s <code>Json</code> without decoding the enclosing record. It&#39;s a
+        case study for axes 1 and 2 at their most productive.</p>
+        
+        <h3 id="the-problem" class="section"><a class="anchor-link left" href="#the-problem"><i class="icofont-laika link">&#xef71;</i></a>The problem</h3>
+        <p>The classical &quot;edit one leaf in a JSON document&quot; pattern is:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">json</span><span>.</span><span class="identifier">as</span><span>[</span><span class="type-name">Person</span><span>]                                 </span><span class="comment">// decode everything
+</span><span>    .</span><span class="identifier">map</span><span>(</span><span class="identifier">p</span><span> =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">name</span><span> = </span><span class="identifier">p</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">toUpperCase</span><span>))
+    .</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">asJson</span><span>)                              </span><span class="comment">// re-encode everything</span></code></pre>
+        <p>For a forty-field record where you want to upper-case one
+        string, thirty-nine fields get decoded and re-encoded for no
+        reason. A cursor-based edit could touch only the leaf — but
+        circe&#39;s <code>HCursor.set.top</code> forces a conversion of its internal
+        <code>LinkedHashMap</code>-backed <code>JsonObject</code> to a <code>MapAndVector</code>
+        representation per hop, which on the narrow-record benchmark
+        accounted for ~27% of runtime before the optimisation.</p>
+        <p>The fix is a concrete Optic subclass that walks the JSON
+        directly via <code>Json.asObject</code> and <code>JsonObject.add</code>, bypassing
+        <code>HCursor</code> entirely.</p>
+        
+        <h3 id="the-design" class="section"><a class="anchor-link left" href="#the-design"><i class="icofont-laika link">&#xef71;</i></a>The design</h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">final</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">JsonPrism</span><span>[</span><span class="type-name">A</span><span>] </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] (
+    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">path</span><span>:    </span><span class="type-name">Array</span><span>[</span><span class="type-name">PathStep</span><span>],   </span><span class="comment">// flat root-to-leaf path
+</span><span>    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">encoder</span><span>: </span><span class="type-name">Encoder</span><span>[</span><span class="type-name">A</span><span>],
+    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">decoder</span><span>: </span><span class="type-name">Decoder</span><span>[</span><span class="type-name">A</span><span>],
+) </span><span class="keyword">extends</span><span> </span><span class="type-name">Optic</span><span>[</span><span class="type-name">Json</span><span>, </span><span class="type-name">Json</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">Either</span><span>]:
+  </span><span class="keyword">type</span><span> </span><span class="type-name">X</span><span> = (</span><span class="type-name">DecodingFailure</span><span>, </span><span class="type-name">HCursor</span><span>)              </span><span class="comment">// miss branch carries diagnostics</span></code></pre>
+        <p>Look at what&#39;s picked here and what&#39;s not.</p>
+        <ul>
+          <li><strong>Carrier.</strong> <code>Either</code> — the same one <code>Prism</code> uses. No new
+          carrier, no new typeclass instances. Every capability
+          <code>Either</code> already ships — <code>Accessor</code>, <code>ReverseAccessor</code>,
+          <code>ForgetfulFunctor</code>, <code>ForgetfulTraverse</code>,
+          <code>AssociativeFunctor</code> — applies verbatim.</li>
+          <li><strong>Composition.</strong> JsonPrism composes with every other optic
+          family through the existing <code>Morph[Either, G]</code> /
+          <code>Morph[G, Either]</code> instances. A Lens chain over native
+          Scala values can <code>.andThen</code> a JsonPrism over Json; a
+          JsonPrism can <code>.andThen</code> an Optional inside the decoded
+          value — the cross-carrier machinery handles both directions,
+          without a single line of new <code>Composer</code> code in
+          <code>cats-eo-circe</code>.</li>
+          <li><strong>Storage.</strong> An <code>Array[PathStep]</code> — a cheap flat
+          representation that copies-and-extends on each <code>.field(_.x)</code>
+          step. Stored once at construction; no closure allocation
+          per call.</li>
+          <li><strong>Existential <code>X</code>.</strong> The miss-branch&#39;s <code>(DecodingFailure,
+HCursor)</code> gives generic-path callers both a diagnostic
+          (<code>DecodingFailure.history</code>) and the raw original Json
+          (<code>HCursor.top</code>) so <code>Optic.from</code> can forward the input
+          unchanged on a miss.</li>
+        </ul>
+        <p>The full code is
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/circe/src/main/scala/eo/circe/JsonPrism.scala"><code>circe/src/main/scala/eo/circe/JsonPrism.scala</code></a>.</p>
+        
+        <h3 id="the-fused-hot-path" class="section"><a class="anchor-link left" href="#the-fused-hot-path"><i class="icofont-laika link">&#xef71;</i></a>The fused hot path</h3>
+        <p>The class body shadows the generic Optic extensions with
+        <code>inline</code> methods that walk the path directly:</p>
+        <pre><code class="nohighlight"><span class="keyword">inline</span><span> </span><span class="keyword">def</span><span> </span><span class="declaration-name">modify</span><span>[</span><span class="type-name">X</span><span>](</span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> =&gt; </span><span class="type-name">A</span><span>): </span><span class="type-name">Json</span><span> =&gt; </span><span class="type-name">Json</span><span> =
+  </span><span class="identifier">json</span><span> =&gt; </span><span class="identifier">modifyImpl</span><span>(</span><span class="identifier">json</span><span>, </span><span class="identifier">f</span><span>)
+
+</span><span class="keyword">inline</span><span> </span><span class="keyword">def</span><span> </span><span class="declaration-name">transform</span><span>[</span><span class="type-name">X</span><span>](</span><span class="identifier">f</span><span>: </span><span class="type-name">Json</span><span> =&gt; </span><span class="type-name">Json</span><span>): </span><span class="type-name">Json</span><span> =&gt; </span><span class="type-name">Json</span><span> =
+  </span><span class="identifier">json</span><span> =&gt; </span><span class="identifier">transformImpl</span><span>(</span><span class="identifier">json</span><span>, </span><span class="identifier">f</span><span>)
+
+</span><span class="keyword">inline</span><span> </span><span class="keyword">def</span><span> </span><span class="declaration-name">place</span><span>[</span><span class="type-name">X</span><span>](</span><span class="identifier">a</span><span>: </span><span class="type-name">A</span><span>): </span><span class="type-name">Json</span><span> =&gt; </span><span class="type-name">Json</span><span> =
+  </span><span class="identifier">json</span><span> =&gt; </span><span class="identifier">placeImpl</span><span>(</span><span class="identifier">json</span><span>, </span><span class="identifier">a</span><span>)
+
+</span><span class="keyword">inline</span><span> </span><span class="keyword">def</span><span> </span><span class="declaration-name">reverseGet</span><span>(</span><span class="identifier">a</span><span>: </span><span class="type-name">A</span><span>): </span><span class="type-name">Json</span><span> = </span><span class="identifier">encoder</span><span>(</span><span class="identifier">a</span><span>)
+
+</span><span class="keyword">inline</span><span> </span><span class="keyword">def</span><span> </span><span class="declaration-name">getOption</span><span>(</span><span class="identifier">json</span><span>: </span><span class="type-name">Json</span><span>): </span><span class="type-name">Option</span><span>[</span><span class="type-name">A</span><span>] =
+  </span><span class="keyword">val</span><span> </span><span class="identifier">c</span><span> = </span><span class="identifier">navigateCursor</span><span>(</span><span class="identifier">json</span><span>)
+  </span><span class="identifier">c</span><span>.</span><span class="identifier">as</span><span>[</span><span class="type-name">A</span><span>](</span><span class="keyword">using</span><span> </span><span class="identifier">decoder</span><span>).</span><span class="identifier">toOption</span></code></pre>
+        <p><code>modifyImpl</code> is a pair of <code>while</code> loops: walk down collecting
+        parent <code>JsonObject</code>s and <code>Vector[Json]</code>s into an
+        <code>Array[AnyRef]</code>, decode the leaf, apply <code>f</code>, re-encode, unwind
+        via <code>JsonObject.add</code> / <code>Vector.updated</code> (each of which keeps
+        circe&#39;s internal <code>LinkedHashMap</code> representation).</p>
+        <p>Zero <code>HCursor</code> allocation. Zero carrier <code>Either</code>
+        materialisation. One <code>JsonObject.add</code> per path step on the way
+        up.</p>
+        
+        <h3 id="two-tiers-both-correct" class="section"><a class="anchor-link left" href="#two-tiers-both-correct"><i class="icofont-laika link">&#xef71;</i></a>Two tiers, both correct</h3>
+        <p>A JsonPrism caller binds in one of two ways:</p>
+        <p><strong>Concrete binding</strong> — you get the fused code:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span>: </span><span class="type-name">JsonPrism</span><span>[</span><span class="type-name">String</span><span>] =
+  </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
+
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>)
+</span><span class="comment">//       ^— dispatches to JsonPrism.modifyImpl: the fused path</span></code></pre>
+        <p><strong>Trait binding</strong> — you get the generic carrier path:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">Json</span><span>, </span><span class="type-name">Json</span><span>, </span><span class="type-name">String</span><span>, </span><span class="type-name">String</span><span>, </span><span class="type-name">Either</span><span>] =
+  </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
+
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>)
+</span><span class="comment">//       ^— dispatches to the generic Optic.modify extension,
+//          which routes through ForgetfulFunctor[Either].</span></code></pre>
+        <p>Both type-check, both produce the same answer. You pick
+        concrete binding when you care about the hot-path cost;
+        otherwise the generic extension is there unchanged.</p>
+        <p>The concrete class&#39;s inline overrides don&#39;t <em>replace</em> the
+        trait surface — they sit <em>alongside</em> it. That&#39;s why JsonPrism
+        still composes with every non-JSON optic through the generic
+        <code>.andThen</code>: the trait&#39;s abstract <code>to</code> / <code>from</code> keep satisfying
+        the Either-carrier contract that cross-carrier composition
+        relies on.</p>
+        
+        <h2 id="worked-example-jsontraversal" class="section"><a class="anchor-link left" href="#worked-example-jsontraversal"><i class="icofont-laika link">&#xef71;</i></a>Worked example: JsonTraversal</h2>
+        <p>Some domain optics don&#39;t need the full Optic trait integration.
+        <code>JsonTraversal</code> — the multi-focus edit under <code>.each</code> — is one
+        of them.</p>
+        
+        <h3 id="why-not-powerseries" class="section"><a class="anchor-link left" href="#why-not-powerseries"><i class="icofont-laika link">&#xef71;</i></a>Why not PowerSeries</h3>
+        <p>cats-eo&#39;s generic multi-focus carrier is <code>PowerSeries</code>. You
+        could express <code>codecPrism[Basket].items.each.name</code> as a
+        PowerSeries-carrier optic — but PowerSeries pays per-element
+        bookkeeping to support arbitrary downstream composition, and
+        for the JSON-array case you know the structure: a flat array
+        under a known prefix, with a fixed per-element suffix.</p>
+        
+        <h3 id="the-chosen-shape" class="section"><a class="anchor-link left" href="#the-chosen-shape"><i class="icofont-laika link">&#xef71;</i></a>The chosen shape</h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">final</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">JsonTraversal</span><span>[</span><span class="type-name">A</span><span>] </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] (
+    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">prefix</span><span>:  </span><span class="type-name">Array</span><span>[</span><span class="type-name">PathStep</span><span>],   </span><span class="comment">// root → array
+</span><span>    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">suffix</span><span>:  </span><span class="type-name">Array</span><span>[</span><span class="type-name">PathStep</span><span>],   </span><span class="comment">// element → leaf
+</span><span>    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">encoder</span><span>: </span><span class="type-name">Encoder</span><span>[</span><span class="type-name">A</span><span>],
+    </span><span class="keyword">private</span><span>[</span><span class="identifier">circe</span><span>] </span><span class="keyword">val</span><span> </span><span class="identifier">decoder</span><span>: </span><span class="type-name">Decoder</span><span>[</span><span class="type-name">A</span><span>],
+) </span><span class="keyword">extends</span><span> </span><span class="type-name">Dynamic</span><span>                                  </span><span class="comment">// NOT Optic</span></code></pre>
+        <p><code>JsonTraversal</code> does <strong>not</strong> extend <code>Optic</code>. It has its own
+        surface — <code>modify</code>, <code>transform</code>, <code>getAll</code> — and its own path
+        walker that traverses the prefix once, maps the array, and
+        unwinds. For a traversal whose only integration surface is
+        &quot;call me from a JsonPrism via <code>.each</code>&quot; and whose exit point is
+        a normal <code>Json</code>, stepping outside the Optic trait is the
+        correct call: you pay zero overhead for a contract you weren&#39;t
+        going to use.</p>
+        <p>This is axis 4 — a new domain-specific carrier — but the
+        &quot;carrier&quot; here is JSON-specific and doesn&#39;t need to integrate
+        with <code>AssociativeFunctor</code> or <code>Morph</code> because the use site is
+        closed. The handoff from JsonPrism to JsonTraversal happens at
+        <code>.each</code>, which is a plain method, not an <code>Optic.andThen</code>.</p>
+        <p>So the library-design principle is: <strong>extend as little as you
+        need</strong>. The JsonPrism path goes through axis 1+2 for full
+        Optic integration. The JsonTraversal path goes off-piste
+        because nothing downstream of it needs the integration.</p>
+        
+        <h2 id="measurable-outcome" class="section"><a class="anchor-link left" href="#measurable-outcome"><i class="icofont-laika link">&#xef71;</i></a>Measurable outcome</h2>
+        <p>Both domain optics deliver the expected constant factor over
+        the decode / re-encode baseline —
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala"><code>JsonPrismBench</code></a>
+        lands at ~2× across depths 1/2/3 and ~1× at the &quot;wide&quot;
+        (28-field) shape where the naive decoder already touches
+        every field;
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonTraversalBench.scala"><code>JsonTraversalBench</code></a>
+        holds ~2× across array sizes 8 / 64 / 512. See the
+        <a href="benchmarks.html">Benchmarks</a> page&#39;s JsonPrism and JsonTraversal
+        sections for the full tables.</p>
+        
+        <h2 id="when-to-reach-for-this-pattern" class="section"><a class="anchor-link left" href="#when-to-reach-for-this-pattern"><i class="icofont-laika link">&#xef71;</i></a>When to reach for this pattern</h2>
+        <p><strong>Yes</strong>, if all four of these are true:</p>
+        <ul>
+          <li>You have a measurable hot path where the generic carrier
+          round-trip is a real cost.</li>
+          <li>Your domain has a representation you can walk cheaper than
+          the carrier does. (JSON&#39;s <code>JsonObject</code>, a binary format&#39;s
+          <code>ByteBuffer</code>, a typed record walked via reflection ahead of
+          time, etc.)</li>
+          <li>You want callers to stay inside the Optic universe — be
+          able to <code>.andThen</code> your optic with a Lens, a Prism, a
+          traversal — without bridge code.</li>
+          <li>The performance delta justifies the code you&#39;re about to
+          write.</li>
+        </ul>
+        <p><strong>No</strong>, or <strong>not yet</strong>:</p>
+        <ul>
+          <li>It&#39;s a one-off utility. Just write a function.</li>
+          <li>The hot path isn&#39;t measured. Profile first, or you&#39;ll
+          over-specialise.</li>
+          <li>Your optic&#39;s shape doesn&#39;t match any existing carrier. That
+          points to axis 4 (new carrier), which is heavier than
+          JsonPrism&#39;s story — make sure axis 1 + 2 don&#39;t cover it
+          first.</li>
+        </ul>
+        
+        <h2 id="see-also" class="section"><a class="anchor-link left" href="#see-also"><i class="icofont-laika link">&#xef71;</i></a>See also</h2>
+        <ul>
+          <li><a href="concepts.html">Concepts</a> — what a carrier is and which
+          typeclasses unlock which operations.</li>
+          <li><a href="circe.html">Circe integration</a> — how to <em>use</em> the
+          JsonPrism / JsonTraversal optics described here as a design
+          case study.</li>
+          <li><a href="benchmarks.html">Benchmarks</a> — measured numbers for both
+          JsonPrism and JsonTraversal against the naive decode /
+          re-encode baseline.</li>
+        </ul>
+
+        
+<hr class="footer-rule"/>
+<footer>
+  Site generated by <a href="https://typelevel.org/Laika/">Laika</a> with the Helium theme.
+</footer>
+
+
+      </main>
+
+    </div>
+
+  </body>
+
+</html>
