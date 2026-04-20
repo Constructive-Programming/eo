@@ -52,13 +52,13 @@ object Optional:
     new Optic[S, T, A, B, Affine]:
       type X = (T, S)
       val to: S => Affine[X, A] = s =>
-        Affine(getOrModify(s) match
-          case Right(a) => Right(s -> a)
-          case Left(t)  => Left(t))
+        getOrModify(s) match
+          case Right(a) => new Affine.Hit[X, A](s, a)
+          case Left(t)  => new Affine.Miss[X, A](t)
       val from: Affine[X, B] => T = a =>
-        a.affine match
-          case Right(p) => reverseGet(p)
-          case Left(t)  => t
+        a match
+          case h: Affine.Hit[X, B]  => reverseGet((h.snd, h.b))
+          case m: Affine.Miss[X, B] => m.fst
 
   /** Read-only construction — build an `Optic[S, Unit, A, A, Affine]` from just a partial
     * projection `S => Option[A]`, with no write-back needed.
@@ -87,9 +87,9 @@ object Optional:
     new Optic[S, Unit, A, A, Affine]:
       type X = (Unit, S)
       val to: S => Affine[X, A] = s =>
-        Affine(matches(s) match
-          case Some(a) => Right((s, a))
-          case None    => Left(()))
+        matches(s) match
+          case Some(a) => new Affine.Hit[X, A](s, a)
+          case None    => new Affine.Miss[X, A](())
       val from: Affine[X, A] => Unit = _ => ()
 
   /** Filtering read-only Optional — keeps only inputs matching `p`, exposing them via `.getOption`

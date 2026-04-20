@@ -71,13 +71,7 @@ object ForgetfulTraverse:
   given affineFTraverse: ForgetfulTraverse[Affine, Applicative] with
 
     def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =
-      fa =>
-        f =>
-          fa.affine
-            .fold(
-              l => Affine(l.asLeft[(Snd[X], B)]).pure[G],
-              (x, a) => f(a).map(b => Affine((x, b).asRight[Fst[X]])),
-            )
+      fa => f => fa.aTraverse(f)
 
   /** `Forget[F]` traverse — delegates to the underlying `Traverse[F]`. The core of
     * `Traversal.forEach` and `Fold` in their effectful forms.

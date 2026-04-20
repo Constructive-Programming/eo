@@ -158,11 +158,11 @@ object PowerSeries:
         type X = (1, Either[Fst[o.X], Snd[o.X]])
 
         val to: S => PowerSeries[X, A] = s =>
-          o.to(s).affine match
-            case Left(x0)       => PowerSeries(Left(x0), PSVec.empty[A])
-            case Right((x1, b)) => PowerSeries(Right(x1), PSVec.singleton[A](b))
+          o.to(s) match
+            case m: Affine.Miss[o.X, A] => PowerSeries(Left(m.fst), PSVec.empty[A])
+            case h: Affine.Hit[o.X, A]  => PowerSeries(Right(h.snd), PSVec.singleton[A](h.b))
 
         val from: PowerSeries[X, B] => T = ps =>
           ps.xo.asInstanceOf[Either[Fst[o.X], Snd[o.X]]] match
-            case Left(fx)  => o.from(Affine.ofLeft(fx))
-            case Right(sx) => o.from(Affine.ofRight(sx -> ps.vs.head))
+            case Left(fx)  => o.from(new Affine.Miss[o.X, B](fx))
+            case Right(sx) => o.from(new Affine.Hit[o.X, B](sx, ps.vs.head))

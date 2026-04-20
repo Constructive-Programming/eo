@@ -42,7 +42,11 @@ object ForgetfulFold:
   given affineFFold: ForgetfulFold[Affine] with
 
     def foldMap[X, A, M: Monoid]: (A => M) => Affine[X, A] => M =
-      f => fa => fa.affine.fold(_ => Monoid[M].empty, p => f(p._2))
+      f =>
+        fa =>
+          fa match
+            case _: Affine.Miss[X, A] => Monoid[M].empty
+            case h: Affine.Hit[X, A]  => f(h.b)
 
   /** `Forget[F]` foldMap — delegates to the underlying `Foldable[F]`. Powers `Fold.apply[F, A]` and
     * `Traversal.forEach.foldMap`.
