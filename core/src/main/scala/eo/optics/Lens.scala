@@ -112,6 +112,24 @@ class GetReplaceLens[S, T, A, B](
   inline def modify(f: A => B): S => T =
     s => enplace(s, f(get(s)))
 
+  /** Fused composition — `GetReplaceLens.andThen(GetReplaceLens)` collapses into another
+    * `GetReplaceLens` with `get = inner.get ∘ outer.get` and an enplace that threads the inner
+    * update through the outer. Skips the generic `AssociativeFunctor[Tuple2]` composeTo /
+    * composeFrom path entirely — no Tuple2 pairings, no existential nesting, no carrier round-trip.
+    *
+    * Scala's overload resolution picks this concrete-typed overload over the inherited
+    * `Optic.andThen` whenever both sides are known to be `GetReplaceLens` at the call site (true
+    * for `Lens.apply` results — which preserves the concrete type through inference). When the
+    * inner side is a different concrete subclass or a generic `Optic[…, Tuple2]`, the inherited
+    * method fires and the result uses the generic carrier path. Either way the user-facing
+    * behaviour is unchanged; fusion is a runtime-only acceleration.
+    */
+  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
+    new GetReplaceLens(
+      get = s => inner.get(get(s)),
+      enplace = (s, d) => enplace(s, inner.enplace(get(s), d)),
+    )
+
 /** Polymorphic split-combine lens. Encodes a lens as a splitter (`S => (XA, A)`) plus a combiner
   * (`(XA, B) => T`), with the structural complement surfaced as the existential `X = XA`.
   *

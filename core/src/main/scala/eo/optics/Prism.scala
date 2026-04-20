@@ -100,6 +100,30 @@ final class MendTearPrism[S, T, A, B](
   inline def getOption(s: S): Option[A] = tear(s).toOption
   inline def reverseGet(b: B): T = mend(b)
 
+  /** Fused composition — `MendTearPrism.andThen(MendTearPrism)` collapses into another
+    * `MendTearPrism` with a composed tear (outer → inner, bubbling misses appropriately) and
+    * `mend = outer.mend ∘ inner.mend`. Skips the generic `AssociativeFunctor[Either]` composeTo /
+    * composeFrom path — no nested `Left(Left(…))` / `Left(Right(…))` wrappers.
+    *
+    * Scala's overload resolution picks this concrete-typed overload over the inherited
+    * `Optic.andThen` whenever both sides are known to be `MendTearPrism` at the call site (true for
+    * `Prism.apply` / `Prism.pPrism` results, which preserve the concrete type through inference).
+    * When the inner side is a different concrete subclass (e.g. [[PickMendPrism]]) or a generic
+    * `Optic[…, Either]`, the inherited method fires and the result uses the generic carrier path.
+    * User-facing behaviour is unchanged; fusion is a runtime-only acceleration.
+    */
+  def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
+    new MendTearPrism(
+      tear = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) =>
+            inner.tear(a) match
+              case Left(b)  => Left(mend(b))
+              case Right(c) => Right(c),
+      mend = d => mend(inner.mend(d)),
+    )
+
 /** Concrete Optic subclass for the `Option`-shaped Prism constructor (`Prism.optional` /
   * `Prism.pOptional`).
   *
