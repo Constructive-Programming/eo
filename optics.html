@@ -91,11 +91,11 @@
     <li class="level1 nav-leaf"><a href="#lens">Lens</a></li>
     <li class="level1 nav-leaf"><a href="#prism">Prism</a></li>
     <li class="level1 nav-leaf"><a href="#iso">Iso</a></li>
-    <li class="level1 nav-leaf"><a href="#optional">Optional</a></li>
+    <li class="level1 nav-node"><a href="#optional">Optional</a></li>
+    <li class="level2 nav-leaf"><a href="#read-only-construction">Read-only construction</a></li>
     <li class="level1 nav-leaf"><a href="#setter">Setter</a></li>
     <li class="level1 nav-leaf"><a href="#getter">Getter</a></li>
     <li class="level1 nav-leaf"><a href="#fold">Fold</a></li>
-    <li class="level1 nav-leaf"><a href="#affinefold">AffineFold</a></li>
     <li class="level1 nav-leaf"><a href="#review">Review</a></li>
     <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
   </ul>
@@ -203,6 +203,33 @@
         the Lens into the Affine carrier. No explicit <code>.morph</code> required
         on your end.</p>
         
+        <h3 id="read-only-construction" class="section"><a class="anchor-link left" href="#read-only-construction"><i class="icofont-laika link">&#xef71;</i></a>Read-only construction</h3>
+        <p><code>Optional.readOnly(matches: S =&gt; Option[A])</code> builds an
+        <code>Optic[S, Unit, A, A, Affine]</code> from just a partial projection —
+        no write-back required. <code>T = Unit</code> statically rules out
+        <code>.modify</code> / <code>.replace</code>, so the resulting optic exposes only the
+        read-side operations (<code>.foldMap</code>, <code>.modifyA</code> for collecting
+        effects).</p>
+        <p>Use this when the source shape has no natural write-back
+        (<code>headOption</code> on a List, predicate-gated filters like
+        <code>Option.when(p(s))(s)</code>), or as an API-boundary declaration that
+        callers cannot write through the returned optic.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Adult</span><span>(</span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
+</span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span> =
+  </span><span class="type-name">Optional</span><span>.</span><span class="identifier">readOnly</span><span>[</span><span class="type-name">Adult</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">int</span><span>.</span><span class="keyword">given</span><span>
+</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">20</span><span>))
+</span><span class="comment">// res11: Int = 20
+</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">15</span><span>))
+</span><span class="comment">// res12: Int = 0</span></code></pre>
+        <p><code>Optional.selectReadOnly(p)</code> is the corresponding filter — keep
+        only inputs matching <code>p</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">evenOpt</span><span> = </span><span class="type-name">Optional</span><span>.</span><span class="identifier">selectReadOnly</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> % </span><span class="number-literal">2</span><span> == </span><span class="number-literal">0</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">evenOpt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">4</span><span>)
+</span><span class="comment">// res13: Int = 4
+</span><span class="identifier">evenOpt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">3</span><span>)
+</span><span class="comment">// res14: Int = 0</span></code></pre>
+        
         <h2 id="setter" class="section"><a class="anchor-link left" href="#setter"><i class="icofont-laika link">&#xef71;</i></a>Setter</h2>
         <p>A <code>Setter[S, A]</code> can modify but not read — a write-only focus
         for cases where the focus value isn&#39;t observable to the caller.
@@ -214,7 +241,7 @@
   </span><span class="identifier">cfg</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">values</span><span> = </span><span class="identifier">cfg</span><span>.</span><span class="identifier">values</span><span>.</span><span class="identifier">view</span><span>.</span><span class="identifier">mapValues</span><span>(</span><span class="identifier">f</span><span>).</span><span class="identifier">toMap</span><span>)
 }</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">bumpAll</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">SetterConfig</span><span>(</span><span class="type-name">Map</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span> -&gt; </span><span class="number-literal">1</span><span>, </span><span class="string-literal">&quot;b&quot;</span><span> -&gt; </span><span class="number-literal">2</span><span>)))
-</span><span class="comment">// res11: SetterConfig = SetterConfig(Map(&quot;a&quot; -&gt; 2, &quot;b&quot; -&gt; 3))</span></code></pre>
+</span><span class="comment">// res15: SetterConfig = SetterConfig(Map(&quot;a&quot; -&gt; 2, &quot;b&quot; -&gt; 3))</span></code></pre>
         
         <h2 id="getter" class="section"><a class="anchor-link left" href="#getter"><i class="icofont-laika link">&#xef71;</i></a>Getter</h2>
         <p>A <code>Getter[S, A]</code> is the read-only counterpart to <code>Setter</code> — a
@@ -223,7 +250,7 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">nameLen</span><span> = </span><span class="type-name">Getter</span><span>[</span><span class="type-name">Person</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">length</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">nameLen</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res12: Int = 5</span></code></pre>
+</span><span class="comment">// res16: Int = 5</span></code></pre>
         <p>Getter → Getter doesn&#39;t compose via <code>Optic.andThen</code> today
         (Getter&#39;s <code>T = Unit</code> mismatches the outer <code>B</code> slot). For a
         deeper read, compose a Lens chain and call <code>.get</code> on the
@@ -237,45 +264,15 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">listFold</span><span> = </span><span class="type-name">Fold</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listFold</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res13: Int = 6
+</span><span class="comment">// res17: Int = 6
 </span><span class="identifier">listFold</span><span>.</span><span class="identifier">foldMap</span><span>((</span><span class="identifier">i</span><span>: </span><span class="type-name">Int</span><span>) =&gt; </span><span class="identifier">i</span><span> * </span><span class="identifier">i</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res14: Int = 14</span></code></pre>
+</span><span class="comment">// res18: Int = 14</span></code></pre>
         <p><code>Fold.select(p)</code> narrows to elements matching a predicate:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">positive</span><span> = </span><span class="type-name">Fold</span><span>.</span><span class="identifier">select</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> &gt; </span><span class="number-literal">0</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">positive</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res15: Int = 3
+</span><span class="comment">// res19: Int = 3
 </span><span class="identifier">positive</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(-</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res16: Int = 0</span></code></pre>
-        
-        <h2 id="affinefold" class="section"><a class="anchor-link left" href="#affinefold"><i class="icofont-laika link">&#xef71;</i></a>AffineFold</h2>
-        <p>An <code>AffineFold[S, A]</code> is the read-only counterpart to
-        <code>Optional</code>: a zero-or-one-focus projection. Carrier: <code>Affine</code>
-        with <code>T = Unit</code>.</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">AffineFold</span><span>
-
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Adult</span><span>(</span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
-</span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span> =
-  </span><span class="type-name">AffineFold</span><span>[</span><span class="type-name">Adult</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">20</span><span>))
-</span><span class="comment">// res17: Option[Int] = Some(20)
-</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">15</span><span>))
-</span><span class="comment">// res18: Option[Int] = None
-</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">20</span><span>))
-</span><span class="comment">// res19: Int = 20
-</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">15</span><span>))
 </span><span class="comment">// res20: Int = 0</span></code></pre>
-        <p><code>AffineFold.select(p)</code> narrows to values matching a predicate —
-        symmetric to <code>Fold.select</code> but over a single focus:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">evenAF</span><span> = </span><span class="type-name">AffineFold</span><span>.</span><span class="identifier">select</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> % </span><span class="number-literal">2</span><span> == </span><span class="number-literal">0</span><span>)</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">evenAF</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="number-literal">4</span><span>)
-</span><span class="comment">// res21: Option[Int] = Some(4)
-</span><span class="identifier">evenAF</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res22: Option[Int] = None</span></code></pre>
-        <p>Composition caveat matches <code>Fold</code> / <code>Getter</code>: an AffineFold
-        doesn&#39;t compose with other AffineFolds via <code>Optic.andThen</code>
-        because its <code>T = Unit</code> mismatches the outer <code>B</code> slot. For a
-        deeper read, compose an <code>Optional</code> chain and call <code>.getOption</code>
-        / <code>.foldMap</code> on the composed optic.</p>
         
         <h2 id="review" class="section"><a class="anchor-link left" href="#review"><i class="icofont-laika link">&#xef71;</i></a>Review</h2>
         <p>A <code>Review[S, A]</code> is the reverse-only counterpart to <code>Getter</code> —
@@ -287,14 +284,14 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">someIntR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">Int</span><span>](</span><span class="type-name">Some</span><span>(</span><span class="identifier">_</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">42</span><span>)
-</span><span class="comment">// res23: Option[Int] = Some(42)</span></code></pre>
+</span><span class="comment">// res21: Option[Int] = Some(42)</span></code></pre>
         <p>Compose by composing the underlying <code>A =&gt; S</code> functions directly:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">lengthR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">length</span><span>)
 </span><span class="keyword">val</span><span> </span><span class="identifier">someLen</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">String</span><span>](
   </span><span class="identifier">s</span><span> =&gt; </span><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">lengthR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">s</span><span>))
 )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someLen</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="string-literal">&quot;hello&quot;</span><span>)
-</span><span class="comment">// res24: Option[Int] = Some(5)</span></code></pre>
+</span><span class="comment">// res22: Option[Int] = Some(5)</span></code></pre>
         <p>Two factory methods pull the natural build direction out of an
         Iso or a Prism — aliased as <code>ReversedLens</code> and <code>ReversedPrism</code>
         for users who expect to find those names next to the rest of
@@ -314,9 +311,9 @@
 )
 </span><span class="keyword">val</span><span> </span><span class="identifier">revPrism</span><span> = </span><span class="type-name">ReversedPrism</span><span>(</span><span class="identifier">somePrism</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">revIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">5</span><span>)
-</span><span class="comment">// res25: Int = 2
+</span><span class="comment">// res23: Int = 2
 </span><span class="identifier">revPrism</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">7</span><span>)
-</span><span class="comment">// res26: Option[Int] = Some(7)</span></code></pre>
+</span><span class="comment">// res24: Option[Int] = Some(7)</span></code></pre>
         <p><strong><code>ReversedLens</code> only accepts a bijective Lens</strong> (an
         <code>BijectionIso</code>). A general Lens doesn&#39;t carry enough
         information to reconstruct its source from the focus alone —
@@ -343,12 +340,12 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">listEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">pEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res27: List[Int] = List(2, 3, 4)</span></code></pre>
+</span><span class="comment">// res25: List[Int] = List(2, 3, 4)</span></code></pre>
         <p>Stick with <code>forEach</code> when the chain terminates — no downstream
         optics — and you want the tight map-only path:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">listForEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">forEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listForEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res28: List[Int] = List(2, 3, 4)</span></code></pre>
+</span><span class="comment">// res26: List[Int] = List(2, 3, 4)</span></code></pre>
         <p><code>each</code> shines when the chain continues past the traversal — e.g.
         &quot;for every phone, toggle <code>isMobile</code>&quot;:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span>: </span><span class="type-name">Boolean</span><span>, </span><span class="identifier">number</span><span>: </span><span class="type-name">String</span><span>)
@@ -362,7 +359,7 @@
   </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">false</span><span>, </span><span class="string-literal">&quot;555-0001&quot;</span><span>),
   </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">true</span><span>,  </span><span class="string-literal">&quot;555-0002&quot;</span><span>),
 )))
-</span><span class="comment">// res29: Owner = Owner(
+</span><span class="comment">// res27: Owner = Owner(
 //   List(
 //     Phone(isMobile = true, number = &quot;555-0001&quot;),
 //     Phone(isMobile = false, number = &quot;555-0002&quot;)
