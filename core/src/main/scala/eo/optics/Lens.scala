@@ -140,6 +140,48 @@ class GetReplaceLens[S, T, A, B](
       enplace = (s, d) => enplace(s, inner.reverseGet(d)),
     )
 
+  /** Fused `GetReplaceLens.andThen(MendTearPrism)` — always-present outer field focused further
+    * through a partial prism. Result is an `Optional`: the outer always hits, but the inner may
+    * miss. Skips cross-carrier `Morph.bothViaAffine`.
+    */
+  def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        inner.tear(get(s)) match
+          case Left(b)  => Left(enplace(s, b))
+          case Right(c) => Right(c),
+      reverseGet = (s, d) => enplace(s, inner.mend(d)),
+    )
+
+  /** Fused `GetReplaceLens.andThen(PickMendPrism)` — same shape as `andThen(MendTearPrism)` but the
+    * inner uses the Option-fast-path PickMend shape. Monomorphic inner (A = B on the prism)
+    * required so types close.
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using
+      ev: A =:= B
+  ): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        inner.pick(get(s)) match
+          case Some(c) => Right(c)
+          case None    => Left(enplace(s, ev(get(s)))),
+      reverseGet = (s, d) => enplace(s, ev(inner.mend(d))),
+    )
+
+  /** Fused `GetReplaceLens.andThen(Optional)` — lens focuses always-present inner, then Optional
+    * may miss on the inner. Result is an `Optional`.
+    */
+  def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        inner.getOrModify(get(s)) match
+          case Left(b)  => Left(enplace(s, b))
+          case Right(c) => Right(c),
+      reverseGet = (s, d) =>
+        val newB = inner.reverseGet(get(s), d)
+        enplace(s, newB),
+    )
+
 /** Polymorphic split-combine lens. Encodes a lens as a splitter (`S => (XA, A)`) plus a combiner
   * (`(XA, B) => T`), with the structural complement surfaced as the existential `X = XA`.
   *

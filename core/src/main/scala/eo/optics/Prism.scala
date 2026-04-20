@@ -157,6 +157,43 @@ final class MendTearPrism[S, T, A, B](
       mend = d => mend(ev(inner.mend(d))),
     )
 
+  /** Fused `MendTearPrism.andThen(GetReplaceLens)` — prism may miss, lens focuses on hit. Result is
+    * an `Optional` (partial focus). Skips cross-carrier `Morph.bothViaAffine`.
+    */
+  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) => Right(inner.get(a)),
+      reverseGet = (s, d) =>
+        tear(s) match
+          case Left(t)  => t
+          case Right(a) =>
+            val newB = inner.enplace(a, d)
+            mend(newB),
+    )
+
+  /** Fused `MendTearPrism.andThen(Optional)` — nested partial focuses. Outer miss passes through;
+    * inner miss lifts back through outer.mend.
+    */
+  def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) =>
+            inner.getOrModify(a) match
+              case Left(b)  => Left(mend(b))
+              case Right(c) => Right(c),
+      reverseGet = (s, d) =>
+        tear(s) match
+          case Left(t)  => t
+          case Right(a) =>
+            val newB = inner.reverseGet(a, d)
+            mend(newB),
+    )
+
 /** Concrete Optic subclass for the `Option`-shaped Prism constructor (`Prism.optional` /
   * `Prism.pOptional`).
   *

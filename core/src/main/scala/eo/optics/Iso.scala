@@ -86,3 +86,17 @@ final class BijectionIso[S, T, A, B](
           case Right(c) => Right(c),
       mend = d => reverseGet(inner.mend(d)),
     )
+
+  /** Fused `BijectionIso.andThen(Optional)` — iso is transparent; result is an `Optional` with the
+    * iso threaded around the inner Optional's partial focus.
+    */
+  def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        inner.getOrModify(get(s)) match
+          case Left(b)  => Left(reverseGet(b))
+          case Right(c) => Right(c),
+      reverseGet = (s, d) =>
+        val newB = inner.reverseGet(get(s), d)
+        reverseGet(newB),
+    )
