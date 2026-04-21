@@ -80,11 +80,13 @@ object PowerSeries:
   )
 
   /** Internal protocol for PowerSeries-carrier optics that always produce a 0- or 1-element focus
-    * vector — i.e. the morphed Lens / Prism / Optional values returned by [[tuple2ps]] /
-    * [[either2ps]] / [[affine2ps]]. When an outer PowerSeries optic detects its inner is
-    * `PSSingleton`, `assoc.composeTo` / `composeFrom` skip the per-element `PowerSeries` and
-    * `PSVec.Single` allocations entirely and (for Prism / Optional) also skip the `Either`/`Option`
-    * wrapper the generic `to` path would build.
+    * vector — the morphed Lens / Prism / Optional values returned by [[tuple2ps]] / [[either2ps]] /
+    * [[affine2ps]]. When `assoc.composeTo` / `composeFrom` detect a `PSSingleton` inner, they skip
+    * the per-element `PowerSeries` + `PSVec.Single` allocations and (for Prism / Optional) also
+    * skip the `Either` / `Option` wrapper the generic `to` path would build.
+    *
+    * The stricter refinement [[PSSingletonAlwaysHit]] covers the "every call hits" case (Lens
+    * morphs), letting `assoc` skip the `Array[Int]` `lens` array entirely.
     *
     * Private to `eo` — user code never sees this trait or its instances.
     */
@@ -123,10 +125,14 @@ object PowerSeries:
 
   /** Refinement of [[PSSingleton]] for optics that always produce **exactly one** focus per outer
     * element (a morphed Lens — no miss branch, no multi-focus). Lets `composeTo` skip the
-    * per-element `lens` array entirely (every slot would be 1) and lets `composeFrom` address
-    * `ys` and `vys` with the same index `i` without walking a running `offset`.
+    * per-element `lens` array entirely (every slot would be 1) and lets `composeFrom` address `ys`
+    * and `vys` with the same index `i` without walking a running `offset`.
     *
     * Prism / Optional morphs don't qualify: they may miss, producing a 0-length focus contribution.
+    *
+    * Implementers only need to define the two always-hit methods — the base [[PSSingleton]]
+    * contract is filled in automatically by delegation, so the generic maybe-hit path in
+    * `composeTo` / `composeFrom` still works if the type-match ever routes through it.
     *
     * Private to `eo` — user code never sees this trait.
     */
@@ -137,10 +143,23 @@ object PowerSeries:
       */
     def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit
 
-    /** Reassemble `T` from the i-th `(y, focus)` pair. Skips the [[PSSingleton.reconstructSingleton]]
-      * `pos` / `len` plumbing since always-hit implies `pos == i, len == 1`.
+    /** Reassemble `T` from the i-th `(y, focus)` pair. Skips the
+      * [[PSSingleton.reconstructSingleton]] `pos` / `len` plumbing since always-hit implies
+      * `pos == i, len == 1`.
       */
     def reconstructAlwaysHit(y: AnyRef, focus: B): T
+
+    final def collectTo(
+        s: S,
+        lenBuf: IntArrBuilder,
+        ysBuf: ObjArrBuilder,
+        flatBuf: ObjArrBuilder,
+    ): Unit =
+      lenBuf.append(1)
+      collectAlwaysHit(s, ysBuf, flatBuf)
+
+    final def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
+      reconstructAlwaysHit(y, vys(pos))
 
   given assoc[Xo, Xi]: AssociativeFunctor[PowerSeries, Xo, Xi] with
     type SndZ = AssocSndZ[Xo, Xi]
@@ -249,19 +268,6 @@ object PowerSeries:
     val to: S => PowerSeries[X, A] = s => PowerSeries(s, PSVec.singleton[A](lens.get(s)))
     val from: PowerSeries[X, B] => T = ps => lens.enplace(ps.xo, ps.vs.head)
 
-    def collectTo(
-        s: S,
-        lenBuf: IntArrBuilder,
-        ysBuf: ObjArrBuilder,
-        flatBuf: ObjArrBuilder,
-    ): Unit =
-      lenBuf.append(1)
-      ysBuf.append(s.asInstanceOf[AnyRef])
-      flatBuf.append(lens.get(s).asInstanceOf[AnyRef])
-
-    def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
-      lens.enplace(y.asInstanceOf[S], vys(pos))
-
     def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
       ysBuf.append(s.asInstanceOf[AnyRef])
       flatBuf.append(lens.get(s).asInstanceOf[AnyRef])
@@ -284,20 +290,6 @@ object PowerSeries:
       PowerSeries(xo, PSVec.singleton[A](a))
 
     val from: PowerSeries[X, B] => T = ps => o.from((ps.xo, ps.vs.head))
-
-    def collectTo(
-        s: S,
-        lenBuf: IntArrBuilder,
-        ysBuf: ObjArrBuilder,
-        flatBuf: ObjArrBuilder,
-    ): Unit =
-      val (xo, a) = o.to(s)
-      lenBuf.append(1)
-      ysBuf.append(xo.asInstanceOf[AnyRef])
-      flatBuf.append(a.asInstanceOf[AnyRef])
-
-    def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
-      o.from((y.asInstanceOf[o.X], vys(pos)))
 
     def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
       val (xo, a) = o.to(s)
