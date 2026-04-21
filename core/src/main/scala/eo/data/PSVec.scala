@@ -45,6 +45,17 @@ sealed trait PSVec[+B]:
       i += 1
     a
 
+  /** Like [[toAnyRefArray]] but MAY return the PSVec's own backing array without copying when
+    * it densely covers the full focus range (`Slice` with `offset == 0 && length == arr.length`).
+    * Callers MUST treat the returned array as immutable — any mutation would change the PSVec's
+    * observable content. Used by consumers that also won't mutate (notably
+    * [[optics.Traversal.pEach]]'s `from` which hands the result to
+    * `ArraySeq.unsafeWrapArray`, whose contract likewise forbids mutation).
+    *
+    * Default implementation is the safe `toAnyRefArray` copy; only `Slice` overrides to share.
+    */
+  def unsafeShareableArray: Array[AnyRef] = toAnyRefArray
+
   override def equals(that: Any): Boolean = that match
     case other: PSVec[?] =>
       if length != other.length then false
@@ -138,6 +149,10 @@ object PSVec:
       val a = new Array[AnyRef](length)
       System.arraycopy(arr, offset, a, 0, length)
       a
+
+    override def unsafeShareableArray: Array[AnyRef] =
+      if offset == 0 && length == arr.length then arr
+      else toAnyRefArray
 
   /** Zero-length shared vector. */
   def empty[B]: PSVec[B] = Empty

@@ -108,11 +108,14 @@ object Traversal:
         val vec = ps.vs
         ps.xo match
           case _: ArraySeq[?] =>
-            // `PSVec.toAnyRefArray` on a `Slice` compiles to one `System.arraycopy`
-            // (JVM intrinsic). Avoids `Traverse[ArraySeq].map`'s builder path, which
-            // routed through `SeqOps.size$` and accounted for 18% of profiled CPU
-            // on the nested bench before this bypass.
-            ArraySeq.unsafeWrapArray(vec.toAnyRefArray).asInstanceOf[T[B]]
+            // `unsafeShareableArray` hands back the Slice's own backing array when
+            // the Slice densely covers it (offset=0, length=arr.length — always true
+            // when `vec` came from `composeFrom`'s freshly-allocated resultBuf). We
+            // then wrap via `ArraySeq.unsafeWrapArray`, whose contract also forbids
+            // mutation, so the aliasing is safe end-to-end. Fallback path (non-dense
+            // Slice, or other PSVec variants) does the System.arraycopy copy via
+            // `toAnyRefArray`.
+            ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
           case _ =>
             var idx = 0
             Traverse[T].map(ps.xo) { _ =>
