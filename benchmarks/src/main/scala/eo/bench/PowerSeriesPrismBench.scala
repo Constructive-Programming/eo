@@ -2,6 +2,7 @@ package eo
 package bench
 
 import java.util.concurrent.TimeUnit
+import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
@@ -10,23 +11,23 @@ import eo.data.PowerSeries
 import eo.optics.{Prism => EoPrism, Traversal => EoTraversal}
 import eo.optics.Optic.*
 
-import cats.instances.list.given
+import cats.instances.arraySeq.given
 
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting
   * after a Traversal.
   *
-  * Fixture: `List[Result]` where `Result` is a sum type `Ok(Int) | Err(String)` with a 50/50
-  * distribution. The optic chain traverses every element and focuses the `Ok.value` via a
-  * Prism. Modify increments each `Ok.value` by one; the `Err` cases pass through untouched.
+  * Fixture: `ArraySeq[Result]` where `Result` is a sum type `Ok(Int) | Err(String)` with a
+  * 50/50 distribution. The optic chain traverses every element and focuses the `Ok.value`
+  * via a Prism. Modify increments each `Ok.value` by one; the `Err` cases pass through
+  * untouched.
   *
   * {{{
-  *   Traversal.each[List, Result].andThen(Prism[Result, Int](...))
+  *   Traversal.each[ArraySeq, Result].andThen(Prism[Result, Int](...))
   * }}}
   *
-  * This is the shape where a trie carrier's `PSEmpty` node could short-circuit half the
-  * per-element work: the current flat design still allocates per-element carrier structure for
-  * misses and filters them at `from` time, whereas a trie could mark the miss once and skip
-  * its subtree entirely.
+  * The ArraySeq container isolates the optic cost from List's pointer-chasing overhead —
+  * `Functor[ArraySeq].map` is a native array walk, so the numbers here reflect the
+  * PowerSeries / Prism machinery rather than any container traversal artefact.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -41,11 +42,11 @@ class PowerSeriesPrismBench:
   @Param(Array("8", "64", "512"))
   var size: Int = uninitialized
 
-  var results: List[Result] = uninitialized
+  var results: ArraySeq[Result] = uninitialized
 
   private val okValues =
     EoTraversal
-      .each[List, Result]
+      .each[ArraySeq, Result]
       .andThen(
         EoPrism[Result, Int](
           {
@@ -58,14 +59,14 @@ class PowerSeriesPrismBench:
 
   @Setup(Level.Iteration)
   def init(): Unit =
-    results = List.tabulate(size)(i =>
+    results = ArraySeq.tabulate(size)(i =>
       if i % 2 == 0 then Result.Ok(i) else Result.Err(s"err-$i")
     )
 
-  @Benchmark def eoModify_sparse: List[Result] =
+  @Benchmark def eoModify_sparse: ArraySeq[Result] =
     okValues.modify(_ + 1)(results)
 
-  @Benchmark def naive_sparse: List[Result] =
+  @Benchmark def naive_sparse: ArraySeq[Result] =
     results.map {
       case Result.Ok(v) => Result.Ok(v + 1)
       case other        => other
