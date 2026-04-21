@@ -65,12 +65,17 @@ object PowerSeries:
     * one primitive-int write and one reference write instead of allocating an intermediate
     * `(Int, Snd[Xi])` Tuple2.
     *
+    * When the inner optic is a [[PSSingletonAlwaysHit]] (a morphed Lens — every call yields exactly
+    * one focus), `lens` is left `null`: every per-element length is implicitly 1, so composeFrom
+    * can use `i` as both the focus-vector offset and the ys index without consulting the array.
+    * Saves `4 + 4*n` bytes per always-hit compose level.
+    *
     * The class is private to `eo` because the type is purely an internal detail of [[assoc]]'s `Z`
     * — no user code ever constructs one.
     */
   final private[eo] class AssocSndZ[Xo, Xi](
       val xo: Snd[Xo],
-      val lens: Array[Int],
+      val lens: Array[Int] | Null,
       val ys: Array[AnyRef],
   )
 
@@ -116,6 +121,27 @@ object PowerSeries:
       */
     def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T
 
+  /** Refinement of [[PSSingleton]] for optics that always produce **exactly one** focus per outer
+    * element (a morphed Lens — no miss branch, no multi-focus). Lets `composeTo` skip the
+    * per-element `lens` array entirely (every slot would be 1) and lets `composeFrom` address
+    * `ys` and `vys` with the same index `i` without walking a running `offset`.
+    *
+    * Prism / Optional morphs don't qualify: they may miss, producing a 0-length focus contribution.
+    *
+    * Private to `eo` — user code never sees this trait.
+    */
+  private[eo] trait PSSingletonAlwaysHit[S, T, A, B] extends PSSingleton[S, T, A, B]:
+
+    /** Emit the one-focus contribution for `s` directly into the shared builders. `ysBuf` and
+      * `flatBuf` stay 1:1 aligned across calls.
+      */
+    def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit
+
+    /** Reassemble `T` from the i-th `(y, focus)` pair. Skips the [[PSSingleton.reconstructSingleton]]
+      * `pos` / `len` plumbing since always-hit implies `pos == i, len == 1`.
+      */
+    def reconstructAlwaysHit(y: AnyRef, focus: B): T
+
   given assoc[Xo, Xi]: AssociativeFunctor[PowerSeries, Xo, Xi] with
     type SndZ = AssocSndZ[Xo, Xi]
     type Z = (Int, SndZ)
@@ -129,21 +155,33 @@ object PowerSeries:
       val xo = outerPS.xo
       val va = outerPS.vs
       val n = va.length
-      val lenBuf = new IntArrBuilder(n)
       val ysBuf = new ObjArrBuilder(n)
-      val flatBuf = new ObjArrBuilder()
       inner match
+        case ah: PSSingletonAlwaysHit[A, B, C, D] @unchecked =>
+          // Always-hit fast path: every call produces exactly one focus, so
+          // `lenBuf` would be filled with 1s. Skip it entirely (AssocSndZ.lens
+          // stays null) and pre-size flatBuf — we know the exact total is `n`.
+          val flatBuf = new ObjArrBuilder(n)
+          var i = 0
+          while i < n do
+            ah.collectAlwaysHit(va(i), ysBuf, flatBuf)
+            i += 1
+          val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
+          PowerSeries(sndZ, flatBuf.freezeAsPSVec[C])
         case ps: PSSingleton[A, B, C, D] @unchecked =>
-          // Fast path: inner is a morphed Lens / Prism / Optional that
-          // always yields 0- or 1-element PSVec. collectTo appends the
-          // element's (len, y, focus) directly into the shared builders
-          // without per-call PowerSeries / PSVec / Either / Option / Tuple2
-          // allocation.
+          // Maybe-hit fast path (Prism / Optional morphs). We still need lenBuf
+          // because some elements may miss — flatBuf.length < n is possible.
+          val lenBuf = new IntArrBuilder(n)
+          val flatBuf = new ObjArrBuilder()
           var i = 0
           while i < n do
             ps.collectTo(va(i), lenBuf, ysBuf, flatBuf)
             i += 1
+          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+          PowerSeries(sndZ, flatBuf.freezeAsPSVec[C])
         case _ =>
+          val lenBuf = new IntArrBuilder(n)
+          val flatBuf = new ObjArrBuilder()
           var i = 0
           while i < n do
             val innerPS = inner.to(va(i))
@@ -152,8 +190,8 @@ object PowerSeries:
             ysBuf.append(innerPS.xo.asInstanceOf[AnyRef])
             flatBuf.appendAllFromPSVec(vy)
             i += 1
-      val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-      PowerSeries(sndZ, flatBuf.freezeAsPSVec[C])
+          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+          PowerSeries(sndZ, flatBuf.freezeAsPSVec[C])
 
     def composeFrom[S, T, A, B, C, D](
         xd: PowerSeries[Z, D],
@@ -164,26 +202,34 @@ object PowerSeries:
       val vys = xd.vs
       val lens = sndZ.lens
       val ys = sndZ.ys
-      val n = lens.length
-      val resultBuf = new ObjArrBuilder(n)
+      val resultBuf = new ObjArrBuilder(ys.length)
       inner match
+        case ah: PSSingletonAlwaysHit[A, B, C, D] @unchecked =>
+          // Always-hit fast path (lens == null, every element hits exactly once):
+          // vys index == ys index == i, no running offset needed.
+          val n = ys.length
+          var i = 0
+          while i < n do
+            resultBuf.append(ah.reconstructAlwaysHit(ys(i), vys(i)).asInstanceOf[AnyRef])
+            i += 1
         case ps: PSSingleton[A, B, C, D] @unchecked =>
-          // Fast path mirrors composeTo: feed each element's raw (y, vys,
-          // pos, len) into reconstructSingleton instead of allocating a
-          // per-element PowerSeries + PSVec slice for inner.from.
+          // Maybe-hit fast path — still consult lens for 0/1 length per element.
+          val lensArr = lens.nn
+          val n = lensArr.length
           var offset = 0
           var i = 0
           while i < n do
-            val len = lens(i)
-            val y = ys(i)
-            resultBuf.append(ps.reconstructSingleton(y, vys, offset, len).asInstanceOf[AnyRef])
+            val len = lensArr(i)
+            resultBuf.append(ps.reconstructSingleton(ys(i), vys, offset, len).asInstanceOf[AnyRef])
             offset += len
             i += 1
         case _ =>
+          val lensArr = lens.nn
+          val n = lensArr.length
           var offset = 0
           var i = 0
           while i < n do
-            val len = lens(i)
+            val len = lensArr(i)
             val y = ys(i).asInstanceOf[Snd[Xi]]
             val chunk = vys.slice(offset, offset + len)
             resultBuf.append(inner.from(PowerSeries(y, chunk)).asInstanceOf[AnyRef])
@@ -197,7 +243,7 @@ object PowerSeries:
     */
   final private class GetReplaceLensInPS[S, T, A, B](lens: GetReplaceLens[S, T, A, B])
       extends Optic[S, T, A, B, PowerSeries]
-      with PSSingleton[S, T, A, B]:
+      with PSSingletonAlwaysHit[S, T, A, B]:
     type X = (1, S)
 
     val to: S => PowerSeries[X, A] = s => PowerSeries(s, PSVec.singleton[A](lens.get(s)))
@@ -216,6 +262,13 @@ object PowerSeries:
     def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
       lens.enplace(y.asInstanceOf[S], vys(pos))
 
+    def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
+      ysBuf.append(s.asInstanceOf[AnyRef])
+      flatBuf.append(lens.get(s).asInstanceOf[AnyRef])
+
+    def reconstructAlwaysHit(y: AnyRef, focus: B): T =
+      lens.enplace(y.asInstanceOf[S], focus)
+
   /** Generic Tuple2-carrier → PowerSeries morph for non-[[GetReplaceLens]] lenses (`SimpleLens`,
     * `SplitCombineLens`, hand-rolled `Optic[_, _, _, _, Tuple2]`). Still participates in the
     * `PSSingleton` fast path — it just has to call the generic `o.to(s)` to get the `(xo, a)`
@@ -223,7 +276,7 @@ object PowerSeries:
     */
   final private class GenericTuple2InPS[S, T, A, B](val o: Optic[S, T, A, B, Tuple2])
       extends Optic[S, T, A, B, PowerSeries]
-      with PSSingleton[S, T, A, B]:
+      with PSSingletonAlwaysHit[S, T, A, B]:
     type X = (1, o.X)
 
     val to: S => PowerSeries[X, A] = s =>
@@ -245,6 +298,14 @@ object PowerSeries:
 
     def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
       o.from((y.asInstanceOf[o.X], vys(pos)))
+
+    def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
+      val (xo, a) = o.to(s)
+      ysBuf.append(xo.asInstanceOf[AnyRef])
+      flatBuf.append(a.asInstanceOf[AnyRef])
+
+    def reconstructAlwaysHit(y: AnyRef, focus: B): T =
+      o.from((y.asInstanceOf[o.X], focus))
 
   given tuple2ps: Composer[Tuple2, PowerSeries] with
 
