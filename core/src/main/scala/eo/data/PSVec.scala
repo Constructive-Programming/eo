@@ -30,6 +30,21 @@ sealed trait PSVec[+B]:
 
   inline def isEmpty: Boolean = length == 0
 
+  /** Materialise the focus sequence as a fresh `Array[AnyRef]`. Default impl walks via [[apply]];
+    * [[PSVec.Slice]] overrides with `System.arraycopy` (a JVM intrinsic) so the common "rebuild
+    * an `ArraySeq` from a PSVec" path in [[optics.Traversal.pEach]]'s `from` becomes one memcpy
+    * rather than a per-element loop with element-by-element checkcast. `Empty` / `Single` have
+    * trivial overrides.
+    */
+  def toAnyRefArray: Array[AnyRef] =
+    val n = length
+    val a = new Array[AnyRef](n)
+    var i = 0
+    while i < n do
+      a(i) = apply(i).asInstanceOf[AnyRef]
+      i += 1
+    a
+
   override def equals(that: Any): Boolean = that match
     case other: PSVec[?] =>
       if length != other.length then false
@@ -68,6 +83,8 @@ object PSVec:
   case object Empty extends PSVec[Nothing]:
     def length: Int = 0
 
+    override val toAnyRefArray: Array[AnyRef] = new Array[AnyRef](0)
+
     def apply(i: Int): Nothing =
       throw new IndexOutOfBoundsException(s"PSVec.Empty.apply($i)")
 
@@ -93,6 +110,11 @@ object PSVec:
       val hi = math.min(1, math.max(lo, until))
       if lo == 0 && hi == 1 then this else Empty
 
+    override def toAnyRefArray: Array[AnyRef] =
+      val a = new Array[AnyRef](1)
+      a(0) = b.asInstanceOf[AnyRef]
+      a
+
   /** Array-backed view with offset + length. [[slice]] is a pointer update over the shared backing
     * array — the zero-copy reassembly path that `PowerSeries.assoc` depends on.
     */
@@ -111,6 +133,11 @@ object PSVec:
       if n == 0 then Empty
       else if n == 1 then new Single[B](arr(offset + lo).asInstanceOf[B])
       else new Slice[B](arr, offset + lo, n)
+
+    override def toAnyRefArray: Array[AnyRef] =
+      val a = new Array[AnyRef](length)
+      System.arraycopy(arr, offset, a, 0, length)
+      a
 
   /** Zero-length shared vector. */
   def empty[B]: PSVec[B] = Empty

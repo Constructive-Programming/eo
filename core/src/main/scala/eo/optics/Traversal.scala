@@ -1,7 +1,9 @@
 package eo
 package optics
 
-import data.{FixedTraversal, Forget, ObjArrBuilder, PowerSeries}
+import scala.collection.immutable.ArraySeq
+
+import data.{FixedTraversal, Forget, ObjArrBuilder, PSVec, PowerSeries}
 
 import cats.Traverse
 
@@ -75,6 +77,13 @@ object Traversal:
     * ending in `pEach` on profiling. The original `T[A]` is stashed in the existential leftover
     * `X = (Int, T[A])` so `from` has something `Functor.map`-shaped to traverse.
     *
+    * For [[ArraySeq]] specifically `.from` skips `Traverse[ArraySeq].map` entirely — cats's
+    * instance delegates to stdlib's `ArraySeq.map`, which threads through
+    * `StrictOptimizedSeqOps.strictOptimizedMap` → `this.size` via the non-devirtualised
+    * `SeqOps.size$` forwarder. That dispatch appeared as 18% CPU on the nested-traversal bench.
+    * The specialised path builds an `Array[AnyRef]` directly from the flat focus vector and wraps
+    * with `ArraySeq.unsafeWrapArray` — one allocation, no builder-sizing round-trip.
+    *
     * @group Constructors
     */
   def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
@@ -82,18 +91,35 @@ object Traversal:
       type X = (Int, T[A])
 
       val to: T[A] => PowerSeries[X, A] = ta =>
-        val buf = new ObjArrBuilder()
-        Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-        PowerSeries(ta, buf.freezeAsPSVec[A])
+        ta match
+          case refArr: ArraySeq.ofRef[?] =>
+            // `ArraySeq.ofRef.unsafeArray` IS already an `Array[AnyRef]` (Scala's
+            // type is `Array[_ <: AnyRef | Null]`, erased on the JVM to
+            // `Object[]`). Wrap it directly — PowerSeries's `ForgetfulFunctor.map`
+            // allocates a fresh output array (never mutates `vs.arr`), and
+            // `ArraySeq` is contractually immutable, so aliasing is safe.
+            PowerSeries(ta, PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]]))
+          case _ =>
+            val buf = new ObjArrBuilder()
+            Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
+            PowerSeries(ta, buf.freezeAsPSVec[A])
 
       val from: PowerSeries[X, B] => T[B] = ps =>
         val vec = ps.vs
-        var idx = 0
-        Traverse[T].map(ps.xo) { _ =>
-          val b = vec(idx)
-          idx += 1
-          b
-        }
+        ps.xo match
+          case _: ArraySeq[?] =>
+            // `PSVec.toAnyRefArray` on a `Slice` compiles to one `System.arraycopy`
+            // (JVM intrinsic). Avoids `Traverse[ArraySeq].map`'s builder path, which
+            // routed through `SeqOps.size$` and accounted for 18% of profiled CPU
+            // on the nested bench before this bypass.
+            ArraySeq.unsafeWrapArray(vec.toAnyRefArray).asInstanceOf[T[B]]
+          case _ =>
+            var idx = 0
+            Traverse[T].map(ps.xo) { _ =>
+              val b = vec(idx)
+              idx += 1
+              b
+            }
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.
