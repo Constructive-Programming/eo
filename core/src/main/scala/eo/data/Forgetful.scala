@@ -4,7 +4,6 @@ package data
 import optics.Optic
 
 import cats.{Applicative, Bifunctor, Comonad, FlatMap, Functor, Invariant, Traverse}
-import cats.syntax.comonad._
 import cats.syntax.coflatMap._
 import cats.syntax.functor._
 import cats.syntax.flatMap._

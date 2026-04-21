@@ -3,7 +3,6 @@ package laws
 package eo
 package discipline
 
-import cats.Traverse
 import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
 import org.typelevel.discipline.Laws
@@ -14,7 +13,6 @@ abstract class FoldMapHomomorphismTests[S, A, F[_, _]] extends Laws:
 
   def foldMapHomomorphism(using
       Arbitrary[S],
-      Arbitrary[A],
       Cogen[A],
       ForgetfulFold[F],
   ): RuleSet =
@@ -27,7 +25,7 @@ abstract class FoldMapHomomorphismTests[S, A, F[_, _]] extends Laws:
     )
 
 /** Discipline `RuleSet` for [[TraverseAllLaws]]. */
-abstract class TraverseAllTests[T[_]: Traverse, A] extends Laws:
+abstract class TraverseAllTests[T[_], A] extends Laws:
   def laws: TraverseAllLaws[T, A]
 
   def traverseAll(using Arbitrary[T[A]]): RuleSet =
@@ -40,7 +38,7 @@ abstract class TraverseAllTests[T[_]: Traverse, A] extends Laws:
     )
 
 /** Discipline `RuleSet` for [[ForgetAllModifyLaws]]. */
-abstract class ForgetAllModifyTests[T[_]: Traverse, A] extends Laws:
+abstract class ForgetAllModifyTests[T[_], A] extends Laws:
   def laws: ForgetAllModifyLaws[T, A]
 
   def allMap(using Arbitrary[T[A]], Arbitrary[A], Cogen[A]): RuleSet =

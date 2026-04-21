@@ -5,13 +5,11 @@ import optics._
 
 import cats.instances.list._
 import cats.syntax.either._
-import eo.data
 
 case class UP(a: Int, b: Boolean)
 
 @main def samples =
 
-  import Lens.given
   import Optic.*
   import Forgetful.given
 

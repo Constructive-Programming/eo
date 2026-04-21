@@ -12,7 +12,6 @@ abstract class FoldTests[S, A, F[_, _]] extends Laws:
 
   def fold(using
       Arbitrary[S],
-      Arbitrary[A],
       Cogen[A],
       ForgetfulFold[F],
   ): RuleSet =

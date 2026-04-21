@@ -340,7 +340,11 @@ object PowerSeries:
           ysBuf.append(x.asInstanceOf[AnyRef])
         case Right(a) =>
           lenBuf.append(1)
-          ysBuf.append(null)
+          // ysBuf slot for this index is irrelevant on hit (reconstructSingleton
+          // reads from flatBuf when len==1), but we must push *something* to
+          // keep ysBuf 1:1 aligned with lenBuf. `null.asInstanceOf[AnyRef]`
+          // rather than `null` so this compiles under `-Yexplicit-nulls`.
+          ysBuf.append(null.asInstanceOf[AnyRef])
           flatBuf.append(a.asInstanceOf[AnyRef])
 
     def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =

@@ -5,7 +5,6 @@ package eo
 import optics.Optic
 import optics.Optic.*
 import _root_.eo.data.{Affine, Forgetful}
-import _root_.eo.data.Forgetful.given
 import _root_.eo.data.Affine.given
 
 // Laws governing `Composer.chain` — the mechanism that lifts a series

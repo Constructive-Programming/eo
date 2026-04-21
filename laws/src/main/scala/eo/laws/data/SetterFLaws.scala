@@ -1,7 +1,6 @@
 package eo.laws.data
 
 import eo.data.{Fst, SetterF, Snd}
-import eo.data.SetterF.given
 import eo.ForgetfulFunctor
 
 /** Carrier-level laws for `SetterF[X, A]`.

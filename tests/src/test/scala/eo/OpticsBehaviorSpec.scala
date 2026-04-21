@@ -13,7 +13,6 @@ import optics.{
   ReversedLens,
   ReversedPrism,
   Review,
-  Setter,
   Traversal,
 }
 import optics.Optic.*
@@ -21,7 +20,6 @@ import data.{Affine, Forget, Forgetful}
 import data.Forgetful.given
 import data.Affine.given
 
-import cats.Applicative
 import cats.instances.int.given
 import cats.instances.list.given
 import cats.instances.option.given

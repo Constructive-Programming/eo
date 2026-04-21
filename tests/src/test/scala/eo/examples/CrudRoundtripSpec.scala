@@ -1,7 +1,7 @@
 package eo
 package examples
 
-import optics.{Lens, Optic, Traversal}
+import optics.{Optic, Traversal}
 import optics.Optic.*
 import generics.lens
 import data.PowerSeries

@@ -24,8 +24,11 @@ object JsonOptic:
       def from: JsonF[X, A] => HCursor =
         _.cursor
 
-  def ofOptic[S: Codec, A: Codec, F[_, _]: ForgetfulFunctor](
-      o: Optic[S, S, A, A, F]
+  // Work-in-progress stub — body is `???` pending migration into a demo
+  // spec (see docs/plans/2026-04-17-001-feat-production-readiness-laws-docs-plan.md).
+  // The unused params reflect the eventual API shape.
+  def ofOptic[S, A: Codec, F[_, _]: ForgetfulFunctor](
+      @scala.annotation.unused o: Optic[S, S, A, A, F]
   ): JsonOptic[S, A, F] =
     new JsonOptic[S, A, F]:
       def to: S => F[HCursor, A] = ???

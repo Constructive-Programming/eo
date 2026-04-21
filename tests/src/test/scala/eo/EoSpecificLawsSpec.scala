@@ -42,7 +42,6 @@ import laws.eo.discipline.{
   TraverseAllTests,
 }
 
-import cats.instances.int.given
 import cats.instances.list.given
 
 import org.scalacheck.Arbitrary

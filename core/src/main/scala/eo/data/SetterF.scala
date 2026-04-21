@@ -1,7 +1,7 @@
 package eo
 package data
 
-import cats.{Bifunctor, Distributive, Traverse}
+import cats.Distributive
 import cats.instances.function._
 import cats.syntax.functor._
 

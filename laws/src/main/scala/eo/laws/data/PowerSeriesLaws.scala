@@ -1,7 +1,6 @@
 package eo.laws.data
 
 import eo.data.PowerSeries
-import eo.data.PowerSeries.given
 import eo.{ForgetfulFunctor, ForgetfulTraverse}
 
 import cats.{Applicative, Id}

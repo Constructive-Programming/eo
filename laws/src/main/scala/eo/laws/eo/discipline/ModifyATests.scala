@@ -31,7 +31,6 @@ abstract class ModifyAConstTests[S, A, F[_, _]] extends Laws:
 
   def modifyAConst(using
       Arbitrary[S],
-      Arbitrary[A],
       Cogen[A],
       ForgetfulFold[F],
       ForgetfulTraverse[F, Applicative],

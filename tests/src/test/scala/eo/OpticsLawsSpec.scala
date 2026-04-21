@@ -421,16 +421,6 @@ class OpticsLawsSpec extends Specification with Discipline:
     .forgetfulTraverse,
   )
 
-  // SetterF ForgetfulFunctor at the carrier-typeclass level — builds
-  // its own Arbitrary from Fst/Snd/A components, sampled at one x.
-  private given arbSetterFIntStringBool: Arbitrary[SetterF[(Int, String), Boolean]] =
-    Arbitrary(
-      for
-        fst <- Arbitrary.arbitrary[Int]
-        snd2b <- Arbitrary.arbitrary[String => Boolean]
-      yield SetterF[(Int, String), Boolean]((fst, snd2b))
-    )
-
   // Use a custom extensional equality check inside the law — structural
   // `==` on SetterF compares closures by identity which is too strict.
   // We sample the builder at a fixed Snd input to witness identity /

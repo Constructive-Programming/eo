@@ -43,7 +43,12 @@ object Traversal:
     * listForEach.modify(_ + 1)(List(1, 2, 3))   // List(2, 3, 4)
     *   }}}
     */
-  def forEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, Forget[T]] =
+  def forEach[T[_], A, B](using
+      @scala.annotation.unused ev: Traverse[T]
+  ): Optic[T[A], T[B], A, B, Forget[T]] =
+    // `Traverse[T]` not used in the body: the carrier is identity-shaped,
+    // and `.modifyA` / `.all` summon the ForgetfulTraverse instance for
+    // `Forget[T]` themselves. Bound is kept as API documentation.
     new Optic[T[A], T[B], A, B, Forget[T]]:
       type X = Nothing
       val to: T[A] => T[A] = identity

@@ -2,13 +2,12 @@ package eo
 package laws
 package discipline
 
-import cats.Functor
 import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[TraversalLaws]]. */
-abstract class TraversalTests[T[_]: Functor, A] extends Laws:
+abstract class TraversalTests[T[_], A] extends Laws:
   def laws: TraversalLaws[T, A]
 
   def traversal(using Arbitrary[T[A]], Arbitrary[A], Cogen[A]): RuleSet =

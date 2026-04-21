@@ -1,7 +1,6 @@
 package eo
 package data
 
-import scala.annotation.tailrec
 import scala.compiletime.ops.int.*
 
 /** Match-type helper that builds the fixed-arity traversal carrier tuple shape. Reduces to `A *:

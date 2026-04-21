@@ -2,10 +2,8 @@ package eo
 package generics
 
 import eo.optics.Optic.*
-import eo.data.Forgetful.given
 
 import eo.generics.samples.{Employee, Person, Shape, Tree}
-import eo.generics.samples.given
 
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
@@ -60,14 +58,11 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   "derived Lens.place overwrites the focus, leaving the complement alone" >> forAll {
     (p: Person, a: Int) =>
-      import ageL.given
-      import nameL.given
       ageL.place(a)(p) == Person(p.name, a) &&
       nameL.place("Bob")(p) == Person("Bob", p.age)
   }
 
   "derived Lens.transfer lifts a C => A into a focus-replacer" >> forAll { (p: Person, d: Double) =>
-    import ageL.given
     // For a home-grown `C => A` (`Double => Int`), transfer should
     // equal place(f(c)) -- i.e. converting the value and replacing.
     val toInt: Double => Int = _.toInt
@@ -75,7 +70,6 @@ class GenericsSpec extends Specification with ScalaCheck:
   }
 
   "derived Lens.transfer is curried form of place ∘ f" >> forAll { (p: Person, c: Int) =>
-    import ageL.given
     val f: Int => Int = _ + 1
     ageL.transfer(f)(p)(c) == ageL.place(f(c))(p)
   }

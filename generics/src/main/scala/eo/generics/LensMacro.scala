@@ -3,7 +3,7 @@ package generics
 
 import scala.quoted.*
 
-import eo.optics.{Lens, Optic, SimpleLens}
+import eo.optics.SimpleLens
 
 /** Compile-time derivation of a `Lens` as a [[eo.optics.SimpleLens]].
   *
@@ -162,6 +162,10 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
             (x, $selector(s))
           }
 
+        // `a` is threaded through the nested splice via `'{ a }` on the
+        // `Existential[Expr, A]` line below — `-Wunused:explicits` can't
+        // see across the quote/splice boundary, so it flags `a` as
+        // unused. Silenced module-level via `-Wconf` in build.sbt.
         val combine: Expr[(xa, A) => S] =
           '{ (x: xa, a: A) =>
             ${

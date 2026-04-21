@@ -3,9 +3,6 @@ package laws
 
 import optics.Optic
 import optics.Optic.*
-// Imports shared givens that the Either-carrier's ForgetfulFunctor
-// instance depends on (used by `prism.modify`).
-import _root_.eo.data.Forgetful.given
 
 /** Law equations for a `Prism[S, A]` — `Optic[S, S, A, A, Either]`.
   *

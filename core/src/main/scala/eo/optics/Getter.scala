@@ -15,7 +15,6 @@ import data.Forgetful
   * underlying functions directly, or use a `Lens` chain and call `.get` on the composed lens.
   */
 object Getter:
-  import Function.const
 
   /** Construct a Getter from `get: S => A`.
     *

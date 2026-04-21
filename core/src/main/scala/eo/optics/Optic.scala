@@ -41,7 +41,6 @@ import cats.syntax.functor._
   */
 trait Optic[S, T, A, B, F[_, _]]:
   self =>
-  import Function.const
 
   /** Existential "leftover" carried alongside the focus — the type-level witness each carrier uses
     * to rebuild `T` from a modified `B`. Concrete at each construction site (`Lens.apply` sets it

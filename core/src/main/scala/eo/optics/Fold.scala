@@ -3,7 +3,6 @@ package optics
 
 import cats.Foldable
 import eo.data.Forget
-import eo.data.Forgetful
 
 /** Constructors for `Fold` — the read-only multi-focus optic, backed by the `Forget[F]` carrier
   * (`type Forget[F] = [X, A] =>> F[A]`).
@@ -17,8 +16,6 @@ import eo.data.Forgetful
   */
 object Fold:
 
-  import Function.const
-
   /** Construct a Fold over any `Foldable[F]`. The focus type is the element type `A`;
     * `.foldMap(g)(s)` combines every `A` in `s: F[A]` via `Monoid[M]`.
     *
@@ -31,7 +28,13 @@ object Fold:
     * listFold.foldMap(identity[Int])(List(1, 2, 3))   // 6
     *   }}}
     */
-  def apply[F[_]: Foldable, A]: Optic[F[A], Unit, A, A, Forget[F]] =
+  def apply[F[_], A](using
+      @scala.annotation.unused ev: Foldable[F]
+  ): Optic[F[A], Unit, A, A, Forget[F]] =
+    // `Foldable[F]` not used in the body: the Forget[F] carrier's
+    // ForgetfulFold instance (summoned at the call site via `.foldMap`)
+    // is what does the actual work. Bound is kept as API documentation
+    // ("Fold only makes sense when F is Foldable").
     new Optic[F[A], Unit, A, A, Forget[F]]:
       type X = Nothing
       val to: F[A] => F[A] = identity

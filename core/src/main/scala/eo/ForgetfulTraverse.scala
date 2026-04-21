@@ -1,12 +1,11 @@
 package eo
 
-import data.{Affine, Forget, Fst, Snd}
+import data.{Affine, Forget}
 
 import cats.{Applicative, Functor, Traverse}
 import cats.syntax.applicative._
 import cats.syntax.either._
 import cats.syntax.functor._
-import eo.ForgetfulTraverse
 
 /** Traverse the focus of a two-parameter carrier `F[_, _]` under a shape-preserving effectful
   * transform `A => G[B]`.
