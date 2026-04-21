@@ -33,6 +33,14 @@ ThisBuild / developers := List(
 // compare against.
 ThisBuild / tlMimaPreviousVersions := Set.empty
 
+// The minimum Java runtime we support (`-java-output-version 17` on the
+// scalac side, `javacOptions --release 17` on the javac side). JDK 25+
+// no longer accepts `--release 8`, and our CI matrix tests only on 17
+// and 21 — so 17 is the honest floor. Downstream consumers on older
+// JDKs must use `cats-eo 0.1.x`-era artifacts compiled with a pre-25
+// toolchain.
+ThisBuild / tlJdkRelease := Some(17)
+
 // GitHub Actions matrix: JDK 17 (LTS) and JDK 21 (current LTS).
 // Scala version comes from the scalaVersion ThisBuild setting
 // below via `crossScalaVersions`.
@@ -136,6 +144,54 @@ lazy val commonSettings = Seq(
   // `@group Operations` / `@group Instances` bucket on an optic
   // companion shows up as a collapsible section in the API docs.
   Compile / doc / scalacOptions ++= Seq("-groups"),
+  // Silence unchecked-type-test warnings that bubble up from Hearth's
+  // kindlings-cats-derivation macro expansions. The generated match
+  // patterns reference our abstract enum cases ("the type test for
+  // Problem.X cannot be checked at runtime"); we don't own that
+  // library's code and the warning is a Hearth-side concern rather
+  // than a cats-eo bug.
+  Test / scalacOptions += "-Wconf:src=.*/cats-derivation/.*:silent",
+)
+
+// Library-appropriate scalac options layered on top of the baseline set
+// that sbt-typelevel-settings contributes automatically (`-deprecation
+// -feature -unchecked -Wunused:implicits,explicits,imports,locals,params,privates
+// -Wvalue-discard -Xkind-projector:underscores`, plus `-Werror` in CI
+// via `tlFatalWarnings`). Applied to published modules.
+//
+// Scala 3 has no bytecode optimiser (no `-opt:l:inline` equivalent —
+// that flag is Scala-2-only), so the only runtime-perf-relevant flag
+// here is `-Yretain-trees`, which keeps full ASTs in published TASTy
+// so downstream callers' `inline def` expansions can see through our
+// bodies. `-Wsafe-init` catches `val` init-order bugs in companion
+// objects — zero runtime cost, purely a compile-time check.
+//
+// Deferred: `-language:strictEquality` (SIP-67). Enabling it requires
+// threading `CanEqual` witnesses through every `equals(that: Any)`
+// that currently compares match-type-valued fields (Affine's Fst/Snd,
+// PSVec's leaf-structural equality, ...). Tracked for a later pass
+// once we decide how CanEqual should flow through the existential
+// optic hierarchy.
+lazy val scala3LibrarySettings = Seq(
+  scalacOptions ++= Seq(
+    "-Yretain-trees", // downstream `inline def` / macros see our bodies
+    "-Wsafe-init", // catch `val` init-order bugs in companion objects
+    "-Yexplicit-nulls", // non-nullable reference types by default
+    // `-Yexplicit-nulls` + `-Xcheck-macros` + Hearth's `lens[S](_.field)`
+    // expansion trip a Scala 3 compiler bug at quote expansion time
+    // ("Missing symbol position ... method productIterator / productPrefix").
+    // The emitted code still works and the tests pass; we silence the
+    // internal compiler-bug note until Hearth / Scala 3 patch the
+    // interaction.
+    "-Wconf:msg=Missing symbol position:silent",
+  )
+)
+
+// Macro-bearing modules additionally enable `-Xcheck-macros` so
+// malformed quotes surface at macro-compile time rather than as NPEs
+// in downstream builds.
+lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
+  scalacOptions += "-Xcheck-macros"
 )
 
 lazy val root: Project = project
@@ -150,6 +206,7 @@ lazy val root: Project = project
 lazy val core: Project = project
   .in(file("core"))
   .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
@@ -163,6 +220,7 @@ lazy val laws: Project = project
   .in(file("laws"))
   .dependsOn(LocalProject("core"))
   .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-laws",
     libraryDependencies += cats,
@@ -204,11 +262,19 @@ lazy val generics: Project = project
   .in(file("generics"))
   .dependsOn(LocalProject("core"), LocalProject("laws") % Test)
   .settings(commonSettings *)
+  .settings(scala3MacroSettings *)
   .settings(
     name := "cats-eo-generics",
     libraryDependencies += cats,
     libraryDependencies += hearth,
     libraryDependencies += discipline % Test,
+    // The Hearth-quote-driven lens macro emits a `'{ (x, a) => ... }`
+    // lambda whose `a` is only referenced from inside a nested splice,
+    // which `-Wunused:explicits` can't follow across the quote/splice
+    // boundary (no amount of `val _ = a` in the quote body or `@nowarn`
+    // on the enclosing def dislodges it). Silence the false positive
+    // for this one file only.
+    Compile / scalacOptions += "-Wconf:src=.*/LensMacro\\.scala:silent",
   )
 
 // Cross-representation optics that bridge a native Scala source type
@@ -221,6 +287,7 @@ lazy val circeIntegration: Project = project
   .in(file("circe"))
   .dependsOn(LocalProject("core"), LocalProject("generics"))
   .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-circe",
     libraryDependencies += cats,

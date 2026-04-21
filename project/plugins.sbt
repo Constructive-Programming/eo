@@ -15,6 +15,14 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.5")
 // to compare against; see `mima.sbt`).
 addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.5")
 
+// `sbt-typelevel-settings` contributes the curated scalac flag set
+// (`-deprecation -feature -unchecked -Wunused:... -Wvalue-discard`,
+// plus `-Xkind-projector:underscores` on 3.5+) and turns on `-Werror`
+// in CI via `tlFatalWarnings`. Not transitively brought in by
+// `-ci-release`, so we add it explicitly — without it each module is
+// responsible for its own scalacOptions.
+addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.5")
+
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
 // configured from build.sbt. Pinned to the same 0.8.5 family as
