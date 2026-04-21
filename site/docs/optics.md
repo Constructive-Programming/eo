@@ -295,9 +295,16 @@ element of a container. Two carriers coexist:
 
 * `Traversal.each[F, A]` / `Traversal.pEach[F, A, B]` — carrier
   `PowerSeries`, the default. Supports `.andThen` with downstream
-  optics. Linear scaling with a small constant-factor overhead
-  (~15–20× over a naive `copy`/`map`) from the Composer chain's
-  per-element dispatch.
+  optics. Linear scaling; overhead over a naive `copy`/`map` runs
+  at 2-3× for dense chains (`Lens → Traversal → Lens`) and ~5×
+  for the Prism miss-branch shape, amortising toward the lower
+  end as the traversed-collection size grows (the
+  [PowerSeries benchmarks](benchmarks.md#powerseries--traversal-with-downstream-composition)
+  sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
+  `PSSingleton` protocol — morphed Lens / Prism / Optional
+  inners collect into pre-sized flat arrays without per-element
+  `PowerSeries` wrappers, and the always-hit refinement for
+  Lens morphs skips the length-tracking array entirely.
 * `Traversal.forEach[F, A, B]` — carrier `Forget[F]`, map-only
   fast path. Identity-shaped carrier, linear time, no downstream
   optic composition.

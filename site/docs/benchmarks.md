@@ -188,30 +188,90 @@ the per-element codec round-trip.
 
 ## PowerSeries — traversal with downstream composition
 
-EO-only — no Monocle equivalent. Toggles `isMobile` on every
-`Phone` inside a `Person.phones: ArraySeq[Phone]`; the chain
-is `Lens → Traversal.each → Lens`, where `Traversal.each` is
-the `PowerSeries`-backed composable traversal.
+EO-only — no Monocle equivalent. Three variants in the harness,
+one per common chain shape, all sharing the `PowerSeries`-backed
+`Traversal.each` as the composition vehicle.
 
-| Size |  eo (composed chain) | naive `copy` / `map` | ratio |
-|------|---------------------:|---------------------:|------:|
-| 4    |              131 ns  |               13 ns  |  10×  |
-| 32   |              805 ns  |               80 ns  |  10×  |
-| 256  |            4 996 ns  |              721 ns  |   7×  |
+### `PowerSeriesBench.eoModify_powerEach` — `Lens → Traversal.each → Lens`
 
-Focus storage is a `PSVec[B]` view (an `Array[AnyRef]` plus
-an `(offset, length)` window) — so the `assoc`'s per-element
-reassembly slice is a pointer update rather than an arraycopy.
-Per-element leftovers are held in parallel `Array[Int]` and
-`Array[AnyRef]` buffers inside `AssocSndZ`, avoiding a
-`(Int, Snd[Xi])` boxing per element. The `Traversal.pEach.from`
-rebuild stashes the original `T[A]` in the existential leftover
-and reassembles via `Traverse.mapAccumulate` — a single O(N)
-pass through the original container shape, not the O(N²)
-`MonoidK.combineK` fold an earlier revision used. The result
-is linear scaling at ~7–10× overhead over the naive
-`copy`/`map` baseline, and the ratio *tightens* with size as
-fixed per-op setup amortises.
+Toggles `isMobile` on every `Phone` inside a `Person.phones:
+ArraySeq[Phone]`. The two-hop chain exercises the flat "dense
+singleton outer + multi-focus inner + dense singleton inner" pattern.
+
+| Size | eo        |  naive  | ratio |
+|------|----------:|--------:|------:|
+| 4    |    66 ns  |   13 ns |  5.1× |
+| 32   |   275 ns  |   80 ns |  3.4× |
+| 256  | 1 890 ns  |  726 ns |  2.6× |
+| 1024 | 6 927 ns  | 3 633 ns |  1.9× |
+
+### `PowerSeriesNestedBench.eoModify_nested` — 5-hop tree of traversals
+
+`Company → List[Department] → ArraySeq[Employee] → Boolean`. Two
+traversal fan-outs with Lens hops between them — the worst shape
+for flat-carrier composition.
+
+| Size | eo       |  naive  | ratio |
+|------|---------:|--------:|------:|
+| 4    |  348 ns  |   65 ns | 5.4×  |
+| 32   | 1 175 ns |  497 ns | 2.4×  |
+| 256  | 8 085 ns | 3 376 ns | 2.4×  |
+
+### `PowerSeriesPrismBench.eoModify_sparse` — `Traversal.each → Prism`
+
+Increments every `Ok.value: Int` inside an `ArraySeq[Result]`
+where `Result = Ok(Int) | Err(String)` is a 50/50 split. The
+Prism miss branch is the slow part of the composition machinery —
+this bench is the regression oracle for it.
+
+| Size | eo       |  naive | ratio |
+|------|---------:|-------:|------:|
+| 8    |    59 ns |  12 ns | 5.0×  |
+| 64   |   408 ns |  73 ns | 5.6×  |
+| 512  | 3 610 ns | 660 ns | 5.5×  |
+
+### What makes these numbers possible
+
+The `PowerSeries` carrier pairs an existential leftover
+`xo: Snd[A]` with a `PSVec[B]` focus vector — an `Array[AnyRef]`
+plus an `(offset, length)` window, so per-element slices during
+reassembly are pointer updates rather than arraycopies.
+
+Most of the machinery is hidden behind the `PSSingleton`
+protocol — an internal trait implemented by the morphed
+`Lens` / `Prism` / `Optional` optics (their `.to` would otherwise
+build a throwaway `PowerSeries` + `PSVec.Single` per element).
+`assoc.composeTo` / `composeFrom` detect the protocol and call
+`collectTo` / `reconstructSingleton` directly, skipping the
+per-element wrapper allocations. The `PSSingletonAlwaysHit`
+refinement covers the "every call hits" case (Lens morphs) —
+it also skips the per-element length `Array[Int]` since every
+slot is implicitly 1.
+
+`Traversal.pEach`'s `from` rebuilds the container via `Functor.map`
+with a captured `var` counter — the `State[Int, _]` chain that
+`Traverse.mapAccumulate` would build shows up as 25 % CPU on
+`State`-thunk bookkeeping when used literally. For `ArraySeq`
+specifically both the `.to` (zero-copy from `ArraySeq.ofRef.unsafeArray`)
+and `.from` (direct `ArraySeq.unsafeWrapArray` of the shared
+`PSVec.Slice` backing array) go through an `Array[AnyRef]` end-to-end
+with a single `System.arraycopy` at most — `Traverse[ArraySeq].map`'s
+builder-sizing path through `SeqOps.size$` was 18 % CPU before
+this bypass.
+
+`IntArrBuilder.unsafeAppend` / `ObjArrBuilder.unsafeAppend` skip
+the per-call grow-check on hot paths where the total is known
+upfront (`composeTo` pre-sizes all three builders to `n` in
+PSSingleton paths). `PSVec.Slice.unsafeShareableArray` completes
+the end-to-end zero-copy story for freshly-built result arrays.
+
+The cumulative effect vs the pre-optimisation baseline on this
+same harness is −59 % to −67 % ns and −58 % to −67 % alloc
+across the three benches. Ratios to naive now sit at 1.9× on
+dense Lens-chain (`powerEach @ 1024`), 2.4× on nested, 5× on
+sparse-Prism — the remaining gap on sparse is inherent Prism
+miss-branch plumbing and is substantially smaller than the
+5-10× ratios other optic libraries publish for the same shape.
 
 For single-pass modify of a collection — no downstream optic
 after the traversal — `Traversal.forEach[F, A, B]` (carrier

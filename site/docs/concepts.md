@@ -64,7 +64,7 @@ this optic have?"
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`             |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 | `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`, `Traversal`    |
-| `PowerSeries`   | `(Snd[X], Vect[Int, A])`                       | Composable `Traversal` |
+| `PowerSeries`   | `(Snd[X], PSVec[A])`                           | Composable `Traversal` |
 | `FixedTraversal[N]` | Fixed-length tuple of `A`s                  | `Traversal.{two,three,four}` |
 
 What a carrier supports is *exactly* what its typeclass
@@ -103,8 +103,7 @@ When two optics share `F`, `Optic.andThen` composes them under
 that carrier:
 
 ```scala mdoc:silent
-import eo.optics.{Lens, Optic}
-import eo.optics.Optic.*
+import eo.optics.Lens
 
 case class Address(street: String)
 case class Person(address: Address)

@@ -5,7 +5,7 @@ Every fence is compiled by mdoc against the current library
 version.
 
 ```scala mdoc:silent
-import eo.optics.{Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
+import eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import eo.optics.Optic.*
 import eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
 ```

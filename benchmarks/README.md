@@ -70,12 +70,14 @@ Specifically — the numbers are only meaningful when:
 
 ### EO-only (no direct Monocle equivalent)
 
-| Bench class             | Subject | Monocle equivalent |
-|-------------------------|---------|--------------------|
-| `PowerSeriesBench`      | `Traversal.each[ArraySeq, A]` (PowerSeries-backed) chain | None. PowerSeries is the carrier behind EO's cross-optic composition. |
-| `JsonPrismBench`        | `JsonPrism.modify` at depths 1/2/3 | None. Cursor-backed JSON navigation is cats-eo specific. |
-| `JsonPrismWideBench`    | Same on wide (8/14/6 field) records   | None |
-| `JsonTraversalBench`    | `codecPrism[Basket].items.each.name.modify` over N elements | None |
+| Bench class              | Subject | Monocle equivalent |
+|--------------------------|---------|--------------------|
+| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/32/256/1024) | None. PowerSeries is the carrier behind EO's cross-optic composition. |
+| `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/32/256 × 4-dept fanout) | None. Stress-tests tree-of-traversals composition. |
+| `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/64/512) | None. Regression oracle for Prism miss-branch plumbing. |
+| `JsonPrismBench`         | `JsonPrism.modify` at depths 1/2/3 | None. Cursor-backed JSON navigation is cats-eo specific. |
+| `JsonPrismWideBench`     | Same on wide (8/14/6 field) records   | None |
+| `JsonTraversalBench`     | `codecPrism[Basket].items.each.name.modify` over N elements | None |
 
 All benches share the same shape: a paired `eoXxx` / `mXxx` (or `naiveXxx`) method per metric, so the generated JMH report shows them side-by-side in one table.
 
@@ -106,6 +108,14 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-`PowerSeriesBench` shows `Traversal.each` (PowerSeries-backed) scaling **linearly** with traversed-collection size — ~7–10× off the naive `copy`/`map` baseline, and the ratio *tightens* with size (10× at N=4, 7× at N=256) as the fixed per-op setup amortises across more elements. The remaining overhead is the Composer chain's per-element `.modify` dispatch plus the singleton PSVec wrap per Lens-morph hop, not the storage structure.
+All three PowerSeries benches scale **linearly** with traversed-collection size; the eo-to-naive ratios tighten as size grows (fixed per-op setup amortises).
+
+Current ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries--traversal-with-downstream-composition) for full tables):
+
+- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 5.1× at N=4 → 1.9× at N=1024.
+- **`PowerSeriesNestedBench` (5-hop tree):** 5.4× at N=4 → 2.4× at N=256.
+- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.5× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
+
+Under the hood the hot paths use a private `PSSingleton` protocol — morphed Lens/Prism/Optional inners `collectTo` into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders without per-element `PowerSeries` or `PSVec.Single` wrappers. The `PSSingletonAlwaysHit` refinement (for Lens morphs, which always hit) additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
 
 Use `Traversal.forEach[F, A, B]` (carrier `Forget[F]`) for single-pass element-wise modifies where no downstream optic composition is needed — it's the linear-and-tight fast path. Reach for `Traversal.each` / `pEach` (carrier `PowerSeries`) when the chain needs to continue past the traversal.

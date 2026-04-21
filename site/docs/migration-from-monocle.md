@@ -51,8 +51,7 @@ the two optics share `F` or not:
 
 ```scala mdoc:silent
 import eo.data.Affine
-import eo.optics.{Lens, Optic}
-import eo.optics.Optic.*
+import eo.optics.Lens
 import eo.optics.Optional
 
 case class MigConfig(timeout: Option[Int])
