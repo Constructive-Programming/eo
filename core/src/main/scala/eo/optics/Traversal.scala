@@ -62,12 +62,13 @@ object Traversal:
 
   /** Polymorphic counterpart to [[each]] — allows the focus to change type along the traversal.
     *
-    * Reassembly uses `Traverse.mapAccumulate` to walk the original container shape exactly once and
-    * plug in the modified focus values at each position — an O(N) reconstruct that replaces the
-    * previous `foldMapK(Applicative[T].pure)` loop's O(N²) `MonoidK.combineK` concat. The original
-    * `T[A]` is stashed in the existential leftover `X = (Int, T[A])` so the `from` direction has it
-    * available; Traverse laws guarantee `to`'s `foldLeft` and `from`'s `mapAccumulate` walk
-    * positions in the same order.
+    * Reassembly uses `Functor.map` to walk the original container shape exactly once, pulling the
+    * next focus value off a positional index maintained by a captured `var`. This matches what
+    * `Traverse.mapAccumulate` would compute (Traverse laws guarantee `map` and `mapAccumulate`
+    * visit elements in the same order), but without the `State[Int, _]` thunk chain that the
+    * default `mapAccumulate` implementation builds — the dominant CPU cost of composed chains
+    * ending in `pEach` on profiling. The original `T[A]` is stashed in the existential leftover
+    * `X = (Int, T[A])` so `from` has something `Functor.map`-shaped to traverse.
     *
     * @group Constructors
     */
@@ -82,10 +83,12 @@ object Traversal:
 
       val from: PowerSeries[X, B] => T[B] = ps =>
         val vec = ps.vs
-        val (_, rebuilt) = Traverse[T].mapAccumulate(0, ps.xo) { (i, _) =>
-          (i + 1, vec(i))
+        var idx = 0
+        Traverse[T].map(ps.xo) { _ =>
+          val b = vec(idx)
+          idx += 1
+          b
         }
-        rebuilt
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.
