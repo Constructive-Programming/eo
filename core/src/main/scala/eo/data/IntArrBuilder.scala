@@ -20,6 +20,15 @@ final private[eo] class IntArrBuilder(initialCapacity: Int = 16):
     arr(len) = x
     len += 1
 
+  /** Append without the grow-check. Caller MUST have pre-sized the builder at construction time
+    * with `initialCapacity` ≥ the total append count for this builder's lifetime, otherwise an
+    * `ArrayIndexOutOfBoundsException` fires. Used on hot paths where the total is known upfront
+    * (`PowerSeries.assoc`'s PSSingleton fast paths) — skips a branch + length read per call.
+    */
+  inline def unsafeAppend(x: Int): Unit =
+    arr(len) = x
+    len += 1
+
   private def grow(minCap: Int): Unit =
     var newCap = arr.length * 2
     while newCap < minCap do newCap *= 2

@@ -21,6 +21,15 @@ final private[eo] class ObjArrBuilder(initialCapacity: Int = 16):
     arr(len) = x
     len += 1
 
+  /** Append without the grow-check. Caller MUST have pre-sized the builder at construction time
+    * with `initialCapacity` ≥ the total append count for this builder's lifetime, otherwise an
+    * `ArrayIndexOutOfBoundsException` fires. Used on hot paths where the total is known upfront
+    * (`PowerSeries.assoc`'s PSSingleton fast paths) — skips a branch + length read per call.
+    */
+  inline def unsafeAppend(x: AnyRef): Unit =
+    arr(len) = x
+    len += 1
+
   def appendAllFromPSVec[A](src: PSVec[A]): Unit =
     src match
       case PSVec.Empty        => ()

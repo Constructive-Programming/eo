@@ -190,8 +190,11 @@ object PowerSeries:
         case ps: PSSingleton[A, B, C, D] @unchecked =>
           // Maybe-hit fast path (Prism / Optional morphs). We still need lenBuf
           // because some elements may miss — flatBuf.length < n is possible.
+          // All three builders are pre-sized to `n`: lenBuf and ysBuf fill
+          // exactly, flatBuf overshoots on misses (trimmed on freeze, but no
+          // intermediate grow allocations).
           val lenBuf = new IntArrBuilder(n)
-          val flatBuf = new ObjArrBuilder()
+          val flatBuf = new ObjArrBuilder(n)
           var i = 0
           while i < n do
             ps.collectTo(va(i), lenBuf, ysBuf, flatBuf)
@@ -269,8 +272,10 @@ object PowerSeries:
     val from: PowerSeries[X, B] => T = ps => lens.enplace(ps.xo, ps.vs.head)
 
     def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
-      ysBuf.append(s.asInstanceOf[AnyRef])
-      flatBuf.append(lens.get(s).asInstanceOf[AnyRef])
+      // `unsafeAppend` skips the grow-check — composeTo pre-sizes both builders
+      // to `n` (the exact total for the always-hit case).
+      ysBuf.unsafeAppend(s.asInstanceOf[AnyRef])
+      flatBuf.unsafeAppend(lens.get(s).asInstanceOf[AnyRef])
 
     def reconstructAlwaysHit(y: AnyRef, focus: B): T =
       lens.enplace(y.asInstanceOf[S], focus)
@@ -293,8 +298,8 @@ object PowerSeries:
 
     def collectAlwaysHit(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
       val (xo, a) = o.to(s)
-      ysBuf.append(xo.asInstanceOf[AnyRef])
-      flatBuf.append(a.asInstanceOf[AnyRef])
+      ysBuf.unsafeAppend(xo.asInstanceOf[AnyRef])
+      flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
 
     def reconstructAlwaysHit(y: AnyRef, focus: B): T =
       o.from((y.asInstanceOf[o.X], focus))
@@ -334,18 +339,21 @@ object PowerSeries:
         ysBuf: ObjArrBuilder,
         flatBuf: ObjArrBuilder,
     ): Unit =
+      // `unsafeAppend` — all three builders are pre-sized to `n` in
+      // composeTo (lenBuf / ysBuf fill exactly, flatBuf overshoots on misses
+      // and trims on freeze).
       o.to(s) match
         case Left(x) =>
-          lenBuf.append(0)
-          ysBuf.append(x.asInstanceOf[AnyRef])
+          lenBuf.unsafeAppend(0)
+          ysBuf.unsafeAppend(x.asInstanceOf[AnyRef])
         case Right(a) =>
-          lenBuf.append(1)
+          lenBuf.unsafeAppend(1)
           // ysBuf slot for this index is irrelevant on hit (reconstructSingleton
           // reads from flatBuf when len==1), but we must push *something* to
           // keep ysBuf 1:1 aligned with lenBuf. `null.asInstanceOf[AnyRef]`
           // rather than `null` so this compiles under `-Yexplicit-nulls`.
-          ysBuf.append(null.asInstanceOf[AnyRef])
-          flatBuf.append(a.asInstanceOf[AnyRef])
+          ysBuf.unsafeAppend(null.asInstanceOf[AnyRef])
+          flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
 
     def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
       if len == 0 then o.from(Left(y.asInstanceOf[o.X]))
@@ -382,14 +390,15 @@ object PowerSeries:
         ysBuf: ObjArrBuilder,
         flatBuf: ObjArrBuilder,
     ): Unit =
+      // `unsafeAppend` — same pre-sized-builder contract as [[EitherInPS]].
       o.to(s) match
         case m: Affine.Miss[o.X, A] =>
-          lenBuf.append(0)
-          ysBuf.append(m.fst.asInstanceOf[AnyRef])
+          lenBuf.unsafeAppend(0)
+          ysBuf.unsafeAppend(m.fst.asInstanceOf[AnyRef])
         case h: Affine.Hit[o.X, A] =>
-          lenBuf.append(1)
-          ysBuf.append(h.snd.asInstanceOf[AnyRef])
-          flatBuf.append(h.b.asInstanceOf[AnyRef])
+          lenBuf.unsafeAppend(1)
+          ysBuf.unsafeAppend(h.snd.asInstanceOf[AnyRef])
+          flatBuf.unsafeAppend(h.b.asInstanceOf[AnyRef])
 
     def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
       if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
