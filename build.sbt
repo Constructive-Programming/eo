@@ -159,12 +159,20 @@ lazy val commonSettings = Seq(
 // -Wvalue-discard -Xkind-projector:underscores`, plus `-Werror` in CI
 // via `tlFatalWarnings`). Applied to published modules.
 //
-// Scala 3 has no bytecode optimiser (no `-opt:l:inline` equivalent —
-// that flag is Scala-2-only), so the only runtime-perf-relevant flag
-// here is `-Yretain-trees`, which keeps full ASTs in published TASTy
-// so downstream callers' `inline def` expansions can see through our
-// bodies. `-Wsafe-init` catches `val` init-order bugs in companion
-// objects — zero runtime cost, purely a compile-time check.
+// `-opt` was ported from Scala 2 to Scala 3.8.3 in January 2026 and is
+// safe on published artifacts: it only rewrites bytecode within a
+// method (box elim, null-check folding, dead-code elim, copy
+// propagation) and touches neither TASTy nor call boundaries, so
+// downstream binary-compat checks see nothing. `-opt-inline` DOES cross
+// method/class boundaries and is reserved for [[scala3CoreSettings]]
+// only, with the `<sources>` scope so nothing from cats / JDK is baked
+// into our jar (a future cats release can't be invalidated by stale
+// inline copies). Laws / generics / circe stay on `-opt` only.
+//
+// `-Yretain-trees` keeps full ASTs in published TASTy so downstream
+// callers' `inline def` expansions can see through our bodies.
+// `-Wsafe-init` catches `val` init-order bugs in companion objects,
+// zero runtime cost.
 //
 // Deferred: `-language:strictEquality` (SIP-67). Enabling it requires
 // threading `CanEqual` witnesses through every `equals(that: Any)`
@@ -174,8 +182,9 @@ lazy val commonSettings = Seq(
 // optic hierarchy.
 lazy val scala3LibrarySettings = Seq(
   scalacOptions ++= Seq(
-    "-Yretain-trees", // downstream `inline def` / macros see our bodies
-    "-Wsafe-init", // catch `val` init-order bugs in companion objects
+    "-opt",             // method-local JVM bytecode optimizer
+    "-Yretain-trees",   // downstream `inline def` / macros see our bodies
+    "-Wsafe-init",      // catch `val` init-order bugs in companion objects
     "-Yexplicit-nulls", // non-nullable reference types by default
     // `-Yexplicit-nulls` + `-Xcheck-macros` + Hearth's `lens[S](_.field)`
     // expansion trip a Scala 3 compiler bug at quote expansion time
@@ -185,6 +194,19 @@ lazy val scala3LibrarySettings = Seq(
     // interaction.
     "-Wconf:msg=Missing symbol position:silent",
   )
+)
+
+// Pure library modules with no dependency on another artifact's
+// internals can additionally enable `-opt-inline:<sources>` — inlines
+// only between files compiled together in the current sub-project,
+// leaving external libraries untouched so their future bug-fixes keep
+// flowing through. Applied to `core/` only; `circeIntegration/`
+// deliberately omits it (crosses into circe, where we must NOT bake
+// internals). `generics/` also omits it — inlining across macro
+// expansions is both unnecessary and risks leaking compiler-internals
+// into user bytecode.
+lazy val scala3CoreSettings = scala3LibrarySettings ++ Seq(
+  scalacOptions += "-opt-inline:<sources>"
 )
 
 // Macro-bearing modules additionally enable `-Xcheck-macros` so
@@ -206,7 +228,7 @@ lazy val root: Project = project
 lazy val core: Project = project
   .in(file("core"))
   .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+  .settings(scala3CoreSettings *)
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
