@@ -64,17 +64,24 @@ object Grate:
   /** `AssociativeFunctor[Grate, Xo, Xi]` — same-carrier `.andThen`.
     *
     * `Z = (Xo, Xi)` — the combined existential is the product of outer and inner rebuilds. Push
-    * side reads `(a, kO)` from the outer and `(c, kI)` from the inner on that `a`, producing the
-    * fused rebuild `(z: Z) => kI(z._2)`. Pull side (the `.modify` path) ignores the rebuild slots
-    * on both sides — once the user's `f: C => D` has fired through [[grateFunctor]], the carried
-    * focus is already the post-update value and the rebuild slots collapse to "return the focus"
-    * (placeholder closures `_ => d` and `_ => b`).
+    * side reads `(a, _)` from the outer (discarding the outer rebuild `kO`) and `(c, kI)` from the
+    * inner on that `a`, producing the fused rebuild `(z: Z) => kI(z._2)` — which consults the inner
+    * index `z._2` only. The outer rebuild is structurally unreachable once we've collapsed through
+    * the outer focus, so we drop it on push.
     *
-    * Caveat (mirrored in the class-level note on Grate): the rebuild fields in the composite are
-    * placeholders. This matches the `.modify` contract because the focus half is already
-    * load-bearing; operations that read the rebuild slot (`zipWithF`, `collect` — future work) need
-    * a different composition path, which would ship as a specialised bridge alongside those
-    * extensions.
+    * Pull side threads the rebuild faithfully to the inner (whose `from` may read it per-slot — as
+    * [[tuple]] does). The outer's rebuild is reconstructed as a constant broadcaster `_ => b` —
+    * acceptable because a) the shipped outers in v1 are either iso-morphed (Forgetful → Grate,
+    * reads only the focus) or tuple-built (broadcasts already), and b) the paired encoding's
+    * outer-rebuild has no inner-index handle to reach, so any finer reconstruction would require a
+    * profunctor-style closed witness beyond the scope of `AssociativeFunctor`.
+    *
+    * The `null.asInstanceOf[Xo]` sentinel below is safe **by construction** — [[composeTo]]'s fused
+    * rebuild closes over `z._2` only, so `kD((null, xi)) == kI(xi)` for any null-cast Xo.
+    *
+    * Caveat: if a third-party outer Grate comes along whose `from` genuinely consults the per-slot
+    * rebuild (not true of any v1 carrier), this assoc's outer-rebuild broadcast would
+    * under-approximate. Documented for the future-work `zipWithF`/`collect` bridge.
     *
     * @group Instances
     */
@@ -95,10 +102,14 @@ object Grate:
         inner: Optic[A, B, C, D, Grate] { type X = Xi },
         outer: Optic[S, T, A, B, Grate] { type X = Xo },
     ): T =
-      val (d, _) = xd
-      // The rebuild closures below are placeholders — the paired-encoding caveat. `.modify` only
-      // consults the focus half, which `grateFunctor` has already updated to `d`.
-      val b: B = inner.from((d, (_: Xi) => d))
+      val (d, kD) = xd
+      // Reconstruct the inner rebuild: [[composeTo]]'s fused kD closes over `z._2` only, so
+      // `kD((null, xi)) == kI(xi)` for any Xo sentinel. The null cast is safe by construction.
+      val kI: Xi => D = xi => kD((null.asInstanceOf[Xo], xi))
+      val b: B = inner.from((d, kI))
+      // Outer's rebuild — broadcast fallback. V1 outers (iso-morphed, tuple-built) don't consult
+      // this; future per-slot-outer Grates would need a Closed-profunctor-style reconstruction
+      // which isn't expressible in the paired encoding without additional machinery.
       outer.from((b, (_: Xo) => b))
 
   // ------------------------------------------------------------------
@@ -237,3 +248,32 @@ object Grate:
             i += 1
           Tuple.fromArray(arr).asInstanceOf[T]
       }
+
+  // ------------------------------------------------------------------
+  // Composer bridges (Unit 4)
+  // ------------------------------------------------------------------
+
+  /** Trivial injection `Forgetful ↪ Grate` — lets an `Iso`-carrier optic compose against a
+    * `Grate`-carrier optic via cross-carrier `.andThen`. The Iso's forward `to: S => A` doubles as
+    * the rebuild's read; the reverse `from: B => T` drives the pull side.
+    *
+    * Does **not** ship the mirror `Composer[Tuple2, Grate]` (Lens → Grate) by design. A Lens's
+    * source type `S` is not in general `Representable` / `Distributive`, so there's no natural way
+    * to broadcast a fresh focus through the Lens's structural leftover — the composition only makes
+    * sense when `S` is already representable, at which point the user should reach for
+    * [[Grate.apply]] directly. Per plan D3, the workaround for users who want Lens → Grate is to
+    * construct the Grate separately at the Lens's focus type and compose through `Lens.andThen`
+    * (staying in `Tuple2`). Consequence for transitive `Composer.chain`: a user-written
+    * `iso.andThen(lens).andThen(grate)` will not type-check — the resolution miss surfaces as
+    * `"Morph[Tuple2, Grate]"` implicit not found. See `site/docs/optics.md` Grate section for the
+    * worked workaround.
+    *
+    * @group Instances
+    */
+  given forgetful2grate: Composer[Forgetful, Grate] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Grate] =
+      new Optic[S, T, A, B, Grate]:
+        type X = S
+        val to: S => (A, S => A) = s => (o.to(s), s0 => o.to(s0))
+        val from: ((B, S => B)) => T = { case (b, _) => o.from(b) }

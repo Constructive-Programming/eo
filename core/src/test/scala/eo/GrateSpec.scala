@@ -87,3 +87,36 @@ class GrateSpec extends Specification with ScalaCheck:
       )
     }
   }
+
+  "Composer[Forgetful, Grate] (Iso → Grate)" should {
+    import data.Forgetful
+    import optics.Iso
+
+    val triple = Grate.tuple[(Int, Int, Int), Int]
+
+    "compose iso.andThen(grate.tuple) with identity iso" >> {
+      val idIso =
+        Iso[(Int, Int, Int), (Int, Int, Int), (Int, Int, Int), (Int, Int, Int)](
+          identity,
+          identity,
+        )
+      val composed = idIso.andThen(triple)
+      forAll((a: Int, b: Int, c: Int) =>
+        composed.modify((x: Int) => x + 1)((a, b, c)) == ((a + 1, b + 1, c + 1))
+      )
+    }
+
+    "compose iso.andThen(grate.tuple) with non-trivial bijection" >> {
+      // Bijection: (Int, Int, Int) <-> (Int, Int, Int) via rotate-left / rotate-right
+      val rotate =
+        Iso[(Int, Int, Int), (Int, Int, Int), (Int, Int, Int), (Int, Int, Int)](
+          t => (t._2, t._3, t._1),
+          t => (t._3, t._1, t._2),
+        )
+      val composed = rotate.andThen(triple)
+      forAll { (a: Int, b: Int, c: Int) =>
+        // rotate.to(a, b, c) = (b, c, a); triple.modify(+1) = (b+1, c+1, a+1); rotate.from = (a+1, b+1, c+1)
+        composed.modify((x: Int) => x + 1)((a, b, c)) == ((a + 1, b + 1, c + 1))
+      }
+    }
+  }

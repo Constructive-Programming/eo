@@ -591,7 +591,7 @@ if existing core-module tests hit the new given.
 
 ### Unit 4 — Composer bridge (`Forgetful → Grate`)
 
-- [ ] Land `given forgetful2grate: Composer[Forgetful, Grate]`.
+- [x] Land `given forgetful2grate: Composer[Forgetful, Grate]`.
 
 **Files.** Modify `core/src/main/scala/eo/data/Grate.scala`.
 
