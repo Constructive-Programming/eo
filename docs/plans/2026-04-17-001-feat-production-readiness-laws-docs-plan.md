@@ -3,6 +3,7 @@ title: "feat: Production-readiness — Laws, Tests, Docs, Benchmarks, and 0.1.0 
 type: feat
 status: active
 date: 2026-04-17
+revised: 2026-04-24
 ---
 
 # feat: Production-readiness — Laws, Tests, Docs, Benchmarks, and 0.1.0 Release
@@ -41,6 +42,25 @@ enforced on the 0.1.0 tag itself; it becomes a gate on 0.1.1 and forward
 within the `0.1.x` series.
 
 ## Problem Frame
+
+> **2026-04-24 revision note.** The library has grown substantially since this
+> plan's initial baseline (2026-04-17). New optic families have landed on `main`:
+> `AlgLens[F]` (classifier carrier + `algFold` downstream), `AffineFold` (folded
+> into `Optional`'s constructor surface), `Grate` (plan 004 complete: carrier +
+> laws + bench + docs), circe multi-field optics and observable-failure Ior
+> surface (plan 005 complete), `lens` / `prism` generics macros with multi-field
+> NamedTuple focus + full-cover Iso (plan 003 complete), and an in-flight
+> Kaleidoscope family (plan 006, 4 of 7 units landed — see §"Kaleidoscope
+> in-flight coordination" below). The 0.1.0 target now includes laws, docs,
+> and composition coverage for *these* new families, not just the pre-plan
+> baseline. Three review inputs — a 15×15 composition-gap matrix
+> ([`2026-04-23-composition-gap-analysis.md`](../research/2026-04-23-composition-gap-analysis.md)),
+> a simplicity-lens code-quality review
+> ([`2026-04-23-code-quality-review.md`](../research/2026-04-23-code-quality-review.md)),
+> and a cookbook + diagrams research sweep
+> ([`2026-04-23-external-sources-cookbook-ideas.md`](../research/2026-04-23-external-sources-cookbook-ideas.md))
+> — define the additional units needed before tag; they are integrated into
+> the unit list below.
 
 The library has strong bones (rigorous existential-optics core, working Scala 3
 macros, discipline-checked core optics, JMH suite vs Monocle for Lens / Prism /
@@ -135,6 +155,77 @@ Requirements the plan must satisfy end-to-end:
 - **R10. Existing behavior is preserved.** No law, benchmark, or API change
   alters the semantics of current optics or carriers; the existing ~70% of
   `core/` remains green against its laws.
+- **R11. Composition-gap top-3 closures land at the behaviour-spec level**
+  before tag, per
+  [`2026-04-23-composition-gap-analysis.md`](../research/2026-04-23-composition-gap-analysis.md)
+  §1.3. Concretely:
+  - **R11a.** Behaviour tests for `Traversal.each × {Iso, Optional, Prism,
+    Traversal.each}` — the second-most-common chain after `Lens → Traversal →
+    Lens`, currently zero-covered.
+  - **R11b.** Behaviour tests for Optional's four fused `.andThen` overloads
+    (`Optional.andThen(GetReplaceLens | MendTearPrism | Optional |
+    Traversal.each)`) — each has a fast path in `Optional.scala:123-188` that
+    no spec currently exercises; overlaps with the Unit 8 coverage lift
+    on `core/optics/Optional.scala`.
+  - **R11c.** Setter composition story — either ship
+    `AssociativeFunctor[SetterF, _, _]` plus `Composer[SetterF, _]` for at
+    least Tuple2, *or* promote the terminal-carrier gotcha from
+    `SetterF.scala:14` into user-facing `site/docs/optics.md`. Same for
+    `FixedTraversal[N]` terminal-carrier note.
+- **R12. Structural composition gaps get an explicit disposition.**
+  `AlgLens[F]` outbound (no `Composer[AlgLens, _]`) and the
+  `PowerSeries → {AlgLens, Grate}` absence are documented in
+  `site/docs/optics.md` with a "why and what to do" paragraph each; and
+  `Composer[Affine, AlgLens[F]]` + `JsonPrism × AlgLens` move from the
+  composition-gap `?` cells into either an experimental-resolution
+  micro-unit (§R12a) or an explicit deferral entry.
+- **R13. Core coverage regression is repaired before tag.** The baseline
+  68.30% → 58.83% statement (70.77% → 52.84% branch) regression flagged in
+  [`2026-04-23-code-quality-review.md`](../research/2026-04-23-code-quality-review.md)
+  §Coverage snapshot is unwound: `Iso.scala`, `Prism.scala`, `Optional.scala`,
+  `Lens.scala` fused-`.andThen` overloads get behaviour fixtures (same work
+  as R11b for Optional); the ≥85 % statement target from R3 becomes
+  reachable once that coverage work lands. Branch target from R3 is relaxed
+  to ≥75 % (match-type heavy code still under-reports).
+- **R14. Code-quality review "must-fix before 0.1.0" items are closed.**
+  Concretely (from review §Prioritized cleanup list → Must-fix for 0.1.0):
+  - Finding #1 from the review (orphan-Reflector) is **dismissed as a
+    timing artifact** — Kaleidoscope plan 006 Units 1-4 landed after the
+    review ran, so `Reflector.scala` is now the live substrate for an
+    in-flight family, not orphan scaffolding.
+  - Findings 2-5 (coverage regression, circe walk-and-rebuild duplication,
+    Grate null sentinels, laws-pulls-core architecture) are absorbed into
+    the unit list below.
+  - Remove the unused `given tupleInterchangeable` (`Lens.scala:22-24`),
+    the empty `object ForgetfulApplicative` stub, the unused type
+    parameters on `SetterF.scala:26, 38`, and the unused
+    `@annotation.unused original: Json` parameter on
+    `JsonFieldsTraversal.scala:313-318`.
+  - Fill the enumerated Scaladoc companion-object gaps (overlaps with R5).
+  - Add one fixture that pins the `Grate.apply` / `grateAssoc` null-sentinel
+    invariants (`Grate.scala:108, 178`) — a future regression that starts
+    reading the sentinel materialises as a test failure, not a silent NPE.
+  - Ensure `circe/` is included in the `coverageReport` run, either by
+    promoting `circeIntegration/test` into the coverage incantation or by
+    documenting the exclusion in the baseline doc.
+- **R15. Documentation deliverables from the cookbook + diagrams review
+  ship with 0.1.0**, per
+  [`2026-04-23-external-sources-cookbook-ideas.md`](../research/2026-04-23-external-sources-cookbook-ideas.md):
+  - **R15a.** Ship three priority Mermaid diagrams — D1 (composition
+    lattice, `site/docs/concepts.md`), D5 (JsonPrism Ior failure-flow,
+    `site/docs/circe.md`), D3 (optic family taxonomy tree, top of
+    `site/docs/optics.md`). Runners-up (D4, D7 simplified, D9) are
+    stretch-goals.
+  - **R15b.** Converge `site/docs/cookbook.md` on ~18-22 recipes (target
+    footprint per the review's §"Recipe count" estimate) drawn from the
+    30-recipe catalogue, merging adjacent recipes (e.g. 8+9 into one
+    traversal-choice section; 13+14+15 into one JSON arc; 11+12+18 into
+    one AlgLens vignette). Preserve the cats-eo-unique recipes first
+    (recipes 3, 4, 10, 13-15, 23, 26, 28-30).
+  - **R15c.** Cross-link recipes with Penner / Monocle-docs attribution
+    so readers can chase the original framings (Penner's *Optics By
+    Example* is the single heaviest source; cite it by chapter where
+    the recipe maps directly).
 
 ## Scope Boundaries
 
@@ -148,9 +239,19 @@ In scope:
 
 Out of scope (explicit non-goals):
 
-- **No new optic abstractions.** The plan documents and hardens what exists;
-  it does not add `Grate`, `Review`, `IndexedLens`, etc. Those belong in a
-  follow-up.
+- **No brand-new optic abstractions added *during* this plan's execution.**
+  The plan documents and hardens what exists on `main` at the moment of
+  the 0.1.0 cut. `Grate` (plan 004), `AlgLens`, and `AffineFold` have
+  already landed and are therefore in scope for laws / docs / composition
+  coverage. The in-flight **Kaleidoscope** family (plan 006; Units 1-4
+  landed, Units 5-7 pending) is treated as conditional scope — it ships
+  in 0.1.0 *if* Units 5-7 of plan 006 land before tag, otherwise it
+  defers cleanly to 0.1.1.
+- **Indexed optics (plan 007) deferred to 0.2.x.** `IxLens` / `IxTraversal` /
+  `IxFold` / `IxSetter` + a parallel law / bench / docs tree are
+  structurally disruptive (every family's surface grows an index
+  parameter). Track in
+  [`docs/plans/2026-04-23-007-feat-indexed-optics-hierarchy-plan.md`](./2026-04-23-007-feat-indexed-optics-hierarchy-plan.md).
 - **No Scala.js / Scala Native cross-build.** The codebase is JVM-only today.
   Adding cross-build is tracked as a 1.0 follow-up (see Future Considerations
   below).
@@ -307,19 +408,66 @@ any surprising incidents (e.g., "MiMa false positive on existential type X",
   are almost entirely type-level; their runtime statement coverage may stay
   low regardless of test effort. Target is ≥85% on `core` overall; per-file
   floors are set during Unit 2 when we see real numbers.
-- **Whether to keep the old `OpticLaws.scala` / `EoSpecificLaws.scala`
-  umbrella objects as re-exports.** Decide during Unit 1 once the split is
-  visible. If downstream users have already copied from the current shape
-  (low likelihood at 0.1.0-SNAPSHOT) we keep them as `@deprecated` shims.
-- **Laika navigation taxonomy.** The categorical grouping on the site
-  (Concepts / Optics / Carriers / Cookbook / Migration) is drafted in Unit 10
-  but will be refined during site authoring.
 - **Whether to publish snapshot builds to Sonatype snapshots.** Left for the
-  release cut in Unit 14 — may not be worth the extra secret surface for a
+  release cut in Unit 15 — may not be worth the extra secret surface for a
   single 0.1.0 line.
+
+### New since 2026-04-24 revision — surfaced by review inputs
+
+- **OQ-R1. The 12 `?` cells from the composition-gap analysis §2.2.** Each is
+  a "carrier pair exists but no Composer ships and no test resolves it"
+  question. Before tag, pick one of three dispositions for each:
+  (a) experimental 5-minute compile-run to flip ? → N,
+  (b) ship a new Composer / AssociativeFunctor given,
+  (c) explicit deferral entry in `site/docs/optics.md`.
+  The 12 cells cluster into three batches (Lens/Prism/Optional × Fold/
+  Traversal.forEach; Traversal.each × {Fold, Traversal.forEach, AlgLens};
+  cross-F Forget × Forget). Cross-reference
+  [composition-gap §2.2](../research/2026-04-23-composition-gap-analysis.md#22-summary-of-the--cells-for-34)
+  on resolution.
+- **OQ-R2. Setter composition direction (R11c).** Ship an
+  `AssociativeFunctor[SetterF, _, _]` plus a `Composer[SetterF, _]` for
+  Tuple2? Or keep SetterF as a composition-terminal and make that a
+  documented boundary? Performance implication is negligible either way;
+  it's purely a UX / API-surface call.
+- **OQ-R3. How much of the circe walk-and-rebuild extraction ships in
+  0.1.0?** The review's single highest-ROI refactor (∼1200 LoC removed via
+  a shared `walkAndUpdate[F]` helper) is structurally disruptive and wants
+  a benchmark re-run. Default disposition: defer to 0.1.1 per the review's
+  "Post-0.1.0" ranking, but flag the current duplication in release notes
+  so downstream readers know the shape is provisional.
+- **OQ-R4. Should `Codescene MCP` wiring be attempted before tag?** The
+  code-quality review substituted the simplicity-reviewer lens for a
+  Codescene run because no Codescene MCP was available. If the tooling
+  surfaces before tag, a one-shot Codescene pass adds change-coupling,
+  churn × hotspot, and god-class metrics we currently lack. Low priority;
+  mark as optional pre-tag nice-to-have.
+
+### Resolved since 2026-04-17
+
+- **Which docs toolchain?** → `sbt-typelevel-site` (Laika + mdoc). User
+  chose this option explicitly. *Resolved; site is live under `site/`.*
+- **PowerSeries / Vect law depth?** → Full law classes. User chose this.
+  *Resolved; laws + fixtures landed in Units 5-6.*
+- **Publishing target?** → Maven Central (Central Portal) at 0.1.0, pre-1.0
+  semantics. User chose this. *Resolved; Unit 13 wired.*
+- **Include benchmarks expansion?** → Yes. User chose this. *Resolved;
+  Unit 12 complete + Grate / PowerSeries benches added.*
+- **Do we need a separate `cats-eo-bench` published artifact?** → No, keep
+  `benchmarks/` with `publish / skip := true`. *Resolved.*
+- **Do we need a separate `cats-eo-docs` published artifact?** → No.
+  *Resolved; `site/` is `publish / skip := true`.*
+- **`OpticLaws.scala` / `EoSpecificLaws.scala` umbrella fate.** Decided
+  during Unit 1 execution — the split dropped the umbrellas entirely;
+  no `@deprecated` shim was needed because no downstream existed at
+  0.1.0-SNAPSHOT. *Resolved.*
+- **Laika navigation taxonomy.** *Resolved in Unit 11 execution:
+  `site/docs/directory.conf` ships the final ordering (getting-started /
+  concepts / optics / generics / cookbook / circe / benchmarks /
+  extensibility / migration).*
 - **Which specific `@example` blocks migrate from Scaladoc into the
-  microsite.** Short examples stay in Scaladoc; anything more than ~5 lines
-  moves to `docs/` where mdoc verifies it. Call case by case in Unit 11.
+  microsite.** *Resolved in Unit 11 — short examples stayed in Scaladoc;
+  anything over ~5 lines now lives in `site/docs/`.*
 
 ## High-Level Technical Design
 
@@ -440,9 +588,31 @@ flowchart TB
   U11 --> U12[U12 Benchmarks expansion]
   U1 --> U13[U13 Release infra plugins + build settings]
   U13 --> U14[U14 CI workflows + publish secrets]
+
+  %% 2026-04-24 revision — composition / quality / cookbook / diagrams
+  U1 --> U16[U16 Composition-gap top-3 closures R11]
+  U8 --> U16
+  U1 --> U17[U17 Code-quality must-fix + circe coverage R13/R14]
+  U11 --> U18[U18 Mermaid diagrams D1/D3/D5 R15a]
+  U11 --> U19[U19 Cookbook consolidation to 18-22 recipes R15b/c]
+  U18 --> U19
+  U16 --> U21[U21 Resolve 12 ? composition cells OQ-R1]
+  U7 --> U21
+
+  %% Kaleidoscope 006 conditional
+  K006[plan 006 Units 5-7 Kaleidoscope] -.->|conditional| U20[U20 Kaleidoscope cross-scope coordination]
+  U20 -.->|if shipped| U18
+  U20 -.->|if shipped| U19
+
   U14 --> U15[U15 README + CHANGELOG + CONTRIBUTING + 0.1.0 cut]
   U12 --> U15
   U11 --> U15
+  U16 --> U15
+  U17 --> U15
+  U18 --> U15
+  U19 --> U15
+  U20 --> U15
+  U21 --> U15
 ```
 
 ### Law-file skeleton shape (directional)
@@ -833,8 +1003,10 @@ cats' `TraverseLaws` shape.
 - The migrated `Unthreaded.scala` scenarios exist in `PowerSeriesSpec.scala`
   as property tests.
 
-- [ ] **Unit 7: Type-class laws (`ForgetfulFunctor`, `ForgetfulTraverse`,
-  `AssociativeFunctor`, `Composer`)**
+- [~] **Unit 7: Type-class laws (`ForgetfulFunctor`, `ForgetfulTraverse`,
+  `AssociativeFunctor`, `Composer`)** *(partial — ForgetfulFunctor and
+  ForgetfulTraverse laws landed under `laws/src/main/scala/eo/laws/typeclass/`;
+  `AssociativeFunctor` + `Composer` law classes still pending)*
 
 **Goal:** Dedicate law classes to the four carrier type-classes that drive
 runtime behavior across every optic and carrier in use today. Any
@@ -1351,6 +1523,466 @@ the gate triggers.
 - `.github/workflows/release.yml` dry-run via `act` (if available) or
   documented as "first real run happens on the 0.1.0 tag."
 
+- [ ] **Unit 16: Composition-gap top-3 closures (R11) + structural disposition (R12)**
+
+**Goal:** Close the three highest-priority gaps from the composition-gap
+analysis at the behaviour-spec level, and ship the two structural-boundary
+docs paragraphs so users stop hitting silent implicit misses.
+
+**Requirements:** R11, R12.
+
+**Dependencies:** Unit 1 (stable laws layout). Can run in parallel with
+Units 9-12. Work overlaps materially with Unit 8 (Optional fused-overload
+coverage) and with Unit 11 (docs content for the terminal-carrier
+paragraphs) — land Unit 16 first or in the same PR as the overlap to avoid
+double-editing.
+
+**Files:**
+- Modify: `tests/src/test/scala/eo/OpticsBehaviorSpec.scala` — add
+  property-based behaviour rows for:
+  - **R11a block** — `Traversal.each × Iso`, `Traversal.each × Optional`,
+    `Traversal.each × Prism`, and 2-level-nested
+    `Traversal.each.andThen(Traversal.each)`. Reference fixtures: a
+    `List[Option[Int]]` or `List[Result]` shape for the Prism variant; a
+    `List[(A, A)]` or similar for nested-each. Parallel to the bench-only
+    coverage these already get in `benchmarks/`.
+  - **R11b block** — behaviour spec per Optional fused overload
+    (`Optional.andThen(GetReplaceLens | MendTearPrism | Optional |
+    Traversal.each)` at `Optional.scala:123-188`). Each spec calls the
+    fused path and the unfused-via-carrier path on the same fixture and
+    asserts `.modify` / `.get` equivalence. These fixtures double as the
+    coverage fix for `core/optics/Optional.scala` (21.92 % → ≥85 %).
+  - **R11c** — if the decision on Setter composition is "ship the
+    carrier instances" (see OQ-R2), add `setter.andThen(setter)` +
+    `lens.andThen(setter)` property specs. If the decision is "document
+    as terminal", no spec changes here; the docs work falls under Unit 11
+    (or Unit 11.5 below).
+- Modify: `site/docs/optics.md` — append short "terminal-carrier" paragraphs
+  for `SetterF` and `FixedTraversal[N]`, naming the implicit miss the user
+  will hit and the workaround. Append an "AlgLens[F] is a sink" paragraph
+  explicitly (the section exists but understates it per composition-gap §5.1).
+- Modify: `site/docs/optics.md` — add a "Grate composes only with Iso"
+  paragraph cross-referencing plan 004 D3 for the Rep/Distributive
+  argument; the composition-gap §3.2.4 lists every absent Composer pair
+  that should be named there.
+
+**Approach:**
+- Land the Traversal-each-outer family first (R11a) — it's the
+  user-facing chain the tests undercover most visibly. The `Composer[Either,
+  PowerSeries]` (`PowerSeries.scala:362`) + `Composer[Affine,
+  PowerSeries]` (`PowerSeries.scala:407`) fast paths ALL need at least
+  one behaviour spec.
+- For R11b, pick the 5 most-user-facing fused paths per
+  `Iso` / `Prism` / `Optional` / `Lens` concrete subclass (code-quality
+  review recommendation §"Nice-to-have #8"). Each fused overload is a 3-line
+  spec calling `.andThen(…).modify(…)` and asserting equivalence with the
+  unfused path.
+- R11c: the Setter decision is OQ-R2; resolve at the top of the unit, then
+  either ship the carrier instances or land the docs prose. Do not leave
+  it ambiguous.
+
+**Execution note:** Test-first for R11a and R11b. Write failing forAll
+properties that exercise the chain, then verify they pass on current
+code (because the fast paths do work — they're just untested).
+
+**Patterns to follow:** existing `OpticsBehaviorSpec.scala` style; the
+cross-carrier composition tests already in `CrossCarrierCompositionSpec`.
+
+**Test scenarios:**
+- Happy path — every R11a chain `.modify(f).get == f.applied.get` for a
+  `forAll` on List/Option fixtures.
+- Happy path — every R11b Optional fused path is byte-for-byte equivalent
+  to the carrier-derived path on the same fixture.
+- Edge case — Prism miss inside a Traversal.each propagates as
+  "element unchanged" per PowerSeries semantics.
+- Error path — n/a (these are pure total optics; error paths live in
+  circe / Ior land, not here).
+
+**Verification:**
+- `sbt tests/test` green with ≥10 new `forAll` blocks.
+- Coverage re-run shows `core/optics/Optional.scala`, `Iso.scala`,
+  `Prism.scala`, `Lens.scala` above the 80 % line (R13 target).
+- `site/docs/optics.md` renders the new terminal-carrier paragraphs under
+  the Setter / FixedTraversal / AlgLens sections; mdoc green.
+
+- [ ] **Unit 17: Code-quality review must-fix + circe-coverage wiring (R13, R14)**
+
+**Goal:** Close the code-quality review's "Must-fix for 0.1.0" items and
+repair the scoverage pipeline so circe is no longer silently skipped.
+
+**Requirements:** R13, R14.
+
+**Dependencies:** None structural — can run anywhere after Unit 1. Should
+land before Unit 15 (release cut) so the tag ships the cleaned surface.
+
+**Files:**
+- Modify: `core/src/main/scala/eo/optics/Lens.scala` — remove the unused
+  `given tupleInterchangeable[A, B]: (((A, B)) => (B, A))` at lines 22-24
+  (code-quality review §core/YAGNI; 3 LoC).
+- Modify: `core/src/main/scala/eo/ForgetfulApplicative.scala` — remove the
+  empty `object ForgetfulApplicative` stub at line 19 (review
+  §core/Dead-or-unreachable; 2 LoC).
+- Modify: `core/src/main/scala/eo/data/SetterF.scala` — remove the unused
+  `[S, A]` type parameters on `given map` (line 26) and `given traverse`
+  (line 38) (review §core/Dead; ~4 LoC).
+- Modify: `circe/src/main/scala/eo/circe/JsonFieldsTraversal.scala` —
+  drop or wire up the unused `@annotation.unused original: Json`
+  parameter at lines 313-318 (review §circe/Dead).
+- Modify: `core/src/main/scala/eo/data/Grate.scala` — keep the
+  `null.asInstanceOf[Xo]` sentinels at lines 108, 178 but add an
+  `assert(false, "...")`-style guard or a code comment naming the exact
+  invariant each sentinel relies on. **Do NOT invoke the sentinel at
+  runtime** — the cast stays sound for every v1 carrier; the change is
+  documentary + defensive.
+- Create: `core/src/test/scala/eo/GrateSentinelInvariantSpec.scala` (or
+  add to existing `GrateSpec.scala`) — one fixture that pins the
+  invariant "no current Grate carrier observes `.to(fa)._1` before
+  `composeFrom` replaces it". If the test is inherently a compile-time
+  property (i.e. no runtime check possible without adding a hostile
+  carrier), convert to a `// coverage-sentinel` comment + a
+  `compileErrors` negative test. Review recommendation §7.
+- Modify: `build.sbt` or `CLAUDE.md`'s coverage command — extend the
+  coverage incantation from `sbt "clean; coverage; tests/test;
+  coverageReport"` to include `circeIntegration/test` so circe appears
+  in the scoverage report. Update
+  `docs/solutions/2026-04-17-coverage-baseline.md` to reflect the new
+  coverage of `circe/` (was "No coverage data"; now real numbers).
+- Modify: Scaladoc gaps — add the ~30 one-line "companion for [[X]]"
+  docstrings enumerated in review §core/Scaladoc-gaps +
+  §circe/Scaladoc-gaps + §generics/Scaladoc-gaps. Covers:
+  - `Accessor` / `ReverseAccessor` companions, `Morph` trait members +
+    companion, `Optic` companion, `SimpleLens` / `Review` companions,
+    `AlgLens` / `PSVec` companions, the four `AlgLensFromList` instances
+    (if public), the three `FixedTraversal` given instances, six
+    `PowerSeries` givens.
+  - `JsonFailure` / `JsonPrism` / `JsonFieldsPrism` / `JsonTraversal`
+    companions + `type X` members.
+  - `PartiallyAppliedLens` class header in `generics/package.scala`.
+- Modify: `laws/src/main/scala/eo/laws/eo/ChainLaws.scala:59-60` —
+  add per-given docstrings for `accessorF` / `accessorH` abstract
+  members.
+
+**Approach:**
+- Do the dead-code removals in one PR (very small diff, mechanical).
+- Scaladoc gap-fill in a second PR — ~30 one-line edits; bundle them
+  so reviewers can skim a single diff.
+- Grate sentinel work in a third, isolated PR since it touches
+  correctness reasoning.
+- Coverage-incantation fix lives in whatever PR the release-pipeline
+  changes land in; the `docs/solutions/` update becomes a small 3rd
+  commit in that PR.
+- Finding #1 from the review (orphan `Reflector.scala`) is **NOT**
+  acted on — Kaleidoscope Units 1-4 landed after the review ran;
+  `Reflector` is the live substrate for that family, not orphan.
+  Call this out in the PR description.
+
+**Execution note:** None special. Each sub-task is S-sized.
+
+**Patterns to follow:**
+- Existing Scaladoc shape in `Optic.scala`, `Lens.scala`,
+  `ForgetfulFunctor.scala` is the per-member model for the docstring
+  additions.
+- The `docs/solutions/2026-04-17-coverage-baseline.md` format is the
+  model for the coverage-incantation note.
+
+**Test scenarios:**
+- Happy path — `sbt test` still green after dead-code removal.
+- Integration — `sbt doc` runs without Scaladoc warnings on the
+  surface; Unit 9's zero-warning goal survives.
+- Regression — `sbt "clean; coverage; tests/test; circeIntegration/test;
+  coverageReport"` produces a coverage row for `circe/` (was empty
+  before).
+
+**Verification:**
+- `git grep tupleInterchangeable core/` returns empty.
+- `sbt doc` zero-warning on `core`, `laws`, `generics`, `circe`.
+- Coverage report's circe module is populated.
+- Review §"Must-fix for 0.1.0" checklist items 1-7 all complete.
+
+- [ ] **Unit 18: Mermaid diagrams — composition lattice, Ior failure-flow, family taxonomy (R15a)**
+
+**Goal:** Ship the three priority diagrams from the
+cookbook-sources research (§Track 2 shortlist) so users can orient on the
+cross-carrier composition story, the Ior surface, and the family tree at a
+glance. Laika's Helium theme ships Mermaid support natively — no new build
+plumbing required.
+
+**Requirements:** R15a.
+
+**Dependencies:** Unit 11 (site content exists to embed into).
+
+**Files:**
+- Modify: `site/docs/concepts.md` — embed **D1 (composition lattice)**
+  immediately after the "Cross-family composition" section. ~40 lines of
+  Mermaid `flowchart LR`: nodes = carriers (`Tuple2`, `Either`,
+  `Forgetful`, `Affine`, `SetterF`, `Forget[F]`, `PowerSeries`, `Grate`,
+  `AlgLens[F]`, plus `Kaleidoscope` if plan 006 lands); edges = shipped
+  `Composer[F, G]` givens labelled by direction + `Composer` /
+  `Composer.chain` / `Morph.bothViaAffine`. Effort: **S**.
+  Edge set is enumerated in
+  [composition-gap §0.3](../research/2026-04-23-composition-gap-analysis.md#03-ledger-of-given-instances).
+- Modify: `site/docs/circe.md` — embed **D5 (JsonPrism Ior failure-flow
+  decision graph)** next to the "Reading diagnostics" section. Mermaid
+  `flowchart TD`: input = `Json | String`; terminals = `Ior.Right`,
+  `Ior.Both`, `Ior.Left`; decision branches per `JsonFailure` case
+  (`ParseFailed`, `PathMissing`, `TypeMismatch`, `DecodeFailed`) +
+  collect-on-traversal-skips. Effort: **M**. Verify cases against
+  `circe/src/test/scala/eo/circe/JsonPrismSpec.scala` so each branch
+  matches shipping code.
+- Modify: `site/docs/optics.md` — embed **D3 (optic family taxonomy
+  tree)** at the top of the page as an at-a-glance index. Mermaid
+  `flowchart TD`: root `Optic[S, T, A, B, F]`, branching by carrier,
+  leaves at concrete families (Iso, Lens, Prism, Optional, AffineFold,
+  Getter, Setter, Fold, Traversal.each / .forEach, FixedTraversal[N],
+  AlgLens[F], Grate; add Kaleidoscope if plan 006 ships in 0.1.0). Link
+  leaves to in-page anchors via Mermaid node links. Effort: **S**.
+- **Optional stretch (if time):**
+  - **D4** — `site/docs/circe.md` or `extensibility.md` — sequence
+    diagram of the `modifyImpl` walk (root → field step → leaf →
+    rebuild-up). Effort: M.
+  - **D9** — `site/docs/concepts.md` — one concrete cross-carrier
+    ladder (`Iso → Lens → Traversal.each → Prism → Lens`) rendered
+    as linear `flowchart LR` with per-edge Morph / Composer labels.
+    Effort: M.
+  - **D7 simplified** — `site/docs/benchmarks.md` — two-box "naive
+    PowerSeries vs. flat-array" comparison. Effort: S–M.
+
+**Approach:**
+- Start with D1 (S-effort, highest payoff) → verify it renders in local
+  `sbt site/tlSitePreview` → repeat for D3 and D5.
+- Cross-reference existing `concepts.md` text and the composition-gap
+  §0.3 ledger when drafting D1; every edge must be a shipping given,
+  not a hypothetical.
+- Keep labels short; two-word `Composer` / `chain` / `morph-via-Affine`
+  style. Helium's theme colours the nodes automatically; do not
+  override.
+- D5 is the only diagram with real decision-branching semantics —
+  draft, preview, refine until every `JsonFailure` terminal makes
+  sense to a reader who hasn't read `JsonFailure.scala`.
+
+**Execution note:** mdoc doesn't parse Mermaid fences (they're opaque
+to the Scala compiler), so no mdoc changes are needed. A site rebuild
+is enough.
+
+**Patterns to follow:**
+- Laika's Helium theme Mermaid support docs in the research file
+  (§Rendering tech survey).
+- cats / Cats-Effect sites don't use Mermaid yet — we're breaking new
+  ground in the Typelevel-adjacent space. Keep diagram density high
+  per page (two or fewer per page).
+
+**Test scenarios:**
+- Happy path — `sbt site/tlSitePreview` renders all three diagrams
+  inline without console warnings.
+- Edge case — a malformed Mermaid fence causes a console warning
+  only (does NOT fail the build) — so manually review each diagram
+  after local preview before commit.
+
+**Verification:**
+- Local preview shows all three diagrams.
+- Each diagram's nodes match shipping code (one pass to reconcile
+  with the composition-gap ledger and `JsonFailure` ADT).
+- Links / anchors in D3 leaves resolve to their in-page sections.
+
+- [ ] **Unit 19: Cookbook recipe consolidation (R15b, R15c)**
+
+**Goal:** Converge `site/docs/cookbook.md` on ~18-22 recipes drawn from
+the 30-recipe research catalogue, merging adjacent recipes where one
+page can cover two motivating problems, and attribute each recipe to
+its literature source (Penner's *Optics By Example*, Monocle docs,
+Haskell `lens` tutorial, circe-optics, etc.).
+
+**Requirements:** R15b, R15c.
+
+**Dependencies:** Unit 11 (base cookbook content exists), ideally Unit 18
+(diagrams are available to cross-link from recipe prose).
+
+**Files:**
+- Modify: `site/docs/cookbook.md` — target structure (working draft,
+  refine during authoring):
+  - **Theme A (Product editing)** — keep recipes 1-4 (deep-nested
+    coordinate; Celsius↔Fahrenheit virtual field; multi-field
+    NamedTuple focus; full-cover Iso upgrade). Recipes 3 and 4 are
+    cats-eo-unique — lead with them.
+  - **Theme B (Sum-branch)** — merge recipes 5-6 into one "Prism +
+    Lens chain" section; keep recipe 7 (Review → ID construction) as
+    its own section under "Write-only" (theme F).
+  - **Theme C (Collection walks)** — merge recipes 8-9 into one
+    "each vs. forEach" section; keep recipes 10-11 distinct (sparse
+    traversal, AlgLens teaser); recipe 12 (Iris classifier) stays as
+    a cross-link to plan 002 (not inline).
+  - **Theme D (JSON / tree)** — merge recipes 13-15 into one three-act
+    JSON arc (edit leaf / edit array / diagnose); keep recipes 16-17
+    separate (jq-style filter; recursive rename).
+  - **Theme E (Algebraic)** — merge recipes 11, 18 into one AlgLens
+    vignette (partition + z-shift). Recipe 19 (Kaleidoscope) becomes
+    a cross-reference to plan 006 *or* if plan 006 Units 5-7 land in
+    time, a first-class recipe.
+  - **Theme F (Write / read escape)** — keep recipes 7 (Review),
+    20 (Getter), 21 (Setter), 22 (AffineFold).
+  - **Theme G (Composition)** — recipe 23 (three-family ladder) is
+    load-bearing; place it prominently with a cross-link to D1 (the
+    composition-lattice diagram from Unit 18).
+  - **Theme H (Effectful)** — keep recipes 25, 26 (batch-load 100×);
+    27 (Witherable) remains deferred cross-ref.
+  - **Theme I (Observable failure)** — keep 28, 29, 30; cross-link
+    from D5 (Ior failure-flow).
+- Modify: each recipe gets an "attribution" line naming source
+  (Penner chapter reference for recipes mapped from *Optics By
+  Example*; Gonzalez's Hackage tutorial for the Atom/Molecule
+  example; Monocle docs for the Getter / Setter baseline; circe-optics
+  for the `root.*` JSON-path context).
+- Expected final count: **~20 recipes** (in the research review's
+  18-22 target band).
+
+**Approach:**
+- Re-use recipe prose from the research doc's §Theme sections where
+  the framing is already tight; don't invent new examples
+  gratuitously.
+- Every code fence is mdoc — leverage existing Unit 11 infrastructure.
+- Attribution style: "Source: Penner — *Optics By Example* ch. 7,
+  <https://leanpub.com/optics-by-example/>" inline at the end of each
+  recipe (parallel to existing solution-doc citation style).
+- Where a recipe flags a gap (e.g. recipe 11's `.classify` API
+  doesn't exist), either implement the gap in-scope (only if
+  trivially small; usually not), or rephrase the recipe around the
+  shipping surface + a "future work" cross-reference.
+- If plan 006 Kaleidoscope lands in time, promote recipe 19 from
+  deferred to real; otherwise keep as cross-reference.
+
+**Execution note:** Write one theme at a time, run `sbt site/mdoc`,
+verify, move on. Avoid large-batch authoring.
+
+**Patterns to follow:**
+- cats docs `cookbook/` framing (problem → code → why).
+- The research catalogue's recipe shape (Problem / Optics / Outline /
+  Source / Why / cats-eo angle) is the direct template.
+
+**Test scenarios:**
+- Happy path — `sbt site/mdoc` green on every page after recipe
+  consolidation.
+- Edge case — a recipe citing a shipping gap (e.g. 11 without
+  `.classify`) compiles via the documented workaround, not the
+  unshipped surface.
+- Integration — every cross-reference (D1/D3/D5 diagrams, plan 002
+  iris example, plan 006 Kaleidoscope, plan 007 indexed deferral)
+  resolves.
+
+**Verification:**
+- `sbt site/mdoc` green.
+- Final recipe count ∈ [18, 22].
+- Every cats-eo-unique recipe (3, 4, 10, 13-15, 23, 26, 28-30) is
+  retained.
+- Penner attribution appears on every Penner-sourced recipe.
+
+- [ ] **Unit 20: Kaleidoscope cross-scope coordination (conditional — plan 006 Units 5-7)**
+
+**Goal:** Track plan 006's remaining units (3 of 7) as in-flight
+conditional scope for 0.1.0. If plan 006 Units 5-7 land in time (~1-2
+weeks real-time), the Kaleidoscope family ships in 0.1.0 with laws,
+bench, docs, and cookbook mention. If they do not, Kaleidoscope cleanly
+defers to 0.1.1 — Units 1-4 already on `main` are forward-compatible,
+no rollback needed.
+
+**Requirements:** R15b (if Kaleidoscope is in, cookbook recipe 19 is
+promoted to first-class per Unit 19's structure).
+
+**Dependencies:** plan 006 Units 5-7. No strict ordering with Units 16-19.
+
+**Files (pass-through to plan 006):**
+- See
+  [`docs/plans/2026-04-23-006-feat-kaleidoscope-optic-family-plan.md`](./2026-04-23-006-feat-kaleidoscope-optic-family-plan.md)
+  for the remaining units:
+  - Unit 4 — `Composer[Forgetful, Kaleidoscope]` + law-level fixture.
+    *Landed `c79dd7a`.*
+  - Unit 5 — `KaleidoscopeLaws` + `KaleidoscopeTests` + `checkAll`
+    fixtures. *Pending.*
+  - Unit 6 — `KaleidoscopeBench` (EO-only, two fixtures). *Pending.*
+  - Unit 7 — `site/docs/optics.md` Kaleidoscope section + `concepts.md`
+    carrier-row update + `cookbook.md` Kaleidoscope vignette. *Pending.*
+
+**Approach:**
+- No work *in this unit* — this is a tracking / coordination entry so
+  the 0.1.0 plan's dependency graph reflects the open scope.
+- **Go / no-go decision point** — when Unit 14 (CI) and Unit 17
+  (code-quality cleanup) are both ready to merge, inspect plan 006's
+  state: if Units 4-5 are landed and 6-7 are realistic within a week,
+  Kaleidoscope ships in 0.1.0; otherwise, tag without it and retarget
+  Kaleidoscope for 0.1.1.
+- If Kaleidoscope ships: update Unit 18's D1 (composition lattice)
+  and D3 (family taxonomy) to include Kaleidoscope. Update Unit 19's
+  recipe 19. Update CHANGELOG entry (Unit 15).
+- If Kaleidoscope defers: add a 0.1.1 teaser entry to CHANGELOG.
+
+**Execution note:** None — meta-unit.
+
+**Patterns to follow:** plan 006's own unit structure.
+
+**Test scenarios:** n/a — see plan 006.
+
+**Verification:**
+- Plan 006 Units 5-7 are either all marked `- [x]` (Kaleidoscope in)
+  or the go/no-go decision is recorded in this plan with a date.
+- CHANGELOG reflects the final disposition.
+
+- [ ] **Unit 21: Resolve the `?` composition-gap cells (OQ-R1)**
+
+**Goal:** Before tag, each of the 12 `?` cells from the composition-gap
+analysis §2.2 gets one of three dispositions:
+(a) experimental compile-run to flip ? → N (5-minute prompt each),
+(b) ship a new Composer / AssociativeFunctor given,
+(c) explicit deferral entry in `site/docs/optics.md`.
+
+**Requirements:** R12, OQ-R1.
+
+**Dependencies:** Unit 1 (laws layout); ideally Unit 7 (type-class
+laws — new Composers trigger them).
+
+**Files:**
+- Create or modify: one-off Scala REPL / scratch file that walks every
+  `?` pair and pins its disposition. Not checked in.
+- Modify: `site/docs/optics.md` — add a "composition coverage" section
+  (or extend the existing one) listing the final (N / M / U / deferred)
+  disposition per cell. This becomes part of the release-notes
+  transparency for 0.1.0.
+- Modify (conditional): if any `?` cell gets a new Composer / assoc
+  given, the relevant `core/src/main/scala/eo/data/*.scala` file plus
+  a matching law fixture under `laws/` + a behaviour spec under
+  `tests/`.
+
+**Approach:**
+- Batch the 12 cells as three groups per composition-gap §2.2:
+  - Group 1: Iso / Lens / Prism / Optional × Fold / Traversal.forEach
+    (8 cells) — most likely disposition is "document as M" (compose
+    via `foldMap` or `AlgLens.fromLensF`).
+  - Group 2: Traversal.each × {Fold, Traversal.forEach, AlgLens}
+    (3 cells) — likely disposition is "defer, track in 0.2.x".
+  - Group 3: Cross-F Traversal.forEach × Traversal.forEach (1 cell)
+    — disposition is "defer" (needs a `Composer[Forget[F], Forget[G]]`
+    with a transformation witness).
+- For any cell flipped to N via a new given, the work cascades into
+  Unit 16 (add a behaviour spec) and Unit 7 (add a law-level fixture
+  for the new given's `AssociativeFunctor` / `Composer` witness).
+
+**Execution note:** 5 minutes per cell for the experimental check;
+hours per cell if the disposition is "ship new given". Budget 1 day
+total assuming most dispositions are (a) or (c).
+
+**Patterns to follow:** composition-gap analysis §2 matrix is the
+authoritative starting point; §3.3 enumerates the 12 cells with a
+best-guess disposition per cell.
+
+**Test scenarios:**
+- For each cell flipped to N via a new given: a behaviour-spec row
+  under `OpticsBehaviorSpec` that exercises the chain.
+- For each cell kept as M or U: a docs entry naming the workaround.
+
+**Verification:**
+- `site/docs/optics.md` has a table of 12 cells with dispositions +
+  1-line justifications.
+- If Unit 21 adds Composers, all three of {law, behaviour spec,
+  coverage} are populated.
+
 - [ ] **Unit 15: README + CHANGELOG + CONTRIBUTING, and cut the 0.1.0 release**
 
 **Goal:** Write the three top-level markdown files a public project needs,
@@ -1358,7 +1990,8 @@ then tag `v0.1.0` and trigger the release workflow.
 
 **Requirements:** R4, R6, R9.
 
-**Dependencies:** Units 12, 11, 14.
+**Dependencies:** Units 11, 12, 14, 16, 17, 18, 19, 20 (Kaleidoscope
+go/no-go must be decided), 21.
 
 **Files:**
 - Create: `README.md` — overwrite the sbt stub. Sections: summary (1
@@ -1367,13 +2000,39 @@ then tag `v0.1.0` and trigger the release workflow.
   badges (build, maven-central, codecov, scaladoc), development +
   release pointers, license line.
 - Create: `CHANGELOG.md` — Keep-a-Changelog format. Initial entry:
-  `## [0.1.0] — 2026-MM-DD` listing the 15-unit scope at a high level
-  ("first public release", "full law coverage for …", "mdoc-verified
-  docs site", "benchmarks vs Monocle for Lens/Prism/Iso/Traversal/Fold/
-  Getter/Optional/Setter/PowerSeries", "Sonatype Central Portal via
-  sbt-typelevel-ci-release").
+  `## [0.1.0] — 2026-MM-DD` listing the landed scope:
+  - "First public release."
+  - "Full discipline-checked law coverage for every public optic (Iso,
+    Lens, Prism, Optional, AffineFold, Getter, Setter, Fold, Traversal,
+    Grate, AlgLens[F]) and every shipped carrier (Affine, SetterF,
+    Vect, PowerSeries, FixedTraversal[N], AlgLens, Grate)."
+  - "mdoc-verified docs site with optic-family taxonomy, composition
+    lattice, and Ior failure-flow diagrams."
+  - "Benchmarks vs. Monocle for Lens / Prism / Iso / Traversal / Fold /
+    Getter / Optional / Setter; EO-only benches for PowerSeries /
+    Grate / (Kaleidoscope if shipped)."
+  - "circe integration — JsonPrism / JsonTraversal / JsonFieldsPrism /
+    JsonFieldsTraversal with observable-by-default failure (Ior
+    surface)."
+  - "`lens` / `prism` generics macros with multi-field NamedTuple
+    focus and full-cover Iso upgrade."
+  - "Sonatype Central Portal publishing via sbt-typelevel-ci-release."
+  - **Breaking changes relative to pre-v0.2 surface** — promote to a
+    dedicated "Changed" subsection: the circe observable-failure
+    migration (plan 005; `JsonPrism!` commits, `Json | String` input
+    widening, `*Unsafe` escape-hatches). Users of pre-0.1.0 circe
+    consumers need the migration notes at
+    `site/docs/circe.md` + `migration-from-monocle.md`.
+  - **Known issues** — list the circe walk-and-rebuild duplication
+    (review §F1; ∼1200 LoC removable) as a 0.1.1 refactor target so
+    downstream readers know the shape may move.
+  - **Composition coverage disposition** — link to the `site/docs/optics.md`
+    "composition coverage" table (Unit 21 output) so downstream users
+    can see the explicit N / M / U / deferred map.
 - Create: `CONTRIBUTING.md` — how to run tests, run benchmarks, preview
-  the site locally, submit a PR, what the CI gates check.
+  the site locally, submit a PR, what the CI gates check. Name the
+  manual recovery path for a partial Central Portal publish (per
+  Risk table).
 - Modify: `CLAUDE.md` — cross-reference `CONTRIBUTING.md` for human
   contributors.
 - Tag: `v0.1.0` (manual step by maintainer).
@@ -1550,55 +2209,164 @@ the artifacts on Maven Central after the tag push.
 
 ## Phased Delivery
 
+> **2026-04-24 update:** Phases 1 and 3 and most of Phases 2 and 4 have
+> landed. The remaining work reorganises into three pre-tag waves (G, H, I)
+> that absorb the new Units 16-21 plus the still-open Units 7-partial, 8,
+> 9, and 15. Historical phases and their completion status are kept below
+> for audit traceability.
+
 **Phase 1 — Laws structure + coverage (Units 1–8).** Lands the
 restructure, fills the law gaps, lifts coverage. No user-visible
-behavior change. Can ship as a single `laws-and-coverage` PR or as
-eight small PRs.
+behavior change. *Status: Units 1-6 landed; Unit 7 partial (ForgetfulFunctor
+and ForgetfulTraverse laws on main; AssociativeFunctor + Composer laws
+pending); Unit 8 pending.*
 
 **Phase 2 — Documentation (Units 9–11).** Scaladoc uplift, site
-scaffold, site content. Landable as three PRs, but Unit 11 is the
-largest (most markdown prose) and benefits from multiple authorial
-passes.
+scaffold, site content. *Status: Units 10-11 landed; Unit 9 (Scaladoc
+uplift with `-groups`) pending.*
 
-**Phase 3 — Benchmarks (Unit 12).** Independent of Phase 2; can run in
-parallel.
+**Phase 3 — Benchmarks (Unit 12).** *Status: landed; Grate + PowerSeries
++ PowerSeriesPrismBench extensions are on main.*
 
-**Phase 4 — Release (Units 13–15).** Infrastructure first, then CI
-gates, then README / CHANGELOG and the tag. Unit 15 formally depends on
-Units 11, 12, and 14 — which in turn require Phases 2 and 3 to have
-landed their content — so the tag ships with docs and benchmarks.
-Unit 13 itself has no behavioral dependency on Phases 1–3 and can land
-whenever is convenient.
+**Phase 4 — Release (Units 13–15).** *Status: Units 13-14 landed;
+Unit 15 pending.*
 
-Suggested merge order (optimizing for parallelism and reviewable PR
-size — dependencies permitting):
+**Phase 5 — Composition + quality + diagrams + cookbook (Units 16-21;
+new in 2026-04-24 revision).** Six units responding to the three review
+inputs:
+- Unit 16 — behaviour closures for R11 top-3 composition gaps +
+  structural-disposition docs (R12).
+- Unit 17 — code-quality must-fix items (dead code, Scaladoc gap-fill,
+  Grate sentinels, circe coverage wiring).
+- Unit 18 — three Mermaid diagrams (D1 / D3 / D5) on the site.
+- Unit 19 — cookbook consolidation to ~18-22 recipes with attribution.
+- Unit 20 — Kaleidoscope (plan 006) conditional cross-scope tracking.
+- Unit 21 — resolve the 12 ? composition cells (OQ-R1).
+
+Suggested merge order for the remaining work (optimizing for parallelism
+and reviewable PR size — dependencies permitting):
+
+- **Wave G (parallel-safe, unblocked now):**
+  - Unit 7-remainder (AssociativeFunctor + Composer laws; depends on
+    Unit 1 which is landed).
+  - Unit 9 (Scaladoc uplift; depends on stable surface — 0.1.0-SNAPSHOT
+    API is de facto stable at this point).
+  - Unit 17 (code-quality must-fix; landable independently in small
+    per-concern PRs).
+  - Unit 16 (composition-gap closures; parallel with Unit 17).
+- **Wave H (after G; mostly parallel):**
+  - Unit 8 (coverage gap-fill to ≥85%; depends on Unit 16's fixtures
+    absorbing much of the core/optics regression).
+  - Unit 18 (Mermaid diagrams; depends on Unit 11 which is landed).
+  - Unit 19 (cookbook consolidation; depends on Unit 18 so diagrams
+    can be cross-referenced from recipe prose).
+  - Unit 21 (? cell resolution; depends on Unit 7-remainder for any
+    cells that flip to N via new givens).
+- **Wave I (Kaleidoscope go/no-go):**
+  - Unit 20 decision — inspect plan 006's state; ship Kaleidoscope in
+    0.1.0 if Units 5-7 are realistic within a week, otherwise defer
+    cleanly to 0.1.1. Go/no-go documented in this plan and in
+    CHANGELOG.
+- **Wave J (release cut):**
+  - Unit 15 (README + CHANGELOG + CONTRIBUTING + tag v0.1.0).
+
+If executed with maximum parallelism the remaining work is 4 waves
+(G → H → I → J); sequential is ~8 merges. Historical wave breakdown
+(pre-revision) for audit:
 
 - **Wave A (foundation, parallel-safe):** Unit 1, Unit 13.
-- **Wave B (after A, mostly parallel):** Unit 2 (depends on 1), Units 3
-  / 4 / 7 (all depend on 1), Unit 5 (depends on 1).
-- **Wave C:** Unit 6 (depends on 5), Unit 12 (depends on 1 but benefits
-  from a stable laws layout).
-- **Wave D:** Unit 8 (depends on 2–7).
+- **Wave B (after A, mostly parallel):** Unit 2, Units 3 / 4 / 7, Unit 5.
+- **Wave C:** Unit 6, Unit 12.
+- **Wave D:** Unit 8.
 - **Wave E (sequential):** Unit 9 → Unit 10 → Unit 11.
-- **Wave F:** Unit 14 (depends on 13), Unit 15 (depends on 11, 12, 14).
-
-If executed in full parallel this is ~6 waves; sequential implementation
-is 15 merges.
+- **Wave F:** Unit 14, Unit 15.
 
 ## Documentation Plan
 
-Beyond the docs content this plan itself produces (Unit 11), the
-following docs are updated in place:
+Beyond the docs content Unit 11 originally produced, the revision adds
+three streams of documentation work (Units 18, 19, 16-docs-parts) that
+together form the "site-wide refresh for 0.1.0 tag" deliverable.
+
+### Priority Mermaid diagrams (R15a, Unit 18)
+
+| Diagram | Slot | Effort | Data source |
+|---------|------|-------:|-------------|
+| **D1** — Composition lattice (carriers = nodes, `Composer` givens = edges) | `site/docs/concepts.md`, after "Cross-family composition" | S | `given Composer[_, _]` set + composition-gap §0.3 ledger |
+| **D3** — Optic family taxonomy tree (root = `Optic[S, T, A, B, F]`, leaves = families grouped by carrier) | `site/docs/optics.md`, top of page as at-a-glance index | S | Carrier column of `concepts.md` table + `optic-families-survey.md` |
+| **D5** — JsonPrism Ior failure-flow decision graph (input → `Ior.Right` / `Both` / `Left` with per-`JsonFailure` branches) | `site/docs/circe.md`, adjacent to "Reading diagnostics" | M | `JsonPrism.scala` walker + `JsonFailure` ADT; verify against `JsonPrismSpec` |
+
+Stretch diagrams (D4 sequence walk, D9 cross-carrier ladder, D7
+simplified PowerSeries chunking) ship if capacity allows — none are
+blocking for tag.
+
+### Cookbook recipe footprint (R15b, R15c, Unit 19)
+
+Target: ~18-22 recipes in `site/docs/cookbook.md`, drawn from the
+30-recipe research catalogue in
+[`2026-04-23-external-sources-cookbook-ideas.md`](../research/2026-04-23-external-sources-cookbook-ideas.md).
+
+| Theme | Recipes retained | Source attribution |
+|-------|-----------------:|--------------------|
+| **A. Product editing (Lens chains)** | 4 (recipes 1-4) | Gonzalez *Control.Lens.Tutorial*; Penner *Virtual fields*; cats-eo novel (3, 4) |
+| **B. Sum-branch (Prism)** | 2-3 (5 merged with 6, separate 7) | Baeldung / RockTheJVM; Wlaschin DDD; Penner ch. 13 |
+| **C. Collection walks (Traversal)** | 3-4 (8+9 merged, 10, 11; 12 cross-link) | Penner *Optics By Example* ch. 7-8, 10; Gonzalez |
+| **D. JSON / tree editing** | 3-4 (13+14+15 merged; 16, 17 separate) | cats-eo novel (13-15); Penner *jq post*; RefTree |
+| **E. Algebraic / classifier** | 1-2 (11+18 merged; 19 conditional on plan 006) | Penner *Algebraic lenses*; Román et al. NWPT 2019 |
+| **F. Write / read escape** | 3 (20, 21, 22) | Monocle Focus docs; Penner ch. 10, 13 |
+| **G. Composition laddering** | 1-2 (23 load-bearing; 24 stretch) | Chapuis hands-on; Borjas lunar phase; Penner ch. 14 |
+| **H. Effectful read (`modifyA`)** | 2 (25, 26; 27 deferred cross-ref) | Penner *batch-load* 100× story |
+| **I. Observable failure (Ior)** | 3 (28, 29, 30) | cats-eo novel; cats `Ior` + circe `DecodingFailure.history` |
+| **Total** | **~20** | Penner's *Optics By Example* is the single heaviest source |
+
+Each recipe gets an inline `Source:` line with author + title +
+chapter (for books) + URL. Penner's recipes cite the chapter directly
+so readers can chase the original framing. The cats-eo-unique recipes
+(3, 4, 10, 13-15, 23, 26, 28-30) lead the cookbook's first scroll.
+
+### Site-wide refresh incorporating review inputs
+
+The following site pages get updates beyond the new diagrams + cookbook
+recipes. None are "greenfield" — they extend already-published pages:
+
+- **`site/docs/concepts.md`** — embed D1 (composition lattice);
+  cross-link D9 (if shipped) as a worked example.
+- **`site/docs/optics.md`** — embed D3 (family taxonomy); append
+  terminal-carrier paragraphs for SetterF, FixedTraversal[N],
+  AlgLens[F] outbound, and Grate structural incompatibility (Unit 16
+  + Unit 21 output). Add a "composition coverage" section from
+  Unit 21's final N/M/U/deferred table.
+- **`site/docs/circe.md`** — embed D5 (Ior failure-flow); cross-link
+  recipes 13-15 and 28-30 from the cookbook.
+- **`site/docs/cookbook.md`** — absorb the Unit 19 consolidation.
+- **`site/docs/extensibility.md`** — cross-link to D4 / D7 if shipped.
+
+### Housekeeping docs (unchanged targets)
 
 - `CLAUDE.md` — day-to-day sbt commands get a new row for `docs/mdoc`
   and `docs/tlSite`; release commands point at the ci-release flow.
+  *Already current as of plan-006 landing.*
 - `CONTRIBUTING.md` — new, covers everything a first-time contributor
-  needs.
-- `CHANGELOG.md` — new, seeded at 0.1.0.
+  needs. Adds the manual recovery path for a partial Central Portal
+  publish. *Created in Unit 15.*
+- `CHANGELOG.md` — new, seeded at 0.1.0 with the explicit "Changed"
+  subsection for the circe v0.2 observable-failure migration. *Created
+  in Unit 15.*
 - `docs/solutions/2026-04-17-coverage-baseline.md` — the measurement
-  artifact from Unit 2, updated in Unit 8.
-- `docs/solutions/` — gets populated as incidents occur during
-  execution; not pre-written here.
+  artifact from Unit 2; updated in Unit 8 and again in Unit 17 (to
+  include circe's newly-wired numbers).
+- `docs/solutions/` — populated as incidents occur; not pre-written
+  here.
+
+### Release-notes architecture callout
+
+Per R14 finding #5 and code-quality review §F5, the 0.1.0 CHANGELOG
+states explicitly that `cats-eo-laws` depends transitively on `cats-eo`
+(every law file imports `eo.optics.Optic.*`). This is intentional
+architecture, not a bug — users of `cats-eo-laws` in downstream
+discipline-checked test suites get the optics package automatically.
+A possible 0.2.0 split into `cats-eo-core` + `cats-eo-optics` so
+law-equation-only consumers can skip optics is tracked as future
+work — flagged in Future Considerations, not in-scope here.
 
 ## Operational / Rollout Notes
 
@@ -1616,12 +2384,24 @@ following docs are updated in place:
 ## Future Considerations
 
 - **Scala.js / Scala Native cross-build** — 0.2.0 timeframe.
-- **New optic families** — tracked in
-  `docs/research/2026-04-19-optic-families-survey.md`. Review and
-  `AlgLens[F]` already landed; the remaining prioritised candidates
-  are AffineFold, indexed variants (IxLens / IxTraversal / …),
-  Achromatic Lens, Grate, and Kaleidoscope. Each will need
-  corresponding laws.
+- **Optic families already tracked in their own plans** (no longer
+  listed here as bare bullets — see the plan directory):
+  - [plan 004](./2026-04-23-004-feat-grate-optic-family-plan.md) —
+    `Grate` *(complete; merged, ships in 0.1.0)*.
+  - [plan 006](./2026-04-23-006-feat-kaleidoscope-optic-family-plan.md)
+    — Kaleidoscope *(Units 1-4 landed on main; Units 5-7 pending;
+    conditional 0.1.0 scope per Unit 20)*.
+  - [plan 007](./2026-04-23-007-feat-indexed-optics-hierarchy-plan.md)
+    — Indexed optics (IxLens / IxTraversal / IxFold / IxSetter).
+    **Deferred to 0.2.x** per 2026-04-24 scope call — the parallel
+    hierarchy is structurally disruptive and too large to ship inside
+    0.1.0's pre-tag window.
+- **Other optic families surveyed but not yet planned** — see
+  [`docs/research/2026-04-19-optic-families-survey.md`](../research/2026-04-19-optic-families-survey.md).
+  Candidates after the plan-006/007 line ships: Achromatic Lens,
+  Witherable / filter-during-parse traversal (recipe 27 in the
+  cookbook research), `filtered` / `selected` predicate-gated
+  traversal (recipe 16 in the cookbook research).
 - **Auto-derivation for Iso / Optional / Traversal** in `generics/` — a
   natural extension of the current `lens` / `prism` macros.
 - **Mutation testing with EO-aware mutators for sbt-stryker4s** — the
@@ -1638,9 +2418,74 @@ following docs are updated in place:
   any existential. Deferred: touches the whole `Optic` extension
   surface; best landed alongside the Getter/Setter composition
   gaps so the witness threading pays for all three at once.
+- **Circe `walkAndUpdate[F]` extraction.** Review §F1 identifies the
+  single highest-ROI structural refactor in the codebase: ~1200 LoC
+  removable across the four `Json*.scala` files via a shared
+  `walkAndUpdate[F]` helper that generalises the path-walk /
+  rebuild loop over a failure-treatment `F`. Structurally disruptive,
+  wants a benchmark re-run. **Target: 0.1.1 or 0.2.0** — documented
+  as known shape in the 0.1.0 CHANGELOG so downstream readers don't
+  build long-term on the current layout.
+- **`cats-eo-laws` → `cats-eo-core` + `cats-eo-optics` split.** Review
+  §F5 observes that `cats-eo-laws` transitively pulls `cats-eo`
+  because every law file imports `eo.optics.Optic.*`. A three-way
+  split would let law-equation-only users skip the optics package.
+  Structurally disruptive; 0.2.0 candidate.
+- **`LowPriorityForgetInstances.assocForgetComonad` deprecation.**
+  Review §core/YAGNI flags this ~25-LoC path as having no shipping
+  consumer. Deprecate in 0.1.0 if time; remove in 0.2.0.
+- **`pickSingletonOrThrow` collapse** in `AlgLens.scala:282-300` into
+  direct `Foldable.reduceLeftToOption(_)(identity).get` — saves 15
+  LoC. Post-0.1.0.
+- **`JsonTraversal.place` → `replaceAll` rename** per review
+  §circe/Naming to match broadcast semantics. API-breaking; 0.2.0.
+- **Codescene MCP pass** — the code-quality review substituted the
+  simplicity-reviewer lens because no Codescene MCP was available.
+  When the tooling lands, run a one-shot Codescene pass and absorb
+  change-coupling / churn × hotspot / god-class metrics into a
+  follow-up review doc. See OQ-R4 + the review's
+  §"Codescene comparison shopping list" for the specific metrics to
+  request.
 
 ## Sources & References
 
+- **2026-04-24 revision inputs** (three research docs absorbed into the
+  Unit 16-21 additions + Requirements R11-R15 + Open Questions OQ-R1..4):
+  - [`docs/research/2026-04-23-composition-gap-analysis.md`](../research/2026-04-23-composition-gap-analysis.md)
+    — 15×15 composition-family matrix (696 lines, 94 N / 86 M / 35 U /
+    12 ? cells). Source for R11 (top-3 closures), R12 (structural
+    dispositions), OQ-R1 (12 ? cells).
+  - [`docs/research/2026-04-23-code-quality-review.md`](../research/2026-04-23-code-quality-review.md)
+    — simplicity-lens / YAGNI review substituting for an absent
+    Codescene MCP (923 lines). Source for R13 (coverage regression
+    repair), R14 (dead-code + Scaladoc + Grate-sentinel + circe-
+    coverage must-fix), OQ-R3 (circe `walkAndUpdate` extraction
+    deferral), OQ-R4 (future Codescene pass). **Finding #1 of the
+    review (orphan `Reflector.scala`) is explicitly dismissed as a
+    timing artifact** — Kaleidoscope plan 006 Units 1-4 landed after
+    the review ran; Reflector is the live substrate for that family.
+  - [`docs/research/2026-04-23-external-sources-cookbook-ideas.md`](../research/2026-04-23-external-sources-cookbook-ideas.md)
+    — 30-recipe cookbook catalogue + 9-diagram candidate list
+    (1141 lines). Source for R15a (three priority Mermaid diagrams),
+    R15b (18-22 recipe target), R15c (attribution discipline,
+    Penner et al.).
+- **Cross-referenced plans:**
+  - [plan 006 — Kaleidoscope optic family](./2026-04-23-006-feat-kaleidoscope-optic-family-plan.md)
+    — 7 units, 1-4 landed on main (`9a09f65`, `7dd1bb7`, `dd5a685`,
+    `c79dd7a`). Units 5-7 remaining are tracked by Unit 20 of this plan as
+    conditional 0.1.0 scope.
+  - [plan 007 — Indexed optics hierarchy](./2026-04-23-007-feat-indexed-optics-hierarchy-plan.md)
+    — **deferred to 0.2.x per 2026-04-24 scope call**; out-of-scope
+    for 0.1.0.
+  - [plan 004 — Grate optic family](./2026-04-23-004-feat-grate-optic-family-plan.md)
+    — complete; ships in 0.1.0.
+  - [plan 005 — circe multi-field + observable failure](./2026-04-23-005-feat-circe-multi-field-plus-observable-failure-plan.md)
+    — complete; v0.2 breaking changes to be called out in Unit 15
+    CHANGELOG.
+  - [plan 003 — generics multi-field Lens](./2026-04-23-003-feat-generics-multi-field-lens-plan.md)
+    — complete.
+  - [plan 002 — Iris classifier example](./2026-04-22-002-feat-iris-classifier-example.md)
+    — cross-referenced from cookbook recipe 12.
 - Research agents invoked during planning:
   - `compound-engineering:research:best-practices-researcher` — current
     Typelevel / Monocle conventions for docs, laws, publishing, CI,
