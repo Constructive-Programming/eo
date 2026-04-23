@@ -199,3 +199,77 @@ object Kaleidoscope:
           (_: xd.FCarrier[B]) => xd.rebuild(xd.focus)._1,
         )
       outer.from(outerK)
+
+  // ------------------------------------------------------------------
+  // Factory (Unit 3)
+  // ------------------------------------------------------------------
+
+  /** Generic Kaleidoscope factory — given any `Reflector[F]`, construct an optic whose focus is the
+    * entire `F[A]` and whose rebuild is identity. This is the single entry point per plan D5; no
+    * tuple-shaped convenience overloads (tuples are not Reflector-shaped).
+    *
+    * Encoding: `X = F[A]`, `focus = fa`, `rebuild = identity`. After composition through the
+    * abstract `Optic[…, Kaleidoscope]` slot the path-type `FCarrier` becomes opaque, so
+    * `.collect[F, ...]` takes `F` as an explicit type argument.
+    *
+    * @group Factories
+    * @example
+    *   {{{
+    * import cats.data.ZipList
+    * import eo.data.Kaleidoscope
+    * import eo.data.Kaleidoscope.given
+    * import eo.optics.Optic.*
+    *
+    * val k = Kaleidoscope.apply[ZipList, Double]
+    * // Column-wise aggregation — `.collect` receives the whole ZipList
+    * // focus and folds it down with the user's aggregator.
+    * val mean = k.collect[ZipList, Double](zl => zl.value.sum / zl.value.size.toDouble)
+    * mean(ZipList(List(1.0, 2.0, 3.0)))   // 2.0
+    *   }}}
+    */
+  def apply[F[_], A](using F: Reflector[F]): Optic[F[A], F[A], A, A, Kaleidoscope] =
+    new Optic[F[A], F[A], A, A, Kaleidoscope]:
+      type X = F[A]
+      val to: F[A] => Kaleidoscope[F[A], A] =
+        (fa: F[A]) => make[F[A], A, F](F, fa, identity[F[A]])
+      val from: Kaleidoscope[F[A], A] => F[A] = k =>
+        // The shipped rebuild for this factory is `identity: F[A] => F[A]`. After `.modify(f)`
+        // lands via [[kalFunctor]], the rebuild becomes the constant broadcast — but the focus
+        // has already been mapped by `f`, so returning the focus gives the correct result.
+        k.focus.asInstanceOf[F[A]]
+
+  // ------------------------------------------------------------------
+  // Kaleidoscope-specific extension — `.collect` (the Kaleidoscope universal)
+  // ------------------------------------------------------------------
+
+  /** `.collect[F, B](agg)` — the Kaleidoscope universal. Given an aggregator `agg: F[A] => B`,
+    * reduce the focus down to a single `B` via `Reflector.reflect`, broadcast it back across `F`,
+    * then feed the resulting `F[B]` through the Kaleidoscope's rebuild to recover a `T`-shaped
+    * result.
+    *
+    * For the generic [[apply]] factory (`X = F[A]`, `rebuild = identity`, `T = F[A]`) this reduces
+    * to:
+    *   1. Project the source via `o.to(s)` — yields `Kaleidoscope[F[A], A]` with focus `fa`.
+    *   2. `reflect(fa)(agg): F[B]` via the Reflector.
+    *   3. Since `T = F[A]` and `A = B` at the monomorphic factory site, the F[B] IS the result.
+    *
+    * **Why `F` is an explicit type parameter.** `Kaleidoscope`'s `FCarrier` path-type becomes
+    * opaque once the optic flows through `Optic[…, Kaleidoscope]`, so the extension can't recover
+    * it structurally. Requiring the user to write `collect[F, B](agg)` at the call site is the
+    * ergonomic trade-off the plan's D5 accepts for the single-factory surface.
+    *
+    * @group Operations
+    */
+  extension [S, T, A, B](o: Optic[S, T, A, B, Kaleidoscope])
+
+    def collect[F[_], C](agg: F[A] => C)(using F: Reflector[F], ev: C =:= B): S => T =
+      val _ = ev // evidence compile-time only; pins C to B so the Reflector's B aligns with the
+      // optic's output focus.
+      (s: S) =>
+        val k = o.to(s)
+        // Cast the path-type FCarrier to `F` — safe at every v1 construction site.
+        val reflected: F[B] = F.reflect(k.focus.asInstanceOf[F[A]])(agg).asInstanceOf[F[B]]
+        val rebuildOrig: F[A] => o.X = k.rebuild.asInstanceOf[F[A] => o.X]
+        val kReflected =
+          make[o.X, B, F](F, reflected, (fb: F[B]) => rebuildOrig(fb.asInstanceOf[F[A]]))
+        o.from(kReflected.asInstanceOf[Kaleidoscope[o.X, B]])

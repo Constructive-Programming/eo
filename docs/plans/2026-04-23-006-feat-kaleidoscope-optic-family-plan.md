@@ -960,7 +960,17 @@ existing test suites.
 
 ### Unit 3 — `Kaleidoscope.apply[F[_]: Reflector, A]`
 
-- [ ] Land the generic constructor.
+- [x] Land the generic constructor.
+
+  **`.collect[F, B]` takes `F` as an explicit type parameter
+  (settled ergonomic trade-off).** The Kaleidoscope universal
+  extension is defined on plain `Optic[S, T, A, B, Kaleidoscope]`
+  (not a refined type), so the `FCarrier` path-type becomes opaque
+  once the optic leaves the factory's concrete return type. Making
+  `F` explicit at the call site is the simplest path — users write
+  `k.collect[ZipList, Double](agg)`. An `OpticF[F, ...]` refinement
+  was tried but caused spurious "unused type member" warnings and
+  added surface area without a real ergonomic win.
 
 **Files.** Modify `core/src/main/scala/eo/data/Kaleidoscope.scala`.
 

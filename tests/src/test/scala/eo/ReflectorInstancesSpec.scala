@@ -96,6 +96,42 @@ class ReflectorInstancesSpec extends Specification with ScalaCheck:
     }
   }
 
+  "Kaleidoscope.apply (Unit 3 smoke)" should {
+    import data.Kaleidoscope
+    import data.Kaleidoscope.given
+    import optics.Optic.*
+
+    "round-trip .modify(identity) on a List kaleidoscope" >> {
+      val k = Kaleidoscope.apply[List, Int]
+      forAll { (xs: List[Int]) =>
+        k.modify(identity[Int])(xs) == xs
+      }
+    }
+
+    "apply .modify(_ + 1) element-wise on a List kaleidoscope" >> {
+      val k = Kaleidoscope.apply[List, Int]
+      k.modify(_ + 1)(List(1, 2, 3)) == List(2, 3, 4)
+    }
+
+    "apply .modify on a ZipList kaleidoscope" >> {
+      val k = Kaleidoscope.apply[ZipList, Int]
+      k.modify(_ * 10)(ZipList(List(1, 2, 3))).value == List(10, 20, 30)
+    }
+
+    "collect[List, Int] produces the List-singleton reflector output" >> {
+      val k = Kaleidoscope.apply[List, Int]
+      // The generic factory returns the raw reflected F[B] — for List (singleton), the result
+      // of `.collect(_.sum)` is `List(sum)`.
+      k.collect[List, Int](_.sum)(List(1, 2, 3, 4)) == List(10)
+    }
+
+    "collect[ZipList, Int] broadcasts the aggregate across the ZipList length" >> {
+      val k = Kaleidoscope.apply[ZipList, Int]
+      // ZipList's reflector broadcasts the aggregate to the input's length.
+      k.collect[ZipList, Int](_.value.sum)(ZipList(List(1, 2, 3))).value == List(6, 6, 6)
+    }
+  }
+
   "Reflector[Const[Int, *]]" should {
     val R = summon[Reflector[Const[Int, *]]]
 
