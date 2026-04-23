@@ -1216,7 +1216,7 @@ otherwise the naming symmetry breaks.
   `name` and `price` missing → two entries in chain for element 2,
   element unchanged); forgiving on empty array / missing prefix.
 
-- [ ] **Unit 5: Macro-error diagnostics hardening**
+- [x] **Unit 5: Macro-error diagnostics hardening**
 
   **Goal:** every D10 row has an exact-message compile-error test.
 
