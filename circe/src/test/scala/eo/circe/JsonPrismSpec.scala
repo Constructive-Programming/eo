@@ -300,14 +300,18 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     }
   }
 
-  // ---- Traversal ----------------------------------------------------
+  // ---- Traversal (*Unsafe surface) --------------------------------
+  //
+  // Paired default-Ior traversal specs live in JsonTraversalSpec.
+  // Keeping the *Unsafe flavour here preserves the pre-v0.2 spec
+  // for the prism-fluent sugar chains (`.each.name.modifyUnsafe`).
 
   "JsonPrism .each traversal" should {
 
     "modify every element's focused field in one pass" >> {
       val basket = Basket(owner = "Alice", items = Vector(Order("x"), Order("y"), Order("z")))
       val json = basket.asJson
-      val out = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(json)
+      val out = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(json)
       out === basket.copy(items = Vector(Order("X"), Order("Y"), Order("Z"))).asJson
     }
 
@@ -318,31 +322,31 @@ class JsonPrismSpec extends Specification with ScalaCheck:
         .items
         .each
         .name
-        .transform(_.mapString(_.reverse))(json)
+        .transformUnsafe(_.mapString(_.reverse))(json)
       out === basket.copy(items = Vector(Order("ba"), Order("dc"))).asJson
     }
 
-    "getAll collects every focus" >> {
+    "getAllUnsafe collects every focus" >> {
       val basket = Basket(owner = "Alice", items = Vector(Order("x"), Order("y")))
-      codecPrism[Basket].items.each.name.getAll(basket.asJson) ===
+      codecPrism[Basket].items.each.name.getAllUnsafe(basket.asJson) ===
         Vector("x", "y")
     }
 
-    "on an empty array, modify is a no-op" >> {
+    "on an empty array, modifyUnsafe is a no-op" >> {
       val basket = Basket(owner = "Alice", items = Vector.empty)
       val json = basket.asJson
-      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(json) === json
+      codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(json) === json
     }
 
-    "forgiving: a missing prefix field leaves input unchanged" >> {
+    "*Unsafe: a missing prefix field leaves input unchanged" >> {
       val stump = Json.obj("owner" -> Json.fromString("Alice"))
-      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(stump) === stump
+      codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) === stump
     }
 
-    "at the root: modify every element of a top-level array" >> {
+    "at the root: modifyUnsafe every element of a top-level array" >> {
       val orders = Vector(Order("a"), Order("b"))
       val json = orders.asJson
-      codecPrism[Vector[Order]].each.name.modify(_.toUpperCase)(json) ===
+      codecPrism[Vector[Order]].each.name.modifyUnsafe(_.toUpperCase)(json) ===
         Vector(Order("A"), Order("B")).asJson
     }
   }

@@ -45,16 +45,19 @@ class JsonTraversalBench:
 
   // Construct the traversal once, outside the bench loop.
   // `Any`-typed because the transparent inline widens at the
-  // definition site but `.modify` still resolves to the right
-  // overload at the call site.
+  // definition site but `.modifyUnsafe` still resolves to the right
+  // overload at the call site. Bench targets the pre-v0.2 silent
+  // shape (`modifyUnsafe`, `Json => Json`) so the perf reference
+  // survives R13; default Ior-bearing `modify` is logged as a new
+  // datapoint under OQ6.
   private val nameEach8: Json => Json =
-    codecPrism[Basket].items.each.name.modify(_.toUpperCase)
+    codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)
 
   private val nameEach64: Json => Json =
-    codecPrism[Basket].items.each.name.modify(_.toUpperCase)
+    codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)
 
   private val nameEach512: Json => Json =
-    codecPrism[Basket].items.each.name.modify(_.toUpperCase)
+    codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)
 
   // ---- Size 8 -------------------------------------------------------
 

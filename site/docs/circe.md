@@ -119,8 +119,8 @@ per-element suffix:
 ```scala mdoc
 val everyName = codecPrism[Basket].items.each.name
 
-everyName.modify(_.toUpperCase)(basketJson).noSpacesSortKeys
-everyName.getAll(basketJson)
+everyName.modifyUnsafe(_.toUpperCase)(basketJson).noSpacesSortKeys
+everyName.getAllUnsafe(basketJson)
 ```
 
 Empty arrays and missing paths leave the Json unchanged.

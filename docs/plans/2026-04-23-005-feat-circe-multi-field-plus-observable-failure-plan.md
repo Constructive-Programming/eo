@@ -1097,7 +1097,7 @@ otherwise the naming symmetry breaks.
   `modify(f)(broken)` === `Ior.Both(chain-of-one, broken)` matching
   `modifyUnsafe(f)(broken) === broken`.
 
-- [ ] **Unit 2: Default + `*Unsafe` surface on `JsonTraversal` + new forgiving `place` / `transfer` + accumulation**
+- [x] **Unit 2: Default + `*Unsafe` surface on `JsonTraversal` + new forgiving `place` / `transfer` + accumulation**
 
   **Goal:** land the rename + Ior-bearing defaults + accumulation
   story on `JsonTraversal`. Plug the missing `place` / `transfer`

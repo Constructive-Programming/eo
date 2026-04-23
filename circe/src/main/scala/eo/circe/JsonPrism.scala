@@ -512,8 +512,8 @@ object JsonPrism:
     * `.selectDynamic("x")` / `.at(i)` calls on the traversal extend its suffix, so one traversal
     * covers arbitrarily deep paths under the iterated array.
     *
-    * Usage: `codecPrism[Basket].items.each.name.modify(_.toUpperCase)(json)` upper-cases every
-    * `items[*].name` in one pass.
+    * Usage: `codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(json)` upper-cases
+    * every `items[*].name` in one pass (or `.modify(...)` for the default Ior-bearing surface).
     */
   extension [A](o: JsonPrism[A])
 
