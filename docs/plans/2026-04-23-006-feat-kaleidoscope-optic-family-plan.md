@@ -467,7 +467,7 @@ sites.
 `core/src/main/scala/eo/Reflector.scala`:
 
 ```
-trait Reflector[F[_]] extends Applicative[F]:
+trait Reflector[F[_]] extends Apply[F]:
   // The reflector operation: lift a "reflect-through-F" function
   // into F-level.
   def reflect[A, B](fa: F[A])(f: F[A] => B): F[B]
@@ -477,6 +477,17 @@ object Reflector:
   given forZipList: Reflector[cats.data.ZipList]
   given forConst[M: Monoid]: Reflector[Const[M, *]]
 ```
+
+**Narrowing — `Apply`, not `Applicative` (Unit 1, settled).** The plan
+originally sketched `extends Applicative[F]`. The Unit 1 research
+spike found that `cats.data.ZipList` only ships `CommutativeApply` —
+not `Applicative` — because ZipList's `pure` would need an infinite
+list. Narrowing to `Apply[F]` keeps all three v1 instances
+(`List`, `ZipList`, `Const[M, *]`) in the family. ZipList's length-
+aware broadcast lives inside the `reflect` op itself (reads the
+input's `fa.value.size`) rather than being lifted to a typeclass
+`pure`. Structurally analogous to Grate's `Distributive →
+Representable` narrowing from plan 004.
 
 **What `reflect` means.** Given an `F[A]` and a function
 `F[A] => B` (read: "aggregate the whole F[A] into a single B"),
@@ -864,9 +875,20 @@ Each unit is ~1 commit. Checkboxes track status.
 
 ### Unit 1 — `Reflector[F[_]]` typeclass + three instances
 
-- [ ] Land `Reflector` typeclass with `List`, `ZipList`, and
+- [x] Land `Reflector` typeclass with `List`, `ZipList`, and
   `Const[M, *]` instances, plus unit tests for the reflector law
   per instance.
+
+  **Narrowing note (settled Risk 1).** The research spike pinned the
+  Reflector signature at `extends Apply[F]` (not `extends Applicative[F]`
+  as the plan's D2 sketch suggested). `cats.data.ZipList` only ships
+  `CommutativeApply[ZipList]` — not `Applicative[ZipList]` — because a
+  top-level `pure` would need an infinite list. Narrowing to `Apply`
+  keeps all three v1 instances (`List`, `ZipList`, `Const[M, *]`) in
+  the family; ZipList's length-aware "broadcast" analogue of `pure`
+  lives inside the `reflect` op itself rather than being lifted to a
+  typeclass method. This is structurally analogous to Grate's
+  `Distributive → Representable` narrowing.
 
 **Files.**
 - Create `core/src/main/scala/eo/Reflector.scala`.

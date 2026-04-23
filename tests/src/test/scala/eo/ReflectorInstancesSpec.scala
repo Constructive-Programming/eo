@@ -1,0 +1,126 @@
+package eo
+
+import cats.data.{Const, ZipList}
+
+import org.scalacheck.{Arbitrary, Cogen}
+import org.scalacheck.Prop.forAll
+import org.specs2.ScalaCheck
+import org.specs2.mutable.Specification
+
+/** Reflector-law unit tests per the plan's D6 (Unit 1). These exist in place of a full discipline
+  * `ReflectorTests` RuleSet: plan Open Question #6 defers promotion to discipline until the
+  * Reflector instance surface grows beyond the v1 three shipped instances.
+  *
+  * Two laws per instance:
+  *   - **R1 — map-compat**: `reflect(fa)(f).map(g) == reflect(fa)(fa_ => g(f(fa_)))`. Post-
+  *     composition with a pure function distributes into the reflector's aggregator.
+  *   - **R2 — const-collapse**: `reflect(fa)(_ => b).map(_ => ()) == fa.map(_ => ())` up to
+  *     F-shape. Witnesses that the aggregator's `B` doesn't alter the output F's *shape* — only its
+  *     element values.
+  *
+  * Plus an instance-specific witness that the `reflect` produces the documented shape: singleton
+  * for `List`, length-broadcast for `ZipList`, phantom-retag for `Const[M, *]`.
+  */
+class ReflectorInstancesSpec extends Specification with ScalaCheck:
+
+  // Arbitrary[ZipList[Int]] — constructed from an Arbitrary[List[Int]] so the plumbing is free.
+  // Lengths stay bounded by Scalacheck's default list generator (~0 to 100 elements), which is
+  // plenty for witnessing the reflector's broadcast behaviour.
+  private given arbZipList: Arbitrary[ZipList[Int]] =
+    Arbitrary(Arbitrary.arbitrary[List[Int]].map(ZipList(_)))
+
+  // Cogen[ZipList[Int]] — routes `ZipList[Int] => Int` functions through the underlying List's
+  // Cogen. Needed so scalacheck can synthesise Arbitrary function values keyed on ZipList inputs.
+  private given cogenZipList: Cogen[ZipList[Int]] =
+    Cogen[List[Int]].contramap(_.value)
+
+  // Arbitrary[Const[Int, Int]] — both slots are Int; the B side is phantom.
+  private given arbConstIntInt: Arbitrary[Const[Int, Int]] =
+    Arbitrary(Arbitrary.arbitrary[Int].map(Const(_)))
+
+  // Cogen[Const[Int, Int]] — by the underlying monoid `Int`.
+  private given cogenConstIntInt: Cogen[Const[Int, Int]] =
+    Cogen[Int].contramap(_.getConst)
+
+  "Reflector[List]" should {
+    val R = summon[Reflector[List]]
+
+    "produce a singleton list (the documented cartesian-shape)" >> {
+      forAll { (xs: List[Int], b: Int) =>
+        R.reflect(xs)(_ => b) == List(b)
+      }
+    }
+
+    "R1 map-compat: reflect(fa)(f).map(g) == reflect(fa)(fa_ => g(f(fa_)))" >> {
+      forAll { (xs: List[Int], f: List[Int] => Int, g: Int => String) =>
+        val lhs = R.map(R.reflect(xs)(f))(g)
+        val rhs = R.reflect(xs)(xs0 => g(f(xs0)))
+        lhs == rhs
+      }
+    }
+
+    "R2 const-collapse shape: reflect(fa)(_ => b).map(_ => ()) is singleton-unit" >> {
+      // For List, `reflect` always produces a singleton, so the "shape preserves" form
+      // specialises to "singleton-unit" regardless of xs' original size.
+      forAll { (xs: List[Int], b: Int) =>
+        R.map(R.reflect(xs)(_ => b))(_ => ()) == List(())
+      }
+    }
+  }
+
+  "Reflector[ZipList]" should {
+    val R = summon[Reflector[ZipList]]
+
+    "broadcast f(fa) across fa.value.size (the documented zipping-shape)" >> {
+      forAll { (xs: List[Int], b: Int) =>
+        val fa = ZipList(xs)
+        R.reflect(fa)(_ => b).value == List.fill(xs.size)(b)
+      }
+    }
+
+    "R1 map-compat: reflect(fa)(f).map(g) == reflect(fa)(fa_ => g(f(fa_)))" >> {
+      forAll { (xs: List[Int], f: ZipList[Int] => Int, g: Int => String) =>
+        val fa = ZipList(xs)
+        val lhs = R.map(R.reflect(fa)(f))(g)
+        val rhs = R.reflect(fa)(fa_ => g(f(fa_)))
+        lhs.value == rhs.value
+      }
+    }
+
+    "R2 const-collapse shape: reflect(fa)(_ => b).map(_ => ()) has the same size as fa" >> {
+      forAll { (xs: List[Int], b: Int) =>
+        val fa = ZipList(xs)
+        val reflected = R.map(R.reflect(fa)(_ => b))(_ => ())
+        reflected.value.size == fa.value.size
+      }
+    }
+  }
+
+  "Reflector[Const[Int, *]]" should {
+    val R = summon[Reflector[Const[Int, *]]]
+
+    "retag the phantom B side (the documented summation-shape)" >> {
+      forAll { (m: Int, b: String) =>
+        // `Const(m)` as `Const[Int, Int]`; `reflect(_)(_ => b)` gives `Const[Int, String]`;
+        // the underlying monoid value `m` should survive intact.
+        val fa: Const[Int, Int] = Const(m)
+        R.reflect(fa)(_ => b).getConst == m
+      }
+    }
+
+    "R1 map-compat: reflect(fa)(f).getConst == reflect(fa)(fa_ => g(f(fa_))).getConst" >> {
+      forAll { (m: Int, f: Const[Int, Int] => Int, g: Int => String) =>
+        val fa: Const[Int, Int] = Const(m)
+        val lhs = R.map(R.reflect(fa)(f))(g)
+        val rhs = R.reflect(fa)(fa_ => g(f(fa_)))
+        lhs.getConst == rhs.getConst
+      }
+    }
+
+    "R2 const-collapse shape: reflect(fa)(_ => b).getConst == m (unchanged monoid side)" >> {
+      forAll { (m: Int, b: String) =>
+        val fa: Const[Int, Int] = Const(m)
+        R.reflect(fa)(_ => b).getConst == m
+      }
+    }
+  }
