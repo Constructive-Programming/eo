@@ -38,6 +38,91 @@ optics too. The cross-carrier variant of `.andThen` summons a
 `Composer[F, G]` or `Composer[G, F]` to bring both sides under
 a common carrier.
 
+## Grate
+
+A `Grate[S, A]` is the dual of `Lens`: where a Lens decomposes a
+product `S` into a focus `A` alongside a leftover, a Grate lifts a
+source-reading function through a *distributive* / Naperian shape.
+Classical shape `((S => A) => B) => T`; carrier: `Grate` (paired
+encoding `(A, X => A)`).
+
+Use this for fixed-shape homogeneous containers — tuple-of-Doubles,
+finite-index function records — where every slot holds a value of the
+same type. The canonical operation is "apply `A => B` uniformly to
+every slot".
+
+```scala mdoc:silent
+import eo.data.Grate
+import eo.data.Grate.given
+
+val triple = Grate.tuple[(Double, Double, Double), Double]
+```
+
+```scala mdoc
+triple.modify(_ * 2)((1.0, 2.0, 3.0))
+triple.replace(0.0)((1.0, 2.0, 3.0))
+```
+
+The `Grate.tuple[T <: Tuple, A]` factory accepts any homogeneous
+tuple (arity 2 upward) whose element type matches `A`; the constraint
+is `Tuple.Union[T] <:< A`.
+
+A distributive-container flavour ships as `Grate.apply[F: Representable]`
+— any `cats.Representable[F]` works (Function1-of-index, tuple-of-pair
+`(A, A)`, user-defined Naperian shapes):
+
+```scala mdoc:silent
+import cats.instances.function.given  // Representable[Function1[Boolean, *]]
+
+val funGrate = Grate[[a] =>> Boolean => a, Int]
+val f: Boolean => Int = b => if b then 1 else 2
+```
+
+```scala mdoc
+val doubled = funGrate.modify(_ * 2)(f)
+doubled(true)
+doubled(false)
+```
+
+**When to reach for Grate vs Traversal.** Use `Traversal.each` for
+container+downstream optic composition (`lens.andThen(each).andThen(lens)`)
+— the standard map-over-elements shape. Use Grate for fixed-shape
+homogeneous records where the structure is known at compile time and
+the operation is a uniform rewrite — tuples, function-shaped finite
+records, any `cats.Representable` container. Grate's future `zipWithF`
+/ `collect` extensions (not in this v1) will unlock operations that
+Traversal can't express.
+
+**Composition.** `Iso.andThen(Grate)` works via
+`Composer[Forgetful, Grate]`:
+
+```scala mdoc:silent
+import eo.optics.Iso
+import eo.optics.Optic.*
+
+val rotate =
+  Iso[(Double, Double, Double), (Double, Double, Double), (Double, Double, Double),
+    (Double, Double, Double)](
+    t => (t._2, t._3, t._1),
+    t => (t._3, t._1, t._2),
+  )
+
+val composed = rotate.andThen(triple)
+```
+
+```scala mdoc
+composed.modify((x: Double) => x + 1)((1.0, 2.0, 3.0))
+```
+
+**Lens → Grate does NOT compose automatically.** A Lens's source `S`
+is not in general `Representable`, so there is no natural way to
+broadcast a fresh focus through the Lens's structural leftover. A
+user-written `iso.andThen(lens).andThen(grate)` fails with an
+implicit-resolution miss for `Morph[Tuple2, Grate]`. The workaround is
+to construct the Grate separately at the Lens's focus type and
+compose through `Lens.andThen` (staying in `Tuple2`), then apply the
+Grate directly.
+
 ## Prism
 
 A `Prism[S, A]` focuses one branch of a sum type — `Some` over

@@ -67,6 +67,7 @@ this optic have?"
 | `PowerSeries`   | `(Snd[X], PSVec[A])`                           | Composable `Traversal` |
 | `FixedTraversal[N]` | Fixed-length tuple of `A`s                  | `Traversal.{two,three,four}` |
 | `AlgLens[F]`    | `(X, F[A])` — classifier-shaped: pair leftover with an `F`-wrapped focus vector | Algebraic Lens (non-uniform classifier cardinality) |
+| `Grate`         | `(A, X => A)` — focus + per-slot rebuild     | `Grate` (distributive / Naperian optics) |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:

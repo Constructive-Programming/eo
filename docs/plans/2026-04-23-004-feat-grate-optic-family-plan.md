@@ -642,7 +642,7 @@ separate-file research doc is overkill for Grate's first bench).
 
 ### Unit 7 — Docs (`optics.md` section + `concepts.md` carriers row)
 
-- [ ] Land user-facing docs.
+- [x] Land user-facing docs.
 
 **Files.** Modify `site/docs/optics.md` (new Grate section between
 Lens and Prism); modify `site/docs/concepts.md` (carriers table row).
