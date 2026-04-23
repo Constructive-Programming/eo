@@ -155,46 +155,59 @@ per-element wrapping cost.
 
 ## JsonPrism — cursor-backed JSON edit
 
-No Monocle equivalent at this layer. Compared against the
-classical `decode → modify → re-encode` baseline.
+No Monocle equivalent at this layer. Two EO surfaces side by
+side: `.modifyUnsafe` (silent, pre-v0.2 shape) and `.modify`
+(default, returns `Ior[Chain[JsonFailure], Json]`). Baseline is
+the classical `decode → modify → re-encode`.
 
-| Depth | eo        | naive     | speedup |
-|-------|----------:|----------:|--------:|
-| 1     |  69.1 ns  | 155.5 ns  | 2.25×   |
-| 2     | 116.1 ns  | 158.8 ns  | 1.37×   |
-| 3     | 135.8 ns  | 253.3 ns  | 1.87×   |
-| wide  | 943.5 ns  | 983.6 ns  | 1.04×   |
+| Depth | `.modifyUnsafe` |    `.modify` (Ior) |     naive | Unsafe vs naive | Ior vs naive | Ior tax |
+|:-----:|----------------:|-------------------:|----------:|----------------:|-------------:|--------:|
+| 1     |    68.8 ± 2.7   |    67.4 ± 1.4      |    151 ns |         2.20×   |       2.24×  | ~0 ns   |
+| 2     |   114.6 ± 0.7   |   117.3 ± 2.8      |    151 ns |         1.32×   |       1.29×  | +2.7 ns |
+| 3     |   129.3 ± 5.3   |   131.9 ± 4.9      |    234 ns |         1.81×   |       1.77×  | +2.5 ns |
 
-The "wide" variant uses 28-total-field records; at that width
-the naive decoder has to touch every field. EO's
-`codecPrism[…].field(_.x).field(_.y)` walks only the focused
-path.
+The "Ior tax" column isolates the cost of opting into the
+default diagnostic-bearing surface: a single `Ior.Right(json)`
+case-class allocation per call, flat per path depth (not per
+step). At d1 the number is inside measurement noise (d1 Ior
+actually comes out slightly faster on this run — JMH standard
+error territory).
 
-**v0.2 surface-tier note.** The table above is measured against
-`.modifyUnsafe` — the silent escape hatch introduced in v0.2.
-That body is byte-identical to the pre-rename `.modify`, so the
-numbers above compare apples-to-apples with previous releases.
-The new default Ior-bearing `.modify` (returning
-`Ior[Chain[JsonFailure], Json]`) adds a happy-path cost of one
-`Ior.Right(json)` allocation — low single-digit nanoseconds on
-the Unit 1 spot-check (OQ6). If you've measured and want to
-preserve pre-v0.2 throughput exactly, reach for `.modifyUnsafe`;
-otherwise the default surface is the recommended entry.
+A fourth "wide" fixture (28-field record, measured separately)
+showed the ratio narrow to ~1.04× because the naive decoder
+touches every field regardless of arity, while EO still walks
+only the focused path. That wide-record bench stayed on the
+pre-rename harness; the numbers in the table above are for the
+standard Person / Deep3 fixtures.
+
+**When to reach for `.modifyUnsafe`.** If you've measured and
+want pre-v0.2 throughput exactly, or you have a hot path where
+the `Ior.Right` allocation matters (heap-sensitive loops, very
+short overall work units). Otherwise the default is the
+recommended entry — you get structured `JsonFailure` diagnostics
+for the same order-of-magnitude speedup over naive.
 
 ## JsonTraversal — `items.each.name` edits
 
 Uppercasing every `items[*].name` inside a `Basket` record, at
-three array sizes:
+three array sizes. Same two-surface story as JsonPrism above:
 
-| Items |          eo |      naive | speedup |
-|-------|------------:|-----------:|--------:|
-| 8     |    796.1 ns |  1 802.2 ns | 2.26×   |
-| 64    |  5 977.8 ns | 12 404.9 ns | 2.07×   |
-| 512   | 47 498.6 ns | 95 503.5 ns | 2.01×   |
+| Items | `.modifyUnsafe` | `.modify` (Ior) |      naive | Unsafe vs naive | Ior vs naive | Ior tax   |
+|:-----:|----------------:|----------------:|-----------:|----------------:|-------------:|----------:|
+| 8     |    797 ±  18    |    819 ±  22    |  1 659 ns  |         2.08×   |       2.03×  |   +22 ns / +2.9 % |
+| 64    |  5 991 ± 188    |  6 128 ±  83    | 12 196 ns  |         2.04×   |       1.99×  |  +137 ns / +2.3 % |
+| 512   | 47 046 ± 601    | 48 928 ±1 428   | 92 710 ns  |         1.97×   |       1.89×  | +1 882 ns / +4.0 % |
 
-The ratio is roughly constant — the naive path pays a full
-decode / re-encode for every element, so both scale linearly
-with array size and EO wins by a constant factor from avoiding
+Traversal's Ior tax scales with element count (~3.7 ns per
+element at size 512), consistent with per-element `Chain`
+bookkeeping on the success path. The gap to naive is ~2× at
+every size and stays ~2× when switching to the default
+Ior-bearing surface — the cursor-walk speedup absorbs the
+accumulator cost comfortably.
+
+The ratio is roughly constant across sizes — the naive path
+pays a full decode / re-encode for every element, so both sides
+scale linearly and EO wins by a constant factor from avoiding
 the per-element codec round-trip.
 
 ## PowerSeries traversal with downstream composition

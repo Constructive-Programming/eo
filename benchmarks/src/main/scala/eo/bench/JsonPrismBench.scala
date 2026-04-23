@@ -5,7 +5,7 @@ import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations.*
 
-import eo.circe.{JsonPrism, codecPrism}
+import eo.circe.{JsonFailure, JsonPrism, codecPrism}
 
 import io.circe.{Codec, Json}
 import io.circe.syntax.*
@@ -61,6 +61,9 @@ class JsonPrismBench:
   @Benchmark def eoModify_d1: Json =
     nameD1.modifyUnsafe(_.toUpperCase)(aliceJson)
 
+  @Benchmark def eoModifyIor_d1: cats.data.Ior[cats.data.Chain[JsonFailure], Json] =
+    nameD1.modify(_.toUpperCase)(aliceJson)
+
   @Benchmark def naiveModify_d1: Json =
     aliceJson.as[Person].map(p => p.copy(name = p.name.toUpperCase)).toOption.get.asJson
 
@@ -68,6 +71,9 @@ class JsonPrismBench:
 
   @Benchmark def eoModify_d2: Json =
     streetD2.modifyUnsafe(_.toUpperCase)(aliceJson)
+
+  @Benchmark def eoModifyIor_d2: cats.data.Ior[cats.data.Chain[JsonFailure], Json] =
+    streetD2.modify(_.toUpperCase)(aliceJson)
 
   @Benchmark def naiveModify_d2: Json =
     aliceJson
@@ -81,6 +87,9 @@ class JsonPrismBench:
 
   @Benchmark def eoModify_d3: Json =
     leafD3.modifyUnsafe(_.toUpperCase)(deep3Json)
+
+  @Benchmark def eoModifyIor_d3: cats.data.Ior[cats.data.Chain[JsonFailure], Json] =
+    leafD3.modify(_.toUpperCase)(deep3Json)
 
   @Benchmark def naiveModify_d3: Json =
     deep3Json

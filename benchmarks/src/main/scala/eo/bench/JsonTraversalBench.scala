@@ -5,7 +5,8 @@ import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations.*
 
-import eo.circe.{JsonPrism, codecPrism}
+import eo.circe.{JsonFailure, JsonPrism, codecPrism}
+import cats.data.{Chain, Ior}
 
 import io.circe.{Codec, Json}
 import io.circe.syntax.*
@@ -59,10 +60,24 @@ class JsonTraversalBench:
   private val nameEach512: Json => Json =
     codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)
 
+  // Default Ior-bearing surface — paired alongside each `*Unsafe`
+  // datapoint so the cost of opt-in diagnostics is legible.
+  private val nameEachIor8: Json => Ior[Chain[JsonFailure], Json] =
+    codecPrism[Basket].items.each.name.modify(_.toUpperCase)
+
+  private val nameEachIor64: Json => Ior[Chain[JsonFailure], Json] =
+    codecPrism[Basket].items.each.name.modify(_.toUpperCase)
+
+  private val nameEachIor512: Json => Ior[Chain[JsonFailure], Json] =
+    codecPrism[Basket].items.each.name.modify(_.toUpperCase)
+
   // ---- Size 8 -------------------------------------------------------
 
   @Benchmark def eoTraverse_8: Json =
     nameEach8(json8)
+
+  @Benchmark def eoTraverseIor_8: Ior[Chain[JsonFailure], Json] =
+    nameEachIor8(json8)
 
   @Benchmark def naiveTraverse_8: Json =
     json8
@@ -79,6 +94,9 @@ class JsonTraversalBench:
   @Benchmark def eoTraverse_64: Json =
     nameEach64(json64)
 
+  @Benchmark def eoTraverseIor_64: Ior[Chain[JsonFailure], Json] =
+    nameEachIor64(json64)
+
   @Benchmark def naiveTraverse_64: Json =
     json64
       .as[Basket]
@@ -93,6 +111,9 @@ class JsonTraversalBench:
 
   @Benchmark def eoTraverse_512: Json =
     nameEach512(json512)
+
+  @Benchmark def eoTraverseIor_512: Ior[Chain[JsonFailure], Json] =
+    nameEachIor512(json512)
 
   @Benchmark def naiveTraverse_512: Json =
     json512
