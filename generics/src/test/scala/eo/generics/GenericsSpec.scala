@@ -3,7 +3,7 @@ package generics
 
 import eo.optics.Optic.*
 
-import eo.generics.samples.{Employee, Person, Shape, Tree}
+import eo.generics.samples.{Employee, LTree, Person, Shape, Tree}
 
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
@@ -284,4 +284,119 @@ class GenericsSpec extends Specification with ScalaCheck:
   "derived Prism on a recursive ADT round-trips on its own variant" >> forAll { (n: Int) =>
     val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
     leafP.to(leafP.reverseGet(leaf)) == Right(leaf)
+  }
+
+  // ---------- Multi-field Lens derivation (partial cover) ----------
+  //
+  // The varargs entry `lens[S](_.f1, _.f2, …)` with `k < fieldCount(S)`
+  // lands a `SimpleLens[S, Focus, Complement]` where Focus is a Scala 3
+  // NamedTuple in SELECTOR order and Complement is a NamedTuple in
+  // DECLARATION order among the non-focused fields (D1). The laws still
+  // hold: set-get, get-set, set-set; modify is replace∘f; complement
+  // access exposes the unfocused fields by original name.
+  //
+  // Every scenario below uses a 2-of-4 or 3-of-4 on `Employee` with
+  // selector-order ≠ declaration-order so an off-by-one in the focus /
+  // complement index bookkeeping surfaces.
+
+  // `transparent inline` on the partial-application entry refines the
+  // return type at the call site to `SimpleLens[Employee, <focus>,
+  // <complement>]`, so we can treat `salaryIdL`'s focus type
+  // transparently as `(Double, Long)` at the value level. For
+  // field-name access we use the `EmpSalaryIdFocus` type alias.
+  type EmpSalaryIdFocus = scala.NamedTuple.NamedTuple[("salary", "id"), (Double, Long)]
+
+  type EmpSalaryIdComplement =
+    scala.NamedTuple.NamedTuple[("name", "department"), (String, String)]
+
+  val salaryIdL = lens[Employee](_.salary, _.id)
+
+  "multi-field Lens get packs focus in selector order" >> forAll { (e: Employee) =>
+    val focus = salaryIdL.get(e).asInstanceOf[EmpSalaryIdFocus]
+    focus.salary == e.salary && focus.id == e.id
+  }
+
+  "multi-field Lens set-get law (2-of-4 selector-order ≠ decl-order)" >> forAll {
+    (e: Employee, s: Double, i: Long) =>
+      val newFocus = (s, i).asInstanceOf[EmpSalaryIdFocus]
+      val got = salaryIdL.get(salaryIdL.replace(newFocus)(e)).asInstanceOf[EmpSalaryIdFocus]
+      got.salary == s && got.id == i
+  }
+
+  "multi-field Lens get-set law" >> forAll { (e: Employee) =>
+    salaryIdL.replace(salaryIdL.get(e))(e) == e
+  }
+
+  "multi-field Lens preserves non-focused fields under replace" >> forAll {
+    (e: Employee, i: Long, s: Double) =>
+      val newFocus = (s, i).asInstanceOf[EmpSalaryIdFocus]
+      val after = salaryIdL.replace(newFocus)(e)
+      after.name == e.name && after.department == e.department
+  }
+
+  "multi-field Lens set-set law" >> forAll { (e: Employee, s1: Double, s2: Double) =>
+    val f1 = (s1, 1L).asInstanceOf[EmpSalaryIdFocus]
+    val f2 = (s2, 2L).asInstanceOf[EmpSalaryIdFocus]
+    salaryIdL.replace(f2)(salaryIdL.replace(f1)(e)) == salaryIdL.replace(f2)(e)
+  }
+
+  "multi-field Lens complement exposes non-focused fields by name" >> forAll { (e: Employee) =>
+    // `salaryIdL.to(e)` returns `(complement, focus)`. Complement is
+    // NamedTuple[("name", "department"), (String, String)] — declaration
+    // order among the non-focused fields.
+    val (complement, _) = salaryIdL.to(e)
+    val named = complement.asInstanceOf[EmpSalaryIdComplement]
+    named.name == e.name && named.department == e.department
+  }
+
+  // 3-of-4 case with selector-order ≠ declaration-order.
+  type EmpNameDeptIdFocus =
+    scala.NamedTuple.NamedTuple[("name", "department", "id"), (String, String, Long)]
+
+  val nameDeptIdL = lens[Employee](_.name, _.department, _.id)
+
+  "multi-field Lens (3-of-4) get reads in selector order" >> forAll { (e: Employee) =>
+    val focus = nameDeptIdL.get(e).asInstanceOf[EmpNameDeptIdFocus]
+    focus.name == e.name && focus.department == e.department && focus.id == e.id
+  }
+
+  "multi-field Lens (3-of-4) replace preserves non-focused salary" >> forAll {
+    (e: Employee, n: String, d: String, i: Long) =>
+      val newFocus = (n, d, i).asInstanceOf[EmpNameDeptIdFocus]
+      val after = nameDeptIdL.replace(newFocus)(e)
+      after.salary == e.salary && after.name == n
+      && after.department == d && after.id == i
+  }
+
+  // Recursive parameterised ADT, multi-field partial cover.
+  // `LTree.LBranch[N]` has three fields `(left, middle, right)`.
+  // Picking `(right, left)` exercises the multi-field Lens path on a
+  // recursive case with selector-order ≠ declaration-order AND a
+  // non-trivial complement (just `middle`).
+  val lBranchRightLeftL = lens[LTree.LBranch[Int]](_.right, _.left)
+
+  type LBranchFocus =
+    scala.NamedTuple.NamedTuple[("right", "left"), (LTree[Int], LTree[Int])]
+
+  "multi-field Lens on a recursive parameterised ADT set-get law" >> forAll { (x: Int, y: Int) =>
+    val branch: LTree.LBranch[Int] =
+      LTree.LBranch[Int](LTree.LLeaf(x), x + y, LTree.LLeaf(y))
+    val newRight: LTree[Int] = LTree.LLeaf(999)
+    val newLeft: LTree[Int] = LTree.LLeaf(-1)
+    val newFocus = (newRight, newLeft).asInstanceOf[LBranchFocus]
+    val got = lBranchRightLeftL
+      .get(lBranchRightLeftL.replace(newFocus)(branch))
+      .asInstanceOf[LBranchFocus]
+    got.right == newRight && got.left == newLeft
+  }
+
+  "multi-field Lens on a recursive parameterised ADT preserves middle" >> forAll {
+    (x: Int, y: Int, k: Int) =>
+      val branch: LTree.LBranch[Int] =
+        LTree.LBranch[Int](LTree.LLeaf(x), k, LTree.LLeaf(y))
+      val newFocus =
+        (LTree.LLeaf[Int](1): LTree[Int], LTree.LLeaf[Int](2): LTree[Int])
+          .asInstanceOf[LBranchFocus]
+      val after = lBranchRightLeftL.replace(newFocus)(branch)
+      after.middle == k
   }

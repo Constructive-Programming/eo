@@ -443,7 +443,7 @@ points (`lens[S]` + `lensN[S]`).
   **Test scenarios:** empty varargs; duplicate selector; unknown field
   name; non-field selector (`_.name.toUpperCase`); non-case-class `S`.
 
-- [ ] **Unit 2: N-field Lens codegen (partial cover)**
+- [x] **Unit 2: N-field Lens codegen (partial cover)**
 
   **Goal:** `lens[S](_.f1, _.f2, …)` with `k < fieldCount(S)` compiles
   to `SimpleLens[S, Focus, Complement]` with Focus in selector order,

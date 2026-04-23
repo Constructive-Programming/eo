@@ -49,6 +49,13 @@ package object samples:
     case Leaf(value: N)
     case Branch(left: Tree[N], right: Tree[N])
 
+  // A recursive ADT with >=3 fields on one branch, so multi-field
+  // Lens derivation can be exercised on a recursive shape with
+  // partial cover (2-of-3).
+  enum LTree[+N]:
+    case LLeaf(value: N)
+    case LBranch(left: LTree[N], middle: N, right: LTree[N])
+
   // 4-field case class for the N-field (>= 3) Lens derivation. The
   // macro must synthesise an `XA = T1 *: T2 *: T3 *: EmptyTuple`
   // complement and round-trip it through `_.apply(i).asInstanceOf[t]`

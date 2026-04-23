@@ -139,25 +139,24 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val selectedNames: List[String] = resolved.map(_._2)
         val fullCover: Boolean = selectedNames.toSet == knownFields.toSet
 
-        // Arity + cover dispatch per D7. Units 2 and 3 replace the stubs below.
+        // Arity + cover dispatch per D7.
         //
         // N=1 full-cover (1-field case class) currently falls through to the legacy
         // SimpleLens path so Unit 1 leaves the tree green; Unit 3 promotes it to a
         // BijectionIso per D2.
         selectors.size match
-          case 1 =>
+          case 1 if !fullCover =>
             deriveSingle[S](cc, selectors.head, selectedNames.head)
+          case 1 =>
+            // TODO (Unit 3): promote N=1 full cover to BijectionIso.
+            deriveSingle[S](cc, selectors.head, selectedNames.head)
+          case _ if !fullCover =>
+            buildMultiLens[S](cc, selectedNames)
           case _ =>
-            if fullCover then
-              report.errorAndAbort(
-                s"lens[${Type.prettyPrint[S]}]: full-cover Iso codegen"
-                  + " not yet wired (Implementation Unit 3)."
-              )
-            else
-              report.errorAndAbort(
-                s"lens[${Type.prettyPrint[S]}]: multi-field Lens codegen"
-                  + " not yet wired (Implementation Unit 2)."
-              )
+            report.errorAndAbort(
+              s"lens[${Type.prettyPrint[S]}]: full-cover Iso codegen"
+                + " not yet wired (Implementation Unit 3)."
+            )
 
   /** Single-selector, partial-cover codegen — emits `SimpleLens[S, A, XA]` exactly as the legacy
     * `lens[Person](_.age)` form did. `XA` is the `NamedTuple` complement over the non-focused
@@ -315,6 +314,158 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
           }
 
         '{ SimpleLens[S, A, xa]($selector, $split, $combine) }
+
+  /** Multi-selector, partial-cover codegen — emits a `SimpleLens[S, Focus, Complement]` with:
+    *
+    *   - `Focus` = `NamedTuple[selectorNames, selectorTypes]` in SELECTOR ORDER (D1).
+    *   - `Complement` = `NamedTuple[otherNames, otherTypes]` in DECLARATION ORDER among the
+    *     non-focused fields (D1).
+    *
+    * `split: S => (Complement, Focus)` reads each field via `Select.unique`, packs the focus /
+    * complement tuples via `Expr.ofTupleFromSeq`, and narrows through `asExprOf` (sound because the
+    * underlying values tuple IS-A NamedTuple through the opaque-subtype relation
+    * `Values <: NamedTuple[Names, Values]`).
+    *
+    * `combine: (Complement, Focus) => S` threads the primary constructor through Hearth's
+    * `cc.construct[Id]`: for each declaration-order parameter it decides whether the value is in
+    * the focus (selector-order index lookup) or the complement (declaration-order-among-
+    * non-focused index lookup) and emits the matching
+    * `<named-tuple>.asInstanceOf[Tuple].apply(i).asInstanceOf[t]` read.
+    */
+  private def buildMultiLens[S: Type](
+      cc: CaseClass[S],
+      selectedNames: List[String],
+  ): Expr[Optic[S, S, ?, ?, ?]] =
+    val sTpe = TypeRepr.of[S]
+    val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
+
+    // Selector-order focus metadata. `selectorSyms(i)` is the symbol of the
+    // i-th selector's target field; `selectorTypes(i)` its field type.
+    val selectorSyms: List[Symbol] = selectedNames.map { name =>
+      allFieldSyms.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
+            + s" found on ${Type.prettyPrint[S]}."
+        )
+      }
+    }
+    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => sTpe.memberType(sym))
+
+    // Declaration-order complement metadata, restricted to non-selected fields.
+    val selectedSet: Set[String] = selectedNames.toSet
+    val otherSyms: List[Symbol] = allFieldSyms.filterNot(sym => selectedSet.contains(sym.name))
+    val otherTypes: List[TypeRepr] = otherSyms.map(sym => sTpe.memberType(sym))
+
+    // Build a NamedTuple[Names, Values] type from a list of symbols + types.
+    def namedTupleTypeOf(names: List[String], tpes: List[TypeRepr]): TypeRepr =
+      val namesTpe = names.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+      val valuesTpe = tpes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+      TypeRepr
+        .of[scala.NamedTuple.NamedTuple]
+        .appliedTo(List(namesTpe, valuesTpe))
+
+    val focusTpe = namedTupleTypeOf(selectedNames, selectorTypes)
+    val complementTpe = namedTupleTypeOf(otherSyms.map(_.name), otherTypes)
+
+    (focusTpe.asType, complementTpe.asType) match
+      case ('[focus], '[complement]) =>
+        // `get: S => focus` — reads the selected fields in SELECTOR order and packs
+        // them into a NamedTuple via `Expr.ofTupleFromSeq` + `asExprOf`.
+        val get: Expr[S => focus] =
+          '{ (s: S) =>
+            ${
+              val focusReads: List[scala.quoted.Expr[Any]] =
+                selectorSyms.map { sym =>
+                  Select.unique('{ s }.asTerm, sym.name).asExpr
+                }
+              scala.quoted.Expr.ofTupleFromSeq(focusReads).asExprOf[focus]
+            }
+          }
+
+        // `split: S => (complement, focus)` — reads complement (declaration order)
+        // and focus (selector order), returns the pair. Used by `SimpleLens.to`.
+        val split: Expr[S => (complement, focus)] =
+          '{ (s: S) =>
+            val x: complement = ${
+              val otherReads: List[scala.quoted.Expr[Any]] =
+                otherSyms.map { sym =>
+                  Select.unique('{ s }.asTerm, sym.name).asExpr
+                }
+              scala.quoted.Expr.ofTupleFromSeq(otherReads).asExprOf[complement]
+            }
+            val a: focus = ${
+              val focusReads: List[scala.quoted.Expr[Any]] =
+                selectorSyms.map { sym =>
+                  Select.unique('{ s }.asTerm, sym.name).asExpr
+                }
+              scala.quoted.Expr.ofTupleFromSeq(focusReads).asExprOf[focus]
+            }
+            (x, a)
+          }
+
+        // `combine: (complement, focus) => S` — threads the primary constructor
+        // through `cc.construct[Id]`, routing each declaration-order parameter to
+        // its home (focus / complement) and emitting the matching indexed read.
+        //
+        // `x` and `a` are threaded into the nested splice via `'{ x }` / `'{ a }`;
+        // `-Wunused:explicits` can't see across quote/splice boundaries and the
+        // file-level `-Wconf` silences the false positives.
+        val combine: Expr[(complement, focus) => S] =
+          '{ (x: complement, a: focus) =>
+            ${
+              val xTerm = '{ x }.asTerm
+              val aTerm = '{ a }.asTerm
+              val constructed: Id[Option[Expr[S]]] = cc.construct[Id] { (param: Parameter) =>
+                val focusIdx = selectedNames.indexOf(param.name)
+                if focusIdx >= 0 then
+                  val tpe = selectorTypes(focusIdx)
+                  tpe.asType match
+                    case '[t] =>
+                      val aExpr = aTerm.asExprOf[focus]
+                      val idxExpr = scala.quoted.Expr(focusIdx)
+                      val accessor: Expr[t] =
+                        '{
+                          $aExpr
+                            .asInstanceOf[Tuple]
+                            .apply($idxExpr)
+                            .asInstanceOf[t]
+                        }
+                      Existential[Expr, t](accessor): Expr_??
+                else
+                  val complementIdx = otherSyms.indexWhere(_.name == param.name)
+                  if complementIdx < 0 then
+                    report.errorAndAbort(
+                      s"lens[${Type.prettyPrint[S]}]: internal error -- "
+                        + s"unexpected parameter '${param.name}'."
+                    )
+                  val tpe = otherTypes(complementIdx)
+                  tpe.asType match
+                    case '[t] =>
+                      val xExpr = xTerm.asExprOf[complement]
+                      val idxExpr = scala.quoted.Expr(complementIdx)
+                      val accessor: Expr[t] =
+                        '{
+                          $xExpr
+                            .asInstanceOf[Tuple]
+                            .apply($idxExpr)
+                            .asInstanceOf[t]
+                        }
+                      Existential[Expr, t](accessor): Expr_??
+              }
+              constructed.getOrElse {
+                report.errorAndAbort(
+                  s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
+                    + s" constructor of ${Type.prettyPrint[S]}."
+                )
+              }
+            }
+          }
+
+        '{ SimpleLens[S, focus, complement]($get, $split, $combine) }
 
   /** Strips Inlined/Typed wrappers and peeks inside the lambda body for a single Select. `Lambda`
     * must be tried before `Block` because a lambda IS a `Block(DefDef, Closure)` structurally --
