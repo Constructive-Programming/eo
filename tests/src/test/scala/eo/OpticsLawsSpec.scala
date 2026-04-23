@@ -1,14 +1,16 @@
 package eo
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Forgetful, SetterF}
+import data.{Affine, Forget, Forgetful, Grate, SetterF}
 import data.Affine.given
 import data.Forget.given
+import data.Grate.given
 import data.SetterF.given
 import laws.{
   AffineFoldLaws,
   FoldLaws,
   GetterLaws,
+  GrateLaws,
   IsoLaws,
   LensLaws,
   OptionalLaws,
@@ -20,6 +22,7 @@ import laws.discipline.{
   AffineFoldTests,
   FoldTests,
   GetterTests,
+  GrateTests,
   IsoTests,
   LensTests,
   OptionalTests,
@@ -635,4 +638,32 @@ class OpticsLawsSpec extends Specification with Discipline:
       ]:
         val optic = headOptional
     .foldMapHomomorphism,
+  )
+
+  // ----- Grate: tuple-indexed + Function1[Boolean, *] -------------
+  //
+  // Two fixtures per plan R7 — homogeneous tuples of arity 2 and 3,
+  // both via `Grate.tuple[T <: Tuple, A]`. All three laws are checked
+  // (G1 modify-identity, G2 compose-modify, G3 replace-idempotent).
+
+  val tuple2Grate: Optic[(Int, Int), (Int, Int), Int, Int, Grate] =
+    Grate.tuple[(Int, Int), Int]
+
+  checkAll(
+    "Grate[(Int, Int), Int] — tuple arity 2",
+    new GrateTests[(Int, Int), Int]:
+      val laws = new GrateLaws[(Int, Int), Int]:
+        val grate = tuple2Grate
+    .grate,
+  )
+
+  val tuple3Grate: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, Grate] =
+    Grate.tuple[(Int, Int, Int), Int]
+
+  checkAll(
+    "Grate[(Int, Int, Int), Int] — tuple arity 3",
+    new GrateTests[(Int, Int, Int), Int]:
+      val laws = new GrateLaws[(Int, Int, Int), Int]:
+        val grate = tuple3Grate
+    .grate,
   )

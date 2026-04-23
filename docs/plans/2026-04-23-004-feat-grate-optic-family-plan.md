@@ -605,7 +605,7 @@ spec: Iso `.andThen` Grate produces a Grate-carrier optic whose
 
 ### Unit 5 — Laws (`GrateLaws` + `GrateTests` + fixtures)
 
-- [ ] Land the law class, discipline RuleSet, and at least two
+- [x] Land the law class, discipline RuleSet, and at least two
   `checkAll` wirings.
 
 **Files.**
