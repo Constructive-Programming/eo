@@ -90,37 +90,37 @@ final class JsonFieldsPrism[A] private[circe] (
 
   // ---- Default (Ior-bearing) surface --------------------------------
 
-  def modify(f: A => A): Json => Ior[Chain[JsonFailure], Json] =
-    json => modifyIor(json, f)
+  def modify(f: A => A): (Json | String) => Ior[Chain[JsonFailure], Json] =
+    input => JsonFailure.parseInputIor(input).flatMap(j => modifyIor(j, f))
 
-  def transform(f: Json => Json): Json => Ior[Chain[JsonFailure], Json] =
-    json => transformIor(json, f)
+  def transform(f: Json => Json): (Json | String) => Ior[Chain[JsonFailure], Json] =
+    input => JsonFailure.parseInputIor(input).flatMap(j => transformIor(j, f))
 
-  def place(a: A): Json => Ior[Chain[JsonFailure], Json] =
-    json => placeIor(json, a)
+  def place(a: A): (Json | String) => Ior[Chain[JsonFailure], Json] =
+    input => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, a))
 
-  def transfer[C](f: C => A): Json => C => Ior[Chain[JsonFailure], Json] =
-    json => c => placeIor(json, f(c))
+  def transfer[C](f: C => A): (Json | String) => C => Ior[Chain[JsonFailure], Json] =
+    input => c => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, f(c)))
 
-  def get(json: Json): Ior[Chain[JsonFailure], A] =
-    getIor(json)
+  def get(input: Json | String): Ior[Chain[JsonFailure], A] =
+    JsonFailure.parseInputIor(input).flatMap(getIor)
 
   // ---- *Unsafe escape hatches ---------------------------------------
 
-  inline def modifyUnsafe(f: A => A): Json => Json =
-    json => modifyImpl(json, f)
+  inline def modifyUnsafe(f: A => A): (Json | String) => Json =
+    input => modifyImpl(JsonFailure.parseInputUnsafe(input), f)
 
-  inline def transformUnsafe(f: Json => Json): Json => Json =
-    json => transformImpl(json, f)
+  inline def transformUnsafe(f: Json => Json): (Json | String) => Json =
+    input => transformImpl(JsonFailure.parseInputUnsafe(input), f)
 
-  inline def placeUnsafe(a: A): Json => Json =
-    json => placeImpl(json, a)
+  inline def placeUnsafe(a: A): (Json | String) => Json =
+    input => placeImpl(JsonFailure.parseInputUnsafe(input), a)
 
-  inline def transferUnsafe[C](f: C => A): Json => C => Json =
-    json => c => placeImpl(json, f(c))
+  inline def transferUnsafe[C](f: C => A): (Json | String) => C => Json =
+    input => c => placeImpl(JsonFailure.parseInputUnsafe(input), f(c))
 
-  inline def getOptionUnsafe(json: Json): Option[A] =
-    getOptionUnsafeImpl(json)
+  inline def getOptionUnsafe(input: Json | String): Option[A] =
+    getOptionUnsafeImpl(JsonFailure.parseInputUnsafe(input))
 
   // ---- Shared helpers ----------------------------------------------
 

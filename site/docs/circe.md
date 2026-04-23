@@ -248,6 +248,41 @@ codecPrism[Basket]
   .modify(_.toUpperCase)(brokenBasket)
 ```
 
+## String input — parse on the fly
+
+Every edit and read method on `JsonPrism` / `JsonFieldsPrism` /
+`JsonTraversal` / `JsonFieldsTraversal` accepts `Json | String` as
+the source. When you hand in a `String`, the library parses it
+first and surfaces parse errors through the same `JsonFailure`
+accumulator as every other failure mode.
+
+```scala mdoc:silent
+val incoming: String =
+  """{"name":"Alice","age":30,"address":{"street":"Main St","zip":12345}}"""
+
+val upperName = codecPrism[Person].field(_.name).modify(_.toUpperCase)
+```
+
+```scala mdoc
+// Happy path: parsed, modified, Ior.Right.
+upperName(incoming).map(_.noSpacesSortKeys)
+
+// Parse failure: Ior.Left(Chain(JsonFailure.ParseFailed(_))).
+upperName("not json at all")
+```
+
+Handing in a `Json` directly still works unchanged — the widened
+`(Json | String) => _` signature is a supertype of the old `Json =>
+_`, so every pre-existing call site compiles without change. The
+parse cost is zero when the input is already a `Json`; it's one
+`io.circe.parser.parse` invocation when it's a `String`.
+
+On the `*Unsafe` surface, unparseable strings fall back to
+`Json.Null` — there's no meaningful "input unchanged" semantic for
+text that isn't JSON, and the whole point of `*Unsafe` is to drop
+failure detail. Callers who need parse diagnostics stay on the
+default Ior-bearing surface.
+
 ## Ignoring failures (the `*Unsafe` escape hatch)
 
 For callers who have measured and know they don't want the Ior

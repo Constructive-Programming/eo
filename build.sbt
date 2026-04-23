@@ -318,7 +318,11 @@ lazy val circeIntegration: Project = project
     name := "cats-eo-circe",
     libraryDependencies += cats,
     libraryDependencies += circe,
-    libraryDependencies += circeParser % Test,
+    // Compile-scope: the `Json | String` overloads on JsonPrism /
+    // JsonFieldsPrism / JsonTraversal / JsonFieldsTraversal parse String
+    // inputs via io.circe.parser.parse before proceeding with the Json
+    // path. Parse failures surface via JsonFailure.ParseFailed.
+    libraryDependencies += circeParser,
     libraryDependencies += kindlingsCirce % Test,
     libraryDependencies += discipline % Test,
   )
