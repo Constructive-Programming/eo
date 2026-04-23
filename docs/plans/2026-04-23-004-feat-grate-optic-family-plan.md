@@ -626,7 +626,7 @@ scoverage shows `Grate.scala` exercised on `ForgetfulFunctor` +
 
 ### Unit 6 — Benchmark (`GrateBench` — EO-only)
 
-- [ ] Land JMH bench.
+- [x] Land JMH bench.
 
 **Files.** Create `benchmarks/src/main/scala/eo/bench/GrateBench.scala`.
 
