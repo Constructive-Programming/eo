@@ -318,6 +318,115 @@ object JsonPrismMacro:
 
         '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
 
+  /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
+    * [[fieldsImpl]] on the traversal side: parses varargs, validates per D10, synthesises the
+    * NamedTuple type in SELECTOR order, summons codecs, emits `toFieldsTraversal`.
+    */
+  def fieldsTraversalImpl[A: Type](
+      parent: Expr[JsonTraversal[A]],
+      selectorsE: Expr[Seq[A => Any]],
+  )(using q: Quotes): Expr[Any] =
+    import quotes.reflect.*
+
+    val selectors: List[Expr[A => Any]] =
+      selectorsE match
+        case Varargs(es) => es.toList
+        case other       =>
+          report.errorAndAbort(
+            s"JsonTraversal.fields[${Type.show[A]}]: could not destructure varargs selector"
+              + s" list. Got: ${other.asTerm.show}"
+          )
+
+    if selectors.sizeIs < 2 then
+      report.errorAndAbort(
+        s"JsonTraversal.fields[${Type.show[A]}]: requires at least two field selectors"
+          + s" (for one selector, use .field(_.x) instead)."
+      )
+
+    val aTpe = TypeRepr.of[A]
+    val aSym = aTpe.typeSymbol
+    val caseFields = aSym.caseFields
+
+    if caseFields.isEmpty then
+      report.errorAndAbort(
+        s"JsonTraversal.fields[${Type.show[A]}]: parent focus ${Type.show[A]} has no case"
+          + " fields; .fields requires a case class."
+      )
+
+    val knownFields: List[String] = caseFields.map(_.name)
+
+    val resolved: List[(Int, String)] =
+      selectors.zipWithIndex.map { (sel, i) =>
+        val name = extractSingleFieldName(sel.asTerm).getOrElse {
+          report.errorAndAbort(
+            s"JsonTraversal.fields[${Type.show[A]}]: selector at position $i must be a"
+              + " single-field accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not"
+              + s" yet supported. Got: ${sel.asTerm.show}"
+          )
+        }
+        if !knownFields.contains(name) then
+          report.errorAndAbort(
+            s"JsonTraversal.fields[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
+              + s" Known fields: ${knownFields.mkString(", ")}."
+          )
+        (i, name)
+      }
+
+    val byName: Map[String, List[Int]] = resolved.groupMap(_._2)(_._1)
+    byName.find(_._2.sizeIs > 1).foreach {
+      case (name, positions) =>
+        val sorted = positions.sorted
+        report.errorAndAbort(
+          s"JsonTraversal.fields[${Type.show[A]}]: duplicate field selector '$name' at"
+            + s" positions ${sorted.mkString(", ")}. Each field may appear at most once."
+        )
+    }
+
+    val selectedNames: List[String] = resolved.map(_._2)
+
+    val selectorSyms: List[Symbol] = selectedNames.map { name =>
+      caseFields.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"JsonTraversal.fields[${Type.show[A]}]: internal error — field '$name' not found on"
+            + s" ${Type.show[A]}."
+        )
+      }
+    }
+    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
+
+    val namesTpe: TypeRepr =
+      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+    val valuesTpe: TypeRepr =
+      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+    val ntTpe: TypeRepr =
+      TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
+
+    ntTpe.asType match
+      case '[nt] =>
+        val enc = Expr.summon[Encoder[nt]].getOrElse {
+          report.errorAndAbort(
+            s"JsonTraversal.fields[${Type.show[A]}]: no given Encoder[${Type.show[nt]}] in"
+              + s" scope. Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
+              + " KindlingsCodecAsObject.derive`, or provide one manually."
+          )
+        }
+        val dec = Expr.summon[Decoder[nt]].getOrElse {
+          report.errorAndAbort(
+            s"JsonTraversal.fields[${Type.show[A]}]: no given Decoder[${Type.show[nt]}] in"
+              + s" scope. Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
+              + " KindlingsCodecAsObject.derive`, or provide one manually."
+          )
+        }
+
+        val namesExpr: Expr[Array[String]] =
+          '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
+
+        '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $enc, $dec) }
+
   /** Macro for `traversal.<fieldName>`. Counterpart to [[selectFieldImpl]] — drives the Dynamic
     * sugar on [[JsonTraversal]] by extending the suffix.
     */

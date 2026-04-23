@@ -109,6 +109,20 @@ final class JsonTraversal[A] private[circe] (
     newSuffix(suffix.length) = step
     new JsonTraversal[B](prefix, newSuffix, encB, decB)
 
+  /** Hand off the current (prefix, suffix) as a [[JsonFieldsTraversal]] parent descriptor, with the
+    * caller-supplied `fieldNames` enumerating the selected fields under the per-element parent.
+    * Used by the [[JsonTraversal.fields]] macro; not meant for direct call by end users.
+    *
+    * The existing suffix becomes the new `elemParent` — the sub-path walked under each array
+    * element to reach the JsonObject that carries the selected fields. In the common case
+    * (`.each.fields` with no further drill), that suffix is empty and the elements themselves carry
+    * the fields.
+    */
+  private[circe] def toFieldsTraversal[B](
+      fieldNames: Array[String]
+  )(using encB: Encoder[B], decB: Decoder[B]): JsonFieldsTraversal[B] =
+    new JsonFieldsTraversal[B](prefix, suffix, fieldNames, encB, decB)
+
   // ---- Internals: *Unsafe walks (byte-identical to pre-v0.2) -------
 
   private def navigateToArray(json: Json): Option[Vector[Json]] =
@@ -652,3 +666,21 @@ object JsonTraversal:
 
     transparent inline def at(i: Int): Any =
       ${ JsonPrismMacro.atTraversalImpl[A]('t, 'i) }
+
+  /** Focus a bundle of named fields of a case class `A` as a Scala 3 NamedTuple, per element of the
+    * iterated array. Multi-field sibling of [[field]] — arity ≥ 2 required (single- selector calls
+    * should use `.field(_.x)`).
+    *
+    * {{{
+    *   codecPrism[Basket].items.each.fields(_.name, _.price)
+    *     // JsonFieldsTraversal[NamedTuple[("name","price"), (String, Double)]]
+    * }}}
+    *
+    * Per-element atomicity (D4 / Unit 3 carry-over): if any selected field of an element misses,
+    * that element is left unchanged in the output and one JsonFailure per missing field contributes
+    * to the accumulated chain.
+    */
+  extension [A](t: JsonTraversal[A])
+
+    transparent inline def fields(inline selectors: (A => Any)*): Any =
+      ${ JsonPrismMacro.fieldsTraversalImpl[A]('t, 'selectors) }

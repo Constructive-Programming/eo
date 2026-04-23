@@ -1176,7 +1176,7 @@ otherwise the naming symmetry breaks.
   multi-failure scenario (`name` and `age` both missing → chain of
   two).
 
-- [ ] **Unit 4: Multi-field `JsonFieldsTraversal[A]` + `.fields` on traversal**
+- [x] **Unit 4: Multi-field `JsonFieldsTraversal[A]` + `.fields` on traversal**
 
   **Goal:** `.fields(_.name, _.price)` on a `JsonTraversal` compiles
   and produces a traversal whose `.modify` updates every element's
