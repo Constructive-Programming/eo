@@ -1,6 +1,6 @@
 package eo
 
-import cats.{Applicative, Apply, Monoid}
+import cats.{Applicative, Apply, Id, Monoid}
 import cats.data.{Const, ZipList}
 
 /** Classifying typeclass for the [[data.Kaleidoscope]] optic family.
@@ -149,3 +149,30 @@ object Reflector:
     def reflect[A, B](fa: Const[M, A])(f: Const[M, A] => B): Const[M, B] =
       val _ = f(fa) // evaluated for consistency with the other instances (no-op on Const).
       fa.retag[B]
+
+  /** `Reflector[Id]` — the degenerate identity instance. `cats.Id[A] = A`, so `reflect(a)(f)`
+    * simplifies to `f(a)`: the aggregation collapses to the aggregator's return value with no
+    * wrapping. This instance is **used only by** [[data.Kaleidoscope.forgetful2kaleidoscope]], the
+    * Iso → Kaleidoscope bridge — an Iso's focus is a single `A`, so threading it through a
+    * single-slot Reflector leaves the optic's semantics unchanged.
+    *
+    * Plan Open Question #3 weighed `Reflector[Id]` against `Reflector[List]` with a singleton-list
+    * rebuild. `Reflector[Id]` wins because the `AssociativeFunctor[Kaleidoscope, Xo, Xi]` push side
+    * reads `kO.focus.asInstanceOf[A]` — with `FCarrier = Id`, `kO.focus: Id[A] = A`, so the cast is
+    * an exact type match. Using `List` would produce `kO.focus: List[A]` and the same cast would
+    * fail at runtime when the inner's Reflector tried to walk the focus.
+    *
+    * @group Instances
+    */
+  given forId: Reflector[Id] with
+    private val A: Applicative[Id] = Applicative[Id]
+
+    def pure[A](x: A): Id[A] = x
+
+    def ap[A, B](ff: Id[A => B])(fa: Id[A]): Id[B] = A.ap(ff)(fa)
+
+    override def map[A, B](fa: Id[A])(f: A => B): Id[B] = f(fa)
+
+    override def product[A, B](fa: Id[A], fb: Id[B]): Id[(A, B)] = (fa, fb)
+
+    def reflect[A, B](fa: Id[A])(f: Id[A] => B): Id[B] = f(fa)

@@ -988,7 +988,26 @@ passes.
 
 ### Unit 4 — Composer bridge (`Forgetful → Kaleidoscope`)
 
-- [ ] Land `given forgetful2kaleidoscope: Composer[Forgetful, Kaleidoscope]`.
+- [x] Land `given forgetful2kaleidoscope: Composer[Forgetful, Kaleidoscope]`.
+
+  **Open Question #3 resolved to `Reflector[Id]`.** Plan weighed
+  `Reflector[Id]` vs `Reflector[List]` singleton for the Iso bridge.
+  Empirical test: `Reflector[List]` loses to a `ClassCastException`
+  because [[kalAssoc]]'s push side does
+  `kO.focus.asInstanceOf[A]` — under `FCarrier = List`, `kO.focus`
+  is `List[A]`, not `A`, so the cast succeeds but the downstream
+  Reflector walks a `List[A]` thinking it's an element. `Id` makes
+  the cast an identity: `Id[A] = A`, so `kO.focus: Id[A] = A`
+  exactly. A new `Reflector.forId` instance ships — scoped solely
+  to this bridge, documented on the instance.
+
+  **Knock-on — `kalAssoc` uses the INNER's FCarrier for the composed
+  result.** Originally the assoc result used the outer's FCarrier;
+  that breaks for cross-F compositions where the outer is the Iso
+  bridge's `Id` but the inner is a real `F`. Using the inner's
+  FCarrier makes cross-F `Iso -> Kaleidoscope[F]` work uniformly:
+  the inner "wins" because it's where the aggregation semantics
+  live. Same-F compositions are unaffected (both F's are the same).
 
 **Files.** Modify `core/src/main/scala/eo/data/Kaleidoscope.scala`.
 

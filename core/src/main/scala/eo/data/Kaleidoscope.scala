@@ -148,29 +148,30 @@ object Kaleidoscope:
         inner: Optic[A, B, C, D, Kaleidoscope] { type X = Xi },
     ): Kaleidoscope[Z, C] =
       val kO = outer.to(s)
-      // Derive the canonical A to hand to `inner.to`. The shipped generic factory sets
-      // `X = FCarrier[A]` with `rebuild = identity`, so `rebuildO(focusO) = focusO: FCarrier[A]`
-      // — the A-aggregate itself. In the continuation optic-calculus interpretation, the whole
-      // `focus: FCarrier[A]` stands in for "the A the outer focuses on"; the inner then sees
-      // that aggregate as its A.
+      // Derive the canonical A to hand to `inner.to`. At shipped sites:
+      //   - Iso bridge (FCarrier = Id): `focus: Id[A] = A` — cast is an identity.
+      //   - Generic factory (FCarrier = F, X = F[A]): `focus: F[A]`. Here casting to `A`
+      //     is semantically "the aggregate IS the thing the inner reads" — coherent only
+      //     when F[A] = A structurally, which is NOT generally true.
       //
-      // The cast through `A` is the scoped-same-F assumption: we're treating the outer's
-      // FCarrier[A] (which at the factory site IS the whole A) as the abstract `A` the Optic
-      // trait presents. This is safe by construction for every v1 constructor — the Iso bridge
-      // (Unit 4) and the generic factory (Unit 3) both set FCarrier appropriately.
+      // The latter case is the "cross-F composition doesn't make sense" story the plan's
+      // D1/D3 call out. In v1 the meaningful compositions are:
+      //   (a) Iso → Kaleidoscope — outer is Id, cast is free. Works.
+      //   (b) Kaleidoscope → Kaleidoscope with same F — focus shape matches.
+      // Pure (b) is the main `.andThen` path once both sides are user-constructed Kaleidoscopes.
       val a: A = kO.focus.asInstanceOf[A]
       val kI = inner.to(a)
-      // Convert the inner's FCarrier into the outer's FCarrier type for the result. Both are
-      // path-types reducing to the same underlying F — safe by construction at v1 sites.
-      val RO: Reflector[kO.FCarrier] = kO.reflector
-      val focusC: kO.FCarrier[C] = kI.focus.asInstanceOf[kO.FCarrier[C]]
-      val rebuildC: kO.FCarrier[C] => Z = (fc: kO.FCarrier[C]) =>
-        // `kO.rebuild(kO.focus) : Xo` is the outer's "current X" — captured lazily since
-        // v1 factories never consult `Z._1` on the pull side.
+      // Use the INNER's FCarrier/Reflector for the composed result — the aggregation semantics
+      // live in the inner (the outer, for the Iso bridge, is a trivial Id). This matches the
+      // cross-F composition pattern where the inner's carrier "wins" because it's the one that
+      // actually reflects/aggregates.
+      val RI: Reflector[kI.FCarrier] = kI.reflector
+      val focusC: kI.FCarrier[C] = kI.focus
+      val rebuildC: kI.FCarrier[C] => Z = (fc: kI.FCarrier[C]) =>
         val xo: Xo = kO.rebuild(kO.focus)
-        val xi: Xi = kI.rebuild(fc.asInstanceOf[kI.FCarrier[C]])
+        val xi: Xi = kI.rebuild(fc)
         (xo, xi)
-      make[Z, C, kO.FCarrier](RO, focusC, rebuildC)
+      make[Z, C, kI.FCarrier](RI, focusC, rebuildC)
 
     def composeFrom[S, T, A, B, C, D](
         xd: Kaleidoscope[Z, D],
@@ -186,19 +187,18 @@ object Kaleidoscope:
           (fd: xd.FCarrier[D]) => xd.rebuild(fd)._2,
         )
       val b: B = inner.from(innerK)
-      // Reconstruct outer's Kaleidoscope — broadcast `b` across the FCarrier via the Reflector's
-      // map (there's no `pure` on the Apply superclass in general — ZipList doesn't have one —
-      // so we use the current focus as a length witness and replace each element with b). The
-      // outer's rebuild is reconstructed to thread `_._1` (Xo projection), though at shipped
-      // sites it's never consulted.
-      val outerFocus: xd.FCarrier[B] = R.map(xd.focus)(_ => b)
-      val outerK: Kaleidoscope[Xo, B] { type FCarrier[T] = xd.FCarrier[T] } =
-        make[Xo, B, xd.FCarrier](
-          R,
-          outerFocus,
-          (_: xd.FCarrier[B]) => xd.rebuild(xd.focus)._1,
+      // Reconstruct outer's Kaleidoscope — the outer's focus is `b` (singleton from the Iso
+      // bridge's Id-shape; unused for other shipped sites since `from` ignores it). We
+      // construct a minimal Id-carrier Kaleidoscope here; if the outer's FCarrier is something
+      // else, its `from` should still work because v1 factories only consult `focus` on the
+      // pull side.
+      val outerK =
+        make[Xo, B, cats.Id](
+          summon[Reflector[cats.Id]],
+          b,
+          (_: cats.Id[B]) => xd.rebuild(xd.focus)._1,
         )
-      outer.from(outerK)
+      outer.from(outerK.asInstanceOf[Kaleidoscope[Xo, B]])
 
   // ------------------------------------------------------------------
   // Factory (Unit 3)
@@ -273,3 +273,42 @@ object Kaleidoscope:
         val kReflected =
           make[o.X, B, F](F, reflected, (fb: F[B]) => rebuildOrig(fb.asInstanceOf[F[A]]))
         o.from(kReflected.asInstanceOf[Kaleidoscope[o.X, B]])
+
+  // ------------------------------------------------------------------
+  // Composer bridge (Unit 4)
+  // ------------------------------------------------------------------
+
+  /** Trivial injection `Forgetful ↪ Kaleidoscope` — lets an `Iso`-carrier optic compose against a
+    * `Kaleidoscope`-carrier optic via cross-carrier `.andThen`. The Iso's forward `to: S => A`
+    * becomes the focus of an `Id`-carrier Kaleidoscope (`FCarrier = Id`, so `Id[A] = A`), with the
+    * rebuild reading back through the Iso's reverse `from: B => T`.
+    *
+    * **Why `Reflector[Id]`.** Plan Open Question #3 weighed `Id` against `List` with a singleton-
+    * list rebuild. `Id` wins because the [[kalAssoc]] push side does `kO.focus.asInstanceOf[A]`,
+    * which is an exact type match under `FCarrier = Id` (since `Id[A] = A`). Using `List` would
+    * wrap the Iso's focus in a singleton list and the same cast would fail at runtime when the
+    * inner Kaleidoscope's Reflector walked the focus expecting `A` and found `List[A]`. The bridge
+    * is the sole user of [[Reflector.forId]] — documented there.
+    *
+    * Does **not** ship the mirror `Composer[Tuple2, Kaleidoscope]` (Lens → Kaleidoscope) by design
+    * — see plan D3, same shape as Grate's Lens → Grate deferral. A Lens's source type has no
+    * natural `Reflector` witness; users who want Lens → Kaleidoscope should construct the
+    * Kaleidoscope separately at the Lens's focus type and compose via `Lens.andThen`. The
+    * resolution miss surfaces as `"Morph[Tuple2, Kaleidoscope]"` implicit not found.
+    *
+    * @group Instances
+    */
+  given forgetful2kaleidoscope: Composer[Forgetful, Kaleidoscope] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Kaleidoscope] =
+      new Optic[S, T, A, B, Kaleidoscope]:
+        type X = S
+        val to: S => Kaleidoscope[S, A] = (s: S) =>
+          val R = summon[Reflector[cats.Id]]
+          // `Id[A] = A` — the Iso's focus IS the Id-wrapped focus, no constructor allocation.
+          make[S, A, cats.Id](R, o.to(s), (_: cats.Id[A]) => s)
+        val from: Kaleidoscope[S, B] => T = k =>
+          // The `from` consumes only the mapped focus. For the Iso bridge `FCarrier = Id`, so
+          // `focus: Id[B] = B` — hand it straight to the Iso's reverse side.
+          val b = k.focus.asInstanceOf[B]
+          o.from(b)

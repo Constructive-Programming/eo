@@ -23,22 +23,14 @@ import org.specs2.mutable.Specification
   */
 class ReflectorInstancesSpec extends Specification with ScalaCheck:
 
-  // Arbitrary[ZipList[Int]] — constructed from an Arbitrary[List[Int]] so the plumbing is free.
-  // Lengths stay bounded by Scalacheck's default list generator (~0 to 100 elements), which is
-  // plenty for witnessing the reflector's broadcast behaviour.
-  private given arbZipList: Arbitrary[ZipList[Int]] =
-    Arbitrary(Arbitrary.arbitrary[List[Int]].map(ZipList(_)))
-
   // Cogen[ZipList[Int]] — routes `ZipList[Int] => Int` functions through the underlying List's
   // Cogen. Needed so scalacheck can synthesise Arbitrary function values keyed on ZipList inputs.
+  // Used by the R1 map-compat test's `f: ZipList[Int] => Int` generator.
   private given cogenZipList: Cogen[ZipList[Int]] =
     Cogen[List[Int]].contramap(_.value)
 
-  // Arbitrary[Const[Int, Int]] — both slots are Int; the B side is phantom.
-  private given arbConstIntInt: Arbitrary[Const[Int, Int]] =
-    Arbitrary(Arbitrary.arbitrary[Int].map(Const(_)))
-
-  // Cogen[Const[Int, Int]] — by the underlying monoid `Int`.
+  // Cogen[Const[Int, Int]] — by the underlying monoid `Int`. Used by the R1 map-compat test's
+  // `f: Const[Int, Int] => Int` generator.
   private given cogenConstIntInt: Cogen[Const[Int, Int]] =
     Cogen[Int].contramap(_.getConst)
 
@@ -129,6 +121,29 @@ class ReflectorInstancesSpec extends Specification with ScalaCheck:
       val k = Kaleidoscope.apply[ZipList, Int]
       // ZipList's reflector broadcasts the aggregate to the input's length.
       k.collect[ZipList, Int](_.value.sum)(ZipList(List(1, 2, 3))).value == List(6, 6, 6)
+    }
+  }
+
+  "Composer[Forgetful, Kaleidoscope] (Unit 4)" should {
+    import data.Kaleidoscope
+    import data.Kaleidoscope.given
+    import optics.{Iso, Optic}
+    import optics.Optic.*
+
+    // Iso: wrap/unwrap a single Int as List[Int] (singleton list). The Iso's carrier is Forgetful;
+    // composition with a Kaleidoscope through `.andThen` should morph the Iso through the bridge.
+    val singletonIso: Optic[Int, Int, List[Int], List[Int], data.Forgetful] =
+      Iso[Int, Int, List[Int], List[Int]](i => List(i), _.head)
+
+    "Iso .andThen Kaleidoscope composes cleanly via Composer[Forgetful, Kaleidoscope]" >> {
+      val kOverList: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
+        Kaleidoscope.apply[List, Int]
+      val composed: Optic[Int, Int, Int, Int, Kaleidoscope] =
+        singletonIso.andThen(kOverList)
+      // .modify(_ * 3) on the composed optic — runs through the Iso (int -> List(int)), through
+      // the Kaleidoscope's modify (each element * 3), then back through the Iso's reverse
+      // (List.head).
+      composed.modify(_ * 3)(7) == 21
     }
   }
 
