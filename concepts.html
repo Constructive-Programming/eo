@@ -171,7 +171,7 @@
             <tr>
               <td><code>Affine</code></td>
               <td><code>Either[Fst[X], (Snd[X], A)]</code></td>
-              <td><code>Optional</code></td>
+              <td><code>Optional</code>, <code>AffineFold</code></td>
             </tr>
             <tr>
               <td><code>SetterF</code></td>
@@ -185,13 +185,18 @@
             </tr>
             <tr>
               <td><code>PowerSeries</code></td>
-              <td><code>(Snd[X], Vect[Int, A])</code></td>
+              <td><code>(Snd[X], PSVec[A])</code></td>
               <td>Composable <code>Traversal</code></td>
             </tr>
             <tr>
               <td><code>FixedTraversal[N]</code></td>
               <td>Fixed-length tuple of <code>A</code>s</td>
               <td><code>Traversal.{two,three,four}</code></td>
+            </tr>
+            <tr>
+              <td><code>AlgLens[F]</code></td>
+              <td><code>(X, F[A])</code> — classifier-shaped: pair leftover with an <code>F</code>-wrapped focus vector</td>
+              <td>Algebraic Lens (non-uniform classifier cardinality)</td>
             </tr>
           </tbody>
         </table>
@@ -260,8 +265,7 @@
         <h3 id="same-carrier-optic-andthen" class="section"><a class="anchor-link left" href="#same-carrier-optic-andthen"><i class="icofont-laika link">&#xef71;</i></a>Same-carrier: <code>Optic.andThen</code></h3>
         <p>When two optics share <code>F</code>, <code>Optic.andThen</code> composes them under
         that carrier:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.{</span><span class="type-name">Lens</span><span>, </span><span class="type-name">Optic</span><span>}
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Lens</span><span>
 
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Address</span><span>(</span><span class="identifier">street</span><span>: </span><span class="type-name">String</span><span>)
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Person</span><span>(</span><span class="identifier">address</span><span>: </span><span class="type-name">Address</span><span>)

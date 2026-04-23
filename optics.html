@@ -93,11 +93,13 @@
     <li class="level1 nav-leaf"><a href="#iso">Iso</a></li>
     <li class="level1 nav-node"><a href="#optional">Optional</a></li>
     <li class="level2 nav-leaf"><a href="#read-only-construction">Read-only construction</a></li>
+    <li class="level1 nav-leaf"><a href="#affinefold">AffineFold</a></li>
     <li class="level1 nav-leaf"><a href="#setter">Setter</a></li>
     <li class="level1 nav-leaf"><a href="#getter">Getter</a></li>
     <li class="level1 nav-leaf"><a href="#fold">Fold</a></li>
     <li class="level1 nav-leaf"><a href="#review">Review</a></li>
     <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
+    <li class="level1 nav-leaf"><a href="#alglens">AlgLens</a></li>
   </ul>
 
   <p class="footer"></p>
@@ -112,7 +114,8 @@
         reference see the Scaladoc.</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.{</span><span class="type-name">Lens</span><span>, </span><span class="type-name">Optic</span><span>}
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Forgetful</span><span>.</span><span class="keyword">given</span><span>    </span><span class="comment">// Accessor[Forgetful] — powers .get on Iso / Getter</span></code></pre>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Forgetful</span><span>.</span><span class="keyword">given</span><span>    </span><span class="comment">// Accessor[Forgetful] — powers .get on Iso / Getter
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Forget</span><span>.</span><span class="keyword">given</span><span>       </span><span class="comment">// ForgetfulFunctor / Fold / Traverse for Forget[F] carriers</span></code></pre>
         <p>Every page here shows optics constructed by hand. For the
         macro-derived <code>lens[S](_.field)</code> / <code>prism[S, A]</code> flavour, see
         <a href="generics.html">Generics</a>.</p>
@@ -204,31 +207,50 @@
         on your end.</p>
         
         <h3 id="read-only-construction" class="section"><a class="anchor-link left" href="#read-only-construction"><i class="icofont-laika link">&#xef71;</i></a>Read-only construction</h3>
-        <p><code>Optional.readOnly(matches: S =&gt; Option[A])</code> builds an
-        <code>Optic[S, Unit, A, A, Affine]</code> from just a partial projection —
-        no write-back required. <code>T = Unit</code> statically rules out
-        <code>.modify</code> / <code>.replace</code>, so the resulting optic exposes only the
-        read-side operations (<code>.foldMap</code>, <code>.modifyA</code> for collecting
-        effects).</p>
-        <p>Use this when the source shape has no natural write-back
-        (<code>headOption</code> on a List, predicate-gated filters like
-        <code>Option.when(p(s))(s)</code>), or as an API-boundary declaration that
-        callers cannot write through the returned optic.</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Adult</span><span>(</span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
-</span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span> =
-  </span><span class="type-name">Optional</span><span>.</span><span class="identifier">readOnly</span><span>[</span><span class="type-name">Adult</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">int</span><span>.</span><span class="keyword">given</span><span>
-</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">20</span><span>))
-</span><span class="comment">// res11: Int = 20
-</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">15</span><span>))
-</span><span class="comment">// res12: Int = 0</span></code></pre>
-        <p><code>Optional.selectReadOnly(p)</code> is the corresponding filter — keep
-        only inputs matching <code>p</code>:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">evenOpt</span><span> = </span><span class="type-name">Optional</span><span>.</span><span class="identifier">selectReadOnly</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> % </span><span class="number-literal">2</span><span> == </span><span class="number-literal">0</span><span>)</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">evenOpt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">4</span><span>)
-</span><span class="comment">// res13: Int = 4
-</span><span class="identifier">evenOpt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res14: Int = 0</span></code></pre>
+        <p>See <a href="#affinefold">AffineFold</a> below. <code>Optional.readOnly</code> and
+        <code>Optional.selectReadOnly</code> are aliases that delegate to
+        <code>AffineFold.apply</code> / <code>AffineFold.select</code> — kept for users coming
+        from the &quot;read-only Optional&quot; mental model.</p>
+        
+        <h2 id="affinefold" class="section"><a class="anchor-link left" href="#affinefold"><i class="icofont-laika link">&#xef71;</i></a>AffineFold</h2>
+        <p>An <code>AffineFold[S, A]</code> is the read-only 0-or-1 focus shape: a
+        partial projection with no write-back path. Type alias for
+        <code>Optic[S, Unit, A, A, Affine]</code> — the <code>T = Unit</code> slot statically
+        rules out <code>.modify</code> / <code>.replace</code>, so the only operations are
+        <code>.getOption</code>, <code>.foldMap</code>, and <code>.modifyA</code> (effectful read).</p>
+        <p>Use this when the source has no natural write-back
+        (<code>headOption</code> on a List, predicate-gated filters), or as an
+        API-boundary declaration that callers cannot write through the
+        returned optic.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">AffineFold</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Adult</span><span>(</span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
+</span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span>: </span><span class="type-name">AffineFold</span><span>[</span><span class="type-name">Adult</span><span>, </span><span class="type-name">Int</span><span>] =
+  </span><span class="type-name">AffineFold</span><span>(</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">20</span><span>))
+</span><span class="comment">// res11: Option[Int] = Some(20)
+</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">15</span><span>))
+</span><span class="comment">// res12: Option[Int] = None</span></code></pre>
+        <p><code>AffineFold.select(p)</code> is the filtering variant:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">evenAF</span><span> = </span><span class="type-name">AffineFold</span><span>.</span><span class="identifier">select</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> % </span><span class="number-literal">2</span><span> == </span><span class="number-literal">0</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">evenAF</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="number-literal">4</span><span>)
+</span><span class="comment">// res13: Option[Int] = Some(4)
+</span><span class="identifier">evenAF</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="number-literal">3</span><span>)
+</span><span class="comment">// res14: Option[Int] = None</span></code></pre>
+        <p>Narrow an existing <code>Optional</code> or <code>Prism</code> to its read-only
+        projection via <code>AffineFold.fromOptional</code> / <code>AffineFold.fromPrism</code> —
+        both return an <code>AffineFold[S, A]</code> that holds the matcher but
+        discards the write / build path.</p>
+        <p><strong>Composition note.</strong> Direct <code>lens.andThen(af)</code> on an
+        <code>AffineFold</code> does not type-check: the outer <code>B</code> slot doesn&#39;t
+        align with the inner <code>T = Unit</code>. Build a full composed
+        <code>Optional</code> through the Lens chain and narrow the result with
+        <code>AffineFold.fromOptional</code>.</p>
+        <p><strong>Specialisation.</strong> <code>AffineFold.apply</code> picks <code>X = (Unit, Unit)</code>
+        rather than the <code>(Unit, S)</code> shape a full Optional would use:
+        the Hit branch never needs to store the source <code>S</code>, since
+        <code>from</code> throws its input away. Saves one reference slot per
+        <code>Affine.Hit</code> allocation on every read.</p>
         
         <h2 id="setter" class="section"><a class="anchor-link left" href="#setter"><i class="icofont-laika link">&#xef71;</i></a>Setter</h2>
         <p>A <code>Setter[S, A]</code> can modify but not read — a write-only focus
@@ -326,9 +348,16 @@
         <ul>
           <li><code>Traversal.each[F, A]</code> / <code>Traversal.pEach[F, A, B]</code> — carrier
           <code>PowerSeries</code>, the default. Supports <code>.andThen</code> with downstream
-          optics. Linear scaling with a small constant-factor overhead
-          (~15–20× over a naive <code>copy</code>/<code>map</code>) from the Composer chain&#39;s
-          per-element dispatch.</li>
+          optics. Linear scaling; overhead over a naive <code>copy</code>/<code>map</code> runs
+          at 2-3× for dense chains (<code>Lens → Traversal → Lens</code>) and ~5×
+          for the Prism miss-branch shape, amortising toward the lower
+          end as the traversed-collection size grows (the
+          <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">PowerSeries benchmarks</a>
+          sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
+          <code>PSSingleton</code> protocol — morphed Lens / Prism / Optional
+          inners collect into pre-sized flat arrays without per-element
+          <code>PowerSeries</code> wrappers, and the always-hit refinement for
+          Lens morphs skips the length-tracking array entirely.</li>
           <li><code>Traversal.forEach[F, A, B]</code> — carrier <code>Forget[F]</code>, map-only
           fast path. Identity-shaped carrier, linear time, no downstream
           optic composition.</li>
@@ -368,6 +397,37 @@
         <p>See <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers">the PowerSeries benchmark
         notes</a>
         for the cost tradeoff.</p>
+        
+        <h2 id="alglens" class="section"><a class="anchor-link left" href="#alglens"><i class="icofont-laika link">&#xef71;</i></a>AlgLens</h2>
+        <p>An algebraic lens targets cases that sit <em>between</em> <code>Lens</code> and
+        <code>Traversal</code> — a focus with <strong>classifier cardinality <code>F</code></strong>, where
+        <code>F[_]</code> is a <code>Monad + Traverse + Alternative</code> (so <code>List</code>,
+        <code>Vector</code>, <code>Chain</code>, <code>Option</code>, …). Carrier <code>AlgLens[F]</code>, value
+        shape <code>(X, F[A])</code>.</p>
+        <p>Use <code>AlgLens[F]</code> when the update function genuinely needs the
+        whole <code>F[A]</code> visible — adaptive-k KNN, one-vs-rest rule
+        matching, classifier output that varies per input. <strong>Do NOT</strong>
+        reach for <code>AlgLens.fromLensF</code> as a general replacement for
+        <code>Traversal.each</code>: a head-to-head bench
+        (<a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/AlgLensBench.scala"><code>AlgLensBench</code></a>)
+        shows <code>AlgLens[List]</code> running 1.5–2.6× slower than
+        <code>PowerSeries</code> on the traversal-shape common case. The tradeoff
+        analysis lives in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-22-alglens-vs-powerseries.md"><code>docs/research/2026-04-22-alglens-vs-powerseries.md</code></a>.</p>
+        <p>Three cross-carrier factories lift existing optics into
+        <code>AlgLens[F]</code>:</p>
+        <ul>
+          <li><code>AlgLens.fromLensF[F, S, A]</code> — a Lens whose focus is already
+          <code>F[A]</code> (e.g. <code>Lens[Person, List[Phone]]</code>).</li>
+          <li><code>AlgLens.fromPrismF[F, S, A]</code> — a Prism whose hit branch
+          carries an <code>F[A]</code> (<code>Prism[Json, List[Int]]</code>).</li>
+          <li><code>AlgLens.fromOptionalF[F, S, A]</code> — the Optional analogue.</li>
+        </ul>
+        <p>Composition with plain <code>Lens</code> / <code>Prism</code> / <code>Optional</code> on either
+        side works through the shipped <code>Composer</code> bridges — AlgLens&#39;s
+        <code>ForgetfulFunctor</code> / <code>ForgetfulFold</code> / <code>ForgetfulTraverse</code> /
+        <code>AssociativeFunctor</code> instances plug straight into the existing
+        <code>.modify</code> / <code>.foldMap</code> / <code>.modifyA</code> extensions.</p>
 
         
 <hr class="footer-rule"/>

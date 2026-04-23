@@ -91,6 +91,9 @@
     <li class="level1 nav-node"><a href="#lens-s-_-field"><code>lens[S](_.field)</code></a></li>
     <li class="level2 nav-leaf"><a href="#composition">Composition</a></li>
     <li class="level2 nav-leaf"><a href="#type-level-complement">Type-level complement</a></li>
+    <li class="level1 nav-leaf"><a href="#multi-field-lens-lens-s-_-a-_-b">Multi-field Lens — <code>lens[S](_.a, _.b, …)</code></a></li>
+    <li class="level1 nav-leaf"><a href="#full-cover-iso-lens-s-_-a-_-b-covering-every-field">Full-cover Iso — <code>lens[S](_.a, _.b, …)</code> covering every field</a></li>
+    <li class="level1 nav-leaf"><a href="#compile-time-diagnostics">Compile-time diagnostics</a></li>
     <li class="level1 nav-node"><a href="#prism-s-a"><code>prism[S, A]</code></a></li>
     <li class="level2 nav-leaf"><a href="#composition-with-lens-chains">Composition with Lens chains</a></li>
     <li class="level1 nav-leaf"><a href="#macro-errors">Macro errors</a></li>
@@ -109,7 +112,7 @@
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">libraryDependencies</span><span> += </span><span class="string-literal">&quot;dev.constructive&quot;</span><span> %% </span><span class="string-literal">&quot;cats-eo-generics&quot;</span><span> % </span><span class="string-literal">&quot;0.1&quot;</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.{</span><span class="identifier">lens</span><span>, </span><span class="identifier">prism</span><span>}
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Customer</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Shape</span><span>, </span><span class="type-name">Shape2</span><span>, </span><span class="type-name">Coords</span><span>, </span><span class="type-name">Zip</span><span>}</span></code></pre>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Customer</span><span>, </span><span class="type-name">NameAgePair</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Shape</span><span>, </span><span class="type-name">Shape2</span><span>, </span><span class="type-name">Coords</span><span>, </span><span class="type-name">Zip</span><span>}</span></code></pre>
         <blockquote>Macro-derived optics need their target case classes and enum
         cases to live at a package-level location. The page hosts its
         samples in <code>eo.docs.*</code> for that reason — the same <code>lens</code> /
@@ -168,6 +171,112 @@
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">renamed</span><span> = </span><span class="identifier">nameL</span><span>.</span><span class="identifier">place</span><span>(</span><span class="string-literal">&quot;Carol&quot;</span><span>)(</span><span class="identifier">alice</span><span>)
 </span><span class="comment">// renamed: Customer = Customer(name = &quot;Carol&quot;, age = 30)</span></code></pre>
         
+        <h2 id="multi-field-lens-lens-s-_-a-_-b" class="section"><a class="anchor-link left" href="#multi-field-lens-lens-s-_-a-_-b"><i class="icofont-laika link">&#xef71;</i></a>Multi-field Lens — <code>lens[S](_.a, _.b, …)</code></h2>
+        <p>The same entry point accepts multiple selectors. When the selector
+        set is a <strong>strict subset</strong> of the case class&#39;s fields, the macro
+        emits a <code>SimpleLens[S, Focus, Complement]</code> where <code>Focus</code> is a
+        Scala 3 <code>NamedTuple</code> in SELECTOR order and <code>Complement</code> is a
+        <code>NamedTuple</code> in DECLARATION order among the non-focused fields.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// `Customer(name, age)` with only 2 fields is full-cover territory —
+// see the Iso section below. For a proper partial-cover example we
+// need a wider case class; use `Person(name, address)` (2 fields) by
+// focusing *one* field to stay on the Lens path, then reach for
+// multi-field on wider data like the 3-field ADT below.
+</span><span>
+</span><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">OrderItem</span><span>(</span><span class="identifier">sku</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">quantity</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">price</span><span>: </span><span class="type-name">Double</span><span>)
+</span><span class="keyword">val</span><span> </span><span class="identifier">qtyAndPrice</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">OrderItem</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">quantity</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">price</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">item</span><span> = </span><span class="type-name">OrderItem</span><span>(</span><span class="string-literal">&quot;abc-123&quot;</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">9.99</span><span>)
+</span><span class="comment">// item: OrderItem = OrderItem(sku = &quot;abc-123&quot;, quantity = 3, price = 9.99)
+</span><span class="keyword">val</span><span> </span><span class="identifier">focus</span><span> = </span><span class="identifier">qtyAndPrice</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">item</span><span>)
+</span><span class="comment">// focus: NamedTuple[*:[&quot;quantity&quot;, *:[&quot;price&quot;, EmptyTuple]], *:[Int, *:[Double, EmptyTuple]]] = (
+//   3,
+//   9.99
+// )
+</span><span class="identifier">focus</span><span>.</span><span class="identifier">quantity</span><span>
+</span><span class="comment">// res5: Int = 3
+</span><span class="identifier">focus</span><span>.</span><span class="identifier">price</span><span>
+</span><span class="comment">// res6: Double = 9.99
+</span><span>
+</span><span class="keyword">val</span><span> (</span><span class="identifier">complement</span><span>, </span><span class="identifier">_</span><span>) = </span><span class="identifier">qtyAndPrice</span><span>.</span><span class="identifier">to</span><span>(</span><span class="identifier">item</span><span>)
+</span><span class="comment">// complement: NamedTuple[*:[&quot;sku&quot;, EmptyTuple], *:[String, EmptyTuple]] = Tuple1(
+//   &quot;abc-123&quot;
+// )
+</span><span class="identifier">complement</span><span>.</span><span class="identifier">sku</span><span>
+</span><span class="comment">// res7: String = &quot;abc-123&quot;</span></code></pre>
+        <p>The focus NamedTuple preserves selector order, so
+        <code>lens[OrderItem](_.price, _.quantity)</code> would produce a focus whose
+        <code>.price</code> field comes before <code>.quantity</code>. That choice is deliberate
+        (D1 in the implementation plan) — downstream code usually cares
+        about the order the fields appear in the call, not the original
+        declaration order.</p>
+        
+        <h2 id="full-cover-iso-lens-s-_-a-_-b-covering-every-field" class="section"><a class="anchor-link left" href="#full-cover-iso-lens-s-_-a-_-b-covering-every-field"><i class="icofont-laika link">&#xef71;</i></a>Full-cover Iso — <code>lens[S](_.a, _.b, …)</code> covering every field</h2>
+        <p>When the selector set covers <strong>every</strong> case field of <code>S</code> (in any
+        order, at any arity including N = 1 on a 1-field wrapper), the
+        macro emits a <code>BijectionIso[S, S, Focus, Focus]</code> instead of a
+        <code>SimpleLens</code>. Downstream <code>.get</code> / <code>.reverseGet</code> / <code>.modify</code> all
+        work without extra evidence; <code>.andThen</code> picks up the fused
+        <code>BijectionIso</code> overloads for free.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nameAgeIso</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">NameAgePair</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">pair</span><span> = </span><span class="type-name">NameAgePair</span><span>(</span><span class="string-literal">&quot;Dana&quot;</span><span>, </span><span class="number-literal">42</span><span>)
+</span><span class="comment">// pair: NameAgePair = NameAgePair(name = &quot;Dana&quot;, age = 42)
+</span><span class="keyword">val</span><span> </span><span class="identifier">tuple</span><span> = </span><span class="identifier">nameAgeIso</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">pair</span><span>)
+</span><span class="comment">// tuple: NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, EmptyTuple]], *:[String, *:[Int, EmptyTuple]]] = (
+//   &quot;Dana&quot;,
+//   42
+// )
+</span><span class="identifier">tuple</span><span>.</span><span class="identifier">name</span><span>
+</span><span class="comment">// res8: String = &quot;Dana&quot;
+</span><span class="identifier">tuple</span><span>.</span><span class="identifier">age</span><span>
+</span><span class="comment">// res9: Int = 42
+</span><span class="identifier">nameAgeIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">tuple</span><span>)
+</span><span class="comment">// res10: NameAgePair = NameAgePair(name = &quot;Dana&quot;, age = 42)</span></code></pre>
+        <p>Selector-order inversion flips the NamedTuple shape:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">ageNameIso</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">NameAgePair</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">rev</span><span> = </span><span class="identifier">ageNameIso</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">pair</span><span>)
+</span><span class="comment">// rev: NamedTuple[*:[&quot;age&quot;, *:[&quot;name&quot;, EmptyTuple]], *:[Int, *:[String, EmptyTuple]]] = (
+//   42,
+//   &quot;Dana&quot;
+// )
+</span><span class="identifier">rev</span><span>.</span><span class="identifier">age</span><span>
+</span><span class="comment">// res11: Int = 42
+</span><span class="identifier">rev</span><span>.</span><span class="identifier">name</span><span>
+</span><span class="comment">// res12: String = &quot;Dana&quot;
+</span><span class="identifier">ageNameIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">rev</span><span>)
+</span><span class="comment">// res13: NameAgePair = NameAgePair(name = &quot;Dana&quot;, age = 42)</span></code></pre>
+        
+        <h2 id="compile-time-diagnostics" class="section"><a class="anchor-link left" href="#compile-time-diagnostics"><i class="icofont-laika link">&#xef71;</i></a>Compile-time diagnostics</h2>
+        <p>All macro failures surface at compile time with explicit messages
+        prefixed <code>lens[S]:</code> for grep-ability:</p>
+        <ul>
+          <li><strong>Empty varargs</strong> — <code>lens[Customer]()</code> → &quot;requires at least one
+          field selector&quot;.</li>
+          <li><strong>Non-case-class source</strong> — <code>lens[SomeInterface](...)</code> → Hearth&#39;s
+          <code>CaseClass.parse</code> diagnostic.</li>
+          <li><strong>Non-field selector</strong> — <code>lens[Customer](_.name.toUpperCase)</code> →
+          &quot;selector at position 0 must be a single-field accessor like
+          <code>_.fieldName</code>. Nested paths (e.g. <code>_.a.b</code>) are not yet supported.&quot;</li>
+          <li><strong>Unknown field</strong> — <code>lens[Widget](_.bogus)</code> → &quot;&#39;bogus&#39; is not a
+          field of Widget. Known fields: name, size&quot;.</li>
+          <li><strong>Duplicate selectors</strong> — <code>lens[OrderItem](_.sku, _.sku)</code> →
+          &quot;duplicate field selector &#39;sku&#39; at positions 0, 1. Each field
+          may appear at most once.&quot;</li>
+        </ul>
+        <p>Duplicate rejection fires at compile time:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">dup</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">NameAgePair</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>)
+</span><span class="comment">// error:
+// lens[eo.docs.NameAgePair]: duplicate field selector &#39;name&#39; at positions 0, 1. Each field may appear at most once.
+// val dup = lens[NameAgePair](_.name, _.name)
+//           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span></code></pre>
+        <p>Nested paths are rejected too — chain manually if you need them:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nested</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>)
+</span><span class="comment">// error:
+// lens[eo.docs.Person]: selector at position 0 must be a single-field accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported. Got: ((_$13: eo.docs.Person) =&gt; _$13.address.street)
+// val nested = lens[Person](_.address.street)
+//              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Fine — two independent Lens derivations composed:
+</span><span class="keyword">val</span><span> </span><span class="identifier">ok</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>).</span><span class="identifier">andThen</span><span>(</span><span class="identifier">lens</span><span>[</span><span class="type-name">Address</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">street</span><span>))</span></code></pre>
+        
         <h2 id="prism-s-a" class="section"><a class="anchor-link left" href="#prism-s-a"><i class="icofont-laika link">&#xef71;</i></a><code>prism[S, A]</code></h2>
         <p>A <code>prism[S, A]</code> derives a Prism from the parent sum type <code>S</code> to
         a specific child <code>A &lt;: S</code>. Recognises:</p>
@@ -180,20 +289,20 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">squareP</span><span>   = </span><span class="identifier">prism</span><span>[</span><span class="type-name">Shape</span><span>, </span><span class="type-name">Shape</span><span>.</span><span class="type-name">Square</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">triangleP</span><span> = </span><span class="identifier">prism</span><span>[</span><span class="type-name">Shape</span><span>, </span><span class="type-name">Shape</span><span>.</span><span class="type-name">Triangle</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">circleP</span><span>.</span><span class="identifier">to</span><span>(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="number-literal">1.0</span><span>))
-</span><span class="comment">// res5: Either[X, Circle] = Right(Circle(1.0))
+</span><span class="comment">// res16: Either[X, Circle] = Right(Circle(1.0))
 </span><span class="identifier">circleP</span><span>.</span><span class="identifier">to</span><span>(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Square</span><span>(</span><span class="number-literal">2.0</span><span>))
-</span><span class="comment">// res6: Either[X, Circle] = Left(Square(2.0))
+</span><span class="comment">// res17: Either[X, Circle] = Left(Square(2.0))
 </span><span>
 </span><span class="identifier">circleP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; </span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="identifier">c</span><span>.</span><span class="identifier">r</span><span> * </span><span class="number-literal">2</span><span>))(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="number-literal">1.0</span><span>))
-</span><span class="comment">// res7: Shape = Circle(2.0)
+</span><span class="comment">// res18: Shape = Circle(2.0)
 </span><span class="identifier">circleP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; </span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="identifier">c</span><span>.</span><span class="identifier">r</span><span> * </span><span class="number-literal">2</span><span>))(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Square</span><span>(</span><span class="number-literal">2.0</span><span>))
-</span><span class="comment">// res8: Shape = Square(2.0)</span></code></pre>
+</span><span class="comment">// res19: Shape = Square(2.0)</span></code></pre>
         <p>Union types work the same way:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">intP</span><span> = </span><span class="identifier">prism</span><span>[</span><span class="type-name">Int</span><span> | </span><span class="type-name">String</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">intP</span><span>.</span><span class="identifier">to</span><span>(</span><span class="number-literal">42</span><span>: </span><span class="type-name">Int</span><span> | </span><span class="type-name">String</span><span>)
-</span><span class="comment">// res9: Either[X, Int] = Right(42)
+</span><span class="comment">// res20: Either[X, Int] = Right(42)
 </span><span class="identifier">intP</span><span>.</span><span class="identifier">to</span><span>(</span><span class="string-literal">&quot;hi&quot;</span><span>: </span><span class="type-name">Int</span><span> | </span><span class="type-name">String</span><span>)
-</span><span class="comment">// res10: Either[X, Int] = Left(&quot;hi&quot;)</span></code></pre>
+</span><span class="comment">// res21: Either[X, Int] = Left(&quot;hi&quot;)</span></code></pre>
         
         <h3 id="composition-with-lens-chains" class="section"><a class="anchor-link left" href="#composition-with-lens-chains"><i class="icofont-laika link">&#xef71;</i></a>Composition with Lens chains</h3>
         <p><code>prism ∘ lens</code> works naturally through <code>Composer</code> bridges:</p>
@@ -204,9 +313,9 @@
     .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">lens</span><span>[</span><span class="type-name">Shape2</span><span>.</span><span class="type-name">Circle</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">c</span><span>))
     .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">lens</span><span>[</span><span class="type-name">Coords</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">x</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">circleCoordsX</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">10</span><span>)(</span><span class="type-name">Shape2</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="type-name">Coords</span><span>(</span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>), </span><span class="number-literal">1.0</span><span>))
-</span><span class="comment">// res11: Shape2 = Circle(c = Coords(x = 13, y = 4), r = 1.0)
+</span><span class="comment">// res22: Shape2 = Circle(c = Coords(x = 13, y = 4), r = 1.0)
 </span><span class="identifier">circleCoordsX</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">10</span><span>)(</span><span class="type-name">Shape2</span><span>.</span><span class="type-name">Square</span><span>(</span><span class="type-name">Coords</span><span>(</span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>), </span><span class="number-literal">2.0</span><span>))
-</span><span class="comment">// res12: Shape2 = Square(c = Coords(x = 3, y = 4), s = 2.0)</span></code></pre>
+</span><span class="comment">// res23: Shape2 = Square(c = Coords(x = 3, y = 4), s = 2.0)</span></code></pre>
         
         <h2 id="macro-errors" class="section"><a class="anchor-link left" href="#macro-errors"><i class="icofont-laika link">&#xef71;</i></a>Macro errors</h2>
         <p>Both macros fail at compile time with explicit errors when

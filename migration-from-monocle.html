@@ -126,6 +126,10 @@
               <td><code>lens[S](_.field)</code> (from <code>eo.generics</code>)</td>
             </tr>
             <tr>
+              <td><code>GenLens[S](_.a).andThen(GenLens[S](_.b)).andThen(...)</code> — N hand-composed GenLenses</td>
+              <td><code>lens[S](_.a, _.b, ...)</code> — one varargs call; full-cover upgrades to <code>BijectionIso</code> automatically (no Monocle equivalent)</td>
+            </tr>
+            <tr>
               <td><code>Prism[S, A](_.some)(identity)</code></td>
               <td><code>Prism.optional[S, A](_.some, identity)</code></td>
             </tr>
@@ -140,6 +144,14 @@
             <tr>
               <td><code>Optional[S, A](_.some)(a =&gt; s =&gt; …)</code></td>
               <td><code>Optional[S, S, A, A, Affine](getOrModify, rg)</code></td>
+            </tr>
+            <tr>
+              <td><em>(no standalone equivalent — Monocle reaches for <code>Optional.getOption</code>)</em></td>
+              <td><code>AffineFold(p =&gt; ...)</code> / <code>AffineFold.select(p)</code> / <code>AffineFold.fromOptional(opt)</code> / <code>AffineFold.fromPrism(p)</code> — read-only 0-or-1 focus, <code>T = Unit</code> forbids <code>.modify</code></td>
+            </tr>
+            <tr>
+              <td><em>(no direct equivalent — algebraic lenses are not in Monocle)</em></td>
+              <td><code>AlgLens.fromLensF</code> / <code>fromPrismF</code> / <code>fromOptionalF</code> — classifier-shaped lens over <code>F[A]</code> focus; see <a href="optics.html#alglens">Optics → AlgLens</a></td>
             </tr>
             <tr>
               <td><code>Setter[S, A](f =&gt; s =&gt; …)</code></td>
@@ -187,7 +199,7 @@
             </tr>
             <tr>
               <td><code>optional.getOption(s)</code></td>
-              <td><code>opt.to(s).affine.toOption</code> — see below</td>
+              <td><code>optional.getOption(s)</code> — generic <code>.getOption</code> extension on any <code>Optic[_, _, _, _, Affine]</code> (Optional and AffineFold both ship it)</td>
             </tr>
             <tr>
               <td><code>traversal.modify(f)(xs)</code></td>
@@ -219,8 +231,7 @@
         The upshot at the call site: the same <code>.andThen</code> works whether
         the two optics share <code>F</code> or not:</p>
         <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.{</span><span class="type-name">Lens</span><span>, </span><span class="type-name">Optic</span><span>}
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Lens</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optional</span><span>
 
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">MigConfig</span><span>(</span><span class="identifier">timeout</span><span>: </span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>])

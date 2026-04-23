@@ -99,7 +99,11 @@
     <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
     <li class="level1 nav-leaf"><a href="#jsonprism-cursor-backed-json-edit">JsonPrism — cursor-backed JSON edit</a></li>
     <li class="level1 nav-leaf"><a href="#jsontraversal-items-each-name-edits">JsonTraversal — <code>items.each.name</code> edits</a></li>
-    <li class="level1 nav-leaf"><a href="#powerseries-traversal-with-downstream-composition">PowerSeries — traversal with downstream composition</a></li>
+    <li class="level1 nav-node"><a href="#powerseries-traversal-with-downstream-composition">PowerSeries traversal with downstream composition</a></li>
+    <li class="level2 nav-leaf"><a href="#powerseriesbench-eomodify_powereach-lens-traversal-each-lens"><code>PowerSeriesBench.eoModify_powerEach</code> — <code>Lens → Traversal.each → Lens</code></a></li>
+    <li class="level2 nav-leaf"><a href="#powerseriesnestedbench-eomodify_nested-5-hop-tree-of-traversals"><code>PowerSeriesNestedBench.eoModify_nested</code> — 5-hop tree of traversals</a></li>
+    <li class="level2 nav-leaf"><a href="#powerseriesprismbench-eomodify_sparse-traversal-each-prism"><code>PowerSeriesPrismBench.eoModify_sparse</code> — <code>Traversal.each → Prism</code></a></li>
+    <li class="level2 nav-leaf"><a href="#what-makes-these-numbers-possible">What makes these numbers possible</a></li>
     <li class="level1 nav-leaf"><a href="#reproducing">Reproducing</a></li>
   </ul>
 
@@ -512,54 +516,160 @@ Affine]</code> instance auto-lifts each Lens hop into the <code>Affine</code>
         with array size and EO wins by a constant factor from avoiding
         the per-element codec round-trip.</p>
         
-        <h2 id="powerseries-traversal-with-downstream-composition" class="section"><a class="anchor-link left" href="#powerseries-traversal-with-downstream-composition"><i class="icofont-laika link">&#xef71;</i></a>PowerSeries — traversal with downstream composition</h2>
-        <p>EO-only — no Monocle equivalent. Toggles <code>isMobile</code> on every
-        <code>Phone</code> inside a <code>Person.phones: ArraySeq[Phone]</code>; the chain
-        is <code>Lens → Traversal.each → Lens</code>, where <code>Traversal.each</code> is
-        the <code>PowerSeries</code>-backed composable traversal.</p>
+        <h2 id="powerseries-traversal-with-downstream-composition" class="section"><a class="anchor-link left" href="#powerseries-traversal-with-downstream-composition"><i class="icofont-laika link">&#xef71;</i></a>PowerSeries traversal with downstream composition</h2>
+        <p>EO-only — no Monocle equivalent. Three variants in the harness,
+        one per common chain shape, all sharing the <code>PowerSeries</code>-backed
+        <code>Traversal.each</code> as the composition vehicle.</p>
+        
+        <h3 id="powerseriesbench-eomodify_powereach-lens-traversal-each-lens" class="section"><a class="anchor-link left" href="#powerseriesbench-eomodify_powereach-lens-traversal-each-lens"><i class="icofont-laika link">&#xef71;</i></a><code>PowerSeriesBench.eoModify_powerEach</code> — <code>Lens → Traversal.each → Lens</code></h3>
+        <p>Toggles <code>isMobile</code> on every <code>Phone</code> inside a <code>Person.phones:
+ArraySeq[Phone]</code>. The two-hop chain exercises the flat &quot;dense
+        singleton outer + multi-focus inner + dense singleton inner&quot; pattern.</p>
         <table>
           <thead>
             <tr>
               <th>Size</th>
-              <th>eo (composed chain)</th>
-              <th>naive <code>copy</code> / <code>map</code></th>
+              <th>eo</th>
+              <th>naive</th>
               <th>ratio</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>4</td>
-              <td>131 ns</td>
+              <td>66 ns</td>
               <td>13 ns</td>
-              <td>10×</td>
+              <td>5.1×</td>
             </tr>
             <tr>
               <td>32</td>
-              <td>805 ns</td>
+              <td>275 ns</td>
               <td>80 ns</td>
-              <td>10×</td>
+              <td>3.4×</td>
             </tr>
             <tr>
               <td>256</td>
-              <td>4 996 ns</td>
-              <td>721 ns</td>
-              <td>7×</td>
+              <td>1 890 ns</td>
+              <td>726 ns</td>
+              <td>2.6×</td>
+            </tr>
+            <tr>
+              <td>1024</td>
+              <td>6 927 ns</td>
+              <td>3 633 ns</td>
+              <td>1.9×</td>
             </tr>
           </tbody>
         </table>
-        <p>Focus storage is a <code>PSVec[B]</code> view (an <code>Array[AnyRef]</code> plus
-        an <code>(offset, length)</code> window) — so the <code>assoc</code>&#39;s per-element
-        reassembly slice is a pointer update rather than an arraycopy.
-        Per-element leftovers are held in parallel <code>Array[Int]</code> and
-        <code>Array[AnyRef]</code> buffers inside <code>AssocSndZ</code>, avoiding a
-        <code>(Int, Snd[Xi])</code> boxing per element. The <code>Traversal.pEach.from</code>
-        rebuild stashes the original <code>T[A]</code> in the existential leftover
-        and reassembles via <code>Traverse.mapAccumulate</code> — a single O(N)
-        pass through the original container shape, not the O(N²)
-        <code>MonoidK.combineK</code> fold an earlier revision used. The result
-        is linear scaling at ~7–10× overhead over the naive
-        <code>copy</code>/<code>map</code> baseline, and the ratio <em>tightens</em> with size as
-        fixed per-op setup amortises.</p>
+        
+        <h3 id="powerseriesnestedbench-eomodify_nested-5-hop-tree-of-traversals" class="section"><a class="anchor-link left" href="#powerseriesnestedbench-eomodify_nested-5-hop-tree-of-traversals"><i class="icofont-laika link">&#xef71;</i></a><code>PowerSeriesNestedBench.eoModify_nested</code> — 5-hop tree of traversals</h3>
+        <p><code>Company → List[Department] → ArraySeq[Employee] → Boolean</code>. Two
+        traversal fan-outs with Lens hops between them — the worst shape
+        for flat-carrier composition.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th>eo</th>
+              <th>naive</th>
+              <th>ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>4</td>
+              <td>348 ns</td>
+              <td>65 ns</td>
+              <td>5.4×</td>
+            </tr>
+            <tr>
+              <td>32</td>
+              <td>1 175 ns</td>
+              <td>497 ns</td>
+              <td>2.4×</td>
+            </tr>
+            <tr>
+              <td>256</td>
+              <td>8 085 ns</td>
+              <td>3 376 ns</td>
+              <td>2.4×</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <h3 id="powerseriesprismbench-eomodify_sparse-traversal-each-prism" class="section"><a class="anchor-link left" href="#powerseriesprismbench-eomodify_sparse-traversal-each-prism"><i class="icofont-laika link">&#xef71;</i></a><code>PowerSeriesPrismBench.eoModify_sparse</code> — <code>Traversal.each → Prism</code></h3>
+        <p>Increments every <code>Ok.value: Int</code> inside an <code>ArraySeq[Result]</code>
+        where <code>Result = Ok(Int) | Err(String)</code> is a 50/50 split. The
+        Prism miss branch is the slow part of the composition machinery —
+        this bench is the regression oracle for it.</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Size</th>
+              <th>eo</th>
+              <th>naive</th>
+              <th>ratio</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>8</td>
+              <td>59 ns</td>
+              <td>12 ns</td>
+              <td>5.0×</td>
+            </tr>
+            <tr>
+              <td>64</td>
+              <td>408 ns</td>
+              <td>73 ns</td>
+              <td>5.6×</td>
+            </tr>
+            <tr>
+              <td>512</td>
+              <td>3 610 ns</td>
+              <td>660 ns</td>
+              <td>5.5×</td>
+            </tr>
+          </tbody>
+        </table>
+        
+        <h3 id="what-makes-these-numbers-possible" class="section"><a class="anchor-link left" href="#what-makes-these-numbers-possible"><i class="icofont-laika link">&#xef71;</i></a>What makes these numbers possible</h3>
+        <p>The <code>PowerSeries</code> carrier pairs an existential leftover
+        <code>xo: Snd[A]</code> with a <code>PSVec[B]</code> focus vector — an <code>Array[AnyRef]</code>
+        plus an <code>(offset, length)</code> window, so per-element slices during
+        reassembly are pointer updates rather than arraycopies.</p>
+        <p>Most of the machinery is hidden behind the <code>PSSingleton</code>
+        protocol — an internal trait implemented by the morphed
+        <code>Lens</code> / <code>Prism</code> / <code>Optional</code> optics (their <code>.to</code> would otherwise
+        build a throwaway <code>PowerSeries</code> + <code>PSVec.Single</code> per element).
+        <code>assoc.composeTo</code> / <code>composeFrom</code> detect the protocol and call
+        <code>collectTo</code> / <code>reconstructSingleton</code> directly, skipping the
+        per-element wrapper allocations. The <code>PSSingletonAlwaysHit</code>
+        refinement covers the &quot;every call hits&quot; case (Lens morphs) —
+        it also skips the per-element length <code>Array[Int]</code> since every
+        slot is implicitly 1.</p>
+        <p><code>Traversal.pEach</code>&#39;s <code>from</code> rebuilds the container via <code>Functor.map</code>
+        with a captured <code>var</code> counter — the <code>State[Int, _]</code> chain that
+        <code>Traverse.mapAccumulate</code> would build shows up as 25 % CPU on
+        <code>State</code>-thunk bookkeeping when used literally. For <code>ArraySeq</code>
+        specifically both the <code>.to</code> (zero-copy from <code>ArraySeq.ofRef.unsafeArray</code>)
+        and <code>.from</code> (direct <code>ArraySeq.unsafeWrapArray</code> of the shared
+        <code>PSVec.Slice</code> backing array) go through an <code>Array[AnyRef]</code> end-to-end
+        with a single <code>System.arraycopy</code> at most — <code>Traverse[ArraySeq].map</code>&#39;s
+        builder-sizing path through <code>SeqOps.size$</code> was 18 % CPU before
+        this bypass.</p>
+        <p><code>IntArrBuilder.unsafeAppend</code> / <code>ObjArrBuilder.unsafeAppend</code> skip
+        the per-call grow-check on hot paths where the total is known
+        upfront (<code>composeTo</code> pre-sizes all three builders to <code>n</code> in
+        PSSingleton paths). <code>PSVec.Slice.unsafeShareableArray</code> completes
+        the end-to-end zero-copy story for freshly-built result arrays.</p>
+        <p>The cumulative effect vs the pre-optimisation baseline on this
+        same harness is −59 % to −67 % ns and −58 % to −67 % alloc
+        across the three benches. Ratios to naive now sit at 1.9× on
+        dense Lens-chain (<code>powerEach @ 1024</code>), 2.4× on nested, 5× on
+        sparse-Prism — the remaining gap on sparse is inherent Prism
+        miss-branch plumbing and is substantially smaller than the
+        5-10× ratios other optic libraries publish for the same shape.</p>
         <p>For single-pass modify of a collection — no downstream optic
         after the traversal — <code>Traversal.forEach[F, A, B]</code> (carrier
         <code>Forget[F]</code>, identity-shaped, no composition support) is the
