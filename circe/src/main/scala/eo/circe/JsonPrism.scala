@@ -470,6 +470,15 @@ final class JsonPrism[A] private[circe] (
   ): JsonTraversal[B] =
     new JsonTraversal[B](path, Array.empty[PathStep], encB, decB)
 
+  /** Hand off the current path as a [[JsonFieldsPrism]] parent path, with the caller-supplied
+    * `fieldNames` enumerating the selected fields under that parent. Used by the [[fields]] macro;
+    * not meant for direct call by end users.
+    */
+  private[circe] def toFieldsPrism[B](
+      fieldNames: Array[String]
+  )(using encB: Encoder[B], decB: Decoder[B]): JsonFieldsPrism[B] =
+    new JsonFieldsPrism[B](path, fieldNames, encB, decB)
+
 object JsonPrism:
 
   /** Construct a root-level `JsonPrism[S]` — the path is empty, so `modify` applies the user
@@ -519,3 +528,30 @@ object JsonPrism:
 
     transparent inline def each: Any =
       ${ JsonPrismMacro.eachImpl[A]('o) }
+
+  /** Focus a bundle of named fields of a case class `A` as a Scala 3 NamedTuple — the multi-field
+    * sibling of [[field]]. Arity must be >= 2 (single-selector calls should use `.field(_.x)`
+    * instead).
+    *
+    * {{{
+    *   case class Person(name: String, age: Int, address: Address)
+    *
+    *   val nameAge: JsonFieldsPrism[NamedTuple[("name", "age"), (String, Int)]] =
+    *     codecPrism[Person].fields(_.name, _.age)
+    *
+    *   nameAge.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(personJson)
+    * }}}
+    *
+    * The macro extracts each selector's field name, validates that every name is a case field of
+    * `A` with no duplicates, synthesises the NamedTuple type in selector order, and summons
+    * `Encoder[NT]` / `Decoder[NT]` from the enclosing scope (typically derived via
+    * `KindlingsCodecAsObject.derive`). See the plan's D10 for the full error-message catalogue.
+    *
+    * Full-cover note: when the selector set covers every field of `A`, the result is still a
+    * `JsonFieldsPrism[NT]` — NOT a JsonIso. See D1 of the plan for why: JSON decode can always fail
+    * (the input may not even be a JSON object), so totality can't be witnessed.
+    */
+  extension [A](o: JsonPrism[A])
+
+    transparent inline def fields(inline selectors: (A => Any)*): Any =
+      ${ JsonPrismMacro.fieldsImpl[A]('o, 'selectors) }

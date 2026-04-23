@@ -1136,7 +1136,7 @@ otherwise the naming symmetry breaks.
   (`Ior.Both(chain-length-many, partially-updated)`); prefix-missing
   (chain-length-1 with `PathMissing`, `Ior.Left`).
 
-- [ ] **Unit 3: Multi-field `JsonFieldsPrism[A]` + `.fields` macro + read/write codegen**
+- [x] **Unit 3: Multi-field `JsonFieldsPrism[A]` + `.fields` macro + read/write codegen**
 
   **Goal:** `.fields(_.a, _.b)` compiles on `JsonPrism[A]` and emits
   a `JsonFieldsPrism[NT]` whose default `.modify` round-trips all

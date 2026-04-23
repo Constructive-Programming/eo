@@ -21,6 +21,7 @@ import org.specs2.mutable.Specification
 class JsonPrismSpec extends Specification with ScalaCheck:
 
   import JsonPrismSpec.*
+  import JsonPrismSpec.given
 
   // ---- Root-level ---------------------------------------------------
 
@@ -388,6 +389,121 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     }
   }
 
+  // ---- Multi-field focus (.fields) --------------------------------
+
+  "codecPrism[Person].fields(_.name, _.age)" should {
+
+    val nameAgeL = codecPrism[Person].fields(_.name, _.age)
+
+    "modify round-trips the two focused fields atomically (Unsafe)" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val json = p.asJson
+      val out = nameAgeL.modifyUnsafe(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(json)
+      out === p.copy(name = "ALICE", age = 31).asJson
+    }
+
+    "modify (default) round-trips on happy path as Ior.Right" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val json = p.asJson
+      val out = nameAgeL.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(json)
+      out === Ior.Right(p.copy(name = "ALICE", age = 31).asJson)
+    }
+
+    "leaves non-focused fields byte-identical (address)" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val json = p.asJson
+      val out = nameAgeL.modifyUnsafe(nt => (name = nt.name + "-x", age = nt.age))(json)
+      out.hcursor.downField("address").as[Address] ===
+        Right(Address("Main St", 12345))
+    }
+
+    "get (default) returns the NamedTuple on happy path" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val result = nameAgeL.get(p.asJson)
+      result.toOption must beSome.which { nt =>
+        (nt.name === "Alice").and(nt.age === 30)
+      }
+    }
+
+    "getOptionUnsafe returns Some(NamedTuple) on happy path" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      nameAgeL.getOptionUnsafe(p.asJson) must beSome.which { nt =>
+        (nt.name === "Alice").and(nt.age === 30)
+      }
+    }
+
+    "get on a Json missing one focused field returns Ior.Left with PathMissing" >> {
+      val missing = Json.obj("name" -> Json.fromString("Alice"))
+      val result = nameAgeL.get(missing)
+      result match
+        case Ior.Left(chain) =>
+          (chain.length === 1L).and(
+            chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("age"))
+          )
+        case _ => ko(s"expected Ior.Left, got $result")
+    }
+
+    "get on a Json missing both focused fields accumulates both failures" >> {
+      val missing = Json.obj("address" -> Address("Main St", 12345).asJson)
+      val result = nameAgeL.get(missing)
+      result match
+        case Ior.Left(chain) =>
+          (chain.length === 2L)
+            .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("name"))) === true)
+            .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("age"))) === true)
+        case _ => ko(s"expected Ior.Left, got $result")
+    }
+
+    "modify on a Json missing one field returns Ior.Both(chain, inputJson) (atomicity)" >> {
+      val missing = Json.obj("name" -> Json.fromString("Alice"))
+      val result = nameAgeL.modify(nt => nt)(missing)
+      result match
+        case Ior.Both(chain, out) =>
+          (out === missing).and(
+            chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("age"))
+          )
+        case _ => ko(s"expected Ior.Both, got $result")
+    }
+
+    "place (default) overwrites all selected fields atomically" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val json = p.asJson
+      val newNt: NameAge = (name = "Carol", age = 55)
+      nameAgeL.place(newNt)(json) ===
+        Ior.Right(p.copy(name = "Carol", age = 55).asJson)
+    }
+  }
+
+  "codecPrism[Person].fields with selector-order != declaration-order" should {
+
+    val ageNameL = codecPrism[Person].fields(_.age, _.name)
+
+    "carries the NamedTuple in selector order" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val result = ageNameL.get(p.asJson)
+      result.toOption must beSome.which { nt =>
+        (nt.age === 30).and(nt.name === "Alice")
+      }
+    }
+
+    "modify round-trips via selector-order NT" >> {
+      val p = Person("Alice", 30, Address("Main St", 12345))
+      val out = ageNameL.modifyUnsafe(nt => (age = nt.age + 100, name = nt.name))(p.asJson)
+      out === p.copy(age = 130).asJson
+    }
+  }
+
+  "codecPrism[Person].fields full-cover does NOT produce a JsonIso" >> {
+    // Full cover still returns a JsonFieldsPrism[NT] per D1. The
+    // output type is JsonFieldsPrism, not JsonIso.
+    val fullL = codecPrism[Person].fields(_.name, _.age, _.address)
+    val p = Person("Alice", 30, Address("Main St", 12345))
+    val out = fullL.modifyUnsafe(nt =>
+      (name = nt.name.toUpperCase, age = nt.age, address = nt.address)
+    )(p.asJson)
+    out === p.copy(name = "ALICE").asJson
+  }
+
 object JsonPrismSpec:
 
   case class Address(street: String, zip: Int)
@@ -409,3 +525,20 @@ object JsonPrismSpec:
 
   object Basket:
     given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+
+  // ---- NamedTuple codec givens for multi-field (.fields) specs ----
+  //
+  // The macro's `Expr.summon` resolves against the enclosing scope at
+  // the call site. These givens are the supplied implementations that
+  // let `.fields(_.name, _.age)` etc. compile inside this spec.
+
+  type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
+  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive
+
+  type NameAgeAddress =
+    NamedTuple.NamedTuple[("name", "age", "address"), (String, Int, Address)]
+
+  given Codec.AsObject[NameAgeAddress] = KindlingsCodecAsObject.derive
+
+  type AgeName = NamedTuple.NamedTuple[("age", "name"), (Int, String)]
+  given Codec.AsObject[AgeName] = KindlingsCodecAsObject.derive

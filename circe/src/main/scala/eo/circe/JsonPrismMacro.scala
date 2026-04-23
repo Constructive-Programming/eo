@@ -199,6 +199,125 @@ object JsonPrismMacro:
         }
         '{ $parent.widenSuffixIndex[b]($iE)(using $enc, $dec) }
 
+  /** Macro for `codecPrism[A].fields(_.a, _.b, ...)` — multi-field focus. Parses the varargs
+    * selector list, validates arity (≥ 2), duplicate-ness, known-fields-ness, non-nested-ness,
+    * synthesises a Scala 3 NamedTuple type in SELECTOR order, summons `Encoder[NT]` / `Decoder[NT]`
+    * from the enclosing scope, and emits a `toFieldsPrism` call on the parent prism.
+    *
+    * See the plan's D10 for the full error-message catalogue — every row has an exact-message test
+    * in `FieldsMacroErrorSpec` (Unit 5).
+    */
+  def fieldsImpl[A: Type](
+      parent: Expr[JsonPrism[A]],
+      selectorsE: Expr[Seq[A => Any]],
+  )(using q: Quotes): Expr[Any] =
+    import quotes.reflect.*
+
+    val selectors: List[Expr[A => Any]] =
+      selectorsE match
+        case Varargs(es) => es.toList
+        case other       =>
+          report.errorAndAbort(
+            s"JsonPrism.fields[${Type.show[A]}]: could not destructure varargs selector"
+              + s" list. Got: ${other.asTerm.show}"
+          )
+
+    if selectors.sizeIs < 2 then
+      report.errorAndAbort(
+        s"JsonPrism.fields[${Type.show[A]}]: requires at least two field selectors"
+          + s" (for one selector, use .field(_.x) instead)."
+      )
+
+    val aTpe = TypeRepr.of[A]
+    val aSym = aTpe.typeSymbol
+    val caseFields = aSym.caseFields
+
+    if caseFields.isEmpty then
+      report.errorAndAbort(
+        s"JsonPrism.fields[${Type.show[A]}]: parent focus ${Type.show[A]} has no case fields;"
+          + " .fields requires a case class."
+      )
+
+    val knownFields: List[String] = caseFields.map(_.name)
+
+    val resolved: List[(Int, String)] =
+      selectors.zipWithIndex.map { (sel, i) =>
+        val name = extractSingleFieldName(sel.asTerm).getOrElse {
+          report.errorAndAbort(
+            s"JsonPrism.fields[${Type.show[A]}]: selector at position $i must be a single-field"
+              + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
+              + s" Got: ${sel.asTerm.show}"
+          )
+        }
+        if !knownFields.contains(name) then
+          report.errorAndAbort(
+            s"JsonPrism.fields[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
+              + s" Known fields: ${knownFields.mkString(", ")}."
+          )
+        (i, name)
+      }
+
+    // Duplicate selectors: compile error (D10).
+    val byName: Map[String, List[Int]] = resolved.groupMap(_._2)(_._1)
+    byName.find(_._2.sizeIs > 1).foreach {
+      case (name, positions) =>
+        val sorted = positions.sorted
+        report.errorAndAbort(
+          s"JsonPrism.fields[${Type.show[A]}]: duplicate field selector '$name' at positions"
+            + s" ${sorted.mkString(", ")}. Each field may appear at most once."
+        )
+    }
+
+    val selectedNames: List[String] = resolved.map(_._2)
+
+    // Build the NamedTuple type in SELECTOR order. `namesTpe` is the
+    // singleton-String names tuple, `valuesTpe` the field-types tuple.
+    val selectorSyms: List[Symbol] = selectedNames.map { name =>
+      caseFields.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"JsonPrism.fields[${Type.show[A]}]: internal error — field '$name' not found on"
+            + s" ${Type.show[A]}."
+        )
+      }
+    }
+    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
+
+    val namesTpe: TypeRepr =
+      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+    val valuesTpe: TypeRepr =
+      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+    val ntTpe: TypeRepr =
+      TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
+
+    ntTpe.asType match
+      case '[nt] =>
+        val enc = Expr.summon[Encoder[nt]].getOrElse {
+          report.errorAndAbort(
+            s"JsonPrism.fields[${Type.show[A]}]: no given Encoder[${Type.show[nt]}] in scope."
+              + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
+              + " KindlingsCodecAsObject.derive`, or provide one manually."
+          )
+        }
+        val dec = Expr.summon[Decoder[nt]].getOrElse {
+          report.errorAndAbort(
+            s"JsonPrism.fields[${Type.show[A]}]: no given Decoder[${Type.show[nt]}] in scope."
+              + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
+              + " KindlingsCodecAsObject.derive`, or provide one manually."
+          )
+        }
+
+        // Emit `parent.toFieldsPrism[nt](Array(n1, n2, ...))(using enc, dec)`.
+        // We splice the field names as a compile-time-known Array[String]
+        // so the runtime class doesn't need to re-parse them.
+        val namesExpr: Expr[Array[String]] =
+          '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
+
+        '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
+
   /** Macro for `traversal.<fieldName>`. Counterpart to [[selectFieldImpl]] — drives the Dynamic
     * sugar on [[JsonTraversal]] by extending the suffix.
     */
@@ -275,3 +394,25 @@ object JsonPrismMacro:
       case Lambda(_, Inlined(_, _, Select(_, name))) => Some(name)
       case Lambda(_, Typed(Select(_, name), _))      => Some(name)
       case _                                         => None
+
+  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — so `_.a.b` parses
+    * as `None` (caller emits the "nested paths not supported" message) rather than the misleading
+    * `Some("b")`. Used by the `.fields` multi-field macro where the precise "single-field only"
+    * rule from D10 matters at selector validation time.
+    *
+    * Matches eo-generics' `Select(Ident(_), name)` check which requires the Select's receiver to be
+    * the lambda parameter itself.
+    */
+  private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
+    import quotes.reflect.*
+    def oneHop(body: Term): Option[String] =
+      body match
+        case Inlined(_, _, inner)   => oneHop(inner)
+        case Typed(inner, _)        => oneHop(inner)
+        case Select(Ident(_), name) => Some(name)
+        case _                      => None
+    t match
+      case Inlined(_, _, inner) => extractSingleFieldName(inner)
+      case Typed(inner, _)      => extractSingleFieldName(inner)
+      case Lambda(_, body)      => oneHop(body)
+      case _                    => None
