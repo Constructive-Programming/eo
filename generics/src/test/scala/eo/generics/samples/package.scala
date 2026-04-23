@@ -87,3 +87,7 @@ package object samples:
   // check and produces the "not a field" diagnostic.
   final case class Widget(name: String, size: Int):
     def bogus: Int = size + 1
+
+  // Wrapper around `NotACaseClass` so MacroErrorSpec can exercise
+  // nested-path rejection: `_.inner.count` is a two-step selector.
+  final case class NestedWrapper(inner: NotACaseClass)

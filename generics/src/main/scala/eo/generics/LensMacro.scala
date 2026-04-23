@@ -560,15 +560,33 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
 
         '{ BijectionIso[S, S, focus, focus]($get, $reverseGet) }
 
-  /** Strips Inlined/Typed wrappers and peeks inside the lambda body for a single Select. `Lambda`
-    * must be tried before `Block` because a lambda IS a `Block(DefDef, Closure)` structurally --
-    * stripping the outer Block would leave us with the Closure.
+  /** Strips Inlined/Typed wrappers and peeks inside the lambda body for a single Select whose
+    * receiver is exactly the lambda parameter (an `Ident`). `Lambda` must be tried before `Block`
+    * because a lambda IS a `Block(DefDef, Closure)` structurally -- stripping the outer Block would
+    * leave us with the Closure.
+    *
+    * The receiver-is-Ident check matters for nested paths: `_.inner.count` parses as
+    * `Select(Select(Ident(param), "inner"), "count")`. The old pattern `Select(_, name)` would
+    * happily return `Some("count")`, which then routed into the "unknown field" diagnostic with a
+    * confusing error. We now require the Select's receiver to be the parameter itself, which lets
+    * the macro produce the cleaner "nested paths not supported" message via the Option-unpack site
+    * above.
     */
   private def extractFieldName(t: Term): Option[String] =
+    def oneHop(body: Term): Option[String] =
+      body match
+        case Inlined(_, _, inner)   => oneHop(inner)
+        case Typed(inner, _)        => oneHop(inner)
+        case Select(Ident(_), name) =>
+          // Receiver is the lambda parameter itself — single-field accessor.
+          Some(name)
+        case _ =>
+          // Any other shape (method call, nested Select, etc.) falls out
+          // and produces the non-field-accessor diagnostic at the call
+          // site.
+          None
     t match
-      case Inlined(_, _, inner)                      => extractFieldName(inner)
-      case Typed(inner, _)                           => extractFieldName(inner)
-      case Lambda(_, Select(_, name))                => Some(name)
-      case Lambda(_, Inlined(_, _, Select(_, name))) => Some(name)
-      case Lambda(_, Typed(Select(_, name), _))      => Some(name)
-      case _                                         => None
+      case Inlined(_, _, inner) => extractFieldName(inner)
+      case Typed(inner, _)      => extractFieldName(inner)
+      case Lambda(_, body)      => oneHop(body)
+      case _                    => None

@@ -4,7 +4,7 @@ package generics
 import scala.compiletime.testing.typeCheckErrors
 import scala.language.implicitConversions
 
-import eo.generics.samples.{Employee, NotACaseClass, Person, Widget}
+import eo.generics.samples.{Employee, NestedWrapper, NotACaseClass, Person, Widget}
 
 import org.specs2.mutable.Specification
 
@@ -27,7 +27,8 @@ class MacroErrorSpec extends Specification:
   // genuinely used, but only inside the typeCheckErrors string
   // literals, which `-Wunused` can't see into. Referencing each one
   // once here makes the warnings vanish without weakening coverage.
-  private val _samplesUsed: (Person, Employee, NotACaseClass, Widget) = null.asInstanceOf
+  private val _samplesUsed: (Person, Employee, NotACaseClass, Widget, NestedWrapper) =
+    null.asInstanceOf
 
   private def anyMatches(msgs: List[String], substring: String): Boolean =
     msgs.exists(_.contains(substring))
@@ -87,4 +88,30 @@ class MacroErrorSpec extends Specification:
     ).map(_.message)
     anyMatches(msgs, "duplicate field selector 'id'") must beTrue
     anyMatches(msgs, "positions 0, 2") must beTrue
+    anyMatches(msgs, "Each field may appear at most once") must beTrue
+  }
+
+  "nested path selector is rejected with the nested-paths hint" >> {
+    // `_.inner.count` is a two-step selector chain. `extractFieldName`
+    // requires the Select's receiver to be the lambda parameter
+    // (an `Ident`), so a nested chain falls through to the
+    // "single-field accessor" diagnostic that advertises nested-path
+    // support as a Future Considerations item.
+    val msgs = typeCheckErrors(
+      "import eo.generics.lens; import eo.generics.samples.NestedWrapper;"
+        + " lens[NestedWrapper](_.inner.count)"
+    ).map(_.message)
+    anyMatches(msgs, "lens[eo.generics.samples.NestedWrapper]") must beTrue
+    anyMatches(msgs, "selector at position 0 must be a single-field accessor") must beTrue
+    anyMatches(msgs, "Nested paths") must beTrue
+    anyMatches(msgs, "`_.a.b`") must beTrue
+  }
+
+  "three-way duplicate selector lists every offending position" >> {
+    val msgs = typeCheckErrors(
+      "import eo.generics.lens; import eo.generics.samples.Employee;"
+        + " lens[Employee](_.name, _.name, _.id, _.name)"
+    ).map(_.message)
+    anyMatches(msgs, "duplicate field selector 'name'") must beTrue
+    anyMatches(msgs, "positions 0, 1, 3") must beTrue
   }

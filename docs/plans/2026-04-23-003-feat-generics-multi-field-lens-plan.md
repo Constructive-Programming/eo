@@ -499,7 +499,7 @@ points (`lens[S]` + `lensN[S]`).
   order; 3-of-3 reversed; 1-field Iso (D2 witness); `reverseGet ∘ get
   = identity` on each.
 
-- [ ] **Unit 4: Error diagnostics hardening**
+- [x] **Unit 4: Error diagnostics hardening**
 
   **Goal:** every D6 row has an exact-message test.
 
