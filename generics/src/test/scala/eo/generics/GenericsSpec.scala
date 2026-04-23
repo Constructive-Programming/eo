@@ -240,15 +240,26 @@ class GenericsSpec extends Specification with ScalaCheck:
   // that down: a Lens onto a `Tree[N]`-typed child of `Branch`, and a
   // Prism between `Tree[Int]` and one of its variants.
 
-  val leafValueL = lens[Tree.Leaf[Int]](_.value)
+  // `Tree.Leaf[Int]` is a 1-field case class, so `lens[Tree.Leaf[Int]](_.value)` is
+  // FULL cover and emits a `BijectionIso[Tree.Leaf[Int], Tree.Leaf[Int],
+  // NamedTuple[("value",), (Int,)], …]` per D2. `Tree.Branch[Int]` has 2 fields, so
+  // single-selector remains partial cover + `SimpleLens`.
+  val leafValueI = lens[Tree.Leaf[Int]](_.value)
+  type LeafFocus = scala.NamedTuple.NamedTuple[Tuple1["value"], Tuple1[Int]]
   val branchLeftL = lens[Tree.Branch[Int]](_.left)
   val branchRightL = lens[Tree.Branch[Int]](_.right)
 
   val leafP = prism[Tree[Int], Tree.Leaf[Int]]
   val branchP = prism[Tree[Int], Tree.Branch[Int]]
 
-  "derived Lens on a recursive type's leaf reads the carried value" >> forAll { (n: Int) =>
-    leafValueL.get(Tree.Leaf(n)) == n
+  "derived Iso on a 1-field recursive leaf reads the carried value" >> forAll { (n: Int) =>
+    val focus = leafValueI.get(Tree.Leaf(n)).asInstanceOf[LeafFocus]
+    focus.value == n
+  }
+
+  "derived Iso on a 1-field recursive leaf round-trips through reverseGet" >> forAll { (n: Int) =>
+    val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
+    leafValueI.reverseGet(leafValueI.get(leaf)) == leaf
   }
 
   "derived Lens on a recursive type's branch reads the named subtree" >> forAll {
@@ -399,4 +410,101 @@ class GenericsSpec extends Specification with ScalaCheck:
           .asInstanceOf[LBranchFocus]
       val after = lBranchRightLeftL.replace(newFocus)(branch)
       after.middle == k
+  }
+
+  // ---------- Full-cover Iso derivation ----------
+  //
+  // Total coverage emits `BijectionIso[S, S, Focus, Focus]` at any
+  // arity (D2), with Focus a NamedTuple in SELECTOR order. The three
+  // Iso laws — `reverseGet ∘ get = id`, `get ∘ reverseGet = id`, and
+  // modify-commutativity — must hold. Selector-order variants are
+  // exercised below on `Person(name, age)` and `Employee(id, name,
+  // salary, department)`.
+
+  // 2-of-2 in selector order (reversed from declaration).
+  type PersonAgeNameFocus = scala.NamedTuple.NamedTuple[("age", "name"), (Int, String)]
+  val personAgeNameIso = lens[Person](_.age, _.name)
+
+  "full-cover Iso `reverseGet ∘ get = id` on 2-of-2 reversed" >> forAll { (p: Person) =>
+    personAgeNameIso.reverseGet(personAgeNameIso.get(p)) == p
+  }
+
+  "full-cover Iso `get ∘ reverseGet = id` on 2-of-2 reversed" >> forAll { (a: Int, s: String) =>
+    val focus = (a, s).asInstanceOf[PersonAgeNameFocus]
+    val got =
+      personAgeNameIso.get(personAgeNameIso.reverseGet(focus)).asInstanceOf[PersonAgeNameFocus]
+    got.age == a && got.name == s
+  }
+
+  "full-cover Iso modify on 2-of-2 reversed" >> forAll { (p: Person, a: Int) =>
+    // Replace focus through reverseGet composed with an ad-hoc update
+    // (age := a). The resulting Person must have the new age and the
+    // original name.
+    val focus = (a, p.name).asInstanceOf[PersonAgeNameFocus]
+    personAgeNameIso.reverseGet(focus) == Person(p.name, a)
+  }
+
+  // 2-of-2 in declaration order.
+  type PersonNameAgeFocus = scala.NamedTuple.NamedTuple[("name", "age"), (String, Int)]
+  val personNameAgeIso = lens[Person](_.name, _.age)
+
+  "full-cover Iso `reverseGet ∘ get = id` on 2-of-2 declaration order" >> forAll { (p: Person) =>
+    personNameAgeIso.reverseGet(personNameAgeIso.get(p)) == p
+  }
+
+  // 4-of-4 on Employee with selector order scrambled.
+  type EmpAllFocus = scala.NamedTuple.NamedTuple[
+    ("department", "id", "salary", "name"),
+    (String, Long, Double, String),
+  ]
+
+  val empAllIso = lens[Employee](_.department, _.id, _.salary, _.name)
+
+  "full-cover Iso `reverseGet ∘ get = id` on 4-of-4 scrambled" >> forAll { (e: Employee) =>
+    empAllIso.reverseGet(empAllIso.get(e)) == e
+  }
+
+  "full-cover Iso `get ∘ reverseGet = id` on 4-of-4 scrambled" >> forAll {
+    (d: String, i: Long, s: Double, n: String) =>
+      val focus = (d, i, s, n).asInstanceOf[EmpAllFocus]
+      val got = empAllIso.get(empAllIso.reverseGet(focus)).asInstanceOf[EmpAllFocus]
+      got.department == d && got.id == i && got.salary == s && got.name == n
+  }
+
+  "full-cover Iso reverseGet places fields in declaration order" >> forAll {
+    (d: String, i: Long, s: Double, n: String) =>
+      val focus = (d, i, s, n).asInstanceOf[EmpAllFocus]
+      empAllIso.reverseGet(focus) == Employee(i, n, s, d)
+  }
+
+  // 1-field Iso witness (D2) — `Leaf[Int]` already exercised above for
+  // read/round-trip; re-state the Iso laws here to pin the D2 carveout.
+  "1-field Iso obeys `reverseGet ∘ get = id` (D2 witness)" >> forAll { (n: Int) =>
+    val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
+    leafValueI.reverseGet(leafValueI.get(leaf)) == leaf
+  }
+
+  "1-field Iso obeys `get ∘ reverseGet = id` (D2 witness)" >> forAll { (n: Int) =>
+    val focus = Tuple1(n).asInstanceOf[LeafFocus]
+    val got = leafValueI.get(leafValueI.reverseGet(focus)).asInstanceOf[LeafFocus]
+    got.value == n
+  }
+
+  // Composition spot-check: the concrete `BijectionIso` return type of
+  // the full-cover macro survives inference into downstream `.andThen`
+  // so the fused `BijectionIso.andThen(GetReplaceLens)` overload fires.
+  // We chain the (department, id, salary, name) Iso with a hand-written
+  // Lens onto the focus's `id` field — the resulting optic lets us
+  // `.get` the id straight out of an Employee and `.replace` it.
+  "full-cover Iso composes with a downstream Lens (fused andThen)" >> forAll { (e: Employee) =>
+    import eo.optics.{GetReplaceLens, Lens}
+    val idInFocusL: GetReplaceLens[EmpAllFocus, EmpAllFocus, Long, Long] =
+      Lens(
+        (f: EmpAllFocus) => f.asInstanceOf[(String, Long, Double, String)]._2,
+        (f: EmpAllFocus, i: Long) =>
+          val t = f.asInstanceOf[(String, Long, Double, String)]
+          (t._1, i, t._3, t._4).asInstanceOf[EmpAllFocus],
+      )
+    val chained = empAllIso.andThen(idInFocusL)
+    chained.get(e) == e.id && chained.replace(e.id + 1)(e) == e.copy(id = e.id + 1)
   }

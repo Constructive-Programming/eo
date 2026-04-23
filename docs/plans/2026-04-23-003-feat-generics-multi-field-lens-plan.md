@@ -473,7 +473,7 @@ points (`lens[S]` + `lensN[S]`).
   declaration-order; recursive ADT `Tree.Branch` partial cover;
   multi-field enum case.
 
-- [ ] **Unit 3: Iso detection + `BijectionIso` codegen (full cover)**
+- [x] **Unit 3: Iso detection + `BijectionIso` codegen (full cover)**
 
   **Goal:** total-coverage calls emit `BijectionIso[S, S, T, T]`; N =
   1 is included (D2).

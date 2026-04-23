@@ -13,14 +13,16 @@ import eo.optics.{BijectionIso, Optic, SimpleLens}
   * import eo.generics.lens
   * case class Person(age: Int, name: String)
   *
-  * // Single-selector — `SimpleLens[Person, Int, <NamedTuple complement>]`.
+  * // Single-selector, partial cover — `SimpleLens[Person, Int, <NamedTuple complement>]`.
   * val ageL = lens[Person](_.age)
   *
   * // Multi-selector, partial cover — `SimpleLens[Person, <NamedTuple focus>, <NamedTuple complement>]`.
-  * // (Wired in Unit 2.)
+  * // Focus NamedTuple is in SELECTOR order, complement in DECLARATION order among non-focused fields.
+  * // (Not applicable on `Person` alone — `Person` has only 2 fields, so 2 selectors = full cover.)
   *
   * // Full cover — `BijectionIso[Person, Person, <NamedTuple focus>, <NamedTuple focus>]`.
-  * // (Wired in Unit 3.)
+  * val asTuple = lens[Person](_.name, _.age)          // 2-of-2 in declaration order
+  * val asReversed = lens[Person](_.age, _.name)       // 2-of-2 in selector order (reversed)
   * }}}
   *
   * Implementation notes:
@@ -72,10 +74,13 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
 
   /** Entry point for the varargs macro. Recovers the individual selector expressions, validates
     * arity + cover + duplicates per the D6 diagnostic catalogue, and dispatches to the appropriate
-    * codegen arm.
+    * codegen arm:
     *
-    * Until Units 2 and 3 land the multi-field codegen paths, the multi-selector success arms abort
-    * with an explicit "not yet wired" error so the plumbing can be reviewed in isolation.
+    *   - partial cover, 1 selector → legacy `SimpleLens` path ([[deriveSingle]]);
+    *   - partial cover, N ≥ 2 selectors → multi-field Lens with NamedTuple focus + complement
+    *     ([[buildMultiLens]]);
+    *   - full cover at any arity (including N = 1 on a 1-field case class per D2) →
+    *     `BijectionIso[S, S, Focus, Focus]` with NamedTuple focus ([[buildMultiIso]]).
     */
   def deriveMulti[S](
       selectorsExpr: Expr[Seq[S => Any]]
@@ -139,24 +144,13 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val selectedNames: List[String] = resolved.map(_._2)
         val fullCover: Boolean = selectedNames.toSet == knownFields.toSet
 
-        // Arity + cover dispatch per D7.
-        //
-        // N=1 full-cover (1-field case class) currently falls through to the legacy
-        // SimpleLens path so Unit 1 leaves the tree green; Unit 3 promotes it to a
-        // BijectionIso per D2.
-        selectors.size match
-          case 1 if !fullCover =>
-            deriveSingle[S](cc, selectors.head, selectedNames.head)
-          case 1 =>
-            // TODO (Unit 3): promote N=1 full cover to BijectionIso.
-            deriveSingle[S](cc, selectors.head, selectedNames.head)
-          case _ if !fullCover =>
-            buildMultiLens[S](cc, selectedNames)
-          case _ =>
-            report.errorAndAbort(
-              s"lens[${Type.prettyPrint[S]}]: full-cover Iso codegen"
-                + " not yet wired (Implementation Unit 3)."
-            )
+        // Arity + cover dispatch per D7. Full cover at ANY arity — including N = 1 on
+        // a 1-field case class — emits a `BijectionIso` per D2. The behaviour change
+        // for `lens[Wrapper](_.value)` on single-field wrappers is accepted pre-release
+        // at 0.1.0-SNAPSHOT.
+        if fullCover then buildMultiIso[S](cc, selectedNames)
+        else if selectors.sizeIs == 1 then deriveSingle[S](cc, selectors.head, selectedNames.head)
+        else buildMultiLens[S](cc, selectedNames)
 
   /** Single-selector, partial-cover codegen — emits `SimpleLens[S, A, XA]` exactly as the legacy
     * `lens[Person](_.age)` form did. `XA` is the `NamedTuple` complement over the non-focused
@@ -466,6 +460,105 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
           }
 
         '{ SimpleLens[S, focus, complement]($get, $split, $combine) }
+
+  /** Full-cover codegen — emits `BijectionIso[S, S, Focus, Focus]` when the user-supplied selector
+    * set covers every case field of `S`. Applies at ANY arity, including N = 1 (D2 — this is the
+    * behaviour change flagged in the plan for `lens[Wrapper](_.value)`).
+    *
+    *   - `get: S => Focus` reads each selected field in SELECTOR order via `Select.unique` and
+    *     packs them into the NamedTuple via `Expr.ofTupleFromSeq` + `asExprOf`.
+    *   - `reverseGet: Focus => S` threads Hearth's `cc.construct[Id]` through the primary
+    *     constructor: for each declaration-order parameter it computes the selector-order index,
+    *     reads `focus.asInstanceOf[Tuple].apply(i).asInstanceOf[t]`, and plugs it in at the
+    *     matching parameter position.
+    */
+  private def buildMultiIso[S: Type](
+      cc: CaseClass[S],
+      selectedNames: List[String],
+  ): Expr[Optic[S, S, ?, ?, ?]] =
+    val sTpe = TypeRepr.of[S]
+    val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
+
+    val selectorSyms: List[Symbol] = selectedNames.map { name =>
+      allFieldSyms.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
+            + s" found on ${Type.prettyPrint[S]}."
+        )
+      }
+    }
+    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => sTpe.memberType(sym))
+
+    val namesTpe: TypeRepr =
+      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+    val valuesTpe: TypeRepr =
+      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+    val focusTpe: TypeRepr =
+      TypeRepr
+        .of[scala.NamedTuple.NamedTuple]
+        .appliedTo(List(namesTpe, valuesTpe))
+
+    focusTpe.asType match
+      case '[focus] =>
+        // `get: S => focus` — pack selected fields in SELECTOR order into a
+        // NamedTuple via `Expr.ofTupleFromSeq` + `asExprOf[focus]`.
+        val get: Expr[S => focus] =
+          '{ (s: S) =>
+            ${
+              val focusReads: List[scala.quoted.Expr[Any]] =
+                selectorSyms.map { sym =>
+                  Select.unique('{ s }.asTerm, sym.name).asExpr
+                }
+              scala.quoted.Expr.ofTupleFromSeq(focusReads).asExprOf[focus]
+            }
+          }
+
+        // `reverseGet: focus => S` — thread the primary constructor through
+        // `cc.construct[Id]`, looking up each declaration-order parameter in
+        // the selector-order focus tuple.
+        //
+        // `a` is used inside the nested splice via `'{ a }`; `-Wunused` can't
+        // see across quote/splice boundaries. The module-level `-Wconf`
+        // silences the false positive.
+        val reverseGet: Expr[focus => S] =
+          '{ (a: focus) =>
+            ${
+              val aTerm = '{ a }.asTerm
+              val constructed: Id[Option[Expr[S]]] = cc.construct[Id] { (param: Parameter) =>
+                val focusIdx = selectedNames.indexOf(param.name)
+                if focusIdx < 0 then
+                  report.errorAndAbort(
+                    s"lens[${Type.prettyPrint[S]}]: internal error -- "
+                      + s"unexpected parameter '${param.name}' absent from full-cover focus."
+                  )
+                val tpe = selectorTypes(focusIdx)
+                tpe.asType match
+                  case '[t] =>
+                    val aExpr = aTerm.asExprOf[focus]
+                    val idxExpr = scala.quoted.Expr(focusIdx)
+                    val accessor: Expr[t] =
+                      '{
+                        $aExpr
+                          .asInstanceOf[Tuple]
+                          .apply($idxExpr)
+                          .asInstanceOf[t]
+                      }
+                    Existential[Expr, t](accessor): Expr_??
+              }
+              constructed.getOrElse {
+                report.errorAndAbort(
+                  s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
+                    + s" constructor of ${Type.prettyPrint[S]}."
+                )
+              }
+            }
+          }
+
+        '{ BijectionIso[S, S, focus, focus]($get, $reverseGet) }
 
   /** Strips Inlined/Typed wrappers and peeks inside the lambda body for a single Select. `Lambda`
     * must be tried before `Block` because a lambda IS a `Block(DefDef, Closure)` structurally --
