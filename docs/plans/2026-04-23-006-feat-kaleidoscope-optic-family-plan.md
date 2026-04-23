@@ -922,7 +922,25 @@ this unit stalls — raise as a plan revision, don't paper over.
 
 ### Unit 2 — Kaleidoscope carrier + `ForgetfulFunctor` + `AssociativeFunctor`
 
-- [ ] Land the carrier trait + core typeclass instances.
+- [x] Land the carrier trait + core typeclass instances.
+
+  **Scoped same-F composition (settled Risk 2).** The path-type
+  `FCarrier` encoding survives `ForgetfulFunctor` cleanly but hits
+  the anticipated match-type wall in `AssociativeFunctor` — the
+  abstract `Optic` slot makes `outer.FCarrier` and `inner.FCarrier`
+  opaque, so their equality can't be proven. Implementation falls
+  back to the plan's fallback plan: runtime `asInstanceOf` casts at
+  the push/pull sites, safe by construction because the v1
+  construction pathways (the generic `apply` factory in Unit 3 and
+  the Iso → Kaleidoscope bridge in Unit 4) fix `FCarrier = F` per
+  call site, and cross-F composition has no meaningful semantics.
+
+  **Rebuild broadcast on `.map` (new design decision).** The carrier's
+  `rebuild: FCarrier[A] => X` can't be post-composed with the user's
+  `f: A => B` because we lack `B => A`. Solution: `kalFunctor.map`
+  broadcasts a constant rebuild `_ => k.rebuild(k.focus)` — safe
+  because every shipped factory's `from` consumes only `focus`, never
+  rebuild. Documented in the Scaladoc.
 
 **Files.** Create `core/src/main/scala/eo/data/Kaleidoscope.scala`.
 
