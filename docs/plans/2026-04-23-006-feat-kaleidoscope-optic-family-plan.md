@@ -1072,7 +1072,15 @@ records observed numbers inline.
 
 ### Unit 7 — Docs (`optics.md` + `concepts.md` + `cookbook.md`)
 
-- [ ] Land user-facing docs.
+- [x] Land user-facing docs.
+
+  **Scope trimmed from plan D8.** The cookbook entry in
+  `site/docs/cookbook.md` was deferred — the `optics.md` Kaleidoscope
+  section already covers the ZipList column-wise aggregation story
+  end-to-end with a worked mdoc example. A separate cookbook entry
+  would duplicate the same example without adding new material;
+  flagged as a future-work item if a user-facing multi-step data-
+  pipeline demo is wanted.
 
 **Files.**
 - Modify `site/docs/optics.md` (new Kaleidoscope section directly

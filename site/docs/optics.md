@@ -123,6 +123,105 @@ to construct the Grate separately at the Lens's focus type and
 compose through `Lens.andThen` (staying in `Tuple2`), then apply the
 Grate directly.
 
+## Kaleidoscope
+
+A `Kaleidoscope[S, A]` is an aggregation optic whose behaviour at
+composition-time is picked by the `Reflector[F]` the user plugs in.
+Where Grate takes a `Distributive[F]` and Traversal takes a
+`Traverse[F]`, Kaleidoscope takes a strictly weaker `Reflector[F]` —
+which admits `ZipList`, plain `List`, and `Const[M, *]` among others.
+Carrier: `Kaleidoscope` (paired encoding `(F[A], F[A] => X)` with `F`
+as a path-type member). Classical shape (Chris Penner's
+[*Kaleidoscopes: lenses that never die*](https://chrispenner.ca/posts/kaleidoscopes)):
+`(F[A] => F[B]) => T`; the paired encoding fits cats-eo's carrier
+shape while preserving the same universal.
+
+Reflector is cats-eo-local (cats doesn't ship it). Three instances
+ship in v1, witnessing the three distinct aggregation shapes:
+
+| Reflector | Semantics | `reflect(fa)(f)` shape |
+|---|---|---|
+| `Reflector[List]` | cartesian | `List(f(fa))` — singleton |
+| `Reflector[ZipList]` | zipping (column-wise) | `ZipList(List.fill(fa.value.size)(f(fa)))` — length-aware broadcast |
+| `Reflector[Const[M, *]]` | summation (given `Monoid[M]`) | `fa.retag[B]` — phantom pass-through |
+
+The canonical operation is `.collect[F, B](agg: F[A] => B)` — reduce
+the entire `F[A]` focus to a single `B` via the aggregator, broadcast
+it back through the Reflector, return the rebuilt `T`.
+
+```scala mdoc:silent
+import cats.data.ZipList
+import eo.data.Kaleidoscope
+import eo.data.Kaleidoscope.given
+
+val zipK = Kaleidoscope.apply[ZipList, Double]
+```
+
+```scala mdoc
+// Column-wise mean: the aggregator sees the whole ZipList, returns the
+// mean, the Reflector broadcasts it back across the same length.
+zipK.collect[ZipList, Double](zl => zl.value.sum / zl.value.size.toDouble)(
+  ZipList(List(1.0, 2.0, 3.0, 4.0))
+)
+
+// `.modify` still works — maps A => A elementwise through the carrier's
+// ForgetfulFunctor instance.
+zipK.modify(_ * 10.0)(ZipList(List(1.0, 2.0, 3.0))).value
+```
+
+The cartesian flavour (`Reflector[List]`) produces a singleton list —
+the `.collect` result is always `List(agg(fa))` regardless of the
+input's length:
+
+```scala mdoc:silent
+val listK = Kaleidoscope.apply[List, Int]
+```
+
+```scala mdoc
+listK.collect[List, Int](_.sum)(List(1, 2, 3, 4))
+listK.modify(_ + 1)(List(1, 2, 3))
+```
+
+**When to reach for Kaleidoscope vs. Grate vs. Traversal.** Use
+`Traversal.each` for container-walking Applicative effects (positions
+independent, Applicative applied element-by-element). Use `Grate` for
+fixed-shape homogeneous records where `F` is `Representable` (tuples,
+function-shaped finite records). Reach for `Kaleidoscope` when you
+want the `Applicative[F]` to determine the *aggregation structure*
+itself — ZipList-shaped column zip, List-shaped cartesian, Const-
+shaped monoidal summation. The optic is the same value at every call
+site; the behaviour tracks whichever Reflector instance you plug in.
+
+**Composition.** `Iso.andThen(Kaleidoscope)` works via
+`Composer[Forgetful, Kaleidoscope]`:
+
+```scala mdoc:silent
+import eo.optics.Iso
+import eo.optics.Optic.*
+
+val singletonIso = Iso[Int, Int, List[Int], List[Int]](
+  i => List(i),
+  _.head,
+)
+
+val isoThenList = singletonIso.andThen(listK)
+```
+
+```scala mdoc
+// Wraps the Int into List(int), runs the Kaleidoscope's modify on
+// every element, projects back via List.head.
+isoThenList.modify(_ * 3)(7)
+```
+
+**Lens → Kaleidoscope does NOT compose automatically.** A Lens's
+source `S` has no natural `Reflector` witness — the same structural
+restriction Grate hits with `Representable`. A user-written
+`iso.andThen(lens).andThen(kaleidoscope)` fails with an implicit-
+resolution miss for `Morph[Tuple2, Kaleidoscope]`. The workaround is
+to construct the Kaleidoscope separately at the Lens's focus type and
+compose through `Lens.andThen` (staying in `Tuple2`), then apply the
+Kaleidoscope directly.
+
 ## Prism
 
 A `Prism[S, A]` focuses one branch of a sum type — `Some` over

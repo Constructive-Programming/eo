@@ -68,6 +68,7 @@ this optic have?"
 | `FixedTraversal[N]` | Fixed-length tuple of `A`s                  | `Traversal.{two,three,four}` |
 | `AlgLens[F]`    | `(X, F[A])` — classifier-shaped: pair leftover with an `F`-wrapped focus vector | Algebraic Lens (non-uniform classifier cardinality) |
 | `Grate`         | `(A, X => A)` — focus + per-slot rebuild     | `Grate` (distributive / Naperian optics) |
+| `Kaleidoscope`  | `(F[A], F[A] => X)` with `F: Reflector`       | `Kaleidoscope` (Applicative-parameterised aggregation: ZipList zip, List cartesian, Const summation) |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:
