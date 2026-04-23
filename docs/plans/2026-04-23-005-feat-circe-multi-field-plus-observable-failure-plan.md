@@ -1271,7 +1271,7 @@ otherwise the naming symmetry breaks.
   on happy inputs; commutativity of two disjoint-field modifies (a
   bonus property, not a Prism law).
 
-- [ ] **Unit 7: Cross-carrier composition regression specs**
+- [x] **Unit 7: Cross-carrier composition regression specs**
 
   **Goal:** prove the new multi-field JsonPrism / JsonTraversal compose
   cleanly with the rest of the optics family — specifically with
