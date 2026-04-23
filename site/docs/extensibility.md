@@ -153,9 +153,14 @@ A JsonPrism caller binds in one of two ways:
 val streetP: JsonPrism[String] =
   codecPrism[Person].address.street
 
-streetP.modify(_.toUpperCase)(json)
-//       ^— dispatches to JsonPrism.modifyImpl: the fused path
+streetP.modifyUnsafe(_.toUpperCase)(json)
+//       ^— dispatches to JsonPrism.modifyImpl: the fused path,
+//          byte-identical to the pre-v0.2 silent `modify`.
 ```
+
+The default-Ior equivalent — `streetP.modify(_.toUpperCase)(json)` —
+returns `Ior[Chain[JsonFailure], Json]` and surfaces per-step
+failures via the observable-by-default surface introduced in v0.2.
 
 **Trait binding** — you get the generic carrier path:
 
@@ -165,11 +170,14 @@ val streetP: Optic[Json, Json, String, String, Either] =
 
 streetP.modify(_.toUpperCase)(json)
 //       ^— dispatches to the generic Optic.modify extension,
-//          which routes through ForgetfulFunctor[Either].
+//          which routes through ForgetfulFunctor[Either] and
+//          returns Json => Json (pre-v0.2 silent shape).
 ```
 
-Both type-check, both produce the same answer. You pick
-concrete binding when you care about the hot-path cost;
+Both type-check. Concrete binding picks up the Ior-bearing default
+or the `*Unsafe` escape hatch; trait binding keeps the generic
+extension's `Json => Json` shape. You pick concrete binding when
+you care about the hot-path cost or the diagnostic surface;
 otherwise the generic extension is there unchanged.
 
 The concrete class's inline overrides don't *replace* the

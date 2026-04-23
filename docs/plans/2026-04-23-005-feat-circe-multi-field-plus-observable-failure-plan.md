@@ -1041,7 +1041,7 @@ otherwise the naming symmetry breaks.
   fallback where users must provide the NamedTuple codec themselves
   and `.fields` does NOT auto-summon.
 
-- [ ] **Unit 1: `JsonFailure` ADT + `PathStep` visibility bump + rename to `*Unsafe` + default Ior surface on single-field `JsonPrism`**
+- [x] **Unit 1: `JsonFailure` ADT + `PathStep` visibility bump + rename to `*Unsafe` + default Ior surface on single-field `JsonPrism`**
 
   **Goal:** validate the default-Ior surface and the `*Unsafe` escape
   hatches on the current single-field optic before adding multi-field

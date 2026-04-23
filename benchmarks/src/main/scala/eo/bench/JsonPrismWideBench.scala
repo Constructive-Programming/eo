@@ -39,7 +39,7 @@ class JsonPrismWideBench:
     codecPrism[L1].field(_.next).field(_.next).field(_.value)
 
   @Benchmark def eoModify_wide: Json =
-    leafL.modify(_.toUpperCase)(fixtureJson)
+    leafL.modifyUnsafe(_.toUpperCase)(fixtureJson)
 
   @Benchmark def naiveModify_wide: Json =
     fixtureJson

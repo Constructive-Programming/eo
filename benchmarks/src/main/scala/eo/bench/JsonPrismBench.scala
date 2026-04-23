@@ -2,7 +2,6 @@ package eo
 package bench
 
 import java.util.concurrent.TimeUnit
-import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
@@ -54,9 +53,13 @@ class JsonPrismBench:
     codecPrism[Deep3].field(_.d2).field(_.d1).field(_.atom).field(_.value)
 
   // ---- Depth 1: Person → name ---------------------------------------
+  //
+  // Pre-v0.2 reference baseline: `modifyUnsafe` is byte-identical to
+  // the pre-rename silent `modify`. The default Ior-bearing `modify`
+  // benches are reported alongside as a new datapoint per OQ6.
 
   @Benchmark def eoModify_d1: Json =
-    nameD1.modify(_.toUpperCase)(aliceJson)
+    nameD1.modifyUnsafe(_.toUpperCase)(aliceJson)
 
   @Benchmark def naiveModify_d1: Json =
     aliceJson.as[Person].map(p => p.copy(name = p.name.toUpperCase)).toOption.get.asJson
@@ -64,7 +67,7 @@ class JsonPrismBench:
   // ---- Depth 2: Person → address → street ---------------------------
 
   @Benchmark def eoModify_d2: Json =
-    streetD2.modify(_.toUpperCase)(aliceJson)
+    streetD2.modifyUnsafe(_.toUpperCase)(aliceJson)
 
   @Benchmark def naiveModify_d2: Json =
     aliceJson
@@ -77,7 +80,7 @@ class JsonPrismBench:
   // ---- Depth 3: Deep3 → d2 → d1 → atom → value ----------------------
 
   @Benchmark def eoModify_d3: Json =
-    leafD3.modify(_.toUpperCase)(deep3Json)
+    leafD3.modifyUnsafe(_.toUpperCase)(deep3Json)
 
   @Benchmark def naiveModify_d3: Json =
     deep3Json

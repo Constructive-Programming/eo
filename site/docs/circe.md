@@ -58,23 +58,30 @@ val alice   = Person("Alice", 30, Address("Main St", 12345))
 val json    = alice.asJson
 val streetP = codecPrism[Person].address.street
 
-streetP.modify(_.toUpperCase)(json).noSpacesSortKeys
+streetP.modifyUnsafe(_.toUpperCase)(json).noSpacesSortKeys
 ```
 
-Other operations:
+The default `modify` returns `Ior[Chain[JsonFailure], Json]` —
+failures are surfaced rather than silently swallowed. The
+`*Unsafe` variants preserve the pre-v0.2 silent behaviour.
+Full coverage of both surfaces lives in the "Observable-by-default
+failures" section of the v0.2 release notes.
+
+Other operations (all the silent escape hatches):
 
 ```scala mdoc
-streetP.getOption(json)
-streetP.place("Broadway")(json).noSpacesSortKeys
-streetP.transform(_.mapString(_.reverse))(json).noSpacesSortKeys
+streetP.getOptionUnsafe(json)
+streetP.placeUnsafe("Broadway")(json).noSpacesSortKeys
+streetP.transformUnsafe(_.mapString(_.reverse))(json).noSpacesSortKeys
 ```
 
-Forgiving semantics — missing paths leave the Json unchanged:
+Forgiving semantics on the `*Unsafe` surface — missing paths leave
+the Json unchanged:
 
 ```scala mdoc
 import io.circe.Json
 val stump = Json.obj("name" -> Json.fromString("Alice"))
-streetP.modify(_.toUpperCase)(stump).noSpacesSortKeys
+streetP.modifyUnsafe(_.toUpperCase)(stump).noSpacesSortKeys
 ```
 
 ## Array indexing
@@ -96,7 +103,7 @@ val basket     = Basket("Alice", Vector(Order("X"), Order("Y"), Order("Z")))
 val basketJson = basket.asJson
 val secondName = codecPrism[Basket].items.at(1).name
 
-secondName.modify(_.toUpperCase)(basketJson).noSpacesSortKeys
+secondName.modifyUnsafe(_.toUpperCase)(basketJson).noSpacesSortKeys
 ```
 
 Out-of-range / negative / non-array positions pass through
@@ -126,7 +133,7 @@ Empty arrays and missing paths leave the Json unchanged.
 | Edit element `i` of a JSON array                      | `codecPrism[…].items.at(i).…` |
 | Edit every element of a JSON array                    | `codecPrism[…].items.each.…` + `modify` |
 | Read every element's focus                            | `codecPrism[…].items.each.…` + `getAll` |
-| Edit the whole root record (and you have a Codec)     | `codecPrism[Person].modify(f)` |
+| Edit the whole root record (and you have a Codec)     | `codecPrism[Person].modifyUnsafe(f)` |
 
 For the full failure-mode matrix (missing paths, non-array
 focuses, empty collections, out-of-range indices), see the

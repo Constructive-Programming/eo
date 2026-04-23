@@ -155,7 +155,7 @@ val userStreet = codecPrism[SiteUser].address.street
 
 ```scala mdoc
 val userJson = SiteUser("Alice", UserAddress("Main St", 12345)).asJson
-userStreet.modify(_.toUpperCase)(userJson).noSpacesSortKeys
+userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
 ```
 
 ## Apply a function that needs an effect
