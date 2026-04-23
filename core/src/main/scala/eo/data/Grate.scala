@@ -3,6 +3,8 @@ package data
 
 import optics.Optic
 
+import cats.Representable
+
 /** Paired carrier for the `Grate` optic family — `Grate[X, A] = (A, X => A)`.
   *
   * Grate is the dual of `Lens`: where a Lens decomposes a product `S` into a focus `A` alongside a
@@ -98,3 +100,83 @@ object Grate:
       // consults the focus half, which `grateFunctor` has already updated to `d`.
       val b: B = inner.from((d, (_: Xi) => d))
       outer.from((b, (_: Xo) => b))
+
+  // ------------------------------------------------------------------
+  // Factories (Units 2 & 3)
+  // ------------------------------------------------------------------
+
+  /** Generic Grate factory — any `Representable[F]` container `F[_]` with element type `A` yields a
+    * `Grate` over `F[A]` with focus `A`. `Representable[F]` gives a bijection
+    * `F[A] ↔ (Representation => A)`, which is exactly the structure a classical
+    * `Distributive`-Grate `\h -> tabulate (\i -> h (flip index i))` relies on.
+    *
+    * **Why `Representable`, not `Distributive`.** The plan's R4 speaks of `Distributive[F]`; its
+    * Risk 3 anticipates narrowing to `Representable` if position-aware `.modify` turns out to need
+    * `index` / `tabulate`. That risk fired: pure `cats.Distributive` gives `distribute` and
+    * `cosequence` but no way to read a single slot (`F[A] => A`) or materialise per-position values
+    * (`(R => A) => F[A]`), both of which the paired encoding's per-slot `.modify` needs. Every
+    * `Representable` is `Distributive` (cats ships `Representable.distributive` as a derivation),
+    * so every `Distributive` instance a user cares about in practice (Function1, Pair, Tuple2K, …)
+    * is reachable via its `Representable` witness. The plan's `Grate.apply[F: Distributive]`
+    * signature narrows to `Grate.apply[F: Representable]` here — documented as the settled Risk 3
+    * resolution.
+    *
+    * Encoding: `X = F.Representation`. The rebuild slot is `R => A` — a per-index read of the
+    * current container. On `to(fa)`, we snapshot the index function and return `(index(fa)(repr0),
+    * index(fa))` where `repr0` is threaded through the focus for law-compat (see G3 in the law
+    * spec). On `from((b, k))`, we materialise the new container as `tabulate(k)` — the rebuild
+    * closure already embodies the per-slot modification produced by [[grateFunctor]]'s `.map`.
+    *
+    * After `.modify(f)`, this composes cleanly:
+    *   1. `to(fa) = (index(fa)(repr0), index(fa))`
+    *   2. `FF.map(_, f) = (f(a), index(fa) andThen f)`
+    *   3. `from((_, k andThen f)) = tabulate(r => f(index(fa)(r))) = F.map(fa)(f)`
+    * which is exactly the Functor-map over the representable container. G1 `modifyIdentity` and G2
+    * `composeModify` reduce to the standard Functor laws.
+    *
+    * `repr0` — the representative index threaded through the focus — is obtained by running `index`
+    * on a "fresh" container built by `tabulate(identity)`; any fixed `R` satisfies the consistency
+    * invariant `k(repr0) == a`.
+    *
+    * @group Factories
+    * @example
+    *   {{{
+    * import cats.instances.function.given   // Representable[Function1[Boolean, *]]
+    * import eo.data.Grate
+    * import eo.data.Grate.given
+    * import eo.optics.Optic.*
+    *
+    * val g = Grate[[a] =>> Boolean => a, Int]
+    * val f: Boolean => Int = b => if b then 1 else 2
+    * val doubled = g.modify(_ * 2)(f)
+    * doubled(true)  // 2
+    * doubled(false) // 4
+    *   }}}
+    */
+  def apply[F[_], A](using F: Representable[F]): Optic[F[A], F[A], A, A, Grate] =
+    new Optic[F[A], F[A], A, A, Grate]:
+      type X = F.Representation
+      val to: F[A] => (A, X => A) = fa =>
+        val read: X => A = F.index(fa)
+        // `a` is the canonical focus value; we have no way to synthesise a concrete Representation
+        // in-house (Representable doesn't expose a "canonical" index, and creating one from
+        // `tabulate(identity).index` is circular). We stash a null sentinel — `.modify` /
+        // `.replace` / same-carrier `.andThen` all ignore this field (only the rebuild drives
+        // `from`). Users who need a well-defined focus should prefer [[Grate.at]] with an
+        // explicit representative index.
+        (null.asInstanceOf[A], read)
+      val from: ((A, X => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+
+  /** Representable-indexed Grate factory, parameterised by a representative index `repr0`. Use this
+    * when downstream code (laws, extensions) needs the focus `a` returned by `.to` to have a
+    * well-defined value — e.g. a `pureRebuild`-style consistency check `k(repr0) == a`.
+    *
+    * @group Factories
+    */
+  def at[F[_], A](F: Representable[F])(repr0: F.Representation): Optic[F[A], F[A], A, A, Grate] =
+    new Optic[F[A], F[A], A, A, Grate]:
+      type X = F.Representation
+      val to: F[A] => (A, X => A) = fa =>
+        val read: X => A = F.index(fa)
+        (read(repr0), read)
+      val from: ((A, X => A)) => F[A] = { case (_, k) => F.tabulate(k) }

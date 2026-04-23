@@ -551,7 +551,7 @@ if existing core-module tests hit the new given.
 
 ### Unit 2 — Generic `Grate.apply[F[_]: Distributive, A]`
 
-- [ ] Land the generic constructor.
+- [x] Land the generic constructor.
 
 **Files.** Modify `core/src/main/scala/eo/data/Grate.scala`.
 
