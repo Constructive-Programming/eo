@@ -3,26 +3,32 @@ package generics
 
 import scala.quoted.*
 
-import eo.optics.SimpleLens
+import eo.optics.{BijectionIso, Optic, SimpleLens}
 
-/** Compile-time derivation of a `Lens` as a [[eo.optics.SimpleLens]].
+/** Compile-time derivation of a `Lens` (or, on full coverage, an `Iso`) from one or more
+  * single-field case-class accessors.
   *
   * Usage:
   * {{{
   * import eo.generics.lens
   * case class Person(age: Int, name: String)
-  * val ageLens = lens[Person](_.age)
-  * // ageLens: SimpleLens[Person, Int, String]
-  * ageLens.get(Person(30, "Alice"))        // 30
-  * ageLens.replace(40)(Person(30, "Alice"))// Person(40, "Alice")
+  *
+  * // Single-selector — `SimpleLens[Person, Int, <NamedTuple complement>]`.
+  * val ageL = lens[Person](_.age)
+  *
+  * // Multi-selector, partial cover — `SimpleLens[Person, <NamedTuple focus>, <NamedTuple complement>]`.
+  * // (Wired in Unit 2.)
+  *
+  * // Full cover — `BijectionIso[Person, Person, <NamedTuple focus>, <NamedTuple focus>]`.
+  * // (Wired in Unit 3.)
   * }}}
   *
   * Implementation notes:
-  *   - The macro exposes the actual *structural complement* of `S` as the optic's `X` parameter:
-  *     for a 2-field case class focused on one field, `X` is the type of the remaining field. That
-  *     gives `transform`, `place`, and `transfer` the evidence they need for free -- no companion
-  *     `given` required at the call site.
-  *   - The selector lambda is parsed with vanilla `quotes.reflect` pattern matching (Hearth has no
+  *   - The macro exposes the actual *structural complement* of `S` as the optic's `X` parameter on
+  *     the single-selector path: for a 2-field case class focused on one field, `X` is the type of
+  *     the remaining field. That gives `transform`, `place`, and `transfer` the evidence they need
+  *     for free -- no companion `given` required at the call site.
+  *   - Each selector lambda is parsed with vanilla `quotes.reflect` pattern matching (Hearth has no
   *     surface for "the AST of an anonymous function").
   *   - `combine` is built through Hearth's [[hearth.typed.Classes]] view: `CaseClass.parse[S]`
   *     validates that S is a real case class, and `construct[Id]` emits the primary constructor
@@ -33,23 +39,27 @@ import eo.optics.SimpleLens
   *   - N-field case classes are supported through a `NamedTuple` complement — the per-class sibling
   *     fields are encoded as a compile-time-known named tuple, so the derived lens carries
   *     structural evidence for `transform` / `place` / `transfer` regardless of the record's arity.
+  *   - The varargs entry (`lens[S](_.a, _.b, ...)`) dispatches on arity and cover status at macro
+  *     time. Single-selector + partial cover runs the legacy codegen path unchanged;
+  *     single-selector + full cover (one-field case classes) and multi-selector arms emit a
+  *     NamedTuple focus.
   */
 object LensMacro:
 
-  // `transparent inline` so the specific `XA` that `deriveImpl`
-  // synthesises (EmptyTuple for 1-field records, the sibling field's
-  // type for 2-field records) propagates to the call site. The
-  // declared `? ` wildcard is an upper bound; the call-site type is
-  // always a concrete `SimpleLens[S, A, <specificXA>]`.
-  transparent inline def derive[S, A](
-      inline selector: S => A
-  ): SimpleLens[S, A, ?] =
-    ${ deriveImpl[S, A]('selector) }
+  // `transparent inline` so the specific concrete return subclass the macro synthesises
+  // (`SimpleLens[S, A, XA]` on partial cover, `BijectionIso[S, S, T, T]` on full cover)
+  // propagates to the call site. The declared `Optic[S, S, ?, ?, ?]` is the narrowest
+  // cats-eo supertype spanning both arms; the call-site type is always a concrete
+  // subclass, so `.andThen` picks up the fused concrete-subclass overloads.
+  transparent inline def deriveMulti[S](
+      inline selectors: (S => Any)*
+  ): Optic[S, S, ?, ?, ?] =
+    ${ deriveMultiImpl[S]('selectors) }
 
-  def deriveImpl[S: Type, A: Type](
-      selector: Expr[S => A]
-  )(using q: Quotes): Expr[SimpleLens[S, A, ?]] =
-    new HearthLensMacro(q).deriveLens[S, A](selector)
+  def deriveMultiImpl[S: Type](
+      selectorsExpr: Expr[Seq[S => Any]]
+  )(using q: Quotes): Expr[Optic[S, S, ?, ?, ?]] =
+    new HearthLensMacro(q).deriveMulti[S](selectorsExpr)
 
 /** Hearth-backed Lens macro implementation, extends `_root_.hearth.MacroCommonsScala3` so the
   * high-level `CaseClass` / `Type` views are in scope.
@@ -60,33 +70,127 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
   import _root_.hearth.fp.Id
   import _root_.hearth.fp.instances.*
 
-  def deriveLens[S, A](
-      selector: Expr[S => A]
-  )(using Type[S], Type[A]): Expr[SimpleLens[S, A, ?]] =
-    val fieldName: String = extractFieldName(selector.asTerm).getOrElse {
+  /** Entry point for the varargs macro. Recovers the individual selector expressions, validates
+    * arity + cover + duplicates per the D6 diagnostic catalogue, and dispatches to the appropriate
+    * codegen arm.
+    *
+    * Until Units 2 and 3 land the multi-field codegen paths, the multi-selector success arms abort
+    * with an explicit "not yet wired" error so the plumbing can be reviewed in isolation.
+    */
+  def deriveMulti[S](
+      selectorsExpr: Expr[Seq[S => Any]]
+  )(using Type[S]): Expr[Optic[S, S, ?, ?, ?]] =
+    val selectors: List[Expr[S => Any]] =
+      selectorsExpr match
+        case Varargs(es) => es.toList
+        case other       =>
+          // Fallback for OQ3: if `Varargs.unapply` ever returns None on an `inline`
+          // varargs param, walk the AST manually. Under Scala 3.8.3 we haven't seen
+          // this, but the fallback path preserves correctness and points the user
+          // at the offending expression.
+          report.errorAndAbort(
+            s"lens[${Type.prettyPrint[S]}]: could not destructure varargs selector"
+              + s" list. Got: ${other.asTerm.show}"
+          )
+
+    if selectors.isEmpty then
       report.errorAndAbort(
-        s"""lens[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]: selector must be a
-           |single-field accessor like `_.fieldName`.
-           |Nested paths (e.g. `_.a.b`) are not yet supported.
-           |Got: ${selector.asTerm.show}""".stripMargin
+        s"lens[${Type.prettyPrint[S]}]: requires at least one field selector."
       )
-    }
 
     CaseClass.parse[S].toEither match
       case Left(reason) =>
         report.errorAndAbort(s"lens[${Type.prettyPrint[S]}]: $reason")
       case Right(cc) =>
-        val knownFields = cc.caseFields.map(_.value.name)
-        if !knownFields.contains(fieldName) then
-          report.errorAndAbort(
-            s"lens[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]: '$fieldName' is not a "
-              + s"field of ${Type.prettyPrint[S]}. Known fields: ${knownFields.mkString(", ")}"
-          )
+        val knownFields: List[String] = cc.caseFields.map(_.value.name)
 
-        val sTpe = TypeRepr.of[S]
-        val otherFieldSyms = sTpe.typeSymbol.caseFields.filter(_.name != fieldName)
+        // Resolve every selector to a field name, surfacing the position so error
+        // messages can point at the offending selector.
+        val resolved: List[(Int, String)] =
+          selectors.zipWithIndex.map { (sel, i) =>
+            val name = extractFieldName(sel.asTerm).getOrElse {
+              report.errorAndAbort(
+                s"lens[${Type.prettyPrint[S]}]: selector at position $i must be a"
+                  + " single-field accessor like `_.fieldName`. Nested paths (e.g."
+                  + s" `_.a.b`) are not yet supported. Got: ${sel.asTerm.show}"
+              )
+            }
+            if !knownFields.contains(name) then
+              report.errorAndAbort(
+                s"lens[${Type.prettyPrint[S]}]: '$name' is not a field of "
+                  + s"${Type.prettyPrint[S]}. Known fields: ${knownFields.mkString(", ")}"
+              )
+            (i, name)
+          }
 
-        buildLens[S, A](cc, fieldName, selector, sTpe, otherFieldSyms)
+        // Duplicate selectors are a compile error (D3) — silent dedupe hides
+        // copy-paste bugs; fail-fast gives a sharp signal.
+        val byName: Map[String, List[Int]] =
+          resolved.groupMap(_._2)(_._1)
+        byName.find(_._2.sizeIs > 1).foreach {
+          case (name, positions) =>
+            val sorted = positions.sorted
+            report.errorAndAbort(
+              s"lens[${Type.prettyPrint[S]}]: duplicate field selector '$name' at"
+                + s" positions ${sorted.mkString(", ")}. Each field may appear at most once."
+            )
+        }
+
+        val selectedNames: List[String] = resolved.map(_._2)
+        val fullCover: Boolean = selectedNames.toSet == knownFields.toSet
+
+        // Arity + cover dispatch per D7. Units 2 and 3 replace the stubs below.
+        //
+        // N=1 full-cover (1-field case class) currently falls through to the legacy
+        // SimpleLens path so Unit 1 leaves the tree green; Unit 3 promotes it to a
+        // BijectionIso per D2.
+        selectors.size match
+          case 1 =>
+            deriveSingle[S](cc, selectors.head, selectedNames.head)
+          case _ =>
+            if fullCover then
+              report.errorAndAbort(
+                s"lens[${Type.prettyPrint[S]}]: full-cover Iso codegen"
+                  + " not yet wired (Implementation Unit 3)."
+              )
+            else
+              report.errorAndAbort(
+                s"lens[${Type.prettyPrint[S]}]: multi-field Lens codegen"
+                  + " not yet wired (Implementation Unit 2)."
+              )
+
+  /** Single-selector, partial-cover codegen — emits `SimpleLens[S, A, XA]` exactly as the legacy
+    * `lens[Person](_.age)` form did. `XA` is the `NamedTuple` complement over the non-focused
+    * fields in declaration order.
+    *
+    * The selector arrives from the varargs entry as `S => Any` (the erased varargs element type),
+    * so we do NOT cast it with `asExprOf[S => A]` (that would fail at `ExprCastException`).
+    * Instead, we rebuild the selector from a fresh `Select.unique(s, fieldName)` lambda whose
+    * return type IS the member type `A`.
+    */
+  private def deriveSingle[S: Type](
+      cc: CaseClass[S],
+      selector: Expr[S => Any],
+      fieldName: String,
+  ): Expr[Optic[S, S, ?, ?, ?]] =
+    val sTpe = TypeRepr.of[S]
+    val focusSym = sTpe.typeSymbol.caseFields.find(_.name == fieldName).getOrElse {
+      report.errorAndAbort(
+        s"lens[${Type.prettyPrint[S]}]: internal error -- field '$fieldName' not"
+          + s" found on ${Type.prettyPrint[S]}."
+      )
+    }
+    val otherFieldSyms = sTpe.typeSymbol.caseFields.filter(_.name != fieldName)
+    val aTpe = sTpe.memberType(focusSym)
+
+    aTpe.asType match
+      case '[a] =>
+        // Reconstitute the selector at the proper static return type so the
+        // builder can embed it into the emitted quote. `selector` is typed as
+        // `S => Any` due to varargs erasure of the return type.
+        val typedSelector: Expr[S => a] =
+          '{ (s: S) => ${ Select.unique('{ s }.asTerm, fieldName).asExprOf[a] } }
+        buildLens[S, a](cc, fieldName, typedSelector, sTpe, otherFieldSyms)
 
   /** Build a `SimpleLens[S, A, XA]` for a case class with any number of fields.
     *

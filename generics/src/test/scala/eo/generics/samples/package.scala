@@ -69,3 +69,14 @@ package object samples:
         s <- Gen.choose(0.0, 500_000.0)
         d <- Gen.alphaStr
       yield Employee(i, n, s, d))
+
+  // Non-case-class with a `count` accessor, for exercising the
+  // `CaseClass.parse` rejection branch of the varargs macro.
+  class NotACaseClass(val count: Int)
+
+  // Case class exposing a derived non-primary-constructor member
+  // `bogus`. A selector `_.bogus` type-checks fine (it's a plain
+  // method on `Widget`), so the macro reaches its known-fields
+  // check and produces the "not a field" diagnostic.
+  final case class Widget(name: String, size: Int):
+    def bogus: Int = size + 1

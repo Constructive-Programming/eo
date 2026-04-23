@@ -1,6 +1,6 @@
 package eo
 
-import eo.optics.{Optic, SimpleLens}
+import eo.optics.Optic
 
 /** Auto-derivation entry points for EO optics.
   *
@@ -14,10 +14,11 @@ import eo.optics.{Optic, SimpleLens}
   */
 package object generics:
 
-  /** Derive a `Lens` from a case-class field accessor.
+  /** Derive a `Lens` — or on full coverage, an `Iso` — from one or more case-class field accessors.
     *
-    * Two-step partial application: `lens[Person](_.age)`. This lets callers pin `S` while letting
-    * `A` be inferred from the selector (the same pattern Monocle uses for `GenLens[S](_.field)`).
+    * Two-step partial application: `lens[Person](_.age)`, `lens[Person](_.name, _.age)`. This lets
+    * callers pin `S` while letting the focus type be inferred from the selectors (the same pattern
+    * Monocle uses for `GenLens[S](_.field)`).
     *
     * Works on any N-field case class or Scala 3 enum case — the emitted `new S(…)` constructor call
     * avoids the `.copy` requirement that blocks derivation for enum cases.
@@ -27,23 +28,29 @@ package object generics:
     * @example
     *   {{{
     * case class Person(name: String, age: Int)
+    *
+    * // Single-selector Lens — focus is the field type directly.
     * val ageLens = lens[Person](_.age)
     * ageLens.get(Person("Alice", 30))        // 30
     * ageLens.replace(31)(Person("Alice", 30))// Person("Alice", 31)
+    *
+    * // Multi-selector with full coverage — emits an Iso.
+    * val asTuple = lens[Person](_.name, _.age)
     *   }}}
     */
   def lens[S]: PartiallyAppliedLens[S] = new PartiallyAppliedLens[S]
 
   final class PartiallyAppliedLens[S]:
 
-    // `transparent inline` so the specific `XA` the macro synthesises
-    // (EmptyTuple for 1-field, sibling type for 2-field) propagates to
-    // the call site, enabling transform/place/transfer without any
-    // external evidence.
-    transparent inline def apply[A](
-        inline selector: S => A
-    ): SimpleLens[S, A, ?] =
-      LensMacro.derive[S, A](selector)
+    /** Unified varargs entry. `transparent inline` so the macro-synthesised concrete return type (a
+      * `SimpleLens[S, A, XA]` on partial cover, `BijectionIso[S, S, T, T]` on full cover)
+      * propagates to the call site. Chained `.andThen` picks up the fused concrete-subclass
+      * overloads for free.
+      */
+    transparent inline def apply(
+        inline selectors: (S => Any)*
+    ): Optic[S, S, ?, ?, ?] =
+      LensMacro.deriveMulti[S](selectors*)
 
   /** Derive a `Prism` focusing on a single variant of a sum type.
     *
