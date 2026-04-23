@@ -170,6 +170,17 @@ the naive decoder has to touch every field. EO's
 `codecPrism[…].field(_.x).field(_.y)` walks only the focused
 path.
 
+**v0.2 surface-tier note.** The table above is measured against
+`.modifyUnsafe` — the silent escape hatch introduced in v0.2.
+That body is byte-identical to the pre-rename `.modify`, so the
+numbers above compare apples-to-apples with previous releases.
+The new default Ior-bearing `.modify` (returning
+`Ior[Chain[JsonFailure], Json]`) adds a happy-path cost of one
+`Ior.Right(json)` allocation — low single-digit nanoseconds on
+the Unit 1 spot-check (OQ6). If you've measured and want to
+preserve pre-v0.2 throughput exactly, reach for `.modifyUnsafe`;
+otherwise the default surface is the recommended entry.
+
 ## JsonTraversal — `items.each.name` edits
 
 Uppercasing every `items[*].name` inside a `Basket` record, at

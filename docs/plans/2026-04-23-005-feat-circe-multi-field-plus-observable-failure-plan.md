@@ -1372,7 +1372,7 @@ otherwise the naming symmetry breaks.
   above. Every chain asserts at least one success case AND at
   least one diagnostic case (the Ior.Both / Ior.Left path).
 
-- [ ] **Unit 8: Documentation**
+- [x] **Unit 8: Documentation**
 
   **Goal:** `site/docs/circe.md` gains the full surface story;
   `site/docs/cookbook.md` gains a diagnostics recipe; a migration

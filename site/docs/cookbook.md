@@ -158,6 +158,48 @@ val userJson = SiteUser("Alice", UserAddress("Main St", 12345)).asJson
 userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
 ```
 
+## Diagnose a silent JSON edit no-op
+
+The pre-v0.2 `*Unsafe` methods on `JsonPrism` / `JsonTraversal`
+return the input Json unchanged on any miss — the path wasn't
+resolvable, the leaf didn't decode, the index was out of range.
+Useful, but it leaves you wondering *which* miss fired. The
+default `modify` / `get` surface returns `Ior[Chain[JsonFailure],
+Json]` so the diagnostic is observable:
+
+```scala mdoc
+import cats.data.Ior
+import io.circe.Json
+
+// A stump Json missing the `.address` field altogether.
+val stump = Json.obj("name" -> Json.fromString("Alice"))
+userStreet.modify(_.toUpperCase)(stump)
+```
+
+The `Ior.Both(chain, json)` carries both the pre-v0.2 behaviour
+(the unchanged Json) and the diagnostic (the chain). Fold the
+chain into a readable message:
+
+```scala mdoc
+userStreet.modify(_.toUpperCase)(stump) match
+  case Ior.Right(updated) => s"ok: $updated"
+  case Ior.Both(chain, _) => chain.toList.map(_.message).mkString("; ")
+  case Ior.Left(chain)    => chain.toList.map(_.message).mkString("; ")
+```
+
+Ignoring the diagnostic is one `.getOrElse(input)` away:
+
+```scala mdoc
+userStreet.modify(_.toUpperCase)(stump).getOrElse(stump).noSpacesSortKeys
+```
+
+Or reach for the explicit silent form — byte-identical to the
+pre-v0.2 `modify` body, no Ior allocation:
+
+```scala mdoc
+userStreet.modifyUnsafe(_.toUpperCase)(stump).noSpacesSortKeys
+```
+
 ## Apply a function that needs an effect
 
 Both `.modifyF` and `.modifyA` lift an `A => G[B]` through an
