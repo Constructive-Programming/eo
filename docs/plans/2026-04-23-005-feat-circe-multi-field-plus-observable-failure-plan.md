@@ -1238,7 +1238,7 @@ otherwise the naming symmetry breaks.
   field types have no codec, e.g. a user-defined class without a
   Codec).
 
-- [ ] **Unit 6: Property tests + discipline Prism laws on `JsonFieldsPrism`**
+- [x] **Unit 6: Property tests + discipline Prism laws on `JsonFieldsPrism`**
 
   **Goal:** witness `JsonFieldsPrism` satisfies the three Prism laws
   under `cats-eo-laws`'s `PrismLaws`. Property coverage matches

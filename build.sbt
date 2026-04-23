@@ -307,7 +307,11 @@ lazy val generics: Project = project
 // only want the base library don't pull in circe.
 lazy val circeIntegration: Project = project
   .in(file("circe"))
-  .dependsOn(LocalProject("core"), LocalProject("generics"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics"),
+    LocalProject("laws") % Test,
+  )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
   .settings(
