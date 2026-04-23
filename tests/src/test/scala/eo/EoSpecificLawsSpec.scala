@@ -4,6 +4,7 @@ import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
 import data.{Affine, FixedTraversal, Forget, Forgetful, SetterF}
 import data.Forgetful.given
+import data.Forget.given
 import data.Affine.given
 import data.SetterF.given
 import data.FixedTraversal.given

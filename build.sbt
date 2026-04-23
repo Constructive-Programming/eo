@@ -182,9 +182,9 @@ lazy val commonSettings = Seq(
 // optic hierarchy.
 lazy val scala3LibrarySettings = Seq(
   scalacOptions ++= Seq(
-    "-opt",             // method-local JVM bytecode optimizer
-    "-Yretain-trees",   // downstream `inline def` / macros see our bodies
-    "-Wsafe-init",      // catch `val` init-order bugs in companion objects
+    "-opt", // method-local JVM bytecode optimizer
+    "-Yretain-trees", // downstream `inline def` / macros see our bodies
+    "-Wsafe-init", // catch `val` init-order bugs in companion objects
     "-Yexplicit-nulls", // non-nullable reference types by default
     // `-Yexplicit-nulls` + `-Xcheck-macros` + Hearth's `lens[S](_.field)`
     // expansion trip a Scala 3 compiler bug at quote expansion time

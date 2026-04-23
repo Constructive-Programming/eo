@@ -80,9 +80,9 @@ object Traversal:
     * For [[ArraySeq]] specifically `.from` skips `Traverse[ArraySeq].map` entirely — cats's
     * instance delegates to stdlib's `ArraySeq.map`, which threads through
     * `StrictOptimizedSeqOps.strictOptimizedMap` → `this.size` via the non-devirtualised
-    * `SeqOps.size$` forwarder. That dispatch appeared as 18% CPU on the nested-traversal bench.
-    * The specialised path builds an `Array[AnyRef]` directly from the flat focus vector and wraps
-    * with `ArraySeq.unsafeWrapArray` — one allocation, no builder-sizing round-trip.
+    * `SeqOps.size$` forwarder. That dispatch appeared as 18% CPU on the nested-traversal bench. The
+    * specialised path builds an `Array[AnyRef]` directly from the flat focus vector and wraps with
+    * `ArraySeq.unsafeWrapArray` — one allocation, no builder-sizing round-trip.
     *
     * @group Constructors
     */

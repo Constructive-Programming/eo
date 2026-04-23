@@ -14,15 +14,13 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Wide-fixture companion to [[JsonPrismBench]].
   *
-  * Three levels of nesting with realistic field widths: 8 / 14 / 6
-  * total fields across the levels. The narrow companion spec's
-  * fixtures have 2–3 fields per level, which is the degenerate case
-  * where "decode all fields" ≈ "navigate path depth" and the
-  * structural O(depth) vs O(fields) advantage doesn't materialise.
+  * Three levels of nesting with realistic field widths: 8 / 14 / 6 total fields across the levels.
+  * The narrow companion spec's fixtures have 2–3 fields per level, which is the degenerate case
+  * where "decode all fields" ≈ "navigate path depth" and the structural O(depth) vs O(fields)
+  * advantage doesn't materialise.
   *
-  * At 8+14+6 = 28 total fields with a depth-3 path, naive has to
-  * pay decoder + encoder for every field, whereas the cursor-based
-  * modify touches only the four cursor stops on the path and the
+  * At 8+14+6 = 28 total fields with a depth-3 path, naive has to pay decoder + encoder for every
+  * field, whereas the cursor-based modify touches only the four cursor stops on the path and the
   * focused leaf. That's the gap this bench measures.
   */
 @State(Scope.Benchmark)
@@ -48,12 +46,12 @@ class JsonPrismWideBench:
       .as[L1]
       .map { l1 =>
         l1.copy(next =
-          l1.next.copy(next =
-            l1.next.next.copy(value = l1.next.next.value.toUpperCase)
-          )
+          l1.next.copy(next = l1.next.next.copy(value = l1.next.next.value.toUpperCase))
         )
       }
-      .toOption.get.asJson
+      .toOption
+      .get
+      .asJson
 
 object JsonPrismWideBench:
 
@@ -67,18 +65,29 @@ object JsonPrismWideBench:
       e: Long,
       value: String,
   )
+
   object L3:
     given Codec.AsObject[L3] = KindlingsCodecAsObject.derive
 
   // ---- L2: 14 fields, one is L3 -------------------------------------
 
   final case class L2(
-      f01: Int,    f02: String, f03: Double, f04: Boolean,
-      f05: Long,   f06: Int,    f07: String, f08: Double,
-      f09: Boolean, f10: Long,  f11: Int,    f12: String,
+      f01: Int,
+      f02: String,
+      f03: Double,
+      f04: Boolean,
+      f05: Long,
+      f06: Int,
+      f07: String,
+      f08: Double,
+      f09: Boolean,
+      f10: Long,
+      f11: Int,
+      f12: String,
       f13: Double,
       next: L3,
   )
+
   object L2:
     given Codec.AsObject[L2] = KindlingsCodecAsObject.derive
 
@@ -94,6 +103,7 @@ object JsonPrismWideBench:
       f7: String,
       next: L2,
   )
+
   object L1:
     given Codec.AsObject[L1] = KindlingsCodecAsObject.derive
 
@@ -104,8 +114,19 @@ object JsonPrismWideBench:
 
   val DefaultL2: L2 =
     L2(
-      1, "b", 3.14, true, 5L, 6, "g", 8.0,
-      false, 10L, 11, "l", 13.0,
+      1,
+      "b",
+      3.14,
+      true,
+      5L,
+      6,
+      "g",
+      8.0,
+      false,
+      10L,
+      11,
+      "l",
+      13.0,
       DefaultL3,
     )
 

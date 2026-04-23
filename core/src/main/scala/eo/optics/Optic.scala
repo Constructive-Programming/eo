@@ -313,3 +313,18 @@ object Optic:
 
     inline def foldMap[M: Monoid](f: A => M): S => M =
       s => FF.foldMap(using Monoid[M])(f)(o.to(s))
+
+  /** `getOption` over an `Affine`-carrier optic — the canonical read for [[Optional]] and
+    * [[AffineFold]]. Pattern-matches the Affine directly, so the miss branch allocates nothing
+    * beyond the already-produced `Affine.Miss` and the hit branch wraps the focus in `Some`.
+    *
+    * Distinct from [[Optic.foldMap]] in that it does not require a `Monoid[A]`: a miss produces
+    * `None` rather than `Monoid.empty`. For full Optional values this is exactly Monocle's
+    * `Optional.getOption`.
+    *
+    * @group Operations
+    */
+  extension [S, T, A, B](o: Optic[S, T, A, B, Affine])
+
+    inline def getOption(s: S): Option[A] =
+      o.to(s).fold(_ => None, (_, a) => Some(a))

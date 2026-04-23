@@ -11,22 +11,18 @@ import eo.optics.{Lens => EoLens, Optic, Optional => EoOptional}
 
 import monocle.{Lens => MLens, Optional => MOptional}
 
-/** `Optional.modify` / `Optional.replace` on a `Nested0.flag:
-  * Option[String]` focus, at varying composition depth, paired
-  * against Monocle's `Optional`.
+/** `Optional.modify` / `Optional.replace` on a `Nested0.flag: Option[String]` focus, at varying
+  * composition depth, paired against Monocle's `Optional`.
   *
   * Three depths:
   *   - `_0`: leaf-only Optional, a bare Affine round-trip.
-  *   - `_3`, `_6`: the leaf Optional preceded by a `Lens` chain
-  *     through `Nested`.n.n…n.  The Lens chain is `.morph`-ed
-  *     into the `Affine` carrier and then `.andThen`-composed
-  *     with the leaf `Optional`, mirroring exactly the shape of
-  *     a Monocle composed `Optional`.
+  *   - `_3`, `_6`: the leaf Optional preceded by a `Lens` chain through `Nested`.n.n…n. The Lens
+  *     chain is `.morph`-ed into the `Affine` carrier and then `.andThen`-composed with the leaf
+  *     `Optional`, mirroring exactly the shape of a Monocle composed `Optional`.
   *
-  * Both None and Some branches are represented at depth 0 (via
-  * `eoModify_0_empty` / `mModify_0_empty`). The deeper benches
-  * exercise the Some branch only — the fixture's depth-3 / -6
-  * records preserve the populated leaf.
+  * Both None and Some branches are represented at depth 0 (via `eoModify_0_empty` /
+  * `mModify_0_empty`). The deeper benches exercise the Some branch only — the fixture's depth-3 /
+  * -6 records preserve the populated leaf.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -41,7 +37,7 @@ class OptionalBench:
   private val eoFlag =
     EoOptional[Nested0, Nested0, String, String, Affine](
       getOrModify = n0 => n0.flag.toRight(n0),
-      reverseGet  = (pair: (Nested0, String)) => pair._1.copy(flag = Some(pair._2)),
+      reverseGet = (pair: (Nested0, String)) => pair._1.copy(flag = Some(pair._2)),
     )
 
   private val mFlag: MOptional[Nested0, String] =
@@ -72,43 +68,51 @@ class OptionalBench:
 
   private val eoOpt3 =
     eoN3.andThen(eoN2).andThen(eoN1).andThen(eoFlag)
+
   private val eoOpt6 =
-    eoN6.andThen(eoN5).andThen(eoN4)
-      .andThen(eoN3).andThen(eoN2).andThen(eoN1)
+    eoN6
+      .andThen(eoN5)
+      .andThen(eoN4)
+      .andThen(eoN3)
+      .andThen(eoN2)
+      .andThen(eoN1)
       .andThen(eoFlag)
 
   private val mOpt3 = mN3.andThen(mN2).andThen(mN1).andThen(mFlag)
+
   private val mOpt6 =
     mN6.andThen(mN5).andThen(mN4).andThen(mN3).andThen(mN2).andThen(mN1).andThen(mFlag)
 
   // ---- Inputs -------------------------------------------------------
 
-  private val leaf:      Nested0 = Nested.DefaultLeaf
+  private val leaf: Nested0 = Nested.DefaultLeaf
   private val leafEmpty: Nested0 = Nested.EmptyFlagLeaf
-  private val d3:        Nested3 = Nested.Default3
-  private val d6:        Nested6 = Nested.Default6
+  private val d3: Nested3 = Nested.Default3
+  private val d6: Nested6 = Nested.Default6
 
   // ---- Depth 0 (leaf) -----------------------------------------------
 
-  @Benchmark def eoModify_0:       Nested0 = eoFlag.modify(_.toUpperCase)(leaf)
-  @Benchmark def mModify_0:        Nested0 = mFlag.modify(_.toUpperCase)(leaf)
+  @Benchmark def eoModify_0: Nested0 = eoFlag.modify(_.toUpperCase)(leaf)
+  @Benchmark def mModify_0: Nested0 = mFlag.modify(_.toUpperCase)(leaf)
 
-  @Benchmark def eoReplace_0:      Nested0 = eoFlag.replace("world")(leaf)
-  @Benchmark def mReplace_0:       Nested0 = mFlag.replace("world")(leaf)
+  @Benchmark def eoReplace_0: Nested0 = eoFlag.replace("world")(leaf)
+  @Benchmark def mReplace_0: Nested0 = mFlag.replace("world")(leaf)
 
   @Benchmark def eoModify_0_empty: Nested0 = eoFlag.modify(_.toUpperCase)(leafEmpty)
-  @Benchmark def mModify_0_empty:  Nested0 = mFlag.modify(_.toUpperCase)(leafEmpty)
+  @Benchmark def mModify_0_empty: Nested0 = mFlag.modify(_.toUpperCase)(leafEmpty)
 
   // ---- Depth 3 ------------------------------------------------------
 
   @Benchmark def eoModify_3: Nested3 =
     eoOpt3.modify(_.toUpperCase)(d3)
-  @Benchmark def mModify_3:  Nested3 =
+
+  @Benchmark def mModify_3: Nested3 =
     mOpt3.modify(_.toUpperCase)(d3)
 
   // ---- Depth 6 ------------------------------------------------------
 
   @Benchmark def eoModify_6: Nested6 =
     eoOpt6.modify(_.toUpperCase)(d6)
-  @Benchmark def mModify_6:  Nested6 =
+
+  @Benchmark def mModify_6: Nested6 =
     mOpt6.modify(_.toUpperCase)(d6)

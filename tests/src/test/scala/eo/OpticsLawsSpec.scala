@@ -1,10 +1,12 @@
 package eo
 
-import optics.{Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forgetful, SetterF}
+import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
+import data.{Affine, Forget, Forgetful, SetterF}
 import data.Affine.given
+import data.Forget.given
 import data.SetterF.given
 import laws.{
+  AffineFoldLaws,
   FoldLaws,
   GetterLaws,
   IsoLaws,
@@ -15,6 +17,7 @@ import laws.{
   TraversalLaws,
 }
 import laws.discipline.{
+  AffineFoldTests,
   FoldTests,
   GetterTests,
   IsoTests,
@@ -240,6 +243,29 @@ class OpticsLawsSpec extends Specification with Discipline:
     }
   }
 
+  // ----- AffineFold: partial projection + filtering select -------
+
+  val adultAgeAF: AffineFold[(Int, String), Int] =
+    AffineFold { case (age, _) => Option.when(age >= 18)(age) }
+
+  checkAll(
+    "AffineFold[(Int,String), Int] — age ≥ 18",
+    new AffineFoldTests[(Int, String), Int]:
+      val laws = new AffineFoldLaws[(Int, String), Int]:
+        val af = adultAgeAF
+    .affineFold,
+  )
+
+  val evenSelectAF: AffineFold[Int, Int] = AffineFold.select[Int](_ % 2 == 0)
+
+  checkAll(
+    "AffineFold.select[Int](even)",
+    new AffineFoldTests[Int, Int]:
+      val laws = new AffineFoldLaws[Int, Int]:
+        val af = evenSelectAF
+    .affineFold,
+  )
+
   // ----- Affine carrier laws --------------------------------------
 
   checkAll(
@@ -396,8 +422,6 @@ class OpticsLawsSpec extends Specification with Discipline:
   // Forget[List] ForgetfulFunctor + ForgetfulTraverse — exercises
   // Forgetful.scala's traverse2 and bifunctor paths that pure Forgetful
   // fixtures don't land.
-  import data.Forget
-
   checkAll(
     "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]",
     new ForgetfulFunctorTests[Forget[List], Unit, Int]:
@@ -435,6 +459,110 @@ class OpticsLawsSpec extends Specification with Discipline:
     new ForgetfulFunctorTests[FixedTraversal[2], Unit, Int]:
       val laws = new ForgetfulFunctorLaws[FixedTraversal[2], Unit, Int] {}
     .forgetfulFunctor,
+  )
+
+  // AlgLens[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the
+  // `ForgetfulFunctor` / `ForgetfulTraverse` laws across a representative cross-section of
+  // classifier shapes. Custom Arbitraries below mix empty / singleton / multi-element
+  // payloads so `ForgetfulTraverse`'s sequencing law sees non-trivial cardinalities (the
+  // Scalacheck defaults skew to short lists and under-sample the empty edge).
+  import data.AlgLens
+  import data.AlgLens.given
+  import cats.data.Chain
+
+  // Weighted generator aimed at the cardinality edges most likely to break carrier-level laws:
+  //   - ~16% empty (exercises `empty`/`Nil` paths),
+  //   - ~16% singleton (tests the fast-path cardinality),
+  //   - ~68% multi-element — split across fixed-size-5 and random-length-2-to-8 bands so
+  //     sequencing laws see non-trivial lengths most of the time.
+  //
+  // Frequencies 1/1/2/2 = 6 total → 16.6 / 16.6 / 33.3 / 33.3 percent.
+  private def weightedListOf[A](using Arbitrary[A]): Gen[List[A]] =
+    Gen.frequency(
+      1 -> Gen.const(List.empty[A]),
+      1 -> Arbitrary.arbitrary[A].map(List(_)),
+      2 -> Gen.listOfN(5, Arbitrary.arbitrary[A]),
+      2 -> Gen.choose(2, 8).flatMap(n => Gen.listOfN(n, Arbitrary.arbitrary[A])),
+    )
+
+  private given arbAlgLensListIntInt: Arbitrary[AlgLens[List][Int, Int]] =
+    Arbitrary(Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map((x, _))))
+
+  private given arbAlgLensOptionIntInt: Arbitrary[AlgLens[Option][Int, Int]] =
+    Arbitrary(
+      for
+        x <- Arbitrary.arbitrary[Int]
+        o <- Gen.oneOf(
+          Gen.const(Option.empty[Int]),
+          Arbitrary.arbitrary[Int].map(Option(_)),
+        )
+      yield (x, o)
+    )
+
+  private given arbAlgLensVectorIntInt: Arbitrary[AlgLens[Vector][Int, Int]] =
+    Arbitrary(
+      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, xs.toVector)))
+    )
+
+  private given arbAlgLensChainIntInt: Arbitrary[AlgLens[Chain][Int, Int]] =
+    Arbitrary(
+      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, Chain.fromSeq(xs))))
+    )
+
+  checkAll(
+    "ForgetfulFunctor[AlgLens[List]] on (Int, List[Int])",
+    new ForgetfulFunctorTests[AlgLens[List], Int, Int]:
+      val laws = new ForgetfulFunctorLaws[AlgLens[List], Int, Int] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[AlgLens[List], Applicative] on (Int, List[Int])",
+    new ForgetfulTraverseTests[AlgLens[List], Int, Int]:
+      val laws = new ForgetfulTraverseLaws[AlgLens[List], Int, Int] {}
+    .forgetfulTraverse,
+  )
+
+  checkAll(
+    "ForgetfulFunctor[AlgLens[Option]] on (Int, Option[Int])",
+    new ForgetfulFunctorTests[AlgLens[Option], Int, Int]:
+      val laws = new ForgetfulFunctorLaws[AlgLens[Option], Int, Int] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[AlgLens[Option], Applicative] on (Int, Option[Int])",
+    new ForgetfulTraverseTests[AlgLens[Option], Int, Int]:
+      val laws = new ForgetfulTraverseLaws[AlgLens[Option], Int, Int] {}
+    .forgetfulTraverse,
+  )
+
+  checkAll(
+    "ForgetfulFunctor[AlgLens[Vector]] on (Int, Vector[Int])",
+    new ForgetfulFunctorTests[AlgLens[Vector], Int, Int]:
+      val laws = new ForgetfulFunctorLaws[AlgLens[Vector], Int, Int] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[AlgLens[Vector], Applicative] on (Int, Vector[Int])",
+    new ForgetfulTraverseTests[AlgLens[Vector], Int, Int]:
+      val laws = new ForgetfulTraverseLaws[AlgLens[Vector], Int, Int] {}
+    .forgetfulTraverse,
+  )
+
+  checkAll(
+    "ForgetfulFunctor[AlgLens[Chain]] on (Int, Chain[Int])",
+    new ForgetfulFunctorTests[AlgLens[Chain], Int, Int]:
+      val laws = new ForgetfulFunctorLaws[AlgLens[Chain], Int, Int] {}
+    .forgetfulFunctor,
+  )
+
+  checkAll(
+    "ForgetfulTraverse[AlgLens[Chain], Applicative] on (Int, Chain[Int])",
+    new ForgetfulTraverseTests[AlgLens[Chain], Int, Int]:
+      val laws = new ForgetfulTraverseLaws[AlgLens[Chain], Int, Int] {}
+    .forgetfulTraverse,
   )
 
   // ----- ForgetfulApplicative via Optic.put ---------------------

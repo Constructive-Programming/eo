@@ -15,15 +15,12 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** JsonPrism vs. naive decode-modify-encode round-trip.
   *
-  * The motivating story for eo-circe: modifying a single field of a
-  * JSON payload shouldn't pay to decode / re-emit the whole record.
-  * `JsonPrism[A].modify` navigates via `ACursor`, writes at the
-  * focus with `set`, and reassembles the root via `.top` — O(path
-  * depth) rather than O(all fields).
+  * The motivating story for eo-circe: modifying a single field of a JSON payload shouldn't pay to
+  * decode / re-emit the whole record. `JsonPrism[A].modify` navigates via `ACursor`, writes at the
+  * focus with `set`, and reassembles the root via `.top` — O(path depth) rather than O(all fields).
   *
-  * Three depths benched here — depth 1, 2, 3 — with matching fixtures.
-  * Each benchmark toggles the focused string to upper-case and
-  * back. Bench classes ship paired `eo*` / `naive*` methods so JMH
+  * Three depths benched here — depth 1, 2, 3 — with matching fixtures. Each benchmark toggles the
+  * focused string to upper-case and back. Bench classes ship paired `eo*` / `naive*` methods so JMH
   * reports them side-by-side.
   */
 
@@ -73,7 +70,9 @@ class JsonPrismBench:
     aliceJson
       .as[Person]
       .map(p => p.copy(address = p.address.copy(street = p.address.street.toUpperCase)))
-      .toOption.get.asJson
+      .toOption
+      .get
+      .asJson
 
   // ---- Depth 3: Deep3 → d2 → d1 → atom → value ----------------------
 
@@ -84,19 +83,28 @@ class JsonPrismBench:
     deep3Json
       .as[Deep3]
       .map(d =>
-        d.copy(d2 = d.d2.copy(d1 = d.d2.d1.copy(atom = d.d2.d1.atom.copy(value = d.d2.d1.atom.value.toUpperCase))))
+        d.copy(d2 =
+          d.d2
+            .copy(d1 =
+              d.d2.d1.copy(atom = d.d2.d1.atom.copy(value = d.d2.d1.atom.value.toUpperCase))
+            )
+        )
       )
-      .toOption.get.asJson
+      .toOption
+      .get
+      .asJson
 
 object JsonPrismBench:
 
   // ---- Depth-1 / depth-2 fixture (Person with nested Address) -------
 
   final case class Address(street: String, zip: Int)
+
   object Address:
     given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
 
   final case class Person(name: String, age: Int, address: Address)
+
   object Person:
     given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
 
@@ -105,17 +113,21 @@ object JsonPrismBench:
   // ---- Depth-3 fixture ----------------------------------------------
 
   final case class Atom(value: String)
+
   object Atom:
     given Codec.AsObject[Atom] = KindlingsCodecAsObject.derive
 
   final case class Deep1(label: String, atom: Atom)
+
   object Deep1:
     given Codec.AsObject[Deep1] = KindlingsCodecAsObject.derive
 
   final case class Deep2(label: String, d1: Deep1)
+
   object Deep2:
     given Codec.AsObject[Deep2] = KindlingsCodecAsObject.derive
 
   final case class Deep3(label: String, d2: Deep2)
+
   object Deep3:
     given Codec.AsObject[Deep3] = KindlingsCodecAsObject.derive

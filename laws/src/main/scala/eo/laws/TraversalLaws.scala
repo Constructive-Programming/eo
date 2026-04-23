@@ -3,6 +3,7 @@ package laws
 
 import optics.Optic
 import _root_.eo.data.Forget
+import _root_.eo.data.Forget.given
 
 import cats.Functor
 

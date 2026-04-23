@@ -1,11 +1,9 @@
 package eo
 
-import data.Forget
-
-import cats.Applicative
-
 /** Adds `pure` to [[ForgetfulFunctor]] — construct an `F[X, A]` from an `A` alone. Needed by
   * `Optic.put`, which ignores the source `S` and builds the carrier from scratch.
+  *
+  * Instance for `Forget[F]` lives in [[data.Forget]] with the rest of that carrier's ladder.
   *
   * @tparam F
   *   the carrier
@@ -15,13 +13,7 @@ trait ForgetfulApplicative[F[_, _]] extends ForgetfulFunctor[F]:
     */
   def pure[X, A](a: A): F[X, A]
 
-/** Typeclass instances for [[ForgetfulApplicative]]. */
-object ForgetfulApplicative:
-
-  /** `ForgetfulApplicative[Forget[F]]` via any `Applicative[F]`.
-    *
-    * @group Instances
-    */
-  given forgetFApplicative[F[_]: Applicative]: ForgetfulApplicative[Forget[F]] with
-    def map[X, A, B](fa: F[A], f: A => B): F[B] = Applicative[F].map(fa)(f)
-    def pure[X, A](a: A): F[A] = Applicative[F].pure(a)
+/** Typeclass instances for [[ForgetfulApplicative]] — none currently outside the `Forget[F]` /
+  * `Forgetful` carriers; kept as a companion stub in case downstream carriers grow into it.
+  */
+object ForgetfulApplicative

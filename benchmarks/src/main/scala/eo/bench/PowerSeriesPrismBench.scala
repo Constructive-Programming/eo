@@ -13,21 +13,20 @@ import eo.optics.Optic.*
 
 import cats.instances.arraySeq.given
 
-/** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting
-  * after a Traversal.
+/** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a
+  * Traversal.
   *
-  * Fixture: `ArraySeq[Result]` where `Result` is a sum type `Ok(Int) | Err(String)` with a
-  * 50/50 distribution. The optic chain traverses every element and focuses the `Ok.value`
-  * via a Prism. Modify increments each `Ok.value` by one; the `Err` cases pass through
-  * untouched.
+  * Fixture: `ArraySeq[Result]` where `Result` is a sum type `Ok(Int) | Err(String)` with a 50/50
+  * distribution. The optic chain traverses every element and focuses the `Ok.value` via a Prism.
+  * Modify increments each `Ok.value` by one; the `Err` cases pass through untouched.
   *
   * {{{
   *   Traversal.each[ArraySeq, Result].andThen(Prism[Result, Int](...))
   * }}}
   *
   * The ArraySeq container isolates the optic cost from List's pointer-chasing overhead —
-  * `Functor[ArraySeq].map` is a native array walk, so the numbers here reflect the
-  * PowerSeries / Prism machinery rather than any container traversal artefact.
+  * `Functor[ArraySeq].map` is a native array walk, so the numbers here reflect the PowerSeries /
+  * Prism machinery rather than any container traversal artefact.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -59,9 +58,8 @@ class PowerSeriesPrismBench:
 
   @Setup(Level.Iteration)
   def init(): Unit =
-    results = ArraySeq.tabulate(size)(i =>
-      if i % 2 == 0 then Result.Ok(i) else Result.Err(s"err-$i")
-    )
+    results =
+      ArraySeq.tabulate(size)(i => if i % 2 == 0 then Result.Ok(i) else Result.Err(s"err-$i"))
 
   @Benchmark def eoModify_sparse: ArraySeq[Result] =
     okValues.modify(_ + 1)(results)

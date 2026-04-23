@@ -1,8 +1,8 @@
 package eo
 
-import data.{Affine, Forget}
+import data.Affine
 
-import cats.{Applicative, Functor, Traverse}
+import cats.{Applicative, Functor}
 import cats.syntax.applicative._
 import cats.syntax.either._
 import cats.syntax.functor._
@@ -71,13 +71,3 @@ object ForgetfulTraverse:
 
     def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =
       fa => f => fa.aTraverse(f)
-
-  /** `Forget[F]` traverse — delegates to the underlying `Traverse[F]`. The core of
-    * `Traversal.forEach` and `Fold` in their effectful forms.
-    *
-    * @group Instances
-    */
-  given forgetFTraverse[F[_]: Traverse]: ForgetfulTraverse[Forget[F], Applicative] with
-
-    def traverse[X, A, B, G[_]: Applicative]: F[A] => (A => G[B]) => G[F[B]] =
-      Traverse[F].traverse[G, A, B]

@@ -81,7 +81,13 @@ sealed trait Affine[A, B]:
 /** Constructors and typeclass instances for [[Affine]]. */
 object Affine:
 
-  /** Miss-branch variant: no focus present. Stores `fst: Fst[A]` directly. */
+  /** Miss-branch variant: no focus present. Stores `fst: Fst[A]` directly.
+    *
+    * `B` is phantom at the runtime shape — every `Miss[A, B]` stores only `fst: Fst[A]`, regardless
+    * of `B`. Callers that need to re-type a Miss instance across a phantom-B change (e.g. when
+    * adapting an `Affine`-carrier optic into another carrier whose variant type differs on the
+    * focus side only) should prefer [[widenB]] to a raw `asInstanceOf`.
+    */
   final class Miss[A, B](val fst: Fst[A]) extends Affine[A, B]:
     override def toString(): String = s"Miss($fst)"
 
@@ -90,6 +96,11 @@ object Affine:
       case _                 => false
 
     override def hashCode(): Int = fst.hashCode
+
+    /** Re-type this `Miss[A, B]` as `Miss[A, B2]` without allocating a new instance. Safe because
+      * `Miss` stores only `fst: Fst[A]` — the `B` parameter is phantom at the runtime shape.
+      */
+    inline def widenB[B2]: Miss[A, B2] = this.asInstanceOf[Miss[A, B2]]
 
   /** Hit-branch variant: focus present. Stores `snd` and `b` as direct fields. */
   final class Hit[A, B](val snd: Snd[A], val b: B) extends Affine[A, B]:

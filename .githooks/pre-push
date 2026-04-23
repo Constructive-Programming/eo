@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# pre-push — run the full test suite before pushing to origin. Catches
+# regressions the CI would otherwise surface after the branch lands.
+#
+# Covers the root-aggregate `test` task (core + laws + tests + generics).
+# Does NOT run benchmarks (not aggregated) and does NOT run circe-integration
+# or docs builds — those are covered by pre-commit (for docs) and CI.
+#
+# Bypass with `git push --no-verify` if you need to skip (e.g. pushing a
+# WIP branch for collaboration before it's green).
+
+set -euo pipefail
+
+echo "[pre-push] running full test suite (sbt test) ..."
+sbt -no-colors test

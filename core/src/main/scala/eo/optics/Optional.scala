@@ -60,8 +60,8 @@ object Optional:
     * `Option.when(p(s))(s)`, etc.), and useful as an API-boundary declaration of "callers cannot
     * write through this."
     *
-    * The `ForgetfulFold[Affine]` and `ForgetfulTraverse[Affine, Applicative]` instances (already
-    * shipped for Optional proper) handle the read-side operations unchanged.
+    * Delegates to [[AffineFold.apply]]; see that constructor for the specialised `X = (Unit, Unit)`
+    * shape it produces and the per-hit allocation savings over the full-Optional layout.
     *
     * @group Constructors
     *
@@ -74,22 +74,17 @@ object Optional:
     * adultAge.getOption(Person(15))    // None
     *   }}}
     */
-  def readOnly[S, A](matches: S => Option[A]): Optic[S, Unit, A, A, Affine] =
-    new Optic[S, Unit, A, A, Affine]:
-      type X = (Unit, S)
-      val to: S => Affine[X, A] = s =>
-        matches(s) match
-          case Some(a) => new Affine.Hit[X, A](s, a)
-          case None    => new Affine.Miss[X, A](())
-      val from: Affine[X, A] => Unit = _ => ()
+  def readOnly[S, A](matches: S => Option[A]): AffineFold[S, A] =
+    AffineFold(matches)
 
   /** Filtering read-only Optional — keeps only inputs matching `p`, exposing them via `.getOption`
-    * / `.foldMap`. Mirror of [[Fold.select]] but over a single focus.
+    * / `.foldMap`. Mirror of [[Fold.select]] but over a single focus. Delegates to
+    * [[AffineFold.select]].
     *
     * @group Constructors
     */
-  def selectReadOnly[A](p: A => Boolean): Optic[A, Unit, A, A, Affine] =
-    readOnly(a => Option(a).filter(p))
+  def selectReadOnly[A](p: A => Boolean): AffineFold[A, A] =
+    AffineFold.select(p)
 
 /** Concrete Optic subclass for `Optional.apply` — stores `getOrModify` and `reverseGet` directly,
   * enabling fused `.andThen` overloads that skip the generic `AssociativeFunctor[Affine]` composeTo

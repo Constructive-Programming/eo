@@ -28,13 +28,13 @@ import cats.instances.list.given
   *     .andThen(Lens[Employee, Boolean])
   * }}}
   *
-  * This is the shape where a trie carrier would most clearly dominate the flat
-  * `(xo, PSVec)` representation: the two traversal levels force the current design to flatten
-  * a logical tree into parallel arrays and re-nest on the way out. A trie keeps the shape
-  * explicit and substitutes leaves recursively.
+  * This is the shape where a trie carrier would most clearly dominate the flat `(xo, PSVec)`
+  * representation: the two traversal levels force the current design to flatten a logical tree into
+  * parallel arrays and re-nest on the way out. A trie keeps the shape explicit and substitutes
+  * leaves recursively.
   *
-  * Total elements traversed = `departmentCount × size` (4 × {4, 32, 256}). Inner `size`
-  * matches the flat-bench param so comparisons are direct.
+  * Total elements traversed = `departmentCount × size` (4 × {4, 32, 256}). Inner `size` matches the
+  * flat-bench param so comparisons are direct.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))

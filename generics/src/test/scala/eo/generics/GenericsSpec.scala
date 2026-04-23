@@ -322,6 +322,10 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   val salaryIdL = lens[Employee](_.salary, _.id)
 
+  // Field-name access on the focus NamedTuple is exercised implicitly
+  // by every `salaryIdL` test below (`focus.salary`, `focus.id`) —
+  // singleton-String names land correctly iff those resolve at the
+  // value level.
   "multi-field Lens get packs focus in selector order" >> forAll { (e: Employee) =>
     val focus = salaryIdL.get(e).asInstanceOf[EmpSalaryIdFocus]
     focus.salary == e.salary && focus.id == e.id

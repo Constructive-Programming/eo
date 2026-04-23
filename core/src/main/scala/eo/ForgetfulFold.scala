@@ -1,7 +1,7 @@
 package eo
 
-import cats.{Foldable, Monoid}
-import data.{Affine, Forget}
+import cats.Monoid
+import data.Affine
 
 /** `foldMap` over the focus of a two-parameter carrier — the mechanism behind `Optic.foldMap`
   * across every optic family. Miss / absent branches contribute `Monoid[M].empty`; hit branches run
@@ -47,13 +47,3 @@ object ForgetfulFold:
           fa match
             case _: Affine.Miss[X, A] => Monoid[M].empty
             case h: Affine.Hit[X, A]  => f(h.b)
-
-  /** `Forget[F]` foldMap — delegates to the underlying `Foldable[F]`. Powers `Fold.apply[F, A]` and
-    * `Traversal.forEach.foldMap`.
-    *
-    * @group Instances
-    */
-  given forgetFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
-
-    def foldMap[X, A, M: Monoid]: (A => M) => F[A] => M =
-      f => fa => Foldable[F].foldMap(fa)(f)

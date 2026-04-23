@@ -13,25 +13,20 @@ import eo.optics.Optic.*
 
 import cats.instances.arraySeq.*
 
-/** PowerSeries-backed Traversal over a nested focus, paired
-  * against a hand-written iterative baseline.
+/** PowerSeries-backed Traversal over a nested focus, paired against a hand-written iterative
+  * baseline.
   *
-  * `Traversal.each[ArraySeq, A]` (PowerSeries-backed) is EO-only — Monocle has
-  * no direct analog because the PowerSeries carrier is the
-  * mechanism by which EO supports multi-focus traversals with
-  * full `Composer` bridges into `Tuple2` (Lens), `Either`
-  * (Prism), and `Affine` (Optional). This bench documents its
-  * runtime cost.
+  * `Traversal.each[ArraySeq, A]` (PowerSeries-backed) is EO-only — Monocle has no direct analog
+  * because the PowerSeries carrier is the mechanism by which EO supports multi-focus traversals
+  * with full `Composer` bridges into `Tuple2` (Lens), `Either` (Prism), and `Affine` (Optional).
+  * This bench documents its runtime cost.
   *
-  * Fixture: `Person(name, phones: ArraySeq[Phone])`. The optic
-  * chain drills `Person → phones → each Phone → isMobile`
-  * (Boolean). Modify toggles every `isMobile` in-place.
+  * Fixture: `Person(name, phones: ArraySeq[Phone])`. The optic chain drills
+  * `Person → phones → each Phone → isMobile` (Boolean). Modify toggles every `isMobile` in-place.
   *
-  * The `naive_*` comparator does the same work via
-  * `p.copy(phones = p.phones.map(ph => ph.copy(isMobile =
-  * !ph.isMobile)))` — this is essentially what the PowerSeries
-  * chain must produce, so the gap shows the optic-machinery
-  * overhead for multi-focus write.
+  * The `naive_*` comparator does the same work via `p.copy(phones = p.phones.map(ph =>
+  * ph.copy(isMobile = !ph.isMobile)))` — this is essentially what the PowerSeries chain must
+  * produce, so the gap shows the optic-machinery overhead for multi-focus write.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))

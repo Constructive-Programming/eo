@@ -31,10 +31,10 @@ sealed trait PSVec[+B]:
   inline def isEmpty: Boolean = length == 0
 
   /** Materialise the focus sequence as a fresh `Array[AnyRef]`. Default impl walks via [[apply]];
-    * [[PSVec.Slice]] overrides with `System.arraycopy` (a JVM intrinsic) so the common "rebuild
-    * an `ArraySeq` from a PSVec" path in [[optics.Traversal.pEach]]'s `from` becomes one memcpy
-    * rather than a per-element loop with element-by-element checkcast. `Empty` / `Single` have
-    * trivial overrides.
+    * [[PSVec.Slice]] overrides with `System.arraycopy` (a JVM intrinsic) so the common "rebuild an
+    * `ArraySeq` from a PSVec" path in [[optics.Traversal.pEach]]'s `from` becomes one memcpy rather
+    * than a per-element loop with element-by-element checkcast. `Empty` / `Single` have trivial
+    * overrides.
     */
   def toAnyRefArray: Array[AnyRef] =
     val n = length
@@ -45,12 +45,12 @@ sealed trait PSVec[+B]:
       i += 1
     a
 
-  /** Like [[toAnyRefArray]] but MAY return the PSVec's own backing array without copying when
-    * it densely covers the full focus range (`Slice` with `offset == 0 && length == arr.length`).
+  /** Like [[toAnyRefArray]] but MAY return the PSVec's own backing array without copying when it
+    * densely covers the full focus range (`Slice` with `offset == 0 && length == arr.length`).
     * Callers MUST treat the returned array as immutable — any mutation would change the PSVec's
     * observable content. Used by consumers that also won't mutate (notably
-    * [[optics.Traversal.pEach]]'s `from` which hands the result to
-    * `ArraySeq.unsafeWrapArray`, whose contract likewise forbids mutation).
+    * [[optics.Traversal.pEach]]'s `from` which hands the result to `ArraySeq.unsafeWrapArray`,
+    * whose contract likewise forbids mutation).
     *
     * Default implementation is the safe `toAnyRefArray` copy; only `Slice` overrides to share.
     */

@@ -1,9 +1,5 @@
 package eo
 
-import cats.Functor
-
-import data.Forget
-
 /** Functor over the second type parameter of a bifunctor-like `F[_, _]`.
   *
   * The primary method `map` is uncurried for allocation-free hot paths. If you need a curried
@@ -16,7 +12,8 @@ trait ForgetfulFunctor[F[_, _]]:
   *
   * Each supported carrier has a direct instance; the previous generic `Bifunctor` / `Profunctor`
   * fallback instances were removed because every carrier we ship provides a direct instance and the
-  * fallbacks never fired.
+  * fallbacks never fired. `Forget[F]`'s instance lives in [[data.Forget]] with the rest of the
+  * Forget capability ladder.
   */
 object ForgetfulFunctor:
 
@@ -38,10 +35,3 @@ object ForgetfulFunctor:
     */
   given directEither: ForgetfulFunctor[Either] with
     def map[X, A, B](fa: Either[X, A], f: A => B): Either[X, B] = fa.map(f)
-
-  /** Direct instance for `Forget[T]` — calls `Functor[T].map` directly.
-    *
-    * @group Instances
-    */
-  given directForget[T[_]](using F: Functor[T]): ForgetfulFunctor[Forget[T]] with
-    def map[X, A, B](fa: T[A], f: A => B): T[B] = F.map(fa)(f)

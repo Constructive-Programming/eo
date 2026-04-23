@@ -493,7 +493,7 @@ of work. Units marked *Execution note: test-first* should start by adding a
 failing discipline `checkAll` block, then write the law equations until it
 passes.
 
-- [ ] **Unit 1: Split `laws/` into idiomatic per-abstraction files**
+- [x] **Unit 1: Split `laws/` into idiomatic per-abstraction files**
 
 **Goal:** Restructure `OpticLaws.scala` and `EoSpecificLaws.scala` into one
 file per abstraction under `eo.laws.*` (equations) and
@@ -570,7 +570,7 @@ confirm the move is mechanical.
   law family). Size is a secondary signal — files should not be split further
   just to hit a LoC number.
 
-- [ ] **Unit 2: Establish coverage baseline and file-level targets**
+- [x] **Unit 2: Establish coverage baseline and file-level targets**
 
 **Goal:** Run scoverage on the freshly-split `tests/` to capture the current
 statement/branch coverage per file, write the baseline into
@@ -606,7 +606,7 @@ organization).
 - The baseline doc exists and lists every `.scala` under `core/src/main/`.
 - The plan's later coverage-lift unit cites this baseline.
 
-- [ ] **Unit 3: Add `GetterLaws` + `FoldLaws`**
+- [x] **Unit 3: Add `GetterLaws` + `FoldLaws`**
 
 **Goal:** Fill the two obvious optic-level law gaps. Getter should have at
 least one consistency law (`get` = `to .accessor.get`); Fold should have
@@ -663,7 +663,7 @@ wiring.
 - Coverage report for `core/src/main/scala/eo/optics/Getter.scala` and
   `…/Fold.scala` rises above 85%.
 
-- [ ] **Unit 4: Add `AffineLaws` + `SetterFLaws` (carrier laws)**
+- [x] **Unit 4: Add `AffineLaws` + `SetterFLaws` (carrier laws)**
 
 **Goal:** Give `Affine` and `SetterF` standalone law classes independent of
 the `Optional` / `Setter` optics that use them. Laws should cover the
@@ -709,7 +709,7 @@ adapted to the 2-parameter shape.
 - Coverage report for `core/src/main/scala/eo/data/Affine.scala` and
   `…/SetterF.scala` rises above 85%.
 
-- [ ] **Unit 5: `VectLaws` + `VectSpec`**
+- [x] **Unit 5: `VectLaws` + `VectSpec`**
 
 **Goal:** Vect is heterogeneous and phantom-typed but still has a runtime
 structure (the four constructors: `NilVect`, `ConsVect`, `TConsVect`,
@@ -766,7 +766,7 @@ associativity; Monocle has no direct analog.
 - `core/src/main/scala/eo/data/Vect.scala` coverage reaches ≥85% (this
   file is currently ~0% covered).
 
-- [ ] **Unit 6: `PowerSeriesLaws` + `PowerSeriesSpec`**
+- [x] **Unit 6: `PowerSeriesLaws` + `PowerSeriesSpec`**
 
 **Goal:** Full law coverage for the `PowerSeries` carrier + its
 `Traversal.powerEach` surface. This is the largest new law family in the
@@ -1001,7 +1001,7 @@ uniformly on optic companions.
 - Every `type`, `trait`, `class`, `def`, `val` that is `public` in
   `core/src/main/scala/` has a `/** */` docstring.
 
-- [ ] **Unit 10: `site/` sub-project scaffold (sbt-typelevel-site + Laika + mdoc)**
+- [x] **Unit 10: `site/` sub-project scaffold (sbt-typelevel-site + Laika + mdoc)**
 
 **Goal:** Introduce the docs sub-project without writing content yet —
 wire plugins, Laika config, mdoc variable substitutions, a smoke-test
@@ -1060,7 +1060,7 @@ have its public surface documented before we point docs at it).
 - `docs/directory.conf` lists the intended top-level pages even if they
   are empty stubs.
 
-- [ ] **Unit 11: Docs content — guided tour, concepts, optics pages, cookbook, migration guide**
+- [x] **Unit 11: Docs content — guided tour, concepts, optics pages, cookbook, migration guide**
 
 **Goal:** Populate the `docs/` tree with real content so a newcomer can
 learn the library without reading source. Every code fence is
@@ -1134,7 +1134,7 @@ Monocle's tutorials for cookbook layout.
 - Deleted `tests/src/test/scala/eo/Unthreaded.scala` and, if appropriate,
   `JsonOptic.scala` / `Samples.scala`.
 
-- [ ] **Unit 12: Benchmarks expansion — Fold, Getter, Optional, Setter, PowerSeries**
+- [x] **Unit 12: Benchmarks expansion — Fold, Getter, Optional, Setter, PowerSeries**
 
 **Goal:** Mirror Monocle's trait-per-optic + paired
 `EoXxxBench` / `MonocleXxxBench` pattern across the optics that do not
@@ -1205,7 +1205,7 @@ with Units 10–11.
 - Documented run commands in `benchmarks/README.md` reproduce the
   historical Lens numbers within the same order of magnitude.
 
-- [ ] **Unit 13: Release infrastructure — plugins, build settings, MiMa, Central Portal wiring**
+- [x] **Unit 13: Release infrastructure — plugins, build settings, MiMa, Central Portal wiring**
 
 **Goal:** Turn `build.sbt` into a publishable configuration. Wire
 `sbt-typelevel-ci-release` and its friends, set
@@ -1290,7 +1290,7 @@ with Units 2–12.
 - `build.sbt` and `project/plugins.sbt` reviewed for hand-rolled
   publishing remnants.
 
-- [ ] **Unit 14: CI workflows + publish secrets**
+- [x] **Unit 14: CI workflows + publish secrets**
 
 **Goal:** Write `.github/workflows/ci.yml` and `release.yml` so every PR
 gets validated and every git tag triggers a release. Scaffold the
@@ -1616,8 +1616,12 @@ following docs are updated in place:
 ## Future Considerations
 
 - **Scala.js / Scala Native cross-build** — 0.2.0 timeframe.
-- **New optic families** (Grate, Review, IndexedLens, AppendLens) — per
-  `CLAUDE.md`'s future-work notes; each will need corresponding laws.
+- **New optic families** — tracked in
+  `docs/research/2026-04-19-optic-families-survey.md`. Review and
+  `AlgLens[F]` already landed; the remaining prioritised candidates
+  are AffineFold, indexed variants (IxLens / IxTraversal / …),
+  Achromatic Lens, Grate, and Kaleidoscope. Each will need
+  corresponding laws.
 - **Auto-derivation for Iso / Optional / Traversal** in `generics/` — a
   natural extension of the current `lens` / `prism` macros.
 - **Mutation testing with EO-aware mutators for sbt-stryker4s** — the

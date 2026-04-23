@@ -12,6 +12,7 @@ case class UP(a: Int, b: Boolean)
 
   import Optic.*
   import Forgetful.given
+  import Forget.given
 
   val aLens = Lens[UP, Int](_.a, (s, b) => s.copy(a = b))
   val bLens = Lens.second[Int, Boolean]
