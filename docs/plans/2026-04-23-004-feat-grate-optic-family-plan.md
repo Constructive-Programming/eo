@@ -568,7 +568,7 @@ if existing core-module tests hit the new given.
 
 ### Unit 3 — `Grate.tuple[T <: Tuple, A]` (with fallback)
 
-- [ ] Land the concrete N-ary homogeneous-tuple constructor (one
+- [x] Land the concrete N-ary homogeneous-tuple constructor (one
   declaration) or arity 2–4 fallbacks.
 
 **Files.** Modify `core/src/main/scala/eo/data/Grate.scala`.

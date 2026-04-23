@@ -180,3 +180,60 @@ object Grate:
         val read: X => A = F.index(fa)
         (read(repr0), read)
       val from: ((A, X => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+
+  /** Polymorphic homogeneous-tuple Grate factory — a single declaration that works for any `T <:
+    * Tuple` whose elements all have type `A`. The arity is recovered from `Tuple.Size[T]` and the
+    * all-same-element constraint from `Tuple.Union[T] <:< A`.
+    *
+    * **Constraint choice — Union over IsMappedBy.** The plan's D2 sketch reached for
+    * `Tuple.IsMappedBy[[a] =>> A][T]`. In Scala 3.8.3 that evidence hits a wall for concrete
+    * tuples: it requires proving `Map[F, InverseMap[T, F]] =:= T` for the abstract inverse, and the
+    * compiler emits `"Cannot prove that X =:= Tuple.Map[Tuple.InverseMap[X, F], F]"`. Switching to
+    * `Tuple.Union[T] <:< A` sidesteps the unmap problem entirely: `Union` computes the join of all
+    * element types, and `<:< A` asserts that every element is an `A`. The plan's OQ2 fallback to
+    * hand-written `tuple2` / `tuple3` / `tuple4` was NOT needed — a single declaration covers every
+    * arity from 2 through 22.
+    *
+    * **Encoding — index-typed `X`.** `X = Int` — the slot index, not the tuple itself. `to(t)`
+    * produces `(t._0, i => t._i)`: the focus is slot 0, the rebuild reads by index. After
+    * [[grateFunctor]] `.map(f)`, the rebuild becomes `i => f(t._i)`. `from((_, k'))` ignores the
+    * focus and materialises the result as `Tuple.fromArray(Array.tabulate(size)(i => k'(i)))` —
+    * applying `f` at every slot. This matches the classical per-slot Grate semantics.
+    *
+    * @group Factories
+    * @example
+    *   {{{
+    * import eo.data.Grate
+    * import eo.data.Grate.given
+    * import eo.optics.Optic.*
+    *
+    * val g3 = Grate.tuple[(Int, Int, Int), Int]
+    * g3.modify(_ + 1)((1, 2, 3))   // (2, 3, 4)
+    * g3.replace(42)((1, 2, 3))     // (42, 42, 42)
+    *   }}}
+    *
+    * @note
+    *   The `Union[T] <:< A` evidence requires `T` concrete at the call site. Abstract `T <: Tuple`
+    *   (e.g. inside a generic function parameterised over the tuple type) won't resolve until `T`
+    *   is pinned; shift the call to the concrete site.
+    */
+  def tuple[T <: Tuple, A](using
+      sz: ValueOf[Tuple.Size[T]],
+      ev: Tuple.Union[T] <:< A,
+  ): Optic[T, T, A, A, Grate] =
+    val _ = ev // evidence compile-time only; kept for the constraint surface
+    val size = sz.value
+    new Optic[T, T, A, A, Grate]:
+      type X = Int
+      val to: T => (A, X => A) = t =>
+        val read: X => A = (i: Int) => t.productElement(i).asInstanceOf[A]
+        (read(0), read)
+      val from: ((A, X => A)) => T = {
+        case (_, k) =>
+          val arr = new Array[Object](size)
+          var i = 0
+          while i < size do
+            arr(i) = k(i).asInstanceOf[Object]
+            i += 1
+          Tuple.fromArray(arr).asInstanceOf[T]
+      }

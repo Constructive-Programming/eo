@@ -53,3 +53,37 @@ class GrateSpec extends Specification with ScalaCheck:
       }
     }
   }
+
+  "Grate.tuple[Tuple3[Int, Int, Int], Int]" should {
+    val g3 = Grate.tuple[(Int, Int, Int), Int]
+
+    "modify applies the function per-slot" >> {
+      forAll((a: Int, b: Int, c: Int) =>
+        g3.modify((x: Int) => x + 1)((a, b, c)) == ((a + 1, b + 1, c + 1))
+      )
+    }
+
+    "replace broadcasts to every slot" >> {
+      forAll((a: Int, b: Int, c: Int, r: Int) => g3.replace(r)((a, b, c)) == ((r, r, r)))
+    }
+
+    "modify identity is identity" >> {
+      forAll((a: Int, b: Int, c: Int) => g3.modify(identity[Int])((a, b, c)) == ((a, b, c)))
+    }
+  }
+
+  "Grate.tuple[Tuple2[Int, Int], Int]" should {
+    val g2 = Grate.tuple[(Int, Int), Int]
+    "modify applies the function per-slot" >> {
+      forAll((a: Int, b: Int) => g2.modify((x: Int) => x * 2)((a, b)) == ((a * 2, b * 2)))
+    }
+  }
+
+  "Grate.tuple[Tuple4[Int, Int, Int, Int], Int]" should {
+    val g4 = Grate.tuple[(Int, Int, Int, Int), Int]
+    "modify applies the function per-slot" >> {
+      forAll((a: Int, b: Int, c: Int, d: Int) =>
+        g4.modify((x: Int) => -x)((a, b, c, d)) == ((-a, -b, -c, -d))
+      )
+    }
+  }
