@@ -1025,8 +1025,14 @@ optic whose `.modify` behaves as the composed function.
 
 ### Unit 5 — Laws (`KaleidoscopeLaws` + `KaleidoscopeTests` + fixtures)
 
-- [ ] Land the law class, discipline RuleSet, and at least two
-  `checkAll` wirings (List + ZipList fixtures).
+- [x] Land the law class, discipline RuleSet, and at least two
+  `checkAll` wirings (List + ZipList fixtures). The stretch
+  `Const[Int, *]` fixture also landed — all three shipped Reflector
+  instances exercise the full three-law RuleSet. K3 (`collect via
+  reflect`) uses an `S =:= F[A]` scoped evidence so the aggregator is
+  drawn from `F[A] => A` functions; `Cogen[F[A]]` is passed
+  explicitly per instance (hand-rolled for `ZipList` / `Const`). The
+  law-class source cites Penner's blog and Clarke et al. inline.
 
 **Files.**
 - Create `laws/src/main/scala/eo/laws/KaleidoscopeLaws.scala`.

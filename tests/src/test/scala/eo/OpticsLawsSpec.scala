@@ -1,10 +1,11 @@
 package eo
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Forgetful, Grate, SetterF}
+import data.{Affine, Forget, Forgetful, Grate, Kaleidoscope, SetterF}
 import data.Affine.given
 import data.Forget.given
 import data.Grate.given
+import data.Kaleidoscope.given
 import data.SetterF.given
 import laws.{
   AffineFoldLaws,
@@ -12,6 +13,7 @@ import laws.{
   GetterLaws,
   GrateLaws,
   IsoLaws,
+  KaleidoscopeLaws,
   LensLaws,
   OptionalLaws,
   PrismLaws,
@@ -24,6 +26,7 @@ import laws.discipline.{
   GetterTests,
   GrateTests,
   IsoTests,
+  KaleidoscopeTests,
   LensTests,
   OptionalTests,
   PrismTests,
@@ -36,7 +39,7 @@ import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
 import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
 
 import cats.instances.list.given
-import org.scalacheck.{Arbitrary, Gen}
+import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.scalacheck.Prop.forAll
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
@@ -666,4 +669,76 @@ class OpticsLawsSpec extends Specification with Discipline:
       val laws = new GrateLaws[(Int, Int, Int), Int]:
         val grate = tuple3Grate
     .grate,
+  )
+
+  // ----- Kaleidoscope: List (cartesian) + ZipList (zipping) -------
+  //
+  // Two Applicative-distinct fixtures per plan R8 — the whole point of
+  // Kaleidoscope is that the optic's behaviour tracks the supplied
+  // Reflector's Applicative semantics. Both fixtures go through the
+  // generic `Kaleidoscope.apply[F, A]` factory (`S = F[A]`, rebuild =
+  // identity), which is the only constructor shipped in v1.
+  //
+  // Three laws each: K1 modify-identity, K2 compose-modify, K3
+  // collect-via-reflect (the Kaleidoscope-specific universal).
+
+  import cats.data.ZipList
+
+  // Arbitrary[ZipList[Int]] — constructed from an Arbitrary[List[Int]]; the same fixture pattern
+  // the R1 spikes in `ReflectorInstancesSpec` used but kept local so this file is the single
+  // source of truth for law fixtures.
+  private given arbZipListInt: Arbitrary[ZipList[Int]] =
+    Arbitrary(Arbitrary.arbitrary[List[Int]].map(ZipList(_)))
+
+  // Cogen[ZipList[Int]] — routes through the underlying List's Cogen so scalacheck can
+  // synthesise `ZipList[Int] => Int` aggregator functions for K3.
+  private given cogenZipListInt: Cogen[ZipList[Int]] =
+    Cogen[List[Int]].contramap(_.value)
+
+  val listKaleidoscope: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
+    Kaleidoscope.apply[List, Int]
+
+  checkAll(
+    "Kaleidoscope[List[Int], Int] — cartesian Reflector",
+    new KaleidoscopeTests[List[Int], Int, List]:
+      val laws = new KaleidoscopeLaws[List[Int], Int, List]:
+        val kaleidoscope = listKaleidoscope
+        val reflector = summon[Reflector[List]]
+    .kaleidoscope,
+  )
+
+  val zipListKaleidoscope: Optic[ZipList[Int], ZipList[Int], Int, Int, Kaleidoscope] =
+    Kaleidoscope.apply[ZipList, Int]
+
+  checkAll(
+    "Kaleidoscope[ZipList[Int], Int] — zipping Reflector",
+    new KaleidoscopeTests[ZipList[Int], Int, ZipList]:
+      val laws = new KaleidoscopeLaws[ZipList[Int], Int, ZipList]:
+        val kaleidoscope = zipListKaleidoscope
+        val reflector = summon[Reflector[ZipList]]
+    .kaleidoscope,
+  )
+
+  // Const[Int, *] summation fixture — the third "aggregation shape" (summation). Lands as a plain
+  // bonus fixture per plan R8's stretch goal. `Const[Int, Int]`'s `A` slot is phantom, so the K3
+  // law reduces to a retag witness (the aggregator is applied once, but the monoid value doesn't
+  // change). Scalacheck Arbitraries for Const are hand-rolled.
+  import cats.data.Const
+
+  private given arbConstIntInt: Arbitrary[Const[Int, Int]] =
+    Arbitrary(Arbitrary.arbitrary[Int].map(Const(_)))
+
+  private given cogenConstIntInt: Cogen[Const[Int, Int]] =
+    Cogen[Int].contramap(_.getConst)
+
+  val constKaleidoscope: Optic[Const[Int, Int], Const[Int, Int], Int, Int, Kaleidoscope] =
+    Kaleidoscope.apply[Const[Int, *], Int]
+
+  checkAll(
+    "Kaleidoscope[Const[Int, Int], Int] — summation Reflector",
+    new KaleidoscopeTests[Const[Int, Int], Int, Const[Int, *]]:
+      val laws = new KaleidoscopeLaws[Const[Int, Int], Int, Const[Int, *]]:
+        val kaleidoscope = constKaleidoscope
+        val reflector = summon[Reflector[Const[Int, *]]]
+    .kaleidoscope,
   )
