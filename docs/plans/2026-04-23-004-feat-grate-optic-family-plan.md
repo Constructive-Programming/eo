@@ -531,7 +531,7 @@ Each unit is ~1 commit. Checkboxes track status.
 
 ### Unit 1 — Carrier + `ForgetfulFunctor` + `AssociativeFunctor`
 
-- [ ] Land carrier + core typeclass instances.
+- [x] Land carrier + core typeclass instances.
 
 **Files.** Create `core/src/main/scala/eo/data/Grate.scala`.
 
