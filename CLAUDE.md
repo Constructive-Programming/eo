@@ -61,6 +61,25 @@ scalafix --rules RemoveUnused         # example rewrite
 scala -e 'println(1 + 2)'             # quick REPL eval
 ```
 
+### Git hooks
+
+A `.githooks/` directory ships two scripts that mirror the CI gates so you
+don't land a broken commit on main:
+
+```sh
+.githooks/install.sh                  # one-shot: points git at .githooks/
+git commit --no-verify                # bypass pre-commit if you need to
+git push   --no-verify                # bypass pre-push if you need to
+```
+
+- `pre-commit` — `sbt scalafmtCheckAll; docs/mdoc; docs/laikaSite`. Only
+  runs when staged files touch `*.scala` / `*.sbt` / `*.md` / `.scalafmt.conf`
+  / `site/` / `build.sbt`, so unrelated commits (tag moves, merges) pay
+  nothing.
+- `pre-push` — `sbt test`. Full root-aggregate test sweep before push.
+  Does not run benchmarks / circe-integration / docs builds — those are
+  covered by pre-commit and CI.
+
 ### Test-suite quality
 
 [`sbt-scoverage`](https://github.com/scoverage/sbt-scoverage) lives in
@@ -133,8 +152,22 @@ import eo.generics.{lens, prism}
 
 // Product-type Lens (GenLens-style partial application):
 case class Person(name: String, age: Int)
-val ageL  = lens[Person](_.age)            // Optic[Person, Person, Int, Int, Tuple2]
+val ageL  = lens[Person](_.age)            // SimpleLens[Person, Int, <NamedTuple complement>]
 val nameL = lens[Person](_.name)
+
+// Varargs: multiple selectors in one call. Focus is a Scala 3
+// NamedTuple in SELECTOR order, complement in DECLARATION order
+// among non-focused fields. Partial cover → SimpleLens.
+case class OrderItem(sku: String, quantity: Int, price: Double)
+val qtyAndPrice = lens[OrderItem](_.quantity, _.price)
+// → SimpleLens[OrderItem, NamedTuple[("quantity", "price"), (Int, Double)],
+//                          NamedTuple[("sku",), (String,)]]
+
+// Full cover (selectors span every case field) → BijectionIso.
+// This is the sole change in return-type at arity 1: `lens[Wrapper](_.value)`
+// on a 1-field case class now returns a BijectionIso, not a SimpleLens.
+val nameAgeIso = lens[Person](_.name, _.age)
+// → BijectionIso[Person, Person, NamedTuple[("name", "age"), (String, Int)], ...]
 
 // Sum-type Prism from a Scala 3 enum, sealed trait, OR union type:
 enum Shape:

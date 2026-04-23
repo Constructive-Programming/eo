@@ -517,7 +517,7 @@ points (`lens[S]` + `lensN[S]`).
 
   **Test scenarios:** every D6 row.
 
-- [ ] **Unit 5: Behaviour property tests**
+- [x] **Unit 5: Behaviour property tests**
 
   **Goal:** three Lens laws on derived multi-field Lenses; three Iso
   laws (`get ∘ reverseGet = id`, `reverseGet ∘ get = id`, modify
@@ -541,7 +541,7 @@ points (`lens[S]` + `lensN[S]`).
   **Test scenarios:** 2-field Lens vs Iso split; 3-field scrambled;
   4-field scrambled; recursive ADT partial cover; 1-field Iso.
 
-- [ ] **Unit 6: Documentation**
+- [x] **Unit 6: Documentation**
 
   **Goal:** `site/docs/generics.md` and `CLAUDE.md` reflect the new
   shape; every new doc fence is mdoc-verified.
