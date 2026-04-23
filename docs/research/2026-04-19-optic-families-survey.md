@@ -102,6 +102,13 @@ slot has the same type.
 
 ## Algebraic Lens — bulk-aware update
 
+Introduced by Román, Clarke, Elkins, Gibbons, Milewski, Loregian,
+and Pillmore in the NWPT2019 abstract *Profunctor Optics, a
+Categorical Update* (the same research programme later published
+as [arXiv:2001.07488](https://arxiv.org/abs/2001.07488)). Chris
+Penner's blog post popularised the Haskell-facing exposition and
+is what most working library authors cite; the theory predates it.
+
 Shape `(S → A) × (F[S] × B → T)` where `F` is `Foldable`. Lets the
 update function see the **whole collection of S's**, not just the
 single S being updated — so you can compute aggregations (mean,
@@ -223,8 +230,9 @@ up.
 - [Understanding Profunctor Optics (Clarke et al., 2020)](https://arxiv.org/pdf/2001.11816)
 - [Profunctor Optics: a Categorical Update (Román 2020)](https://arxiv.org/abs/2001.07488)
 - [Profunctor Optics: Modular Data Accessors (Pickering, Gibbons, Wu)](https://www.cs.ox.ac.uk/people/jeremy.gibbons/publications/poptics.pdf)
-- [Kaleidoscopes — Chris Penner](https://chrispenner.ca/posts/kaleidoscopes)
-- [Algebraic lenses — Chris Penner](https://chrispenner.ca/posts/algebraic)
+- [Profunctor Optics, a Categorical Update — NWPT2019 abstract, Román/Clarke/Elkins/Gibbons/Milewski/Loregian/Pillmore (original algebraic-lens source)](https://cs.ttu.ee/events/nwpt2019/abstracts/paper14.pdf)
+- [Kaleidoscopes — Chris Penner (exposition)](https://chrispenner.ca/posts/kaleidoscopes)
+- [Algebraic lenses — Chris Penner (exposition)](https://chrispenner.ca/posts/algebraic)
 - [Profunctor Optics — beuke.org](https://beuke.org/profunctor-optics/)
 - [Profunctor Optics: The Categorical View — Bartosz Milewski](https://bartoszmilewski.com/2017/07/07/profunctor-optics-the-categorical-view/)
 - [Monocle (Scala) library overview — Baeldung](https://www.baeldung.com/scala/monocle-optics)

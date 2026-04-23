@@ -8,6 +8,7 @@ reference see the Scaladoc.
 import eo.optics.{Lens, Optic}
 import eo.optics.Optic.*
 import eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
+import eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
 ```
 
 Every page here shows optics constructed by hand. For the
@@ -121,41 +122,64 @@ on your end.
 
 ### Read-only construction
 
-`Optional.readOnly(matches: S => Option[A])` builds an
-`Optic[S, Unit, A, A, Affine]` from just a partial projection —
-no write-back required. `T = Unit` statically rules out
-`.modify` / `.replace`, so the resulting optic exposes only the
-read-side operations (`.foldMap`, `.modifyA` for collecting
-effects).
+See [AffineFold](#affinefold) below. `Optional.readOnly` and
+`Optional.selectReadOnly` are aliases that delegate to
+`AffineFold.apply` / `AffineFold.select` — kept for users coming
+from the "read-only Optional" mental model.
 
-Use this when the source shape has no natural write-back
-(`headOption` on a List, predicate-gated filters like
-`Option.when(p(s))(s)`), or as an API-boundary declaration that
-callers cannot write through the returned optic.
+## AffineFold
+
+An `AffineFold[S, A]` is the read-only 0-or-1 focus shape: a
+partial projection with no write-back path. Type alias for
+`Optic[S, Unit, A, A, Affine]` — the `T = Unit` slot statically
+rules out `.modify` / `.replace`, so the only operations are
+`.getOption`, `.foldMap`, and `.modifyA` (effectful read).
+
+Use this when the source has no natural write-back
+(`headOption` on a List, predicate-gated filters), or as an
+API-boundary declaration that callers cannot write through the
+returned optic.
 
 ```scala mdoc:silent
+import eo.optics.AffineFold
+
 case class Adult(age: Int)
-val adultAge =
-  Optional.readOnly[Adult, Int](p => Option.when(p.age >= 18)(p.age))
+val adultAge: AffineFold[Adult, Int] =
+  AffineFold(p => Option.when(p.age >= 18)(p.age))
 ```
 
 ```scala mdoc
-import cats.instances.int.given
-adultAge.foldMap(identity[Int])(Adult(20))
-adultAge.foldMap(identity[Int])(Adult(15))
+adultAge.getOption(Adult(20))
+adultAge.getOption(Adult(15))
 ```
 
-`Optional.selectReadOnly(p)` is the corresponding filter — keep
-only inputs matching `p`:
+`AffineFold.select(p)` is the filtering variant:
 
 ```scala mdoc:silent
-val evenOpt = Optional.selectReadOnly[Int](_ % 2 == 0)
+val evenAF = AffineFold.select[Int](_ % 2 == 0)
 ```
 
 ```scala mdoc
-evenOpt.foldMap(identity[Int])(4)
-evenOpt.foldMap(identity[Int])(3)
+evenAF.getOption(4)
+evenAF.getOption(3)
 ```
+
+Narrow an existing `Optional` or `Prism` to its read-only
+projection via `AffineFold.fromOptional` / `AffineFold.fromPrism` —
+both return an `AffineFold[S, A]` that holds the matcher but
+discards the write / build path.
+
+**Composition note.** Direct `lens.andThen(af)` on an
+`AffineFold` does not type-check: the outer `B` slot doesn't
+align with the inner `T = Unit`. Build a full composed
+`Optional` through the Lens chain and narrow the result with
+`AffineFold.fromOptional`.
+
+**Specialisation.** `AffineFold.apply` picks `X = (Unit, Unit)`
+rather than the `(Unit, S)` shape a full Optional would use:
+the Hit branch never needs to store the source `S`, since
+`from` throws its input away. Saves one reference slot per
+`Affine.Hit` allocation on every read.
 
 ## Setter
 
@@ -299,7 +323,7 @@ element of a container. Two carriers coexist:
   at 2-3× for dense chains (`Lens → Traversal → Lens`) and ~5×
   for the Prism miss-branch shape, amortising toward the lower
   end as the traversed-collection size grows (the
-  [PowerSeries benchmarks](benchmarks.md#powerseries--traversal-with-downstream-composition)
+  [PowerSeries benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition)
   sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
   `PSSingleton` protocol — morphed Lens / Prism / Optional
   inners collect into pre-sized flat arrays without per-element
@@ -357,3 +381,37 @@ ownerAllPhonesMobile.modify(!_)(Owner(List(
 See [the PowerSeries benchmark
 notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers)
 for the cost tradeoff.
+
+## AlgLens
+
+An algebraic lens targets cases that sit *between* `Lens` and
+`Traversal` — a focus with **classifier cardinality `F`**, where
+`F[_]` is a `Monad + Traverse + Alternative` (so `List`,
+`Vector`, `Chain`, `Option`, …). Carrier `AlgLens[F]`, value
+shape `(X, F[A])`.
+
+Use `AlgLens[F]` when the update function genuinely needs the
+whole `F[A]` visible — adaptive-k KNN, one-vs-rest rule
+matching, classifier output that varies per input. **Do NOT**
+reach for `AlgLens.fromLensF` as a general replacement for
+`Traversal.each`: a head-to-head bench
+([`AlgLensBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/AlgLensBench.scala))
+shows `AlgLens[List]` running 1.5–2.6× slower than
+`PowerSeries` on the traversal-shape common case. The tradeoff
+analysis lives in
+[`docs/research/2026-04-22-alglens-vs-powerseries.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-22-alglens-vs-powerseries.md).
+
+Three cross-carrier factories lift existing optics into
+`AlgLens[F]`:
+
+- `AlgLens.fromLensF[F, S, A]` — a Lens whose focus is already
+  `F[A]` (e.g. `Lens[Person, List[Phone]]`).
+- `AlgLens.fromPrismF[F, S, A]` — a Prism whose hit branch
+  carries an `F[A]` (`Prism[Json, List[Int]]`).
+- `AlgLens.fromOptionalF[F, S, A]` — the Optional analogue.
+
+Composition with plain `Lens` / `Prism` / `Optional` on either
+side works through the shipped `Composer` bridges — AlgLens's
+`ForgetfulFunctor` / `ForgetfulFold` / `ForgetfulTraverse` /
+`AssociativeFunctor` instances plug straight into the existing
+`.modify` / `.foldMap` / `.modifyA` extensions.

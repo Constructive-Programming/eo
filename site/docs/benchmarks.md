@@ -186,7 +186,7 @@ decode / re-encode for every element, so both scale linearly
 with array size and EO wins by a constant factor from avoiding
 the per-element codec round-trip.
 
-## PowerSeries — traversal with downstream composition
+## PowerSeries traversal with downstream composition
 
 EO-only — no Monocle equivalent. Three variants in the harness,
 one per common chain shape, all sharing the `PowerSeries`-backed

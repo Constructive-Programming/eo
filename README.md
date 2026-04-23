@@ -49,20 +49,25 @@ street.modify(_.toUpperCase)(alice)     // Person("Alice", Address("MAIN ST", 12
 ```
 
 No `.copy` chains, no setter lambdas, no `GenLens` boilerplate. The `lens`
-macro works on plain case classes, Scala 3 enums, and union types alike.
+macro works on plain case classes, Scala 3 enums, and union types alike —
+and accepts a varargs list of selectors (`lens[Person](_.name, _.age)`) to
+focus multiple fields as a Scala 3 `NamedTuple`. When the selector set covers
+every case field, the macro upgrades automatically to `BijectionIso`.
 
 ## Optics at a glance
 
-| Type        | Carrier                    | Shape                             | Typical use                                   |
-|-------------|----------------------------|-----------------------------------|-----------------------------------------------|
-| `Lens`      | `Tuple2`                   | one focus, always present         | product-type field access                     |
-| `Prism`     | `Either`                   | one focus, may be absent          | sum-type branch, refinement                   |
-| `Iso`       | `Forgetful`                | one focus, bijective              | data-shape conversion                         |
-| `Optional`  | `Affine`                   | one focus, conditionally present  | partial field, predicate-gated access         |
-| `Setter`    | `SetterF`                  | modify only                       | write-through without reading                 |
-| `Getter`    | `Forgetful`                | read only                         | projection, derived view                      |
-| `Fold`      | `Forget[F]`                | N foci, summarised                | `foldMap` across a container                  |
-| `Traversal` | `Forget` / `PowerSeries`   | N foci, each modified             | map over every element, composed downstream   |
+| Type          | Carrier                    | Shape                             | Typical use                                   |
+|---------------|----------------------------|-----------------------------------|-----------------------------------------------|
+| `Lens`        | `Tuple2`                   | one focus, always present         | product-type field access                     |
+| `Prism`       | `Either`                   | one focus, may be absent          | sum-type branch, refinement                   |
+| `Iso`         | `Forgetful`                | one focus, bijective              | data-shape conversion                         |
+| `Optional`    | `Affine`                   | one focus, conditionally present  | partial field, predicate-gated access         |
+| `AffineFold`  | `Affine`                   | one focus, conditionally present, read-only | partial projection with no write-back, API-boundary read-only declaration |
+| `Setter`      | `SetterF`                  | modify only                       | write-through without reading                 |
+| `Getter`      | `Forgetful`                | read only                         | projection, derived view                      |
+| `Fold`        | `Forget[F]`                | N foci, summarised                | `foldMap` across a container                  |
+| `Traversal`   | `Forget` / `PowerSeries`   | N foci, each modified             | map over every element, composed downstream   |
+| `AlgLens[F]`  | `AlgLens[F]`               | N foci of varying cardinality     | classifier-shaped update (adaptive KNN, one-vs-rest); reach for this, not `Traversal.each`, when the update needs the whole `F[A]` visible |
 
 Every optic carries a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do

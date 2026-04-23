@@ -9,10 +9,13 @@ plus a note on where EO diverges.
 |----------------------------------------------------|-----------------------------------------------------|
 | `Lens[S, A](get)(a => s => …)`                     | `Lens[S, A](get, (s, a) => …)`                      |
 | `GenLens[S](_.field)`                              | `lens[S](_.field)` (from `eo.generics`)             |
+| `GenLens[S](_.a).andThen(GenLens[S](_.b)).andThen(...)` — N hand-composed GenLenses | `lens[S](_.a, _.b, ...)` — one varargs call; full-cover upgrades to `BijectionIso` automatically (no Monocle equivalent) |
 | `Prism[S, A](_.some)(identity)`                    | `Prism.optional[S, A](_.some, identity)`            |
 | `GenPrism[S, A]`                                   | `prism[S, A]` (from `eo.generics`)                  |
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
 | `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A, Affine](getOrModify, rg)`     |
+| *(no standalone equivalent — Monocle reaches for `Optional.getOption`)* | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold.fromOptional(opt)` / `AffineFold.fromPrism(p)` — read-only 0-or-1 focus, `T = Unit` forbids `.modify` |
+| *(no direct equivalent — algebraic lenses are not in Monocle)* | `AlgLens.fromLensF` / `fromPrismF` / `fromOptionalF` — classifier-shaped lens over `F[A]` focus; see [Optics → AlgLens](optics.md#alglens) |
 | `Setter[S, A](f => s => …)`                        | `Setter[S, S, A, A](f => s => …)`                   |
 | `Fold.fromFoldable[List, Int]`                     | `Fold[List, Int]` (with `cats.instances.list.given`)|
 | `Traversal.fromTraverse[List, Int]`                | `Traversal.forEach[List, Int, Int]` (map-only) / `Traversal.pEach[List, Int, Int]` (composable) |
@@ -24,7 +27,7 @@ plus a note on where EO diverges.
 | `lens.modify(f)(s)`                                | `lens.modify(f)(s)` — same                          |
 | `prism.getOption(s)`                               | `prism.getOption(s)` — on the concrete returned class; `prism.to(s).toOption` through the generic trait |
 | `prism.reverseGet(a)`                              | `prism.reverseGet(a)` — same                        |
-| `optional.getOption(s)`                            | `opt.to(s).affine.toOption` — see below             |
+| `optional.getOption(s)`                            | `optional.getOption(s)` — generic `.getOption` extension on any `Optic[_, _, _, _, Affine]` (Optional and AffineFold both ship it) |
 | `traversal.modify(f)(xs)`                          | `traversal.modify(f)(xs)` — same                    |
 | `fold.foldMap(f)(xs)`                              | `fold.foldMap(f)(xs)` — same                        |
 

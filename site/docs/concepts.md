@@ -61,11 +61,12 @@ this optic have?"
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Forgetful`     | `A` — identity; no leftover                    | `Iso`, `Getter`        |
-| `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`             |
+| `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 | `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`, `Traversal`    |
 | `PowerSeries`   | `(Snd[X], PSVec[A])`                           | Composable `Traversal` |
 | `FixedTraversal[N]` | Fixed-length tuple of `A`s                  | `Traversal.{two,three,four}` |
+| `AlgLens[F]`    | `(X, F[A])` — classifier-shaped: pair leftover with an `F`-wrapped focus vector | Algebraic Lens (non-uniform classifier cardinality) |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:

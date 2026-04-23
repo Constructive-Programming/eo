@@ -8,6 +8,7 @@ version.
 import eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import eo.optics.Optic.*
 import eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
+import eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
 ```
 
 ## Edit a deeply-nested field
