@@ -95,6 +95,7 @@
     <li class="level1 nav-leaf"><a href="#modify-every-element-and-continue-through-a-field">Modify every element <em>and</em> continue through a field</a></li>
     <li class="level1 nav-leaf"><a href="#branch-into-a-sum-type">Branch into a sum type</a></li>
     <li class="level1 nav-leaf"><a href="#edit-json-without-decoding">Edit JSON without decoding</a></li>
+    <li class="level1 nav-leaf"><a href="#diagnose-a-silent-json-edit-no-op">Diagnose a silent JSON edit no-op</a></li>
     <li class="level1 nav-leaf"><a href="#apply-a-function-that-needs-an-effect">Apply a function that needs an effect</a></li>
     <li class="level1 nav-leaf"><a href="#iso-between-equivalent-shapes">Iso between equivalent shapes</a></li>
     <li class="level1 nav-leaf"><a href="#derive-a-read-only-view">Derive a read-only view</a></li>
@@ -251,8 +252,42 @@
 //   &quot;zip&quot; : 12345
 // }]
 // )
-</span><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">userJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="identifier">userStreet</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">userJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res12: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;MAIN ST\&quot;,\&quot;zip\&quot;:12345},\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        
+        <h2 id="diagnose-a-silent-json-edit-no-op" class="section"><a class="anchor-link left" href="#diagnose-a-silent-json-edit-no-op"><i class="icofont-laika link">&#xef71;</i></a>Diagnose a silent JSON edit no-op</h2>
+        <p>The pre-v0.2 <code>*Unsafe</code> methods on <code>JsonPrism</code> / <code>JsonTraversal</code>
+        return the input Json unchanged on any miss — the path wasn&#39;t
+        resolvable, the leaf didn&#39;t decode, the index was out of range.
+        Useful, but it leaves you wondering <em>which</em> miss fired. The
+        default <code>modify</code> / <code>get</code> surface returns <code>Ior[Chain[JsonFailure],
+Json]</code> so the diagnostic is observable:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Ior</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="type-name">Json</span><span>
+
+</span><span class="comment">// A stump Json missing the `.address` field altogether.
+</span><span class="keyword">val</span><span> </span><span class="identifier">stump</span><span> = </span><span class="type-name">Json</span><span>.</span><span class="identifier">obj</span><span>(</span><span class="string-literal">&quot;name&quot;</span><span> -&gt; </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>))
+</span><span class="comment">// stump: Json = JObject(object[name -&gt; &quot;Alice&quot;])
+</span><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>)
+</span><span class="comment">// res13: Ior[Chain[JsonFailure], Json] = Both(
+//   a = Singleton(PathMissing(Field(&quot;address&quot;))),
+//   b = JObject(object[name -&gt; &quot;Alice&quot;])
+// )</span></code></pre>
+        <p>The <code>Ior.Both(chain, json)</code> carries both the pre-v0.2 behaviour
+        (the unchanged Json) and the diagnostic (the chain). Fold the
+        chain into a readable message:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>) </span><span class="keyword">match</span><span>
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Right</span><span>(</span><span class="identifier">updated</span><span>) =&gt; </span><span class="string-literal">s&quot;ok: </span><span class="substitution">$updated</span><span class="string-literal">&quot;</span><span>
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Both</span><span>(</span><span class="identifier">chain</span><span>, </span><span class="identifier">_</span><span>) =&gt; </span><span class="identifier">chain</span><span>.</span><span class="identifier">toList</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">message</span><span>).</span><span class="identifier">mkString</span><span>(</span><span class="string-literal">&quot;; &quot;</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Left</span><span>(</span><span class="identifier">chain</span><span>)    =&gt; </span><span class="identifier">chain</span><span>.</span><span class="identifier">toList</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">message</span><span>).</span><span class="identifier">mkString</span><span>(</span><span class="string-literal">&quot;; &quot;</span><span>)
+</span><span class="comment">// res14: String = &quot;path missing at Field(address)&quot;</span></code></pre>
+        <p>Ignoring the diagnostic is one <code>.getOrElse(input)</code> away:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>).</span><span class="identifier">getOrElse</span><span>(</span><span class="identifier">stump</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res15: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>Or reach for the explicit silent form — byte-identical to the
+        pre-v0.2 <code>modify</code> body, no Ior allocation:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res16: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
         
         <h2 id="apply-a-function-that-needs-an-effect" class="section"><a class="anchor-link left" href="#apply-a-function-that-needs-an-effect"><i class="icofont-laika link">&#xef71;</i></a>Apply a function that needs an effect</h2>
         <p>Both <code>.modifyF</code> and <code>.modifyA</code> lift an <code>A =&gt; G[B]</code> through an
@@ -267,12 +302,12 @@
 </span><span class="identifier">shopperAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>)(
   </span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>)
 )
-</span><span class="comment">// res13: Option[Shopper] = Some(Shopper(name = &quot;Alice&quot;, age = 31))
+</span><span class="comment">// res17: Option[Shopper] = Some(Shopper(name = &quot;Alice&quot;, age = 31))
 </span><span>
 </span><span class="identifier">shopperAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>)(
   </span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, -</span><span class="number-literal">1</span><span>)
 )
-</span><span class="comment">// res14: Option[Shopper] = None</span></code></pre>
+</span><span class="comment">// res18: Option[Shopper] = None</span></code></pre>
         
         <h2 id="iso-between-equivalent-shapes" class="section"><a class="anchor-link left" href="#iso-between-equivalent-shapes"><i class="icofont-laika link">&#xef71;</i></a>Iso between equivalent shapes</h2>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
@@ -284,16 +319,16 @@
     </span><span class="identifier">ur</span><span> =&gt; </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">ur</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">ur</span><span>.</span><span class="identifier">age</span><span>),
   )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userIso</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">UserTuple</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res15: UserRecord = UserRecord(name = &quot;Alice&quot;, age = 30)
+</span><span class="comment">// res19: UserRecord = UserRecord(name = &quot;Alice&quot;, age = 30)
 </span><span class="identifier">userIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="type-name">UserRecord</span><span>(</span><span class="string-literal">&quot;Bob&quot;</span><span>, </span><span class="number-literal">25</span><span>))
-</span><span class="comment">// res16: UserTuple = UserTuple(name = &quot;Bob&quot;, age = 25)</span></code></pre>
+</span><span class="comment">// res20: UserTuple = UserTuple(name = &quot;Bob&quot;, age = 25)</span></code></pre>
         
         <h2 id="derive-a-read-only-view" class="section"><a class="anchor-link left" href="#derive-a-read-only-view"><i class="icofont-laika link">&#xef71;</i></a>Derive a read-only view</h2>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Getter</span><span>
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">nameInitial</span><span> = </span><span class="type-name">Getter</span><span>[</span><span class="type-name">Shopper</span><span>, </span><span class="type-name">Char</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">head</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">nameInitial</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res17: Char = &#39;A&#39;</span></code></pre>
+</span><span class="comment">// res21: Char = &#39;A&#39;</span></code></pre>
         
         <h2 id="further-reading" class="section"><a class="anchor-link left" href="#further-reading"><i class="icofont-laika link">&#xef71;</i></a>Further reading</h2>
         <ul>

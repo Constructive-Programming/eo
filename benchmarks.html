@@ -435,85 +435,125 @@ Affine]</code> instance auto-lifts each Lens hop into the <code>Affine</code>
         per-element wrapping cost.</p>
         
         <h2 id="jsonprism-cursor-backed-json-edit" class="section"><a class="anchor-link left" href="#jsonprism-cursor-backed-json-edit"><i class="icofont-laika link">&#xef71;</i></a>JsonPrism — cursor-backed JSON edit</h2>
-        <p>No Monocle equivalent at this layer. Compared against the
-        classical <code>decode → modify → re-encode</code> baseline.</p>
+        <p>No Monocle equivalent at this layer. Two EO surfaces side by
+        side: <code>.modifyUnsafe</code> (silent, pre-v0.2 shape) and <code>.modify</code>
+        (default, returns <code>Ior[Chain[JsonFailure], Json]</code>). Baseline is
+        the classical <code>decode → modify → re-encode</code>.</p>
         <table>
           <thead>
             <tr>
               <th>Depth</th>
-              <th>eo</th>
+              <th><code>.modifyUnsafe</code></th>
+              <th><code>.modify</code> (Ior)</th>
               <th>naive</th>
-              <th>speedup</th>
+              <th>Unsafe vs naive</th>
+              <th>Ior vs naive</th>
+              <th>Ior tax</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>1</td>
-              <td>69.1 ns</td>
-              <td>155.5 ns</td>
-              <td>2.25×</td>
+              <td>68.8 ± 2.7</td>
+              <td>67.4 ± 1.4</td>
+              <td>151 ns</td>
+              <td>2.20×</td>
+              <td>2.24×</td>
+              <td>~0 ns</td>
             </tr>
             <tr>
               <td>2</td>
-              <td>116.1 ns</td>
-              <td>158.8 ns</td>
-              <td>1.37×</td>
+              <td>114.6 ± 0.7</td>
+              <td>117.3 ± 2.8</td>
+              <td>151 ns</td>
+              <td>1.32×</td>
+              <td>1.29×</td>
+              <td>+2.7 ns</td>
             </tr>
             <tr>
               <td>3</td>
-              <td>135.8 ns</td>
-              <td>253.3 ns</td>
-              <td>1.87×</td>
-            </tr>
-            <tr>
-              <td>wide</td>
-              <td>943.5 ns</td>
-              <td>983.6 ns</td>
-              <td>1.04×</td>
+              <td>129.3 ± 5.3</td>
+              <td>131.9 ± 4.9</td>
+              <td>234 ns</td>
+              <td>1.81×</td>
+              <td>1.77×</td>
+              <td>+2.5 ns</td>
             </tr>
           </tbody>
         </table>
-        <p>The &quot;wide&quot; variant uses 28-total-field records; at that width
-        the naive decoder has to touch every field. EO&#39;s
-        <code>codecPrism[…].field(_.x).field(_.y)</code> walks only the focused
-        path.</p>
+        <p>The &quot;Ior tax&quot; column isolates the cost of opting into the
+        default diagnostic-bearing surface: a single <code>Ior.Right(json)</code>
+        case-class allocation per call, flat per path depth (not per
+        step). At d1 the number is inside measurement noise (d1 Ior
+        actually comes out slightly faster on this run — JMH standard
+        error territory).</p>
+        <p>A fourth &quot;wide&quot; fixture (28-field record, measured separately)
+        showed the ratio narrow to ~1.04× because the naive decoder
+        touches every field regardless of arity, while EO still walks
+        only the focused path. That wide-record bench stayed on the
+        pre-rename harness; the numbers in the table above are for the
+        standard Person / Deep3 fixtures.</p>
+        <p><strong>When to reach for <code>.modifyUnsafe</code>.</strong> If you&#39;ve measured and
+        want pre-v0.2 throughput exactly, or you have a hot path where
+        the <code>Ior.Right</code> allocation matters (heap-sensitive loops, very
+        short overall work units). Otherwise the default is the
+        recommended entry — you get structured <code>JsonFailure</code> diagnostics
+        for the same order-of-magnitude speedup over naive.</p>
         
         <h2 id="jsontraversal-items-each-name-edits" class="section"><a class="anchor-link left" href="#jsontraversal-items-each-name-edits"><i class="icofont-laika link">&#xef71;</i></a>JsonTraversal — <code>items.each.name</code> edits</h2>
         <p>Uppercasing every <code>items[*].name</code> inside a <code>Basket</code> record, at
-        three array sizes:</p>
+        three array sizes. Same two-surface story as JsonPrism above:</p>
         <table>
           <thead>
             <tr>
               <th>Items</th>
-              <th>eo</th>
+              <th><code>.modifyUnsafe</code></th>
+              <th><code>.modify</code> (Ior)</th>
               <th>naive</th>
-              <th>speedup</th>
+              <th>Unsafe vs naive</th>
+              <th>Ior vs naive</th>
+              <th>Ior tax</th>
             </tr>
           </thead>
           <tbody>
             <tr>
               <td>8</td>
-              <td>796.1 ns</td>
-              <td>1 802.2 ns</td>
-              <td>2.26×</td>
+              <td>797 ±  18</td>
+              <td>819 ±  22</td>
+              <td>1 659 ns</td>
+              <td>2.08×</td>
+              <td>2.03×</td>
+              <td>+22 ns / +2.9 %</td>
             </tr>
             <tr>
               <td>64</td>
-              <td>5 977.8 ns</td>
-              <td>12 404.9 ns</td>
-              <td>2.07×</td>
+              <td>5 991 ± 188</td>
+              <td>6 128 ±  83</td>
+              <td>12 196 ns</td>
+              <td>2.04×</td>
+              <td>1.99×</td>
+              <td>+137 ns / +2.3 %</td>
             </tr>
             <tr>
               <td>512</td>
-              <td>47 498.6 ns</td>
-              <td>95 503.5 ns</td>
-              <td>2.01×</td>
+              <td>47 046 ± 601</td>
+              <td>48 928 ±1 428</td>
+              <td>92 710 ns</td>
+              <td>1.97×</td>
+              <td>1.89×</td>
+              <td>+1 882 ns / +4.0 %</td>
             </tr>
           </tbody>
         </table>
-        <p>The ratio is roughly constant — the naive path pays a full
-        decode / re-encode for every element, so both scale linearly
-        with array size and EO wins by a constant factor from avoiding
+        <p>Traversal&#39;s Ior tax scales with element count (~3.7 ns per
+        element at size 512), consistent with per-element <code>Chain</code>
+        bookkeeping on the success path. The gap to naive is ~2× at
+        every size and stays ~2× when switching to the default
+        Ior-bearing surface — the cursor-walk speedup absorbs the
+        accumulator cost comfortably.</p>
+        <p>The ratio is roughly constant across sizes — the naive path
+        pays a full decode / re-encode for every element, so both sides
+        scale linearly and EO wins by a constant factor from avoiding
         the per-element codec round-trip.</p>
         
         <h2 id="powerseries-traversal-with-downstream-composition" class="section"><a class="anchor-link left" href="#powerseries-traversal-with-downstream-composition"><i class="icofont-laika link">&#xef71;</i></a>PowerSeries traversal with downstream composition</h2>

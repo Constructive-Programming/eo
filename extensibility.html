@@ -263,17 +263,24 @@ HCursor)</code> gives generic-path callers both a diagnostic
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span>: </span><span class="type-name">JsonPrism</span><span>[</span><span class="type-name">String</span><span>] =
   </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
 
-</span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>)
-</span><span class="comment">//       ^— dispatches to JsonPrism.modifyImpl: the fused path</span></code></pre>
+</span><span class="identifier">streetP</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>)
+</span><span class="comment">//       ^— dispatches to JsonPrism.modifyImpl: the fused path,
+//          byte-identical to the pre-v0.2 silent `modify`.</span></code></pre>
+        <p>The default-Ior equivalent — <code>streetP.modify(_.toUpperCase)(json)</code> —
+        returns <code>Ior[Chain[JsonFailure], Json]</code> and surfaces per-step
+        failures via the observable-by-default surface introduced in v0.2.</p>
         <p><strong>Trait binding</strong> — you get the generic carrier path:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">Json</span><span>, </span><span class="type-name">Json</span><span>, </span><span class="type-name">String</span><span>, </span><span class="type-name">String</span><span>, </span><span class="type-name">Either</span><span>] =
   </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
 
 </span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>)
 </span><span class="comment">//       ^— dispatches to the generic Optic.modify extension,
-//          which routes through ForgetfulFunctor[Either].</span></code></pre>
-        <p>Both type-check, both produce the same answer. You pick
-        concrete binding when you care about the hot-path cost;
+//          which routes through ForgetfulFunctor[Either] and
+//          returns Json =&gt; Json (pre-v0.2 silent shape).</span></code></pre>
+        <p>Both type-check. Concrete binding picks up the Ior-bearing default
+        or the <code>*Unsafe</code> escape hatch; trait binding keeps the generic
+        extension&#39;s <code>Json =&gt; Json</code> shape. You pick concrete binding when
+        you care about the hot-path cost or the diagnostic surface;
         otherwise the generic extension is there unchanged.</p>
         <p>The concrete class&#39;s inline overrides don&#39;t <em>replace</em> the
         trait surface — they sit <em>alongside</em> it. That&#39;s why JsonPrism
