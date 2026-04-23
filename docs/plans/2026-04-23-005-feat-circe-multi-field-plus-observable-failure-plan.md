@@ -1013,7 +1013,7 @@ otherwise the naming symmetry breaks.
 
 ## Implementation Units
 
-- [ ] **Unit 0: NamedTuple codec derivation spike**
+- [x] **Unit 0: NamedTuple codec derivation spike**
 
   **Goal:** confirm that `KindlingsCodecAsObject.derive[NT]` produces
   a usable `Codec.AsObject[NT]` for a macro-synthesised NamedTuple,
