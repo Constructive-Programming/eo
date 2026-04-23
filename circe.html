@@ -94,6 +94,7 @@
     <li class="level1 nav-leaf"><a href="#jsontraversal-each">JsonTraversal (<code>.each</code>)</a></li>
     <li class="level1 nav-leaf"><a href="#multi-field-focus-fields-_-a-_-b">Multi-field focus — <code>.fields(_.a, _.b)</code></a></li>
     <li class="level1 nav-leaf"><a href="#reading-diagnostics-from-the-default-ior-surface">Reading diagnostics from the default Ior surface</a></li>
+    <li class="level1 nav-leaf"><a href="#string-input-parse-on-the-fly">String input — parse on the fly</a></li>
     <li class="level1 nav-leaf"><a href="#ignoring-failures-the-unsafe-escape-hatch">Ignoring failures (the <code>*Unsafe</code> escape hatch)</a></li>
     <li class="level1 nav-leaf"><a href="#migration-notes-v0-2-rename">Migration notes (v0.2 rename)</a></li>
     <li class="level1 nav-leaf"><a href="#when-to-reach-for-which">When to reach for which</a></li>
@@ -159,7 +160,7 @@
 // }]
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
-</span><span class="comment">// streetP: JsonPrism[String] = eo.circe.JsonPrism@727329ac
+</span><span class="comment">// streetP: JsonPrism[String] = eo.circe.JsonPrism@404e2cf
 </span><span>
 </span><span class="identifier">streetP</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">json</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res0: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;MAIN ST\&quot;,\&quot;zip\&quot;:12345},\&quot;age\&quot;:30,\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
@@ -212,7 +213,7 @@
 // ]]
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">secondName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">at</span><span>(</span><span class="number-literal">1</span><span>).</span><span class="identifier">name</span><span>
-</span><span class="comment">// secondName: JsonPrism[String] = eo.circe.JsonPrism@22f1dde1
+</span><span class="comment">// secondName: JsonPrism[String] = eo.circe.JsonPrism@411c7862
 </span><span>
 </span><span class="identifier">secondName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res5: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;X\&quot;},{\&quot;name\&quot;:\&quot;Y\&quot;},{\&quot;name\&quot;:\&quot;Z\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
@@ -225,7 +226,7 @@
         <code>.at</code> / selectable-sugar calls on the traversal extend the
         per-element suffix:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">everyName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
-</span><span class="comment">// everyName: JsonTraversal[String] = eo.circe.JsonTraversal@7dc9f68d
+</span><span class="comment">// everyName: JsonTraversal[String] = eo.circe.JsonTraversal@77f0eb
 </span><span>
 </span><span class="identifier">everyName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res6: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;X\&quot;},{\&quot;name\&quot;:\&quot;Y\&quot;},{\&quot;name\&quot;:\&quot;Z\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;
@@ -241,7 +242,7 @@
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">type</span><span> </span><span class="type-name">NameAge</span><span> = </span><span class="type-name">NamedTuple</span><span>.</span><span class="type-name">NamedTuple</span><span>[(</span><span class="string-literal">&quot;name&quot;</span><span>, </span><span class="string-literal">&quot;age&quot;</span><span>), (</span><span class="type-name">String</span><span>, </span><span class="type-name">Int</span><span>)]
 </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">NameAge</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nameAge</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">fields</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>)
-</span><span class="comment">// nameAge: JsonFieldsPrism[NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, EmptyTuple]], *:[String, *:[Int, EmptyTuple]]]] = eo.circe.JsonFieldsPrism@7e0f7b8a
+</span><span class="comment">// nameAge: JsonFieldsPrism[NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, EmptyTuple]], *:[String, *:[Int, EmptyTuple]]]] = eo.circe.JsonFieldsPrism@588717b4
 </span><span>
 </span><span class="identifier">nameAge</span><span>
   .</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">nt</span><span> =&gt; (</span><span class="identifier">name</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">toUpperCase</span><span>, </span><span class="identifier">age</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>))(</span><span class="identifier">json</span><span>)
@@ -255,7 +256,7 @@
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">type</span><span> </span><span class="type-name">Full</span><span> = </span><span class="type-name">NamedTuple</span><span>.</span><span class="type-name">NamedTuple</span><span>[(</span><span class="string-literal">&quot;name&quot;</span><span>, </span><span class="string-literal">&quot;age&quot;</span><span>, </span><span class="string-literal">&quot;address&quot;</span><span>), (</span><span class="type-name">String</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Address</span><span>)]
 </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Full</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">fullL</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">fields</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>)
-</span><span class="comment">// fullL: JsonFieldsPrism[NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, *:[&quot;address&quot;, EmptyTuple]]], *:[String, *:[Int, *:[Address, EmptyTuple]]]]] = eo.circe.JsonFieldsPrism@34c96587</span></code></pre>
+</span><span class="comment">// fullL: JsonFieldsPrism[NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, *:[&quot;address&quot;, EmptyTuple]]], *:[String, *:[Int, *:[Address, EmptyTuple]]]]] = eo.circe.JsonFieldsPrism@127ff602</span></code></pre>
         <p>Per-element multi-field focus via <code>.each.fields</code> focuses a
         NamedTuple on every element of an array:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Item</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">price</span><span>: </span><span class="type-name">Double</span><span>, </span><span class="identifier">qty</span><span>: </span><span class="type-name">Int</span><span>)
@@ -379,6 +380,50 @@
 //   )
 // )</span></code></pre>
         
+        <h2 id="string-input-parse-on-the-fly" class="section"><a class="anchor-link left" href="#string-input-parse-on-the-fly"><i class="icofont-laika link">&#xef71;</i></a>String input — parse on the fly</h2>
+        <p>Every edit and read method on <code>JsonPrism</code> / <code>JsonFieldsPrism</code> /
+        <code>JsonTraversal</code> / <code>JsonFieldsTraversal</code> accepts <code>Json | String</code> as
+        the source. When you hand in a <code>String</code>, the library parses it
+        first and surfaces parse errors through the same <code>JsonFailure</code>
+        accumulator as every other failure mode.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">incoming</span><span>: </span><span class="type-name">String</span><span> =
+  </span><span class="string-literal">&quot;&quot;&quot;{&quot;name&quot;:&quot;Alice&quot;,&quot;age&quot;:30,&quot;address&quot;:{&quot;street&quot;:&quot;Main St&quot;,&quot;zip&quot;:12345}}&quot;&quot;&quot;</span><span>
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">upperName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">field</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>).</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="comment">// Happy path: parsed, modified, Ior.Right.
+</span><span class="identifier">upperName</span><span>(</span><span class="identifier">incoming</span><span>).</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">noSpacesSortKeys</span><span>)
+</span><span class="comment">// res13: Ior[Chain[JsonFailure], String] = Right(
+//   &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;Main St\&quot;,\&quot;zip\&quot;:12345},\&quot;age\&quot;:30,\&quot;name\&quot;:\&quot;ALICE\&quot;}&quot;
+// )
+</span><span>
+</span><span class="comment">// Parse failure: Ior.Left(Chain(JsonFailure.ParseFailed(_))).
+</span><span class="identifier">upperName</span><span>(</span><span class="string-literal">&quot;not json at all&quot;</span><span>)
+</span><span class="comment">// res14: Ior[Chain[JsonFailure], Json] = Left(
+//   Singleton(
+//     ParseFailed(
+//       ParsingFailure(
+//         message = &quot;expected null got &#39;not js...&#39; (line 1, column 1)&quot;,
+//         underlying = ParseException(
+//           msg = &quot;expected null got &#39;not js...&#39; (line 1, column 1)&quot;,
+//           index = 0,
+//           line = 1,
+//           col = 1
+//         )
+//       )
+//     )
+//   )
+// )</span></code></pre>
+        <p>Handing in a <code>Json</code> directly still works unchanged — the widened
+        <code>(Json | String) =&gt; _</code> signature is a supertype of the old <code>Json =&gt;
+_</code>, so every pre-existing call site compiles without change. The
+        parse cost is zero when the input is already a <code>Json</code>; it&#39;s one
+        <code>io.circe.parser.parse</code> invocation when it&#39;s a <code>String</code>.</p>
+        <p>On the <code>*Unsafe</code> surface, unparseable strings fall back to
+        <code>Json.Null</code> — there&#39;s no meaningful &quot;input unchanged&quot; semantic for
+        text that isn&#39;t JSON, and the whole point of <code>*Unsafe</code> is to drop
+        failure detail. Callers who need parse diagnostics stay on the
+        default Ior-bearing surface.</p>
+        
         <h2 id="ignoring-failures-the-unsafe-escape-hatch" class="section"><a class="anchor-link left" href="#ignoring-failures-the-unsafe-escape-hatch"><i class="icofont-laika link">&#xef71;</i></a>Ignoring failures (the <code>*Unsafe</code> escape hatch)</h2>
         <p>For callers who have measured and know they don&#39;t want the Ior
         allocation, every default method has a sibling <code>*Unsafe</code> variant
@@ -386,11 +431,11 @@
         byte-for-byte:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Pre-v0.2 shape: modifyUnsafe, silent pass-through on miss.
 </span><span class="identifier">streetP</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stumpJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
-</span><span class="comment">// res13: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;
+</span><span class="comment">// res15: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;
 </span><span>
 </span><span class="comment">// Equivalent via the default surface:
 </span><span class="identifier">streetP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stumpJson</span><span>).</span><span class="identifier">getOrElse</span><span>(</span><span class="identifier">stumpJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
-</span><span class="comment">// res14: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+</span><span class="comment">// res16: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
         <p>Both spellings produce the same Json. The first pays nothing for
         diagnostics; the second gives an observable <code>Ior</code> at the price of
         one allocation.</p>
