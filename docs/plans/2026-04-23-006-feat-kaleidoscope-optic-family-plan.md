@@ -1054,7 +1054,7 @@ Reflector instance paths.
 
 ### Unit 6 — Benchmark (`KaleidoscopeBench` — EO-only, two fixtures)
 
-- [ ] Land JMH bench.
+- [x] Land JMH bench.
 
 **Files.** Create `benchmarks/src/main/scala/eo/bench/KaleidoscopeBench.scala`.
 
