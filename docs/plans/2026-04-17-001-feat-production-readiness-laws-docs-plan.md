@@ -1619,9 +1619,15 @@ land before Unit 15 (release cut) so the tag ships the cleaned surface.
 - Modify: `core/src/main/scala/eo/optics/Lens.scala` — remove the unused
   `given tupleInterchangeable[A, B]: (((A, B)) => (B, A))` at lines 22-24
   (code-quality review §core/YAGNI; 3 LoC).
-- Modify: `core/src/main/scala/eo/ForgetfulApplicative.scala` — remove the
-  empty `object ForgetfulApplicative` stub at line 19 (review
-  §core/Dead-or-unreachable; 2 LoC).
+- **Leave alone**: `core/src/main/scala/eo/ForgetfulApplicative.scala` —
+  the empty `object ForgetfulApplicative` stub at line 19. Review
+  §core/Dead-or-unreachable flags it as 2 LoC of dead code, but the
+  stub's Scaladoc documents it as an intentional extension point for
+  user-supplied instances (matching the pattern on the sibling
+  capability typeclasses). **Pinned 2026-04-24** against the review's
+  recommendation; keeping for consistency with the rest of the capability
+  typeclass surface. Revisit only if a concrete simplification proves
+  that user extension isn't wanted there.
 - Modify: `core/src/main/scala/eo/data/SetterF.scala` — remove the unused
   `[S, A]` type parameters on `given map` (line 26) and `given traverse`
   (line 38) (review §core/Dead; ~4 LoC).
@@ -2431,9 +2437,13 @@ work — flagged in Future Considerations, not in-scope here.
   because every law file imports `eo.optics.Optic.*`. A three-way
   split would let law-equation-only users skip the optics package.
   Structurally disruptive; 0.2.0 candidate.
-- **`LowPriorityForgetInstances.assocForgetComonad` deprecation.**
-  Review §core/YAGNI flags this ~25-LoC path as having no shipping
-  consumer. Deprecate in 0.1.0 if time; remove in 0.2.0.
+- **`LowPriorityForgetInstances.assocForgetComonad` — leave alone.**
+  Review §core/YAGNI flagged this ~25-LoC path as having no shipping
+  consumer, suggesting deprecation. **Pinned 2026-04-24 against the
+  review** — the path's Scaladoc documents it as a deliberate design
+  escape hatch for downstream projects wiring an `AssociativeFunctor`
+  through a `Comonad`-flavoured Forget. Keeping intact. Revisit only
+  if user feedback shows nobody reaches for it across 0.1.x.
 - **`pickSingletonOrThrow` collapse** in `AlgLens.scala:282-300` into
   direct `Foldable.reduceLeftToOption(_)(identity).get` — saves 15
   LoC. Post-0.1.0.
