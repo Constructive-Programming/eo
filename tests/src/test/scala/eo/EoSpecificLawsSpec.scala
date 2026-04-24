@@ -9,8 +9,6 @@ import data.Affine.given
 import data.SetterF.given
 import data.FixedTraversal.given
 import laws.eo.{
-  ChainAccessorLaws,
-  ChainPathIndependenceLaws,
   FoldMapHomomorphismLaws,
   ForgetAllModifyLaws,
   IsoComposeLaws,
@@ -26,8 +24,6 @@ import laws.eo.{
   TraverseAllLaws,
 }
 import laws.eo.discipline.{
-  ChainAccessorTests,
-  ChainPathIndependenceTests,
   FoldMapHomomorphismTests,
   ForgetAllModifyTests,
   IsoComposeTests,
@@ -42,6 +38,8 @@ import laws.eo.discipline.{
   TransformTests,
   TraverseAllTests,
 }
+import laws.typeclass.{ComposerPathIndependenceLaws, ComposerPreservesGetLaws}
+import laws.typeclass.discipline.{ComposerPathIndependenceTests, ComposerPreservesGetTests}
 
 import cats.instances.list.given
 
@@ -195,18 +193,18 @@ class EoSpecificLawsSpec extends Specification with Discipline:
     .transform,
   )
 
-  // =============== F1 — Composer.chain path independence ===========
+  // =============== C1 — Composer path independence ================
 
   checkAll(
     "doubleIso: chain through Tuple2 ≡ chain through Either",
-    new ChainPathIndependenceTests[Int, Int]:
+    new ComposerPathIndependenceTests[Int, Int]:
 
-      val laws = new ChainPathIndependenceLaws[Int, Int]:
+      val laws = new ComposerPathIndependenceLaws[Int, Int]:
         val iso = doubleIso
-    .chainPathIndependence,
+    .composerPathIndependence,
   )
 
-  // =============== F2 — Composer.chain preserves get ===============
+  // =============== C2 — Composer preserves get ===================
   //
   // Forgetful → Tuple2 → Tuple2 with a locally-declared identity
   // composer at the second hop. Degenerate because Tuple2 is the
@@ -215,10 +213,10 @@ class EoSpecificLawsSpec extends Specification with Discipline:
 
   checkAll(
     "doubleIso: Forgetful → Tuple2 → Tuple2 chain preserves get",
-    new ChainAccessorTests[Int, Int, Forgetful, Tuple2, Tuple2]:
+    new ComposerPreservesGetTests[Int, Int, Forgetful, Tuple2, Tuple2]:
 
       val laws =
-        new ChainAccessorLaws[Int, Int, Forgetful, Tuple2, Tuple2]:
+        new ComposerPreservesGetLaws[Int, Int, Forgetful, Tuple2, Tuple2]:
           val optic = doubleIso
           val fToG = Composer.forgetful2tuple
 
@@ -233,7 +231,7 @@ class EoSpecificLawsSpec extends Specification with Discipline:
 
           given accessorH: data.Accessor[Tuple2] =
             data.Accessor.tupleAccessor
-    .chainAccessor,
+    .composerPreservesGet,
   )
 
   // =============== G1 + G2 — Optic.all on Forget[T] ================

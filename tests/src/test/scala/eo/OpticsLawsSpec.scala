@@ -35,8 +35,12 @@ import laws.discipline.{
 }
 import laws.data.{AffineLaws, FixedTraversalLaws, PowerSeriesLaws, SetterFLaws}
 import laws.data.discipline.{AffineTests, FixedTraversalTests, PowerSeriesTests, SetterFTests}
-import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
-import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
+import laws.typeclass.{AssociativeFunctorLaws, ForgetfulFunctorLaws, ForgetfulTraverseLaws}
+import laws.typeclass.discipline.{
+  AssociativeFunctorTests,
+  ForgetfulFunctorTests,
+  ForgetfulTraverseTests,
+}
 
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Cogen, Gen}
@@ -394,6 +398,49 @@ class OpticsLawsSpec extends Specification with Discipline:
       val laws = new ForgetfulFunctorLaws[Either, Int, Int] {}
     .forgetfulFunctor,
   )
+
+  // AssociativeFunctor[Tuple2] — nested Lens composition.
+  // Outer: ((Int, String), Boolean) → (Int, String); inner: (Int, String) → Int.
+  // `composed` threads the outer `.andThen(inner)` through the stock
+  // AssociativeFunctor[Tuple2] given at fixture-construction time so the
+  // abstract-F trait body doesn't need to resolve it.
+  val nestedTuple2OuterL: Optic[
+    ((Int, String), Boolean),
+    ((Int, String), Boolean),
+    (Int, String),
+    (Int, String),
+    Tuple2,
+  ] =
+    Lens[((Int, String), Boolean), (Int, String)](_._1, (s, a) => (a, s._2))
+
+  checkAll(
+    "AssociativeFunctor[Tuple2] on nested Lens chain",
+    new AssociativeFunctorTests[((Int, String), Boolean), (Int, String), Int, Tuple2]:
+      val laws = new AssociativeFunctorLaws[((Int, String), Boolean), (Int, String), Int, Tuple2]:
+        val outer = nestedTuple2OuterL
+        val inner = firstLens
+        val composed = nestedTuple2OuterL.andThen(firstLens)
+        val functor = summon[ForgetfulFunctor[Tuple2]]
+    .associativeFunctor,
+  )
+
+  // AssociativeFunctor[Either] — nested Prism composition.
+  // `evenPrism.andThen(evenPrism)` focuses only n such that n is even AND
+  // n/2 is also even (i.e. n mod 4 == 0). Domain-restricted [-10000, 10000]
+  // for the same doubling-overflow reason as the outer evenPrism fixture.
+  locally {
+    given Arbitrary[Int] = Arbitrary(Gen.choose(-10000, 10000))
+    checkAll(
+      "AssociativeFunctor[Either] on nested Prism chain (even ∘ even)",
+      new AssociativeFunctorTests[Int, Int, Int, Either]:
+        val laws = new AssociativeFunctorLaws[Int, Int, Int, Either]:
+          val outer = evenPrism
+          val inner = evenPrism
+          val composed = evenPrism.andThen(evenPrism)
+          val functor = summon[ForgetfulFunctor[Either]]
+      .associativeFunctor,
+    )
+  }
 
   // Affine ForgetfulFunctor + ForgetfulTraverse: reuses arbAffineIntStringBool.
   checkAll(

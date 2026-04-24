@@ -1003,10 +1003,12 @@ cats' `TraverseLaws` shape.
 - The migrated `Unthreaded.scala` scenarios exist in `PowerSeriesSpec.scala`
   as property tests.
 
-- [~] **Unit 7: Type-class laws (`ForgetfulFunctor`, `ForgetfulTraverse`,
-  `AssociativeFunctor`, `Composer`)** *(partial — ForgetfulFunctor and
-  ForgetfulTraverse laws landed under `laws/src/main/scala/eo/laws/typeclass/`;
-  `AssociativeFunctor` + `Composer` law classes still pending)*
+- [x] **Unit 7: Type-class laws (`ForgetfulFunctor`, `ForgetfulTraverse`,
+  `AssociativeFunctor`, `Composer`)** *(completed 2026-04-24 —
+  `AssociativeFunctorLaws` + `ComposerPathIndependenceLaws` +
+  `ComposerPreservesGetLaws` landed under
+  `laws/src/main/scala/eo/laws/typeclass/`, the earlier chain laws were
+  promoted from `eo/ChainLaws.scala`)*
 
 **Goal:** Dedicate law classes to the four carrier type-classes that drive
 runtime behavior across every optic and carrier in use today. Any

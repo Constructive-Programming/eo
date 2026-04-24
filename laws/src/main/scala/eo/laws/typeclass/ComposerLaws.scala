@@ -1,30 +1,31 @@
 package eo
 package laws
-package eo
+package typeclass
 
 import optics.Optic
 import optics.Optic.*
 import _root_.eo.data.{Affine, Forgetful}
 import _root_.eo.data.Affine.given
 
-// Laws governing `Composer.chain` — the mechanism that lifts a series
-// of pairwise `Composer`s into a multi-hop carrier coercion.
-//
-//   F1. Chain path independence — when two distinct intermediate
-//       carriers reach the same end carrier, both `modify` paths
-//       produce identical output.
-//   F2. Chain preserves `get` — for any chain whose carriers all
-//       expose `Accessor`, the `get` extension agrees with the
-//       uncomposed optic's `get`.
+/** Laws governing [[Composer.chain]] — the mechanism that lifts a series of pairwise `Composer`s
+  * into a multi-hop carrier coercion. Promoted from the earlier `eo.laws.eo.ChainLaws` in Unit 7 so
+  * downstream projects adding a new carrier can verify their `Composer` instances as first-class
+  * typeclass laws, not as optic-shape-specific EO-laws.
+  *
+  * C1. Composer path independence — when two distinct intermediate carriers reach the same end
+  * carrier, both `modify` paths produce identical output. C2. Composer preserves `get` — for a
+  * chain whose carriers all expose `Accessor`, the `get` extension on the composed optic agrees
+  * with the uncomposed optic's `get`.
+  */
 
-/** F1 — `Composer.chain` path independence.
+/** C1 — `Composer.chain` path independence.
   *
   * From `Forgetful` there are two direct composers (→ Tuple2, → Either) and from each of those a
   * direct composer to `Affine`. So an `Iso` can land in `Affine` via two distinct chains. They
   * should be modify-equivalent — otherwise `Composer.chain` would be making the caller's choice of
   * intermediary observable.
   */
-trait ChainPathIndependenceLaws[S, A]:
+trait ComposerPathIndependenceLaws[S, A]:
   def iso: Optic[S, S, A, A, Forgetful]
 
   // Using the composers explicitly sidesteps the implicit-resolution
@@ -36,10 +37,10 @@ trait ChainPathIndependenceLaws[S, A]:
   private def viaEither: Optic[S, S, A, A, Affine] =
     Affine.either2affine.to(Composer.forgetful2either.to(iso))
 
-  def chainPathIndependence(s: S, f: A => A): Boolean =
+  def pathIndependence(s: S, f: A => A): Boolean =
     viaTuple2.modify(f)(s) == viaEither.modify(f)(s)
 
-/** F2 — `Composer.chain` preserves `get`.
+/** C2 — `Composer.chain` preserves `get`.
   *
   * A 2-hop chain `F → G → H` preserves `get` whenever all three carriers have an `Accessor`.
   * Currently core only ships `Accessor` instances for `Forgetful` and `Tuple2`, so the only
@@ -47,7 +48,7 @@ trait ChainPathIndependenceLaws[S, A]:
   * hop — testable with a locally-declared identity `Composer` in the spec. The trait itself is
   * fully generic and will gain more witnesses as new `Accessor` instances are added.
   */
-trait ChainAccessorLaws[S, A, F[_, _], G[_, _], H[_, _]]:
+trait ComposerPreservesGetLaws[S, A, F[_, _], G[_, _], H[_, _]]:
   def optic: Optic[S, S, A, A, F]
   def fToG: Composer[F, G]
   def gToH: Composer[G, H]
@@ -59,5 +60,5 @@ trait ChainAccessorLaws[S, A, F[_, _], G[_, _], H[_, _]]:
   given accessorF: _root_.eo.data.Accessor[F]
   given accessorH: _root_.eo.data.Accessor[H]
 
-  def chainPreservesGet(s: S): Boolean =
+  def preservesGet(s: S): Boolean =
     gToH.to(fToG.to(optic)).get(s) == optic.get(s)
