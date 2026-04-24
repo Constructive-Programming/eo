@@ -100,7 +100,8 @@
     <li class="level1 nav-leaf"><a href="#getter">Getter</a></li>
     <li class="level1 nav-leaf"><a href="#fold">Fold</a></li>
     <li class="level1 nav-leaf"><a href="#review">Review</a></li>
-    <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
+    <li class="level1 nav-node"><a href="#traversal">Traversal</a></li>
+    <li class="level2 nav-leaf"><a href="#composer-iso-as-the-inner-of-traversal-each">Composer: <code>Iso</code> as the inner of <code>Traversal.each</code></a></li>
     <li class="level1 nav-leaf"><a href="#alglens">AlgLens</a></li>
   </ul>
 
@@ -170,7 +171,7 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">funGrate</span><span> = </span><span class="type-name">Grate</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">1</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">2</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">doubled</span><span> = </span><span class="identifier">funGrate</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="identifier">f</span><span>)
-</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14374/0x00007f683e25f770@7e1186c
+</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14349/0x00007f6d0625b3f8@2b014351
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">true</span><span>)
 </span><span class="comment">// res5: Int = 2
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">false</span><span>)
@@ -431,6 +432,16 @@
 }</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">bumpAll</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">SetterConfig</span><span>(</span><span class="type-name">Map</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span> -&gt; </span><span class="number-literal">1</span><span>, </span><span class="string-literal">&quot;b&quot;</span><span> -&gt; </span><span class="number-literal">2</span><span>)))
 </span><span class="comment">// res25: SetterConfig = SetterConfig(Map(&quot;a&quot; -&gt; 2, &quot;b&quot; -&gt; 3))</span></code></pre>
+        <p><strong>Setter is a composition terminal.</strong> <code>lens.andThen(setter)</code> works —
+        a Lens to a focus, then a Setter that writes into it. The reverse
+        chain, <code>setter.andThen(inner)</code>, does <em>not</em> work: there&#39;s no
+        <code>AssociativeFunctor[SetterF, _, _]</code> shipped, and no <code>Composer[SetterF,
+_]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] =&gt; A)</code>
+        doesn&#39;t carry a read side, so &quot;compose another optic on top of a
+        write-only endpoint&quot; doesn&#39;t have a natural semantics. If you want
+        <code>setter.andThen(…)</code>, restructure the chain so the Setter is the
+        inner — build <code>lens/prism/traversal.andThen(setter)</code> and call
+        <code>.modify</code> on the result.</p>
         
         <h2 id="getter" class="section"><a class="anchor-link left" href="#getter"><i class="icofont-laika link">&#xef71;</i></a>Getter</h2>
         <p>A <code>Getter[S, A]</code> is the read-only counterpart to <code>Setter</code> — a
@@ -565,6 +576,19 @@
         notes</a>
         for the cost tradeoff.</p>
         
+        <h3 id="composer-iso-as-the-inner-of-traversal-each" class="section"><a class="anchor-link left" href="#composer-iso-as-the-inner-of-traversal-each"><i class="icofont-laika link">&#xef71;</i></a>Composer: <code>Iso</code> as the inner of <code>Traversal.each</code></h3>
+        <p><code>Traversal.each[T, A].andThen(iso)</code> composes cleanly. The direct
+        <code>Composer[Forgetful, PowerSeries]</code> given ships in <code>eo.data.PowerSeries</code>
+        and takes priority over any transitive path (<code>Forgetful → Tuple2 →
+PowerSeries</code> or <code>Forgetful → Either → PowerSeries</code>) that would
+        otherwise be ambiguous.</p>
+        <p>Same story for <code>Iso</code> as the inner of an <code>Optional</code> (Affine carrier) or
+        of an <code>AlgLens[F]</code> — direct <code>Composer[Forgetful, Affine]</code> /
+        <code>Composer[Forgetful, AlgLens[F]]</code> givens ship beside the carrier.
+        Earlier revisions of cats-eo required an explicit <code>.morph[Tuple2]</code>
+        step for these chains; post-Unit 16 it&#39;s a one-hop <code>.andThen</code> call
+        with no ceremony.</p>
+        
         <h2 id="alglens" class="section"><a class="anchor-link left" href="#alglens"><i class="icofont-laika link">&#xef71;</i></a>AlgLens</h2>
         <p>An algebraic lens targets cases that sit <em>between</em> <code>Lens</code> and
         <code>Traversal</code> — a focus with <strong>classifier cardinality <code>F</code></strong>, where
@@ -590,8 +614,23 @@
           carries an <code>F[A]</code> (<code>Prism[Json, List[Int]]</code>).</li>
           <li><code>AlgLens.fromOptionalF[F, S, A]</code> — the Optional analogue.</li>
         </ul>
-        <p>Composition with plain <code>Lens</code> / <code>Prism</code> / <code>Optional</code> on either
-        side works through the shipped <code>Composer</code> bridges — AlgLens&#39;s
+        <p><strong>AlgLens is a composition sink</strong> — it accepts inbound
+        bridges (<code>Composer[Tuple2, AlgLens[F]]</code>, <code>Composer[Either,
+AlgLens[F]]</code>, <code>Composer[Affine, AlgLens[F]]</code>) from all the standard
+        carriers, but ships no outbound <code>Composer[AlgLens[F], _]</code> instances.
+        Once you&#39;ve landed in <code>AlgLens[F]</code>, you stay there. This matches the
+        semantics — AlgLens&#39;s payload shape <code>(X, F[A])</code> exposes the
+        classifier&#39;s full vector, not a single focus you could morph into
+        another carrier&#39;s structure. If you want to drill deeper after an
+        <code>AlgLens</code> step, do it inside the <code>F[A]</code> side directly — map through
+        <code>F</code> with the cats-core machinery you&#39;d normally reach for.</p>
+        <p><code>Composer[AlgLens[F], _]</code> instances are explicitly out of scope for
+        0.1.0 and the roadmap through at least 0.2.x. The outbound-bridge
+        story needs a concrete use case first — the composition-gap analysis
+        (<a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>2026-04-23-composition-gap-analysis.md</code></a>)
+        flags it as a top-5 structural gap, but no user has asked for it.</p>
+        <p>Composition INTO <code>AlgLens[F]</code> from plain <code>Lens</code> / <code>Prism</code> / <code>Optional</code>
+        works through the shipped <code>Composer</code> bridges — AlgLens&#39;s
         <code>ForgetfulFunctor</code> / <code>ForgetfulFold</code> / <code>ForgetfulTraverse</code> /
         <code>AssociativeFunctor</code> instances plug straight into the existing
         <code>.modify</code> / <code>.foldMap</code> / <code>.modifyA</code> extensions.</p>
