@@ -642,3 +642,52 @@ works through the shipped `Composer` bridges — AlgLens's
 `ForgetfulFunctor` / `ForgetfulFold` / `ForgetfulTraverse` /
 `AssociativeFunctor` instances plug straight into the existing
 `.modify` / `.foldMap` / `.modifyA` extensions.
+
+## Composition limits
+
+Beyond the AlgLens-outbound sink documented above, three categories
+of pair are intentionally **not** bridged in 0.1.0. The short answer
+is "the type system rules them out, and the natural workaround is a
+plain Scala expression":
+
+**Lens / Prism / Optional × `Fold[F]` (or `Traversal.forEach`) when
+the outer focuses on a scalar `A`** — the outer never produces an
+`F`-shape, so there's nothing for the `Fold` to traverse. Use
+`fold.foldMap(f)(lens.get(s))` directly. If your outer *does* focus
+on an `F[A]` (e.g. `Lens[Row, List[Int]]`), use one of the
+`AlgLens.fromLensF` / `fromPrismF` / `fromOptionalF` factories to
+lift into `AlgLens[F]` and chain there.
+
+**`Traversal.each` × `Fold[F]` / `Traversal.forEach` / `AlgLens[F]`** —
+PowerSeries (the `Traversal.each` carrier) cannot widen into Forget's
+classifier representation without dropping its rebuild data, and
+cannot widen into AlgLens's per-candidate cardinality model without a
+synthetic count. The idiomatic workaround pushes the inner under the
+traversal: `traversal.modify(a => inner.replace(b)(a))(s)` for an
+`AlgLens` inner; `traversal.foldMap(f)(s)` (the ForgetfulFold instance
+on PowerSeries) when you only need the fold side.
+
+**`Traversal.forEach` × `Traversal.forEach` across different `F` /
+`G`** — `assocForgetMonad` requires `F = G`. Composing
+`Forget[List]` with `Forget[Option]` would need either a
+`FunctionK`-witness Composer or a specialised nested-Foldable flatten;
+both are deferred to 0.2.x. Until then, run the inner foldable inside
+a `modify`:
+
+```scala
+val total: Int =
+  list.foldLeft(0)((acc, opt) => acc + opt.foldMap(_.length))
+```
+
+**`SetterF` outbound** — Setter is a composition terminal: ship it as
+the leaf of a chain (Lens → Setter via `Composer[Tuple2, SetterF]`)
+but don't try to chain off it. There is no `AssociativeFunctor[SetterF]`
+and no outbound Composer.
+
+**`FixedTraversal[N]`** — fixed-arity (`Traversal.two` / `.three` /
+`.four`) is a leaf carrier with no outbound or inbound Composer. Use
+it when you need the exact-N shape; reach for `Traversal.each` when
+you want compositional reach.
+
+The full taxonomy with cell-by-cell rationale lives in
+[`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md).

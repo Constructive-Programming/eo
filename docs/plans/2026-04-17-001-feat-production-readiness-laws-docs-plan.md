@@ -1948,7 +1948,7 @@ promoted to first-class per Unit 19's structure).
   or the go/no-go decision is recorded in this plan with a date.
 - CHANGELOG reflects the final disposition.
 
-- [ ] **Unit 21: Resolve the `?` composition-gap cells (OQ-R1)**
+- [x] **Unit 21: Resolve the `?` composition-gap cells (OQ-R1)** — completed 2026-04-24. Shipped `Composer[Affine, AlgLens[F]]` (`affine2alg`), pinned AlgLens-outbound and Traversal.each × {Fold, Tf, AlgLens} as designed-`U`, deferred cross-F Forget composition to 0.2.x, and documented every idiom in `site/docs/optics.md` "Composition limits" subsection. Behaviour specs in `OpticsBehaviorSpec` for the new Composer; gap-analysis updated with §7 resolution scoreboard (12 → 0 `?` cells).
 
 **Goal:** Before tag, each of the 12 `?` cells from the composition-gap
 analysis §2.2 gets one of three dispositions:

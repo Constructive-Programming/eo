@@ -404,6 +404,42 @@ object AlgLens:
                 o.from(Right(pickSingletonOrThrow(fb, "Either")))
         }
 
+  /** Bridge `Affine ↪ AlgLens[F]` — an Optional becomes an algebraic lens. Mirrors [[either2alg]]'s
+    * shape: the Affine's `Miss` branch maps to `F.empty[A]` (cardinality 0, preserving the Affine's
+    * Fst leftover for the pull side), and the `Hit` branch maps to `F.pure(a)` (cardinality 1). The
+    * pull side reads the (unique-by-construction) `B` from the classifier on hit and routes through
+    * `optional.from` accordingly.
+    *
+    * Resolves the §3.3.2 `?` cell from the 2026-04-23 composition gap analysis — Optional × AlgLens
+    * previously had no Composer path. Now `optional.andThen(algLens)` works for any
+    * `F: Alternative + Foldable`.
+    *
+    * Same `Alternative + Foldable` constraints as `either2alg`. Does NOT mix in
+    * [[AlgLensSingleton]] for the same reason: the Miss branch emits cardinality 0 and breaks the
+    * always-≥1 invariant.
+    *
+    * @group Instances
+    */
+  given affine2alg[F[_]: Alternative: Foldable]: Composer[Affine, AlgLens[F]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, AlgLens[F]] =
+      new Optic[S, T, A, B, AlgLens[F]]:
+        type X = Either[Fst[o.X], Snd[o.X]]
+        val to: S => (X, F[A]) = s =>
+          o.to(s) match
+            case h: Affine.Hit[o.X, A] =>
+              (Right(h.snd), Applicative[F].pure(h.b))
+            case m: Affine.Miss[o.X, A] =>
+              (Left(m.fst), Alternative[F].empty[A])
+        val from: ((X, F[B])) => T = {
+          case (tag, fb) =>
+            tag match
+              case Left(fstX) =>
+                o.from(new Affine.Miss[o.X, B](fstX))
+              case Right(sndX) =>
+                o.from(new Affine.Hit[o.X, B](sndX, pickSingletonOrThrow(fb, "Affine")))
+        }
+
   // -------------------------------------------------------------------
   // F[A]-focus bridges — factory methods for the case where the outer
   // optic's focus is already `F[A]` (e.g. a `Lens[Row, List[Int]]` viewed

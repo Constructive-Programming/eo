@@ -1,6 +1,11 @@
 # Composition-coverage gap analysis
 
 **Date:** 2026-04-23
+**Last updated:** 2026-04-24 — Unit 21 (0.1.0 plan) closed every numbered
+`?` group from §3.3 by shipping one new Composer, documenting the
+idioms, or pinning a structural-`U` decision. See §7 for the
+post-resolution scoreboard.
+
 **Scope:** every (outer × inner) optic-family composition pair currently
 shipped in `cats-eo` (core + circe), classified by whether `.andThen`
 works natively, requires a manual idiom, is unsupported, or is
@@ -130,12 +135,20 @@ Two extension methods exist on `Optic` (see
 The full 14×14 same-family-ish matrix (`Optic`-extending families 1-14;
 standalone JsonTraversal + Review are handled separately in §4):
 
-| Category | Count | % of 196 |
-|---|---|---|
-| **N** (native `.andThen`) | 94 | 48% |
-| **M** (manual idiom) | 56 | 29% |
-| **U** (unsupported) | 34 | 17% |
-| **?** (unexplored) | 12 | 6% |
+| Category | Count (initial) | After Unit 21 | % of 196 (post) |
+|---|---|---|---|
+| **N** (native `.andThen`) | 94 | 96 | 49% |
+| **M** (manual idiom) | 56 | 60 | 31% |
+| **U** (unsupported) | 34 | 40 | 20% |
+| **?** (unexplored) | 12 | 0 | 0% |
+
+The Unit-21 resolution closed every numbered `?` group from §3.3:
++2 N (`affine2alg` + `chainViaTuple2(Forgetful → Tuple2 → Forget[F]`
+already covered by existing tests once chain refactor landed);
++4 M (idiom-documented `Forgetful/Tuple2/Either/Affine × Fold` cases
+where outer focuses on `F[A]`); +6 U (structurally-decided cells
+where the carrier round-trip cannot work — AlgLens outbound,
+PowerSeries × Forget/AlgLens, cross-F Forget pairs).
 
 Adding the 28 border cells for the two standalone families: JsonTraversal
 rows/columns are **M** (documented in `CrossCarrierCompositionSpec`
@@ -143,14 +156,14 @@ scenarios 4/5) and Review rows/columns are **M** (direct
 function-composition idiom) or **U** (as outer — no `to` side).
 
 Grand totals across all 225 requested cells (196 Optic×Optic + 28
-standalone borders + 1 JsonTraversal×Review corner):
+standalone borders + 1 JsonTraversal×Review corner), post-Unit-21:
 
 | Category | Count |
 |---|---|
-| N | 94 |
-| M | 86 |
-| U | 35 |
-| ? | 12 |
+| N | 96 |
+| M | 90 |
+| U | 39 |
+| ? | 0 |
 
 ### 1.2 Top 5 surprising gaps
 
@@ -418,54 +431,116 @@ in AlgLens you can only chain with more AlgLens-carrier inners.
 
 ### 3.3 Unexplored cells (?)
 
-#### 3.3.1 Forgetful / Tuple2 / Either / Affine × Fold or Traversal.forEach
+#### 3.3.1 Forgetful / Tuple2 / Either / Affine × Fold or Traversal.forEach — **RESOLVED (M / U) 2026-04-24**
 
 The Fold and Traversal.forEach optics live on `Forget[F]`. There is
 **no `Composer[Forgetful, Forget[F]]`**, no `Composer[Tuple2,
-Forget[F]]`, etc. The Forget→AlgLens bridge exists, but going Lens →
-Fold directly isn't bridged.
+Forget[F]]`, etc. The Forget→AlgLens bridge exists; the inverse does
+not (Forget has no observable structural leftover, so there's no
+sensible way to widen it back into Tuple2/Either/Affine).
 
-**Best guess.** For a `Lens[S, F[A]]` (the outer focuses on an
-`F[A]`), `AlgLens.fromLensF(lens)` is the canonical path — lift to
-`AlgLens[F]` and use its Foldable. For a Lens whose focus is a plain
-`A` (not an `F[A]`), there's no natural composition with a `Fold[F]`:
-the outer doesn't produce an `F`. A user would reach for
-`Fold.apply[F, A].foldMap(f)(lens.get(s))` in plain Scala — a manual
-idiom worth documenting.
+**Outcome.** Two cases:
 
-#### 3.3.2 Optional × AlgLens[F]
+1. **Outer focuses on an `F[A]`** (e.g. `Lens[Row, List[Int]]`). The
+   canonical lift is `AlgLens.fromLensF(lens)` /
+   `AlgLens.fromPrismF(prism)` / `AlgLens.fromOptionalF(opt)`, then
+   chain via `Composer[AlgLens[F], AlgLens[F]]` (`assocAlgMonad`).
+   Classified **M** — no `.andThen` cross-carrier path, but a single
+   factory call routes the user. Documented in `site/docs/optics.md`
+   AlgLens section and exercised in `OpticsBehaviorSpec`.
+2. **Outer focuses on a scalar `A`** (e.g. `Lens[Row, Int]`). There is
+   **no natural composition** with a `Fold[F]` — the outer never
+   produces an `F`-shaped value. Classified **U** for `.andThen`; the
+   plain-Scala idiom is `lens.get(s).foldMap(f)`. Documented in
+   `site/docs/optics.md` "Composition limits" subsection.
 
-`Composer[Affine, AlgLens[F]]` is not shipped. Transitively, bouncing
-through `Composer[Affine, PowerSeries]` and then `PowerSeries →
-AlgLens` would work *if* that PS→AlgLens bridge existed, but it
-doesn't. So Optional × AlgLens has no path.
+The `?` here was the lack of a written outcome, not a missing piece of
+machinery. Pinned **M / U** by case.
 
-**Best guess.** Ship `Composer[Affine, AlgLens[F]]` mirroring
-`either2alg`: `Miss → F.empty`, `Hit → F.pure(a)`. Requires `F:
-Alternative + Foldable`. Open question.
+#### 3.3.2 Optional × AlgLens[F] — **RESOLVED (N) 2026-04-24**
 
-#### 3.3.3 AlgLens × anything (non-AlgLens inner)
+Shipped `affine2alg` (`AlgLens.scala:423`) — `Composer[Affine,
+AlgLens[F]]` for any `F: Alternative + Foldable`. Mirrors `either2alg`:
+`Miss → F.empty[A]` (cardinality 0, preserves the Affine's `Fst`
+leftover for the pull side); `Hit → F.pure(a)` (cardinality 1; pull
+collapses via `pickSingletonOrThrow`). Behaviour spec at
+`OpticsBehaviorSpec`:
 
-Once in AlgLens, can we morph out? `Composer[AlgLens[F], Forget[F]]`
-would work structurally (drop the `X`, keep the `F[A]`). Not shipped,
-not documented.
+- `"Affine Optional lifts into AlgLens[List] and preserves hit/miss
+  .modify semantics"` — same shape as the Either-prism case.
+- `"Optional andThen AlgLens[List] classifier composes via affine2alg"`
+  — full cross-carrier `.andThen` end-to-end.
 
-#### 3.3.4 Traversal.each × AlgLens / Fold / Traversal.forEach
+This also closes the `Affine → AlgLens` arm of the Tier-2
+`chainViaTuple2` resolution: `Optional → AlgLens` is now a Tier-1
+direct, no transitive lookup needed.
+
+#### 3.3.3 AlgLens × anything (non-AlgLens inner) — **RESOLVED (U, by design) 2026-04-24**
+
+Pinned: **AlgLens[F] is a designed composition sink**. Once you've
+landed in AlgLens you compose only with more AlgLens-carrier optics
+(via `assocAlgMonad`). No outbound Composer ships and none is planned.
+
+Rationale (mirrors the `optics.md` AlgLens section): AlgLens's
+defining property is "structural leftover paired with classifier
+candidates"; morphing back to Forget[F] would silently drop the `X`
+on the floor (changing semantics from "lensy round-trip" to "phantom
+read"), and morphing back to Tuple2/Either/Affine has no natural
+candidate-to-singleton collapse. If the user really wants downstream
+Fold/Traversal behaviour they should bridge the *inner* into AlgLens
+via `Forget[F] → AlgLens[F]` (the `forget2alg` Composer), not bridge
+AlgLens *out*.
+
+Documented in `site/docs/optics.md` AlgLens section and reinforced in
+the §3.4 U-cell summary.
+
+#### 3.3.4 Traversal.each × AlgLens / Fold / Traversal.forEach — **RESOLVED (U, by design) 2026-04-24**
 
 Three distinct carriers (PowerSeries, Forget[F], AlgLens[F]) with no
-Composer between them. The natural route for Traversal.each × Fold is
-"run the fold on each element", but PowerSeries → Forget[F] would
-require a bridge that discards the outer `Xo` in favour of pure
-foldMap — not obviously sound without a `Foldable` constraint on the
-PS outer's `T`-reassembler.
+Composer between them. Pinned **U** by design: PowerSeries → Forget[F]
+would require discarding the outer's `Xo` (PowerSeries' structural
+leftover encoding rebuild data) in favour of pure foldMap, which
+silently breaks the round-trip property; PowerSeries → AlgLens[F]
+would require synthesising a per-candidate cardinality count from the
+PowerSeries' uniform-shape representation, which doesn't fit
+`assocAlgMonad`'s push contract.
 
-#### 3.3.5 Traversal.forEach × Traversal.forEach across different F
+**Idiom.** A user wanting "fold each element of a traversal" already
+has the answer at hand: `traversal.foldMap(f)(s)` (the ForgetfulFold
+instance on PowerSeries). For "classifier per traversal element",
+build the AlgLens chain *under* the traversal:
+
+```scala
+// instead of: traversal.andThen(algLens)
+val result: S = traversal.modify(a => algLens.replace(...)(a))(s)
+```
+
+Documented as "manual idiom" in `site/docs/optics.md` Composition
+section.
+
+#### 3.3.5 Traversal.forEach × Traversal.forEach across different F — **RESOLVED (U, deferred to 0.2.x) 2026-04-24**
 
 Same `Forget[F]` carrier *is* required for `assocForgetMonad`. If `F
 = G` both Monad, this is N. If `F ≠ G` (e.g. `Forget[List]
 .andThen(Forget[Option])`), there's no Composer between two distinct
-`Forget[_]` carriers. Practical use: "flatten nested Foldables" —
-this is a real need, unshipped.
+`Forget[_]` carriers. Pinned **U** for 0.1.0; closing this would
+require either:
+
+- a `Composer[Forget[F], Forget[G]]` parameterised over a
+  natural-transformation witness `FunctionK[F, G]` or `~>`, or
+- a specialised `flatten` for nested-Foldables on the `AlgLens[F]`
+  side (less general but matches the actual use case).
+
+Both are non-trivial design moves that need their own plan; deferred
+to 0.2.x. Until then the workaround is to run the inner Foldable
+manually inside a `modify`:
+
+```scala
+// for Forget[List].andThen(Forget[Option]):
+val total: Int = list.foldLeft(0)((acc, opt) => acc + opt.foldMap(_.length))
+```
+
+Documented in `site/docs/optics.md` Composition limits.
 
 ### 3.4 U-cell summary table
 
@@ -694,3 +769,27 @@ whose absence in the test/doc corpus is most likely to burn.
   the `Optic` level (the fields-specific concerns — partial-read
   atomicity, Ior threading — are orthogonal to `.andThen`). I did
   not split them into separate rows.
+
+---
+
+## 7. Unit 21 resolution scoreboard (2026-04-24)
+
+Closing every `?` from §3.3:
+
+| § | Pair | Action | Outcome |
+|---|---|---|---|
+| 3.3.1 (F[A]-focus) | Forgetful/Tuple2/Either/Affine × Fold/Tf, outer focuses on `F[A]` | Documented `AlgLens.fromLensF` / `fromPrismF` / `fromOptionalF` factory route | **M** |
+| 3.3.1 (scalar-focus) | Forgetful/Tuple2/Either/Affine × Fold/Tf, outer focuses on scalar `A` | Documented `lens.get(s).foldMap(f)` plain-Scala idiom; no carrier path possible | **U** |
+| 3.3.2 | Optional × AlgLens | **Shipped** `Composer[Affine, AlgLens[F]]` (`affine2alg`); two specs in `OpticsBehaviorSpec` | **N** |
+| 3.3.3 | AlgLens × non-AlgLens (outbound) | Pinned designed sink; documented in `optics.md` and §3.4 | **U** |
+| 3.3.4 | Traversal.each × Fold/Tf/AlgLens | Pinned structural; documented `traversal.modify(inner.replace…)` idiom | **U** |
+| 3.3.5 | Traversal.forEach × Traversal.forEach cross-F | Pinned 0.2.x deferral; documented manual fold idiom | **U** (deferred) |
+
+The chain-refactor side effect (§3.3 was written before the
+Tier-1/Tier-2 hierarchy landed): `chainViaTuple2` at low priority now
+routes Forgetful → {SetterF, PowerSeries, AlgLens[F]} transitively,
+so `Iso.andThen(setter)` / `Iso.andThen(traversal)` / `Iso.andThen
+(algLens)` all resolve from a single intermediate without per-target
+direct bridges. The matrix already shows these as N (rows 1, 2, 3 in
+the **I** row in §2); the refactor only changed the resolution path,
+not the cell colour.

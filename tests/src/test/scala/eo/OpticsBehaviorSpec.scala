@@ -536,6 +536,43 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     lifted.modify(_ * 2)(4) === 4
   }
 
+  "Affine Optional lifts into AlgLens[List] and preserves hit/miss .modify semantics" >> {
+    // Optional that fires on adults; non-adults are a Miss.
+    val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
+      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+        getOrModify = p => Either.cond(p.age >= 18, p.age, p),
+        reverseGet = { case (p, a) => AdultPerson(a) },
+      )
+
+    val lifted = summon[Composer[Affine, AlgLens[List]]].to(adultOpt)
+
+    // Hit: age 25 → classifier List(25); modify(+1) → List(26); from(Hit(26)) = AdultPerson(26).
+    lifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26)
+    // Miss: age 12 → classifier is Nil (Alternative.empty); from(Miss) preserves source.
+    lifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12)
+  }
+
+  "Optional andThen AlgLens[List] classifier composes via affine2alg" >> {
+    // Optional → Hit on positive Ints only.
+    val posOpt: Optic[Int, Int, Int, Int, Affine] =
+      Optional[Int, Int, Int, Int, Affine](
+        getOrModify = n => Either.cond(n > 0, n, n),
+        reverseGet = { case (_, n) => n },
+      )
+
+    // Inner: Forget[List] classifier injected to AlgLens[List].
+    val candidatesAlg = summon[Composer[Forget[List], AlgLens[List]]].to(
+      forgetOpt[List](n => List(n, n * 2), _.sum)
+    )
+
+    val composed = posOpt.andThen(candidatesAlg)
+
+    // Hit: 3 → classifier List(3, 6); modify(+1) → List(4, 7); sum = 11; rebuilt back through opt.
+    composed.modify(_ + 1)(3) === 11
+    // Miss: -1 → empty classifier; the Optional restores the source on miss.
+    composed.modify(_ + 1)(-1) === -1
+  }
+
   // ----- Cross-carrier composition Lens andThen AlgLens classifier -
   //
   // This is the headline use case: a plain Lens composed with an
