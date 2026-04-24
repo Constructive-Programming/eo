@@ -87,7 +87,7 @@ git push   --no-verify                # bypass pre-push if you need to
 coverage:
 
 ```sh
-sbt "clean; coverage; tests/test; circeIntegration/test; coverageReport; coverageAggregate"
+sbt "clean; coverage; core/test; tests/test; circeIntegration/test; coverageReport; coverageAggregate"
 # HTML + XML under <module>/target/scala-<ver>/scoverage-report/
 # Aggregate report at target/scala-<ver>/scoverage-report/
 ```

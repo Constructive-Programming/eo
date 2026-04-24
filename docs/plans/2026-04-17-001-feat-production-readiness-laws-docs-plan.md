@@ -1079,7 +1079,13 @@ class is empty, write the law, iterate.
   genuinely optic-level (MorphLaws, Compose of optics, Transform, Put,
   TraverseAll, ForgetAllModify) — carrier-level laws have moved.
 
-- [ ] **Unit 8: Coverage gap-fill to ≥85% on `core`**
+- [x] **Unit 8: Coverage gap-fill to ≥85% on `core`** *(completed 2026-04-24 — core
+  statement coverage raised from 58.83% to 86.07%, branch coverage from 52.84% to 85.28%.
+  Three new spec files: `FusedAndThenSpec` covers 17 concrete-subclass fused `.andThen`
+  overloads on Lens/Prism/Iso; `InternalsCoverageSpec` covers PSVec variants + the
+  `IntArrBuilder` / `ObjArrBuilder` grow-on-demand paths + each `Reflector` instance's
+  cats `Apply` delegation; `GrateCoverageSpec` covers the `Grate.at` factory and the
+  `grateFunctor.map` direct-instance path. Test count 230 → 288.)*
 
 **Goal:** Use the baseline from Unit 2 to identify the remaining
 coverage gaps after Units 3–7 and write targeted tests to reach ≥85%.
