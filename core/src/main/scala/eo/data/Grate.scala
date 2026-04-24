@@ -103,8 +103,14 @@ object Grate:
         outer: Optic[S, T, A, B, Grate] { type X = Xo },
     ): T =
       val (d, kD) = xd
-      // Reconstruct the inner rebuild: [[composeTo]]'s fused kD closes over `z._2` only, so
-      // `kD((null, xi)) == kI(xi)` for any Xo sentinel. The null cast is safe by construction.
+      // INVARIANT: [[composeTo]]'s fused kD closes over `z._2` only — the returned function is
+      // literally `(z: (Xo, Xi)) => kI(z._2)`, ignoring the first tuple component. So
+      // `kD((sentinel, xi)) == kI(xi)` for ANY Xo value. The `null.asInstanceOf[Xo]` cast is
+      // therefore safe by construction regardless of `Xo`'s runtime shape (including primitives).
+      // If any future outer Grate's kD starts reading z._1, this assoc's composeFrom will need
+      // a genuine Xo witness — which the existing paired encoding doesn't expose. Witnessed
+      // end-to-end by every grate.andThen(grate) spec in GrateSpec; the invariant is the reason
+      // those chains preserve semantics.
       val kI: Xi => D = xi => kD((null.asInstanceOf[Xo], xi))
       val b: B = inner.from((d, kI))
       // Outer's rebuild — broadcast fallback. V1 outers (iso-morphed, tuple-built) don't consult

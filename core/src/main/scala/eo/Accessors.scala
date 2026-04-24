@@ -14,6 +14,7 @@ trait Accessor[F[_, _]]:
     */
   def get[A]: [X] => F[X, A] => A
 
+/** Typeclass instances for [[Accessor]]. */
 object Accessor:
 
   /** `Accessor[Tuple2]` — picks the right element of the pair.
@@ -35,6 +36,7 @@ trait ReverseAccessor[F[_, _]]:
     */
   def reverseGet[A]: [X] => A => F[X, A]
 
+/** Typeclass instances for [[ReverseAccessor]]. */
 object ReverseAccessor:
 
   /** `ReverseAccessor[Either]` — wraps `A` as `Right[X, A](a)`.

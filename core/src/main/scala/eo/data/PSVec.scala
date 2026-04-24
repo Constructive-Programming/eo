@@ -86,6 +86,11 @@ sealed trait PSVec[+B]:
       i += 1
     sb.append(")").toString
 
+/** Constructors for [[PSVec]] — the primary entry points are `empty`, `singleton`, and `unsafeWrap`
+  * (zero-copy from an `Array[AnyRef]`). The three `Slice` / `Single` / `Empty` subclasses are
+  * internal to the `eo.data` package and stable across release lines only at the aggregate `PSVec`
+  * supertype level.
+  */
 object PSVec:
 
   /** Zero-element vector — shared singleton. Miss branches of Prism / Affine morphs into

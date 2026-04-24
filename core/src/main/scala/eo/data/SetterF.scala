@@ -23,7 +23,7 @@ object SetterF:
     *
     * @group Instances
     */
-  given map[S, A]: ForgetfulFunctor[SetterF] with
+  given map: ForgetfulFunctor[SetterF] with
 
     def map[X, B, C](fa: SetterF[X, B], f: B => C): SetterF[X, C] =
       val inner = fa.setter._2
@@ -35,7 +35,7 @@ object SetterF:
     *
     * @group Instances
     */
-  given traverse[S, A]: ForgetfulTraverse[SetterF, Distributive] with
+  given traverse: ForgetfulTraverse[SetterF, Distributive] with
 
     def traverse[X, B, C, G[_]](using
         D: Distributive[G]

@@ -90,6 +90,14 @@ trait Optic[S, T, A, B, F[_, _]]:
       val to: S => F[X, C] = s => af.composeTo(s, outerRef, innerRef)
       val from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
+/** Companion for [[Optic]]. Hosts the profunctor instances (`outerProfunctor` / `innerProfunctor`)
+  * and the catalogue of extension methods that drive every public operation on
+  * `Optic[S, T, A, B, F]` — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`,
+  * `.reverseGet`, `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen`, `.morph`.
+  * Each extension is gated on a capability typeclass instance for the carrier (`Accessor[F]` for
+  * `.get`, `ForgetfulFunctor[F]` for `.modify`, etc.), so adding a new carrier that wants to
+  * support `.modify` means supplying a `ForgetfulFunctor[F]` and nothing else.
+  */
 object Optic:
 
   /** Profunctor over `(S, T)` — `dimap` on the outer parameter pair, letting callers pre-compose

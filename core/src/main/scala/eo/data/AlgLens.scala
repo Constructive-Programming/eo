@@ -103,6 +103,13 @@ private[eo] object AlgLensFromList:
   given forChain: AlgLensFromList[cats.data.Chain] with
     def fromList[A](xs: List[A]): cats.data.Chain[A] = cats.data.Chain.fromSeq(xs)
 
+/** Typeclass instances and cross-carrier composers for [[AlgLens]]. Ships `ForgetfulFunctor` (any
+  * `Functor[F]`), `ForgetfulFold` (any `Foldable[F]`), `ForgetfulTraverse[_, Applicative]` (any
+  * `Traverse[F]`), the same-carrier `AssociativeFunctor` (`assocAlgMonad`, requires
+  * `Monad + Traverse + MonoidK + AlgLensFromList` on F), and the inbound Composers from
+  * `Tuple2 / Either / Forget / Forgetful`. No outbound Composers — `AlgLens[F]` is a composition
+  * sink by design.
+  */
 object AlgLens:
 
   /** `ForgetfulFunctor[AlgLens[F]]` — `.modify` / `.replace` on the focus by mapping inside the

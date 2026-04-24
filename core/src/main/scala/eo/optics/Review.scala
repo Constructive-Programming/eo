@@ -24,6 +24,11 @@ package optics
   */
 final case class Review[S, A](reverseGet: A => S)
 
+/** Constructors for [[Review]]. Two entry points: [[Review.fromIso]] (extract the build direction
+  * from a `BijectionIso`) and [[Review.fromPrism]] (extract the `mend` direction from a
+  * `MendTearPrism`). Free-form `Review.apply(f)` also works — `Review` is a plain case class
+  * wrapping `A => S`.
+  */
 object Review:
 
   /** Extract the natural build direction from a [[BijectionIso]]. Every Iso ships a

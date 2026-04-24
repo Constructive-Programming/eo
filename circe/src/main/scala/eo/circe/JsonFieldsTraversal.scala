@@ -265,7 +265,7 @@ final class JsonFieldsTraversal[A] private[circe] (
                 val newA = f(a)
                 val newParent = writeFields(obj, newA)
                 if elemParent.length == 0 then Json.fromJsonObject(newParent)
-                else rebuildElemWithPrefix(elemJson, newParent, ep)
+                else rebuildElemWithPrefix(newParent, ep)
 
   private def updateElementRawUnsafe(elemJson: Json, f: Json => Json): Json =
     val ep = new Array[AnyRef](elemParent.length)
@@ -285,7 +285,7 @@ final class JsonFieldsTraversal[A] private[circe] (
                 case None    => ()
               i += 1
             if elemParent.length == 0 then Json.fromJsonObject(newParent)
-            else rebuildElemWithPrefix(elemJson, newParent, ep)
+            else rebuildElemWithPrefix(newParent, ep)
 
   private def placeElementUnsafe(elemJson: Json, a: A): Json =
     val ep = new Array[AnyRef](elemParent.length)
@@ -294,7 +294,7 @@ final class JsonFieldsTraversal[A] private[circe] (
       case Right(obj) =>
         val newParent = writeFields(obj, a)
         if elemParent.length == 0 then Json.fromJsonObject(newParent)
-        else rebuildElemWithPrefix(elemJson, newParent, ep)
+        else rebuildElemWithPrefix(newParent, ep)
 
   private def readElementUnsafe(elemJson: Json): Option[A] =
     val ep = new Array[AnyRef](elemParent.length)
@@ -311,7 +311,6 @@ final class JsonFieldsTraversal[A] private[circe] (
     * the common-case (elements themselves carry fields) avoids an extra method call.
     */
   private def rebuildElemWithPrefix(
-      @annotation.unused original: Json,
       newParent: JsonObject,
       parents: Array[AnyRef],
   ): Json =
@@ -414,7 +413,7 @@ final class JsonFieldsTraversal[A] private[circe] (
                 val newParent = writeFields(obj, newA)
                 val newElem =
                   if elemParent.length == 0 then Json.fromJsonObject(newParent)
-                  else rebuildElemWithPrefix(elemJson, newParent, ep)
+                  else rebuildElemWithPrefix(newParent, ep)
                 Ior.Right(newElem)
 
   private def updateElementRawIor(
@@ -443,7 +442,7 @@ final class JsonFieldsTraversal[A] private[circe] (
               i += 1
             val newElem =
               if elemParent.length == 0 then Json.fromJsonObject(newParent)
-              else rebuildElemWithPrefix(elemJson, newParent, ep)
+              else rebuildElemWithPrefix(newParent, ep)
             Ior.Right(newElem)
 
   private def placeElementIor(
@@ -457,7 +456,7 @@ final class JsonFieldsTraversal[A] private[circe] (
         val newParent = writeFields(obj, a)
         val newElem =
           if elemParent.length == 0 then Json.fromJsonObject(newParent)
-          else rebuildElemWithPrefix(elemJson, newParent, ep)
+          else rebuildElemWithPrefix(newParent, ep)
         Ior.Right(newElem)
 
   private def readElementIor(elemJson: Json): Ior[Chain[JsonFailure], A] =

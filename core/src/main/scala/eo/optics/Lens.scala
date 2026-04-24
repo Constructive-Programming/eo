@@ -14,14 +14,6 @@ package optics
 object Lens:
   import Function.uncurried
 
-  /** Witness that a `(A, B)` can be flipped to `(B, A)` — used by `Composer` bridges to swap
-    * `Tuple2`'s sides when threading Lens-based chains through non-`Tuple2` carriers.
-    *
-    * @group Instances
-    */
-  given tupleInterchangeable[A, B]: (((A, B)) => (B, A)) with
-    def apply(t: (A, B)): (B, A) = t.swap
-
   /** Polymorphic constructor — allows `S` and `T` to differ, i.e. genuine type change on write.
     *
     * @group Constructors
@@ -234,6 +226,11 @@ final class SimpleLens[S, A, XA](
         val (x, _) = to(s)
         combine(x, f(c))
 
+/** Companion for [[SimpleLens]]. Exposes the `given transformEvidence` that lets the generic
+  * `Optic.transform` / `.place` / `.transfer` extensions pick up the same behaviour as the
+  * class-level methods on `SimpleLens` — callers routing through the abstract trait get the fused
+  * path automatically.
+  */
 object SimpleLens:
 
   /** `to` already has the shape the generic `Optic.transform` / `place` extensions need (`S => (X,

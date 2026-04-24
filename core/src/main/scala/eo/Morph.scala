@@ -51,6 +51,10 @@ trait LowPriorityMorphInstances:
     def morphSelf[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, Affine] = cf.to(o)
     def morphO[A, B, C, D](o: Optic[A, B, C, D, G]): Optic[A, B, C, D, Affine] = cg.to(o)
 
+/** Typeclass instances for [[Morph]]. Four built-ins: `same` (identity morph), `leftToRight` (lift
+  * `F` into `G` via `Composer[F, G]`), `rightToLeft` (dual via `Composer[G, F]`), and the
+  * low-priority `bothViaAffine` fallback that sends both sides through `Affine`.
+  */
 object Morph extends LowPriorityMorphInstances:
 
   /** Same carrier — no morphing. Most-specific given, wins overload resolution whenever `F = G`.

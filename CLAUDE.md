@@ -87,9 +87,15 @@ git push   --no-verify                # bypass pre-push if you need to
 coverage:
 
 ```sh
-sbt "clean; coverage; tests/test; coverageReport"
-# HTML + XML under tests/target/scala-<ver>/scoverage-report/
+sbt "clean; coverage; tests/test; circeIntegration/test; coverageReport; coverageAggregate"
+# HTML + XML under <module>/target/scala-<ver>/scoverage-report/
+# Aggregate report at target/scala-<ver>/scoverage-report/
 ```
+
+The `circeIntegration/test` call is load-bearing — without it,
+`circe/*.scala` files are silently omitted from the scoverage report.
+`coverageAggregate` rolls the per-module reports into a single
+cross-module view at the repo root.
 
 The report directory sits under `target/` and is `.gitignore`d.
 

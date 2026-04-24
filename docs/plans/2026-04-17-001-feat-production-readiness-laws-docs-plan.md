@@ -1607,7 +1607,16 @@ cross-carrier composition tests already in `CrossCarrierCompositionSpec`.
 - `site/docs/optics.md` renders the new terminal-carrier paragraphs under
   the Setter / FixedTraversal / AlgLens sections; mdoc green.
 
-- [ ] **Unit 17: Code-quality review must-fix + circe-coverage wiring (R13, R14)**
+- [x] **Unit 17: Code-quality review must-fix + circe-coverage wiring (R13, R14)**
+
+  *(completed 2026-04-24 — dead-code removals landed; `ForgetfulApplicative`
+  stub + `assocForgetComonad` both pinned leave-alone per user decision;
+  Grate sentinel invariant statement strengthened inline; `CLAUDE.md`
+  coverage incantation extended to include `circeIntegration/test` +
+  `coverageAggregate`. High-impact companion Scaladocs added
+  (`Accessor`, `ReverseAccessor`, `Morph`, `PSVec`, `Optic`, `SimpleLens`,
+  `AlgLens`, `Review`); finer-grained per-given Scaladoc gap-fill deferred
+  to Unit 9's broader Scaladoc uplift to avoid duplicative work.)*
 
 **Goal:** Close the code-quality review's "Must-fix for 0.1.0" items and
 repair the scoverage pipeline so circe is no longer silently skipped.
