@@ -90,6 +90,7 @@
   <ul class="nav-list">
     <li class="level1 nav-leaf"><a href="#lens">Lens</a></li>
     <li class="level1 nav-leaf"><a href="#grate">Grate</a></li>
+    <li class="level1 nav-leaf"><a href="#kaleidoscope">Kaleidoscope</a></li>
     <li class="level1 nav-leaf"><a href="#prism">Prism</a></li>
     <li class="level1 nav-leaf"><a href="#iso">Iso</a></li>
     <li class="level1 nav-node"><a href="#optional">Optional</a></li>
@@ -169,7 +170,7 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">funGrate</span><span> = </span><span class="type-name">Grate</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">1</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">2</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">doubled</span><span> = </span><span class="identifier">funGrate</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="identifier">f</span><span>)
-</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14338/0x00007fa21a263080@70b9ba52
+</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14405/0x00007f7fba283080@aad6423
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">true</span><span>)
 </span><span class="comment">// res5: Int = 2
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">false</span><span>)
@@ -206,6 +207,105 @@
         compose through <code>Lens.andThen</code> (staying in <code>Tuple2</code>), then apply the
         Grate directly.</p>
         
+        <h2 id="kaleidoscope" class="section"><a class="anchor-link left" href="#kaleidoscope"><i class="icofont-laika link">&#xef71;</i></a>Kaleidoscope</h2>
+        <p>A <code>Kaleidoscope[S, A]</code> is an aggregation optic whose behaviour at
+        composition-time is picked by the <code>Reflector[F]</code> the user plugs in.
+        Where Grate takes a <code>Distributive[F]</code> and Traversal takes a
+        <code>Traverse[F]</code>, Kaleidoscope takes a strictly weaker <code>Reflector[F]</code> —
+        which admits <code>ZipList</code>, plain <code>List</code>, and <code>Const[M, *]</code> among others.
+        Carrier: <code>Kaleidoscope</code> (paired encoding <code>(F[A], F[A] =&gt; X)</code> with <code>F</code>
+        as a path-type member). Classical shape (Chris Penner&#39;s
+        <a href="https://chrispenner.ca/posts/kaleidoscopes"><em>Kaleidoscopes: lenses that never die</em></a>):
+        <code>(F[A] =&gt; F[B]) =&gt; T</code>; the paired encoding fits cats-eo&#39;s carrier
+        shape while preserving the same universal.</p>
+        <p>Reflector is cats-eo-local (cats doesn&#39;t ship it). Three instances
+        ship in v1, witnessing the three distinct aggregation shapes:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Reflector</th>
+              <th>Semantics</th>
+              <th><code>reflect(fa)(f)</code> shape</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Reflector[List]</code></td>
+              <td>cartesian</td>
+              <td><code>List(f(fa))</code> — singleton</td>
+            </tr>
+            <tr>
+              <td><code>Reflector[ZipList]</code></td>
+              <td>zipping (column-wise)</td>
+              <td><code>ZipList(List.fill(fa.value.size)(f(fa)))</code> — length-aware broadcast</td>
+            </tr>
+            <tr>
+              <td><code>Reflector[Const[M, *]]</code></td>
+              <td>summation (given <code>Monoid[M]</code>)</td>
+              <td><code>fa.retag[B]</code> — phantom pass-through</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The canonical operation is <code>.collect[F, B](agg: F[A] =&gt; B)</code> — reduce
+        the entire <code>F[A]</code> focus to a single <code>B</code> via the aggregator, broadcast
+        it back through the Reflector, return the rebuilt <code>T</code>.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">ZipList</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Kaleidoscope</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Kaleidoscope</span><span>.</span><span class="keyword">given</span><span>
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">zipK</span><span> = </span><span class="type-name">Kaleidoscope</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Column-wise mean: the aggregator sees the whole ZipList, returns the
+// mean, the Reflector broadcasts it back across the same length.
+</span><span class="identifier">zipK</span><span>.</span><span class="identifier">collect</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>](</span><span class="identifier">zl</span><span> =&gt; </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">sum</span><span> / </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">size</span><span>.</span><span class="identifier">toDouble</span><span>)(
+  </span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>, </span><span class="number-literal">4.0</span><span>))
+)
+</span><span class="comment">// res8: ZipList[Double] = cats.data.ZipList@b588d106
+</span><span>
+</span><span class="comment">// `.modify` still works — maps A =&gt; A elementwise through the carrier&#39;s
+// ForgetfulFunctor instance.
+</span><span class="identifier">zipK</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">10.0</span><span>)(</span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>))).</span><span class="identifier">value</span><span>
+</span><span class="comment">// res9: List[Double] = List(10.0, 20.0, 30.0)</span></code></pre>
+        <p>The cartesian flavour (<code>Reflector[List]</code>) produces a singleton list —
+        the <code>.collect</code> result is always <code>List(agg(fa))</code> regardless of the
+        input&#39;s length:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">listK</span><span> = </span><span class="type-name">Kaleidoscope</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listK</span><span>.</span><span class="identifier">collect</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
+</span><span class="comment">// res10: List[Int] = List(10)
+</span><span class="identifier">listK</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
+</span><span class="comment">// res11: List[Int] = List(2, 3, 4)</span></code></pre>
+        <p><strong>When to reach for Kaleidoscope vs. Grate vs. Traversal.</strong> Use
+        <code>Traversal.each</code> for container-walking Applicative effects (positions
+        independent, Applicative applied element-by-element). Use <code>Grate</code> for
+        fixed-shape homogeneous records where <code>F</code> is <code>Representable</code> (tuples,
+        function-shaped finite records). Reach for <code>Kaleidoscope</code> when you
+        want the <code>Applicative[F]</code> to determine the <em>aggregation structure</em>
+        itself — ZipList-shaped column zip, List-shaped cartesian, Const-
+        shaped monoidal summation. The optic is the same value at every call
+        site; the behaviour tracks whichever Reflector instance you plug in.</p>
+        <p><strong>Composition.</strong> <code>Iso.andThen(Kaleidoscope)</code> works via
+        <code>Composer[Forgetful, Kaleidoscope]</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Iso</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">singletonIso</span><span> = </span><span class="type-name">Iso</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">List</span><span>[</span><span class="type-name">Int</span><span>]](
+  </span><span class="identifier">i</span><span> =&gt; </span><span class="type-name">List</span><span>(</span><span class="identifier">i</span><span>),
+  </span><span class="identifier">_</span><span>.</span><span class="identifier">head</span><span>,
+)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">isoThenList</span><span> = </span><span class="identifier">singletonIso</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">listK</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Wraps the Int into List(int), runs the Kaleidoscope&#39;s modify on
+// every element, projects back via List.head.
+</span><span class="identifier">isoThenList</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">3</span><span>)(</span><span class="number-literal">7</span><span>)
+</span><span class="comment">// res12: Int = 21</span></code></pre>
+        <p><strong>Lens → Kaleidoscope does NOT compose automatically.</strong> A Lens&#39;s
+        source <code>S</code> has no natural <code>Reflector</code> witness — the same structural
+        restriction Grate hits with <code>Representable</code>. A user-written
+        <code>iso.andThen(lens).andThen(kaleidoscope)</code> fails with an implicit-
+        resolution miss for <code>Morph[Tuple2, Kaleidoscope]</code>. The workaround is
+        to construct the Kaleidoscope separately at the Lens&#39;s focus type and
+        compose through <code>Lens.andThen</code> (staying in <code>Tuple2</code>), then apply the
+        Kaleidoscope directly.</p>
+        
         <h2 id="prism" class="section"><a class="anchor-link left" href="#prism"><i class="icofont-laika link">&#xef71;</i></a>Prism</h2>
         <p>A <code>Prism[S, A]</code> focuses one branch of a sum type — <code>Some</code> over
         <code>None</code>, or a specific case of an enum. Carrier: <code>Either</code>.</p>
@@ -223,16 +323,16 @@
   </span><span class="identifier">identity</span><span>,
 )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">circleP</span><span>.</span><span class="identifier">to</span><span>(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="number-literal">1.0</span><span>))
-</span><span class="comment">// res8: Either[Shape, Circle] = Right(Circle(1.0))
+</span><span class="comment">// res13: Either[Shape, Circle] = Right(Circle(1.0))
 </span><span class="identifier">circleP</span><span>.</span><span class="identifier">to</span><span>(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Square</span><span>(</span><span class="number-literal">2.0</span><span>))
-</span><span class="comment">// res9: Either[Shape, Circle] = Left(Square(2.0))
+</span><span class="comment">// res14: Either[Shape, Circle] = Left(Square(2.0))
 </span><span>
 </span><span class="comment">// modify acts only on the Circle branch; Squares pass through
 // unchanged.
 </span><span class="identifier">circleP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; </span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="identifier">c</span><span>.</span><span class="identifier">r</span><span> * </span><span class="number-literal">2</span><span>))(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="number-literal">1.0</span><span>))
-</span><span class="comment">// res10: Shape = Circle(2.0)
+</span><span class="comment">// res15: Shape = Circle(2.0)
 </span><span class="identifier">circleP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; </span><span class="type-name">Shape</span><span>.</span><span class="type-name">Circle</span><span>(</span><span class="identifier">c</span><span>.</span><span class="identifier">r</span><span> * </span><span class="number-literal">2</span><span>))(</span><span class="type-name">Shape</span><span>.</span><span class="type-name">Square</span><span>(</span><span class="number-literal">2.0</span><span>))
-</span><span class="comment">// res11: Shape = Square(2.0)</span></code></pre>
+</span><span class="comment">// res16: Shape = Square(2.0)</span></code></pre>
         <p>For auto-derivation on enums / sealed traits / union types see
         <code>prism[S, A]</code> in <a href="generics.html">Generics</a>.</p>
         
@@ -247,9 +347,9 @@
   </span><span class="identifier">p</span><span> =&gt; (</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>, </span><span class="identifier">p</span><span>.</span><span class="identifier">name</span><span>),
 )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">pairIso</span><span>.</span><span class="identifier">get</span><span>((</span><span class="number-literal">30</span><span>, </span><span class="string-literal">&quot;Alice&quot;</span><span>))
-</span><span class="comment">// res12: PersonPair = PersonPair(age = 30, name = &quot;Alice&quot;)
+</span><span class="comment">// res17: PersonPair = PersonPair(age = 30, name = &quot;Alice&quot;)
 </span><span class="identifier">pairIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="type-name">PersonPair</span><span>(</span><span class="number-literal">30</span><span>, </span><span class="string-literal">&quot;Alice&quot;</span><span>))
-</span><span class="comment">// res13: Tuple2[Int, String] = (30, &quot;Alice&quot;)</span></code></pre>
+</span><span class="comment">// res18: Tuple2[Int, String] = (30, &quot;Alice&quot;)</span></code></pre>
         
         <h2 id="optional" class="section"><a class="anchor-link left" href="#optional"><i class="icofont-laika link">&#xef71;</i></a>Optional</h2>
         <p>An <code>Optional[S, A]</code> focuses a conditionally-present field —
@@ -265,9 +365,9 @@
   </span><span class="identifier">reverseGet</span><span>  = { </span><span class="keyword">case</span><span> (</span><span class="identifier">c</span><span>, </span><span class="identifier">s</span><span>) =&gt; </span><span class="identifier">c</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">flag</span><span> = </span><span class="type-name">Some</span><span>(</span><span class="identifier">s</span><span>)) },
 )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">presentFlag</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="type-name">Contact</span><span>(</span><span class="type-name">Some</span><span>(</span><span class="string-literal">&quot;hello&quot;</span><span>)))
-</span><span class="comment">// res14: Contact = Contact(Some(&quot;HELLO&quot;))
+</span><span class="comment">// res19: Contact = Contact(Some(&quot;HELLO&quot;))
 </span><span class="identifier">presentFlag</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="type-name">Contact</span><span>(</span><span class="type-name">None</span><span>))
-</span><span class="comment">// res15: Contact = Contact(None)</span></code></pre>
+</span><span class="comment">// res20: Contact = Contact(None)</span></code></pre>
         <p>Composition with a Lens is automatic: <code>lens.andThen(optional)</code>
         summons <code>Composer[Tuple2, Affine]</code> under the hood and morphs
         the Lens into the Affine carrier. No explicit <code>.morph</code> required
@@ -295,15 +395,15 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span>: </span><span class="type-name">AffineFold</span><span>[</span><span class="type-name">Adult</span><span>, </span><span class="type-name">Int</span><span>] =
   </span><span class="type-name">AffineFold</span><span>(</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">20</span><span>))
-</span><span class="comment">// res16: Option[Int] = Some(20)
+</span><span class="comment">// res21: Option[Int] = Some(20)
 </span><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Adult</span><span>(</span><span class="number-literal">15</span><span>))
-</span><span class="comment">// res17: Option[Int] = None</span></code></pre>
+</span><span class="comment">// res22: Option[Int] = None</span></code></pre>
         <p><code>AffineFold.select(p)</code> is the filtering variant:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">evenAF</span><span> = </span><span class="type-name">AffineFold</span><span>.</span><span class="identifier">select</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> % </span><span class="number-literal">2</span><span> == </span><span class="number-literal">0</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">evenAF</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="number-literal">4</span><span>)
-</span><span class="comment">// res18: Option[Int] = Some(4)
+</span><span class="comment">// res23: Option[Int] = Some(4)
 </span><span class="identifier">evenAF</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res19: Option[Int] = None</span></code></pre>
+</span><span class="comment">// res24: Option[Int] = None</span></code></pre>
         <p>Narrow an existing <code>Optional</code> or <code>Prism</code> to its read-only
         projection via <code>AffineFold.fromOptional</code> / <code>AffineFold.fromPrism</code> —
         both return an <code>AffineFold[S, A]</code> that holds the matcher but
@@ -330,7 +430,7 @@
   </span><span class="identifier">cfg</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">values</span><span> = </span><span class="identifier">cfg</span><span>.</span><span class="identifier">values</span><span>.</span><span class="identifier">view</span><span>.</span><span class="identifier">mapValues</span><span>(</span><span class="identifier">f</span><span>).</span><span class="identifier">toMap</span><span>)
 }</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">bumpAll</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">SetterConfig</span><span>(</span><span class="type-name">Map</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span> -&gt; </span><span class="number-literal">1</span><span>, </span><span class="string-literal">&quot;b&quot;</span><span> -&gt; </span><span class="number-literal">2</span><span>)))
-</span><span class="comment">// res20: SetterConfig = SetterConfig(Map(&quot;a&quot; -&gt; 2, &quot;b&quot; -&gt; 3))</span></code></pre>
+</span><span class="comment">// res25: SetterConfig = SetterConfig(Map(&quot;a&quot; -&gt; 2, &quot;b&quot; -&gt; 3))</span></code></pre>
         
         <h2 id="getter" class="section"><a class="anchor-link left" href="#getter"><i class="icofont-laika link">&#xef71;</i></a>Getter</h2>
         <p>A <code>Getter[S, A]</code> is the read-only counterpart to <code>Setter</code> — a
@@ -339,7 +439,7 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">nameLen</span><span> = </span><span class="type-name">Getter</span><span>[</span><span class="type-name">Person</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">length</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">nameLen</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res21: Int = 5</span></code></pre>
+</span><span class="comment">// res26: Int = 5</span></code></pre>
         <p>Getter → Getter doesn&#39;t compose via <code>Optic.andThen</code> today
         (Getter&#39;s <code>T = Unit</code> mismatches the outer <code>B</code> slot). For a
         deeper read, compose a Lens chain and call <code>.get</code> on the
@@ -353,15 +453,15 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">listFold</span><span> = </span><span class="type-name">Fold</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listFold</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res22: Int = 6
+</span><span class="comment">// res27: Int = 6
 </span><span class="identifier">listFold</span><span>.</span><span class="identifier">foldMap</span><span>((</span><span class="identifier">i</span><span>: </span><span class="type-name">Int</span><span>) =&gt; </span><span class="identifier">i</span><span> * </span><span class="identifier">i</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res23: Int = 14</span></code></pre>
+</span><span class="comment">// res28: Int = 14</span></code></pre>
         <p><code>Fold.select(p)</code> narrows to elements matching a predicate:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">positive</span><span> = </span><span class="type-name">Fold</span><span>.</span><span class="identifier">select</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> &gt; </span><span class="number-literal">0</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">positive</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res24: Int = 3
+</span><span class="comment">// res29: Int = 3
 </span><span class="identifier">positive</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(-</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res25: Int = 0</span></code></pre>
+</span><span class="comment">// res30: Int = 0</span></code></pre>
         
         <h2 id="review" class="section"><a class="anchor-link left" href="#review"><i class="icofont-laika link">&#xef71;</i></a>Review</h2>
         <p>A <code>Review[S, A]</code> is the reverse-only counterpart to <code>Getter</code> —
@@ -373,14 +473,14 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">someIntR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">Int</span><span>](</span><span class="type-name">Some</span><span>(</span><span class="identifier">_</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">42</span><span>)
-</span><span class="comment">// res26: Option[Int] = Some(42)</span></code></pre>
+</span><span class="comment">// res31: Option[Int] = Some(42)</span></code></pre>
         <p>Compose by composing the underlying <code>A =&gt; S</code> functions directly:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">lengthR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">length</span><span>)
 </span><span class="keyword">val</span><span> </span><span class="identifier">someLen</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">String</span><span>](
   </span><span class="identifier">s</span><span> =&gt; </span><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">lengthR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">s</span><span>))
 )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someLen</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="string-literal">&quot;hello&quot;</span><span>)
-</span><span class="comment">// res27: Option[Int] = Some(5)</span></code></pre>
+</span><span class="comment">// res32: Option[Int] = Some(5)</span></code></pre>
         <p>Two factory methods pull the natural build direction out of an
         Iso or a Prism — aliased as <code>ReversedLens</code> and <code>ReversedPrism</code>
         for users who expect to find those names next to the rest of
@@ -400,9 +500,9 @@
 )
 </span><span class="keyword">val</span><span> </span><span class="identifier">revPrism</span><span> = </span><span class="type-name">ReversedPrism</span><span>(</span><span class="identifier">somePrism</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">revIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">5</span><span>)
-</span><span class="comment">// res28: Int = 2
+</span><span class="comment">// res33: Int = 2
 </span><span class="identifier">revPrism</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">7</span><span>)
-</span><span class="comment">// res29: Option[Int] = Some(7)</span></code></pre>
+</span><span class="comment">// res34: Option[Int] = Some(7)</span></code></pre>
         <p><strong><code>ReversedLens</code> only accepts a bijective Lens</strong> (an
         <code>BijectionIso</code>). A general Lens doesn&#39;t carry enough
         information to reconstruct its source from the focus alone —
@@ -436,12 +536,12 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">listEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">pEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res30: List[Int] = List(2, 3, 4)</span></code></pre>
+</span><span class="comment">// res35: List[Int] = List(2, 3, 4)</span></code></pre>
         <p>Stick with <code>forEach</code> when the chain terminates — no downstream
         optics — and you want the tight map-only path:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">listForEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">forEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listForEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res31: List[Int] = List(2, 3, 4)</span></code></pre>
+</span><span class="comment">// res36: List[Int] = List(2, 3, 4)</span></code></pre>
         <p><code>each</code> shines when the chain continues past the traversal — e.g.
         &quot;for every phone, toggle <code>isMobile</code>&quot;:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span>: </span><span class="type-name">Boolean</span><span>, </span><span class="identifier">number</span><span>: </span><span class="type-name">String</span><span>)
@@ -455,7 +555,7 @@
   </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">false</span><span>, </span><span class="string-literal">&quot;555-0001&quot;</span><span>),
   </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">true</span><span>,  </span><span class="string-literal">&quot;555-0002&quot;</span><span>),
 )))
-</span><span class="comment">// res32: Owner = Owner(
+</span><span class="comment">// res37: Owner = Owner(
 //   List(
 //     Phone(isMobile = true, number = &quot;555-0001&quot;),
 //     Phone(isMobile = false, number = &quot;555-0002&quot;)
