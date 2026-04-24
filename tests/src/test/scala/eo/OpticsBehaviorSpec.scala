@@ -4,6 +4,7 @@ import optics.{
   AffineFold,
   BijectionIso,
   Fold,
+  GetReplaceLens,
   Getter,
   Iso,
   Lens,
@@ -17,7 +18,7 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, AlgLens, AlgLensSingleton, Forget, Forgetful}
+import data.{Affine, AlgLens, AlgLensSingleton, Forget, Forgetful, PowerSeries}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
@@ -853,4 +854,183 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     alg.foldMap(identity[Int])(Some(Nil)) === 0
     // Hit: folds the underlying list.
     alg.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60
+  }
+
+  // ---- R11a — Traversal.each × downstream cross-carrier chains ----
+  //
+  // Closes the composition-gap top-3: the single most-common real
+  // chain shape (traverse-then-drill) has zero behaviour coverage
+  // pre-Unit-16. Each spec chains Traversal.each (PowerSeries carrier)
+  // with an Iso / Optional / Prism / nested-each inner and checks the
+  // result against a hand-rolled map. Exercises Composer[Tuple2, PowerSeries],
+  // Composer[Either, PowerSeries], Composer[Affine, PowerSeries] fast
+  // paths that previously only got reached through the benchmarks.
+
+  "Traversal.each ∘ Iso uppercases every swap-focused element" >> {
+    // Resolves via the direct `Composer[Forgetful, PowerSeries]` given
+    // (added in Unit 16) — no explicit `.morph[Tuple2]` workaround needed.
+    case class Pair(a: Int, b: Int)
+    val pairSwap =
+      Iso[Pair, Pair, (Int, Int), (Int, Int)](p => (p.a, p.b), t => Pair(t._1, t._2))
+    val chain = Traversal.each[List, Pair].andThen(pairSwap)
+    val out = chain.modify { case (a, b) => (a + 1, b + 10) }(
+      List(Pair(1, 2), Pair(3, 4))
+    )
+    out === List(Pair(2, 12), Pair(4, 14))
+  }
+
+  "Traversal.each ∘ Optional skips miss branches, updates hits" >> {
+    val positive =
+      Optional[Int, Int, Int, Int, Affine](
+        getOrModify = n => if n > 0 then Right(n) else Left(n),
+        reverseGet = (_, k) => k,
+      )
+    val chain = Traversal.each[List, Int].andThen(positive)
+    // All-hit input doubles every element:
+    chain.modify(_ * 2)(List(1, 2, 3)) === List(2, 4, 6)
+    // Mixed: only positives get doubled.
+    chain.modify(_ * 2)(List(-1, 0, 2, -3, 4)) === List(-1, 0, 4, -3, 8)
+  }
+
+  "Traversal.each ∘ Prism matches selected elements" >> {
+    sealed trait Shape
+    object Shape:
+      case class Circle(r: Int) extends Shape
+      case class Square(s: Int) extends Shape
+    val circleP =
+      Prism[Shape, Shape.Circle](
+        {
+          case c: Shape.Circle => Right(c)
+          case other           => Left(other)
+        },
+        identity,
+      )
+    val chain = Traversal.each[List, Shape].andThen(circleP)
+    val shapes: List[Shape] = List(Shape.Circle(1), Shape.Square(2), Shape.Circle(3))
+    chain.modify(c => Shape.Circle(c.r * 10))(shapes) ===
+      List(Shape.Circle(10), Shape.Square(2), Shape.Circle(30))
+  }
+
+  "Traversal.each ∘ Traversal.each traverses a matrix uniformly" >> {
+    val each2 = Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int])
+    each2.modify(_ + 1)(List(List(1, 2), List(3, 4, 5), Nil)) ===
+      List(List(2, 3), List(4, 5, 6), Nil)
+  }
+
+  "Traversal.each ∘ Lens ∘ Optional — three-hop realistic chain" >> {
+    case class Owner(phones: List[Phone])
+    case class Phone(number: String, active: Option[Boolean])
+    val activePhone =
+      Optional[Phone, Phone, Boolean, Boolean, Affine](
+        getOrModify = p => p.active.toRight(p),
+        reverseGet = (p, b) => p.copy(active = Some(b)),
+      )
+    // Lens[Owner, List[Phone]] then .each then Optional — covers the
+    // standard "every phone's active flag, when present" shape.
+    val ownerPhones =
+      Lens[Owner, List[Phone]](_.phones, (o, ps) => o.copy(phones = ps))
+    val chain =
+      ownerPhones.andThen(Traversal.each[List, Phone]).andThen(activePhone)
+
+    val owner = Owner(
+      List(Phone("a", Some(true)), Phone("b", None), Phone("c", Some(false)))
+    )
+    chain.modify(!_)(owner) === Owner(
+      List(Phone("a", Some(false)), Phone("b", None), Phone("c", Some(true)))
+    )
+  }
+
+  // ---- R11b — Optional's fused `.andThen` overloads ---------------
+  //
+  // Four fused overloads exist on `Optional` (optics/Optional.scala
+  // lines 123-188). Each one is an optimisation over the generic
+  // cross-carrier `.andThen` but previously had no behaviour spec —
+  // which also drove Optional.scala's 21.92% line coverage. Each spec
+  // below calls the fused overload on a realistic fixture and asserts
+  // both `.modify` behaviour and `.getOption` read-side behaviour.
+
+  case class Address(street: String, zip: Int)
+  case class AddressCarrier(address: Option[Address])
+
+  // Shared fixtures across the R11b block.
+  private val addressOpt: Optional[AddressCarrier, AddressCarrier, Address, Address] =
+    Optional[AddressCarrier, AddressCarrier, Address, Address, Affine](
+      getOrModify = c => c.address.toRight(c),
+      reverseGet = (c, a) => c.copy(address = Some(a)),
+    )
+
+  private val streetLens: GetReplaceLens[Address, Address, String, String] =
+    new GetReplaceLens[Address, Address, String, String](
+      get = _.street,
+      enplace = (a, s) => a.copy(street = s),
+    )
+
+  "Optional.andThen(Optional) — fused Affine ∘ Affine" >> {
+    // AddressCarrier → Address (Optional) → (identity Optional on Address).
+    // The inner is a trivial full-hit Optional, so the chain reduces to
+    // "just apply the outer's modify where present".
+    val idAddr: Optional[Address, Address, Address, Address] =
+      Optional[Address, Address, Address, Address, Affine](
+        Right(_),
+        (_, a) => a,
+      )
+    val chained: Optional[AddressCarrier, AddressCarrier, Address, Address] =
+      addressOpt.andThen(idAddr)
+
+    val hit = AddressCarrier(Some(Address("Main St", 12345)))
+    val miss = AddressCarrier(None)
+
+    chained.modify(a => a.copy(street = a.street.toUpperCase))(hit) ===
+      AddressCarrier(Some(Address("MAIN ST", 12345)))
+    chained.modify(a => a.copy(street = a.street.toUpperCase))(miss) === miss
+  }
+
+  "Optional.andThen(GetReplaceLens) — fused Optional + Lens" >> {
+    val chained: Optional[AddressCarrier, AddressCarrier, String, String] =
+      addressOpt.andThen(streetLens)
+    val hit = AddressCarrier(Some(Address("Main St", 12345)))
+    val miss = AddressCarrier(None)
+    chained.modify(_.toUpperCase)(hit) ===
+      AddressCarrier(Some(Address("MAIN ST", 12345)))
+    chained.modify(_.toUpperCase)(miss) === miss
+  }
+
+  "Optional.andThen(MendTearPrism) — fused Optional + Prism" >> {
+    // Focus: AddressCarrier.address (Optional), then Prism that only
+    // picks zip=12345 addresses, returning the street.
+    case class Tagged(label: String)
+    val zipTagPrism: MendTearPrism[Address, Address, Tagged, Tagged] =
+      new MendTearPrism[Address, Address, Tagged, Tagged](
+        tear = a => if a.zip == 12345 then Right(Tagged(a.street)) else Left(a),
+        mend = (t: Tagged) => Address(t.label, 12345),
+      )
+    val chained: Optional[AddressCarrier, AddressCarrier, Tagged, Tagged] =
+      addressOpt.andThen(zipTagPrism)
+
+    val hit = AddressCarrier(Some(Address("Main St", 12345)))
+    val missInner = AddressCarrier(Some(Address("Broadway", 99)))
+    val missOuter = AddressCarrier(None)
+
+    chained.modify(t => Tagged(t.label.reverse))(hit) ===
+      AddressCarrier(Some(Address("tS niaM", 12345)))
+    chained.modify(t => Tagged(t.label.reverse))(missInner) === missInner
+    chained.modify(t => Tagged(t.label.reverse))(missOuter) === missOuter
+  }
+
+  "Optional.andThen(BijectionIso) — fused Optional + Iso" >> {
+    // (zip, street) iso to (street, zip), then Optional into the carrier.
+    val swapIso: BijectionIso[Address, Address, (Int, String), (Int, String)] =
+      new BijectionIso[Address, Address, (Int, String), (Int, String)](
+        get = a => (a.zip, a.street),
+        reverseGet = { case (z, s) => Address(s, z) },
+      )
+    val chained: Optional[AddressCarrier, AddressCarrier, (Int, String), (Int, String)] =
+      addressOpt.andThen(swapIso)
+
+    val hit = AddressCarrier(Some(Address("Main St", 12345)))
+    val miss = AddressCarrier(None)
+
+    chained.modify { case (z, s) => (z + 1, s + "!") }(hit) ===
+      AddressCarrier(Some(Address("Main St!", 12346)))
+    chained.modify { case (z, s) => (z + 1, s + "!") }(miss) === miss
   }

@@ -1525,7 +1525,7 @@ the gate triggers.
 - `.github/workflows/release.yml` dry-run via `act` (if available) or
   documented as "first real run happens on the 0.1.0 tag."
 
-- [ ] **Unit 16: Composition-gap top-3 closures (R11) + structural disposition (R12)**
+- [x] **Unit 16: Composition-gap top-3 closures (R11) + structural disposition (R12)**
 
 **Goal:** Close the three highest-priority gaps from the composition-gap
 analysis at the behaviour-spec level, and ship the two structural-boundary

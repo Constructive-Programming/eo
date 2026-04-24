@@ -340,6 +340,24 @@ object AlgLens:
     *
     * @group Instances
     */
+  /** Direct `Composer[Forgetful, AlgLens[F]]` — lifts an Iso / Getter straight into `AlgLens[F]` as
+    * a singleton-cardinality classifier.
+    *
+    * Without this given, composing an Iso as the inner of an `AlgLens[F]` chain is ambiguous at
+    * implicit resolution — `Forgetful` reaches `AlgLens[F]` through several transitive paths
+    * (`Tuple2 / Either / Forget[F]`). Shipping a direct given disambiguates via Scala's specificity
+    * preference. Mirrors the pattern already used for `Composer[Forgetful, Grate]` /
+    * `Composer[Forgetful, Kaleidoscope]`.
+    *
+    * Runtime equivalent to the `Forgetful → Tuple2 → AlgLens[F]` chain.
+    *
+    * @group Instances
+    */
+  given forgetful2alg[F[_]: Applicative: Foldable]: Composer[Forgetful, AlgLens[F]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, AlgLens[F]] =
+      tuple2alg[F].to(Composer.forgetful2tuple.to(o))
+
   given tuple2alg[F[_]: Applicative: Foldable]: Composer[Tuple2, AlgLens[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, AlgLens[F]] =

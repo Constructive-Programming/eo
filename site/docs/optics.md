@@ -384,6 +384,17 @@ val bumpAll = Setter[SetterConfig, SetterConfig, Int, Int] { f => cfg =>
 bumpAll.modify(_ + 1)(SetterConfig(Map("a" -> 1, "b" -> 2)))
 ```
 
+**Setter is a composition terminal.** `lens.andThen(setter)` works —
+a Lens to a focus, then a Setter that writes into it. The reverse
+chain, `setter.andThen(inner)`, does *not* work: there's no
+`AssociativeFunctor[SetterF, _, _]` shipped, and no `Composer[SetterF,
+_]`. That's intentional — SetterF's shape `(Fst[X], Snd[X] => A)`
+doesn't carry a read side, so "compose another optic on top of a
+write-only endpoint" doesn't have a natural semantics. If you want
+`setter.andThen(…)`, restructure the chain so the Setter is the
+inner — build `lens/prism/traversal.andThen(setter)` and call
+`.modify` on the result.
+
 ## Getter
 
 A `Getter[S, A]` is the read-only counterpart to `Setter` — a
@@ -566,6 +577,21 @@ See [the PowerSeries benchmark
 notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers)
 for the cost tradeoff.
 
+### Composer: `Iso` as the inner of `Traversal.each`
+
+`Traversal.each[T, A].andThen(iso)` composes cleanly. The direct
+`Composer[Forgetful, PowerSeries]` given ships in `eo.data.PowerSeries`
+and takes priority over any transitive path (`Forgetful → Tuple2 →
+PowerSeries` or `Forgetful → Either → PowerSeries`) that would
+otherwise be ambiguous.
+
+Same story for `Iso` as the inner of an `Optional` (Affine carrier) or
+of an `AlgLens[F]` — direct `Composer[Forgetful, Affine]` /
+`Composer[Forgetful, AlgLens[F]]` givens ship beside the carrier.
+Earlier revisions of cats-eo required an explicit `.morph[Tuple2]`
+step for these chains; post-Unit 16 it's a one-hop `.andThen` call
+with no ceremony.
+
 ## AlgLens
 
 An algebraic lens targets cases that sit *between* `Lens` and
@@ -594,8 +620,25 @@ Three cross-carrier factories lift existing optics into
   carries an `F[A]` (`Prism[Json, List[Int]]`).
 - `AlgLens.fromOptionalF[F, S, A]` — the Optional analogue.
 
-Composition with plain `Lens` / `Prism` / `Optional` on either
-side works through the shipped `Composer` bridges — AlgLens's
+**AlgLens is a composition sink** — it accepts inbound
+bridges (`Composer[Tuple2, AlgLens[F]]`, `Composer[Either,
+AlgLens[F]]`, `Composer[Affine, AlgLens[F]]`) from all the standard
+carriers, but ships no outbound `Composer[AlgLens[F], _]` instances.
+Once you've landed in `AlgLens[F]`, you stay there. This matches the
+semantics — AlgLens's payload shape `(X, F[A])` exposes the
+classifier's full vector, not a single focus you could morph into
+another carrier's structure. If you want to drill deeper after an
+`AlgLens` step, do it inside the `F[A]` side directly — map through
+`F` with the cats-core machinery you'd normally reach for.
+
+`Composer[AlgLens[F], _]` instances are explicitly out of scope for
+0.1.0 and the roadmap through at least 0.2.x. The outbound-bridge
+story needs a concrete use case first — the composition-gap analysis
+([`2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md))
+flags it as a top-5 structural gap, but no user has asked for it.
+
+Composition INTO `AlgLens[F]` from plain `Lens` / `Prism` / `Optional`
+works through the shipped `Composer` bridges — AlgLens's
 `ForgetfulFunctor` / `ForgetfulFold` / `ForgetfulTraverse` /
 `AssociativeFunctor` instances plug straight into the existing
 `.modify` / `.foldMap` / `.modifyA` extensions.
