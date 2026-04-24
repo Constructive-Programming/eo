@@ -313,26 +313,10 @@ object PowerSeries:
         case _ =>
           new GenericTuple2InPS[S, T, A, B](o)
 
-  /** Direct `Composer[Forgetful, PowerSeries]` — lifts an Iso / Getter straight into the PS
-    * carrier.
-    *
-    * Without this given, `Traversal.each[T, A].andThen(iso)` is ambiguous at implicit resolution
-    * because `Forgetful` can transitively reach `PowerSeries` via either `Tuple2` or `Either` and
-    * Scala's implicit chain derivation matches both routes. Shipping this as a direct given puts it
-    * above `Composer.chain` in Scala's specificity-ranking, so the compiler resolves
-    * `Composer[Forgetful, PowerSeries]` here first. Runtime cost is the same as the
-    * `Forgetful → Tuple2 → PowerSeries` chain — this is a resolution-only fix, not a new
-    * implementation.
-    *
-    * Mirrors the `Composer[Forgetful, Grate]` / `Composer[Forgetful, Kaleidoscope]` pattern already
-    * shipped for those carriers.
-    *
-    * @group Instances
-    */
-  given forgetful2ps: Composer[Forgetful, PowerSeries] with
-
-    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, PowerSeries] =
-      tuple2ps.to(Composer.forgetful2tuple.to(o))
+  // Iso → PowerSeries composition is handled by the low-priority `Morph.viaTuple2` fallback
+  // (see `eo.LowPriorityMorphInstances`). No direct `Composer[Forgetful, PowerSeries]` is
+  // shipped here — the fallback fires cleanly once `Composer.chain` is at low priority,
+  // producing the same `Forgetful → Tuple2 → PowerSeries` path as a direct given would have.
 
   /** PS-carrier view of an `Optic[_, _, _, _, Either]`. The generic `to` path would stuff the
     * Prism's miss / hit into a `PowerSeries` wrapping an `Option[o.X]` existential. The

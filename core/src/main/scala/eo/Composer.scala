@@ -17,21 +17,26 @@ trait Composer[F[_, _], G[_, _]]:
 /** Typeclass instances for [[Composer]]. Additional composers live near the carrier they produce:
   * `Composer[Tuple2, Affine]` under [[data.Affine]], `Composer[Tuple2, SetterF]` under
   * [[data.SetterF]], `Composer[Tuple2, PowerSeries]` under [[data.PowerSeries]], etc.
+  *
+  * Resolution tiers:
+  *   1. Regular priority: atomic direct bridges defined here and in each carrier's companion. Fast
+  *      at both compile and runtime.
+  *   2. Low priority (inherited from [[LowPriorityComposerInstances]]): a single
+  *      [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] derivation with `Tuple2` as
+  *      the fixed intermediate. Covers Forgetful-origin chains to Affine / SetterF / PowerSeries /
+  *      AlgLens[F] uniformly without introducing ambiguity. Carriers that don't have a
+  *      `Composer[Tuple2, G]` bridge (Grate, Kaleidoscope) ship their own `Composer[Forgetful, X]`
+  *      directly at tier 1.
+  *
+  * An earlier `chain[F, G, H]` derivation over arbitrary intermediate `G` was removed during the
+  * 2026-04-24 resolution refactor because it introduced implicit-search ambiguity whenever two
+  * intermediate carriers both reached the target (e.g. `Composer[Forgetful, PowerSeries]` via
+  * `Tuple2` OR via `Either`). The fixed-intermediate `chainViaTuple2` is unambiguous by
+  * construction.
   */
-object Composer:
+object Composer extends LowPriorityComposerInstances:
 
   import data.Forgetful
-
-  /** Transitive derivation: given `F → G` and `G → H`, derive `F → H`. Lets callers morph across
-    * two bridges without writing the intermediate type.
-    *
-    * @group Instances
-    */
-  given chain[F[_, _], G[_, _], H[_, _]](using
-      f2g: Composer[F, G],
-      g2h: Composer[G, H],
-  ): Composer[F, H] with
-    def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, H] = g2h.to(f2g.to(o))
 
   /** Express an Iso (or Getter) as a Lens — the Lens's leftover is `Unit` because the bijection
     * doesn't need any.
@@ -61,3 +66,41 @@ object Composer:
           e match
             case Right(b) => o.from(b)
             case Left(_)  => ???
+
+/** Low-priority `Composer` instances. The lone inhabitant is
+  * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] — a transitive derivation with
+  * `Tuple2` pinned as the intermediate carrier. Lifts any `Composer[F, Tuple2]` +
+  * `Composer[Tuple2, G]` pair into `Composer[F, G]` without introducing the ambiguity the older
+  * fully-general `chain[F, G, H]` did.
+  *
+  * Why fixed-intermediate:
+  *
+  *   - Runtime: identical to a direct 2-hop chain — one `cf.to` call, one `cg.to` call, two optic
+  *     wrapper allocations. Same cost as the previous direct `Composer[Forgetful, X]` givens that
+  *     explicitly spelled out `tuple2X.to(forgetful2tuple.to(o))`.
+  *   - Compile time: one named given to consider at the low-priority tier, with two direct implicit
+  *     parameters. No combinatorial enumeration over intermediate carriers.
+  *   - Correctness: unambiguous by construction. Previously `chain` matched with multiple `G`
+  *     instantiations whenever two paths existed (e.g. Tuple2 and Either both bridging Forgetful to
+  *     PowerSeries), and Scala 3's ambiguity rule killed the entire search. With a fixed
+  *     intermediate, there's only one candidate path.
+  *
+  * Non-Tuple2 intermediate paths — currently none exist in the shipped composer table — can be
+  * added as additional fixed-intermediate givens if future carriers need them (e.g. a hypothetical
+  * `chainViaEither` at a still-lower priority).
+  */
+trait LowPriorityComposerInstances:
+
+  /** Transitive derivation via `Tuple2` as the intermediate carrier: given `F → Tuple2` and
+    * `Tuple2 → G`, derive `F → G`. Fires cleanly for Forgetful-origin chains to any target with a
+    * `Composer[Tuple2, _]` direct (Affine / SetterF / PowerSeries / AlgLens[F]).
+    *
+    * @group Instances
+    */
+  given chainViaTuple2[F[_, _], G[_, _]](using
+      f2tuple: Composer[F, Tuple2],
+      tuple2g: Composer[Tuple2, G],
+  ): Composer[F, G] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, G] =
+      tuple2g.to(f2tuple.to(o))

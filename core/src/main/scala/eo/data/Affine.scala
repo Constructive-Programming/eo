@@ -249,22 +249,9 @@ object Affine:
             case m: Miss[X, B] => m.fst
             case h: Hit[X, B]  => o.from((h.snd, h.b))
 
-  /** Direct `Composer[Forgetful, Affine]` — lifts an Iso / Getter straight into Affine.
-    *
-    * Without this given, `optional.andThen(iso)` would resolve through `Composer.chain` with two
-    * candidate paths (`Forgetful → Tuple2 → Affine` and `Forgetful → Either → Affine`), and Scala's
-    * implicit resolver can't pick between them. Shipping a direct given disambiguates via
-    * specificity — Scala 3 prefers a direct given over a chained derivation. Mirrors the
-    * `Composer[Forgetful, Grate]` / `Composer[Forgetful, Kaleidoscope]` pattern. No runtime cost
-    * over the chained path.
-    *
-    * @group Instances
-    */
-  given forgetful2affine: Composer[Forgetful, Affine] with
-    import optics.Optic
-
-    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Affine] =
-      tuple2affine.to(Composer.forgetful2tuple.to(o))
+  // Iso → Affine composition is handled by the low-priority `Morph.viaTuple2` fallback
+  // (see `eo.LowPriorityMorphInstances`). No direct `Composer[Forgetful, Affine]` is shipped
+  // here — the fallback fires cleanly once `Composer.chain` is at low priority.
 
   /** `Composer[Either, Affine]` — express a Prism as an Optional by reusing its `Either`
     * decomposition for Affine's miss / hit branches.
