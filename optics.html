@@ -103,6 +103,7 @@
     <li class="level1 nav-node"><a href="#traversal">Traversal</a></li>
     <li class="level2 nav-leaf"><a href="#composer-iso-as-the-inner-of-traversal-each">Composer: <code>Iso</code> as the inner of <code>Traversal.each</code></a></li>
     <li class="level1 nav-leaf"><a href="#alglens">AlgLens</a></li>
+    <li class="level1 nav-leaf"><a href="#composition-limits">Composition limits</a></li>
   </ul>
 
   <p class="footer"></p>
@@ -171,7 +172,7 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">funGrate</span><span> = </span><span class="type-name">Grate</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">1</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">2</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">doubled</span><span> = </span><span class="identifier">funGrate</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="identifier">f</span><span>)
-</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14434/0x00007ff3122733f8@53ff1943
+</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14365/0x00007fd80a26b080@71d3e621
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">true</span><span>)
 </span><span class="comment">// res5: Int = 2
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">false</span><span>)
@@ -634,6 +635,45 @@ AlgLens[F]]</code>, <code>Composer[Affine, AlgLens[F]]</code>) from all the stan
         <code>ForgetfulFunctor</code> / <code>ForgetfulFold</code> / <code>ForgetfulTraverse</code> /
         <code>AssociativeFunctor</code> instances plug straight into the existing
         <code>.modify</code> / <code>.foldMap</code> / <code>.modifyA</code> extensions.</p>
+        
+        <h2 id="composition-limits" class="section"><a class="anchor-link left" href="#composition-limits"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h2>
+        <p>Beyond the AlgLens-outbound sink documented above, three categories
+        of pair are intentionally <strong>not</strong> bridged in 0.1.0. The short answer
+        is &quot;the type system rules them out, and the natural workaround is a
+        plain Scala expression&quot;:</p>
+        <p><strong>Lens / Prism / Optional × <code>Fold[F]</code> (or <code>Traversal.forEach</code>) when
+        the outer focuses on a scalar <code>A</code></strong> — the outer never produces an
+        <code>F</code>-shape, so there&#39;s nothing for the <code>Fold</code> to traverse. Use
+        <code>fold.foldMap(f)(lens.get(s))</code> directly. If your outer <em>does</em> focus
+        on an <code>F[A]</code> (e.g. <code>Lens[Row, List[Int]]</code>), use one of the
+        <code>AlgLens.fromLensF</code> / <code>fromPrismF</code> / <code>fromOptionalF</code> factories to
+        lift into <code>AlgLens[F]</code> and chain there.</p>
+        <p><strong><code>Traversal.each</code> × <code>Fold[F]</code> / <code>Traversal.forEach</code> / <code>AlgLens[F]</code></strong> —
+        PowerSeries (the <code>Traversal.each</code> carrier) cannot widen into Forget&#39;s
+        classifier representation without dropping its rebuild data, and
+        cannot widen into AlgLens&#39;s per-candidate cardinality model without a
+        synthetic count. The idiomatic workaround pushes the inner under the
+        traversal: <code>traversal.modify(a =&gt; inner.replace(b)(a))(s)</code> for an
+        <code>AlgLens</code> inner; <code>traversal.foldMap(f)(s)</code> (the ForgetfulFold instance
+        on PowerSeries) when you only need the fold side.</p>
+        <p><strong><code>Traversal.forEach</code> × <code>Traversal.forEach</code> across different <code>F</code> /
+        <code>G</code></strong> — <code>assocForgetMonad</code> requires <code>F = G</code>. Composing
+        <code>Forget[List]</code> with <code>Forget[Option]</code> would need either a
+        <code>FunctionK</code>-witness Composer or a specialised nested-Foldable flatten;
+        both are deferred to 0.2.x. Until then, run the inner foldable inside
+        a <code>modify</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">total</span><span>: </span><span class="type-name">Int</span><span> =
+  </span><span class="identifier">list</span><span>.</span><span class="identifier">foldLeft</span><span>(</span><span class="number-literal">0</span><span>)((</span><span class="identifier">acc</span><span>, </span><span class="identifier">opt</span><span>) =&gt; </span><span class="identifier">acc</span><span> + </span><span class="identifier">opt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">length</span><span>))</span></code></pre>
+        <p><strong><code>SetterF</code> outbound</strong> — Setter is a composition terminal: ship it as
+        the leaf of a chain (Lens → Setter via <code>Composer[Tuple2, SetterF]</code>)
+        but don&#39;t try to chain off it. There is no <code>AssociativeFunctor[SetterF]</code>
+        and no outbound Composer.</p>
+        <p><strong><code>FixedTraversal[N]</code></strong> — fixed-arity (<code>Traversal.two</code> / <code>.three</code> /
+        <code>.four</code>) is a leaf carrier with no outbound or inbound Composer. Use
+        it when you need the exact-N shape; reach for <code>Traversal.each</code> when
+        you want compositional reach.</p>
+        <p>The full taxonomy with cell-by-cell rationale lives in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>docs/research/2026-04-23-composition-gap-analysis.md</code></a>.</p>
 
         
 <hr class="footer-rule"/>
