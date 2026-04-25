@@ -6,10 +6,6 @@ import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.Affine
-import dev.constructive.eo.optics.{Lens => EoLens, Optic, Optional => EoOptional}
-
-import monocle.{Lens => MLens, Optional => MOptional}
 
 /** `Optional.modify` / `Optional.replace` on a `Nested0.flag: Option[String]` focus, at varying
   * composition depth, paired against Monocle's `Optional`.
@@ -32,32 +28,10 @@ import monocle.{Lens => MLens, Optional => MOptional}
 @Measurement(iterations = 5, time = 1)
 class OptionalBench:
 
-  // ---- Leaf optionals -----------------------------------------------
+  // ---- Leaf optionals + per-level lenses (shared fixture) -----------
 
-  private val eoFlag =
-    EoOptional[Nested0, Nested0, String, String, Affine](
-      getOrModify = n0 => n0.flag.toRight(n0),
-      reverseGet = (pair: (Nested0, String)) => pair._1.copy(flag = Some(pair._2)),
-    )
-
-  private val mFlag: MOptional[Nested0, String] =
-    MOptional[Nested0, String](_.flag)(s => n0 => n0.copy(flag = Some(s)))
-
-  // ---- Per-level lenses ---------------------------------------------
-
-  private val eoN1 = EoLens[Nested1, Nested0](_.n, (x, v) => x.copy(n = v))
-  private val eoN2 = EoLens[Nested2, Nested1](_.n, (x, v) => x.copy(n = v))
-  private val eoN3 = EoLens[Nested3, Nested2](_.n, (x, v) => x.copy(n = v))
-  private val eoN4 = EoLens[Nested4, Nested3](_.n, (x, v) => x.copy(n = v))
-  private val eoN5 = EoLens[Nested5, Nested4](_.n, (x, v) => x.copy(n = v))
-  private val eoN6 = EoLens[Nested6, Nested5](_.n, (x, v) => x.copy(n = v))
-
-  private val mN1: MLens[Nested1, Nested0] = MLens[Nested1, Nested0](_.n)(v => x => x.copy(n = v))
-  private val mN2: MLens[Nested2, Nested1] = MLens[Nested2, Nested1](_.n)(v => x => x.copy(n = v))
-  private val mN3: MLens[Nested3, Nested2] = MLens[Nested3, Nested2](_.n)(v => x => x.copy(n = v))
-  private val mN4: MLens[Nested4, Nested3] = MLens[Nested4, Nested3](_.n)(v => x => x.copy(n = v))
-  private val mN5: MLens[Nested5, Nested4] = MLens[Nested5, Nested4](_.n)(v => x => x.copy(n = v))
-  private val mN6: MLens[Nested6, Nested5] = MLens[Nested6, Nested5](_.n)(v => x => x.copy(n = v))
+  import NestedOptics.{eoFlag, mFlag, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, mN1, mN2, mN3, mN4, mN5,
+    mN6}
 
   // ---- Composed optionals — Lens chain composed directly with the
   //      leaf Optional via cross-carrier `.andThen`, which summons a
