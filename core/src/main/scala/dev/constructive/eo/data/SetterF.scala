@@ -47,6 +47,28 @@ object SetterF:
     ): SetterF[X, B] => (B => G[C]) => G[SetterF[X, C]] =
       s => g => D.tupleLeft(D.distribute(s.setter._2)(g), s.setter._1).map(SetterF(_))
 
+  /** Shared skeleton for the `Composer[F, SetterF]` instances below. Every one of the four
+    * carriers (`Tuple2`, `Either`, `Affine`, `PowerSeries`) materialises a coerced
+    * `Optic[S, T, A, B, SetterF]` with the same shape — `type X = (S, A)`, the same identity
+    * `to` ("seed the SetterF with the original `s` and the identity focus-fn"), and a `from`
+    * that delegates the per-carrier focus rewrite to `applyWrite`.
+    *
+    * Routing through this helper collapses the four near-identical bodies that previously sat
+    * in each `Composer` instance. Not `inline` — anonymous-class definitions in inline bodies
+    * trigger `-Werror`-fatal "duplicated at each inline site" warnings, and the per-carrier
+    * call-site allocates the same single anonymous-`Optic` instance either way.
+    */
+  private def coerceToSetter[F[_, _], S, T, A, B](
+      applyWrite: (S, A => B) => T
+  ): optics.Optic[S, T, A, B, SetterF] =
+    new optics.Optic[S, T, A, B, SetterF]:
+      type X = (S, A)
+      val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+
+      val from: SetterF[X, B] => T = sfxb =>
+        val (s, f) = sfxb.setter
+        applyWrite(s, f)
+
   /** Coerce any Tuple2-carrier optic (typically a Lens) into a SetterF optic. Every Lens is-a
     * Setter: modify is `setter.from(SetterF(s, f))`, which re-runs the Lens's get/replace path with
     * `f` applied to the focus. Powers cross-carrier `lens.andThen(setter)`, via
@@ -55,17 +77,11 @@ object SetterF:
     * @group Instances
     */
   given tuple2setter: Composer[Tuple2, SetterF] with
-    import optics.Optic
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, SetterF] =
-      new Optic[S, T, A, B, SetterF]:
-        type X = (S, A)
-        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
-
-        val from: SetterF[X, B] => T = sfxb =>
-          val (s, f) = sfxb.setter
-          val (xo, a) = o.to(s)
-          o.from((xo, f(a)))
+    def to[S, T, A, B](o: optics.Optic[S, T, A, B, Tuple2]): optics.Optic[S, T, A, B, SetterF] =
+      coerceToSetter: (s, f) =>
+        val (xo, a) = o.to(s)
+        o.from((xo, f(a)))
 
   /** Coerce an `Either`-carrier optic (Prism) into a SetterF optic. Hit branch: write `f(a)`
     * through the Prism's build path. Miss branch: pass the original leftover back through the
@@ -79,18 +95,12 @@ object SetterF:
     * @group Instances
     */
   given either2setter: Composer[Either, SetterF] with
-    import optics.Optic
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, SetterF] =
-      new Optic[S, T, A, B, SetterF]:
-        type X = (S, A)
-        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
-
-        val from: SetterF[X, B] => T = sfxb =>
-          val (s, f) = sfxb.setter
-          o.to(s) match
-            case Right(a) => o.from(Right(f(a)))
-            case Left(xo) => o.from(Left(xo))
+    def to[S, T, A, B](o: optics.Optic[S, T, A, B, Either]): optics.Optic[S, T, A, B, SetterF] =
+      coerceToSetter: (s, f) =>
+        o.to(s) match
+          case Right(a) => o.from(Right(f(a)))
+          case Left(xo) => o.from(Left(xo))
 
   /** Coerce an `Affine`-carrier optic (Optional) into a SetterF optic. Same shape as
     * [[either2setter]] split across the explicit `Affine.Hit` / `Affine.Miss` constructors so the
@@ -101,20 +111,14 @@ object SetterF:
     * @group Instances
     */
   given affine2setter: Composer[Affine, SetterF] with
-    import optics.Optic
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, SetterF] =
-      new Optic[S, T, A, B, SetterF]:
-        type X = (S, A)
-        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
-
-        val from: SetterF[X, B] => T = sfxb =>
-          val (s, f) = sfxb.setter
-          o.to(s) match
-            case h: Affine.Hit[o.X, A] =>
-              o.from(new Affine.Hit[o.X, B](h.snd, f(h.b)))
-            case m: Affine.Miss[o.X, A] =>
-              o.from(m.widenB[B])
+    def to[S, T, A, B](o: optics.Optic[S, T, A, B, Affine]): optics.Optic[S, T, A, B, SetterF] =
+      coerceToSetter: (s, f) =>
+        o.to(s) match
+          case h: Affine.Hit[o.X, A] =>
+            o.from(new Affine.Hit[o.X, B](h.snd, f(h.b)))
+          case m: Affine.Miss[o.X, A] =>
+            o.from(m.widenB[B])
 
   /** Coerce a `PowerSeries`-carrier optic (Traversal.each) into a SetterF optic. The Setter's
     * `modify` applies the focus function to *every* candidate in the traversal — equivalent to
@@ -127,13 +131,9 @@ object SetterF:
     * @group Instances
     */
   given powerseries2setter: Composer[PowerSeries, SetterF] with
-    import optics.Optic
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, PowerSeries]): Optic[S, T, A, B, SetterF] =
-      new Optic[S, T, A, B, SetterF]:
-        type X = (S, A)
-        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
-
-        val from: SetterF[X, B] => T = sfxb =>
-          val (s, f) = sfxb.setter
-          o.from(summon[ForgetfulFunctor[PowerSeries]].map(o.to(s), f))
+    def to[S, T, A, B](
+        o: optics.Optic[S, T, A, B, PowerSeries]
+    ): optics.Optic[S, T, A, B, SetterF] =
+      coerceToSetter: (s, f) =>
+        o.from(summon[ForgetfulFunctor[PowerSeries]].map(o.to(s), f))
