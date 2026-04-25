@@ -91,6 +91,31 @@ ThisBuild / scalafixDependencies +=
 ThisBuild / scalacOptions += "-Wunused:all"
 ThisBuild / tlFatalWarnings := true
 
+// `unused-code-plugin` (xuwei-k) ships a Scalafix `SyntacticRule`
+// (`WarnUnusedCode`) that finds unused PUBLIC classes/objects/methods.
+// It complements stdlib `RemoveUnused`, which only catches
+// private/local definitions. We use the WARN variant — never the
+// REMOVE / ERROR variant — because cats-eo's public optic
+// constructors are intentionally part of the published API even when
+// no internal call site invokes them yet (downstream users are the
+// consumers).
+//
+// `excludePath` patterns: tests / benchmarks / circe-test fixtures
+// host top-level helpers that look unused across compilation but are
+// referenced via reflection (specs2 discovery, JMH @Benchmark) or
+// only inside their owning module's test runs (which the plugin's
+// scan can't see).
+ThisBuild / unusedCodeConfig ~= { c =>
+  c.copy(
+    excludePath = c.excludePath ++ Set(
+      "glob:**/src/test/**",
+      "glob:**/benchmarks/**",
+    ),
+    excludeMainMethod = false,
+    dialect = unused_code.Dialect.Scala3,
+  )
+}
+
 // -------------------------------------------------------------------
 // Bump hardcoded GitHub Action versions that sbt-typelevel 0.8.5
 // pins to older releases:

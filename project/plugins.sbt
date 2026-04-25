@@ -36,3 +36,12 @@ addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.6")
 // configured from build.sbt. Pinned to the same 0.8.5 family as
 // ci-release so they share plugin transitive versions.
 addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.5")
+
+// `unused-code-plugin` from xuwei-k contributes the `WarnUnusedCode` /
+// `ErrorUnusedCode` / `RemoveUnusedCode` Scalafix `SyntacticRule`s,
+// which surface unused PUBLIC classes/objects/methods (the stdlib
+// `RemoveUnused` rule only catches private/local ones). Configuration
+// for the rule lives on `ThisBuild / unusedCodeConfig` in `build.sbt`;
+// the rule itself ships as `_2.13` only but loads inside the Scalafix
+// classloader so Scala 3 sources are parsed via `Dialect.Scala3`.
+addSbtPlugin("com.github.xuwei-k" % "unused-code-plugin" % "0.5.1")
