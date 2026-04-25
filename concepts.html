@@ -23,6 +23,24 @@
   <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
     <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
   <script src="helium/site/laika-helium.js"></script>
+    <script type="module">
+
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({ 
+  startOnLoad: true,
+  theme: "base",
+  themeVariables: {
+    'darkMode': dark,
+    'primaryColor': dark ? '#125d75' : '#eef5f6', 
+    'primaryTextColor': dark ? '#a7d4de' : '#007c99',
+    'primaryBorderColor': dark ? '#a7d4de' : '#a7d4de',
+    'lineColor': dark ? '#a7d4de' : '#007c99',
+    'background': dark ? '#064458' : '#ffffff',
+  }
+});
+
+</script>
   
   
   <script> /* for avoiding page load transitions */ </script>
@@ -93,6 +111,7 @@
     <li class="level1 nav-node"><a href="#composition">Composition</a></li>
     <li class="level2 nav-leaf"><a href="#same-carrier-optic-andthen">Same-carrier: <code>Optic.andThen</code></a></li>
     <li class="level2 nav-leaf"><a href="#cross-family-andthen-across-carriers">Cross-family: <code>.andThen</code> across carriers</a></li>
+    <li class="level2 nav-leaf"><a href="#composition-lattice">Composition lattice</a></li>
     <li class="level1 nav-leaf"><a href="#why-the-existential-machinery-is-worth-it">Why the existential machinery is worth it</a></li>
   </ul>
 
@@ -318,15 +337,55 @@
 PowerSeries</code>, <code>Either → Affine</code>, <code>Either → PowerSeries</code>,
         <code>Affine → PowerSeries</code>, <code>Forgetful → Tuple2</code>, <code>Forgetful →
 Either</code>.</p>
-        <p>The transitive <code>Composer.chain</code> given lets you hop across two
-        bridges without naming the intermediate. <code>Morph</code>&#39;s four
-        instances (<code>same</code>, <code>leftToRight</code>, <code>rightToLeft</code>, and the
-        low-priority <code>bothViaAffine</code>) are what let <code>.andThen</code>
+        <p>The transitive <code>Composer.chainViaTuple2</code> given lets you hop
+        across two bridges using <code>Tuple2</code> as the fixed intermediate.
+        <code>Morph</code>&#39;s four instances (<code>same</code>, <code>leftToRight</code>, <code>rightToLeft</code>,
+        and the low-priority <code>bothViaAffine</code>) are what let <code>.andThen</code>
         auto-select the morph direction from the available <code>Composer</code>s
         between <code>F</code> and <code>G</code>. <code>bothViaAffine</code> fills the gap for pairs
         that have no direct bridge in either direction — a Prism
         (<code>Either</code>) composed with a Lens (<code>Tuple2</code>), for instance — by
         lifting both sides into <code>Affine</code>, which both carriers reach.</p>
+        
+        <h3 id="composition-lattice" class="section"><a class="anchor-link left" href="#composition-lattice"><i class="icofont-laika link">&#xef71;</i></a>Composition lattice</h3>
+        <p>Every edge below is a shipping <code>Composer[F, G]</code> given; solid
+        arrows are tier-1 atomic bridges, dashed arrows are tier-2
+        transitive derivations via <code>Composer.chainViaTuple2</code>. Terminal
+        nodes (<code>SetterF</code>, <code>AlgLens[F]</code>, <code>Kaleidoscope</code>, <code>Grate</code>,
+        <code>PowerSeries</code>, <code>FixedTraversal[N]</code>) sink — they have no
+        outbound <code>Composer</code> instance — so chains must land there last.</p>
+        <pre class="mermaid">flowchart LR
+  Forgetful --&gt; Tuple2
+  Forgetful --&gt; Either
+  Forgetful --&gt; Grate
+  Forgetful --&gt; Kaleidoscope
+  Tuple2 --&gt; Affine
+  Tuple2 --&gt; SetterF
+  Tuple2 --&gt; PowerSeries
+  Tuple2 --&gt; AlgLensF[&quot;AlgLens[F]&quot;]
+  Either --&gt; Affine
+  Either --&gt; PowerSeries
+  Either --&gt; AlgLensF
+  Affine --&gt; PowerSeries
+  Affine --&gt; AlgLensF
+  ForgetF[&quot;Forget[F]&quot;] --&gt; AlgLensF
+  Forgetful -.-&gt;|chainViaTuple2| Affine
+  Forgetful -.-&gt;|chainViaTuple2| SetterF
+  Forgetful -.-&gt;|chainViaTuple2| PowerSeries
+  Forgetful -.-&gt;|chainViaTuple2| AlgLensF
+  FixedN[&quot;FixedTraversal[N]&quot;]
+  SetterF:::sink
+  AlgLensF:::sink
+  Kaleidoscope:::sink
+  Grate:::sink
+  PowerSeries:::sink
+  FixedN:::sink
+  classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef</pre>
+        <p><code>FixedTraversal[N]</code> is drawn standalone: it has neither
+        inbound nor outbound <code>Composer</code>, and no <code>AssociativeFunctor</code>
+        either — it&#39;s a pure leaf carrier. <code>Forget[F]</code> has one outbound
+        bridge (<code>→ AlgLens[F]</code>) but no inbound, so chains reach it only
+        via <code>Traversal.forEach</code> at construction time.</p>
         
         <h2 id="why-the-existential-machinery-is-worth-it" class="section"><a class="anchor-link left" href="#why-the-existential-machinery-is-worth-it"><i class="icofont-laika link">&#xef71;</i></a>Why the existential machinery is worth it</h2>
         <p>Unifying every optic behind a single trait collapses the usual

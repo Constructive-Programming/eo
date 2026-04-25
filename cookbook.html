@@ -88,17 +88,37 @@
   <p class="header"><a href="#">Cookbook</a></p>
 
   <ul class="nav-list">
-    <li class="level1 nav-leaf"><a href="#edit-a-deeply-nested-field">Edit a deeply-nested field</a></li>
-    <li class="level1 nav-leaf"><a href="#focus-an-option-field-optional-shaped">Focus an <code>Option</code> field (Optional-shaped)</a></li>
-    <li class="level1 nav-leaf"><a href="#compose-a-lens-with-an-optional">Compose a Lens with an Optional</a></li>
-    <li class="level1 nav-leaf"><a href="#modify-every-element-of-a-list">Modify every element of a list</a></li>
-    <li class="level1 nav-leaf"><a href="#modify-every-element-and-continue-through-a-field">Modify every element <em>and</em> continue through a field</a></li>
-    <li class="level1 nav-leaf"><a href="#branch-into-a-sum-type">Branch into a sum type</a></li>
-    <li class="level1 nav-leaf"><a href="#edit-json-without-decoding">Edit JSON without decoding</a></li>
-    <li class="level1 nav-leaf"><a href="#diagnose-a-silent-json-edit-no-op">Diagnose a silent JSON edit no-op</a></li>
-    <li class="level1 nav-leaf"><a href="#apply-a-function-that-needs-an-effect">Apply a function that needs an effect</a></li>
-    <li class="level1 nav-leaf"><a href="#iso-between-equivalent-shapes">Iso between equivalent shapes</a></li>
-    <li class="level1 nav-leaf"><a href="#derive-a-read-only-view">Derive a read-only view</a></li>
+    <li class="level1 nav-node"><a href="#theme-a-product-editing">Theme A — Product editing</a></li>
+    <li class="level2 nav-leaf"><a href="#edit-a-deeply-nested-coordinate">Edit a deeply-nested coordinate</a></li>
+    <li class="level2 nav-leaf"><a href="#virtual-field-iso-celsius-fahrenheit-facade">Virtual-field Iso — Celsius ↔ Fahrenheit facade</a></li>
+    <li class="level2 nav-leaf"><a href="#multi-field-namedtuple-focus-cats-eo-unique">Multi-field NamedTuple focus (cats-eo-unique)</a></li>
+    <li class="level2 nav-leaf"><a href="#full-cover-iso-upgrade-cats-eo-unique">Full-cover Iso upgrade (cats-eo-unique)</a></li>
+    <li class="level1 nav-node"><a href="#theme-b-sum-branch-access">Theme B — Sum-branch access</a></li>
+    <li class="level2 nav-leaf"><a href="#prism-lens-branch-into-a-case-then-edit-inside">Prism + Lens — branch into a case, then edit inside</a></li>
+    <li class="level1 nav-node"><a href="#theme-c-collection-walks">Theme C — Collection walks</a></li>
+    <li class="level2 nav-leaf"><a href="#each-vs-foreach-the-composable-traversal-and-its-tight-twin"><code>each</code> vs. <code>forEach</code> — the composable traversal and its tight twin</a></li>
+    <li class="level2 nav-leaf"><a href="#sparse-traversal-over-a-prism-cats-eo-unique">Sparse traversal over a Prism (cats-eo-unique)</a></li>
+    <li class="level1 nav-node"><a href="#theme-d-json-editing-and-tree-walks">Theme D — JSON editing and tree walks</a></li>
+    <li class="level2 nav-leaf"><a href="#the-json-arc-edit-leaf-edit-array-diagnose">The JSON arc — edit leaf, edit array, diagnose</a></li>
+    <li class="level2 nav-leaf"><a href="#jq-style-path-predicate">jq-style path + predicate</a></li>
+    <li class="level2 nav-leaf"><a href="#recursive-rename-over-a-user-defined-tree">Recursive rename over a user-defined Tree</a></li>
+    <li class="level1 nav-node"><a href="#theme-e-algebraic-classifier">Theme E — Algebraic / classifier</a></li>
+    <li class="level2 nav-leaf"><a href="#alglens-vignette-partition-z-shift">AlgLens vignette — partition + z-shift</a></li>
+    <li class="level2 nav-leaf"><a href="#kaleidoscope-column-wise-aggregation">Kaleidoscope column-wise aggregation</a></li>
+    <li class="level1 nav-node"><a href="#theme-f-write-only-read-only-escape">Theme F — Write-only / read-only escape</a></li>
+    <li class="level2 nav-leaf"><a href="#review-reverse-only-build-path">Review — reverse-only build path</a></li>
+    <li class="level2 nav-leaf"><a href="#getter-derive-a-read-only-view">Getter — derive a read-only view</a></li>
+    <li class="level2 nav-leaf"><a href="#setter-opaque-bulk-write">Setter — opaque bulk write</a></li>
+    <li class="level2 nav-leaf"><a href="#affinefold-predicate-narrowed-read">AffineFold — predicate-narrowed read</a></li>
+    <li class="level1 nav-node"><a href="#theme-g-composition">Theme G — Composition</a></li>
+    <li class="level2 nav-leaf"><a href="#three-family-ladder-iso-lens-traversal-prism-lens">Three-family ladder: Iso → Lens → Traversal → Prism → Lens</a></li>
+    <li class="level1 nav-node"><a href="#theme-h-effectful-modification">Theme H — Effectful modification</a></li>
+    <li class="level2 nav-leaf"><a href="#validate-in-place-with-modifyf">Validate-in-place with <code>modifyF</code></a></li>
+    <li class="level2 nav-leaf"><a href="#batch-load-nested-ids-o-n-o-1-queries-cats-eo-unique">Batch-load nested IDs — O(N) → O(1) queries (cats-eo-unique)</a></li>
+    <li class="level1 nav-node"><a href="#theme-i-observable-failure-cats-eo-unique">Theme I — Observable failure (cats-eo-unique)</a></li>
+    <li class="level2 nav-leaf"><a href="#partial-success-array-walk-ior-both">Partial-success array walk — <code>Ior.Both</code></a></li>
+    <li class="level2 nav-leaf"><a href="#parse-error-surface-json-string-input">Parse-error surface — <code>Json | String</code> input</a></li>
+    <li class="level2 nav-leaf"><a href="#classify-failures-why-did-the-edit-no-op">Classify failures — <em>why</em> did the edit no-op?</a></li>
     <li class="level1 nav-leaf"><a href="#further-reading">Further reading</a></li>
   </ul>
 
@@ -111,126 +131,273 @@
         <h1 id="cookbook" class="title">Cookbook</h1>
         <p>Runnable patterns for the questions that come up most often.
         Every fence is compiled by mdoc against the current library
-        version.</p>
+        version, and every recipe cites the source — Penner&#39;s <em>Optics By
+        Example</em>, Monocle docs, Haskell <code>lens</code> tutorial, circe-optics, or
+        cats-eo itself where the surface is novel.</p>
+        <p>Recipes are grouped by theme. The order inside each theme moves
+        from the most familiar framing to the most cats-eo-unique
+        capability; skim the headings for a jumping-off point.</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.{</span><span class="type-name">Iso</span><span>, </span><span class="type-name">Lens</span><span>, </span><span class="type-name">Optic</span><span>, </span><span class="type-name">Optional</span><span>, </span><span class="type-name">Prism</span><span>, </span><span class="type-name">Traversal</span><span>}
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Forgetful</span><span>.</span><span class="keyword">given</span><span>    </span><span class="comment">// Accessor[Forgetful] — powers .get on Iso / Getter
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Forget</span><span>.</span><span class="keyword">given</span><span>       </span><span class="comment">// ForgetfulFunctor / Fold / Traverse for Forget[F] carriers</span></code></pre>
         
-        <h2 id="edit-a-deeply-nested-field" class="section"><a class="anchor-link left" href="#edit-a-deeply-nested-field"><i class="icofont-laika link">&#xef71;</i></a>Edit a deeply-nested field</h2>
-        <p>Using hand-written Lenses (the
-        <a href="generics.html">generics module</a> provides the <code>lens[S](_.field)</code>
-        macro that generates this boilerplate):</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Zip</span><span>(</span><span class="identifier">code</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">extension</span><span>: </span><span class="type-name">String</span><span>)
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Address</span><span>(</span><span class="identifier">street</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">zip</span><span>: </span><span class="type-name">Zip</span><span>)
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Company</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">address</span><span>: </span><span class="type-name">Address</span><span>)
+        <h2 id="theme-a-product-editing" class="section"><a class="anchor-link left" href="#theme-a-product-editing"><i class="icofont-laika link">&#xef71;</i></a>Theme A — Product editing</h2>
+        
+        <h3 id="edit-a-deeply-nested-coordinate" class="section"><a class="anchor-link left" href="#edit-a-deeply-nested-coordinate"><i class="icofont-laika link">&#xef71;</i></a>Edit a deeply-nested coordinate</h3>
+        <p>The canonical Atom/Molecule walk every Haskell tutorial opens
+        with — increment a deeply-buried leaf through four composition
+        hops:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Point</span><span>(</span><span class="identifier">x</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">y</span><span>: </span><span class="type-name">Int</span><span>)
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Atom</span><span>(</span><span class="identifier">point</span><span>: </span><span class="type-name">Point</span><span>, </span><span class="identifier">mass</span><span>: </span><span class="type-name">Double</span><span>)
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Molecule</span><span>(</span><span class="identifier">atoms</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Atom</span><span>])
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">extL</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Company</span><span>, </span><span class="type-name">Address</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>, (</span><span class="identifier">c</span><span>, </span><span class="identifier">a</span><span>) =&gt; </span><span class="identifier">c</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">address</span><span> = </span><span class="identifier">a</span><span>))
-    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Address</span><span>, </span><span class="type-name">Zip</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">zip</span><span>, (</span><span class="identifier">a</span><span>, </span><span class="identifier">z</span><span>) =&gt; </span><span class="identifier">a</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">zip</span><span> = </span><span class="identifier">z</span><span>)))
-    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Zip</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">extension</span><span>, (</span><span class="identifier">z</span><span>, </span><span class="identifier">e</span><span>) =&gt; </span><span class="identifier">z</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">extension</span><span> = </span><span class="identifier">e</span><span>)))</span></code></pre>
-        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">initech</span><span> = </span><span class="type-name">Company</span><span>(</span><span class="string-literal">&quot;Initech&quot;</span><span>, </span><span class="type-name">Address</span><span>(</span><span class="string-literal">&quot;Main St&quot;</span><span>, </span><span class="type-name">Zip</span><span>(</span><span class="number-literal">12345</span><span>, </span><span class="string-literal">&quot;6789&quot;</span><span>)))
-</span><span class="comment">// initech: Company = Company(
-//   name = &quot;Initech&quot;,
-//   address = Address(
-//     street = &quot;Main St&quot;,
-//     zip = Zip(code = 12345, extension = &quot;6789&quot;)
+</span><span class="keyword">val</span><span> </span><span class="identifier">everyX</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Molecule</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Atom</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">atoms</span><span>, (</span><span class="identifier">m</span><span>, </span><span class="identifier">as</span><span>) =&gt; </span><span class="identifier">m</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">atoms</span><span> = </span><span class="identifier">as</span><span>))
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Atom</span><span>])
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Atom</span><span>, </span><span class="type-name">Point</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">point</span><span>, (</span><span class="identifier">a</span><span>, </span><span class="identifier">p</span><span>) =&gt; </span><span class="identifier">a</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">point</span><span> = </span><span class="identifier">p</span><span>)))
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Point</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">x</span><span>, (</span><span class="identifier">p</span><span>, </span><span class="identifier">x</span><span>) =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">x</span><span> = </span><span class="identifier">x</span><span>)))</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">water</span><span> = </span><span class="type-name">Molecule</span><span>(</span><span class="type-name">List</span><span>(
+  </span><span class="type-name">Atom</span><span>(</span><span class="type-name">Point</span><span>(</span><span class="number-literal">0</span><span>, </span><span class="number-literal">0</span><span>), </span><span class="number-literal">1.0</span><span>),
+  </span><span class="type-name">Atom</span><span>(</span><span class="type-name">Point</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">0</span><span>), </span><span class="number-literal">16.0</span><span>),
+  </span><span class="type-name">Atom</span><span>(</span><span class="type-name">Point</span><span>(</span><span class="number-literal">2</span><span>, </span><span class="number-literal">0</span><span>), </span><span class="number-literal">1.0</span><span>),
+))
+</span><span class="comment">// water: Molecule = Molecule(
+//   List(
+//     Atom(point = Point(x = 0, y = 0), mass = 1.0),
+//     Atom(point = Point(x = 1, y = 0), mass = 16.0),
+//     Atom(point = Point(x = 2, y = 0), mass = 1.0)
 //   )
 // )
-</span><span class="identifier">extL</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">initech</span><span>)
-</span><span class="comment">// res0: String = &quot;6789&quot;
-</span><span class="identifier">extL</span><span>.</span><span class="identifier">replace</span><span>(</span><span class="string-literal">&quot;0000&quot;</span><span>)(</span><span class="identifier">initech</span><span>)
-</span><span class="comment">// res1: Company = Company(
-//   name = &quot;Initech&quot;,
-//   address = Address(
-//     street = &quot;Main St&quot;,
-//     zip = Zip(code = 12345, extension = &quot;0000&quot;)
-//   )
-// )</span></code></pre>
+</span><span class="identifier">everyX</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="identifier">water</span><span>).</span><span class="identifier">atoms</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">point</span><span>.</span><span class="identifier">x</span><span>)
+</span><span class="comment">// res0: List[Int] = List(1, 2, 3)</span></code></pre>
+        <p>Same-carrier Lens hops fuse through <code>Tuple2</code>&#39;s
+        <code>AssociativeFunctor</code>; the cross-carrier hop into <code>PowerSeries</code> at
+        <code>.each</code> happens without a manual <code>.morph</code> call. For macro-derived
+        versions of these Lenses see <a href="generics.html">Generics</a>.</p>
+        <p><strong>Source:</strong> Gonzalez — <em>Control.Lens.Tutorial</em>,
+        <a href="https://hackage.haskell.org/package/lens-tutorial-1.0.5/docs/Control-Lens-Tutorial.html">https://hackage.haskell.org/package/lens-tutorial-1.0.5/docs/Control-Lens-Tutorial.html</a>.</p>
         
-        <h2 id="focus-an-option-field-optional-shaped" class="section"><a class="anchor-link left" href="#focus-an-option-field-optional-shaped"><i class="icofont-laika link">&#xef71;</i></a>Focus an <code>Option</code> field (Optional-shaped)</h2>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
+        <h3 id="virtual-field-iso-celsius-fahrenheit-facade" class="section"><a class="anchor-link left" href="#virtual-field-iso-celsius-fahrenheit-facade"><i class="icofont-laika link">&#xef71;</i></a>Virtual-field Iso — Celsius ↔ Fahrenheit facade</h3>
+        <p>Expose a <code>fahrenheit</code> handle on a <code>Temperature</code> whose underlying
+        representation is Celsius. Callers <code>get</code> and <code>reverseGet</code> without
+        knowing which unit the type stores:</p>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">BijectionIso</span><span>
 
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Setting</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">timeout</span><span>: </span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>])
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Temperature</span><span>(</span><span class="identifier">toC</span><span>: </span><span class="type-name">Double</span><span>)
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">timeoutL</span><span> = </span><span class="type-name">Optional</span><span>[</span><span class="type-name">Setting</span><span>, </span><span class="type-name">Setting</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Affine</span><span>](
-  </span><span class="identifier">getOrModify</span><span> = </span><span class="identifier">s</span><span> =&gt; </span><span class="identifier">s</span><span>.</span><span class="identifier">timeout</span><span>.</span><span class="identifier">toRight</span><span>(</span><span class="identifier">s</span><span>),
-  </span><span class="identifier">reverseGet</span><span>  = { </span><span class="keyword">case</span><span> (</span><span class="identifier">s</span><span>, </span><span class="identifier">t</span><span>) =&gt; </span><span class="identifier">s</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">timeout</span><span> = </span><span class="type-name">Some</span><span>(</span><span class="identifier">t</span><span>)) },
-)</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">timeoutL</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="type-name">Setting</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span>, </span><span class="type-name">Some</span><span>(</span><span class="number-literal">10</span><span>)))
-</span><span class="comment">// res2: Setting = Setting(name = &quot;a&quot;, timeout = Some(20))
-</span><span class="identifier">timeoutL</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="type-name">Setting</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span>, </span><span class="type-name">None</span><span>))
-</span><span class="comment">// res3: Setting = Setting(name = &quot;a&quot;, timeout = None)</span></code></pre>
+</span><span class="keyword">val</span><span> </span><span class="identifier">celsius</span><span> = </span><span class="type-name">BijectionIso</span><span>[</span><span class="type-name">Temperature</span><span>, </span><span class="type-name">Temperature</span><span>, </span><span class="type-name">Double</span><span>, </span><span class="type-name">Double</span><span>](
+  </span><span class="identifier">_</span><span>.</span><span class="identifier">toC</span><span>,
+  </span><span class="type-name">Temperature</span><span>(</span><span class="identifier">_</span><span>),
+)
+</span><span class="keyword">val</span><span> </span><span class="identifier">c2f</span><span> = </span><span class="type-name">BijectionIso</span><span>[</span><span class="type-name">Double</span><span>, </span><span class="type-name">Double</span><span>, </span><span class="type-name">Double</span><span>, </span><span class="type-name">Double</span><span>](
+  </span><span class="identifier">c</span><span> =&gt; </span><span class="identifier">c</span><span> * </span><span class="number-literal">9.0</span><span> / </span><span class="number-literal">5.0</span><span> + </span><span class="number-literal">32.0</span><span>,
+  </span><span class="identifier">f</span><span> =&gt; (</span><span class="identifier">f</span><span> - </span><span class="number-literal">32.0</span><span>) * </span><span class="number-literal">5.0</span><span> / </span><span class="number-literal">9.0</span><span>,
+)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">fahrenheit</span><span> = </span><span class="identifier">celsius</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">c2f</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">fahrenheit</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Temperature</span><span>(</span><span class="number-literal">100.0</span><span>))
+</span><span class="comment">// res1: Double = 212.0
+</span><span class="identifier">fahrenheit</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">32.0</span><span>)
+</span><span class="comment">// res2: Temperature = Temperature(0.0)
+</span><span class="identifier">fahrenheit</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">9.0</span><span>)(</span><span class="type-name">Temperature</span><span>(</span><span class="number-literal">0.0</span><span>))
+</span><span class="comment">// res3: Temperature = Temperature(5.0)</span></code></pre>
+        <p><code>BijectionIso.andThen(BijectionIso)</code> is fused through the
+        concrete-subclass override — no per-hop typeclass dispatch —
+        so the facade-as-public-API refactor story doesn&#39;t cost
+        anything at runtime. See <a href="optics.html#iso">Iso</a> for the carrier
+        details.</p>
+        <p><strong>Source:</strong> Penner — <em>Virtual Record Fields Using Lenses</em>,
+        <a href="https://chrispenner.ca/posts/virtual-fields">https://chrispenner.ca/posts/virtual-fields</a>.</p>
         
-        <h2 id="compose-a-lens-with-an-optional" class="section"><a class="anchor-link left" href="#compose-a-lens-with-an-optional"><i class="icofont-laika link">&#xef71;</i></a>Compose a Lens with an Optional</h2>
-        <p>Cross-carrier <code>.andThen</code> summons <code>Morph[Tuple2, Affine]</code> for you
-        — no manual carrier lifting:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">AppRoot</span><span>(</span><span class="identifier">setting</span><span>: </span><span class="type-name">Setting</span><span>)
+        <h3 id="multi-field-namedtuple-focus-cats-eo-unique" class="section"><a class="anchor-link left" href="#multi-field-namedtuple-focus-cats-eo-unique"><i class="icofont-laika link">&#xef71;</i></a>Multi-field NamedTuple focus (cats-eo-unique)</h3>
+        <p>Focus several case-class fields at once and update them
+        atomically. The <code>lens[S](_.a, _.b, ...)</code> macro returns a Lens
+        whose focus is a Scala 3 <code>NamedTuple</code> in selector order — no
+        Monocle analogue:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.</span><span class="identifier">lens</span><span>
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">appTimeoutL</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">AppRoot</span><span>, </span><span class="type-name">Setting</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">setting</span><span>, (</span><span class="identifier">a</span><span>, </span><span class="identifier">s</span><span>) =&gt; </span><span class="identifier">a</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">setting</span><span> = </span><span class="identifier">s</span><span>))
-    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">timeoutL</span><span>)</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">appTimeoutL</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="type-name">AppRoot</span><span>(</span><span class="type-name">Setting</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span>, </span><span class="type-name">Some</span><span>(</span><span class="number-literal">5</span><span>))))
-</span><span class="comment">// res4: AppRoot = AppRoot(Setting(name = &quot;a&quot;, timeout = Some(10)))
-</span><span class="identifier">appTimeoutL</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="type-name">AppRoot</span><span>(</span><span class="type-name">Setting</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span>, </span><span class="type-name">None</span><span>)))
-</span><span class="comment">// res5: AppRoot = AppRoot(Setting(name = &quot;a&quot;, timeout = None))</span></code></pre>
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">OrderItem</span><span>(</span><span class="identifier">sku</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">quantity</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">price</span><span>: </span><span class="type-name">Double</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">qtyAndPrice</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">OrderItem</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">quantity</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">price</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">order</span><span> = </span><span class="type-name">OrderItem</span><span>(</span><span class="string-literal">&quot;abc-123&quot;</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">9.99</span><span>)
+</span><span class="comment">// order: OrderItem = OrderItem(sku = &quot;abc-123&quot;, quantity = 3, price = 9.99)
+</span><span>
+</span><span class="comment">// Atomic multi-field update: see both fields as a NamedTuple,
+// return the NamedTuple with new values.
+</span><span class="identifier">qtyAndPrice</span><span>.</span><span class="identifier">modify</span><span> { </span><span class="identifier">nt</span><span> =&gt;
+  (</span><span class="identifier">quantity</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">quantity</span><span> * </span><span class="number-literal">2</span><span>, </span><span class="identifier">price</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">price</span><span> * </span><span class="number-literal">0.9</span><span>)
+}(</span><span class="identifier">order</span><span>)
+</span><span class="comment">// res4: OrderItem = OrderItem(sku = &quot;abc-123&quot;, quantity = 6, price = 8.991)</span></code></pre>
+        <p>The selector order determines the NamedTuple shape, so
+        <code>lens[OrderItem](_.price, _.quantity)</code> would produce a focus
+        whose <code>.price</code> field comes first. Partial cover → <code>SimpleLens</code>;
+        full cover flips to a <code>BijectionIso</code> (next recipe). See
+        <a href="generics.html">Generics → Multi-field Lens</a>
+        for the full treatment.</p>
+        <p><strong>Source:</strong> cats-eo internal.</p>
         
-        <h2 id="modify-every-element-of-a-list" class="section"><a class="anchor-link left" href="#modify-every-element-of-a-list"><i class="icofont-laika link">&#xef71;</i></a>Modify every element of a list</h2>
-        <p><code>Traversal.forEach</code> is the map-only fast path — use it when the
-        chain terminates at the traversal:</p>
+        <h3 id="full-cover-iso-upgrade-cats-eo-unique" class="section"><a class="anchor-link left" href="#full-cover-iso-upgrade-cats-eo-unique"><i class="icofont-laika link">&#xef71;</i></a>Full-cover Iso upgrade (cats-eo-unique)</h3>
+        <p>When the selector set spans <em>every</em> case field of <code>S</code>, the macro
+        silently upgrades from <code>SimpleLens</code> to <code>BijectionIso</code>. The user
+        writes a Lens and the macro delivers a round-trip bijection —
+        handy at serialization boundaries:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">ProductCode</span><span>(</span><span class="identifier">value</span><span>: </span><span class="type-name">String</span><span>)
+
+</span><span class="comment">// arity-1 wrapper: single-selector full-cover returns BijectionIso,
+// not SimpleLens. The focus type is the Scala 3 NamedTuple
+// NamedTuple[(&quot;value&quot;,), (String,)] — selector name preserved.
+</span><span class="keyword">val</span><span> </span><span class="identifier">codeIso</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">ProductCode</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">value</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">pc</span><span> = </span><span class="type-name">ProductCode</span><span>(</span><span class="string-literal">&quot;abc-42&quot;</span><span>)
+</span><span class="comment">// pc: ProductCode = ProductCode(&quot;abc-42&quot;)
+</span><span class="keyword">val</span><span> </span><span class="identifier">nt</span><span> = </span><span class="identifier">codeIso</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">pc</span><span>)
+</span><span class="comment">// nt: NamedTuple[*:[&quot;value&quot;, EmptyTuple], *:[String, EmptyTuple]] = Tuple1(
+//   &quot;abc-42&quot;
+// )
+</span><span class="identifier">nt</span><span>.</span><span class="identifier">value</span><span>
+</span><span class="comment">// res5: String = &quot;abc-42&quot;
+</span><span class="identifier">codeIso</span><span>.</span><span class="identifier">reverseGet</span><span>((</span><span class="identifier">value</span><span> = </span><span class="string-literal">&quot;zzz-99&quot;</span><span>))
+</span><span class="comment">// res6: ProductCode = ProductCode(&quot;zzz-99&quot;)
+</span><span class="identifier">codeIso</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">n</span><span> =&gt; (</span><span class="identifier">value</span><span> = </span><span class="identifier">n</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">toUpperCase</span><span>))(</span><span class="identifier">pc</span><span>)
+</span><span class="comment">// res7: ProductCode = ProductCode(&quot;ABC-42&quot;)</span></code></pre>
+        <p>The return-type switch is deliberate: on full cover there&#39;s no
+        structural complement left, so the lens degenerates into a
+        bijection. Same holds for multi-field full cover — see
+        <a href="generics.html">Generics → Full-cover Iso</a>.</p>
+        <p><strong>Source:</strong> cats-eo internal.</p>
+        
+        <h2 id="theme-b-sum-branch-access" class="section"><a class="anchor-link left" href="#theme-b-sum-branch-access"><i class="icofont-laika link">&#xef71;</i></a>Theme B — Sum-branch access</h2>
+        
+        <h3 id="prism-lens-branch-into-a-case-then-edit-inside" class="section"><a class="anchor-link left" href="#prism-lens-branch-into-a-case-then-edit-inside"><i class="icofont-laika link">&#xef71;</i></a>Prism + Lens — branch into a case, then edit inside</h3>
+        <p>Branch into a specific enum case and modify a field inside the
+        hit branch; the miss branch passes through unchanged. The pattern
+        covers both the &quot;update one variant&quot; discriminated-union use case
+        and the F#-style expression-tree AST case-dispatch:</p>
+        <pre><code class="nohighlight"><span class="keyword">enum</span><span> </span><span class="type-name">Expr</span><span>:
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Var</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">App</span><span>(</span><span class="identifier">f</span><span>: </span><span class="type-name">Expr</span><span>, </span><span class="identifier">x</span><span>: </span><span class="type-name">Expr</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Lam</span><span>(</span><span class="identifier">bind</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">body</span><span>: </span><span class="type-name">Expr</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">varP</span><span> = </span><span class="type-name">Prism</span><span>[</span><span class="type-name">Expr</span><span>, </span><span class="type-name">Expr</span><span>.</span><span class="type-name">Var</span><span>](
+  {
+    </span><span class="keyword">case</span><span> </span><span class="identifier">v</span><span>: </span><span class="type-name">Expr</span><span>.</span><span class="type-name">Var</span><span> =&gt; </span><span class="type-name">Right</span><span>(</span><span class="identifier">v</span><span>)
+    </span><span class="keyword">case</span><span> </span><span class="identifier">other</span><span>       =&gt; </span><span class="type-name">Left</span><span>(</span><span class="identifier">other</span><span>)
+  },
+  </span><span class="identifier">identity</span><span>,
+)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">varName</span><span> =
+  </span><span class="identifier">varP</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Expr</span><span>.</span><span class="type-name">Var</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, (</span><span class="identifier">v</span><span>, </span><span class="identifier">n</span><span>) =&gt; </span><span class="identifier">v</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">name</span><span> = </span><span class="identifier">n</span><span>)))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Hit branch: the Var&#39;s name is uppercased.
+</span><span class="identifier">varName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="type-name">Expr</span><span>.</span><span class="type-name">Var</span><span>(</span><span class="string-literal">&quot;x&quot;</span><span>))
+</span><span class="comment">// res8: Expr = Var(&quot;X&quot;)
+</span><span>
+</span><span class="comment">// Miss branch: passes through, the Lam is untouched.
+</span><span class="identifier">varName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="type-name">Expr</span><span>.</span><span class="type-name">Lam</span><span>(</span><span class="string-literal">&quot;y&quot;</span><span>, </span><span class="type-name">Expr</span><span>.</span><span class="type-name">Var</span><span>(</span><span class="string-literal">&quot;y&quot;</span><span>)))
+</span><span class="comment">// res9: Expr = Lam(bind = &quot;y&quot;, body = Var(&quot;y&quot;))</span></code></pre>
+        <p>The Prism (<code>Either</code>) and Lens (<code>Tuple2</code>) compose directly;
+        <code>.andThen</code> summons <code>Composer[Either, Tuple2]</code> via
+        <code>Morph.bothViaAffine</code> under the hood (both sides lift into
+        <code>Affine</code>, then bridge). Same story for Scala 3 enums derived
+        through the <code>prism[S, A]</code> macro — see
+        <a href="generics.html">Generics → <code>prism[S, A]</code></a>.</p>
+        <p><strong>Source:</strong> Baeldung — <em>Monocle Optics</em>,
+        <a href="https://www.baeldung.com/scala/monocle-optics">https://www.baeldung.com/scala/monocle-optics</a>; framing from
+        Wlaschin — <em>Domain Modeling Made Functional</em>, ch. 4,
+        <a href="https://pragprog.com/titles/swdddf/domain-modeling-made-functional/">https://pragprog.com/titles/swdddf/domain-modeling-made-functional/</a>.</p>
+        
+        <h2 id="theme-c-collection-walks" class="section"><a class="anchor-link left" href="#theme-c-collection-walks"><i class="icofont-laika link">&#xef71;</i></a>Theme C — Collection walks</h2>
+        
+        <h3 id="each-vs-foreach-the-composable-traversal-and-its-tight-twin" class="section"><a class="anchor-link left" href="#each-vs-foreach-the-composable-traversal-and-its-tight-twin"><i class="icofont-laika link">&#xef71;</i></a><code>each</code> vs. <code>forEach</code> — the composable traversal and its tight twin</h3>
+        <p>cats-eo ships two Traversal carriers for two different situations.
+        Reach for <code>Traversal.forEach</code> when the chain terminates at the
+        traversal — map once and done, no downstream optic:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">list</span><span>.</span><span class="keyword">given</span><span>
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">forEachInt</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">forEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">forEachInt</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res6: List[Int] = List(2, 3, 4)
-</span><span class="identifier">forEachInt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))     </span><span class="comment">// sum
-// res7: Int = 6
-</span><span class="identifier">forEachInt</span><span>.</span><span class="identifier">foldMap</span><span>((</span><span class="identifier">_</span><span>: </span><span class="type-name">Int</span><span>) =&gt; </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))     </span><span class="comment">// count
-// res8: Int = 3</span></code></pre>
-        
-        <h2 id="modify-every-element-and-continue-through-a-field" class="section"><a class="anchor-link left" href="#modify-every-element-and-continue-through-a-field"><i class="icofont-laika link">&#xef71;</i></a>Modify every element <em>and</em> continue through a field</h2>
-        <p>Use <code>Traversal.each</code> — the composable default — when the chain
-        continues past the traversal (see
-        <a href="optics.html#traversal">Optics → Traversal</a> for the cost
-        tradeoff):</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">PowerSeries</span><span>
-
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Dial</span><span>(</span><span class="identifier">isMobile</span><span>: </span><span class="type-name">Boolean</span><span>, </span><span class="identifier">number</span><span>: </span><span class="type-name">String</span><span>)
+</span><span class="keyword">val</span><span> </span><span class="identifier">bumpList</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">forEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">bumpList</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
+</span><span class="comment">// res10: List[Int] = List(2, 3, 4)
+</span><span class="identifier">bumpList</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))   </span><span class="comment">// sum
+// res11: Int = 6</span></code></pre>
+        <p>Reach for <code>Traversal.each</code> when the chain continues past the
+        traversal — the same map, then drill further into each element:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Dial</span><span>(</span><span class="identifier">isMobile</span><span>: </span><span class="type-name">Boolean</span><span>, </span><span class="identifier">number</span><span>: </span><span class="type-name">String</span><span>)
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Subscriber</span><span>(</span><span class="identifier">phones</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Dial</span><span>])
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">everyMobile</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Subscriber</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Dial</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">phones</span><span>, (</span><span class="identifier">o</span><span>, </span><span class="identifier">ps</span><span>) =&gt; </span><span class="identifier">o</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">phones</span><span> = </span><span class="identifier">ps</span><span>))
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Subscriber</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Dial</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">phones</span><span>, (</span><span class="identifier">s</span><span>, </span><span class="identifier">ps</span><span>) =&gt; </span><span class="identifier">s</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">phones</span><span> = </span><span class="identifier">ps</span><span>))
     .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Dial</span><span>])
-    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Dial</span><span>, </span><span class="type-name">Boolean</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">isMobile</span><span>, (</span><span class="identifier">p</span><span>, </span><span class="identifier">m</span><span>) =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="identifier">m</span><span>)))</span></code></pre>
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Dial</span><span>, </span><span class="type-name">Boolean</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">isMobile</span><span>, (</span><span class="identifier">d</span><span>, </span><span class="identifier">m</span><span>) =&gt; </span><span class="identifier">d</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="identifier">m</span><span>)))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">everyMobile</span><span>.</span><span class="identifier">modify</span><span>(!</span><span class="identifier">_</span><span>)(</span><span class="type-name">Subscriber</span><span>(</span><span class="type-name">List</span><span>(
   </span><span class="type-name">Dial</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">false</span><span>, </span><span class="string-literal">&quot;555-0001&quot;</span><span>),
   </span><span class="type-name">Dial</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">true</span><span>,  </span><span class="string-literal">&quot;555-0002&quot;</span><span>),
 )))
-</span><span class="comment">// res9: Subscriber = Subscriber(
+</span><span class="comment">// res12: Subscriber = Subscriber(
 //   List(
 //     Dial(isMobile = true, number = &quot;555-0001&quot;),
 //     Dial(isMobile = false, number = &quot;555-0002&quot;)
 //   )
 // )</span></code></pre>
+        <p>The cost tradeoff is documented in
+        <a href="optics.html#traversal">Optics → Traversal</a> and the
+        <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">PowerSeries benchmarks</a>:
+        <code>each</code> runs 2-3× over a naive <code>copy</code>/<code>map</code> for dense
+        Lens-Traversal-Lens chains, amortising toward 1.9× as the
+        container size grows; <code>forEach</code> matches the naive path.</p>
+        <p><strong>Source:</strong> Penner — <em>Optics By Example</em> ch. 7 (Simple
+        Traversals), <a href="https://leanpub.com/optics-by-example/">https://leanpub.com/optics-by-example/</a>; Gonzalez
+        — <em>Control.Lens.Tutorial</em>,
+        <a href="https://hackage.haskell.org/package/lens-tutorial-1.0.5/docs/Control-Lens-Tutorial.html">https://hackage.haskell.org/package/lens-tutorial-1.0.5/docs/Control-Lens-Tutorial.html</a>.</p>
         
-        <h2 id="branch-into-a-sum-type" class="section"><a class="anchor-link left" href="#branch-into-a-sum-type"><i class="icofont-laika link">&#xef71;</i></a>Branch into a sum type</h2>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">enum</span><span> </span><span class="type-name">Input</span><span>:
-  </span><span class="keyword">case</span><span> </span><span class="type-name">Click</span><span>(</span><span class="identifier">x</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">y</span><span>: </span><span class="type-name">Int</span><span>)
-  </span><span class="keyword">case</span><span> </span><span class="type-name">Scroll</span><span>(</span><span class="identifier">delta</span><span>: </span><span class="type-name">Int</span><span>)
+        <h3 id="sparse-traversal-over-a-prism-cats-eo-unique" class="section"><a class="anchor-link left" href="#sparse-traversal-over-a-prism-cats-eo-unique"><i class="icofont-laika link">&#xef71;</i></a>Sparse traversal over a Prism (cats-eo-unique)</h3>
+        <p>For every element of a container, drill through a Prism and
+        modify only the hit branch — <code>Err</code> elements pass through
+        unchanged, <code>Ok</code> elements get their <code>value</code> bumped. This is the
+        &quot;sparse traversal&quot; pattern that&#39;s genuinely annoying to
+        hand-roll, and the optic spelling is a one-liner:</p>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">scala</span><span>.</span><span class="identifier">collection</span><span>.</span><span class="identifier">immutable</span><span>.</span><span class="type-name">ArraySeq</span><span>
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">clickP</span><span> = </span><span class="type-name">Prism</span><span>[</span><span class="type-name">Input</span><span>, </span><span class="type-name">Input</span><span>.</span><span class="type-name">Click</span><span>](
+</span><span class="keyword">enum</span><span> </span><span class="type-name">Result</span><span>:
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ok</span><span>(</span><span class="identifier">value</span><span>: </span><span class="type-name">Int</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Err</span><span>(</span><span class="identifier">reason</span><span>: </span><span class="type-name">String</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">okP</span><span> = </span><span class="type-name">Prism</span><span>[</span><span class="type-name">Result</span><span>, </span><span class="type-name">Result</span><span>.</span><span class="type-name">Ok</span><span>](
   {
-    </span><span class="keyword">case</span><span> </span><span class="identifier">c</span><span>: </span><span class="type-name">Input</span><span>.</span><span class="type-name">Click</span><span> =&gt; </span><span class="type-name">Right</span><span>(</span><span class="identifier">c</span><span>)
-    </span><span class="keyword">case</span><span> </span><span class="identifier">other</span><span>          =&gt; </span><span class="type-name">Left</span><span>(</span><span class="identifier">other</span><span>)
+    </span><span class="keyword">case</span><span> </span><span class="identifier">o</span><span>: </span><span class="type-name">Result</span><span>.</span><span class="type-name">Ok</span><span> =&gt; </span><span class="type-name">Right</span><span>(</span><span class="identifier">o</span><span>)
+    </span><span class="keyword">case</span><span> </span><span class="identifier">other</span><span>        =&gt; </span><span class="type-name">Left</span><span>(</span><span class="identifier">other</span><span>)
   },
   </span><span class="identifier">identity</span><span>,
-)</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">clickP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; </span><span class="type-name">Input</span><span>.</span><span class="type-name">Click</span><span>(</span><span class="identifier">c</span><span>.</span><span class="identifier">x</span><span> + </span><span class="number-literal">1</span><span>, </span><span class="identifier">c</span><span>.</span><span class="identifier">y</span><span>))(</span><span class="type-name">Input</span><span>.</span><span class="type-name">Click</span><span>(</span><span class="number-literal">10</span><span>, </span><span class="number-literal">20</span><span>))
-</span><span class="comment">// res10: Input = Click(x = 11, y = 20)
-</span><span class="identifier">clickP</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; </span><span class="type-name">Input</span><span>.</span><span class="type-name">Click</span><span>(</span><span class="identifier">c</span><span>.</span><span class="identifier">x</span><span> + </span><span class="number-literal">1</span><span>, </span><span class="identifier">c</span><span>.</span><span class="identifier">y</span><span>))(</span><span class="type-name">Input</span><span>.</span><span class="type-name">Scroll</span><span>(</span><span class="number-literal">5</span><span>))
-</span><span class="comment">// res11: Input = Scroll(5)</span></code></pre>
+)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">bumpOks</span><span> =
+  </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">ArraySeq</span><span>, </span><span class="type-name">Result</span><span>]
+    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">okP</span><span>)
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Lens</span><span>[</span><span class="type-name">Result</span><span>.</span><span class="type-name">Ok</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">value</span><span>, (</span><span class="identifier">o</span><span>, </span><span class="identifier">v</span><span>) =&gt; </span><span class="identifier">o</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">value</span><span> = </span><span class="identifier">v</span><span>)))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">bumpOks</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(
+  </span><span class="type-name">ArraySeq</span><span>(</span><span class="type-name">Result</span><span>.</span><span class="type-name">Ok</span><span>(</span><span class="number-literal">10</span><span>), </span><span class="type-name">Result</span><span>.</span><span class="type-name">Err</span><span>(</span><span class="string-literal">&quot;nope&quot;</span><span>), </span><span class="type-name">Result</span><span>.</span><span class="type-name">Ok</span><span>(</span><span class="number-literal">20</span><span>))
+)
+</span><span class="comment">// res13: ArraySeq[Result] = ArraySeq(Ok(11), Err(&quot;nope&quot;), Ok(21))</span></code></pre>
+        <p>Performance: the <code>PowerSeriesPrismBench</code> suite measures this
+        shape at ~5× over a hand-rolled naive loop — and that&#39;s the
+        published worst case for <code>each</code>, not the typical one. The
+        per-benchmark curve lives in
+        <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">benchmarks → PowerSeries with Prism inner</a>.</p>
+        <p><strong>Source:</strong> Penner — <em>Optics By Example</em> ch. 8 (Traversal
+        Actions) + ch. 10 (Missing Values),
+        <a href="https://leanpub.com/optics-by-example/">https://leanpub.com/optics-by-example/</a>.</p>
         
-        <h2 id="edit-json-without-decoding" class="section"><a class="anchor-link left" href="#edit-json-without-decoding"><i class="icofont-laika link">&#xef71;</i></a>Edit JSON without decoding</h2>
+        <h2 id="theme-d-json-editing-and-tree-walks" class="section"><a class="anchor-link left" href="#theme-d-json-editing-and-tree-walks"><i class="icofont-laika link">&#xef71;</i></a>Theme D — JSON editing and tree walks</h2>
+        
+        <h3 id="the-json-arc-edit-leaf-edit-array-diagnose" class="section"><a class="anchor-link left" href="#the-json-arc-edit-leaf-edit-array-diagnose"><i class="icofont-laika link">&#xef71;</i></a>The JSON arc — edit leaf, edit array, diagnose</h3>
+        <p>One vignette in three acts: walk a deep JSON path and modify a
+        leaf without decoding the siblings; walk every element of a
+        nested array; and observe <em>why</em> an edit was a silent no-op.
+        The <a href="circe.html#failure-flow">Ior failure-flow diagram</a> covers
+        the full decision tree.</p>
+        
+        <h4 id="act-1-edit-one-leaf-deep-in-a-json-tree-no-decode" class="section"><a class="anchor-link left" href="#act-1-edit-one-leaf-deep-in-a-json-tree-no-decode"><i class="icofont-laika link">&#xef71;</i></a>Act 1 — edit one leaf deep in a JSON tree (no decode)</h4>
+        <p><code>codecPrism[S]</code> walks circe&#39;s <code>Json</code> directly; only the focused
+        leaf is materialised as <code>A</code>:</p>
         <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="identifier">codecPrism</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="type-name">Codec</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="identifier">syntax</span><span>.*
@@ -253,92 +420,655 @@
 // }]
 // )
 </span><span class="identifier">userStreet</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">userJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
-</span><span class="comment">// res12: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;MAIN ST\&quot;,\&quot;zip\&quot;:12345},\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+</span><span class="comment">// res14: String = &quot;{\&quot;address\&quot;:{\&quot;street\&quot;:\&quot;MAIN ST\&quot;,\&quot;zip\&quot;:12345},\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>The
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala"><code>JsonPrismBench</code></a>
+        suite documents a 2× speedup at every depth over the
+        decode / <code>.copy</code> / re-encode path. circe-optics&#39; analogous
+        <code>root.user.address.street</code> surface forces a full decode per
+        level; cats-eo&#39;s cursor walk does not.</p>
         
-        <h2 id="diagnose-a-silent-json-edit-no-op" class="section"><a class="anchor-link left" href="#diagnose-a-silent-json-edit-no-op"><i class="icofont-laika link">&#xef71;</i></a>Diagnose a silent JSON edit no-op</h2>
-        <p>The pre-v0.2 <code>*Unsafe</code> methods on <code>JsonPrism</code> / <code>JsonTraversal</code>
-        return the input Json unchanged on any miss — the path wasn&#39;t
-        resolvable, the leaf didn&#39;t decode, the index was out of range.
-        Useful, but it leaves you wondering <em>which</em> miss fired. The
-        default <code>modify</code> / <code>get</code> surface returns <code>Ior[Chain[JsonFailure],
-Json]</code> so the diagnostic is observable:</p>
+        <h4 id="act-2-edit-every-element-of-a-json-array" class="section"><a class="anchor-link left" href="#act-2-edit-every-element-of-a-json-array"><i class="icofont-laika link">&#xef71;</i></a>Act 2 — edit every element of a JSON array</h4>
+        <p>Walk an array without materialising it as a Scala collection;
+        only the focused leaf of each element is decoded. The <code>.each</code>
+        step splits the Prism into a <code>JsonTraversal</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Item</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">price</span><span>: </span><span class="type-name">Double</span><span>)
+</span><span class="keyword">object</span><span> </span><span class="type-name">Item</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Item</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Basket</span><span>(</span><span class="identifier">owner</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">items</span><span>: </span><span class="type-name">Vector</span><span>[</span><span class="type-name">Item</span><span>])
+</span><span class="keyword">object</span><span> </span><span class="type-name">Basket</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">Basket</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">basket</span><span> = </span><span class="type-name">Basket</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">Vector</span><span>(</span><span class="type-name">Item</span><span>(</span><span class="string-literal">&quot;apple&quot;</span><span>, </span><span class="number-literal">1.0</span><span>), </span><span class="type-name">Item</span><span>(</span><span class="string-literal">&quot;pear&quot;</span><span>, </span><span class="number-literal">2.0</span><span>)))
+</span><span class="comment">// basket: Basket = Basket(
+//   owner = &quot;Alice&quot;,
+//   items = Vector(
+//     Item(name = &quot;apple&quot;, price = 1.0),
+//     Item(name = &quot;pear&quot;, price = 2.0)
+//   )
+// )
+</span><span class="keyword">val</span><span> </span><span class="identifier">everyItemName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
+</span><span class="comment">// everyItemName: JsonTraversal[String] = eo.circe.JsonTraversal@31c065db
+</span><span>
+</span><span class="identifier">everyItemName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basket</span><span>.</span><span class="identifier">asJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res15: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;APPLE\&quot;,\&quot;price\&quot;:1.0},{\&quot;name\&quot;:\&quot;PEAR\&quot;,\&quot;price\&quot;:2.0}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>Per-element failures to decode accumulate into
+        <code>Ior.Both(chain, partialJson)</code> on the default surface — next act.</p>
+        
+        <h4 id="act-3-diagnose-a-silent-edit-no-op" class="section"><a class="anchor-link left" href="#act-3-diagnose-a-silent-edit-no-op"><i class="icofont-laika link">&#xef71;</i></a>Act 3 — diagnose a silent edit no-op</h4>
+        <p>A deep <code>.modify</code> appears to do nothing — which path step
+        refused? The <code>*Unsafe</code> methods preserve the pre-v0.2 silent
+        behaviour, but the default <code>modify</code> returns
+        <code>Ior[Chain[JsonFailure], Json]</code> so the diagnostic is
+        observable:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Ior</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">io</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="type-name">Json</span><span>
 
 </span><span class="comment">// A stump Json missing the `.address` field altogether.
-</span><span class="keyword">val</span><span> </span><span class="identifier">stump</span><span> = </span><span class="type-name">Json</span><span>.</span><span class="identifier">obj</span><span>(</span><span class="string-literal">&quot;name&quot;</span><span> -&gt; </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>))
-</span><span class="comment">// stump: Json = JObject(object[name -&gt; &quot;Alice&quot;])
-</span><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>)
-</span><span class="comment">// res13: Ior[Chain[JsonFailure], Json] = Both(
+</span><span class="keyword">val</span><span> </span><span class="identifier">stump</span><span> = </span><span class="type-name">Json</span><span>.</span><span class="identifier">obj</span><span>(</span><span class="string-literal">&quot;name&quot;</span><span> -&gt; </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>)
+</span><span class="comment">// res16: Ior[Chain[JsonFailure], Json] = Both(
 //   a = Singleton(PathMissing(Field(&quot;address&quot;))),
 //   b = JObject(object[name -&gt; &quot;Alice&quot;])
 // )</span></code></pre>
         <p>The <code>Ior.Both(chain, json)</code> carries both the pre-v0.2 behaviour
         (the unchanged Json) and the diagnostic (the chain). Fold the
-        chain into a readable message:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>) </span><span class="keyword">match</span><span>
-  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Right</span><span>(</span><span class="identifier">updated</span><span>) =&gt; </span><span class="string-literal">s&quot;ok: </span><span class="substitution">$updated</span><span class="string-literal">&quot;</span><span>
-  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Both</span><span>(</span><span class="identifier">chain</span><span>, </span><span class="identifier">_</span><span>) =&gt; </span><span class="identifier">chain</span><span>.</span><span class="identifier">toList</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">message</span><span>).</span><span class="identifier">mkString</span><span>(</span><span class="string-literal">&quot;; &quot;</span><span>)
-  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Left</span><span>(</span><span class="identifier">chain</span><span>)    =&gt; </span><span class="identifier">chain</span><span>.</span><span class="identifier">toList</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">message</span><span>).</span><span class="identifier">mkString</span><span>(</span><span class="string-literal">&quot;; &quot;</span><span>)
-</span><span class="comment">// res14: String = &quot;path missing at Field(address)&quot;</span></code></pre>
-        <p>Ignoring the diagnostic is one <code>.getOrElse(input)</code> away:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>).</span><span class="identifier">getOrElse</span><span>(</span><span class="identifier">stump</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
-</span><span class="comment">// res15: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
-        <p>Or reach for the explicit silent form — byte-identical to the
-        pre-v0.2 <code>modify</code> body, no Ior allocation:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userStreet</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
-</span><span class="comment">// res16: String = &quot;{\&quot;name\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        chain into a readable message, route each case to its own log
+        stream, or collapse on the <code>getOrElse</code> escape hatch — the full
+        cascade is Theme I below.</p>
+        <p><strong>Source:</strong> cats-eo internal (<code>JsonPrism</code>, <code>JsonTraversal</code>);
+        related to circe-optics&#39; <code>root.*</code> idiom
+        <a href="https://circe.github.io/circe/optics.html">https://circe.github.io/circe/optics.html</a>. Structured-failure
+        inspiration from cats&#39; <code>Ior</code> typeclass and
+        <code>DecodingFailure.history</code>.</p>
         
-        <h2 id="apply-a-function-that-needs-an-effect" class="section"><a class="anchor-link left" href="#apply-a-function-that-needs-an-effect"><i class="icofont-laika link">&#xef71;</i></a>Apply a function that needs an effect</h2>
-        <p>Both <code>.modifyF</code> and <code>.modifyA</code> lift an <code>A =&gt; G[B]</code> through an
-        optic. Use <code>.modifyF</code> when the carrier admits just <code>Functor[G]</code>,
-        <code>.modifyA</code> when you need the full <code>Applicative[G]</code>:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Shopper</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
-</span><span class="keyword">val</span><span> </span><span class="identifier">shopperAgeL</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Shopper</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>, (</span><span class="identifier">s</span><span>, </span><span class="identifier">a</span><span>) =&gt; </span><span class="identifier">s</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">age</span><span> = </span><span class="identifier">a</span><span>))</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">syntax</span><span>.</span><span class="identifier">functor</span><span>.*
-</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">option</span><span>.*
+        <h3 id="jq-style-path-predicate" class="section"><a class="anchor-link left" href="#jq-style-path-predicate"><i class="icofont-laika link">&#xef71;</i></a>jq-style path + predicate</h3>
+        <p>&quot;For every <code>item</code> whose <code>price &gt; 100</code>, uppercase its <code>name</code>&quot; —
+        expressible in jq as
+        <code>.items[] | select(.price &gt; 100) | .name |= ascii_upcase</code>. The
+        cats-eo rendering reaches through the multi-field focus (Scala 3
+        NamedTuple) and branches inside the modify lambda:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">type</span><span> </span><span class="type-name">NamePrice</span><span> = </span><span class="type-name">NamedTuple</span><span>.</span><span class="type-name">NamedTuple</span><span>[(</span><span class="string-literal">&quot;name&quot;</span><span>, </span><span class="string-literal">&quot;price&quot;</span><span>), (</span><span class="type-name">String</span><span>, </span><span class="type-name">Double</span><span>)]
+</span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">NamePrice</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span><span>
 
-</span><span class="identifier">shopperAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>)(
-  </span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>)
-)
-</span><span class="comment">// res17: Option[Shopper] = Some(Shopper(name = &quot;Alice&quot;, age = 31))
+</span><span class="keyword">val</span><span> </span><span class="identifier">premiumNames</span><span> =
+  </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>]
+    .</span><span class="identifier">items</span><span>
+    .</span><span class="identifier">each</span><span>
+    .</span><span class="identifier">fields</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">price</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">mixedBasket</span><span> = </span><span class="type-name">Basket</span><span>(
+  </span><span class="string-literal">&quot;Alice&quot;</span><span>,
+  </span><span class="type-name">Vector</span><span>(
+    </span><span class="type-name">Item</span><span>(</span><span class="string-literal">&quot;apple&quot;</span><span>,  </span><span class="number-literal">1.0</span><span>),
+    </span><span class="type-name">Item</span><span>(</span><span class="string-literal">&quot;lobster&quot;</span><span>, </span><span class="number-literal">150.0</span><span>),
+    </span><span class="type-name">Item</span><span>(</span><span class="string-literal">&quot;truffle&quot;</span><span>, </span><span class="number-literal">300.0</span><span>),
+  ),
+).</span><span class="identifier">asJson</span><span>
+</span><span class="comment">// mixedBasket: Json = JObject(
+//   object[owner -&gt; &quot;Alice&quot;,items -&gt; [
+//   {
+//     &quot;name&quot; : &quot;apple&quot;,
+//     &quot;price&quot; : 1.0
+//   },
+//   {
+//     &quot;name&quot; : &quot;lobster&quot;,
+//     &quot;price&quot; : 150.0
+//   },
+//   {
+//     &quot;name&quot; : &quot;truffle&quot;,
+//     &quot;price&quot; : 300.0
+//   }
+// ]]
+// )
 </span><span>
-</span><span class="identifier">shopperAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>)(
-  </span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, -</span><span class="number-literal">1</span><span>)
-)
-</span><span class="comment">// res18: Option[Shopper] = None</span></code></pre>
+</span><span class="identifier">premiumNames</span><span>
+  .</span><span class="identifier">modifyUnsafe</span><span> { </span><span class="identifier">nt</span><span> =&gt;
+    </span><span class="keyword">if</span><span> </span><span class="identifier">nt</span><span>.</span><span class="identifier">price</span><span> &gt; </span><span class="number-literal">100.0</span><span> </span><span class="keyword">then</span><span>
+      (</span><span class="identifier">name</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">toUpperCase</span><span>, </span><span class="identifier">price</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">price</span><span>)
+    </span><span class="keyword">else</span><span> </span><span class="identifier">nt</span><span>
+  }(</span><span class="identifier">mixedBasket</span><span>)
+  .</span><span class="identifier">noSpacesSortKeys</span><span>
+</span><span class="comment">// res17: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;apple\&quot;,\&quot;price\&quot;:1.0},{\&quot;name\&quot;:\&quot;LOBSTER\&quot;,\&quot;price\&quot;:150.0},{\&quot;name\&quot;:\&quot;TRUFFLE\&quot;,\&quot;price\&quot;:300.0}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
+        <p>A tighter spelling via <code>filtered</code> / <code>selected</code> is not in
+        cats-eo 0.1.0 — track that as AffineFold-adjacent work for the
+        0.2 cycle. Today the predicate inlines inside the modify lambda,
+        which is honest about the shape of the work.</p>
+        <p><strong>Source:</strong> Penner — <em>Generalizing &#39;jq&#39; and Traversal Systems</em>,
+        <a href="https://chrispenner.ca/posts/traversal-systems">https://chrispenner.ca/posts/traversal-systems</a>.</p>
         
-        <h2 id="iso-between-equivalent-shapes" class="section"><a class="anchor-link left" href="#iso-between-equivalent-shapes"><i class="icofont-laika link">&#xef71;</i></a>Iso between equivalent shapes</h2>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserRecord</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
+        <h3 id="recursive-rename-over-a-user-defined-tree" class="section"><a class="anchor-link left" href="#recursive-rename-over-a-user-defined-tree"><i class="icofont-laika link">&#xef71;</i></a>Recursive rename over a user-defined Tree</h3>
+        <p>Walk a user-supplied tree type — the library doesn&#39;t need to
+        ship a tree carrier when the user&#39;s type already has
+        <code>cats.Traverse</code>. Bring your own <code>Traverse</code> and <code>each</code> picks it
+        up:</p>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="type-name">Traverse</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="type-name">Applicative</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">syntax</span><span>.</span><span class="identifier">functor</span><span>.*
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">userIso</span><span> =
-  </span><span class="type-name">Iso</span><span>[</span><span class="type-name">UserTuple</span><span>, </span><span class="type-name">UserTuple</span><span>, </span><span class="type-name">UserRecord</span><span>, </span><span class="type-name">UserRecord</span><span>](
-    </span><span class="identifier">ut</span><span> =&gt; </span><span class="type-name">UserRecord</span><span>(</span><span class="identifier">ut</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">ut</span><span>.</span><span class="identifier">age</span><span>),
-    </span><span class="identifier">ur</span><span> =&gt; </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">ur</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">ur</span><span>.</span><span class="identifier">age</span><span>),
-  )</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userIso</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">UserTuple</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res19: UserRecord = UserRecord(name = &quot;Alice&quot;, age = 30)
-</span><span class="identifier">userIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="type-name">UserRecord</span><span>(</span><span class="string-literal">&quot;Bob&quot;</span><span>, </span><span class="number-literal">25</span><span>))
-</span><span class="comment">// res20: UserTuple = UserTuple(name = &quot;Bob&quot;, age = 25)</span></code></pre>
+</span><span class="keyword">enum</span><span> </span><span class="type-name">Tree</span><span>[+</span><span class="type-name">A</span><span>]:
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Leaf</span><span>(</span><span class="identifier">value</span><span>: </span><span class="type-name">A</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Branch</span><span>(</span><span class="identifier">left</span><span>: </span><span class="type-name">Tree</span><span>[</span><span class="type-name">A</span><span>], </span><span class="identifier">right</span><span>: </span><span class="type-name">Tree</span><span>[</span><span class="type-name">A</span><span>])
+
+</span><span class="comment">// Hand-rolled Traverse[Tree] — in real code reach for a derivation
+// or cats.Reducible instance on your own ADT.
+</span><span class="keyword">given</span><span> </span><span class="type-name">Traverse</span><span>[</span><span class="type-name">Tree</span><span>] </span><span class="keyword">with</span><span>
+  </span><span class="keyword">def</span><span> </span><span class="declaration-name">foldLeft</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](</span><span class="identifier">fa</span><span>: </span><span class="type-name">Tree</span><span>[</span><span class="type-name">A</span><span>], </span><span class="identifier">b</span><span>: </span><span class="type-name">B</span><span>)(</span><span class="identifier">f</span><span>: (</span><span class="type-name">B</span><span>, </span><span class="type-name">A</span><span>) =&gt; </span><span class="type-name">B</span><span>): </span><span class="type-name">B</span><span> = </span><span class="identifier">fa</span><span> </span><span class="keyword">match</span><span>
+    </span><span class="keyword">case</span><span> </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="identifier">a</span><span>)       =&gt; </span><span class="identifier">f</span><span>(</span><span class="identifier">b</span><span>, </span><span class="identifier">a</span><span>)
+    </span><span class="keyword">case</span><span> </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Branch</span><span>(</span><span class="identifier">l</span><span>, </span><span class="identifier">r</span><span>)  =&gt; </span><span class="identifier">foldLeft</span><span>(</span><span class="identifier">r</span><span>, </span><span class="identifier">foldLeft</span><span>(</span><span class="identifier">l</span><span>, </span><span class="identifier">b</span><span>)(</span><span class="identifier">f</span><span>))(</span><span class="identifier">f</span><span>)
+  </span><span class="keyword">def</span><span> </span><span class="declaration-name">foldRight</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](</span><span class="identifier">fa</span><span>: </span><span class="type-name">Tree</span><span>[</span><span class="type-name">A</span><span>], </span><span class="identifier">lb</span><span>: </span><span class="identifier">cats</span><span>.</span><span class="type-name">Eval</span><span>[</span><span class="type-name">B</span><span>])(</span><span class="identifier">f</span><span>: (</span><span class="type-name">A</span><span>, </span><span class="identifier">cats</span><span>.</span><span class="type-name">Eval</span><span>[</span><span class="type-name">B</span><span>]) =&gt; </span><span class="identifier">cats</span><span>.</span><span class="type-name">Eval</span><span>[</span><span class="type-name">B</span><span>]): </span><span class="identifier">cats</span><span>.</span><span class="type-name">Eval</span><span>[</span><span class="type-name">B</span><span>] =
+    </span><span class="identifier">fa</span><span> </span><span class="keyword">match</span><span>
+      </span><span class="keyword">case</span><span> </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="identifier">a</span><span>)       =&gt; </span><span class="identifier">f</span><span>(</span><span class="identifier">a</span><span>, </span><span class="identifier">lb</span><span>)
+      </span><span class="keyword">case</span><span> </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Branch</span><span>(</span><span class="identifier">l</span><span>, </span><span class="identifier">r</span><span>)  =&gt; </span><span class="identifier">foldRight</span><span>(</span><span class="identifier">l</span><span>, </span><span class="identifier">foldRight</span><span>(</span><span class="identifier">r</span><span>, </span><span class="identifier">lb</span><span>)(</span><span class="identifier">f</span><span>))(</span><span class="identifier">f</span><span>)
+  </span><span class="keyword">def</span><span> </span><span class="declaration-name">traverse</span><span>[</span><span class="type-name">G</span><span>[</span><span class="identifier">_</span><span>]: </span><span class="type-name">Applicative</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](</span><span class="identifier">fa</span><span>: </span><span class="type-name">Tree</span><span>[</span><span class="type-name">A</span><span>])(</span><span class="identifier">f</span><span>: </span><span class="type-name">A</span><span> =&gt; </span><span class="type-name">G</span><span>[</span><span class="type-name">B</span><span>]): </span><span class="type-name">G</span><span>[</span><span class="type-name">Tree</span><span>[</span><span class="type-name">B</span><span>]] =
+    </span><span class="identifier">fa</span><span> </span><span class="keyword">match</span><span>
+      </span><span class="keyword">case</span><span> </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="identifier">a</span><span>)       =&gt; </span><span class="identifier">f</span><span>(</span><span class="identifier">a</span><span>).</span><span class="identifier">map</span><span>(</span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="identifier">_</span><span>))
+      </span><span class="keyword">case</span><span> </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Branch</span><span>(</span><span class="identifier">l</span><span>, </span><span class="identifier">r</span><span>)  =&gt;
+        </span><span class="type-name">Applicative</span><span>[</span><span class="type-name">G</span><span>].</span><span class="identifier">map2</span><span>(</span><span class="identifier">traverse</span><span>(</span><span class="identifier">l</span><span>)(</span><span class="identifier">f</span><span>), </span><span class="identifier">traverse</span><span>(</span><span class="identifier">r</span><span>)(</span><span class="identifier">f</span><span>))(</span><span class="type-name">Tree</span><span>.</span><span class="type-name">Branch</span><span>(</span><span class="identifier">_</span><span>, </span><span class="identifier">_</span><span>))
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">renameLeaves</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">Tree</span><span>, </span><span class="type-name">String</span><span>]</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">tree</span><span>: </span><span class="type-name">Tree</span><span>[</span><span class="type-name">String</span><span>] =
+  </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Branch</span><span>(
+    </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span>),
+    </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Branch</span><span>(</span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="string-literal">&quot;b&quot;</span><span>), </span><span class="type-name">Tree</span><span>.</span><span class="type-name">Leaf</span><span>(</span><span class="string-literal">&quot;c&quot;</span><span>)),
+  )
+</span><span class="comment">// tree: Tree[String] = Branch(
+//   left = Leaf(&quot;a&quot;),
+//   right = Branch(left = Leaf(&quot;b&quot;), right = Leaf(&quot;c&quot;))
+// )
+</span><span class="identifier">renameLeaves</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">tree</span><span>)
+</span><span class="comment">// res18: Tree[String] = Branch(
+//   left = Leaf(&quot;A&quot;),
+//   right = Branch(left = Leaf(&quot;B&quot;), right = Leaf(&quot;C&quot;))
+// )</span></code></pre>
+        <p>Works identically for any other <code>Traverse[F]</code> — trees, rose
+        trees, non-empty lists, user ADTs. The <em>Iris classifier</em>
+        follow-on (algebraic lens over a labelled dataset) is tracked
+        separately in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/plans/2026-04-22-002-feat-iris-classifier-example.md"><code>docs/plans/2026-04-22-002-feat-iris-classifier-example.md</code></a>.</p>
+        <p><strong>Source:</strong> Stanislav Glebik — <em>RefTree talk</em>,
+        <a href="https://stanch.github.io/reftree/docs/talks/Visualize/">https://stanch.github.io/reftree/docs/talks/Visualize/</a>.</p>
         
-        <h2 id="derive-a-read-only-view" class="section"><a class="anchor-link left" href="#derive-a-read-only-view"><i class="icofont-laika link">&#xef71;</i></a>Derive a read-only view</h2>
+        <h2 id="theme-e-algebraic-classifier" class="section"><a class="anchor-link left" href="#theme-e-algebraic-classifier"><i class="icofont-laika link">&#xef71;</i></a>Theme E — Algebraic / classifier</h2>
+        
+        <h3 id="alglens-vignette-partition-z-shift" class="section"><a class="anchor-link left" href="#alglens-vignette-partition-z-shift"><i class="icofont-laika link">&#xef71;</i></a>AlgLens vignette — partition + z-shift</h3>
+        <p>Two patterns that need the whole <code>F[A]</code> visible, not just a
+        single <code>A</code>: (a) split a list by its own mean, and (b) shift
+        each row&#39;s score by the dataset-wide mean. Both are algebraic —
+        the update function inspects the full classifier to decide what
+        to do with each element:</p>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">AlgLens</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">AlgLens</span><span>.</span><span class="keyword">given</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Row</span><span>(</span><span class="identifier">id</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">score</span><span>: </span><span class="type-name">Double</span><span>)
+
+</span><span class="comment">// Lens whose focus is already the list — we&#39;re updating the whole
+// List[Row] through the dataset-wide mean.
+</span><span class="keyword">val</span><span> </span><span class="identifier">rowsL</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>], </span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>]](</span><span class="identifier">identity</span><span>, (</span><span class="identifier">_</span><span>, </span><span class="identifier">rs</span><span>) =&gt; </span><span class="identifier">rs</span><span>)
+
+</span><span class="comment">// Lift the Lens into AlgLens[List] so the inner focus is a single
+// Row but the modify function sees the whole list.
+</span><span class="keyword">val</span><span> </span><span class="identifier">rowsAlg</span><span> = </span><span class="type-name">AlgLens</span><span>.</span><span class="identifier">fromLensF</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>], </span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>], </span><span class="type-name">Row</span><span>, </span><span class="type-name">Row</span><span>](</span><span class="identifier">rowsL</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">rows</span><span> = </span><span class="type-name">List</span><span>(</span><span class="type-name">Row</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">10.0</span><span>), </span><span class="type-name">Row</span><span>(</span><span class="number-literal">2</span><span>, </span><span class="number-literal">20.0</span><span>), </span><span class="type-name">Row</span><span>(</span><span class="number-literal">3</span><span>, </span><span class="number-literal">30.0</span><span>))
+</span><span class="comment">// rows: List[Row] = List(
+//   Row(id = 1, score = 10.0),
+//   Row(id = 2, score = 20.0),
+//   Row(id = 3, score = 30.0)
+// )
+</span><span>
+</span><span class="comment">// z-shift: each row&#39;s score minus the column-wide mean.
+</span><span class="identifier">rowsAlg</span><span>.</span><span class="identifier">modify</span><span> { </span><span class="identifier">r</span><span> =&gt;
+  </span><span class="comment">// The closure fires per-element; to read the whole list we reach
+</span><span>  </span><span class="comment">// back through the original data. In an AlgLens-aware helper
+</span><span>  </span><span class="comment">// method (modifyWithAggregate — future work) the aggregator
+</span><span>  </span><span class="comment">// would be passed in explicitly.
+</span><span>  </span><span class="keyword">val</span><span> </span><span class="identifier">mean</span><span> = </span><span class="identifier">rows</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">score</span><span>).</span><span class="identifier">sum</span><span> / </span><span class="identifier">rows</span><span>.</span><span class="identifier">length</span><span>
+  </span><span class="identifier">r</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">score</span><span> = </span><span class="identifier">r</span><span>.</span><span class="identifier">score</span><span> - </span><span class="identifier">mean</span><span>)
+}(</span><span class="identifier">rows</span><span>)
+</span><span class="comment">// res19: List[Row] = List(
+//   Row(id = 1, score = -10.0),
+//   Row(id = 2, score = 0.0),
+//   Row(id = 3, score = 10.0)
+// )
+</span><span>
+</span><span class="comment">// Partition: return only the rows at or above the mean. AlgLens
+// accepts rebuild with a different cardinality than the source
+// when F is MonoidK-friendly (List is).
+</span><span class="identifier">rowsAlg</span><span>.</span><span class="identifier">modifyA</span><span>[</span><span class="type-name">List</span><span>] { </span><span class="identifier">r</span><span> =&gt;
+  </span><span class="keyword">val</span><span> </span><span class="identifier">mean</span><span> = </span><span class="identifier">rows</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">score</span><span>).</span><span class="identifier">sum</span><span> / </span><span class="identifier">rows</span><span>.</span><span class="identifier">length</span><span>
+  </span><span class="keyword">if</span><span> </span><span class="identifier">r</span><span>.</span><span class="identifier">score</span><span> &gt;= </span><span class="identifier">mean</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">List</span><span>(</span><span class="identifier">r</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">Nil</span><span>
+}(</span><span class="identifier">rows</span><span>)
+</span><span class="comment">// res20: List[List[Row]] = List()</span></code></pre>
+        <p>The shipping surface is <code>.modify</code> + a closure that reaches back
+        to the full list; the <code>modifyWithAggregate</code> / <code>.classify</code>
+        conveniences sketched in Penner&#39;s blog post are tracked for a
+        follow-up release. The family rationale — and why <code>AlgLens[F]</code>
+        is a composition <em>sink</em> — lives in
+        <a href="optics.html#alglens">Optics → AlgLens</a>.</p>
+        <p><strong>Source:</strong> Penner — <em>Algebraic lenses</em>,
+        <a href="https://chrispenner.ca/posts/algebraic">https://chrispenner.ca/posts/algebraic</a>.</p>
+        
+        <h3 id="kaleidoscope-column-wise-aggregation" class="section"><a class="anchor-link left" href="#kaleidoscope-column-wise-aggregation"><i class="icofont-laika link">&#xef71;</i></a>Kaleidoscope column-wise aggregation</h3>
+        <p>A <code>Kaleidoscope[F, A]</code> reduces the entire <code>F[A]</code> focus to a
+        single <code>B</code> via an aggregator, broadcasts it back through the
+        <code>Reflector[F]</code>, and returns the rebuilt structure. The
+        behaviour depends on <em>which</em> Reflector you plug in — List gives
+        cartesian (singleton) broadcast, ZipList gives column-zip,
+        Const gives monoidal summation:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">ZipList</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Kaleidoscope</span><span>
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">zipK</span><span> = </span><span class="type-name">Kaleidoscope</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>]
+</span><span class="keyword">val</span><span> </span><span class="identifier">listK</span><span> = </span><span class="type-name">Kaleidoscope</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Column-wise mean: the aggregator sees the whole ZipList, returns
+// the mean, Reflector[ZipList] broadcasts it back.
+</span><span class="identifier">zipK</span><span>.</span><span class="identifier">collect</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>](</span><span class="identifier">zl</span><span> =&gt; </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">sum</span><span> / </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">size</span><span>.</span><span class="identifier">toDouble</span><span>)(
+  </span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>, </span><span class="number-literal">4.0</span><span>))
+)
+</span><span class="comment">// res21: ZipList[Double] = cats.data.ZipList@b588d106
+</span><span>
+</span><span class="comment">// Cartesian: Reflector[List] wraps the result in a singleton.
+</span><span class="identifier">listK</span><span>.</span><span class="identifier">collect</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
+</span><span class="comment">// res22: List[Int] = List(10)</span></code></pre>
+        <p>The same optic value at every call site; the semantics track
+        whichever <code>Reflector</code> you plug in. See
+        <a href="optics.html#kaleidoscope">Optics → Kaleidoscope</a> for the full
+        table of Reflector instances and the &quot;when to reach for
+        Kaleidoscope vs. Grate vs. Traversal&quot; decision note.</p>
+        <p><strong>Source:</strong> Penner — <em>Intro to Kaleidoscopes</em>,
+        <a href="https://chrispenner.ca/posts/kaleidoscopes">https://chrispenner.ca/posts/kaleidoscopes</a>.</p>
+        
+        <h2 id="theme-f-write-only-read-only-escape" class="section"><a class="anchor-link left" href="#theme-f-write-only-read-only-escape"><i class="icofont-laika link">&#xef71;</i></a>Theme F — Write-only / read-only escape</h2>
+        
+        <h3 id="review-reverse-only-build-path" class="section"><a class="anchor-link left" href="#review-reverse-only-build-path"><i class="icofont-laika link">&#xef71;</i></a>Review — reverse-only build path</h3>
+        <p>Build a <code>UserId</code> from a <code>UUID</code> through a <code>Review</code> so tests and
+        prod share one construction path — reverse-only, no observable
+        read side:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">java</span><span>.</span><span class="identifier">util</span><span>.</span><span class="type-name">UUID</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Review</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserId</span><span>(</span><span class="identifier">value</span><span>: </span><span class="type-name">UUID</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">userIdR</span><span>: </span><span class="type-name">Review</span><span>[</span><span class="type-name">UserId</span><span>, </span><span class="type-name">UUID</span><span>] = </span><span class="type-name">Review</span><span>(</span><span class="type-name">UserId</span><span>(</span><span class="identifier">_</span><span>))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userIdR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="type-name">UUID</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;00000000-0000-0000-0000-000000000001&quot;</span><span>))
+</span><span class="comment">// res23: UserId = UserId(00000000-0000-0000-0000-000000000001)</span></code></pre>
+        <p>Name the &quot;build-only&quot; intent as first-class and team members
+        stop reaching for bare smart constructors. Contrast with
+        <code>Getter</code> (next recipe) for read-only. <code>Review</code> deliberately
+        sits <em>outside</em> the <code>Optic</code> trait — its lack of a read side
+        would force an artificial <code>to</code> member. See
+        <a href="optics.html#review">Optics → Review</a> for the rationale.</p>
+        <p><strong>Source:</strong> Penner — <em>Optics By Example</em> ch. 13,
+        <a href="https://leanpub.com/optics-by-example/">https://leanpub.com/optics-by-example/</a>.</p>
+        
+        <h3 id="getter-derive-a-read-only-view" class="section"><a class="anchor-link left" href="#getter-derive-a-read-only-view"><i class="icofont-laika link">&#xef71;</i></a>Getter — derive a read-only view</h3>
+        <p>Expose a derived projection so callers can&#39;t try to write
+        through it. <code>Getter[S, A]</code> wraps a pure <code>S =&gt; A</code> with
+        <code>T = Unit</code> on the full optic trait — the mismatch with <code>B</code>
+        statically rules out <code>.modify</code>:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Getter</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Shopper</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">nameInitial</span><span> = </span><span class="type-name">Getter</span><span>[</span><span class="type-name">Shopper</span><span>, </span><span class="type-name">Char</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">head</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">nameInitial</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res21: Char = &#39;A&#39;</span></code></pre>
+</span><span class="comment">// res24: Char = &#39;A&#39;</span></code></pre>
+        <p>See the composition note at
+        <a href="optics.html#getter">Optics → Getter</a> — <code>Getter.andThen(Getter)</code>
+        is handled by composing the underlying <code>S =&gt; A</code> functions
+        directly rather than through <code>Optic.andThen</code>, because the
+        <code>T = Unit</code> slot doesn&#39;t align with the outer <code>B</code>.</p>
+        <p><strong>Source:</strong> Monocle — Focus docs,
+        <a href="https://www.optics.dev/Monocle/docs/focus">https://www.optics.dev/Monocle/docs/focus</a>.</p>
+        
+        <h3 id="setter-opaque-bulk-write" class="section"><a class="anchor-link left" href="#setter-opaque-bulk-write"><i class="icofont-laika link">&#xef71;</i></a>Setter — opaque bulk write</h3>
+        <p>Encrypt every password in a <code>UserDb</code> without exposing the
+        plaintext to the call site. <code>Setter[S, A]</code> writes but doesn&#39;t
+        read — the carrier <code>SetterF</code> carries no observable read side:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Setter</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Users</span><span>(</span><span class="identifier">credentials</span><span>: </span><span class="type-name">Map</span><span>[</span><span class="type-name">String</span><span>, </span><span class="type-name">String</span><span>])
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">encryptAll</span><span> = </span><span class="type-name">Setter</span><span>[</span><span class="type-name">Users</span><span>, </span><span class="type-name">Users</span><span>, </span><span class="type-name">String</span><span>, </span><span class="type-name">String</span><span>] { </span><span class="identifier">f</span><span> =&gt; </span><span class="identifier">users</span><span> =&gt;
+  </span><span class="identifier">users</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">credentials</span><span> = </span><span class="identifier">users</span><span>.</span><span class="identifier">credentials</span><span>.</span><span class="identifier">view</span><span>.</span><span class="identifier">mapValues</span><span>(</span><span class="identifier">f</span><span>).</span><span class="identifier">toMap</span><span>)
+}</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">encryptAll</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">pw</span><span> =&gt; </span><span class="string-literal">s&quot;bcrypt(</span><span class="substitution">$pw</span><span class="string-literal">)&quot;</span><span>)(
+  </span><span class="type-name">Users</span><span>(</span><span class="type-name">Map</span><span>(</span><span class="string-literal">&quot;alice&quot;</span><span> -&gt; </span><span class="string-literal">&quot;s3cret&quot;</span><span>, </span><span class="string-literal">&quot;bob&quot;</span><span> -&gt; </span><span class="string-literal">&quot;hunter2&quot;</span><span>))
+)
+</span><span class="comment">// res25: Users = Users(
+//   Map(&quot;alice&quot; -&gt; &quot;bcrypt(s3cret)&quot;, &quot;bob&quot; -&gt; &quot;bcrypt(hunter2)&quot;)
+// )</span></code></pre>
+        <p><code>Setter</code> is a composition terminal: <code>lens.andThen(setter)</code>
+        works, <code>setter.andThen(...)</code> does not. See the <a href="optics.html#setter">Setter
+        section</a> for the intentional asymmetry.</p>
+        <p><strong>Source:</strong> Monocle — Optics docs,
+        <a href="https://www.optics.dev/Monocle/docs/optics">https://www.optics.dev/Monocle/docs/optics</a>.</p>
+        
+        <h3 id="affinefold-predicate-narrowed-read" class="section"><a class="anchor-link left" href="#affinefold-predicate-narrowed-read"><i class="icofont-laika link">&#xef71;</i></a>AffineFold — predicate-narrowed read</h3>
+        <p>Return <code>Some(age)</code> only when the subject is an adult; no
+        write-back. <code>AffineFold</code> is the 0-or-1 read-only shape with
+        <code>T = Unit</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">AffineFold</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Person</span><span>(</span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span>: </span><span class="type-name">AffineFold</span><span>[</span><span class="type-name">Person</span><span>, </span><span class="type-name">Int</span><span>] =
+  </span><span class="type-name">AffineFold</span><span>(</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="number-literal">20</span><span>))
+</span><span class="comment">// res26: Option[Int] = Some(20)
+</span><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="number-literal">15</span><span>))
+</span><span class="comment">// res27: Option[Int] = None</span></code></pre>
+        <p>Narrow an existing <code>Optional</code> or <code>Prism</code> to its read-only
+        projection via <code>AffineFold.fromOptional</code> /
+        <code>AffineFold.fromPrism</code> — both discard the write / build path
+        but keep the matcher. See
+        <a href="optics.html#affinefold">Optics → AffineFold</a> for the
+        composition-corner note (direct <code>.andThen</code> off a Lens into an
+        AffineFold doesn&#39;t type-check; narrow after composing).</p>
+        <p><strong>Source:</strong> Penner — <em>Optics By Example</em> ch. 10 (Missing
+        Values), <a href="https://leanpub.com/optics-by-example/">https://leanpub.com/optics-by-example/</a>.</p>
+        
+        <h2 id="theme-g-composition" class="section"><a class="anchor-link left" href="#theme-g-composition"><i class="icofont-laika link">&#xef71;</i></a>Theme G — Composition</h2>
+        
+        <h3 id="three-family-ladder-iso-lens-traversal-prism-lens" class="section"><a class="anchor-link left" href="#three-family-ladder-iso-lens-traversal-prism-lens"><i class="icofont-laika link">&#xef71;</i></a>Three-family ladder: Iso → Lens → Traversal → Prism → Lens</h3>
+        <p>One vignette exercises every <code>Composer</code> bridge cats-eo ships,
+        with no explicit <code>.morph</code> calls anywhere. From a <code>UserTuple</code>
+        (structurally the same as <code>UserRecord</code>), pull out the
+        <code>orders: List[Order]</code>, filter to the <code>Paid</code> variant, and
+        increment their <code>amount</code>:</p>
+        <pre><code class="nohighlight"><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>])
+</span><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserRecord</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>])
+
+</span><span class="keyword">enum</span><span> </span><span class="type-name">Order</span><span>:
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Paid</span><span>(</span><span class="identifier">amount</span><span>: </span><span class="type-name">Double</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Pending</span><span>(</span><span class="identifier">amount</span><span>: </span><span class="type-name">Double</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Cancelled</span><span>
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">userIso</span><span> =
+  </span><span class="type-name">Iso</span><span>[</span><span class="type-name">UserTuple</span><span>, </span><span class="type-name">UserTuple</span><span>, </span><span class="type-name">UserRecord</span><span>, </span><span class="type-name">UserRecord</span><span>](
+    </span><span class="identifier">ut</span><span> =&gt; </span><span class="type-name">UserRecord</span><span>(</span><span class="identifier">ut</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">ut</span><span>.</span><span class="identifier">orders</span><span>),
+    </span><span class="identifier">ur</span><span> =&gt; </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">ur</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">ur</span><span>.</span><span class="identifier">orders</span><span>),
+  )
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">userOrders</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">UserRecord</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">orders</span><span>, (</span><span class="identifier">u</span><span>, </span><span class="identifier">os</span><span>) =&gt; </span><span class="identifier">u</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">orders</span><span> = </span><span class="identifier">os</span><span>))
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">paidP</span><span> = </span><span class="type-name">Prism</span><span>[</span><span class="type-name">Order</span><span>, </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>](
+  {
+    </span><span class="keyword">case</span><span> </span><span class="identifier">p</span><span>: </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span> =&gt; </span><span class="type-name">Right</span><span>(</span><span class="identifier">p</span><span>)
+    </span><span class="keyword">case</span><span> </span><span class="identifier">other</span><span>         =&gt; </span><span class="type-name">Left</span><span>(</span><span class="identifier">other</span><span>)
+  },
+  </span><span class="identifier">identity</span><span>,
+)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">paidAmount</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>, </span><span class="type-name">Double</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">amount</span><span>, (</span><span class="identifier">p</span><span>, </span><span class="identifier">a</span><span>) =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">amount</span><span> = </span><span class="identifier">a</span><span>))
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">bumpPaid</span><span> =
+  </span><span class="identifier">userIso</span><span>
+    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">userOrders</span><span>)
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Order</span><span>])
+    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">paidP</span><span>)
+    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">paidAmount</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">input</span><span> = </span><span class="type-name">UserTuple</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">List</span><span>(
+  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>(</span><span class="number-literal">10.0</span><span>),
+  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Pending</span><span>(</span><span class="number-literal">20.0</span><span>),
+  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Cancelled</span><span>,
+  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>(</span><span class="number-literal">30.0</span><span>),
+))
+</span><span class="comment">// input: UserTuple = UserTuple(
+//   name = &quot;Alice&quot;,
+//   orders = List(Paid(10.0), Pending(20.0), Cancelled, Paid(30.0))
+// )
+</span><span class="identifier">bumpPaid</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">5.0</span><span>)(</span><span class="identifier">input</span><span>)
+</span><span class="comment">// res28: UserTuple = UserTuple(
+//   name = &quot;Alice&quot;,
+//   orders = List(Paid(15.0), Pending(20.0), Cancelled, Paid(35.0))
+// )</span></code></pre>
+        <p>Five hops, carriers <code>Forgetful → Tuple2 → PowerSeries → Either
+→ Tuple2</code>. The cross-carrier <code>.andThen</code> does the morph lifting
+        at each seam — the per-pair Monocle overload table becomes one
+        <code>Composer[F, G]</code> lookup per hop. The full carrier graph is the
+        <a href="concepts.html#composition-lattice">composition lattice</a> in the
+        concepts page.</p>
+        <p><strong>Source:</strong> composition demo drawn from Chapuis&#39; hands-on intro
+        <a href="https://jonaschapuis.com/2018/07/optics-a-hands-on-introduction-in-scala/">https://jonaschapuis.com/2018/07/optics-a-hands-on-introduction-in-scala/</a>
+        and Borjas&#39; lunar-phase example
+        <a href="https://tech.lfborjas.com/optics/">https://tech.lfborjas.com/optics/</a>.</p>
+        
+        <h2 id="theme-h-effectful-modification" class="section"><a class="anchor-link left" href="#theme-h-effectful-modification"><i class="icofont-laika link">&#xef71;</i></a>Theme H — Effectful modification</h2>
+        
+        <h3 id="validate-in-place-with-modifyf" class="section"><a class="anchor-link left" href="#validate-in-place-with-modifyf"><i class="icofont-laika link">&#xef71;</i></a>Validate-in-place with <code>modifyF</code></h3>
+        <p>Bump <code>age</code> by 1, but fail with <code>None</code> if the input is negative.
+        <code>.modifyF[G]</code> lifts an <code>A =&gt; G[B]</code> through any carrier that
+        admits <code>Functor[G]</code>:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Visitor</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">age</span><span>: </span><span class="type-name">Int</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">visitorAgeL</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Visitor</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>, (</span><span class="identifier">v</span><span>, </span><span class="identifier">a</span><span>) =&gt; </span><span class="identifier">v</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">age</span><span> = </span><span class="identifier">a</span><span>))</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">syntax</span><span>.</span><span class="identifier">functor</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">option</span><span>.*
+
+</span><span class="identifier">visitorAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt;
+  </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>
+)(</span><span class="type-name">Visitor</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
+</span><span class="comment">// res29: Option[Visitor] = Some(Visitor(name = &quot;Alice&quot;, age = 31))
+</span><span>
+</span><span class="identifier">visitorAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt;
+  </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>
+)(</span><span class="type-name">Visitor</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, -</span><span class="number-literal">1</span><span>))
+</span><span class="comment">// res30: Option[Visitor] = None</span></code></pre>
+        <p><code>.modifyA[G]</code> is the <code>Applicative[G]</code> variant — reach for it
+        when the chain has branching effects to combine (traversal +
+        validation, for instance). <code>Witherable</code>-style filter-and-drop
+        traversal is cross-referenced from
+        <a href="https://chrispenner.ca/posts/witherable-optics">Penner — <em>Composable filters using Witherable optics</em></a>;
+        the carrier is deferred to a follow-up release.</p>
+        <p><strong>Source:</strong> Monocle / Haskell <code>lens</code> classic <code>traverseOf</code>,
+        generalised.</p>
+        
+        <h3 id="batch-load-nested-ids-o-n-o-1-queries-cats-eo-unique" class="section"><a class="anchor-link left" href="#batch-load-nested-ids-o-n-o-1-queries-cats-eo-unique"><i class="icofont-laika link">&#xef71;</i></a>Batch-load nested IDs — O(N) → O(1) queries (cats-eo-unique)</h3>
+        <p>Each node in a tree carries an ID that needs to resolve to a
+        DB-backed record. Naive <code>.modifyA</code> fires one query per node;
+        the optic spelling collects all IDs through a <code>foldMap</code> pass,
+        issues one batched query, then <code>.modify</code> again to distribute
+        results. 100×–300× without restructuring the domain types:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Node</span><span>(</span><span class="identifier">id</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">label</span><span>: </span><span class="type-name">String</span><span>)
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Payload</span><span>(</span><span class="identifier">id</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">body</span><span>: </span><span class="type-name">String</span><span>)
+
+</span><span class="comment">// Stand-in for a DB-backed batch fetch.
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">fetchAll</span><span>(</span><span class="identifier">ids</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Int</span><span>]): </span><span class="type-name">Map</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">Payload</span><span>] =
+  </span><span class="identifier">ids</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">i</span><span> =&gt; </span><span class="identifier">i</span><span> -&gt; </span><span class="type-name">Payload</span><span>(</span><span class="identifier">i</span><span>, </span><span class="string-literal">s&quot;body-</span><span class="substitution">$i</span><span class="string-literal">&quot;</span><span>)).</span><span class="identifier">toMap</span><span>
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">leaves</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">forEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Node</span><span>, </span><span class="type-name">Node</span><span>]
+</span><span class="keyword">val</span><span> </span><span class="identifier">eachLeaf</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Node</span><span>]</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nodes</span><span> = </span><span class="type-name">List</span><span>(</span><span class="type-name">Node</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="string-literal">&quot;a&quot;</span><span>), </span><span class="type-name">Node</span><span>(</span><span class="number-literal">2</span><span>, </span><span class="string-literal">&quot;b&quot;</span><span>), </span><span class="type-name">Node</span><span>(</span><span class="number-literal">3</span><span>, </span><span class="string-literal">&quot;c&quot;</span><span>))
+</span><span class="comment">// nodes: List[Node] = List(
+//   Node(id = 1, label = &quot;a&quot;),
+//   Node(id = 2, label = &quot;b&quot;),
+//   Node(id = 3, label = &quot;c&quot;)
+// )
+</span><span>
+</span><span class="comment">// Pass 1: collect every ID into a single list via foldMap.
+</span><span class="keyword">val</span><span> </span><span class="identifier">allIds</span><span> = </span><span class="identifier">leaves</span><span>.</span><span class="identifier">foldMap</span><span>((</span><span class="identifier">n</span><span>: </span><span class="type-name">Node</span><span>) =&gt; </span><span class="type-name">List</span><span>(</span><span class="identifier">n</span><span>.</span><span class="identifier">id</span><span>))(</span><span class="identifier">nodes</span><span>)
+</span><span class="comment">// allIds: List[Int] = List(1, 2, 3)
+</span><span>
+</span><span class="comment">// Pass 2: issue ONE query for the whole set.
+</span><span class="keyword">val</span><span> </span><span class="identifier">byId</span><span> = </span><span class="identifier">fetchAll</span><span>(</span><span class="identifier">allIds</span><span>)
+</span><span class="comment">// byId: Map[Int, Payload] = Map(
+//   1 -&gt; Payload(id = 1, body = &quot;body-1&quot;),
+//   2 -&gt; Payload(id = 2, body = &quot;body-2&quot;),
+//   3 -&gt; Payload(id = 3, body = &quot;body-3&quot;)
+// )
+</span><span>
+</span><span class="comment">// Pass 3: broadcast the resolved payloads back through the same
+// traversal. The structure is preserved; only the labels shift.
+</span><span class="identifier">eachLeaf</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">n</span><span> =&gt; </span><span class="identifier">n</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">label</span><span> = </span><span class="identifier">byId</span><span>(</span><span class="identifier">n</span><span>.</span><span class="identifier">id</span><span>).</span><span class="identifier">body</span><span>))(</span><span class="identifier">nodes</span><span>)
+</span><span class="comment">// res31: List[Node] = List(
+//   Node(id = 1, label = &quot;body-1&quot;),
+//   Node(id = 2, label = &quot;body-2&quot;),
+//   Node(id = 3, label = &quot;body-3&quot;)
+// )</span></code></pre>
+        <p>The pattern generalises to trees, graphs, nested containers,
+        anything with a <code>Traverse</code>. The two-pass idiom is what cats-eo&#39;s
+        <code>foldMap</code> + <code>modify</code> pair already enables out of the box — no
+        cats-eo-specific API to learn.</p>
+        <p><strong>Source:</strong> Penner — <em>Using traversals to batch database
+        queries</em>, <a href="https://chrispenner.ca/posts/traversals-for-batching">https://chrispenner.ca/posts/traversals-for-batching</a>.</p>
+        
+        <h2 id="theme-i-observable-failure-cats-eo-unique" class="section"><a class="anchor-link left" href="#theme-i-observable-failure-cats-eo-unique"><i class="icofont-laika link">&#xef71;</i></a>Theme I — Observable failure (cats-eo-unique)</h2>
+        <p>The next three recipes cover the observability story for the
+        JSON cursor optics: partial-success walks, parse errors surfaced
+        through the same chain, and how to classify the failures by
+        case. The <a href="circe.html#failure-flow">Ior failure-flow diagram</a> has
+        the full decision tree.</p>
+        
+        <h3 id="partial-success-array-walk-ior-both" class="section"><a class="anchor-link left" href="#partial-success-array-walk-ior-both"><i class="icofont-laika link">&#xef71;</i></a>Partial-success array walk — <code>Ior.Both</code></h3>
+        <p>Across a mixed-failure array, produce the updated JSON <em>and</em>
+        the per-element miss list. <code>Ior.Both(chain, partialJson)</code> is
+        the observable shape — every element that <em>did</em> succeed is
+        reflected in the payload, every refusal accumulates into the
+        chain:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">SimpleItem</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>)
+</span><span class="keyword">object</span><span> </span><span class="type-name">SimpleItem</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">SimpleItem</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">SimpleBasket</span><span>(</span><span class="identifier">owner</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">items</span><span>: </span><span class="type-name">Vector</span><span>[</span><span class="type-name">SimpleItem</span><span>])
+</span><span class="keyword">object</span><span> </span><span class="type-name">SimpleBasket</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">Codec</span><span>.</span><span class="type-name">AsObject</span><span>[</span><span class="type-name">SimpleBasket</span><span>] = </span><span class="type-name">KindlingsCodecAsObject</span><span>.</span><span class="identifier">derive</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">brokenArr</span><span> = </span><span class="type-name">Json</span><span>.</span><span class="identifier">arr</span><span>(
+  </span><span class="type-name">SimpleItem</span><span>(</span><span class="string-literal">&quot;x&quot;</span><span>).</span><span class="identifier">asJson</span><span>,
+  </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;oops&quot;</span><span>),          </span><span class="comment">// not a SimpleItem
+</span><span>  </span><span class="type-name">SimpleItem</span><span>(</span><span class="string-literal">&quot;z&quot;</span><span>).</span><span class="identifier">asJson</span><span>,
+)
+</span><span class="comment">// brokenArr: Json = JArray(
+//   Vector(
+//     JObject(object[name -&gt; &quot;x&quot;]),
+//     JString(&quot;oops&quot;),
+//     JObject(object[name -&gt; &quot;z&quot;])
+//   )
+// )
+</span><span class="keyword">val</span><span> </span><span class="identifier">brokenBasket</span><span> =
+  </span><span class="type-name">Json</span><span>.</span><span class="identifier">obj</span><span>(</span><span class="string-literal">&quot;owner&quot;</span><span> -&gt; </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>), </span><span class="string-literal">&quot;items&quot;</span><span> -&gt; </span><span class="identifier">brokenArr</span><span>)
+</span><span class="comment">// brokenBasket: Json = JObject(
+//   object[owner -&gt; &quot;Alice&quot;,items -&gt; [
+//   {
+//     &quot;name&quot; : &quot;x&quot;
+//   },
+//   &quot;oops&quot;,
+//   {
+//     &quot;name&quot; : &quot;z&quot;
+//   }
+// ]]
+// )
+</span><span>
+</span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">SimpleBasket</span><span>]
+  .</span><span class="identifier">items</span><span>
+  .</span><span class="identifier">each</span><span>
+  .</span><span class="identifier">name</span><span>
+  .</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">brokenBasket</span><span>)
+</span><span class="comment">// res32: Ior[Chain[JsonFailure], Json] = Both(
+//   a = Singleton(NotAnObject(Field(&quot;name&quot;))),
+//   b = JObject(
+//     object[owner -&gt; &quot;Alice&quot;,items -&gt; [
+//   {
+//     &quot;name&quot; : &quot;X&quot;
+//   },
+//   &quot;oops&quot;,
+//   {
+//     &quot;name&quot; : &quot;Z&quot;
+//   }
+// ]]
+//   )
+// )</span></code></pre>
+        <p>circe-optics silently drops per-element failures; cats-eo&#39;s
+        <code>JsonTraversal</code> collects them so the caller can decide what to
+        do. The <code>getOrElse(input).noSpacesSortKeys</code> escape hatch
+        reproduces the pre-v0.2 silent shape byte-for-byte when you
+        know you don&#39;t want the diagnostic.</p>
+        <p><strong>Source:</strong> cats-eo internal.</p>
+        
+        <h3 id="parse-error-surface-json-string-input" class="section"><a class="anchor-link left" href="#parse-error-surface-json-string-input"><i class="icofont-laika link">&#xef71;</i></a>Parse-error surface — <code>Json | String</code> input</h3>
+        <p>When the input is a <code>String</code>, unparseable input surfaces as
+        <code>Ior.Left(Chain(JsonFailure.ParseFailed(_)))</code> through the same
+        chain as every other failure mode:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">upperName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">SimpleBasket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="comment">// Happy path: parsed, modified, Ior.Right.
+</span><span class="identifier">upperName</span><span>(
+  </span><span class="string-literal">&quot;&quot;&quot;{&quot;owner&quot;:&quot;Alice&quot;,&quot;items&quot;:[{&quot;name&quot;:&quot;apple&quot;}]}&quot;&quot;&quot;</span><span>
+).</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">noSpacesSortKeys</span><span>)
+</span><span class="comment">// res33: Ior[Chain[JsonFailure], String] = Right(
+//   &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;APPLE\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;
+// )
+</span><span>
+</span><span class="comment">// Parse failure: Ior.Left(Chain(JsonFailure.ParseFailed(_))).
+</span><span class="identifier">upperName</span><span>(</span><span class="string-literal">&quot;not json at all&quot;</span><span>)
+</span><span class="comment">// res34: Ior[Chain[JsonFailure], Json] = Left(
+//   Singleton(
+//     ParseFailed(
+//       ParsingFailure(
+//         message = &quot;expected null got &#39;not js...&#39; (line 1, column 1)&quot;,
+//         underlying = ParseException(
+//           msg = &quot;expected null got &#39;not js...&#39; (line 1, column 1)&quot;,
+//           index = 0,
+//           line = 1,
+//           col = 1
+//         )
+//       )
+//     )
+//   )
+// )</span></code></pre>
+        <p>The widened <code>(Json | String) =&gt; _</code> signature is a supertype of
+        <code>Json =&gt; _</code>, so every pre-existing call site compiles
+        unchanged. Parse cost is zero when the input is already a
+        <code>Json</code>; one <code>io.circe.parser.parse</code> when it&#39;s a <code>String</code>.</p>
+        <p><strong>Source:</strong> cats-eo internal.</p>
+        
+        <h3 id="classify-failures-why-did-the-edit-no-op" class="section"><a class="anchor-link left" href="#classify-failures-why-did-the-edit-no-op"><i class="icofont-laika link">&#xef71;</i></a>Classify failures — <em>why</em> did the edit no-op?</h3>
+        <p>Pattern-match on each <code>JsonFailure</code> case and route to distinct
+        log / metric streams. The chain collects one entry per refusal
+        point on the walk; the cases cover every way a cursor walk can
+        skip:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">circe</span><span>.</span><span class="type-name">JsonFailure</span><span>
+
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">route</span><span>(</span><span class="identifier">chain</span><span>: </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Chain</span><span>[</span><span class="type-name">JsonFailure</span><span>]): </span><span class="type-name">List</span><span>[</span><span class="type-name">String</span><span>] =
+  </span><span class="identifier">chain</span><span>.</span><span class="identifier">toList</span><span>.</span><span class="identifier">map</span><span> {
+    </span><span class="keyword">case</span><span> </span><span class="type-name">JsonFailure</span><span>.</span><span class="type-name">PathMissing</span><span>(</span><span class="identifier">step</span><span>)       =&gt; </span><span class="string-literal">s&quot;miss:    </span><span class="substitution">$step</span><span class="string-literal">&quot;</span><span>
+    </span><span class="keyword">case</span><span> </span><span class="type-name">JsonFailure</span><span>.</span><span class="type-name">NotAnObject</span><span>(</span><span class="identifier">step</span><span>)       =&gt; </span><span class="string-literal">s&quot;shape:   </span><span class="substitution">$step</span><span class="string-literal"> (not object)&quot;</span><span>
+    </span><span class="keyword">case</span><span> </span><span class="type-name">JsonFailure</span><span>.</span><span class="type-name">NotAnArray</span><span>(</span><span class="identifier">step</span><span>)        =&gt; </span><span class="string-literal">s&quot;shape:   </span><span class="substitution">$step</span><span class="string-literal"> (not array)&quot;</span><span>
+    </span><span class="keyword">case</span><span> </span><span class="type-name">JsonFailure</span><span>.</span><span class="type-name">IndexOutOfRange</span><span>(</span><span class="identifier">step</span><span>,</span><span class="identifier">n</span><span>) =&gt; </span><span class="string-literal">s&quot;bounds:  </span><span class="substitution">$step</span><span class="string-literal"> (size=</span><span class="substitution">$n</span><span class="string-literal">)&quot;</span><span>
+    </span><span class="keyword">case</span><span> </span><span class="type-name">JsonFailure</span><span>.</span><span class="type-name">DecodeFailed</span><span>(</span><span class="identifier">step</span><span>, </span><span class="identifier">df</span><span>)  =&gt; </span><span class="string-literal">s&quot;decode:  </span><span class="substitution">$step</span><span class="string-literal">: </span><span class="substitution">${df.message}</span><span class="string-literal">&quot;</span><span>
+    </span><span class="keyword">case</span><span> </span><span class="type-name">JsonFailure</span><span>.</span><span class="type-name">ParseFailed</span><span>(</span><span class="identifier">pf</span><span>)         =&gt; </span><span class="string-literal">s&quot;parse:   </span><span class="substitution">${pf.message}</span><span class="string-literal">&quot;</span><span>
+  }</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">stump2</span><span> = </span><span class="type-name">Json</span><span>.</span><span class="identifier">obj</span><span>(</span><span class="string-literal">&quot;name&quot;</span><span> -&gt; </span><span class="type-name">Json</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>))
+</span><span class="comment">// stump2: Json = JObject(object[name -&gt; &quot;Alice&quot;])
+</span><span class="identifier">userStreet</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump2</span><span>) </span><span class="keyword">match</span><span>
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Right</span><span>(</span><span class="identifier">_</span><span>)        =&gt; </span><span class="type-name">List</span><span>(</span><span class="string-literal">&quot;ok&quot;</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Both</span><span>(</span><span class="identifier">chain</span><span>, </span><span class="identifier">_</span><span>)  =&gt; </span><span class="identifier">route</span><span>(</span><span class="identifier">chain</span><span>)
+  </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Left</span><span>(</span><span class="identifier">chain</span><span>)     =&gt; </span><span class="identifier">route</span><span>(</span><span class="identifier">chain</span><span>)
+</span><span class="comment">// res35: List[String] = List(&quot;miss:    Field(address)&quot;)</span></code></pre>
+        <p>The Ior surface isn&#39;t a curiosity — it&#39;s production-grade
+        observability. One vignette demonstrates how; per-case routing
+        generalises to metrics, structured logs, or error surfaces at
+        service boundaries.</p>
+        <p><strong>Source:</strong> cats-eo internal.</p>
         
         <h2 id="further-reading" class="section"><a class="anchor-link left" href="#further-reading"><i class="icofont-laika link">&#xef71;</i></a>Further reading</h2>
         <ul>
           <li><a href="concepts.html">Concepts</a> — the theory behind the unified Optic
-          trait and carriers.</li>
-          <li><a href="optics.html">Optics reference</a> — the full per-family tour.</li>
-          <li><a href="generics.html">Generics</a> — macro-derived Lens / Prism.</li>
-          <li><a href="circe.html">Circe integration</a> — cursor-backed JSON optics.</li>
-          <li><a href="migration-from-monocle.html">Migrating from Monocle</a> — a side-
-          by-side translation guide.</li>
+          trait and carriers; the
+          <a href="concepts.html#composition-lattice">composition lattice</a>
+          diagram maps out every <code>Composer[F, G]</code> bridge.</li>
+          <li><a href="optics.html">Optics reference</a> — the full per-family tour,
+          introduced by the
+          <a href="optics.html#family-taxonomy">family taxonomy</a> diagram.</li>
+          <li><a href="generics.html">Generics</a> — macro-derived <code>lens[S](...)</code> and
+          <code>prism[S, A]</code>.</li>
+          <li><a href="circe.html">Circe integration</a> — cursor-backed JSON optics;
+          <a href="circe.html#failure-flow">failure flow</a> for the Ior decision
+          tree.</li>
+          <li><a href="migration-from-monocle.html">Migrating from Monocle</a> —
+          side-by-side translation guide.</li>
         </ul>
 
         

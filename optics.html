@@ -23,6 +23,24 @@
   <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
     <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
   <script src="helium/site/laika-helium.js"></script>
+    <script type="module">
+
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+mermaid.initialize({ 
+  startOnLoad: true,
+  theme: "base",
+  themeVariables: {
+    'darkMode': dark,
+    'primaryColor': dark ? '#125d75' : '#eef5f6', 
+    'primaryTextColor': dark ? '#a7d4de' : '#007c99',
+    'primaryBorderColor': dark ? '#a7d4de' : '#a7d4de',
+    'lineColor': dark ? '#a7d4de' : '#007c99',
+    'background': dark ? '#064458' : '#ffffff',
+  }
+});
+
+</script>
   
   
   <script> /* for avoiding page load transitions */ </script>
@@ -88,6 +106,7 @@
   <p class="header"><a href="#">Optics reference</a></p>
 
   <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#family-taxonomy">Family taxonomy</a></li>
     <li class="level1 nav-leaf"><a href="#lens">Lens</a></li>
     <li class="level1 nav-leaf"><a href="#grate">Grate</a></li>
     <li class="level1 nav-leaf"><a href="#kaleidoscope">Kaleidoscope</a></li>
@@ -116,6 +135,56 @@
         <p>One section per family, each with the shape, carrier, primary
         use case, and a minimal runnable example. For the per-method
         reference see the Scaladoc.</p>
+        
+        <h2 id="family-taxonomy" class="section"><a class="anchor-link left" href="#family-taxonomy"><i class="icofont-laika link">&#xef71;</i></a>Family taxonomy</h2>
+        <p>Every family on this page is a specialisation of the same
+        <code>Optic[S, T, A, B, F]</code> trait, differing only in the carrier
+        <code>F[_, _]</code>. The tree below indexes each family by its carrier.
+        Click a leaf to jump to its section.</p>
+        <pre class="mermaid">flowchart TD
+  root[&quot;Optic[S, T, A, B, F]&quot;]
+  root --&gt; Forgetful
+  root --&gt; Tuple2
+  root --&gt; Either
+  root --&gt; Affine
+  root --&gt; SetterF
+  root --&gt; ForgetF[&quot;Forget[F]&quot;]
+  root --&gt; PowerSeries
+  root --&gt; Grate
+  root --&gt; Kaleidoscope
+  root --&gt; AlgLensF[&quot;AlgLens[F]&quot;]
+  root --&gt; FixedN[&quot;FixedTraversal[N]&quot;]
+  Forgetful --&gt; Iso
+  Forgetful --&gt; Getter
+  Tuple2 --&gt; Lens
+  Either --&gt; Prism
+  Affine --&gt; Optional
+  Affine --&gt; AffineFold
+  SetterF --&gt; Setter
+  ForgetF --&gt; Fold
+  ForgetF --&gt; TraversalForEach[&quot;Traversal.forEach&quot;]
+  PowerSeries --&gt; TraversalEach[&quot;Traversal.each&quot;]
+  Grate --&gt; GrateLeaf[&quot;Grate&quot;]
+  Kaleidoscope --&gt; KaleidoscopeLeaf[&quot;Kaleidoscope&quot;]
+  AlgLensF --&gt; AlgLensLeaf[&quot;AlgLens&quot;]
+  FixedN --&gt; FixedLeaf[&quot;FixedTraversal&quot;]
+  click Iso &quot;#iso&quot;
+  click Getter &quot;#getter&quot;
+  click Lens &quot;#lens&quot;
+  click Prism &quot;#prism&quot;
+  click Optional &quot;#optional&quot;
+  click AffineFold &quot;#affinefold&quot;
+  click Setter &quot;#setter&quot;
+  click Fold &quot;#fold&quot;
+  click TraversalForEach &quot;#traversal&quot;
+  click TraversalEach &quot;#traversal&quot;
+  click GrateLeaf &quot;#grate&quot;
+  click KaleidoscopeLeaf &quot;#kaleidoscope&quot;
+  click AlgLensLeaf &quot;#alglens&quot;
+  click FixedLeaf &quot;#traversal&quot;</pre>
+        <p>The standalone <code>Review</code> family sits outside this tree — it
+        deliberately doesn&#39;t extend <code>Optic</code> (no read side to fit the
+        trait&#39;s <code>to</code> contract) and lives in its own section below.</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.{</span><span class="type-name">Lens</span><span>, </span><span class="type-name">Optic</span><span>}
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
 </span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Forgetful</span><span>.</span><span class="keyword">given</span><span>    </span><span class="comment">// Accessor[Forgetful] — powers .get on Iso / Getter
@@ -172,7 +241,7 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">funGrate</span><span> = </span><span class="type-name">Grate</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">1</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">2</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">doubled</span><span> = </span><span class="identifier">funGrate</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="identifier">f</span><span>)
-</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14365/0x00007fd80a26b080@71d3e621
+</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14312/0x00007f28f6247a80@6629f577
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">true</span><span>)
 </span><span class="comment">// res5: Int = 2
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">false</span><span>)
