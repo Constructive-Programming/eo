@@ -13,14 +13,13 @@ import eo.optics.Optic.*
 
 import cats.instances.list.*
 
-/** Side-by-side perf comparison: `AlgLens[List]` via `fromLensF` vs
-  * `PowerSeries` via `Traversal.each[List, _]`, both routing through
-  * the same chain shape `Lens[Person, List[Phone]] → inner → Lens[Phone,
-  * Boolean]`. This isolates the per-optic-machinery cost on the
-  * common "Lens over a List field" traversal shape.
+/** Side-by-side perf comparison: `AlgLens[List]` via `fromLensF` vs `PowerSeries` via
+  * `Traversal.each[List, _]`, both routing through the same chain shape `Lens[Person, List[Phone]]
+  * → inner → Lens[Phone, Boolean]`. This isolates the per-optic-machinery cost on the common "Lens
+  * over a List field" traversal shape.
   *
-  * `naive_*` does the same work via plain case-class copy + List.map, as
-  * the unconstrained baseline.
+  * `naive_*` does the same work via plain case-class copy + List.map, as the unconstrained
+  * baseline.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))

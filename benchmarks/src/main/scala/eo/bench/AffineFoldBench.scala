@@ -89,6 +89,7 @@ class AffineFoldBench:
   // `.getOption` path.
 
   private val mOpt3 = mN3.andThen(mN2).andThen(mN1).andThen(mFlag)
+
   private val mOpt6 =
     mN6.andThen(mN5).andThen(mN4).andThen(mN3).andThen(mN2).andThen(mN1).andThen(mFlag)
 

@@ -11,17 +11,17 @@ import eo.data.Kaleidoscope
 import eo.data.Kaleidoscope.given
 
 /** JMH bench for the Kaleidoscope carrier — EO-only (Monocle 3.3.0 ships no Kaleidoscope, verified
-  * the same way as Grate: no matches under `cellar search-external`). Two fixtures per plan D7,
-  * one per Reflector instance, because the whole point of Kaleidoscope is that `F` varies:
+  * the same way as Grate: no matches under `cellar search-external`). Two fixtures per plan D7, one
+  * per Reflector instance, because the whole point of Kaleidoscope is that `F` varies:
   *
   *   - **Fixture 1 — ZipList column-wise aggregation.** `List[Double]` walked as a ZipList and
-  *     reduced to its mean via `.collect`. The Reflector's broadcast gives the same aggregate
-  *     back at every position; the bench measures the overhead of the carrier + path-type cast
-  *     chain vs. a hand-rolled `.sum / .size` loop.
+  *     reduced to its mean via `.collect`. The Reflector's broadcast gives the same aggregate back
+  *     at every position; the bench measures the overhead of the carrier + path-type cast chain vs.
+  *     a hand-rolled `.sum / .size` loop.
   *   - **Fixture 2 — Const[Int, *] summation.** `Const[Int, Int]` projected through the phantom
-  *     side; `.collect(identity)` reads the monoid value already carried by `Const`. Measures
-  *     the overhead of routing through the Kaleidoscope carrier on a degenerate Reflector
-  *     where the aggregation is a pass-through.
+  *     side; `.collect(identity)` reads the monoid value already carried by `Const`. Measures the
+  *     overhead of routing through the Kaleidoscope carrier on a degenerate Reflector where the
+  *     aggregation is a pass-through.
   *
   * Baselines are hand-rolled variants (no carrier allocation, no Reflector dispatch) — the
   * zero-overhead floor. Documents the cost envelope rather than a "Kaleidoscope is faster" story,
@@ -44,7 +44,8 @@ class KaleidoscopeBench:
   // aggregator folds the whole ZipList into a single mean. Kaleidoscope's `.collect` threads that
   // mean back through the Reflector's broadcast, producing a ZipList where every position is the
   // same mean value.
-  private val zipListK: eo.optics.Optic[ZipList[Double], ZipList[Double], Double, Double, Kaleidoscope] =
+  private val zipListK
+      : eo.optics.Optic[ZipList[Double], ZipList[Double], Double, Double, Kaleidoscope] =
     Kaleidoscope.apply[ZipList, Double]
 
   private val zipData: ZipList[Double] =
