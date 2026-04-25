@@ -1807,7 +1807,7 @@ is enough.
   with the composition-gap ledger and `JsonFailure` ADT).
 - Links / anchors in D3 leaves resolve to their in-page sections.
 
-- [ ] **Unit 19: Cookbook recipe consolidation (R15b, R15c)**
+- [x] **Unit 19: Cookbook recipe consolidation (R15b, R15c)**
 
 **Goal:** Converge `site/docs/cookbook.md` on ~18-22 recipes drawn from
 the 30-recipe research catalogue, merging adjacent recipes where one
