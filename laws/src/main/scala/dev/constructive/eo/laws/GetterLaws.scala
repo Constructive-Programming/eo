@@ -1,10 +1,11 @@
 package dev.constructive.eo
 package laws
 
-import optics.Optic
-import optics.Optic.*
 import _root_.dev.constructive.eo.data.Forgetful
 import _root_.dev.constructive.eo.data.Forgetful.given
+
+import optics.Optic
+import optics.Optic.*
 
 /** Law equations for a `Getter[S, A]` — `Optic[S, Unit, A, A, Forgetful]`.
   *

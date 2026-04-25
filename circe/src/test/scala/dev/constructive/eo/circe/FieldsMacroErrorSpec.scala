@@ -2,10 +2,8 @@ package dev.constructive.eo.circe
 
 import scala.compiletime.testing.typeCheckErrors
 
-import io.circe.Codec
-
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
-
+import io.circe.Codec
 import org.specs2.mutable.Specification
 
 /** Compile-error catalogue for `.fields` / traversal `.fields` (D10). Every row of the plan's D10

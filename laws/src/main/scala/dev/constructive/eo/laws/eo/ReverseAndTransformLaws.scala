@@ -2,10 +2,11 @@ package dev.constructive.eo
 package laws
 package eo
 
-import optics.Optic
-import optics.Optic.*
 import _root_.dev.constructive.eo.data.Forgetful
 import _root_.dev.constructive.eo.data.Forgetful.given
+
+import optics.Optic
+import optics.Optic.*
 
 // EO-specific laws that live at the boundary of the Iso / Lens machinery:
 //

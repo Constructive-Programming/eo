@@ -1,12 +1,11 @@
 package dev.constructive.eo.laws.data.discipline
 
-import dev.constructive.eo.data.PowerSeries
-import dev.constructive.eo.{ForgetfulFunctor, ForgetfulTraverse}
-import dev.constructive.eo.laws.data.PowerSeriesLaws
-
 import cats.Applicative
-import org.scalacheck.{Arbitrary, Cogen}
+import dev.constructive.eo.data.PowerSeries
+import dev.constructive.eo.laws.data.PowerSeriesLaws
+import dev.constructive.eo.{ForgetfulFunctor, ForgetfulTraverse}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[PowerSeriesLaws]]. */

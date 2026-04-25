@@ -3,9 +3,7 @@ package dev.constructive.eo.circe
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
-
 import dev.constructive.eo.optics.Optic
-
 import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, HCursor, Json, JsonObject}
 
 /** Multi-field Prism sibling of [[JsonPrism]] — focuses a Scala 3 NamedTuple assembled from N named
@@ -147,14 +145,16 @@ final class JsonFieldsPrism[A] private[circe] (
     * successful return.
     */
   /** Walk parentPath via [[JsonWalk.walkPath]] and project the terminal value as a JsonObject so
-    * the selected-field reads / overlays can proceed. Returns the parent JsonObject paired with
-    * the Vector of parents collected along the path — the rebuild phase needs both.
+    * the selected-field reads / overlays can proceed. Returns the parent JsonObject paired with the
+    * Vector of parents collected along the path — the rebuild phase needs both.
     */
   private def walkParent(json: Json): Either[JsonFailure, (JsonObject, Vector[AnyRef])] =
-    JsonWalk.walkPath(json, parentPath).flatMap { case (cur, parents) =>
-      cur.asObject
-        .toRight(JsonFailure.NotAnObject(JsonWalk.terminalOf(parentPath)))
-        .map(obj => (obj, parents))
+    JsonWalk.walkPath(json, parentPath).flatMap {
+      case (cur, parents) =>
+        cur
+          .asObject
+          .toRight(JsonFailure.NotAnObject(JsonWalk.terminalOf(parentPath)))
+          .map(obj => (obj, parents))
     }
 
   /** Read each selected field from `obj`. Returns either the assembled sub-object (for decoder
@@ -172,8 +172,8 @@ final class JsonFieldsPrism[A] private[circe] (
     Either.cond(chain.isEmpty, sub, chain)
 
   /** Given a computed NamedTuple `a`, produce a new parent JsonObject with each selected field
-    * overlaid. The encoder runs once; the resulting JsonObject is split back into individual
-    * (name, Json) pairs that we overlay onto `parent` via successive `JsonObject.add` calls.
+    * overlaid. The encoder runs once; the resulting JsonObject is split back into individual (name,
+    * Json) pairs that we overlay onto `parent` via successive `JsonObject.add` calls.
     *
     * The encoder is expected to produce every selected field; encoders that silently omit a field
     * leave the corresponding entry on `parent` untouched (this mirrors the pre-FP body's silent
@@ -201,7 +201,7 @@ final class JsonFieldsPrism[A] private[circe] (
 
   private def modifyImpl(json: Json, f: A => A): Json =
     walkParent(json) match
-      case Left(_)             => json
+      case Left(_)               => json
       case Right((obj, parents)) =>
         readFields(obj)
           .flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).left.map(_ => Chain.empty))
@@ -213,7 +213,8 @@ final class JsonFieldsPrism[A] private[circe] (
       case Left(_)               => json
       case Right((obj, parents)) =>
         // Assemble a sub-object, apply f, overlay back. Non-object f-output → input unchanged.
-        f(Json.fromJsonObject(buildSubObject(obj))).asObject
+        f(Json.fromJsonObject(buildSubObject(obj)))
+          .asObject
           .map(newSub => rebuild(overlayFields(obj, newSub), parents))
           .getOrElse(json)
 
@@ -223,8 +224,11 @@ final class JsonFieldsPrism[A] private[circe] (
       case Right((obj, parents)) => rebuild(writeFields(obj, a), parents)
 
   private def getOptionUnsafeImpl(json: Json): Option[A] =
-    walkParent(json).toOption.flatMap { case (obj, _) =>
-      readFields(obj).toOption.flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).toOption)
+    walkParent(json).toOption.flatMap {
+      case (obj, _) =>
+        readFields(obj)
+          .toOption
+          .flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).toOption)
     }
 
   // ---- Ior-bearing impls -------------------------------------------
@@ -251,7 +255,7 @@ final class JsonFieldsPrism[A] private[circe] (
       case Right((obj, parents)) =>
         f(Json.fromJsonObject(buildSubObject(obj))).asObject match
           // f produced a non-object; synthesise a NotAnObject at the terminal step.
-          case None         =>
+          case None =>
             Ior.Both(Chain.one(JsonFailure.NotAnObject(JsonWalk.terminalOf(parentPath))), json)
           case Some(newSub) => Ior.Right(rebuild(overlayFields(obj, newSub), parents))
 

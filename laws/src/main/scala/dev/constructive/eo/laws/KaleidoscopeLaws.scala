@@ -1,11 +1,12 @@
 package dev.constructive.eo
 package laws
 
-import optics.Optic
-import optics.Optic.*
 import _root_.dev.constructive.eo.Reflector
 import _root_.dev.constructive.eo.data.Kaleidoscope
 import _root_.dev.constructive.eo.data.Kaleidoscope.given
+
+import optics.Optic
+import optics.Optic.*
 
 /** Law equations for a `Kaleidoscope[S, A]` — `Optic[S, S, A, A, Kaleidoscope]` — parameterised by
   * the concrete Reflector `F[_]` that classifies the optic's aggregation semantics.

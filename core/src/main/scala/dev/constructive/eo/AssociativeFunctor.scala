@@ -1,6 +1,6 @@
 package dev.constructive.eo
 
-import cats.syntax.either._
+import cats.syntax.either.*
 
 import optics.Optic
 

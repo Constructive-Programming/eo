@@ -1,7 +1,8 @@
 package dev.constructive.eo
 
-import optics.Optic
 import io.circe.{Codec, Decoder, HCursor, Json}
+
+import optics.Optic
 
 case class JsonF[A, B](cursor: HCursor, res: Decoder.Result[B])
 

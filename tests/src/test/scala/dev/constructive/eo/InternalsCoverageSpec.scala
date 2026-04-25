@@ -1,11 +1,9 @@
 package dev.constructive.eo
 
-import data.{IntArrBuilder, ObjArrBuilder, PSVec}
-
 import cats.data.{Const, ZipList}
-import cats.instances.list.given
-
 import org.specs2.mutable.Specification
+
+import data.{IntArrBuilder, ObjArrBuilder, PSVec}
 
 /** Direct coverage for internal machinery that shipped without user-facing specs.
   *

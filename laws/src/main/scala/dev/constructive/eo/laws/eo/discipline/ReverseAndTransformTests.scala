@@ -3,8 +3,8 @@ package laws
 package eo
 package discipline
 
-import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ReverseInvolutionLaws]]. */

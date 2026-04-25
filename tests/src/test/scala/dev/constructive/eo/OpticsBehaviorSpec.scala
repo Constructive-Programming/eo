@@ -1,5 +1,12 @@
 package dev.constructive.eo
 
+import cats.instances.int.given
+import cats.instances.list.given
+import cats.instances.option.given
+import org.scalacheck.Prop.forAll
+import org.specs2.ScalaCheck
+import org.specs2.mutable.Specification
+
 import optics.{
   AffineFold,
   BijectionIso,
@@ -24,14 +31,6 @@ import data.Forget.given
 import data.Affine.given
 import data.AlgLens.given
 import data.SetterF.given
-
-import cats.instances.int.given
-import cats.instances.list.given
-import cats.instances.option.given
-
-import org.scalacheck.Prop.forAll
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
   * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,
@@ -337,7 +336,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
-        reverseGet = { case (p, a) => AdultPerson(a) },
+        reverseGet = { case (_, a) => AdultPerson(a) },
       )
     val af = AffineFold.fromOptional(ageOpt)
     af.getOption(AdultPerson(20)) === Some(20)
@@ -542,7 +541,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
-        reverseGet = { case (p, a) => AdultPerson(a) },
+        reverseGet = { case (_, a) => AdultPerson(a) },
       )
 
     val lifted = summon[Composer[Affine, AlgLens[List]]].to(adultOpt)
@@ -601,7 +600,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
-        reverseGet = { case (p, a) => AdultPerson(a) },
+        reverseGet = { case (_, a) => AdultPerson(a) },
       )
 
     val lifted: Optic[AdultPerson, AdultPerson, Int, Int, data.SetterF] =

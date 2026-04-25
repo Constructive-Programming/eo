@@ -2,9 +2,8 @@ package dev.constructive.eo.laws.typeclass.discipline
 
 import dev.constructive.eo.ForgetfulFunctor
 import dev.constructive.eo.laws.typeclass.ForgetfulFunctorLaws
-
-import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ForgetfulFunctorLaws]]. */

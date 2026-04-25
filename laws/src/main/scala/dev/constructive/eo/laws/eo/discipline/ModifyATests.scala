@@ -4,8 +4,8 @@ package eo
 package discipline
 
 import cats.Applicative
-import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ModifyAIdLaws]]. */

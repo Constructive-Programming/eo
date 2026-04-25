@@ -1,11 +1,10 @@
 package dev.constructive.eo.laws.data.discipline
 
-import dev.constructive.eo.data.{Fst, SetterF, Snd}
 import dev.constructive.eo.ForgetfulFunctor
+import dev.constructive.eo.data.{Fst, SetterF, Snd}
 import dev.constructive.eo.laws.data.SetterFLaws
-
-import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[SetterFLaws]]. */

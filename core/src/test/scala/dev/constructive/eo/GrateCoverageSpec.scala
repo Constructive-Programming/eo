@@ -2,13 +2,12 @@ package dev.constructive.eo
 
 import cats.Representable
 import cats.instances.function.given
+import org.specs2.mutable.Specification
 
 import data.Grate
 import data.Grate.given
 import optics.Optic
 import optics.Optic.*
-
-import org.specs2.mutable.Specification
 
 /** Additional Grate coverage targeting the factory + composeFrom paths that the existing
   * `GrateSpec` doesn't touch. Covers: [[Grate.at]] (the indexed factory variant),

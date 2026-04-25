@@ -1,7 +1,7 @@
 package dev.constructive.eo
 
-import cats.{Applicative, Apply, Id, Monoid}
 import cats.data.{Const, ZipList}
+import cats.{Applicative, Apply, Id, Monoid}
 
 /** Classifying typeclass for the [[data.Kaleidoscope]] optic family.
   *

@@ -1,11 +1,15 @@
 package dev.constructive.eo
 
+import cats.instances.list.given
+import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen, Gen}
+import org.specs2.mutable.Specification
+import org.typelevel.discipline.specs2.mutable.Discipline
+
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
 import data.{Affine, Forget, Forgetful, Grate, Kaleidoscope, SetterF}
 import data.Affine.given
 import data.Forget.given
-import data.Grate.given
-import data.Kaleidoscope.given
 import data.SetterF.given
 import laws.{
   AffineFoldLaws,
@@ -41,12 +45,6 @@ import laws.typeclass.discipline.{
   ForgetfulFunctorTests,
   ForgetfulTraverseTests,
 }
-
-import cats.instances.list.given
-import org.scalacheck.{Arbitrary, Cogen, Gen}
-import org.scalacheck.Prop.forAll
-import org.specs2.mutable.Specification
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 // Arbitrary[Affine[(Int, String), Boolean]] — picks between the Fst-only
 // left branch and the (Snd, A) right branch with equal weight.

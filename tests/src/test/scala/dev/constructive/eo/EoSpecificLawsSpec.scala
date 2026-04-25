@@ -1,5 +1,11 @@
 package dev.constructive.eo
 
+import cats.instances.list.given
+import org.scalacheck.Arbitrary
+import org.scalacheck.Prop.forAll
+import org.specs2.mutable.Specification
+import org.typelevel.discipline.specs2.mutable.Discipline
+
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
 import data.{Affine, FixedTraversal, Forget, Forgetful, SetterF}
@@ -40,13 +46,6 @@ import laws.eo.discipline.{
 }
 import laws.typeclass.{ComposerPathIndependenceLaws, ComposerPreservesGetLaws}
 import laws.typeclass.discipline.{ComposerPathIndependenceTests, ComposerPreservesGetTests}
-
-import cats.instances.list.given
-
-import org.scalacheck.Arbitrary
-import org.scalacheck.Prop.forAll
-import org.specs2.mutable.Specification
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 /** Binds the EO-specific law traits to concrete optic instances. Where a law is too tangled to
   * abstract over (H1, which depends on the existential X in a Lens's carrier), it's tested inline

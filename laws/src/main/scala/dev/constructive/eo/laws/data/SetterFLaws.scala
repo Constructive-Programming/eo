@@ -1,7 +1,7 @@
 package dev.constructive.eo.laws.data
 
-import dev.constructive.eo.data.{Fst, SetterF, Snd}
 import dev.constructive.eo.ForgetfulFunctor
+import dev.constructive.eo.data.{Fst, SetterF, Snd}
 
 /** Carrier-level laws for `SetterF[X, A]`.
   *

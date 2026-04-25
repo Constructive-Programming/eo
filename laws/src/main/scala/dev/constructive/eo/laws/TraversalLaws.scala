@@ -1,11 +1,11 @@
 package dev.constructive.eo
 package laws
 
-import optics.Optic
 import _root_.dev.constructive.eo.data.Forget
 import _root_.dev.constructive.eo.data.Forget.given
-
 import cats.Functor
+
+import optics.Optic
 
 /** Law equations for a `Traversal[T[_], A]` — `Optic[T[A], T[A], A, A, Forget[T]]`.
   *

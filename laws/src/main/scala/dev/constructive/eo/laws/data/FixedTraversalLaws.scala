@@ -1,7 +1,7 @@
 package dev.constructive.eo.laws.data
 
-import dev.constructive.eo.data.FixedTraversal
 import dev.constructive.eo.ForgetfulFunctor
+import dev.constructive.eo.data.FixedTraversal
 
 /** Carrier-level laws for `FixedTraversal[N][X, A]` — a tuple-shaped carrier that places `N` copies
   * of `A` followed by a phantom `X` slot. Only `ForgetfulFunctor[FixedTraversal[N]]` is defined

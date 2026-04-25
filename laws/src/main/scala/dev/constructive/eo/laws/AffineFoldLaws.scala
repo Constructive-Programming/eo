@@ -2,6 +2,7 @@ package dev.constructive.eo
 package laws
 
 import cats.Monoid
+
 import optics.AffineFold
 import optics.Optic.*
 

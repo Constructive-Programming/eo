@@ -1,15 +1,11 @@
 package dev.constructive.eo.circe
 
 import cats.data.Ior
-
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
-
-import io.circe.{Codec, Json}
-import io.circe.syntax.*
-
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
-
+import io.circe.syntax.*
+import io.circe.{Codec, Json}
 import org.specs2.mutable.Specification
 
 /** Unit 7: cross-carrier composition regression specs.

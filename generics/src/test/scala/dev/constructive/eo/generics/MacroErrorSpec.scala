@@ -5,7 +5,6 @@ import scala.compiletime.testing.typeCheckErrors
 import scala.language.implicitConversions
 
 import dev.constructive.eo.generics.samples.{Employee, NestedWrapper, NotACaseClass, Person, Widget}
-
 import org.specs2.mutable.Specification
 
 /** Spec covering the D6 error-message catalogue for the varargs `lens[S](...)` macro.

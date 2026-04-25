@@ -1,31 +1,24 @@
 package dev.constructive.eo
 package examples
 
+import cats.instances.either.given
+import cats.instances.list.given
+import cats.syntax.either.*
+import cats.syntax.traverse.*
+import cats.{Eq, Show}
+import hearth.kindlings.catsderivation.extensions.*
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import io.circe.parser.decode as parseJson
+import io.circe.syntax.*
+import io.circe.{Codec, Decoder, Encoder, Json}
+import org.specs2.ScalaCheck
+import org.specs2.mutable.Specification
+
 import optics.{Optic, Traversal}
 import optics.Optic.*
 import generics.lens
 import data.PowerSeries
 import data.PowerSeries.given
-
-import cats.{Eq, Show}
-import cats.instances.either.given
-import cats.instances.list.given
-import cats.syntax.either.*
-import cats.syntax.traverse.*
-
-import io.circe.{Codec, Decoder, Encoder, Json}
-import io.circe.syntax.*
-import io.circe.parser.decode as parseJson
-
-// Kindlings enriches every cats / alleycats typeclass companion with
-// a `.derived` extension method. The wildcard brings the extensions
-// in — `.given` alone is not enough because `.derived` is an
-// extension, not a given.
-import hearth.kindlings.catsderivation.extensions.*
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
-
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** Motivating example for cats-eo — the "why this library exists" showcase.
   *

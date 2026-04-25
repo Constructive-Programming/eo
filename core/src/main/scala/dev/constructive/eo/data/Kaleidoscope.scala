@@ -1,9 +1,9 @@
 package dev.constructive.eo
 package data
 
-import optics.Optic
-
 import dev.constructive.eo.Reflector
+
+import optics.Optic
 
 /** Carrier for the `Kaleidoscope` optic family — an `Applicative`-parameterised aggregation optic
   * whose behaviour at composition time is picked by the `Reflector[F]` the user plugs in.

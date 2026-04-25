@@ -1,8 +1,8 @@
 package dev.constructive.eo
 
-import optics.Iso
-
 import org.specs2.Specification
+
+import optics.Iso
 
 class OpticsSpecs extends Specification:
 

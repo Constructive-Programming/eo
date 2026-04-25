@@ -1,18 +1,14 @@
 package dev.constructive.eo.circe
 
 import cats.data.Ior
-
 import dev.constructive.eo.laws.PrismLaws
 import dev.constructive.eo.laws.discipline.PrismTests
 import dev.constructive.eo.optics.Optic
-
-import io.circe.{Codec, Json}
-import io.circe.syntax.*
-
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
-
-import org.scalacheck.{Arbitrary, Cogen, Gen}
+import io.circe.syntax.*
+import io.circe.{Codec, Json}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline

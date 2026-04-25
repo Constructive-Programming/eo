@@ -2,9 +2,8 @@ package dev.constructive.eo.circe
 
 import cats.Eq
 import cats.data.{Chain, Ior}
-
-import io.circe.{DecodingFailure, Json, ParsingFailure}
 import io.circe.parser.parse as circeParse
+import io.circe.{DecodingFailure, Json, ParsingFailure}
 
 /** Structured failure surfaced by the default Ior-bearing surface of [[JsonPrism]] /
   * [[JsonFieldsPrism]] / [[JsonTraversal]] / [[JsonFieldsTraversal]].

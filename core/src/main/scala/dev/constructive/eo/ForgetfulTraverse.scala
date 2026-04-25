@@ -1,11 +1,11 @@
 package dev.constructive.eo
 
-import data.Affine
-
+import cats.syntax.applicative.*
+import cats.syntax.either.*
+import cats.syntax.functor.*
 import cats.{Applicative, Functor}
-import cats.syntax.applicative._
-import cats.syntax.either._
-import cats.syntax.functor._
+
+import data.Affine
 
 /** Traverse the focus of a two-parameter carrier `F[_, _]` under a shape-preserving effectful
   * transform `A => G[B]`.

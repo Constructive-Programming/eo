@@ -1,10 +1,8 @@
 package dev.constructive.eo
 package generics
 
-import dev.constructive.eo.optics.Optic.*
-
 import dev.constructive.eo.generics.samples.{Employee, LTree, Person, Shape, Tree}
-
+import dev.constructive.eo.optics.Optic.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification

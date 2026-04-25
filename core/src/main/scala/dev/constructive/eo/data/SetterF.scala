@@ -2,8 +2,8 @@ package dev.constructive.eo
 package data
 
 import cats.Distributive
-import cats.instances.function._
-import cats.syntax.functor._
+import cats.instances.function.*
+import cats.syntax.functor.*
 
 /** Carrier for the `Setter` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B` that
   * decides what to do with the focus when it's written back.

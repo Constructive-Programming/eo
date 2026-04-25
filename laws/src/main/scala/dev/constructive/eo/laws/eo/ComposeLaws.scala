@@ -2,11 +2,12 @@ package dev.constructive.eo
 package laws
 package eo
 
+import _root_.dev.constructive.eo.data.Affine.given
+import _root_.dev.constructive.eo.data.Forgetful.given
+import _root_.dev.constructive.eo.data.{Affine, Forgetful}
+
 import optics.Optic
 import optics.Optic.*
-import _root_.dev.constructive.eo.data.{Affine, Forgetful}
-import _root_.dev.constructive.eo.data.Forgetful.given
-import _root_.dev.constructive.eo.data.Affine.given
 
 // Laws governing `Optic.andThen` for each pair of like-shaped optics
 // (Lens ∘ Lens, Iso ∘ Iso, Prism ∘ Prism, Optional ∘ Optional).

@@ -2,12 +2,12 @@ package dev.constructive.eo
 package laws
 package eo
 
-import optics.Optic
-import optics.Optic.*
 import _root_.dev.constructive.eo.data.Forget
 import _root_.dev.constructive.eo.data.Forget.given
-
 import cats.Traverse
+
+import optics.Optic
+import optics.Optic.*
 
 // Fold / Traverse family — the laws below pin down how EO's
 // `foldMap` and `all` interact with the carriers that carry

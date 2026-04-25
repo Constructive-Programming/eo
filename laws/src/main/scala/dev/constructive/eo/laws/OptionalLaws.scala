@@ -1,10 +1,11 @@
 package dev.constructive.eo
 package laws
 
-import optics.Optic
-import optics.Optic.*
 import _root_.dev.constructive.eo.data.Affine
 import _root_.dev.constructive.eo.data.Affine.given
+
+import optics.Optic
+import optics.Optic.*
 
 /** Law equations for an `Optional[S, A]` — `Optic[S, S, A, A, Affine]`.
   *

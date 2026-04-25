@@ -1,9 +1,9 @@
 package dev.constructive.eo
 package data
 
-import optics.Optic
-
 import cats.Representable
+
+import optics.Optic
 
 /** Paired carrier for the `Grate` optic family — `Grate[X, A] = (A, X => A)`.
   *

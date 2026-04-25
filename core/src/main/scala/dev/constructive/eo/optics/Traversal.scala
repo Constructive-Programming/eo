@@ -3,9 +3,9 @@ package optics
 
 import scala.collection.immutable.ArraySeq
 
-import data.{FixedTraversal, Forget, ObjArrBuilder, PSVec, PowerSeries}
-
 import cats.Traverse
+
+import data.{FixedTraversal, Forget, ObjArrBuilder, PSVec, PowerSeries}
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:

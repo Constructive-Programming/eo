@@ -1,9 +1,9 @@
 package dev.constructive.eo
 package data
 
-import optics.Optic
-
 import cats.Invariant
+
+import optics.Optic
 
 /** The identity carrier: `Forgetful[X, A] = A`.
   *

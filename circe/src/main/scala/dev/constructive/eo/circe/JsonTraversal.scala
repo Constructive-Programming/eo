@@ -3,7 +3,6 @@ package dev.constructive.eo.circe
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
-
 import io.circe.{Decoder, Encoder, Json}
 
 /** Multi-focus counterpart to [[JsonPrism]]: a Traversal that walks the JSON from the root down to
@@ -39,7 +38,7 @@ final class JsonTraversal[A] private[circe] (
   // ---- Dynamic field sugar -----------------------------------------
 
   transparent inline def selectDynamic(inline name: String): Any =
-    ${ JsonPrismMacro.selectFieldTraversalImpl[A]('this, 'name) }
+    ${ JsonPrismMacro.selectFieldTraversalImpl[A]('{ this }, 'name) }
 
   // ---- Default (Ior-bearing) surface --------------------------------
 
@@ -147,10 +146,13 @@ final class JsonTraversal[A] private[circe] (
     * if the prefix walk fails.
     */
   private def mapAtPrefix(json: Json)(elemUpdate: Json => Json): Json =
-    JsonWalk.walkPath(json, prefix).toOption
+    JsonWalk
+      .walkPath(json, prefix)
+      .toOption
       .flatMap { case (cur, parents) => cur.asArray.map(arr => (arr, parents)) }
-      .map { case (arr, parents) =>
-        JsonWalk.rebuildPath(parents, prefix, Json.fromValues(arr.map(elemUpdate)))
+      .map {
+        case (arr, parents) =>
+          JsonWalk.rebuildPath(parents, prefix, Json.fromValues(arr.map(elemUpdate)))
       }
       .getOrElse(json)
 
@@ -196,10 +198,12 @@ final class JsonTraversal[A] private[circe] (
       .walkPath(json, prefix)
       .left
       .map(failure => Ior.Left(Chain.one(failure)))
-      .flatMap { case (cur, parents) =>
-        cur.asArray
-          .map(arr => (arr, parents))
-          .toRight(Ior.Left(Chain.one(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))))
+      .flatMap {
+        case (cur, parents) =>
+          cur
+            .asArray
+            .map(arr => (arr, parents))
+            .toRight(Ior.Left(Chain.one(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))))
       }
 
   private def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =

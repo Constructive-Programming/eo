@@ -3,7 +3,6 @@ package dev.constructive.eo.circe
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
-
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 
 /** Multi-field sibling of [[JsonTraversal]] — iterates an array and focuses a Scala 3 NamedTuple on
@@ -78,22 +77,26 @@ final class JsonFieldsTraversal[A] private[circe] (
     * collected along the way (used by [[rebuildRoot]] to splice the new array back through).
     */
   private def walkPrefix(json: Json): Either[JsonFailure, (Vector[Json], Vector[AnyRef])] =
-    JsonWalk.walkPath(json, prefix).flatMap { case (cur, parents) =>
-      cur.asArray
-        .toRight(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))
-        .map(arr => (arr, parents))
+    JsonWalk.walkPath(json, prefix).flatMap {
+      case (cur, parents) =>
+        cur
+          .asArray
+          .toRight(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))
+          .map(arr => (arr, parents))
     }
 
-  /** Walk elemParent on a single element to the field-bearing parent JsonObject. Returns the
-    * parent paired with the per-step parents Vector for the rebuild side.
+  /** Walk elemParent on a single element to the field-bearing parent JsonObject. Returns the parent
+    * paired with the per-step parents Vector for the rebuild side.
     */
   private def walkElemParent(
       elemJson: Json
   ): Either[JsonFailure, (JsonObject, Vector[AnyRef])] =
-    JsonWalk.walkPath(elemJson, elemParent).flatMap { case (cur, parents) =>
-      cur.asObject
-        .toRight(JsonFailure.NotAnObject(JsonWalk.terminalOf(elemParent)))
-        .map(obj => (obj, parents))
+    JsonWalk.walkPath(elemJson, elemParent).flatMap {
+      case (cur, parents) =>
+        cur
+          .asObject
+          .toRight(JsonFailure.NotAnObject(JsonWalk.terminalOf(elemParent)))
+          .map(obj => (obj, parents))
     }
 
   /** Read each selected field of `obj` into a Chain (failures) or a sub-JsonObject (success). */
@@ -117,8 +120,8 @@ final class JsonFieldsTraversal[A] private[circe] (
       encoded(name).fold(out)(v => out.add(name, v))
     }
 
-  /** Overlay the fields of `newSub` onto `parent`. Same shape as [[writeFields]] but starting
-    * from a `JsonObject` produced by `f` in `transform`.
+  /** Overlay the fields of `newSub` onto `parent`. Same shape as [[writeFields]] but starting from
+    * a `JsonObject` produced by `f` in `transform`.
     */
   private def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =
     fieldNames.foldLeft(parent) { (out, name) =>
@@ -139,19 +142,19 @@ final class JsonFieldsTraversal[A] private[circe] (
 
   private def modifyImpl(json: Json, f: A => A): Json =
     walkPrefix(json) match
-      case Left(_)                  => json
+      case Left(_)                     => json
       case Right((arr, prefixParents)) =>
         rebuildRoot(arr.map(updateElementDecodedUnsafe(_, f)), prefixParents)
 
   private def transformImpl(json: Json, f: Json => Json): Json =
     walkPrefix(json) match
-      case Left(_)                  => json
+      case Left(_)                     => json
       case Right((arr, prefixParents)) =>
         rebuildRoot(arr.map(updateElementRawUnsafe(_, f)), prefixParents)
 
   private def placeImpl(json: Json, a: A): Json =
     walkPrefix(json) match
-      case Left(_)                  => json
+      case Left(_)                     => json
       case Right((arr, prefixParents)) =>
         rebuildRoot(arr.map(placeElementUnsafe(_, a)), prefixParents)
 
@@ -162,15 +165,16 @@ final class JsonFieldsTraversal[A] private[circe] (
 
   private def updateElementDecodedUnsafe(elemJson: Json, f: A => A): Json =
     walkElemParent(elemJson)
-      .flatMap { case (obj, parents) =>
-        readFields(obj).left.map(_ => Chain.empty).flatMap { sub =>
-          Json
-            .fromJsonObject(sub)
-            .as[A](using decoder)
-            .left
-            .map(_ => Chain.empty[JsonFailure])
-            .map(a => rebuildElem(writeFields(obj, f(a)), parents))
-        }
+      .flatMap {
+        case (obj, parents) =>
+          readFields(obj).left.map(_ => Chain.empty).flatMap { sub =>
+            Json
+              .fromJsonObject(sub)
+              .as[A](using decoder)
+              .left
+              .map(_ => Chain.empty[JsonFailure])
+              .map(a => rebuildElem(writeFields(obj, f(a)), parents))
+          }
       }
       .getOrElse(elemJson)
 
@@ -178,7 +182,8 @@ final class JsonFieldsTraversal[A] private[circe] (
     walkElemParent(elemJson) match
       case Left(_)               => elemJson
       case Right((obj, parents)) =>
-        f(Json.fromJsonObject(buildSubObject(obj))).asObject
+        f(Json.fromJsonObject(buildSubObject(obj)))
+          .asObject
           .map(newSub => rebuildElem(overlayFields(obj, newSub), parents))
           .getOrElse(elemJson)
 
@@ -188,8 +193,11 @@ final class JsonFieldsTraversal[A] private[circe] (
       case Right((obj, parents)) => rebuildElem(writeFields(obj, a), parents)
 
   private def readElementUnsafe(elemJson: Json): Option[A] =
-    walkElemParent(elemJson).toOption.flatMap { case (obj, _) =>
-      readFields(obj).toOption.flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).toOption)
+    walkElemParent(elemJson).toOption.flatMap {
+      case (obj, _) =>
+        readFields(obj)
+          .toOption
+          .flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).toOption)
     }
 
   // ---- Ior-bearing impls ------------------------------------------
@@ -277,7 +285,7 @@ final class JsonFieldsTraversal[A] private[circe] (
       case Left(failure)         => Ior.Both(Chain.one(failure), elemJson)
       case Right((obj, parents)) =>
         f(Json.fromJsonObject(buildSubObject(obj))).asObject match
-          case None         =>
+          case None =>
             Ior.Both(
               Chain.one(JsonFailure.NotAnObject(JsonWalk.terminalOf(elemParent))),
               elemJson,

@@ -1,16 +1,17 @@
 package dev.constructive.eo
 
+import scala.collection.immutable.ArraySeq
+
+import cats.instances.arraySeq.*
+import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Gen}
+import org.specs2.ScalaCheck
+import org.specs2.mutable.Specification
+
 import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
 import data.PowerSeries
 import data.PowerSeries.given
-
-import cats.instances.arraySeq.*
-import org.scalacheck.{Arbitrary, Gen}
-import org.scalacheck.Prop.forAll
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
-import scala.collection.immutable.ArraySeq
 
 /** Behaviour-level spec for `PowerSeries`, `Traversal.each`, and the
   * `Composer[Tuple2 → PowerSeries]` bridge. Covers scenarios that the discipline suite

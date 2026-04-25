@@ -1,6 +1,7 @@
 package dev.constructive.eo.circe
 
 import scala.quoted.*
+
 import io.circe.{Decoder, Encoder}
 
 /** `.field(_.fieldName)` on a `JsonPrism[S]` — macro sugar over [[JsonPrism.widenPath]]. Extracts
@@ -32,9 +33,9 @@ object JsonPrismMacro:
 
     val name: String = extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
-        s"JsonPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
-          + s"Nested paths are not yet supported inside a single call;\n"
-          + s"chain them: `_.field(_.a).field(_.b)`.\n"
+        "JsonPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
+          + "Nested paths are not yet supported inside a single call;\n"
+          + "chain them: `_.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
@@ -163,7 +164,7 @@ object JsonPrismMacro:
 
     val name: String = extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
-        s"JsonTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
+        "JsonTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
@@ -225,7 +226,7 @@ object JsonPrismMacro:
     if selectors.sizeIs < 2 then
       report.errorAndAbort(
         s"JsonPrism.fields[${Type.show[A]}]: requires at least two field selectors"
-          + s" (for one selector, use .field(_.x) instead)."
+          + " (for one selector, use .field(_.x) instead)."
       )
 
     val aTpe = TypeRepr.of[A]
@@ -340,7 +341,7 @@ object JsonPrismMacro:
     if selectors.sizeIs < 2 then
       report.errorAndAbort(
         s"JsonTraversal.fields[${Type.show[A]}]: requires at least two field selectors"
-          + s" (for one selector, use .field(_.x) instead)."
+          + " (for one selector, use .field(_.x) instead)."
       )
 
     val aTpe = TypeRepr.of[A]

@@ -1,10 +1,10 @@
 package dev.constructive.eo
 package laws
 
+import cats.Monoid
+
 import optics.Optic
 import optics.Optic.*
-
-import cats.Monoid
 
 /** Law equations for a `Fold[S, A]` — a read-only optic whose carrier `F` has `ForgetfulFold[F]`
   * and whose write-side is pinned to `Unit`.

@@ -2,11 +2,11 @@ package dev.constructive.eo
 package laws
 package eo
 
+import cats.data.Const
+import cats.{Applicative, Id}
+
 import optics.Optic
 import optics.Optic.*
-
-import cats.{Applicative, Id}
-import cats.data.Const
 
 // D-series laws — `Optic.modifyA` specialised at two canonical
 // applicatives:

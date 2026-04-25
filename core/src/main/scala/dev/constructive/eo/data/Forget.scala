@@ -1,12 +1,12 @@
 package dev.constructive.eo
 package data
 
-import optics.Optic
-
+import cats.syntax.coflatMap.*
+import cats.syntax.flatMap.*
+import cats.syntax.functor.*
 import cats.{Applicative, Bifunctor, Comonad, FlatMap, Foldable, Functor, Monad, Traverse}
-import cats.syntax.coflatMap._
-import cats.syntax.flatMap._
-import cats.syntax.functor._
+
+import optics.Optic
 
 /** Adapt a `F[_]` container to the two-parameter carrier shape by wrapping it under the phantom
   * `X`. Equivalent to the classic Haskell `newtype Forget r a b = Forget (a -> r)` construction but

@@ -1,7 +1,6 @@
 package dev.constructive.eo.circe
 
 import cats.syntax.foldable.*
-
 import io.circe.{Json, JsonObject}
 
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]],
@@ -28,8 +27,8 @@ private[circe] object JsonWalk:
     * indexed element of `cur.asArray`; in either case, append the container to `parents`. Failure
     * cases surface as the matching `JsonFailure`.
     *
-    * Used by the `modify` / `get` families on [[JsonPrism]] / [[JsonFieldsPrism]] / [[JsonTraversal]]
-    * / [[JsonFieldsTraversal]], where a missing field at any step is a hard miss.
+    * Used by the `modify` / `get` families on [[JsonPrism]] / [[JsonFieldsPrism]] /
+    * [[JsonTraversal]] / [[JsonFieldsTraversal]], where a missing field at any step is a hard miss.
     */
   def stepInto(
       step: PathStep,
@@ -48,16 +47,15 @@ private[circe] object JsonWalk:
         cur.asArray match
           case None      => Left(JsonFailure.NotAnArray(step))
           case Some(arr) =>
-            if idx < 0 || idx >= arr.length then
-              Left(JsonFailure.IndexOutOfRange(step, arr.length))
+            if idx < 0 || idx >= arr.length then Left(JsonFailure.IndexOutOfRange(step, arr.length))
             else Right((arr(idx), parents :+ arr))
 
   /** One step of a lenient walk — same as [[stepInto]] except missing fields are silently filled
     * with `Json.Null` rather than failing. Index steps still fail on non-array parents and on
     * out-of-range indices.
     *
-    * Used by the `transform` / `place` families on [[JsonPrism]] / [[JsonTraversal]], which write
-    * a value at the leaf regardless of whether the source path contained one — a missing field
+    * Used by the `transform` / `place` families on [[JsonPrism]] / [[JsonTraversal]], which write a
+    * value at the leaf regardless of whether the source path contained one — a missing field
     * effectively gets created on the way back up.
     */
   def stepIntoLenient(
@@ -114,8 +112,9 @@ private[circe] object JsonWalk:
       path: Array[PathStep],
       newLeaf: Json,
   ): Json =
-    parents.zip(path.toIndexedSeq).foldRight(newLeaf) { case ((parent, step), child) =>
-      rebuildStep(parent, step, child)
+    parents.zip(path.toIndexedSeq).foldRight(newLeaf) {
+      case ((parent, step), child) =>
+        rebuildStep(parent, step, child)
     }
 
   /** Splice `child` into `parent` at `step`. The parent's runtime shape is determined by the step

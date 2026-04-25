@@ -1,19 +1,9 @@
 package dev.constructive.eo
 
-import optics.{
-  BijectionIso,
-  GetReplaceLens,
-  Iso,
-  Lens,
-  MendTearPrism,
-  Optional,
-  PickMendPrism,
-  Prism,
-}
-import optics.Optic.*
-import data.Affine
-
 import org.specs2.mutable.Specification
+
+import optics.{BijectionIso, GetReplaceLens, MendTearPrism, Optional, PickMendPrism}
+import data.Affine
 
 /** Dedicated coverage for the 21 fused `.andThen` overloads on the concrete optic subclasses
   * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`). Each fused

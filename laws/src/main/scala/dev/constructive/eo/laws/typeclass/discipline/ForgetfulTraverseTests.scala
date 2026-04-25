@@ -1,9 +1,8 @@
 package dev.constructive.eo.laws.typeclass.discipline
 
+import cats.Applicative
 import dev.constructive.eo.ForgetfulTraverse
 import dev.constructive.eo.laws.typeclass.ForgetfulTraverseLaws
-
-import cats.Applicative
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop.forAll
 import org.typelevel.discipline.Laws

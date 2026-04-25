@@ -1,9 +1,8 @@
 package dev.constructive.eo.laws.data
 
+import cats.{Applicative, Id}
 import dev.constructive.eo.data.PowerSeries
 import dev.constructive.eo.{ForgetfulFunctor, ForgetfulTraverse}
-
-import cats.{Applicative, Id}
 
 /** Carrier-level laws for `PowerSeries[X, A]`.
   *

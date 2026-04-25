@@ -1,17 +1,16 @@
 package dev.constructive.eo
 
-import data._
-import optics._
+import cats.instances.list.*
+import cats.syntax.either.*
 
-import cats.instances.list._
-import cats.syntax.either._
+import data.*
+import optics.*
 
 case class UP(a: Int, b: Boolean)
 
 @main def samples =
 
   import Optic.*
-  import Forgetful.given
   import Forget.given
 
   val aLens = Lens[UP, Int](_.a, (s, b) => s.copy(a = b))

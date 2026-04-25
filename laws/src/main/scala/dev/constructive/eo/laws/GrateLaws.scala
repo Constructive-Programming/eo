@@ -1,10 +1,11 @@
 package dev.constructive.eo
 package laws
 
-import optics.Optic
-import optics.Optic.*
 import _root_.dev.constructive.eo.data.Grate
 import _root_.dev.constructive.eo.data.Grate.given
+
+import optics.Optic
+import optics.Optic.*
 
 /** Law equations for a `Grate[S, A]` — `Optic[S, S, A, A, Grate]`.
   *

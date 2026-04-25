@@ -2,8 +2,8 @@ package dev.constructive.eo
 package laws
 package discipline
 
-import org.scalacheck.{Arbitrary, Cogen}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[KaleidoscopeLaws]]. The `F` path-type flows in from the `laws` field

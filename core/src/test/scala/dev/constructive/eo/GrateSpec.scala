@@ -1,15 +1,14 @@
 package dev.constructive.eo
 
 import cats.instances.function.given
+import org.scalacheck.Prop.forAll
+import org.specs2.ScalaCheck
+import org.specs2.mutable.Specification
 
 import data.Grate
 import data.Grate.given
 import optics.Optic
 import optics.Optic.*
-
-import org.scalacheck.Prop.forAll
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** In-core smoke spec for the Grate carrier. Pins down the generic `Grate.apply[F: Representable]`
   * factory on `Function1[Boolean, *]` — the Naperian "record-of-pairs" shape that every
@@ -89,7 +88,6 @@ class GrateSpec extends Specification with ScalaCheck:
   }
 
   "Composer[Forgetful, Grate] (Iso → Grate)" should {
-    import data.Forgetful
     import optics.Iso
 
     val triple = Grate.tuple[(Int, Int, Int), Int]

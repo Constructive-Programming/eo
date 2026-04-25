@@ -1,9 +1,9 @@
 package dev.constructive.eo
 package data
 
-import optics.Optic
-
 import cats.{Alternative, Applicative, Foldable, Monoid, MonoidK, Traverse}
+
+import optics.Optic
 
 /** Pair carrier for the algebraic-lens family — `AlgLens[F][X, A] = (X, F[A])`. The `X` holds
   * structural leftover (the same role it plays for `Tuple2` / `Affine`); the `F[A]` holds
@@ -54,9 +54,9 @@ private[eo] trait AlgLensSingleton[S, T, A, B, X0]:
   * [[AlgLens.assocAlgMonad]]'s push/pull paths stay O(n) across every qualifying `F` and surface
   * explicit errors where cardinality would otherwise collapse.
   *
-  * Required alongside `Traverse[F]` by `assocAlgMonad`. Instances for
-  * `List`, `Option`, `Vector`, `cats.data.Chain` live in the companion; users extending `AlgLens`
-  * to a custom `F` supply their own instance.
+  * Required alongside `Traverse[F]` by `assocAlgMonad`. Instances for `List`, `Option`, `Vector`,
+  * `cats.data.Chain` live in the companion; users extending `AlgLens` to a custom `F` supply their
+  * own instance.
   */
 private[eo] trait AlgLensFromList[F[_]]:
   /** Build `F[A]` from a `List[A]`, preserving order and cardinality. Throw `IllegalStateException`

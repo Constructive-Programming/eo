@@ -3,9 +3,7 @@ package dev.constructive.eo.circe
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
-
 import dev.constructive.eo.optics.Optic
-
 import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, HCursor, Json}
 
 /** A specialised Prism from [[io.circe.Json]] to a native type `A`, backed by a circe `Encoder[A]`
@@ -73,7 +71,7 @@ final class JsonPrism[A] private[circe] (
   // never shadows them.
 
   transparent inline def selectDynamic(inline name: String): Any =
-    ${ JsonPrismMacro.selectFieldImpl[A]('this, 'name) }
+    ${ JsonPrismMacro.selectFieldImpl[A]('{ this }, 'name) }
 
   // ---- Abstract Optic members (for generic Optic contract) ----------
   //
@@ -157,7 +155,7 @@ final class JsonPrism[A] private[circe] (
 
   private def modifyImpl(json: Json, f: A => A): Json =
     JsonWalk.walkPath(json, path) match
-      case Left(_)              => json
+      case Left(_)               => json
       case Right((cur, parents)) =>
         decoder.decodeJson(cur) match
           case Left(_)  => json
@@ -165,15 +163,15 @@ final class JsonPrism[A] private[circe] (
 
   private def transformImpl(json: Json, f: Json => Json): Json =
     JsonWalk.walkPath(json, path) match
-      case Left(_)              => json
+      case Left(_)               => json
       case Right((cur, parents)) => JsonWalk.rebuildPath(parents, path, f(cur))
 
   private def placeImpl(json: Json, a: A): Json =
     if path.length == 0 then encoder(a)
     else
       JsonWalk.walkPath(json, path) match
-        case Left(_)              => json
-        case Right((_, parents))  => JsonWalk.rebuildPath(parents, path, encoder(a))
+        case Left(_)             => json
+        case Right((_, parents)) => JsonWalk.rebuildPath(parents, path, encoder(a))
 
   // ---- Ior-bearing helper bodies ------------------------------------
   //
@@ -185,7 +183,7 @@ final class JsonPrism[A] private[circe] (
 
   private def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
     JsonWalk.walkPath(json, path) match
-      case Left(failure)        => Ior.Both(Chain.one(failure), json)
+      case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((cur, parents)) =>
         decoder.decodeJson(cur) match
           case Left(df) =>
@@ -196,7 +194,7 @@ final class JsonPrism[A] private[circe] (
 
   private def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
     JsonWalk.walkPath(json, path) match
-      case Left(failure)        => Ior.Both(Chain.one(failure), json)
+      case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((cur, parents)) =>
         Ior.Right(JsonWalk.rebuildPath(parents, path, f(cur)))
 
@@ -213,7 +211,7 @@ final class JsonPrism[A] private[circe] (
     */
   private def getIor(json: Json): Ior[Chain[JsonFailure], A] =
     JsonWalk.walkPath(json, path) match
-      case Left(failure)  => Ior.Left(Chain.one(failure))
+      case Left(failure)   => Ior.Left(Chain.one(failure))
       case Right((cur, _)) =>
         decoder.decodeJson(cur) match
           case Right(a) => Ior.Right(a)

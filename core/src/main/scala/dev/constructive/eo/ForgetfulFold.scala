@@ -1,6 +1,7 @@
 package dev.constructive.eo
 
 import cats.Monoid
+
 import data.Affine
 
 /** `foldMap` over the focus of a two-parameter carrier — the mechanism behind `Optic.foldMap`

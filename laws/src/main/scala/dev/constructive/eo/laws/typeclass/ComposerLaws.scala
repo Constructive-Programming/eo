@@ -2,10 +2,11 @@ package dev.constructive.eo
 package laws
 package typeclass
 
+import _root_.dev.constructive.eo.data.Affine.given
+import _root_.dev.constructive.eo.data.{Affine, Forgetful}
+
 import optics.Optic
 import optics.Optic.*
-import _root_.dev.constructive.eo.data.{Affine, Forgetful}
-import _root_.dev.constructive.eo.data.Affine.given
 
 /** Laws governing [[Composer.chain]] — the mechanism that lifts a series of pairwise `Composer`s
   * into a multi-hop carrier coercion. Promoted from the earlier

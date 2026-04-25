@@ -1,11 +1,11 @@
 package dev.constructive.eo
 package optics
 
-import data._
-
-import cats.{Applicative, Functor, Monoid}
 import cats.arrow.Profunctor
-import cats.syntax.functor._
+import cats.syntax.functor.*
+import cats.{Applicative, Functor, Monoid}
+
+import data.*
 
 /** Existential encoding of a profunctor optic — the single trait behind every optic family in
   * `cats-eo`.

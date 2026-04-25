@@ -1,12 +1,9 @@
 package dev.constructive.eo.circe
 
 import cats.data.Ior
-
-import io.circe.{Codec, Json}
-import io.circe.syntax.*
-
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
-
+import io.circe.syntax.*
+import io.circe.{Codec, Json}
 import org.specs2.mutable.Specification
 
 /** Observable-identity behaviour specs for [[JsonFailure]]. Each case of the enum must be reachable

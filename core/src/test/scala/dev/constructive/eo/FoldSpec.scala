@@ -1,10 +1,10 @@
 package dev.constructive.eo
 
-import optics.Fold
-
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
+
+import optics.Fold
 
 /** In-core smoke spec that pins down `Fold.select`'s predicate semantics. The fuller behaviour /
   * law suites live in cats-eo-tests, but keeping this one-property spec in core lets `core/test`
