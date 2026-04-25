@@ -186,8 +186,8 @@ final class JsonFieldsTraversal[A] private[circe] (
       case Right((arr, _)) => JsonTraversalAccumulator.collectIor(arr, readElementIor)
 
   /** Per-element update with failure accumulation. Delegates to
-    * [[JsonTraversalAccumulator.mapElementsIor]] — Elements whose update fails are left
-    * unchanged in the output; their failure(s) contribute to the outer chain.
+    * [[JsonTraversalAccumulator.mapElementsIor]] — Elements whose update fails are left unchanged
+    * in the output; their failure(s) contribute to the outer chain.
     */
   private def mapElementsIor(
       arr: Vector[Json],
