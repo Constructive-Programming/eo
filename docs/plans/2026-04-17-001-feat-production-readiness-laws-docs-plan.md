@@ -2006,7 +2006,7 @@ best-guess disposition per cell.
 - If Unit 21 adds Composers, all three of {law, behaviour spec,
   coverage} are populated.
 
-- [ ] **Unit 15: README + CHANGELOG + CONTRIBUTING, and cut the 0.1.0 release**
+- [x] **Unit 15: README + CHANGELOG + CONTRIBUTING, and cut the 0.1.0 release** — files prepared 2026-04-25; tag cut deferred to maintainer per plan line 2061.
 
 **Goal:** Write the three top-level markdown files a public project needs,
 then tag `v0.1.0` and trigger the release workflow.
