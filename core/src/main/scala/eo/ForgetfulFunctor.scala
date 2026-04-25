@@ -4,8 +4,20 @@ package eo
   *
   * The primary method `map` is uncurried for allocation-free hot paths. If you need a curried
   * variant, derive it at the call site: `fa => f => FF.map(fa, f)`.
+  *
+  * @tparam F
+  *   the two-argument carrier being mapped
   */
 trait ForgetfulFunctor[F[_, _]]:
+  /** Map `f` over the second type parameter, leaving the first untouched.
+    *
+    * @tparam X
+    *   existential leftover
+    * @tparam A
+    *   focus read out of the carrier
+    * @tparam B
+    *   focus written back
+    */
   def map[X, A, B](fa: F[X, A], f: A => B): F[X, B]
 
 /** Typeclass instances for [[ForgetfulFunctor]].

@@ -11,7 +11,15 @@ import data.Affine
   *   the carrier
   */
 trait ForgetfulFold[F[_, _]]:
-  /** Combine every focus through `Monoid[M]` after running `f`. */
+  /** Combine every focus through `Monoid[M]` after running `f`.
+    *
+    * @tparam X
+    *   existential leftover (unused by the fold — `Monoid.empty` on miss, `f(focus)` on hit)
+    * @tparam A
+    *   focus being folded
+    * @tparam M
+    *   monoid the focus is folded into
+    */
   def foldMap[X, A, M: Monoid]: (A => M) => F[X, A] => M
 
 /** Typeclass instances for [[ForgetfulFold]]. */

@@ -20,7 +20,17 @@ import cats.syntax.functor._
   *   constraint that `G` must satisfy
   */
 trait ForgetfulTraverse[F[_, _], C[_[_]]]:
-  /** Apply `A => G[B]` at the focus and reassemble the carrier. */
+  /** Apply `A => G[B]` at the focus and reassemble the carrier.
+    *
+    * @tparam X
+    *   existential leftover
+    * @tparam A
+    *   focus being traversed
+    * @tparam B
+    *   focus produced by the effectful transform
+    * @tparam G
+    *   effect constructor — must satisfy the constraint `C`
+    */
   def traverse[X, A, B, G[_]: C]: F[X, A] => (A => G[B]) => G[F[X, B]]
 
 /** Typeclass instances for [[ForgetfulTraverse]]. */

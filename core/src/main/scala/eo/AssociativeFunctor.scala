@@ -29,6 +29,19 @@ trait AssociativeFunctor[F[_, _], Xo, Xi]:
 
   /** Push-side composition — run `outer.to(s)` to get an `F[Xo, A]`, feed the focus through
     * `inner.to` to produce `F[Xi, C]`, reassemble as `F[Z, C]`.
+    *
+    * @tparam S
+    *   outer source type
+    * @tparam T
+    *   outer result type
+    * @tparam A
+    *   outer focus read (which becomes the inner source)
+    * @tparam B
+    *   outer focus written back
+    * @tparam C
+    *   inner focus read (the combined optic's focus)
+    * @tparam D
+    *   inner focus written back
     */
   def composeTo[S, T, A, B, C, D](
       s: S,
@@ -38,6 +51,19 @@ trait AssociativeFunctor[F[_, _], Xo, Xi]:
 
   /** Pull-side composition — unfold `F[Z, D]` back through `inner.from` and `outer.from` to produce
     * `T`. Dual of [[composeTo]].
+    *
+    * @tparam S
+    *   outer source type
+    * @tparam T
+    *   outer result type
+    * @tparam A
+    *   outer focus read
+    * @tparam B
+    *   outer focus written back (intermediate — produced by `inner.from`)
+    * @tparam C
+    *   inner focus read
+    * @tparam D
+    *   inner focus written back
     */
   def composeFrom[S, T, A, B, C, D](
       xd: F[Z, D],

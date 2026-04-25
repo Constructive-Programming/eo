@@ -10,6 +10,11 @@ package eo
   */
 trait ForgetfulApplicative[F[_, _]] extends ForgetfulFunctor[F]:
   /** Lift an `A` into the carrier with whatever leftover the `Applicative` shape defines.
+    *
+    * @tparam X
+    *   existential leftover
+    * @tparam A
+    *   focus being lifted
     */
   def pure[X, A](a: A): F[X, A]
 

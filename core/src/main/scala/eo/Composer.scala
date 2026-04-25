@@ -12,6 +12,17 @@ import optics.Optic
   *   target carrier
   */
 trait Composer[F[_, _], G[_, _]]:
+  /** Bridge an `F`-carrier optic into a `G`-carrier optic.
+    *
+    * @tparam S
+    *   source type
+    * @tparam T
+    *   result type
+    * @tparam A
+    *   focus read
+    * @tparam B
+    *   focus written back
+    */
   def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, G]
 
 /** Typeclass instances for [[Composer]]. Additional composers live near the carrier they produce:

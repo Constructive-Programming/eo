@@ -11,6 +11,11 @@ package data
 trait Accessor[F[_, _]]:
   /** Extract the focus from the carrier, erasing the existential `X` (which the caller cannot
     * observe through `Accessor`).
+    *
+    * @tparam A
+    *   focus type
+    * @tparam X
+    *   existential leftover — polymorphic so the extraction is valid for any concrete instantiation
     */
   def get[A]: [X] => F[X, A] => A
 
@@ -33,6 +38,11 @@ object Accessor:
   */
 trait ReverseAccessor[F[_, _]]:
   /** Lift an `A` into the carrier, choosing the right branch by construction.
+    *
+    * @tparam A
+    *   focus being lifted
+    * @tparam X
+    *   existential — polymorphic so the lift is valid for any concrete instantiation
     */
   def reverseGet[A]: [X] => A => F[X, A]
 

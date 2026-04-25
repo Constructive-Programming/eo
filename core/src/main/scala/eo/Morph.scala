@@ -28,8 +28,13 @@ import data.Affine
   *   inner optic's carrier
   */
 trait Morph[F[_, _], G[_, _]]:
+  /** Common target carrier both `F` and `G` morph into. */
   type Out[_, _]
+
+  /** Lift the outer (`F`-carrier) optic into the shared [[Out]] carrier. */
   def morphSelf[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, Out]
+
+  /** Lift the inner (`G`-carrier) optic into the shared [[Out]] carrier. */
   def morphO[A, B, C, D](o: Optic[A, B, C, D, G]): Optic[A, B, C, D, Out]
 
 /** Low-priority `Morph` instances — consulted only when the higher-priority instances in [[Morph$]]
