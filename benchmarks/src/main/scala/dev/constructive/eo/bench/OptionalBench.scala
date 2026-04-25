@@ -30,8 +30,22 @@ class OptionalBench:
 
   // ---- Leaf optionals + per-level lenses (shared fixture) -----------
 
-  import NestedOptics.{eoFlag, mFlag, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, mN1, mN2, mN3, mN4, mN5,
-    mN6}
+  import NestedOptics.{
+    eoFlag,
+    eoN1,
+    eoN2,
+    eoN3,
+    eoN4,
+    eoN5,
+    eoN6,
+    mFlag,
+    mN1,
+    mN2,
+    mN3,
+    mN4,
+    mN5,
+    mN6,
+  }
 
   // ---- Composed optionals — Lens chain composed directly with the
   //      leaf Optional via cross-carrier `.andThen`, which summons a

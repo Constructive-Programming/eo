@@ -8,22 +8,22 @@ import dev.constructive.eo.optics.{Lens => EoLens, Optional => EoOptional}
 import monocle.{Lens => MLens, Optional => MOptional}
 
 /** Pre-built EO and Monocle lenses / optionals over the [[Nested]] case-class chain. The
-  * `OptionalBench`, `AffineFoldBench`, and any future bench that wants the same depth-0/3/6
-  * shape pulls these from here instead of redefining the same six EO + six Monocle lenses
-  * (and the leaf `Optional` over `Nested0.flag`) in the per-class scope.
+  * `OptionalBench`, `AffineFoldBench`, and any future bench that wants the same depth-0/3/6 shape
+  * pulls these from here instead of redefining the same six EO + six Monocle lenses (and the leaf
+  * `Optional` over `Nested0.flag`) in the per-class scope.
   *
   * Constants only. Each `@Benchmark` method still lives on its owning class — JMH requires
-  * per-class state — but the JMH state ''values'' it pulls in via `private val` aliases come
-  * from here. A bench class declares e.g. `private val eoFlag = NestedOptics.eoFlag`; the JIT
-  * sees the same constant (the object's static field) at every call site.
+  * per-class state — but the JMH state ''values'' it pulls in via `private val` aliases come from
+  * here. A bench class declares e.g. `private val eoFlag = NestedOptics.eoFlag`; the JIT sees the
+  * same constant (the object's static field) at every call site.
   */
 object NestedOptics:
 
   // ---- Leaf optionals on Nested0.flag ------------------------------
 
-  /** EO `Optional[Nested0, String]` over `flag: Option[String]`. Type is left to inference
-    * so the concrete `Optional` subclass surfaces (callers that need the fused-andThen path
-    * see the same shape they would have if they declared the val locally).
+  /** EO `Optional[Nested0, String]` over `flag: Option[String]`. Type is left to inference so the
+    * concrete `Optional` subclass surfaces (callers that need the fused-andThen path see the same
+    * shape they would have if they declared the val locally).
     */
   val eoFlag =
     EoOptional[Nested0, Nested0, String, String, Affine](
