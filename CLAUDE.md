@@ -6,6 +6,9 @@
 [cats](https://typelevel.org/cats/). Scala `3.8.3` via sbt `1.12.9`
 (`project/build.properties`), runs on JDK 17 or JDK 21.
 
+Human contributors: see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the
+day-one bootstrap. This file is the parallel guide for AI agents.
+
 Runtime dependency: `org.typelevel:cats-core_3:2.13.0`.
 Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 
