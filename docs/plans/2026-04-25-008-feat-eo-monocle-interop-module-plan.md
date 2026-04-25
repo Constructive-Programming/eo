@@ -133,6 +133,24 @@ optic in the chosen encoding.
   minor when an existing API breaks; eo-monocle can rev separately
   when Monocle ships a 4.0 with breaking changes.
 
+## Scope change — 2026-04-25
+
+User narrowed the 0.1.0 scope by dropping four requirements (R8, R10,
+R11, R13) and the units that depend on them (Units 7 and 8 entirely;
+Units 5 and 9 trimmed). Rationale: the dropped surface is either lossy
+(Review → Setter, eo-only families → Setter/Fold), out-of-aggregate
+asymmetric (cross-library laws glue), or reachable through other
+documented idioms (NamedTuple flattening). Stable Unit IDs are
+preserved — Units 7 and 8 remain in the document as `[Dropped]` stubs
+so cross-references in commit messages or external trackers still
+resolve.
+
+The reduced scope keeps the bidirectional core (Iso, Lens, Prism,
+Optional, AffineFold, Traversal, Setter, Getter, Fold), cross-library
+`.andThen`, round-trip property tests, the cookbook + migration page,
+and JMH benches. New effort estimate: ~12-20 days part-time,
+unchanged at the 2-4 week range.
+
 ## Requirements Trace
 
 - **R1. Bidirectional Iso conversion.** `eo.optics.BijectionIso[S, S,
@@ -168,37 +186,45 @@ optic in the chosen encoding.
   Fold: monocle.Fold is `[S, A]` (any source), eo Fold is
   `[F[A], Unit, A, A]` (source pinned to the container shape) — the
   conversion fixes `S = F[A]` and otherwise commutes.
-- **R8. Review conversion.** `eo.optics.Review[S, A]` ↔
-  `monocle.Iso[A, S].reverseGet` (Monocle has no first-class Review
-  type — the `A => S` direction lives on Iso / Prism). Document the
-  asymmetry; ship `Review.toMonocleIso` (when paired with a left
-  inverse) and `monocleIsoOrPrism.toEoReview`.
+- **R8. Review conversion.** **[DROPPED 2026-04-25]** Lossy mapping
+  (Review → Setter only on the Monocle side; reverse requires a
+  user-supplied left inverse). Out of 0.1.0 scope; users wanting
+  Review-shaped reverse builds keep eo's `Review` directly or write
+  the `A => S` function inline.
 - **R9. Cross-library `.andThen`.** `eoOptic.andThen(monocleOptic)`
   and `monocleOptic.andThen(eoOptic)` work without explicit
   conversion. D2 picks the resulting encoding (eo vs monocle); the
   other direction is reachable via an explicit `.toMonocle` /
   `.toEo` on the result.
 - **R10. One-way conversion of eo-only families to Monocle.**
-  `AlgLens[F]` → `monocle.Setter`, `Grate` → `monocle.Setter`,
-  `Kaleidoscope` → `monocle.Fold`, `JsonPrism` →
-  `monocle.Optional[Json, A]`, `JsonFieldsTraversal` →
-  `monocle.Traversal[Json, A]`. Inverse direction not offered.
-- **R11. Generic-derived interop.** `eo.generics.lens[S](_.field)`
-  (NamedTuple focus) interop with `monocle.Focus[S](_.field)` (plain
-  focus type) via a NamedTuple ↔ tuple flattening adapter that
-  unwraps a single-field NamedTuple to its field type.
+  **[DROPPED 2026-04-25]** Each conversion is lossy (AlgLens loses its
+  classifier, Kaleidoscope loses its shatter direction, Json* loses
+  the Ior failure surface) and adds breadth without compounding the
+  bidirectional core. Users who need a Monocle-shaped output from an
+  eo-only family invoke `.modify` / `.foldMap` directly inside a
+  `monocle.Setter.apply` / `monocle.Fold.apply` constructor at the
+  call site — a one-liner whose surface area doesn't justify a
+  module-level entry point.
+- **R11. Generic-derived interop.** **[DROPPED 2026-04-25]** Cross-
+  library use of `eo.generics.lens[S](_.field)` against
+  `monocle.Focus[S](_.field)` is reachable today by converting the
+  eo result via `.toMonocle` (R2) and wrapping in `monocle.Iso` for
+  the NamedTuple-to-plain-type flatten if needed. The dedicated
+  flattening adapter would only marginally improve ergonomics; defer
+  to 0.2.x once usage patterns are clearer.
 - **R12. Round-trip law tests.** For every bidirectional conversion,
   a property test asserts `optic.toMonocle.toEo ≡ optic` and
   `monocleOptic.toEo.toMonocle ≡ monocleOptic`. Behaviour equality
   is observable through `get` / `modify` / `replace` / `getOption`
   on a sufficient fixture set (cats-eo's existing `Person` /
   `Address` / `Shape` test ADTs).
-- **R13. Discipline glue: run Monocle's laws on eo optics.** The
-  module re-exports `monocle.law.LensLaws.{getReplace, replaceGet,
-  replaceReplace}` etc. instantiated on eo-derived optics-after-
-  `.toMonocle`, so the user can confirm Monocle's law canon holds on
-  eo's encoding. Also the inverse: `eo.laws.discipline.LensTests`
-  on Monocle optics-after-`.toEo`. (Decision deferred to OQ-conv-5.)
+- **R13. Discipline glue: run Monocle's laws on eo optics.**
+  **[DROPPED 2026-04-25]** Both libraries already have their own
+  law canons (eo's discipline RuleSets, Monocle's `monocle.law.*`
+  ScalaCheck props), and the round-trip property tests in R12
+  observably check the conversion preserves behaviour — the
+  cross-library law glue would have been belt-and-suspenders. Out
+  of 0.1.0 scope.
 - **R14. JMH benchmark harness.** A new `MonocleInteropBench` in the
   `benchmarks/` sub-project measures `.toMonocle.get` /
   `.toMonocle.modify` and the inverse direction against the
@@ -239,8 +265,10 @@ optic in the chosen encoding.
 - **No Monocle `Focus`-macro re-implementation.** Users who want
   derived optics in eo write `eo.generics.lens[S](_.field)`; users
   who want Monocle-derived write `monocle.Focus[S](_.field)`. The
-  interop adapter (R11) lets either output cross-compose, but we do
-  not re-implement Monocle's macro to emit eo-shaped optics.
+  cross-compose path is `eoGenericLens.toMonocle` (via R2) followed
+  by Monocle's own composition; the dedicated NamedTuple-flattening
+  adapter (originally R11) is dropped from 0.1.0 scope and deferred
+  to 0.2.x.
 - **No conversion for `monocle.std.*` accessors** (`monocle.std.list`,
   `monocle.std.map`, etc.). These are pre-built Monocle optics that
   already work via the standard `.toEo` extension. Users
@@ -306,13 +334,16 @@ optic in the chosen encoding.
 - `monocle.Focus[S](_.field)` is the macro counterpart to
   `eo.generics.lens[S](_.field)`. Monocle returns a plain
   `Lens[S, FieldType]`; eo returns a `SimpleLens[S, FieldType,
-  NamedTuple[…]]` whose complement is a NamedTuple. R11's adapter
-  flattens a one-field NamedTuple to its field type and unflattens
-  in the reverse direction.
+  NamedTuple[…]]` whose complement is a NamedTuple. The dedicated
+  flattening adapter (R11) was dropped from 0.1.0 scope; cross-
+  library users go through the standard `.toMonocle` (R2) and add a
+  Monocle Iso for the NamedTuple flattening at the call site if
+  needed.
 - `monocle.law.{LensLaws, PrismLaws, IsoLaws, OptionalLaws,
   TraversalLaws, SetterLaws}` — Monocle's law canon, expressed as
-  Scalacheck properties. R13's discipline glue exposes these
-  through cats-eo's `discipline-specs2`-bound test infrastructure.
+  Scalacheck properties. The cross-library laws-glue (R13) was
+  dropped from 0.1.0 scope; round-trip property tests (R12) cover
+  the conversion-soundness signal observably.
 - Profunctor encoding: `monocle.PLens.modifyF` requires `Functor[F]`,
   `modifyA` requires `Applicative[F]`, `parModifyF` requires
   `Parallel[F]`. Internally Monocle 3 is no longer a polymorphic
@@ -402,19 +433,18 @@ None yet specific to interop; any Monocle-version-skew gotchas (e.g.
   is not part of Monocle's binary-stability story). The
   public-API route is slow but *right* — and the JMH bench in R14
   quantifies the overhead so users can decide. (Answers OQ-conv-3.)
-- **D7. Discipline glue — run Monocle's laws on our optics.** R13
-  resolved as **yes** — the eo-monocle module re-exports Monocle's
-  law fixtures bound to `discipline-specs2`, so users can verify
-  cats-eo optics obey Monocle's law canon. Rationale: this is
-  cheap (one `extends` per fixture), it's an integration soundness
-  check we want anyway, and it's the primary "trust us, the
-  encodings agree" evidence in the migration guide. (Answers
-  OQ-conv-5.)
-- **D8. Generic-derived adapter lives in `eo-monocle`, not in
-  `eo-generics`.** The NamedTuple ↔ tuple flattening that R11 needs
-  is interop-specific; putting it in `generics/` would force every
-  generics user to take a Monocle dep. Pay the cost in the interop
-  module where the dep is already justified. (Answers OQ-conv-7.)
+- **D7. Discipline glue — superseded.** Originally resolved as "yes,
+  re-export Monocle's law fixtures into discipline-specs2". The
+  2026-04-25 scope change dropped R13; round-trip property tests
+  (R12) now carry the conversion-soundness signal alone. Both
+  libraries enforce their own law canons internally; the cross-
+  library re-run was belt-and-suspenders.
+- **D8. Generic-derived adapter — superseded.** Originally resolved
+  as "lives in `eo-monocle`, not `eo-generics`". The 2026-04-25
+  scope change dropped R11 entirely; users cross-compose generic-
+  derived optics by going through the standard `.toMonocle` (R2)
+  and wrapping the NamedTuple flattening in an inline Monocle Iso
+  at the call site if needed.
 - **D9. Versioning — eo-monocle 0.1.0 ships with cats-eo 0.1.0.**
   Both artefacts cut at the same git tag. Subsequent eo-monocle
   releases stay binary-compat with cats-eo's matching `0.1.x` line
@@ -444,14 +474,13 @@ meaningful target (we don't ship that conversion).
 | `Setter` (`SetterF`) | `Setter[S, A]` / `PSetter[S, T, A, B]` | yes | yes | yes | Direct shape match. |
 | `Getter` (`Forgetful`, `T=Unit`) | `Getter[S, A]` | yes | yes | n/a | `Forgetful` carrier's `get` is identity, lines up with Monocle's `Getter.get`. |
 | `Fold` (`Forget[F]`, `T=Unit`) | `Fold[S, A]` | yes (with `S = F[A]`) | partial | n/a | ← M only when the user supplies the container shape `F[_]`; otherwise Monocle's plain Fold has no eo target. |
-| `Review` (standalone) | `Iso[A, S].reverseGet` / `Prism[S, A].reverseGet` | yes (lossy — Iso requires left inverse) | yes (extracts the build direction) | n/a | Monocle has no Review type; the conversion uses Monocle's Iso / Prism `reverseGet`. |
-| `AlgLens[F]` (`AlgLens[F]`) | `Setter[S, A]` (degraded) | yes | — | n/a | eo-only family. Monocle has no algebraic-classifier optic. |
-| `Grate` (`Grate`) | `Setter[S, A]` (degraded) | yes | — | n/a | eo-only family. |
-| `Kaleidoscope` (`Kaleidoscope`) | `Fold[S, A]` (degraded) | yes | — | n/a | eo-only family. The "shatter" direction has no Monocle counterpart. |
-| `JsonPrism` (`Either`, on Json) | `Optional[Json, A]` | yes | — | n/a | eo-only family. ← direction would require Monocle-circe, deferred. |
-| `JsonFieldsPrism` (`Either`, on Json) | `Optional[Json, NamedTuple]` | yes | — | n/a | Same as JsonPrism. |
-| `JsonTraversal` (standalone) | `Traversal[Json, A]` | yes | — | n/a | One-way; the standalone shape can't host a Monocle Traversal as input. |
-| `JsonFieldsTraversal` (standalone) | `Traversal[Json, NamedTuple]` | yes | — | n/a | Same as JsonTraversal. |
+
+Out of 0.1.0 scope (per the 2026-04-25 scope change): Review (R8 dropped),
+AlgLens / Grate / Kaleidoscope / JsonPrism / JsonFieldsPrism /
+JsonTraversal / JsonFieldsTraversal (all R10 dropped). Users wanting
+those interop shapes today reach for `.modify` / `.foldMap` directly
+inside a Monocle constructor at the call site — see the migration
+page for the exact one-liner per family.
 
 The table is the single source of truth for what conversions ship in
 each Implementation Unit; cross-reference by row when the unit's
@@ -626,11 +655,11 @@ pure plumbing.
 **Verification:**
 - `sbt monocle/test` green.
 
-### Unit 5: Setter / Getter / Fold / Review conversions
+### Unit 5: Setter / Getter / Fold conversions
 
-**Goal:** Ship the remaining six conversions (R6, R7, R8). Setter is bidirectional poly; Getter is bidirectional mono; Fold is bidirectional with a fixed-`F` constraint on `← M`; Review is partial both directions because Monocle has no Review type.
+**Goal:** Ship the remaining bidirectional conversions for the read-only / write-only optics. Setter is bidirectional poly; Getter is bidirectional mono; Fold is bidirectional with a fixed-`F` constraint on `← M`. (Review interop dropped — see R8.)
 
-**Requirements:** R6, R7, R8.
+**Requirements:** R6, R7.
 
 **Dependencies:** Unit 1.
 
@@ -638,10 +667,9 @@ pure plumbing.
 - Create: `monocle/src/main/scala/eo/monocle/SetterConverters.scala`.
 - Create: `monocle/src/main/scala/eo/monocle/GetterConverters.scala`.
 - Create: `monocle/src/main/scala/eo/monocle/FoldConverters.scala`.
-- Create: `monocle/src/main/scala/eo/monocle/ReviewConverters.scala`.
-- Create: matching four spec files in `monocle/src/test/`.
+- Create: matching three spec files in `monocle/src/test/`.
 
-**Approach.** Setter: directly bridge `modify` ↔ `modify`. Getter: directly bridge `get` ↔ `get`. Fold: bridge `foldMap` ↔ `foldMap`; for `← M` the user supplies the container `F[_]`. Review: `eoReview.toMonocleIso(left: A => Either[…])` requires the user to supply a left inverse to construct an Iso — without one, we ship `eoReview.toMonocleSetter` instead (Setter has only the `replace` direction, lines up with Review's `reverseGet`). `monocle.{Iso, Prism}.toEoReview` extracts the natural build direction.
+**Approach.** Setter: directly bridge `modify` ↔ `modify`. Getter: directly bridge `get` ↔ `get`. Fold: bridge `foldMap` ↔ `foldMap`; for `← M` the user supplies the container `F[_]`.
 
 **Effort:** M.
 
@@ -653,7 +681,6 @@ pure plumbing.
 - Setter round-trip on `Person.name`, `Map[K, V].at(k)`.
 - Getter round-trip on `Person.age`.
 - Fold round-trip: `Fold[List, Int].toMonocle.toEo[List]` ≡ original; `← M` direction with `F = List`, `F = Vector`, `F = NonEmptyList`.
-- Review: `Review.fromIso(i).toMonocleIso(left)` with explicit left inverse round-trips through the build direction.
 - Edge case: Setter that's a constant overwrite (`replace` only, no `modify` consumer of the input).
 - Edge case: empty Fold (no foci).
 
@@ -695,90 +722,35 @@ pure plumbing.
 
 ### Unit 7: Eo-only family one-way conversions — AlgLens / Grate / Kaleidoscope / Json*
 
-**Goal:** Ship the eo→Monocle direction for the five eo-only families. Each degrades to the strongest Monocle counterpart available (Setter or Fold).
-
-**Requirements:** R10.
-
-**Dependencies:** Unit 1, Unit 5 (Setter/Fold conversions are reused).
-
-**Files:**
-- Create: `monocle/src/main/scala/eo/monocle/AlgLensConverters.scala` — `AlgLens[F].toMonocleSetter`.
-- Create: `monocle/src/main/scala/eo/monocle/GrateConverters.scala` — `Grate.toMonocleSetter`.
-- Create: `monocle/src/main/scala/eo/monocle/KaleidoscopeConverters.scala` — `Kaleidoscope.toMonocleFold` (gated on Kaleidoscope landing per plan 006 Units 5–7; otherwise placeholder).
-- Create: `monocle/src/main/scala/eo/monocle/JsonOpticConverters.scala` — `JsonPrism.toMonocleOptional`, `JsonFieldsPrism.toMonocleOptional`, `JsonTraversal.toMonocleTraversal`, `JsonFieldsTraversal.toMonocleTraversal`.
-- Create: matching four spec files.
-
-**Approach.** Each conversion goes through the public-API `modify` / `foldMap` of the eo side and uses Monocle's setter / fold factory. AlgLens loses its classifier semantics in the conversion (Monocle Setter has no concept of "aggregate per key"); document this prominently in the Scaladoc.
-
-**Effort:** M.
-
-**Execution note.** Kaleidoscope is in-flight per plan 006 Units 5–7. If those land before this unit starts, ship the conversion. If not, the file is empty / contains a single TODO comment and the unit is partially deferred to a follow-up.
-
-**Patterns to follow:** Unit 5's Setter and Fold builder shapes.
-
-**Test scenarios:**
-- AlgLens: a `Set`-classifier AlgLens degrades to a Monocle Setter that preserves `replace` semantics on a fixture; `modify` semantics survive too, but the fold-direction from AlgLens is not visible in Setter (document).
-- Grate: distributive carrier degrades to Setter, `replace` survives.
-- Kaleidoscope: shatter direction visible only as a Monocle Fold (read-only).
-- JsonPrism: round-trip through Monocle Optional preserves `getOption` and `modify`.
-
-**Verification:**
-- `sbt monocle/test` green.
+**[Dropped 2026-04-25]** R10 dropped from 0.1.0 scope — each conversion was lossy and added breadth without compounding the bidirectional core. Users needing a Monocle-shaped output from an eo-only family invoke `.modify` / `.foldMap` inside a `monocle.Setter.apply` / `monocle.Fold.apply` constructor at the call site (one-liner per family). The migration page (Unit 10) documents the idiom for AlgLens, Grate, Kaleidoscope, and the four Json* families.
 
 ### Unit 8: Generic-derived optics interop — NamedTuple ↔ tuple flattening
 
-**Goal:** Ship the adapter that lets `eo.generics.lens[S](_.field)` (NamedTuple focus) cross-compose with `monocle.Focus[S](_.field)` (plain focus). Single-field NamedTuple unwraps to its underlying type; the reverse direction wraps a plain type into a one-field NamedTuple.
+**[Dropped 2026-04-25]** R11 dropped from 0.1.0 scope — the dedicated NamedTuple flattening adapter only marginally improves over `eoGenericLens.toMonocle` followed by an inline `monocle.Iso` if the user wants the plain-type focus. Defer to 0.2.x once cross-library generic-derived usage patterns are clearer.
 
-**Requirements:** R11.
+### Unit 9: Round-trip property tests
 
-**Dependencies:** Unit 2 (Lens conversion).
+**Goal:** Property-test that `optic.toMonocle.toEo ≡ optic` and `monocleOptic.toEo.toMonocle ≡ monocleOptic` for every conversion shipped in Units 2-5. Behaviour equality is observed through `get` / `modify` / `replace` / `getOption` against a sufficient fixture set.
+
+**Requirements:** R12.
+
+**Dependencies:** Units 2-6 (all bidirectional conversions and the cross-library compose syntax must exist).
 
 **Files:**
-- Create: `monocle/src/main/scala/eo/monocle/GenericsAdapter.scala` — the NamedTuple flattening / unflattening utilities, plus the convenience extension `eoGenericLens.toMonocleFlat: monocle.Lens[S, A]`.
-- Create: `monocle/src/test/scala/eo/monocle/GenericsAdapterSpec.scala`.
+- Create: `monocle/src/test/scala/eo/monocle/laws/ConversionRoundTripSpec.scala` — round-trip property tests for every bidirectional conversion (Iso, Lens, Prism, Optional, AffineFold, Traversal, Setter, Getter, Fold).
 
-**Approach.** Use Scala 3's NamedTuple machinery. For a single-field NamedTuple `NamedTuple[(name,), (A,)]` → `A`. Multi-field NamedTuples don't have a plain-type counterpart; document that interop with `monocle.Focus(_.fieldA, _.fieldB)`-style multi-field focuses requires the user to construct the Monocle equivalent by hand (Monocle's Focus has its own multi-field shape).
+**Approach.** ScalaCheck `Prop` per conversion direction, observed through a battery of operations: for a Lens, run `get` on the original and on `lens.toMonocle.toEo`, assert equal; same for `modify`, `replace` with random inputs from the existing eo fixtures (`Person`, `Address`, `Shape`, `Map[K, V]`, `Either[A, B]`).
 
 **Effort:** S.
 
-**Execution note.** Scala 3 NamedTuple introspection is via `NamedTuple.From[T]` and friends; confirm via cellar against Scala 3.8.3.
+**Execution note.** No cross-library law glue needed (R13 dropped). Both libraries already enforce their own law canons internally; the round-trip property test catches any encoding-translation bug observably without re-running the Monocle / eo law fixtures on translated optics.
 
-**Patterns to follow:** Unit 2's Lens conversion.
-
-**Test scenarios:**
-- Single-field `case class Wrapper(value: Int)`: `lens[Wrapper](_.value).toMonocleFlat` is observably equivalent to `monocle.Focus[Wrapper](_.value)`.
-- Multi-field varargs `lens[OrderItem](_.quantity, _.price)`: explicit "no flat conversion" — user gets a clear compile error pointing at the migration page.
-- Round-trip: `monocle.Focus[Wrapper](_.value).toEoLens` then `.toMonocleFlat` ≡ original.
-- Edge case: 1-field case class via `eo.generics.lens` returns a `BijectionIso` (per CLAUDE.md), not a `SimpleLens` — so the conversion entry point lives on `BijectionIso`, not `SimpleLens`. Verify.
-
-**Verification:**
-- `sbt monocle/test` green.
-
-### Unit 9: Round-trip property tests + Monocle law glue
-
-**Goal:** Wire eo-derived optics (post-`.toMonocle`) through Monocle's own `monocle.law.LensLaws` etc. Wire Monocle-derived optics (post-`.toEo`) through `eo.laws.discipline.LensTests` etc. This is the integration-grade soundness check.
-
-**Requirements:** R12, R13.
-
-**Dependencies:** Units 2–7 (all conversions must exist).
-
-**Files:**
-- Create: `monocle/src/test/scala/eo/monocle/laws/EoToMonocleLawsSpec.scala` — runs Monocle's law fixtures on eo-derived `.toMonocle` optics for Iso / Lens / Prism / Optional / Traversal / Setter.
-- Create: `monocle/src/test/scala/eo/monocle/laws/MonocleToEoLawsSpec.scala` — runs eo's discipline RuleSets on Monocle-derived `.toEo` optics.
-- Create: `monocle/src/test/scala/eo/monocle/laws/ConversionRoundTripSpec.scala` — explicit round-trip property tests as a parallel quality signal.
-
-**Approach.** Each fixture pairs a cats-eo optic with the matching Monocle law class (`monocle.law.LensLaws[S, A]` takes a `monocle.Lens[S, A]`); we hand `eoLens.toMonocle` in and assert all three Monocle laws hold. Inverse direction: hand `monocleLens.toEo` to `eo.laws.discipline.LensTests` and assert all eo laws hold.
-
-**Effort:** M.
-
-**Execution note.** Monocle's law classes use ScalaCheck `Prop` directly, not discipline RuleSets. Glue: wrap each `Prop` in a discipline `SimpleRuleSet` if we want unified output, or run ScalaCheck props directly via the test harness (specs2 supports both). Pick one and document.
-
-**Patterns to follow:** existing law spec wiring at `tests/src/test/scala/eo/OpticsLawsSpec.scala` for the discipline side.
+**Patterns to follow:** existing law spec wiring at `tests/src/test/scala/eo/OpticsLawsSpec.scala` for the ScalaCheck-meets-specs2 idiom.
 
 **Test scenarios:**
-- Every law class for every optic family runs in both directions, all pass.
-- Edge fixtures: `Map[K, V].at(k)` Optional, `Either[A, B]` Prism, `(Int, String)` Iso.
-- Negative test: a deliberately-broken hand-rolled Lens (violates `getReplace`) flagged by both Monocle's laws and eo's laws — confirms the laws are actually enforcing.
+- Every conversion in the family-by-family table (R12 universe) round-trips for `get` / `modify` / `replace`.
+- Edge fixtures: `Map[K, V].at(k)` Optional, `Either[A, B]` Prism, `(Int, String)` Iso, empty list traversal.
+- Negative test: a deliberately-broken hand-rolled `.toMonocle` (e.g. always returns the same constant) flunks the round-trip — confirms the property is actually enforcing.
 
 **Verification:**
 - `sbt monocle/test` green.
@@ -793,7 +765,7 @@ mdoc-verified runnable examples throughout.
 
 **Requirements:** R15.
 
-**Dependencies:** Units 2–8 (all conversion entry points must compile so mdoc snippets work).
+**Dependencies:** Units 2-6 (all bidirectional conversion entry points and the cross-library compose syntax must compile so mdoc snippets work).
 
 **Files:**
 - Modify: `site/docs/cookbook.md` — add the new recipe in the migration section.
@@ -801,11 +773,11 @@ mdoc-verified runnable examples throughout.
 - Modify: `site/docs/directory.conf` — add the new page to the Laika nav.
 - Modify: `site/build.sbt` (or root `build.sbt`'s docs project) — add `LocalProject("monocle")` to `dependsOn` so mdoc compiles snippets against the interop module.
 
-**Approach.** Three worked scenarios as numbered sections in the migration page; each ends with a "what to keep, what to migrate" paragraph. The cookbook recipe is the condensed version (~250 LoC). Both pages cite Penner's *Optics By Example* chapters where applicable (per the cookbook + diagrams research review).
+**Approach.** Three worked scenarios as numbered sections in the migration page; each ends with a "what to keep, what to migrate" paragraph. The cookbook recipe is the condensed version (~250 LoC). Both pages cite Penner's *Optics By Example* chapters where applicable (per the cookbook + diagrams research review). Migration page also documents the eo-only-family idiom (post-R10-drop): "to feed an `AlgLens` / `Grate` / `Kaleidoscope` / `JsonPrism` into a Monocle pipeline, wrap `.modify` or `.foldMap` inside `monocle.Setter.apply` / `monocle.Fold.apply` at the call site."
 
 **Effort:** M.
 
-**Execution note.** mdoc compiles every code fence; if Unit 10 lands before Unit 7 (the eo-only family conversions), any snippet using `AlgLens`/`Grate`/`Kaleidoscope` interop must be marked `mdoc:nest` or moved to a later commit. Sequence Unit 10 after Unit 7 to avoid this.
+**Execution note.** With Units 7 and 8 dropped, this unit's dependency surface is just Units 2-6 — strictly bidirectional conversions plus the compose syntax. No `mdoc:nest` workarounds needed; every fence compiles directly.
 
 **Patterns to follow:** existing migration content in `site/docs/` (per the production-readiness plan Unit 11).
 
@@ -851,7 +823,7 @@ mdoc-verified runnable examples throughout.
 
 **Requirements:** R16.
 
-**Dependencies:** Units 1–11 (artifact must compile + tests pass).
+**Dependencies:** Units 1-6, 9-11 (artifact must compile + tests pass; Units 7 and 8 dropped per scope change).
 
 **Files:**
 - Modify: `build.sbt` — confirm `monocle` sub-project is included in the publish-set (i.e. `publish / skip := false`, no `publish / skip := true` shadow).
@@ -884,16 +856,16 @@ mdoc-verified runnable examples throughout.
 | 2 | Iso + Lens conversions (mono + poly) | M |
 | 3 | Prism + Optional + AffineFold conversions | M |
 | 4 | Traversal conversions — `each` + `forEach` branching | L |
-| 5 | Setter / Getter / Fold / Review conversions | M |
+| 5 | Setter / Getter / Fold conversions | M |
 | 6 | Cross-library composition syntax | L |
-| 7 | Eo-only family one-way conversions | M |
-| 8 | Generic-derived optics interop | S |
-| 9 | Round-trip property tests + Monocle law glue | M |
+| 7 | Eo-only family one-way conversions | **dropped** |
+| 8 | Generic-derived optics interop | **dropped** |
+| 9 | Round-trip property tests | S |
 | 10 | Cookbook recipe + migration page | M |
 | 11 | JMH benchmarks — conversion overhead | S |
 | 12 | Release coordination | S |
 
-Tier conversion: S = ½ day, M = 1–2 days, L = 3–5 days. Total: ~3 S + 5 M + 2 L = 1.5 + (5–10) + (6–10) = **12.5–21.5 days** of part-time work. Realistically **2–4 weeks** for a single contributor working part-time. This sits in the same effort band as the production-readiness plan (which is ~6 weeks for a richer scope).
+Tier conversion: S = ½ day, M = 1-2 days, L = 3-5 days. Total: 4 S + 4 M + 2 L = 2 + (4-8) + (6-10) = **12-20 days** of part-time work. Realistically **2-4 weeks** for a single contributor working part-time. The 2026-04-25 scope change removed ~½-2 days of dropped work plus ~1 day of trimming in Units 5 and 9; the headline range shifts from 12.5-21.5 to 12-20 days.
 
 ## Dependency graph
 
@@ -902,21 +874,17 @@ flowchart TB
   U1[U1 Module scaffold] --> U2[U2 Iso + Lens]
   U1 --> U3[U3 Prism + Optional + AffineFold]
   U1 --> U4[U4 Traversal each / forEach]
-  U1 --> U5[U5 Setter / Getter / Fold / Review]
+  U1 --> U5[U5 Setter / Getter / Fold]
   U2 --> U6[U6 Cross-library .andThen]
   U3 --> U6
   U4 --> U6
   U5 --> U6
-  U1 --> U7[U7 Eo-only one-way]
-  U5 --> U7
-  U2 --> U8[U8 Generics adapter]
-  U2 --> U9[U9 Laws + round-trip]
+  U2 --> U9[U9 Round-trip property tests]
   U3 --> U9
   U4 --> U9
   U5 --> U9
   U6 --> U9
-  U7 --> U10[U10 Cookbook + migration page]
-  U8 --> U10
+  U6 --> U10[U10 Cookbook + migration page]
   U2 --> U11[U11 JMH benches]
   U3 --> U11
   U4 --> U11
@@ -926,9 +894,9 @@ flowchart TB
 ```
 
 Critical path: U1 → U2 → U6 → U9 → U10 → U12 (six units, includes the
-heaviest ones). Parallel opportunities: U3 / U4 / U5 / U7 / U8 can all
-run in parallel after U1, gated by Unit 6's "all conversions must
-exist" constraint.
+heaviest ones). Parallel opportunities: U3 / U4 / U5 can run in
+parallel after U1, gated by Unit 6's "all conversions must exist"
+constraint. Units 7 and 8 dropped per the 2026-04-25 scope change.
 
 ## Cats-eo-side gaps uncovered while researching
 
@@ -959,13 +927,15 @@ the latest before the unit that depends on them.
   more general `Fold` shape in cats-eo that doesn't pin `S`; this is
   a much bigger change and out of scope here. Defer to a 0.2.x
   decision.
-- **Gap-3. `Composer[Affine, AlgLens[F]]` and `Composer[PowerSeries,
-  AlgLens[F]]` are unresolved (`?` cells in the gap analysis §2.2).**
-  Cross-library `Optional + Monocle Traversal + AlgLens` chains
-  cannot land if these Composers are missing. **Disposition:**
-  resolve as part of the 0.1.0 plan's OQ-R1 (the 12 `?` cells unit);
-  this is already on the 0.1.0 track and lands before eo-monocle
-  Unit 6.
+- **Gap-3. `Composer[PowerSeries, AlgLens[F]]` is U-by-design.**
+  Cross-library `Traversal + Monocle Lens + AlgLens` chains cannot
+  reach the AlgLens leaf as inner via Unit 6's compose syntax.
+  `Composer[Affine, AlgLens[F]]` (`affine2alg`) shipped in cats-eo
+  Unit 21 (commit `08c26a1`), so Optional + AlgLens chains are
+  fine; only the PowerSeries side stands as `U` per the composition-
+  gap §3.3.4 resolution. **Disposition:** document in the migration
+  page; users who want a Traversal-of-AlgLens push the AlgLens under
+  the traversal via `traversal.modify(a => algLens.replace(...)(a))`.
 - **Gap-4. Carriers without `Composer` outbound — `AlgLens`, `Grate`,
   `Forget[F]` (cross-`F`).** These are sink families on the eo side
   (composition-gap §0.3). Cross-library composition `eo AlgLens
@@ -980,21 +950,20 @@ the latest before the unit that depends on them.
   observably equivalent for the `Tuple2` carrier, but the conversion
   must thread the right typeclass at the right call site. **Disposition:**
   no cats-eo change needed; just careful conversion code.
-- **Gap-6. eo's `Review` is structural-only (no `Optic` extension).**
-  Monocle's Iso / Prism `reverseGet` is reachable through the optic
-  trait; eo's `Review` is a free-standing case class. The conversion
-  to a Monocle counterpart loses the ability to convert *back* into
-  an Iso / Prism unless the user supplies the missing direction.
-  **Disposition:** document this; ship `Review.toMonocleSetter` as
-  the lossy conversion (Setter has the `replace` direction we want).
-  No cats-eo change needed.
+- **Gap-6. eo's `Review` is structural-only.** Monocle's Iso / Prism
+  `reverseGet` is reachable through the optic trait; eo's `Review`
+  is a free-standing case class. **Disposition:** moot for 0.1.0
+  — R8 (Review interop) was dropped; users keep eo's `Review` for
+  reverse-build use cases or write the `A => S` function inline.
 
-If Gaps 1 and 3 land before eo-monocle starts, the interop design is
-clean. If they don't, Units 6 and 7 ship more "no composition
-supported" branches and the migration page grows a "things you can't
-do" section. Recommended path: close Gaps 1 + 3 as part of cats-eo
-0.1.0 (they're already on that plan's track per OQ-R1) and let
-eo-monocle inherit the cleaned-up surface.
+If Gap 1 lands before eo-monocle starts, the interop design is
+clean. If it doesn't, Unit 6 ships more "no composition supported"
+branches (eo Prism / Optional / Traversal × monocle Setter) and the
+migration page grows a "things you can't do" section. Recommended
+path: close Gap 1 as part of cats-eo 0.1.0 and let eo-monocle
+inherit the cleaned-up surface. (Gap 3's PowerSeries × AlgLens leg
+is U-by-design and stays documented; Gap 4 — sink-family outbound —
+is also U-by-design.)
 
 ## Open questions
 
@@ -1016,26 +985,24 @@ eo-monocle inherit the cleaned-up surface.
   typeclass?** → Extension method (D5). `eoLens.toMonocle` is the
   most discoverable Scala 3 idiom.
 - **OQ-conv-5. Run Monocle's laws on eo optics via discipline glue?**
-  → Yes (D7). Cheap, integration soundness check, primary "trust
-  us" evidence in the migration guide. Also do the inverse (run eo's
-  laws on Monocle optics) for symmetry.
+  → **Obsoleted 2026-04-25** when R13 was dropped. Round-trip
+  property tests (R12) cover the soundness signal observably; both
+  libraries already enforce their own law canons internally, so the
+  cross-library re-run is belt-and-suspenders.
 - **OQ-conv-7. Where does the NamedTuple ↔ tuple flattening live?**
-  → In `eo-monocle`, not `eo-generics` (D8). Generic-derived users
-  who don't take Monocle shouldn't pay the dep.
+  → **Obsoleted 2026-04-25** when R11 was dropped. The dedicated
+  flattening adapter is deferred to 0.2.x.
 
 ### Deferred — need user input before Unit 1
 
 These are the questions where the user's call genuinely changes the
 plan. Listed in the order they affect work.
 
-- **OQ-conv-6. Json-optic interop scope.** Do we provide
-  `JsonPrism.toMonocleOptional` (one-way, eo→Monocle, currently
-  in Unit 7), or do we *also* provide `monocle-circe`'s `JsonPath`
-  → eo's `JsonPrism` direction? The latter requires taking
-  `dev.optics:monocle-circe` as a transitive dep on the eo-monocle
-  module, which doubles the dep footprint. Recommendation: ship
-  one-way only at 0.1.0; offer a follow-up `eo-monocle-circe` if
-  there's demand.
+- **OQ-conv-6. Json-optic interop scope.** **Resolved 2026-04-25**
+  by the R10 drop — Json* conversions are out of 0.1.0 scope.
+  Users wanting JsonPrism in a Monocle pipeline wrap
+  `jsonPrism.modifyImpl` inside `monocle.Optional.apply` at the call
+  site (the migration page documents this idiom).
 - **OQ-conv-8. Cross-library `.andThen` — explicit-import or
   auto-`given`?** Unit 6 today requires `import eo.monocle.syntax.*`
   to enable the cross-library extensions. Alternative: provide a
@@ -1073,12 +1040,10 @@ plan. Listed in the order they affect work.
   overloading — but Scala 3's overload resolution can pick weirdly
   for type-changing optics; verify in Unit 2.
 - **OQ-conv-12. Run Monocle's `monocle.law` against eo optics in CI,
-  or only in local dev?** Unit 9 ships the law glue. Sub-question:
-  add it to the GitHub Actions matrix? Concern: another sub-project's
-  test suite doubles CI time; benefit: catches Monocle-version
-  upgrade regressions instantly. Recommendation: in CI, but as a
-  separate job that doesn't block PR merge — surfaces regressions
-  without slowing the dev loop.
+  or only in local dev?** **Resolved 2026-04-25** by the R13 drop —
+  no cross-library laws glue ships, so the CI question is moot.
+  Round-trip property tests run in the same `monocle/test` step as
+  the rest of the module's tests, no separate CI job needed.
 
 ### Stretch / future
 
