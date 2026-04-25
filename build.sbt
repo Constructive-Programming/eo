@@ -117,6 +117,28 @@ ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
   }
 }
 
+// -------------------------------------------------------------------
+// Drop the legacy `SONATYPE_CREDENTIAL_HOST` env var that
+// sbt-typelevel-sonatype-ci-release 0.8.5 still emits on the
+// `Publish` step (see TypelevelSonatypeCiReleasePlugin.scala:66).
+// The host is no longer parameterised: TypelevelSonatypePlugin pins
+// `publishTo` to https://central.sonatype.com/... unconditionally.
+// Carrying the env var means we'd also need a matching repo secret
+// for it, which is a constant masquerading as a secret. Remove this
+// override when sbt-typelevel ships a release that drops the env var
+// upstream.
+// -------------------------------------------------------------------
+ThisBuild / githubWorkflowPublish := Seq(
+  WorkflowStep.Sbt(
+    List("tlCiRelease"),
+    name = Some("Publish"),
+    env = Map(
+      "SONATYPE_USERNAME" -> "${{ secrets.SONATYPE_USERNAME }}",
+      "SONATYPE_PASSWORD" -> "${{ secrets.SONATYPE_PASSWORD }}",
+    ),
+  )
+)
+
 val Typelevel = "org.typelevel"
 val ScalaCheckOrg = "org.scalacheck"
 val Optics = "dev.optics"
