@@ -86,7 +86,10 @@ Two extension methods exist on `Optic` (see
 | `Forgetful → Either` | `Composer.scala:54` |
 | `Tuple2 → Affine` | `Affine.scala:237` |
 | `Either → Affine` | `Affine.scala:257` |
-| `Tuple2 → SetterF` | `SetterF.scala:52` |
+| `Tuple2 → SetterF` | `SetterF.scala:57` |
+| `Either → SetterF` | `SetterF.scala:81` (shipped 2026-04-25 to close eo-monocle Gap-1) |
+| `Affine → SetterF` | `SetterF.scala:103` (shipped 2026-04-25 to close eo-monocle Gap-1) |
+| `PowerSeries → SetterF` | `SetterF.scala:129` (shipped 2026-04-25 to close eo-monocle Gap-1) |
 | `Tuple2 → PowerSeries` | `PowerSeries.scala:307` |
 | `Either → PowerSeries` | `PowerSeries.scala:362` |
 | `Affine → PowerSeries` | `PowerSeries.scala:407` |
@@ -135,12 +138,19 @@ Two extension methods exist on `Optic` (see
 The full 14×14 same-family-ish matrix (`Optic`-extending families 1-14;
 standalone JsonTraversal + Review are handled separately in §4):
 
-| Category | Count (initial) | After Unit 21 | % of 196 (post) |
-|---|---|---|---|
-| **N** (native `.andThen`) | 94 | 96 | 49% |
-| **M** (manual idiom) | 56 | 60 | 31% |
-| **U** (unsupported) | 34 | 40 | 20% |
-| **?** (unexplored) | 12 | 0 | 0% |
+| Category | Count (initial) | After Unit 21 | After 2026-04-25 SetterF | % of 196 (post) |
+|---|---|---|---|---|
+| **N** (native `.andThen`) | 94 | 96 | 99 | 51% |
+| **M** (manual idiom) | 56 | 60 | 59 | 30% |
+| **U** (unsupported) | 34 | 40 | 40 | 20% |
+| **?** (unexplored) | 12 | 0 | 0 | 0% |
+
+(2026-04-25 SetterF row delta: +3 N from `Either → SetterF`, `Affine →
+SetterF`, `PowerSeries → SetterF` — shipped to close eo-monocle Gap-1.
+Three cells flip: P × S `M → N`, O × S `? → N`, Te × S `? → N`. The
+Unit 21 "0 ?" count was a count of the 12 *numbered groups* in §2.2,
+not a literal cell-by-cell tally — a handful of ? cells outside those
+groups remained until this batch.)
 
 The Unit-21 resolution closed every numbered `?` group from §3.3:
 +2 N (`affine2alg` + `chainViaTuple2(Forgetful → Tuple2 → Forget[F]`
@@ -156,12 +166,12 @@ scenarios 4/5) and Review rows/columns are **M** (direct
 function-composition idiom) or **U** (as outer — no `to` side).
 
 Grand totals across all 225 requested cells (196 Optic×Optic + 28
-standalone borders + 1 JsonTraversal×Review corner), post-Unit-21:
+standalone borders + 1 JsonTraversal×Review corner), post-2026-04-25:
 
 | Category | Count |
 |---|---|
-| N | 96 |
-| M | 90 |
+| N | 99 |
+| M | 89 |
 | U | 39 |
 | ? | 0 |
 
@@ -227,13 +237,13 @@ Each cell indicates the classification and a one-line "why".
 |---------|---|---|---|---|----|---|---|---|----|----|----|----|----|----|
 | **I**   | N (Forgetful.assoc, fused `BijectionIso.andThen(BijectionIso)`) | N (forgetful2tuple→tupleAssocF; fused `Iso.andThen(GetReplaceLens)`) | N (forgetful2either→eitherAssocF; fused `Iso.andThen(MendTearPrism)`) | N (Forgetful→Tuple2→Affine via chain; fused `Iso.andThen(Optional)`) | M (AF's T=Unit mismatches outer B — see §3) | U (Getter's T=Unit) | N (Forgetful→Tuple2→SetterF) | ? (Forgetful→Forget[F] not shipped — needs check) | N (Forgetful→Tuple2→PowerSeries via chain) | ? (Forgetful→Forget[F] unexplored) | U (no Composer[_, FT]) | N (forget2alg path OR Forgetful→Tuple2→AlgLens) | N (Composer[Forgetful, Grate]; GrateSpec witnesses) | N (Forgetful→Either via forgetful2either) |
 | **L**   | N (tupleAssocF after forgetful2tuple on inner) | N (tupleAssocF; fused `GetReplaceLens.andThen(GetReplaceLens)`) | N (bothViaAffine — OpticsBehaviorSpec.Lens→Prism) | N (Composer[Tuple2, Affine]; fused `GetReplaceLens.andThen(Optional)`) | M (see AffineFold row in §3) | U (inner T=Unit ≠ outer B) | N (Composer[Tuple2, SetterF]) | ? (Tuple2 → Forget[F] not shipped) | N (Composer[Tuple2, PowerSeries]) | ? (no direct Composer) | U (no Composer[_, FT]) | N (Composer[Tuple2, AlgLens[F]]) | U (Composer[Tuple2, Grate] explicitly NOT shipped per D3) | N (bothViaAffine — CrossCarrierCompositionSpec scenarios 1-3) |
-| **P**   | N (forgetful2either morphs inner into Either; fused `MendTearPrism.andThen(BijectionIso)`) | N (bothViaAffine) | N (eitherAssocF; fused `MendTearPrism.andThen(MendTearPrism)`) | N (Composer[Either, Affine]; fused `MendTearPrism.andThen(Optional)`) | M (AF T=Unit) | U (T=Unit) | M (no Either→SetterF; via bothViaAffine→Affine→… no, Affine→SetterF absent; see §3) | ? (Either→Forget[F] unexplored) | N (Composer[Either, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Either, AlgLens[F]]) | U (no Composer[Either, Grate]) | N (stays in Either via eitherAssocF) |
-| **O**   | N (Affine.assoc after forgetful→tuple→affine on inner) | N (Affine.assoc after tuple2affine on inner; fused `Optional.andThen(GetReplaceLens)`) | N (Affine.assoc after either2affine; fused `Optional.andThen(MendTearPrism)`) | N (Affine.assoc; fused `Optional.andThen(Optional)`) | M (AF T=Unit — use `AffineFold.fromOptional(chain)`) | U (T=Unit) | ? (no direct Affine→SetterF; possibly unreachable) | ? (Affine→Forget[F] unexplored) | N (Composer[Affine, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (via Composer[Tuple2, AlgLens[F]] after morphing?) — **actually ?**: no Composer[Affine, AlgLens[F]] shipped | U (no Composer[Affine, Grate]) | N (stays Affine via either2affine on the inner JsonPrism) |
+| **P**   | N (forgetful2either morphs inner into Either; fused `MendTearPrism.andThen(BijectionIso)`) | N (bothViaAffine) | N (eitherAssocF; fused `MendTearPrism.andThen(MendTearPrism)`) | N (Composer[Either, Affine]; fused `MendTearPrism.andThen(Optional)`) | M (AF T=Unit) | U (T=Unit) | N (Composer[Either, SetterF] — shipped 2026-04-25) | ? (Either→Forget[F] unexplored) | N (Composer[Either, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Either, AlgLens[F]]) | U (no Composer[Either, Grate]) | N (stays in Either via eitherAssocF) |
+| **O**   | N (Affine.assoc after forgetful→tuple→affine on inner) | N (Affine.assoc after tuple2affine on inner; fused `Optional.andThen(GetReplaceLens)`) | N (Affine.assoc after either2affine; fused `Optional.andThen(MendTearPrism)`) | N (Affine.assoc; fused `Optional.andThen(Optional)`) | M (AF T=Unit — use `AffineFold.fromOptional(chain)`) | U (T=Unit) | N (Composer[Affine, SetterF] — shipped 2026-04-25) | ? (Affine→Forget[F] unexplored) | N (Composer[Affine, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Affine, AlgLens[F]] — `affine2alg`, Unit 21) | U (no Composer[Affine, Grate]) | N (stays Affine via either2affine on the inner JsonPrism) |
 | **AF**  | U (outer T=Unit; can't feed into any inner B slot) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) |
 | **G**   | U (outer T=Unit) | U | U | U | U | U | U | U | U | U | U | U | U | U |
 | **S**   | U (SetterF lacks AssociativeFunctor; even with same-F inner no andThen) | U (no Composer[SetterF, _]) | U | U | U | U | U | U | U | U | U | U | U | U |
 | **F**   | U (Fold's T=Unit) | U | U | U | U | U | U | U | U | U | U | U | U | U |
-| **Te**  | N (Composer[Forgetful → Tuple2 → PowerSeries] via chain on inner) | N (Composer[Tuple2, PowerSeries] on inner) | N (Composer[Either, PowerSeries] on inner) | N (Composer[Affine, PowerSeries] on inner) | M (T=Unit on inner AF) | U (Getter T=Unit) | ? (no Composer[SetterF, PowerSeries]; SetterF is terminal) | ? (no Composer[Forget[F], PowerSeries]) | N (same-carrier PowerSeries.assoc — **untested with 2-level nesting**) | ? (no Composer between PowerSeries and Forget[F]) | U (no Composer[_, FT]) | ? (no Composer[PowerSeries, AlgLens[F]]) | U (no Composer[PowerSeries, Grate]) | N (Composer[Either, PowerSeries] on inner JsonPrism; untested) |
+| **Te**  | N (Composer[Forgetful → Tuple2 → PowerSeries] via chain on inner) | N (Composer[Tuple2, PowerSeries] on inner) | N (Composer[Either, PowerSeries] on inner) | N (Composer[Affine, PowerSeries] on inner) | M (T=Unit on inner AF) | U (Getter T=Unit) | N (Composer[PowerSeries, SetterF] — shipped 2026-04-25) | ? (no Composer[Forget[F], PowerSeries]) | N (same-carrier PowerSeries.assoc — **untested with 2-level nesting**) | ? (no Composer between PowerSeries and Forget[F]) | U (no Composer[_, FT]) | ? (no Composer[PowerSeries, AlgLens[F]]) | U (no Composer[PowerSeries, Grate]) | N (Composer[Either, PowerSeries] on inner JsonPrism; untested) |
 | **Tf**  | U (Tf's T=Unit outer) | U | U | U | U | U | U | U | U | ? (same Forget[F] same-F is fine via assocForgetMonad if F: Monad; different F not bridged) | U | U | U | U |
 | **FT**  | U (FT lacks AssociativeFunctor; no outbound composer) | U | U | U | U | U | U | U | U | U | U | U | U | U |
 | **AL**  | N (Forgetful→Tuple2→AlgLens[F] via chain on inner) | N (Composer[Tuple2, AlgLens[F]] on inner — OpticsBehaviorSpec) | N (Composer[Either, AlgLens[F]] on inner — OpticsBehaviorSpec) | ? (no Composer[Affine, AlgLens[F]] shipped) | M (AF T=Unit) | U (Getter T=Unit) | ? (SetterF terminal) | N (Composer[Forget[F], AlgLens[F]] on inner when same F — OpticsBehaviorSpec) | ? (no Composer[PowerSeries, AlgLens[F]]) | ? (no Composer[AlgLens[F], Forget[F]]) | U (no Composer[_, FT]) | N (assocAlgMonad; OpticsBehaviorSpec "Two Forget[List] classifiers compose") | U (no Composer[AlgLens[F], Grate]) | ? (Either→AlgLens bridge works per-prism — JsonPrism.andThen(AlgLens) plausible but untested) |
@@ -357,22 +367,20 @@ val composed = Review[Option[Int], String](s => r2.reverseGet(r1.reverseGet(s)))
 Witnessed in OpticsBehaviorSpec `"Reviews compose via direct function
 composition"`.
 
-#### 3.1.4 Prism × Setter
+#### 3.1.4 Prism × Setter — **RESOLVED (N) 2026-04-25**
 
-Prism's `Either` carrier has no direct Composer to SetterF. The
-`bothViaAffine` fallback lifts Prism into Affine (via `either2affine`),
-but there is no `Composer[Affine, SetterF]`, so the inferred `Out` for
-`Morph[Either, SetterF]` is unreachable.
+Shipped `Composer[Either, SetterF]` (`either2setter`, `SetterF.scala:81`)
+to close eo-monocle Gap-1. Hit branch writes `f(a)` through the Prism's
+build path; miss branch passes the leftover back via `o.from(Left(xo))`.
+Same hit/miss invariants as the original Prism's `.modify(f)`, just
+exposed through the Setter API. Behaviour spec at
+`OpticsBehaviorSpec`'s `"Either Prism lifts into SetterF and preserves
+hit/miss .modify semantics"`.
 
-**Idiom.** Drop the Setter back to a `modify(f)` closure wrapping the
-Prism:
-
-```scala
-// instead of `prism.andThen(setter)`:
-val bump: S => S = s => prism.modify(setter.modify(f))(s)
-```
-
-No test witnesses this — gap candidate.
+The same shipping batch added `affine2setter` (resolves Optional × Setter,
+previously a `?` cell) and `powerseries2setter` (resolves Traversal.each
+× Setter, previously a `?` cell). All three are mechanical mirror images
+of `tuple2setter`, all three have round-trip behaviour specs.
 
 ### 3.2 Unsupported cells (U)
 

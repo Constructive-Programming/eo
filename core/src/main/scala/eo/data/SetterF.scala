@@ -66,3 +66,74 @@ object SetterF:
           val (s, f) = sfxb.setter
           val (xo, a) = o.to(s)
           o.from((xo, f(a)))
+
+  /** Coerce an `Either`-carrier optic (Prism) into a SetterF optic. Hit branch: write `f(a)`
+    * through the Prism's build path. Miss branch: pass the original leftover back through the
+    * Prism's miss reconstruction — `o.from(Left(xo))`. Both halves are observably the same as the
+    * original Prism's `.modify(f)`, just with a Setter-shaped read API that doesn't expose the
+    * hit/miss structure to downstream callers.
+    *
+    * Resolves Gap-1 (Prism × Setter) for cross-library `eo Prism + monocle Setter` chains in
+    * `eo-monocle` Unit 6.
+    *
+    * @group Instances
+    */
+  given either2setter: Composer[Either, SetterF] with
+    import optics.Optic
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, SetterF] =
+      new Optic[S, T, A, B, SetterF]:
+        type X = (S, A)
+        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+
+        val from: SetterF[X, B] => T = sfxb =>
+          val (s, f) = sfxb.setter
+          o.to(s) match
+            case Right(a) => o.from(Right(f(a)))
+            case Left(xo) => o.from(Left(xo))
+
+  /** Coerce an `Affine`-carrier optic (Optional) into a SetterF optic. Same shape as
+    * [[either2setter]] split across the explicit `Affine.Hit` / `Affine.Miss` constructors so the
+    * miss path uses [[Affine.Miss.widenB widenB]] rather than allocating a fresh `Miss`.
+    *
+    * Resolves Gap-1 (Optional × Setter) for cross-library `eo Optional + monocle Setter` chains.
+    *
+    * @group Instances
+    */
+  given affine2setter: Composer[Affine, SetterF] with
+    import optics.Optic
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, SetterF] =
+      new Optic[S, T, A, B, SetterF]:
+        type X = (S, A)
+        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+
+        val from: SetterF[X, B] => T = sfxb =>
+          val (s, f) = sfxb.setter
+          o.to(s) match
+            case h: Affine.Hit[o.X, A] =>
+              o.from(new Affine.Hit[o.X, B](h.snd, f(h.b)))
+            case m: Affine.Miss[o.X, A] =>
+              o.from(m.widenB[B])
+
+  /** Coerce a `PowerSeries`-carrier optic (Traversal.each) into a SetterF optic. The Setter's
+    * `modify` applies the focus function to *every* candidate in the traversal — equivalent to
+    * `traversal.modify(f)` on the original optic. Implementation routes through
+    * `ForgetfulFunctor[PowerSeries].map`, which is the same map the `Optic.modify` extension uses
+    * for PowerSeries-carrier optics.
+    *
+    * Resolves Gap-1 (Traversal × Setter) for cross-library `eo Traversal + monocle Setter` chains.
+    *
+    * @group Instances
+    */
+  given powerseries2setter: Composer[PowerSeries, SetterF] with
+    import optics.Optic
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, PowerSeries]): Optic[S, T, A, B, SetterF] =
+      new Optic[S, T, A, B, SetterF]:
+        type X = (S, A)
+        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+
+        val from: SetterF[X, B] => T = sfxb =>
+          val (s, f) = sfxb.setter
+          o.from(summon[ForgetfulFunctor[PowerSeries]].map(o.to(s), f))

@@ -18,11 +18,12 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, AlgLens, AlgLensSingleton, Forget, Forgetful, PowerSeries}
+import data.{Affine, AlgLens, AlgLensSingleton, Forget, Forgetful, PowerSeries, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
 import data.AlgLens.given
+import data.SetterF.given
 
 import cats.instances.int.given
 import cats.instances.list.given
@@ -571,6 +572,57 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     composed.modify(_ + 1)(3) === 11
     // Miss: -1 → empty classifier; the Optional restores the source on miss.
     composed.modify(_ + 1)(-1) === -1
+  }
+
+  // ----- Prism / Optional / Traversal lifted into SetterF ----------
+  //
+  // The three Composers — either2setter, affine2setter,
+  // powerseries2setter — let a Prism / Optional / Traversal degrade
+  // to a write-only SetterF. The headline use case is cross-library
+  // composition with a Monocle Setter on the inner side; the lift
+  // also makes setter-only consumers (.modify / .replace) of
+  // higher-cardinality optics straightforward.
+
+  "Either Prism lifts into SetterF and preserves hit/miss .modify semantics" >> {
+    // Even-only prism: hit on even ints, miss otherwise.
+    val evenP: Optic[Int, Int, Int, Int, Either] =
+      Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
+
+    val lifted: Optic[Int, Int, Int, Int, data.SetterF] =
+      summon[Composer[Either, data.SetterF]].to(evenP)
+
+    // Hit: 4 is even → modify(+10) → 14.
+    lifted.modify(_ + 10)(4) === 14
+    // Miss: 5 is odd → from(Left(5)) preserves the source.
+    lifted.modify(_ + 10)(5) === 5
+  }
+
+  "Affine Optional lifts into SetterF and preserves hit/miss .modify semantics" >> {
+    val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
+      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+        getOrModify = p => Either.cond(p.age >= 18, p.age, p),
+        reverseGet = { case (p, a) => AdultPerson(a) },
+      )
+
+    val lifted: Optic[AdultPerson, AdultPerson, Int, Int, data.SetterF] =
+      summon[Composer[Affine, data.SetterF]].to(adultOpt)
+
+    // Hit: age 25 → modify(+1) → AdultPerson(26).
+    lifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26)
+    // Miss: age 12 → preserves the source via Affine.Miss.widenB.
+    lifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12)
+  }
+
+  "PowerSeries Traversal lifts into SetterF and applies f to every focus" >> {
+    val each: Optic[List[Int], List[Int], Int, Int, PowerSeries] =
+      Traversal.each[List, Int]
+
+    val lifted: Optic[List[Int], List[Int], Int, Int, data.SetterF] =
+      summon[Composer[PowerSeries, data.SetterF]].to(each)
+
+    lifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30)
+    // Empty list — modify is a no-op rebuild.
+    lifted.modify(_ * 10)(Nil) === Nil
   }
 
   // ----- Cross-carrier composition Lens andThen AlgLens classifier -
