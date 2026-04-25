@@ -229,27 +229,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     val otherTypes: List[TypeRepr] =
       otherSyms.map(sym => sTpe.memberType(sym))
 
-    // Names tuple: the singleton-String types of the non-focused
-    // fields, in declaration order.
-    val namesTpe: TypeRepr =
-      otherSyms.foldRight(TypeRepr.of[EmptyTuple]) { (sym, acc) =>
-        val nameLit = ConstantType(StringConstant(sym.name))
-        TypeRepr.of[*:].appliedTo(List(nameLit, acc))
-      }
-
-    // Values tuple: the field types of the non-focused fields, in
-    // declaration order.
-    val valuesTpe: TypeRepr =
-      otherTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
-
-    // xa = NamedTuple[namesTpe, valuesTpe] — the full named-tuple
+    // xa = NamedTuple[otherNames, otherTypes] — the full named-tuple
     // carrier for the complement.
-    val xaTpe: TypeRepr =
-      TypeRepr
-        .of[scala.NamedTuple.NamedTuple]
-        .appliedTo(List(namesTpe, valuesTpe))
+    val xaTpe: TypeRepr = namedTupleTypeOf(otherSyms.map(_.name), otherTypes)
 
     xaTpe.asType match
       case '[xa] =>
@@ -263,11 +245,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
               // IS-A Tuple — the opaque-subtype relation
               // `Values <: NamedTuple[Names, Values]` carries the
               // value through the asExprOf check.
-              val otherReads: List[scala.quoted.Expr[Any]] =
-                otherSyms.map { sym =>
-                  Select.unique('{ s }.asTerm, sym.name).asExpr
-                }
-              scala.quoted.Expr.ofTupleFromSeq(otherReads).asExprOf[xa]
+              scala.quoted.Expr
+                .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, otherSyms))
+                .asExprOf[xa]
             }
             (x, $selector(s))
           }
@@ -292,23 +272,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
                   val tpe = otherTypes(idx)
                   tpe.asType match
                     case '[t] =>
-                      // NamedTuple's runtime representation IS the
-                      // underlying values tuple (opaque subtyping:
-                      // `Values <: NamedTuple[Names, Values]`), so
-                      // `asInstanceOf[Tuple]` is an erased cast the
-                      // JVM absorbs at zero cost. `.apply(i)` then
-                      // reads the position; the final
-                      // `asInstanceOf[t]` re-types the boxed slot
-                      // back to the field's static type.
-                      val xExpr = xTerm.asExprOf[xa]
-                      val idxExpr = scala.quoted.Expr(idx)
-                      val accessor: Expr[t] =
-                        '{
-                          $xExpr
-                            .asInstanceOf[Tuple]
-                            .apply($idxExpr)
-                            .asInstanceOf[t]
-                        }
+                      val accessor = tupleIndexAccessor[xa, t](xTerm.asExprOf[xa], idx)
                       Existential[Expr, t](accessor): Expr_??
               }
               constructed.getOrElse {
@@ -363,18 +327,6 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     val otherSyms: List[Symbol] = allFieldSyms.filterNot(sym => selectedSet.contains(sym.name))
     val otherTypes: List[TypeRepr] = otherSyms.map(sym => sTpe.memberType(sym))
 
-    // Build a NamedTuple[Names, Values] type from a list of symbols + types.
-    def namedTupleTypeOf(names: List[String], tpes: List[TypeRepr]): TypeRepr =
-      val namesTpe = names.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
-        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
-      }
-      val valuesTpe = tpes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
-      TypeRepr
-        .of[scala.NamedTuple.NamedTuple]
-        .appliedTo(List(namesTpe, valuesTpe))
-
     val focusTpe = namedTupleTypeOf(selectedNames, selectorTypes)
     val complementTpe = namedTupleTypeOf(otherSyms.map(_.name), otherTypes)
 
@@ -385,11 +337,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val get: Expr[S => focus] =
           '{ (s: S) =>
             ${
-              val focusReads: List[scala.quoted.Expr[Any]] =
-                selectorSyms.map { sym =>
-                  Select.unique('{ s }.asTerm, sym.name).asExpr
-                }
-              scala.quoted.Expr.ofTupleFromSeq(focusReads).asExprOf[focus]
+              scala.quoted.Expr
+                .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, selectorSyms))
+                .asExprOf[focus]
             }
           }
 
@@ -398,18 +348,14 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val split: Expr[S => (complement, focus)] =
           '{ (s: S) =>
             val x: complement = ${
-              val otherReads: List[scala.quoted.Expr[Any]] =
-                otherSyms.map { sym =>
-                  Select.unique('{ s }.asTerm, sym.name).asExpr
-                }
-              scala.quoted.Expr.ofTupleFromSeq(otherReads).asExprOf[complement]
+              scala.quoted.Expr
+                .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, otherSyms))
+                .asExprOf[complement]
             }
             val a: focus = ${
-              val focusReads: List[scala.quoted.Expr[Any]] =
-                selectorSyms.map { sym =>
-                  Select.unique('{ s }.asTerm, sym.name).asExpr
-                }
-              scala.quoted.Expr.ofTupleFromSeq(focusReads).asExprOf[focus]
+              scala.quoted.Expr
+                .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, selectorSyms))
+                .asExprOf[focus]
             }
             (x, a)
           }
@@ -432,16 +378,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
                   val tpe = selectorTypes(focusIdx)
                   tpe.asType match
                     case '[t] =>
-                      val aExpr = aTerm.asExprOf[focus]
-                      val idxExpr = scala.quoted.Expr(focusIdx)
-                      val accessor: Expr[t] =
-                        '{
-                          $aExpr
-                            .asInstanceOf[Tuple]
-                            .apply($idxExpr)
-                            .asInstanceOf[t]
-                        }
-                      Existential[Expr, t](accessor): Expr_??
+                      Existential[Expr, t](
+                        tupleIndexAccessor[focus, t](aTerm.asExprOf[focus], focusIdx)
+                      ): Expr_??
                 else
                   val complementIdx = otherSyms.indexWhere(_.name == param.name)
                   if complementIdx < 0 then
@@ -452,16 +391,12 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
                   val tpe = otherTypes(complementIdx)
                   tpe.asType match
                     case '[t] =>
-                      val xExpr = xTerm.asExprOf[complement]
-                      val idxExpr = scala.quoted.Expr(complementIdx)
-                      val accessor: Expr[t] =
-                        '{
-                          $xExpr
-                            .asInstanceOf[Tuple]
-                            .apply($idxExpr)
-                            .asInstanceOf[t]
-                        }
-                      Existential[Expr, t](accessor): Expr_??
+                      Existential[Expr, t](
+                        tupleIndexAccessor[complement, t](
+                          xTerm.asExprOf[complement],
+                          complementIdx,
+                        )
+                      ): Expr_??
               }
               constructed.getOrElse {
                 report.errorAndAbort(
@@ -502,18 +437,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     }
     val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => sTpe.memberType(sym))
 
-    val namesTpe: TypeRepr =
-      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
-        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
-      }
-    val valuesTpe: TypeRepr =
-      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
-    val focusTpe: TypeRepr =
-      TypeRepr
-        .of[scala.NamedTuple.NamedTuple]
-        .appliedTo(List(namesTpe, valuesTpe))
+    val focusTpe: TypeRepr = namedTupleTypeOf(selectedNames, selectorTypes)
 
     focusTpe.asType match
       case '[focus] =>
@@ -522,11 +446,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val get: Expr[S => focus] =
           '{ (s: S) =>
             ${
-              val focusReads: List[scala.quoted.Expr[Any]] =
-                selectorSyms.map { sym =>
-                  Select.unique('{ s }.asTerm, sym.name).asExpr
-                }
-              scala.quoted.Expr.ofTupleFromSeq(focusReads).asExprOf[focus]
+              scala.quoted.Expr
+                .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, selectorSyms))
+                .asExprOf[focus]
             }
           }
 
@@ -551,16 +473,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
                 val tpe = selectorTypes(focusIdx)
                 tpe.asType match
                   case '[t] =>
-                    val aExpr = aTerm.asExprOf[focus]
-                    val idxExpr = scala.quoted.Expr(focusIdx)
-                    val accessor: Expr[t] =
-                      '{
-                        $aExpr
-                          .asInstanceOf[Tuple]
-                          .apply($idxExpr)
-                          .asInstanceOf[t]
-                      }
-                    Existential[Expr, t](accessor): Expr_??
+                    Existential[Expr, t](
+                      tupleIndexAccessor[focus, t](aTerm.asExprOf[focus], focusIdx)
+                    ): Expr_??
               }
               constructed.getOrElse {
                 report.errorAndAbort(
@@ -572,6 +487,54 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
           }
 
         '{ BijectionIso[S, S, focus, focus]($get, $reverseGet) }
+
+  /** Build the `NamedTuple[Names, Values]` `TypeRepr` for a list of (name, type) pairs.
+    *
+    * Used by all three codegen arms (`buildLens` for the single-selector complement,
+    * `buildMultiLens` for both the focus and the complement, `buildMultiIso` for the focus).
+    * Folds names + types right-to-left into right-leaning `*: EmptyTuple` chains, then applies
+    * `scala.NamedTuple.NamedTuple` to lift the values tuple back into NamedTuple shape.
+    */
+  private def namedTupleTypeOf(names: List[String], tpes: List[TypeRepr]): TypeRepr =
+    val namesTpe =
+      names.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+    val valuesTpe =
+      tpes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+    TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
+
+  /** Read each field of `sourceTerm` named in `fieldSyms` via `Select.unique`, returning the
+    * resulting list of `Expr[Any]`. Used by every codegen arm that has to project a list of
+    * fields out of `S` into a NamedTuple (focus reads on all three arms, complement reads on
+    * the single + multi arms).
+    *
+    * Note: the `Term` and `Symbol` arguments are tied to the enclosing class's `Quotes` (we
+    * use them via the imported `quotes.reflect.*`), so this helper does NOT take
+    * `(using Quotes)`. Callers pass terms taken from the same `quotes.reflect` scope.
+    */
+  private def tupleFieldReads(sourceTerm: Term, fieldSyms: List[Symbol]): List[Expr[Any]] =
+    fieldSyms.map(sym => Select.unique(sourceTerm, sym.name).asExpr)
+
+  /** Materialise the `NamedTuple → Tuple → apply(i) → t` indexed-read pattern. Every codegen arm
+    * uses the same shape on the constructor-feeding side: NamedTuple's runtime representation IS
+    * the underlying values tuple (opaque subtyping `Values <: NamedTuple[Names, Values]`), so
+    * `asInstanceOf[Tuple]` is an erased cast and `.apply(idx).asInstanceOf[t]` retypes the boxed
+    * slot.
+    *
+    * Takes `(using Quotes)` so the helper builds its `'{ … }` against the call-site splice's
+    * `Quotes` rather than capturing the enclosing class-level `Quotes` — without it, the
+    * resulting `Expr[T]` would be tied to the wrong quote scope and the splice site would
+    * reject it as "captures an outer instance of Quotes".
+    */
+  private def tupleIndexAccessor[Carrier: Type, T: Type](
+      carrier: Expr[Carrier],
+      idx: Int,
+  )(using Quotes): Expr[T] =
+    val idxExpr = scala.quoted.Expr(idx)
+    '{ $carrier.asInstanceOf[Tuple].apply($idxExpr).asInstanceOf[T] }
 
   /** Strips Inlined/Typed wrappers and peeks inside the lambda body for a single Select whose
     * receiver is exactly the lambda parameter (an `Ident`). `Lambda` must be tried before `Block`
