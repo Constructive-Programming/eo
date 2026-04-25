@@ -4,7 +4,7 @@ import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
 
-import io.circe.{Decoder, Encoder, Json, JsonObject}
+import io.circe.{Decoder, Encoder, Json}
 
 /** Multi-focus counterpart to [[JsonPrism]]: a Traversal that walks the JSON from the root down to
   * some array, then applies the focus update to every element of that array.
@@ -74,21 +74,9 @@ final class JsonTraversal[A] private[circe] (
 
   inline def getAllUnsafe(input: Json | String): Vector[A] =
     val json = JsonFailure.parseInputUnsafe(input)
-    navigateToArray(json) match
-      case None      => Vector.empty
-      case Some(arr) =>
-        val b = Vector.newBuilder[A]
-        b.sizeHint(arr.length)
-        var i = 0
-        while i < arr.length do
-          walkSuffix(arr(i)) match
-            case None       => ()
-            case Some(leaf) =>
-              decoder.decodeJson(leaf) match
-                case Right(a) => b += a
-                case Left(_)  => ()
-          i += 1
-        b.result()
+    navigateToArray(json).fold(Vector.empty[A]) { arr =>
+      arr.flatMap(elem => walkSuffix(elem).flatMap(leaf => decoder.decodeJson(leaf).toOption))
+    }
 
   // ---- Path extension (used by field / at / selectDynamic macros) --
 
@@ -126,47 +114,17 @@ final class JsonTraversal[A] private[circe] (
 
   // ---- Internals: *Unsafe walks (byte-identical to pre-v0.2) -------
 
+  /** Read-only walk over the prefix that discards parents (we only need the terminal). Returns
+    * `None` on any miss; `Some(arr)` if the terminal is a JsonArray.
+    */
   private def navigateToArray(json: Json): Option[Vector[Json]] =
-    var cur: Json = json
-    var i = 0
-    while i < prefix.length do
-      prefix(i) match
-        case PathStep.Field(name) =>
-          cur.asObject match
-            case None      => return None
-            case Some(obj) =>
-              obj(name) match
-                case None    => return None
-                case Some(c) => cur = c
-        case PathStep.Index(idx) =>
-          cur.asArray match
-            case None      => return None
-            case Some(arr) =>
-              if idx < 0 || idx >= arr.length then return None
-              cur = arr(idx)
-      i += 1
-    cur.asArray
+    JsonWalk.walkPath(json, prefix).toOption.flatMap(_._1.asArray)
 
+  /** Read-only walk over the suffix that discards parents — used by the `getAll` family which only
+    * needs the leaf to decode.
+    */
   private def walkSuffix(elemJson: Json): Option[Json] =
-    var cur: Json = elemJson
-    var i = 0
-    while i < suffix.length do
-      suffix(i) match
-        case PathStep.Field(name) =>
-          cur.asObject match
-            case None      => return None
-            case Some(obj) =>
-              obj(name) match
-                case None    => return None
-                case Some(c) => cur = c
-        case PathStep.Index(idx) =>
-          cur.asArray match
-            case None      => return None
-            case Some(arr) =>
-              if idx < 0 || idx >= arr.length then return None
-              cur = arr(idx)
-      i += 1
-    Some(cur)
+    JsonWalk.walkPath(elemJson, suffix).toOption.map(_._1)
 
   private def modifyImpl(json: Json, f: A => A): Json =
     mapAtPrefix(json) { elem =>
@@ -189,148 +147,41 @@ final class JsonTraversal[A] private[circe] (
     * if the prefix walk fails.
     */
   private def mapAtPrefix(json: Json)(elemUpdate: Json => Json): Json =
-    val n = prefix.length
-    val parents = new Array[AnyRef](n)
-    var cur: Json = json
-    var i = 0
-    while i < n do
-      prefix(i) match
-        case PathStep.Field(name) =>
-          cur.asObject match
-            case None      => return json
-            case Some(obj) =>
-              parents(i) = obj
-              obj(name) match
-                case None    => return json
-                case Some(c) => cur = c
-        case PathStep.Index(idx) =>
-          cur.asArray match
-            case None      => return json
-            case Some(arr) =>
-              if idx < 0 || idx >= arr.length then return json
-              parents(i) = arr
-              cur = arr(idx)
-      i += 1
-
-    val arr = cur.asArray match
-      case Some(a) => a
-      case None    => return json
-    val newArr = arr.map(elemUpdate)
-
-    var newChild: Json = Json.fromValues(newArr)
-    var j = n - 1
-    while j >= 0 do
-      newChild = rebuildStep(parents(j), prefix(j), newChild)
-      j -= 1
-    newChild
+    JsonWalk.walkPath(json, prefix).toOption
+      .flatMap { case (cur, parents) => cur.asArray.map(arr => (arr, parents)) }
+      .map { case (arr, parents) =>
+        JsonWalk.rebuildPath(parents, prefix, Json.fromValues(arr.map(elemUpdate)))
+      }
+      .getOrElse(json)
 
   /** For one array element: walk the suffix collecting parents, decode the leaf, apply `f`,
     * re-encode, and rebuild the element. On any failure (suffix miss, decode failure) the original
     * element is returned unchanged.
     */
   private def updateElementDecoded(elemJson: Json, f: A => A): Json =
-    val n = suffix.length
-    if n == 0 then
-      decoder.decodeJson(elemJson) match
-        case Right(a) => encoder(f(a))
-        case Left(_)  => elemJson
-    else
-      val parents = new Array[AnyRef](n)
-      var cur: Json = elemJson
-      var i = 0
-      while i < n do
-        suffix(i) match
-          case PathStep.Field(name) =>
-            cur.asObject match
-              case None      => return elemJson
-              case Some(obj) =>
-                parents(i) = obj
-                obj(name) match
-                  case None    => return elemJson
-                  case Some(c) => cur = c
-          case PathStep.Index(idx) =>
-            cur.asArray match
-              case None      => return elemJson
-              case Some(arr) =>
-                if idx < 0 || idx >= arr.length then return elemJson
-                parents(i) = arr
-                cur = arr(idx)
-        i += 1
-      decoder.decodeJson(cur) match
-        case Left(_)  => elemJson
-        case Right(a) =>
-          var newChild: Json = encoder(f(a))
-          var j = n - 1
-          while j >= 0 do
-            newChild = rebuildStep(parents(j), suffix(j), newChild)
-            j -= 1
-          newChild
+    JsonWalk.walkPath(elemJson, suffix) match
+      case Left(_)               => elemJson
+      case Right((cur, parents)) =>
+        decoder
+          .decodeJson(cur)
+          .map(a => JsonWalk.rebuildPath(parents, suffix, encoder(f(a))))
+          .getOrElse(elemJson)
 
-  /** Raw-Json element update: same walk as [[updateElementDecoded]] but applies `f` to the Json at
-    * the suffix leaf. Missing leaves receive `Json.Null`.
-    */
+  /** Raw-Json element update: lenient walk so missing leaves become Json.Null at the leaf. */
   private def updateElementRaw(elemJson: Json, f: Json => Json): Json =
-    val n = suffix.length
-    if n == 0 then f(elemJson)
-    else
-      val parents = new Array[AnyRef](n)
-      var cur: Json = elemJson
-      var i = 0
-      while i < n do
-        suffix(i) match
-          case PathStep.Field(name) =>
-            cur.asObject match
-              case None      => return elemJson
-              case Some(obj) =>
-                parents(i) = obj
-                cur = obj(name).getOrElse(Json.Null)
-          case PathStep.Index(idx) =>
-            cur.asArray match
-              case None      => return elemJson
-              case Some(arr) =>
-                if idx < 0 || idx >= arr.length then return elemJson
-                parents(i) = arr
-                cur = arr(idx)
-        i += 1
-      var newChild: Json = f(cur)
-      var j = n - 1
-      while j >= 0 do
-        newChild = rebuildStep(parents(j), suffix(j), newChild)
-        j -= 1
-      newChild
+    JsonWalk.walkPathLenient(elemJson, suffix) match
+      case Left(_)               => elemJson
+      case Right((cur, parents)) => JsonWalk.rebuildPath(parents, suffix, f(cur))
 
   /** Like [[updateElementDecoded]] but the user's focus value is precomputed (a single encoded
     * Json). Used by [[placeImpl]] so the encoder runs once, not once per element.
     */
   private def placeElement(elemJson: Json, encoded: Json): Json =
-    val n = suffix.length
-    if n == 0 then encoded
+    if suffix.length == 0 then encoded
     else
-      val parents = new Array[AnyRef](n)
-      var cur: Json = elemJson
-      var i = 0
-      while i < n do
-        suffix(i) match
-          case PathStep.Field(name) =>
-            cur.asObject match
-              case None      => return elemJson
-              case Some(obj) =>
-                parents(i) = obj
-                cur = obj(name).getOrElse(Json.Null)
-          case PathStep.Index(idx) =>
-            cur.asArray match
-              case None      => return elemJson
-              case Some(arr) =>
-                if idx < 0 || idx >= arr.length then return elemJson
-                parents(i) = arr
-                cur = arr(idx)
-        i += 1
-      var newChild: Json = encoded
-      var j = n - 1
-      while j >= 0 do
-        newChild = rebuildStep(parents(j), suffix(j), newChild)
-        j -= 1
-      newChild
+      JsonWalk.walkPathLenient(elemJson, suffix) match
+        case Left(_)             => elemJson
+        case Right((_, parents)) => JsonWalk.rebuildPath(parents, suffix, encoded)
 
   // ---- Internals: Ior-bearing walks --------------------------------
 
@@ -340,45 +191,16 @@ final class JsonTraversal[A] private[circe] (
     */
   private def navigateToArrayIor(
       json: Json
-  ): Either[Ior.Left[Chain[JsonFailure]], (Vector[Json], Array[AnyRef])] =
-    val n = prefix.length
-    val parents = new Array[AnyRef](n)
-    var cur: Json = json
-    var i = 0
-    while i < n do
-      val step = prefix(i)
-      step match
-        case PathStep.Field(name) =>
-          cur.asObject match
-            case None =>
-              return Left(Ior.Left(Chain.one(JsonFailure.NotAnObject(step))))
-            case Some(obj) =>
-              parents(i) = obj
-              obj(name) match
-                case None =>
-                  return Left(Ior.Left(Chain.one(JsonFailure.PathMissing(step))))
-                case Some(c) => cur = c
-        case PathStep.Index(idx) =>
-          cur.asArray match
-            case None =>
-              return Left(Ior.Left(Chain.one(JsonFailure.NotAnArray(step))))
-            case Some(arr) =>
-              if idx < 0 || idx >= arr.length then
-                return Left(
-                  Ior.Left(Chain.one(JsonFailure.IndexOutOfRange(step, arr.length)))
-                )
-              parents(i) = arr
-              cur = arr(idx)
-      i += 1
-    cur.asArray match
-      case Some(arr) => Right((arr, parents))
-      case None      =>
-        // Prefix resolved but the terminal value isn't an array — synthesise
-        // a NotAnArray at the last step. For a prefix-empty traversal this
-        // is the root-step sentinel.
-        val lastStep =
-          if n == 0 then PathStep.Field("") else prefix(n - 1)
-        Left(Ior.Left(Chain.one(JsonFailure.NotAnArray(lastStep))))
+  ): Either[Ior.Left[Chain[JsonFailure]], (Vector[Json], Vector[AnyRef])] =
+    JsonWalk
+      .walkPath(json, prefix)
+      .left
+      .map(failure => Ior.Left(Chain.one(failure)))
+      .flatMap { case (cur, parents) =>
+        cur.asArray
+          .map(arr => (arr, parents))
+          .toRight(Ior.Left(Chain.one(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))))
+      }
 
   private def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
     navigateToArrayIor(json) match
@@ -405,249 +227,97 @@ final class JsonTraversal[A] private[circe] (
           mapElementsIor(arr, placeElementIor(_, encoded))
         rebuildPrefix(newArrAndChain, parents)
 
-  /** Per-element map that accumulates each per-element Ior.Both / Ior.Right into a shared
-    * Chain.Builder. Ior.Left from an element is treated as "couldn't update this element" — the
-    * element stays in the output unchanged, failure contributes to the chain.
+  /** Per-element map that accumulates each per-element Ior into a shared (Vector, Chain) pair.
+    * Ior.Left from an element is treated as "couldn't update this element" — the element stays in
+    * the output unchanged, failure contributes to the chain.
     */
   private def mapElementsIor(
       arr: Vector[Json],
       elemUpdate: Json => Ior[Chain[JsonFailure], Json],
   ): (Vector[Json], Chain[JsonFailure]) =
-    val b = Vector.newBuilder[Json]
-    b.sizeHint(arr.length)
-    var chain: Chain[JsonFailure] = Chain.empty
-    var i = 0
-    while i < arr.length do
-      elemUpdate(arr(i)) match
-        case Ior.Right(j)   => b += j
-        case Ior.Both(c, j) =>
-          chain = chain ++ c
-          b += j
-        case Ior.Left(c) =>
-          chain = chain ++ c
-          b += arr(i)
-      i += 1
-    (b.result(), chain)
+    arr.foldLeft((Vector.empty[Json], Chain.empty[JsonFailure])) {
+      case ((acc, chain), elem) =>
+        elemUpdate(elem) match
+          case Ior.Right(j)   => (acc :+ j, chain)
+          case Ior.Both(c, j) => (acc :+ j, chain ++ c)
+          case Ior.Left(c)    => (acc :+ elem, chain ++ c)
+    }
 
   /** Rebuild the prefix path back up to the root and wrap the result in the appropriate Ior shape:
     * Ior.Right on an empty chain, Ior.Both otherwise.
     */
   private def rebuildPrefix(
       arrAndChain: (Vector[Json], Chain[JsonFailure]),
-      parents: Array[AnyRef],
+      parents: Vector[AnyRef],
   ): Ior[Chain[JsonFailure], Json] =
     val (newArr, chain) = arrAndChain
-    var newChild: Json = Json.fromValues(newArr)
-    var j = prefix.length - 1
-    while j >= 0 do
-      newChild = rebuildStep(parents(j), prefix(j), newChild)
-      j -= 1
-    if chain.isEmpty then Ior.Right(newChild)
-    else Ior.Both(chain, newChild)
+    val newChild = JsonWalk.rebuildPath(parents, prefix, Json.fromValues(newArr))
+    if chain.isEmpty then Ior.Right(newChild) else Ior.Both(chain, newChild)
 
   /** Per-element Ior-bearing decoded update. Walks the suffix, decodes the leaf, applies `f`,
-    * re-encodes. Returns Ior.Left(chain-of-one) + inputElement via Ior.Both's contract if the
-    * suffix or decode misses. This way the element is preserved in the output.
+    * re-encodes. Returns Ior.Both(chain-of-one, originalElement) if the suffix or decode misses
+    * (the element is preserved in the output).
     */
   private def updateElementDecodedIor(
       elemJson: Json,
       f: A => A,
   ): Ior[Chain[JsonFailure], Json] =
-    val n = suffix.length
-    if n == 0 then
-      decoder.decodeJson(elemJson) match
-        case Right(a) => Ior.Right(encoder(f(a)))
-        case Left(df) =>
-          Ior.Both(Chain.one(JsonFailure.DecodeFailed(PathStep.Field(""), df)), elemJson)
-    else
-      val parents = new Array[AnyRef](n)
-      var cur: Json = elemJson
-      var i = 0
-      while i < n do
-        val step = suffix(i)
-        step match
-          case PathStep.Field(name) =>
-            cur.asObject match
-              case None =>
-                return Ior.Both(Chain.one(JsonFailure.NotAnObject(step)), elemJson)
-              case Some(obj) =>
-                parents(i) = obj
-                obj(name) match
-                  case None =>
-                    return Ior.Both(Chain.one(JsonFailure.PathMissing(step)), elemJson)
-                  case Some(c) => cur = c
-          case PathStep.Index(idx) =>
-            cur.asArray match
-              case None =>
-                return Ior.Both(Chain.one(JsonFailure.NotAnArray(step)), elemJson)
-              case Some(arr) =>
-                if idx < 0 || idx >= arr.length then
-                  return Ior.Both(
-                    Chain.one(JsonFailure.IndexOutOfRange(step, arr.length)),
-                    elemJson,
-                  )
-                parents(i) = arr
-                cur = arr(idx)
-        i += 1
-      decoder.decodeJson(cur) match
-        case Left(df) =>
-          Ior.Both(Chain.one(JsonFailure.DecodeFailed(suffix(n - 1), df)), elemJson)
-        case Right(a) =>
-          var newChild: Json = encoder(f(a))
-          var j = n - 1
-          while j >= 0 do
-            newChild = rebuildStep(parents(j), suffix(j), newChild)
-            j -= 1
-          Ior.Right(newChild)
+    JsonWalk.walkPath(elemJson, suffix) match
+      case Left(failure)         => Ior.Both(Chain.one(failure), elemJson)
+      case Right((cur, parents)) =>
+        decoder.decodeJson(cur) match
+          case Right(a) => Ior.Right(JsonWalk.rebuildPath(parents, suffix, encoder(f(a))))
+          case Left(df) =>
+            Ior.Both(
+              Chain.one(JsonFailure.DecodeFailed(JsonWalk.terminalOf(suffix), df)),
+              elemJson,
+            )
 
-  /** Per-element Ior-bearing raw-Json update. Like updateElementDecodedIor but skips the decode
-    * step.
-    */
+  /** Per-element Ior-bearing raw-Json update — lenient walk so missing leaves become Json.Null. */
   private def updateElementRawIor(
       elemJson: Json,
       f: Json => Json,
   ): Ior[Chain[JsonFailure], Json] =
-    val n = suffix.length
-    if n == 0 then Ior.Right(f(elemJson))
-    else
-      val parents = new Array[AnyRef](n)
-      var cur: Json = elemJson
-      var i = 0
-      while i < n do
-        val step = suffix(i)
-        step match
-          case PathStep.Field(name) =>
-            cur.asObject match
-              case None =>
-                return Ior.Both(Chain.one(JsonFailure.NotAnObject(step)), elemJson)
-              case Some(obj) =>
-                parents(i) = obj
-                cur = obj(name).getOrElse(Json.Null)
-          case PathStep.Index(idx) =>
-            cur.asArray match
-              case None =>
-                return Ior.Both(Chain.one(JsonFailure.NotAnArray(step)), elemJson)
-              case Some(arr) =>
-                if idx < 0 || idx >= arr.length then
-                  return Ior.Both(
-                    Chain.one(JsonFailure.IndexOutOfRange(step, arr.length)),
-                    elemJson,
-                  )
-                parents(i) = arr
-                cur = arr(idx)
-        i += 1
-      var newChild: Json = f(cur)
-      var j = n - 1
-      while j >= 0 do
-        newChild = rebuildStep(parents(j), suffix(j), newChild)
-        j -= 1
-      Ior.Right(newChild)
+    JsonWalk.walkPathLenient(elemJson, suffix) match
+      case Left(failure)         => Ior.Both(Chain.one(failure), elemJson)
+      case Right((cur, parents)) => Ior.Right(JsonWalk.rebuildPath(parents, suffix, f(cur)))
 
   /** Per-element Ior-bearing place (constant Json). */
   private def placeElementIor(
       elemJson: Json,
       encoded: Json,
   ): Ior[Chain[JsonFailure], Json] =
-    val n = suffix.length
-    if n == 0 then Ior.Right(encoded)
+    if suffix.length == 0 then Ior.Right(encoded)
     else
-      val parents = new Array[AnyRef](n)
-      var cur: Json = elemJson
-      var i = 0
-      while i < n do
-        val step = suffix(i)
-        step match
-          case PathStep.Field(name) =>
-            cur.asObject match
-              case None =>
-                return Ior.Both(Chain.one(JsonFailure.NotAnObject(step)), elemJson)
-              case Some(obj) =>
-                parents(i) = obj
-                cur = obj(name).getOrElse(Json.Null)
-          case PathStep.Index(idx) =>
-            cur.asArray match
-              case None =>
-                return Ior.Both(Chain.one(JsonFailure.NotAnArray(step)), elemJson)
-              case Some(arr) =>
-                if idx < 0 || idx >= arr.length then
-                  return Ior.Both(
-                    Chain.one(JsonFailure.IndexOutOfRange(step, arr.length)),
-                    elemJson,
-                  )
-                parents(i) = arr
-                cur = arr(idx)
-        i += 1
-      var newChild: Json = encoded
-      var j = n - 1
-      while j >= 0 do
-        newChild = rebuildStep(parents(j), suffix(j), newChild)
-        j -= 1
-      Ior.Right(newChild)
+      JsonWalk.walkPathLenient(elemJson, suffix) match
+        case Left(failure)       => Ior.Both(Chain.one(failure), elemJson)
+        case Right((_, parents)) => Ior.Right(JsonWalk.rebuildPath(parents, suffix, encoded))
 
   /** Per-element Ior-bearing read: walk the suffix, then decode the leaf. Success = Ior.Right(a),
     * any miss = Ior.Left(chain-of-one). Used by `getAll`.
     */
   private def readElementIor(elemJson: Json): Ior[Chain[JsonFailure], A] =
-    val n = suffix.length
-    var cur: Json = elemJson
-    var i = 0
-    while i < n do
-      val step = suffix(i)
-      step match
-        case PathStep.Field(name) =>
-          cur.asObject match
-            case None =>
-              return Ior.Left(Chain.one(JsonFailure.NotAnObject(step)))
-            case Some(obj) =>
-              obj(name) match
-                case None =>
-                  return Ior.Left(Chain.one(JsonFailure.PathMissing(step)))
-                case Some(c) => cur = c
-        case PathStep.Index(idx) =>
-          cur.asArray match
-            case None =>
-              return Ior.Left(Chain.one(JsonFailure.NotAnArray(step)))
-            case Some(arr) =>
-              if idx < 0 || idx >= arr.length then
-                return Ior.Left(Chain.one(JsonFailure.IndexOutOfRange(step, arr.length)))
-              cur = arr(idx)
-      i += 1
-    decoder.decodeJson(cur) match
-      case Right(a) => Ior.Right(a)
-      case Left(df) =>
-        val lastStep = if n == 0 then PathStep.Field("") else suffix(n - 1)
-        Ior.Left(Chain.one(JsonFailure.DecodeFailed(lastStep, df)))
+    JsonWalk.walkPath(elemJson, suffix) match
+      case Left(failure)   => Ior.Left(Chain.one(failure))
+      case Right((cur, _)) =>
+        decoder.decodeJson(cur) match
+          case Right(a) => Ior.Right(a)
+          case Left(df) =>
+            Ior.Left(Chain.one(JsonFailure.DecodeFailed(JsonWalk.terminalOf(suffix), df)))
 
   private def getAllIor(json: Json): Ior[Chain[JsonFailure], Vector[A]] =
     navigateToArrayIor(json) match
       case Left(l)         => l
       case Right((arr, _)) =>
-        val b = Vector.newBuilder[A]
-        b.sizeHint(arr.length)
-        var chain: Chain[JsonFailure] = Chain.empty
-        var i = 0
-        while i < arr.length do
-          readElementIor(arr(i)) match
-            case Ior.Right(a)   => b += a
-            case Ior.Left(c)    => chain = chain ++ c
-            case Ior.Both(c, a) =>
-              chain = chain ++ c
-              b += a
-          i += 1
-        val result = b.result()
-        if chain.isEmpty then Ior.Right(result)
-        else Ior.Both(chain, result)
-
-  private inline def rebuildStep(
-      parent: AnyRef,
-      step: PathStep,
-      child: Json,
-  ): Json =
-    step match
-      case PathStep.Field(name) =>
-        Json.fromJsonObject(parent.asInstanceOf[JsonObject].add(name, child))
-      case PathStep.Index(idx) =>
-        Json.fromValues(parent.asInstanceOf[Vector[Json]].updated(idx, child))
+        val (chain, result) =
+          arr.foldLeft((Chain.empty[JsonFailure], Vector.empty[A])) {
+            case ((chain, acc), elem) =>
+              readElementIor(elem) match
+                case Ior.Right(a)   => (chain, acc :+ a)
+                case Ior.Left(c)    => (chain ++ c, acc)
+                case Ior.Both(c, a) => (chain ++ c, acc :+ a)
+          }
+        if chain.isEmpty then Ior.Right(result) else Ior.Both(chain, result)
 
 object JsonTraversal:
 
