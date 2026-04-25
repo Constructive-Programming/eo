@@ -905,18 +905,17 @@ significantly complicate, clean implementation. They should be
 addressed in cats-eo `core` *before* eo-monocle Unit 1 starts, or at
 the latest before the unit that depends on them.
 
-- **Gap-1. `Composer[F, SetterF]` is incomplete.** The composition-gap
-  analysis (§0.3) confirms `Tuple2 → SetterF` is the only inbound
-  Composer for SetterF; `Either → SetterF`, `Affine → SetterF`,
-  `PowerSeries → SetterF`, `Forget → SetterF` are all absent. Several
-  cross-library composition rows (eo Prism + monocle Setter, eo
-  Optional + monocle Setter, eo Traversal + monocle Setter) need
-  these to compile. **Disposition:** ship the missing inbound
-  Composers as part of cats-eo 0.1.0 (the Composer instances are
-  small, mostly mechanical) OR document the gap in the migration
-  page and tell users to take the Setter via `.toEo` and downcast
-  to a `Setter[S, A]` directly. Recommended: ship the Composers;
-  it's <100 LoC and the migration page is much cleaner.
+- **Gap-1. `Composer[F, SetterF]` is incomplete.** **CLOSED 2026-04-25**
+  by cats-eo commit `d9d5fcd` — shipped `either2setter`, `affine2setter`,
+  and `powerseries2setter` in `core/src/main/scala/eo/data/SetterF.scala`.
+  All three cross-library compose rows (eo Prism / Optional /
+  Traversal × Monocle Setter) now resolve via the standard `Composer`
+  + `chainViaTuple2` machinery. `Forget → SetterF` was not shipped —
+  Forget is read-only and can't meaningfully degrade to a write-only
+  Setter; Fold-outer × Monocle Setter has no structural target. The
+  cross-library composition lattice (§"Cross-library composition
+  lattice" above) for Setter inner now resolves uniformly without a
+  Setter-specific carve-out.
 - **Gap-2. Monocle's `Fold[S, A]` has no eo target without nominating
   `F[_]`.** cats-eo's Fold is `Optic[F[A], Unit, A, A, Forget[F]]` —
   the source type is pinned to `F[A]`. Monocle's Fold is `Fold[S, A]`
@@ -956,14 +955,12 @@ the latest before the unit that depends on them.
   — R8 (Review interop) was dropped; users keep eo's `Review` for
   reverse-build use cases or write the `A => S` function inline.
 
-If Gap 1 lands before eo-monocle starts, the interop design is
-clean. If it doesn't, Unit 6 ships more "no composition supported"
-branches (eo Prism / Optional / Traversal × monocle Setter) and the
-migration page grows a "things you can't do" section. Recommended
-path: close Gap 1 as part of cats-eo 0.1.0 and let eo-monocle
-inherit the cleaned-up surface. (Gap 3's PowerSeries × AlgLens leg
-is U-by-design and stays documented; Gap 4 — sink-family outbound —
-is also U-by-design.)
+Gap 1 closed in cats-eo `d9d5fcd` (2026-04-25); the interop design
+inherits a clean Setter row. Gap 3's PowerSeries × AlgLens leg is
+U-by-design and stays documented; Gap 4 — sink-family outbound — is
+also U-by-design. Gap 6 is moot since R8 (Review interop) was
+dropped from 0.1.0 scope. No outstanding pre-Unit-1 blockers; the
+plan is ready to start whenever the maintainer schedules it.
 
 ## Open questions
 
