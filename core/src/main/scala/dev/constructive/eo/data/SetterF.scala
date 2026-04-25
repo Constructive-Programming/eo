@@ -47,16 +47,16 @@ object SetterF:
     ): SetterF[X, B] => (B => G[C]) => G[SetterF[X, C]] =
       s => g => D.tupleLeft(D.distribute(s.setter._2)(g), s.setter._1).map(SetterF(_))
 
-  /** Shared skeleton for the `Composer[F, SetterF]` instances below. Every one of the four
-    * carriers (`Tuple2`, `Either`, `Affine`, `PowerSeries`) materialises a coerced
-    * `Optic[S, T, A, B, SetterF]` with the same shape — `type X = (S, A)`, the same identity
-    * `to` ("seed the SetterF with the original `s` and the identity focus-fn"), and a `from`
-    * that delegates the per-carrier focus rewrite to `applyWrite`.
+  /** Shared skeleton for the `Composer[F, SetterF]` instances below. Every one of the four carriers
+    * (`Tuple2`, `Either`, `Affine`, `PowerSeries`) materialises a coerced
+    * `Optic[S, T, A, B, SetterF]` with the same shape — `type X = (S, A)`, the same identity `to`
+    * ("seed the SetterF with the original `s` and the identity focus-fn"), and a `from` that
+    * delegates the per-carrier focus rewrite to `applyWrite`.
     *
-    * Routing through this helper collapses the four near-identical bodies that previously sat
-    * in each `Composer` instance. Not `inline` — anonymous-class definitions in inline bodies
-    * trigger `-Werror`-fatal "duplicated at each inline site" warnings, and the per-carrier
-    * call-site allocates the same single anonymous-`Optic` instance either way.
+    * Routing through this helper collapses the four near-identical bodies that previously sat in
+    * each `Composer` instance. Not `inline` — anonymous-class definitions in inline bodies trigger
+    * `-Werror`-fatal "duplicated at each inline site" warnings, and the per-carrier call-site
+    * allocates the same single anonymous-`Optic` instance either way.
     */
   private def coerceToSetter[F[_, _], S, T, A, B](
       applyWrite: (S, A => B) => T

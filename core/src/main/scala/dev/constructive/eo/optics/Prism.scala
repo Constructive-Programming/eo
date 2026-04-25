@@ -124,12 +124,12 @@ final class MendTearPrism[S, T, A, B](
 
   /** Single fused-andThen kernel for a `MendTearPrism` outer when the result is another
     * `MendTearPrism` (i.e. the inner contributes only Either-carrier semantics). The outer-miss
-    * `Left(t)` short-circuits; outer-hit threads the focus through `innerTear` (read side, may
-    * miss in inner-shaped form) and `innerMend` (write side, lifts D back to B before applying
-    * the outer's mend).
+    * `Left(t)` short-circuits; outer-hit threads the focus through `innerTear` (read side, may miss
+    * in inner-shaped form) and `innerMend` (write side, lifts D back to B before applying the
+    * outer's mend).
     *
-    * `inline` so the call-site materialises the same `MendTearPrism` allocation as the
-    * pre-refactor hand-written overloads.
+    * `inline` so the call-site materialises the same `MendTearPrism` allocation as the pre-refactor
+    * hand-written overloads.
     */
   private inline def fuseToMendTear[C, D](
       innerTear: A => Either[T, C],
@@ -143,11 +143,11 @@ final class MendTearPrism[S, T, A, B](
       mend = d => mend(innerMend(d)),
     )
 
-  /** Single fused-andThen kernel for a `MendTearPrism` outer when the result is an `Optional`
-    * (i.e. the inner is the always-present half — Lens or Optional — and the composite must
-    * surface the carrier-shaped `Affine` semantics). Outer-miss surfaces as `Left(t)`; on hit,
-    * `innerHit` decides whether the focus C arrived (`Right(c)`) or the inner missed and we
-    * need to lift through outer.mend (`Left(mend(b))` — encoded in the caller).
+  /** Single fused-andThen kernel for a `MendTearPrism` outer when the result is an `Optional` (i.e.
+    * the inner is the always-present half — Lens or Optional — and the composite must surface the
+    * carrier-shaped `Affine` semantics). Outer-miss surfaces as `Left(t)`; on hit, `innerHit`
+    * decides whether the focus C arrived (`Right(c)`) or the inner missed and we need to lift
+    * through outer.mend (`Left(mend(b))` — encoded in the caller).
     */
   private inline def fuseToOptional[C, D](
       innerHit: A => Either[T, C],

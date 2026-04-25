@@ -185,12 +185,11 @@ final class Optional[S, T, A, B](
   /** Fused `Optional.andThen(BijectionIso)` — iso is transparent; threads the get / reverseGet
     * through the Optional's existing shape.
     *
-    * Historical note: prior to the de-duplication refactor this overload skipped the
-    * outer-miss short-circuit on the write path (`reverseGet = (s, d) => reverseGet(s,
-    * inner.reverseGet(d))`), which observably differed from the other three Optional fused
-    * overloads. That was a latent bug — the unfused `from` returns the Miss leftover `t`
-    * directly, never invoking `reverseGet`. Routing through `fuseToOptional` aligns this case
-    * with the others.
+    * Historical note: prior to the de-duplication refactor this overload skipped the outer-miss
+    * short-circuit on the write path (`reverseGet = (s, d) => reverseGet(s, inner.reverseGet(d))`),
+    * which observably differed from the other three Optional fused overloads. That was a latent bug
+    * — the unfused `from` returns the Miss leftover `t` directly, never invoking `reverseGet`.
+    * Routing through `fuseToOptional` aligns this case with the others.
     */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): Optional[S, T, C, D] =
     fuseToOptional(

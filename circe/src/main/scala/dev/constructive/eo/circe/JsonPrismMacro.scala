@@ -58,12 +58,11 @@ object JsonPrismMacro:
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
     selectDynamicCommon[A]("JsonPrism selectDynamic", nameE) {
-      [b] =>
-        (
-            name: String,
-            enc: Expr[Encoder[b]],
-            dec: Expr[Decoder[b]]
-        ) => '{ $parent.widenPath[b](${ Expr(name) })(using $enc, $dec) }
+      [b] => (
+          name: String,
+          enc: Expr[Encoder[b]],
+          dec: Expr[Decoder[b]],
+      ) => '{ $parent.widenPath[b](${ Expr(name) })(using $enc, $dec) }
     }
 
   /** Macro for `jsonPrism.at(i)`. Verifies the parent focus `A` looks like a Scala collection (i.e.
@@ -153,12 +152,11 @@ object JsonPrismMacro:
       selectorsE: Expr[Seq[A => Any]],
   )(using q: Quotes): Expr[Any] =
     fieldsCommon[A]("JsonPrism.fields", selectorsE) {
-      [nt] =>
-        (
-            namesExpr: Expr[Array[String]],
-            enc: Expr[Encoder[nt]],
-            dec: Expr[Decoder[nt]]
-        ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
+      [nt] => (
+          namesExpr: Expr[Array[String]],
+          enc: Expr[Encoder[nt]],
+          dec: Expr[Decoder[nt]],
+      ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
     }
 
   /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
@@ -170,26 +168,28 @@ object JsonPrismMacro:
       selectorsE: Expr[Seq[A => Any]],
   )(using q: Quotes): Expr[Any] =
     fieldsCommon[A]("JsonTraversal.fields", selectorsE) {
-      [nt] =>
-        (
-            namesExpr: Expr[Array[String]],
-            enc: Expr[Encoder[nt]],
-            dec: Expr[Decoder[nt]]
-        ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $enc, $dec) }
+      [nt] => (
+          namesExpr: Expr[Array[String]],
+          enc: Expr[Encoder[nt]],
+          dec: Expr[Decoder[nt]],
+      ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $enc, $dec) }
     }
 
   /** Shared backbone for `fieldsImpl` (JsonPrism side) and `fieldsTraversalImpl` (JsonTraversal
-    * side). Validates the varargs selector list per D10, synthesises the SELECTOR-order
-    * NamedTuple type, summons its `Encoder` / `Decoder`, and hands the four pieces
-    * (`namesExpr`, `enc`, `dec`, plus the `Type[nt]` evidence) to the caller-supplied `emit`
-    * callback. The two former entry points differed only in the error tag and the final
-    * `toFieldsPrism` / `toFieldsTraversal` emit; everything else (~115 lines of validation +
-    * NamedTuple construction) was copy-pasted between them.
+    * side). Validates the varargs selector list per D10, synthesises the SELECTOR-order NamedTuple
+    * type, summons its `Encoder` / `Decoder`, and hands the four pieces (`namesExpr`, `enc`, `dec`,
+    * plus the `Type[nt]` evidence) to the caller-supplied `emit` callback. The two former entry
+    * points differed only in the error tag and the final `toFieldsPrism` / `toFieldsTraversal`
+    * emit; everything else (~115 lines of validation + NamedTuple construction) was copy-pasted
+    * between them.
     */
   private def fieldsCommon[A: Type](
       who: String,
       selectorsE: Expr[Seq[A => Any]],
-  )(emit: [nt] => (Expr[Array[String]], Expr[Encoder[nt]], Expr[Decoder[nt]]) => Type[nt] ?=> Expr[
+  )(
+      emit: [nt] => (Expr[Array[String]], Expr[Encoder[nt]], Expr[Decoder[nt]]) => Type[
+        nt
+      ] ?=> Expr[
         Any
       ]
   )(using q: Quotes): Expr[Any] =
@@ -299,19 +299,18 @@ object JsonPrismMacro:
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
     selectDynamicCommon[A]("JsonTraversal selectDynamic", nameE) {
-      [b] =>
-        (
-            name: String,
-            enc: Expr[Encoder[b]],
-            dec: Expr[Decoder[b]]
-        ) => '{ $parent.widenSuffix[b](${ Expr(name) })(using $enc, $dec) }
+      [b] => (
+          name: String,
+          enc: Expr[Encoder[b]],
+          dec: Expr[Decoder[b]],
+      ) => '{ $parent.widenSuffix[b](${ Expr(name) })(using $enc, $dec) }
     }
 
   /** Shared backbone for `selectFieldImpl` (JsonPrism side) and `selectFieldTraversalImpl`
     * (JsonTraversal side). Validates the literal-string name, looks the field up on `A`'s
-    * case-class schema, widens the field type, summons `Encoder` / `Decoder`, and routes
-    * through the caller-supplied `emit` callback for the side-specific final expression
-    * (`widenPath` vs `widenSuffix`).
+    * case-class schema, widens the field type, summons `Encoder` / `Decoder`, and routes through
+    * the caller-supplied `emit` callback for the side-specific final expression (`widenPath` vs
+    * `widenSuffix`).
     */
   private def selectDynamicCommon[A: Type](
       who: String,
@@ -366,10 +365,10 @@ object JsonPrismMacro:
         )
 
   /** Shared helper: summon both `Encoder[B]` and `Decoder[B]` from the enclosing scope, with a
-    * caller-supplied error message on either failure. Each former call site spelled the same
-    * "no given Encoder[…] in scope. …" twice, once for `Encoder` and once for `Decoder`; the
-    * caller now passes a single `errorMsg(role)` and the helper plugs in `"Encoder"` /
-    * `"Decoder"` for the missing one.
+    * caller-supplied error message on either failure. Each former call site spelled the same "no
+    * given Encoder[…] in scope. …" twice, once for `Encoder` and once for `Decoder`; the caller now
+    * passes a single `errorMsg(role)` and the helper plugs in `"Encoder"` / `"Decoder"` for the
+    * missing one.
     */
   private def summonCodecs[B: Type](
       errorMsg: String => String

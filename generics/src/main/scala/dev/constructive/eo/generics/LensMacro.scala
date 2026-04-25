@@ -245,7 +245,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
               // IS-A Tuple — the opaque-subtype relation
               // `Values <: NamedTuple[Names, Values]` carries the
               // value through the asExprOf check.
-              scala.quoted.Expr
+              scala
+                .quoted
+                .Expr
                 .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, otherSyms))
                 .asExprOf[xa]
             }
@@ -337,7 +339,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val get: Expr[S => focus] =
           '{ (s: S) =>
             ${
-              scala.quoted.Expr
+              scala
+                .quoted
+                .Expr
                 .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, selectorSyms))
                 .asExprOf[focus]
             }
@@ -348,12 +352,16 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val split: Expr[S => (complement, focus)] =
           '{ (s: S) =>
             val x: complement = ${
-              scala.quoted.Expr
+              scala
+                .quoted
+                .Expr
                 .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, otherSyms))
                 .asExprOf[complement]
             }
             val a: focus = ${
-              scala.quoted.Expr
+              scala
+                .quoted
+                .Expr
                 .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, selectorSyms))
                 .asExprOf[focus]
             }
@@ -446,7 +454,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         val get: Expr[S => focus] =
           '{ (s: S) =>
             ${
-              scala.quoted.Expr
+              scala
+                .quoted
+                .Expr
                 .ofTupleFromSeq(tupleFieldReads('{ s }.asTerm, selectorSyms))
                 .asExprOf[focus]
             }
@@ -491,8 +501,8 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
   /** Build the `NamedTuple[Names, Values]` `TypeRepr` for a list of (name, type) pairs.
     *
     * Used by all three codegen arms (`buildLens` for the single-selector complement,
-    * `buildMultiLens` for both the focus and the complement, `buildMultiIso` for the focus).
-    * Folds names + types right-to-left into right-leaning `*: EmptyTuple` chains, then applies
+    * `buildMultiLens` for both the focus and the complement, `buildMultiIso` for the focus). Folds
+    * names + types right-to-left into right-leaning `*: EmptyTuple` chains, then applies
     * `scala.NamedTuple.NamedTuple` to lift the values tuple back into NamedTuple shape.
     */
   private def namedTupleTypeOf(names: List[String], tpes: List[TypeRepr]): TypeRepr =
@@ -507,13 +517,13 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
 
   /** Read each field of `sourceTerm` named in `fieldSyms` via `Select.unique`, returning the
-    * resulting list of `Expr[Any]`. Used by every codegen arm that has to project a list of
-    * fields out of `S` into a NamedTuple (focus reads on all three arms, complement reads on
-    * the single + multi arms).
+    * resulting list of `Expr[Any]`. Used by every codegen arm that has to project a list of fields
+    * out of `S` into a NamedTuple (focus reads on all three arms, complement reads on the single +
+    * multi arms).
     *
-    * Note: the `Term` and `Symbol` arguments are tied to the enclosing class's `Quotes` (we
-    * use them via the imported `quotes.reflect.*`), so this helper does NOT take
-    * `(using Quotes)`. Callers pass terms taken from the same `quotes.reflect` scope.
+    * Note: the `Term` and `Symbol` arguments are tied to the enclosing class's `Quotes` (we use
+    * them via the imported `quotes.reflect.*`), so this helper does NOT take `(using Quotes)`.
+    * Callers pass terms taken from the same `quotes.reflect` scope.
     */
   private def tupleFieldReads(sourceTerm: Term, fieldSyms: List[Symbol]): List[Expr[Any]] =
     fieldSyms.map(sym => Select.unique(sourceTerm, sym.name).asExpr)
@@ -525,9 +535,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     * slot.
     *
     * Takes `(using Quotes)` so the helper builds its `'{ … }` against the call-site splice's
-    * `Quotes` rather than capturing the enclosing class-level `Quotes` — without it, the
-    * resulting `Expr[T]` would be tied to the wrong quote scope and the splice site would
-    * reject it as "captures an outer instance of Quotes".
+    * `Quotes` rather than capturing the enclosing class-level `Quotes` — without it, the resulting
+    * `Expr[T]` would be tied to the wrong quote scope and the splice site would reject it as
+    * "captures an outer instance of Quotes".
     */
   private def tupleIndexAccessor[Carrier: Type, T: Type](
       carrier: Expr[Carrier],
