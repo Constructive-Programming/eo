@@ -15,29 +15,27 @@ optics seamlessly. The module ships:
 
 1. **Bidirectional conversions** — `toMonocle` / `toEo` for every
    optic family that exists on both sides (Iso, Lens, Prism, Optional,
-   Traversal, Setter, Getter, Fold, Review).
+   Traversal, Setter, Getter, Fold). AffineFold goes one-way (eo →
+   Monocle `Fold`) since Monocle has no AffineFold counterpart.
 2. **Cross-library composition** — `eoLens.andThen(monocleTraversal)`
    and the symmetric direction land at the lowest common ancestor in
    the lattice without explicit conversions, mirroring Monocle's own
    subtype lattice (Iso ⊂ Lens ⊂ Optional ⊂ Traversal ⊂ Setter; Iso ⊂
    Prism ⊂ Optional; Lens ⊂ Getter ⊂ Fold).
-3. **One-way conversions for eo-only families** — `AlgLens[F]`,
-   `Grate`, `Kaleidoscope`, `JsonPrism` / `JsonFieldsTraversal`
-   degrade to a Monocle `Setter` or `Fold` (the cats-eo encoding has
-   no direct Monocle counterpart, so the conversion preserves what it
-   can and the inverse direction is not offered).
-4. **Generic-derived optics interop** — `eo.generics.lens` returns
-   NamedTuple-bearing optics; Monocle's `Focus` macro returns
-   plain-tuple `Lens`. A NamedTuple ↔ tuple flattening adapter lets
-   the two macro outputs cross compose.
-5. **A migration cookbook recipe + dedicated migration page** showing
+3. **A migration cookbook recipe + dedicated migration page** showing
    "drop our jar in alongside your existing Monocle code" and "leaf
-   migrate one Lens at a time" workflows.
-6. **Round-trip property tests** that verify every conversion is
-   law-preserving (a Monocle Lens converted to eo and back behaves
-   identically; an eo Lens converted to Monocle obeys
-   `monocle.law.LensLaws`).
-7. **JMH micro-benchmarks** that quantify conversion overhead so users
+   migrate one Lens at a time" workflows. The migration page also
+   documents the eo-only-family idiom: AlgLens / Grate / Kaleidoscope
+   / JsonPrism / JsonFieldsTraversal have no Monocle counterpart, so
+   users feed them into Monocle pipelines by wrapping `.modify` or
+   `.foldMap` inside `monocle.Setter.apply` / `monocle.Fold.apply`
+   at the call site. (Module-level converters for those families
+   were considered and dropped — see the §Scope change note.)
+4. **Round-trip property tests** that verify every conversion is
+   behaviour-preserving — a Monocle optic converted to eo and back is
+   observably identical through `get` / `modify` / `replace` / etc.
+   on a fixture battery.
+5. **JMH micro-benchmarks** that quantify conversion overhead so users
    know hot-path cost (target: ≤2 ns per `.toMonocle` /
    `.toEo` for the simple-carrier optics; allocations only in the
    wrapper, not the body of `get` / `modify`).
@@ -298,10 +296,11 @@ unchanged at the 2-4 week range.
   reaching for either an explicit `Composer` or a `.toEo` /
   `.toMonocle` step.
 - `core/src/main/scala/eo/optics/{Lens, Prism, Iso, Optional,
-  Traversal, Setter, Getter, Fold, AffineFold, Review}.scala` — each
-  family's constructors. The `.toMonocle` half of every conversion
-  reads through these constructor shapes; the `.toEo` half builds
-  the same constructor shape from the Monocle side.
+  Traversal, Setter, Getter, Fold, AffineFold}.scala` — each family's
+  constructors. The `.toMonocle` half of every conversion reads
+  through these constructor shapes; the `.toEo` half builds the same
+  constructor shape from the Monocle side. `Review.scala` is in cats-
+  eo but its interop was dropped (R8) — see §Scope change.
 - `core/src/main/scala/eo/data/{Affine, AlgLens, FixedTraversal,
   Forget, Forgetful, Grate, Kaleidoscope, PowerSeries, SetterF}.scala`
   — carrier definitions. Each carrier's `to` / `from` shape pins the
