@@ -1722,7 +1722,7 @@ land before Unit 15 (release cut) so the tag ships the cleaned surface.
 - Coverage report's circe module is populated.
 - Review §"Must-fix for 0.1.0" checklist items 1-7 all complete.
 
-- [ ] **Unit 18: Mermaid diagrams — composition lattice, Ior failure-flow, family taxonomy (R15a)**
+- [x] **Unit 18: Mermaid diagrams — composition lattice, Ior failure-flow, family taxonomy (R15a)**
 
 **Goal:** Ship the three priority diagrams from the
 cookbook-sources research (§Track 2 shortlist) so users can orient on the

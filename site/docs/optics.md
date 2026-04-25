@@ -4,6 +4,62 @@ One section per family, each with the shape, carrier, primary
 use case, and a minimal runnable example. For the per-method
 reference see the Scaladoc.
 
+## Family taxonomy
+
+Every family on this page is a specialisation of the same
+`Optic[S, T, A, B, F]` trait, differing only in the carrier
+`F[_, _]`. The tree below indexes each family by its carrier.
+Click a leaf to jump to its section.
+
+```mermaid
+flowchart TD
+  root["Optic[S, T, A, B, F]"]
+  root --> Forgetful
+  root --> Tuple2
+  root --> Either
+  root --> Affine
+  root --> SetterF
+  root --> ForgetF["Forget[F]"]
+  root --> PowerSeries
+  root --> Grate
+  root --> Kaleidoscope
+  root --> AlgLensF["AlgLens[F]"]
+  root --> FixedN["FixedTraversal[N]"]
+  Forgetful --> Iso
+  Forgetful --> Getter
+  Tuple2 --> Lens
+  Either --> Prism
+  Affine --> Optional
+  Affine --> AffineFold
+  SetterF --> Setter
+  ForgetF --> Fold
+  ForgetF --> TraversalForEach["Traversal.forEach"]
+  PowerSeries --> TraversalEach["Traversal.each"]
+  Grate --> GrateLeaf["Grate"]
+  Kaleidoscope --> KaleidoscopeLeaf["Kaleidoscope"]
+  AlgLensF --> AlgLensLeaf["AlgLens"]
+  FixedN --> FixedLeaf["FixedTraversal"]
+  click Iso "#iso"
+  click Getter "#getter"
+  click Lens "#lens"
+  click Prism "#prism"
+  click Optional "#optional"
+  click AffineFold "#affinefold"
+  click Setter "#setter"
+  click Fold "#fold"
+  click TraversalForEach "#traversal"
+  click TraversalEach "#traversal"
+  click GrateLeaf "#grate"
+  click KaleidoscopeLeaf "#kaleidoscope"
+  click AlgLensLeaf "#alglens"
+  click FixedLeaf "#traversal"
+```
+
+The standalone `Review` family sits outside this tree — it
+deliberately doesn't extend `Optic` (no read side to fit the
+trait's `to` contract) and lives in its own section below.
+
+
 ```scala mdoc:silent
 import eo.optics.{Lens, Optic}
 import eo.optics.Optic.*
