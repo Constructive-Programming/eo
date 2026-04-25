@@ -157,15 +157,60 @@ PowerSeries`, `Either → Affine`, `Either → PowerSeries`,
 `Affine → PowerSeries`, `Forgetful → Tuple2`, `Forgetful →
 Either`.
 
-The transitive `Composer.chain` given lets you hop across two
-bridges without naming the intermediate. `Morph`'s four
-instances (`same`, `leftToRight`, `rightToLeft`, and the
-low-priority `bothViaAffine`) are what let `.andThen`
+The transitive `Composer.chainViaTuple2` given lets you hop
+across two bridges using `Tuple2` as the fixed intermediate.
+`Morph`'s four instances (`same`, `leftToRight`, `rightToLeft`,
+and the low-priority `bothViaAffine`) are what let `.andThen`
 auto-select the morph direction from the available `Composer`s
 between `F` and `G`. `bothViaAffine` fills the gap for pairs
 that have no direct bridge in either direction — a Prism
 (`Either`) composed with a Lens (`Tuple2`), for instance — by
 lifting both sides into `Affine`, which both carriers reach.
+
+### Composition lattice
+
+Every edge below is a shipping `Composer[F, G]` given; solid
+arrows are tier-1 atomic bridges, dashed arrows are tier-2
+transitive derivations via `Composer.chainViaTuple2`. Terminal
+nodes (`SetterF`, `AlgLens[F]`, `Kaleidoscope`, `Grate`,
+`PowerSeries`, `FixedTraversal[N]`) sink — they have no
+outbound `Composer` instance — so chains must land there last.
+
+```mermaid
+flowchart LR
+  Forgetful --> Tuple2
+  Forgetful --> Either
+  Forgetful --> Grate
+  Forgetful --> Kaleidoscope
+  Tuple2 --> Affine
+  Tuple2 --> SetterF
+  Tuple2 --> PowerSeries
+  Tuple2 --> AlgLensF["AlgLens[F]"]
+  Either --> Affine
+  Either --> PowerSeries
+  Either --> AlgLensF
+  Affine --> PowerSeries
+  Affine --> AlgLensF
+  ForgetF["Forget[F]"] --> AlgLensF
+  Forgetful -.->|chainViaTuple2| Affine
+  Forgetful -.->|chainViaTuple2| SetterF
+  Forgetful -.->|chainViaTuple2| PowerSeries
+  Forgetful -.->|chainViaTuple2| AlgLensF
+  FixedN["FixedTraversal[N]"]
+  SetterF:::sink
+  AlgLensF:::sink
+  Kaleidoscope:::sink
+  Grate:::sink
+  PowerSeries:::sink
+  FixedN:::sink
+  classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
+```
+
+`FixedTraversal[N]` is drawn standalone: it has neither
+inbound nor outbound `Composer`, and no `AssociativeFunctor`
+either — it's a pure leaf carrier. `Forget[F]` has one outbound
+bridge (`→ AlgLens[F]`) but no inbound, so chains reach it only
+via `Traversal.forEach` at construction time.
 
 ## Why the existential machinery is worth it
 
