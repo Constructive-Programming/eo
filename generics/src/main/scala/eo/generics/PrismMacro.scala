@@ -35,6 +35,24 @@ import eo.optics.{Optic, Prism}
   */
 object PrismMacro:
 
+  /** Derive a Prism from a sum / enum / union type `S` to one of its direct children `A <: S`.
+    * Delegates to [[deriveImpl]] through a `transparent inline` splice so the synthesised
+    * `MendTearPrism` propagates to the call site.
+    *
+    * @group Constructors
+    * @tparam S
+    *   parent sum / enum / union type
+    * @tparam A
+    *   child variant type being focused; must be a subtype of `S`
+    *
+    * @example
+    *   {{{
+    * import eo.generics.prism
+    * enum Shape:
+    *   case Circle(r: Double), Square(s: Double)
+    * val circleP = prism[Shape, Shape.Circle]
+    *   }}}
+    */
   inline def derive[S, A <: S]: Optic[S, S, A, A, Either] =
     ${ deriveImpl[S, A] }
 

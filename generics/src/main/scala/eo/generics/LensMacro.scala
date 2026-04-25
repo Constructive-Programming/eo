@@ -48,11 +48,24 @@ import eo.optics.{BijectionIso, Optic, SimpleLens}
   */
 object LensMacro:
 
-  // `transparent inline` so the specific concrete return subclass the macro synthesises
-  // (`SimpleLens[S, A, XA]` on partial cover, `BijectionIso[S, S, T, T]` on full cover)
-  // propagates to the call site. The declared `Optic[S, S, ?, ?, ?]` is the narrowest
-  // cats-eo supertype spanning both arms; the call-site type is always a concrete
-  // subclass, so `.andThen` picks up the fused concrete-subclass overloads.
+  /** Varargs macro entry — derives a `Lens` (partial cover) or `Iso` (full cover) from one or more
+    * single-field case-class accessors. `transparent inline` so the macro-synthesised concrete
+    * subclass (a `SimpleLens[S, A, XA]` on partial cover, `BijectionIso[S, S, T, T]` on full cover)
+    * propagates to the call site — the declared `Optic[S, S, ?, ?, ?]` is the narrowest cats-eo
+    * supertype spanning both arms, but callers see the concrete subclass so `.andThen` picks up
+    * fused concrete-subclass overloads.
+    *
+    * @group Constructors
+    * @tparam S
+    *   source case-class type
+    *
+    * @example
+    *   {{{
+    * import eo.generics.lens
+    * case class Person(name: String, age: Int)
+    * val ageL = lens[Person](_.age)
+    *   }}}
+    */
   transparent inline def deriveMulti[S](
       inline selectors: (S => Any)*
   ): Optic[S, S, ?, ?, ?] =

@@ -24,6 +24,8 @@ package object generics:
     * avoids the `.copy` requirement that blocks derivation for enum cases.
     *
     * @group Constructors
+    * @tparam S
+    *   source case-class type whose field(s) will be focused
     *
     * @example
     *   {{{
@@ -40,12 +42,20 @@ package object generics:
     */
   def lens[S]: PartiallyAppliedLens[S] = new PartiallyAppliedLens[S]
 
+  /** Partially-applied type witness produced by [[lens]]. The second argument list collects the
+    * field selectors and dispatches to the underlying `LensMacro`.
+    *
+    * @tparam S
+    *   source case-class type (carried from the first application)
+    */
   final class PartiallyAppliedLens[S]:
 
     /** Unified varargs entry. `transparent inline` so the macro-synthesised concrete return type (a
       * `SimpleLens[S, A, XA]` on partial cover, `BijectionIso[S, S, T, T]` on full cover)
       * propagates to the call site. Chained `.andThen` picks up the fused concrete-subclass
       * overloads for free.
+      *
+      * @group Constructors
       */
     transparent inline def apply(
         inline selectors: (S => Any)*
@@ -58,6 +68,10 @@ package object generics:
     * through Hearth's `Enum.parse[S]` and emits the appropriate pattern-match.
     *
     * @group Constructors
+    * @tparam S
+    *   parent sum / enum / union type
+    * @tparam A
+    *   child variant type being focused; must be a subtype of `S`
     *
     * @example
     *   {{{
