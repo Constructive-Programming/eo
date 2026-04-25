@@ -18,6 +18,7 @@ libraryDependencies += "dev.constructive" %% "cats-eo" % "0.1.0"
 // Optional submodules:
 libraryDependencies += "dev.constructive" %% "cats-eo-laws"     % "0.1.0" % Test
 libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "0.1.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-circe"    % "0.1.0"
 ```
 
 Requires Scala 3.8.x on JDK 17 or JDK 21.
@@ -46,42 +47,42 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
 
 ## What's in cats-eo
 
-- [`Iso`](https://cats-eo.constructive.dev/optics.html#iso) — a bijective
+- [`Iso`](https://eo.constructive.dev/optics.html#iso) — a bijective
   one-focus optic; the carrier is `Forgetful`.
-- [`Lens`](https://cats-eo.constructive.dev/optics.html#lens) — a
+- [`Lens`](https://eo.constructive.dev/optics.html#lens) — a
   one-focus optic into an always-present field of a product.
-- [`Prism`](https://cats-eo.constructive.dev/optics.html#prism) — a
+- [`Prism`](https://eo.constructive.dev/optics.html#prism) — a
   one-focus optic into a sum-type branch.
-- [`Optional`](https://cats-eo.constructive.dev/optics.html#optional) — a
+- [`Optional`](https://eo.constructive.dev/optics.html#optional) — a
   one-focus optic where the focus may be absent.
-- [`AffineFold`](https://cats-eo.constructive.dev/optics.html#affinefold) —
+- [`AffineFold`](https://eo.constructive.dev/optics.html#affinefold) —
   a read-only `Optional`; partial projection without a write side.
-- [`Getter`](https://cats-eo.constructive.dev/optics.html#getter) — a
+- [`Getter`](https://eo.constructive.dev/optics.html#getter) — a
   read-only one-focus projection.
-- [`Setter`](https://cats-eo.constructive.dev/optics.html#setter) — a
+- [`Setter`](https://eo.constructive.dev/optics.html#setter) — a
   write-only optic; modify without observing.
-- [`Fold`](https://cats-eo.constructive.dev/optics.html#fold) — N foci
+- [`Fold`](https://eo.constructive.dev/optics.html#fold) — N foci
   summarised through a `Monoid`.
-- [`Traversal`](https://cats-eo.constructive.dev/optics.html#traversal) —
+- [`Traversal`](https://eo.constructive.dev/optics.html#traversal) —
   N foci, each individually modifiable; `.each` and `.forEach` flavours.
-- [`AlgLens`](https://cats-eo.constructive.dev/optics.html#alglens) —
+- [`AlgLens`](https://eo.constructive.dev/optics.html#alglens) —
   classifier-shaped update where the whole `F[A]` is visible (adaptive
   KNN, one-vs-rest).
-- [`Grate`](https://cats-eo.constructive.dev/optics.html#grate) — the
+- [`Grate`](https://eo.constructive.dev/optics.html#grate) — the
   dual of `Lens`; lifts a function on the focus to a function on the
   whole structure.
-- [`Kaleidoscope`](https://cats-eo.constructive.dev/optics.html#kaleidoscope) —
+- [`Kaleidoscope`](https://eo.constructive.dev/optics.html#kaleidoscope) —
   applicative-aware aggregation; folds a structure under any
   `Apply` carrier.
-- [`Review`](https://cats-eo.constructive.dev/optics.html#review) — the
+- [`Review`](https://eo.constructive.dev/optics.html#review) — the
   reverse-only half of a `Prism`; build, never observe.
-- [`JsonPrism`](https://cats-eo.constructive.dev/circe.html#jsonprism) —
+- [`JsonPrism`](https://eo.constructive.dev/circe.html#jsonprism) —
   cursor-backed JSON optic with observable-by-default `Ior` failures.
-- [`JsonFieldsPrism`](https://cats-eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
+- [`JsonFieldsPrism`](https://eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
   multi-field flavour of `JsonPrism`.
-- [`JsonTraversal`](https://cats-eo.constructive.dev/circe.html#jsontraversal-each) —
+- [`JsonTraversal`](https://eo.constructive.dev/circe.html#jsontraversal-each) —
   `.each` traversal across JSON arrays.
-- [`JsonFieldsTraversal`](https://cats-eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
+- [`JsonFieldsTraversal`](https://eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
   multi-field flavour of `JsonTraversal`.
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
@@ -90,9 +91,9 @@ for cats typeclasses.
 
 ## Where to go next
 
-- Getting started: <https://cats-eo.constructive.dev/getting-started.html>
-- Macro-derived optics (`generics`): <https://cats-eo.constructive.dev/generics.html>
-- Cookbook (recipes): <https://cats-eo.constructive.dev/cookbook.html>
+- Getting started: <https://eo.constructive.dev/getting-started.html>
+- Macro-derived optics (`generics`): <https://eo.constructive.dev/generics.html>
+- Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
 - Composition gap analysis (research):
   [`docs/research/2026-04-23-composition-gap-analysis.md`](./docs/research/2026-04-23-composition-gap-analysis.md)
 

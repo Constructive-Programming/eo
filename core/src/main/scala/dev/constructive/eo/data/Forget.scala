@@ -13,8 +13,8 @@ import cats.syntax.functor._
   * applied to a type constructor `F`: `Forget[F][X, A] = F[A]`, ignoring `X` completely.
   *
   * Used by [[dev.constructive.eo.optics.Fold]], [[dev.constructive.eo.optics.Traversal.forEach]],
-  * and the algebraic-lens family ([[dev.constructive.eo.optics.AlgebraicLens]]) as a uniform
-  * "F-shape carrier" whose optic-level capabilities scale with the typeclasses `F` itself admits.
+  * and the algebraic-lens family ([[dev.constructive.eo.data.AlgLens]]) as a uniform "F-shape
+  * carrier" whose optic-level capabilities scale with the typeclasses `F` itself admits.
   */
 type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
 
