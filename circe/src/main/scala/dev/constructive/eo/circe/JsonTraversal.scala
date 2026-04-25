@@ -33,43 +33,18 @@ final class JsonTraversal[A] private[circe] (
     private[circe] val suffix: Array[PathStep],
     private[circe] val encoder: Encoder[A],
     private[circe] val decoder: Decoder[A],
-) extends Dynamic:
+) extends JsonOpticOps[A],
+      Dynamic:
 
   // ---- Dynamic field sugar -----------------------------------------
 
   transparent inline def selectDynamic(inline name: String): Any =
     ${ JsonPrismMacro.selectFieldTraversalImpl[A]('{ this }, 'name) }
 
-  // ---- Default (Ior-bearing) surface --------------------------------
-
-  def modify(f: A => A): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => modifyIor(j, f))
-
-  def transform(f: Json => Json): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => transformIor(j, f))
-
-  def place(a: A): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, a))
-
-  def transfer[C](f: C => A): (Json | String) => C => Ior[Chain[JsonFailure], Json] =
-    input => c => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, f(c)))
+  // ---- Read surface (multi-focus specific) --------------------------
 
   def getAll(input: Json | String): Ior[Chain[JsonFailure], Vector[A]] =
     JsonFailure.parseInputIor(input).flatMap(getAllIor)
-
-  // ---- *Unsafe (silent) escape hatches ------------------------------
-
-  inline def modifyUnsafe(f: A => A): (Json | String) => Json =
-    input => modifyImpl(JsonFailure.parseInputUnsafe(input), f)
-
-  inline def transformUnsafe(f: Json => Json): (Json | String) => Json =
-    input => transformImpl(JsonFailure.parseInputUnsafe(input), f)
-
-  inline def placeUnsafe(a: A): (Json | String) => Json =
-    input => placeImpl(JsonFailure.parseInputUnsafe(input), a)
-
-  inline def transferUnsafe[C](f: C => A): (Json | String) => C => Json =
-    input => c => placeImpl(JsonFailure.parseInputUnsafe(input), f(c))
 
   inline def getAllUnsafe(input: Json | String): Vector[A] =
     val json = JsonFailure.parseInputUnsafe(input)
@@ -125,17 +100,17 @@ final class JsonTraversal[A] private[circe] (
   private def walkSuffix(elemJson: Json): Option[Json] =
     JsonWalk.walkPath(elemJson, suffix).toOption.map(_._1)
 
-  private def modifyImpl(json: Json, f: A => A): Json =
+  override protected def modifyImpl(json: Json, f: A => A): Json =
     mapAtPrefix(json) { elem =>
       updateElementDecoded(elem, f)
     }
 
-  private def transformImpl(json: Json, f: Json => Json): Json =
+  override protected def transformImpl(json: Json, f: Json => Json): Json =
     mapAtPrefix(json) { elem =>
       updateElementRaw(elem, f)
     }
 
-  private def placeImpl(json: Json, a: A): Json =
+  override protected def placeImpl(json: Json, a: A): Json =
     val encoded = encoder(a)
     mapAtPrefix(json) { elem =>
       placeElement(elem, encoded)
@@ -206,7 +181,7 @@ final class JsonTraversal[A] private[circe] (
             .toRight(Ior.Left(Chain.one(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))))
       }
 
-  private def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
+  override protected def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
     navigateToArrayIor(json) match
       case Left(l)               => l
       case Right((arr, parents)) =>
@@ -214,7 +189,7 @@ final class JsonTraversal[A] private[circe] (
           mapElementsIor(arr, updateElementDecodedIor(_, f))
         rebuildPrefix(newArrAndChain, parents)
 
-  private def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
+  override protected def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
     navigateToArrayIor(json) match
       case Left(l)               => l
       case Right((arr, parents)) =>
@@ -222,7 +197,7 @@ final class JsonTraversal[A] private[circe] (
           mapElementsIor(arr, updateElementRawIor(_, f))
         rebuildPrefix(newArrAndChain, parents)
 
-  private def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
+  override protected def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
     val encoded = encoder(a)
     navigateToArrayIor(json) match
       case Left(l)               => l

@@ -50,6 +50,7 @@ final class JsonFieldsPrism[A] private[circe] (
     private[circe] val encoder: Encoder[A],
     private[circe] val decoder: Decoder[A],
 ) extends Optic[Json, Json, A, A, Either],
+      JsonOpticOps[A],
       Dynamic:
 
   type X = (DecodingFailure, HCursor)
@@ -86,36 +87,10 @@ final class JsonFieldsPrism[A] private[circe] (
     case Right(a)      => encoder(a)
   }
 
-  // ---- Default (Ior-bearing) surface --------------------------------
-
-  def modify(f: A => A): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => modifyIor(j, f))
-
-  def transform(f: Json => Json): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => transformIor(j, f))
-
-  def place(a: A): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, a))
-
-  def transfer[C](f: C => A): (Json | String) => C => Ior[Chain[JsonFailure], Json] =
-    input => c => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, f(c)))
+  // ---- Read surface (single-focus specific) -------------------------
 
   def get(input: Json | String): Ior[Chain[JsonFailure], A] =
     JsonFailure.parseInputIor(input).flatMap(getIor)
-
-  // ---- *Unsafe escape hatches ---------------------------------------
-
-  inline def modifyUnsafe(f: A => A): (Json | String) => Json =
-    input => modifyImpl(JsonFailure.parseInputUnsafe(input), f)
-
-  inline def transformUnsafe(f: Json => Json): (Json | String) => Json =
-    input => transformImpl(JsonFailure.parseInputUnsafe(input), f)
-
-  inline def placeUnsafe(a: A): (Json | String) => Json =
-    input => placeImpl(JsonFailure.parseInputUnsafe(input), a)
-
-  inline def transferUnsafe[C](f: C => A): (Json | String) => C => Json =
-    input => c => placeImpl(JsonFailure.parseInputUnsafe(input), f(c))
 
   inline def getOptionUnsafe(input: Json | String): Option[A] =
     getOptionUnsafeImpl(JsonFailure.parseInputUnsafe(input))
@@ -199,7 +174,7 @@ final class JsonFieldsPrism[A] private[circe] (
 
   // ---- *Unsafe impls (pre-v0.2-shape forgiving bodies) -------------
 
-  private def modifyImpl(json: Json, f: A => A): Json =
+  override protected def modifyImpl(json: Json, f: A => A): Json =
     walkParent(json) match
       case Left(_)               => json
       case Right((obj, parents)) =>
@@ -208,7 +183,7 @@ final class JsonFieldsPrism[A] private[circe] (
           .map(a => rebuild(writeFields(obj, f(a)), parents))
           .getOrElse(json)
 
-  private def transformImpl(json: Json, f: Json => Json): Json =
+  override protected def transformImpl(json: Json, f: Json => Json): Json =
     walkParent(json) match
       case Left(_)               => json
       case Right((obj, parents)) =>
@@ -218,7 +193,7 @@ final class JsonFieldsPrism[A] private[circe] (
           .map(newSub => rebuild(overlayFields(obj, newSub), parents))
           .getOrElse(json)
 
-  private def placeImpl(json: Json, a: A): Json =
+  override protected def placeImpl(json: Json, a: A): Json =
     walkParent(json) match
       case Left(_)               => json
       case Right((obj, parents)) => rebuild(writeFields(obj, a), parents)
@@ -233,7 +208,7 @@ final class JsonFieldsPrism[A] private[circe] (
 
   // ---- Ior-bearing impls -------------------------------------------
 
-  private def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
+  override protected def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
     walkParent(json) match
       case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((obj, parents)) =>
@@ -249,7 +224,7 @@ final class JsonFieldsPrism[A] private[circe] (
                   json,
                 )
 
-  private def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
+  override protected def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
     walkParent(json) match
       case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((obj, parents)) =>
@@ -259,7 +234,7 @@ final class JsonFieldsPrism[A] private[circe] (
             Ior.Both(Chain.one(JsonFailure.NotAnObject(JsonWalk.terminalOf(parentPath))), json)
           case Some(newSub) => Ior.Right(rebuild(overlayFields(obj, newSub), parents))
 
-  private def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
+  override protected def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
     walkParent(json) match
       case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((obj, parents)) => Ior.Right(rebuild(writeFields(obj, a), parents))

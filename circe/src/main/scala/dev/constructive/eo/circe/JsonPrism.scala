@@ -54,6 +54,7 @@ final class JsonPrism[A] private[circe] (
     private[circe] val encoder: Encoder[A],
     private[circe] val decoder: Decoder[A],
 ) extends Optic[Json, Json, A, A, Either],
+      JsonOpticOps[A],
       Dynamic:
   type X = (DecodingFailure, HCursor)
 
@@ -91,50 +92,15 @@ final class JsonPrism[A] private[circe] (
     case Right(a)      => encoder(a)
   }
 
-  // ---- Default (Ior-bearing) surface --------------------------------
+  // ---- Read surface (single-focus specific) -------------------------
   //
-  // Apply what's possible; surface every miss as a JsonFailure in the
-  // Chain. For a single-field prism there are three shapes:
-  //   - happy path               → Ior.Right(newJson)
-  //   - path-level or decode miss → Ior.Both(chain-of-one, inputJson)
-  //   - (Ior.Left does not arise on modify — the input Json is always
-  //     a fallback carrier; `get` is the place where Ior.Left surfaces,
-  //     because "nothing read" has no Json-shaped fallback.)
-
-  def modify(f: A => A): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => modifyIor(j, f))
-
-  def transform(f: Json => Json): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => transformIor(j, f))
-
-  def place(a: A): (Json | String) => Ior[Chain[JsonFailure], Json] =
-    input => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, a))
-
-  def transfer[C](f: C => A): (Json | String) => C => Ior[Chain[JsonFailure], Json] =
-    input => c => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, f(c)))
+  // The `modify` / `transform` / `place` / `transfer` (and `*Unsafe`
+  // variants) live on the shared `JsonOpticOps[A]` mixin and delegate
+  // to the per-class `*Ior` / `*Impl` methods below. Only the Prism's
+  // own `get` / `reverseGet` / `getOptionUnsafe` reads remain here.
 
   def get(input: Json | String): Ior[Chain[JsonFailure], A] =
     JsonFailure.parseInputIor(input).flatMap(getIor)
-
-  // ---- *Unsafe (silent) escape hatches ------------------------------
-  //
-  // Byte-identical to the pre-v0.2 forgiving bodies when handed a `Json`.
-  // When handed a `String` that doesn't parse, the fallback is
-  // `Json.Null` — there's no meaningful input-unchanged semantic for a
-  // non-Json input. Callers who want parse diagnostics use the default
-  // Ior-bearing surface above.
-
-  inline def modifyUnsafe(f: A => A): (Json | String) => Json =
-    input => modifyImpl(JsonFailure.parseInputUnsafe(input), f)
-
-  inline def transformUnsafe(f: Json => Json): (Json | String) => Json =
-    input => transformImpl(JsonFailure.parseInputUnsafe(input), f)
-
-  inline def placeUnsafe(a: A): (Json | String) => Json =
-    input => placeImpl(JsonFailure.parseInputUnsafe(input), a)
-
-  inline def transferUnsafe[C](f: C => A): (Json | String) => C => Json =
-    input => c => placeImpl(JsonFailure.parseInputUnsafe(input), f(c))
 
   inline def reverseGet(a: A): Json = encoder(a)
 
@@ -153,7 +119,7 @@ final class JsonPrism[A] private[circe] (
   // into Ior.Both / Ior.Left depending on whether the carrier is the
   // input Json (`modify` / `transform` / `place`) or absent (`get`).
 
-  private def modifyImpl(json: Json, f: A => A): Json =
+  override protected def modifyImpl(json: Json, f: A => A): Json =
     JsonWalk.walkPath(json, path) match
       case Left(_)               => json
       case Right((cur, parents)) =>
@@ -161,12 +127,12 @@ final class JsonPrism[A] private[circe] (
           case Left(_)  => json
           case Right(a) => JsonWalk.rebuildPath(parents, path, encoder(f(a)))
 
-  private def transformImpl(json: Json, f: Json => Json): Json =
+  override protected def transformImpl(json: Json, f: Json => Json): Json =
     JsonWalk.walkPath(json, path) match
       case Left(_)               => json
       case Right((cur, parents)) => JsonWalk.rebuildPath(parents, path, f(cur))
 
-  private def placeImpl(json: Json, a: A): Json =
+  override protected def placeImpl(json: Json, a: A): Json =
     if path.length == 0 then encoder(a)
     else
       JsonWalk.walkPath(json, path) match
@@ -181,7 +147,7 @@ final class JsonPrism[A] private[circe] (
   // happy path — we build a one-element Chain only when a miss
   // surfaces. Every success path returns `Ior.Right(newJson)`.
 
-  private def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
+  override protected def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
     JsonWalk.walkPath(json, path) match
       case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((cur, parents)) =>
@@ -192,13 +158,13 @@ final class JsonPrism[A] private[circe] (
           case Right(a) =>
             Ior.Right(JsonWalk.rebuildPath(parents, path, encoder(f(a))))
 
-  private def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
+  override protected def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
     JsonWalk.walkPath(json, path) match
       case Left(failure)         => Ior.Both(Chain.one(failure), json)
       case Right((cur, parents)) =>
         Ior.Right(JsonWalk.rebuildPath(parents, path, f(cur)))
 
-  private def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
+  override protected def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
     if path.length == 0 then Ior.Right(encoder(a))
     else
       JsonWalk.walkPath(json, path) match
