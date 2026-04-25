@@ -57,44 +57,14 @@ object JsonPrismMacro:
       parent: Expr[JsonPrism[A]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
-    import quotes.reflect.*
-
-    val name: String = nameE.value.getOrElse {
-      report.errorAndAbort(
-        "JsonPrism selectDynamic: field name must be a compile-time string literal."
-      )
+    selectDynamicCommon[A]("JsonPrism selectDynamic", nameE) {
+      [b] =>
+        (
+            name: String,
+            enc: Expr[Encoder[b]],
+            dec: Expr[Decoder[b]]
+        ) => '{ $parent.widenPath[b](${ Expr(name) })(using $enc, $dec) }
     }
-
-    val aTpe = TypeRepr.of[A]
-    val aSym = aTpe.typeSymbol
-    val cases = aSym.caseFields
-
-    val fieldSym = cases.find(_.name == name).getOrElse {
-      val available =
-        if cases.isEmpty then s"${Type.show[A]} has no case fields (is it a case class?)"
-        else s"Available: ${cases.map(_.name).mkString(", ")}"
-      report.errorAndAbort(
-        s"JsonPrism selectDynamic: type ${Type.show[A]} has no case field named '$name'. $available"
-      )
-    }
-
-    val fieldTpe = aTpe.memberType(fieldSym).widen
-
-    fieldTpe.asType match
-      case '[b] =>
-        val enc = Expr.summon[Encoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism selectDynamic: no given Encoder[${Type
-                .show[b]}] in scope for field '$name' of ${Type.show[A]}."
-          )
-        }
-        val dec = Expr.summon[Decoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism selectDynamic: no given Decoder[${Type
-                .show[b]}] in scope for field '$name' of ${Type.show[A]}."
-          )
-        }
-        '{ $parent.widenPath[b](${ Expr(name) })(using $enc, $dec) }
 
   /** Macro for `jsonPrism.at(i)`. Verifies the parent focus `A` looks like a Scala collection (i.e.
     * derives from `Iterable`), extracts the element type via `A`'s `Iterable` base type, summons
@@ -104,24 +74,14 @@ object JsonPrismMacro:
       parent: Expr[JsonPrism[A]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    import quotes.reflect.*
-
     val elemTpe = iterableElementType[A]("JsonPrism.at")
 
     elemTpe.asType match
       case '[b] =>
-        val enc = Expr.summon[Encoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism.at: no given Encoder[${Type
-                .show[b]}] in scope for the element type of ${Type.show[A]}."
-          )
-        }
-        val dec = Expr.summon[Decoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism.at: no given Decoder[${Type
-                .show[b]}] in scope for the element type of ${Type.show[A]}."
-          )
-        }
+        val (enc, dec) = summonCodecs[b](role =>
+          s"JsonPrism.at: no given $role[${Type
+              .show[b]}] in scope for the element type of ${Type.show[A]}."
+        )
         '{ $parent.widenPathIndex[b]($iE)(using $enc, $dec) }
 
   /** Macro for `jsonPrism.each`. Reads the element type from `A`'s `Iterable` base, summons the
@@ -131,24 +91,14 @@ object JsonPrismMacro:
   def eachImpl[A: Type](
       parent: Expr[JsonPrism[A]]
   )(using q: Quotes): Expr[Any] =
-    import quotes.reflect.*
-
     val elemTpe = iterableElementType[A]("JsonPrism.each")
 
     elemTpe.asType match
       case '[b] =>
-        val enc = Expr.summon[Encoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism.each: no given Encoder[${Type
-                .show[b]}] in scope for the element type of ${Type.show[A]}."
-          )
-        }
-        val dec = Expr.summon[Decoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism.each: no given Decoder[${Type
-                .show[b]}] in scope for the element type of ${Type.show[A]}."
-          )
-        }
+        val (enc, dec) = summonCodecs[b](role =>
+          s"JsonPrism.each: no given $role[${Type
+              .show[b]}] in scope for the element type of ${Type.show[A]}."
+        )
         '{ $parent.toTraversal[b](using $enc, $dec) }
 
   /** Macro for `traversal.field(_.x)`. Counterpart to [[fieldImpl]] — extends the traversal's
@@ -180,24 +130,14 @@ object JsonPrismMacro:
       parent: Expr[JsonTraversal[A]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    import quotes.reflect.*
-
     val elemTpe = iterableElementType[A]("JsonTraversal.at")
 
     elemTpe.asType match
       case '[b] =>
-        val enc = Expr.summon[Encoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal.at: no given Encoder[${Type
-                .show[b]}] in scope for the element type of ${Type.show[A]}."
-          )
-        }
-        val dec = Expr.summon[Decoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal.at: no given Decoder[${Type
-                .show[b]}] in scope for the element type of ${Type.show[A]}."
-          )
-        }
+        val (enc, dec) = summonCodecs[b](role =>
+          s"JsonTraversal.at: no given $role[${Type
+              .show[b]}] in scope for the element type of ${Type.show[A]}."
+        )
         '{ $parent.widenSuffixIndex[b]($iE)(using $enc, $dec) }
 
   /** Macro for `codecPrism[A].fields(_.a, _.b, ...)` — multi-field focus. Parses the varargs
@@ -212,6 +152,47 @@ object JsonPrismMacro:
       parent: Expr[JsonPrism[A]],
       selectorsE: Expr[Seq[A => Any]],
   )(using q: Quotes): Expr[Any] =
+    fieldsCommon[A]("JsonPrism.fields", selectorsE) {
+      [nt] =>
+        (
+            namesExpr: Expr[Array[String]],
+            enc: Expr[Encoder[nt]],
+            dec: Expr[Decoder[nt]]
+        ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
+    }
+
+  /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
+    * [[fieldsImpl]] on the traversal side: parses varargs, validates per D10, synthesises the
+    * NamedTuple type in SELECTOR order, summons codecs, emits `toFieldsTraversal`.
+    */
+  def fieldsTraversalImpl[A: Type](
+      parent: Expr[JsonTraversal[A]],
+      selectorsE: Expr[Seq[A => Any]],
+  )(using q: Quotes): Expr[Any] =
+    fieldsCommon[A]("JsonTraversal.fields", selectorsE) {
+      [nt] =>
+        (
+            namesExpr: Expr[Array[String]],
+            enc: Expr[Encoder[nt]],
+            dec: Expr[Decoder[nt]]
+        ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $enc, $dec) }
+    }
+
+  /** Shared backbone for `fieldsImpl` (JsonPrism side) and `fieldsTraversalImpl` (JsonTraversal
+    * side). Validates the varargs selector list per D10, synthesises the SELECTOR-order
+    * NamedTuple type, summons its `Encoder` / `Decoder`, and hands the four pieces
+    * (`namesExpr`, `enc`, `dec`, plus the `Type[nt]` evidence) to the caller-supplied `emit`
+    * callback. The two former entry points differed only in the error tag and the final
+    * `toFieldsPrism` / `toFieldsTraversal` emit; everything else (~115 lines of validation +
+    * NamedTuple construction) was copy-pasted between them.
+    */
+  private def fieldsCommon[A: Type](
+      who: String,
+      selectorsE: Expr[Seq[A => Any]],
+  )(emit: [nt] => (Expr[Array[String]], Expr[Encoder[nt]], Expr[Decoder[nt]]) => Type[nt] ?=> Expr[
+        Any
+      ]
+  )(using q: Quotes): Expr[Any] =
     import quotes.reflect.*
 
     val selectors: List[Expr[A => Any]] =
@@ -219,13 +200,13 @@ object JsonPrismMacro:
         case Varargs(es) => es.toList
         case other       =>
           report.errorAndAbort(
-            s"JsonPrism.fields[${Type.show[A]}]: could not destructure varargs selector"
+            s"$who[${Type.show[A]}]: could not destructure varargs selector"
               + s" list. Got: ${other.asTerm.show}"
           )
 
     if selectors.sizeIs < 2 then
       report.errorAndAbort(
-        s"JsonPrism.fields[${Type.show[A]}]: requires at least two field selectors"
+        s"$who[${Type.show[A]}]: requires at least two field selectors"
           + " (for one selector, use .field(_.x) instead)."
       )
 
@@ -235,7 +216,7 @@ object JsonPrismMacro:
 
     if caseFields.isEmpty then
       report.errorAndAbort(
-        s"JsonPrism.fields[${Type.show[A]}]: parent focus ${Type.show[A]} has no case fields;"
+        s"$who[${Type.show[A]}]: parent focus ${Type.show[A]} has no case fields;"
           + " .fields requires a case class."
       )
 
@@ -245,14 +226,14 @@ object JsonPrismMacro:
       selectors.zipWithIndex.map { (sel, i) =>
         val name = extractSingleFieldName(sel.asTerm).getOrElse {
           report.errorAndAbort(
-            s"JsonPrism.fields[${Type.show[A]}]: selector at position $i must be a single-field"
+            s"$who[${Type.show[A]}]: selector at position $i must be a single-field"
               + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
               + s" Got: ${sel.asTerm.show}"
           )
         }
         if !knownFields.contains(name) then
           report.errorAndAbort(
-            s"JsonPrism.fields[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
+            s"$who[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
               + s" Known fields: ${knownFields.mkString(", ")}."
           )
         (i, name)
@@ -264,7 +245,7 @@ object JsonPrismMacro:
       case (name, positions) =>
         val sorted = positions.sorted
         report.errorAndAbort(
-          s"JsonPrism.fields[${Type.show[A]}]: duplicate field selector '$name' at positions"
+          s"$who[${Type.show[A]}]: duplicate field selector '$name' at positions"
             + s" ${sorted.mkString(", ")}. Each field may appear at most once."
         )
     }
@@ -276,7 +257,7 @@ object JsonPrismMacro:
     val selectorSyms: List[Symbol] = selectedNames.map { name =>
       caseFields.find(_.name == name).getOrElse {
         report.errorAndAbort(
-          s"JsonPrism.fields[${Type.show[A]}]: internal error — field '$name' not found on"
+          s"$who[${Type.show[A]}]: internal error — field '$name' not found on"
             + s" ${Type.show[A]}."
         )
       }
@@ -296,137 +277,19 @@ object JsonPrismMacro:
 
     ntTpe.asType match
       case '[nt] =>
-        val enc = Expr.summon[Encoder[nt]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism.fields[${Type.show[A]}]: no given Encoder[${Type.show[nt]}] in scope."
-              + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
-              + " KindlingsCodecAsObject.derive`, or provide one manually."
-          )
-        }
-        val dec = Expr.summon[Decoder[nt]].getOrElse {
-          report.errorAndAbort(
-            s"JsonPrism.fields[${Type.show[A]}]: no given Decoder[${Type.show[nt]}] in scope."
-              + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
-              + " KindlingsCodecAsObject.derive`, or provide one manually."
-          )
-        }
+        val (enc, dec) = summonCodecs[nt](role =>
+          s"$who[${Type.show[A]}]: no given $role[${Type.show[nt]}] in scope."
+            + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
+            + " KindlingsCodecAsObject.derive`, or provide one manually."
+        )
 
-        // Emit `parent.toFieldsPrism[nt](Array(n1, n2, ...))(using enc, dec)`.
+        // Emit `parent.toFields*[nt](Array(n1, n2, ...))(using enc, dec)`.
         // We splice the field names as a compile-time-known Array[String]
         // so the runtime class doesn't need to re-parse them.
         val namesExpr: Expr[Array[String]] =
           '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
 
-        '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
-
-  /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
-    * [[fieldsImpl]] on the traversal side: parses varargs, validates per D10, synthesises the
-    * NamedTuple type in SELECTOR order, summons codecs, emits `toFieldsTraversal`.
-    */
-  def fieldsTraversalImpl[A: Type](
-      parent: Expr[JsonTraversal[A]],
-      selectorsE: Expr[Seq[A => Any]],
-  )(using q: Quotes): Expr[Any] =
-    import quotes.reflect.*
-
-    val selectors: List[Expr[A => Any]] =
-      selectorsE match
-        case Varargs(es) => es.toList
-        case other       =>
-          report.errorAndAbort(
-            s"JsonTraversal.fields[${Type.show[A]}]: could not destructure varargs selector"
-              + s" list. Got: ${other.asTerm.show}"
-          )
-
-    if selectors.sizeIs < 2 then
-      report.errorAndAbort(
-        s"JsonTraversal.fields[${Type.show[A]}]: requires at least two field selectors"
-          + " (for one selector, use .field(_.x) instead)."
-      )
-
-    val aTpe = TypeRepr.of[A]
-    val aSym = aTpe.typeSymbol
-    val caseFields = aSym.caseFields
-
-    if caseFields.isEmpty then
-      report.errorAndAbort(
-        s"JsonTraversal.fields[${Type.show[A]}]: parent focus ${Type.show[A]} has no case"
-          + " fields; .fields requires a case class."
-      )
-
-    val knownFields: List[String] = caseFields.map(_.name)
-
-    val resolved: List[(Int, String)] =
-      selectors.zipWithIndex.map { (sel, i) =>
-        val name = extractSingleFieldName(sel.asTerm).getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal.fields[${Type.show[A]}]: selector at position $i must be a"
-              + " single-field accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not"
-              + s" yet supported. Got: ${sel.asTerm.show}"
-          )
-        }
-        if !knownFields.contains(name) then
-          report.errorAndAbort(
-            s"JsonTraversal.fields[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
-              + s" Known fields: ${knownFields.mkString(", ")}."
-          )
-        (i, name)
-      }
-
-    val byName: Map[String, List[Int]] = resolved.groupMap(_._2)(_._1)
-    byName.find(_._2.sizeIs > 1).foreach {
-      case (name, positions) =>
-        val sorted = positions.sorted
-        report.errorAndAbort(
-          s"JsonTraversal.fields[${Type.show[A]}]: duplicate field selector '$name' at"
-            + s" positions ${sorted.mkString(", ")}. Each field may appear at most once."
-        )
-    }
-
-    val selectedNames: List[String] = resolved.map(_._2)
-
-    val selectorSyms: List[Symbol] = selectedNames.map { name =>
-      caseFields.find(_.name == name).getOrElse {
-        report.errorAndAbort(
-          s"JsonTraversal.fields[${Type.show[A]}]: internal error — field '$name' not found on"
-            + s" ${Type.show[A]}."
-        )
-      }
-    }
-    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
-
-    val namesTpe: TypeRepr =
-      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
-        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
-      }
-    val valuesTpe: TypeRepr =
-      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
-    val ntTpe: TypeRepr =
-      TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
-
-    ntTpe.asType match
-      case '[nt] =>
-        val enc = Expr.summon[Encoder[nt]].getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal.fields[${Type.show[A]}]: no given Encoder[${Type.show[nt]}] in"
-              + s" scope. Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
-              + " KindlingsCodecAsObject.derive`, or provide one manually."
-          )
-        }
-        val dec = Expr.summon[Decoder[nt]].getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal.fields[${Type.show[A]}]: no given Decoder[${Type.show[nt]}] in"
-              + s" scope. Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
-              + " KindlingsCodecAsObject.derive`, or provide one manually."
-          )
-        }
-
-        val namesExpr: Expr[Array[String]] =
-          '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
-
-        '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $enc, $dec) }
+        emit[nt](namesExpr, enc, dec)
 
   /** Macro for `traversal.<fieldName>`. Counterpart to [[selectFieldImpl]] — drives the Dynamic
     * sugar on [[JsonTraversal]] by extending the suffix.
@@ -435,12 +298,31 @@ object JsonPrismMacro:
       parent: Expr[JsonTraversal[A]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
+    selectDynamicCommon[A]("JsonTraversal selectDynamic", nameE) {
+      [b] =>
+        (
+            name: String,
+            enc: Expr[Encoder[b]],
+            dec: Expr[Decoder[b]]
+        ) => '{ $parent.widenSuffix[b](${ Expr(name) })(using $enc, $dec) }
+    }
+
+  /** Shared backbone for `selectFieldImpl` (JsonPrism side) and `selectFieldTraversalImpl`
+    * (JsonTraversal side). Validates the literal-string name, looks the field up on `A`'s
+    * case-class schema, widens the field type, summons `Encoder` / `Decoder`, and routes
+    * through the caller-supplied `emit` callback for the side-specific final expression
+    * (`widenPath` vs `widenSuffix`).
+    */
+  private def selectDynamicCommon[A: Type](
+      who: String,
+      nameE: Expr[String],
+  )(emit: [b] => (String, Expr[Encoder[b]], Expr[Decoder[b]]) => Type[b] ?=> Expr[Any])(using
+      q: Quotes
+  ): Expr[Any] =
     import quotes.reflect.*
 
     val name: String = nameE.value.getOrElse {
-      report.errorAndAbort(
-        "JsonTraversal selectDynamic: field name must be a compile-time string literal."
-      )
+      report.errorAndAbort(s"$who: field name must be a compile-time string literal.")
     }
 
     val aTpe = TypeRepr.of[A]
@@ -452,7 +334,7 @@ object JsonPrismMacro:
         if cases.isEmpty then s"${Type.show[A]} has no case fields (is it a case class?)"
         else s"Available: ${cases.map(_.name).mkString(", ")}"
       report.errorAndAbort(
-        s"JsonTraversal selectDynamic: type ${Type.show[A]} has no case field named '$name'. $available"
+        s"$who: type ${Type.show[A]} has no case field named '$name'. $available"
       )
     }
 
@@ -460,19 +342,11 @@ object JsonPrismMacro:
 
     fieldTpe.asType match
       case '[b] =>
-        val enc = Expr.summon[Encoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal selectDynamic: no given Encoder[${Type
-                .show[b]}] in scope for field '$name' of ${Type.show[A]}."
-          )
-        }
-        val dec = Expr.summon[Decoder[b]].getOrElse {
-          report.errorAndAbort(
-            s"JsonTraversal selectDynamic: no given Decoder[${Type
-                .show[b]}] in scope for field '$name' of ${Type.show[A]}."
-          )
-        }
-        '{ $parent.widenSuffix[b](${ Expr(name) })(using $enc, $dec) }
+        val (enc, dec) = summonCodecs[b](role =>
+          s"$who: no given $role[${Type
+              .show[b]}] in scope for field '$name' of ${Type.show[A]}."
+        )
+        emit[b](name, enc, dec)
 
   /** Shared helper: pull the element type out of a Scala collection's `Iterable` base type, or
     * abort with a clear error mentioning the call site (`who`).
@@ -490,6 +364,20 @@ object JsonPrismMacro:
           s"$who: expected a Scala collection (Vector / List / Seq / …) with a single element type; got ${Type
               .show[A]}."
         )
+
+  /** Shared helper: summon both `Encoder[B]` and `Decoder[B]` from the enclosing scope, with a
+    * caller-supplied error message on either failure. Each former call site spelled the same
+    * "no given Encoder[…] in scope. …" twice, once for `Encoder` and once for `Decoder`; the
+    * caller now passes a single `errorMsg(role)` and the helper plugs in `"Encoder"` /
+    * `"Decoder"` for the missing one.
+    */
+  private def summonCodecs[B: Type](
+      errorMsg: String => String
+  )(using q: Quotes): (Expr[Encoder[B]], Expr[Decoder[B]]) =
+    import quotes.reflect.*
+    val enc = Expr.summon[Encoder[B]].getOrElse(report.errorAndAbort(errorMsg("Encoder")))
+    val dec = Expr.summon[Decoder[B]].getOrElse(report.errorAndAbort(errorMsg("Decoder")))
+    (enc, dec)
 
   /** Strip `Inlined` / `Typed` wrappers around a lambda and pull the field name out of its body.
     * Mirrors the eo-generics `extractFieldName` helper so both macros agree on what a "single-field
