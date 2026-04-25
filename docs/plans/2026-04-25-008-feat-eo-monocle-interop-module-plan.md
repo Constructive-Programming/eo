@@ -87,16 +87,22 @@ Three composable scenarios drive the design:
 
 **Scenario 1 — Existing Monocle codebase, single eo leaf.** User has
 a deep `monocle.Lens` chain into a record; the leaf field needs an
-`AlgLens[Set]` because they're aggregating per-key. They write:
+`AlgLens[Set]` because they're aggregating per-key. AlgLens is an
+eo-only carrier with no Monocle counterpart — the per-key aggregation
+is a feature only the eo encoding offers — so the chain must lift the
+Monocle outers *into* eo via `.toEo`, then compose with the AlgLens
+leaf in the eo encoding. The result stays eo:
 
 ```scala
 val outerM: monocle.Lens[Org, Department]  = Focus[Org](_.dept)
 val innerM: monocle.Lens[Department, Team] = Focus[Department](_.team)
 val leafE: Optic[Team, Team, Members, Members, AlgLens[Set]] = …  // eo
 
-// Cross-library chain — outer two stay Monocle, leaf is eo:
-val full = outerM.andThen(innerM).andThen(leafE.toMonocle)
-// → monocle.Setter[Org, Members], because AlgLens degrades to Setter
+// Cross-library chain — Monocle outers lift to eo, leaf stays eo:
+val full = outerM.toEo.andThen(innerM.toEo).andThen(leafE)
+// → eo.Optic[Org, Org, Members, Members, AlgLens[Set]]
+//   AlgLens cannot degrade to a Monocle type, so the chain stays eo
+//   and the user runs .modify / .foldMap / .all on the result.
 ```
 
 **Scenario 2 — Existing eo codebase, single Monocle leaf.** User has
