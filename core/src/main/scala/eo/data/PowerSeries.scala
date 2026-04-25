@@ -15,12 +15,24 @@ import optics.{GetReplaceLens, Optic}
   * time.
   *
   * See `benchmarks/src/main/scala/eo/bench/PowerSeriesBench.scala` for the runtime profile.
+  *
+  * @tparam A
+  *   existential leftover tuple — the `Snd[A]` match type reduces to the second tuple element when
+  *   `A` is a concrete `Tuple2` and stays inert otherwise.
+  * @tparam B
+  *   focus element type — stored erased-to-`AnyRef` inside the underlying [[PSVec]].
   */
 final case class PowerSeries[A, B](xo: Snd[A], vs: PSVec[B])
 
 /** Typeclass instances for [[PowerSeries]]. */
 object PowerSeries:
 
+  /** `ForgetfulFunctor[PowerSeries]` — maps each focus element through `f` into a freshly allocated
+    * `Array[AnyRef]` and re-wraps as a [[PSVec]]. Unlocks `.modify` / `.replace` on every
+    * PowerSeries-carrier optic.
+    *
+    * @group Instances
+    */
   given map: ForgetfulFunctor[PowerSeries] with
 
     def map[X, A, B](psa: PowerSeries[X, A], f: A => B): PowerSeries[X, B] =
@@ -33,6 +45,12 @@ object PowerSeries:
         i += 1
       PowerSeries(psa.xo, PSVec.unsafeWrap[B](arr))
 
+  /** `ForgetfulTraverse[PowerSeries, Applicative]` — sequences an effectful `A => G[B]` through the
+    * focus vector by applicative combination, producing `G[PowerSeries[X, B]]`. Unlocks `.modifyA`
+    * / `.all` on every PowerSeries-carrier optic.
+    *
+    * @group Instances
+    */
   given traverse: ForgetfulTraverse[PowerSeries, Applicative] with
 
     def traverse[X, A, B, G[_]: Applicative]
@@ -161,6 +179,13 @@ object PowerSeries:
     final def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
       reconstructAlwaysHit(y, vys(pos))
 
+  /** `AssociativeFunctor[PowerSeries, Xo, Xi]` — same-carrier `.andThen` for two
+    * PowerSeries-carrier optics. Specialises on [[PSSingletonAlwaysHit]] (morphed Lens) and
+    * [[PSSingleton]] (morphed Prism / Optional) inner optics for zero-intermediate-allocation fast
+    * paths; falls back to the generic per-element path otherwise.
+    *
+    * @group Instances
+    */
   given assoc[Xo, Xi]: AssociativeFunctor[PowerSeries, Xo, Xi] with
     type SndZ = AssocSndZ[Xo, Xi]
     type Z = (Int, SndZ)
@@ -304,6 +329,12 @@ object PowerSeries:
     def reconstructAlwaysHit(y: AnyRef, focus: B): T =
       o.from((y.asInstanceOf[o.X], focus))
 
+  /** `Composer[Tuple2, PowerSeries]` — lifts a Lens-carrier optic into PowerSeries so
+    * `lens.andThen(traversal)` type-checks. Specialises on [[optics.GetReplaceLens]] for the fast
+    * path (`GetReplaceLensInPS`); falls back to the generic Tuple2 wrapper otherwise.
+    *
+    * @group Instances
+    */
   given tuple2ps: Composer[Tuple2, PowerSeries] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, PowerSeries] =
@@ -364,6 +395,12 @@ object PowerSeries:
       if len == 0 then o.from(Left(y.asInstanceOf[o.X]))
       else o.from(Right(vys(pos)))
 
+  /** `Composer[Either, PowerSeries]` — lifts a Prism-carrier optic into PowerSeries so
+    * `prism.andThen(traversal)` type-checks. Uses the [[PSSingleton]] fast path to skip the
+    * intermediate `Option[o.X]` wrapper the generic `to` would allocate.
+    *
+    * @group Instances
+    */
   given either2ps: Composer[Either, PowerSeries] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, PowerSeries] =
@@ -409,6 +446,12 @@ object PowerSeries:
       if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
       else o.from(new Affine.Hit[o.X, B](y.asInstanceOf[Snd[o.X]], vys(pos)))
 
+  /** `Composer[Affine, PowerSeries]` — lifts an Optional-carrier optic into PowerSeries so
+    * `optional.andThen(traversal)` type-checks. Uses the [[PSSingleton]] fast path to skip the
+    * intermediate `Either[Fst[o.X], Snd[o.X]]` wrapper the generic `to` would allocate.
+    *
+    * @group Instances
+    */
   given affine2ps: Composer[Affine, PowerSeries] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, PowerSeries] =

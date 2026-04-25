@@ -46,6 +46,9 @@ sealed trait Affine[A, B]:
 
   /** Monomorphic fold — pattern-matches on the Miss/Hit variant and runs the matching branch. No
     * boxing, no allocation beyond what the branches themselves do.
+    *
+    * @tparam C
+    *   output type produced by either branch
     */
   def fold[C](onMiss: Fst[A] => C, onHit: (Snd[A], B) => C): C = this match
     case m: Miss[A, B] => onMiss(m.fst)
@@ -61,6 +64,9 @@ sealed trait Affine[A, B]:
 
   /** Fold both branches into a new `Affine[A, C]`. Mirrors the old `aFold` but dispatches via
     * `Miss`/`Hit` pattern match directly, so neither branch allocates an intermediate Either.
+    *
+    * @tparam C
+    *   focus type of the output Affine
     */
   def aFold[C](
       f: Fst[A] => Affine[A, C],
@@ -71,6 +77,11 @@ sealed trait Affine[A, B]:
 
   /** Effectful traversal over the focus — runs `f` only on the hit branch, passes the miss branch
     * through unchanged via `Applicative.pure`.
+    *
+    * @tparam C
+    *   focus produced by `f`
+    * @tparam G
+    *   effect constructor; must have `Applicative[G]`
     */
   def aTraverse[C, G[_]: Applicative](f: B => G[C]): G[Affine[A, C]] = this match
     case m: Miss[A, B] =>
@@ -115,6 +126,12 @@ object Affine:
   /** Legacy smart constructor — accept a raw `Either[Fst[A], (Snd[A], B)]` and dispatch to the
     * matching variant. Kept so call sites that still build an Either manually keep working; prefer
     * `new Miss(...)` / `new Hit(...)` in new code to avoid the intermediate Either allocation.
+    *
+    * @group Constructors
+    * @tparam A
+    *   existential leftover tuple
+    * @tparam B
+    *   focus
     */
   def apply[A, B](e: Either[Fst[A], (Snd[A], B)]): Affine[A, B] = e match
     case Left(l)       => new Miss[A, B](l)

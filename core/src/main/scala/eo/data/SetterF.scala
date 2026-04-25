@@ -12,6 +12,11 @@ import cats.syntax.functor._
   * path together. SetterF has no `AssociativeFunctor` instance: composing two `SetterF` optics via
   * `Optic.andThen` is not yet supported. Compose a Lens chain in `Tuple2` and reach for SetterF
   * only at the leaf.
+  *
+  * @tparam A
+  *   existential leftover tuple — `Fst[A]` / `Snd[A]` reduce when `A` is a concrete `Tuple2`.
+  * @tparam B
+  *   focus written back through the continuation.
   */
 class SetterF[A, B](val setter: (Fst[A], Snd[A] => B)) extends AnyVal
 

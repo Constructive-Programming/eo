@@ -32,18 +32,33 @@ type FixedTraversal[C] = [A, B] =>> FixedTraversal_[C, A, B]
   */
 object FixedTraversal:
 
+  /** `ForgetfulFunctor[FixedTraversal[2]]` — maps both focus slots through `f`, leaves the phantom
+    * slot alone. Unlocks `.modify` / `.replace` on every arity-2 fixed traversal.
+    *
+    * @group Instances
+    */
   given two: ForgetfulFunctor[FixedTraversal[2]] with
 
     def map[X, A, B](fa: FixedTraversal[2][X, A], f: A => B): FixedTraversal[2][X, B] =
       fa match
         case (a0, a1, x) => (f(a0), f(a1), x)
 
+  /** `ForgetfulFunctor[FixedTraversal[3]]` — arity-3 counterpart of [[two]]. Maps all three focus
+    * slots through `f`.
+    *
+    * @group Instances
+    */
   given three: ForgetfulFunctor[FixedTraversal[3]] with
 
     def map[X, A, B](fa: FixedTraversal[3][X, A], f: A => B): FixedTraversal[3][X, B] =
       fa match
         case (a0, a1, a2, x) => (f(a0), f(a1), f(a2), x)
 
+  /** `ForgetfulFunctor[FixedTraversal[4]]` — arity-4 counterpart of [[two]]. Maps all four focus
+    * slots through `f`.
+    *
+    * @group Instances
+    */
   given four: ForgetfulFunctor[FixedTraversal[4]] with
 
     def map[X, A, B](fa: FixedTraversal[4][X, A], f: A => B): FixedTraversal[4][X, B] =
