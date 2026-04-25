@@ -3,6 +3,7 @@
 #
 # Covered:
 #   * scalafmtCheckAll   — formatting matches .scalafmt.conf across all modules
+#   * scalafixAll --check — scalafix rules in .scalafix.conf are clean
 #   * docs/mdoc          — every `scala mdoc` fence in site/docs/*.md compiles
 #   * docs/laikaSite     — internal cross-references resolve, Laika renders
 #
@@ -13,12 +14,12 @@ set -euo pipefail
 # Only run when there are staged Scala / sbt / markdown changes — skip
 # for untouched commits (tag moves, rebases, merge commits with no content).
 if ! git diff --cached --quiet --diff-filter=ACMR \
-     -- '*.scala' '*.sbt' '*.md' '.scalafmt.conf' 'site/' 'build.sbt' 2>/dev/null
+     -- '*.scala' '*.sbt' '*.md' '.scalafmt.conf' '.scalafix.conf' 'site/' 'build.sbt' 2>/dev/null
 then
   :  # at least one relevant file changed; fall through to checks
 else
   exit 0
 fi
 
-echo "[pre-commit] running scalafmtCheckAll + docs/mdoc + docs/laikaSite ..."
-sbt -no-colors 'scalafmtCheckAll; docs/mdoc; docs/laikaSite'
+echo "[pre-commit] running scalafmtCheckAll + scalafixAll --check + docs/mdoc + docs/laikaSite ..."
+sbt -no-colors 'scalafmtCheckAll; scalafixAll --check; docs/mdoc; docs/laikaSite'

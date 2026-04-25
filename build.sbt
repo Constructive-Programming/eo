@@ -51,13 +51,45 @@ ThisBuild / githubWorkflowJavaVersions := Seq(
   JavaSpec.temurin("21"),
 )
 // Run `sbt test` + `sbt doc` + scalafmt check on every PR. MiMa
-// is wired transitively through sbt-typelevel-ci-release.
+// is wired transitively through sbt-typelevel-ci-release. The
+// scalafix check runs via `--check` so any rule drift fails CI
+// without rewriting files; devs run `sbt scalafixAll` locally to
+// auto-fix.
 ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   WorkflowStep.Sbt(
     List("scalafmtCheckAll", "scalafmtSbtCheck"),
     name = Some("Check formatting"),
-  )
+  ),
+  WorkflowStep.Sbt(
+    List("scalafixAll --check"),
+    name = Some("Check scalafix"),
+  ),
 )
+
+// -------------------------------------------------------------------
+// Scalafix wiring. SemanticDB exports are required by the semantic
+// rules (RemoveUnused, OrganizeImports). Rule set lives in
+// `.scalafix.conf` at the repo root; typelevel-scalafix is brought in
+// via `scalafixDependencies` so its cats-module rules
+// (TypelevelMapSequence, TypelevelAs) are discoverable by name.
+//
+// `-Wunused:all` is the broadest unused-warning surface; it
+// supersedes the narrower `-Wunused:implicits,explicits,imports,
+// locals,params,privates` that sbt-typelevel-settings 0.8.5 ships,
+// adding `unused pattern bindings` and `unused nowarn annotations`.
+//
+// `tlFatalWarnings := true` flips warnings-as-errors from CI-only
+// (the plugin default) to always-on. Surgical `-Wconf` silences in
+// `commonSettings` / `scala3LibrarySettings` continue to work — they
+// whitelist specific known-noisy patterns rather than blanket-
+// suppressing.
+// -------------------------------------------------------------------
+ThisBuild / semanticdbEnabled := true
+ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
+ThisBuild / scalafixDependencies +=
+  "org.typelevel" %% "typelevel-scalafix" % "0.5.0"
+ThisBuild / scalacOptions += "-Wunused:all"
+ThisBuild / tlFatalWarnings := true
 
 // -------------------------------------------------------------------
 // Bump hardcoded GitHub Action versions that sbt-typelevel 0.8.5

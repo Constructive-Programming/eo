@@ -20,8 +20,8 @@ import cats.{Alternative, Applicative, Foldable, Monoid, MonoidK, Traverse}
   *     `ForgetfulFunctor[AlgLens[F]]`).
   *   - `.foldMap` needs `Foldable[F]`.
   *   - `.modifyA` / `.all` needs `Traverse[F]`.
-  *   - Same-carrier `.andThen` (`assocAlgMonad`) needs `Applicative[F] + Traverse[F] + MonoidK[F] +
-  *     AlgLensFromList[F]`.
+  *   - Same-carrier `.andThen` (`assocAlgMonad`) needs `Traverse[F] + AlgLensFromList[F]` (the body
+  *     threads everything through `Traverse.mapAccumulate` and `AlgLensFromList`'s per-F builder).
   *   - Constructing a bridge via `fromPrismF` / `fromOptionalF` needs `MonoidK[F]` only;
   *     `fromLensF` has no `F` constraint at construction.
   */
@@ -54,7 +54,7 @@ private[eo] trait AlgLensSingleton[S, T, A, B, X0]:
   * [[AlgLens.assocAlgMonad]]'s push/pull paths stay O(n) across every qualifying `F` and surface
   * explicit errors where cardinality would otherwise collapse.
   *
-  * Required alongside `Applicative[F] + Traverse[F] + MonoidK[F]` by `assocAlgMonad`. Instances for
+  * Required alongside `Traverse[F]` by `assocAlgMonad`. Instances for
   * `List`, `Option`, `Vector`, `cats.data.Chain` live in the companion; users extending `AlgLens`
   * to a custom `F` supply their own instance.
   */
@@ -171,12 +171,12 @@ object AlgLens:
     * arise from the standard `.modify` / `.andThen` surface because `fd = fc.map(f)` preserves
     * length and the per-xi `Int` sizes sum to `|fd|` by construction of push.
     *
-    * Constraints: `Applicative[F]` (`pure` + `map` for push), `Traverse[F]` (stateful traverse for
-    * pull — also carries the `Foldable[F]` the body's fold / `toList` / `size` calls need),
-    * `MonoidK[F]` (`empty`), and [[AlgLensFromList]] (per-F O(n) rebuild, replacing the generic
-    * `combineK` prepend loop which was O(n²) for `Vector` and silently lossy for `Option`). `List`,
-    * `Option`, `Vector`, `cats.data.Chain` all ship `AlgLensFromList` instances; `NonEmptyList`
-    * does not (no `MonoidK.empty`).
+    * Constraints: `Traverse[F]` (stateful traverse via `mapAccumulate` for both push and pull —
+    * also carries the `Foldable[F]` the body's fold / `toList` / `size` calls need) and
+    * [[AlgLensFromList]] (per-F O(n) rebuild, replacing the generic `combineK` prepend loop which
+    * was O(n²) for `Vector` and silently lossy for `Option`). `List`, `Option`, `Vector`,
+    * `cats.data.Chain` all ship `AlgLensFromList` instances; `NonEmptyList` does not (no
+    * `MonoidK.empty`).
     *
     * Performance: ~1.5-2.6× slower than `PowerSeries`'s specialised traversal carrier on the
     * traversal-over-list-field shape (see `docs/research/2026-04-22-alglens-vs-powerseries.md`).
@@ -185,7 +185,7 @@ object AlgLens:
     *
     * @group Instances
     */
-  given assocAlgMonad[F[_]: Applicative: Traverse: MonoidK: AlgLensFromList, Xo, Xi]
+  given assocAlgMonad[F[_]: Traverse: AlgLensFromList, Xo, Xi]
       : AssociativeFunctor[AlgLens[F], Xo, Xi] with
     type Z = (Xo, F[(Xi, Int)])
 

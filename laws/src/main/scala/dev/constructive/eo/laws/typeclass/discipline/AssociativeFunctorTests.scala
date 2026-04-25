@@ -3,7 +3,7 @@ package laws
 package typeclass
 package discipline
 
-import org.scalacheck.{Arbitrary, Cogen}
+import org.scalacheck.Arbitrary
 import org.scalacheck.Prop.forAll
 import org.typelevel.discipline.Laws
 
@@ -14,7 +14,6 @@ abstract class AssociativeFunctorTests[S, A, C, F[_, _]] extends Laws:
 
   def associativeFunctor(using
       Arbitrary[S],
-      Cogen[C],
       Arbitrary[C => C],
   ): RuleSet =
     new SimpleRuleSet(

@@ -23,6 +23,14 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.5")
 // responsible for its own scalacOptions.
 addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.5")
 
+// `sbt-scalafix` wires Scalafix into the build (`sbt scalafixAll`,
+// `sbt scalafixAll --check`). Pinned to the same minor as the
+// standalone CLI version listed in CLAUDE.md so devs and the build
+// agree on rule semantics. Brings the SemanticDB compiler plugin
+// transitively via `scalafixSemanticdb`; we wire it explicitly in
+// build.sbt so every module exports SemanticDB consistently.
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.6")
+
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
 // configured from build.sbt. Pinned to the same 0.8.5 family as
