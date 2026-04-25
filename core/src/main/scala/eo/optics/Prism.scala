@@ -17,6 +17,10 @@ object Prism:
     * `Left(s)` on miss.
     *
     * @group Constructors
+    * @tparam S
+    *   source type
+    * @tparam A
+    *   focus variant being selected
     *
     * @example
     *   {{{
@@ -43,6 +47,14 @@ object Prism:
     * production code uses [[apply]]; this form matters for refinement-style conversions.
     *
     * @group Constructors
+    * @tparam S
+    *   source type
+    * @tparam T
+    *   result type produced by the miss branch / reverse lift
+    * @tparam A
+    *   focus read
+    * @tparam B
+    *   focus written back
     */
   def pPrism[S, T, A, B](
       getOrModify: S => Either[T, A],
@@ -55,6 +67,10 @@ object Prism:
     * projection is already `S => Option[A]`.
     *
     * @group Constructors
+    * @tparam S
+    *   source type
+    * @tparam A
+    *   focus variant being selected
     */
   def optional[S, A](getOption: S => Option[A], reverseGet: A => S) =
     PickMendPrism[S, A, A](getOption, reverseGet)
@@ -62,6 +78,12 @@ object Prism:
   /** Polymorphic counterpart to [[optional]] — allows type change on write.
     *
     * @group Constructors
+    * @tparam S
+    *   source type (also the result type — monomorphic in the outer)
+    * @tparam A
+    *   focus read
+    * @tparam B
+    *   focus written back through the reverseGet
     */
   def pOptional[S, A, B](getOption: S => Option[A], reverseGet: B => S) =
     PickMendPrism[S, A, B](getOption, reverseGet)

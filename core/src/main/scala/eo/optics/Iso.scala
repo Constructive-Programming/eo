@@ -17,6 +17,14 @@ object Iso:
     * variant — `S = T` / `A = B` for the common monomorphic case, differing types for refinement.
     *
     * @group Constructors
+    * @tparam S
+    *   source type being read
+    * @tparam T
+    *   result type after the reverse lift
+    * @tparam A
+    *   focus read
+    * @tparam B
+    *   focus written back
     *
     * @example
     *   {{{

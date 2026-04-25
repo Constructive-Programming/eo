@@ -36,6 +36,12 @@ object Traversal:
     * three.
     *
     * @group Constructors
+    * @tparam T
+    *   container type constructor; must admit a `Traverse[T]` instance at the call site
+    * @tparam A
+    *   element type being read
+    * @tparam B
+    *   element type being written back
     *
     * @example
     *   {{{
@@ -63,6 +69,10 @@ object Traversal:
     * chain terminates, prefer [[forEach]] for the map-only fast path.
     *
     * @group Constructors
+    * @tparam T
+    *   container type constructor
+    * @tparam A
+    *   element type (monomorphic — `S = T = T[A]`, `A = B`).
     */
   def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, PowerSeries] =
     pEach[T, A, A]
@@ -85,6 +95,12 @@ object Traversal:
     * `ArraySeq.unsafeWrapArray` — one allocation, no builder-sizing round-trip.
     *
     * @group Constructors
+    * @tparam T
+    *   container type constructor
+    * @tparam A
+    *   element type being read
+    * @tparam B
+    *   element type being written back (may differ from `A` — polymorphic write path).
     */
   def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
     new Optic[T[A], T[B], A, B, PowerSeries]:
@@ -128,6 +144,14 @@ object Traversal:
     * modified `B`s.
     *
     * @group Constructors
+    * @tparam S
+    *   source type
+    * @tparam T
+    *   result type after reassembly
+    * @tparam A
+    *   per-element read focus
+    * @tparam B
+    *   per-element written-back focus
     */
   def two[S, T, A, B](
       a: S => A,

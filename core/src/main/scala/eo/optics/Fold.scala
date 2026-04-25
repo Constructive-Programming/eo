@@ -20,6 +20,10 @@ object Fold:
     * `.foldMap(g)(s)` combines every `A` in `s: F[A]` via `Monoid[M]`.
     *
     * @group Constructors
+    * @tparam F
+    *   container type constructor — must admit `Foldable[F]`
+    * @tparam A
+    *   element type being folded
     *
     * @example
     *   {{{
@@ -45,6 +49,8 @@ object Fold:
     * doesn't.
     *
     * @group Constructors
+    * @tparam A
+    *   element type being filtered
     */
   def select[A](p: A => Boolean): Optic[A, Unit, A, A, Forget[Option]] =
     new Optic[A, Unit, A, A, Forget[Option]]:

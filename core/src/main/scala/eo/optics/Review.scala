@@ -35,6 +35,10 @@ object Review:
     * `reverseGet: A => S` — this lifts it into a standalone Review.
     *
     * @group Constructors
+    * @tparam S
+    *   source type reconstructed by the review
+    * @tparam A
+    *   focus the review lifts into `S`
     */
   def fromIso[S, A](iso: BijectionIso[S, S, A, A]): Review[S, A] =
     Review(iso.reverseGet)
@@ -44,6 +48,10 @@ object Review:
     * so the rest of the Prism's machinery (the partial read) is left behind.
     *
     * @group Constructors
+    * @tparam S
+    *   source type reconstructed by the review
+    * @tparam A
+    *   focus the review lifts into `S`
     */
   def fromPrism[S, A](prism: MendTearPrism[S, S, A, A]): Review[S, A] =
     Review(prism.mend)

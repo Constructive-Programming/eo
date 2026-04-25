@@ -16,6 +16,14 @@ object Setter:
     * the focus and returns the modified `T`.
     *
     * @group Constructors
+    * @tparam S
+    *   source type
+    * @tparam T
+    *   result type (often `= S`)
+    * @tparam A
+    *   focus read
+    * @tparam B
+    *   focus written back
     *
     * @example
     *   {{{

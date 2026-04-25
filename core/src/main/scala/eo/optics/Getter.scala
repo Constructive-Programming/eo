@@ -19,6 +19,10 @@ object Getter:
   /** Construct a Getter from `get: S => A`.
     *
     * @group Constructors
+    * @tparam S
+    *   source type
+    * @tparam A
+    *   focus type produced by `get`
     *
     * @example
     *   {{{
