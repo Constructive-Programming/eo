@@ -256,7 +256,7 @@ for circe. **This is a process gap**: if the release pipeline uses
 #### Coupling / layer violations
 
 None. `core/` imports only `cats.*` and self-refers via
-`eo.optics.*` / `eo.data.*`.
+`dev.constructive.eo.optics.*` / `dev.constructive.eo.data.*`.
 
 #### Scaladoc gaps (0.1.0 surface)
 
@@ -429,7 +429,7 @@ review but verified via `sbt test` running 102 examples).
 
 #### Coupling / layer violations
 
-The laws module imports `eo.optics.Optic` and `eo.optics.Optic.*`
+The laws module imports `dev.constructive.eo.optics.Optic` and `dev.constructive.eo.optics.Optic.*`
 in every single law file (verified via `Grep`):
 
 ```
@@ -457,11 +457,11 @@ means `cats-eo-laws` is not a standalone "law equations" module;
 consumers pull in the concrete optics package transitively.
 
 The `laws/src/main/scala/eo/laws/typeclass/` subtree imports only
-`eo.ForgetfulFunctor` / `eo.ForgetfulTraverse` (typeclass surface),
-not `eo.optics.*`. Clean layer.
+`dev.constructive.eo.ForgetfulFunctor` / `dev.constructive.eo.ForgetfulTraverse` (typeclass surface),
+not `dev.constructive.eo.optics.*`. Clean layer.
 
 The `laws/src/main/scala/eo/laws/data/` subtree imports carrier
-types directly (`eo.data.Affine`, `eo.data.PowerSeries`, etc.) plus
+types directly (`dev.constructive.eo.data.Affine`, `dev.constructive.eo.data.PowerSeries`, etc.) plus
 the matching typeclasses. Clean; no `optics.*` dependency.
 
 No real violation — flagging for 0.1.0 release-notes clarity.
@@ -555,7 +555,7 @@ None.
 #### Coupling / layer violations
 
 - **`circe/` depends on `core/`** (normal, intended).
-- **`circe/` does NOT depend on `laws/`** (`Grep` for `eo.laws` in
+- **`circe/` does NOT depend on `laws/`** (`Grep` for `dev.constructive.eo.laws` in
   `circe/src/main` returns nothing). Clean.
 - No layer violations inside circe itself; all four classes live
   in the same package and share the same `PathStep` / `JsonFailure`
@@ -766,7 +766,7 @@ exercised by the benchmark suite not the law suite."
 Three different scoping levels (`private`, `private[data]`,
 `private[eo]`) are used for "internal to the package / module"
 markers. Since the module is just `core`, and the package structure
-is shallow (`eo.*`, `eo.data.*`, `eo.optics.*`), the levels are
+is shallow (`eo.*`, `dev.constructive.eo.data.*`, `dev.constructive.eo.optics.*`), the levels are
 effectively interchangeable *within this module*. The drift matters
 only for downstream consumers (who shouldn't import any of these
 anyway). Fine as-is; documenting for Codescene parity.
@@ -782,7 +782,7 @@ explicitly to the coverage-report command.
 
 ### F5. The `0.1.0` released artifact list includes `cats-eo-laws` which pulls in `cats-eo` transitively
 
-`laws/src/main/scala/eo/laws/*` imports `eo.optics.Optic.*` in every
+`laws/src/main/scala/eo/laws/*` imports `dev.constructive.eo.optics.Optic.*` in every
 file. Users of `cats-eo-laws` get the optics package by default.
 If this is intended, document. If not, consider a `cats-eo-core`
 publish artifact (bare trait + data) and a `cats-eo-optics` publish

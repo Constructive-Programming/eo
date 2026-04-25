@@ -41,7 +41,7 @@ a v1.1 follow-up plan — the substrate + v1 families are enough to
 judge whether the ergonomic-vs-cost trade is worth buying out the rest
 of the hierarchy.
 
-The macro side of this story — `eo.generics.ilens[S](_.field)` and
+The macro side of this story — `dev.constructive.eo.generics.ilens[S](_.field)` and
 friends — is **explicitly out of scope** and deferred to a separate
 generics plan once v1 settles.
 
@@ -224,7 +224,7 @@ up under a single mental model.
   the four v1.1 families. Scoped as a separate follow-up plan once
   v1 demonstrates the substrate is load-bearing. See *Future
   Considerations*.
-- **Macro-derivation** — `eo.generics.ilens[S](_.field)` and
+- **Macro-derivation** — `dev.constructive.eo.generics.ilens[S](_.field)` and
   equivalents. Substantial macro work, orthogonal to the carrier
   design, and the hand-written ergonomics need to settle before the
   macro surface is pinned. Deferred.
@@ -655,7 +655,7 @@ lift, and doesn't touch unindexed chains at all.
 
 ### D7. Derivation macros — **out of scope, roadmap item**
 
-**Decision.** `eo.generics.ilens[S](_.field)` / `iprism[S, A]` /
+**Decision.** `dev.constructive.eo.generics.ilens[S](_.field)` / `iprism[S, A]` /
 `itraversal[S, A]` macros are **not** part of v1. They ship in a
 separate follow-up plan once the hand-written indexed optics settle.
 
@@ -1001,7 +1001,7 @@ units (0 spike + 10 body units).
 tree.
 
 **Approach.**
-1. Create `eo.data.IxForget[F[_], I]` as an opaque type over
+1. Create `dev.constructive.eo.data.IxForget[F[_], I]` as an opaque type over
    `F[(I, A)]`.
 2. Try to write a `ForgetfulFunctor[IxForget[F, I]]` instance that
    does *not* collide with the existing `Forget[F]` instance.
@@ -1268,7 +1268,7 @@ Pre-commit hook passes.
 
 ### Scaladoc on new files
 
-Every public member under `eo.Ix*` and `eo.data.IxF` / `eo.optics.Ix*`
+Every public member under `dev.constructive.eo.Ix*` and `dev.constructive.eo.data.IxF` / `dev.constructive.eo.optics.Ix*`
 carries Scaladoc at the density of `AlgLens.scala`:
 
 - Typeclass traits — signature + "unlocks which extension on
@@ -1378,7 +1378,7 @@ the v1 substrate — no new typeclasses, no new carriers beyond
 Gate on v1 adoption: ship v1.1 once external users request the
 additional families, or once cats-eo internal examples benefit.
 
-### Macro derivation — `eo.generics.ilens`, `eo.generics.itraversal`
+### Macro derivation — `dev.constructive.eo.generics.ilens`, `dev.constructive.eo.generics.itraversal`
 
 Scoped as a generics-follow-up plan once v1 hand-written indexed
 surface settles. Expected scope: ~6 units. Target: zero-config

@@ -100,7 +100,7 @@ val leafE: Optic[Team, Team, Members, Members, AlgLens[Set]] = …  // eo
 
 // Cross-library chain — Monocle outers lift to eo, leaf stays eo:
 val full = outerM.toEo.andThen(innerM.toEo).andThen(leafE)
-// → eo.Optic[Org, Org, Members, Members, AlgLens[Set]]
+// → dev.constructive.eo.Optic[Org, Org, Members, Members, AlgLens[Set]]
 //   AlgLens cannot degrade to a Monocle type, so the chain stays eo
 //   and the user runs .modify / .foldMap / .all on the result.
 ```
@@ -115,7 +115,7 @@ val outerE: Optic[App, App, User, User, Tuple2] = lens[App](_.user)
 val leafM: monocle.Lens[User, Profile]          = ThirdPartyLib.profileLens
 
 val full = outerE.andThen(leafM.toEo)
-// → eo.Optic[App, App, Profile, Profile, Tuple2], composes naturally
+// → dev.constructive.eo.Optic[App, App, Profile, Profile, Tuple2], composes naturally
 ```
 
 **Scenario 3 — Mixed-library composition without explicit conversion.**
@@ -157,11 +157,11 @@ unchanged at the 2-4 week range.
 
 ## Requirements Trace
 
-- **R1. Bidirectional Iso conversion.** `eo.optics.BijectionIso[S, S,
+- **R1. Bidirectional Iso conversion.** `dev.constructive.eo.optics.BijectionIso[S, S,
   A, A]` ↔ `monocle.Iso[S, A]`, plus the polymorphic
   `BijectionIso[S, T, A, B]` ↔ `monocle.PIso[S, T, A, B]`. Round-trip
   preserves `get` / `reverseGet`.
-- **R2. Bidirectional Lens conversion.** `eo.optics.GetReplaceLens` /
+- **R2. Bidirectional Lens conversion.** `dev.constructive.eo.optics.GetReplaceLens` /
   `SimpleLens` / `SplitCombineLens` (all `Optic[…, Tuple2]` shapes) ↔
   `monocle.Lens[S, A]` / `monocle.PLens[S, T, A, B]`. The eo→Monocle
   direction goes through whichever fused subclass the eo lens
@@ -210,7 +210,7 @@ unchanged at the 2-4 week range.
   call site — a one-liner whose surface area doesn't justify a
   module-level entry point.
 - **R11. Generic-derived interop.** **[DROPPED 2026-04-25]** Cross-
-  library use of `eo.generics.lens[S](_.field)` against
+  library use of `dev.constructive.eo.generics.lens[S](_.field)` against
   `monocle.Focus[S](_.field)` is reachable today by converting the
   eo result via `.toMonocle` (R2) and wrapping in `monocle.Iso` for
   the NamedTuple-to-plain-type flatten if needed. The dedicated
@@ -247,7 +247,7 @@ unchanged at the 2-4 week range.
 
 **In scope.** Everything required by R1–R16.
 
-- New sub-module `monocle/` with package `eo.monocle`.
+- New sub-module `monocle/` with package `dev.constructive.eo.monocle`.
 - Conversion functions: `toMonocle` / `toEo` extension methods on
   every optic family.
 - Cross-library `.andThen` extensions on both `Optic[…]` (eo) and
@@ -267,7 +267,7 @@ unchanged at the 2-4 week range.
   reasoning about three Json encodings simultaneously. Defer to a
   hypothetical 0.2.x `eo-monocle-circe` add-on. (See OQ-conv-6.)
 - **No Monocle `Focus`-macro re-implementation.** Users who want
-  derived optics in eo write `eo.generics.lens[S](_.field)`; users
+  derived optics in eo write `dev.constructive.eo.generics.lens[S](_.field)`; users
   who want Monocle-derived write `monocle.Focus[S](_.field)`. The
   cross-compose path is `eoGenericLens.toMonocle` (via R2) followed
   by Monocle's own composition; the dedicated NamedTuple-flattening
@@ -337,7 +337,7 @@ unchanged at the 2-4 week range.
   `split`. The `getOrModify` lineage is the structural bridge
   between Monocle's lattice and cats-eo's Affine carrier.
 - `monocle.Focus[S](_.field)` is the macro counterpart to
-  `eo.generics.lens[S](_.field)`. Monocle returns a plain
+  `dev.constructive.eo.generics.lens[S](_.field)`. Monocle returns a plain
   `Lens[S, FieldType]`; eo returns a `SimpleLens[S, FieldType,
   NamedTuple[…]]` whose complement is a NamedTuple. The dedicated
   flattening adapter (R11) was dropped from 0.1.0 scope; cross-
@@ -387,10 +387,10 @@ None yet specific to interop; any Monocle-version-skew gotchas (e.g.
 ## Key Technical Decisions
 
 - **D1. Module name and artifact.** `monocle/` on disk, sbt name
-  `monocle`, artifact `cats-eo-monocle`, package `eo.monocle`.
+  `monocle`, artifact `cats-eo-monocle`, package `dev.constructive.eo.monocle`.
   Rationale: every published module follows the `cats-eo-*` artifact
   prefix, and the on-disk directory matches the trailing path
-  segment. Package `eo.monocle` keeps the namespace short.
+  segment. Package `dev.constructive.eo.monocle` keeps the namespace short.
 - **D2. Composition direction default — eo wins.** When the user
   writes `eoLens.andThen(monocleLens)` (or the symmetric direction),
   the result is an eo `Optic[…, F]`, not a Monocle `Lens`. Rationale:
@@ -421,8 +421,8 @@ None yet specific to interop; any Monocle-version-skew gotchas (e.g.
   `T = S`, `B = A` defaulted in the mono helpers). (Answers
   OQ-conv-2.)
 - **D5. Conversion API — extension methods, not free functions.** The
-  user writes `eoLens.toMonocle`, not `eo.monocle.MonocleConverters.toMonocle(eoLens)`,
-  and not `import eo.monocle.given; eoLens.lift[Monocle]`. Rationale:
+  user writes `eoLens.toMonocle`, not `dev.constructive.eo.monocle.MonocleConverters.toMonocle(eoLens)`,
+  and not `import dev.constructive.eo.monocle.given; eoLens.lift[Monocle]`. Rationale:
   extension methods are the most discoverable Scala 3 idiom, they
   IDE-auto-complete after the dot, and the typeclass-given approach
   introduces a typeclass surface that doesn't otherwise pay rent.
@@ -499,23 +499,23 @@ interop module ships extension methods on both directions:
 
 | Outer | Inner | Result default (D2) | Implementation |
 |---|---|---|---|
-| `eo.Optic[…, F]` | `monocle.Iso[A, B]` | `eo.Optic[…, F]` | `outer.andThen(inner.toEo)` |
-| `eo.Optic[…, F]` | `monocle.Lens[A, B]` | `eo.Optic[…, F]` (or `Tuple2` if F lifts) | `outer.andThen(inner.toEo)` |
-| `eo.Optic[…, F]` | `monocle.Prism[A, B]` | `eo.Optic[…, F]` (or `Either`) | `outer.andThen(inner.toEo)` |
-| `eo.Optic[…, F]` | `monocle.Optional[A, B]` | `eo.Optic[…, Affine]` | via `Composer[F, Affine]` |
-| `eo.Optic[…, F]` | `monocle.Traversal[A, B]` | `eo.Optic[…, PowerSeries]` | via `Composer[F, PowerSeries]` |
-| `eo.Optic[…, F]` | `monocle.Setter[A, B]` | `eo.Optic[…, SetterF]` | via `Composer[F, SetterF]` |
-| `eo.Optic[…, F]` | `monocle.Getter[A, B]` | `eo.Optic[…, Forgetful]` | via `Composer[F, Forgetful]` if F lifts |
-| `eo.Optic[…, F]` | `monocle.Fold[A, B]` | `eo.Optic[…, Forget[F]]` | via the Fold-builder bridge |
-| `monocle.Lens[S, A]` | `eo.Optic[A, A, B, B, F]` | `eo.Optic[…, F]` | `outer.toEo.andThen(inner)` |
-| `monocle.Optional[S, A]` | `eo.Optic[A, A, B, B, F]` | `eo.Optic[…, Affine]` (via Composer) | `outer.toEo.andThen(inner)` |
-| `monocle.Traversal[S, A]` | `eo.Optic[A, A, B, B, F]` | `eo.Optic[…, PowerSeries]` (via Composer) | `outer.toEo.andThen(inner)` |
-| `monocle.Setter[S, A]` | `eo.Optic[A, A, B, B, F]` | `eo.Optic[…, SetterF]` (via Composer) | `outer.toEo.andThen(inner)` |
-| `monocle.Fold[S, A]` | `eo.Optic[A, A, B, B, F]` | `eo.Optic[…, Forget[F]]` | `outer.toEo.andThen(inner)`, F derived from container |
-| `monocle.Getter[S, A]` | `eo.Optic[A, A, B, B, F]` | `eo.Optic[…, Forgetful]` (or F via Composer) | `outer.toEo.andThen(inner)` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Iso[A, B]` | `dev.constructive.eo.Optic[…, F]` | `outer.andThen(inner.toEo)` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Lens[A, B]` | `dev.constructive.eo.Optic[…, F]` (or `Tuple2` if F lifts) | `outer.andThen(inner.toEo)` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Prism[A, B]` | `dev.constructive.eo.Optic[…, F]` (or `Either`) | `outer.andThen(inner.toEo)` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Optional[A, B]` | `dev.constructive.eo.Optic[…, Affine]` | via `Composer[F, Affine]` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Traversal[A, B]` | `dev.constructive.eo.Optic[…, PowerSeries]` | via `Composer[F, PowerSeries]` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Setter[A, B]` | `dev.constructive.eo.Optic[…, SetterF]` | via `Composer[F, SetterF]` |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Getter[A, B]` | `dev.constructive.eo.Optic[…, Forgetful]` | via `Composer[F, Forgetful]` if F lifts |
+| `dev.constructive.eo.Optic[…, F]` | `monocle.Fold[A, B]` | `dev.constructive.eo.Optic[…, Forget[F]]` | via the Fold-builder bridge |
+| `monocle.Lens[S, A]` | `dev.constructive.eo.Optic[A, A, B, B, F]` | `dev.constructive.eo.Optic[…, F]` | `outer.toEo.andThen(inner)` |
+| `monocle.Optional[S, A]` | `dev.constructive.eo.Optic[A, A, B, B, F]` | `dev.constructive.eo.Optic[…, Affine]` (via Composer) | `outer.toEo.andThen(inner)` |
+| `monocle.Traversal[S, A]` | `dev.constructive.eo.Optic[A, A, B, B, F]` | `dev.constructive.eo.Optic[…, PowerSeries]` (via Composer) | `outer.toEo.andThen(inner)` |
+| `monocle.Setter[S, A]` | `dev.constructive.eo.Optic[A, A, B, B, F]` | `dev.constructive.eo.Optic[…, SetterF]` (via Composer) | `outer.toEo.andThen(inner)` |
+| `monocle.Fold[S, A]` | `dev.constructive.eo.Optic[A, A, B, B, F]` | `dev.constructive.eo.Optic[…, Forget[F]]` | `outer.toEo.andThen(inner)`, F derived from container |
+| `monocle.Getter[S, A]` | `dev.constructive.eo.Optic[A, A, B, B, F]` | `dev.constructive.eo.Optic[…, Forgetful]` (or F via Composer) | `outer.toEo.andThen(inner)` |
 
-The mixed-direction `.andThen` extensions live in `eo.monocle.syntax`
-and are summoned via a single `import eo.monocle.syntax.*` at the
+The mixed-direction `.andThen` extensions live in `dev.constructive.eo.monocle.syntax`
+and are summoned via a single `import dev.constructive.eo.monocle.syntax.*` at the
 call site. (Open question OQ-conv-8: is this enough, or should we
 also expose a `given` so the imports happen automatically? — see
 Open Questions.)
@@ -532,7 +532,7 @@ of part-time work for a single contributor.
 **Goal:** Stand up a new `monocle/` sub-project that depends on `core`
 + `monocle-core` + (Test only) `laws`, has a `publish / skip := false`
 setting, and is wired into `build.sbt` as a published module. Empty
-package object `eo.monocle.package`. No conversion logic yet —
+package object `dev.constructive.eo.monocle.package`. No conversion logic yet —
 pure plumbing.
 
 **Requirements:** R16 (MiMa baseline = empty).
@@ -554,7 +554,7 @@ pure plumbing.
 **Patterns to follow:** `circeIntegration` setup in `build.sbt` lines 330–350.
 
 **Test scenarios:**
-- Smoke: `import monocle.Lens; import eo.optics.Lens` compiles in the smoke spec.
+- Smoke: `import monocle.Lens; import dev.constructive.eo.optics.Lens` compiles in the smoke spec.
 - Smoke: `cats-eo-monocle_3-0.1.0-SNAPSHOT.jar` is produced by `sbt monocle/publishLocal`.
 
 **Verification:**
@@ -694,7 +694,7 @@ pure plumbing.
 
 ### Unit 6: Cross-library composition syntax — `eoOptic.andThen(monocleOptic)` and reverse
 
-**Goal:** Ship the cross-library `.andThen` extensions on both directions per the lattice table above. User imports `eo.monocle.syntax.*` and gets transparent mixed-library composition.
+**Goal:** Ship the cross-library `.andThen` extensions on both directions per the lattice table above. User imports `dev.constructive.eo.monocle.syntax.*` and gets transparent mixed-library composition.
 
 **Requirements:** R9.
 
@@ -710,7 +710,7 @@ pure plumbing.
 
 **Effort:** L (lots of small entries, all need to type-check correctly).
 
-**Execution note.** Scala 3 implicit resolution can pick the wrong extension when both `eo.monocle.syntax` and the existing `eo.optics.Optic.*` extensions are in scope. Pin the priority: place the cross-library extensions at lower `given` priority so the same-library `.andThen` always wins when both sides are eo or both Monocle. Use `import eo.monocle.syntax.*` *under* the existing `import eo.optics.Optic.*` if priority needs explicit control.
+**Execution note.** Scala 3 implicit resolution can pick the wrong extension when both `dev.constructive.eo.monocle.syntax` and the existing `dev.constructive.eo.optics.Optic.*` extensions are in scope. Pin the priority: place the cross-library extensions at lower `given` priority so the same-library `.andThen` always wins when both sides are eo or both Monocle. Use `import dev.constructive.eo.monocle.syntax.*` *under* the existing `import dev.constructive.eo.optics.Optic.*` if priority needs explicit control.
 
 **Patterns to follow:** existing cross-carrier `andThen` at `core/src/main/scala/eo/optics/Optic.scala:166-176` — the Morph-summoning extension is the model.
 
@@ -1006,12 +1006,12 @@ plan. Listed in the order they affect work.
   `jsonPrism.modifyImpl` inside `monocle.Optional.apply` at the call
   site (the migration page documents this idiom).
 - **OQ-conv-8. Cross-library `.andThen` — explicit-import or
-  auto-`given`?** Unit 6 today requires `import eo.monocle.syntax.*`
+  auto-`given`?** Unit 6 today requires `import dev.constructive.eo.monocle.syntax.*`
   to enable the cross-library extensions. Alternative: provide a
   `given` so the extensions are picked up automatically via implicit
   scope on the optic types. Tradeoff: explicit import is more
   predictable (no surprise compilation success/failure when the user
-  adds `import eo.monocle.*` somewhere unrelated); auto-given is
+  adds `import dev.constructive.eo.monocle.*` somewhere unrelated); auto-given is
   more ergonomic at the cost of polluting the implicit search at
   every `.andThen` site.
 - **OQ-conv-9. Aggregate or out-of-aggregate?** Unit 1 ships the
@@ -1051,7 +1051,7 @@ plan. Listed in the order they affect work.
 
 - **OQ-conv-future-1.** A higher-level "lift any Monocle codebase
   into eo-shape" tool — a script that goes file-by-file in a target
-  repo and rewrites `monocle.Lens` to `eo.optics.Lens`, etc. Not in
+  repo and rewrites `monocle.Lens` to `dev.constructive.eo.optics.Lens`, etc. Not in
   scope for the interop module; would be its own project (probably
   a Scalafix rule + cookbook).
 - **OQ-conv-future-2.** Support for Monocle's `monocle-state`

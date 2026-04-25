@@ -18,9 +18,9 @@ Requires Scala 3.8.x on JDK 17 or JDK 21.
 ## First example
 
 ```scala mdoc:silent
-import eo.optics.Optic.*
-import eo.generics.lens
-import eo.docs.{Address, Person, Zip}
+import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.generics.lens
+import dev.constructive.eo.docs.{Address, Person, Zip}
 ```
 
 A Lens focuses a single field of a product:

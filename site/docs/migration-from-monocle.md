@@ -8,10 +8,10 @@ plus a note on where EO diverges.
 | Monocle                                            | cats-eo                                             |
 |----------------------------------------------------|-----------------------------------------------------|
 | `Lens[S, A](get)(a => s => …)`                     | `Lens[S, A](get, (s, a) => …)`                      |
-| `GenLens[S](_.field)`                              | `lens[S](_.field)` (from `eo.generics`)             |
+| `GenLens[S](_.field)`                              | `lens[S](_.field)` (from `dev.constructive.eo.generics`)             |
 | `GenLens[S](_.a).andThen(GenLens[S](_.b)).andThen(...)` — N hand-composed GenLenses | `lens[S](_.a, _.b, ...)` — one varargs call; full-cover upgrades to `BijectionIso` automatically (no Monocle equivalent) |
 | `Prism[S, A](_.some)(identity)`                    | `Prism.optional[S, A](_.some, identity)`            |
-| `GenPrism[S, A]`                                   | `prism[S, A]` (from `eo.generics`)                  |
+| `GenPrism[S, A]`                                   | `prism[S, A]` (from `dev.constructive.eo.generics`)                  |
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
 | `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A, Affine](getOrModify, rg)`     |
 | *(no standalone equivalent — Monocle reaches for `Optional.getOption`)* | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold.fromOptional(opt)` / `AffineFold.fromPrism(p)` — read-only 0-or-1 focus, `T = Unit` forbids `.modify` |
@@ -53,9 +53,9 @@ The upshot at the call site: the same `.andThen` works whether
 the two optics share `F` or not:
 
 ```scala mdoc:silent
-import eo.data.Affine
-import eo.optics.Lens
-import eo.optics.Optional
+import dev.constructive.eo.data.Affine
+import dev.constructive.eo.optics.Lens
+import dev.constructive.eo.optics.Optional
 
 case class MigConfig(timeout: Option[Int])
 case class MigApp(config: MigConfig)
@@ -123,7 +123,7 @@ libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
 ```
 
 ```scala
-import eo.laws.discipline.LensTests
+import dev.constructive.eo.laws.discipline.LensTests
 
 checkAll("Lens[Person, Int]", LensTests[Person, Int](ageL).lens)
 ```

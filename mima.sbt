@@ -8,7 +8,7 @@
 // Format (per MiMa docs):
 //
 //   ThisBuild / mimaBinaryIssueFilters ++= Seq(
-//     ProblemFilters.exclude[MissingClassProblem]("eo.internal.Foo"),
+//     ProblemFilters.exclude[MissingClassProblem]("dev.constructive.eo.internal.Foo"),
 //   )
 //
 // Only exclude symbols that are genuinely internal (`private` or

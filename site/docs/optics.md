@@ -61,10 +61,10 @@ trait's `to` contract) and lives in its own section below.
 
 
 ```scala mdoc:silent
-import eo.optics.{Lens, Optic}
-import eo.optics.Optic.*
-import eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
-import eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
+import dev.constructive.eo.optics.{Lens, Optic}
+import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
+import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
 ```
 
 Every page here shows optics constructed by hand. For the
@@ -108,8 +108,8 @@ same type. The canonical operation is "apply `A => B` uniformly to
 every slot".
 
 ```scala mdoc:silent
-import eo.data.Grate
-import eo.data.Grate.given
+import dev.constructive.eo.data.Grate
+import dev.constructive.eo.data.Grate.given
 
 val triple = Grate.tuple[(Double, Double, Double), Double]
 ```
@@ -153,8 +153,8 @@ Traversal can't express.
 `Composer[Forgetful, Grate]`:
 
 ```scala mdoc:silent
-import eo.optics.Iso
-import eo.optics.Optic.*
+import dev.constructive.eo.optics.Iso
+import dev.constructive.eo.optics.Optic.*
 
 val rotate =
   Iso[(Double, Double, Double), (Double, Double, Double), (Double, Double, Double),
@@ -207,8 +207,8 @@ it back through the Reflector, return the rebuilt `T`.
 
 ```scala mdoc:silent
 import cats.data.ZipList
-import eo.data.Kaleidoscope
-import eo.data.Kaleidoscope.given
+import dev.constructive.eo.data.Kaleidoscope
+import dev.constructive.eo.data.Kaleidoscope.given
 
 val zipK = Kaleidoscope.apply[ZipList, Double]
 ```
@@ -252,8 +252,8 @@ site; the behaviour tracks whichever Reflector instance you plug in.
 `Composer[Forgetful, Kaleidoscope]`:
 
 ```scala mdoc:silent
-import eo.optics.Iso
-import eo.optics.Optic.*
+import dev.constructive.eo.optics.Iso
+import dev.constructive.eo.optics.Optic.*
 
 val singletonIso = Iso[Int, Int, List[Int], List[Int]](
   i => List(i),
@@ -284,7 +284,7 @@ A `Prism[S, A]` focuses one branch of a sum type — `Some` over
 `None`, or a specific case of an enum. Carrier: `Either`.
 
 ```scala mdoc:silent
-import eo.optics.Prism
+import dev.constructive.eo.optics.Prism
 
 enum Shape:
   case Circle(r: Double)
@@ -318,7 +318,7 @@ An `Iso[S, A]` is a bijection — every `S` round-trips to exactly
 one `A` and back. Carrier: `Forgetful` (the identity carrier).
 
 ```scala mdoc:silent
-import eo.optics.Iso
+import dev.constructive.eo.optics.Iso
 
 case class PersonPair(age: Int, name: String)
 val pairIso = Iso[(Int, String), (Int, String), PersonPair, PersonPair](
@@ -339,8 +339,8 @@ an `Option[A]` field, a predicate-gated access, a
 refinement-style narrowing. Carrier: `Affine`.
 
 ```scala mdoc:silent
-import eo.data.Affine
-import eo.optics.Optional
+import dev.constructive.eo.data.Affine
+import dev.constructive.eo.optics.Optional
 
 case class Contact(flag: Option[String])
 
@@ -381,7 +381,7 @@ API-boundary declaration that callers cannot write through the
 returned optic.
 
 ```scala mdoc:silent
-import eo.optics.AffineFold
+import dev.constructive.eo.optics.AffineFold
 
 case class Adult(age: Int)
 val adultAge: AffineFold[Adult, Int] =
@@ -428,7 +428,7 @@ for cases where the focus value isn't observable to the caller.
 Carrier: `SetterF`.
 
 ```scala mdoc:silent
-import eo.optics.Setter
+import dev.constructive.eo.optics.Setter
 
 case class SetterConfig(values: Map[String, Int])
 val bumpAll = Setter[SetterConfig, SetterConfig, Int, Int] { f => cfg =>
@@ -457,7 +457,7 @@ A `Getter[S, A]` is the read-only counterpart to `Setter` — a
 pure projection. Carrier: `Forgetful` with `T = Unit`.
 
 ```scala mdoc:silent
-import eo.optics.Getter
+import dev.constructive.eo.optics.Getter
 
 val nameLen = Getter[Person, Int](_.name.length)
 ```
@@ -478,7 +478,7 @@ A `Fold[F, A]` summarises every element of a `Foldable[F]` via
 
 ```scala mdoc:silent
 import cats.instances.list.given
-import eo.optics.Fold
+import dev.constructive.eo.optics.Fold
 
 val listFold = Fold[List, Int]
 ```
@@ -508,7 +508,7 @@ an observing `to` that a pure review has none of); it's a
 standalone type with its own composition.
 
 ```scala mdoc:silent
-import eo.optics.Review
+import dev.constructive.eo.optics.Review
 
 val someIntR = Review[Option[Int], Int](Some(_))
 ```
@@ -536,7 +536,7 @@ for users who expect to find those names next to the rest of
 the optics reference:
 
 ```scala mdoc:silent
-import eo.optics.{BijectionIso, MendTearPrism, ReversedLens, ReversedPrism}
+import dev.constructive.eo.optics.{BijectionIso, MendTearPrism, ReversedLens, ReversedPrism}
 
 val doubleIso =
   BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
@@ -588,8 +588,8 @@ Use `each` for the composable default — it's what Scala users
 reach for intuitively:
 
 ```scala mdoc:silent
-import eo.optics.Traversal
-import eo.data.PowerSeries
+import dev.constructive.eo.optics.Traversal
+import dev.constructive.eo.data.PowerSeries
 
 val listEach = Traversal.pEach[List, Int, Int]
 ```
@@ -636,7 +636,7 @@ for the cost tradeoff.
 ### Composer: `Iso` as the inner of `Traversal.each`
 
 `Traversal.each[T, A].andThen(iso)` composes cleanly. The direct
-`Composer[Forgetful, PowerSeries]` given ships in `eo.data.PowerSeries`
+`Composer[Forgetful, PowerSeries]` given ships in `dev.constructive.eo.data.PowerSeries`
 and takes priority over any transitive path (`Forgetful → Tuple2 →
 PowerSeries` or `Forgetful → Either → PowerSeries`) that would
 otherwise be ambiguous.

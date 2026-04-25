@@ -13,9 +13,9 @@ Current version: @VERSION@.
 ## 60-second example
 
 ```scala mdoc:silent
-import eo.optics.Optic.*
-import eo.generics.lens
-import eo.docs.{Address, Person, Zip}
+import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.generics.lens
+import dev.constructive.eo.docs.{Address, Person, Zip}
 
 val street =
   lens[Person](_.address)

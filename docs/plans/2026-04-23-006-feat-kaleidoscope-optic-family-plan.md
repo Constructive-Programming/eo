@@ -231,7 +231,7 @@ value lives. They stay as separate families.
   if they want one; automatic promotion is deferred.
 - **No indexed variant (`IxKaleidoscope`)** — part of the parallel
   indexed hierarchy (see survey).
-- **No auto-derivation macro** `eo.generics.kaleidoscope[...]` —
+- **No auto-derivation macro** `dev.constructive.eo.generics.kaleidoscope[...]` —
   separate landing, if at all.
 - **Reflector law suite as first-class discipline tests** — v1
   ships the reflector law as a unit test per instance, not a full
@@ -760,7 +760,7 @@ during the named Unit.
 `core/src/main/scala/eo/Reflector.scala`:
 
 ```
-package eo
+package dev.constructive.eo
 
 import cats.{Applicative, Monoid}
 import cats.data.{Const, ZipList}
@@ -1153,7 +1153,7 @@ pre-commit hook passes.
 
 ### Scaladoc on new files
 
-Every public member under `eo.Reflector` and `eo.data.Kaleidoscope`
+Every public member under `dev.constructive.eo.Reflector` and `dev.constructive.eo.data.Kaleidoscope`
 carries Scaladoc at the density of `AlgLens.scala`:
 
 - `Reflector[F[_]]` trait — the reflector operation's contract +
@@ -1299,7 +1299,7 @@ Once Reflector instance surface grows (say, five+ instances), ship
 `ReflectorLaws` + `ReflectorTests` per the `OptionalTests` template.
 For v1's three instances, unit tests are the right scope.
 
-### Auto-derivation — `eo.generics.kaleidoscope[F]`
+### Auto-derivation — `dev.constructive.eo.generics.kaleidoscope[F]`
 
 Hearth-based macro synthesising a Kaleidoscope for user-defined
 Reflector-shaped containers. Far future; needs the Reflector

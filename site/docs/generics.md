@@ -9,14 +9,14 @@ libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "@VERSION@"
 ```
 
 ```scala mdoc:silent
-import eo.optics.Optic.*
-import eo.generics.{lens, prism}
-import eo.docs.{Address, Customer, NameAgePair, Person, Shape, Shape2, Coords, Zip}
+import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.generics.{lens, prism}
+import dev.constructive.eo.docs.{Address, Customer, NameAgePair, Person, Shape, Shape2, Coords, Zip}
 ```
 
 > Macro-derived optics need their target case classes and enum
 > cases to live at a package-level location. The page hosts its
-> samples in `eo.docs.*` for that reason — the same `lens` /
+> samples in `dev.constructive.eo.docs.*` for that reason — the same `lens` /
 > `prism` calls work identically on your own top-level ADTs.
 
 ## `lens[S](_.field)`
@@ -215,7 +215,7 @@ intP.to("hi": Int | String)
 `prism ∘ lens` works naturally through `Composer` bridges:
 
 ```scala mdoc:silent
-import eo.data.Affine
+import dev.constructive.eo.data.Affine
 
 val circleCoordsX =
   prism[Shape2, Shape2.Circle]

@@ -157,7 +157,7 @@ optics at compile time, built on top of Mateusz Kubuszok's
 macro-commons library. Two entry points so far:
 
 ```scala
-import eo.generics.{lens, prism}
+import dev.constructive.eo.generics.{lens, prism}
 
 // Product-type Lens (GenLens-style partial application):
 case class Person(name: String, age: Int)

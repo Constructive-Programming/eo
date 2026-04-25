@@ -150,7 +150,7 @@ Out of scope (explicit non-goals):
   the emitted Iso picks up composition speedups automatically.
 - `generics/src/test/scala/eo/generics/GenericsSpec.scala` — specs2 +
   ScalaCheck property tests using `forAll`; sample ADTs live under
-  `eo.generics.samples.*` because macro-emitted `new T(...)` calls
+  `dev.constructive.eo.generics.samples.*` because macro-emitted `new T(...)` calls
   trip on inner-class outer accessors. No `cats-eo-laws` dep.
 
 ### External References

@@ -38,7 +38,7 @@ narrowed to just genuine algebraic-lens use cases, or shelved entirely).
 
 ## Requirements Trace
 
-- **R1.** `eo.optics.AlgebraicLens` object exists with `listLens[S, A]` and
+- **R1.** `dev.constructive.eo.optics.AlgebraicLens` object exists with `listLens[S, A]` and
   `alternativeLens[F: Alternative, S, A]` constructors. Both return
   `Optic[S, S, A, A, AlgLens[F]]` (or polymorphic variant).
 - **R2.** At least one nontrivial end-to-end example spec under

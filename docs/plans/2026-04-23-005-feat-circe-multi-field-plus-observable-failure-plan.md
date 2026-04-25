@@ -37,7 +37,7 @@ Prism and the Traversal surface from day one. Designing the
 `JsonFailure` ADT once with full awareness of the multi-field read
 story keeps the two stories aligned.
 
-This is a **breaking change** to the existing `eo.circe` API. At
+This is a **breaking change** to the existing `dev.constructive.eo.circe` API. At
 `0.1.0-SNAPSHOT` that cost is acceptable — see Risks & Dependencies
 and the Migration Notes section under the Documentation Plan.
 
@@ -112,7 +112,7 @@ with the multi-field code keeps all four flows aligned.
   no Ior construction, no Chain.Builder allocation.
 - **R6. `JsonFailure` ADT.** A structured failure type carrying the
   `PathStep` at which the walk aborted plus the reason. Lives in the
-  `eo.circe` package. Appears inside the `Chain[JsonFailure]` carried
+  `dev.constructive.eo.circe` package. Appears inside the `Chain[JsonFailure]` carried
   by every Ior result.
 - **R7. Symmetric Prism + Traversal accumulation.** Both
   `JsonPrism.*` and `JsonTraversal.*` default methods carry
@@ -207,7 +207,7 @@ Out of scope:
 - **New law classes.** Multi-field `JsonFieldsPrism` is still a Prism
   (focus shape changed, laws unchanged). The existing `PrismLaws`
   instance suffices. No new law file.
-- **cross-module `eo.circe` → `eo.laws` dependency at Compile scope.**
+- **cross-module `dev.constructive.eo.circe` → `dev.constructive.eo.laws` dependency at Compile scope.**
   The circe module does not depend on `cats-eo-laws` today; this plan
   does not change that. The Prism laws are instantiated inside the
   circe test tree using a `laws % Test` LocalProject dep — see Unit 6.
@@ -782,7 +782,7 @@ decision in D3 settles it. OQ6 remains and is reframed below.
   against the circeIntegration test classpath. If it fails, the
   fallback is (a) require users to provide their own NamedTuple
   codec explicitly, (b) ship a minimal hand-written NamedTuple
-  codec in `eo.circe.instances` that covers at least the
+  codec in `dev.constructive.eo.circe.instances` that covers at least the
   small-tuple cases we test, or (c) block the plan on upstream
   kindlings fix. Picking (a) is a strict-but-honest fallback; (b)
   has scope-creep risk. Recommend (a) if the spike fails.
@@ -834,7 +834,7 @@ decision in D3 settles it. OQ6 remains and is reframed below.
 
 ```text
 // circe/src/main/scala/eo/circe/JsonFailure.scala
-package eo.circe
+package dev.constructive.eo.circe
 
 import io.circe.DecodingFailure
 
@@ -1276,7 +1276,7 @@ otherwise the naming symmetry breaks.
   **Goal:** prove the new multi-field JsonPrism / JsonTraversal compose
   cleanly with the rest of the optics family — specifically with
   plain Scala-level Lenses, macro-derived Lenses from
-  `eo.generics`, and `AffineFold` — so the Composer-bridge
+  `dev.constructive.eo.generics`, and `AffineFold` — so the Composer-bridge
   machinery (`Composer[Tuple2, Either]`, `Composer[Either, Affine]`,
   etc.) doesn't silently break when JsonFieldsPrism lands as a new
   Optic subclass.
@@ -1310,7 +1310,7 @@ otherwise the naming symmetry breaks.
 
   2. **Generics `lens[S](_.field)` → single-field JsonPrism,
      native `.andThen`.** Fixture: `case class Envelope(payload: Json)`;
-     `val outer = lens[Envelope](_.payload)` (from `eo.generics`);
+     `val outer = lens[Envelope](_.payload)` (from `dev.constructive.eo.generics`);
      `val inner = codecPrism[Person].field(_.name)`. Chain:
      `outer.andThen(inner)`. Validate both surfaces:
      - `.modify(_.toUpperCase)(env).map(_.payload)` returns
@@ -1415,7 +1415,7 @@ otherwise the naming symmetry breaks.
 
 ## Risks & Dependencies
 
-- **R1 (high). Breaking change to the existing `eo.circe` public
+- **R1 (high). Breaking change to the existing `dev.constructive.eo.circe` public
   API.** Every external caller of `modify` / `transform` / `place` /
   `transfer` / `getOption` on `JsonPrism` (and `modify` / `transform`
   / `getAll` on `JsonTraversal`) gets a compile error post-Unit 1.

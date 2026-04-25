@@ -35,7 +35,7 @@ every array size.
 ## JsonPrism
 
 ```scala mdoc:silent
-import eo.circe.codecPrism
+import dev.constructive.eo.circe.codecPrism
 import io.circe.Codec
 import io.circe.syntax.*
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
@@ -255,7 +255,7 @@ flowchart TD
 
 ```scala mdoc
 import cats.data.Ior
-import eo.circe.{JsonFailure, PathStep}
+import dev.constructive.eo.circe.{JsonFailure, PathStep}
 
 val stumpJson = Json.obj("name" -> Json.fromString("Alice"))
 

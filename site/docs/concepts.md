@@ -106,7 +106,7 @@ When two optics share `F`, `Optic.andThen` composes them under
 that carrier:
 
 ```scala mdoc:silent
-import eo.optics.Lens
+import dev.constructive.eo.optics.Lens
 
 case class Address(street: String)
 case class Person(address: Address)
@@ -129,8 +129,8 @@ When the downstream optic uses a different carrier, the same
 `.andThen` still works — no explicit morph step:
 
 ```scala mdoc:silent
-import eo.data.Affine
-import eo.optics.Optional
+import dev.constructive.eo.data.Affine
+import dev.constructive.eo.optics.Optional
 
 case class Maybe(flag: Option[String])
 case class Wrapped(maybe: Maybe)
@@ -151,7 +151,7 @@ val mainStreet = wrappedMaybe.andThen(mainOnly)
 ```
 
 `Composer[Tuple2, Affine]` is one of the stdlib instances;
-[`eo.data.Affine`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html)
+[`dev.constructive.eo.data.Affine`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html)
 ships it. Other bridges: `Tuple2 → SetterF`, `Tuple2 →
 PowerSeries`, `Either → Affine`, `Either → PowerSeries`,
 `Affine → PowerSeries`, `Forgetful → Tuple2`, `Forgetful →

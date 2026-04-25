@@ -25,9 +25,9 @@ Requires Scala 3.8.x on JDK 17 or JDK 21.
 ## 60-second tour
 
 ```scala
-import eo.optics.Lens
-import eo.optics.Optic.*
-import eo.generics.lens
+import dev.constructive.eo.optics.Lens
+import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.generics.lens
 
 case class Address(street: String, zip: Int)
 case class Person(name: String, address: Address)

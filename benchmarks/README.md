@@ -27,7 +27,7 @@ Filter by class (`.*` is JMH's regex syntax):
 
 ```sh
 sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*OptionalBench.*"
-sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 eo.bench.JsonPrismBench.eoModify_d3"
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 dev.constructive.eo.bench.JsonPrismBench.eoModify_d3"
 ```
 
 Enable a profiler (see `-prof list` for available):
@@ -83,7 +83,7 @@ All benches share the same shape: a paired `eoXxx` / `mXxx` (or `naiveXxx`) meth
 
 ### Shared fixture
 
-`eo.bench.fixture.Nested` (`Nested0` … `Nested6`) is the depth-parameterised case-class chain used by `OptionalBench`, `GetterBench`, `SetterBench`. Each leaf carries:
+`dev.constructive.eo.bench.fixture.Nested` (`Nested0` … `Nested6`) is the depth-parameterised case-class chain used by `OptionalBench`, `GetterBench`, `SetterBench`. Each leaf carries:
 
 - `value: Int` — Lens / Getter / Setter focus
 - `flag: Option[String]` — Optional focus (with Some-default and empty-default leaf variants)

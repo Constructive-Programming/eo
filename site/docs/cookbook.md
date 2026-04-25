@@ -11,10 +11,10 @@ from the most familiar framing to the most cats-eo-unique
 capability; skim the headings for a jumping-off point.
 
 ```scala mdoc:silent
-import eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
-import eo.optics.Optic.*
-import eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
-import eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
+import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
+import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
+import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
 ```
 
 ## Theme A — Product editing
@@ -61,7 +61,7 @@ representation is Celsius. Callers `get` and `reverseGet` without
 knowing which unit the type stores:
 
 ```scala mdoc:silent
-import eo.optics.BijectionIso
+import dev.constructive.eo.optics.BijectionIso
 
 case class Temperature(toC: Double)
 
@@ -100,7 +100,7 @@ whose focus is a Scala 3 `NamedTuple` in selector order — no
 Monocle analogue:
 
 ```scala mdoc:silent
-import eo.generics.lens
+import dev.constructive.eo.generics.lens
 
 case class OrderItem(sku: String, quantity: Int, price: Double)
 
@@ -316,7 +316,7 @@ the full decision tree.
 leaf is materialised as `A`:
 
 ```scala mdoc:silent
-import eo.circe.codecPrism
+import dev.constructive.eo.circe.codecPrism
 import io.circe.Codec
 import io.circe.syntax.*
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
@@ -512,8 +512,8 @@ the update function inspects the full classifier to decide what
 to do with each element:
 
 ```scala mdoc:silent
-import eo.data.AlgLens
-import eo.data.AlgLens.given
+import dev.constructive.eo.data.AlgLens
+import dev.constructive.eo.data.AlgLens.given
 
 case class Row(id: Int, score: Double)
 
@@ -570,7 +570,7 @@ Const gives monoidal summation:
 
 ```scala mdoc:silent
 import cats.data.ZipList
-import eo.data.Kaleidoscope
+import dev.constructive.eo.data.Kaleidoscope
 
 val zipK = Kaleidoscope.apply[ZipList, Double]
 val listK = Kaleidoscope.apply[List, Int]
@@ -606,7 +606,7 @@ read side:
 
 ```scala mdoc:silent
 import java.util.UUID
-import eo.optics.Review
+import dev.constructive.eo.optics.Review
 
 case class UserId(value: UUID)
 
@@ -635,7 +635,7 @@ through it. `Getter[S, A]` wraps a pure `S => A` with
 statically rules out `.modify`:
 
 ```scala mdoc:silent
-import eo.optics.Getter
+import dev.constructive.eo.optics.Getter
 
 case class Shopper(name: String, age: Int)
 
@@ -662,7 +662,7 @@ plaintext to the call site. `Setter[S, A]` writes but doesn't
 read — the carrier `SetterF` carries no observable read side:
 
 ```scala mdoc:silent
-import eo.optics.Setter
+import dev.constructive.eo.optics.Setter
 
 case class Users(credentials: Map[String, String])
 
@@ -691,7 +691,7 @@ write-back. `AffineFold` is the 0-or-1 read-only shape with
 `T = Unit`:
 
 ```scala mdoc:silent
-import eo.optics.AffineFold
+import dev.constructive.eo.optics.AffineFold
 
 case class Person(age: Int)
 
@@ -949,7 +949,7 @@ point on the walk; the cases cover every way a cursor walk can
 skip:
 
 ```scala mdoc:silent
-import eo.circe.JsonFailure
+import dev.constructive.eo.circe.JsonFailure
 
 def route(chain: cats.data.Chain[JsonFailure]): List[String] =
   chain.toList.map {

@@ -153,7 +153,7 @@ wirings in `tests/src/test/scala/eo/OpticsLawsSpec.scala`.
   restricted; would ship as a scoped witness. Deferred.
 - **Cross-carrier bridges to AlgLens / PowerSeries / Affine / SetterF**
   — structurally disjoint. Deferred.
-- **Auto-derivation macro** `eo.generics.grate[...]` — separate landing.
+- **Auto-derivation macro** `dev.constructive.eo.generics.grate[...]` — separate landing.
 - **Indexed Grate** (`IxGrate`) — part of the parallel indexed hierarchy.
 
 ## Context & Research
@@ -199,7 +199,7 @@ Unit 6 bench documents cost envelope, not a side-by-side story.
   factories `fromLensF`/`fromPrismF`/`fromOptionalF`). **Grate's
   structure in this plan follows the same template:** type alias +
   given instances + factory constructors + Composer bridges, all in
-  `eo.data.Grate`.
+  `dev.constructive.eo.data.Grate`.
 - **`PowerSeries`** — reference for a high-optimisation carrier with
   fused composition paths. Not a v1 Grate target; Grate is niche and
   the optimisation budget is better spent elsewhere.
@@ -536,7 +536,7 @@ Each unit is ~1 commit. Checkboxes track status.
 **Files.** Create `core/src/main/scala/eo/data/Grate.scala`.
 
 **Approach.**
-1. Define `type Grate[X, A] = (A, X => A)` in `eo.data`.
+1. Define `type Grate[X, A] = (A, X => A)` in `dev.constructive.eo.data`.
 2. `given grateFunctor: ForgetfulFunctor[Grate]` — one-liner.
 3. `given grateAssoc[Xo, Xi]: AssociativeFunctor[Grate, Xo, Xi]`
    with `Z = (Xo, Xi)`. `composeFrom` uses the focus half only;
@@ -690,7 +690,7 @@ pre-commit hook passes.
 
 ### Scaladoc on new files
 
-Every public member under `eo.data.Grate` carries Scaladoc at the
+Every public member under `dev.constructive.eo.data.Grate` carries Scaladoc at the
 density of `AlgLens.scala`:
 - Type alias — encoding note, link to this plan.
 - Each `given` — what it unlocks + required evidence.
@@ -794,7 +794,7 @@ Needs a `Keyed[F, K]` witness. Deferred with the same reasoning.
 - AlgLens / PowerSeries / Affine / SetterF bridges — none are
   natural; deferred with low priority.
 
-### Generics macro — `eo.generics.grate[T]`
+### Generics macro — `dev.constructive.eo.generics.grate[T]`
 
 Hearth-based macro synthesising a Grate for homogeneous case classes
 (all fields same type). Follow-up after Grate settles; reuses the

@@ -117,8 +117,8 @@ Requirements the plan must satisfy end-to-end:
   `FooTests` abstract class (discipline `RuleSet`) plus at least one
   `checkAll(...)` instantiation in `tests/`.
 - **R2. Laws module is idiomatically structured** — `FooLaws` (equations)
-  under `eo.laws.*`, `FooTests` (discipline RuleSet) under
-  `eo.laws.discipline.*`. Cohesively grouped per abstraction, not
+  under `dev.constructive.eo.laws.*`, `FooTests` (discipline RuleSet) under
+  `dev.constructive.eo.laws.discipline.*`. Cohesively grouped per abstraction, not
   one-equation-per-file. Matches cats / Monocle conventions. The published
   `cats-eo-laws` artifact is usable by downstream projects.
 - **R3. `core` statement coverage ≥85%** (up from ~70% today) as measured
@@ -276,7 +276,7 @@ Out of scope (explicit non-goals):
   `abstract class XxxTests[...] extends Laws { def laws: XxxLaws[...]; def
   iso(using Arbitrary[S], ...): RuleSet = new SimpleRuleSet("name", ...) }`.
   The pattern is correct — the restructure is purely moving each abstraction
-  into its own file under `eo.laws` / `eo.laws.discipline`.
+  into its own file under `dev.constructive.eo.laws` / `dev.constructive.eo.laws.discipline`.
 - **Carrier naming + paths** to follow when adding new law files:
   - Optics → `laws/src/main/scala/eo/laws/<Name>Laws.scala`,
     `laws/src/main/scala/eo/laws/discipline/<Name>Tests.scala`.
@@ -348,7 +348,7 @@ any surprising incidents (e.g., "MiMa false positive on existential type X",
   library — so docs cannot silently rot. Rejected: Docusaurus (requires Node
   in the dev loop), microsites (abandoned), vanilla Scaladoc alone (no
   narrative layer).
-- **D4. Split laws into `eo.laws` + `eo.laws.discipline`, one abstraction
+- **D4. Split laws into `dev.constructive.eo.laws` + `dev.constructive.eo.laws.discipline`, one abstraction
   per file.** Rationale: matches cats and makes `cats-eo-laws` a clean
   downstream dependency. The current bundled files (`OpticLaws.scala`,
   `EoSpecificLaws.scala`) become entry-point "pallets" that re-export for
@@ -621,7 +621,7 @@ For every new law class, the same skeleton (not implementation — just shape):
 
 ```scala
 // laws/src/main/scala/eo/laws/GetterLaws.scala
-package eo.laws
+package dev.constructive.eo.laws
 
 trait GetterLaws[S, A]:
   def getter: Optic[S, S, A, A, Forgetful]
@@ -632,7 +632,7 @@ trait GetterLaws[S, A]:
 
 ```scala
 // laws/src/main/scala/eo/laws/discipline/GetterTests.scala
-package eo.laws.discipline
+package dev.constructive.eo.laws.discipline
 
 abstract class GetterTests[S, A] extends Laws:
   def laws: GetterLaws[S, A]
@@ -666,8 +666,8 @@ passes.
 - [x] **Unit 1: Split `laws/` into idiomatic per-abstraction files**
 
 **Goal:** Restructure `OpticLaws.scala` and `EoSpecificLaws.scala` into one
-file per abstraction under `eo.laws.*` (equations) and
-`eo.laws.discipline.*` (RuleSets), matching cats conventions. Delete or
+file per abstraction under `dev.constructive.eo.laws.*` (equations) and
+`dev.constructive.eo.laws.discipline.*` (RuleSets), matching cats conventions. Delete or
 `@deprecated`-shim the old bundled objects. No behavior changes.
 
 **Requirements:** R2, R10.
@@ -1291,7 +1291,7 @@ mdoc-compiled.
 - Side-by-side Monocle / cats-eo comparison in `migration-from-monocle.md`
   is the single most-important page for adoption; spend the time.
 - Don't duplicate Scaladoc content — link to it from each page
-  (`API reference: @:api(eo.optics.Lens)`).
+  (`API reference: @:api(dev.constructive.eo.optics.Lens)`).
 
 **Execution note:** Write one cookbook page first, run `sbt docs/mdoc`,
 make sure the round-trip works, then expand.
@@ -2096,7 +2096,7 @@ the artifacts on Maven Central after the tag push.
 
 - **Interaction graph:**
   - `laws/` module structure changes → every downstream test spec that
-    `import eo.laws._` is affected. Within this repo only
+    `import dev.constructive.eo.laws._` is affected. Within this repo only
     `tests/src/test/scala/eo/OpticsLawsSpec.scala` and
     `EoSpecificLawsSpec.scala` are affected. Downstream projects (none
     yet — pre-0.1.0) would see new stable import paths after the split.
@@ -2131,8 +2131,8 @@ the artifacts on Maven Central after the tag push.
 - **API surface parity:**
   - Scaladoc `@group` tags are additive — no API change, only doc
     organization. No runtime effect.
-  - Law class splits change `eo.laws.OpticLaws.IsoLaws[...]` to
-    `eo.laws.IsoLaws[...]`. We will ship a type alias / re-export in
+  - Law class splits change `dev.constructive.eo.laws.OpticLaws.IsoLaws[...]` to
+    `dev.constructive.eo.laws.IsoLaws[...]`. We will ship a type alias / re-export in
     the old location for one release to avoid breaking any hypothetical
     downstream consumer, or `@deprecated` it.
 - **Integration coverage:**
@@ -2384,7 +2384,7 @@ recipes. None are "greenfield" — they extend already-published pages:
 
 Per R14 finding #5 and code-quality review §F5, the 0.1.0 CHANGELOG
 states explicitly that `cats-eo-laws` depends transitively on `cats-eo`
-(every law file imports `eo.optics.Optic.*`). This is intentional
+(every law file imports `dev.constructive.eo.optics.Optic.*`). This is intentional
 architecture, not a bug — users of `cats-eo-laws` in downstream
 discipline-checked test suites get the optics package automatically.
 A possible 0.2.0 split into `cats-eo-core` + `cats-eo-optics` so
@@ -2451,7 +2451,7 @@ work — flagged in Future Considerations, not in-scope here.
   build long-term on the current layout.
 - **`cats-eo-laws` → `cats-eo-core` + `cats-eo-optics` split.** Review
   §F5 observes that `cats-eo-laws` transitively pulls `cats-eo`
-  because every law file imports `eo.optics.Optic.*`. A three-way
+  because every law file imports `dev.constructive.eo.optics.Optic.*`. A three-way
   split would let law-equation-only users skip the optics package.
   Structurally disruptive; 0.2.0 candidate.
 - **`LowPriorityForgetInstances.assocForgetComonad` — leave alone.**
