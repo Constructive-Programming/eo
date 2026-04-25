@@ -17,6 +17,7 @@ import org.specs2.mutable.Specification
   */
 class JsonPrismSpec extends Specification with ScalaCheck:
 
+  import JsonSpecFixtures.*
   import JsonPrismSpec.*
   import JsonPrismSpec.given
 
@@ -503,25 +504,10 @@ class JsonPrismSpec extends Specification with ScalaCheck:
 
 object JsonPrismSpec:
 
-  case class Address(street: String, zip: Int)
-
-  object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-
-  case class Person(name: String, age: Int, address: Address)
-
-  object Person:
-    given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
-
-  case class Order(name: String)
-
-  object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
-
-  case class Basket(owner: String, items: Vector[Order])
-
-  object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+  // Common ADTs (`Address`, `Person`, `Order`, `Basket`) live in
+  // `JsonSpecFixtures` — this object holds only the spec-specific
+  // NamedTuple aliases + their codec instances.
+  import JsonSpecFixtures.Address
 
   // ---- NamedTuple codec givens for multi-field (.fields) specs ----
   //

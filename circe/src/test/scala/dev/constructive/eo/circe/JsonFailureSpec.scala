@@ -1,9 +1,8 @@
 package dev.constructive.eo.circe
 
 import cats.data.Ior
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import io.circe.Json
 import io.circe.syntax.*
-import io.circe.{Codec, Json}
 import org.specs2.mutable.Specification
 
 /** Observable-identity behaviour specs for [[JsonFailure]]. Each case of the enum must be reachable
@@ -12,7 +11,7 @@ import org.specs2.mutable.Specification
   */
 class JsonFailureSpec extends Specification:
 
-  import JsonFailureSpec.*
+  import JsonSpecFixtures.*
 
   "JsonFailure.PathMissing" should {
 
@@ -106,24 +105,5 @@ class JsonFailureSpec extends Specification:
     }
   }
 
-object JsonFailureSpec:
-
-  case class Address(street: String, zip: Int)
-
-  object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-
-  case class Person(name: String, age: Int, address: Address)
-
-  object Person:
-    given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
-
-  case class Order(name: String)
-
-  object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
-
-  case class Basket(owner: String, items: Vector[Order])
-
-  object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+// Spec-companion is empty: all ADTs needed by the test body live in
+// `JsonSpecFixtures`, imported above.

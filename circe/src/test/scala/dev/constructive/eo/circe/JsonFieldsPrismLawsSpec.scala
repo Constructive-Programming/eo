@@ -25,6 +25,7 @@ import org.typelevel.discipline.specs2.mutable.Discipline
   */
 class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCheck:
 
+  import JsonSpecFixtures.Person
   import JsonFieldsPrismLawsSpec.*
   import JsonFieldsPrismLawsSpec.given
 
@@ -115,15 +116,9 @@ class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCh
 
 object JsonFieldsPrismLawsSpec:
 
-  case class Address(street: String, zip: Int)
-
-  object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-
-  case class Person(name: String, age: Int, address: Address)
-
-  object Person:
-    given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
+  // `Address` / `Person` come from `JsonSpecFixtures`; `Pair` and the
+  // NamedTuple aliases stay here.
+  import JsonSpecFixtures.{Address, Person}
 
   type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
   given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive

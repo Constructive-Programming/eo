@@ -24,6 +24,7 @@ import org.specs2.mutable.Specification
   */
 class CrossCarrierCompositionSpec extends Specification:
 
+  import JsonSpecFixtures.*
   import CrossCarrierCompositionSpec.*
   import CrossCarrierCompositionSpec.given
 
@@ -346,25 +347,8 @@ class CrossCarrierCompositionSpec extends Specification:
 
 object CrossCarrierCompositionSpec:
 
-  case class Address(street: String, zip: Int)
-
-  object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-
-  case class Person(name: String, age: Int, address: Address)
-
-  object Person:
-    given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
-
-  case class Order(name: String)
-
-  object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
-
-  case class Basket(owner: String, items: Vector[Order])
-
-  object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+  // Common ADTs live in `JsonSpecFixtures`; the spec-specific MItem /
+  // MultiBasket / Box / Envelope / NamedTuple aliases stay here.
 
   case class MItem(name: String, price: Double, qty: Int)
 

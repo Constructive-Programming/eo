@@ -18,6 +18,7 @@ import org.specs2.mutable.Specification
   */
 class StringInputSpec extends Specification:
 
+  import JsonSpecFixtures.{Address, Person}
   import StringInputSpec.*
   import StringInputSpec.given
 
@@ -114,15 +115,9 @@ class StringInputSpec extends Specification:
 
 object StringInputSpec:
 
-  final case class Address(street: String, zip: Int)
-
-  object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-
-  final case class Person(name: String, age: Int, address: Address)
-
-  object Person:
-    given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
+  // `Address` / `Person` come from `JsonSpecFixtures`; the
+  // spec-specific `Item` + `Basket` (different from the fixture's
+  // `Basket`!) stay here.
 
   // NamedTuple focus for the multi-field `.fields(_.name, _.age)` spec.
   given Codec.AsObject[NamedTuple.NamedTuple[("name", "age"), (String, Int)]] =
