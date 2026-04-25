@@ -36,6 +36,7 @@ final class JsonFieldsTraversal[A] private[circe] (
     private[circe] val encoder: Encoder[A],
     private[circe] val decoder: Decoder[A],
 ) extends JsonOpticOps[A],
+      JsonFieldsBuilder[A],
       Dynamic:
 
   // ---- Read surface (multi-focus specific) --------------------------
@@ -74,34 +75,9 @@ final class JsonFieldsTraversal[A] private[circe] (
           .map(obj => (obj, parents))
     }
 
-  /** Read each selected field of `obj` into a Chain (failures) or a sub-JsonObject (success). */
-  private def readFields(obj: JsonObject): Either[Chain[JsonFailure], JsonObject] =
-    val (chain, sub) = fieldNames.toVector.foldLeft((Chain.empty[JsonFailure], JsonObject.empty)) {
-      case ((chain, sub), name) =>
-        obj(name) match
-          case None    => (chain :+ JsonFailure.PathMissing(PathStep.Field(name)), sub)
-          case Some(v) => (chain, sub.add(name, v))
-    }
-    Either.cond(chain.isEmpty, sub, chain)
-
-  private def buildSubObject(obj: JsonObject): JsonObject =
-    fieldNames.foldLeft(JsonObject.empty) { (sub, name) =>
-      sub.add(name, obj(name).getOrElse(Json.Null))
-    }
-
-  private def writeFields(parent: JsonObject, a: A): JsonObject =
-    val encoded: JsonObject = encoder(a).asObject.getOrElse(JsonObject.empty)
-    fieldNames.foldLeft(parent) { (out, name) =>
-      encoded(name).fold(out)(v => out.add(name, v))
-    }
-
-  /** Overlay the fields of `newSub` onto `parent`. Same shape as [[writeFields]] but starting from
-    * a `JsonObject` produced by `f` in `transform`.
-    */
-  private def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =
-    fieldNames.foldLeft(parent) { (out, name) =>
-      newSub(name).fold(out)(v => out.add(name, v))
-    }
+  // `readFields`, `buildSubObject`, `writeFields`, `overlayFields` come
+  // from the `JsonFieldsBuilder[A]` mixin — they only depend on
+  // `fieldNames` and `encoder`, which are exposed as protected members.
 
   /** Rebuild the elem after updating the terminal JsonObject at the end of `elemParent`. When
     * `elemParent` is empty the new parent IS the new elem, no fold needed.

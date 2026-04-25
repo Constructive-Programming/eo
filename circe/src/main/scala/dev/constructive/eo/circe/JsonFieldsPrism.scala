@@ -51,6 +51,7 @@ final class JsonFieldsPrism[A] private[circe] (
     private[circe] val decoder: Decoder[A],
 ) extends Optic[Json, Json, A, A, Either],
       JsonOpticOps[A],
+      JsonFieldsBuilder[A],
       Dynamic:
 
   type X = (DecodingFailure, HCursor)
@@ -105,20 +106,10 @@ final class JsonFieldsPrism[A] private[circe] (
         case PathStep.Index(idx)  => c.downN(idx)
     }
 
-  /** Pick the selected fields out of `obj` into a fresh JsonObject, preserving selector order.
-    * Missing fields become `Json.Null` entries — the caller decides whether that's acceptable (the
-    * decode-path checks for missing-ness explicitly before assembly).
-    */
-  private def buildSubObject(obj: JsonObject): JsonObject =
-    fieldNames.foldLeft(JsonObject.empty) { (sub, name) =>
-      sub.add(name, obj(name).getOrElse(Json.Null))
-    }
+  // `readFields`, `buildSubObject`, `writeFields`, `overlayFields` come
+  // from the `JsonFieldsBuilder[A]` mixin — they only depend on
+  // `fieldNames` and `encoder`, which are exposed as protected members.
 
-  /** Walk the parent path *and* collect per-step parents into the supplied buffer. Returns the
-    * parent JsonObject on success, or a single-step failure reason if the walk misses. The buffer
-    * is populated only up to the step that succeeded — callers inspect `parents` only after a
-    * successful return.
-    */
   /** Walk parentPath via [[JsonWalk.walkPath]] and project the terminal value as a JsonObject so
     * the selected-field reads / overlays can proceed. Returns the parent JsonObject paired with the
     * Vector of parents collected along the path — the rebuild phase needs both.
@@ -130,42 +121,6 @@ final class JsonFieldsPrism[A] private[circe] (
           .asObject
           .toRight(JsonFailure.NotAnObject(JsonWalk.terminalOf(parentPath)))
           .map(obj => (obj, parents))
-    }
-
-  /** Read each selected field from `obj`. Returns either the assembled sub-object (for decoder
-    * feed) or a Chain of per-field failures. Missing fields accumulate as PathMissing.
-    */
-  private def readFields(
-      obj: JsonObject
-  ): Either[Chain[JsonFailure], JsonObject] =
-    val (chain, sub) = fieldNames.toVector.foldLeft((Chain.empty[JsonFailure], JsonObject.empty)) {
-      case ((chain, sub), name) =>
-        obj(name) match
-          case None    => (chain :+ JsonFailure.PathMissing(PathStep.Field(name)), sub)
-          case Some(v) => (chain, sub.add(name, v))
-    }
-    Either.cond(chain.isEmpty, sub, chain)
-
-  /** Given a computed NamedTuple `a`, produce a new parent JsonObject with each selected field
-    * overlaid. The encoder runs once; the resulting JsonObject is split back into individual (name,
-    * Json) pairs that we overlay onto `parent` via successive `JsonObject.add` calls.
-    *
-    * The encoder is expected to produce every selected field; encoders that silently omit a field
-    * leave the corresponding entry on `parent` untouched (this mirrors the pre-FP body's silent
-    * tolerance).
-    */
-  private def writeFields(parent: JsonObject, a: A): JsonObject =
-    val encoded: JsonObject = encoder(a).asObject.getOrElse(JsonObject.empty)
-    fieldNames.toVector.foldLeft(parent) { (out, name) =>
-      encoded(name).fold(out)(v => out.add(name, v))
-    }
-
-  /** Overlay the fields of `newSub` onto `parent` via successive `JsonObject.add` — same shape as
-    * [[writeFields]] but starting from a `JsonObject` produced by `f` in `transform`.
-    */
-  private def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =
-    fieldNames.toVector.foldLeft(parent) { (out, name) =>
-      newSub(name).fold(out)(v => out.add(name, v))
     }
 
   /** Rebuild the root Json by splicing `newParent` through the collected parents. */

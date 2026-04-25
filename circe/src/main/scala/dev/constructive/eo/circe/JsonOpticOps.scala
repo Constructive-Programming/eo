@@ -1,7 +1,7 @@
 package dev.constructive.eo.circe
 
 import cats.data.{Chain, Ior}
-import io.circe.Json
+import io.circe.{Encoder, Json, JsonObject}
 
 /** Shared public surface for the four Json optic carriers — [[JsonPrism]], [[JsonFieldsPrism]],
   * [[JsonTraversal]], and [[JsonFieldsTraversal]]. Every one of those classes exposes the same
@@ -66,3 +66,69 @@ private[circe] trait JsonOpticOps[A]:
 
   def transferUnsafe[C](f: C => A): (Json | String) => C => Json =
     input => c => placeImpl(JsonFailure.parseInputUnsafe(input), f(c))
+
+/** Shared field-level helpers for the multi-field Json optic carriers — [[JsonFieldsPrism]]
+  * and [[JsonFieldsTraversal]]. Both classes carry `fieldNames` (the SELECTOR-order field
+  * list) and `encoder: Encoder[A]` (where `A` is a Scala 3 NamedTuple), and both perform the
+  * same per-field walks: read (`readFields`), assemble-with-Null-fallback (`buildSubObject`),
+  * write through the encoder (`writeFields`), and overlay a foreign sub-object
+  * (`overlayFields`).
+  *
+  * Routing through this trait collapses four near-identical hand-written helpers per class.
+  */
+private[circe] trait JsonFieldsBuilder[A]:
+
+  /** SELECTOR-order list of field names this multi-field carrier focuses.
+    *
+    * `private[circe]` matches the access level the implementing classes already use for
+    * their constructor `val`s — a `protected` declaration here would force them to widen
+    * their access modifier, breaking the existing intra-package API.
+    */
+  private[circe] def fieldNames: Array[String]
+
+  /** Codec for the synthesised NamedTuple `A`. Same access-level rationale as
+    * [[fieldNames]].
+    */
+  private[circe] def encoder: Encoder[A]
+
+  /** Read each selected field from `obj`. Returns either the assembled sub-object (for
+    * decoder feed) or a Chain of per-field failures. Missing fields accumulate as
+    * `JsonFailure.PathMissing`.
+    */
+  protected def readFields(obj: JsonObject): Either[Chain[JsonFailure], JsonObject] =
+    val (chain, sub) = fieldNames.toVector.foldLeft((Chain.empty[JsonFailure], JsonObject.empty)) {
+      case ((chain, sub), name) =>
+        obj(name) match
+          case None    => (chain :+ JsonFailure.PathMissing(PathStep.Field(name)), sub)
+          case Some(v) => (chain, sub.add(name, v))
+    }
+    Either.cond(chain.isEmpty, sub, chain)
+
+  /** Pick the selected fields out of `obj` into a fresh JsonObject. Missing fields become
+    * `Json.Null` entries — the caller decides whether that's acceptable (the decode-path
+    * checks for missing-ness explicitly via `readFields`).
+    */
+  protected def buildSubObject(obj: JsonObject): JsonObject =
+    fieldNames.foldLeft(JsonObject.empty) { (sub, name) =>
+      sub.add(name, obj(name).getOrElse(Json.Null))
+    }
+
+  /** Given a computed NamedTuple `a`, produce a new parent JsonObject with each selected
+    * field overlaid. The encoder runs once; the resulting JsonObject is split back into
+    * individual `(name, Json)` pairs that overlay onto `parent` via successive
+    * `JsonObject.add` calls. Encoders that silently omit a field leave the corresponding
+    * entry on `parent` untouched (matches the pre-FP body's silent tolerance).
+    */
+  protected def writeFields(parent: JsonObject, a: A): JsonObject =
+    val encoded: JsonObject = encoder(a).asObject.getOrElse(JsonObject.empty)
+    fieldNames.foldLeft(parent) { (out, name) =>
+      encoded(name).fold(out)(v => out.add(name, v))
+    }
+
+  /** Overlay the fields of `newSub` onto `parent`. Same shape as `writeFields` but starting
+    * from a `JsonObject` produced by `f` in `transform` (rather than re-encoding an `A`).
+    */
+  protected def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =
+    fieldNames.foldLeft(parent) { (out, name) =>
+      newSub(name).fold(out)(v => out.add(name, v))
+    }
