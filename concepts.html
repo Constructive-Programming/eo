@@ -294,7 +294,7 @@ mermaid.initialize({
         <h3 id="same-carrier-optic-andthen" class="section"><a class="anchor-link left" href="#same-carrier-optic-andthen"><i class="icofont-laika link">&#xef71;</i></a>Same-carrier: <code>Optic.andThen</code></h3>
         <p>When two optics share <code>F</code>, <code>Optic.andThen</code> composes them under
         that carrier:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Lens</span><span>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Lens</span><span>
 
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Address</span><span>(</span><span class="identifier">street</span><span>: </span><span class="type-name">String</span><span>)
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Person</span><span>(</span><span class="identifier">address</span><span>: </span><span class="type-name">Address</span><span>)
@@ -312,8 +312,8 @@ mermaid.initialize({
         <h3 id="cross-family-andthen-across-carriers" class="section"><a class="anchor-link left" href="#cross-family-andthen-across-carriers"><i class="icofont-laika link">&#xef71;</i></a>Cross-family: <code>.andThen</code> across carriers</h3>
         <p>When the downstream optic uses a different carrier, the same
         <code>.andThen</code> still works — no explicit morph step:</p>
-        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optional</span><span>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optional</span><span>
 
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Maybe</span><span>(</span><span class="identifier">flag</span><span>: </span><span class="type-name">Option</span><span>[</span><span class="type-name">String</span><span>])
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Wrapped</span><span>(</span><span class="identifier">maybe</span><span>: </span><span class="type-name">Maybe</span><span>)
@@ -332,7 +332,7 @@ mermaid.initialize({
 // into the Affine carrier so the result is an `Optic[..., Affine]`.
 </span><span class="keyword">val</span><span> </span><span class="identifier">mainStreet</span><span> = </span><span class="identifier">wrappedMaybe</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">mainOnly</span><span>)</span></code></pre>
         <p><code>Composer[Tuple2, Affine]</code> is one of the stdlib instances;
-        <a href="https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html"><code>eo.data.Affine</code></a>
+        <a href="https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html"><code>dev.constructive.eo.data.Affine</code></a>
         ships it. Other bridges: <code>Tuple2 → SetterF</code>, <code>Tuple2 →
 PowerSeries</code>, <code>Either → Affine</code>, <code>Either → PowerSeries</code>,
         <code>Affine → PowerSeries</code>, <code>Forgetful → Tuple2</code>, <code>Forgetful →

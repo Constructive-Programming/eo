@@ -123,7 +123,7 @@
             </tr>
             <tr>
               <td><code>GenLens[S](_.field)</code></td>
-              <td><code>lens[S](_.field)</code> (from <code>eo.generics</code>)</td>
+              <td><code>lens[S](_.field)</code> (from <code>dev.constructive.eo.generics</code>)</td>
             </tr>
             <tr>
               <td><code>GenLens[S](_.a).andThen(GenLens[S](_.b)).andThen(...)</code> — N hand-composed GenLenses</td>
@@ -135,7 +135,7 @@
             </tr>
             <tr>
               <td><code>GenPrism[S, A]</code></td>
-              <td><code>prism[S, A]</code> (from <code>eo.generics</code>)</td>
+              <td><code>prism[S, A]</code> (from <code>dev.constructive.eo.generics</code>)</td>
             </tr>
             <tr>
               <td><code>Iso[S, A](f)(g)</code></td>
@@ -230,9 +230,9 @@
         <code>Composer[G, F]</code>) to lift both sides under a shared carrier.
         The upshot at the call site: the same <code>.andThen</code> works whether
         the two optics share <code>F</code> or not:</p>
-        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Lens</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optional</span><span>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Lens</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optional</span><span>
 
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">MigConfig</span><span>(</span><span class="identifier">timeout</span><span>: </span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>])
 </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">MigApp</span><span>(</span><span class="identifier">config</span><span>: </span><span class="type-name">MigConfig</span><span>)
@@ -289,7 +289,7 @@
         <p>Downstream projects can reuse the same <code>checkAll</code> pattern they
         know from cats. <code>cats-eo-laws</code> ships the rule-sets:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">libraryDependencies</span><span> += </span><span class="string-literal">&quot;dev.constructive&quot;</span><span> %% </span><span class="string-literal">&quot;cats-eo-laws&quot;</span><span> % </span><span class="string-literal">&quot;0.1&quot;</span><span> % </span><span class="type-name">Test</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">laws</span><span>.</span><span class="identifier">discipline</span><span>.</span><span class="type-name">LensTests</span><span>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">laws</span><span>.</span><span class="identifier">discipline</span><span>.</span><span class="type-name">LensTests</span><span>
 
 </span><span class="identifier">checkAll</span><span>(</span><span class="string-literal">&quot;Lens[Person, Int]&quot;</span><span>, </span><span class="type-name">LensTests</span><span>[</span><span class="type-name">Person</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">ageL</span><span>).</span><span class="identifier">lens</span><span>)</span></code></pre>
         <p>Every public optic family has a matching <code>FooLaws</code> /

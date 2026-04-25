@@ -110,12 +110,12 @@
         the boilerplate usually written by hand for Lens / Prism
         derivation.</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">libraryDependencies</span><span> += </span><span class="string-literal">&quot;dev.constructive&quot;</span><span> %% </span><span class="string-literal">&quot;cats-eo-generics&quot;</span><span> % </span><span class="string-literal">&quot;0.1&quot;</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.{</span><span class="identifier">lens</span><span>, </span><span class="identifier">prism</span><span>}
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Customer</span><span>, </span><span class="type-name">NameAgePair</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Shape</span><span>, </span><span class="type-name">Shape2</span><span>, </span><span class="type-name">Coords</span><span>, </span><span class="type-name">Zip</span><span>}</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.{</span><span class="identifier">lens</span><span>, </span><span class="identifier">prism</span><span>}
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Customer</span><span>, </span><span class="type-name">NameAgePair</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Shape</span><span>, </span><span class="type-name">Shape2</span><span>, </span><span class="type-name">Coords</span><span>, </span><span class="type-name">Zip</span><span>}</span></code></pre>
         <blockquote>Macro-derived optics need their target case classes and enum
         cases to live at a package-level location. The page hosts its
-        samples in <code>eo.docs.*</code> for that reason — the same <code>lens</code> /
+        samples in <code>dev.constructive.eo.docs.*</code> for that reason — the same <code>lens</code> /
         <code>prism</code> calls work identically on your own top-level ADTs.</blockquote>
         
         <h2 id="lens-s-_-field" class="section"><a class="anchor-link left" href="#lens-s-_-field"><i class="icofont-laika link">&#xef71;</i></a><code>lens[S](_.field)</code></h2>
@@ -265,13 +265,13 @@
         <p>Duplicate rejection fires at compile time:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">dup</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">NameAgePair</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>)
 </span><span class="comment">// error:
-// lens[eo.docs.NameAgePair]: duplicate field selector &#39;name&#39; at positions 0, 1. Each field may appear at most once.
+// lens[dev.constructive.eo.docs.NameAgePair]: duplicate field selector &#39;name&#39; at positions 0, 1. Each field may appear at most once.
 // val dup = lens[NameAgePair](_.name, _.name)
 //           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span></code></pre>
         <p>Nested paths are rejected too — chain manually if you need them:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nested</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>)
 </span><span class="comment">// error:
-// lens[eo.docs.Person]: selector at position 0 must be a single-field accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported. Got: ((_$13: eo.docs.Person) =&gt; _$13.address.street)
+// lens[dev.constructive.eo.docs.Person]: selector at position 0 must be a single-field accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported. Got: ((_$13: dev.constructive.eo.docs.Person) =&gt; _$13.address.street)
 // val nested = lens[Person](_.address.street)
 //              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Fine — two independent Lens derivations composed:
@@ -306,7 +306,7 @@
         
         <h3 id="composition-with-lens-chains" class="section"><a class="anchor-link left" href="#composition-with-lens-chains"><i class="icofont-laika link">&#xef71;</i></a>Composition with Lens chains</h3>
         <p><code>prism ∘ lens</code> works naturally through <code>Composer</code> bridges:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">Affine</span><span>
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">circleCoordsX</span><span> =
   </span><span class="identifier">prism</span><span>[</span><span class="type-name">Shape2</span><span>, </span><span class="type-name">Shape2</span><span>.</span><span class="type-name">Circle</span><span>]

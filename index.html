@@ -108,9 +108,9 @@
         <p>Current version: 0.1.</p>
         
         <h2 id="_60-second-example" class="section"><a class="anchor-link left" href="#_60-second-example"><i class="icofont-laika link">&#xef71;</i></a>60-second example</h2>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.</span><span class="identifier">lens</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Zip</span><span>}
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">generics</span><span>.</span><span class="identifier">lens</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Zip</span><span>}
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">street</span><span> =
   </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>)
