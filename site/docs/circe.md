@@ -207,6 +207,52 @@ shapes:
   misses and for traversal-prefix misses where there's nothing
   to iterate.
 
+### Failure flow
+
+The diagram below traces the path a `Json | String` input takes
+through a default-surface read/modify, showing which
+`JsonFailure` case lands in the chain at each refusal point and
+which `Ior` shape the caller observes.
+
+```mermaid
+flowchart TD
+  input["Json | String input"] --> parsed{parses?}
+  parsed -- "no (String only)" --> parseFail["ParseFailed"]
+  parseFail --> iorLeft(["Ior.Left(chain)"])
+  parsed -- yes --> walk{prefix walk}
+  walk -- "field on non-object" --> notObj["NotAnObject"]
+  walk -- "field absent" --> pathMissing["PathMissing"]
+  walk -- "at on non-array" --> notArr["NotAnArray"]
+  walk -- "index out of range" --> idxOOR["IndexOutOfRange"]
+  walk -- "decoder refused" --> decodeFail["DecodeFailed"]
+  walk -- "clean path" --> travStep{traversal?}
+  notObj --> opShape1{operation}
+  pathMissing --> opShape1
+  notArr --> opShape1
+  idxOOR --> opShape1
+  decodeFail --> opShape1
+  opShape1 -- "get / prefix-miss traversal" --> iorLeft
+  opShape1 -- "modify / place / transform" --> iorBoth(["Ior.Both(chain, inputJson)"])
+  travStep -- "no (scalar)" --> iorRight(["Ior.Right(json)"])
+  travStep -- "yes" --> perElt{per-element walk}
+  perElt -- "every element OK" --> iorRight
+  perElt -- "some elements skip" --> iorBothPartial(["Ior.Both(chain, partialJson)"])
+  perElt -- "empty array" --> iorRight
+```
+
+- Prefix-walk failures (the `NotAnObject` / `PathMissing` /
+  `NotAnArray` / `IndexOutOfRange` / `DecodeFailed` branches) surface
+  as `Ior.Left` on read operations and `Ior.Both(chain, inputJson)`
+  on modify operations — the unchanged input Json rides along so
+  the caller can keep walking.
+- Per-element traversal skips (the `.each` path) accumulate one
+  `JsonFailure` per refused element and land in `Ior.Both`
+  together with the partially-updated Json — every element that
+  *did* succeed is reflected in the payload.
+- `ParseFailed` is the only case that can fire on string inputs;
+  when the caller hands in a `Json` directly, that branch is
+  unreachable.
+
 ```scala mdoc
 import cats.data.Ior
 import eo.circe.{JsonFailure, PathStep}
