@@ -132,3 +132,50 @@ private[circe] trait JsonFieldsBuilder[A]:
     fieldNames.foldLeft(parent) { (out, name) =>
       newSub(name).fold(out)(v => out.add(name, v))
     }
+
+/** Free-floating utility for the per-element accumulation used by both [[JsonTraversal]]
+  * and [[JsonFieldsTraversal]]. Both `getAllIor` bodies look the same after the per-class
+  * prefix walk: `arr.foldLeft((empty Chain, empty Vector)) { ... readElement ... }` and a
+  * post-fold `Ior.Right` / `Ior.Both` lift. Routing through this helper deduplicates the
+  * fold + lift pair.
+  */
+private[circe] object JsonTraversalAccumulator:
+
+  /** Apply `readElement` to every element of `arr`, accumulating the per-element `Ior`s
+    * into a `(Vector[A], Chain[JsonFailure])` and lifting the pair to a single
+    * `Ior[Chain[JsonFailure], Vector[A]]` at the end.
+    *
+    *   - `Ior.Right(a)` → element contributes `a`, no failure.
+    *   - `Ior.Both(c, a)` → element contributes `a`, also adds `c` to the chain.
+    *   - `Ior.Left(c)` → element drops out of the result Vector, adds `c` to the chain.
+    */
+  def collectIor[A](
+      arr: Vector[Json],
+      readElement: Json => Ior[Chain[JsonFailure], A],
+  ): Ior[Chain[JsonFailure], Vector[A]] =
+    val (chain, result) =
+      arr.foldLeft((Chain.empty[JsonFailure], Vector.empty[A])) {
+        case ((chain, acc), elem) =>
+          readElement(elem) match
+            case Ior.Right(a)   => (chain, acc :+ a)
+            case Ior.Left(c)    => (chain ++ c, acc)
+            case Ior.Both(c, a) => (chain ++ c, acc :+ a)
+      }
+    if chain.isEmpty then Ior.Right(result) else Ior.Both(chain, result)
+
+  /** Per-element rewrite with failure accumulation. Elements whose `elemUpdate` returns
+    * `Ior.Left` are left unchanged in the output Vector; their failure(s) contribute to the
+    * accumulated chain. Used by both `JsonTraversal.modifyIor` / `…transformIor` /
+    * `…placeIor` and `JsonFieldsTraversal`'s equivalents.
+    */
+  def mapElementsIor(
+      arr: Vector[Json],
+      elemUpdate: Json => Ior[Chain[JsonFailure], Json],
+  ): (Vector[Json], Chain[JsonFailure]) =
+    arr.foldLeft((Vector.empty[Json], Chain.empty[JsonFailure])) {
+      case ((acc, chain), elem) =>
+        elemUpdate(elem) match
+          case Ior.Right(j)   => (acc :+ j, chain)
+          case Ior.Both(c, j) => (acc :+ j, chain ++ c)
+          case Ior.Left(c)    => (acc :+ elem, chain ++ c)
+    }

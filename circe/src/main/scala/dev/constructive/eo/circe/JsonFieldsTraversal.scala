@@ -183,32 +183,17 @@ final class JsonFieldsTraversal[A] private[circe] (
   private def getAllIor(json: Json): Ior[Chain[JsonFailure], Vector[A]] =
     walkPrefix(json) match
       case Left(failure)   => Ior.Left(Chain.one(failure))
-      case Right((arr, _)) =>
-        val (chain, result) =
-          arr.foldLeft((Chain.empty[JsonFailure], Vector.empty[A])) {
-            case ((chain, acc), elem) =>
-              readElementIor(elem) match
-                case Ior.Right(a)   => (chain, acc :+ a)
-                case Ior.Left(c)    => (chain ++ c, acc)
-                case Ior.Both(c, a) => (chain ++ c, acc :+ a)
-          }
-        if chain.isEmpty then Ior.Right(result) else Ior.Both(chain, result)
+      case Right((arr, _)) => JsonTraversalAccumulator.collectIor(arr, readElementIor)
 
-  /** Per-element update with failure accumulation. Elements whose update fails (walk / read /
-    * decode) are left unchanged in the output; their failure(s) contribute to the outer chain.
+  /** Per-element update with failure accumulation. Delegates to
+    * [[JsonTraversalAccumulator.mapElementsIor]] — Elements whose update fails are left
+    * unchanged in the output; their failure(s) contribute to the outer chain.
     */
   private def mapElementsIor(
       arr: Vector[Json],
       elemUpdate: Json => Ior[Chain[JsonFailure], Json],
   ): (Vector[Json], Chain[JsonFailure]) =
-    val (acc, chain) = arr.foldLeft((Vector.empty[Json], Chain.empty[JsonFailure])) {
-      case ((acc, chain), elem) =>
-        elemUpdate(elem) match
-          case Ior.Right(j)   => (acc :+ j, chain)
-          case Ior.Both(c, j) => (acc :+ j, chain ++ c)
-          case Ior.Left(c)    => (acc :+ elem, chain ++ c)
-    }
-    (acc, chain)
+    JsonTraversalAccumulator.mapElementsIor(arr, elemUpdate)
 
   private def updateElementDecodedIor(
       elemJson: Json,

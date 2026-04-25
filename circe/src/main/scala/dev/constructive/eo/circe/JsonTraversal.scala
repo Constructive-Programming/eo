@@ -207,20 +207,14 @@ final class JsonTraversal[A] private[circe] (
         rebuildPrefix(newArrAndChain, parents)
 
   /** Per-element map that accumulates each per-element Ior into a shared (Vector, Chain) pair.
-    * Ior.Left from an element is treated as "couldn't update this element" — the element stays in
-    * the output unchanged, failure contributes to the chain.
+    * Delegates to [[JsonTraversalAccumulator.mapElementsIor]] — see that helper's docs for the
+    * Ior.Right / Ior.Both / Ior.Left handling.
     */
   private def mapElementsIor(
       arr: Vector[Json],
       elemUpdate: Json => Ior[Chain[JsonFailure], Json],
   ): (Vector[Json], Chain[JsonFailure]) =
-    arr.foldLeft((Vector.empty[Json], Chain.empty[JsonFailure])) {
-      case ((acc, chain), elem) =>
-        elemUpdate(elem) match
-          case Ior.Right(j)   => (acc :+ j, chain)
-          case Ior.Both(c, j) => (acc :+ j, chain ++ c)
-          case Ior.Left(c)    => (acc :+ elem, chain ++ c)
-    }
+    JsonTraversalAccumulator.mapElementsIor(arr, elemUpdate)
 
   /** Rebuild the prefix path back up to the root and wrap the result in the appropriate Ior shape:
     * Ior.Right on an empty chain, Ior.Both otherwise.
@@ -287,16 +281,7 @@ final class JsonTraversal[A] private[circe] (
   private def getAllIor(json: Json): Ior[Chain[JsonFailure], Vector[A]] =
     navigateToArrayIor(json) match
       case Left(l)         => l
-      case Right((arr, _)) =>
-        val (chain, result) =
-          arr.foldLeft((Chain.empty[JsonFailure], Vector.empty[A])) {
-            case ((chain, acc), elem) =>
-              readElementIor(elem) match
-                case Ior.Right(a)   => (chain, acc :+ a)
-                case Ior.Left(c)    => (chain ++ c, acc)
-                case Ior.Both(c, a) => (chain ++ c, acc :+ a)
-          }
-        if chain.isEmpty then Ior.Right(result) else Ior.Both(chain, result)
+      case Right((arr, _)) => JsonTraversalAccumulator.collectIor(arr, readElementIor)
 
 object JsonTraversal:
 
