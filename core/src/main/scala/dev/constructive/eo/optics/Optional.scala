@@ -115,43 +115,58 @@ final class Optional[S, T, A, B](
       case h: Affine.Hit[X, B]  => reverseGet(h.snd, h.b)
       case m: Affine.Miss[X, B] => m.fst
 
+  /** Single fused-andThen kernel for the Optional outer. Every concrete-typed inner shape
+    * (`Optional`, `GetReplaceLens`, `MendTearPrism`, `BijectionIso`) lowers into the same skeleton
+    * — outer-miss short-circuits, outer-hit threads the focus through `innerHit` (read side) and
+    * `innerWrite` (write side). The previous 4-way duplication of `getOrModify` / `reverseGet`
+    * blocks is collapsed here; each `andThen` overload below is a 1-2 line shell that synthesises
+    * the inner-shape adapters.
+    *
+    * `inline` so the call-site materialises the same Optional construction it would have done
+    * before the refactor — the helper exists only to share source, not to add a function-call
+    * indirection on the hot path.
+    *
+    *   - `innerHit(s, a)` — given the original `s` and the outer-hit focus `a`, return either a
+    *     final `T` (when the inner misses, lifted via outer.reverseGet) or the combined focus `C`.
+    *   - `innerWrite(a, d)` — given the outer-hit focus `a` and a write-back `d`, produce the
+    *     `B`-shaped value the outer's reverseGet expects on the write path.
+    */
+  private inline def fuseToOptional[C, D](
+      innerHit: (S, A) => Either[T, C],
+      innerWrite: (A, D) => B,
+  ): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        getOrModify(s) match
+          case Left(t)  => Left(t)
+          case Right(a) => innerHit(s, a),
+      reverseGet = (s, d) =>
+        getOrModify(s) match
+          case Left(t)  => t
+          case Right(a) => reverseGet(s, innerWrite(a, d)),
+    )
+
   /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another partial focus.
     * Outer miss passes through; outer hit + inner miss lifts the inner miss via the outer's
     * reverseGet (which takes the original S + inner's B-shaped leftover); inner hit yields the
     * combined hit focus C.
     */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        getOrModify(s) match
-          case Left(t)  => Left(t)
-          case Right(a) =>
-            inner.getOrModify(a) match
-              case Left(b)  => Left(reverseGet(s, b))
-              case Right(c) => Right(c),
-      reverseGet = (s, d) =>
-        getOrModify(s) match
-          case Left(t)  => t
-          case Right(a) =>
-            val newB = inner.reverseGet(a, d)
-            reverseGet(s, newB),
+    fuseToOptional(
+      innerHit = (s, a) =>
+        inner.getOrModify(a) match
+          case Left(b)  => Left(reverseGet(s, b))
+          case Right(c) => Right(c),
+      innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
   /** Fused `Optional.andThen(GetReplaceLens)` — always-present inner field inside a partial outer
     * focus. Stays partial (`Optional`): outer miss is still a miss.
     */
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        getOrModify(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => Right(inner.get(a)),
-      reverseGet = (s, d) =>
-        getOrModify(s) match
-          case Left(t)  => t
-          case Right(a) =>
-            val newB = inner.enplace(a, d)
-            reverseGet(s, newB),
+    fuseToOptional(
+      innerHit = (_, a) => Right(inner.get(a)),
+      innerWrite = (a, d) => inner.enplace(a, d),
     )
 
   /** Fused `Optional.andThen(MendTearPrism)` — outer Optional's hit branch fed into a Prism. Miss
@@ -159,30 +174,26 @@ final class Optional[S, T, A, B](
     * the inner's B-shaped leftover back to the outer's A shape.
     */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        getOrModify(s) match
-          case Left(t)  => Left(t)
-          case Right(a) =>
-            inner.tear(a) match
-              case Left(b)  => Left(reverseGet(s, b))
-              case Right(c) => Right(c),
-      reverseGet = (s, d) =>
-        getOrModify(s) match
-          case Left(t)  => t
-          case Right(_) =>
-            val newB = inner.mend(d)
-            reverseGet(s, newB),
+    fuseToOptional(
+      innerHit = (s, a) =>
+        inner.tear(a) match
+          case Left(b)  => Left(reverseGet(s, b))
+          case Right(c) => Right(c),
+      innerWrite = (_, d) => inner.mend(d),
     )
 
   /** Fused `Optional.andThen(BijectionIso)` — iso is transparent; threads the get / reverseGet
     * through the Optional's existing shape.
+    *
+    * Historical note: prior to the de-duplication refactor this overload skipped the
+    * outer-miss short-circuit on the write path (`reverseGet = (s, d) => reverseGet(s,
+    * inner.reverseGet(d))`), which observably differed from the other three Optional fused
+    * overloads. That was a latent bug — the unfused `from` returns the Miss leftover `t`
+    * directly, never invoking `reverseGet`. Routing through `fuseToOptional` aligns this case
+    * with the others.
     */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        getOrModify(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => Right(inner.get(a)),
-      reverseGet = (s, d) => reverseGet(s, inner.reverseGet(d)),
+    fuseToOptional(
+      innerHit = (_, a) => Right(inner.get(a)),
+      innerWrite = (_, d) => inner.reverseGet(d),
     )

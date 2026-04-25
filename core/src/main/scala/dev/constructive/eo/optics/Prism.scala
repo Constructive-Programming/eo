@@ -122,6 +122,48 @@ final class MendTearPrism[S, T, A, B](
   inline def getOption(s: S): Option[A] = tear(s).toOption
   inline def reverseGet(b: B): T = mend(b)
 
+  /** Single fused-andThen kernel for a `MendTearPrism` outer when the result is another
+    * `MendTearPrism` (i.e. the inner contributes only Either-carrier semantics). The outer-miss
+    * `Left(t)` short-circuits; outer-hit threads the focus through `innerTear` (read side, may
+    * miss in inner-shaped form) and `innerMend` (write side, lifts D back to B before applying
+    * the outer's mend).
+    *
+    * `inline` so the call-site materialises the same `MendTearPrism` allocation as the
+    * pre-refactor hand-written overloads.
+    */
+  private inline def fuseToMendTear[C, D](
+      innerTear: A => Either[T, C],
+      innerMend: D => B,
+  ): MendTearPrism[S, T, C, D] =
+    new MendTearPrism(
+      tear = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) => innerTear(a),
+      mend = d => mend(innerMend(d)),
+    )
+
+  /** Single fused-andThen kernel for a `MendTearPrism` outer when the result is an `Optional`
+    * (i.e. the inner is the always-present half — Lens or Optional — and the composite must
+    * surface the carrier-shaped `Affine` semantics). Outer-miss surfaces as `Left(t)`; on hit,
+    * `innerHit` decides whether the focus C arrived (`Right(c)`) or the inner missed and we
+    * need to lift through outer.mend (`Left(mend(b))` — encoded in the caller).
+    */
+  private inline def fuseToOptional[C, D](
+      innerHit: A => Either[T, C],
+      innerWrite: (A, D) => B,
+  ): Optional[S, T, C, D] =
+    new Optional(
+      getOrModify = s =>
+        tear(s) match
+          case Left(t)  => Left(t)
+          case Right(a) => innerHit(a),
+      reverseGet = (s, d) =>
+        tear(s) match
+          case Left(t)  => t
+          case Right(a) => mend(innerWrite(a, d)),
+    )
+
   /** Fused composition — `MendTearPrism.andThen(MendTearPrism)` collapses into another
     * `MendTearPrism` with a composed tear (outer → inner, bubbling misses appropriately) and
     * `mend = outer.mend ∘ inner.mend`. Skips the generic `AssociativeFunctor[Either]` composeTo /
@@ -135,15 +177,12 @@ final class MendTearPrism[S, T, A, B](
     * User-facing behaviour is unchanged; fusion is a runtime-only acceleration.
     */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
-    new MendTearPrism(
-      tear = s =>
-        tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) =>
-            inner.tear(a) match
-              case Left(b)  => Left(mend(b))
-              case Right(c) => Right(c),
-      mend = d => mend(inner.mend(d)),
+    fuseToMendTear(
+      innerTear = a =>
+        inner.tear(a) match
+          case Left(b)  => Left(mend(b))
+          case Right(c) => Right(c),
+      innerMend = d => inner.mend(d),
     )
 
   /** Fused `MendTearPrism.andThen(BijectionIso)` — collapses the inner iso into the outer prism.
@@ -151,12 +190,9 @@ final class MendTearPrism[S, T, A, B](
     * cross-carrier `Composer[Forgetful, Either]` hop.
     */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): MendTearPrism[S, T, C, D] =
-    new MendTearPrism(
-      tear = s =>
-        tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => Right(inner.get(a)),
-      mend = d => mend(inner.reverseGet(d)),
+    fuseToMendTear(
+      innerTear = a => Right(inner.get(a)),
+      innerMend = d => inner.reverseGet(d),
     )
 
   /** Fused `MendTearPrism.andThen(PickMendPrism)` — when both are monomorphic in the focus (`A = B`
@@ -168,52 +204,33 @@ final class MendTearPrism[S, T, A, B](
   def andThen[C, D](inner: PickMendPrism[A, C, D])(using
       ev: A =:= B
   ): MendTearPrism[S, T, C, D] =
-    new MendTearPrism(
-      tear = s =>
-        tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) =>
-            inner.pick(a) match
-              case Some(c) => Right(c)
-              case None    => Left(mend(ev(a))),
-      mend = d => mend(ev(inner.mend(d))),
+    fuseToMendTear(
+      innerTear = a =>
+        inner.pick(a) match
+          case Some(c) => Right(c)
+          case None    => Left(mend(ev(a))),
+      innerMend = d => ev(inner.mend(d)),
     )
 
   /** Fused `MendTearPrism.andThen(GetReplaceLens)` — prism may miss, lens focuses on hit. Result is
     * an `Optional` (partial focus). Skips cross-carrier `Morph.bothViaAffine`.
     */
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => Right(inner.get(a)),
-      reverseGet = (s, d) =>
-        tear(s) match
-          case Left(t)  => t
-          case Right(a) =>
-            val newB = inner.enplace(a, d)
-            mend(newB),
+    fuseToOptional(
+      innerHit = a => Right(inner.get(a)),
+      innerWrite = (a, d) => inner.enplace(a, d),
     )
 
   /** Fused `MendTearPrism.andThen(Optional)` — nested partial focuses. Outer miss passes through;
     * inner miss lifts back through outer.mend.
     */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) =>
-            inner.getOrModify(a) match
-              case Left(b)  => Left(mend(b))
-              case Right(c) => Right(c),
-      reverseGet = (s, d) =>
-        tear(s) match
-          case Left(t)  => t
-          case Right(a) =>
-            val newB = inner.reverseGet(a, d)
-            mend(newB),
+    fuseToOptional(
+      innerHit = a =>
+        inner.getOrModify(a) match
+          case Left(b)  => Left(mend(b))
+          case Right(c) => Right(c),
+      innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
 /** Concrete Optic subclass for the `Option`-shaped Prism constructor (`Prism.optional` /
