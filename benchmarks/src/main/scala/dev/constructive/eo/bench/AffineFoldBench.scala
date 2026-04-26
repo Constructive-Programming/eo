@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations.*
 
@@ -26,13 +25,7 @@ import dev.constructive.eo.optics.Optic.*
   * A secondary EO-vs-EO comparison shows the specialisation win: the same read against a full
   * `Optional` (X = (S, S) shape) vs the `AffineFold` (X = (Unit, Unit) shape) at the leaf.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class AffineFoldBench:
+class AffineFoldBench extends JmhDefaults:
 
   // ---- Leaf + per-level lenses (shared fixture; eoFlagOpt is the
   //      same as fixture.eoFlag, re-aliased here to keep the local

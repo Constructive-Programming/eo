@@ -1,8 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
 import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.data.Grate
@@ -26,13 +24,7 @@ import dev.constructive.eo.optics.Optic.*
   * sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 1 .*GrateBench.*"
   * }}}
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class GrateBench:
+class GrateBench extends JmhDefaults:
 
   private val tripleGrate = Grate.tuple[(Double, Double, Double), Double]
 

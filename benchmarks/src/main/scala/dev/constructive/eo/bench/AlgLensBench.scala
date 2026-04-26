@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
 import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
@@ -21,13 +20,7 @@ import cats.instances.list.*
   * `naive_*` does the same work via plain case-class copy + List.map, as the unconstrained
   * baseline.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class AlgLensBench:
+class AlgLensBench extends JmhDefaults:
 
   import AlgLensBench.*
 

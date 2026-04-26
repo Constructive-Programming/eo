@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
 import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
@@ -28,13 +27,7 @@ import cats.instances.arraySeq.*
   * ph.copy(isMobile = !ph.isMobile)))` — this is essentially what the PowerSeries chain must
   * produce, so the gap shows the optic-machinery overhead for multi-focus write.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class PowerSeriesBench:
+class PowerSeriesBench extends JmhDefaults:
 
   import PowerSeriesBench.*
 

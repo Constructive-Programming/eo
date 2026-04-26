@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
 import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
@@ -28,13 +27,7 @@ import cats.instances.arraySeq.given
   * `Functor[ArraySeq].map` is a native array walk, so the numbers here reflect the PowerSeries /
   * Prism machinery rather than any container traversal artefact.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class PowerSeriesPrismBench:
+class PowerSeriesPrismBench extends JmhDefaults:
 
   import PowerSeriesPrismBench.*
 

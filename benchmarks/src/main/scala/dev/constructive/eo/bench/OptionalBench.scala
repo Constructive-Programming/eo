@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
 
 import org.openjdk.jmh.annotations.*
 
@@ -20,13 +19,7 @@ import dev.constructive.eo.bench.fixture.*
   * `mModify_0_empty`). The deeper benches exercise the Some branch only — the fixture's depth-3 /
   * -6 records preserve the populated leaf.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class OptionalBench:
+class OptionalBench extends JmhDefaults:
 
   // ---- Leaf optionals + per-level lenses (shared fixture) -----------
 

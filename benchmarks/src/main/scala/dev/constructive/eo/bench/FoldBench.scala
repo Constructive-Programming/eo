@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
 import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
@@ -20,13 +19,7 @@ import monocle.{Fold => MFold}
   * example — cheap per element, so the per-element `Monoid[Int].combine` and iteration cost
   * dominate and any typeclass-dispatch overhead becomes visible.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class FoldBench:
+class FoldBench extends JmhDefaults:
 
   @Param(Array("8", "64", "512"))
   var size: Int = uninitialized
