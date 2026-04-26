@@ -20,13 +20,13 @@ import org.openjdk.jmh.annotations.*
   * }}}
   *
   * JMH inherits class-level annotations from a `trait` parent — see the
-  * [[org.openjdk.jmh.annotations.Benchmark]] processor's "annotated parent class" handling.
-  * Bench classes now declare `class XBench extends JmhDefaults: …` and pick up the standard
-  * preamble for free.
+  * [[org.openjdk.jmh.annotations.Benchmark]] processor's "annotated parent class" handling. Bench
+  * classes now declare `class XBench extends JmhDefaults: …` and pick up the standard preamble for
+  * free.
   *
-  * Per-bench classes that want to override one annotation (e.g. a longer warmup for a slow
-  * fixture) can re-declare just the relevant `@Warmup` / `@Measurement` on the subclass; JMH's
-  * processor takes the most-specific annotation.
+  * Per-bench classes that want to override one annotation (e.g. a longer warmup for a slow fixture)
+  * can re-declare just the relevant `@Warmup` / `@Measurement` on the subclass; JMH's processor
+  * takes the most-specific annotation.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))

@@ -12,8 +12,8 @@ package dev.constructive.eo
   * }}}
   *
   * The re-exports below pull the most-frequently-imported names into package scope so per-file
-  * imports drop to the bench-specific subset (e.g. `cats.instances.arraySeq.given` for benches
-  * that need cats's collection instances, the per-bench fixture wildcard).
+  * imports drop to the bench-specific subset (e.g. `cats.instances.arraySeq.given` for benches that
+  * need cats's collection instances, the per-bench fixture wildcard).
   */
 package object bench:
 
@@ -23,5 +23,10 @@ package object bench:
   export dev.constructive.eo.optics.Optic.*
 
   // Renamed re-exports for the EO carriers used by every bench class.
-  export dev.constructive.eo.optics.{Lens => EoLens, Prism => EoPrism, Traversal => EoTraversal,
-    Setter => EoSetter, Getter => EoGetter}
+  export dev.constructive.eo.optics.{
+    Getter => EoGetter,
+    Lens => EoLens,
+    Prism => EoPrism,
+    Setter => EoSetter,
+    Traversal => EoTraversal,
+  }
