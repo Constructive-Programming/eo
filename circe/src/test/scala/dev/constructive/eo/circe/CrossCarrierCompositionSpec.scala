@@ -57,7 +57,7 @@ class CrossCarrierCompositionSpec extends Specification:
     val direct = codecPrism[Person].field(_.name)
     val diagOk = direct.modify(_.toUpperCase)(Json.obj()) match
       case Ior.Both(c, _) => c.headOption.get === JsonFailure.PathMissing(PathStep.Field("name"))
-      case other => ko(s"expected Ior.Both, got $other")
+      case other          => ko(s"expected Ior.Both, got $other")
 
     (chain.getOption(validEnv) === Some("Alice"))
       .and(chain.getOption(emptyEnv) === None)
@@ -83,13 +83,14 @@ class CrossCarrierCompositionSpec extends Specification:
     val p = Person("Alice", 30, Address("Main St", 1))
     val concrete = codecPrism[Person].fields(_.name, _.age)
     val concreteOk = concrete.modify(f)(p.asJson) match
-      case Ior.Right(json) => json.hcursor.downField("address").as[Address] === Right(Address("Main St", 1))
+      case Ior.Right(json) =>
+        json.hcursor.downField("address").as[Address] === Right(Address("Main St", 1))
       case other => ko(s"expected Ior.Right, got $other")
 
     val payload = Json.obj("name" -> Json.fromString("Alice"))
     val diagOk = codecPrism[Person].fields(_.name, _.age).get(payload) match
       case Ior.Left(c) => c.toList.contains(JsonFailure.PathMissing(PathStep.Field("age"))) === true
-      case other => ko(s"expected Ior.Left, got $other")
+      case other       => ko(s"expected Ior.Left, got $other")
 
     modOk.and(concreteOk).and(diagOk)
   }
@@ -119,7 +120,7 @@ class CrossCarrierCompositionSpec extends Specification:
       Json.obj("owner" -> Json.fromString("Alice"), "items" -> brokenArr)
     val diagOk = trav.modify(_.toUpperCase)(brokenBasket) match
       case Ior.Both(c, _) => c.headOption.get === JsonFailure.NotAnObject(PathStep.Field("name"))
-      case other => ko(s"expected Ior.Both, got $other")
+      case other          => ko(s"expected Ior.Both, got $other")
 
     unsafeOk.and(iorOk).and(diagOk)
   }

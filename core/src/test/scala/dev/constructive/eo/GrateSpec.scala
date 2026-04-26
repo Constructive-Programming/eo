@@ -16,10 +16,10 @@ import scala.language.implicitConversions
   * factory on `Function1[Boolean, *]` — the Naperian "record-of-pairs" shape that every
   * distributive-optic tutorial reaches for first.
   *
-  * '''2026-04-25 consolidation.''' 11 → 5 named blocks. Pre-image had 4 separate
-  * Function1[Boolean, Int] specs (modify pointwise, replace broadcast, identity-law, composition-law)
-  * collapsed into one composite. Three different tuple arities (Tuple2/3/4) collapsed into one
-  * arity-parametric test. Composer specs left as-is (one identity + one non-trivial bijection).
+  * '''2026-04-25 consolidation.''' 11 → 5 named blocks. Pre-image had 4 separate Function1[Boolean,
+  * Int] specs (modify pointwise, replace broadcast, identity-law, composition-law) collapsed into
+  * one composite. Three different tuple arities (Tuple2/3/4) collapsed into one arity-parametric
+  * test. Composer specs left as-is (one identity + one non-trivial bijection).
   */
 class GrateSpec extends Specification with ScalaCheck:
 

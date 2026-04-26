@@ -14,8 +14,8 @@ import scala.language.implicitConversions
   *
   * '''2026-04-25 consolidation.''' 15 → 5 named blocks. Each Reflector instance previously had
   * three separate specs (shape-witness + R1 map-compat + R2 const-collapse). Collapsed each into
-  * one composite test that asserts all three invariants. The Kaleidoscope (Unit 3) and
-  * Composer (Unit 4) blocks merged similarly.
+  * one composite test that asserts all three invariants. The Kaleidoscope (Unit 3) and Composer
+  * (Unit 4) blocks merged similarly.
   */
 class ReflectorInstancesSpec extends Specification with ScalaCheck:
 

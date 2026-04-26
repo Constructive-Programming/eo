@@ -214,6 +214,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       },
       identity,
     )
+
   private val triSideL: Optic[Shape3.Tri, Shape3.Tri, Int, Int, Tuple2] =
     Lens[Shape3.Tri, Int](_.side, (t, s) => t.copy(side = s))
 

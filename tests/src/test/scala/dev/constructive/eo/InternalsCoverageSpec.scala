@@ -9,8 +9,8 @@ import data.{IntArrBuilder, ObjArrBuilder, PSVec}
   *
   * '''2026-04-25 consolidation.''' 25 → 9 named blocks. The pre-image had:
   *
-  *   - PSVec.Empty: 5 separate single-property specs collapsed into one. Each one tested
-  *     a tiny invariant (length-0, apply-throws, head-throws, slice-empty, equals).
+  *   - PSVec.Empty: 5 separate single-property specs collapsed into one. Each one tested a tiny
+  *     invariant (length-0, apply-throws, head-throws, slice-empty, equals).
   *   - PSVec.Single: 3 separate specs collapsed into one (length, slice, apply-throws).
   *   - PSVec.Slice: 4 separate specs collapsed into one (apply/head/length, slice variants,
   *     unsafeShareableArray identity, copy-on-partial).

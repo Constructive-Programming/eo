@@ -10,11 +10,10 @@ import io.circe.{Codec, Json}
   * '''2026-04-25 consolidation.''' 12 → 5 named blocks. The pre-image had:
   *
   *   - Three "happy path" specs (Unsafe + default Ior + sibling preservation + getAll +
-  *     *Unsafe-agreement) that hit the same code path. Collapsed into one happy-path test
-  *     that asserts all those invariants.
-  *   - Three default-Ior atomicity specs all asserting "Ior.Both with chain" and only
-  *     differing in element layout. Collapsed into one one-broken-elem case + one
-  *     two-failures-accumulate case.
+  *     *Unsafe-agreement) that hit the same code path. Collapsed into one happy-path test that
+  *     asserts all those invariants.
+  *   - Three default-Ior atomicity specs all asserting "Ior.Both with chain" and only differing in
+  *     element layout. Collapsed into one one-broken-elem case + one two-failures-accumulate case.
   *   - Two place/placeUnsafe specs paired into one parity test.
   */
 class JsonFieldsTraversalSpec extends JsonSpecBase:

@@ -11,9 +11,9 @@ import scala.language.implicitConversions
 
 /** Behavioural specs for macro-derived Lens and Prism.
   *
-  * '''2026-04-25 consolidation.''' 50 → 13 named blocks, organised as one composite block per
-  * macro shape. Each block exercises every law for that shape in a single Result.
-  * Discipline-equivalent law coverage preserved per the consolidation contract.
+  * '''2026-04-25 consolidation.''' 50 → 13 named blocks, organised as one composite block per macro
+  * shape. Each block exercises every law for that shape in a single Result. Discipline-equivalent
+  * law coverage preserved per the consolidation contract.
   */
 class GenericsSpec extends Specification with ScalaCheck:
 
@@ -145,6 +145,7 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   val intInUnionP: dev.constructive.eo.optics.Optic[Int | String, Int | String, Int, Int, Either] =
     prism[Int | String, Int]
+
   val stringInUnionP
       : dev.constructive.eo.optics.Optic[Int | String, Int | String, String, String, Either] =
     prism[Int | String, String]
@@ -242,6 +243,7 @@ class GenericsSpec extends Specification with ScalaCheck:
   // ---------- Multi-field Lens (partial cover) ----------
 
   type EmpSalaryIdFocus = scala.NamedTuple.NamedTuple[("salary", "id"), (Double, Long)]
+
   type EmpSalaryIdComplement =
     scala.NamedTuple.NamedTuple[("name", "department"), (String, String)]
 
@@ -281,6 +283,7 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   type EmpNameDeptIdFocus =
     scala.NamedTuple.NamedTuple[("name", "department", "id"), (String, String, Long)]
+
   val nameDeptIdL = lens[Employee](_.name, _.department, _.id)
 
   // covers: 3-of-4 get reads in selector order, replace preserves non-focused salary
@@ -300,6 +303,7 @@ class GenericsSpec extends Specification with ScalaCheck:
   // ---------- Recursive parameterised ADT, multi-field partial cover ----
 
   val lBranchRightLeftL = lens[LTree.LBranch[Int]](_.right, _.left)
+
   type LBranchFocus =
     scala.NamedTuple.NamedTuple[("right", "left"), (LTree[Int], LTree[Int])]
 
@@ -334,10 +338,12 @@ class GenericsSpec extends Specification with ScalaCheck:
   val personAgeNameIso = lens[Person](_.age, _.name)
   type PersonNameAgeFocus = scala.NamedTuple.NamedTuple[("name", "age"), (String, Int)]
   val personNameAgeIso = lens[Person](_.name, _.age)
+
   type EmpAllFocus = scala.NamedTuple.NamedTuple[
     ("department", "id", "salary", "name"),
     (String, Long, Double, String),
   ]
+
   val empAllIso = lens[Employee](_.department, _.id, _.salary, _.name)
 
   // covers: full-cover Iso reverseGet ∘ get = id on 2-of-2 reversed, get ∘

@@ -9,8 +9,8 @@ import scala.language.implicitConversions
   *
   * '''2026-04-25 consolidation.''' 19 → 6 named blocks. Pre-image had:
   *
-  *   - Three "happy path" specs (one per modify/getAll/transform) that all hit the same
-  *     happy-path traversal logic — collapsed into one parity test.
+  *   - Three "happy path" specs (one per modify/getAll/transform) that all hit the same happy-path
+  *     traversal logic — collapsed into one parity test.
   *   - Two empty/missing-prefix specs (one per modify+getAll) — collapsed into one.
   *   - Three Ior.Both accumulation specs at three array layouts — collapsed into two
   *     (single-failure + multi-failure).

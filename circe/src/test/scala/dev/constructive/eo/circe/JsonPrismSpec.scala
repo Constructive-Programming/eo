@@ -19,8 +19,8 @@ import scala.language.implicitConversions
   * `get`) with the `*Unsafe` escape hatch (`modifyUnsafe` / …) for the SAME case. Each property
   * below subsumes the matched pair via the **default ↔ Unsafe parity invariant**:
   * `defaultOp(args).right.exists(_ == unsafeOp(args))` on the happy path, and `Ior.Both(chain,
-  * unsafeOp(args))` on the failure path. ScalaCheck `forAll` over a Person/Address/Vector
-  * generator hits both surfaces with one assertion.
+  * unsafeOp(args))` on the failure path. ScalaCheck `forAll` over a Person/Address/Vector generator
+  * hits both surfaces with one assertion.
   */
 class JsonPrismSpec extends Specification with ScalaCheck:
 
@@ -45,7 +45,6 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     yield Person(n, a, addr)
   )
 
-
   // ---- Root-level codecPrism[S] -------------------------------------
 
   // covers: round-trip modify via full decode/encode (default), round-trip modify
@@ -54,7 +53,8 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     (p: Person) =>
       val json = p.asJson
       val expected = p.copy(name = p.name.toUpperCase).asJson
-      val unsafe = codecPrism[Person].modifyUnsafe((q: Person) => q.copy(name = q.name.toUpperCase))(json)
+      val unsafe =
+        codecPrism[Person].modifyUnsafe((q: Person) => q.copy(name = q.name.toUpperCase))(json)
       val default =
         codecPrism[Person].modify((q: Person) => q.copy(name = q.name.toUpperCase))(json)
       (unsafe == expected) && (default == Ior.Right(expected))
@@ -72,7 +72,8 @@ class JsonPrismSpec extends Specification with ScalaCheck:
         (json === notAPerson)
           .and(chain.length === 1L)
           .and(chain.headOption.get.isInstanceOf[JsonFailure.DecodeFailed] === true)
-      case _ => org.specs2.execute.Failure(s"expected Ior.Both, got $ior"): org.specs2.execute.Result
+      case _ =>
+        org.specs2.execute.Failure(s"expected Ior.Both, got $ior"): org.specs2.execute.Result
     iorOk.and(getResult.isLeft === true).and(unsafeOut === notAPerson)
   }
 
@@ -125,7 +126,8 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       case Ior.Left(chain) =>
         (chain.length === 1L)
           .and(chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("name")))
-      case _ => org.specs2.execute.Failure(s"expected Ior.Left, got $getResult"): org.specs2.execute.Result
+      case _ =>
+        org.specs2.execute.Failure(s"expected Ior.Left, got $getResult"): org.specs2.execute.Result
 
     val modifyOk = modifyResult ===
       Ior.Both(Chain.one(JsonFailure.PathMissing(PathStep.Field("name"))), unsafeModify)
@@ -254,7 +256,10 @@ class JsonPrismSpec extends Specification with ScalaCheck:
 
     val basket2 = Basket(owner = "Alice", items = Vector(Order("ab"), Order("cd")))
     val r2 = codecPrism[Basket]
-      .items.each.name.transformUnsafe(_.mapString(_.reverse))(basket2.asJson) ===
+      .items
+      .each
+      .name
+      .transformUnsafe(_.mapString(_.reverse))(basket2.asJson) ===
       basket2.copy(items = Vector(Order("ba"), Order("dc"))).asJson
 
     val basket3 = Basket(owner = "Alice", items = Vector(Order("x"), Order("y")))
@@ -318,12 +323,9 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       val out = nameAgeL.modifyUnsafe(nt => (name = nt.name + "-x", age = nt.age))(json)
       val addrPreserved = out.hcursor.downField("address").as[Address] == Right(p.address)
 
-      val getOk = nameAgeL.get(json).toOption.exists(nt =>
-        nt.name == p.name && nt.age == p.age
-      )
-      val unsafeGetOk = nameAgeL.getOptionUnsafe(json).exists(nt =>
-        nt.name == p.name && nt.age == p.age
-      )
+      val getOk = nameAgeL.get(json).toOption.exists(nt => nt.name == p.name && nt.age == p.age)
+      val unsafeGetOk =
+        nameAgeL.getOptionUnsafe(json).exists(nt => nt.name == p.name && nt.age == p.age)
 
       val newNt: NameAge = (name = "Carol", age = 55)
       val placeOk = nameAgeL.place(newNt)(json) ==
@@ -367,9 +369,7 @@ class JsonPrismSpec extends Specification with ScalaCheck:
   ".fields with selector-order != declaration-order — NT in selector order" >> forAll {
     (p: Person) =>
       val ageNameL = codecPrism[Person].fields(_.age, _.name)
-      val getOk = ageNameL.get(p.asJson).toOption.exists(nt =>
-        nt.age == p.age && nt.name == p.name
-      )
+      val getOk = ageNameL.get(p.asJson).toOption.exists(nt => nt.age == p.age && nt.name == p.name)
       val out = ageNameL.modifyUnsafe(nt => (age = nt.age + 100, name = nt.name))(p.asJson)
       getOk && (out == p.copy(age = p.age + 100).asJson)
   }
