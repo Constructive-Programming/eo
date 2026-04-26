@@ -32,17 +32,30 @@ import data.Affine.given
 import data.AlgLens.given
 import data.SetterF.given
 
+import scala.language.implicitConversions
+
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
   * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,
   * and `Getter`, all of which are never reached from the ported Monocle laws but still belong in
   * any honest description of what the library does.
+  *
+  * '''2026-04-25 consolidation.''' 61 → 22 named blocks. Pre-image had:
+  *
+  *   - 3 Lens factory specs (first/second/curried) collapsed into one.
+  *   - 4 Review specs collapsed into one (apply/compose/fromIso/fromPrism + ReversedLens alias).
+  *   - 5 AffineFold specs collapsed into one (apply/select/fromOptional/fromPrism/Lens-narrow).
+  *   - 3 Lens-into-AlgLens[List] specs (Tuple2/Either/Affine) collapsed via the same parametric
+  *     hit/miss assertion shape.
+  *   - 3 SetterF lift specs (Either/Affine/PowerSeries → SetterF) collapsed similarly.
+  *   - 3 algFold cardinality specs collapsed.
+  *   - 4 Optional.fused-andThen specs (Optional/GetReplaceLens/MendTearPrism/BijectionIso)
+  *     collapsed via parametric hit/miss assertion.
+  *
+  * Each consolidated block lists the specific scenarios it absorbs in a `// covers: ...` comment.
   */
 class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
-  /** Hand-rolled `Forget[F]`-carrier optic on `Int`, parameterised by the classifier shape `F` so
-    * the AlgLens / Forget-composition specs below can build `Forget[List]` / `Forget[Option]` /
-    * `Forget[Either[E, *]]` classifiers without re-typing the carrier boilerplate per call site.
-    */
+  /** Hand-rolled `Forget[F]`-carrier optic on `Int`, parameterised by the classifier shape `F`. */
   private def forgetOpt[F[_]](
       toF: Int => F[Int],
       fromF: F[Int] => Int,
@@ -52,41 +65,32 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       val to = toF
       val from = fromF
 
-  // ----- Getter.apply ----------------------------------------------
+  // ----- Getter --------------------------------------------------------
 
   "Getter.apply reads the focused value" >> {
     val g = Getter[(Int, String), Int](_._1)
     forAll((s: (Int, String)) => g.get(s) == s._1)
   }
 
-  // ----- Lens alternative constructors -----------------------------
+  // ----- Lens alternative constructors ---------------------------------
 
-  "Lens.first exposes the first tuple component" >> {
-    val l = Lens.first[Int, String]
-    l.get((1, "a")) === 1
-    l.replace(9)((1, "a")) === (9, "a")
+  // covers: Lens.first exposes the first tuple component, Lens.second exposes the
+  // second tuple component, Lens.curried is equivalent to Lens.apply
+  "Lens factories: first / second / curried agree with their Lens.apply analogues" >> {
+    val l1 = Lens.first[Int, String]
+    val l2 = Lens.second[Int, String]
+    val curried = Lens.curried[(Int, Int), Int](_._1, a => s => (a, s._2))
+    val applied = Lens[(Int, Int), Int](_._1, (s, a) => (a, s._2))
+
+    val l1Ok = (l1.get((1, "a")) === 1).and(l1.replace(9)((1, "a")) === ((9, "a")))
+    val l2Ok = (l2.get((1, "a")) === "a").and(l2.replace("z")((1, "a")) === ((1, "z")))
+    val curriedOk = forAll { (s: (Int, Int), a: Int) =>
+      curried.get(s) == applied.get(s) && curried.replace(a)(s) == applied.replace(a)(s)
+    }
+    l1Ok.and(l2Ok) && curriedOk
   }
 
-  "Lens.second exposes the second tuple component" >> {
-    val l = Lens.second[Int, String]
-    l.get((1, "a")) === "a"
-    l.replace("z")((1, "a")) === (1, "z")
-  }
-
-  "Lens.curried is equivalent to Lens.apply" >> {
-    val curried =
-      Lens.curried[(Int, Int), Int](_._1, a => s => (a, s._2))
-    val applied =
-      Lens[(Int, Int), Int](_._1, (s, a) => (a, s._2))
-    forAll((s: (Int, Int), a: Int) =>
-      curried.get(s) == applied.get(s) &&
-        curried.replace(a)(s) == applied.replace(a)(s)
-    )
-  }
-
-  // ----- Lens composition via Optic.andThen ------------------------
-  //
-  // Exercises AssociativeFunctor[Tuple2, X, Y] through andThen.
+  // ----- Lens composition via Optic.andThen ----------------------------
 
   "Lens composed with Lens reaches nested pair component" >> {
     type S = ((Int, Int), Int)
@@ -95,89 +99,75 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val inner: Optic[(Int, Int), (Int, Int), Int, Int, Tuple2] =
       Lens[(Int, Int), Int](_._1, (s, a) => (a, s._2))
     val nested = outer.andThen(inner)
-    nested.get(((1, 2), 3)) === 1
-    nested.replace(9)(((1, 2), 3)) === ((9, 2), 3)
-    nested.modify(_ + 100)(((1, 2), 3)) === ((101, 2), 3)
+    (nested.get(((1, 2), 3)) === 1)
+      .and(nested.replace(9)(((1, 2), 3)) === (((9, 2), 3)))
+      .and(nested.modify(_ + 100)(((1, 2), 3)) === (((101, 2), 3)))
   }
 
-  // ----- Iso.reverse -----------------------------------------------
+  // ----- Iso.reverse ---------------------------------------------------
 
   "Iso.reverse swaps the get / reverseGet directions" >> {
     val longIso: Optic[Int, Int, Long, Long, Forgetful] =
       Iso[Int, Int, Long, Long](_.toLong, _.toInt)
     val rev = longIso.reverse
-    forAll((n: Int) =>
-      // reverse.get undoes longIso.get within Int's range
-      rev.get(n.toLong) == n
-    )
+    forAll((n: Int) => rev.get(n.toLong) == n)
   }
 
-  // ----- Prism alternative constructors ----------------------------
+  // ----- Prism alternative constructor ---------------------------------
 
   "Prism.optional builds a Prism from a partial projection" >> {
     val posIntPrism = Prism.optional[Int, Int](
       n => if n >= 0 then Some(n) else None,
       identity,
     )
-    posIntPrism.to(5) === Right(5)
-    posIntPrism.to(-1) === Left(-1)
-    posIntPrism.reverseGet(7) === 7
+    (posIntPrism.to(5) === Right(5))
+      .and(posIntPrism.to(-1) === Left(-1))
+      .and(posIntPrism.reverseGet(7) === 7)
   }
 
-  // ----- foldMap exercised on Traversal.forEach --------------------
-  //
-  // Hits ForgetfulFold.foldFFold[List] and Optic.foldMap.
+  // ----- Traversal/foldMap/modifyA shorthand ---------------------------
 
-  "Traversal.forEach.foldMap totals the list under Monoid[Int]" >> {
+  // covers: Traversal.forEach.foldMap totals the list under Monoid[Int],
+  // Traversal.forEach.modifyA short-circuits on None, Lens morphed into an Affine
+  // behaves like the original Lens
+  "Traversal.forEach: foldMap totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
     val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
       Traversal.forEach[List, Int, Int]
-    forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
-  }
+    val sumOk = forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
 
-  // ----- modifyA with the Option applicative -----------------------
-  //
-  // Hits ForgetfulTraverse.traverse2[List] for Forget[List] and
-  // demonstrates that failure short-circuits the whole traversal.
-
-  "Traversal.forEach.modifyA short-circuits on None" >> {
-    val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-      Traversal.forEach[List, Int, Int]
     val positivesDoubled: Int => Option[Int] =
       a => if a > 0 then Some(a * 2) else None
+    val mAOk =
+      (t.modifyA[Option](positivesDoubled)(List(1, 2, 3)) == Some(List(2, 4, 6))) &&
+        (t.modifyA[Option](positivesDoubled)(List(1, -2, 3)) == None) &&
+        (t.modifyA[Option](positivesDoubled)(Nil) == Some(Nil))
 
-    t.modifyA[Option](positivesDoubled)(List(1, 2, 3)) === Some(List(2, 4, 6))
-    t.modifyA[Option](positivesDoubled)(List(1, -2, 3)) === None
-    t.modifyA[Option](positivesDoubled)(Nil) === Some(Nil)
-  }
-
-  // ----- .morph coerces a Tuple2 carrier (Lens) to an Affine --------
-  //
-  // Hits Composer.tuple2affine in data.Affine.
-
-  "Lens morphed into an Affine behaves like the original Lens" >> {
     val l: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens.first[Int, String]
     val asAffine: Optic[(Int, String), (Int, String), Int, Int, Affine] =
       l.morph[Affine]
+    val morphOk =
+      forAll((pair: (Int, String), a: Int) => asAffine.modify(_ => a)(pair) == l.replace(a)(pair))
 
-    forAll((pair: (Int, String), a: Int) => asAffine.modify(_ => a)(pair) == l.replace(a)(pair))
+    sumOk && morphOk && mAOk
   }
 
-  // ----- Fold.apply for a Foldable ---------------------------------
+  // ----- Fold ---------------------------------------------------------
 
-  "Fold.apply[List] folds all elements" >> {
-    val f: Optic[List[Int], Unit, Int, Int, Forget[List]] =
-      Fold[List, Int]
-    forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
+  // covers: Fold.apply[List] folds all elements, Fold.select keeps values matching
+  // the predicate
+  "Fold.apply[List] sums + Fold.select keeps matching predicates" >> {
+    val f: Optic[List[Int], Unit, Int, Int, Forget[List]] = Fold[List, Int]
+    val sumOk = forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
+
+    val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] =
+      Fold.select[Int](_ % 2 == 0)
+    val selectOk = forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
+
+    sumOk && selectOk
   }
 
-  // ----- Optional.foldMap exercises the Affine ForgetfulFold --------
-  //
-  // ForgetfulFold.affineFFold was cold — no test called foldMap on an
-  // Optional. A partial Optional (focus is the first Int only when it's
-  // even) hits both branches of the Affine foldMap: Right yields f(a),
-  // Left yields Monoid[M].empty.
-
+  // covers: Optional.foldMap returns the focus when matched, empty otherwise
   "Optional.foldMap returns the focus when matched, empty otherwise" >> {
     val evenFstOpt: Optic[(Int, Int), (Int, Int), Int, Int, Affine] =
       Optional[(Int, Int), (Int, Int), Int, Int, Tuple2](
@@ -185,60 +175,32 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         { case ((_, b), newA) => (newA, b) },
       )
     forAll((a: Int, b: Int) =>
-      evenFstOpt.foldMap(identity[Int])((a, b)) ==
-        (if a % 2 == 0 then a else 0)
+      evenFstOpt.foldMap(identity[Int])((a, b)) == (if a % 2 == 0 then a else 0)
     )
   }
 
-  // ----- Fold.select predicate semantics ---------------------------
-  //
-  // Pins the `Option(_).filter(p)` in Fold.select so stryker detects a
-  // mutation to `filterNot` here (the whole project has exactly one
-  // stryker-reachable runtime expression, and this is it).
+  // ----- Composer morphs from Forgetful --------------------------------
 
-  "Fold.select keeps values matching the predicate, drops the rest" >> {
-    val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] =
-      Fold.select[Int](_ % 2 == 0)
-    forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
-  }
+  // covers: Iso.morph[Tuple2] behaves like a Lens, Iso.morph[Either] behaves like a
+  // Prism, Iso.morph[Tuple2].morph[Affine] is a valid Affine-shaped optic
+  "Iso.morph[Tuple2/Either/Tuple2→Affine] — Forgetful → Tuple2 → Affine chain" >> {
+    val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
+      Iso[Int, Int, Int, Int](_ * 2, _ / 2)
 
-  // ----- Composer morphs from Forgetful -----------------------------
-  //
-  // Iso's carrier is Forgetful; the three `morph` targets exercise
-  // `forgetful2tuple`, `forgetful2either`, and `chain` (Composer.scala),
-  // which are otherwise unreachable from the ported laws.
-
-  val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
-    Iso[Int, Int, Int, Int](_ * 2, _ / 2)
-
-  "Iso.morph[Tuple2] behaves like a Lens" >> {
     val asLens = doubleIso.morph[Tuple2]
-    forAll((n: Int) => asLens.get(n) == n * 2)
-  }
+    val tuple2Ok = forAll((n: Int) => asLens.get(n) == n * 2)
 
-  "Iso.morph[Either] behaves like a Prism" >> {
     val asPrism = doubleIso.morph[Either]
-    // Forgetful → Either always sends to Right
-    asPrism.to(10) === Right(20)
-    asPrism.reverseGet(20) === 10
-  }
+    val eitherOk =
+      (asPrism.to(10) == Right(20)) && (asPrism.reverseGet(20) == 10)
 
-  // Chaining morphs (Forgetful -> Tuple2 -> Affine) exercises
-  // Composer.chain for its middle step.
-  "Iso.morph[Tuple2].morph[Affine] is a valid Affine-shaped optic" >> {
     val asAffine = doubleIso.morph[Tuple2].morph[Affine]
-    forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
+    val affineOk = forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
+
+    tuple2Ok && affineOk && eitherOk
   }
 
-  // ----- Cross-carrier andThen via Morph ------------------------------
-  //
-  // Pins the three Morph instances that rewire `.andThen` across
-  // differing carriers. `leftToRight` and `rightToLeft` are covered
-  // indirectly through the Lens→Optional and Lens→Traversal paths
-  // elsewhere; this block adds explicit coverage plus a regression
-  // for `bothViaAffine`, the low-priority fallback that lifts two
-  // optics with no direct bridge (e.g. `Either` + `Tuple2`) into a
-  // shared `Affine`.
+  // ----- Cross-carrier andThen via Morph.bothViaAffine -----------------
 
   private enum Shape3:
     case Tri(side: Int)
@@ -252,160 +214,115 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       },
       identity,
     )
-
   private val triSideL: Optic[Shape3.Tri, Shape3.Tri, Int, Int, Tuple2] =
     Lens[Shape3.Tri, Int](_.side, (t, s) => t.copy(side = s))
 
-  "Prism.andThen(Lens) composes via Morph.bothViaAffine" >> {
-    // Carrier pair (Either, Tuple2) has no direct Composer either way;
-    // bothViaAffine picks Affine as the common target.
-    val triSide: Optic[Shape3, Shape3, Int, Int, Affine] =
-      triP.andThen(triSideL)
+  // covers: Prism.andThen(Lens) composes via Morph.bothViaAffine, Lens.andThen(Prism)
+  // composes via Morph.bothViaAffine (symmetric)
+  "Morph.bothViaAffine: Prism→Lens and Lens→Prism both compose via the affine bridge" >> {
+    val triSide: Optic[Shape3, Shape3, Int, Int, Affine] = triP.andThen(triSideL)
+    val r1 = (triSide.modify(_ + 10)(Shape3.Tri(3)) === Shape3.Tri(13))
+      .and(triSide.modify(_ + 10)(Shape3.Sq(5)) === Shape3.Sq(5))
 
-    triSide.modify(_ + 10)(Shape3.Tri(3)) === Shape3.Tri(13)
-    triSide.modify(_ + 10)(Shape3.Sq(5)) === Shape3.Sq(5)
-  }
-
-  "Lens.andThen(Prism) composes via Morph.bothViaAffine (symmetric)" >> {
     case class Wrapper(shape: Shape3)
-    val wrapperShape =
-      Lens[Wrapper, Shape3](_.shape, (w, s) => w.copy(shape = s))
+    val wrapperShape = Lens[Wrapper, Shape3](_.shape, (w, s) => w.copy(shape = s))
     val wrappedTri: Optic[Wrapper, Wrapper, Shape3.Tri, Shape3.Tri, Affine] =
       wrapperShape.andThen(triP)
-
-    wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Tri(3))) ===
-      Wrapper(Shape3.Tri(4))
-    wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ===
-      Wrapper(Shape3.Sq(5))
+    val r2 =
+      (wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Tri(3))) ===
+        Wrapper(Shape3.Tri(4))).and(
+        wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ===
+          Wrapper(Shape3.Sq(5))
+      )
+    r1.and(r2)
   }
 
-  // ----- Optional.readOnly behaviour --------------------------------
-  //
-  // Read-only Optional constructed with no write-back — T = Unit so
-  // .modify / .replace are statically forbidden, only .foldMap and
-  // direct .to / PowerSeries-style access remain. Exercises the
-  // Affine carrier's ForgetfulFold path for the hit/miss branches.
+  // ----- Optional.readOnly behaviour -----------------------------------
 
   case class AdultPerson(age: Int)
 
   val adultAge: Optic[AdultPerson, Unit, Int, Int, Affine] =
     Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
 
-  "Optional.readOnly.foldMap folds the hit branch, returns empty on miss" >> {
-    import cats.instances.int.given
-    adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20
-    adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0
-  }
+  // covers: Optional.readOnly.foldMap folds the hit branch, returns empty on miss,
+  // Optional.selectReadOnly keeps values matching the predicate, Optional.readOnly.modifyA
+  // lifts a hit-branch read under Applicative[G]
+  "Optional.readOnly: foldMap hit/miss + selectReadOnly predicate + modifyA[Option]" >> {
+    val foldOk = (adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20)
+      .and(adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0)
 
-  "Optional.selectReadOnly keeps values matching the predicate" >> {
-    import cats.instances.int.given
     val evenAF = Optional.selectReadOnly[Int](_ % 2 == 0)
-    evenAF.foldMap(identity[Int])(4) === 4
-    evenAF.foldMap(identity[Int])(3) === 0
-    evenAF.foldMap(identity[Int])(0) === 0
-  }
+    val selOk = (evenAF.foldMap(identity[Int])(4) === 4)
+      .and(evenAF.foldMap(identity[Int])(3) === 0)
+      .and(evenAF.foldMap(identity[Int])(0) === 0)
 
-  "Optional.readOnly.modifyA lifts a hit-branch read under Applicative[G]" >> {
     val mf: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
-    adultAge.modifyA[Option](mf)(AdultPerson(20)) === Some(())
-    adultAge.modifyA[Option](mf)(AdultPerson(15)) === Some(()) // miss → pure(empty)
+    val mAOk = (adultAge.modifyA[Option](mf)(AdultPerson(20)) === Some(()))
+      .and(adultAge.modifyA[Option](mf)(AdultPerson(15)) === Some(()))
+
+    foldOk.and(selOk).and(mAOk)
   }
 
-  // ----- AffineFold behaviour --------------------------------------
-  //
-  // AffineFold is the user-facing name for the read-only 0-or-1 focus
-  // shape. The constructor is specialised to X = (Unit, Unit) so the
-  // Hit branch doesn't carry the unused S; the observable contract is
-  // still .getOption / .foldMap / .modifyA.
+  // ----- AffineFold behaviour ------------------------------------------
 
   val adultAgeAF: AffineFold[AdultPerson, Int] =
     AffineFold(p => Option.when(p.age >= 18)(p.age))
 
-  "AffineFold.apply hits on Some and misses on None" >> {
-    adultAgeAF.getOption(AdultPerson(20)) === Some(20)
-    adultAgeAF.getOption(AdultPerson(15)) === None
-  }
+  // covers: AffineFold.apply hits on Some and misses on None,
+  // AffineFold.select keeps values matching the predicate, AffineFold.fromOptional
+  // drops write path, AffineFold.fromPrism drops build path,
+  // AffineFold.fromOptional narrows a Lens-composed Optional
+  "AffineFold: apply / select / fromOptional / fromPrism / Lens-narrow all preserve getOption" >> {
+    val applyOk = (adultAgeAF.getOption(AdultPerson(20)) === Some(20))
+      .and(adultAgeAF.getOption(AdultPerson(15)) === None)
 
-  "AffineFold.select keeps values matching the predicate" >> {
     val evenAF = AffineFold.select[Int](_ % 2 == 0)
-    evenAF.getOption(4) === Some(4)
-    evenAF.getOption(3) === None
-  }
+    val selOk = (evenAF.getOption(4) === Some(4)).and(evenAF.getOption(3) === None)
 
-  "AffineFold.fromOptional drops write path, preserves getOption" >> {
     val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-    val af = AffineFold.fromOptional(ageOpt)
-    af.getOption(AdultPerson(20)) === Some(20)
-    af.getOption(AdultPerson(15)) === None
-  }
+    val afFromOpt = AffineFold.fromOptional(ageOpt)
+    val fromOptOk = (afFromOpt.getOption(AdultPerson(20)) === Some(20))
+      .and(afFromOpt.getOption(AdultPerson(15)) === None)
 
-  "AffineFold.fromPrism drops build path, preserves getOption" >> {
     val intPrism = Prism.optional[String, Int](s => s.toIntOption, _.toString)
-    val af = AffineFold.fromPrism(intPrism)
-    af.getOption("42") === Some(42)
-    af.getOption("nope") === None
-  }
+    val afFromPrism = AffineFold.fromPrism(intPrism)
+    val fromPrismOk = (afFromPrism.getOption("42") === Some(42))
+      .and(afFromPrism.getOption("nope") === None)
 
-  // Direct Lens.andThen(AffineFold) is not well-typed — AffineFold's
-  // T = Unit mismatches the outer Lens's B slot in the Optic composition
-  // law. The intended route to a composed read-only focus is to build a
-  // full Optional through the Lens chain and narrow the result via
-  // AffineFold.fromOptional.
-  "AffineFold.fromOptional narrows a Lens-composed Optional" >> {
     case class Wrapper(inner: AdultPerson)
     val wrapAge = Optional[Wrapper, Wrapper, Int, Int, Affine](
       getOrModify = w => Either.cond(w.inner.age >= 18, w.inner.age, w),
       reverseGet = { case (w, a) => w.copy(inner = AdultPerson(a)) },
     )
     val chained = AffineFold.fromOptional(wrapAge)
-    chained.getOption(Wrapper(AdultPerson(20))) === Some(20)
-    chained.getOption(Wrapper(AdultPerson(15))) === None
+    val chainOk = (chained.getOption(Wrapper(AdultPerson(20))) === Some(20))
+      .and(chained.getOption(Wrapper(AdultPerson(15))) === None)
+
+    applyOk.and(selOk).and(fromOptOk).and(fromPrismOk).and(chainOk)
   }
 
-  // ----- Review behaviour ------------------------------------------
+  // ----- Review behaviour ----------------------------------------------
 
-  "Review.apply wraps an A => S build function" >> {
+  // covers: Review.apply wraps an A => S build function, Reviews compose via
+  // direct function composition, Review.fromIso extracts the reverseGet side of a
+  // BijectionIso, Review.fromPrism extracts the mend side of a MendTearPrism,
+  // ReversedLens(iso) and ReversedPrism(prism) alias the Review factories
+  "Review: apply / compose / fromIso / fromPrism + ReversedLens/ReversedPrism aliases" >> {
     val toSome = Review[Option[Int], Int](Some(_))
-    toSome.reverseGet(3) === Some(3)
-    toSome.reverseGet(-1) === Some(-1)
-  }
+    val applyOk = (toSome.reverseGet(3) === Some(3)).and(toSome.reverseGet(-1) === Some(-1))
 
-  "Reviews compose via direct function composition" >> {
-    val toSome = Review[Option[Int], Int](Some(_))
     val stringify = Review[Int, String](_.length)
     val composed =
       Review[Option[Int], String](s => toSome.reverseGet(stringify.reverseGet(s)))
-    composed.reverseGet("hello") === Some(5)
-  }
+    val composeOk = composed.reverseGet("hello") === Some(5)
 
-  "Review.fromIso extracts the reverseGet side of a BijectionIso" >> {
     val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
       BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
-    val rev = Review.fromIso(doubleIsoConcrete)
-    rev.reverseGet(10) === 5
-  }
-
-  "Review.fromPrism extracts the mend side of a MendTearPrism" >> {
-    val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
-      tear = {
-        case Some(n) => Right(n)
-        case None    => Left(None)
-      },
-      mend = Some(_),
-    )
-    val rev = Review.fromPrism(somePrism)
-    rev.reverseGet(42) === Some(42)
-  }
-
-  "ReversedLens(iso) and ReversedPrism(prism) alias the Review factories" >> {
-    val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
-      BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
-    val fromIso = ReversedLens(doubleIsoConcrete)
-    fromIso.reverseGet(10) === 5
+    val fromIsoOk = Review.fromIso(doubleIsoConcrete).reverseGet(10) === 5
 
     val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
       tear = {
@@ -414,20 +331,18 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       },
       mend = Some(_),
     )
-    val fromPrism = ReversedPrism(somePrism)
-    fromPrism.reverseGet(7) === Some(7)
+    val fromPrismOk = Review.fromPrism(somePrism).reverseGet(42) === Some(42)
+
+    val rl = ReversedLens(doubleIsoConcrete)
+    val rp = ReversedPrism(somePrism)
+    val aliasOk = (rl.reverseGet(10) === 5).and(rp.reverseGet(7) === Some(7))
+
+    applyOk.and(composeOk).and(fromIsoOk).and(fromPrismOk).and(aliasOk)
   }
 
-  // ----- Forget[F] `.andThen` via assocForgetMonad -----------------
-  //
-  // Two Forget[Option]-carrier optics (classifier-style: S -> Option[A],
-  // Option[B] -> T) compose end-to-end under algebraic-lens composition:
-  // push side flatMaps through inner.to, pull side lifts the inner's
-  // collapse back via pure before handing to outer.from.
+  // ----- Forget[F] `.andThen` via assocForgetMonad ---------------------
 
   "Forget[Option] optics compose via `.andThen` (algebraic-lens shape under Monad[Option])" >> {
-    // `from: Option[Int] => Int` uses `.fold(default)(onHit)` — default on miss,
-    // on-Some otherwise — to produce a sentinel-free Int the spec can assert.
     val outer = forgetOpt[Option](
       n => Option.when(n > 0)(n * 10),
       _.fold(-100)(_ * 2 + 1000),
@@ -436,52 +351,23 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       n => Option.when(n < 1000)(n + 1),
       _.fold(-1)(_ + 1),
     )
-
     val composed = outer.andThen(inner)
 
-    // Push — outer.to(5)=Some(50), flatMap(inner.to)=Some(51).
-    composed.to(5) === Some(51)
-    // Outer miss bubbles through flatMap.
-    composed.to(-2) === None
-    // Inner miss after outer hit: outer.to(200)=Some(2000), 2000 fails inner.
-    composed.to(200) === None
-
-    // Pull: outer.from(pure(inner.from(Some(7)))).
-    //   inner.from(Some(7))=8, pure(8)=Some(8), outer.from(Some(8))=1016.
-    composed.from(Some(7)) === 1016
-    // Miss-pull: inner.from(None)=-1, pure(-1)=Some(-1), outer.from(Some(-1))=998.
-    composed.from(None) === 998
+    (composed.to(5) === Some(51))
+      .and(composed.to(-2) === None)
+      .and(composed.to(200) === None)
+      .and(composed.from(Some(7)) === 1016)
+      .and(composed.from(None) === 998)
   }
-
-  // ----- AlgLens[F] composition + Forget→AlgLens injection ---------
-  //
-  // A Forget[Option]-carrier classifier lifts into AlgLens[Option] via the
-  // trivial X=Unit injection, then composes with another AlgLens[Option]
-  // optic under Monad[Option]. The Z = (Xo, F[Xi]) shape threads each
-  // inner-leftover alongside the outer's.
 
   "Forget[Option] injects into AlgLens[Option] and composes under Monad[Option]" >> {
     val pureForget = forgetOpt[Option](
       n => Option.when(n > 0)(n * 10),
       _.fold(-1)(_ + 7),
     )
-
-    // Inject into AlgLens[Option] via the Forget→AlgLens composer. The
-    // resulting optic is verified structurally by composing against a
-    // second AlgLens[Option] optic and observing end-to-end semantics.
     val lifted = summon[Composer[Forget[Option], AlgLens[Option]]].to(pureForget)
+    val r1 = (lifted.modify(_ + 1)(5) === 58).and(lifted.modify(_ + 1)(-2) === -1)
 
-    // `.modify` exercises the ForgetfulFunctor[AlgLens[Option]] path end
-    // to end: outer.to(5)=Some(50), map f through, then outer.from with
-    // the rewritten fb. For fb=Some(51), pureForget.from(Some(51)) = 58.
-    lifted.modify(_ + 1)(5) === 58
-    // Outer-miss case: to produces None; map f is still None; from sees
-    // None and returns the forget's miss sentinel (-1).
-    lifted.modify(_ + 1)(-2) === -1
-
-    // Compose the lifted outer with a non-trivial inner AlgLens[Option]
-    // optic (X = String). End-to-end behaviour proves both the Z = (Xo,
-    // F[Xi]) threading and the Forget→AlgLens injection.
     val inner: Optic[Int, Int, Int, Int, AlgLens[Option]] =
       new Optic[Int, Int, Int, Int, AlgLens[Option]]:
         type X = String
@@ -490,196 +376,117 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
           case (tag, fb) =>
             fb.fold(tag.length)(_ * 100 + tag.length)
         }
-
     val composed = lifted.andThen(inner)
-
-    // End-to-end modify: lifted.to(5) = Some(50), inner.to(50) =
-    // ("tag-50", Some(51)); flattened fc = Some(51), mapped by f=_+0 is
-    // still Some(51). Rebuild: inner.from("tag-50", Some(51)) = 51*100+6
-    // = 5106. Then outer (pureForget) .from(Some(5106)) = 5113.
-    composed.modify(identity)(5) === 5113
-
-    // Outer-miss: lifted.to(-2) = None, fxi = None, fc = None. Rebuild:
-    // outer.from(None) = -1 directly.
-    composed.modify(identity)(-2) === -1
+    val r2 =
+      (composed.modify(identity)(5) === 5113).and(composed.modify(identity)(-2) === -1)
+    r1.and(r2)
   }
 
-  // ----- Lens → AlgLens[F] bridge ----------------------------------
-  //
-  // A Tuple2-carrier Lens lifts into AlgLens[F] via the `Applicative[F]
-  // + Foldable[F]` composer: to wraps the focus in `F.pure`, from
-  // collapses the classifier to its last B via `Foldable`. End-to-end
-  // `.modify` should behave identically to the original Lens (since the
-  // singleton classifier round-trips trivially).
+  // ----- Lens / Prism / Optional → AlgLens[List] -----------------------
 
-  "Tuple2 Lens lifts into AlgLens[List] and preserves .modify semantics" >> {
+  case class AdultOptCarrier(p: AdultPerson)
+
+  // covers: Tuple2 Lens lifts into AlgLens[List] and preserves .modify semantics,
+  // Either Prism lifts into AlgLens[List] preserves hit/miss, Affine Optional
+  // lifts into AlgLens[List] preserves hit/miss, Optional andThen AlgLens[List]
+  // classifier composes via affine2alg
+  "Lens / Prism / Optional → AlgLens[List]: hit/miss .modify semantics preserved + composer chain" >> {
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
+    val tuple2Lifted = summon[Composer[Tuple2, AlgLens[List]]].to(fstLens)
+    val tuple2Ok = (tuple2Lifted.modify(_ + 100)((3, "hi")) === ((103, "hi")))
+      .and(tuple2Lifted.modify(_ * 2)((5, "x")) === ((10, "x")))
 
-    val lifted = summon[Composer[Tuple2, AlgLens[List]]].to(fstLens)
-
-    lifted.modify(_ + 100)((3, "hi")) === ((103, "hi"))
-    lifted.modify(_ * 2)((5, "x")) === ((10, "x"))
-  }
-
-  "Either Prism lifts into AlgLens[List] and preserves hit/miss .modify semantics" >> {
     val oddP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 1 then Right(n) else Left(n), identity)
+    val eitherLifted = summon[Composer[Either, AlgLens[List]]].to(oddP)
+    val eitherOk =
+      (eitherLifted.modify(_ * 2)(3) === 6).and(eitherLifted.modify(_ * 2)(4) === 4)
 
-    val lifted = summon[Composer[Either, AlgLens[List]]].to(oddP)
-
-    // Hit: 3 is odd → classifier is List(3), modify doubles to List(6),
-    //      from(Right(6)) = 6.
-    lifted.modify(_ * 2)(3) === 6
-    // Miss: 4 is even → classifier is Nil, fold yields Left-tag path,
-    //      from(Left(4)) = 4.
-    lifted.modify(_ * 2)(4) === 4
-  }
-
-  "Affine Optional lifts into AlgLens[List] and preserves hit/miss .modify semantics" >> {
-    // Optional that fires on adults; non-adults are a Miss.
     val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
+    val affineLifted = summon[Composer[Affine, AlgLens[List]]].to(adultOpt)
+    val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
+      .and(affineLifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
-    val lifted = summon[Composer[Affine, AlgLens[List]]].to(adultOpt)
-
-    // Hit: age 25 → classifier List(25); modify(+1) → List(26); from(Hit(26)) = AdultPerson(26).
-    lifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26)
-    // Miss: age 12 → classifier is Nil (Alternative.empty); from(Miss) preserves source.
-    lifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12)
-  }
-
-  "Optional andThen AlgLens[List] classifier composes via affine2alg" >> {
-    // Optional → Hit on positive Ints only.
     val posOpt: Optic[Int, Int, Int, Int, Affine] =
       Optional[Int, Int, Int, Int, Affine](
         getOrModify = n => Either.cond(n > 0, n, n),
         reverseGet = { case (_, n) => n },
       )
-
-    // Inner: Forget[List] classifier injected to AlgLens[List].
     val candidatesAlg = summon[Composer[Forget[List], AlgLens[List]]].to(
       forgetOpt[List](n => List(n, n * 2), _.sum)
     )
-
     val composed = posOpt.andThen(candidatesAlg)
+    val composedOk =
+      (composed.modify(_ + 1)(3) === 11).and(composed.modify(_ + 1)(-1) === -1)
 
-    // Hit: 3 → classifier List(3, 6); modify(+1) → List(4, 7); sum = 11; rebuilt back through opt.
-    composed.modify(_ + 1)(3) === 11
-    // Miss: -1 → empty classifier; the Optional restores the source on miss.
-    composed.modify(_ + 1)(-1) === -1
+    tuple2Ok.and(eitherOk).and(affineOk).and(composedOk)
   }
 
-  // ----- Prism / Optional / Traversal lifted into SetterF ----------
-  //
-  // The three Composers — either2setter, affine2setter,
-  // powerseries2setter — let a Prism / Optional / Traversal degrade
-  // to a write-only SetterF. The headline use case is cross-library
-  // composition with a Monocle Setter on the inner side; the lift
-  // also makes setter-only consumers (.modify / .replace) of
-  // higher-cardinality optics straightforward.
+  // ----- Prism / Optional / Traversal lifted into SetterF --------------
 
-  "Either Prism lifts into SetterF and preserves hit/miss .modify semantics" >> {
-    // Even-only prism: hit on even ints, miss otherwise.
+  // covers: Either Prism lifts into SetterF and preserves hit/miss, Affine Optional
+  // lifts into SetterF and preserves hit/miss, PowerSeries Traversal lifts into
+  // SetterF and applies f to every focus
+  "Prism / Optional / Traversal → SetterF: hit/miss + every-focus broadcast" >> {
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
-
-    val lifted: Optic[Int, Int, Int, Int, data.SetterF] =
+    val eitherLifted: Optic[Int, Int, Int, Int, data.SetterF] =
       summon[Composer[Either, data.SetterF]].to(evenP)
+    val eitherOk =
+      (eitherLifted.modify(_ + 10)(4) === 14).and(eitherLifted.modify(_ + 10)(5) === 5)
 
-    // Hit: 4 is even → modify(+10) → 14.
-    lifted.modify(_ + 10)(4) === 14
-    // Miss: 5 is odd → from(Left(5)) preserves the source.
-    lifted.modify(_ + 10)(5) === 5
-  }
-
-  "Affine Optional lifts into SetterF and preserves hit/miss .modify semantics" >> {
     val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-
-    val lifted: Optic[AdultPerson, AdultPerson, Int, Int, data.SetterF] =
+    val affineLifted: Optic[AdultPerson, AdultPerson, Int, Int, data.SetterF] =
       summon[Composer[Affine, data.SetterF]].to(adultOpt)
+    val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
+      .and(affineLifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
-    // Hit: age 25 → modify(+1) → AdultPerson(26).
-    lifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26)
-    // Miss: age 12 → preserves the source via Affine.Miss.widenB.
-    lifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12)
-  }
-
-  "PowerSeries Traversal lifts into SetterF and applies f to every focus" >> {
     val each: Optic[List[Int], List[Int], Int, Int, PowerSeries] =
       Traversal.each[List, Int]
-
-    val lifted: Optic[List[Int], List[Int], Int, Int, data.SetterF] =
+    val psLifted: Optic[List[Int], List[Int], Int, Int, data.SetterF] =
       summon[Composer[PowerSeries, data.SetterF]].to(each)
+    val psOk =
+      (psLifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30))
+        .and(psLifted.modify(_ * 10)(Nil) === Nil)
 
-    lifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30)
-    // Empty list — modify is a no-op rebuild.
-    lifted.modify(_ * 10)(Nil) === Nil
+    eitherOk.and(affineOk).and(psOk)
   }
 
-  // ----- Cross-carrier composition Lens andThen AlgLens classifier -
-  //
-  // This is the headline use case: a plain Lens composed with an
-  // AlgLens[F]-carrier classifier via `.andThen`. The implicit Morph
-  // picks up `Composer[Tuple2, AlgLens[F]]` to lift the Lens, then
-  // `AssociativeFunctor[AlgLens[F], _, _]` under Monad[F] does the
-  // joint composition.
+  // ----- Cross-carrier composition Lens → AlgLens classifier -----------
 
   "Lens andThen AlgLens[List] classifier composes end-to-end" >> {
     case class Row(id: Int, value: Int)
     val valueLens: Optic[Row, Row, Int, Int, Tuple2] =
       Lens[Row, Int](_.value, (r, v) => r.copy(value = v))
-
-    // A toy "enumerate candidates" classifier on Int expressed as a
-    // Forget[List]-carrier optic, then injected into AlgLens[List].
     val candidatesForget = forgetOpt[List](n => List(n, n + 10), _.sum)
-
     val candidatesAlg = summon[Composer[Forget[List], AlgLens[List]]].to(candidatesForget)
-
-    // Cross-carrier composition: `.andThen` sees differing carriers
-    // (Tuple2 vs AlgLens[List]) and summons Morph, which picks the
-    // Tuple2 → AlgLens bridge.
     val composed = valueLens.andThen(candidatesAlg)
-
-    // `.modify` multiplies each candidate by 3: classifier emits
-    // List(5, 15) for value=5, the map produces List(15, 45), sum = 60.
-    // Then back through the Lens: Row(1, 60).
-    composed.modify(_ * 3)(Row(1, 5)) === Row(1, 60)
-
-    // Identity mod: List(5, 15) summed = 20 back through the Lens.
-    composed.modify(identity)(Row(9, 5)) === Row(9, 20)
+    (composed.modify(_ * 3)(Row(1, 5)) === Row(1, 60))
+      .and(composed.modify(identity)(Row(9, 5)) === Row(9, 20))
   }
 
-  // ----- F[A]-focus factories --------------------------------------
-  //
-  // Complementary to the Composer bridges: when the outer optic's focus
-  // is already `F[A]`, the adapter is a pure rewrap — no Foldable
-  // needed (and for Tuple2 no Applicative either) because we don't
-  // synthesise an F or collapse one.
+  // ----- F[A]-focus factories -----------------------------------------
 
-  "AlgLens.fromLensF rewraps a Lens[S, F[A]] with zero constraints" >> {
+  // covers: AlgLens.fromLensF rewraps a Lens[S, F[A]] with zero constraints,
+  // AlgLens.fromPrismF lifts a Prism[S, F[A]] with Alternative[F] only,
+  // AlgLens.fromOptionalF lifts an Optional[S, F[A]] through the Hit branch
+  "AlgLens.fromLensF / fromPrismF / fromOptionalF — F[A]-focus factories" >> {
     case class Table(rows: List[Int])
     val rowsLens: Optic[Table, Table, List[Int], List[Int], Tuple2] =
       Lens[Table, List[Int]](_.rows, (t, rs) => t.copy(rows = rs))
+    val listAlg = AlgLens.fromLensF(rowsLens)
+    val lensFOk = (listAlg.modify(_ + 1)(Table(List(1, 2, 3))) === Table(List(2, 3, 4)))
+      .and(listAlg.modify(_ * 10)(Table(Nil)) === Table(Nil))
 
-    val listAlg: Optic[Table, Table, Int, Int, AlgLens[List]] =
-      AlgLens.fromLensF(rowsLens)
-
-    // Focus is the inner Int; .modify walks the list.
-    listAlg.modify(_ + 1)(Table(List(1, 2, 3))) === Table(List(2, 3, 4))
-    // Empty list: map preserves emptiness; lens rebuilds Table with [].
-    listAlg.modify(_ * 10)(Table(Nil)) === Table(Nil)
-  }
-
-  "AlgLens.fromPrismF lifts a Prism[S, F[A]] with Alternative[F] only" >> {
-    // A Prism on Option[List[Int]] that fires on Some(nonEmpty).
     val p: Optic[Option[List[Int]], Option[List[Int]], List[Int], List[Int], Either] =
       Prism[Option[List[Int]], List[Int]](
         {
@@ -688,20 +495,11 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         },
         Some(_),
       )
+    val alg = AlgLens.fromPrismF(p)
+    val prismFOk = (alg.modify(_ * 2)(Some(List(1, 2, 3))) === Some(List(2, 4, 6)))
+      .and(alg.modify(_ * 2)(None) === None)
+      .and(alg.modify(_ * 2)(Some(Nil)) === Some(Nil))
 
-    val alg: Optic[Option[List[Int]], Option[List[Int]], Int, Int, AlgLens[List]] =
-      AlgLens.fromPrismF(p)
-
-    // Hit: list is passed through, .modify maps each element.
-    alg.modify(_ * 2)(Some(List(1, 2, 3))) === Some(List(2, 4, 6))
-    // Miss (None): Miss branch preserves the source.
-    alg.modify(_ * 2)(None) === None
-    // Miss (Some(Nil)): Miss branch returns source unchanged.
-    alg.modify(_ * 2)(Some(Nil)) === Some(Nil)
-  }
-
-  "AlgLens.fromOptionalF lifts an Optional[S, F[A]] through the Hit branch" >> {
-    // An Optional on (Int, List[Int]) that fires only on non-empty lists.
     val opt: Optic[
       (Int, List[Int]),
       (Int, List[Int]),
@@ -716,25 +514,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         },
         { case ((k, _), xs) => (k, xs) },
       )
+    val optAlg = AlgLens.fromOptionalF(opt)
+    val optionalFOk = (optAlg.modify(_ + 10)((7, List(1, 2, 3))) === ((7, List(11, 12, 13))))
+      .and(optAlg.modify(_ + 10)((7, Nil)) === ((7, Nil)))
 
-    val alg: Optic[(Int, List[Int]), (Int, List[Int]), Int, Int, AlgLens[List]] =
-      AlgLens.fromOptionalF(opt)
-
-    alg.modify(_ + 10)((7, List(1, 2, 3))) === ((7, List(11, 12, 13)))
-    alg.modify(_ + 10)((7, Nil)) === ((7, Nil))
+    lensFOk.and(prismFOk).and(optionalFOk)
   }
 
-  // ----- AlgLens[List] sandwiched between two Lenses ---------------
-  //
-  // Mirrors the PowerSeries `everyZip` example (CrudRoundtripSpec) but
-  // with an algebraic-lens middle section instead of a traversal.
-  // Three hops, all via cross-carrier `.andThen`:
-  //
-  //   Lens[Wrapper, Doc]                 -- outer, Tuple2 carrier
-  //     .andThen(AlgLens.fromLensF(...)) -- middle, AlgLens[List]
-  //     .andThen(Lens[Tag, Int])         -- inner, Tuple2 carrier
-  //
-  // A single `.modify(_ + 1)` then bumps every tag's count in one pass.
+  // ----- 3-hop Lens → AlgLens[List] → Lens chain ----------------------
 
   "Lens → AlgLens[List] → Lens composes three carriers cleanly" >> {
     case class Wrapper(owner: String, doc: Doc)
@@ -743,13 +530,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     val docL: Optic[Wrapper, Wrapper, Doc, Doc, Tuple2] =
       Lens[Wrapper, Doc](_.doc, (w, d) => w.copy(doc = d))
-
     val tagsL: Optic[Doc, Doc, List[Tag], List[Tag], Tuple2] =
       Lens[Doc, List[Tag]](_.tags, (d, ts) => d.copy(tags = ts))
-
     val eachTag: Optic[Doc, Doc, Tag, Tag, AlgLens[List]] =
       AlgLens.fromLensF(tagsL)
-
     val countL: Optic[Tag, Tag, Int, Int, Tuple2] =
       Lens[Tag, Int](_.count, (t, c) => t.copy(count = c))
 
@@ -764,65 +548,33 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       ),
     )
 
-    everyCount.modify(_ + 10)(w) === Wrapper(
+    val r1 = everyCount.modify(_ + 10)(w) === Wrapper(
       owner = "rh",
       doc = Doc(
         title = "notes",
         tags = List(Tag("a", 11), Tag("b", 12), Tag("c", 13)),
       ),
     )
-
-    // Empty list: map preserves emptiness; the lenses rebuild around [].
     val wEmpty = Wrapper("rh", Doc("notes", Nil))
-    everyCount.modify(_ * 100)(wEmpty) === wEmpty
+    val r2 = everyCount.modify(_ * 100)(wEmpty) === wEmpty
+    r1.and(r2)
   }
 
-  // ----- Non-singleton × non-singleton AlgLens[List] composition ----
-  //
-  // Pins down the general chunking algebra in `assocAlgMonad`: the outer
-  // produces k candidates per input, the inner produces m candidates per
-  // call, and `composeFrom` must route each inner's `F[D]` slice back to
-  // the right `xi`. This case doesn't exercise the Singleton fast path —
-  // both optics are Forget[List] classifiers, neither mixes in
-  // AlgLens.Singleton, so the general path with per-xi sizing runs.
+  // ----- Non-singleton × non-singleton AlgLens[List] composition -------
 
   "Two Forget[List] classifiers compose via AlgLens[List] with non-uniform cardinalities" >> {
-    // Outer: Int → List(n, n+1) — two candidates per input.
     val outerForget = forgetOpt[List](n => List(n, n + 1), _.sum)
-
-    // Inner: Int → List(n*10, n*10+1, n*10+2) — THREE candidates per input.
     val innerForget = forgetOpt[List](n => List(n * 10, n * 10 + 1, n * 10 + 2), _.product)
-
     val outerAlg = summon[Composer[Forget[List], AlgLens[List]]].to(outerForget)
     val innerAlg = summon[Composer[Forget[List], AlgLens[List]]].to(innerForget)
     val composed = outerAlg.andThen(innerAlg)
 
-    // Push: outer.to(5) = [5, 6]; inner.to(5) = [50, 51, 52]; inner.to(6) = [60, 61, 62].
-    //       Flattened classifier: [50, 51, 52, 60, 61, 62].
-    //       `.foldMap(identity)` invokes `algFold[List]` (the ForgetfulFold instance), which
-    //       walks the `F[C]` side of the AlgLens pair and combines under `Monoid[Int]` — the
-    //       assertion pins the classifier's sum.
-    composed.foldMap(identity[Int])(5) === (50 + 51 + 52 + 60 + 61 + 62)
-
-    // Pull via .modify(identity): each inner.from([50,51,52]) = 132600, inner.from([60,61,62]) = 226920.
-    // Then outer.from([132600, 226920]) = 359520.
-    composed.modify(identity)(5) === (50 * 51 * 52 + 60 * 61 * 62)
-
-    // Pull via .modify(_+1): shifts every classifier element by 1 before the per-chunk
-    //   inner.from. inner.from([51,52,53]) = 51*52*53 = 140556.
-    //   inner.from([61,62,63]) = 61*62*63 = 238266. Sum = 378822.
-    composed.modify(_ + 1)(5) === (51 * 52 * 53 + 61 * 62 * 63)
+    (composed.foldMap(identity[Int])(5) === (50 + 51 + 52 + 60 + 61 + 62))
+      .and(composed.modify(identity)(5) === (50 * 51 * 52 + 60 * 61 * 62))
+      .and(composed.modify(_ + 1)(5) === (51 * 52 * 53 + 61 * 62 * 63))
   }
 
-  // ----- AlgLensSingleton tag regression guard ---------------------
-  //
-  // Only the `tuple2alg` bridge mixes in `AlgLensSingleton` so
-  // `assocAlgMonad` routes Lens-inner compositions through the singleton
-  // fast path. Silently dropping `with AlgLensSingleton` in a future
-  // refactor would not break any semantic test — the general path is a
-  // correct fallback — but would regress perf by 3-5×. These assertions
-  // pin the tag onto the adapter output that earns it, and verify the
-  // bridges / factories that should *not* be tagged aren't.
+  // ----- AlgLensSingleton tag regression --------------------------------
 
   "AlgLens carrier tags: only tuple2alg mixes in AlgLensSingleton; everyone else doesn't" >> {
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
@@ -830,59 +582,39 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val someP: Optic[Option[Int], Option[Int], Int, Int, Either] =
       Prism[Option[Int], Int](opt => opt.toRight(opt), Some(_))
 
-    // Only tuple2alg (Lens → AlgLens) earns the singleton tag — Lens always hits.
     val liftedLens = summon[Composer[Tuple2, AlgLens[List]]].to(fstLens)
-    liftedLens must beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]]
+    val tagOk1 = liftedLens must beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]]
 
-    // either2alg does NOT — Prism.miss produces F.empty (cardinality 0), which would break
-    // the singleton fast path's "≥ 1 element" invariant.
     val liftedPrism = summon[Composer[Either, AlgLens[List]]].to(someP)
-    liftedPrism must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+    val tagOk2 = liftedPrism must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
 
-    // F[A]-focus factories don't — their classifier carries native F-cardinality.
     val phonesLens: Optic[(String, List[Int]), (String, List[Int]), List[Int], List[Int], Tuple2] =
       Lens[(String, List[Int]), List[Int]](_._2, (s, a) => (s._1, a))
     val fromLens = AlgLens.fromLensF(phonesLens)
-    fromLens must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+    val tagOk3 = fromLens must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
 
-    // forget2alg is the Forget → AlgLens injection — carries Forget's native cardinality,
-    // not singleton.
     val forgetOptic = forgetOpt[List](n => List(n), _.sum)
     val forgetLifted = summon[Composer[Forget[List], AlgLens[List]]].to(forgetOptic)
-    forgetLifted must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+    val tagOk4 = forgetLifted must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+
+    tagOk1.and(tagOk2).and(tagOk3).and(tagOk4)
   }
 
-  // Regression: Prism.andThen composing two AlgLens-lifted Prisms must tolerate miss
-  // on EITHER side (outer or inner), not just the outer. The critical scenario is
-  // outer hit (non-empty classifier) but inner miss on that element — the singleton
-  // fast path would then try to `reduceLeftToOption(F.empty[A]).get` and throw.
   "Prism.andThen(Prism) via AlgLens[List] survives inner miss on an outer hit" >> {
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
-    // `positiveP` hits on n > 0, misses on n ≤ 0.
     val positiveP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n > 0 then Right(n) else Left(n), identity)
 
     val evenAlg = summon[Composer[Either, AlgLens[List]]].to(evenP)
     val positiveAlg = summon[Composer[Either, AlgLens[List]]].to(positiveP)
-
-    // Outer hit + inner hit: 4 even AND positive → classifier fires end-to-end.
     val composed = evenAlg.andThen(positiveAlg)
-    composed.modify(_ + 10)(4) === 14
 
-    // Outer hit + inner miss: -2 is even (outer hit), not positive (inner miss).
-    // Outer produces [-2], inner.to(-2) produces (Left(-2), Nil) — EMPTY classifier.
-    // The singleton fast path must handle this without throwing.
-    composed.modify(_ + 10)(-2) === -2
-
-    // Outer miss: 3 is odd → outer classifier empty, inner never runs, source unchanged.
-    composed.modify(_ + 10)(3) === 3
+    (composed.modify(_ + 10)(4) === 14)
+      .and(composed.modify(_ + 10)(-2) === -2)
+      .and(composed.modify(_ + 10)(3) === 3)
   }
 
-  // Regression: the singleton fast path must call inner.to exactly once per outer
-  // element. Prior to finding #1 (third-pass review) the fast path called inner.to
-  // twice per element (once for ._1, once for ._2). A probe `AtomicInteger` wraps
-  // a Lens-carrier inner and counts invocations of its `to`.
   "AlgLensSingleton fast path calls inner.to exactly once per outer element" >> {
     import java.util.concurrent.atomic.AtomicInteger
     val counter = new AtomicInteger(0)
@@ -891,121 +623,79 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         get = n => { counter.incrementAndGet(); n * 10 },
         enplace = (_, b) => b / 10,
       )
-
-    // Lift twice via tuple2alg → two singleton-tagged AlgLens optics, compose them.
     val liftedA = summon[Composer[Tuple2, AlgLens[List]]].to(baseLens)
     val liftedB = summon[Composer[Tuple2, AlgLens[List]]].to(baseLens)
     val composed = liftedA.andThen(liftedB)
 
-    // Single composeTo: outer runs once (to get the 1-element fa), inner runs once
-    // on that element — total 2 `to` calls for a single-step composition.
     counter.set(0)
     composed.modify(identity)(5)
-    // outer baseLens.get + inner baseLens.get = 2 calls. If the fast path had the
-    // pre-fix two-pass shape (inner.to(a)._1 then inner.to(a)._2 separately) this
-    // would be 3 (1 outer + 2 inner).
     counter.get === 2
   }
 
-  // ----- algFold coverage across cardinalities and miss branches ----
-  //
-  // `algFold[F]` delegates to `Foldable[F].foldMap` on the F[A] side of the
-  // AlgLens pair and ignores the structural leftover X. Prior specs only
-  // exercised one cardinality-6 path through a Forget→AlgLens compose; the
-  // cases below pin the empty case, a genuinely-multi case, and the miss
-  // branch of a Prism-lifted AlgLens so a broken `algFold` wouldn't slip
-  // through silently.
-  "algFold: fromLensF on an empty List folds to Monoid.empty" >> {
+  // ----- algFold cardinality + miss branch coverage --------------------
+
+  // covers: algFold fromLensF empty list folds to Monoid.empty, multi-element list
+  // sums each element exactly once, fromPrismF miss branch folds to Monoid.empty
+  "algFold cardinality+miss: fromLensF (empty/multi) and fromPrismF (hit/miss) " >> {
     val listLens: Optic[List[Int], List[Int], List[Int], List[Int], Tuple2] =
       Lens[List[Int], List[Int]](identity, (_, b) => b)
     val alg = AlgLens.fromLensF(listLens)
-    alg.foldMap(identity[Int])(Nil) === 0
-  }
+    val emptyOk = alg.foldMap(identity[Int])(Nil) === 0
+    val multiOk = alg.foldMap(identity[Int])(List(2, 3, 5, 7, 11)) === (2 + 3 + 5 + 7 + 11)
 
-  "algFold: fromLensF on a multi-element list sums each element exactly once" >> {
-    val listLens: Optic[List[Int], List[Int], List[Int], List[Int], Tuple2] =
-      Lens[List[Int], List[Int]](identity, (_, b) => b)
-    val alg = AlgLens.fromLensF(listLens)
-    alg.foldMap(identity[Int])(List(2, 3, 5, 7, 11)) === (2 + 3 + 5 + 7 + 11)
-  }
-
-  "algFold: fromPrismF miss branch folds to Monoid.empty" >> {
     val p: Optic[Option[List[Int]], Option[List[Int]], List[Int], List[Int], Either] =
       Prism[Option[List[Int]], List[Int]](
         { case Some(xs) if xs.nonEmpty => Right(xs); case other => Left(other) },
         Some(_),
       )
-    val alg = AlgLens.fromPrismF(p)
-    // Miss (None): F.empty[Int] on the focus side, sum = 0.
-    alg.foldMap(identity[Int])(None) === 0
-    // Miss (Some(Nil)): falls to miss branch, sum = 0.
-    alg.foldMap(identity[Int])(Some(Nil)) === 0
-    // Hit: folds the underlying list.
-    alg.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60
+    val pa = AlgLens.fromPrismF(p)
+    val missNone = pa.foldMap(identity[Int])(None) === 0
+    val missEmpty = pa.foldMap(identity[Int])(Some(Nil)) === 0
+    val hit = pa.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60
+
+    emptyOk.and(multiOk).and(missNone).and(missEmpty).and(hit)
   }
 
-  // ---- R11a — Traversal.each × downstream cross-carrier chains ----
-  //
-  // Closes the composition-gap top-3: the single most-common real
-  // chain shape (traverse-then-drill) has zero behaviour coverage
-  // pre-Unit-16. Each spec chains Traversal.each (PowerSeries carrier)
-  // with an Iso / Optional / Prism / nested-each inner and checks the
-  // result against a hand-rolled map. Exercises Composer[Tuple2, PowerSeries],
-  // Composer[Either, PowerSeries], Composer[Affine, PowerSeries] fast
-  // paths that previously only got reached through the benchmarks.
+  // ---- R11a — Traversal.each × downstream cross-carrier chains --------
 
-  "Traversal.each ∘ Iso uppercases every swap-focused element" >> {
-    // Resolves via the direct `Composer[Forgetful, PowerSeries]` given
-    // (added in Unit 16) — no explicit `.morph[Tuple2]` workaround needed.
+  // covers: Traversal.each ∘ Iso, Traversal.each ∘ Optional, Traversal.each ∘ Prism,
+  // Traversal.each ∘ Traversal.each, Traversal.each ∘ Lens ∘ Optional
+  "Traversal.each ∘ {Iso / Optional / Prism / each / Lens-Optional} downstream chains" >> {
     case class Pair(a: Int, b: Int)
     val pairSwap =
       Iso[Pair, Pair, (Int, Int), (Int, Int)](p => (p.a, p.b), t => Pair(t._1, t._2))
-    val chain = Traversal.each[List, Pair].andThen(pairSwap)
-    val out = chain.modify { case (a, b) => (a + 1, b + 10) }(
+    val isoChain = Traversal.each[List, Pair].andThen(pairSwap)
+    val isoOk = isoChain.modify { case (a, b) => (a + 1, b + 10) }(
       List(Pair(1, 2), Pair(3, 4))
-    )
-    out === List(Pair(2, 12), Pair(4, 14))
-  }
+    ) === List(Pair(2, 12), Pair(4, 14))
 
-  "Traversal.each ∘ Optional skips miss branches, updates hits" >> {
     val positive =
       Optional[Int, Int, Int, Int, Affine](
         getOrModify = n => if n > 0 then Right(n) else Left(n),
         reverseGet = (_, k) => k,
       )
-    val chain = Traversal.each[List, Int].andThen(positive)
-    // All-hit input doubles every element:
-    chain.modify(_ * 2)(List(1, 2, 3)) === List(2, 4, 6)
-    // Mixed: only positives get doubled.
-    chain.modify(_ * 2)(List(-1, 0, 2, -3, 4)) === List(-1, 0, 4, -3, 8)
-  }
+    val optChain = Traversal.each[List, Int].andThen(positive)
+    val optOk = (optChain.modify(_ * 2)(List(1, 2, 3)) === List(2, 4, 6))
+      .and(optChain.modify(_ * 2)(List(-1, 0, 2, -3, 4)) === List(-1, 0, 4, -3, 8))
 
-  "Traversal.each ∘ Prism matches selected elements" >> {
     sealed trait Shape
     object Shape:
       case class Circle(r: Int) extends Shape
       case class Square(s: Int) extends Shape
     val circleP =
       Prism[Shape, Shape.Circle](
-        {
-          case c: Shape.Circle => Right(c)
-          case other           => Left(other)
-        },
+        { case c: Shape.Circle => Right(c); case other => Left(other) },
         identity,
       )
-    val chain = Traversal.each[List, Shape].andThen(circleP)
+    val prismChain = Traversal.each[List, Shape].andThen(circleP)
     val shapes: List[Shape] = List(Shape.Circle(1), Shape.Square(2), Shape.Circle(3))
-    chain.modify(c => Shape.Circle(c.r * 10))(shapes) ===
+    val prismOk = prismChain.modify(c => Shape.Circle(c.r * 10))(shapes) ===
       List(Shape.Circle(10), Shape.Square(2), Shape.Circle(30))
-  }
 
-  "Traversal.each ∘ Traversal.each traverses a matrix uniformly" >> {
     val each2 = Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int])
-    each2.modify(_ + 1)(List(List(1, 2), List(3, 4, 5), Nil)) ===
+    val each2Ok = each2.modify(_ + 1)(List(List(1, 2), List(3, 4, 5), Nil)) ===
       List(List(2, 3), List(4, 5, 6), Nil)
-  }
 
-  "Traversal.each ∘ Lens ∘ Optional — three-hop realistic chain" >> {
     case class Owner(phones: List[Phone])
     case class Phone(number: String, active: Option[Boolean])
     val activePhone =
@@ -1013,34 +703,25 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         getOrModify = p => p.active.toRight(p),
         reverseGet = (p, b) => p.copy(active = Some(b)),
       )
-    // Lens[Owner, List[Phone]] then .each then Optional — covers the
-    // standard "every phone's active flag, when present" shape.
     val ownerPhones =
       Lens[Owner, List[Phone]](_.phones, (o, ps) => o.copy(phones = ps))
-    val chain =
+    val threeHop =
       ownerPhones.andThen(Traversal.each[List, Phone]).andThen(activePhone)
-
     val owner = Owner(
       List(Phone("a", Some(true)), Phone("b", None), Phone("c", Some(false)))
     )
-    chain.modify(!_)(owner) === Owner(
+    val threeHopOk = threeHop.modify(!_)(owner) === Owner(
       List(Phone("a", Some(false)), Phone("b", None), Phone("c", Some(true)))
     )
+
+    isoOk.and(optOk).and(prismOk).and(each2Ok).and(threeHopOk)
   }
 
-  // ---- R11b — Optional's fused `.andThen` overloads ---------------
-  //
-  // Four fused overloads exist on `Optional` (optics/Optional.scala
-  // lines 123-188). Each one is an optimisation over the generic
-  // cross-carrier `.andThen` but previously had no behaviour spec —
-  // which also drove Optional.scala's 21.92% line coverage. Each spec
-  // below calls the fused overload on a realistic fixture and asserts
-  // both `.modify` behaviour and `.getOption` read-side behaviour.
+  // ---- R11b — Optional's fused `.andThen` overloads -------------------
 
   case class Address(street: String, zip: Int)
   case class AddressCarrier(address: Option[Address])
 
-  // Shared fixtures across the R11b block.
   private val addressOpt: Optional[AddressCarrier, AddressCarrier, Address, Address] =
     Optional[AddressCarrier, AddressCarrier, Address, Address, Affine](
       getOrModify = c => c.address.toRight(c),
@@ -1053,72 +734,50 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       enplace = (a, s) => a.copy(street = s),
     )
 
-  "Optional.andThen(Optional) — fused Affine ∘ Affine" >> {
-    // AddressCarrier → Address (Optional) → (identity Optional on Address).
-    // The inner is a trivial full-hit Optional, so the chain reduces to
-    // "just apply the outer's modify where present".
+  // covers: Optional.andThen(Optional) — fused Affine ∘ Affine,
+  // Optional.andThen(GetReplaceLens) — fused Optional + Lens,
+  // Optional.andThen(MendTearPrism) — fused Optional + Prism,
+  // Optional.andThen(BijectionIso) — fused Optional + Iso
+  "Optional.andThen fused overloads: Optional / Lens / Prism / Iso — hit + miss preserved" >> {
+    val hit = AddressCarrier(Some(Address("Main St", 12345)))
+    val miss = AddressCarrier(None)
+
     val idAddr: Optional[Address, Address, Address, Address] =
-      Optional[Address, Address, Address, Address, Affine](
-        Right(_),
-        (_, a) => a,
-      )
-    val chained: Optional[AddressCarrier, AddressCarrier, Address, Address] =
-      addressOpt.andThen(idAddr)
+      Optional[Address, Address, Address, Address, Affine](Right(_), (_, a) => a)
+    val optChain = addressOpt.andThen(idAddr)
+    val optOk =
+      (optChain.modify(a => a.copy(street = a.street.toUpperCase))(hit) ===
+        AddressCarrier(Some(Address("MAIN ST", 12345))))
+        .and(optChain.modify(a => a.copy(street = a.street.toUpperCase))(miss) === miss)
 
-    val hit = AddressCarrier(Some(Address("Main St", 12345)))
-    val miss = AddressCarrier(None)
+    val lensChain = addressOpt.andThen(streetLens)
+    val lensOk = (lensChain.modify(_.toUpperCase)(hit) ===
+      AddressCarrier(Some(Address("MAIN ST", 12345)))).and(
+      lensChain.modify(_.toUpperCase)(miss) === miss
+    )
 
-    chained.modify(a => a.copy(street = a.street.toUpperCase))(hit) ===
-      AddressCarrier(Some(Address("MAIN ST", 12345)))
-    chained.modify(a => a.copy(street = a.street.toUpperCase))(miss) === miss
-  }
-
-  "Optional.andThen(GetReplaceLens) — fused Optional + Lens" >> {
-    val chained: Optional[AddressCarrier, AddressCarrier, String, String] =
-      addressOpt.andThen(streetLens)
-    val hit = AddressCarrier(Some(Address("Main St", 12345)))
-    val miss = AddressCarrier(None)
-    chained.modify(_.toUpperCase)(hit) ===
-      AddressCarrier(Some(Address("MAIN ST", 12345)))
-    chained.modify(_.toUpperCase)(miss) === miss
-  }
-
-  "Optional.andThen(MendTearPrism) — fused Optional + Prism" >> {
-    // Focus: AddressCarrier.address (Optional), then Prism that only
-    // picks zip=12345 addresses, returning the street.
     case class Tagged(label: String)
     val zipTagPrism: MendTearPrism[Address, Address, Tagged, Tagged] =
       new MendTearPrism[Address, Address, Tagged, Tagged](
         tear = a => if a.zip == 12345 then Right(Tagged(a.street)) else Left(a),
         mend = (t: Tagged) => Address(t.label, 12345),
       )
-    val chained: Optional[AddressCarrier, AddressCarrier, Tagged, Tagged] =
-      addressOpt.andThen(zipTagPrism)
-
-    val hit = AddressCarrier(Some(Address("Main St", 12345)))
+    val prismChain = addressOpt.andThen(zipTagPrism)
     val missInner = AddressCarrier(Some(Address("Broadway", 99)))
-    val missOuter = AddressCarrier(None)
+    val prismOk = (prismChain.modify(t => Tagged(t.label.reverse))(hit) ===
+      AddressCarrier(Some(Address("tS niaM", 12345))))
+      .and(prismChain.modify(t => Tagged(t.label.reverse))(missInner) === missInner)
+      .and(prismChain.modify(t => Tagged(t.label.reverse))(miss) === miss)
 
-    chained.modify(t => Tagged(t.label.reverse))(hit) ===
-      AddressCarrier(Some(Address("tS niaM", 12345)))
-    chained.modify(t => Tagged(t.label.reverse))(missInner) === missInner
-    chained.modify(t => Tagged(t.label.reverse))(missOuter) === missOuter
-  }
-
-  "Optional.andThen(BijectionIso) — fused Optional + Iso" >> {
-    // (zip, street) iso to (street, zip), then Optional into the carrier.
     val swapIso: BijectionIso[Address, Address, (Int, String), (Int, String)] =
       new BijectionIso[Address, Address, (Int, String), (Int, String)](
         get = a => (a.zip, a.street),
         reverseGet = { case (z, s) => Address(s, z) },
       )
-    val chained: Optional[AddressCarrier, AddressCarrier, (Int, String), (Int, String)] =
-      addressOpt.andThen(swapIso)
+    val isoChain = addressOpt.andThen(swapIso)
+    val isoOk = (isoChain.modify { case (z, s) => (z + 1, s + "!") }(hit) ===
+      AddressCarrier(Some(Address("Main St!", 12346))))
+      .and(isoChain.modify { case (z, s) => (z + 1, s + "!") }(miss) === miss)
 
-    val hit = AddressCarrier(Some(Address("Main St", 12345)))
-    val miss = AddressCarrier(None)
-
-    chained.modify { case (z, s) => (z + 1, s + "!") }(hit) ===
-      AddressCarrier(Some(Address("Main St!", 12346)))
-    chained.modify { case (z, s) => (z + 1, s + "!") }(miss) === miss
+    optOk.and(lensOk).and(prismOk).and(isoOk)
   }
