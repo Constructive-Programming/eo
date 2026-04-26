@@ -13,18 +13,19 @@ import optics.Optic.*
 import data.PowerSeries
 import data.PowerSeries.given
 
+import scala.language.implicitConversions
+
 /** Behaviour-level spec for `PowerSeries`, `Traversal.each`, and the
-  * `Composer[Tuple2 → PowerSeries]` bridge. Covers scenarios that the discipline suite
-  * (`PowerSeriesLaws` in `dev.constructive.eo.laws.data`) does not — specifically, end-to-end
-  * `modify` / `replace` semantics on optics that flow through the PowerSeries carrier.
+  * `Composer[Tuple2 → PowerSeries]` bridge.
   *
-  * Absorbs the prior `Unthreaded.scala` `@main` demonstration into real property assertions so it
-  * participates in CI.
+  * '''2026-04-25 consolidation.''' 12 → 5 named blocks. Pre-image had:
+  *
+  *   - Three Traversal.each specs (identity / distribute / replace) — collapsed into one.
+  *   - Three Composer chain specs (length-1 vector / round-trip / agreement) — collapsed.
+  *   - Two empty-array edge cases — collapsed.
+  *   - Single-element + 3+ andThen chain regression specs stay separate.
   */
 class PowerSeriesSpec extends Specification with ScalaCheck:
-
-  // ---- Fixtures: a nested Person/Phone ADT that exercises the same
-  //      optic chain as the old Unthreaded example, minus Circe. ----
 
   case class Phone(isMobile: Boolean, number: String)
   case class Person(id: Int, name: String, phones: ArraySeq[Phone])
@@ -46,8 +47,6 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
       yield Person(i, n, ArraySeq.from(ps))
     )
 
-  // ---- Optic chain: Person → phones → each Phone → isMobile -----
-
   private val personPhones =
     Lens[Person, ArraySeq[Phone]](_.phones, (s, b) => s.copy(phones = b))
       .andThen(Traversal.each[ArraySeq, Phone])
@@ -58,89 +57,60 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
   private val personAllMobiles =
     personPhones.andThen(phoneIsMobile)
 
-  // ---- `powerEach` behaviour ------------------------------------
+  // covers: leave structure unchanged under modify(identity), distribute a modify
+  // across every phone, replace propagates through the whole ArraySeq
+  "Traversal.each: identity / distribute modify / replace propagation" >> {
+    val identityOk = forAll((p: Person) => personPhones.modify(identity[Phone])(p) == p)
 
-  "Traversal.each" should {
-    "leave structure unchanged under modify(identity)" >> {
-      forAll((p: Person) => personPhones.modify(identity[Phone])(p) == p)
+    val distributeOk = forAll { (p: Person) =>
+      val toggled = personPhones
+        .modify(ph => Phone(!ph.isMobile, ph.number))(p)
+      toggled.phones.zip(p.phones).forall { (after, before) =>
+        after.isMobile != before.isMobile && after.number == before.number
+      }
     }
 
-    "distribute a modify across every phone" >> {
-      forAll((p: Person) =>
-        val toggled = personPhones
-          .modify(ph => Phone(!ph.isMobile, ph.number))(p)
-        toggled.phones.zip(p.phones).forall { (after, before) =>
-          after.isMobile != before.isMobile && after.number == before.number
-        }
-      )
+    val replaceOk = forAll { (p: Person) =>
+      val replaced = personAllMobiles.replace(false)(p)
+      replaced.phones.forall(ph => ph.isMobile == false)
     }
 
-    "replace propagates through the whole ArraySeq" >> {
-      forAll((p: Person) =>
-        val replaced =
-          personAllMobiles.replace(false)(p)
-        replaced.phones.forall(ph => ph.isMobile == false)
-      )
-    }
+    identityOk && distributeOk && replaceOk
   }
 
-  // ---- Composer chain round-trip on a single-element container --
+  // covers: lift a Lens into a PowerSeries optic whose inner Vector has size 1,
+  // round-trip modify(identity) through a PowerSeries-lifted Lens,
+  // modify-through-morph agrees with modify on the original Lens
+  "Tuple2 → PowerSeries composer: length-1 inner vector / identity round-trip / modify agreement" >> {
+    val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
+    val morphd = lens.morph[PowerSeries]
 
-  "Tuple2 → PowerSeries composer" should {
-    "lift a Lens into a PowerSeries optic whose inner Vector has size 1" >> {
-      val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-      val morphd = lens.morph[PowerSeries]
-      forAll((p: (Int, String)) =>
-        val vect = morphd.to(p).vs
-        vect.length == 1
-      )
-    }
+    val sizeOk = forAll { (p: (Int, String)) => morphd.to(p).vs.length == 1 }
+    val identityOk = forAll { (p: (Int, String)) => morphd.modify(identity[Int])(p) == p }
+    val agreeOk =
+      forAll { (p: (Int, String), f: Int => Int) => morphd.modify(f)(p) == lens.modify(f)(p) }
 
-    "round-trip modify(identity) through a PowerSeries-lifted Lens" >> {
-      val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-      val morphd = lens.morph[PowerSeries]
-      forAll((p: (Int, String)) => morphd.modify(identity[Int])(p) == p)
-    }
-
-    "modify-through-morph agrees with modify on the original Lens" >> {
-      val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-      val morphd = lens.morph[PowerSeries]
-      forAll((p: (Int, String), f: Int => Int) => morphd.modify(f)(p) == lens.modify(f)(p))
-    }
+    sizeOk && identityOk && agreeOk
   }
 
-  // ---- Empty and single-element ArraySeq edge cases -------------
+  // covers: leave the container unchanged under modify(identity) on empty,
+  // still leave the container unchanged under a non-identity modify on empty,
+  // apply the modify exactly once on a single-element ArraySeq
+  "Traversal.each edge cases: empty + single-element ArraySeq" >> {
+    val empty = Person(0, "noone", ArraySeq.empty[Phone])
+    val emptyIdOk = personPhones.modify(identity[Phone])(empty) == empty
+    val emptyConstOk = personPhones.modify((_: Phone) => Phone(true, "x"))(empty) == empty
 
-  "Traversal.each on an empty ArraySeq" should {
-    "leave the container unchanged under modify(identity)" >> {
-      val empty = Person(0, "noone", ArraySeq.empty[Phone])
-      personPhones.modify(identity[Phone])(empty) == empty
-    }
-
-    "still leave the container unchanged under a non-identity modify" >> {
-      val empty = Person(0, "noone", ArraySeq.empty[Phone])
-      personPhones.modify((_: Phone) => Phone(true, "x"))(empty) == empty
-    }
-  }
-
-  "Traversal.each on a single-element ArraySeq" should {
-    "apply the modify exactly once" >> {
-      val one = Person(1, "solo", ArraySeq(Phone(false, "555-0001")))
-      val after = personPhones
-        .modify(ph => Phone(!ph.isMobile, ph.number))(one)
-      after.phones.length == 1 &&
+    val one = Person(1, "solo", ArraySeq(Phone(false, "555-0001")))
+    val after = personPhones.modify(ph => Phone(!ph.isMobile, ph.number))(one)
+    val singleOk = after.phones.length == 1 &&
       after.phones(0).isMobile == true &&
       after.phones(0).number == "555-0001"
-    }
+
+    emptyIdOk && emptyConstOk && singleOk
   }
 
   // ---- 3+ .andThen chain regression ----------------------------------
-  //
-  // Pins the outer lens → `powerEach` → inner lens → innermost lens
-  // composition against `modify(identity)`, which previously exposed a
-  // slice off-by-one in the now-deleted `Vect` carrier. Kept as a
-  // regression test against future assoc-logic mistakes in the
-  // `ArraySeq`-backed `PowerSeries`.
 
   case class Addr2(zip: String)
   case class Ord2(ship: Addr2)
@@ -152,25 +122,21 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
       .andThen(Lens[Ord2, Addr2](_.ship, (o, a) => o.copy(ship = a)))
       .andThen(Lens[Addr2, String](_.zip, (a, z) => a.copy(zip = z)))
 
-  "3+ andThen chain on PowerSeries" should {
-    "preserve the order of a 3-element list under modify(identity)" >> {
-      val u = Usr2(List(Ord2(Addr2("A")), Ord2(Addr2("B")), Ord2(Addr2("C"))))
+  // covers: preserve the order of a 3-element list under modify(identity), preserve
+  // the order of every N-element list (N = 0..5) under modify(identity), apply a
+  // non-identity modify to every list position
+  "3+ andThen chain: order-preserving modify (N=0..5) + non-identity modify positions" >> {
+    val identityOk = (0 to 5).forall { n =>
+      val items = (0 until n)
+        .map(i => Ord2(Addr2(('A' + i).toChar.toString)))
+        .toList
+      val u = Usr2(items)
       threeAndThenChain.modify(identity[String])(u) == u
     }
 
-    "preserve the order of every N-element list (N = 0..5)" >> {
-      (0 to 5).forall { n =>
-        val items = (0 until n)
-          .map(i => Ord2(Addr2(('A' + i).toChar.toString)))
-          .toList
-        val u = Usr2(items)
-        threeAndThenChain.modify(identity[String])(u) == u
-      }
-    }
+    val u = Usr2(List(Ord2(Addr2("a")), Ord2(Addr2("b")), Ord2(Addr2("c"))))
+    val out = threeAndThenChain.modify((z: String) => z.toUpperCase)(u)
+    val nonIdOk = out.orders.map(_.ship.zip) == List("A", "B", "C")
 
-    "apply a non-identity modify to every list position" >> {
-      val u = Usr2(List(Ord2(Addr2("a")), Ord2(Addr2("b")), Ord2(Addr2("c"))))
-      val out = threeAndThenChain.modify((z: String) => z.toUpperCase)(u)
-      out.orders.map(_.ship.zip) == List("A", "B", "C")
-    }
+    identityOk && nonIdOk
   }
