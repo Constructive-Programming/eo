@@ -295,6 +295,14 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     * the focus (selector-order index lookup) or the complement (declaration-order-among-
     * non-focused index lookup) and emits the matching
     * `<named-tuple>.asInstanceOf[Tuple].apply(i).asInstanceOf[t]` read.
+    *
+    * The 5-line opening (signature + `MultiBuildContext.from` call) is shared with
+    * [[buildMultiIso]]. Both functions implement different output shapes — a Lens with focus
+    * + complement vs an Iso with focus alone — so the prelude is the only meaningful overlap.
+    * Merging them into one body via an `if fullCover` switch was tried and made the per-arm
+    * codegen (~100 lines each, with substantively different output Expr shapes) significantly
+    * harder to follow; the 5-line signature overlap is the price of keeping the two arms as
+    * separate, focused functions.
     */
   private def buildMultiLens[S: Type](
       cc: CaseClass[S],
