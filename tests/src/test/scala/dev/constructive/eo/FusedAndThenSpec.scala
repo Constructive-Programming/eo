@@ -5,16 +5,15 @@ import org.specs2.mutable.Specification
 import optics.{BijectionIso, GetReplaceLens, MendTearPrism, Optional, PickMendPrism}
 import data.Affine
 
+import scala.language.implicitConversions
+
 /** Dedicated coverage for the 21 fused `.andThen` overloads on the concrete optic subclasses
-  * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`). Each fused
-  * overload bypasses the generic `AssociativeFunctor` / `Composer` path when both sides are known
-  * concrete-typed at the call site; they're a silent runtime-performance feature.
+  * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`).
   *
-  * Unit 16 covered the four `Optional.andThen(_)` fused paths as part of the composition-gap top-3
-  * closures. This spec closes the remaining 17 across the three other concrete classes. Each
-  * scenario calls the fused path on a realistic 3-field fixture and asserts the observed modify
-  * behaviour (for Lens/Iso/Optional-returning fused paths) or the Prism hit/miss split (for
-  * Prism-returning fused paths).
+  * '''2026-04-25 consolidation.''' 17 → 5 named blocks, one per outer-class group. Each block
+  * exercises every fused overload of that outer (eg BijectionIso.andThen(BijectionIso/GRL/MTP/Opt)
+  * collapsed into one BijectionIso group). Per-overload semantics asserted in a single composite
+  * Result.
   */
 class FusedAndThenSpec extends Specification:
 
@@ -53,190 +52,139 @@ class FusedAndThenSpec extends Specification:
       reverseGet = (i, n2) => i.copy(n = n2),
     )
 
-  // ---- BijectionIso.andThen(_) — 4 fused overloads -----------------
+  // covers: BijectionIso.andThen(BijectionIso) fuses two isos,
+  // BijectionIso.andThen(GetReplaceLens) produces a GetReplaceLens,
+  // BijectionIso.andThen(MendTearPrism) produces a MendTearPrism,
+  // BijectionIso.andThen(Optional) produces an Optional
+  "BijectionIso.andThen — 4 fused overloads (Iso/Lens/Prism/Optional)" >> {
+    val isoChain = wrapperIso.andThen(innerIso)
+    val isoOk = (isoChain.get(Wrapper(Inner(5, "x"))) === ((5, "x")))
+      .and(isoChain.reverseGet((10, "y")) === Wrapper(Inner(10, "y")))
 
-  "BijectionIso.andThen(BijectionIso) fuses two isos" >> {
-    val chained = wrapperIso.andThen(innerIso)
-    chained.get(Wrapper(Inner(5, "x"))) === ((5, "x"))
-    chained.reverseGet((10, "y")) === Wrapper(Inner(10, "y"))
-  }
+    val lensChain: GetReplaceLens[Wrapper, Wrapper, Int, Int] = wrapperIso.andThen(innerLens)
+    val lensOk = (lensChain.get(Wrapper(Inner(7, "t"))) === 7)
+      .and(lensChain.enplace(Wrapper(Inner(7, "t")), 11) === Wrapper(Inner(11, "t")))
 
-  "BijectionIso.andThen(GetReplaceLens) produces a GetReplaceLens" >> {
-    val chained: GetReplaceLens[Wrapper, Wrapper, Int, Int] =
-      wrapperIso.andThen(innerLens)
-    chained.get(Wrapper(Inner(7, "t"))) === 7
-    chained.enplace(Wrapper(Inner(7, "t")), 11) === Wrapper(Inner(11, "t"))
-  }
-
-  "BijectionIso.andThen(MendTearPrism) produces a MendTearPrism" >> {
     val intIso: BijectionIso[Int, Int, Int, Int] =
       new BijectionIso[Int, Int, Int, Int](_ * 3, _ / 3)
-    val chained: MendTearPrism[Int, Int, Int, Int] =
-      intIso.andThen(evenMtPrism)
-    // 4 * 3 = 12 (even after iso swap? Actually Iso.to(4) = 12, then prism.tear(12) = Right(6).
-    chained.tear(4) === Right(6)
-    // 3 * 3 = 9, odd → Left(9 / 3 = 3 via iso.reverseGet on the unchanged value? Let's trace:
-    // intIso.get(3) = 9; evenMtPrism.tear(9) = Left(9); intIso.reverseGet(9) = 3.
-    chained.tear(3) === Left(3)
-    chained.mend(4) === intIso.reverseGet(evenMtPrism.mend(4)) // 4*2 = 8, then 8/3 = 2
+    val prismChain: MendTearPrism[Int, Int, Int, Int] = intIso.andThen(evenMtPrism)
+    val prismOk = (prismChain.tear(4) === Right(6))
+      .and(prismChain.tear(3) === Left(3))
+      .and(prismChain.mend(4) === intIso.reverseGet(evenMtPrism.mend(4)))
+
+    val optChain: Optional[Wrapper, Wrapper, Int, Int] = wrapperIso.andThen(adultOpt)
+    val optOk = (optChain.getOrModify(Wrapper(Inner(20, "a"))) === Right(20))
+      .and(optChain.getOrModify(Wrapper(Inner(15, "m"))) === Left(Wrapper(Inner(15, "m"))))
+      .and(optChain.reverseGet(Wrapper(Inner(20, "a")), 99) === Wrapper(Inner(99, "a")))
+
+    isoOk.and(lensOk).and(prismOk).and(optOk)
   }
 
-  "BijectionIso.andThen(Optional) produces an Optional" >> {
-    val chained: Optional[Wrapper, Wrapper, Int, Int] =
-      wrapperIso.andThen(adultOpt)
-    chained.getOrModify(Wrapper(Inner(20, "a"))) === Right(20)
-    chained.getOrModify(Wrapper(Inner(15, "m"))) === Left(Wrapper(Inner(15, "m")))
-    chained.reverseGet(Wrapper(Inner(20, "a")), 99) === Wrapper(Inner(99, "a"))
-  }
+  // covers: MendTearPrism.andThen(MendTearPrism) fuses two prisms,
+  // MendTearPrism.andThen(BijectionIso) produces a MendTearPrism,
+  // MendTearPrism.andThen(PickMendPrism) fuses when A = B,
+  // MendTearPrism.andThen(GetReplaceLens) produces an Optional,
+  // MendTearPrism.andThen(Optional) produces an Optional
+  "MendTearPrism.andThen — 5 fused overloads (Prism/Iso/PMPrism/Lens/Optional)" >> {
+    val mtChain: MendTearPrism[Int, Int, Int, Int] = evenMtPrism.andThen(evenMtPrism)
+    val mtOk = (mtChain.tear(12) === Right(3))
+      .and(mtChain.tear(10) === Left(10))
+      .and(mtChain.tear(7) === Left(7))
+      .and(mtChain.mend(4) === 16)
 
-  // ---- MendTearPrism.andThen(_) — 5 fused overloads ----------------
-
-  "MendTearPrism.andThen(MendTearPrism) fuses two prisms" >> {
-    // Outer: even → half. Inner: same shape.
-    val chained: MendTearPrism[Int, Int, Int, Int] =
-      evenMtPrism.andThen(evenMtPrism)
-    // 12 → 6 → 3 (3 is odd, so inner tears Left). Result: Left(outer.mend(Left's inner)) = Left(6*2=12)?
-    // Let's trace: outer.tear(12) = Right(6). inner.tear(6) = Right(3). So chained.tear(12) = Right(3).
-    chained.tear(12) === Right(3)
-    // 10 → 5 → odd → Left(5). Outer receives Left(5), rewraps via outer.mend(5) = 10.
-    chained.tear(10) === Left(10)
-    // 7 → odd → Left(7). Outer never calls inner; returns Left(7).
-    chained.tear(7) === Left(7)
-    // mend: inner.mend(4) = 8, outer.mend(8) = 16.
-    chained.mend(4) === 16
-  }
-
-  "MendTearPrism.andThen(BijectionIso) produces a MendTearPrism" >> {
     val intIso: BijectionIso[Int, Int, Int, Int] =
       new BijectionIso[Int, Int, Int, Int](_ + 100, _ - 100)
-    val chained: MendTearPrism[Int, Int, Int, Int] = evenMtPrism.andThen(intIso)
-    // 12 → 6 (even, prism hit) → iso.get(6) = 106. So chained.tear(12) = Right(106).
-    chained.tear(12) === Right(106)
-    // 7 → odd → Left(7).
-    chained.tear(7) === Left(7)
-    // mend: iso.reverseGet(106) = 6, prism.mend(6) = 12.
-    chained.mend(106) === 12
+    val isoChain: MendTearPrism[Int, Int, Int, Int] = evenMtPrism.andThen(intIso)
+    val isoOk = (isoChain.tear(12) === Right(106))
+      .and(isoChain.tear(7) === Left(7))
+      .and(isoChain.mend(106) === 12)
+
+    val pmChain: MendTearPrism[Int, Int, Int, Int] = evenMtPrism.andThen(evenPmPrism)
+    val pmOk = (pmChain.tear(12) === Right(3))
+      .and(pmChain.tear(10) === Left(10))
+      .and(pmChain.tear(7) === Left(7))
+
+    val nonNegInnerPrism: MendTearPrism[Inner, Inner, Inner, Inner] =
+      new MendTearPrism[Inner, Inner, Inner, Inner](
+        tear = i => if i.n >= 0 then Right(i) else Left(i),
+        mend = identity,
+      )
+    val lensChain: Optional[Inner, Inner, Int, Int] = nonNegInnerPrism.andThen(innerLens)
+    val lensOk = (lensChain.getOrModify(Inner(5, "x")) === Right(5))
+      .and(lensChain.getOrModify(Inner(-3, "y")) === Left(Inner(-3, "y")))
+      .and(lensChain.reverseGet(Inner(5, "x"), 99) === Inner(99, "x"))
+
+    val optChain: Optional[Inner, Inner, Int, Int] = nonNegInnerPrism.andThen(adultOpt)
+    val optOk = (optChain.getOrModify(Inner(20, "a")) === Right(20))
+      .and(optChain.getOrModify(Inner(-5, "neg")) === Left(Inner(-5, "neg")))
+      .and(optChain.getOrModify(Inner(15, "m")) === Left(Inner(15, "m")))
+
+    mtOk.and(isoOk).and(pmOk).and(lensOk).and(optOk)
   }
 
-  "MendTearPrism.andThen(PickMendPrism) fuses when A = B" >> {
-    val chained: MendTearPrism[Int, Int, Int, Int] =
-      evenMtPrism.andThen(evenPmPrism)
-    // Outer: 12 → 6 (even, hit). Inner: 6 → 3 (even, hit). Chained: Right(3).
-    chained.tear(12) === Right(3)
-    // Outer: 10 → 5 (hit). Inner: 5 → odd → None. Chained miss-via-inner:
-    // Left(outer.mend(outer's focus 5)) = Left(10).
-    chained.tear(10) === Left(10)
-    // Outer: 7 → odd → Left(7).
-    chained.tear(7) === Left(7)
-  }
+  // covers: PickMendPrism.andThen(PickMendPrism) fuses two,
+  // PickMendPrism.andThen(MendTearPrism) requires A = B,
+  // PickMendPrism.andThen(BijectionIso) produces a PickMendPrism
+  "PickMendPrism.andThen — 3 fused overloads (PMPrism/MTPrism/Iso)" >> {
+    val pmChain: PickMendPrism[Int, Int, Int] = evenPmPrism.andThen(evenPmPrism)
+    val pmOk = (pmChain.pick(16) === Some(4))
+      .and(pmChain.pick(10) === None)
+      .and(pmChain.pick(3) === None)
+      .and(pmChain.mend(4) === 16)
 
-  // Both MendTearPrism.andThen(GetReplaceLens) and andThen(Optional) start from the
-  // same "prism over Inner that hits when n >= 0" outer — factor it once so the two
-  // scenarios below only express the per-fusion assertion shape.
-  private val nonNegInnerPrism: MendTearPrism[Inner, Inner, Inner, Inner] =
-    new MendTearPrism[Inner, Inner, Inner, Inner](
-      tear = i => if i.n >= 0 then Right(i) else Left(i),
-      mend = identity,
-    )
+    val mtChain: MendTearPrism[Int, Int, Int, Int] = evenPmPrism.andThen(evenMtPrism)
+    val mtOk = (mtChain.tear(16) === Right(4))
+      .and(mtChain.tear(10) === Left(10))
+      .and(mtChain.tear(3) === Left(3))
+      .and(mtChain.mend(4) === 16)
 
-  "MendTearPrism.andThen(GetReplaceLens) produces an Optional" >> {
-    val chained: Optional[Inner, Inner, Int, Int] =
-      nonNegInnerPrism.andThen(innerLens)
-    chained.getOrModify(Inner(5, "x")) === Right(5)
-    chained.getOrModify(Inner(-3, "y")) === Left(Inner(-3, "y"))
-    chained.reverseGet(Inner(5, "x"), 99) === Inner(99, "x")
-  }
-
-  "MendTearPrism.andThen(Optional) produces an Optional" >> {
-    val chained: Optional[Inner, Inner, Int, Int] =
-      nonNegInnerPrism.andThen(adultOpt)
-    chained.getOrModify(Inner(20, "a")) === Right(20)
-    chained.getOrModify(Inner(-5, "neg")) === Left(Inner(-5, "neg")) // outer miss
-    chained.getOrModify(Inner(15, "m")) === Left(Inner(15, "m")) // inner miss
-  }
-
-  // ---- PickMendPrism.andThen(_) — 3 fused overloads ----------------
-
-  "PickMendPrism.andThen(PickMendPrism) fuses two" >> {
-    val chained: PickMendPrism[Int, Int, Int] =
-      evenPmPrism.andThen(evenPmPrism)
-    // 16 → 8 (even, hit) → 4 (even, hit). chained: Some(4).
-    chained.pick(16) === Some(4)
-    // 10 → 5 (even, hit) → None (5 is odd). chained: None (outer hits, inner misses).
-    chained.pick(10) === None
-    // 3 → odd → None (outer miss).
-    chained.pick(3) === None
-    // mend: inner.mend(4) = 8, outer.mend(8) = 16.
-    chained.mend(4) === 16
-  }
-
-  "PickMendPrism.andThen(MendTearPrism) requires A = B" >> {
-    val chained: MendTearPrism[Int, Int, Int, Int] =
-      evenPmPrism.andThen(evenMtPrism)
-    chained.tear(16) === Right(4) // 16 → 8 → 4, chain hit
-    chained.tear(10) === Left(10) // 10 → 5 → odd → inner miss, outer.mend(5) = 10
-    chained.tear(3) === Left(3) // outer miss
-    chained.mend(4) === 16
-  }
-
-  "PickMendPrism.andThen(BijectionIso) produces a PickMendPrism" >> {
     val intIso: BijectionIso[Int, Int, Int, Int] =
       new BijectionIso[Int, Int, Int, Int](_ * 10, _ / 10)
-    val chained: PickMendPrism[Int, Int, Int] = evenPmPrism.andThen(intIso)
-    chained.pick(16) === Some(80) // 16/2=8, iso 8*10=80
-    chained.pick(7) === None
-    chained.mend(80) === 16 // iso 80/10=8, outer 8*2=16
+    val isoChain: PickMendPrism[Int, Int, Int] = evenPmPrism.andThen(intIso)
+    val isoOk = (isoChain.pick(16) === Some(80))
+      .and(isoChain.pick(7) === None)
+      .and(isoChain.mend(80) === 16)
+
+    pmOk.and(mtOk).and(isoOk)
   }
 
-  // ---- GetReplaceLens.andThen(_) — 5 fused overloads ---------------
-
-  "GetReplaceLens.andThen(GetReplaceLens) fuses two lenses" >> {
+  // covers: GetReplaceLens.andThen(GetReplaceLens) fuses two lenses,
+  // GetReplaceLens.andThen(BijectionIso) produces a GetReplaceLens,
+  // GetReplaceLens.andThen(MendTearPrism) produces an Optional,
+  // GetReplaceLens.andThen(PickMendPrism) produces an Optional (A = B),
+  // GetReplaceLens.andThen(Optional) produces an Optional
+  "GetReplaceLens.andThen — 5 fused overloads (Lens/Iso/MTPrism/PMPrism/Optional)" >> {
     val outerLens: GetReplaceLens[Wrapper, Wrapper, Inner, Inner] =
       new GetReplaceLens[Wrapper, Wrapper, Inner, Inner](_.inner, (w, i) => w.copy(inner = i))
-    val chained: GetReplaceLens[Wrapper, Wrapper, Int, Int] =
-      outerLens.andThen(innerLens)
-    chained.get(Wrapper(Inner(7, "x"))) === 7
-    chained.enplace(Wrapper(Inner(7, "x")), 11) === Wrapper(Inner(11, "x"))
-    chained.modify(_ + 1)(Wrapper(Inner(7, "x"))) === Wrapper(Inner(8, "x"))
-  }
 
-  "GetReplaceLens.andThen(BijectionIso) produces a GetReplaceLens" >> {
-    val outerLens: GetReplaceLens[Wrapper, Wrapper, Inner, Inner] =
-      new GetReplaceLens[Wrapper, Wrapper, Inner, Inner](_.inner, (w, i) => w.copy(inner = i))
-    val chained: GetReplaceLens[Wrapper, Wrapper, (Int, String), (Int, String)] =
+    val lensChain: GetReplaceLens[Wrapper, Wrapper, Int, Int] = outerLens.andThen(innerLens)
+    val lensOk = (lensChain.get(Wrapper(Inner(7, "x"))) === 7)
+      .and(lensChain.enplace(Wrapper(Inner(7, "x")), 11) === Wrapper(Inner(11, "x")))
+      .and(lensChain.modify(_ + 1)(Wrapper(Inner(7, "x"))) === Wrapper(Inner(8, "x")))
+
+    val isoChain: GetReplaceLens[Wrapper, Wrapper, (Int, String), (Int, String)] =
       outerLens.andThen(innerIso)
-    chained.get(Wrapper(Inner(5, "a"))) === ((5, "a"))
-    chained.enplace(Wrapper(Inner(5, "a")), (9, "z")) === Wrapper(Inner(9, "z"))
-  }
+    val isoOk = (isoChain.get(Wrapper(Inner(5, "a"))) === ((5, "a")))
+      .and(isoChain.enplace(Wrapper(Inner(5, "a")), (9, "z")) === Wrapper(Inner(9, "z")))
 
-  "GetReplaceLens.andThen(MendTearPrism) produces an Optional" >> {
-    val outerLens: GetReplaceLens[Wrapper, Wrapper, Inner, Inner] =
-      new GetReplaceLens[Wrapper, Wrapper, Inner, Inner](_.inner, (w, i) => w.copy(inner = i))
     val innerPrism: MendTearPrism[Inner, Inner, Int, Int] =
       new MendTearPrism[Inner, Inner, Int, Int](
         tear = i => if i.n >= 0 then Right(i.n) else Left(i),
         mend = n => Inner(n, "from-mend"),
       )
-    val chained: Optional[Wrapper, Wrapper, Int, Int] =
-      outerLens.andThen(innerPrism)
-    chained.getOrModify(Wrapper(Inner(5, "ok"))) === Right(5)
-    chained.getOrModify(Wrapper(Inner(-1, "neg"))) === Left(Wrapper(Inner(-1, "neg")))
-  }
+    val mtChain: Optional[Wrapper, Wrapper, Int, Int] = outerLens.andThen(innerPrism)
+    val mtOk = (mtChain.getOrModify(Wrapper(Inner(5, "ok"))) === Right(5))
+      .and(mtChain.getOrModify(Wrapper(Inner(-1, "neg"))) === Left(Wrapper(Inner(-1, "neg"))))
 
-  "GetReplaceLens.andThen(PickMendPrism) produces an Optional (A = B)" >> {
-    val outerLens: GetReplaceLens[Inner, Inner, Int, Int] = innerLens
-    val chained: Optional[Inner, Inner, Int, Int] =
-      outerLens.andThen(evenPmPrism)
-    chained.getOrModify(Inner(16, "x")) === Right(8) // 16 even → hit
-    chained.getOrModify(Inner(7, "y")) === Left(Inner(7, "y")) // 7 odd → miss
-  }
+    val pmInnerLens: GetReplaceLens[Inner, Inner, Int, Int] = innerLens
+    val pmChain: Optional[Inner, Inner, Int, Int] = pmInnerLens.andThen(evenPmPrism)
+    val pmOk = (pmChain.getOrModify(Inner(16, "x")) === Right(8))
+      .and(pmChain.getOrModify(Inner(7, "y")) === Left(Inner(7, "y")))
 
-  "GetReplaceLens.andThen(Optional) produces an Optional" >> {
-    val outerLens: GetReplaceLens[Wrapper, Wrapper, Inner, Inner] =
-      new GetReplaceLens[Wrapper, Wrapper, Inner, Inner](_.inner, (w, i) => w.copy(inner = i))
-    val chained: Optional[Wrapper, Wrapper, Int, Int] =
-      outerLens.andThen(adultOpt)
-    chained.getOrModify(Wrapper(Inner(30, "a"))) === Right(30)
-    chained.getOrModify(Wrapper(Inner(15, "m"))) === Left(Wrapper(Inner(15, "m")))
-    chained.reverseGet(Wrapper(Inner(30, "a")), 99) === Wrapper(Inner(99, "a"))
+    val optChain: Optional[Wrapper, Wrapper, Int, Int] = outerLens.andThen(adultOpt)
+    val optOk = (optChain.getOrModify(Wrapper(Inner(30, "a"))) === Right(30))
+      .and(optChain.getOrModify(Wrapper(Inner(15, "m"))) === Left(Wrapper(Inner(15, "m"))))
+      .and(optChain.reverseGet(Wrapper(Inner(30, "a")), 99) === Wrapper(Inner(99, "a")))
+
+    lensOk.and(isoOk).and(mtOk).and(pmOk).and(optOk)
   }
