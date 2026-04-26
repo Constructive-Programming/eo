@@ -4,7 +4,6 @@ import cats.instances.list.given
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
 import data.{Affine, Forget, Forgetful, Grate, Kaleidoscope, SetterF}
@@ -13,38 +12,28 @@ import data.Forget.given
 import data.SetterF.given
 import laws.{
   AffineFoldLaws,
-  FoldLaws,
   GetterLaws,
   GrateLaws,
   IsoLaws,
-  KaleidoscopeLaws,
   LensLaws,
   OptionalLaws,
   PrismLaws,
   SetterLaws,
-  TraversalLaws,
 }
 import laws.discipline.{
   AffineFoldTests,
-  FoldTests,
   GetterTests,
   GrateTests,
   IsoTests,
-  KaleidoscopeTests,
   LensTests,
   OptionalTests,
   PrismTests,
   SetterTests,
-  TraversalTests,
 }
-import laws.data.{AffineLaws, FixedTraversalLaws, PowerSeriesLaws, SetterFLaws}
-import laws.data.discipline.{AffineTests, FixedTraversalTests, PowerSeriesTests, SetterFTests}
-import laws.typeclass.{AssociativeFunctorLaws, ForgetfulFunctorLaws, ForgetfulTraverseLaws}
-import laws.typeclass.discipline.{
-  AssociativeFunctorTests,
-  ForgetfulFunctorTests,
-  ForgetfulTraverseTests,
-}
+import laws.data.{AffineLaws, PowerSeriesLaws, SetterFLaws}
+import laws.data.discipline.{AffineTests, PowerSeriesTests, SetterFTests}
+import laws.typeclass.AssociativeFunctorLaws
+import laws.typeclass.discipline.AssociativeFunctorTests
 
 // Arbitrary[Affine[(Int, String), Boolean]] — picks between the Fst-only
 // left branch and the (Snd, A) right branch with equal weight.
@@ -63,7 +52,7 @@ private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] 
   * constructs a concrete instance and feeds it to the matching `*Tests` runner in
   * `dev.constructive.eo.laws.OpticLaws`.
   */
-class OpticsLawsSpec extends Specification with Discipline:
+class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Iso: tuple swap (Int, String) <-> (String, Int) ----------
 
@@ -168,13 +157,8 @@ class OpticsLawsSpec extends Specification with Discipline:
   val listTraversal: Optic[List[Int], List[Int], Int, Int, data.Forget[List]] =
     Traversal.forEach[List, Int, Int]
 
-  checkAll(
-    "Traversal.forEach[List, Int]",
-    new TraversalTests[List, Int]:
-      val laws = new TraversalLaws[List, Int]:
-        val traversal = listTraversal
-    .traversal,
-  )
+  // covers: Traversal.forEach over List[Int]
+  checkAllTraversalFor[List, Int]("Traversal.forEach[List, Int]", listTraversal)
 
   // ----- Getter: first projection and a synthetic one ------------
 
@@ -207,37 +191,22 @@ class OpticsLawsSpec extends Specification with Discipline:
   val listFold: Optic[List[Int], Unit, Int, Int, data.Forget[List]] =
     Fold[List, Int]
 
-  checkAll(
-    "Fold[List, Int]",
-    new FoldTests[List[Int], Int, data.Forget[List]]:
-      val laws = new FoldLaws[List[Int], Int, data.Forget[List]]:
-        val fold = listFold
-    .fold,
-  )
+  // covers: Fold over List[Int]
+  checkAllFoldFor[List[Int], Int, data.Forget[List]]("Fold[List, Int]", listFold)
 
   val optionFold: Optic[Option[Int], Unit, Int, Int, data.Forget[Option]] =
     Fold[Option, Int]
 
-  checkAll(
-    "Fold[Option, Int]",
-    new FoldTests[Option[Int], Int, data.Forget[Option]]:
-      val laws = new FoldLaws[Option[Int], Int, data.Forget[Option]]:
-        val fold = optionFold
-    .fold,
-  )
+  // covers: Fold over Option[Int]
+  checkAllFoldFor[Option[Int], Int, data.Forget[Option]]("Fold[Option, Int]", optionFold)
 
   // ----- Fold.select: focuses on values matching a predicate ------
 
   val evenSelectFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
     Fold.select[Int](_ % 2 == 0)
 
-  checkAll(
-    "Fold.select[Int](even)",
-    new FoldTests[Int, Int, data.Forget[Option]]:
-      val laws = new FoldLaws[Int, Int, data.Forget[Option]]:
-        val fold = evenSelectFold
-    .fold,
-  )
+  // covers: Fold.select over Int (Forget[Option] carrier)
+  checkAllFoldFor[Int, Int, data.Forget[Option]]("Fold.select[Int](even)", evenSelectFold)
 
   "Fold.select" should {
     "expose the value via .to when the predicate holds, None otherwise" >> {
@@ -333,12 +302,8 @@ class OpticsLawsSpec extends Specification with Discipline:
       yield (a0, a1, ()).asInstanceOf[FixedTraversal[2][Unit, Int]]
     )
 
-  checkAll(
-    "FixedTraversal[2][Unit, Int]",
-    new FixedTraversalTests[2, Unit, Int]:
-      val laws = new FixedTraversalLaws[2, Unit, Int] {}
-    .fixedTraversal,
-  )
+  // covers: FixedTraversal arity 2
+  checkAllFixedTraversalFor[2, Unit, Int]("FixedTraversal[2][Unit, Int]")
 
   private given arbFixedTrav3: Arbitrary[FixedTraversal[3][Unit, Int]] =
     Arbitrary(
@@ -349,12 +314,8 @@ class OpticsLawsSpec extends Specification with Discipline:
       yield (a0, a1, a2, ()).asInstanceOf[FixedTraversal[3][Unit, Int]]
     )
 
-  checkAll(
-    "FixedTraversal[3][Unit, Int]",
-    new FixedTraversalTests[3, Unit, Int]:
-      val laws = new FixedTraversalLaws[3, Unit, Int] {}
-    .fixedTraversal,
-  )
+  // covers: FixedTraversal arity 3
+  checkAllFixedTraversalFor[3, Unit, Int]("FixedTraversal[3][Unit, Int]")
 
   private given arbFixedTrav4: Arbitrary[FixedTraversal[4][Unit, Int]] =
     Arbitrary(
@@ -366,12 +327,8 @@ class OpticsLawsSpec extends Specification with Discipline:
       yield (a0, a1, a2, a3, ()).asInstanceOf[FixedTraversal[4][Unit, Int]]
     )
 
-  checkAll(
-    "FixedTraversal[4][Unit, Int]",
-    new FixedTraversalTests[4, Unit, Int]:
-      val laws = new FixedTraversalLaws[4, Unit, Int] {}
-    .fixedTraversal,
-  )
+  // covers: FixedTraversal arity 4
+  checkAllFixedTraversalFor[4, Unit, Int]("FixedTraversal[4][Unit, Int]")
 
   // ----- Carrier type-class laws via representative fixtures ------
   //
@@ -381,21 +338,11 @@ class OpticsLawsSpec extends Specification with Discipline:
   // satisfies the shared ForgetfulFunctor / ForgetfulTraverse laws.
   // Expanding the matrix is a follow-up (0.1.1).
 
-  // Tuple2 ForgetfulFunctor: reuses scalacheck's built-in Arbitrary[(Int, Int)].
-  checkAll(
-    "ForgetfulFunctor[Tuple2] on (Int, Int)",
-    new ForgetfulFunctorTests[Tuple2, Int, Int]:
-      val laws = new ForgetfulFunctorLaws[Tuple2, Int, Int] {}
-    .forgetfulFunctor,
-  )
+  // covers: ForgetfulFunctor over Tuple2 (built-in Arbitrary[(Int, Int)])
+  checkAllForgetfulFunctorFor[Tuple2, Int, Int]("ForgetfulFunctor[Tuple2] on (Int, Int)")
 
-  // Either ForgetfulFunctor: reuses built-in Arbitrary[Either[Int, Int]].
-  checkAll(
-    "ForgetfulFunctor[Either] on Either[Int, Int]",
-    new ForgetfulFunctorTests[Either, Int, Int]:
-      val laws = new ForgetfulFunctorLaws[Either, Int, Int] {}
-    .forgetfulFunctor,
-  )
+  // covers: ForgetfulFunctor over Either (built-in Arbitrary[Either[Int, Int]])
+  checkAllForgetfulFunctorFor[Either, Int, Int]("ForgetfulFunctor[Either] on Either[Int, Int]")
 
   // AssociativeFunctor[Tuple2] — nested Lens composition.
   // Outer: ((Int, String), Boolean) → (Int, String); inner: (Int, String) → Int.
@@ -440,60 +387,35 @@ class OpticsLawsSpec extends Specification with Discipline:
     )
   }
 
-  // Affine ForgetfulFunctor + ForgetfulTraverse: reuses arbAffineIntStringBool.
-  checkAll(
-    "ForgetfulFunctor[Affine] on Affine[(Int, String), Boolean]",
-    new ForgetfulFunctorTests[Affine, (Int, String), Boolean]:
-      val laws = new ForgetfulFunctorLaws[Affine, (Int, String), Boolean] {}
-    .forgetfulFunctor,
+  // covers: ForgetfulFunctor + ForgetfulTraverse over Affine (uses arbAffineIntStringBool)
+  checkAllForgetfulFunctorFor[Affine, (Int, String), Boolean](
+    "ForgetfulFunctor[Affine] on Affine[(Int, String), Boolean]"
+  )
+  checkAllForgetfulTraverseFor[Affine, (Int, String), Boolean](
+    "ForgetfulTraverse[Affine, Applicative] on Affine[(Int, String), Boolean]"
   )
 
-  checkAll(
-    "ForgetfulTraverse[Affine, Applicative] on Affine[(Int, String), Boolean]",
-    new ForgetfulTraverseTests[Affine, (Int, String), Boolean]:
-      val laws = new ForgetfulTraverseLaws[Affine, (Int, String), Boolean] {}
-    .forgetfulTraverse,
+  // covers: ForgetfulFunctor + ForgetfulTraverse over PowerSeries (uses arbPowerSeries)
+  checkAllForgetfulFunctorFor[PowerSeries, (Int, Int), Int](
+    "ForgetfulFunctor[PowerSeries] on PowerSeries[(Int, Int), Int]"
+  )
+  checkAllForgetfulTraverseFor[PowerSeries, (Int, Int), Int](
+    "ForgetfulTraverse[PowerSeries, Applicative] on PowerSeries[(Int, Int), Int]"
   )
 
-  // PowerSeries ForgetfulFunctor + ForgetfulTraverse: reuses arbPowerSeries.
-  checkAll(
-    "ForgetfulFunctor[PowerSeries] on PowerSeries[(Int, Int), Int]",
-    new ForgetfulFunctorTests[PowerSeries, (Int, Int), Int]:
-      val laws = new ForgetfulFunctorLaws[PowerSeries, (Int, Int), Int] {}
-    .forgetfulFunctor,
-  )
-
-  checkAll(
-    "ForgetfulTraverse[PowerSeries, Applicative] on PowerSeries[(Int, Int), Int]",
-    new ForgetfulTraverseTests[PowerSeries, (Int, Int), Int]:
-      val laws = new ForgetfulTraverseLaws[PowerSeries, (Int, Int), Int] {}
-    .forgetfulTraverse,
-  )
-
-  // Forget[List] ForgetfulFunctor + ForgetfulTraverse — exercises
-  // Forgetful.scala's traverse2 and bifunctor paths that pure Forgetful
+  // covers: ForgetfulFunctor + ForgetfulTraverse over Forget[List] —
+  // exercises Forgetful.scala's traverse2 and bifunctor paths that pure Forgetful
   // fixtures don't land.
-  checkAll(
-    "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]",
-    new ForgetfulFunctorTests[Forget[List], Unit, Int]:
-      val laws = new ForgetfulFunctorLaws[Forget[List], Unit, Int] {}
-    .forgetfulFunctor,
+  checkAllForgetfulFunctorFor[Forget[List], Unit, Int](
+    "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]"
+  )
+  checkAllForgetfulTraverseFor[Forget[List], Unit, Int](
+    "ForgetfulTraverse[Forget[List], Applicative] on Forget[List][Unit, Int]"
   )
 
-  checkAll(
-    "ForgetfulTraverse[Forget[List], Applicative] on Forget[List][Unit, Int]",
-    new ForgetfulTraverseTests[Forget[List], Unit, Int]:
-      val laws = new ForgetfulTraverseLaws[Forget[List], Unit, Int] {}
-    .forgetfulTraverse,
-  )
-
-  // Either ForgetfulTraverse[Applicative] — exercises
-  // ForgetfulTraverse.eitherFTraverse.
-  checkAll(
-    "ForgetfulTraverse[Either, Applicative] on Either[Int, Int]",
-    new ForgetfulTraverseTests[Either, Int, Int]:
-      val laws = new ForgetfulTraverseLaws[Either, Int, Int] {}
-    .forgetfulTraverse,
+  // covers: ForgetfulTraverse over Either — exercises ForgetfulTraverse.eitherFTraverse.
+  checkAllForgetfulTraverseFor[Either, Int, Int](
+    "ForgetfulTraverse[Either, Applicative] on Either[Int, Int]"
   )
 
   // Use a custom extensional equality check inside the law — structural
@@ -503,13 +425,10 @@ class OpticsLawsSpec extends Specification with Discipline:
   // the SetterF-specific laws directly (from dev.constructive.eo.laws.data) rather than
   // the carrier-generic ones.
 
-  // FixedTraversal[2] ForgetfulFunctor at the typeclass level —
+  // covers: ForgetfulFunctor over FixedTraversal[2] at the typeclass level —
   // exercises the typeclass-level witness for the fixed-arity carrier.
-  checkAll(
-    "ForgetfulFunctor[FixedTraversal[2]] on (Int, Int, Unit)",
-    new ForgetfulFunctorTests[FixedTraversal[2], Unit, Int]:
-      val laws = new ForgetfulFunctorLaws[FixedTraversal[2], Unit, Int] {}
-    .forgetfulFunctor,
+  checkAllForgetfulFunctorFor[FixedTraversal[2], Unit, Int](
+    "ForgetfulFunctor[FixedTraversal[2]] on (Int, Int, Unit)"
   )
 
   // AlgLens[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the
@@ -560,60 +479,36 @@ class OpticsLawsSpec extends Specification with Discipline:
       Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, Chain.fromSeq(xs))))
     )
 
-  checkAll(
-    "ForgetfulFunctor[AlgLens[List]] on (Int, List[Int])",
-    new ForgetfulFunctorTests[AlgLens[List], Int, Int]:
-      val laws = new ForgetfulFunctorLaws[AlgLens[List], Int, Int] {}
-    .forgetfulFunctor,
+  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[List]
+  checkAllForgetfulFunctorFor[AlgLens[List], Int, Int](
+    "ForgetfulFunctor[AlgLens[List]] on (Int, List[Int])"
+  )
+  checkAllForgetfulTraverseFor[AlgLens[List], Int, Int](
+    "ForgetfulTraverse[AlgLens[List], Applicative] on (Int, List[Int])"
   )
 
-  checkAll(
-    "ForgetfulTraverse[AlgLens[List], Applicative] on (Int, List[Int])",
-    new ForgetfulTraverseTests[AlgLens[List], Int, Int]:
-      val laws = new ForgetfulTraverseLaws[AlgLens[List], Int, Int] {}
-    .forgetfulTraverse,
+  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[Option]
+  checkAllForgetfulFunctorFor[AlgLens[Option], Int, Int](
+    "ForgetfulFunctor[AlgLens[Option]] on (Int, Option[Int])"
+  )
+  checkAllForgetfulTraverseFor[AlgLens[Option], Int, Int](
+    "ForgetfulTraverse[AlgLens[Option], Applicative] on (Int, Option[Int])"
   )
 
-  checkAll(
-    "ForgetfulFunctor[AlgLens[Option]] on (Int, Option[Int])",
-    new ForgetfulFunctorTests[AlgLens[Option], Int, Int]:
-      val laws = new ForgetfulFunctorLaws[AlgLens[Option], Int, Int] {}
-    .forgetfulFunctor,
+  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[Vector]
+  checkAllForgetfulFunctorFor[AlgLens[Vector], Int, Int](
+    "ForgetfulFunctor[AlgLens[Vector]] on (Int, Vector[Int])"
+  )
+  checkAllForgetfulTraverseFor[AlgLens[Vector], Int, Int](
+    "ForgetfulTraverse[AlgLens[Vector], Applicative] on (Int, Vector[Int])"
   )
 
-  checkAll(
-    "ForgetfulTraverse[AlgLens[Option], Applicative] on (Int, Option[Int])",
-    new ForgetfulTraverseTests[AlgLens[Option], Int, Int]:
-      val laws = new ForgetfulTraverseLaws[AlgLens[Option], Int, Int] {}
-    .forgetfulTraverse,
+  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[Chain]
+  checkAllForgetfulFunctorFor[AlgLens[Chain], Int, Int](
+    "ForgetfulFunctor[AlgLens[Chain]] on (Int, Chain[Int])"
   )
-
-  checkAll(
-    "ForgetfulFunctor[AlgLens[Vector]] on (Int, Vector[Int])",
-    new ForgetfulFunctorTests[AlgLens[Vector], Int, Int]:
-      val laws = new ForgetfulFunctorLaws[AlgLens[Vector], Int, Int] {}
-    .forgetfulFunctor,
-  )
-
-  checkAll(
-    "ForgetfulTraverse[AlgLens[Vector], Applicative] on (Int, Vector[Int])",
-    new ForgetfulTraverseTests[AlgLens[Vector], Int, Int]:
-      val laws = new ForgetfulTraverseLaws[AlgLens[Vector], Int, Int] {}
-    .forgetfulTraverse,
-  )
-
-  checkAll(
-    "ForgetfulFunctor[AlgLens[Chain]] on (Int, Chain[Int])",
-    new ForgetfulFunctorTests[AlgLens[Chain], Int, Int]:
-      val laws = new ForgetfulFunctorLaws[AlgLens[Chain], Int, Int] {}
-    .forgetfulFunctor,
-  )
-
-  checkAll(
-    "ForgetfulTraverse[AlgLens[Chain], Applicative] on (Int, Chain[Int])",
-    new ForgetfulTraverseTests[AlgLens[Chain], Int, Int]:
-      val laws = new ForgetfulTraverseLaws[AlgLens[Chain], Int, Int] {}
-    .forgetfulTraverse,
+  checkAllForgetfulTraverseFor[AlgLens[Chain], Int, Int](
+    "ForgetfulTraverse[AlgLens[Chain], Applicative] on (Int, Chain[Int])"
   )
 
   // ----- ForgetfulApplicative via Optic.put ---------------------
@@ -652,40 +547,22 @@ class OpticsLawsSpec extends Specification with Discipline:
   // EO-specific FoldMapHomomorphismLaws (used earlier on
   // Traversal.forEach) against the tuple / prism / optional fixtures
   // already declared above.
-  import laws.eo.FoldMapHomomorphismLaws
-  import laws.eo.discipline.FoldMapHomomorphismTests
-
-  checkAll(
+  // covers: foldMap homomorphism on Lens (Tuple2 carrier)
+  checkAllFoldMapHomomorphismFor[(Int, String), Int, Tuple2](
     "Lens foldMap homomorphism (Tuple2 carrier)",
-    new FoldMapHomomorphismTests[(Int, String), Int, Tuple2]:
-      val laws =
-        new FoldMapHomomorphismLaws[(Int, String), Int, Tuple2]:
-          val optic = firstLens
-    .foldMapHomomorphism,
+    firstLens,
   )
 
-  checkAll(
+  // covers: foldMap homomorphism on Prism (Either carrier)
+  checkAllFoldMapHomomorphismFor[Int, Int, Either](
     "Prism foldMap homomorphism (Either carrier)",
-    new FoldMapHomomorphismTests[Int, Int, Either]:
-      val laws = new FoldMapHomomorphismLaws[Int, Int, Either]:
-        val optic = evenPrism
-    .foldMapHomomorphism,
+    evenPrism,
   )
 
-  checkAll(
+  // covers: foldMap homomorphism on Optional (Affine carrier)
+  checkAllFoldMapHomomorphismFor[(Int, List[Int]), Int, Affine](
     "Optional foldMap homomorphism (Affine carrier)",
-    new FoldMapHomomorphismTests[
-      (Int, List[Int]),
-      Int,
-      Affine,
-    ]:
-      val laws = new FoldMapHomomorphismLaws[
-        (Int, List[Int]),
-        Int,
-        Affine,
-      ]:
-        val optic = headOptional
-    .foldMapHomomorphism,
+    headOptional,
   )
 
   // ----- Grate: tuple-indexed + Function1[Boolean, *] -------------
@@ -743,25 +620,19 @@ class OpticsLawsSpec extends Specification with Discipline:
   val listKaleidoscope: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
     Kaleidoscope.apply[List, Int]
 
-  checkAll(
+  // covers: Kaleidoscope over List (cartesian Reflector)
+  checkAllKaleidoscopeFor[List[Int], Int, List](
     "Kaleidoscope[List[Int], Int] — cartesian Reflector",
-    new KaleidoscopeTests[List[Int], Int, List]:
-      val laws = new KaleidoscopeLaws[List[Int], Int, List]:
-        val kaleidoscope = listKaleidoscope
-        val reflector = summon[Reflector[List]]
-    .kaleidoscope,
+    listKaleidoscope,
   )
 
   val zipListKaleidoscope: Optic[ZipList[Int], ZipList[Int], Int, Int, Kaleidoscope] =
     Kaleidoscope.apply[ZipList, Int]
 
-  checkAll(
+  // covers: Kaleidoscope over ZipList (zipping Reflector)
+  checkAllKaleidoscopeFor[ZipList[Int], Int, ZipList](
     "Kaleidoscope[ZipList[Int], Int] — zipping Reflector",
-    new KaleidoscopeTests[ZipList[Int], Int, ZipList]:
-      val laws = new KaleidoscopeLaws[ZipList[Int], Int, ZipList]:
-        val kaleidoscope = zipListKaleidoscope
-        val reflector = summon[Reflector[ZipList]]
-    .kaleidoscope,
+    zipListKaleidoscope,
   )
 
   // Const[Int, *] summation fixture — the third "aggregation shape" (summation). Lands as a plain
@@ -779,11 +650,8 @@ class OpticsLawsSpec extends Specification with Discipline:
   val constKaleidoscope: Optic[Const[Int, Int], Const[Int, Int], Int, Int, Kaleidoscope] =
     Kaleidoscope.apply[Const[Int, *], Int]
 
-  checkAll(
+  // covers: Kaleidoscope over Const (summation Reflector)
+  checkAllKaleidoscopeFor[Const[Int, Int], Int, Const[Int, *]](
     "Kaleidoscope[Const[Int, Int], Int] — summation Reflector",
-    new KaleidoscopeTests[Const[Int, Int], Int, Const[Int, *]]:
-      val laws = new KaleidoscopeLaws[Const[Int, Int], Int, Const[Int, *]]:
-        val kaleidoscope = constKaleidoscope
-        val reflector = summon[Reflector[Const[Int, *]]]
-    .kaleidoscope,
+    constKaleidoscope,
   )

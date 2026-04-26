@@ -4,7 +4,6 @@ import cats.instances.list.given
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop.forAll
 import org.specs2.mutable.Specification
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
@@ -15,13 +14,11 @@ import data.Affine.given
 import data.SetterF.given
 import data.FixedTraversal.given
 import laws.eo.{
-  FoldMapHomomorphismLaws,
   ForgetAllModifyLaws,
   IsoComposeLaws,
   LensComposeLaws,
   ModifyAConstLaws,
   ModifyAIdLaws,
-  MorphLaws,
   OptionalComposeLaws,
   PrismComposeLaws,
   PutIsReverseGetLaws,
@@ -30,13 +27,11 @@ import laws.eo.{
   TraverseAllLaws,
 }
 import laws.eo.discipline.{
-  FoldMapHomomorphismTests,
   ForgetAllModifyTests,
   IsoComposeTests,
   LensComposeTests,
   ModifyAConstTests,
   ModifyAIdTests,
-  MorphTests,
   OptionalComposeTests,
   PrismComposeTests,
   PutIsReverseGetTests,
@@ -51,7 +46,7 @@ import laws.typeclass.discipline.{ComposerPathIndependenceTests, ComposerPreserv
   * abstract over (H1, which depends on the existential X in a Lens's carrier), it's tested inline
   * as a property below.
   */
-class EoSpecificLawsSpec extends Specification with Discipline:
+class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Concrete optics used by several checkAlls ---------------
 
@@ -66,34 +61,25 @@ class EoSpecificLawsSpec extends Specification with Discipline:
 
   // =============== A1/I1 — morph preserves modify ==================
 
-  checkAll(
+  // covers: Morph from Tuple2 → SetterF on a Lens
+  checkAllMorphPreservesModifyFor[(Int, String), Int, Tuple2, SetterF](
     "Lens.morph[SetterF] preserves modify (I1)",
-    new MorphTests[(Int, String), Int, Tuple2, SetterF]:
-
-      val laws = new MorphLaws[(Int, String), Int, Tuple2, SetterF]:
-        val optic = firstLens
-        val morphed = firstLens.morph[SetterF]
-    .morphPreservesModify,
+    firstLens,
+    firstLens.morph[SetterF],
   )
 
-  checkAll(
+  // covers: Morph from Tuple2 → Affine on a Lens
+  checkAllMorphPreservesModifyFor[(Int, String), Int, Tuple2, Affine](
     "Lens.morph[Affine] preserves modify",
-    new MorphTests[(Int, String), Int, Tuple2, Affine]:
-
-      val laws = new MorphLaws[(Int, String), Int, Tuple2, Affine]:
-        val optic = firstLens
-        val morphed = firstLens.morph[Affine]
-    .morphPreservesModify,
+    firstLens,
+    firstLens.morph[Affine],
   )
 
-  checkAll(
+  // covers: Morph from Forgetful → Tuple2 on an Iso (preserves-get arm)
+  checkAllMorphPreservesGetFor[Int, Int, Forgetful, Tuple2](
     "Iso.morph[Tuple2] preserves get",
-    new MorphTests[Int, Int, Forgetful, Tuple2]:
-
-      val laws = new MorphLaws[Int, Int, Forgetful, Tuple2]:
-        val optic = doubleIso
-        val morphed = doubleIso.morph[Tuple2]
-    .morphPreservesGet,
+    doubleIso,
+    doubleIso.morph[Tuple2],
   )
 
   // =============== B1 — Iso reverse involution =====================
@@ -150,14 +136,10 @@ class EoSpecificLawsSpec extends Specification with Discipline:
 
   // =============== E1 — foldMap Monoid homomorphism ================
 
-  checkAll(
+  // covers: foldMap homomorphism on Traversal (Forget[List] carrier)
+  checkAllFoldMapHomomorphismFor[List[Int], Int, Forget[List]](
     "Traversal.forEach.foldMap is a Monoid[Int] homomorphism",
-    new FoldMapHomomorphismTests[List[Int], Int, Forget[List]]:
-
-      val laws =
-        new FoldMapHomomorphismLaws[List[Int], Int, Forget[List]]:
-          val optic = listTraversal
-    .foldMapHomomorphism,
+    listTraversal,
   )
 
   // =============== H3 — put ≡ reverseGet ∘ pure ====================
