@@ -4,59 +4,66 @@ import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
 import dev.constructive.eo.optics.Optic
-import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, HCursor, Json}
+import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
 
-/** A specialised Prism from [[io.circe.Json]] to a native type `A`, backed by a circe `Encoder[A]`
-  * / `Decoder[A]` pair and a flat `Array[PathStep]` path that tracks the cursor steps.
+/** A specialised Prism from [[io.circe.Json]] to a native type `A`.
   *
-  * Shape on the Optic type:
+  * '''Design (2026-04-26 unification).''' Originally cats-eo shipped four sibling carriers —
+  * `JsonPrism`, `JsonFieldsPrism`, `JsonTraversal`, `JsonFieldsTraversal` — each ~200 lines of
+  * near-identical surface. They varied along two orthogonal axes:
+  *
+  *   1. ''single-field vs multi-field focus'' — [[JsonFocus.Leaf]] vs [[JsonFocus.Fields]];
+  *   2. ''single-focus vs multi-focus'' — [[JsonPrism]] (apply at root) vs [[JsonTraversal]] (apply
+  *      per-element of an array reached by a `prefix` walk).
+  *
+  * Two booleans, four classes — and the multi-field × single-focus class is just `JsonPrism` whose
+  * focus is `JsonFocus.Fields(...)` instead of `JsonFocus.Leaf(...)`. That observation collapses
+  * the four classes to two and the four "multi-field" duplicates (Fields-side reads / writes /
+  * overlays) into one [[JsonFocus.Fields]] body.
+  *
+  * Shape on the Optic type (unchanged):
   *
   * {{{
   *   JsonPrism[A] <: Optic[Json, Json, A, A, Either]
   *   type X = (DecodingFailure, HCursor)
   * }}}
   *
-  * Extends `Optic` directly, in the same vein as [[dev.constructive.eo.optics.MendTearPrism]] — so
-  * it composes with the rest of the cats-eo universe via stock `.andThen`, and its abstract `to` /
-  * `from` satisfy the Either-carrier contract.
-  *
-  * Storage is a flat `Array[PathStep]` of field-name / array-index steps (the path from the root
-  * Json to the focused value). Each `.field(_.name)` call copies the array and appends one step.
-  * Walking the path at `modify` / `transform` time is an imperative loop that pulls JsonObjects
-  * directly via `Json.asObject` / `JsonObject.apply` — skipping `HCursor` entirely — and rebuilds
-  * by walking up through `JsonObject.add`, which keeps the underlying `LinkedHashMap`
-  * representation and avoids the expensive `LinkedHashMap → MapAndVector` conversion that
-  * `HCursor.set.top` triggers.
-  *
-  * Two call-surface tiers:
+  * Two call-surface tiers (unchanged):
   *
   *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` return
   *     `Json => Ior[Chain[JsonFailure], Json]`; `get` returns `Ior[Chain[JsonFailure], A]`.
-  *     Failures observed during the walk (missing path steps, non-object / non-array parents,
-  *     out-of-range indices, decode failures) are collected into a `Chain[JsonFailure]` and
-  *     surfaced to the caller rather than silently swallowed. Partial success returns
-  *     `Ior.Both(chain, inputJson)` — the Json is the pre-plan silent behaviour, the chain
-  *     documents what went wrong.
+  *     Failures (path miss, non-object / non-array parent, out-of-range index, decode failure)
+  *     accumulate into `Chain[JsonFailure]`. Partial success returns `Ior.Both(chain, inputJson)`.
   *   - '''`*Unsafe` (silent).''' `modifyUnsafe` / `transformUnsafe` / `placeUnsafe` /
-  *     `transferUnsafe` / `getOptionUnsafe` preserve the pre-v0.2 forgiving behaviour
-  *     byte-for-byte: silent pass-through on the modify family, `Option[A]` on the read family.
-  *     Escape hatch for callers who have measured and don't want the `Ior.Right(json)` allocation
-  *     on the happy path.
+  *     `transferUnsafe` / `getOptionUnsafe` preserve the pre-v0.2 forgiving behaviour byte-for-byte:
+  *     silent pass-through on the modify family, `Option[A]` on the read family.
   *
-  * Failure diagnostics on the abstract `Optic` surface: the inherited `to` method still returns
+  * Failure diagnostics on the abstract `Optic` surface: the inherited `to` returns
   * `Left((DecodingFailure, HCursor))` so callers routing through the generic cats-eo extensions can
   * both diagnose (`DecodingFailure.history`) and recover raw Json (`HCursor.value` /
-  * `HCursor.top`). Users reaching for the direct-call hot path should prefer the Ior-bearing
-  * default surface, which carries richer per-step context.
+  * `HCursor.top`).
+  *
+  * The compatibility alias [[JsonFieldsPrism]] points back at `JsonPrism[A]` — old code that
+  * ascribed `: JsonFieldsPrism[NT]` keeps compiling.
   */
 final class JsonPrism[A] private[circe] (
-    private[circe] val path: Array[PathStep],
-    private[circe] val encoder: Encoder[A],
-    private[circe] val decoder: Decoder[A],
+    private[circe] val focus: JsonFocus[A]
 ) extends Optic[Json, Json, A, A, Either],
       JsonOpticOps[A],
       Dynamic:
+
   type X = (DecodingFailure, HCursor)
+
+  /** The focus's storage path (`path` for a Leaf focus, `parentPath` for a Fields focus). */
+  private[circe] def path: Array[PathStep] = focus match
+    case l: JsonFocus.Leaf[A]   => l.path
+    case f: JsonFocus.Fields[A] => f.parentPath
+
+  /** Codec accessors — kept for the `widenPath` / `widenPathIndex` paths and for backwards
+    * compatibility with code that read these fields off the prism directly.
+    */
+  private[circe] def encoder: Encoder[A] = focus.encoder
+  private[circe] def decoder: Decoder[A] = focus.decoder
 
   // ---- Selectable field sugar ---------------------------------------
   //
@@ -65,158 +72,68 @@ final class JsonPrism[A] private[circe] (
   // explicit selector lambdas, no extension-method noise. The macro
   // looks the field up on `A`'s case-class schema at compile time,
   // summons its Encoder/Decoder, and delegates to `widenPath`.
-  //
-  // Only case-class case fields are reachable this way. Methods
-  // already defined on the class (`modify`, `transform`, `to`, …)
-  // bind first via normal member resolution, so the Dynamic path
-  // never shadows them.
 
   transparent inline def selectDynamic(inline name: String): Any =
     ${ JsonPrismMacro.selectFieldImpl[A]('{ this }, 'name) }
 
-  // ---- Abstract Optic members (for generic Optic contract) ----------
-  //
-  // These still use `HCursor`-based navigation: the generic `Optic`
-  // extensions route through them, and callers that care about the
-  // (DecodingFailure, HCursor) diagnostic need an HCursor-aware `to`.
-  // The hot-path class methods below bypass them.
+  // ---- Abstract Optic members ---------------------------------------
 
   def to: Json => Either[(DecodingFailure, HCursor), A] = json =>
-    val c = navigateCursor(json)
-    c.as[A](using decoder) match
+    val c = focus.navigateCursor(json)
+    focus.decodeFromCursor(c) match
       case Right(a) => Right(a)
       case Left(df) => Left((df, json.hcursor))
 
   def from: Either[(DecodingFailure, HCursor), A] => Json = {
     case Left((_, hc)) => hc.top.getOrElse(hc.value)
-    case Right(a)      => encoder(a)
+    case Right(a)      => focus.encoder(a)
   }
 
   // ---- Read surface (single-focus specific) -------------------------
-  //
-  // The `modify` / `transform` / `place` / `transfer` (and `*Unsafe`
-  // variants) live on the shared `JsonOpticOps[A]` mixin and delegate
-  // to the per-class `*Ior` / `*Impl` methods below. Only the Prism's
-  // own `get` / `reverseGet` / `getOptionUnsafe` reads remain here.
 
   def get(input: Json | String): Ior[Chain[JsonFailure], A] =
-    JsonFailure.parseInputIor(input).flatMap(getIor)
+    JsonFailure.parseInputIor(input).flatMap(focus.readIor)
 
-  inline def reverseGet(a: A): Json = encoder(a)
+  inline def reverseGet(a: A): Json = focus.encoder(a)
 
   inline def getOptionUnsafe(input: Json | String): Option[A] =
-    val j = JsonFailure.parseInputUnsafe(input)
-    val c = navigateCursor(j)
-    c.as[A](using decoder).toOption
+    focus.readImpl(JsonFailure.parseInputUnsafe(input))
 
-  // ---- Non-inline *Unsafe helper bodies -----------------------------
+  // ---- JsonOpticOps wiring ------------------------------------------
   //
-  // The walks below all use the same fold-based shape: descend the
-  // path with `JsonWalk.walkPath` (foldLeftM in Either[JsonFailure, _]),
-  // then rebuild from the leaf back to the root via `JsonWalk.rebuildPath`.
-  // The *Unsafe family discards the failure and returns the input
-  // Json unchanged; the Ior-bearing family promotes the same failure
-  // into Ior.Both / Ior.Left depending on whether the carrier is the
-  // input Json (`modify` / `transform` / `place`) or absent (`get`).
-
-  override protected def modifyImpl(json: Json, f: A => A): Json =
-    JsonWalk.walkPath(json, path) match
-      case Left(_)               => json
-      case Right((cur, parents)) =>
-        decoder.decodeJson(cur) match
-          case Left(_)  => json
-          case Right(a) => JsonWalk.rebuildPath(parents, path, encoder(f(a)))
-
-  override protected def transformImpl(json: Json, f: Json => Json): Json =
-    JsonWalk.walkPath(json, path) match
-      case Left(_)               => json
-      case Right((cur, parents)) => JsonWalk.rebuildPath(parents, path, f(cur))
-
-  override protected def placeImpl(json: Json, a: A): Json =
-    if path.length == 0 then encoder(a)
-    else
-      JsonWalk.walkPath(json, path) match
-        case Left(_)             => json
-        case Right((_, parents)) => JsonWalk.rebuildPath(parents, path, encoder(a))
-
-  // ---- Ior-bearing helper bodies ------------------------------------
-  //
-  // Walk in Either[JsonFailure, _] first, then promote the result.
-  // On path miss we synthesise a single-failure Chain and return
-  // Ior.Both(chain, inputJson). No Chain.Builder allocation on the
-  // happy path — we build a one-element Chain only when a miss
-  // surfaces. Every success path returns `Ior.Right(newJson)`.
+  // The JsonOpticOps mixin demands six per-Json hooks; this prism's
+  // hooks delegate straight to the focus.
 
   override protected def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
-    JsonWalk.walkPath(json, path) match
-      case Left(failure)         => Ior.Both(Chain.one(failure), json)
-      case Right((cur, parents)) =>
-        decoder.decodeJson(cur) match
-          case Left(df) =>
-            val step = JsonWalk.terminalOf(path)
-            Ior.Both(Chain.one(JsonFailure.DecodeFailed(step, df)), json)
-          case Right(a) =>
-            Ior.Right(JsonWalk.rebuildPath(parents, path, encoder(f(a))))
+    focus.modifyIor(json, f)
 
   override protected def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
-    JsonWalk.walkPath(json, path) match
-      case Left(failure)         => Ior.Both(Chain.one(failure), json)
-      case Right((cur, parents)) =>
-        Ior.Right(JsonWalk.rebuildPath(parents, path, f(cur)))
+    focus.transformIor(json, f)
 
   override protected def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
-    if path.length == 0 then Ior.Right(encoder(a))
-    else
-      JsonWalk.walkPath(json, path) match
-        case Left(failure)       => Ior.Both(Chain.one(failure), json)
-        case Right((_, parents)) =>
-          Ior.Right(JsonWalk.rebuildPath(parents, path, encoder(a)))
+    focus.placeIor(json, a)
 
-  /** Ior-bearing read — walks `path`, returning `Ior.Left(chain-of-one)` on any miss. Success is
-    * `Ior.Right(a)`; `Ior.Both` does not arise because a read either produces an `A` or it doesn't.
-    */
-  private def getIor(json: Json): Ior[Chain[JsonFailure], A] =
-    JsonWalk.walkPath(json, path) match
-      case Left(failure)   => Ior.Left(Chain.one(failure))
-      case Right((cur, _)) =>
-        decoder.decodeJson(cur) match
-          case Right(a) => Ior.Right(a)
-          case Left(df) =>
-            val step = JsonWalk.terminalOf(path)
-            Ior.Left(Chain.one(JsonFailure.DecodeFailed(step, df)))
+  override protected def modifyImpl(json: Json, f: A => A): Json =
+    focus.modifyImpl(json, f)
 
-  // ---- Helpers ------------------------------------------------------
+  override protected def transformImpl(json: Json, f: Json => Json): Json =
+    focus.transformImpl(json, f)
 
-  /** Build an ACursor from the root by walking each path step via `downField` / `downN`. Only used
-    * by the generic Optic `to` / `from`; the hot-path methods above go straight through
-    * `JsonObject` / `Vector[Json]` without materialising a cursor.
-    */
-  private def navigateCursor(json: Json): ACursor =
-    var c: ACursor = json.hcursor
-    var i = 0
-    while i < path.length do
-      c = path(i) match
-        case PathStep.Field(name) => c.downField(name)
-        case PathStep.Index(idx)  => c.downN(idx)
-      i += 1
-    c
+  override protected def placeImpl(json: Json, a: A): Json =
+    focus.placeImpl(json, a)
 
-  /** Sentinel step for root-level decode failures on a path-empty prism. The decode-failed leaf has
-    * no field-name or index to point at, so we use `PathStep.Field("")` as a marker.
-    */
-  private inline def rootStep: PathStep = PathStep.Field("")
+  // ---- Path widening (used by the macro extensions) ----------------
 
-  /** Extend the path by a field step and swap to a narrower Encoder/Decoder pair. Used by the
-    * [[field]] / `selectDynamic` macros; not intended for direct call by end users.
+  /** Extend the leaf focus's path by a field step and swap to a narrower codec pair. Only valid
+    * when the current focus is a Leaf (the `field` macro never composes Fields focuses with
+    * further `.field`). Used by [[field]] / `selectDynamic`.
     */
   private[circe] def widenPath[B](
       step: String
   )(using encB: Encoder[B], decB: Decoder[B]): JsonPrism[B] =
     widenPathStep[B](PathStep.Field(step))
 
-  /** Extend the path by an array-index step and swap to the element type's Encoder/Decoder pair.
-    * Used by the [[at]] macro.
-    */
+  /** Extend the leaf focus's path by an array-index step. Used by [[at]]. */
   private[circe] def widenPathIndex[B](
       i: Int
   )(using encB: Encoder[B], decB: Decoder[B]): JsonPrism[B] =
@@ -228,41 +145,34 @@ final class JsonPrism[A] private[circe] (
     val newPath = new Array[PathStep](path.length + 1)
     System.arraycopy(path, 0, newPath, 0, path.length)
     newPath(path.length) = step
-    new JsonPrism[B](newPath, encB, decB)
+    new JsonPrism[B](new JsonFocus.Leaf[B](newPath, encB, decB))
 
-  /** Hand off the current path as a [[JsonTraversal]] prefix with an empty suffix; the new focus
-    * type `B` is the element type of the array at this position. Used by the [[each]] macro; not
-    * meant for direct call by end users.
+  /** Hand off the current path as a [[JsonTraversal]] prefix; the new focus is a Leaf focus over
+    * the iterated element type `B`. Used by the `.each` macro.
     */
   private[circe] def toTraversal[B](using
       encB: Encoder[B],
       decB: Decoder[B],
   ): JsonTraversal[B] =
-    new JsonTraversal[B](path, Array.empty[PathStep], encB, decB)
+    new JsonTraversal[B](path, new JsonFocus.Leaf[B](Array.empty[PathStep], encB, decB))
 
-  /** Hand off the current path as a [[JsonFieldsPrism]] parent path, with the caller-supplied
-    * `fieldNames` enumerating the selected fields under that parent. Used by the [[fields]] macro;
-    * not meant for direct call by end users.
+  /** Hand off the current path as a [[JsonPrism]] whose focus is a Fields focus enumerating
+    * `fieldNames` under that parent. Used by the `.fields` macro. The static return type is
+    * `JsonPrism[B]` — historically named `JsonFieldsPrism[B]`, kept as an alias.
     */
   private[circe] def toFieldsPrism[B](
       fieldNames: Array[String]
-  )(using encB: Encoder[B], decB: Decoder[B]): JsonFieldsPrism[B] =
-    new JsonFieldsPrism[B](path, fieldNames, encB, decB)
+  )(using encB: Encoder[B], decB: Decoder[B]): JsonPrism[B] =
+    new JsonPrism[B](new JsonFocus.Fields[B](path, fieldNames, encB, decB))
 
 object JsonPrism:
 
-  /** Construct a root-level `JsonPrism[S]` — the path is empty, so `modify` applies the user
-    * function to the whole Json after decoding, and `transform` applies to the raw Json at the
-    * root.
-    */
+  /** Construct a root-level `JsonPrism[S]` — the focus is a Leaf with empty path. */
   def apply[S](using enc: Encoder[S], dec: Decoder[S]): JsonPrism[S] =
-    new JsonPrism[S](Array.empty[PathStep], enc, dec)
+    new JsonPrism[S](new JsonFocus.Leaf[S](Array.empty[PathStep], enc, dec))
 
-  /** Drill into a named field via a selector lambda. The macro extracts the field name at compile
-    * time; the resulting `JsonPrism[B]` extends the parent's path by one step and carries the inner
-    * `Encoder[B]` / `Decoder[B]` for encoding and decoding at that position.
-    *
-    * Chain freely: `codecPrism[Person].field(_.address).field(_.street)`.
+  /** `.field(_.x)` — drill into a named field via a selector lambda. The macro extracts the field
+    * name at compile time, summons the inner codec, and emits `widenPath`.
     */
   extension [A](o: JsonPrism[A])
 
@@ -271,55 +181,22 @@ object JsonPrism:
     )(using encB: Encoder[B], decB: Decoder[B]): JsonPrism[B] =
       ${ JsonPrismMacro.fieldImpl[A, B]('o, 'selector, 'encB, 'decB) }
 
-  /** Drill into the `i`-th element of a JSON array. The parent `JsonPrism[A]` must focus a Scala
-    * collection (`Vector[B]`, `List[B]`, `Seq[B]`, etc.); the macro extracts the element type `B`,
-    * summons `Encoder[B]` and `Decoder[B]` from the enclosing scope, and emits a child
-    * `JsonPrism[B]`.
-    *
-    * `i` is free to be a runtime value — the macro does not constant-evaluate it.
-    *
-    * Out-of-range and missing-array cases follow the rest of `JsonPrism`'s forgiving semantics:
-    * `modify` returns the input unchanged.
+  /** `.at(i)` — drill into the i-th element of a JSON array. Requires the parent focus `A` to be a
+    * Scala collection.
     */
   extension [A](o: JsonPrism[A])
 
     transparent inline def at(i: Int): Any =
       ${ JsonPrismMacro.atImpl[A]('o, 'i) }
 
-  /** Split the path at the current array focus and return a [[JsonTraversal]] whose element type is
-    * `A`'s first type argument (Vector/List/Seq/…). Subsequent `.field(_.x)` /
-    * `.selectDynamic("x")` / `.at(i)` calls on the traversal extend its suffix, so one traversal
-    * covers arbitrarily deep paths under the iterated array.
-    *
-    * Usage: `codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(json)` upper-cases
-    * every `items[*].name` in one pass (or `.modify(...)` for the default Ior-bearing surface).
-    */
+  /** `.each` — split into a [[JsonTraversal]] over the iterated array's elements. */
   extension [A](o: JsonPrism[A])
 
     transparent inline def each: Any =
       ${ JsonPrismMacro.eachImpl[A]('o) }
 
-  /** Focus a bundle of named fields of a case class `A` as a Scala 3 NamedTuple — the multi-field
-    * sibling of [[field]]. Arity must be >= 2 (single-selector calls should use `.field(_.x)`
-    * instead).
-    *
-    * {{{
-    *   case class Person(name: String, age: Int, address: Address)
-    *
-    *   val nameAge: JsonFieldsPrism[NamedTuple[("name", "age"), (String, Int)]] =
-    *     codecPrism[Person].fields(_.name, _.age)
-    *
-    *   nameAge.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(personJson)
-    * }}}
-    *
-    * The macro extracts each selector's field name, validates that every name is a case field of
-    * `A` with no duplicates, synthesises the NamedTuple type in selector order, and summons
-    * `Encoder[NT]` / `Decoder[NT]` from the enclosing scope (typically derived via
-    * `KindlingsCodecAsObject.derive`). See the plan's D10 for the full error-message catalogue.
-    *
-    * Full-cover note: when the selector set covers every field of `A`, the result is still a
-    * `JsonFieldsPrism[NT]` — NOT a JsonIso. See D1 of the plan for why: JSON decode can always fail
-    * (the input may not even be a JSON object), so totality can't be witnessed.
+  /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields. Returns a `JsonPrism[NT]`
+    * whose focus is a [[JsonFocus.Fields]] (formerly `JsonFieldsPrism[NT]`).
     */
   extension [A](o: JsonPrism[A])
 
