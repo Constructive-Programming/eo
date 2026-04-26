@@ -28,8 +28,22 @@ class AffineFoldBench extends JmhDefaults:
   private val eoFlagAF: AffineFold[Nested0, String] =
     AffineFold[Nested0, String](_.flag)
 
-  import NestedOptics.{eoFlag => eoFlagOpt, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, mFlag, mOpt3,
-    mOpt6, leaf, leafEmpty, d3, d6}
+  import NestedOptics.{
+    d3,
+    d6,
+    eoFlag => eoFlagOpt,
+    eoN1,
+    eoN2,
+    eoN3,
+    eoN4,
+    eoN5,
+    eoN6,
+    leaf,
+    leafEmpty,
+    mFlag,
+    mOpt3,
+    mOpt6,
+  }
 
   // ---- Composed EO Optionals narrowed to AffineFold via .getOption.
   //      The Monocle `mOpt3` / `mOpt6` peers live on the shared NestedOptics

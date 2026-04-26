@@ -13,8 +13,8 @@ import io.circe.{Codec, Json}
   * `Decoder` from the enclosing scope at the call site, so a wildcard import of this object brings
   * the codecs into scope without further ceremony.
   *
-  * See [[JsonSpecBase]] for the per-spec import-deduplication trait that re-exports the rest of
-  * the boilerplate (`cats.data.{Chain, Ior}`, `io.circe.{Codec, Json}` etc.) at member level.
+  * See [[JsonSpecBase]] for the per-spec import-deduplication trait that re-exports the rest of the
+  * boilerplate (`cats.data.{Chain, Ior}`, `io.circe.{Codec, Json}` etc.) at member level.
   */
 object JsonSpecFixtures:
 
@@ -39,9 +39,9 @@ object JsonSpecFixtures:
     given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
 
   /** Build a basket-shaped root JSON `{ "owner": "Alice", "items": [...] }` from a list of
-    * pre-encoded element JSONs. Used by the traversal specs whose scenarios all share this
-    * "wrap a sequence of element JSONs as a Basket payload" shape — factoring the build once
-    * collapses the per-spec helper clone.
+    * pre-encoded element JSONs. Used by the traversal specs whose scenarios all share this "wrap a
+    * sequence of element JSONs as a Basket payload" shape — factoring the build once collapses the
+    * per-spec helper clone.
     */
   def basketRoot(elems: Seq[Json]): Json =
     Json.obj(

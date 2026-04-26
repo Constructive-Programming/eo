@@ -6,12 +6,13 @@ import io.circe.{Json, JsonObject}
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
   * and the [[JsonFocus]] enum.
   *
-  * '''2026-04-26 rethink.''' This file used to host two walks (`walkPath` strict / `walkPathLenient`
-  * lenient) and two single-step helpers (`stepInto` / `stepIntoLenient`). The four routines had
-  * the same fold shape and only diverged on a single decision: whether a missing field at a Field
-  * step is a hard miss or a `Json.Null` fallback. The duplicates have been collapsed by
-  * factoring the per-step decision out as an `OnMissingField` policy — `walkPath` and `stepInto`
-  * are the only entry points; passing `OnMissingField.Lenient` recovers the lenient semantics.
+  * '''2026-04-26 rethink.''' This file used to host two walks (`walkPath` strict /
+  * `walkPathLenient` lenient) and two single-step helpers (`stepInto` / `stepIntoLenient`). The
+  * four routines had the same fold shape and only diverged on a single decision: whether a missing
+  * field at a Field step is a hard miss or a `Json.Null` fallback. The duplicates have been
+  * collapsed by factoring the per-step decision out as an `OnMissingField` policy — `walkPath` and
+  * `stepInto` are the only entry points; passing `OnMissingField.Lenient` recovers the lenient
+  * semantics.
   */
 private[circe] object JsonWalk:
 
@@ -62,8 +63,8 @@ private[circe] object JsonWalk:
             if idx < 0 || idx >= arr.length then Left(JsonFailure.IndexOutOfRange(step, arr.length))
             else Right((arr(idx), parents :+ arr))
 
-  /** Walk an entire `path` from `json`, accumulating parents at each step. Strict by default —
-    * pass `OnMissingField.Lenient` to tolerate missing field-steps as `Json.Null` leaves.
+  /** Walk an entire `path` from `json`, accumulating parents at each step. Strict by default — pass
+    * `OnMissingField.Lenient` to tolerate missing field-steps as `Json.Null` leaves.
     */
   def walkPath(
       json: Json,

@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-
 import org.openjdk.jmh.annotations.*
 
 import cats.data.{Const, ZipList}

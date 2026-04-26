@@ -297,12 +297,12 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     * `<named-tuple>.asInstanceOf[Tuple].apply(i).asInstanceOf[t]` read.
     *
     * The 5-line opening (signature + `MultiBuildContext.from` call) is shared with
-    * [[buildMultiIso]]. Both functions implement different output shapes — a Lens with focus
-    * + complement vs an Iso with focus alone — so the prelude is the only meaningful overlap.
-    * Merging them into one body via an `if fullCover` switch was tried and made the per-arm
-    * codegen (~100 lines each, with substantively different output Expr shapes) significantly
-    * harder to follow; the 5-line signature overlap is the price of keeping the two arms as
-    * separate, focused functions.
+    * [[buildMultiIso]]. Both functions implement different output shapes — a Lens with focus +
+    * complement vs an Iso with focus alone — so the prelude is the only meaningful overlap. Merging
+    * them into one body via an `if fullCover` switch was tried and made the per-arm codegen (~100
+    * lines each, with substantively different output Expr shapes) significantly harder to follow;
+    * the 5-line signature overlap is the price of keeping the two arms as separate, focused
+    * functions.
     */
   private def buildMultiLens[S: Type](
       cc: CaseClass[S],
@@ -494,10 +494,9 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
 
   /** Shared prelude for the multi-selector codegen arms. Both [[buildMultiLens]] and
-    * [[buildMultiIso]] start with the same setup — resolve the source type's `TypeRepr`, list
-    * its case fields, then look up the selector-order symbols + member types. Bundling the
-    * intermediate values lets the per-arm bodies destructure-import what they need with a single
-    * line.
+    * [[buildMultiIso]] start with the same setup — resolve the source type's `TypeRepr`, list its
+    * case fields, then look up the selector-order symbols + member types. Bundling the intermediate
+    * values lets the per-arm bodies destructure-import what they need with a single line.
     */
   private case class MultiBuildContext(
       sTpe: TypeRepr,
@@ -552,8 +551,8 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
     val idxExpr = scala.quoted.Expr(idx)
     '{ $carrier.asInstanceOf[Tuple].apply($idxExpr).asInstanceOf[T] }
 
-  /** Selector-AST extraction lives on the shared [[MacroSelectors]] helper — see its docs for
-    * the receiver-is-Ident rule that lets nested paths (`_.a.b`) fall through cleanly.
+  /** Selector-AST extraction lives on the shared [[MacroSelectors]] helper — see its docs for the
+    * receiver-is-Ident rule that lets nested paths (`_.a.b`) fall through cleanly.
     */
   private def extractFieldName(t: Term): Option[String] =
     MacroSelectors.extractSingleFieldName(t)

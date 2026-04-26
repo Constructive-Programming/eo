@@ -20,8 +20,22 @@ import dev.constructive.eo.bench.fixture.*
   */
 class OptionalBench extends JmhDefaults:
 
-  import NestedOptics.{eoFlag, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, mFlag, mOpt3, mOpt6, leaf,
-    leafEmpty, d3, d6}
+  import NestedOptics.{
+    d3,
+    d6,
+    eoFlag,
+    eoN1,
+    eoN2,
+    eoN3,
+    eoN4,
+    eoN5,
+    eoN6,
+    leaf,
+    leafEmpty,
+    mFlag,
+    mOpt3,
+    mOpt6,
+  }
 
   // ---- Composed EO optionals — Lens chain composed directly with the
   //      leaf Optional via cross-carrier `.andThen`. The Monocle peer

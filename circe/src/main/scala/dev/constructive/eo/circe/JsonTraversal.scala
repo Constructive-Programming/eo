@@ -15,8 +15,8 @@ import io.circe.{Decoder, Encoder, Json}
   *   - `focus: JsonFocus[A]` — the per-element focus, applied to every element of the array.
   *
   * The Fields-vs-Leaf split lives entirely inside `focus` (per the `JsonFocus` enum), so the four
-  * legacy carriers — `JsonTraversal` over a single field, `JsonFieldsTraversal` over a NamedTuple
-  * — collapse to one class. The compatibility alias [[JsonFieldsTraversal]] points back here.
+  * legacy carriers — `JsonTraversal` over a single field, `JsonFieldsTraversal` over a NamedTuple —
+  * collapse to one class. The compatibility alias [[JsonFieldsTraversal]] points back here.
   *
   * Two call-surface tiers (unchanged):
   *

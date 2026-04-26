@@ -6,7 +6,6 @@ import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
-
 import cats.instances.arraySeq.given
 import cats.instances.list.given
 

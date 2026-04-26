@@ -6,7 +6,6 @@ import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
-
 import cats.instances.arraySeq.given
 
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a

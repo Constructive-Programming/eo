@@ -92,9 +92,9 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
   // them as one helper plus per-test assertions removes the duplication while
   // keeping each scenario's intent visible at the call site.
 
-  /** Build a basket whose `items` array holds `elems`, then run the multi-field
-    * traversal `.modify(f)`. The basket-wrapper build lives on `JsonSpecFixtures`;
-    * this helper just pipes through the traversal under test.
+  /** Build a basket whose `items` array holds `elems`, then run the multi-field traversal
+    * `.modify(f)`. The basket-wrapper build lives on `JsonSpecFixtures`; this helper just pipes
+    * through the traversal under test.
     */
   private def runFieldsModify(
       elems: Seq[Json],

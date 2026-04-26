@@ -11,7 +11,7 @@ import io.circe.syntax.*
   */
 class JsonTraversalSpec extends JsonSpecBase:
 
-  import JsonSpecFixtures.{Order, Basket}
+  import JsonSpecFixtures.{Basket, Order}
 
   // ---- Default Ior surface — modify --------------------------------
 

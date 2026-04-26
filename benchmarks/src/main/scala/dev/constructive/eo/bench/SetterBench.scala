@@ -15,8 +15,21 @@ import dev.constructive.eo.bench.fixture.*
   */
 class SetterBench extends JmhDefaults:
 
-  import NestedOptics.{eoSetValue, eoS1, eoS2, eoS3, eoS4, eoS5, eoS6, mSetValue, mSet3, mSet6,
-    leaf, d3, d6}
+  import NestedOptics.{
+    d3,
+    d6,
+    eoS1,
+    eoS2,
+    eoS3,
+    eoS4,
+    eoS5,
+    eoS6,
+    eoSetValue,
+    leaf,
+    mSet3,
+    mSet6,
+    mSetValue,
+  }
 
   @Benchmark def eoModify_0: Nested0 = eoSetValue.modify(_ + 1)(leaf)
   @Benchmark def mModify_0: Nested0 = mSetValue.modify(_ + 1)(leaf)

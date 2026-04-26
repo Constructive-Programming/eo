@@ -16,8 +16,21 @@ import dev.constructive.eo.data.Forgetful.given
   */
 class GetterBench extends JmhDefaults:
 
-  import NestedOptics.{eoGetValue, eoG1, eoG2, eoG3, eoG4, eoG5, eoG6, mGetValue, mGet3, mGet6,
-    leaf, d3, d6}
+  import NestedOptics.{
+    d3,
+    d6,
+    eoG1,
+    eoG2,
+    eoG3,
+    eoG4,
+    eoG5,
+    eoG6,
+    eoGetValue,
+    leaf,
+    mGet3,
+    mGet6,
+    mGetValue,
+  }
 
   @Benchmark def eoGet_0: Int = eoGetValue.get(leaf)
   @Benchmark def mGet_0: Int = mGetValue.get(leaf)

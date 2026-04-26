@@ -12,8 +12,8 @@ import io.circe.Json
   * forwarders out of the per-class bodies — both `JsonPrism` and `JsonTraversal` rely on it to
   * thread the `parseInput*` step uniformly.
   *
-  * Concrete classes supply six per-Json hooks (three Ior-bearing, three silent); the trait wires
-  * up the public surface in terms of those hooks.
+  * Concrete classes supply six per-Json hooks (three Ior-bearing, three silent); the trait wires up
+  * the public surface in terms of those hooks.
   */
 private[circe] trait JsonOpticOps[A]:
 

@@ -6,7 +6,6 @@ import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
-
 import cats.instances.arraySeq.*
 
 /** PowerSeries-backed Traversal over a nested focus, paired against a hand-written iterative

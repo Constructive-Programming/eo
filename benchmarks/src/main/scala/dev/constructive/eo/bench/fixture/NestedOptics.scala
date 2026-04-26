@@ -3,8 +3,12 @@ package bench
 package fixture
 
 import dev.constructive.eo.data.Affine
-import dev.constructive.eo.optics.{Getter => EoGetter, Lens => EoLens, Optional => EoOptional,
-  Setter => EoSetter}
+import dev.constructive.eo.optics.{
+  Getter => EoGetter,
+  Lens => EoLens,
+  Optional => EoOptional,
+  Setter => EoSetter,
+}
 
 import monocle.{Getter => MGetter, Lens => MLens, Optional => MOptional, Setter => MSetter}
 
@@ -125,14 +129,19 @@ object NestedOptics:
 
   val mS1: MSetter[Nested1, Nested0] =
     MSetter[Nested1, Nested0](f => x => x.copy(n = f(x.n)))
+
   val mS2: MSetter[Nested2, Nested1] =
     MSetter[Nested2, Nested1](f => x => x.copy(n = f(x.n)))
+
   val mS3: MSetter[Nested3, Nested2] =
     MSetter[Nested3, Nested2](f => x => x.copy(n = f(x.n)))
+
   val mS4: MSetter[Nested4, Nested3] =
     MSetter[Nested4, Nested3](f => x => x.copy(n = f(x.n)))
+
   val mS5: MSetter[Nested5, Nested4] =
     MSetter[Nested5, Nested4](f => x => x.copy(n = f(x.n)))
+
   val mS6: MSetter[Nested6, Nested5] =
     MSetter[Nested6, Nested5](f => x => x.copy(n = f(x.n)))
 

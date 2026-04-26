@@ -241,10 +241,15 @@ object JsonPrismMacro:
 
     // Duplicate selectors: compile error (D10). Routed through the shared selector-validation
     // helper in `eo-generics` (this module already depends on generics for the lens macro).
-    dev.constructive.eo.generics.MacroSelectors.reportDuplicateSelectors(
-      s"$who[${Type.show[A]}]",
-      resolved,
-    )
+    dev
+      .constructive
+      .eo
+      .generics
+      .MacroSelectors
+      .reportDuplicateSelectors(
+        s"$who[${Type.show[A]}]",
+        resolved,
+      )
 
     val selectedNames: List[String] = resolved.map(_._2)
 
@@ -388,8 +393,8 @@ object JsonPrismMacro:
       case Lambda(_, Typed(Select(_, name), _))      => Some(name)
       case _                                         => None
 
-  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — routes through
-    * the shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to keep the strict
+  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — routes through the
+    * shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to keep the strict
     * receiver-is-Ident rule consistent with the lens macro's selector parsing.
     */
   private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =

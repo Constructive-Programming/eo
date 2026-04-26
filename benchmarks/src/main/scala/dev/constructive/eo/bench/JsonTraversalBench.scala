@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-
 import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.circe.{JsonFailure, JsonPrism, codecPrism}

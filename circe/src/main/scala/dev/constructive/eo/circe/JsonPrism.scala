@@ -35,8 +35,8 @@ import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
   *     Failures (path miss, non-object / non-array parent, out-of-range index, decode failure)
   *     accumulate into `Chain[JsonFailure]`. Partial success returns `Ior.Both(chain, inputJson)`.
   *   - '''`*Unsafe` (silent).''' `modifyUnsafe` / `transformUnsafe` / `placeUnsafe` /
-  *     `transferUnsafe` / `getOptionUnsafe` preserve the pre-v0.2 forgiving behaviour byte-for-byte:
-  *     silent pass-through on the modify family, `Option[A]` on the read family.
+  *     `transferUnsafe` / `getOptionUnsafe` preserve the pre-v0.2 forgiving behaviour
+  *     byte-for-byte: silent pass-through on the modify family, `Option[A]` on the read family.
   *
   * Failure diagnostics on the abstract `Optic` surface: the inherited `to` returns
   * `Left((DecodingFailure, HCursor))` so callers routing through the generic cats-eo extensions can
@@ -125,8 +125,8 @@ final class JsonPrism[A] private[circe] (
   // ---- Path widening (used by the macro extensions) ----------------
 
   /** Extend the leaf focus's path by a field step and swap to a narrower codec pair. Only valid
-    * when the current focus is a Leaf (the `field` macro never composes Fields focuses with
-    * further `.field`). Used by [[field]] / `selectDynamic`.
+    * when the current focus is a Leaf (the `field` macro never composes Fields focuses with further
+    * `.field`). Used by [[field]] / `selectDynamic`.
     */
   private[circe] def widenPath[B](
       step: String

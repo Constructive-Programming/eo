@@ -47,14 +47,14 @@ type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
   * twin instance bodies that only differed in the last line of `composeFrom`. They now share a
   * single `Forget.assocFor[F]` builder that takes the pull-side `redistribute: F[D] => F[B]` as a
   * parameter. The `assocForgetMonad` / `assocForgetComonad` givens reduce to `assocFor[F](pure)` /
-  * `assocFor[F](_.coflatMap(_))` plumbing, the priority ordering is preserved, and the wider
-  * "users can opt into the Comonad pull explicitly" contract is unchanged.
+  * `assocFor[F](_.coflatMap(_))` plumbing, the priority ordering is preserved, and the wider "users
+  * can opt into the Comonad pull explicitly" contract is unchanged.
   */
 object Forget extends LowPriorityForgetInstances:
 
-  /** Strategy for "redistribute the inner `from` across the F-context" on the pull side. The
-    * Monad form ignores the `F[D]` and lifts a single `inner.from(xd)` via `pure`; the Comonad
-    * form `coflatMap`s `inner.from` over the existing F[D]. Other lawful strategies (e.g.
+  /** Strategy for "redistribute the inner `from` across the F-context" on the pull side. The Monad
+    * form ignores the `F[D]` and lifts a single `inner.from(xd)` via `pure`; the Comonad form
+    * `coflatMap`s `inner.from` over the existing F[D]. Other lawful strategies (e.g.
     * `Distributive[F].cosequence` over an inner `F[F[B]]`) could be added as further instances.
     */
   trait ForgetPull[F[_]]:
@@ -75,8 +75,8 @@ object Forget extends LowPriorityForgetInstances:
         Applicative[F].pure(fromInner(xd))
 
   /** Shared `AssociativeFunctor[Forget[F], Xo, Xi]` body — push uses `flatMap`, pull threads the
-    * inner's `from` through the supplied [[ForgetPull]] strategy, hands the resulting `F[B]` to
-    * the outer's `from`.
+    * inner's `from` through the supplied [[ForgetPull]] strategy, hands the resulting `F[B]` to the
+    * outer's `from`.
     *
     * Both `assocForgetMonad` (Monad pull) and `assocForgetComonad` (Comonad pull) reduce to
     * `assocFor[F]` plus a strategy. The duplicated 14-line bodies that used to live on each
@@ -176,8 +176,7 @@ trait LowPriorityForgetInstances:
     *
     * @group Instances
     */
-  given assocForgetComonad[F[_]: FlatMap: Comonad, Xo, Xi]
-      : AssociativeFunctor[Forget[F], Xo, Xi] =
+  given assocForgetComonad[F[_]: FlatMap: Comonad, Xo, Xi]: AssociativeFunctor[Forget[F], Xo, Xi] =
     Forget.assocFor[F, Xo, Xi](
       new Forget.ForgetPull[F]:
 
