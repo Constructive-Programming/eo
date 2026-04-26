@@ -22,8 +22,7 @@ import org.apache.avro.generic.IndexedRecord
   *
   * Mirrors `dev.constructive.eo.circe`'s architecture decisions on `Json` for the Avro carrier:
   * `IndexedRecord` plays the role of `Json`, `vulcan.Codec[A]` plays the role of
-  * `(io.circe.Encoder[A], io.circe.Decoder[A])`, and `AvroFailure` plays the role of
-  * `JsonFailure`.
+  * `(io.circe.Encoder[A], io.circe.Decoder[A])`, and `AvroFailure` plays the role of `JsonFailure`.
   *
   * '''Gap-1 (per the eo-avro plan).''' [[PathStep]] is duplicated, not shared with eo-circe — the
   * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. The
