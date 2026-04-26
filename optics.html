@@ -137,51 +137,87 @@ mermaid.initialize({
         reference see the Scaladoc.</p>
         
         <h2 id="family-taxonomy" class="section"><a class="anchor-link left" href="#family-taxonomy"><i class="icofont-laika link">&#xef71;</i></a>Family taxonomy</h2>
-        <p>Every family on this page is a specialisation of the same
-        <code>Optic[S, T, A, B, F]</code> trait, differing only in the carrier
-        <code>F[_, _]</code>. The tree below indexes each family by its carrier.
-        Click a leaf to jump to its section.</p>
+        <p>Every family is a specialisation of the same <code>Optic[S, T, A, B, F]</code>
+        trait, differing only in the carrier <code>F[_, _]</code>. The diagram below is
+        a Hasse-style <strong>composition lattice</strong>: an edge <code>A → B</code> means <em>every
+        <code>A</code> is a <code>B</code></em> (the carrier admits the conversion natively, often
+        with a fused <code>.andThen</code> overload). When you compose two optics, the
+        result family is their <strong>join</strong> — the lowest node both originals can
+        reach by following edges down. So <code>Iso.andThen(Lens)</code> lands on
+        <code>Lens</code>; <code>Lens.andThen(Prism)</code> lands on <code>Optional</code>;
+        <code>Optional.andThen(Traversal)</code> lands on <code>Traversal</code>; any read-only
+        chain lands on <code>Fold</code>. Click a node to jump to its section.</p>
         <pre class="mermaid">flowchart TD
-  root[&quot;Optic[S, T, A, B, F]&quot;]
-  root --&gt; Forgetful
-  root --&gt; Tuple2
-  root --&gt; Either
-  root --&gt; Affine
-  root --&gt; SetterF
-  root --&gt; ForgetF[&quot;Forget[F]&quot;]
-  root --&gt; PowerSeries
-  root --&gt; Grate
-  root --&gt; Kaleidoscope
-  root --&gt; AlgLensF[&quot;AlgLens[F]&quot;]
-  root --&gt; FixedN[&quot;FixedTraversal[N]&quot;]
-  Forgetful --&gt; Iso
-  Forgetful --&gt; Getter
-  Tuple2 --&gt; Lens
-  Either --&gt; Prism
-  Affine --&gt; Optional
-  Affine --&gt; AffineFold
-  SetterF --&gt; Setter
-  ForgetF --&gt; Fold
-  ForgetF --&gt; TraversalForEach[&quot;Traversal.forEach&quot;]
-  PowerSeries --&gt; TraversalEach[&quot;Traversal.each&quot;]
-  Grate --&gt; GrateLeaf[&quot;Grate&quot;]
-  Kaleidoscope --&gt; KaleidoscopeLeaf[&quot;Kaleidoscope&quot;]
-  AlgLensF --&gt; AlgLensLeaf[&quot;AlgLens&quot;]
-  FixedN --&gt; FixedLeaf[&quot;FixedTraversal&quot;]
+  %% Read-write spine — Iso ⊏ {Lens, Prism} ⊏ Optional ⊏ Traversal ⊏ Setter.
+  %% Each downward edge is a native specialisation; composing two adjacent
+  %% families lands at the lower node by following both arrows down.
+  Iso --&gt; Lens
+  Iso --&gt; Prism
+  Lens --&gt; Optional
+  Prism --&gt; Optional
+  Optional --&gt; Traversal
+  Traversal --&gt; Setter
+
+  %% Read-only branch — drops the write side (T = Unit). Every read-write
+  %% family has a read-only counterpart that fans into Fold.
+  Iso --&gt; Getter
+  Lens --&gt; Getter
+  Optional --&gt; AffineFold
+  Getter --&gt; Fold
+  AffineFold --&gt; Fold
+  Traversal --&gt; Fold
+
+  %% eo-only families that don&#39;t fit the classical lattice.
+  %% Iso → Grate is the only natural inbound edge to Grate
+  %% (gap analysis §0.3).
+  Iso --&gt; Grate
+
+  %% AlgLens[F] and Kaleidoscope are composition sinks: inbound
+  %% bridges from the classical families exist but no outbound
+  %% Composer ships. Dotted edges mark *degraded* conversions
+  %% (the fold loses classifier or applicative shape).
+  Optional -.-&gt; AlgLens[&quot;AlgLens[F]&quot;]
+  AlgLens -.-&gt; Setter
+  AlgLens -.-&gt; Fold
+  Kaleidoscope -.-&gt; Fold
+
+  %% FixedTraversal[N] sits beside Traversal, not below: same rebuild
+  %% semantics, fixed arity, but no Composer in or out
+  %% (composition-terminal leaf).
+  FixedTraversal[&quot;FixedTraversal[N] — leaf, fixed arity&quot;]
+
   click Iso &quot;#iso&quot;
-  click Getter &quot;#getter&quot;
   click Lens &quot;#lens&quot;
   click Prism &quot;#prism&quot;
   click Optional &quot;#optional&quot;
-  click AffineFold &quot;#affinefold&quot;
+  click Traversal &quot;#traversal&quot;
   click Setter &quot;#setter&quot;
+  click Getter &quot;#getter&quot;
+  click AffineFold &quot;#affinefold&quot;
   click Fold &quot;#fold&quot;
-  click TraversalForEach &quot;#traversal&quot;
-  click TraversalEach &quot;#traversal&quot;
-  click GrateLeaf &quot;#grate&quot;
-  click KaleidoscopeLeaf &quot;#kaleidoscope&quot;
-  click AlgLensLeaf &quot;#alglens&quot;
-  click FixedLeaf &quot;#traversal&quot;</pre>
+  click Grate &quot;#grate&quot;
+  click AlgLens &quot;#alglens&quot;
+  click Kaleidoscope &quot;#kaleidoscope&quot;
+  click FixedTraversal &quot;#traversal&quot;</pre>
+        <p>How to read the diagram in practice:</p>
+        <ul>
+          <li><strong>Same-family compose</strong>: result stays in that family. <code>Lens ∘ Lens =
+Lens</code>, <code>Prism ∘ Prism = Prism</code>, <code>Iso ∘ Iso = Iso</code>.</li>
+          <li><strong>Cross-family compose</strong>: walk down from each input until they
+          meet. <code>Lens ∘ Prism</code> walks Lens → Optional and Prism → Optional,
+          meet at <code>Optional</code>. <code>Iso ∘ Setter</code> walks Iso → Lens → Optional →
+          Traversal → Setter, meet at <code>Setter</code>.</li>
+          <li><strong>Read-only families on the right branch absorb their read-write
+          parents</strong>. Composing into a Getter / AffineFold / Fold drops the
+          write side; the result stays read-only.</li>
+          <li><strong>Solid edges = native, fused, or <code>Composer</code>-resolved</strong>. <strong>Dotted
+          edges = degraded conversion</strong> that loses information (documented
+          in the AlgLens / Kaleidoscope sections).</li>
+        </ul>
+        <p>The full 14×14 cell-by-cell composition matrix lives in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>docs/research/2026-04-23-composition-gap-analysis.md</code></a>;
+        that&#39;s the source of truth — the lattice above is the geometric view
+        of the same data.</p>
         <p>The standalone <code>Review</code> family sits outside this tree — it
         deliberately doesn&#39;t extend <code>Optic</code> (no read side to fit the
         trait&#39;s <code>to</code> contract) and lives in its own section below.</p>
@@ -241,7 +277,7 @@ mermaid.initialize({
 </span><span class="keyword">val</span><span> </span><span class="identifier">funGrate</span><span> = </span><span class="type-name">Grate</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">1</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">2</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">doubled</span><span> = </span><span class="identifier">funGrate</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="identifier">f</span><span>)
-</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14765/0x00007fe29234fa80@3879bf6a
+</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14798/0x00007fccfe3673a8@664ce68a
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">true</span><span>)
 </span><span class="comment">// res5: Int = 2
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">false</span><span>)
