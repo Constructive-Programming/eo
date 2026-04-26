@@ -14,9 +14,8 @@ import dev.constructive.eo.optics.{
   Traversal => EoTraversal,
 }
 import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.data.{Forget, Forgetful}
+import dev.constructive.eo.data.Forget
 import dev.constructive.eo.data.Forget.given
-import dev.constructive.eo.data.Forgetful.given
 
 import cats.instances.list.given
 

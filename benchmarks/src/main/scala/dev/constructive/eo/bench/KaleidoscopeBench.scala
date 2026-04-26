@@ -8,7 +8,6 @@ import org.openjdk.jmh.annotations.*
 import cats.data.{Const, ZipList}
 
 import dev.constructive.eo.data.Kaleidoscope
-import dev.constructive.eo.data.Kaleidoscope.given
 
 /** JMH bench for the Kaleidoscope carrier — EO-only (Monocle 3.3.0 ships no Kaleidoscope, verified
   * the same way as Grate: no matches under `cellar search-external`). Two fixtures per plan D7, one
