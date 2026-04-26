@@ -1,6 +1,7 @@
 package dev.constructive.eo
 
 import scala.collection.immutable.ArraySeq
+import scala.language.implicitConversions
 
 import cats.instances.arraySeq.*
 import org.scalacheck.Prop.forAll
@@ -12,8 +13,6 @@ import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
 import data.PowerSeries
 import data.PowerSeries.given
-
-import scala.language.implicitConversions
 
 /** Behaviour-level spec for `PowerSeries`, `Traversal.each`, and the
   * `Composer[Tuple2 → PowerSeries]` bridge.

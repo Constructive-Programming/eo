@@ -1,11 +1,11 @@
 package dev.constructive.eo
 
+import scala.language.implicitConversions
+
 import org.specs2.mutable.Specification
 
 import optics.{BijectionIso, GetReplaceLens, MendTearPrism, Optional, PickMendPrism}
 import data.Affine
-
-import scala.language.implicitConversions
 
 /** Dedicated coverage for the 21 fused `.andThen` overloads on the concrete optic subclasses
   * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`).

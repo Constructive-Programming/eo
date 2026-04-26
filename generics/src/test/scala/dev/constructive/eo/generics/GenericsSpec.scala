@@ -1,13 +1,13 @@
 package dev.constructive.eo
 package generics
 
+import scala.language.implicitConversions
+
 import dev.constructive.eo.generics.samples.{Employee, LTree, Person, Shape, Tree}
 import dev.constructive.eo.optics.Optic.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
-
-import scala.language.implicitConversions
 
 /** Behavioural specs for macro-derived Lens and Prism.
   *

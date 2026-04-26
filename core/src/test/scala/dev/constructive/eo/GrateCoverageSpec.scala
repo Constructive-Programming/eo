@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import scala.language.implicitConversions
+
 import cats.Representable
 import cats.instances.function.given
 import org.specs2.mutable.Specification
@@ -8,8 +10,6 @@ import data.Grate
 import data.Grate.given
 import optics.Optic
 import optics.Optic.*
-
-import scala.language.implicitConversions
 
 /** Additional Grate coverage targeting the factory + composeFrom paths that the existing
   * `GrateSpec` doesn't touch.

@@ -1,12 +1,12 @@
 package dev.constructive.eo
 
+import scala.language.implicitConversions
+
 import cats.data.{Const, ZipList}
-import org.scalacheck.Prop.forAll
 import org.scalacheck.Cogen
+import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
-
-import scala.language.implicitConversions
 
 /** Reflector-law unit tests per the plan's D6 (Unit 1). These exist in place of a full discipline
   * `ReflectorTests` RuleSet: plan Open Question #6 defers promotion to discipline until the

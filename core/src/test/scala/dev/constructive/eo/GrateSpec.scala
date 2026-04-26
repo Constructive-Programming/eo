@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import scala.language.implicitConversions
+
 import cats.instances.function.given
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
@@ -9,8 +11,6 @@ import data.Grate
 import data.Grate.given
 import optics.Optic
 import optics.Optic.*
-
-import scala.language.implicitConversions
 
 /** In-core smoke spec for the Grate carrier. Pins down the generic `Grate.apply[F: Representable]`
   * factory on `Function1[Boolean, *]` — the Naperian "record-of-pairs" shape that every

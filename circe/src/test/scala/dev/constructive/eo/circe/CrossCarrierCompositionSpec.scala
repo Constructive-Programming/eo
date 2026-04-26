@@ -1,5 +1,7 @@
 package dev.constructive.eo.circe
 
+import scala.language.implicitConversions
+
 import cats.data.Ior
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
@@ -7,8 +9,6 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
 import org.specs2.mutable.Specification
-
-import scala.language.implicitConversions
 
 /** Unit 7: cross-carrier composition regression specs.
   *

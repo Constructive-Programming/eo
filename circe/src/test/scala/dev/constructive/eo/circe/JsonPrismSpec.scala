@@ -1,15 +1,15 @@
 package dev.constructive.eo.circe
 
+import scala.language.implicitConversions
+
 import cats.data.{Chain, Ior}
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
-import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
-
-import scala.language.implicitConversions
 
 /** Behaviour spec for [[JsonPrism]] — the cursor-backed Prism from `Json` to a native type, with
   * field-drilling sugar.

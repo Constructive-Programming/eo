@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import scala.language.implicitConversions
+
 import cats.instances.int.given
 import cats.instances.list.given
 import cats.instances.option.given
@@ -31,8 +33,6 @@ import data.Forget.given
 import data.Affine.given
 import data.AlgLens.given
 import data.SetterF.given
-
-import scala.language.implicitConversions
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
   * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,

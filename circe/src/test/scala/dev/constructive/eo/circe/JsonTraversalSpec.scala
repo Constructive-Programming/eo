@@ -1,8 +1,8 @@
 package dev.constructive.eo.circe
 
-import io.circe.syntax.*
-
 import scala.language.implicitConversions
+
+import io.circe.syntax.*
 
 /** Behaviour spec for [[JsonTraversal]] — the array-walking traversal introduced alongside the
   * prism in v0.1 and retargeted to the default-Ior / `*Unsafe` pair in v0.2.
