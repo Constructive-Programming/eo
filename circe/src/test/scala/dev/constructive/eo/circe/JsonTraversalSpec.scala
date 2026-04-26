@@ -42,15 +42,11 @@ class JsonTraversalSpec extends JsonSpecBase:
         case _ => ko(s"expected Ior.Left, got $result")
     }
 
-    // Both Ior.Both scenarios below share the same "build a basket with `items` ↦ arr,
-    // then `.items.each.name.modify(_.toUpperCase)`" shape. Factoring this once
-    // collapses the previous 5-line clone of the basket-build-then-run pattern.
+    // Both Ior.Both scenarios below share the basket-build pattern; the
+    // `JsonSpecFixtures.basketRoot` helper builds the wrapper JSON, this
+    // local helper just pipes it through the traversal under test.
     def runItemsModify(elems: Json*): Ior[Chain[JsonFailure], Json] =
-      val root = Json.obj(
-        "owner" -> Json.fromString("Alice"),
-        "items" -> Json.arr(elems*),
-      )
-      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(root)
+      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(JsonSpecFixtures.basketRoot(elems))
 
     "return Ior.Both when one element's suffix misses (element left unchanged, failure recorded)" >> {
       // A basket whose items array has one malformed element (a string

@@ -93,18 +93,18 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
   // keeping each scenario's intent visible at the call site.
 
   /** Build a basket whose `items` array holds `elems`, then run the multi-field
-    * traversal `.modify(f)`. The `f` is identity by default — for tests that just
-    * want to observe the chain, identity is the cheapest non-throwing focus.
+    * traversal `.modify(f)`. The basket-wrapper build lives on `JsonSpecFixtures`;
+    * this helper just pipes through the traversal under test.
     */
   private def runFieldsModify(
       elems: Seq[Json],
       f: NamePrice => NamePrice = identity,
   ): Ior[Chain[JsonFailure], Json] =
-    val root = Json.obj(
-      "owner" -> Json.fromString("Alice"),
-      "items" -> Json.arr(elems*),
-    )
-    codecPrism[Basket].items.each.fields(_.name, _.price).modify(f)(root)
+    codecPrism[Basket]
+      .items
+      .each
+      .fields(_.name, _.price)
+      .modify(f)(JsonSpecFixtures.basketRoot(elems))
 
   "JsonFieldsTraversal default-Ior per-element atomicity" should {
 
@@ -143,33 +143,31 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
         case _ => ko(s"expected Ior.Both, got $result")
     }
 
-    "element with BOTH fields missing contributes TWO entries to the chain" >> {
-      val good = Order("x", 1.0, qty = 1).asJson
-      val emptyElem = Json.obj("qty" -> Json.fromInt(2))
-      val result = runFieldsModify(Seq(good, emptyElem))
-      result match
+    // Both scenarios below assert the same Ior.Both shape (chain has length 2,
+    // contains PathMissing(name) and PathMissing(price)) — they only differ in
+    // how the missing-name / missing-price elements are arranged in the input
+    // array. Factor the assertion once to remove the 10-line clone.
+    def assertNamePriceMissing(elems: Seq[Json]) =
+      runFieldsModify(elems) match
         case Ior.Both(chain, _) =>
           (chain.length === 2L)
             .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("name"))) === true)
             .and(
               chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("price"))) === true
             )
-        case _ => ko(s"expected Ior.Both, got $result")
+        case other => ko(s"expected Ior.Both, got $other")
+
+    "element with BOTH fields missing contributes TWO entries to the chain" >> {
+      val good = Order("x", 1.0, qty = 1).asJson
+      val emptyElem = Json.obj("qty" -> Json.fromInt(2))
+      assertNamePriceMissing(Seq(good, emptyElem))
     }
 
     "accumulate across elements: two different broken elements contribute two entries" >> {
       val missingName = Json.obj("price" -> Json.fromDoubleOrNull(1.0), "qty" -> Json.fromInt(1))
       val missingPrice = Json.obj("name" -> Json.fromString("y"), "qty" -> Json.fromInt(2))
       val good = Order("z", 3.0, qty = 3).asJson
-      val result = runFieldsModify(Seq(missingName, missingPrice, good))
-      result match
-        case Ior.Both(chain, _) =>
-          (chain.length === 2L)
-            .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("name"))) === true)
-            .and(
-              chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("price"))) === true
-            )
-        case _ => ko(s"expected Ior.Both, got $result")
+      assertNamePriceMissing(Seq(missingName, missingPrice, good))
     }
   }
 

@@ -1,7 +1,7 @@
 package dev.constructive.eo.circe
 
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
-import io.circe.Codec
+import io.circe.{Codec, Json}
 
 /** Shared ADT fixtures + Circe codecs for the circe-test specs.
   *
@@ -37,3 +37,14 @@ object JsonSpecFixtures:
 
   object Basket:
     given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+
+  /** Build a basket-shaped root JSON `{ "owner": "Alice", "items": [...] }` from a list of
+    * pre-encoded element JSONs. Used by the traversal specs whose scenarios all share this
+    * "wrap a sequence of element JSONs as a Basket payload" shape — factoring the build once
+    * collapses the per-spec helper clone.
+    */
+  def basketRoot(elems: Seq[Json]): Json =
+    Json.obj(
+      "owner" -> Json.fromString("Alice"),
+      "items" -> Json.arr(elems*),
+    )
