@@ -1,8 +1,6 @@
 package dev.constructive.eo.circe
 
 import io.circe.syntax.*
-import io.circe.{Codec, Json}
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Behaviour spec for [[JsonTraversal]] — the array-walking traversal introduced alongside the
   * prism in v0.1 and retargeted to the default-Ior / `*Unsafe` pair in v0.2.
@@ -13,7 +11,7 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
   */
 class JsonTraversalSpec extends JsonSpecBase:
 
-  import JsonTraversalSpec.*
+  import JsonSpecFixtures.{Order, Basket}
 
   // ---- Default Ior surface — modify --------------------------------
 
@@ -213,14 +211,4 @@ class JsonTraversalSpec extends JsonSpecBase:
     }
   }
 
-object JsonTraversalSpec:
-
-  case class Order(name: String)
-
-  object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
-
-  case class Basket(owner: String, items: Vector[Order])
-
-  object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+// Order / Basket come from JsonSpecFixtures — see the import above.
