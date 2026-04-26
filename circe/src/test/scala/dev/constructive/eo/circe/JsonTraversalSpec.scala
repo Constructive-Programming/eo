@@ -1,10 +1,8 @@
 package dev.constructive.eo.circe
 
-import cats.data.{Chain, Ior}
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
-import org.specs2.mutable.Specification
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Behaviour spec for [[JsonTraversal]] — the array-walking traversal introduced alongside the
   * prism in v0.1 and retargeted to the default-Ior / `*Unsafe` pair in v0.2.
@@ -13,7 +11,7 @@ import org.specs2.mutable.Specification
   * reasons across elements, and prefix-walk failures return `Ior.Left` (no Json fallback — there's
   * nothing to iterate).
   */
-class JsonTraversalSpec extends Specification:
+class JsonTraversalSpec extends JsonSpecBase:
 
   import JsonTraversalSpec.*
 

@@ -1,10 +1,8 @@
 package dev.constructive.eo.circe
 
-import cats.data.{Chain, Ior}
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
-import org.specs2.mutable.Specification
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Behaviour spec for the `Json | String` union-input overloads on every public JSON optic. Covers
   * three shapes per class: (1) happy-path parse on a String that's well-formed JSON, (2)
@@ -16,7 +14,7 @@ import org.specs2.mutable.Specification
   * the widening to `Json | String` is structurally uniform (one shared `parseInputIor` /
   * `parseInputUnsafe` helper in `JsonFailure`).
   */
-class StringInputSpec extends Specification:
+class StringInputSpec extends JsonSpecBase:
 
   import JsonSpecFixtures.{Address, Person}
   import StringInputSpec.*

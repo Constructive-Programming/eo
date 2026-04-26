@@ -1,10 +1,8 @@
 package dev.constructive.eo.circe
 
-import cats.data.{Chain, Ior}
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
-import org.specs2.mutable.Specification
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Behaviour spec for [[JsonFieldsTraversal]] — the multi-field array traversal produced by
   * `JsonTraversal.fields(_.a, _.b, ...)` (Unit 4).
@@ -12,7 +10,7 @@ import org.specs2.mutable.Specification
   * Exercises per-element atomicity (NamedTuple cannot be partial — D4), per-element failure
   * accumulation, and the new `place` / `transfer` surface.
   */
-class JsonFieldsTraversalSpec extends Specification:
+class JsonFieldsTraversalSpec extends JsonSpecBase:
 
   import JsonFieldsTraversalSpec.*
   import JsonFieldsTraversalSpec.given
