@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-
 import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.bench.fixture.*
@@ -27,31 +26,15 @@ import dev.constructive.eo.optics.Optic.*
   */
 class AffineFoldBench extends JmhDefaults:
 
-  // ---- Leaf + per-level lenses (shared fixture; eoFlagOpt is the
-  //      same as fixture.eoFlag, re-aliased here to keep the local
-  //      name the bench's @Benchmark methods reference) -------------
-
   private val eoFlagAF: AffineFold[Nested0, String] =
     AffineFold[Nested0, String](_.flag)
 
-  import NestedOptics.{
-    eoFlag => eoFlagOpt,
-    eoN1,
-    eoN2,
-    eoN3,
-    eoN4,
-    eoN5,
-    eoN6,
-    mFlag,
-    mN1,
-    mN2,
-    mN3,
-    mN4,
-    mN5,
-    mN6,
-  }
+  import NestedOptics.{eoFlag => eoFlagOpt, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, mFlag, mOpt3,
+    mOpt6, leaf, leafEmpty, d3, d6}
 
-  // ---- Composed Optionals narrowed to AffineFold --------------------
+  // ---- Composed EO Optionals narrowed to AffineFold via .getOption.
+  //      The Monocle `mOpt3` / `mOpt6` peers live on the shared NestedOptics
+  //      fixture.
 
   private val eoOpt3 =
     eoN3.andThen(eoN2).andThen(eoN1).andThen(eoFlagOpt)
@@ -64,25 +47,6 @@ class AffineFoldBench extends JmhDefaults:
       .andThen(eoN2)
       .andThen(eoN1)
       .andThen(eoFlagOpt)
-
-  // `fromOptional` here takes Optional[S, S, A, A]; the composed values
-  // above are Optic values that are structurally Optional but typed as
-  // `Optic`. We hit them through the generic `.getOption` extension on
-  // `Optic[_, _, _, _, Affine]` instead of narrowing via `fromOptional`,
-  // which would require the concrete Optional type. Same observable
-  // `.getOption` path.
-
-  private val mOpt3 = mN3.andThen(mN2).andThen(mN1).andThen(mFlag)
-
-  private val mOpt6 =
-    mN6.andThen(mN5).andThen(mN4).andThen(mN3).andThen(mN2).andThen(mN1).andThen(mFlag)
-
-  // ---- Inputs -------------------------------------------------------
-
-  private val leaf: Nested0 = Nested.DefaultLeaf
-  private val leafEmpty: Nested0 = Nested.EmptyFlagLeaf
-  private val d3: Nested3 = Nested.Default3
-  private val d6: Nested6 = Nested.Default6
 
   // ---- Depth 0 ------------------------------------------------------
 

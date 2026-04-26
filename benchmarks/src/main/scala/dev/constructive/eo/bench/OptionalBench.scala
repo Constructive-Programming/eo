@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package bench
 
-
 import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.bench.fixture.*
@@ -21,31 +20,12 @@ import dev.constructive.eo.bench.fixture.*
   */
 class OptionalBench extends JmhDefaults:
 
-  // ---- Leaf optionals + per-level lenses (shared fixture) -----------
+  import NestedOptics.{eoFlag, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, mFlag, mOpt3, mOpt6, leaf,
+    leafEmpty, d3, d6}
 
-  import NestedOptics.{
-    eoFlag,
-    eoN1,
-    eoN2,
-    eoN3,
-    eoN4,
-    eoN5,
-    eoN6,
-    mFlag,
-    mN1,
-    mN2,
-    mN3,
-    mN4,
-    mN5,
-    mN6,
-  }
-
-  // ---- Composed optionals — Lens chain composed directly with the
-  //      leaf Optional via cross-carrier `.andThen`, which summons a
-  //      `Morph[Tuple2, Affine]` (carrying `Composer[Tuple2, Affine]`)
-  //      on the hop from the Lens chain to the Optional. Dropping the
-  //      `<: Tuple` bound on `Affine.assoc` is what lets that
-  //      cross-existential composition type-check.
+  // ---- Composed EO optionals — Lens chain composed directly with the
+  //      leaf Optional via cross-carrier `.andThen`. The Monocle peer
+  //      `mOpt3` / `mOpt6` lives on the shared NestedOptics fixture.
 
   private val eoOpt3 =
     eoN3.andThen(eoN2).andThen(eoN1).andThen(eoFlag)
@@ -58,18 +38,6 @@ class OptionalBench extends JmhDefaults:
       .andThen(eoN2)
       .andThen(eoN1)
       .andThen(eoFlag)
-
-  private val mOpt3 = mN3.andThen(mN2).andThen(mN1).andThen(mFlag)
-
-  private val mOpt6 =
-    mN6.andThen(mN5).andThen(mN4).andThen(mN3).andThen(mN2).andThen(mN1).andThen(mFlag)
-
-  // ---- Inputs -------------------------------------------------------
-
-  private val leaf: Nested0 = Nested.DefaultLeaf
-  private val leafEmpty: Nested0 = Nested.EmptyFlagLeaf
-  private val d3: Nested3 = Nested.Default3
-  private val d6: Nested6 = Nested.Default6
 
   // ---- Depth 0 (leaf) -----------------------------------------------
 

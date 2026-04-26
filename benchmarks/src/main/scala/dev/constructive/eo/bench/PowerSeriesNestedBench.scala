@@ -6,7 +6,6 @@ import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
-import dev.constructive.eo.data.PowerSeries
 import dev.constructive.eo.optics.{Lens => EoLens, Traversal => EoTraversal}
 import dev.constructive.eo.optics.Optic.*
 
