@@ -42,14 +42,22 @@ class JsonTraversalSpec extends JsonSpecBase:
         case _ => ko(s"expected Ior.Left, got $result")
     }
 
+    // Both Ior.Both scenarios below share the same "build a basket with `items` ↦ arr,
+    // then `.items.each.name.modify(_.toUpperCase)`" shape. Factoring this once
+    // collapses the previous 5-line clone of the basket-build-then-run pattern.
+    def runItemsModify(elems: Json*): Ior[Chain[JsonFailure], Json] =
+      val root = Json.obj(
+        "owner" -> Json.fromString("Alice"),
+        "items" -> Json.arr(elems*),
+      )
+      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(root)
+
     "return Ior.Both when one element's suffix misses (element left unchanged, failure recorded)" >> {
       // A basket whose items array has one malformed element (a string
       // instead of an Order).
       val good = Order("x").asJson
       val malformed = Json.fromString("oops")
-      val arr = Json.arr(good, malformed, Order("z").asJson)
-      val root = Json.obj("owner" -> Json.fromString("Alice"), "items" -> arr)
-      val result = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(root)
+      val result = runItemsModify(good, malformed, Order("z").asJson)
       result match
         case Ior.Both(chain, out) =>
           val expectedArr = Json.arr(
@@ -66,13 +74,12 @@ class JsonTraversalSpec extends JsonSpecBase:
     }
 
     "accumulate multiple per-element failures across the array" >> {
-      val arr = Json.arr(
-        Json.fromString("oops"), // not an object
-        Json.obj(), // object missing "name"
-        Order("z").asJson, // succeeds
-      )
-      val root = Json.obj("owner" -> Json.fromString("Alice"), "items" -> arr)
-      val result = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(root)
+      val result =
+        runItemsModify(
+          Json.fromString("oops"), // not an object
+          Json.obj(), // object missing "name"
+          Order("z").asJson, // succeeds
+        )
       result match
         case Ior.Both(chain, out) =>
           // chain length 2: NotAnObject + PathMissing

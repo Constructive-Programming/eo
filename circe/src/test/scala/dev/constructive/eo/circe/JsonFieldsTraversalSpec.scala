@@ -84,6 +84,27 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
   }
 
   // ---- Per-element atomicity (D4) ---------------------------------
+  //
+  // The three scenarios below all share the shape "build a basket with a fixed
+  // element list, run `.items.each.fields(_.name, _.price).modify(f)`, assert the
+  // chain's content". The previous hand-written copies of that build-and-run
+  // pattern were the source of the 7-line and 17-line jscpd clones; factoring
+  // them as one helper plus per-test assertions removes the duplication while
+  // keeping each scenario's intent visible at the call site.
+
+  /** Build a basket whose `items` array holds `elems`, then run the multi-field
+    * traversal `.modify(f)`. The `f` is identity by default — for tests that just
+    * want to observe the chain, identity is the cheapest non-throwing focus.
+    */
+  private def runFieldsModify(
+      elems: Seq[Json],
+      f: NamePrice => NamePrice = identity,
+  ): Ior[Chain[JsonFailure], Json] =
+    val root = Json.obj(
+      "owner" -> Json.fromString("Alice"),
+      "items" -> Json.arr(elems*),
+    )
+    codecPrism[Basket].items.each.fields(_.name, _.price).modify(f)(root)
 
   "JsonFieldsTraversal default-Ior per-element atomicity" should {
 
@@ -94,14 +115,11 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
         "qty" -> Json.fromInt(2),
         // "price" missing
       )
-      val arr = Json.arr(good, brokenElem, Order("z", 3.0, qty = 3).asJson)
-      val root = Json.obj("owner" -> Json.fromString("Alice"), "items" -> arr)
       val result =
-        codecPrism[Basket]
-          .items
-          .each
-          .fields(_.name, _.price)
-          .modify(nt => (name = nt.name.toUpperCase, price = nt.price * 2))(root)
+        runFieldsModify(
+          Seq(good, brokenElem, Order("z", 3.0, qty = 3).asJson),
+          nt => (name = nt.name.toUpperCase, price = nt.price * 2),
+        )
       result match
         case Ior.Both(chain, out) =>
           val outArr = out.hcursor.downField("items").focus.flatMap(_.asArray)
@@ -128,14 +146,7 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
     "element with BOTH fields missing contributes TWO entries to the chain" >> {
       val good = Order("x", 1.0, qty = 1).asJson
       val emptyElem = Json.obj("qty" -> Json.fromInt(2))
-      val arr = Json.arr(good, emptyElem)
-      val root = Json.obj("owner" -> Json.fromString("Alice"), "items" -> arr)
-      val result =
-        codecPrism[Basket]
-          .items
-          .each
-          .fields(_.name, _.price)
-          .modify(nt => (name = nt.name, price = nt.price))(root)
+      val result = runFieldsModify(Seq(good, emptyElem))
       result match
         case Ior.Both(chain, _) =>
           (chain.length === 2L)
@@ -150,14 +161,7 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
       val missingName = Json.obj("price" -> Json.fromDoubleOrNull(1.0), "qty" -> Json.fromInt(1))
       val missingPrice = Json.obj("name" -> Json.fromString("y"), "qty" -> Json.fromInt(2))
       val good = Order("z", 3.0, qty = 3).asJson
-      val arr = Json.arr(missingName, missingPrice, good)
-      val root = Json.obj("owner" -> Json.fromString("Alice"), "items" -> arr)
-      val result =
-        codecPrism[Basket]
-          .items
-          .each
-          .fields(_.name, _.price)
-          .modify(nt => (name = nt.name, price = nt.price))(root)
+      val result = runFieldsModify(Seq(missingName, missingPrice, good))
       result match
         case Ior.Both(chain, _) =>
           (chain.length === 2L)
