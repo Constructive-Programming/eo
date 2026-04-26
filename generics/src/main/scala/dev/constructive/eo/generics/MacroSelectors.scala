@@ -4,8 +4,8 @@ import scala.quoted.*
 
 /** Quote-context selector-AST helpers shared between [[LensMacro]] (this module) and
   * `JsonPrismMacro` in the circe integration module. Both macros parse single-field selector
-  * lambdas (`_.fieldName`) and validate that no field appears twice in a multi-selector list;
-  * the parsing and validation routines were duplicated across the two files.
+  * lambdas (`_.fieldName`) and validate that no field appears twice in a multi-selector list; the
+  * parsing and validation routines were duplicated across the two files.
   *
   * '''2026-04-26 dedup.''' Both macros now call into [[MacroSelectors]] from inside their splice
   * bodies. The macro-quote-context plumbing is the same on both sides — the only place the macros
@@ -42,7 +42,9 @@ object MacroSelectors:
     *
     * Calls `report.errorAndAbort` on the first duplicate found, never returns. Pure side-effect.
     */
-  def reportDuplicateSelectors(using Quotes)(
+  def reportDuplicateSelectors(using
+      Quotes
+  )(
       who: String,
       resolved: List[(Int, String)],
   ): Unit =

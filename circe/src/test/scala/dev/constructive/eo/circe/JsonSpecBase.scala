@@ -15,12 +15,12 @@ import org.specs2.mutable.Specification
   * }}}
   *
   * Re-exporting the type-level names through this trait brings them into every subclass's scope
-  * automatically. Spec bodies that want `cats.data.Chain` write it as just `Chain` (lifted via
-  * the trait member `type Chain[A] = cats.data.Chain[A]` plus the `val Chain` re-export).
+  * automatically. Spec bodies that want `cats.data.Chain` write it as just `Chain` (lifted via the
+  * trait member `type Chain[A] = cats.data.Chain[A]` plus the `val Chain` re-export).
   *
   * Note: extension methods (e.g. `io.circe.syntax.EncoderOps.asJson`) STILL need a per-file
-  * `import io.circe.syntax.*` — Scala 3's `export` doesn't propagate extension-method scope
-  * across compilation units the way a wildcard import does.
+  * `import io.circe.syntax.*` — Scala 3's `export` doesn't propagate extension-method scope across
+  * compilation units the way a wildcard import does.
   */
 trait JsonSpecBase extends Specification:
 

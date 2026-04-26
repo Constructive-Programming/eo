@@ -24,7 +24,7 @@ import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
   * Optic-trait diagnostics (`navigateCursor` returning an `ACursor` for the (DecodingFailure,
   * HCursor) shape).
   */
-private[circe] sealed abstract class JsonFocus[A]:
+sealed abstract private[circe] class JsonFocus[A]:
 
   /** Codec for the focused value `A`. For Leaf focuses this is the user's `Encoder[A]` /
     * `Decoder[A]`; for Fields focuses this is the codec for the synthesised NamedTuple type.
@@ -45,7 +45,7 @@ private[circe] sealed abstract class JsonFocus[A]:
     * body — `modifyIor`, `placeIor`, the post-fields-read on `Fields.modifyIor`. Both Leaf and
     * Fields share this exact decode-then-rebuild-or-fail shape.
     */
-  protected final def decodeOrFail(
+  final protected def decodeOrFail(
       cur: Json,
       json: Json,
   )(onHit: A => Json): Ior[Chain[JsonFailure], Json] =
@@ -56,7 +56,7 @@ private[circe] sealed abstract class JsonFocus[A]:
   /** Read variant of [[decodeOrFail]] — decode `cur`; success → `Ior.Right(a)`, failure →
     * `Ior.Left(Chain(DecodeFailed(terminalStep, ...)))`. Used by both Leaf and Fields `readIor`.
     */
-  protected final def decodeOrLeft(cur: Json): Ior[Chain[JsonFailure], A] =
+  final protected def decodeOrLeft(cur: Json): Ior[Chain[JsonFailure], A] =
     decoder.decodeJson(cur) match
       case Right(a) => Ior.Right(a)
       case Left(df) => Ior.Left(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)))
@@ -109,8 +109,8 @@ private[circe] sealed abstract class JsonFocus[A]:
 private[circe] object JsonFocus:
 
   /** Single-leaf focus — reaches an `A` via the `path` walk and reads / writes it through the
-    * user-supplied codec. Powers `JsonPrism[A]` and the per-element step of `JsonTraversal[A]`
-    * when the user did `.each.<field>` style chains.
+    * user-supplied codec. Powers `JsonPrism[A]` and the per-element step of `JsonTraversal[A]` when
+    * the user did `.each.<field>` style chains.
     */
   final class Leaf[A] private[circe] (
       private[circe] val path: Array[PathStep],
@@ -216,12 +216,13 @@ private[circe] object JsonFocus:
       * present. Missing fields accumulate as `PathMissing` failures.
       */
     private def readFields(obj: JsonObject): Either[Chain[JsonFailure], JsonObject] =
-      val (chain, sub) = fieldNames.toVector.foldLeft((Chain.empty[JsonFailure], JsonObject.empty)) {
-        case ((chain, sub), name) =>
-          obj(name) match
-            case None    => (chain :+ JsonFailure.PathMissing(PathStep.Field(name)), sub)
-            case Some(v) => (chain, sub.add(name, v))
-      }
+      val (chain, sub) =
+        fieldNames.toVector.foldLeft((Chain.empty[JsonFailure], JsonObject.empty)) {
+          case ((chain, sub), name) =>
+            obj(name) match
+              case None    => (chain :+ JsonFailure.PathMissing(PathStep.Field(name)), sub)
+              case Some(v) => (chain, sub.add(name, v))
+        }
       Either.cond(chain.isEmpty, sub, chain)
 
     /** Overlay the encoder's output for a focus value `a` onto `parent`. Encoders that omit a
