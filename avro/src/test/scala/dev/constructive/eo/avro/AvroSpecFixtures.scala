@@ -1,9 +1,8 @@
 package dev.constructive.eo.avro
 
-import java.io.ByteArrayOutputStream
-
 import cats.data.Chain
 import cats.syntax.all.*
+import java.io.ByteArrayOutputStream
 import org.apache.avro.Schema
 import org.apache.avro.generic.{
   GenericData,

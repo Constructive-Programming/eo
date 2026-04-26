@@ -1,11 +1,10 @@
 package dev.constructive.eo.avro
 
-import java.io.ByteArrayInputStream
-
 import scala.util.control.NonFatal
 
 import cats.Eq
 import cats.data.{Chain, Ior}
+import java.io.ByteArrayInputStream
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
 import org.apache.avro.io.DecoderFactory
