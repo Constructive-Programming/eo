@@ -1,6 +1,8 @@
 package dev.constructive.eo
 
+import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
+import vulcan.Codec
 
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
   *
@@ -36,5 +38,18 @@ package object avro:
     * threaded `Json`.
     */
   type Avro = IndexedRecord
+
+  /** Root-level Prism from Avro to a native type `S`. Reads `S`'s schema off the in-scope
+    * `Codec[S]` (per OQ-avro-5). Alias for [[AvroPrism.codecPrism]] that reads more naturally when
+    * composed with `.field`.
+    */
+  def codecPrism[S](using codec: Codec[S]): AvroPrism[S] = AvroPrism.codecPrism[S]
+
+  /** Root-level Prism from Avro to a native type `S`, with an explicit reader schema. Use when the
+    * schema is loaded at runtime from an `.avsc` file or a Schema Registry rather than derived from
+    * the codec.
+    */
+  def codecPrism[S](schema: Schema)(using codec: Codec[S]): AvroPrism[S] =
+    AvroPrism.codecPrism[S](schema)
 
 end avro
