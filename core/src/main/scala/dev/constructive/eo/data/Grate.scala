@@ -171,18 +171,12 @@ object Grate:
     *   }}}
     */
   def apply[F[_], A](using F: Representable[F]): Optic[F[A], F[A], A, A, Grate] =
-    new Optic[F[A], F[A], A, A, Grate]:
-      type X = F.Representation
-      val to: F[A] => (A, X => A) = fa =>
-        val read: X => A = F.index(fa)
-        // `a` is the canonical focus value; we have no way to synthesise a concrete Representation
-        // in-house (Representable doesn't expose a "canonical" index, and creating one from
-        // `tabulate(identity).index` is circular). We stash a null sentinel — `.modify` /
-        // `.replace` / same-carrier `.andThen` all ignore this field (only the rebuild drives
-        // `from`). Users who need a well-defined focus should prefer [[Grate.at]] with an
-        // explicit representative index.
-        (null.asInstanceOf[A], read)
-      val from: ((A, X => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+    // No canonical Representation in-house (Representable doesn't expose a default index, and
+    // `tabulate(identity).index` is circular), so the focus position carries a null sentinel.
+    // `.modify` / `.replace` / same-carrier `.andThen` all ignore this field (only the rebuild
+    // drives `from`). Users who need a well-defined focus should prefer [[Grate.at]] with an
+    // explicit representative index.
+    representableGrate[F, A](F)(_ => null.asInstanceOf[A])
 
   /** Representable-indexed Grate factory, parameterised by a representative index `repr0`. Use this
     * when downstream code (laws, extensions) needs the focus `a` returned by `.to` to have a
@@ -191,11 +185,21 @@ object Grate:
     * @group Factories
     */
   def at[F[_], A](F: Representable[F])(repr0: F.Representation): Optic[F[A], F[A], A, A, Grate] =
+    representableGrate[F, A](F)(read => read(repr0))
+
+  /** Shared `apply` / `at` body — given a `Representable[F]`, build an
+    * `Optic[F[A], F[A], A, A, Grate]` where the focus position is whatever `pickFocus` extracts
+    * from the per-call `read: F.Representation => A`. Both `apply` (null sentinel) and `at`
+    * (`read(repr0)`) reduce to a call here.
+    */
+  private def representableGrate[F[_], A](
+      F: Representable[F]
+  )(pickFocus: (F.Representation => A) => A): Optic[F[A], F[A], A, A, Grate] =
     new Optic[F[A], F[A], A, A, Grate]:
       type X = F.Representation
       val to: F[A] => (A, X => A) = fa =>
         val read: X => A = F.index(fa)
-        (read(repr0), read)
+        (pickFocus(read), read)
       val from: ((A, X => A)) => F[A] = { case (_, k) => F.tabulate(k) }
 
   /** Polymorphic homogeneous-tuple Grate factory — a single declaration that works for any `T <:

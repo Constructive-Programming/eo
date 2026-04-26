@@ -239,16 +239,12 @@ object JsonPrismMacro:
         (i, name)
       }
 
-    // Duplicate selectors: compile error (D10).
-    val byName: Map[String, List[Int]] = resolved.groupMap(_._2)(_._1)
-    byName.find(_._2.sizeIs > 1).foreach {
-      case (name, positions) =>
-        val sorted = positions.sorted
-        report.errorAndAbort(
-          s"$who[${Type.show[A]}]: duplicate field selector '$name' at positions"
-            + s" ${sorted.mkString(", ")}. Each field may appear at most once."
-        )
-    }
+    // Duplicate selectors: compile error (D10). Routed through the shared selector-validation
+    // helper in `eo-generics` (this module already depends on generics for the lens macro).
+    dev.constructive.eo.generics.MacroSelectors.reportDuplicateSelectors(
+      s"$who[${Type.show[A]}]",
+      resolved,
+    )
 
     val selectedNames: List[String] = resolved.map(_._2)
 
@@ -392,24 +388,9 @@ object JsonPrismMacro:
       case Lambda(_, Typed(Select(_, name), _))      => Some(name)
       case _                                         => None
 
-  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — so `_.a.b` parses
-    * as `None` (caller emits the "nested paths not supported" message) rather than the misleading
-    * `Some("b")`. Used by the `.fields` multi-field macro where the precise "single-field only"
-    * rule from D10 matters at selector validation time.
-    *
-    * Matches eo-generics' `Select(Ident(_), name)` check which requires the Select's receiver to be
-    * the lambda parameter itself.
+  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — routes through
+    * the shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to keep the strict
+    * receiver-is-Ident rule consistent with the lens macro's selector parsing.
     */
   private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
-    import quotes.reflect.*
-    def oneHop(body: Term): Option[String] =
-      body match
-        case Inlined(_, _, inner)   => oneHop(inner)
-        case Typed(inner, _)        => oneHop(inner)
-        case Select(Ident(_), name) => Some(name)
-        case _                      => None
-    t match
-      case Inlined(_, _, inner) => extractSingleFieldName(inner)
-      case Typed(inner, _)      => extractSingleFieldName(inner)
-      case Lambda(_, body)      => oneHop(body)
-      case _                    => None
+    dev.constructive.eo.generics.MacroSelectors.extractSingleFieldName(t)

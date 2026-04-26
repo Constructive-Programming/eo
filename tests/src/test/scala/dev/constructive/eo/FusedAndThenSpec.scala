@@ -130,27 +130,26 @@ class FusedAndThenSpec extends Specification:
     chained.tear(7) === Left(7)
   }
 
+  // Both MendTearPrism.andThen(GetReplaceLens) and andThen(Optional) start from the
+  // same "prism over Inner that hits when n >= 0" outer — factor it once so the two
+  // scenarios below only express the per-fusion assertion shape.
+  private val nonNegInnerPrism: MendTearPrism[Inner, Inner, Inner, Inner] =
+    new MendTearPrism[Inner, Inner, Inner, Inner](
+      tear = i => if i.n >= 0 then Right(i) else Left(i),
+      mend = identity,
+    )
+
   "MendTearPrism.andThen(GetReplaceLens) produces an Optional" >> {
-    val outerPrism: MendTearPrism[Inner, Inner, Inner, Inner] =
-      new MendTearPrism[Inner, Inner, Inner, Inner](
-        tear = i => if i.n >= 0 then Right(i) else Left(i),
-        mend = identity,
-      )
     val chained: Optional[Inner, Inner, Int, Int] =
-      outerPrism.andThen(innerLens)
+      nonNegInnerPrism.andThen(innerLens)
     chained.getOrModify(Inner(5, "x")) === Right(5)
     chained.getOrModify(Inner(-3, "y")) === Left(Inner(-3, "y"))
     chained.reverseGet(Inner(5, "x"), 99) === Inner(99, "x")
   }
 
   "MendTearPrism.andThen(Optional) produces an Optional" >> {
-    val outerPrism: MendTearPrism[Inner, Inner, Inner, Inner] =
-      new MendTearPrism[Inner, Inner, Inner, Inner](
-        tear = i => if i.n >= 0 then Right(i) else Left(i),
-        mend = identity,
-      )
     val chained: Optional[Inner, Inner, Int, Int] =
-      outerPrism.andThen(adultOpt)
+      nonNegInnerPrism.andThen(adultOpt)
     chained.getOrModify(Inner(20, "a")) === Right(20)
     chained.getOrModify(Inner(-5, "neg")) === Left(Inner(-5, "neg")) // outer miss
     chained.getOrModify(Inner(15, "m")) === Left(Inner(15, "m")) // inner miss
