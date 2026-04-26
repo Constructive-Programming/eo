@@ -12,7 +12,6 @@ import dev.constructive.eo.optics.{
   Prism => EoPrism,
   Traversal => EoTraversal,
 }
-import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.data.Forget
 import dev.constructive.eo.data.Forget.given
 

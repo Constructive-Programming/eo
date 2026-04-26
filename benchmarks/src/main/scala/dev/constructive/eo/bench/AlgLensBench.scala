@@ -7,8 +7,6 @@ import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.data.AlgLens
 import dev.constructive.eo.data.AlgLens.given
-import dev.constructive.eo.optics.{Lens => EoLens, Traversal => EoTraversal}
-import dev.constructive.eo.optics.Optic.*
 
 import cats.instances.list.*
 

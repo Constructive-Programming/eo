@@ -5,7 +5,6 @@ import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.data.Forgetful.given
-import dev.constructive.eo.optics.Optic.*
 
 /** `Getter.get` at the leaf plus deep manual composition, paired EO vs Monocle.
   *

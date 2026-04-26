@@ -6,8 +6,6 @@ import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
 
-import dev.constructive.eo.optics.{Prism => EoPrism, Traversal => EoTraversal}
-import dev.constructive.eo.optics.Optic.*
 
 import cats.instances.arraySeq.given
 

@@ -5,7 +5,6 @@ import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.optics.AffineFold
-import dev.constructive.eo.optics.Optic.*
 
 /** `AffineFold.getOption` on a `Nested0.flag: Option[String]` focus at varying composition depth,
   * paired against Monocle's `Optional.getOption` (Monocle 3.x does not ship a standalone

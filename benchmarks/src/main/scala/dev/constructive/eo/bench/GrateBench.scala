@@ -5,7 +5,6 @@ import org.openjdk.jmh.annotations.*
 
 import dev.constructive.eo.data.Grate
 import dev.constructive.eo.data.Grate.given
-import dev.constructive.eo.optics.Optic.*
 
 /** JMH bench for the Grate carrier — EO-only (Monocle 3.3.0 ships no Grate, verified via
   * `cellar search-external dev.optics:monocle-core_3:3.3.0 Grate` returning no results). The v1
