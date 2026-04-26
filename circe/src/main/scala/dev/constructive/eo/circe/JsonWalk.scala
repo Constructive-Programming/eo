@@ -3,17 +3,15 @@ package dev.constructive.eo.circe
 import cats.syntax.foldable.*
 import io.circe.{Json, JsonObject}
 
-/** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]],
-  * [[JsonFieldsPrism]], [[JsonTraversal]], and [[JsonFieldsTraversal]].
+/** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
+  * and the [[JsonFocus]] enum.
   *
-  * The walk shape is identical across all four: descend an `Array[PathStep]`, at each step either
-  * enter a JsonObject by name or a JsonArray by index, accumulate the parent into a Vector for the
-  * eventual rebuild phase, and short-circuit on the first failure.
-  *
-  * Encoding the loop as a `foldLeftM` over the path with `Either[JsonFailure, _]` as the target
-  * monad keeps the walks pure (no `var`, no `while`, no early `return`, no mutation of the parents
-  * buffer) while preserving the same fail-fast semantics. Callers that need a different result
-  * monad (e.g. `Option`, `Ior`) walk in `Either` first and then transform the result.
+  * '''2026-04-26 rethink.''' This file used to host two walks (`walkPath` strict / `walkPathLenient`
+  * lenient) and two single-step helpers (`stepInto` / `stepIntoLenient`). The four routines had
+  * the same fold shape and only diverged on a single decision: whether a missing field at a Field
+  * step is a hard miss or a `Json.Null` fallback. The duplicates have been collapsed by
+  * factoring the per-step decision out as an `OnMissingField` policy — `walkPath` and `stepInto`
+  * are the only entry points; passing `OnMissingField.Lenient` recovers the lenient semantics.
   */
 private[circe] object JsonWalk:
 
@@ -23,17 +21,28 @@ private[circe] object JsonWalk:
     */
   type State = (Json, Vector[AnyRef])
 
-  /** One step of a strict walk. Either descend into the named field of `cur.asObject`, or into the
-    * indexed element of `cur.asArray`; in either case, append the container to `parents`. Failure
-    * cases surface as the matching `JsonFailure`.
-    *
-    * Used by the `modify` / `get` families on [[JsonPrism]] / [[JsonFieldsPrism]] /
-    * [[JsonTraversal]] / [[JsonFieldsTraversal]], where a missing field at any step is a hard miss.
+  /** Per-step policy controlling how missing field-steps behave. */
+  enum OnMissingField:
+
+    /** Missing field at a Field step → `Left(JsonFailure.PathMissing(step))`. The strict default,
+      * used by every read / decoded-modify path.
+      */
+    case Strict
+
+    /** Missing field at a Field step → `Right((Json.Null, parents :+ obj))`. Used by the per-
+      * element raw-transform / place paths on a Traversal, where a missing-field element is treated
+      * as "synthesise a Null leaf and let the user-supplied f or value take over".
+      */
+    case Lenient
+
+  /** One step of a walk under the given `OnMissingField` policy. Index steps always fail strictly
+    * (out-of-range indices and non-array parents are uniform errors regardless of policy).
     */
   def stepInto(
       step: PathStep,
       cur: Json,
       parents: Vector[AnyRef],
+      policy: OnMissingField,
   ): Either[JsonFailure, State] =
     step match
       case PathStep.Field(name) =>
@@ -41,8 +50,11 @@ private[circe] object JsonWalk:
           case None      => Left(JsonFailure.NotAnObject(step))
           case Some(obj) =>
             obj(name) match
-              case None    => Left(JsonFailure.PathMissing(step))
               case Some(c) => Right((c, parents :+ obj))
+              case None    =>
+                policy match
+                  case OnMissingField.Strict  => Left(JsonFailure.PathMissing(step))
+                  case OnMissingField.Lenient => Right((Json.Null, parents :+ obj))
       case PathStep.Index(idx) =>
         cur.asArray match
           case None      => Left(JsonFailure.NotAnArray(step))
@@ -50,63 +62,26 @@ private[circe] object JsonWalk:
             if idx < 0 || idx >= arr.length then Left(JsonFailure.IndexOutOfRange(step, arr.length))
             else Right((arr(idx), parents :+ arr))
 
-  /** One step of a lenient walk — same as [[stepInto]] except missing fields are silently filled
-    * with `Json.Null` rather than failing. Index steps still fail on non-array parents and on
-    * out-of-range indices.
-    *
-    * Used by the `transform` / `place` families on [[JsonPrism]] / [[JsonTraversal]], which write a
-    * value at the leaf regardless of whether the source path contained one — a missing field
-    * effectively gets created on the way back up.
-    */
-  def stepIntoLenient(
-      step: PathStep,
-      cur: Json,
-      parents: Vector[AnyRef],
-  ): Either[JsonFailure, State] =
-    step match
-      case PathStep.Field(name) =>
-        cur.asObject match
-          case None      => Left(JsonFailure.NotAnObject(step))
-          case Some(obj) =>
-            Right((obj(name).getOrElse(Json.Null), parents :+ obj))
-      case PathStep.Index(_) => stepInto(step, cur, parents)
-
-  /** Walk an entire `path` from `json`, accumulating parents at each step. Returns
-    * `Left(firstFailure)` on the first miss; on success returns the terminal value and the parent
-    * Vector.
+  /** Walk an entire `path` from `json`, accumulating parents at each step. Strict by default —
+    * pass `OnMissingField.Lenient` to tolerate missing field-steps as `Json.Null` leaves.
     */
   def walkPath(
       json: Json,
       path: Array[PathStep],
+      policy: OnMissingField = OnMissingField.Strict,
   ): Either[JsonFailure, State] =
     path.toVector.foldLeftM[[T] =>> Either[JsonFailure, T], State]((json, Vector.empty)) {
-      case ((cur, parents), step) => stepInto(step, cur, parents)
+      case ((cur, parents), step) => stepInto(step, cur, parents, policy)
     }
 
-  /** Lenient counterpart to [[walkPath]]: tolerates missing fields by replacing the leaf with
-    * `Json.Null`. Used by the `transform` / `place` paths on [[JsonPrism]] / [[JsonTraversal]].
-    */
-  def walkPathLenient(
-      json: Json,
-      path: Array[PathStep],
-  ): Either[JsonFailure, State] =
-    path.toVector.foldLeftM[[T] =>> Either[JsonFailure, T], State]((json, Vector.empty)) {
-      case ((cur, parents), step) => stepIntoLenient(step, cur, parents)
-    }
-
-  /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used by
-    * walks that need to point at "the last step we tried to interpret" when a non-step-shaped
-    * failure arises (e.g. a decode failure on the assembled leaf, or a "terminal value isn't an
-    * array" on a [[JsonTraversal]] prefix).
+  /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
+    * when a non-step-shaped failure (decode failure, "terminal value isn't an array") needs to
+    * point at "the last step we tried to interpret".
     */
   inline def terminalOf(path: Array[PathStep]): PathStep =
     if path.length == 0 then PathStep.Field("") else path(path.length - 1)
 
-  /** Rebuild a Json from the leaf back to the root, using the parents collected during a walk.
-    * Pairs each `parents(j)` with `path(j)` and folds right-to-left, applying [[rebuildStep]] at
-    * each level. The result is `parent₀(parent₁(... parentₙ(newLeaf) ...))` — the root JSON with
-    * the new leaf spliced through every collected parent.
-    */
+  /** Rebuild a Json from the leaf back to the root, using the parents collected during a walk. */
   def rebuildPath(
       parents: Vector[AnyRef],
       path: Array[PathStep],

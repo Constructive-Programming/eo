@@ -40,6 +40,27 @@ private[circe] sealed abstract class JsonFocus[A]:
     */
   protected def terminalStep: PathStep
 
+  /** Decode `cur` and either fold the resulting `A` into a rebuild Json (`onHit`), or surface a
+    * `DecodeFailed` against the terminal step. Threaded through every Ior-bearing decoded-modify
+    * body — `modifyIor`, `placeIor`, the post-fields-read on `Fields.modifyIor`. Both Leaf and
+    * Fields share this exact decode-then-rebuild-or-fail shape.
+    */
+  protected final def decodeOrFail(
+      cur: Json,
+      json: Json,
+  )(onHit: A => Json): Ior[Chain[JsonFailure], Json] =
+    decoder.decodeJson(cur) match
+      case Right(a) => Ior.Right(onHit(a))
+      case Left(df) => Ior.Both(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)), json)
+
+  /** Read variant of [[decodeOrFail]] — decode `cur`; success → `Ior.Right(a)`, failure →
+    * `Ior.Left(Chain(DecodeFailed(terminalStep, ...)))`. Used by both Leaf and Fields `readIor`.
+    */
+  protected final def decodeOrLeft(cur: Json): Ior[Chain[JsonFailure], A] =
+    decoder.decodeJson(cur) match
+      case Right(a) => Ior.Right(a)
+      case Left(df) => Ior.Left(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)))
+
   // ---- Default Ior-bearing ops ------------------------------------
 
   /** Walk to the focus, decode, apply `f`, encode, rebuild root. Failures (path miss, decode
@@ -136,9 +157,7 @@ private[circe] object JsonFocus:
       JsonWalk.walkPath(json, path) match
         case Left(failure)         => Ior.Both(Chain.one(failure), json)
         case Right((cur, parents)) =>
-          decoder.decodeJson(cur) match
-            case Right(a) => Ior.Right(JsonWalk.rebuildPath(parents, path, encoder(f(a))))
-            case Left(df) => Ior.Both(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)), json)
+          decodeOrFail(cur, json)(a => JsonWalk.rebuildPath(parents, path, encoder(f(a))))
 
     def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
       JsonWalk.walkPath(json, path) match
@@ -157,10 +176,7 @@ private[circe] object JsonFocus:
     def readIor(json: Json): Ior[Chain[JsonFailure], A] =
       JsonWalk.walkPath(json, path) match
         case Left(failure)   => Ior.Left(Chain.one(failure))
-        case Right((cur, _)) =>
-          decoder.decodeJson(cur) match
-            case Right(a) => Ior.Right(a)
-            case Left(df) => Ior.Left(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)))
+        case Right((cur, _)) => decodeOrLeft(cur)
 
   /** Multi-field focus — reaches a parent JsonObject via `parentPath`, then assembles a NamedTuple
     * `A` by reading the selected `fieldNames` from it. Powers the multi-field variants (formerly
@@ -272,10 +288,9 @@ private[circe] object JsonFocus:
           readFields(obj) match
             case Left(chain) => Ior.Both(chain, json)
             case Right(sub)  =>
-              Json.fromJsonObject(sub).as[A](using decoder) match
-                case Right(a) => Ior.Right(rebuild(writeFields(obj, f(a)), parents))
-                case Left(df) =>
-                  Ior.Both(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)), json)
+              decodeOrFail(Json.fromJsonObject(sub), json)(a =>
+                rebuild(writeFields(obj, f(a)), parents)
+              )
 
     def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
       walkParent(json) match
@@ -296,8 +311,4 @@ private[circe] object JsonFocus:
         case Right((obj, _)) =>
           readFields(obj) match
             case Left(chain) => Ior.Left(chain)
-            case Right(sub)  =>
-              Json.fromJsonObject(sub).as[A](using decoder) match
-                case Right(a) => Ior.Right(a)
-                case Left(df) =>
-                  Ior.Left(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)))
+            case Right(sub)  => decodeOrLeft(Json.fromJsonObject(sub))
