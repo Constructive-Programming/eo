@@ -1,8 +1,8 @@
 package dev.constructive.eo.circe
 
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Behaviour spec for [[JsonFieldsTraversal]] — the multi-field array traversal produced by
   * `JsonTraversal.fields(_.a, _.b, ...)` (Unit 4).

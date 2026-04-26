@@ -1,8 +1,8 @@
 package dev.constructive.eo.circe
 
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Behaviour spec for the `Json | String` union-input overloads on every public JSON optic. Covers
   * three shapes per class: (1) happy-path parse on a String that's well-formed JSON, (2)
