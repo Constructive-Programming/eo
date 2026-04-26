@@ -6,54 +6,91 @@ reference see the Scaladoc.
 
 ## Family taxonomy
 
-Every family on this page is a specialisation of the same
-`Optic[S, T, A, B, F]` trait, differing only in the carrier
-`F[_, _]`. The tree below indexes each family by its carrier.
-Click a leaf to jump to its section.
+Every family is a specialisation of the same `Optic[S, T, A, B, F]`
+trait, differing only in the carrier `F[_, _]`. The diagram below is
+a Hasse-style **composition lattice**: an edge `A → B` means *every
+`A` is a `B`* (the carrier admits the conversion natively, often
+with a fused `.andThen` overload). When you compose two optics, the
+result family is their **join** — the lowest node both originals can
+reach by following edges down. So `Iso.andThen(Lens)` lands on
+`Lens`; `Lens.andThen(Prism)` lands on `Optional`;
+`Optional.andThen(Traversal)` lands on `Traversal`; any read-only
+chain lands on `Fold`. Click a node to jump to its section.
 
 ```mermaid
 flowchart TD
-  root["Optic[S, T, A, B, F]"]
-  root --> Forgetful
-  root --> Tuple2
-  root --> Either
-  root --> Affine
-  root --> SetterF
-  root --> ForgetF["Forget[F]"]
-  root --> PowerSeries
-  root --> Grate
-  root --> Kaleidoscope
-  root --> AlgLensF["AlgLens[F]"]
-  root --> FixedN["FixedTraversal[N]"]
-  Forgetful --> Iso
-  Forgetful --> Getter
-  Tuple2 --> Lens
-  Either --> Prism
-  Affine --> Optional
-  Affine --> AffineFold
-  SetterF --> Setter
-  ForgetF --> Fold
-  ForgetF --> TraversalForEach["Traversal.forEach"]
-  PowerSeries --> TraversalEach["Traversal.each"]
-  Grate --> GrateLeaf["Grate"]
-  Kaleidoscope --> KaleidoscopeLeaf["Kaleidoscope"]
-  AlgLensF --> AlgLensLeaf["AlgLens"]
-  FixedN --> FixedLeaf["FixedTraversal"]
+  %% Read-write spine — Iso ⊏ {Lens, Prism} ⊏ Optional ⊏ Traversal ⊏ Setter.
+  %% Each downward edge is a native specialisation; composing two adjacent
+  %% families lands at the lower node by following both arrows down.
+  Iso --> Lens
+  Iso --> Prism
+  Lens --> Optional
+  Prism --> Optional
+  Optional --> Traversal
+  Traversal --> Setter
+
+  %% Read-only branch — drops the write side (T = Unit). Every read-write
+  %% family has a read-only counterpart that fans into Fold.
+  Iso --> Getter
+  Lens --> Getter
+  Optional --> AffineFold
+  Getter --> Fold
+  AffineFold --> Fold
+  Traversal --> Fold
+
+  %% eo-only families that don't fit the classical lattice.
+  %% Iso → Grate is the only natural inbound edge to Grate
+  %% (gap analysis §0.3).
+  Iso --> Grate
+
+  %% AlgLens[F] and Kaleidoscope are composition sinks: inbound
+  %% bridges from the classical families exist but no outbound
+  %% Composer ships. Dotted edges mark *degraded* conversions
+  %% (the fold loses classifier or applicative shape).
+  Optional -.-> AlgLens["AlgLens[F]"]
+  AlgLens -.-> Setter
+  AlgLens -.-> Fold
+  Kaleidoscope -.-> Fold
+
+  %% FixedTraversal[N] sits beside Traversal, not below: same rebuild
+  %% semantics, fixed arity, but no Composer in or out
+  %% (composition-terminal leaf).
+  FixedTraversal["FixedTraversal[N] — leaf, fixed arity"]
+
   click Iso "#iso"
-  click Getter "#getter"
   click Lens "#lens"
   click Prism "#prism"
   click Optional "#optional"
-  click AffineFold "#affinefold"
+  click Traversal "#traversal"
   click Setter "#setter"
+  click Getter "#getter"
+  click AffineFold "#affinefold"
   click Fold "#fold"
-  click TraversalForEach "#traversal"
-  click TraversalEach "#traversal"
-  click GrateLeaf "#grate"
-  click KaleidoscopeLeaf "#kaleidoscope"
-  click AlgLensLeaf "#alglens"
-  click FixedLeaf "#traversal"
+  click Grate "#grate"
+  click AlgLens "#alglens"
+  click Kaleidoscope "#kaleidoscope"
+  click FixedTraversal "#traversal"
 ```
+
+How to read the diagram in practice:
+
+- **Same-family compose**: result stays in that family. `Lens ∘ Lens =
+  Lens`, `Prism ∘ Prism = Prism`, `Iso ∘ Iso = Iso`.
+- **Cross-family compose**: walk down from each input until they
+  meet. `Lens ∘ Prism` walks Lens → Optional and Prism → Optional,
+  meet at `Optional`. `Iso ∘ Setter` walks Iso → Lens → Optional →
+  Traversal → Setter, meet at `Setter`.
+- **Read-only families on the right branch absorb their read-write
+  parents**. Composing into a Getter / AffineFold / Fold drops the
+  write side; the result stays read-only.
+- **Solid edges = native, fused, or `Composer`-resolved**. **Dotted
+  edges = degraded conversion** that loses information (documented
+  in the AlgLens / Kaleidoscope sections).
+
+The full 14×14 cell-by-cell composition matrix lives in
+[`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md);
+that's the source of truth — the lattice above is the geometric view
+of the same data.
 
 The standalone `Review` family sits outside this tree — it
 deliberately doesn't extend `Optic` (no read side to fit the
