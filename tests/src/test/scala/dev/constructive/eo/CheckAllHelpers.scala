@@ -1,7 +1,6 @@
 package dev.constructive.eo
 
-import cats.Applicative
-import cats.Functor
+import cats.{Applicative, Functor}
 import org.scalacheck.{Arbitrary, Cogen}
 import org.specs2.mutable.SpecificationLike
 import org.specs2.specification.core.Fragment
@@ -18,18 +17,18 @@ import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
 import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
 import optics.Optic
 
-/** Path B helpers — collapse the highly repetitive `checkAll(...)` patterns in `OpticsLawsSpec`
-  * and `EoSpecificLawsSpec` into one-liners.
+/** Path B helpers — collapse the highly repetitive `checkAll(...)` patterns in `OpticsLawsSpec` and
+  * `EoSpecificLawsSpec` into one-liners.
   *
   * Each helper takes a single carrier / arity instantiation worth of inputs (typed-evidence and a
   * descriptive name) and feeds it to the matching `*Tests` runner. The original carrier the call
   * site exercises stays auditable via a `// covers: ...` comment at each invocation.
   *
   * The trait composes on top of `Discipline` so callers can mix `with CheckAllHelpers` instead of
-  * `with Discipline` directly — the `checkAll` method is inherited transitively. Helpers return
-  * the `Fragment` produced by `checkAll` to silence Scala 3's `-Wnonunit-statement` discard
-  * warning at the call site (the `Fragment` is registered as a side-effect on the spec's mutable
-  * fragment list — its return value is informational).
+  * `with Discipline` directly — the `checkAll` method is inherited transitively. Helpers return the
+  * `Fragment` produced by `checkAll` to silence Scala 3's `-Wnonunit-statement` discard warning at
+  * the call site (the `Fragment` is registered as a side-effect on the spec's mutable fragment list
+  * — its return value is informational).
   */
 trait CheckAllHelpers extends Discipline:
   self: SpecificationLike =>

@@ -6,9 +6,9 @@ import org.scalacheck.{Arbitrary, Cogen}
 
 /** Discipline `RuleSet` for [[TraversalLaws]].
   *
-  * '''Hierarchy:''' Traversal is also pure modify-tier — the four props are inherited verbatim
-  * from [[internal.ReplaceLawsTests]], with no Traversal-specific extras at this layer (the
-  * `Optic.all` / `foldMap` laws live in `eo.discipline.TraverseAllTests` and friends instead).
+  * '''Hierarchy:''' Traversal is also pure modify-tier — the four props are inherited verbatim from
+  * [[internal.ReplaceLawsTests]], with no Traversal-specific extras at this layer (the `Optic.all`
+  * / `foldMap` laws live in `eo.discipline.TraverseAllTests` and friends instead).
   */
 abstract class TraversalTests[T[_], A] extends internal.ReplaceLawsTests[T[A], A]:
   def laws: TraversalLaws[T, A]

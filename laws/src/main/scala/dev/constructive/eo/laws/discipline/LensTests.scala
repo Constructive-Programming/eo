@@ -8,8 +8,8 @@ import org.scalacheck.{Arbitrary, Cogen}
 /** Discipline `RuleSet` for [[LensLaws]].
   *
   * '''Hierarchy:''' inherits the four modify-tier props from [[internal.ReplaceLawsTests]] and adds
-  * the two get/replace round-trip props (`getReplace`, `replaceGet`) that distinguish a Lens from
-  * a Setter / Traversal.
+  * the two get/replace round-trip props (`getReplace`, `replaceGet`) that distinguish a Lens from a
+  * Setter / Traversal.
   */
 abstract class LensTests[S, A] extends internal.ReplaceLawsTests[S, A]:
   def laws: LensLaws[S, A]
