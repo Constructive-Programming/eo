@@ -15,11 +15,8 @@ abstract class LensTests[S, A] extends Laws:
       "Lens",
       "get-replace" -> forAll((s: S) => laws.getReplace(s)),
       "replace-get" -> forAll((s: S, a: A) => laws.replaceGet(s, a)),
-      "replace idempotent" ->
-        forAll((s: S, a: A) => laws.replaceIdempotent(s, a)),
-      "modify identity" -> forAll((s: S) => laws.modifyIdentity(s)),
-      "compose modify" ->
-        forAll((s: S, f: A => A, g: A => A) => laws.composeModify(s, f, g)),
-      "consistent replace-modify" ->
-        forAll((s: S, a: A) => laws.consistentReplaceModify(s, a)),
+      OpticLawProps.replaceIdempotent[S, A](laws.replaceIdempotent),
+      OpticLawProps.modifyIdentity[S](laws.modifyIdentity),
+      OpticLawProps.composeModify[S, A](laws.composeModify),
+      OpticLawProps.consistentReplaceModify[S, A](laws.consistentReplaceModify),
     )

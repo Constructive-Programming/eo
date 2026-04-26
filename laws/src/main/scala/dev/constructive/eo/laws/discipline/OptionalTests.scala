@@ -13,9 +13,8 @@ abstract class OptionalTests[S, A] extends Laws:
   def optional(using Arbitrary[S], Arbitrary[A], Cogen[A]): RuleSet =
     new SimpleRuleSet(
       "Optional",
-      "modify identity" -> forAll((s: S) => laws.modifyIdentity(s)),
-      "compose modify" ->
-        forAll((s: S, f: A => A, g: A => A) => laws.composeModify(s, f, g)),
+      OpticLawProps.modifyIdentity[S](laws.modifyIdentity),
+      OpticLawProps.composeModify[S, A](laws.composeModify),
       "consistent getOption / modify-id" ->
         forAll((s: S) => laws.consistentGetOptionModifyId(s)),
     )

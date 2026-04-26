@@ -2,7 +2,6 @@ package dev.constructive.eo
 package laws
 package discipline
 
-import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
@@ -13,11 +12,8 @@ abstract class TraversalTests[T[_], A] extends Laws:
   def traversal(using Arbitrary[T[A]], Arbitrary[A], Cogen[A]): RuleSet =
     new SimpleRuleSet(
       "Traversal",
-      "modify identity" -> forAll((s: T[A]) => laws.modifyIdentity(s)),
-      "compose modify" ->
-        forAll((s: T[A], f: A => A, g: A => A) => laws.composeModify(s, f, g)),
-      "replace idempotent" ->
-        forAll((s: T[A], a: A) => laws.replaceIdempotent(s, a)),
-      "consistent replace-modify" ->
-        forAll((s: T[A], a: A) => laws.consistentReplaceModify(s, a)),
+      OpticLawProps.modifyIdentity[T[A]](laws.modifyIdentity),
+      OpticLawProps.composeModify[T[A], A](laws.composeModify),
+      OpticLawProps.replaceIdempotent[T[A], A](laws.replaceIdempotent),
+      OpticLawProps.consistentReplaceModify[T[A], A](laws.consistentReplaceModify),
     )

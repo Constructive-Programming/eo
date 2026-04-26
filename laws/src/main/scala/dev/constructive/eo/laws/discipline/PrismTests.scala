@@ -17,9 +17,8 @@ abstract class PrismTests[S, A] extends Laws:
         forAll((s: S) => laws.partialRoundTripOneWay(s)),
       "round trip other way" ->
         forAll((a: A) => laws.roundTripOtherWay(a)),
-      "modify identity" -> forAll((s: S) => laws.modifyIdentity(s)),
-      "compose modify" ->
-        forAll((s: S, f: A => A, g: A => A) => laws.composeModify(s, f, g)),
+      OpticLawProps.modifyIdentity[S](laws.modifyIdentity),
+      OpticLawProps.composeModify[S, A](laws.composeModify),
       "consistent getOption / modify-id" ->
         forAll((s: S) => laws.consistentGetOptionModifyId(s)),
     )

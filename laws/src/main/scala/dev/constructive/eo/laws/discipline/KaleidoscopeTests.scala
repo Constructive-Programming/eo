@@ -26,9 +26,8 @@ abstract class KaleidoscopeTests[S, A, F[_]] extends Laws:
   ): RuleSet =
     new SimpleRuleSet(
       "Kaleidoscope",
-      "modify identity" -> forAll((s: S) => laws.modifyIdentity(s)),
-      "compose modify" ->
-        forAll((s: S, f: A => A, g: A => A) => laws.composeModify(s, f, g)),
+      OpticLawProps.modifyIdentity[S](laws.modifyIdentity),
+      OpticLawProps.composeModify[S, A](laws.composeModify),
       "collect via reflect" ->
         forAll((s: S, agg: F[A] => A) => laws.collectViaReflect(s, agg)),
     )
