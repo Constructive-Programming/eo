@@ -201,6 +201,8 @@ val ScalaCheckOrg = "org.scalacheck"
 val Optics = "dev.optics"
 val Kubuszok = "com.kubuszok"
 val Circe = "io.circe"
+val Fd4s = "com.github.fd4s"
+val ApacheAvro = "org.apache.avro"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
@@ -212,6 +214,14 @@ lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.1.0"
 lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.1.0"
 lazy val circe = Circe %% "circe-core" % "0.14.10"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
+// `vulcan` is the cats-native Avro codec library (single `Codec[A]`
+// typeclass, `Either[AvroError, A]` failure surface, tasty-mima
+// enforced). Brings in apache-avro 1.11.5 transitively.
+lazy val vulcan = Fd4s %% "vulcan" % "1.13.0"
+// Pin apache-avro 1.11.5 explicitly even though vulcan brings it
+// transitively — keeps the reachable runtime jar visible in dependency
+// reports.
+lazy val avro = ApacheAvro % "avro" % "1.11.5"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
@@ -297,7 +307,7 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
 
 lazy val root: Project = project
   .in(file("."))
-  .aggregate(core, laws, tests, generics, circeIntegration)
+  .aggregate(core, laws, tests, generics, circeIntegration, avroIntegration)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-root",
@@ -403,6 +413,36 @@ lazy val circeIntegration: Project = project
     // path. Parse failures surface via JsonFailure.ParseFailed.
     libraryDependencies += circeParser,
     libraryDependencies += kindlingsCirce % Test,
+    libraryDependencies += discipline % Test,
+  )
+
+// Cross-representation optics that bridge a native Scala source type
+// (a case class) and its Apache Avro on-the-wire form (`IndexedRecord`
+// / `Array[Byte]`). The flagship is `AvroPrism[S, A]` — a Prism whose
+// write path lets you `transform` an `IndexedRecord` field in place
+// without round-tripping through S. Mirrors `circeIntegration`'s
+// architecture decisions; built on `com.github.fd4s:vulcan` for the
+// codec surface (single-typeclass `Codec[A]`, `Either[AvroError, A]`
+// failure model). Kept in its own module so projects that only want
+// the base library don't pull in vulcan / avro.
+lazy val avroIntegration: Project = project
+  .in(file("avro"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-avro",
+    libraryDependencies += cats,
+    libraryDependencies += vulcan,
+    // Pin apache-avro explicitly even though vulcan brings it
+    // transitively — the optic surface uses `IndexedRecord` /
+    // `GenericData` directly for hot-path walks, so the dep is part
+    // of our reachable API.
+    libraryDependencies += avro,
     libraryDependencies += discipline % Test,
   )
 

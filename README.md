@@ -19,6 +19,7 @@ libraryDependencies += "dev.constructive" %% "cats-eo" % "0.1.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-laws"     % "0.1.0" % Test
 libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "0.1.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-circe"    % "0.1.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-avro"     % "0.1.0"
 ```
 
 Requires Scala 3.8.x on JDK 17 or JDK 21.
