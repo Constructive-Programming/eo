@@ -300,20 +300,8 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       cc: CaseClass[S],
       selectedNames: List[String],
   ): Expr[Optic[S, S, ?, ?, ?]] =
-    val sTpe = TypeRepr.of[S]
-    val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
-
-    // Selector-order focus metadata. `selectorSyms(i)` is the symbol of the
-    // i-th selector's target field; `selectorTypes(i)` its field type.
-    val selectorSyms: List[Symbol] = selectedNames.map { name =>
-      allFieldSyms.find(_.name == name).getOrElse {
-        report.errorAndAbort(
-          s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
-            + s" found on ${Type.prettyPrint[S]}."
-        )
-      }
-    }
-    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => sTpe.memberType(sym))
+    val ctx = MultiBuildContext.from[S](selectedNames)
+    import ctx.{sTpe, allFieldSyms, selectorSyms, selectorTypes}
 
     // Declaration-order complement metadata, restricted to non-selected fields.
     val selectedSet: Set[String] = selectedNames.toSet
@@ -423,18 +411,8 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       cc: CaseClass[S],
       selectedNames: List[String],
   ): Expr[Optic[S, S, ?, ?, ?]] =
-    val sTpe = TypeRepr.of[S]
-    val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
-
-    val selectorSyms: List[Symbol] = selectedNames.map { name =>
-      allFieldSyms.find(_.name == name).getOrElse {
-        report.errorAndAbort(
-          s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
-            + s" found on ${Type.prettyPrint[S]}."
-        )
-      }
-    }
-    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => sTpe.memberType(sym))
+    val ctx = MultiBuildContext.from[S](selectedNames)
+    import ctx.{selectorSyms, selectorTypes}
 
     val focusTpe: TypeRepr = namedTupleTypeOf(selectedNames, selectorTypes)
 
@@ -506,6 +484,35 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         TypeRepr.of[*:].appliedTo(List(t, acc))
       }
     TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
+
+  /** Shared prelude for the multi-selector codegen arms. Both [[buildMultiLens]] and
+    * [[buildMultiIso]] start with the same setup — resolve the source type's `TypeRepr`, list
+    * its case fields, then look up the selector-order symbols + member types. Bundling the
+    * intermediate values lets the per-arm bodies destructure-import what they need with a single
+    * line.
+    */
+  private case class MultiBuildContext(
+      sTpe: TypeRepr,
+      allFieldSyms: List[Symbol],
+      selectorSyms: List[Symbol],
+      selectorTypes: List[TypeRepr],
+  )
+
+  private object MultiBuildContext:
+
+    def from[S: Type](selectedNames: List[String]): MultiBuildContext =
+      val sTpe = TypeRepr.of[S]
+      val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
+      val syms: List[Symbol] = selectedNames.map { name =>
+        allFieldSyms.find(_.name == name).getOrElse {
+          report.errorAndAbort(
+            s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
+              + s" found on ${Type.prettyPrint[S]}."
+          )
+        }
+      }
+      val tpes: List[TypeRepr] = syms.map(sym => sTpe.memberType(sym))
+      MultiBuildContext(sTpe, allFieldSyms, syms, tpes)
 
   /** Read each field of `sourceTerm` named in `fieldSyms` via `Select.unique`, returning the
     * resulting list of `Expr[Any]`. Used by every codegen arm that has to project a list of fields
