@@ -225,6 +225,33 @@ object AvroWalk:
         // Union steps don't change the parent shape — the alternative IS the value directly.
         child
 
+  /** Allocate a fresh [[IndexedRecord]] by copying `parent`'s positional slots, replacing any slot
+    * whose schema field name appears in `updates`. The fresh record is allocated under
+    * `parent.getSchema`, so the result has the same schema identity as the input.
+    *
+    * Used by the multi-field overlay paths in [[AvroFocus.Fields]] (and, in Unit 6+, the matching
+    * traversal Fields focus). Counterpart to circe's `JsonFieldsPrism.writeFields` /
+    * `overlayFields` helpers; the underlying mechanic — "rewrite a subset of named slots in one
+    * shot" — is uniform enough to live in [[AvroWalk]] alongside [[rebuildStep]].
+    *
+    * Per D15 (immutable boundary): always allocates a new record so the input is never mutated.
+    */
+  def replaceRecordFields(
+      parent: IndexedRecord,
+      updates: Map[String, Any],
+  ): IndexedRecord =
+    val schema = parent.getSchema
+    val fresh = new GenericData.Record(schema)
+    schema
+      .getFields
+      .asScala
+      .foreach { f =>
+        updates.get(f.name) match
+          case Some(v) => fresh.put(f.pos, v.asInstanceOf[AnyRef])
+          case None    => fresh.put(f.pos, parent.get(f.pos))
+      }
+    fresh
+
   /** Look up the union-branch name for a runtime value. Apache-avro's `GenericData.resolveUnion`
     * returns the index of the matching alternative; we map back to the schema's name list to
     * surface a stable, schema-driven identifier in [[AvroFailure.UnionResolutionFailed]].

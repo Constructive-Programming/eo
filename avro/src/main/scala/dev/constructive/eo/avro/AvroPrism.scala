@@ -16,6 +16,11 @@ import org.apache.avro.generic.IndexedRecord
   *   type X = (Throwable, IndexedRecord)
   * }}}
   *
+  * '''2026-04-27 (Unit 5).''' The four legacy carriers (`AvroPrism`, `AvroFieldsPrism`, and Units
+  * 6/7 traversal siblings) collapse to two real classes by factoring the storage variation along
+  * two orthogonal axes — see [[AvroFocus]] for the design note. An `AvroPrism[A]` now holds an
+  * `AvroFocus[A]` and a cached root schema; the per-record hooks delegate straight to the focus.
+  *
   * Two call-surface tiers (parallel to JsonPrism, supplied via [[AvroOpticOps]]):
   *
   *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` return
@@ -30,8 +35,7 @@ import org.apache.avro.generic.IndexedRecord
   * Failure diagnostics on the abstract [[Optic]] surface: the inherited `to` returns
   * `Left((Throwable, IndexedRecord))` so callers routing through the generic cats-eo extensions can
   * both diagnose (`Throwable.getMessage`) and recover the input record (the second element of the
-  * pair). The `Throwable` is whatever the kindlings decoder threw — `AvroRuntimeException`,
-  * `AvroTypeException`, `ClassCastException` for type mismatches.
+  * pair).
   *
   * '''D6 / OQ-avro-5 (plan).''' The prism caches the root schema in [[rootSchema]] (read off the
   * user-supplied `AvroCodec[Root]` at construction time, OR accepted explicitly via the
@@ -46,10 +50,8 @@ import org.apache.avro.generic.IndexedRecord
   * `core.OpticOps[Carrier, Failure, A]` generalisation lands when the third cursor module appears.
   */
 final class AvroPrism[A] private[avro] (
-    private[avro] val path: Array[PathStep],
-    private[avro] val codec: AvroCodec[A],
+    private[avro] val focus: AvroFocus[A],
     private[avro] val rootSchemaCached: Schema,
-    private[avro] val leafSchema: Schema,
 ) extends Optic[IndexedRecord, IndexedRecord, A, A, Either],
       AvroOpticOps[A],
       Dynamic:
@@ -57,6 +59,19 @@ final class AvroPrism[A] private[avro] (
   type X = (Throwable, IndexedRecord)
 
   override protected def rootSchema: Schema = rootSchemaCached
+
+  /** The focus's storage path (`path` for a Leaf focus, `parentPath` for a Fields focus). Used by
+    * the `widenPath*` helpers (which only fire on Leaf focuses) and by tests that introspect the
+    * cursor position.
+    */
+  private[avro] def path: Array[PathStep] = focus match
+    case l: AvroFocus.Leaf[A]   => l.path
+    case f: AvroFocus.Fields[A] => f.parentPath
+
+  /** Codec accessor — kept for the `widenPath` paths and for backwards compatibility with code that
+    * read this field off the prism directly.
+    */
+  private[avro] def codec: AvroCodec[A] = focus.codec
 
   // ---- Selectable field sugar ---------------------------------------
   //
@@ -71,15 +86,7 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Abstract Optic members ---------------------------------------
 
-  def to: IndexedRecord => Either[(Throwable, IndexedRecord), A] = record =>
-    AvroWalk.walkPath(record, path) match
-      case Left(_) =>
-        // Path-walk failures don't have an exception to surface; synthesise one.
-        Left((new RuntimeException(s"path missing in ${path.mkString("/")}"), record))
-      case Right((cur, _)) =>
-        codec.decodeEither(cur) match
-          case Right(a) => Right(a)
-          case Left(t)  => Left((t, record))
+  def to: IndexedRecord => Either[(Throwable, IndexedRecord), A] = focus.navigateRaw
 
   def from: Either[(Throwable, IndexedRecord), A] => IndexedRecord = {
     case Left((_, record)) => record
@@ -87,7 +94,7 @@ final class AvroPrism[A] private[avro] (
       // No prior record context — best effort: encode `a` standalone.
       // The encoder produces an `Any` payload; callers should typically
       // route through `place(a)` instead, which has a record context.
-      codec.encode(a) match
+      focus.codec.encode(a) match
         case any: IndexedRecord => any
         case _                  =>
           // The encoded value isn't itself an IndexedRecord (e.g. a primitive).
@@ -102,215 +109,92 @@ final class AvroPrism[A] private[avro] (
     * through the Ior channel.
     */
   def get(input: IndexedRecord | Array[Byte]): Ior[Chain[AvroFailure], A] =
-    AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(readIor)
+    AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
 
   /** Construct a record-shaped value from `a` by encoding through the codec. Counterpart to
     * `JsonPrism.reverseGet` — encodes `a` standalone, returning the codec's [[IndexedRecord]]
     * payload (or a synthesised empty record when the encoded value isn't record-shaped).
     */
   def reverseGet(a: A): IndexedRecord =
-    codec.encode(a) match
+    focus.codec.encode(a) match
       case any: IndexedRecord => any
       case _                  =>
         new org.apache.avro.generic.GenericData.Record(rootSchemaCached)
 
   /** Silent counterpart to [[get]] — `None` on any failure. */
   inline def getOptionUnsafe(input: IndexedRecord | Array[Byte]): Option[A] =
-    readImpl(AvroFailure.parseInputUnsafe(input, rootSchemaCached))
+    focus.readImpl(AvroFailure.parseInputUnsafe(input, rootSchemaCached))
 
-  // ---- Per-record Ior-bearing hooks ---------------------------------
+  // ---- Per-record Ior-bearing hooks (delegate to focus) -------------
 
   override protected def modifyIor(
       record: IndexedRecord,
       f: A => A,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
-    AvroWalk.walkPath(record, path) match
-      case Left(failure)         => Ior.Both(Chain.one(failure), record)
-      case Right((cur, parents)) =>
-        codec.decodeEither(cur) match
-          case Left(t) =>
-            Ior.Both(
-              Chain.one(AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t)),
-              record,
-            )
-          case Right(a) =>
-            // kindlings' encoder is pure (no Either) — wrap in try/catch to mirror the
-            // decoder failure surface for the rare case where a derived encoder rejects
-            // a value at runtime (e.g. a refined-type witness violates an invariant).
-            try
-              val encoded = codec.encode(f(a))
-              Ior.Right(
-                AvroWalk
-                  .rebuildPath(parents, path, encoded)
-                  .asInstanceOf[IndexedRecord]
-              )
-            catch
-              case scala.util.control.NonFatal(t) =>
-                Ior.Both(
-                  Chain.one(AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t)),
-                  record,
-                )
+    focus.modifyIor(record, f)
 
   override protected def transformIor(
       record: IndexedRecord,
       f: IndexedRecord => IndexedRecord,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
-    AvroWalk.walkPath(record, path) match
-      case Left(failure)         => Ior.Both(Chain.one(failure), record)
-      case Right((cur, parents)) =>
-        cur match
-          case asRecord: IndexedRecord =>
-            Ior.Right(
-              AvroWalk
-                .rebuildPath(parents, path, f(asRecord))
-                .asInstanceOf[IndexedRecord]
-            )
-          case _ =>
-            Ior.Both(Chain.one(AvroFailure.NotARecord(AvroWalk.terminalOf(path))), record)
+    focus.transformIor(record, f)
 
   override protected def placeIor(
       record: IndexedRecord,
       a: A,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
-    if path.length == 0 then
-      try
-        codec.encode(a) match
-          case asRec: IndexedRecord => Ior.Right(asRec)
-          case _                    =>
-            // Not a record at the root — the root schema isn't a record type.
-            Ior.Both(
-              Chain.one(AvroFailure.NotARecord(AvroWalk.terminalOf(path))),
-              record,
-            )
-      catch
-        case scala.util.control.NonFatal(t) =>
-          Ior.Both(Chain.one(AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t)), record)
-    else
-      AvroWalk.walkPath(record, path) match
-        case Left(failure)       => Ior.Both(Chain.one(failure), record)
-        case Right((_, parents)) =>
-          try
-            val encoded = codec.encode(a)
-            Ior.Right(
-              AvroWalk
-                .rebuildPath(parents, path, encoded)
-                .asInstanceOf[IndexedRecord]
-            )
-          catch
-            case scala.util.control.NonFatal(t) =>
-              Ior.Both(Chain.one(AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t)), record)
+    focus.placeIor(record, a)
 
-  // ---- Per-record silent (*Unsafe) hooks ----------------------------
+  // ---- Per-record silent (*Unsafe) hooks (delegate to focus) --------
 
   override protected def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-    AvroWalk.walkPath(record, path) match
-      case Left(_)               => record
-      case Right((cur, parents)) =>
-        codec.decodeEither(cur) match
-          case Left(_)  => record
-          case Right(a) =>
-            try
-              val encoded = codec.encode(f(a))
-              AvroWalk
-                .rebuildPath(parents, path, encoded)
-                .asInstanceOf[IndexedRecord]
-            catch case scala.util.control.NonFatal(_) => record
+    focus.modifyImpl(record, f)
 
   override protected def transformImpl(
       record: IndexedRecord,
       f: IndexedRecord => IndexedRecord,
   ): IndexedRecord =
-    AvroWalk.walkPath(record, path) match
-      case Left(_)               => record
-      case Right((cur, parents)) =>
-        cur match
-          case asRecord: IndexedRecord =>
-            AvroWalk
-              .rebuildPath(parents, path, f(asRecord))
-              .asInstanceOf[IndexedRecord]
-          case _ => record
+    focus.transformImpl(record, f)
 
   override protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-    if path.length == 0 then
-      try
-        codec.encode(a) match
-          case asRec: IndexedRecord => asRec
-          case _                    => record
-      catch case scala.util.control.NonFatal(_) => record
-    else
-      AvroWalk.walkPath(record, path) match
-        case Left(_)             => record
-        case Right((_, parents)) =>
-          try
-            val encoded = codec.encode(a)
-            AvroWalk
-              .rebuildPath(parents, path, encoded)
-              .asInstanceOf[IndexedRecord]
-          catch case scala.util.control.NonFatal(_) => record
-
-  // ---- Read hooks ----------------------------------------------------
-
-  private def readIor(record: IndexedRecord): Ior[Chain[AvroFailure], A] =
-    AvroWalk.walkPath(record, path) match
-      case Left(failure)   => Ior.Left(Chain.one(failure))
-      case Right((cur, _)) =>
-        codec.decodeEither(cur) match
-          case Right(a) => Ior.Right(a)
-          case Left(t)  =>
-            Ior.Left(Chain.one(AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t)))
-
-  private def readImpl(record: IndexedRecord): Option[A] =
-    AvroWalk.walkPath(record, path).toOption.flatMap { s =>
-      codec.decodeEither(s._1).toOption
-    }
+    focus.placeImpl(record, a)
 
   // ---- Path widening (used by macro extensions) ---------------------
 
-  /** Extend the path by a field step and swap to a narrower codec. Used by [[field]] /
-    * `selectDynamic`.
-    *
-    * The new prism's `leafSchema` is computed from the parent's `leafSchema` by looking up the
-    * named field's schema. If the parent's leaf isn't a record (or the field doesn't exist), we
-    * fall back to the child codec's own schema — at walk-time the runtime walker will surface
-    * `PathMissing` / `NotARecord` if the schema-driven step doesn't actually exist in the record's
-    * runtime shape.
+  /** Extend the leaf focus's path by a field step and swap to a narrower codec. Only valid when the
+    * current focus is a Leaf (the `field` macro never composes Fields focuses with further
+    * `.field`). Used by [[field]] / `selectDynamic`.
     */
   private[avro] def widenPath[B](step: String)(using codecB: AvroCodec[B]): AvroPrism[B] =
-    val newPath = new Array[PathStep](path.length + 1)
-    System.arraycopy(path, 0, newPath, 0, path.length)
-    newPath(path.length) = PathStep.Field(step)
+    widenPathStep[B](PathStep.Field(step))
 
-    val nextLeafSchema: Schema =
-      if leafSchema.getType == Schema.Type.RECORD then
-        val f = leafSchema.getField(step)
-        if f != null then f.schema else codecB.schema
-      else codecB.schema
-
-    new AvroPrism[B](newPath, codecB, rootSchemaCached, nextLeafSchema)
-
-  /** Extend the path by an array-index step. Used by [[at]]. */
+  /** Extend the leaf focus's path by an array-index step. Used by [[at]]. */
   private[avro] def widenPathIndex[B](i: Int)(using codecB: AvroCodec[B]): AvroPrism[B] =
-    val newPath = new Array[PathStep](path.length + 1)
-    System.arraycopy(path, 0, newPath, 0, path.length)
-    newPath(path.length) = PathStep.Index(i)
+    widenPathStep[B](PathStep.Index(i))
 
-    val nextLeafSchema: Schema =
-      if leafSchema.getType == Schema.Type.ARRAY then leafSchema.getElementType
-      else codecB.schema
-
-    new AvroPrism[B](newPath, codecB, rootSchemaCached, nextLeafSchema)
-
-  /** Extend the path by a union-branch step. Used by `.union[Branch]` macro (Unit 8 ships the macro
-    * entry; the helper is in place for early adopters / hand-written paths).
+  /** Extend the leaf focus's path by a union-branch step. Used by `.union[Branch]` macro (Unit 8
+    * ships the macro entry; the helper is in place for early adopters / hand-written paths).
     */
   private[avro] def widenPathUnion[B](
       branchName: String
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
+    widenPathStep[B](PathStep.UnionBranch(branchName))
+
+  private def widenPathStep[B](
+      step: PathStep
+  )(using codecB: AvroCodec[B]): AvroPrism[B] =
     val newPath = new Array[PathStep](path.length + 1)
     System.arraycopy(path, 0, newPath, 0, path.length)
-    newPath(path.length) = PathStep.UnionBranch(branchName)
+    newPath(path.length) = step
+    new AvroPrism[B](new AvroFocus.Leaf[B](newPath, codecB), rootSchemaCached)
 
-    new AvroPrism[B](newPath, codecB, rootSchemaCached, codecB.schema)
+  /** Hand off the current path as a [[AvroPrism]] whose focus is a Fields focus enumerating
+    * `fieldNames` under that parent. Used by the `.fields` macro.
+    */
+  private[avro] def toFieldsPrism[B](
+      fieldNames: Array[String]
+  )(using codecB: AvroCodec[B]): AvroPrism[B] =
+    new AvroPrism[B](new AvroFocus.Fields[B](path, fieldNames, codecB), rootSchemaCached)
 
 end AvroPrism
 
@@ -322,14 +206,14 @@ object AvroPrism:
     * always resolves a schema for any derivable type, so this never throws on the happy path.
     */
   def codecPrism[S](using codec: AvroCodec[S]): AvroPrism[S] =
-    new AvroPrism[S](Array.empty[PathStep], codec, codec.schema, codec.schema)
+    new AvroPrism[S](new AvroFocus.Leaf[S](Array.empty[PathStep], codec), codec.schema)
 
   /** Construct a root-level `AvroPrism[S]` with an explicit reader schema. Use when the schema is
     * loaded at runtime from an `.avsc` file or a Schema Registry rather than derived from the codec
     * — the user-supplied schema overrides whatever `codec.schema` would produce.
     */
   def codecPrism[S](schema: Schema)(using codec: AvroCodec[S]): AvroPrism[S] =
-    new AvroPrism[S](Array.empty[PathStep], codec, schema, schema)
+    new AvroPrism[S](new AvroFocus.Leaf[S](Array.empty[PathStep], codec), schema)
 
   /** `.field(_.x)` — drill into a named field via a selector lambda. The macro extracts the field
     * name at compile time, summons the inner [[AvroCodec]], and emits `widenPath`.
@@ -356,5 +240,14 @@ object AvroPrism:
 
     transparent inline def union[Branch]: Any =
       ${ AvroPrismMacro.unionImpl[A, Branch]('o) }
+
+  /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields. Returns an `AvroPrism[NT]`
+    * whose focus is an [[AvroFocus.Fields]] (with the [[AvroFieldsPrism]] alias still pointing at
+    * the same shape).
+    */
+  extension [A](o: AvroPrism[A])
+
+    transparent inline def fields(inline selectors: (A => Any)*): Any =
+      ${ AvroPrismMacro.fieldsImpl[A]('o, 'selectors) }
 
 end AvroPrism

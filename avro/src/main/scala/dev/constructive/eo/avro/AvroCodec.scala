@@ -17,8 +17,8 @@ import org.apache.avro.Schema
   * Why not vulcan? Vulcan 1.13.x pins apache-avro 1.11.5; kindlings-avro-derivation 0.1.2 pins
   * 1.12.1. cats-eo-avro chose kindlings + avro 1.12 because it lines up with the rest of the
   * ecosystem moving forward, and the typeclass surface is simpler (no `Either[AvroError, A]`
-  * threading on every call — kindlings' decoders throw on failure, which the prism layer wraps
-  * into [[AvroFailure]]).
+  * threading on every call — kindlings' decoders throw on failure, which the prism layer wraps into
+  * [[AvroFailure]]).
   *
   * '''Per the eo-avro plan (OQ-avro-1):''' the codec library at v0.1.0 is
   * `com.kubuszok:kindlings-avro-derivation`. Vulcan and raw apache-avro stay viable as future
@@ -31,16 +31,16 @@ trait AvroCodec[A]:
     */
   def schema: Schema
 
-  /** Encode an `A` to an Avro-shaped runtime value (an [[org.apache.avro.generic.IndexedRecord]],
-    * a primitive box, an [[org.apache.avro.util.Utf8]], or a [[org.apache.avro.generic.GenericArray]]
+  /** Encode an `A` to an Avro-shaped runtime value (an [[org.apache.avro.generic.IndexedRecord]], a
+    * primitive box, an [[org.apache.avro.util.Utf8]], or a [[org.apache.avro.generic.GenericArray]]
     * — varies by `A`). The kindlings encoder is a pure (no-`Either`) shape; the optic layer never
     * needs to recover here.
     */
   def encode(a: A): Any
 
   /** Decode an Avro-shaped runtime value to an `A`, or surface the kindlings decoder's exception
-    * via [[Left]]. The decoder itself throws on bad input; this method wraps the throw to match
-    * the project's structured-failure conventions.
+    * via [[Left]]. The decoder itself throws on bad input; this method wraps the throw to match the
+    * project's structured-failure conventions.
     */
   def decodeEither(any: Any): Either[Throwable, A]
 

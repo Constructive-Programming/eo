@@ -96,6 +96,140 @@ object AvroPrismMacro:
     )
     '{ $parent.widenPathUnion[B](${ Expr(branchName) })(using $codecB) }
 
+  /** Macro for `codecPrism[A].fields(_.a, _.b, ...)` — multi-field focus. Parses the varargs
+    * selector list, validates arity (≥ 2), duplicate-ness, known-fields-ness, non-nested-ness,
+    * synthesises a Scala 3 NamedTuple type in SELECTOR order, summons `AvroCodec[NT]` from the
+    * enclosing scope, and emits a `toFieldsPrism` call on the parent prism.
+    *
+    * Mirrors `JsonPrismMacro.fieldsImpl` row-for-row; the codec-summoning side is simpler than
+    * circe's because [[AvroCodec]] is one typeclass instead of two (`Encoder` + `Decoder`).
+    */
+  def fieldsImpl[A: Type](
+      parent: Expr[AvroPrism[A]],
+      selectorsE: Expr[Seq[A => Any]],
+  )(using q: Quotes): Expr[Any] =
+    fieldsCommon[A]("AvroPrism.fields", selectorsE) {
+      [nt] => (
+          namesExpr: Expr[Array[String]],
+          codecNT: Expr[AvroCodec[nt]],
+      ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $codecNT) }
+    }
+
+  /** Shared backbone for [[fieldsImpl]] (and, in Unit 6+, the matching traversal-side
+    * `fieldsTraversalImpl`). Validates the varargs selector list per the plan's D10 rules,
+    * synthesises the SELECTOR-order NamedTuple type, summons its [[AvroCodec]], and hands the three
+    * pieces (`namesExpr`, the codec expression, plus the `Type[nt]` evidence) to the
+    * caller-supplied `emit` callback.
+    *
+    * Counterpart to `JsonPrismMacro.fieldsCommon`; the only differences are the codec-summon shape
+    * (one [[AvroCodec]] vs circe's `Encoder` / `Decoder` pair) and the error-message hint pointing
+    * at `AvroCodec.derived` instead of `KindlingsCodecAsObject.derive`.
+    */
+  private def fieldsCommon[A: Type](
+      who: String,
+      selectorsE: Expr[Seq[A => Any]],
+  )(
+      emit: [nt] => (Expr[Array[String]], Expr[AvroCodec[nt]]) => Type[nt] ?=> Expr[Any]
+  )(using q: Quotes): Expr[Any] =
+    import quotes.reflect.*
+
+    val selectors: List[Expr[A => Any]] =
+      selectorsE match
+        case Varargs(es) => es.toList
+        case other       =>
+          report.errorAndAbort(
+            s"$who[${Type.show[A]}]: could not destructure varargs selector"
+              + s" list. Got: ${other.asTerm.show}"
+          )
+
+    if selectors.sizeIs < 2 then
+      report.errorAndAbort(
+        s"$who[${Type.show[A]}]: requires at least two field selectors"
+          + " (for one selector, use .field(_.x) instead)."
+      )
+
+    val aTpe = TypeRepr.of[A]
+    val aSym = aTpe.typeSymbol
+    val caseFields = aSym.caseFields
+
+    if caseFields.isEmpty then
+      report.errorAndAbort(
+        s"$who[${Type.show[A]}]: parent focus ${Type.show[A]} has no case fields;"
+          + " .fields requires a case class."
+      )
+
+    val knownFields: List[String] = caseFields.map(_.name)
+
+    val resolved: List[(Int, String)] =
+      selectors.zipWithIndex.map { (sel, i) =>
+        val name = extractSingleFieldName(sel.asTerm).getOrElse {
+          report.errorAndAbort(
+            s"$who[${Type.show[A]}]: selector at position $i must be a single-field"
+              + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
+              + s" Got: ${sel.asTerm.show}"
+          )
+        }
+        if !knownFields.contains(name) then
+          report.errorAndAbort(
+            s"$who[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
+              + s" Known fields: ${knownFields.mkString(", ")}."
+          )
+        (i, name)
+      }
+
+    // Duplicate selectors: compile error (D10). Routed through the shared selector-validation
+    // helper in `eo-generics` (this module already depends on generics for the lens macro).
+    dev
+      .constructive
+      .eo
+      .generics
+      .MacroSelectors
+      .reportDuplicateSelectors(
+        s"$who[${Type.show[A]}]",
+        resolved,
+      )
+
+    val selectedNames: List[String] = resolved.map(_._2)
+
+    // Build the NamedTuple type in SELECTOR order. `namesTpe` is the
+    // singleton-String names tuple, `valuesTpe` the field-types tuple.
+    val selectorSyms: List[Symbol] = selectedNames.map { name =>
+      caseFields.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"$who[${Type.show[A]}]: internal error — field '$name' not found on"
+            + s" ${Type.show[A]}."
+        )
+      }
+    }
+    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
+
+    val namesTpe: TypeRepr =
+      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+    val valuesTpe: TypeRepr =
+      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+    val ntTpe: TypeRepr =
+      TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
+
+    ntTpe.asType match
+      case '[nt] =>
+        val codecNT = summonCodec[nt](
+          s"$who[${Type.show[A]}]: no given AvroCodec[${Type.show[nt]}] in scope."
+            + s" Derive one via `given AvroCodec[${Type.show[nt]}] = AvroCodec.derived` (which"
+            + " auto-summons kindlings' AvroEncoder / AvroDecoder / AvroSchemaFor)."
+        )
+
+        // Emit `parent.toFieldsPrism[nt](Array(n1, n2, ...))(using codecNT)`.
+        // We splice the field names as a compile-time-known Array[String]
+        // so the runtime class doesn't need to re-parse them.
+        val namesExpr: Expr[Array[String]] =
+          '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
+
+        emit[nt](namesExpr, codecNT)
+
   // ---- Shared helpers (selectDynamic backbone, iterable elem, codec summon) -----
 
   private def selectDynamicCommon[A: Type](
@@ -170,5 +304,13 @@ object AvroPrismMacro:
       case Lambda(_, Inlined(_, _, Select(_, name))) => Some(name)
       case Lambda(_, Typed(Select(_, name), _))      => Some(name)
       case _                                         => None
+
+  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — routes through the
+    * shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to keep the strict
+    * receiver-is-Ident rule consistent with the lens macro's selector parsing (and the circe-side
+    * `JsonPrismMacro.fields` selector validation).
+    */
+  private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
+    dev.constructive.eo.generics.MacroSelectors.extractSingleFieldName(t)
 
 end AvroPrismMacro
