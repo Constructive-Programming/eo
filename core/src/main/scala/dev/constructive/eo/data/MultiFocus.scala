@@ -567,24 +567,17 @@ object MultiFocus:
         o.from((x, fb))
 
   // ------------------------------------------------------------------
-  // Foldable-gated read surface — the read-only escape from MultiFocus.
-  // Cannot ship as `Composer[MultiFocus[F], Forget[F]]` because
-  // `forget2multifocus` already covers the opposite direction; a
-  // bidirectional pair would break Morph resolution. Instead, surface as
-  // direct extension methods so users have a discoverable read path
-  // without requiring an outer .andThen(fold) chain. Closes top-5 gap #2
-  // — see docs/research/2026-04-29-top5-gap-closure-plan.md.
+  // Read-only escape — `multiFocus.foldMap(f)` is provided by the
+  // carrier-wide `Optic.foldMap` extension, gated on `ForgetfulFold[F]`
+  // which `mfFold[F: Foldable]` already supplies. No MultiFocus-specific
+  // extension method needed; the user's capability lights up via the
+  // existing `Optic.foldMap` whenever `F: Foldable` is in scope.
+  //
+  // Why no `Composer[MultiFocus[F], Forget[F]]`? `forget2multifocus`
+  // ships in the OPPOSITE direction; a bidirectional pair would create
+  // ambiguity in Morph resolution and break every existing
+  // `forget.andThen(multifocus)` chain.
   // ------------------------------------------------------------------
-
-  /** Read-only escape: aggregate the focused `F[A]` monoidally via `f: A => M`. Equivalent to
-    * `Foldable[F].foldMap(o.to(s)._2)(f)`, exposed directly on the optic so users don't have to
-    * destructure `o.to(s)` by hand. Works for every `MultiFocus[F]`-carrier optic where `F` has
-    * `Foldable` — i.e. every shipped instance (List, Option, Vector, Chain, PSVec).
-    */
-  extension [S, T, A, B, F[_]](o: Optic[S, T, A, B, MultiFocus[F]])(using F: Foldable[F])
-
-    def foldMapF[M: Monoid](f: A => M): S => M =
-      (s: S) => F.foldMap(o.to(s)._2)(f)
 
   // ------------------------------------------------------------------
   // Distributive / Representable typeclass-gated method set — absorbed

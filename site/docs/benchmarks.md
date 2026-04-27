@@ -334,7 +334,7 @@ miss-branch plumbing and is substantially smaller than the
 
 `Traversal.each` / `pEach` (carrier `MultiFocus[PSVec]`) covers
 both single-pass modifies and chains that continue past the
-traversal — same optic, same `.modify`, with `.foldMapF` for
+traversal — same optic, same `.modify`, with `.foldMap` for
 read-only aggregation and `.andThen` for downstream composition.
 
 See the

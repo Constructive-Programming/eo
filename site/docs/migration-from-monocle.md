@@ -91,7 +91,7 @@ workaround.
 cats-eo's `Traversal` is a single carrier:
 
 - `Traversal.each[F, A]` / `pEach[F, A, B]` — carrier
-  `MultiFocus[PSVec]`. Supports `.modify`, `.foldMapF`, `.modifyA`,
+  `MultiFocus[PSVec]`. Supports `.modify`, `.foldMap`, `.modifyA`,
   and `.andThen` with downstream optics. Pays a small constant-
   factor overhead over the naive map path; see the
   [PowerSeries benchmark notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers)

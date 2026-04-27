@@ -1,9 +1,8 @@
 package dev.constructive.eo
 package laws
 
-import _root_.dev.constructive.eo.data.MultiFocus
 import _root_.dev.constructive.eo.data.MultiFocus.given
-import _root_.dev.constructive.eo.data.PSVec
+import _root_.dev.constructive.eo.data.{MultiFocus, PSVec}
 import cats.Functor
 
 import optics.Optic

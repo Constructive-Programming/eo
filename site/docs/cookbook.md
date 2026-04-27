@@ -15,7 +15,6 @@ import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
 import dev.constructive.eo.data.MultiFocus.given   // Functor / Foldable / Traverse for MultiFocus[PSVec] (post-fold)
-import dev.constructive.eo.data.MultiFocus.foldMapF // read-only escape on MultiFocus[F]-carrier optics
 ```
 
 ## Theme A — Product editing
@@ -210,7 +209,7 @@ Wlaschin — *Domain Modeling Made Functional*, ch. 4,
 ### `each` — the composable traversal
 
 cats-eo ships a single Traversal carrier — `Traversal.each`. Map
-over every element of a container, fold via `.foldMapF`, and chain
+over every element of a container, fold via `.foldMap`, and chain
 further optics past the traversal in the same call:
 
 ```scala mdoc:silent
@@ -221,7 +220,7 @@ val bumpList = Traversal.each[List, Int]
 
 ```scala mdoc
 bumpList.modify(_ + 1)(List(1, 2, 3))
-bumpList.foldMapF(identity[Int])(List(1, 2, 3))   // sum
+bumpList.foldMap(identity[Int])(List(1, 2, 3))   // sum
 ```
 
 `each` shines when the chain continues past the traversal — the
@@ -841,8 +840,8 @@ val eachLeaf = Traversal.each[List, Node]
 ```scala mdoc
 val nodes = List(Node(1, "a"), Node(2, "b"), Node(3, "c"))
 
-// Pass 1: collect every ID into a single list via foldMapF.
-val allIds = eachLeaf.foldMapF((n: Node) => List(n.id))(nodes)
+// Pass 1: collect every ID into a single list via foldMap.
+val allIds = eachLeaf.foldMap((n: Node) => List(n.id))(nodes)
 
 // Pass 2: issue ONE query for the whole set.
 val byId = fetchAll(allIds)
@@ -854,7 +853,7 @@ eachLeaf.modify(n => n.copy(label = byId(n.id).body))(nodes)
 
 The pattern generalises to trees, graphs, nested containers,
 anything with a `Traverse`. The two-pass idiom is what cats-eo's
-`foldMapF` + `modify` pair already enables out of the box — no
+`foldMap` + `modify` pair already enables out of the box — no
 cats-eo-specific API to learn.
 
 **Source:** Penner — *Using traversals to batch database

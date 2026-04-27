@@ -31,7 +31,7 @@ import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PSVec, 
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
-import data.MultiFocus.{foldMapF, given}
+import data.MultiFocus.given
 import data.SetterF.given
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
@@ -130,15 +130,15 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(posIntPrism.reverseGet(7) === 7)
   }
 
-  // ----- Traversal/foldMapF/modifyA shorthand --------------------------
+  // ----- Traversal/foldMap/modifyA shorthand --------------------------
 
-  // covers: Traversal.each.foldMapF totals the list under Monoid[Int],
+  // covers: Traversal.each.foldMap totals the list under Monoid[Int],
   // Traversal.each.modifyA short-circuits on None, Lens morphed into an Affine
   // behaves like the original Lens
-  "Traversal.each: foldMapF totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
+  "Traversal.each: foldMap totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
     val t: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
       Traversal.each[List, Int]
-    val sumOk = forAll((xs: List[Int]) => t.foldMapF(identity[Int])(xs) == xs.sum)
+    val sumOk = forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
 
     val positivesDoubled: Int => Option[Int] =
       a => if a > 0 then Some(a * 2) else None
@@ -503,19 +503,18 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // original MultiFocus's .modify(f) — same Functor-driven element-wise rewrite as
   // ForgetfulFunctor[MultiFocus[F]].
   // covers: gap #2 of top-5 closure plan (2026-04-29) — read-only escape from
-  // MultiFocus[F] to a Foldable-aggregated value via .foldMapF extension method.
+  // MultiFocus[F] to a Foldable-aggregated value via .foldMap extension method.
   // Cannot ship as Composer[MultiFocus[F], Forget[F]] because the opposite
   // direction (forget2multifocus) ships and Morph forbids bidirectional pairs;
   // the extension method gives users the same capability without touching
   // implicit search.
-  "MultiFocus[F] read-only escape: .foldMapF aggregates focused F[A] via Foldable" >> {
-    import data.MultiFocus.foldMapF
+  "MultiFocus[F] read-only escape: .foldMap aggregates focused F[A] via Foldable" >> {
     val listMF: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
       MultiFocus.apply[List, Int]
 
-    val sumOk = listMF.foldMapF(identity[Int])(List(1, 2, 3, 4)) === 10
-    val sizeOk = listMF.foldMapF(_ => 1)(List(1, 2, 3)) === 3
-    val emptyOk = listMF.foldMapF(identity[Int])(Nil) === 0
+    val sumOk = listMF.foldMap(identity[Int])(List(1, 2, 3, 4)) === 10
+    val sizeOk = listMF.foldMap(_ => 1)(List(1, 2, 3)) === 3
+    val emptyOk = listMF.foldMap(identity[Int])(Nil) === 0
 
     sumOk.and(sizeOk).and(emptyOk)
   }

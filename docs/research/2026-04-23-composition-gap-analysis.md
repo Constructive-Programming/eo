@@ -5,7 +5,7 @@
 "terminal traversal") is removed pre-0.1.0. Matrix shrinks from 13×13
 to 12×12; the Tf row + Tf column dissolve entirely (same shape as the
 2026-04-29 FixedTraversal[N] fold). The single Traversal carrier is now
-`Traversal.each` (`MultiFocus[PSVec]`) — `.modify`, `.foldMapF`,
+`Traversal.each` (`MultiFocus[PSVec]`) — `.modify`, `.foldMap`,
 `.modifyA`, and downstream composition all flow through one optic.
 `Forget[F]` survives as the `Fold` carrier; only the `Traversal.forEach`
 constructor (and its `Forget[T]`-carrier traversal shape) is gone.
@@ -67,7 +67,7 @@ The pre-2026-04-30 row count was 13 (with a separate `Traversal.forEach`
 row on the `Forget[F]` carrier). The drop dissolves the Tf row + Tf
 column entirely (same shape as the FixedTraversal[N] fold one day
 earlier): `Traversal.each` (`MultiFocus[PSVec]`) covers every Tf use
-case, `.foldMapF` is the read-only escape, and same-carrier `.andThen`
+case, `.foldMap` is the read-only escape, and same-carrier `.andThen`
 flows through `mfAssocPSVec`. The pre-2026-04-29 row count was 14 (with
 a separate `FixedTraversal[N]` row carrying "all U" — leaf carrier with
 no Composer or AssociativeFunctor). The fold collapses FT into
@@ -768,7 +768,7 @@ per-candidate cardinality count from PSVec's uniform-shape
 representation, which doesn't fit `mfAssoc`'s push contract.
 
 **Idiom.** A user wanting "fold each element of a traversal" reaches
-for `traversal.foldMapF(f)(s)` — the read-only escape that ships as
+for `traversal.foldMap(f)(s)` — the read-only escape that ships as
 an extension method on every `MultiFocus[F]`-carrier optic where `F`
 admits `Foldable` (closes top-5 gap #2 from
 `docs/research/2026-04-29-top5-gap-closure-plan.md`). For "classifier
@@ -1033,7 +1033,7 @@ Closing every `?` from §3.3:
 | 3.3.1 (scalar-focus) | Forgetful/Tuple2/Either/Affine × Fold, outer focuses on scalar `A` | Documented `lens.get(s).foldMap(f)` plain-Scala idiom; no carrier path possible | **U** |
 | 3.3.2 | Optional × MultiFocus | **Shipped** `Composer[Affine, MultiFocus[F]]` (`affine2multifocus`); two specs in `OpticsBehaviorSpec` | **N** |
 | 3.3.3 | MultiFocus × non-MultiFocus (outbound) | Pinned designed sink (only outbound is `multifocus2setter`); documented in `optics.md` and §3.4 | **U** |
-| 3.3.4 | Traversal.each × MultiFocus[F] (cross-F) | Pinned structural; documented `traversal.modify(inner.replace…)` idiom and `.foldMapF` for read-only escape | **U** |
+| 3.3.4 | Traversal.each × MultiFocus[F] (cross-F) | Pinned structural; documented `traversal.modify(inner.replace…)` idiom and `.foldMap` for read-only escape | **U** |
 | ~~3.3.5~~ | ~~Traversal.forEach × Traversal.forEach cross-F~~ | N/A 2026-04-30 — `Traversal.forEach` removed pre-0.1.0; cross-F MultiFocus composition gap subsumes it (see Top-Surprising #2) | — |
 
 The chain-refactor side effect (§3.3 was written before the

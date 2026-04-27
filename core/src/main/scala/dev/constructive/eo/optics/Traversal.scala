@@ -11,9 +11,9 @@ import data.{MultiFocus, ObjArrBuilder, PSVec}
   * traversable container.
   *
   *   - [[each]] / [[pEach]] use `MultiFocus[PSVec]`. The single Traversal carrier — supports
-  *     `.modify`, `.foldMapF`, `.modifyA`, AND downstream composition with [[Lens]] / [[Prism]] /
+  *     `.modify`, `.foldMap`, `.modifyA`, AND downstream composition with [[Lens]] / [[Prism]] /
   *     [[Optional]] / [[Iso]] / further Traversals through the shared `MultiFocus[PSVec]`
-  *     `AssociativeFunctor`. Read-only escape via the `.foldMapF` extension method on
+  *     `AssociativeFunctor`. Read-only escape via the `.foldMap` extension method on
   *     `MultiFocus[F]`-carrier optics.
   *
   * The [[two]] / [[three]] / [[four]] fixed-arity variants expose a Traversal over a fixed number
@@ -23,7 +23,7 @@ import data.{MultiFocus, ObjArrBuilder, PSVec}
 object Traversal:
 
   /** `each` — the Traversal constructor, built on the `MultiFocus[PSVec]` carrier. Supports
-    * `.modify` / `.replace` (`Functor[PSVec]`), `.foldMapF` (`Foldable[PSVec]`), `.modifyA` / `.all`
+    * `.modify` / `.replace` (`Functor[PSVec]`), `.foldMap` (`Foldable[PSVec]`), `.modifyA` / `.all`
     * (`Traverse[PSVec]`), and downstream optic composition via the `MultiFocus[PSVec]`
     * `AssociativeFunctor`.
     *

@@ -501,7 +501,7 @@ element of a container. Single carrier:
 
 * `Traversal.each[F, A]` / `Traversal.pEach[F, A, B]` — carrier
   `MultiFocus[PSVec]`. Supports `.modify` / `.replace`
-  (`Functor[PSVec]`), `.foldMapF` (`Foldable[PSVec]`),
+  (`Functor[PSVec]`), `.foldMap` (`Foldable[PSVec]`),
   `.modifyA` / `.all` (`Traverse[PSVec]`), and `.andThen` with
   downstream optics through the shared `MultiFocus[PSVec]`
   `AssociativeFunctor`. Linear scaling; overhead over a naive
@@ -519,14 +519,13 @@ element of a container. Single carrier:
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
 import dev.constructive.eo.data.MultiFocus.given  // Functor / Foldable / Traverse for MultiFocus[PSVec]
-import dev.constructive.eo.data.MultiFocus.foldMapF // read-only escape on MultiFocus[F]-carrier optics
 
 val listEach = Traversal.pEach[List, Int, Int]
 ```
 
 ```scala mdoc
 listEach.modify(_ + 1)(List(1, 2, 3))
-listEach.foldMapF(identity[Int])(List(1, 2, 3))   // sum
+listEach.foldMap(identity[Int])(List(1, 2, 3))   // sum
 ```
 
 `each` shines when the chain continues past the traversal — e.g.
@@ -786,7 +785,7 @@ representation without dropping its rebuild data, and cannot widen
 into another `MultiFocus[G]`'s per-candidate cardinality model without
 a synthetic count. The idiomatic workaround pushes the inner under
 the traversal: `traversal.modify(a => inner.replace(b)(a))(s)` for a
-`MultiFocus` inner; `traversal.foldMapF(f)(s)` (read-only escape on
+`MultiFocus` inner; `traversal.foldMap(f)(s)` (read-only escape on
 any `MultiFocus[F]`-carrier optic) when you only need the fold side.
 
 **`SetterF` outbound** — Setter is a composition terminal: ship it as
