@@ -13,7 +13,7 @@ import org.apache.avro.generic.IndexedRecord
   *
   * {{{
   *   AvroPrism[A] <: Optic[IndexedRecord, IndexedRecord, A, A, Either]
-  *   type X = (Throwable, IndexedRecord)
+  *   type X = (AvroFailure, IndexedRecord)
   * }}}
   *
   * '''2026-04-27 (Unit 5).''' The four legacy carriers (`AvroPrism`, `AvroFieldsPrism`, and Units
@@ -33,9 +33,11 @@ import org.apache.avro.generic.IndexedRecord
   *     through on the modify family, `Option[A]` on the read family.
   *
   * Failure diagnostics on the abstract [[Optic]] surface: the inherited `to` returns
-  * `Left((Throwable, IndexedRecord))` so callers routing through the generic cats-eo extensions can
-  * both diagnose (`Throwable.getMessage`) and recover the input record (the second element of the
-  * pair).
+  * `Left((AvroFailure, IndexedRecord))` — the same shape `JsonPrism` ships as
+  * `(DecodingFailure, HCursor)`: a structured failure paired with the recoverable input. Walk
+  * misses surface the relevant `AvroFailure.PathMissing` / `NotARecord` / etc. cases; decode
+  * failures surface `AvroFailure.DecodeFailed(step, cause)` carrying kindlings' underlying
+  * Throwable on the `cause` side.
   *
   * '''D6 / OQ-avro-5 (plan).''' The prism caches the root schema in [[rootSchema]] (read off the
   * user-supplied `AvroCodec[Root]` at construction time, OR accepted explicitly via the
@@ -56,7 +58,7 @@ final class AvroPrism[A] private[avro] (
       AvroOpticOps[A],
       Dynamic:
 
-  type X = (Throwable, IndexedRecord)
+  type X = (AvroFailure, IndexedRecord)
 
   override protected def rootSchema: Schema = rootSchemaCached
 
@@ -86,21 +88,18 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Abstract Optic members ---------------------------------------
 
-  def to: IndexedRecord => Either[(Throwable, IndexedRecord), A] = focus.navigateRaw
+  def to: IndexedRecord => Either[(AvroFailure, IndexedRecord), A] = record =>
+    focus.navigateRaw(record) match
+      case Left(failure) => Left((failure, record))
+      case Right(any)    =>
+        focus.decodeFrom(any) match
+          case Right(a) => Right(a)
+          case Left(t)  =>
+            Left((AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t), record))
 
-  def from: Either[(Throwable, IndexedRecord), A] => IndexedRecord = {
+  def from: Either[(AvroFailure, IndexedRecord), A] => IndexedRecord = {
     case Left((_, record)) => record
-    case Right(a)          =>
-      // No prior record context — best effort: encode `a` standalone.
-      // The encoder produces an `Any` payload; callers should typically
-      // route through `place(a)` instead, which has a record context.
-      focus.codec.encode(a) match
-        case any: IndexedRecord => any
-        case _                  =>
-          // The encoded value isn't itself an IndexedRecord (e.g. a primitive).
-          // We can't manufacture a root record here; surface a sentinel
-          // empty record built from the cached root schema.
-          new org.apache.avro.generic.GenericData.Record(rootSchemaCached)
+    case Right(a)          => reverseGet(a)
   }
 
   // ---- Read surface --------------------------------------------------

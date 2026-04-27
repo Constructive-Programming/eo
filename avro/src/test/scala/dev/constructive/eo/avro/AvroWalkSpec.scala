@@ -64,7 +64,8 @@ class AvroWalkSpec extends Specification:
   // covers: walk a missing record field with Lenient policy returns null + parent
   "stepInto lenient: missing field returns null leaf" >> {
     val r = personRecord(Person("Alice", 30))
-    val result = AvroWalk.walkPathLenient(r, Array(PathStep.Field("nope")))
+    val result =
+      AvroWalk.walkPath(r, Array(PathStep.Field("nope")), AvroWalk.OnMissingField.Lenient)
     result match
       case Right((cur, parents)) =>
         (cur === null).and(parents.length === 1)

@@ -23,8 +23,9 @@ import org.apache.avro.generic.{GenericData, IndexedRecord}
   *
   * Each focus exposes the same six per-record operations: three Ior-bearing (decoded modify, raw
   * transform, decoded place) for the default surface, and three silent (input pass-through) for the
-  * `*Unsafe` escape hatches. Plus two reads (decoded get, decoded silent get) and the abstract
-  * Optic-trait `to`-side hook (`navigateRaw` returning `Either[(Throwable, IndexedRecord), A]`).
+  * `*Unsafe` escape hatches. Plus two reads (decoded get, decoded silent get) and two abstract
+  * Optic-trait `to`-side hooks (`navigateRaw` returning the value-ready-for-decode, then a shared
+  * one-line `decodeFrom` default delegating to the focus's [[AvroCodec]]).
   */
 sealed abstract private[avro] class AvroFocus[A]:
 
@@ -104,10 +105,20 @@ sealed abstract private[avro] class AvroFocus[A]:
 
   // ---- Optic-trait `to` side --------------------------------------
 
-  /** Build the `Either[(Throwable, IndexedRecord), A]` shape for the abstract `Optic.to`. The Ior
-    * surfaces above bypass this; the generic `Optic` extensions go through it.
+  /** Walk to the focus's "thing ready for decode" — for a Leaf focus that's the walked-to leaf
+    * value; for a Fields focus that's the assembled atomic-read sub-record. Failures (path miss,
+    * non-record parent, partial-fields miss) surface as a structured [[AvroFailure]].
+    *
+    * Counterpart to `JsonFocus.navigateCursor`, but returning the value-ready-for-decode rather
+    * than a navigable cursor (Avro has no cursor abstraction — apache-avro's `IndexedRecord` is a
+    * positional Java interface). The decode step is the shared [[decodeFrom]] default below.
     */
-  def navigateRaw(record: IndexedRecord): Either[(Throwable, IndexedRecord), A]
+  def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any]
+
+  /** Decode an Avro-shaped runtime value to an `A`. One-line shared default — both Leaf and Fields
+    * use the focus's codec the same way. Counterpart to `JsonFocus.decodeFromCursor`.
+    */
+  final def decodeFrom(any: Any): Either[Throwable, A] = codec.decodeEither(any)
 
 end AvroFocus
 
@@ -124,14 +135,8 @@ private[avro] object AvroFocus:
 
     protected def terminalStep: PathStep = AvroWalk.terminalOf(path)
 
-    def navigateRaw(record: IndexedRecord): Either[(Throwable, IndexedRecord), A] =
-      AvroWalk.walkPath(record, path) match
-        case Left(_) =>
-          Left((new RuntimeException(s"path missing in ${path.mkString("/")}"), record))
-        case Right((cur, _)) =>
-          codec.decodeEither(cur) match
-            case Right(a) => Right(a)
-            case Left(t)  => Left((t, record))
+    def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any] =
+      AvroWalk.walkPath(record, path).map(_._1)
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
       AvroWalk.walkPath(record, path) match
@@ -247,22 +252,20 @@ private[avro] object AvroFocus:
       */
     private val ntSchema: Schema = codec.schema
 
-    def navigateRaw(record: IndexedRecord): Either[(Throwable, IndexedRecord), A] =
-      AvroWalk.walkPath(record, parentPath) match
-        case Left(_) =>
-          Left((new RuntimeException(s"path missing in ${parentPath.mkString("/")}"), record))
-        case Right((cur, _)) =>
+    def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any] =
+      AvroWalk.walkPath(record, parentPath).flatMap {
+        case (cur, _) =>
           cur match
             case parent: IndexedRecord =>
-              readFields(parent) match
-                case Right(sub) =>
-                  codec.decodeEither(sub) match
-                    case Right(a) => Right(a)
-                    case Left(t)  => Left((t, record))
-                case Left(_) =>
-                  Left((new RuntimeException("missing fields"), record))
-            case _ =>
-              Left((new RuntimeException("parent is not a record"), record))
+              readFields(parent).left.map { chain =>
+                // navigateRaw returns a single failure; readFields can produce a chain of
+                // PathMissings on partial-cover. Surface the first as the head failure — the
+                // Ior-bearing readIor below carries the full chain; this path is for the
+                // abstract Optic.to surface where only one failure can fit.
+                chain.headOption.getOrElse(AvroFailure.PathMissing(terminalStep))
+              }
+            case _ => Left(AvroFailure.NotARecord(terminalStep))
+      }
 
     /** Atomic read — succeeds with the assembled sub-record only when ALL selected fields are
       * present. Missing fields accumulate as `PathMissing` failures.

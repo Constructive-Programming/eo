@@ -1,7 +1,8 @@
 package dev.constructive.eo
 
+import cats.Eq
 import org.apache.avro.Schema
-import org.apache.avro.generic.IndexedRecord
+import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
   *
@@ -54,5 +55,26 @@ package object avro:
     */
   def codecPrism[S](schema: Schema)(using codec: AvroCodec[S]): AvroPrism[S] =
     AvroPrism.codecPrism[S](schema)
+
+  /** Structural equality for [[IndexedRecord]] — schema + positional field values, recursing
+    * through nested records / arrays / maps.
+    *
+    * Per Gap-5 / OQ-avro-9 this is a public `given`. Downstream property tests and round-trip specs
+    * that compare records by value (rather than reference) pick this up via
+    * `import dev.constructive.eo.avro.given`.
+    *
+    * Implementation note: defers to `org.apache.avro.generic.GenericData.compare` which already
+    * walks the schema-driven runtime shape recursively. Equal iff `compare == 0`.
+    */
+  given Eq[IndexedRecord] with
+
+    def eqv(x: IndexedRecord, y: IndexedRecord): Boolean =
+      x.getSchema == y.getSchema &&
+        GenericData.get().compare(x, y, x.getSchema) == 0
+
+  /** [[Eq]] specialised to [[GenericRecord]] — the more common runtime type. Reuses the same
+    * `compare`-based implementation.
+    */
+  given Eq[GenericRecord] = Eq.by(identity[IndexedRecord])
 
 end avro

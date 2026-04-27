@@ -2,9 +2,8 @@ package dev.constructive.eo.avro
 
 import scala.jdk.CollectionConverters.*
 
-import cats.Eq
 import cats.syntax.foldable.*
-import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
+import org.apache.avro.generic.{GenericData, IndexedRecord}
 
 /** Shared internal helpers for the fold-based Avro walks used by [[AvroPrism]] and (in Unit 6+) its
   * traversal siblings.
@@ -14,18 +13,16 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   * walker can pierce all four reachable Avro shapes (records, arrays, maps, union alternatives)
   * under one fold.
   *
-  * '''Gap-5 (per the eo-avro plan).''' Avro's [[IndexedRecord]] is a Java interface with
-  * reference-based equality. Property-test comparisons (`record1 === record2`) need a structural
-  * `Eq[IndexedRecord]` instance — supplied below as a public `given` so downstream property tests
-  * pick it up via `import dev.constructive.eo.avro.AvroWalk.given` (per OQ-avro-9). The
-  * implementation compares schemas + positional values recursively.
-  *
   * '''Gap-6 (per the eo-avro plan).''' Avro's runtime string type is `org.apache.avro.util.Utf8`, a
   * subtype of `CharSequence`. The walker is lenient about string shapes — fields whose schema is
   * `STRING` come back as `Utf8` from the apache-avro reader and the codec layer converts to Scala
   * `String` at the leaf. The string check uses `instanceof CharSequence`, not `instanceof String`.
+  *
+  * The structural `Eq[IndexedRecord]` / `Eq[GenericRecord]` givens (per Gap-5 / OQ-avro-9) live in
+  * the [[dev.constructive.eo.avro]] package object — that's the public-facing user surface;
+  * `AvroWalk` itself is implementation detail.
   */
-object AvroWalk:
+private[avro] object AvroWalk:
 
   /** A walked-cursor state: the current Avro focus (typed as `Any` because Avro's runtime values
     * span [[IndexedRecord]] / [[java.util.List]] / [[java.util.Map]] / `Utf8` / unboxed
@@ -128,13 +125,6 @@ object AvroWalk:
       .foldLeftM[[T] =>> Either[AvroFailure, T], State]((record: Any, Vector.empty)) {
         case ((cur, parents), step) => stepInto(step, cur, parents, policy)
       }
-
-  /** Lenient variant of [[walkPath]] — missing field-steps at any depth become `null` leaves. */
-  def walkPathLenient(
-      record: IndexedRecord,
-      path: Array[PathStep],
-  ): Either[AvroFailure, State] =
-    walkPath(record, path, OnMissingField.Lenient)
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't of the expected type")
@@ -272,26 +262,5 @@ object AvroWalk:
       case _: java.util.List[?]   => "array"
       case _: java.util.Map[?, ?] => "map"
       case other                  => other.getClass.getName
-
-  /** Structural equality for [[IndexedRecord]] — schema + positional field values, recursing
-    * through nested records / arrays / maps.
-    *
-    * Per Gap-5 / OQ-avro-9 this is a public `given`. Downstream property tests and round-trip specs
-    * that compare records by value (rather than reference) pick this up via
-    * `import dev.constructive.eo.avro.AvroWalk.given` or `import dev.constructive.eo.avro.given`.
-    *
-    * Implementation note: defers to `org.apache.avro.generic.GenericData.compare` which already
-    * walks the schema-driven runtime shape recursively. Equal iff `compare == 0`.
-    */
-  given Eq[IndexedRecord] with
-
-    def eqv(x: IndexedRecord, y: IndexedRecord): Boolean =
-      x.getSchema == y.getSchema &&
-        GenericData.get().compare(x, y, x.getSchema) == 0
-
-  /** Public re-export of [[Eq[IndexedRecord]]] specialised to [[GenericRecord]] — the more common
-    * runtime type. Reuses the same `compare`-based implementation.
-    */
-  given Eq[GenericRecord] = Eq.by(identity[IndexedRecord])
 
 end AvroWalk
