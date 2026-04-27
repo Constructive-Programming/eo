@@ -195,6 +195,18 @@ final class AvroPrism[A] private[avro] (
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
     new AvroPrism[B](new AvroFocus.Fields[B](path, fieldNames, codecB), rootSchemaCached)
 
+  /** Hand off the current path as an [[AvroTraversal]] prefix; the new focus is a Leaf focus over
+    * the iterated element type `B`. Used by the `.each` macro. The prism's cached root schema
+    * threads straight through — the traversal needs it for `Array[Byte]` parsing at the dual-input
+    * boundary.
+    */
+  private[avro] def toTraversal[B](using codecB: AvroCodec[B]): AvroTraversal[B] =
+    new AvroTraversal[B](
+      path,
+      new AvroFocus.Leaf[B](Array.empty[PathStep], codecB),
+      rootSchemaCached,
+    )
+
 end AvroPrism
 
 object AvroPrism:
@@ -239,6 +251,12 @@ object AvroPrism:
 
     transparent inline def union[Branch]: Any =
       ${ AvroPrismMacro.unionImpl[A, Branch]('o) }
+
+  /** `.each` — split into an [[AvroTraversal]] over the iterated array's elements. */
+  extension [A](o: AvroPrism[A])
+
+    transparent inline def each: Any =
+      ${ AvroPrismMacro.eachImpl[A]('o) }
 
   /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields. Returns an `AvroPrism[NT]`
     * whose focus is an [[AvroFocus.Fields]] (with the [[AvroFieldsPrism]] alias still pointing at

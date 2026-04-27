@@ -34,10 +34,44 @@ object AvroSpecFixtures:
     given AvroDecoder[Person] = AvroDecoder.derived
     given AvroSchemaFor[Person] = AvroSchemaFor.derived
 
+  /** Three-field case class used by the traversal specs as the per-element shape inside a
+    * [[Basket]]. Mirrors `JsonSpecFixtures.Order` — `name` for the leaf-traversal hooks,
+    * `(name, price)` for the multi-field traversal hooks, `qty` as the un-focused sibling whose
+    * preservation across modify is the witness for "non-focused fields untouched".
+    */
+  case class Order(name: String, price: Double, qty: Int)
+
+  object Order:
+
+    given AvroEncoder[Order] = AvroEncoder.derived
+    given AvroDecoder[Order] = AvroDecoder.derived
+    given AvroSchemaFor[Order] = AvroSchemaFor.derived
+
+  /** Owner + array of [[Order]]s — the array-walking shape consumed by the traversal specs. The
+    * `items: List[Order]` derives a `Schema.Type.ARRAY` via kindlings.
+    */
+  case class Basket(owner: String, items: List[Order])
+
+  object Basket:
+
+    given AvroEncoder[Basket] = AvroEncoder.derived
+    given AvroDecoder[Basket] = AvroDecoder.derived
+    given AvroSchemaFor[Basket] = AvroSchemaFor.derived
+
   /** The reader schema used by the parse-helper tests. Pulled off the codec at fixture-creation
     * time so spec bodies don't repeat the `.schema` dance.
     */
   lazy val personSchema: Schema = summon[AvroCodec[Person]].schema
+
+  /** Reader schema for [[Basket]] — used by the traversal specs to construct stump records that
+    * exercise the missing-prefix path.
+    */
+  lazy val basketSchema: Schema = summon[AvroCodec[Basket]].schema
+
+  /** Reader schema for [[Order]] — used to assemble custom array elements when a spec wants a
+    * specific malformed shape.
+    */
+  lazy val orderSchema: Schema = summon[AvroCodec[Order]].schema
 
   /** Build a kindlings-encoded `IndexedRecord` for a `Person`. The encoder produces an
     * `org.apache.avro.generic.GenericData.Record` whose positional slots line up with the schema's
@@ -45,6 +79,32 @@ object AvroSpecFixtures:
     */
   def personRecord(p: Person): GenericRecord =
     summon[AvroCodec[Person]].encode(p).asInstanceOf[GenericRecord]
+
+  /** Build a kindlings-encoded record for an [[Order]]. */
+  def orderRecord(o: Order): GenericRecord =
+    summon[AvroCodec[Order]].encode(o).asInstanceOf[GenericRecord]
+
+  /** Build a kindlings-encoded record for a [[Basket]]. */
+  def basketRecord(b: Basket): GenericRecord =
+    summon[AvroCodec[Basket]].encode(b).asInstanceOf[GenericRecord]
+
+  /** Build a basket-shaped root record `{ owner: "Alice", items: [...] }` whose `items` array is
+    * filled with the supplied raw element values. Mirrors `JsonSpecFixtures.basketRoot` — used by
+    * the traversal specs whose scenarios all share this "wrap a sequence of element values as a
+    * Basket payload" shape.
+    *
+    * The `items` field is allocated as a [[GenericData.Array]] under the basket schema's array
+    * field type; raw `IndexedRecord` elements (or even `Utf8`-shaped strings) can be stuffed in
+    * directly to test the per-element failure paths.
+    */
+  def basketRoot(elems: Seq[AnyRef]): GenericRecord =
+    val itemsField = basketSchema.getField("items")
+    val arr = new GenericData.Array[AnyRef](elems.size, itemsField.schema)
+    elems.foreach(arr.add)
+    val rec = new GenericData.Record(basketSchema)
+    rec.put(basketSchema.getField("owner").pos, "Alice")
+    rec.put(itemsField.pos, arr)
+    rec
 
   /** Encode a record to its binary wire representation under the supplied schema. Used by the
     * parse-helper round-trip tests.

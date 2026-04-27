@@ -101,3 +101,44 @@ private[avro] trait AvroOpticOps[A]:
     input => c => placeImpl(AvroFailure.parseInputUnsafe(input, rootSchema), f(c))
 
 end AvroOpticOps
+
+/** Per-element accumulator for [[AvroTraversal]] — folds an `Ior`-bearing element rewrite over a
+  * `Vector[Any]` (the runtime element values of an Avro array) and lifts the (chain, vector) pair
+  * to a single `Ior`. Mirrors `dev.constructive.eo.circe.JsonTraversalAccumulator` line-for-line.
+  */
+private[avro] object AvroTraversalAccumulator:
+
+  /** Apply `readElement` to every element, accumulating the per-element `Ior`s into
+    * `(Vector[A], Chain[AvroFailure])` and lifting at the end. `Ior.Right(a)` adds `a`,
+    * `Ior.Both(c, a)` adds both, `Ior.Left(c)` drops the element and adds `c`.
+    */
+  def collectIor[A](
+      arr: Vector[Any],
+      readElement: Any => Ior[Chain[AvroFailure], A],
+  ): Ior[Chain[AvroFailure], Vector[A]] =
+    val (chain, result) =
+      arr.foldLeft((Chain.empty[AvroFailure], Vector.empty[A])) {
+        case ((chain, acc), elem) =>
+          readElement(elem) match
+            case Ior.Right(a)   => (chain, acc :+ a)
+            case Ior.Left(c)    => (chain ++ c, acc)
+            case Ior.Both(c, a) => (chain ++ c, acc :+ a)
+      }
+    if chain.isEmpty then Ior.Right(result) else Ior.Both(chain, result)
+
+  /** Per-element rewrite with failure accumulation. Elements whose `elemUpdate` returns `Ior.Left`
+    * are left unchanged in the output Vector; their failure(s) contribute to the accumulated chain.
+    */
+  def mapElementsIor(
+      arr: Vector[Any],
+      elemUpdate: Any => Ior[Chain[AvroFailure], IndexedRecord],
+  ): (Vector[Any], Chain[AvroFailure]) =
+    arr.foldLeft((Vector.empty[Any], Chain.empty[AvroFailure])) {
+      case ((acc, chain), elem) =>
+        elemUpdate(elem) match
+          case Ior.Right(r)   => (acc :+ r, chain)
+          case Ior.Both(c, r) => (acc :+ r, chain ++ c)
+          case Ior.Left(c)    => (acc :+ elem, chain ++ c)
+    }
+
+end AvroTraversalAccumulator

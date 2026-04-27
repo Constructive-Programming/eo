@@ -96,6 +96,61 @@ object AvroPrismMacro:
     )
     '{ $parent.widenPathUnion[B](${ Expr(branchName) })(using $codecB) }
 
+  /** Macro for `avroPrism.each`. Reads the element type from `A`'s `Iterable` base, summons the
+    * element's [[AvroCodec]], and emits a `toTraversal[B]` call that hands the current path off as
+    * the new traversal's prefix. Mirror of `JsonPrismMacro.eachImpl`.
+    */
+  def eachImpl[A: Type](
+      parent: Expr[AvroPrism[A]]
+  )(using q: Quotes): Expr[Any] =
+    val elemTpe = iterableElementType[A]("AvroPrism.each")
+
+    elemTpe.asType match
+      case '[b] =>
+        val codecB = summonCodec[b](
+          s"AvroPrism.each: no given AvroCodec[${Type
+              .show[b]}] in scope for the element type of ${Type.show[A]}."
+        )
+        '{ $parent.toTraversal[b](using $codecB) }
+
+  /** Macro for `traversal.field(_.x)`. Counterpart to [[fieldImpl]] — extends the traversal's
+    * suffix by a named field.
+    */
+  def fieldTraversalImpl[A: Type, B: Type](
+      parent: Expr[AvroTraversal[A]],
+      selector: Expr[A => B],
+      codecB: Expr[AvroCodec[B]],
+  )(using q: Quotes): Expr[AvroTraversal[B]] =
+    import quotes.reflect.*
+
+    val name: String = extractFieldName(selector.asTerm).getOrElse {
+      report.errorAndAbort(
+        "AvroTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
+          + s"Got: ${selector.asTerm.show}"
+      )
+    }
+
+    '{
+      $parent.widenSuffix[B](${ Expr(name) })(using $codecB)
+    }
+
+  /** Macro for `traversal.at(i)`. Counterpart to [[atImpl]] — extends the traversal's suffix by an
+    * array index.
+    */
+  def atTraversalImpl[A: Type](
+      parent: Expr[AvroTraversal[A]],
+      iE: Expr[Int],
+  )(using q: Quotes): Expr[Any] =
+    val elemTpe = iterableElementType[A]("AvroTraversal.at")
+
+    elemTpe.asType match
+      case '[b] =>
+        val codecB = summonCodec[b](
+          s"AvroTraversal.at: no given AvroCodec[${Type
+              .show[b]}] in scope for the element type of ${Type.show[A]}."
+        )
+        '{ $parent.widenSuffixIndex[b]($iE)(using $codecB) }
+
   /** Macro for `codecPrism[A].fields(_.a, _.b, ...)` — multi-field focus. Parses the varargs
     * selector list, validates arity (≥ 2), duplicate-ness, known-fields-ness, non-nested-ness,
     * synthesises a Scala 3 NamedTuple type in SELECTOR order, summons `AvroCodec[NT]` from the
@@ -113,6 +168,35 @@ object AvroPrismMacro:
           namesExpr: Expr[Array[String]],
           codecNT: Expr[AvroCodec[nt]],
       ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $codecNT) }
+    }
+
+  /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
+    * [[fieldsImpl]] on the traversal side: parses varargs, validates per D10, synthesises the
+    * NamedTuple type in SELECTOR order, summons the codec, emits `toFieldsTraversal`.
+    */
+  def fieldsTraversalImpl[A: Type](
+      parent: Expr[AvroTraversal[A]],
+      selectorsE: Expr[Seq[A => Any]],
+  )(using q: Quotes): Expr[Any] =
+    fieldsCommon[A]("AvroTraversal.fields", selectorsE) {
+      [nt] => (
+          namesExpr: Expr[Array[String]],
+          codecNT: Expr[AvroCodec[nt]],
+      ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $codecNT) }
+    }
+
+  /** Macro for `traversal.<fieldName>`. Counterpart to [[selectFieldImpl]] — drives the Dynamic
+    * sugar on [[AvroTraversal]] by extending the suffix.
+    */
+  def selectFieldTraversalImpl[A: Type](
+      parent: Expr[AvroTraversal[A]],
+      nameE: Expr[String],
+  )(using q: Quotes): Expr[Any] =
+    selectDynamicCommon[A](
+      "AvroTraversal selectDynamic",
+      nameE,
+    ) { [b] => (name: String, codecB: Expr[AvroCodec[b]]) =>
+      '{ $parent.widenSuffix[b](${ Expr(name) })(using $codecB) }
     }
 
   /** Shared backbone for [[fieldsImpl]] (and, in Unit 6+, the matching traversal-side
