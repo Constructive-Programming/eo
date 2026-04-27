@@ -72,10 +72,9 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
   * to gate the same-carrier `.andThen` push/pull paths.
   *
   * Multifocus-unification spike Q2 finding: `Traverse[F] + MonoidK[F]` is ENOUGH to derive
-  * `fromList` in principle —
-  * `xs.foldLeft(empty)((acc, a) => combineK(acc, pure(a)))` — but the asymptotics regress on Vector
-  * (O(n²)) and the cardinality is silently dropped on Option. The typeclass is therefore a known
-  * per-F cost we carry forward unchanged.
+  * `fromList` in principle — `xs.foldLeft(empty)((acc, a) => combineK(acc, pure(a)))` — but the
+  * asymptotics regress on Vector (O(n²)) and the cardinality is silently dropped on Option. The
+  * typeclass is therefore a known per-F cost we carry forward unchanged.
   */
 private[eo] trait MultiFocusFromList[F[_]]:
   def fromList[A](xs: List[A]): F[A]
@@ -146,8 +145,8 @@ private[eo] object MultiFocusFromList:
   * `IntArrBuilder` (per-element 0/1 length) and `ObjArrBuilder` (parallel ys / flat) the
   * PSVec-specialised `mfAssoc` body uses.
   *
-  * Powerseries-fold-spike Q3 finding: kept after measurement. The Prism fast-path's elision of
-  * the per-element `Option` / `Either` wrapper allocation is empirically observable on
+  * Powerseries-fold-spike Q3 finding: kept after measurement. The Prism fast-path's elision of the
+  * per-element `Option` / `Either` wrapper allocation is empirically observable on
   * `PowerSeriesPrismBench`.
   */
 private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
@@ -660,7 +659,7 @@ object MultiFocus:
         val from: ((X, F[B])) => T = {
           case (Left(xMiss), _) => o.from(Left(xMiss))
           // precondition on Right branch: fb is singleton (Applicative.pure-wrapped); throws on |fb| != 1
-          case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
+          case (Right(_), fb) => o.from(Right(pickSingletonOrThrow(fb, "Either")))
         }
 
   /** Optional → MultiFocus[F]. Same shape as the prior `affine2alg`. */
