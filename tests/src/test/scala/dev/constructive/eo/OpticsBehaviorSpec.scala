@@ -502,6 +502,24 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // element-wise via Functor[F]. The lifted SetterF.modify must agree byte-for-byte with the
   // original MultiFocus's .modify(f) — same Functor-driven element-wise rewrite as
   // ForgetfulFunctor[MultiFocus[F]].
+  // covers: gap #2 of top-5 closure plan (2026-04-29) — read-only escape from
+  // MultiFocus[F] to a Foldable-aggregated value via .foldMapF extension method.
+  // Cannot ship as Composer[MultiFocus[F], Forget[F]] because the opposite
+  // direction (forget2multifocus) ships and Morph forbids bidirectional pairs;
+  // the extension method gives users the same capability without touching
+  // implicit search.
+  "MultiFocus[F] read-only escape: .foldMapF aggregates focused F[A] via Foldable" >> {
+    import data.MultiFocus.foldMapF
+    val listMF: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
+      MultiFocus.apply[List, Int]
+
+    val sumOk = listMF.foldMapF(identity[Int])(List(1, 2, 3, 4)) === 10
+    val sizeOk = listMF.foldMapF(_ => 1)(List(1, 2, 3)) === 3
+    val emptyOk = listMF.foldMapF(identity[Int])(Nil) === 0
+
+    sumOk.and(sizeOk).and(emptyOk)
+  }
+
   "MultiFocus.apply[List] / MultiFocus.apply[ZipList] → SetterF: element-wise modify" >> {
     val listMF: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
       MultiFocus.apply[List, Int]

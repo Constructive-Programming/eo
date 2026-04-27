@@ -567,6 +567,26 @@ object MultiFocus:
         o.from((x, fb))
 
   // ------------------------------------------------------------------
+  // Foldable-gated read surface — the read-only escape from MultiFocus.
+  // Cannot ship as `Composer[MultiFocus[F], Forget[F]]` because
+  // `forget2multifocus` already covers the opposite direction; a
+  // bidirectional pair would break Morph resolution. Instead, surface as
+  // direct extension methods so users have a discoverable read path
+  // without requiring an outer .andThen(fold) chain. Closes top-5 gap #2
+  // — see docs/research/2026-04-29-top5-gap-closure-plan.md.
+  // ------------------------------------------------------------------
+
+  /** Read-only escape: aggregate the focused `F[A]` monoidally via `f: A => M`. Equivalent to
+    * `Foldable[F].foldMap(o.to(s)._2)(f)`, exposed directly on the optic so users don't have to
+    * destructure `o.to(s)` by hand. Works for every `MultiFocus[F]`-carrier optic where `F` has
+    * `Foldable` — i.e. every shipped instance (List, Option, Vector, Chain, PSVec).
+    */
+  extension [S, T, A, B, F[_]](o: Optic[S, T, A, B, MultiFocus[F]])(using F: Foldable[F])
+
+    def foldMapF[M: Monoid](f: A => M): S => M =
+      (s: S) => F.foldMap(o.to(s)._2)(f)
+
+  // ------------------------------------------------------------------
   // Distributive / Representable typeclass-gated method set — absorbed
   // from the v1 Grate carrier's read surface. `.at(i)` is the single
   // load-bearing addition; provides O(1) per-position read once a
