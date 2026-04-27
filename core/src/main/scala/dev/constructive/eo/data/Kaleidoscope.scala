@@ -317,8 +317,8 @@ object Kaleidoscope:
     * aggregation pattern to the Setter API by ignoring the structural readback of the rebuild and
     * exposing only the `(A => B) => S => T` modify shape.
     *
-    * Implementation reads the focus + reflector via `o.to(s) = k`, applies `f` over the focus
-    * using `k.reflector.map(k.focus)(f)`, and threads the result back through `o.from`. This is
+    * Implementation reads the focus + reflector via `o.to(s) = k`, applies `f` over the focus using
+    * `k.reflector.map(k.focus)(f)`, and threads the result back through `o.from`. This is
     * byte-identical to what [[kalFunctor]]'s `.modify(f)` produces — the SetterF lift just exposes
     * it through the carrier-erasing Setter API rather than the Kaleidoscope's paired (focus,
     * rebuild) shape.
@@ -330,8 +330,8 @@ object Kaleidoscope:
     * Setter-shaped extension point. Like every other `Composer[X, SetterF]`, this does NOT enable
     * `kaleidoscope.andThen(setter)` directly: SetterF lacks an `AssociativeFunctor` instance by
     * design (see [[SetterF]] doc), so once both sides agree on SetterF the chain still has nowhere
-    * to compose at the `AssociativeFunctor` level. The cross-carrier value lives at the morph
-    * site, same as `tuple2setter` / `either2setter` / `affine2setter` / `powerseries2setter` /
+    * to compose at the `AssociativeFunctor` level. The cross-carrier value lives at the morph site,
+    * same as `tuple2setter` / `either2setter` / `affine2setter` / `powerseries2setter` /
     * `grate2setter`.
     *
     * **Path-type FCarrier is opaque through this lift.** Because `FCarrier` is a path-dependent
