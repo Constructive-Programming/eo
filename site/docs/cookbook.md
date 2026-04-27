@@ -979,7 +979,7 @@ service boundaries.
 
 ## Theme J — Streaming / Kafka
 
-### Kafka payload edit (binary in, binary out)
+### Kafka payload edit — binary in, binary out
 
 Most Kafka consumers receive `Array[Byte]` payloads, want to
 modify a single field, and re-emit binary on the producer side.
@@ -989,7 +989,8 @@ the cached reader schema, and threads the modify back through
 without ever materialising the full case-class tree:
 
 ```scala mdoc:silent
-import dev.constructive.eo.avro.{AvroCodec, codecPrism}
+import dev.constructive.eo.avro as eoavro
+import dev.constructive.eo.avro.AvroCodec
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, IndexedRecord}
@@ -1015,8 +1016,10 @@ val sampleBytes: Array[Byte] =
   out.toByteArray
 
 // The optic: walk into `customer` once at construction time,
-// reuse on every inbound record.
-val upperCustomer = codecPrism[OrderEvent].customer
+// reuse on every inbound record. Disambiguate the Avro
+// `codecPrism` from the circe one imported earlier in this page
+// by qualifying through the `eoavro` alias.
+val upperCustomer = eoavro.codecPrism[OrderEvent].customer
 
 // Re-serialise the modified IndexedRecord back to binary for the
 // producer side. In a real consumer this lives in your sink.
