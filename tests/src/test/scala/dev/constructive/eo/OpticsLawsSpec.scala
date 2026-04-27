@@ -265,8 +265,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // identical (the X leftover and the PSVec[A] focus vector); only the
   // top-level carrier name changed.
 
-  import data.{MultiFocus, PSVec}
-
   private given arbMultiFocusPSVec: Arbitrary[((Int, Int), PSVec[Int])] =
     Arbitrary(
       for
