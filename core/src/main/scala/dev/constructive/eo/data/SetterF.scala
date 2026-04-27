@@ -47,8 +47,8 @@ object SetterF:
     ): SetterF[X, B] => (B => G[C]) => G[SetterF[X, C]] =
       s => g => D.tupleLeft(D.distribute(s.setter._2)(g), s.setter._1).map(SetterF(_))
 
-  /** Shared skeleton for the `Composer[F, SetterF]` instances below. Every one of the four carriers
-    * (`Tuple2`, `Either`, `Affine`, `PowerSeries`) materialises a coerced
+  /** Shared skeleton for the `Composer[F, SetterF]` instances below. Every carrier
+    * (`Tuple2`, `Either`, `Affine`, `MultiFocus[F]`) materialises a coerced
     * `Optic[S, T, A, B, SetterF]` with the same shape — `type X = (S, A)`, the same identity `to`
     * ("seed the SetterF with the original `s` and the identity focus-fn"), and a `from` that
     * delegates the per-carrier focus rewrite to `applyWrite`.
@@ -120,20 +120,8 @@ object SetterF:
           case m: Affine.Miss[o.X, A] =>
             o.from(m.widenB[B])
 
-  /** Coerce a `PowerSeries`-carrier optic (Traversal.each) into a SetterF optic. The Setter's
-    * `modify` applies the focus function to *every* candidate in the traversal — equivalent to
-    * `traversal.modify(f)` on the original optic. Implementation routes through
-    * `ForgetfulFunctor[PowerSeries].map`, which is the same map the `Optic.modify` extension uses
-    * for PowerSeries-carrier optics.
-    *
-    * Resolves Gap-1 (Traversal × Setter) for cross-library `eo Traversal + monocle Setter` chains.
-    *
-    * @group Instances
-    */
-  given powerseries2setter: Composer[PowerSeries, SetterF] with
-
-    def to[S, T, A, B](
-        o: optics.Optic[S, T, A, B, PowerSeries]
-    ): optics.Optic[S, T, A, B, SetterF] =
-      coerceToSetter: (s, f) =>
-        o.from(summon[ForgetfulFunctor[PowerSeries]].map(o.to(s), f))
+  // Note: the `multifocus2setter` Composer in `MultiFocus.scala` covers
+  // `MultiFocus[PSVec]` → `SetterF` via the carrier-wide widening. The legacy
+  // `powerseries2setter` is gone — the new `Traversal.each` already returns
+  // `Optic[..., MultiFocus[PSVec]]`, which routes through `multifocus2setter`
+  // when widened.

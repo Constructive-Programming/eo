@@ -5,16 +5,16 @@ import scala.collection.immutable.ArraySeq
 
 import cats.Traverse
 
-import data.{FixedTraversal, Forget, ObjArrBuilder, PSVec, PowerSeries}
+import data.{FixedTraversal, Forget, MultiFocus, ObjArrBuilder, PSVec}
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
   *
-  *   - [[each]] / [[pEach]] use `PowerSeries` — the default. Supports downstream composition with
-  *     [[Lens]] / [[Prism]] through the shared `PowerSeries` carrier. Pays a super-linear cost
-  *     relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the composition story is
-  *     the whole point of having a Traversal in the first place, so `each` is named to match what
-  *     Scala users reach for intuitively.
+  *   - [[each]] / [[pEach]] use `MultiFocus[PSVec]` — the default. Supports downstream composition
+  *     with [[Lens]] / [[Prism]] through the shared `MultiFocus[PSVec]` carrier. Pays a
+  *     super-linear cost relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the
+  *     composition story is the whole point of having a Traversal in the first place, so `each`
+  *     is named to match what Scala users reach for intuitively.
   *   - [[forEach]] uses `Forget[T]` — a map-only fast path. Identity-shaped carrier, linear time,
   *     no downstream composition. Use when the chain terminates at the traversal.
   *
@@ -62,8 +62,8 @@ object Traversal:
       val to: T[A] => T[A] = identity
       val from: T[B] => T[B] = identity
 
-  /** `each` — the composable traversal, built on the `PowerSeries` carrier. Enables downstream
-    * optic composition via the `PowerSeries` `AssociativeFunctor`.
+  /** `each` — the composable traversal, built on the `MultiFocus[PSVec]` carrier. Enables
+    * downstream optic composition via the `MultiFocus[PSVec]` `AssociativeFunctor`.
     *
     * Reach for this when the chain continues past the traversal (`.andThen(lens)` etc.); if the
     * chain terminates, prefer [[forEach]] for the map-only fast path.
@@ -74,7 +74,7 @@ object Traversal:
     * @tparam A
     *   element type (monomorphic — `S = T = T[A]`, `A = B`).
     */
-  def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, PowerSeries] =
+  def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, MultiFocus[PSVec]] =
     pEach[T, A, A]
 
   /** Polymorphic counterpart to [[each]] — allows the focus to change type along the traversal.
@@ -102,43 +102,44 @@ object Traversal:
     * @tparam B
     *   element type being written back (may differ from `A` — polymorphic write path).
     */
-  def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, PowerSeries] =
-    new Optic[T[A], T[B], A, B, PowerSeries]:
-      type X = (Int, T[A])
+  def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, MultiFocus[PSVec]] =
+    new Optic[T[A], T[B], A, B, MultiFocus[PSVec]]:
+      type X = T[A]
 
-      val to: T[A] => PowerSeries[X, A] = ta =>
+      val to: T[A] => (T[A], PSVec[A]) = ta =>
         ta match
           case refArr: ArraySeq.ofRef[?] =>
             // `ArraySeq.ofRef.unsafeArray` IS already an `Array[AnyRef]` (Scala's
             // type is `Array[_ <: AnyRef | Null]`, erased on the JVM to
-            // `Object[]`). Wrap it directly — PowerSeries's `ForgetfulFunctor.map`
-            // allocates a fresh output array (never mutates `vs.arr`), and
+            // `Object[]`). Wrap it directly — `Functor[PSVec].map` allocates a
+            // fresh output array (never mutates the Slice's backing array), and
             // `ArraySeq` is contractually immutable, so aliasing is safe.
-            PowerSeries(ta, PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]]))
+            (ta, PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]]))
           case _ =>
             val buf = new ObjArrBuilder()
             Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-            PowerSeries(ta, buf.freezeAsPSVec[A])
+            (ta, buf.freezeAsPSVec[A])
 
-      val from: PowerSeries[X, B] => T[B] = ps =>
-        val vec = ps.vs
-        ps.xo match
-          case _: ArraySeq[?] =>
-            // `unsafeShareableArray` hands back the Slice's own backing array when
-            // the Slice densely covers it (offset=0, length=arr.length — always true
-            // when `vec` came from `composeFrom`'s freshly-allocated resultBuf). We
-            // then wrap via `ArraySeq.unsafeWrapArray`, whose contract also forbids
-            // mutation, so the aliasing is safe end-to-end. Fallback path (non-dense
-            // Slice, or other PSVec variants) does the System.arraycopy copy via
-            // `toAnyRefArray`.
-            ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
-          case _ =>
-            var idx = 0
-            Traverse[T].map(ps.xo) { _ =>
-              val b = vec(idx)
-              idx += 1
-              b
-            }
+      val from: ((T[A], PSVec[B])) => T[B] = {
+        case (xo, vec) =>
+          xo match
+            case _: ArraySeq[?] =>
+              // `unsafeShareableArray` hands back the Slice's own backing array when
+              // the Slice densely covers it (offset=0, length=arr.length — always true
+              // when `vec` came from `composeFrom`'s freshly-allocated resultBuf). We
+              // then wrap via `ArraySeq.unsafeWrapArray`, whose contract also forbids
+              // mutation, so the aliasing is safe end-to-end. Fallback path (non-dense
+              // Slice, or other PSVec variants) does the System.arraycopy copy via
+              // `toAnyRefArray`.
+              ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
+            case _ =>
+              var idx = 0
+              Traverse[T].map(xo) { _ =>
+                val b = vec(idx)
+                idx += 1
+                b
+              }
+      }
 
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.

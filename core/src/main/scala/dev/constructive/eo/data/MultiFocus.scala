@@ -4,6 +4,7 @@ package data
 import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
 import optics.Optic
+import PSVecInstances.given
 
 /** Unified pair carrier for the `AlgLens`, `Kaleidoscope`, and `Grate` optic families —
   * `MultiFocus[F][X, A] = (X, F[A])`.
@@ -119,6 +120,54 @@ private[eo] object MultiFocusFromList:
 
   given forChain: MultiFocusFromList[cats.data.Chain] with
     def fromList[A](xs: List[A]): cats.data.Chain[A] = cats.data.Chain.fromSeq(xs)
+
+  /** PSVec builder — `fromArraySlice` is zero-copy (returns a `PSVec.Slice` view over the source
+    * array). This is the crucial perf hook that lets `MultiFocus[PSVec]`'s `composeFrom` hand each
+    * inner reassembly an O(1) slice of the shared flat focus vector, just like the legacy
+    * `PowerSeries.assoc` did.
+    */
+  given forPSVec: MultiFocusFromList[PSVec] with
+    def fromList[A](xs: List[A]): PSVec[A] = xs match
+      case Nil      => PSVec.empty[A]
+      case h :: Nil => PSVec.singleton[A](h)
+      case _        =>
+        val arr = new Array[AnyRef](xs.size)
+        var i = 0
+        var cur = xs
+        while cur.nonEmpty do
+          arr(i) = cur.head.asInstanceOf[AnyRef]
+          i += 1
+          cur = cur.tail
+        PSVec.unsafeWrap[A](arr)
+
+    override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): PSVec[A] =
+      size match
+        case 0 => PSVec.empty[A]
+        case 1 => PSVec.singleton[A](arr(from).asInstanceOf[A])
+        case _ => new PSVec.Slice[A](arr, from, size)
+
+/** PSVec-specialised capability trait for the `MultiFocus[PSVec]` MaybeHit fast-path. Mirrors the
+  * legacy `PowerSeries.PSSingleton` (the non-AlwaysHit variant): used by Prism / Optional morphs
+  * that produce a 0- or 1-element focus vector, where the generic `inner.to(s)` would build an
+  * `Either`/`Option`-shaped wrapper around the focus that the fast-path can elide.
+  *
+  * AlwaysHit (Lens) morphs already get a fast-path via the carrier-wide `MultiFocusSingleton`. This
+  * trait is the maybe-hit complement, scoped to PSVec because its body writes directly into the
+  * `IntArrBuilder` (per-element 0/1 length) and `ObjArrBuilder` (parallel ys / flat) the
+  * PSVec-specialised `mfAssoc` body uses.
+  *
+  * Q3 finding: kept after measurement. The Prism fast-path's elision of the per-element `Option` /
+  * `Either` wrapper allocation is empirically observable on `PowerSeriesPrismBench`.
+  */
+private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
+  def collectTo(
+      s: S,
+      lenBuf: IntArrBuilder,
+      ysBuf: ObjArrBuilder,
+      flatBuf: ObjArrBuilder,
+  ): Unit
+
+  def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T
 
 object MultiFocus:
 
@@ -269,6 +318,137 @@ object MultiFocus:
       outer.from((null.asInstanceOf[Xo], (_: X0) => b))
 
   // ------------------------------------------------------------------
+  // Same-carrier composition — `MultiFocus[PSVec]` specialisation.
+  //
+  // Absorbs the legacy `PowerSeries.assoc` body verbatim. The general
+  // `mfAssoc` body would build two intermediate `List` accumulators per
+  // composeTo (cList + xiList), then reverse + materialise via
+  // `MultiFocusFromList[PSVec].fromList`. The specialised body below
+  // writes directly into `IntArrBuilder` / `ObjArrBuilder` exactly as
+  // `PowerSeries.assoc` did, recovering the parallel-array `AssocSndZ`
+  // representation: `Z = (Xo, AssocSndZ[Xo, Xi])` carries an `Array[Int]`
+  // of per-outer focus counts (or `null` for the always-hit case) plus an
+  // `Array[AnyRef]` of per-outer leftovers, sidestepping the per-element
+  // `(Xi, Int)` Tuple2 + `F[(Xi, Int)]` materialisation the generic body
+  // pays.
+  //
+  // Q3 (singleton fast-path) — the AlwaysHit branch reuses the carrier-
+  // wide `MultiFocusSingleton` trait (already mixed in by
+  // `tuple2multifocus`); no new trait is needed for AlwaysHit. The
+  // MaybeHit branch (Prism / Optional morphs) DOES use a separate
+  // PSVec-scoped trait `MultiFocusPSMaybeHit` because its semantics —
+  // pushing into `lenBuf` / `ysBuf` / `flatBuf` directly to skip the
+  // intermediate `Either[X, Unit]` / `Affine[X, Unit]` wrappers the
+  // generic morph would build — only make sense inside the PSVec body.
+  // ------------------------------------------------------------------
+
+  given mfAssocPSVec[Xo, Xi]: AssociativeFunctor[MultiFocus[PSVec], Xo, Xi] with
+    type SndZ = AssocSndZ[Xo, Xi]
+    type Z = SndZ
+
+    def composeTo[S, T, A, B, C, D](
+        s: S,
+        outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
+        inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+    ): (Z, PSVec[C]) =
+      val (xo, va) = outer.to(s)
+      val n = va.length
+      val ysBuf = new ObjArrBuilder(n)
+      inner match
+        case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
+          // Always-hit fast path (mfSingleton): every call produces exactly one focus.
+          val flatBuf = new ObjArrBuilder(n)
+          var i = 0
+          while i < n do
+            val (xi, c) = ah.singletonTo(va(i))
+            ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
+            flatBuf.unsafeAppend(c.asInstanceOf[AnyRef])
+            i += 1
+          val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
+          (sndZ, flatBuf.freezeAsPSVec[C])
+        case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked =>
+          // Maybe-hit fast path (Prism / Optional morphs).
+          val lenBuf = new IntArrBuilder(n)
+          val flatBuf = new ObjArrBuilder(n)
+          var i = 0
+          while i < n do
+            mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
+            i += 1
+          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+          (sndZ, flatBuf.freezeAsPSVec[C])
+        case _ =>
+          val lenBuf = new IntArrBuilder(n)
+          val flatBuf = new ObjArrBuilder()
+          var i = 0
+          while i < n do
+            val (xi, vy) = inner.to(va(i))
+            lenBuf.append(vy.length)
+            ysBuf.append(xi.asInstanceOf[AnyRef])
+            flatBuf.appendAllFromPSVec(vy)
+            i += 1
+          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+          (sndZ, flatBuf.freezeAsPSVec[C])
+
+    def composeFrom[S, T, A, B, C, D](
+        xd: (Z, PSVec[D]),
+        inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+        outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
+    ): T =
+      val (sndZ, vys) = xd
+      val lens = sndZ.lens
+      val ys = sndZ.ys
+      val resultBuf = new ObjArrBuilder(ys.length)
+      inner match
+        case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
+          // Always-hit fast path (lens == null, every element hits exactly once).
+          val n = ys.length
+          var i = 0
+          while i < n do
+            resultBuf.append(
+              ah.singletonFrom(ys(i).asInstanceOf[Xi], vys(i)).asInstanceOf[AnyRef]
+            )
+            i += 1
+        case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked =>
+          val lensArr = lens.nn
+          val n = lensArr.length
+          var offset = 0
+          var i = 0
+          while i < n do
+            val len = lensArr(i)
+            resultBuf.append(
+              mh.reconstructSingleton(ys(i), vys, offset, len).asInstanceOf[AnyRef]
+            )
+            offset += len
+            i += 1
+        case _ =>
+          val lensArr = lens.nn
+          val n = lensArr.length
+          var offset = 0
+          var i = 0
+          while i < n do
+            val len = lensArr(i)
+            val y = ys(i).asInstanceOf[Xi]
+            val chunk = vys.slice(offset, offset + len)
+            resultBuf.append(inner.from((y, chunk)).asInstanceOf[AnyRef])
+            offset += len
+            i += 1
+      outer.from((sndZ.xo, resultBuf.freezeAsPSVec[B]))
+
+  /** Composed existential leftover for `MultiFocus[PSVec]` `andThen`. Stores the outer leftover, a
+    * primitive `Array[Int]` of per-outer focus counts, and an `Array[AnyRef]` of per-outer inner
+    * leftovers — parallel arrays rather than a Tuple2-of-two arrays, so each per-element entry pays
+    * one primitive-int write and one reference write instead of allocating an intermediate
+    * `(Int, Xi)` Tuple2. When the inner is a `MultiFocusSingleton` (a morphed Lens — every call
+    * yields exactly one focus), `lens` is left `null`: every per-element length is implicitly 1.
+    * Absorbed verbatim from the legacy `PowerSeries.AssocSndZ`.
+    */
+  final private[eo] class AssocSndZ[Xo, Xi](
+      val xo: Xo,
+      val lens: Array[Int] | Null,
+      val ys: Array[AnyRef],
+  )
+
+  // ------------------------------------------------------------------
   // Kaleidoscope universal — `.collect`. Q1 finding: NOT derivable from
   // Apply alone in a way that preserves all three v1 Reflector instances.
   // We expose two variants and let the user pick the aggregation shape.
@@ -416,6 +596,163 @@ object MultiFocus:
           case (Right(sndX), fb) =>
             o.from(new Affine.Hit[o.X, B](sndX, pickSingletonOrThrow(fb, "Affine")))
         }
+
+  // ------------------------------------------------------------------
+  // PSVec-specialised Composer instances. The generic `*2multifocus[F]`
+  // bridges above demand `Applicative[F]` / `Alternative[F]`, neither of
+  // which `PSVec` admits naturally (no zip-Applicative shape, no MonoidK
+  // beyond concatenation we don't need). The specialised Composers below
+  // directly use `PSVec.singleton` / `PSVec.empty`, mirroring the legacy
+  // `PowerSeries.tuple2ps` / `either2ps` / `affine2ps` bridges.
+  //
+  // The Tuple2 → MultiFocus[PSVec] bridge specialises further on
+  // `optics.GetReplaceLens` to skip the intermediate `(s, get(s))` Tuple2
+  // the generic Tuple2 path would build — same fast-path the legacy
+  // `GetReplaceLensInPS` had. This is observable on the `mfPath` and
+  // `psPath` benches.
+  //
+  // The Either / Affine bridges mix in `MultiFocusPSMaybeHit` so the
+  // PSVec-specialised `mfAssocPSVec` body picks up the Prism/Optional
+  // fast-path (skip the per-element `Either[X, Unit]` / `Affine[X, Unit]`
+  // wrapper that the generic morph would build).
+  // ------------------------------------------------------------------
+
+  /** PSVec-carrier view of a `optics.GetReplaceLens`. Specialised over the generic Tuple2 morph:
+    * stores the lens's `get` / `enplace` directly and skips the intermediate `(s, get(s))` Tuple2
+    * that the generic `tuple2psvec` body would build on every access. Mirror of the legacy
+    * `GetReplaceLensInPS`.
+    */
+  final private class GetReplaceLensInMFPSVec[S, T, A, B](lens: optics.GetReplaceLens[S, T, A, B])
+      extends Optic[S, T, A, B, MultiFocus[PSVec]]
+      with MultiFocusSingleton[S, T, A, B, S]:
+    type X = S
+    val to: S => (S, PSVec[A]) = s => (s, PSVec.singleton[A](lens.get(s)))
+    val from: ((S, PSVec[B])) => T = { case (s, vs) => lens.enplace(s, vs.head) }
+
+    def singletonTo(s: S): (S, A) = (s, lens.get(s))
+    def singletonFrom(x: S, b: B): T = lens.enplace(x, b)
+
+  /** Generic Tuple2-carrier → MultiFocus[PSVec] morph for non-`GetReplaceLens` lenses
+    * (`SimpleLens`, `SplitCombineLens`, hand-rolled `Optic[_, _, _, _, Tuple2]`). Still participates
+    * in the `MultiFocusSingleton` fast path — it just calls the generic `o.to(s)` to get the
+    * `(xo, a)` tuple. Mirror of the legacy `GenericTuple2InPS`.
+    */
+  final private class GenericTuple2InMFPSVec[S, T, A, B](o: Optic[S, T, A, B, Tuple2])
+      extends Optic[S, T, A, B, MultiFocus[PSVec]]
+      with MultiFocusSingleton[S, T, A, B, o.X]:
+    type X = o.X
+    val to: S => (o.X, PSVec[A]) = s =>
+      val (xo, a) = o.to(s)
+      (xo, PSVec.singleton[A](a))
+    val from: ((o.X, PSVec[B])) => T = {
+      case (xo, vs) => o.from((xo, vs.head))
+    }
+    def singletonTo(s: S): (o.X, A) = o.to(s)
+    def singletonFrom(x: o.X, b: B): T = o.from((x, b))
+
+  /** `Composer[Tuple2, MultiFocus[PSVec]]` — lifts a Lens-carrier optic into MultiFocus[PSVec] so
+    * `lens.andThen(traversal)` type-checks. Specialises on `optics.GetReplaceLens` for the fast
+    * path (`GetReplaceLensInMFPSVec`); falls back to the generic Tuple2 wrapper otherwise. Mirror of
+    * the legacy `tuple2ps`.
+    */
+  given tuple2psvec: Composer[Tuple2, MultiFocus[PSVec]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, MultiFocus[PSVec]] =
+      o match
+        case glr: optics.GetReplaceLens[?, ?, ?, ?] =>
+          new GetReplaceLensInMFPSVec[S, T, A, B](
+            glr.asInstanceOf[optics.GetReplaceLens[S, T, A, B]]
+          )
+        case _ =>
+          new GenericTuple2InMFPSVec[S, T, A, B](o)
+
+  /** PSVec-carrier view of an `Optic[_, _, _, _, Either]`. Mixes in `MultiFocusPSMaybeHit` so the
+    * PSVec-specialised `mfAssocPSVec` body skips the per-element `Either[o.X, Unit]` wrapper the
+    * generic `to` path would build. Mirror of the legacy `EitherInPS`.
+    */
+  final private class EitherInMFPSVec[S, T, A, B](o: Optic[S, T, A, B, Either])
+      extends Optic[S, T, A, B, MultiFocus[PSVec]]
+      with MultiFocusPSMaybeHit[S, T, A, B]:
+    type X = Option[o.X]
+    val to: S => (Option[o.X], PSVec[A]) = s =>
+      o.to(s) match
+        case Left(x)  => (Some(x), PSVec.empty[A])
+        case Right(a) => (None, PSVec.singleton[A](a))
+    val from: ((Option[o.X], PSVec[B])) => T = {
+      case (Some(x), _)  => o.from(Left(x))
+      case (None, vs)    => o.from(Right(vs.head))
+    }
+
+    def collectTo(
+        s: S,
+        lenBuf: IntArrBuilder,
+        ysBuf: ObjArrBuilder,
+        flatBuf: ObjArrBuilder,
+    ): Unit =
+      o.to(s) match
+        case Left(x) =>
+          lenBuf.unsafeAppend(0)
+          ysBuf.unsafeAppend(x.asInstanceOf[AnyRef])
+        case Right(a) =>
+          lenBuf.unsafeAppend(1)
+          ysBuf.unsafeAppend(null.asInstanceOf[AnyRef])
+          flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
+
+    def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
+      if len == 0 then o.from(Left(y.asInstanceOf[o.X]))
+      else o.from(Right(vys(pos)))
+
+  /** `Composer[Either, MultiFocus[PSVec]]` — lifts a Prism-carrier optic into MultiFocus[PSVec] so
+    * `prism.andThen(traversal)` type-checks. Mirror of the legacy `either2ps`.
+    */
+  given either2psvec: Composer[Either, MultiFocus[PSVec]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[PSVec]] =
+      new EitherInMFPSVec[S, T, A, B](o)
+
+  /** PSVec-carrier view of an `Optic[_, _, _, _, Affine]`. Mixes in `MultiFocusPSMaybeHit` so the
+    * PSVec-specialised `mfAssocPSVec` body skips the per-element `Affine[o.X, Unit]` wrapper the
+    * generic `to` path would build. Mirror of the legacy `AffineInPS`.
+    */
+  final private class AffineInMFPSVec[S, T, A, B](o: Optic[S, T, A, B, Affine])
+      extends Optic[S, T, A, B, MultiFocus[PSVec]]
+      with MultiFocusPSMaybeHit[S, T, A, B]:
+    type X = Either[Fst[o.X], Snd[o.X]]
+    val to: S => (X, PSVec[A]) = s =>
+      o.to(s) match
+        case m: Affine.Miss[o.X, A] => (Left(m.fst), PSVec.empty[A])
+        case h: Affine.Hit[o.X, A]  => (Right(h.snd), PSVec.singleton[A](h.b))
+    val from: ((X, PSVec[B])) => T = {
+      case (Left(fx), _)  => o.from(new Affine.Miss[o.X, B](fx))
+      case (Right(sx), vs) => o.from(new Affine.Hit[o.X, B](sx, vs.head))
+    }
+
+    def collectTo(
+        s: S,
+        lenBuf: IntArrBuilder,
+        ysBuf: ObjArrBuilder,
+        flatBuf: ObjArrBuilder,
+    ): Unit =
+      o.to(s) match
+        case m: Affine.Miss[o.X, A] =>
+          lenBuf.unsafeAppend(0)
+          ysBuf.unsafeAppend(m.fst.asInstanceOf[AnyRef])
+        case h: Affine.Hit[o.X, A] =>
+          lenBuf.unsafeAppend(1)
+          ysBuf.unsafeAppend(h.snd.asInstanceOf[AnyRef])
+          flatBuf.unsafeAppend(h.b.asInstanceOf[AnyRef])
+
+    def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
+      if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
+      else o.from(new Affine.Hit[o.X, B](y.asInstanceOf[Snd[o.X]], vys(pos)))
+
+  /** `Composer[Affine, MultiFocus[PSVec]]` — lifts an Optional-carrier optic into MultiFocus[PSVec]
+    * so `optional.andThen(traversal)` type-checks. Mirror of the legacy `affine2ps`.
+    */
+  given affine2psvec: Composer[Affine, MultiFocus[PSVec]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[PSVec]] =
+      new AffineInMFPSVec[S, T, A, B](o)
 
   /** MultiFocus[F] → SetterF. Replaces both `kaleidoscope2setter` and the (latent, never-shipped)
     * `alg2setter`. Closes the U → N gap from the composition gap analysis: the Kaleidoscope row of
