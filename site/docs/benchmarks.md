@@ -187,6 +187,41 @@ short overall work units). Otherwise the default is the
 recommended entry — you get structured `JsonFailure` diagnostics
 for the same order-of-magnitude speedup over naive.
 
+## AvroPrism — direct-walk over `IndexedRecord`
+
+EO-only — no Monocle equivalent at this layer. `AvroPrism.modify` walks
+the `IndexedRecord` tree along its precomputed `PathStep` array, decodes
+only at the focused leaf, and stitches the parents back together — the
+classical alternative is to decode the whole record into its
+case-class tree, mutate the leaf, and re-encode end-to-end.
+
+Two depths benched in `AvroOpticsBench`: depth 1 (`Person.name`,
+shallow) and depth 3 (`Deep3.d2.d1.atom.value`, deep). Each depth has
+paired `eo*` / `native*` rows so JMH reports them side-by-side. The
+`eo*` side is the silent `*Unsafe` hot path; the `native*` side is the
+raw [kindlings-avro-derivation][kindlings-avro] codec round-trip
+(`AvroCodec.decodeEither` → case-class `.copy` chain →
+`AvroCodec.encode`). Same shape as `JsonPrismBench` for eo-circe; the
+codec library swap is the only difference.
+
+Run them with the standard JMH invocation, filtering by class:
+
+```sh
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*AvroOpticsBench.*"
+```
+
+A third pair of rows (`eoModifyIor*`) reports the default
+Ior-bearing surface for the same fixtures — the additional cost is a
+single `Ior.Right(record)` allocation per call, mirroring the "Ior
+tax" datapoint reported for `JsonPrism`.
+
+The plan target is "≤2× the unwrapped baseline at deep paths" — the
+direct-walk speedup absorbs Avro's per-step `IndexedRecord.get(i)` /
+`put(i, v)` cost without ever materialising the case-class tree at the
+intermediate depths.
+
+[kindlings-avro]: https://github.com/MateuszKubuszok/kindlings-avro-derivation
+
 ## JsonTraversal — `items.each.name` edits
 
 Uppercasing every `items[*].name` inside a `Basket` record, at
