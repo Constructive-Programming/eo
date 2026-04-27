@@ -4,6 +4,7 @@ package bench
 import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.optics.{
   Iso => EoIso,
@@ -27,6 +28,12 @@ final case class Person(age: Int, name: String)
   * Both Monocle's `Lens` and EO's `Optic[..., Tuple2]` implement the lens algebra; this benchmark
   * compares the per-call overhead of each surface for the canonical `Person.age` case.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class LensBench extends JmhDefaults:
 
   val person: Person = Person(30, "Alice")
@@ -53,6 +60,12 @@ class LensBench extends JmhDefaults:
   *   - `Either[String, Int]` prism focusing the Right (Int) branch; this is a more natural Prism
   *     since the residual type differs from the focused type.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class PrismBench extends JmhDefaults:
 
   val present: Option[Int] = Some(7)
@@ -102,6 +115,12 @@ class PrismBench extends JmhDefaults:
   * call allocates a new carrier on each side and exercises the same boxing behaviour a real Iso
   * would.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class IsoBench extends JmhDefaults:
 
   val tuple: (Int, String) = (30, "Alice")
@@ -130,6 +149,12 @@ class IsoBench extends JmhDefaults:
   * The Monocle traversal walks the list with a Traverse[List]; the EO traversal walks via the
   * Forget[List] carrier's bifunctor map. Same shape, different machinery.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class TraversalBench extends JmhDefaults:
 
   @Param(Array("8", "64", "512"))

@@ -2,6 +2,7 @@ package dev.constructive.eo
 package bench
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.circe.{JsonFailure, JsonPrism, codecPrism}
 import cats.data.{Chain, Ior}
@@ -24,6 +25,12 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
   *
   * Three sizes — 8, 64, 512 elements — to show how the gap grows with the element count.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class JsonTraversalBench extends JmhDefaults:
 
   import JsonTraversalBench.*

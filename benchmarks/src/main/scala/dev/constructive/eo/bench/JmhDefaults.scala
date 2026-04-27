@@ -1,37 +1,19 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
-import org.openjdk.jmh.annotations.*
-
-/** Shared JMH-config base that every bench class inherits.
+/** Marker trait for the project's benchmark classes.
   *
-  * '''2026-04-26 dedup.''' Every bench class used to declare an identical pre-amble:
+  * '''2026-04-27 walk-back.''' This trait once carried the shared JMH preamble — `@State`,
+  * `@BenchmarkMode`, `@OutputTimeUnit`, `@Fork`, `@Warmup`, `@Measurement` — on the assumption that
+  * JMH's processor inherits class-level annotations from a `trait` parent. It does not: Scala 3
+  * does not propagate trait annotations onto the implementing class's bytecode, and JMH's
+  * `BenchmarkProcessor` reads annotations off the concrete bench class only (the JMH annotations
+  * lack `@Inherited`, so even an `abstract class` parent wouldn't help). The result was a broken
+  * `benchmarks/Jmh/run` for every bench in the suite — every fixture field surfaced as "declared
+  * within a class not having @State annotation".
   *
-  * {{{
-  *   @State(Scope.Benchmark)
-  *   @BenchmarkMode(Array(Mode.AverageTime))
-  *   @OutputTimeUnit(TimeUnit.NANOSECONDS)
-  *   @Fork(3)
-  *   @Warmup(iterations = 3, time = 1)
-  *   @Measurement(iterations = 5, time = 1)
-  *   class XBench: …
-  * }}}
-  *
-  * JMH inherits class-level annotations from a `trait` parent — see the
-  * [[org.openjdk.jmh.annotations.Benchmark]] processor's "annotated parent class" handling. Bench
-  * classes now declare `class XBench extends JmhDefaults: …` and pick up the standard preamble for
-  * free.
-  *
-  * Per-bench classes that want to override one annotation (e.g. a longer warmup for a slow fixture)
-  * can re-declare just the relevant `@Warmup` / `@Measurement` on the subclass; JMH's processor
-  * takes the most-specific annotation.
+  * The 6-annotation preamble lives directly on each subclass again. The trait stays as a marker so
+  * `extends JmhDefaults` reads as documentation ("this is a JMH bench class with the project's
+  * default config") and so a future "actually shareable" base method has somewhere to land.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 trait JmhDefaults

@@ -2,6 +2,7 @@ package dev.constructive.eo
 package bench
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.data.Forgetful.given
@@ -14,6 +15,12 @@ import dev.constructive.eo.data.Forgetful.given
   * `g4.get(g3.get(g2.get(g1.get(s))))` — matching what a user would write. Monocle's
   * `Getter.andThen` (first-class on the trait) produces the equivalent composed reader on its side.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class GetterBench extends JmhDefaults:
 
   import NestedOptics.{

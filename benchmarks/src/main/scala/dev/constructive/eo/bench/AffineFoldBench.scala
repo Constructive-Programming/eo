@@ -2,6 +2,7 @@ package dev.constructive.eo
 package bench
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.optics.AffineFold
@@ -23,6 +24,12 @@ import dev.constructive.eo.optics.AffineFold
   * A secondary EO-vs-EO comparison shows the specialisation win: the same read against a full
   * `Optional` (X = (S, S) shape) vs the `AffineFold` (X = (Unit, Unit) shape) at the leaf.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class AffineFoldBench extends JmhDefaults:
 
   private val eoFlagAF: AffineFold[Nested0, String] =

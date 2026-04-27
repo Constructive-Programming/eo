@@ -2,6 +2,7 @@ package dev.constructive.eo
 package bench
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import cats.data.{Const, ZipList}
 
@@ -29,6 +30,12 @@ import dev.constructive.eo.data.Kaleidoscope
   * sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 1 .*KaleidoscopeBench.*"
   * }}}
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class KaleidoscopeBench extends JmhDefaults:
 
   // Fixture 1 — ZipList column-wise mean. The data is a 16-element ZipList of Doubles; the

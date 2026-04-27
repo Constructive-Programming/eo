@@ -5,6 +5,7 @@ import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import cats.instances.arraySeq.given
 import cats.instances.list.given
@@ -31,6 +32,12 @@ import cats.instances.list.given
   * Total elements traversed = `departmentCount × size` (4 × {4, 32, 256}). Inner `size` matches the
   * flat-bench param so comparisons are direct.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class PowerSeriesNestedBench extends JmhDefaults:
 
   import PowerSeriesNestedBench.*

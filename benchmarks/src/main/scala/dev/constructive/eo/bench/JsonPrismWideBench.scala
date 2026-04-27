@@ -2,6 +2,7 @@ package dev.constructive.eo
 package bench
 
 import org.openjdk.jmh.annotations.*
+import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.circe.{JsonPrism, codecPrism}
 
@@ -21,6 +22,12 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
   * field, whereas the cursor-based modify touches only the four cursor stops on the path and the
   * focused leaf. That's the gap this bench measures.
   */
+@State(Scope.Benchmark)
+@BenchmarkMode(Array(Mode.AverageTime))
+@OutputTimeUnit(TimeUnit.NANOSECONDS)
+@Fork(3)
+@Warmup(iterations = 3, time = 1)
+@Measurement(iterations = 5, time = 1)
 class JsonPrismWideBench extends JmhDefaults:
 
   import JsonPrismWideBench.*
