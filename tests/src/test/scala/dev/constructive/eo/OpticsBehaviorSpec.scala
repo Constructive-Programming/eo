@@ -31,7 +31,7 @@ import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PSVec, 
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
-import data.MultiFocus.given
+import data.MultiFocus.{foldMapF, given}
 import data.SetterF.given
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
