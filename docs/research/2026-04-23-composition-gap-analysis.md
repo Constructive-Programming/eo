@@ -1,10 +1,16 @@
 # Composition-coverage gap analysis
 
 **Date:** 2026-04-23
-**Last updated:** 2026-04-24 — Unit 21 (0.1.0 plan) closed every numbered
-`?` group from §3.3 by shipping one new Composer, documenting the
-idioms, or pinning a structural-`U` decision. See §7 for the
-post-resolution scoreboard.
+**Last updated:** 2026-04-28 — `AlgLens[F]` + `Kaleidoscope` collapse
+into the unified `MultiFocus[F]` carrier. Matrix shrinks from 15×15 to
+14×14; the AL and K columns merge into a single MF column with the
+combined cell counts. See §1.1 for the recount and §3.2.4 / §3.2.6 for
+the post-merge `MultiFocus[F]` × non-MF skip rationale.
+
+**2026-04-24** — Unit 21 (0.1.0 plan) closed every numbered `?` group
+from §3.3 by shipping one new Composer, documenting the idioms, or
+pinning a structural-`U` decision. See §7 for the post-resolution
+scoreboard.
 
 **Scope:** every (outer × inner) optic-family composition pair currently
 shipped in `cats-eo` (core + circe), classified by whether `.andThen`
@@ -15,11 +21,7 @@ unexplored.
 
 ### 0.1 Families covered
 
-The 15 "families" from the task brief collapse to 13 distinct rows once
-duplicates are removed — AffineFold is `Optional` with `T = Unit` (same
-`Affine` carrier; differs only in the result slot), and the PowerSeries
-vs Forget split of Traversal behaves differently enough under composition
-that we keep both. The rows used below are:
+The post-MultiFocus-unification rows are:
 
 | # | Family | Carrier | Type alias / concrete class |
 |---|--------|---------|-----------------------------|
@@ -34,19 +36,23 @@ that we keep both. The rows used below are:
 |  9 | Traversal.each (PS) | `PowerSeries` | `Optic[…, PowerSeries]` |
 | 10 | Traversal.forEach | `Forget[F]` | `Optic[…, Forget[F]]` |
 | 11 | FixedTraversal[N] | `FixedTraversal[N]` | `Traversal.{two,three,four}` |
-| 12 | AlgLens[F] | `AlgLens[F]` | `Optic[…, AlgLens[F]]` |
+| 12 | MultiFocus[F] | `MultiFocus[F]` | `Optic[…, MultiFocus[F]]` (unified successor of `AlgLens[F]` + `Kaleidoscope`) |
 | 13 | Grate | `Grate` | `Optic[…, Grate]` |
-| 14 | Kaleidoscope | `Kaleidoscope` | `Optic[…, Kaleidoscope]` |
-| 15 | JsonPrism / JsonFieldsPrism | `Either` | `Optic[Json, Json, A, A, Either]` |
-| 16 | JsonTraversal / JsonFieldsTraversal | — | standalone, not an `Optic` |
-| 17 | Review | — | standalone, not an `Optic` |
+| 14 | JsonPrism / JsonFieldsPrism | `Either` | `Optic[Json, Json, A, A, Either]` |
+| 15 | JsonTraversal / JsonFieldsTraversal | — | standalone, not an `Optic` |
+| 16 | Review | — | standalone, not an `Optic` |
 
-That is **17 row labels**, but row 16 and 17 do not extend `Optic`, so
+That is **16 row labels**, but rows 15–16 do not extend `Optic`, so
 they can only appear as outer or inner of an idiom-level composition.
-For the 15 `Optic`-bearing families above (1–15) we produce a 15×15
-inner-matrix (225 cells) and then add two "outer JsonTraversal / Review"
-and two "inner JsonTraversal / Review" border rows, bringing the matrix
-to the ~254 cells.
+For the 14 `Optic`-bearing families above (1–14) we produce a 14×14
+inner-matrix (196 cells) and then add the standalone-family border
+rows, bringing the matrix to ~224 cells.
+
+The pre-2026-04-28 row count was 15 (with separate `AlgLens[F]` and
+`Kaleidoscope` rows). The unification collapses those into row 12 with
+combined cell counts — every old AL cell and every old K cell point at
+the same `(X, F[A])` value shape, so the merged behaviour is well-
+defined.
 
 ### 0.2 Composition entry points
 
@@ -73,7 +79,7 @@ Two extension methods exist on `Optic` (see
 | `PowerSeries` | `PowerSeries.assoc` | `core/src/main/scala/eo/data/PowerSeries.scala:164` |
 | `Forget[F]` (F: Monad) | `Forget.assocForgetMonad` | `core/src/main/scala/eo/data/Forget.scala:106` |
 | `Forget[F]` (F: FlatMap + Comonad) | `Forget.assocForgetComonad` | `core/src/main/scala/eo/data/Forget.scala:135` |
-| `AlgLens[F]` (F: Applicative+Traverse+MonoidK+AlgLensFromList) | `AlgLens.assocAlgMonad` | `core/src/main/scala/eo/data/AlgLens.scala:181` |
+| `MultiFocus[F]` (F: Traverse+MultiFocusFromList) | `MultiFocus.mfAssoc` | `core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala` |
 | `Grate` | `Grate.grateAssoc` | `core/src/main/scala/eo/data/Grate.scala:88` |
 | `SetterF` | **absent** | `core/src/main/scala/eo/data/SetterF.scala` L14 comment: *"SetterF has no AssociativeFunctor instance"* |
 | `FixedTraversal[N]` | **absent** | only `ForgetfulFunctor` given; no `AssociativeFunctor` |
@@ -94,13 +100,14 @@ Two extension methods exist on `Optic` (see
 | `Tuple2 → PowerSeries` | `PowerSeries.scala:307` |
 | `Either → PowerSeries` | `PowerSeries.scala:362` |
 | `Affine → PowerSeries` | `PowerSeries.scala:407` |
-| `Forget[F] → AlgLens[F]` | `AlgLens.scala:318` |
-| `Tuple2 → AlgLens[F]` (F: Applicative+Foldable) | `AlgLens.scala:343` |
-| `Either → AlgLens[F]` (F: Alternative+Foldable) | `AlgLens.scala:378` |
+| `Forget[F] → MultiFocus[F]` | `MultiFocus.scala` |
+| `Tuple2 → MultiFocus[F]` (F: Applicative+Foldable) | `MultiFocus.scala` |
+| `Either → MultiFocus[F]` (F: Alternative+Foldable) | `MultiFocus.scala` |
+| `Affine → MultiFocus[F]` (F: Alternative+Foldable) | `MultiFocus.scala` |
+| `Forgetful → MultiFocus[F]` (F: Applicative+Foldable) | `MultiFocus.scala` |
+| `MultiFocus[F] → SetterF` | `MultiFocus.scala` (collapses both `kaleidoscope2setter` and the prior latent `alg2setter`) |
 | `Forgetful → Grate` | `Grate.scala:273` |
 | `Grate → SetterF` | `Grate.scala` (shipped 2026-04-27 — closes Gr × S) |
-| `Forgetful → Kaleidoscope` | `Kaleidoscope.scala:301` |
-| `Kaleidoscope → SetterF` | `Kaleidoscope.scala` (shipped 2026-04-27 — closes K × S) |
 
 **Absent by design / not yet shipped** (documented or inferred):
 
@@ -111,15 +118,6 @@ Two extension methods exist on `Optic` (see
 - `Composer[Either, Grate]`, `Composer[Affine, Grate]`,
   `Composer[PowerSeries, Grate]` — same reason (no Representable
   inhabitant at these focuses).
-- `Composer[Tuple2, Kaleidoscope]` — Kaleidoscope plan D3
-  (`docs/plans/2026-04-23-006-feat-kaleidoscope-optic-family-plan.md`):
-  same shape as Grate's Lens → Grate deferral. A Lens's source `S` has
-  no natural `Reflector` witness, so there's no carrier-shaped
-  aggregation to plug in. Workaround: construct the Kaleidoscope
-  separately at the Lens's focus type and compose via `Lens.andThen`.
-- `Composer[Either, Kaleidoscope]`, `Composer[Affine, Kaleidoscope]`,
-  `Composer[PowerSeries, Kaleidoscope]` — same reason (no `Reflector`
-  at these focuses).
 - `Composer[F, FixedTraversal[N]]` for any `F` — fixed-arity traversal
   carriers have no Composer inbound, no Composer outbound, and no
   `AssociativeFunctor` — they're leaves.
@@ -127,7 +125,8 @@ Two extension methods exist on `Optic` (see
   (`Tuple2 → SetterF`); no outgoing.
 - `Composer[_, Forget[F]]` for F ≠ F (no direct bridge between distinct
   `F`-shape Forgets).
-- `Composer[AlgLens[F], _]` — AlgLens is a sink; no outbound bridges.
+- `Composer[MultiFocus[F], _]` — MultiFocus is a sink (with the sole
+  exception of `MultiFocus[F] → SetterF`).
 
 ### 0.4 Classification legend
 
@@ -148,15 +147,54 @@ Two extension methods exist on `Optic` (see
 
 ### 1.1 Cell counts
 
-The full 15×15 same-family-ish matrix (`Optic`-extending families 1-15;
-standalone JsonTraversal + Review are handled separately in §4):
+The post-MultiFocus-unification 14×14 matrix (`Optic`-extending
+families 1-14; standalone JsonTraversal + Review are handled separately
+in §4):
 
-| Category | Count (initial) | After Unit 21 | After 2026-04-25 SetterF | After 2026-04-27 Grate-row | After 2026-04-27 Kaleidoscope-row | % of 225 (post) |
-|---|---|---|---|---|---|---|
-| **N** (native `.andThen`) | 94 | 96 | 99 | 100 | 103 | 46% |
-| **M** (manual idiom) | 56 | 60 | 59 | 59 | 59 | 26% |
-| **U** (unsupported) | 34 | 40 | 40 | 39 | 63 | 28% |
-| **?** (unexplored) | 12 | 0 | 0 | 0 | 0 | 0% |
+| Category | Pre-merge (15×15 = 225 cells) | Post-merge (14×14 = 196 cells) | % of 196 (post) |
+|---|---|---|---|
+| **N** (native `.andThen`) | 103 | 95 | 48% |
+| **M** (manual idiom) | 59 | 57 | 29% |
+| **U** (unsupported) | 63 | 44 | 22% |
+| **?** (unexplored) | 0 | 0 | 0% |
+
+**The merge math.** The pre-merge matrix had two separate
+classifier-shape rows / columns: AL (`AlgLens[F]`) and K
+(`Kaleidoscope`). Each had its own 15-cell row and 15-cell column for
+a total of 30 row-cells + 30 column-cells − 4 corner cells (AL × AL,
+AL × K, K × AL, K × K) = 56 cells distributed across the two rows and
+two columns. Collapsing AL ∪ K → MF (single row, single column)
+produces 14 row-cells + 14 column-cells − 1 corner (MF × MF) = 27
+cells. Net change: 56 − 27 = **29 cells removed**, matching the
+matrix-shape delta 225 − 196 = 29.
+
+Cell-by-cell merge rules (every (outer, AL) cell is the same `(X,
+F[A])` value-shape composition as the corresponding (outer, K) cell at
+the same F, so the inherited classification is identical):
+
+- **(outer × MF)** — every row gets the AL classification, which was
+  N for the inbound carriers (Iso, Lens, Prism, Optional, Forget[F])
+  and U for the rest. The K column was U everywhere except Iso × K
+  (N via the same `forgetful2multifocus` bridge) and same-carrier
+  K × K. No information is lost on the merge.
+- **(MF × inner)** — sink shape. Carries the AL row's N for `MF × MF`
+  (same-carrier `mfAssoc`), N for `MF × SetterF` (the new
+  `multifocus2setter` collapses the prior `kaleidoscope2setter` and
+  the latent `alg2setter`), and U for everything else. No `MF →
+  Forgetful` (would create a bidirectional pair with
+  `forgetful2multifocus`); no `MF → Forget[F]` (the carrier-shaped
+  bridge can't thread a `Foldable[F]` witness).
+
+(2026-04-28 MultiFocus-merge delta from the immediately prior matrix:
+**29 cells removed**; **−8 N** (the 4 K-row cells that were N: I × K,
+K × K, K × S, plus the 4 AL-row cells that were N at I/L/P/O × AL
+collapse into the merged row's I/L/P/O × MF); **−2 M** (no AL × M
+cells survive separately — they collapse into MF × M); **−19 U** (the
+remaining 26 K-cells that were U + the same-shape AL-column cells
+collapse into the single MF row/column's 22 U cells; see "merge math"
+above).
+
+Earlier deltas (kept for change-log continuity):
 
 (2026-04-25 SetterF row delta: +3 N from `Either → SetterF`, `Affine →
 SetterF`, `PowerSeries → SetterF` — shipped to close eo-monocle Gap-1.
@@ -172,39 +210,27 @@ two adjacent candidates investigated in the same batch
 rejected as structurally unsound — see §3.2.4 for the resolution
 rationale.)
 
-(2026-04-27 Kaleidoscope-row delta: matrix grows from 14×14 (196 cells)
-to 15×15 (225 cells) — 29 new cells from the Kaleidoscope row + column.
-Of those: **+3 N** (I × K via `forgetful2kaleidoscope`; K × K via the
-already-shipped `kalAssoc`; K × S via the new `kaleidoscope2setter`),
-and **+26 U** (every other K row/column cell — Kaleidoscope's
-structural isolation matches Grate's almost cell-for-cell, including
-the same Lens-source-has-no-classifier-witness shape that gates Lens →
-Grate). The two adjacent candidates investigated in the same batch
-(`Composer[Kaleidoscope, Forgetful]` and `Composer[Kaleidoscope,
-Forget[F]]`) were rejected as structurally unsound — see §3.2.6 for
-the resolution rationale, which mirrors §3.2.4's Grate skip block.)
-
 The Unit-21 resolution closed every numbered `?` group from §3.3:
 +2 N (`affine2alg` + `chainViaTuple2(Forgetful → Tuple2 → Forget[F]`
 already covered by existing tests once chain refactor landed);
 +4 M (idiom-documented `Forgetful/Tuple2/Either/Affine × Fold` cases
 where outer focuses on `F[A]`); +6 U (structurally-decided cells
-where the carrier round-trip cannot work — AlgLens outbound,
-PowerSeries × Forget/AlgLens, cross-F Forget pairs).
+where the carrier round-trip cannot work — MultiFocus outbound,
+PowerSeries × Forget/MultiFocus, cross-F Forget pairs).
 
-Adding the 28 border cells for the two standalone families: JsonTraversal
+Adding the border cells for the two standalone families: JsonTraversal
 rows/columns are **M** (documented in `CrossCarrierCompositionSpec`
 scenarios 4/5) and Review rows/columns are **M** (direct
 function-composition idiom) or **U** (as outer — no `to` side).
 
-Grand totals across all 225 requested cells (196 Optic×Optic + 28
-standalone borders + 1 JsonTraversal×Review corner), post-2026-04-25:
+Grand totals across all post-merge cells (196 Optic×Optic + standalone
+borders), post-2026-04-28:
 
 | Category | Count |
 |---|---|
-| N | 99 |
-| M | 89 |
-| U | 39 |
+| N | 95 |
+| M | 85 |
+| U | 44 |
 | ? | 0 |
 
 ### 1.2 Top 5 surprising gaps
@@ -214,26 +240,29 @@ standalone borders + 1 JsonTraversal×Review corner), post-2026-04-25:
    `Fold[List] .andThen Fold[Option]` shape fails implicit resolution:
    no `Composer[Forget[List], Forget[Option]]`. Not even documented
    as unsupported — genuinely **?**.
-2. **AlgLens outbound**. There is *no* `Composer[AlgLens[F], _]`. Once
-   you land in `AlgLens[List]` you cannot compose with a downstream
-   `Forget[List]` or `Tuple2` optic except by lifting the downstream
-   side *into* `AlgLens[F]` first. That's not surfaced in docs.
+2. **MultiFocus outbound** (other than to SetterF). There is no
+   `Composer[MultiFocus[F], Forgetful]` / `Composer[MultiFocus[F],
+   Forget[G]]` / `Composer[MultiFocus[F], Tuple2]`. Once you land in
+   `MultiFocus[List]` you can only widen to `SetterF` or stay in
+   MultiFocus. The carrier is otherwise a sink — same shape as Grate's
+   isolation profile, one notch less surprising than the pre-merge
+   `AlgLens[F]` outbound + `Kaleidoscope` outbound double-headed gap.
 3. **PowerSeries → anything** is not bridged. Composing a Traversal
    with a Lens on its right requires the Lens to be lifted into
    PowerSeries (fine; `tuple2ps` ships), but a Traversal composed with
-   an AlgLens classifier or a Grate fails — no `Composer[PowerSeries,
-   AlgLens[F]]` or `Composer[PowerSeries, Grate]` exists. Untested
-   in the spec corpus.
+   a MultiFocus classifier or a Grate fails — no
+   `Composer[PowerSeries, MultiFocus[F]]` or `Composer[PowerSeries,
+   Grate]` exists. Untested in the spec corpus.
 4. **Setter composition is flat-out absent.** `SetterF` has
    `ForgetfulFunctor` and `ForgetfulTraverse` but NO
    `AssociativeFunctor`, so `setter.andThen(setter)` does not compile.
    Documented in `SetterF.scala` line 14 but nowhere near the user-
    facing `Setter.scala` ctor.
-5. **JsonPrism.andThen(AlgLens)** — both are `Either`-based at their
-   respective outer layers, but JsonPrism's `Either`-carrier meets
-   AlgLens via `Composer[Either, AlgLens[F]]` only when `F` is
-   `Alternative + Foldable`. No test ever composes a JsonPrism with
-   an AlgLens; plausibly works via `leftToRight` but unverified.
+5. **JsonPrism.andThen(MultiFocus)** — both are `Either`-based at
+   their respective outer layers, but JsonPrism's `Either`-carrier
+   meets MultiFocus via `Composer[Either, MultiFocus[F]]` only when
+   `F` is `Alternative + Foldable`. No test ever composes a JsonPrism
+   with a MultiFocus; plausibly works via `leftToRight` but unverified.
 
 ### 1.3 Top 3 high-priority gap-closures for 0.1.0
 
@@ -247,10 +276,10 @@ standalone borders + 1 JsonTraversal×Review corner), post-2026-04-25:
    outbound Composer). Add a short section in `site/docs/optics.md`
    for each saying so; right now users discover it by hitting an
    implicit miss.
-3. **Ship or explicitly close AlgLens × Traversal.each bridging** —
+3. **Ship or explicitly close MultiFocus × Traversal.each bridging** —
    a common user question is "how do I combine a classifier with a
    list traversal?" There is no
-   `Composer[AlgLens[F], PowerSeries]` nor its reverse. Pick one
+   `Composer[MultiFocus[F], PowerSeries]` nor its reverse. Pick one
    direction, document it, or add a Composer.
 
 ---
@@ -260,28 +289,27 @@ standalone borders + 1 JsonTraversal×Review corner), post-2026-04-25:
 Columns are **inner** optics; rows are **outer** optics. Abbreviations:
 I=Iso, L=Lens, P=Prism, O=Optional, AF=AffineFold, G=Getter, S=Setter,
 F=Fold, Te=Traversal.each (PowerSeries), Tf=Traversal.forEach
-(Forget[F]), FT=FixedTraversal[N], AL=AlgLens[F], Gr=Grate,
-K=Kaleidoscope, JP=JsonPrism/JsonFieldsPrism.
+(Forget[F]), FT=FixedTraversal[N], MF=MultiFocus[F], Gr=Grate,
+JP=JsonPrism/JsonFieldsPrism.
 
 Each cell indicates the classification and a one-line "why".
 
-|         | I | L | P | O | AF | G | S | F | Te | Tf | FT | AL | Gr | K | JP |
-|---------|---|---|---|---|----|---|---|---|----|----|----|----|----|----|----|
-| **I**   | N (Forgetful.assoc, fused `BijectionIso.andThen(BijectionIso)`) | N (forgetful2tuple→tupleAssocF; fused `Iso.andThen(GetReplaceLens)`) | N (forgetful2either→eitherAssocF; fused `Iso.andThen(MendTearPrism)`) | N (Forgetful→Tuple2→Affine via chain; fused `Iso.andThen(Optional)`) | M (AF's T=Unit mismatches outer B — see §3) | U (Getter's T=Unit) | N (Forgetful→Tuple2→SetterF) | ? (Forgetful→Forget[F] not shipped — needs check) | N (Forgetful→Tuple2→PowerSeries via chain) | ? (Forgetful→Forget[F] unexplored) | U (no Composer[_, FT]) | N (forget2alg path OR Forgetful→Tuple2→AlgLens) | N (Composer[Forgetful, Grate]; GrateSpec witnesses) | N (Composer[Forgetful, Kaleidoscope] — `forgetful2kaleidoscope`; ReflectorInstancesSpec) | N (Forgetful→Either via forgetful2either) |
-| **L**   | N (tupleAssocF after forgetful2tuple on inner) | N (tupleAssocF; fused `GetReplaceLens.andThen(GetReplaceLens)`) | N (bothViaAffine — OpticsBehaviorSpec.Lens→Prism) | N (Composer[Tuple2, Affine]; fused `GetReplaceLens.andThen(Optional)`) | M (see AffineFold row in §3) | U (inner T=Unit ≠ outer B) | N (Composer[Tuple2, SetterF]) | ? (Tuple2 → Forget[F] not shipped) | N (Composer[Tuple2, PowerSeries]) | ? (no direct Composer) | U (no Composer[_, FT]) | N (Composer[Tuple2, AlgLens[F]]) | U (Composer[Tuple2, Grate] explicitly NOT shipped per D3) | U (Composer[Tuple2, Kaleidoscope] explicitly NOT shipped per K-plan D3 — same shape as Lens → Grate, no Reflector at the Lens's source) | N (bothViaAffine — CrossCarrierCompositionSpec scenarios 1-3) |
-| **P**   | N (forgetful2either morphs inner into Either; fused `MendTearPrism.andThen(BijectionIso)`) | N (bothViaAffine) | N (eitherAssocF; fused `MendTearPrism.andThen(MendTearPrism)`) | N (Composer[Either, Affine]; fused `MendTearPrism.andThen(Optional)`) | M (AF T=Unit) | U (T=Unit) | N (Composer[Either, SetterF] — shipped 2026-04-25) | ? (Either→Forget[F] unexplored) | N (Composer[Either, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Either, AlgLens[F]]) | U (no Composer[Either, Grate]) | U (no Composer[Either, Kaleidoscope] — by symmetry with Either → Grate) | N (stays in Either via eitherAssocF) |
-| **O**   | N (Affine.assoc after forgetful→tuple→affine on inner) | N (Affine.assoc after tuple2affine on inner; fused `Optional.andThen(GetReplaceLens)`) | N (Affine.assoc after either2affine; fused `Optional.andThen(MendTearPrism)`) | N (Affine.assoc; fused `Optional.andThen(Optional)`) | M (AF T=Unit — use `AffineFold.fromOptional(chain)`) | U (T=Unit) | N (Composer[Affine, SetterF] — shipped 2026-04-25) | ? (Affine→Forget[F] unexplored) | N (Composer[Affine, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Affine, AlgLens[F]] — `affine2alg`, Unit 21) | U (no Composer[Affine, Grate]) | U (no Composer[Affine, Kaleidoscope]) | N (stays Affine via either2affine on the inner JsonPrism) |
-| **AF**  | U (outer T=Unit; can't feed into any inner B slot) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) |
-| **G**   | U (outer T=Unit) | U | U | U | U | U | U | U | U | U | U | U | U | U | U |
-| **S**   | U (SetterF lacks AssociativeFunctor; even with same-F inner no andThen) | U (no Composer[SetterF, _]) | U | U | U | U | U | U | U | U | U | U | U | U | U |
-| **F**   | U (Fold's T=Unit) | U | U | U | U | U | U | U | U | U | U | U | U | U | U |
-| **Te**  | N (Composer[Forgetful → Tuple2 → PowerSeries] via chain on inner) | N (Composer[Tuple2, PowerSeries] on inner) | N (Composer[Either, PowerSeries] on inner) | N (Composer[Affine, PowerSeries] on inner) | M (T=Unit on inner AF) | U (Getter T=Unit) | N (Composer[PowerSeries, SetterF] — shipped 2026-04-25) | ? (no Composer[Forget[F], PowerSeries]) | N (same-carrier PowerSeries.assoc — **untested with 2-level nesting**) | ? (no Composer between PowerSeries and Forget[F]) | U (no Composer[_, FT]) | ? (no Composer[PowerSeries, AlgLens[F]]) | U (no Composer[PowerSeries, Grate]) | U (no Composer[PowerSeries, Kaleidoscope]) | N (Composer[Either, PowerSeries] on inner JsonPrism; untested) |
-| **Tf**  | U (Tf's T=Unit outer) | U | U | U | U | U | U | U | U | ? (same Forget[F] same-F is fine via assocForgetMonad if F: Monad; different F not bridged) | U | U | U | U | U |
-| **FT**  | U (FT lacks AssociativeFunctor; no outbound composer) | U | U | U | U | U | U | U | U | U | U | U | U | U | U |
-| **AL**  | N (Forgetful→Tuple2→AlgLens[F] via chain on inner) | N (Composer[Tuple2, AlgLens[F]] on inner — OpticsBehaviorSpec) | N (Composer[Either, AlgLens[F]] on inner — OpticsBehaviorSpec) | ? (no Composer[Affine, AlgLens[F]] shipped) | M (AF T=Unit) | U (Getter T=Unit) | ? (SetterF terminal) | N (Composer[Forget[F], AlgLens[F]] on inner when same F — OpticsBehaviorSpec) | ? (no Composer[PowerSeries, AlgLens[F]]) | ? (no Composer[AlgLens[F], Forget[F]]) | U (no Composer[_, FT]) | N (assocAlgMonad; OpticsBehaviorSpec "Two Forget[List] classifiers compose") | U (no Composer[AlgLens[F], Grate]) | U (no Composer[AlgLens[F], Kaleidoscope]) | ? (Either→AlgLens bridge works per-prism — JsonPrism.andThen(AlgLens) plausible but untested) |
-| **Gr**  | U (Composer[Forgetful, Grate] is ONE-WAY; Iso→Grate yes, Grate→Iso no — see §3.2.4) | U (no Composer[Tuple2, Grate]) | U | U | U | U | N (Composer[Grate, SetterF] — `grate2setter`, Grate.scala; shipped 2026-04-27) | U | U | U | U | U | N (grateAssoc same-carrier — untested with two Grates beyond law suite) | U (no Composer between Grate and Kaleidoscope in either direction) | U |
-| **K**   | U (Composer[Forgetful, Kaleidoscope] is ONE-WAY; Iso→K yes, K→Iso no — see §3.2.6) | U (no Composer[Tuple2, Kaleidoscope] — same Lens-source-has-no-Reflector shape as Lens → Grate) | U | U | U | U | N (Composer[Kaleidoscope, SetterF] — `kaleidoscope2setter`, Kaleidoscope.scala; shipped 2026-04-27) | U (Composer[Kaleidoscope, Forget[F]] structurally unsound — see §3.2.6) | U | U | U | U | U (no Composer between Kaleidoscope and Grate in either direction) | N (kalAssoc same-carrier same-F — ReflectorInstancesSpec witnesses Iso → K → K through the same FCarrier) | U |
-| **JP**  | N (forgetful2either morphs inner Iso into Either; eitherAssocF) | N (bothViaAffine — CCCS scenarios 1-3) | N (eitherAssocF — fused `.andThen` lives on JsonPrism itself via stock Either carrier) | N (Composer[Either, Affine]) | M (AF T=Unit) | U | ? (no coverage) | ? | N (Composer[Either, PowerSeries] — untested) | ? | U | ? (Composer[Either, AlgLens] applies but unverified for JsonPrism specifically) | U | U (no Composer[Either, Kaleidoscope]) | N (eitherAssocF — JsonPrism nested via `.field(...).field(...)` is this pattern) |
+|         | I | L | P | O | AF | G | S | F | Te | Tf | FT | MF | Gr | JP |
+|---------|---|---|---|---|----|---|---|---|----|----|----|----|----|----|
+| **I**   | N (Forgetful.assoc, fused `BijectionIso.andThen(BijectionIso)`) | N (forgetful2tuple→tupleAssocF; fused `Iso.andThen(GetReplaceLens)`) | N (forgetful2either→eitherAssocF; fused `Iso.andThen(MendTearPrism)`) | N (Forgetful→Tuple2→Affine via chain; fused `Iso.andThen(Optional)`) | M (AF's T=Unit mismatches outer B — see §3) | U (Getter's T=Unit) | N (Forgetful→Tuple2→SetterF) | ? (Forgetful→Forget[F] not shipped — needs check) | N (Forgetful→Tuple2→PowerSeries via chain) | ? (Forgetful→Forget[F] unexplored) | U (no Composer[_, FT]) | N (forgetful2multifocus direct OR forget2multifocus path) | N (Composer[Forgetful, Grate]; GrateSpec witnesses) | N (Forgetful→Either via forgetful2either) |
+| **L**   | N (tupleAssocF after forgetful2tuple on inner) | N (tupleAssocF; fused `GetReplaceLens.andThen(GetReplaceLens)`) | N (bothViaAffine — OpticsBehaviorSpec.Lens→Prism) | N (Composer[Tuple2, Affine]; fused `GetReplaceLens.andThen(Optional)`) | M (see AffineFold row in §3) | U (inner T=Unit ≠ outer B) | N (Composer[Tuple2, SetterF]) | ? (Tuple2 → Forget[F] not shipped) | N (Composer[Tuple2, PowerSeries]) | ? (no direct Composer) | U (no Composer[_, FT]) | N (Composer[Tuple2, MultiFocus[F]] — `tuple2multifocus`) | U (Composer[Tuple2, Grate] explicitly NOT shipped per D3) | N (bothViaAffine — CrossCarrierCompositionSpec scenarios 1-3) |
+| **P**   | N (forgetful2either morphs inner into Either; fused `MendTearPrism.andThen(BijectionIso)`) | N (bothViaAffine) | N (eitherAssocF; fused `MendTearPrism.andThen(MendTearPrism)`) | N (Composer[Either, Affine]; fused `MendTearPrism.andThen(Optional)`) | M (AF T=Unit) | U (T=Unit) | N (Composer[Either, SetterF] — shipped 2026-04-25) | ? (Either→Forget[F] unexplored) | N (Composer[Either, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Either, MultiFocus[F]] — `either2multifocus`) | U (no Composer[Either, Grate]) | N (stays in Either via eitherAssocF) |
+| **O**   | N (Affine.assoc after forgetful→tuple→affine on inner) | N (Affine.assoc after tuple2affine on inner; fused `Optional.andThen(GetReplaceLens)`) | N (Affine.assoc after either2affine; fused `Optional.andThen(MendTearPrism)`) | N (Affine.assoc; fused `Optional.andThen(Optional)`) | M (AF T=Unit — use `AffineFold.fromOptional(chain)`) | U (T=Unit) | N (Composer[Affine, SetterF] — shipped 2026-04-25) | ? (Affine→Forget[F] unexplored) | N (Composer[Affine, PowerSeries]) | ? (no Composer) | U (no Composer[_, FT]) | N (Composer[Affine, MultiFocus[F]] — `affine2multifocus`) | U (no Composer[Affine, Grate]) | N (stays Affine via either2affine on the inner JsonPrism) |
+| **AF**  | U (outer T=Unit; can't feed into any inner B slot) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) |
+| **G**   | U (outer T=Unit) | U | U | U | U | U | U | U | U | U | U | U | U | U |
+| **S**   | U (SetterF lacks AssociativeFunctor; even with same-F inner no andThen) | U (no Composer[SetterF, _]) | U | U | U | U | U | U | U | U | U | U | U | U |
+| **F**   | U (Fold's T=Unit) | U | U | U | U | U | U | U | U | U | U | U | U | U |
+| **Te**  | N (Composer[Forgetful → Tuple2 → PowerSeries] via chain on inner) | N (Composer[Tuple2, PowerSeries] on inner) | N (Composer[Either, PowerSeries] on inner) | N (Composer[Affine, PowerSeries] on inner) | M (T=Unit on inner AF) | U (Getter T=Unit) | N (Composer[PowerSeries, SetterF] — shipped 2026-04-25) | ? (no Composer[Forget[F], PowerSeries]) | N (same-carrier PowerSeries.assoc — **untested with 2-level nesting**) | ? (no Composer between PowerSeries and Forget[F]) | U (no Composer[_, FT]) | ? (no Composer[PowerSeries, MultiFocus[F]]) | U (no Composer[PowerSeries, Grate]) | N (Composer[Either, PowerSeries] on inner JsonPrism; untested) |
+| **Tf**  | U (Tf's T=Unit outer) | U | U | U | U | U | U | U | U | ? (same Forget[F] same-F is fine via assocForgetMonad if F: Monad; different F not bridged) | U | U | U | U |
+| **FT**  | U (FT lacks AssociativeFunctor; no outbound composer) | U | U | U | U | U | U | U | U | U | U | U | U | U |
+| **MF**  | U (no Composer[MultiFocus[F], Forgetful] — would shadow `forgetful2multifocus`; see §3.2.6) | N (Composer[Tuple2, MultiFocus[F]] on inner — OpticsBehaviorSpec) | N (Composer[Either, MultiFocus[F]] on inner — OpticsBehaviorSpec) | N (Composer[Affine, MultiFocus[F]] on inner — `affine2multifocus`) | M (AF T=Unit) | U (Getter T=Unit) | N (Composer[MultiFocus[F], SetterF] — `multifocus2setter`) | N (Composer[Forget[F], MultiFocus[F]] on inner when same F — OpticsBehaviorSpec) | U (no Composer[PowerSeries, MultiFocus[F]]) | U (no Composer[MultiFocus[F], Forget[F]]; structurally unsound — see §3.2.6) | U (no Composer[_, FT]) | N (mfAssoc same-carrier — OpticsBehaviorSpec "Two Forget[List] classifiers compose"; ZipList/Const collect via `collectMap`) | U (no Composer between MultiFocus and Grate in either direction) | ? (Either→MultiFocus bridge works per-prism — JsonPrism.andThen(MultiFocus) plausible but untested) |
+| **Gr**  | U (Composer[Forgetful, Grate] is ONE-WAY; Iso→Grate yes, Grate→Iso no — see §3.2.4) | U (no Composer[Tuple2, Grate]) | U | U | U | U | N (Composer[Grate, SetterF] — `grate2setter`, Grate.scala; shipped 2026-04-27) | U | U | U | U | U (no Composer between Grate and MultiFocus in either direction) | N (grateAssoc same-carrier — untested with two Grates beyond law suite) | U |
+| **JP**  | N (forgetful2either morphs inner Iso into Either; eitherAssocF) | N (bothViaAffine — CCCS scenarios 1-3) | N (eitherAssocF — fused `.andThen` lives on JsonPrism itself via stock Either carrier) | N (Composer[Either, Affine]) | M (AF T=Unit) | U | ? (no coverage) | ? | N (Composer[Either, PowerSeries] — untested) | ? | U | ? (Composer[Either, MultiFocus] applies but unverified for JsonPrism specifically) | U | N (eitherAssocF — JsonPrism nested via `.field(...).field(...)` is this pattern) |
 
 ### 2.1 Standalone-family borders
 
@@ -298,8 +326,8 @@ Two standalone types never appear on the outer side of an `Optic`
 
 ### 2.2 Summary of the ? cells (for §3.4)
 
-The 12 `?` cells are all flavours of "carrier pair exists but no
-Composer ships and no test or doc resolves it":
+The remaining `?` cells are all flavours of "carrier pair exists but
+no Composer ships and no test or doc resolves it":
 
 1. Iso × Fold (`Forgetful → Forget[F]`)
 2. Iso × Traversal.forEach (`Forgetful → Forget[F]`)
@@ -309,13 +337,14 @@ Composer ships and no test or doc resolves it":
 6. Prism × Traversal.forEach
 7. Optional × Fold
 8. Optional × Traversal.forEach
-9. Optional × AlgLens (`Affine → AlgLens[F]`)
-10. Traversal.each × Fold / Traversal.forEach / AlgLens — three cells
-11. AlgLens × {Affine, PowerSeries, Forget[F]-as-outer, JsonPrism}
-12. Traversal.forEach × Traversal.forEach across different `F` shapes
+9. Traversal.each × Fold / Traversal.forEach / MultiFocus — three cells
+10. Traversal.forEach × Traversal.forEach across different `F` shapes
+11. JsonPrism × Setter / Fold / Traversal.forEach / MultiFocus — four
+    cells covered by the inherited Either-row, but unverified for
+    JsonPrism specifically.
 
 The common thread: **Forget[F] never morphs into anything except
-`AlgLens[F]`**, and AlgLens never morphs out at all.
+`MultiFocus[F]`**, and MultiFocus only morphs out to SetterF.
 
 ---
 
@@ -511,70 +540,79 @@ witnessed in `core/src/test/scala/eo/GrateSpec.scala` lines 91-122) and
 Gr × SetterF (`grate2setter`; witnessed in `EoSpecificLawsSpec` and
 `OpticsBehaviorSpec`).
 
-#### 3.2.5 AlgLens outbound
+#### 3.2.5 (deleted)
 
-No `Composer[AlgLens[F], _]` ships — AlgLens is a sink. Once you're
-in AlgLens you can only chain with more AlgLens-carrier inners.
+Folded into §3.2.6 — `MultiFocus[F]` outbound is now the unified
+sink-rationale section.
 
-#### 3.2.6 Kaleidoscope × non-Kaleidoscope, non-Kaleidoscope × Kaleidoscope (except Iso→K)
+#### 3.2.6 MultiFocus[F] × non-MultiFocus, non-MultiFocus × MultiFocus (except Iso→MF)
 
-**2026-04-27 update — K × S resolved (N).** Shipped
-`Composer[Kaleidoscope, SetterF]` (`kaleidoscope2setter`,
-`Kaleidoscope.scala`); the K × S cell flips from **U** to **N**. The
-bridge collapses Kaleidoscope's aggregation pattern to the Setter API
-by reusing the `(s: S) => k = o.to(s); o.from(kalFunctor.map(k, f))`
-shape from [[kalFunctor]]. Witnessed by `EoSpecificLawsSpec`
-(MorphLaws.A1 on the lifted `Kaleidoscope.apply[List, Int]`) and
-`OpticsBehaviorSpec` (per-element rewrite on `Kaleidoscope.apply[List]`
-and `Kaleidoscope.apply[ZipList]`). Like every other
-`Composer[X, SetterF]`, this does NOT enable `kaleidoscope.andThen
-(setter)` directly — SetterF lacks `AssociativeFunctor` by design — but
-it does unlock the morph-site value (`kaleidoscope.morph[SetterF]`,
-uniform Setter-shaped extension points).
+**2026-04-28 update — `MultiFocus[F]` carrier merge.** The pre-merge
+`AlgLens[F]` × * and `Kaleidoscope` × * rows collapse into a single
+`MultiFocus[F]` × * row. The MF × MF cell stays N (same-carrier
+`mfAssoc`); MF × SetterF stays N (`multifocus2setter` collapses both
+the prior `kaleidoscope2setter` and the latent `alg2setter`); every
+other MF × inner cell is U with the same structural rationale that
+governed Kaleidoscope × inner pre-merge.
+
+**Inbound bridges** (every cell is N):
+
+- `Composer[Forgetful, MultiFocus[F]]` (Iso → MF) — `forgetful2multifocus`
+  with `F: Applicative + Foldable`.
+- `Composer[Tuple2, MultiFocus[F]]` (Lens → MF) — `tuple2multifocus`
+  with `F: Applicative + Foldable`; mixes in `MultiFocusSingleton` so
+  `mfAssoc`'s singleton fast-path fires.
+- `Composer[Either, MultiFocus[F]]` (Prism → MF) — `either2multifocus`
+  with `F: Alternative + Foldable`.
+- `Composer[Affine, MultiFocus[F]]` (Optional → MF) — `affine2multifocus`
+  with `F: Alternative + Foldable`.
+- `Composer[Forget[F], MultiFocus[F]]` (Fold/Tf → MF) — `forget2multifocus`,
+  unconstrained.
+
+**Outbound — only MF → SetterF.** `MultiFocus[F] → SetterF` ships as
+`multifocus2setter`; the bridge collapses MultiFocus's broadcast
+pattern via `(s: S) => (x, fa) = o.to(s); o.from((x, F.map(fa, f)))`.
+Witnessed by `EoSpecificLawsSpec` (MorphLaws.A1 on the lifted
+`MultiFocus.apply[List, Int]`) and `OpticsBehaviorSpec` (per-element
+rewrite on `MultiFocus.apply[List]` and `MultiFocus.apply[ZipList]`).
+Like every other `Composer[X, SetterF]`, this does NOT enable
+`multiFocus.andThen(setter)` directly — SetterF lacks
+`AssociativeFunctor` by design — but it does unlock the morph-site
+value (`multiFocus.morph[SetterF]`).
 
 **Two further candidates investigated and rejected as structurally
-unsound** (rationale also lives at the bottom of `Kaleidoscope.scala`
-so the investigation isn't re-spent — and mirrors §3.2.4's Grate skip
-block almost cell-for-cell):
+unsound** (rationale also lives at the bottom of `MultiFocus.scala`):
 
-- **`Composer[Kaleidoscope, Forgetful]` (Kaleidoscope widens to
-  Iso/Getter).** Type-level the bridge encodes via `Id`-carrier
-  Kaleidoscopes on either side. However, [[forgetful2kaleidoscope]]
-  already ships in the OPPOSITE direction. Adding the reverse would
-  create a bidirectional Composer pair, which the `Morph` resolution
-  explicitly forbids: both `Morph.leftToRight` and `Morph.rightToLeft`
-  would match for any `Iso × Kaleidoscope` pair, surfacing as
-  ambiguous-implicit and breaking every existing
-  `iso.andThen(kaleidoscope)` call site (witnessed by
-  `ReflectorInstancesSpec`). Cats-eo's resolution invariant *"we don't
-  ship bidirectional composers"* is the deciding constraint, NOT the
-  type-level encodability.
+- **`Composer[MultiFocus[F], Forgetful]` (MultiFocus widens to
+  Iso/Getter).** Type-level encodable. However,
+  `forgetful2multifocus` already ships in the OPPOSITE direction.
+  Adding the reverse would create a bidirectional Composer pair, which
+  the `Morph` resolution explicitly forbids: both `Morph.leftToRight`
+  and `Morph.rightToLeft` would match for any `Iso × MultiFocus` pair,
+  surfacing as ambiguous-implicit and breaking every existing
+  `iso.andThen(multifocus)` call site. Cats-eo's resolution invariant
+  *"we don't ship bidirectional composers"* is the deciding
+  constraint, NOT the type-level encodability. Workaround:
+  `multiFocus.to(s)._2` for the read side.
 
-- **`Composer[Kaleidoscope, Forget[F]]` (Kaleidoscope widens to
+- **`Composer[MultiFocus[F], Forget[G]]` (MultiFocus widens to
   Traversal/Fold).** Generic in `S, T, A, B`. The target carrier
-  `Forget[F][X, A] = F[A]` forces the morphed `to` to produce `F[A]`
-  from arbitrary `S`. There is no path because (a) Kaleidoscope's
-  `FCarrier` is a path-dependent type member (NOT a Composer
-  parameter), opaque after morphing through `Optic[…, Kaleidoscope]`;
-  and (b) even with `FCarrier = F` known at the user's call site,
-  `Reflector[F]` provides `Apply[F]`, which is not in general the same
-  as `Foldable[F]` Composer would need to thread for the target.
-  Composer has no place to thread a `FCarrier = F` equality OR a
-  `Foldable[F]` instance. The structural mismatch is genuine; users
-  wanting fold/traverse semantics on a Kaleidoscope's slots should
-  construct the `Forget[F]`-carrier optic directly.
+  `Forget[G][X, A] = G[A]` forces the morphed `to` to produce `G[A]`
+  from arbitrary `S`. The structural mismatch: even with `F = G`
+  matching, the Composer has no place to thread the `Foldable[G]`
+  witness — the carrier-shaped bridge can't carry an inner constraint
+  scoped to the call site. Users wanting fold/traverse semantics on a
+  MultiFocus's slots should construct the `Forget[F]`-carrier optic
+  directly.
 
-Kaleidoscope plan D3 documents the absence of:
+By symmetry of these two skip-rationales, `Tuple2 → MultiFocus → X`
+chains where X ∉ {SetterF, MultiFocus[F]} all sit in the U bucket.
+The shipped `MultiFocus` outbound surface is: same-carrier `andThen`
+(via `mfAssoc`), `morph[SetterF]` (via `multifocus2setter`), and
+nothing else.
 
-- `Composer[Tuple2, Kaleidoscope]` (Lens → Kaleidoscope) — see
-  `Kaleidoscope.scala` lines 293-298.
-
-By symmetry, `Either → Kaleidoscope`, `Affine → Kaleidoscope`,
-`PowerSeries → Kaleidoscope`, and every `Kaleidoscope → non-K` *except*
-K → SetterF are absent. The two shipped non-symmetric pairs are Iso ×
-Kaleidoscope (`forgetful2kaleidoscope`; witnessed in
-`ReflectorInstancesSpec`) and K × SetterF (`kaleidoscope2setter`;
-witnessed in `EoSpecificLawsSpec` and `OpticsBehaviorSpec`).
+The pre-merge `AlgLens.scala` and `Kaleidoscope.scala` files are
+deleted; the unified file is `MultiFocus.scala`.
 
 ### 3.3 Unexplored cells (?)
 
@@ -582,19 +620,19 @@ witnessed in `EoSpecificLawsSpec` and `OpticsBehaviorSpec`).
 
 The Fold and Traversal.forEach optics live on `Forget[F]`. There is
 **no `Composer[Forgetful, Forget[F]]`**, no `Composer[Tuple2,
-Forget[F]]`, etc. The Forget→AlgLens bridge exists; the inverse does
-not (Forget has no observable structural leftover, so there's no
+Forget[F]]`, etc. The `Forget → MultiFocus` bridge exists; the inverse
+does not (Forget has no observable structural leftover, so there's no
 sensible way to widen it back into Tuple2/Either/Affine).
 
 **Outcome.** Two cases:
 
 1. **Outer focuses on an `F[A]`** (e.g. `Lens[Row, List[Int]]`). The
-   canonical lift is `AlgLens.fromLensF(lens)` /
-   `AlgLens.fromPrismF(prism)` / `AlgLens.fromOptionalF(opt)`, then
-   chain via `Composer[AlgLens[F], AlgLens[F]]` (`assocAlgMonad`).
+   canonical lift is `MultiFocus.fromLensF(lens)` /
+   `MultiFocus.fromPrismF(prism)` / `MultiFocus.fromOptionalF(opt)`,
+   then chain via `Composer[MultiFocus[F], MultiFocus[F]]` (`mfAssoc`).
    Classified **M** — no `.andThen` cross-carrier path, but a single
    factory call routes the user. Documented in `site/docs/optics.md`
-   AlgLens section and exercised in `OpticsBehaviorSpec`.
+   MultiFocus section and exercised in `OpticsBehaviorSpec`.
 2. **Outer focuses on a scalar `A`** (e.g. `Lens[Row, Int]`). There is
    **no natural composition** with a `Fold[F]` — the outer never
    produces an `F`-shaped value. Classified **U** for `.andThen`; the
@@ -604,62 +642,64 @@ sensible way to widen it back into Tuple2/Either/Affine).
 The `?` here was the lack of a written outcome, not a missing piece of
 machinery. Pinned **M / U** by case.
 
-#### 3.3.2 Optional × AlgLens[F] — **RESOLVED (N) 2026-04-24**
+#### 3.3.2 Optional × MultiFocus[F] — **RESOLVED (N) 2026-04-24**
 
-Shipped `affine2alg` (`AlgLens.scala:423`) — `Composer[Affine,
-AlgLens[F]]` for any `F: Alternative + Foldable`. Mirrors `either2alg`:
-`Miss → F.empty[A]` (cardinality 0, preserves the Affine's `Fst`
-leftover for the pull side); `Hit → F.pure(a)` (cardinality 1; pull
-collapses via `pickSingletonOrThrow`). Behaviour spec at
-`OpticsBehaviorSpec`:
+Shipped `affine2multifocus` (`MultiFocus.scala`; pre-merge: `affine2alg`
+in `AlgLens.scala`) — `Composer[Affine, MultiFocus[F]]` for any `F:
+Alternative + Foldable`. Mirrors `either2multifocus`: `Miss → F.empty[A]`
+(cardinality 0, preserves the Affine's `Fst` leftover for the pull
+side); `Hit → F.pure(a)` (cardinality 1; pull collapses via
+`pickSingletonOrThrow`). Behaviour spec at `OpticsBehaviorSpec`:
 
-- `"Affine Optional lifts into AlgLens[List] and preserves hit/miss
+- `"Affine Optional lifts into MultiFocus[List] and preserves hit/miss
   .modify semantics"` — same shape as the Either-prism case.
-- `"Optional andThen AlgLens[List] classifier composes via affine2alg"`
-  — full cross-carrier `.andThen` end-to-end.
+- `"Optional andThen MultiFocus[List] classifier composes via
+  affine2multifocus"` — full cross-carrier `.andThen` end-to-end.
 
-This also closes the `Affine → AlgLens` arm of the Tier-2
-`chainViaTuple2` resolution: `Optional → AlgLens` is now a Tier-1
+This also closes the `Affine → MultiFocus` arm of the Tier-2
+`chainViaTuple2` resolution: `Optional → MultiFocus` is now a Tier-1
 direct, no transitive lookup needed.
 
-#### 3.3.3 AlgLens × anything (non-AlgLens inner) — **RESOLVED (U, by design) 2026-04-24**
+#### 3.3.3 MultiFocus × anything (non-MultiFocus inner) — **RESOLVED (U, by design) 2026-04-24**
 
-Pinned: **AlgLens[F] is a designed composition sink**. Once you've
-landed in AlgLens you compose only with more AlgLens-carrier optics
-(via `assocAlgMonad`). No outbound Composer ships and none is planned.
+Pinned: **MultiFocus[F] is a designed composition sink** (sole
+exception: `multifocus2setter`). Once you've landed in MultiFocus you
+compose only with more MultiFocus-carrier optics (via `mfAssoc`) or
+widen to `SetterF`. No other outbound Composer ships and none is
+planned.
 
-Rationale (mirrors the `optics.md` AlgLens section): AlgLens's
+Rationale (mirrors the `optics.md` MultiFocus section): MultiFocus's
 defining property is "structural leftover paired with classifier
 candidates"; morphing back to Forget[F] would silently drop the `X`
 on the floor (changing semantics from "lensy round-trip" to "phantom
 read"), and morphing back to Tuple2/Either/Affine has no natural
 candidate-to-singleton collapse. If the user really wants downstream
-Fold/Traversal behaviour they should bridge the *inner* into AlgLens
-via `Forget[F] → AlgLens[F]` (the `forget2alg` Composer), not bridge
-AlgLens *out*.
+Fold/Traversal behaviour they should bridge the *inner* into MultiFocus
+via `Forget[F] → MultiFocus[F]` (the `forget2multifocus` Composer),
+not bridge MultiFocus *out*.
 
-Documented in `site/docs/optics.md` AlgLens section and reinforced in
-the §3.4 U-cell summary.
+Documented in `site/docs/optics.md` MultiFocus section and reinforced
+in the §3.4 U-cell summary.
 
-#### 3.3.4 Traversal.each × AlgLens / Fold / Traversal.forEach — **RESOLVED (U, by design) 2026-04-24**
+#### 3.3.4 Traversal.each × MultiFocus / Fold / Traversal.forEach — **RESOLVED (U, by design) 2026-04-24**
 
-Three distinct carriers (PowerSeries, Forget[F], AlgLens[F]) with no
-Composer between them. Pinned **U** by design: PowerSeries → Forget[F]
-would require discarding the outer's `Xo` (PowerSeries' structural
-leftover encoding rebuild data) in favour of pure foldMap, which
-silently breaks the round-trip property; PowerSeries → AlgLens[F]
-would require synthesising a per-candidate cardinality count from the
-PowerSeries' uniform-shape representation, which doesn't fit
-`assocAlgMonad`'s push contract.
+Three distinct carriers (PowerSeries, Forget[F], MultiFocus[F]) with
+no Composer between them. Pinned **U** by design: PowerSeries →
+Forget[F] would require discarding the outer's `Xo` (PowerSeries'
+structural leftover encoding rebuild data) in favour of pure foldMap,
+which silently breaks the round-trip property; PowerSeries →
+MultiFocus[F] would require synthesising a per-candidate cardinality
+count from the PowerSeries' uniform-shape representation, which
+doesn't fit `mfAssoc`'s push contract.
 
 **Idiom.** A user wanting "fold each element of a traversal" already
 has the answer at hand: `traversal.foldMap(f)(s)` (the ForgetfulFold
 instance on PowerSeries). For "classifier per traversal element",
-build the AlgLens chain *under* the traversal:
+build the MultiFocus chain *under* the traversal:
 
 ```scala
-// instead of: traversal.andThen(algLens)
-val result: S = traversal.modify(a => algLens.replace(...)(a))(s)
+// instead of: traversal.andThen(multiFocus)
+val result: S = traversal.modify(a => multiFocus.replace(...)(a))(s)
 ```
 
 Documented as "manual idiom" in `site/docs/optics.md` Composition
@@ -675,7 +715,7 @@ require either:
 
 - a `Composer[Forget[F], Forget[G]]` parameterised over a
   natural-transformation witness `FunctionK[F, G]` or `~>`, or
-- a specialised `flatten` for nested-Foldables on the `AlgLens[F]`
+- a specialised `flatten` for nested-Foldables on the `MultiFocus[F]`
   side (less general but matches the actual use case).
 
 Both are non-trivial design moves that need their own plan; deferred
@@ -702,9 +742,7 @@ For quick scanning, the `U` rows in §2:
 | anything × FixedTraversal[N] | no Composer[_, FT] | Yes if desired |
 | anything × Grate (except Iso) | Rep/Distributive incompat (plan D3) | No — structural |
 | Grate × anything (except Grate, SetterF) | same reason | No — structural |
-| anything × Kaleidoscope (except Iso) | no Reflector at the source (K-plan D3, mirror of Grate) | No — structural |
-| Kaleidoscope × anything (except Kaleidoscope, SetterF) | same reason; bidirectional pair with Iso bridge would shadow Morph | No — structural |
-| AlgLens outbound | no Composer[AlgLens, _] | Yes — extension work |
+| MultiFocus[F] × anything (except inbound carriers, MultiFocus, SetterF) | bidirectional pair with Iso bridge would shadow Morph; Foldable witness can't ride a carrier-shaped bridge | No — structural for some, extension work for others |
 
 ---
 
@@ -738,12 +776,12 @@ demonstrates it. Files inspected:
 | Lens × Optional | OBS | (Affine carrier narrowing) + CRS |
 | Lens × Setter | **gap** | no spec |
 | Lens × Traversal.each | PSS, CRS | `lens.andThen(Traversal.each[ArraySeq, Phone])` |
-| Lens × AlgLens | OBS | `"Lens andThen AlgLens[List] classifier composes end-to-end"` |
+| Lens × MultiFocus | OBS | `"Lens andThen MultiFocus[List] classifier composes end-to-end"` |
 | Lens × JsonPrism | CCCS | scenarios 2 and 3 |
 | Prism × Prism | OBS (via OLS law coverage) | `MendTearPrism.andThen(MendTearPrism)` fused path exercised in law suite |
 | Prism × Lens | OBS | `"Prism.andThen(Lens) composes via Morph.bothViaAffine"` |
 | Prism × Optional | OBS (implicit — Prism→Affine bridge) | **gap** — no direct `Prism.andThen(Optional)` test found |
-| Prism × AlgLens | OBS | `"Either Prism lifts into AlgLens[List]"`, `"Prism.andThen(Prism) via AlgLens[List] survives inner miss"` |
+| Prism × MultiFocus | OBS | `"Either Prism lifts into MultiFocus[List]"`, `"Prism.andThen(Prism) via MultiFocus[List] survives inner miss"` |
 | Prism × Traversal.each | **gap** | no test `prism.andThen(Traversal.each)` |
 | Prism × JsonPrism | **gap** (implicitly via JsonPrism's own `.field.field` chaining) | no user-level Prism outer × JsonPrism inner test |
 | Optional × Lens | **gap** — fused `Optional.andThen(GetReplaceLens)` path exists in source but no test | |
@@ -755,10 +793,10 @@ demonstrates it. Files inspected:
 | Traversal.each × Optional | **gap** | |
 | Traversal.each × Iso | **gap** | |
 | Traversal.each × Traversal.each (nested) | **gap** | no 2-level test |
-| AlgLens × Lens | OBS | `"Lens → AlgLens[List] → Lens composes three carriers cleanly"` |
-| AlgLens × Prism | **gap** | only Prism-inner-to-AlgLens-outer as its own same-carrier test |
-| AlgLens × AlgLens (same F) | OBS | `"Two Forget[List] classifiers compose via AlgLens[List] with non-uniform cardinalities"` |
-| AlgLens × Fold | OBS (via `algFold`) | `algFold` specs lines 829-856 |
+| MultiFocus × Lens | OBS | `"Lens → MultiFocus[List] → Lens composes three carriers cleanly"` |
+| MultiFocus × Prism | **gap** | only Prism-inner-to-MultiFocus-outer as its own same-carrier test |
+| MultiFocus × MultiFocus (same F) | OBS | `"Two Forget[List] classifiers compose via MultiFocus[List] with non-uniform cardinalities"` |
+| MultiFocus × Fold | OBS (via `mfFold`) | `mfFold` cardinality+miss spec |
 | Grate × Grate | OLS (law suite) | but no behaviour-level `grate.andThen(grate)` pair test |
 | Forgetful → Either, Forgetful → Tuple2 | OBS | `"Iso.morph[Either] behaves like a Prism"`, `"Iso.morph[Tuple2] behaves like a Lens"` |
 | Composer.chain (Forgetful → Tuple2 → Affine) | OBS | `"Iso.morph[Tuple2].morph[Affine]"` |
@@ -775,7 +813,7 @@ demonstrates it. Files inspected:
 | Lens × JsonTraversal (manual idiom) | CCCS | scenario 4 |
 | Lens × JsonFieldsTraversal (manual idiom) | CCCS | scenario 5 |
 | Forget[F] × Forget[F] same-F compose (assocForgetMonad) | OBS | `"Forget[Option] optics compose via `.andThen`"` |
-| Forget[F] × AlgLens[F] same-F inject | OBS | `"Forget[Option] injects into AlgLens[Option]"` |
+| Forget[F] × MultiFocus[F] same-F inject | OBS | `"Forget[Option] injects into MultiFocus[Option]"` |
 
 ### 4.3 Gap list (actionable)
 
@@ -809,8 +847,8 @@ spec line before 0.1.0:
 10. `Traversal.each.andThen(Traversal.each)` — nested traversal case
     is a headline use case; only covered implicitly in benchmarks.
     Behaviour-level test missing.
-11. `AlgLens.andThen(Prism)` — Prism as inner should go through
-    `Composer[Either, AlgLens[F]]`; no test.
+11. `MultiFocus.andThen(Prism)` — Prism as inner should go through
+    `Composer[Either, MultiFocus[F]]`; no test.
 12. Two-Grate compose — `grateAssoc` is law-suite tested but no
     behaviour spec exercises `grate.andThen(grate)` with asymmetric
     outer/inner.
@@ -848,9 +886,10 @@ whose absence in the test/doc corpus is most likely to burn.
    at `SetterF.scala:14` into the user-facing `site/docs/optics.md`
    so users stop trying. The current state is a silent implicit miss
    on `setter.andThen(…)`.
-4. **AlgLens × downstream outbound**. Currently `AlgLens[F]` is a
-   sink. At minimum document that in `site/docs/optics.md` AlgLens
-   section (already present but understated).
+4. **MultiFocus × downstream outbound**. Currently `MultiFocus[F]` is
+   a sink (sole exception: `multifocus2setter`). At minimum document
+   that in `site/docs/optics.md` MultiFocus section (already present
+   but understated).
 5. **Traversal.forEach × same-F behaviour test**. `assocForgetMonad`
    for `F: Monad` is load-bearing (unlocks the classifier-composition
    story) but tested only via a toy `Forget[Option]` pair. A realistic
@@ -872,9 +911,11 @@ whose absence in the test/doc corpus is most likely to burn.
    leaf tool for law fixtures; real users compose via `Traversal.each`.
 9. JsonTraversal × Optic lift-in — plan 005 Future Considerations;
    out of scope for 0.1.0.
-10. `Composer[Affine, AlgLens[F]]` — would close Optional × AlgLens,
-    but the use case is niche (Optional-gated classifier). Ship later
-    once a user asks.
+10. `Composer[Affine, MultiFocus[F]]` — already shipped via
+    `affine2multifocus`. Pre-merge there were two separate Composers
+    (`Composer[Affine, AlgLens[F]]` shipped in Unit 21 + a parallel
+    Kaleidoscope-side gap that was never explored). Both collapse into
+    the single carrier-merged Composer.
 11. Cross-`F` Forget composition (`Forget[List] .andThen
     Forget[Option]`) — would require a fresh `Composer[Forget[F],
     Forget[G]]` with a transformation witness, or a specialized `flatten`
@@ -884,10 +925,10 @@ whose absence in the test/doc corpus is most likely to burn.
 
 ## 6. Methodology caveats
 
-- **15 × 15 = 225 is an approximation.** AffineFold and Getter
-  collapse with their read-only parents for most inner cells (both
-  have `T = Unit`, so the whole row is U). Counting those rows
-  multiplies the U bucket; the N/M counts are unaffected.
+- **14 × 14 = 196 is an approximation** (was 15 × 15 = 225 pre-merge).
+  AffineFold and Getter collapse with their read-only parents for most
+  inner cells (both have `T = Unit`, so the whole row is U). Counting
+  those rows multiplies the U bucket; the N/M counts are unaffected.
 - **Fused-overload interactions.** Many cells are N partly because a
   concrete class (e.g. `GetReplaceLens`) ships a `.andThen` overload
   that bypasses the carrier-level machinery. When I cite "fused
@@ -911,7 +952,7 @@ whose absence in the test/doc corpus is most likely to burn.
 - **`?` cells are honest.** I did not run the compiler against each
   unexplored pair. A handful might flip to N once the implicit
   resolution is simulated (especially transitive `chain` pairs
-  involving `Forgetful → Tuple2 → AlgLens`). Flipping them is a
+  involving `Forgetful → Tuple2 → MultiFocus`). Flipping them is a
   5-minute experiment per pair — folded into gap-list item #1 above.
 - **JsonFieldsPrism treated as JsonPrism.** Both extend `Optic[Json,
   Json, A, A, Either]`; their composition behaviour is identical at
@@ -927,18 +968,18 @@ Closing every `?` from §3.3:
 
 | § | Pair | Action | Outcome |
 |---|---|---|---|
-| 3.3.1 (F[A]-focus) | Forgetful/Tuple2/Either/Affine × Fold/Tf, outer focuses on `F[A]` | Documented `AlgLens.fromLensF` / `fromPrismF` / `fromOptionalF` factory route | **M** |
+| 3.3.1 (F[A]-focus) | Forgetful/Tuple2/Either/Affine × Fold/Tf, outer focuses on `F[A]` | Documented `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` factory route | **M** |
 | 3.3.1 (scalar-focus) | Forgetful/Tuple2/Either/Affine × Fold/Tf, outer focuses on scalar `A` | Documented `lens.get(s).foldMap(f)` plain-Scala idiom; no carrier path possible | **U** |
-| 3.3.2 | Optional × AlgLens | **Shipped** `Composer[Affine, AlgLens[F]]` (`affine2alg`); two specs in `OpticsBehaviorSpec` | **N** |
-| 3.3.3 | AlgLens × non-AlgLens (outbound) | Pinned designed sink; documented in `optics.md` and §3.4 | **U** |
-| 3.3.4 | Traversal.each × Fold/Tf/AlgLens | Pinned structural; documented `traversal.modify(inner.replace…)` idiom | **U** |
+| 3.3.2 | Optional × MultiFocus | **Shipped** `Composer[Affine, MultiFocus[F]]` (`affine2multifocus`); two specs in `OpticsBehaviorSpec` | **N** |
+| 3.3.3 | MultiFocus × non-MultiFocus (outbound) | Pinned designed sink (only outbound is `multifocus2setter`); documented in `optics.md` and §3.4 | **U** |
+| 3.3.4 | Traversal.each × Fold/Tf/MultiFocus | Pinned structural; documented `traversal.modify(inner.replace…)` idiom | **U** |
 | 3.3.5 | Traversal.forEach × Traversal.forEach cross-F | Pinned 0.2.x deferral; documented manual fold idiom | **U** (deferred) |
 
 The chain-refactor side effect (§3.3 was written before the
 Tier-1/Tier-2 hierarchy landed): `chainViaTuple2` at low priority now
-routes Forgetful → {SetterF, PowerSeries, AlgLens[F]} transitively,
+routes Forgetful → {SetterF, PowerSeries, MultiFocus[F]} transitively,
 so `Iso.andThen(setter)` / `Iso.andThen(traversal)` / `Iso.andThen
-(algLens)` all resolve from a single intermediate without per-target
+(multifocus)` all resolve from a single intermediate without per-target
 direct bridges. The matrix already shows these as N (rows 1, 2, 3 in
 the **I** row in §2); the refactor only changed the resolution path,
 not the cell colour.
