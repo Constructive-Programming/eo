@@ -149,8 +149,8 @@ object Traversal:
     * [[MultiFocus.tuple]] but specialised to the per-element-getter API instead of the
     * homogeneous-tuple-source API. Inherits the standard `MultiFocus[Function1[Int, *]]`
     * composability surface: `Iso → MF[Function1[Int, *]]` (via `forgetful2multifocusFunction1`),
-    * `MF[Function1[Int, *]] → SetterF` (via `multifocus2setter`), and same-carrier `.andThen`
-    * (via `mfAssocFunction1`). Lens / Prism / Optional inputs are NOT bridged because
+    * `MF[Function1[Int, *]] → SetterF` (via `multifocus2setter`), and same-carrier `.andThen` (via
+    * `mfAssocFunction1`). Lens / Prism / Optional inputs are NOT bridged because
     * `Function1[Int, *]` lacks `Foldable` / `Alternative` — same constraint as v1 Grate.
     *
     * @group Constructors
