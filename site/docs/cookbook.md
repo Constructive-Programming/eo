@@ -14,7 +14,6 @@ capability; skim the headings for a jumping-off point.
 import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
-import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
 import dev.constructive.eo.data.MultiFocus.given   // Functor / Foldable / Traverse for MultiFocus[PSVec] (post-fold)
 import dev.constructive.eo.data.MultiFocus.foldMapF // read-only escape on MultiFocus[F]-carrier optics
 ```
