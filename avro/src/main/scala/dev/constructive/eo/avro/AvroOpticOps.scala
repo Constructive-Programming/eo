@@ -21,9 +21,10 @@ private[avro] trait AvroOpticOps[A]:
 
   // ---- Abstract members supplied by each carrier ---------------------
 
-  /** The reader schema used to decode `Array[Byte]` inputs. The carrier's constructor cached this
-    * off the user's `AvroCodec[Root]` (or accepted it as a `given Schema` per OQ-avro-5); exposing
-    * it here lets [[AvroFailure.parseInputIor]] thread it without re-summoning.
+  /** The reader schema used to decode `Array[Byte]` and `String` (Avro JSON wire format) inputs.
+    * The carrier's constructor cached this off the user's `AvroCodec[Root]` (or accepted it as a
+    * `given Schema` per OQ-avro-5); exposing it here lets [[AvroFailure.parseInputIor]] thread it
+    * without re-summoning.
     */
   protected def rootSchema: Schema
 
@@ -51,7 +52,7 @@ private[avro] trait AvroOpticOps[A]:
     * failure, type mismatch) accumulate into `Chain[AvroFailure]`; partial success returns
     * `Ior.Both(chain, inputRecord)` (the modify-family preserves the input as the silent fallback).
     */
-  def modify(f: A => A): (IndexedRecord | Array[Byte]) => Ior[Chain[AvroFailure], IndexedRecord] =
+  def modify(f: A => A): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
     input => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => modifyIor(j, f))
 
   /** Apply `f` to the raw [[IndexedRecord]] at the focused position (no decode / encode through the
@@ -65,11 +66,11 @@ private[avro] trait AvroOpticOps[A]:
     */
   def transform(
       f: IndexedRecord => IndexedRecord
-  ): (IndexedRecord | Array[Byte]) => Ior[Chain[AvroFailure], IndexedRecord] =
+  ): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
     input => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => transformIor(j, f))
 
   /** Replace the focused value with `a`. Same failure surface as [[modify]]. */
-  def place(a: A): (IndexedRecord | Array[Byte]) => Ior[Chain[AvroFailure], IndexedRecord] =
+  def place(a: A): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
     input => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, a))
 
   /** Lift a `C => A` into a focus-replacer: `transfer(f)(record)(c)` decodes `c` to `A` via `f` and
@@ -77,27 +78,27 @@ private[avro] trait AvroOpticOps[A]:
     */
   def transfer[C](
       f: C => A
-  ): (IndexedRecord | Array[Byte]) => C => Ior[Chain[AvroFailure], IndexedRecord] =
+  ): (IndexedRecord | Array[Byte] | String) => C => Ior[Chain[AvroFailure], IndexedRecord] =
     input => c => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, f(c)))
 
   // ---- *Unsafe (silent) escape hatches -------------------------------
 
   /** Silent counterpart to [[modify]] — input pass-through on any failure. */
-  def modifyUnsafe(f: A => A): (IndexedRecord | Array[Byte]) => IndexedRecord =
+  def modifyUnsafe(f: A => A): (IndexedRecord | Array[Byte] | String) => IndexedRecord =
     input => modifyImpl(AvroFailure.parseInputUnsafe(input, rootSchema), f)
 
   /** Silent counterpart to [[transform]]. */
   def transformUnsafe(
       f: IndexedRecord => IndexedRecord
-  ): (IndexedRecord | Array[Byte]) => IndexedRecord =
+  ): (IndexedRecord | Array[Byte] | String) => IndexedRecord =
     input => transformImpl(AvroFailure.parseInputUnsafe(input, rootSchema), f)
 
   /** Silent counterpart to [[place]]. */
-  def placeUnsafe(a: A): (IndexedRecord | Array[Byte]) => IndexedRecord =
+  def placeUnsafe(a: A): (IndexedRecord | Array[Byte] | String) => IndexedRecord =
     input => placeImpl(AvroFailure.parseInputUnsafe(input, rootSchema), a)
 
   /** Silent counterpart to [[transfer]]. */
-  def transferUnsafe[C](f: C => A): (IndexedRecord | Array[Byte]) => C => IndexedRecord =
+  def transferUnsafe[C](f: C => A): (IndexedRecord | Array[Byte] | String) => C => IndexedRecord =
     input => c => placeImpl(AvroFailure.parseInputUnsafe(input, rootSchema), f(c))
 
 end AvroOpticOps

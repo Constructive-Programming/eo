@@ -59,6 +59,14 @@ class AvroFailureSpec extends Specification:
       .and(f.message must contain("binary went sideways"))
   }
 
+  // covers: JsonParseFailed constructible, message wraps the underlying Throwable + tags Avro JSON
+  "AvroFailure.JsonParseFailed constructible + wraps Throwable message" >> {
+    val cause = new RuntimeException("json went sideways")
+    val f: AvroFailure = AvroFailure.JsonParseFailed(cause)
+    (f.message must contain("Avro JSON"))
+      .and(f.message must contain("json went sideways"))
+  }
+
   // covers: UnionResolutionFailed constructible, message includes branches
   "AvroFailure.UnionResolutionFailed constructible + message includes branches" >> {
     val f: AvroFailure = AvroFailure.UnionResolutionFailed(
@@ -150,6 +158,44 @@ class AvroFailureSpec extends Specification:
 
     // Suppress "unused chain helper" warnings.
     val _ = Chain.empty[AvroFailure]
+  }
+
+  // covers: parseInputIor decodes a well-formed Avro JSON String, parseInputIor surfaces
+  // JsonParseFailed for malformed JSON, parseInputUnsafe decodes a well-formed JSON String,
+  // parseInputUnsafe returns a synthetic empty record on bad JSON
+  "parseInputIor + parseInputUnsafe handle good JSON / bad JSON" >> {
+    val p = Person("Alice", 30)
+    val schema = personSchema
+    val goodJson = """{"name":"Alice","age":30}"""
+    val badJson = "not json at all"
+
+    // ---- Ior path ------
+    val iorGood = AvroFailure.parseInputIor(goodJson, schema)
+    val iorBad = AvroFailure.parseInputIor(badJson, schema)
+
+    val iorGoodOk = iorGood match
+      case Ior.Right(r) =>
+        val gr = r.asInstanceOf[GenericRecord]
+        (gr.get("name").toString === p.name)
+          .and(gr.get("age").asInstanceOf[Int] === p.age)
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+
+    val iorBadOk = iorBad match
+      case Ior.Left(chain) =>
+        (chain.length === 1L)
+          .and(chain.headOption.get.isInstanceOf[AvroFailure.JsonParseFailed] === true)
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+
+    // ---- Unsafe path ------
+    val unsafeGood = AvroFailure.parseInputUnsafe(goodJson, schema)
+    val unsafeBad = AvroFailure.parseInputUnsafe(badJson, schema)
+
+    val unsafeGoodOk = unsafeGood.asInstanceOf[GenericRecord].get("name").toString === p.name
+    val unsafeBadOk = unsafeBad.getSchema === schema
+
+    iorGoodOk.and(iorBadOk).and(unsafeGoodOk).and(unsafeBadOk)
   }
 
 end AvroFailureSpec

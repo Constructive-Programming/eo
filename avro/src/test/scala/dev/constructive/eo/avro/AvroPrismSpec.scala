@@ -191,6 +191,36 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       .and(unsafeBad === None)
   }
 
+  // ---- String-input dual surface (Avro JSON wire format) -----------
+
+  // covers: modify on String input parses + applies (Ior.Right) on the happy path,
+  // modify on bad JSON surfaces JsonParseFailed in the chain, getOptionUnsafe on bad JSON
+  // returns None (synthetic-empty-record fallback can't decode the focus)
+  "String input: parse + modify, bad JSON surfaces JsonParseFailed" >> {
+    val p = Person("Alice", 30)
+    val goodJson = """{"name":"Alice","age":30}"""
+    val badJson = "not json at all"
+
+    val nameL = codecPrism[Person].field(_.name)
+
+    val happyResult = nameL.modify((s: String) => s.toUpperCase)(goodJson)
+    val happyOk = happyResult match
+      case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "ALICE")))
+      case _              => false
+
+    val badResult = nameL.modify((s: String) => s)(badJson)
+    val badOk = badResult match
+      case Ior.Left(chain) =>
+        chain.headOption.get.isInstanceOf[AvroFailure.JsonParseFailed]
+      case _ => false
+
+    val unsafeBad = nameL.getOptionUnsafe(badJson)
+
+    (happyOk === true)
+      .and(badOk === true)
+      .and(unsafeBad === None)
+  }
+
   // ---- Codec-level decode failure ----------------------------------
 
   // covers: decode failure on get surfaces Ior.Left(DecodeFailed),
