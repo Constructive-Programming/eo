@@ -73,6 +73,52 @@ object AvroSpecFixtures:
     */
   lazy val orderSchema: Schema = summon[AvroCodec[Order]].schema
 
+  /** Two-field record carrying a union-shaped `amount` slot. Mirrors the "transaction" shape from
+    * the Unit 8 plan: kindlings derives `amount` as `union<null, long>` (the standard Avro encoding
+    * for `Option[Long]`), exercising the `.union[Branch]` macro on a `Some` branch and surfacing
+    * `UnionResolutionFailed` when the runtime value is on the `null` branch and the user asks for
+    * `.union[Long]`.
+    */
+  case class Transaction(id: String, amount: Option[Long])
+
+  object Transaction:
+
+    given AvroEncoder[Transaction] = AvroEncoder.derived
+    given AvroDecoder[Transaction] = AvroDecoder.derived
+    given AvroSchemaFor[Transaction] = AvroSchemaFor.derived
+
+  /** Reader schema for [[Transaction]] — exposed for tests that need to build malformed records
+    * directly (e.g. the union-mismatch case).
+    */
+  lazy val transactionSchema: Schema = summon[AvroCodec[Transaction]].schema
+
+  /** Sealed-trait sum used by the `.union[Branch]` happy-path tests. Mirrors the probe ADT — two
+    * record-shaped subclasses, deliberately top-level so the kindlings macros aren't tripped by
+    * outer accessors.
+    */
+  sealed trait Payment
+
+  object Payment:
+
+    given AvroEncoder[Payment] = AvroEncoder.derived
+    given AvroDecoder[Payment] = AvroDecoder.derived
+    given AvroSchemaFor[Payment] = AvroSchemaFor.derived
+
+    given AvroEncoder[Cash] = AvroEncoder.derived
+    given AvroDecoder[Cash] = AvroDecoder.derived
+    given AvroSchemaFor[Cash] = AvroSchemaFor.derived
+
+    given AvroEncoder[Card] = AvroEncoder.derived
+    given AvroDecoder[Card] = AvroDecoder.derived
+    given AvroSchemaFor[Card] = AvroSchemaFor.derived
+
+  case class Cash(amount: Long) extends Payment
+  case class Card(number: String) extends Payment
+
+  /** Build a kindlings-encoded Transaction record. */
+  def transactionRecord(t: Transaction): GenericRecord =
+    summon[AvroCodec[Transaction]].encode(t).asInstanceOf[GenericRecord]
+
   /** Build a kindlings-encoded `IndexedRecord` for a `Person`. The encoder produces an
     * `org.apache.avro.generic.GenericData.Record` whose positional slots line up with the schema's
     * field order.
