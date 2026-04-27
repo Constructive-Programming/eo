@@ -98,6 +98,7 @@
     <li class="level1 nav-leaf"><a href="#fold-forget-f-carrier">Fold (<code>Forget[F]</code> carrier)</a></li>
     <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
     <li class="level1 nav-leaf"><a href="#jsonprism-cursor-backed-json-edit">JsonPrism — cursor-backed JSON edit</a></li>
+    <li class="level1 nav-leaf"><a href="#avroprism-direct-walk-over-indexedrecord">AvroPrism — direct-walk over <code>IndexedRecord</code></a></li>
     <li class="level1 nav-leaf"><a href="#jsontraversal-items-each-name-edits">JsonTraversal — <code>items.each.name</code> edits</a></li>
     <li class="level1 nav-node"><a href="#powerseries-traversal-with-downstream-composition">PowerSeries traversal with downstream composition</a></li>
     <li class="level2 nav-leaf"><a href="#powerseriesbench-eomodify_powereach-lens-traversal-each-lens"><code>PowerSeriesBench.eoModify_powerEach</code> — <code>Lens → Traversal.each → Lens</code></a></li>
@@ -499,6 +500,31 @@ Affine]</code> instance auto-lifts each Lens hop into the <code>Affine</code>
         short overall work units). Otherwise the default is the
         recommended entry — you get structured <code>JsonFailure</code> diagnostics
         for the same order-of-magnitude speedup over naive.</p>
+        
+        <h2 id="avroprism-direct-walk-over-indexedrecord" class="section"><a class="anchor-link left" href="#avroprism-direct-walk-over-indexedrecord"><i class="icofont-laika link">&#xef71;</i></a>AvroPrism — direct-walk over <code>IndexedRecord</code></h2>
+        <p>EO-only — no Monocle equivalent at this layer. <code>AvroPrism.modify</code> walks
+        the <code>IndexedRecord</code> tree along its precomputed <code>PathStep</code> array, decodes
+        only at the focused leaf, and stitches the parents back together — the
+        classical alternative is to decode the whole record into its
+        case-class tree, mutate the leaf, and re-encode end-to-end.</p>
+        <p>Two depths benched in <code>AvroOpticsBench</code>: depth 1 (<code>Person.name</code>,
+        shallow) and depth 3 (<code>Deep3.d2.d1.atom.value</code>, deep). Each depth has
+        paired <code>eo*</code> / <code>native*</code> rows so JMH reports them side-by-side. The
+        <code>eo*</code> side is the silent <code>*Unsafe</code> hot path; the <code>native*</code> side is the
+        raw <a href="https://github.com/MateuszKubuszok/kindlings-avro-derivation">kindlings-avro-derivation</a> codec round-trip
+        (<code>AvroCodec.decodeEither</code> → case-class <code>.copy</code> chain →
+        <code>AvroCodec.encode</code>). Same shape as <code>JsonPrismBench</code> for eo-circe; the
+        codec library swap is the only difference.</p>
+        <p>Run them with the standard JMH invocation, filtering by class:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span>sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*AvroOpticsBench.*&quot;</span></code></pre>
+        <p>A third pair of rows (<code>eoModifyIor*</code>) reports the default
+        Ior-bearing surface for the same fixtures — the additional cost is a
+        single <code>Ior.Right(record)</code> allocation per call, mirroring the &quot;Ior
+        tax&quot; datapoint reported for <code>JsonPrism</code>.</p>
+        <p>The plan target is &quot;≤2× the unwrapped baseline at deep paths&quot; — the
+        direct-walk speedup absorbs Avro&#39;s per-step <code>IndexedRecord.get(i)</code> /
+        <code>put(i, v)</code> cost without ever materialising the case-class tree at the
+        intermediate depths.</p>
         
         <h2 id="jsontraversal-items-each-name-edits" class="section"><a class="anchor-link left" href="#jsontraversal-items-each-name-edits"><i class="icofont-laika link">&#xef71;</i></a>JsonTraversal — <code>items.each.name</code> edits</h2>
         <p>Uppercasing every <code>items[*].name</code> inside a <code>Basket</code> record, at
