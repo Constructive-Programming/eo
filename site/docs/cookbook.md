@@ -977,6 +977,98 @@ service boundaries.
 
 **Source:** cats-eo internal.
 
+## Theme J — Streaming / Kafka
+
+### Kafka payload edit (binary in, binary out)
+
+Most Kafka consumers receive `Array[Byte]` payloads, want to
+modify a single field, and re-emit binary on the producer side.
+The `AvroPrism` triple-input surface accepts `Array[Byte]`
+directly, parses it through apache-avro's `BinaryDecoder` under
+the cached reader schema, and threads the modify back through
+without ever materialising the full case-class tree:
+
+```scala mdoc:silent
+import dev.constructive.eo.avro.{AvroCodec, codecPrism}
+import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.io.ByteArrayOutputStream
+import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, IndexedRecord}
+import org.apache.avro.io.EncoderFactory
+
+case class OrderEvent(orderId: String, customer: String, total: Double)
+object OrderEvent:
+  given AvroEncoder[OrderEvent] = AvroEncoder.derived
+  given AvroDecoder[OrderEvent] = AvroDecoder.derived
+  given AvroSchemaFor[OrderEvent] = AvroSchemaFor.derived
+
+// Stand-in for an inbound Kafka record: serialise an OrderEvent to
+// binary under the same schema the prism caches.
+val outSchema = summon[AvroCodec[OrderEvent]].schema
+val sample = OrderEvent("ord-42", "alice", 99.99)
+val sampleBytes: Array[Byte] =
+  val rec = summon[AvroCodec[OrderEvent]].encode(sample).asInstanceOf[GenericRecord]
+  val out = new ByteArrayOutputStream()
+  val encoder = EncoderFactory.get().binaryEncoder(out, null)
+  val writer = new GenericDatumWriter[GenericRecord](outSchema)
+  writer.write(rec, encoder)
+  encoder.flush()
+  out.toByteArray
+
+// The optic: walk into `customer` once at construction time,
+// reuse on every inbound record.
+val upperCustomer = codecPrism[OrderEvent].customer
+
+// Re-serialise the modified IndexedRecord back to binary for the
+// producer side. In a real consumer this lives in your sink.
+def toBinary(rec: IndexedRecord): Array[Byte] =
+  val out = new ByteArrayOutputStream()
+  val encoder = EncoderFactory.get().binaryEncoder(out, null)
+  val writer = new GenericDatumWriter[GenericRecord](rec.getSchema)
+  writer.write(rec.asInstanceOf[GenericRecord], encoder)
+  encoder.flush()
+  out.toByteArray
+```
+
+```scala mdoc
+// Kafka hot path: bytes in → modify in place → bytes out.
+val outBytes: Array[Byte] =
+  toBinary(upperCustomer.modifyUnsafe(_.toUpperCase)(sampleBytes))
+
+// Round-trip witness — decode the output to confirm the customer
+// field changed and the rest is preserved.
+val outRec = upperCustomer
+  .modifyUnsafe(_.toUpperCase)(sampleBytes)
+  .asInstanceOf[GenericRecord]
+(outRec.get("customer").toString,
+ outRec.get("orderId").toString,
+ outRec.get("total"))
+```
+
+`modifyUnsafe` is the silent-pass-through variant — bad bytes,
+missing fields, or decode mismatches leave the input bytes
+unmodified rather than allocating an `Ior` chain. That matches
+the Kafka consumer budget: at-least-once delivery already
+implies the consumer must be tolerant of malformed payloads at
+the offset commit boundary, and the per-record allocation cost
+of `Ior` is a tax on the happy path. When you DO want the
+diagnostic — for a dead-letter queue, say — the default
+`.modify(...)` call returns
+`Ior[Chain[AvroFailure], IndexedRecord]` for the exact same
+fixture; route on the `Ior.Both` / `Ior.Left` shape from there.
+
+The cached reader schema is the load-bearing piece: a single
+`codecPrism[OrderEvent]` value pins the schema once, and the
+parser reuses it across millions of inbound records. For the
+schema-registry case where the reader schema arrives at
+runtime, use the explicit-schema overload —
+`AvroPrism.codecPrism[OrderEvent](runtimeSchema)` — to bypass
+the kindlings-derived schema entirely.
+
+**Source:** cats-eo internal (`AvroPrism`'s triple-input
+surface, Unit 10). Background framing on the streaming /
+Kafka use case lives in the
+[Avro integration intro](avro.md#why-this-exists).
+
 ## Further reading
 
 - [Concepts](concepts.md) — the theory behind the unified Optic
@@ -991,5 +1083,8 @@ service boundaries.
 - [Circe integration](circe.md) — cursor-backed JSON optics;
   [failure flow](circe.md#failure-flow) for the Ior decision
   tree.
+- [Avro integration](avro.md) — cursor-backed Avro optics;
+  [failure flow](avro.md#failure-flow) for the schema-driven
+  Ior decision tree.
 - [Migrating from Monocle](migration-from-monocle.md) —
   side-by-side translation guide.

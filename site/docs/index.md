@@ -46,6 +46,9 @@ types alike.
   `prism[S, A]` macros, backed by Hearth.
 - [Circe integration](circe.md) — `JsonPrism` / `JsonTraversal`,
   cursor-backed navigation into circe `Json` with no full decode.
+- [Avro integration](avro.md) — `AvroPrism` / `AvroTraversal`,
+  cursor-backed navigation into Apache Avro `IndexedRecord` with no
+  full decode; binary + JSON wire-format input dual.
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.

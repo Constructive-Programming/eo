@@ -458,6 +458,7 @@ lazy val docs: Project = project
     LocalProject("core"),
     LocalProject("generics"),
     LocalProject("circeIntegration"),
+    LocalProject("avroIntegration"),
     LocalProject("laws"),
   )
   .settings(commonSettings *)
@@ -468,6 +469,11 @@ lazy val docs: Project = project
     // docs examples that want circe Codec derivation need it
     // surfaced here as a Compile-scope dep.
     libraryDependencies += kindlingsCirce,
+    // kindlingsAvro is only in `avroIntegration`'s test/runtime path
+    // through the codec triplet — surface it here so avro.md mdoc
+    // blocks can summon `AvroEncoder.derived` / `AvroDecoder.derived`
+    // / `AvroSchemaFor.derived` against the live module classpath.
+    libraryDependencies += kindlingsAvro,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
