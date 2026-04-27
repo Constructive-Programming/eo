@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 
 import cats.instances.arraySeq.given
 
+import dev.constructive.eo.data.MultiFocus.given
+
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a
   * Traversal.
   *

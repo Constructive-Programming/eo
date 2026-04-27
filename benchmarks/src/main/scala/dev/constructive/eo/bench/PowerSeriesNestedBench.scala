@@ -10,6 +10,8 @@ import java.util.concurrent.TimeUnit
 import cats.instances.arraySeq.given
 import cats.instances.list.given
 
+import dev.constructive.eo.data.MultiFocus.given
+
 /** Nested-traversal PowerSeries bench — tree-of-trees shape.
   *
   * Fixture: `Company(departments: List[Department(employees: ArraySeq[Employee])])`. Every

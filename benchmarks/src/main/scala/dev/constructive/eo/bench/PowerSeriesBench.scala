@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 
 import cats.instances.arraySeq.*
 
+import dev.constructive.eo.data.MultiFocus.given
+
 /** PowerSeries-backed Traversal over a nested focus, paired against a hand-written iterative
   * baseline.
   *
