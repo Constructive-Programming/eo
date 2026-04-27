@@ -278,7 +278,7 @@ Lens</code>, <code>Prism ∘ Prism = Prism</code>, <code>Iso ∘ Iso = Iso</code
 </span><span class="keyword">val</span><span> </span><span class="identifier">funGrate</span><span> = </span><span class="type-name">Grate</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]
 </span><span class="keyword">val</span><span> </span><span class="identifier">f</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">1</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">2</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">doubled</span><span> = </span><span class="identifier">funGrate</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="identifier">f</span><span>)
-</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14525/0x00007f36162ad7b8@3aa88acf
+</span><span class="comment">// doubled: Function1[Boolean, Int] = scala.Function1$$Lambda$14745/0x00007fdcee2f5570@7231424e
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">true</span><span>)
 </span><span class="comment">// res5: Int = 2
 </span><span class="identifier">doubled</span><span>(</span><span class="boolean-literal">false</span><span>)
@@ -444,6 +444,43 @@ Lens</code>, <code>Prism ∘ Prism = Prism</code>, <code>Iso ∘ Iso = Iso</code
         to construct the Kaleidoscope separately at the Lens&#39;s focus type and
         compose through <code>Lens.andThen</code> (staying in <code>Tuple2</code>), then apply the
         Kaleidoscope directly.</p>
+        <p><strong>Composability — Kaleidoscope widens to Setter.</strong> A
+        <code>Composer[Kaleidoscope, SetterF]</code> ships (<code>kaleidoscope2setter</code>,
+        <code>Kaleidoscope.scala</code>), so any Kaleidoscope can be morphed to the
+        <code>SetterF</code> carrier via <code>kaleidoscope.morph[SetterF]</code>. The lifted
+        Setter&#39;s <code>.modify(f)</code> is byte-identical to the Kaleidoscope&#39;s
+        <code>.modify(f)</code> — same Reflector-driven element-wise rewrite, just exposed
+        through the carrier-erasing Setter API. This makes Kaleidoscope uniform
+        with <code>eo-monocle</code>-style cross-library interop and any code consuming
+        the <code>Optic[…, SetterF]</code> shape. Like every other <code>Composer[X, SetterF]</code>,
+        this morph does NOT enable <code>kaleidoscope.andThen(setter)</code> directly —
+        <code>SetterF</code> lacks an <code>AssociativeFunctor</code> instance by design, so the
+        cross-carrier value lives at the morph site, not the chain site.</p>
+        <p><strong>Composition limits — Kaleidoscope to Iso/Getter and Kaleidoscope to
+        Traversal/Fold.</strong> Both directions were investigated for v0.1.x; both
+        turn out to be structurally unsound under cats-eo&#39;s resolution rules
+        (mirroring Grate&#39;s twin skip rationales):</p>
+        <ul>
+          <li><code>Composer[Kaleidoscope, Forgetful]</code> (Kaleidoscope → Iso/Getter) would
+          be type-level encodable (via an <code>Id</code>-carrier Kaleidoscope on either
+          side), but cats-eo already ships the reverse
+          (<code>Composer[Forgetful, Kaleidoscope]</code>). Adding the forward direction
+          would create a bidirectional Composer pair, which the <a href="https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala"><code>Morph</code></a>
+          resolution explicitly forbids — every <code>iso.andThen(kaleidoscope)</code>
+          call site would surface as ambiguous-implicit. Use
+          <code>kaleidoscope.to(s).focus.asInstanceOf[F[A]]</code> at a known-<code>F</code> factory
+          site for the read.</li>
+          <li><code>Composer[Kaleidoscope, Forget[F]]</code> (Kaleidoscope → Traversal/Fold)
+          would have to produce <code>F[A]</code> from arbitrary <code>S</code>, but Kaleidoscope&#39;s
+          <code>FCarrier</code> is a path-dependent type member and opaque after morphing
+          through the abstract <code>Optic[…, Kaleidoscope]</code> slot. Composer has no
+          place to thread a <code>FCarrier = F</code> equality OR a <code>Foldable[F]</code> witness
+          even when the Reflector&#39;s <code>Apply[F]</code> happens to coincide with one.
+          Users wanting fold/traverse semantics on a Kaleidoscope&#39;s slots
+          should construct the <code>Forget[F]</code>-carrier optic directly.</li>
+        </ul>
+        <p>The full structural rationale lives at the bottom of
+        <code>Kaleidoscope.scala</code> for future maintainers.</p>
         
         <h2 id="prism" class="section"><a class="anchor-link left" href="#prism"><i class="icofont-laika link">&#xef71;</i></a>Prism</h2>
         <p>A <code>Prism[S, A]</code> focuses one branch of a sum type — <code>Some</code> over
