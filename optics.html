@@ -537,37 +537,34 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
         
         <h2 id="traversal" class="section"><a class="anchor-link left" href="#traversal"><i class="icofont-laika link">&#xef71;</i></a>Traversal</h2>
         <p>A <code>Traversal</code> is the multi-focus modify optic — map over every
-        element of a container. Two carriers coexist:</p>
+        element of a container. Single carrier:</p>
         <ul>
           <li><code>Traversal.each[F, A]</code> / <code>Traversal.pEach[F, A, B]</code> — carrier
-          <code>PowerSeries</code>, the default. Supports <code>.andThen</code> with downstream
-          optics. Linear scaling; overhead over a naive <code>copy</code>/<code>map</code> runs
-          at 2-3× for dense chains (<code>Lens → Traversal → Lens</code>) and ~5×
-          for the Prism miss-branch shape, amortising toward the lower
-          end as the traversed-collection size grows (the
+          <code>MultiFocus[PSVec]</code>. Supports <code>.modify</code> / <code>.replace</code>
+          (<code>Functor[PSVec]</code>), <code>.foldMapF</code> (<code>Foldable[PSVec]</code>),
+          <code>.modifyA</code> / <code>.all</code> (<code>Traverse[PSVec]</code>), and <code>.andThen</code> with
+          downstream optics through the shared <code>MultiFocus[PSVec]</code>
+          <code>AssociativeFunctor</code>. Linear scaling; overhead over a naive
+          <code>copy</code>/<code>map</code> runs at 2-3× for dense chains
+          (<code>Lens → Traversal → Lens</code>) and ~5× for the Prism miss-branch
+          shape, amortising toward the lower end as the traversed-
+          collection size grows (the
           <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">PowerSeries benchmarks</a>
           sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
           <code>PSSingleton</code> protocol — morphed Lens / Prism / Optional
           inners collect into pre-sized flat arrays without per-element
           <code>PowerSeries</code> wrappers, and the always-hit refinement for
           Lens morphs skips the length-tracking array entirely.</li>
-          <li><code>Traversal.forEach[F, A, B]</code> — carrier <code>Forget[F]</code>, map-only
-          fast path. Identity-shaped carrier, linear time, no downstream
-          optic composition.</li>
         </ul>
-        <p>Use <code>each</code> for the composable default — it&#39;s what Scala users
-        reach for intuitively:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Traversal</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="keyword">given</span><span>  </span><span class="comment">// Functor / Foldable / Traverse for MultiFocus[PSVec]
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">foldMapF</span><span> </span><span class="comment">// read-only escape on MultiFocus[F]-carrier optics
 </span><span>
 </span><span class="keyword">val</span><span> </span><span class="identifier">listEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">pEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res25: List[Int] = List(2, 3, 4)</span></code></pre>
-        <p>Stick with <code>forEach</code> when the chain terminates — no downstream
-        optics — and you want the tight map-only path:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">listForEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">forEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listForEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res26: List[Int] = List(2, 3, 4)</span></code></pre>
+</span><span class="comment">// res25: List[Int] = List(2, 3, 4)
+</span><span class="identifier">listEach</span><span>.</span><span class="identifier">foldMapF</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))   </span><span class="comment">// sum
+// res26: Int = 6</span></code></pre>
         <p><code>each</code> shines when the chain continues past the traversal — e.g.
         &quot;for every phone, toggle <code>isMobile</code>&quot;:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span>: </span><span class="type-name">Boolean</span><span>, </span><span class="identifier">number</span><span>: </span><span class="type-name">String</span><span>)
@@ -785,29 +782,21 @@ PowerSeries</code> or <code>Forgetful → Either → PowerSeries</code>) that wo
         of pair are intentionally <strong>not</strong> bridged in 0.1.0. The short answer
         is &quot;the type system rules them out, and the natural workaround is a
         plain Scala expression&quot;:</p>
-        <p><strong>Lens / Prism / Optional × <code>Fold[F]</code> (or <code>Traversal.forEach</code>) when
-        the outer focuses on a scalar <code>A</code></strong> — the outer never produces an
-        <code>F</code>-shape, so there&#39;s nothing for the <code>Fold</code> to traverse. Use
-        <code>fold.foldMap(f)(lens.get(s))</code> directly. If your outer <em>does</em> focus
-        on an <code>F[A]</code> (e.g. <code>Lens[Row, List[Int]]</code>), use one of the
-        <code>MultiFocus.fromLensF</code> / <code>fromPrismF</code> / <code>fromOptionalF</code> factories to
-        lift into <code>MultiFocus[F]</code> and chain there.</p>
-        <p><strong><code>Traversal.each</code> × <code>Fold[F]</code> / <code>Traversal.forEach</code> / <code>MultiFocus[F]</code></strong> —
-        PowerSeries (the <code>Traversal.each</code> carrier) cannot widen into Forget&#39;s
-        classifier representation without dropping its rebuild data, and
-        cannot widen into MultiFocus&#39;s per-candidate cardinality model without a
-        synthetic count. The idiomatic workaround pushes the inner under the
-        traversal: <code>traversal.modify(a =&gt; inner.replace(b)(a))(s)</code> for a
-        <code>MultiFocus</code> inner; <code>traversal.foldMap(f)(s)</code> (the ForgetfulFold instance
-        on PowerSeries) when you only need the fold side.</p>
-        <p><strong><code>Traversal.forEach</code> × <code>Traversal.forEach</code> across different <code>F</code> /
-        <code>G</code></strong> — <code>assocForgetMonad</code> requires <code>F = G</code>. Composing
-        <code>Forget[List]</code> with <code>Forget[Option]</code> would need either a
-        <code>FunctionK</code>-witness Composer or a specialised nested-Foldable flatten;
-        both are deferred to 0.2.x. Until then, run the inner foldable inside
-        a <code>modify</code>:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">total</span><span>: </span><span class="type-name">Int</span><span> =
-  </span><span class="identifier">list</span><span>.</span><span class="identifier">foldLeft</span><span>(</span><span class="number-literal">0</span><span>)((</span><span class="identifier">acc</span><span>, </span><span class="identifier">opt</span><span>) =&gt; </span><span class="identifier">acc</span><span> + </span><span class="identifier">opt</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">length</span><span>))</span></code></pre>
+        <p><strong>Lens / Prism / Optional × <code>Fold[F]</code> when the outer focuses on a
+        scalar <code>A</code></strong> — the outer never produces an <code>F</code>-shape, so there&#39;s
+        nothing for the <code>Fold</code> to traverse. Use <code>fold.foldMap(f)(lens.get(s))</code>
+        directly. If your outer <em>does</em> focus on an <code>F[A]</code> (e.g.
+        <code>Lens[Row, List[Int]]</code>), use one of the <code>MultiFocus.fromLensF</code> /
+        <code>fromPrismF</code> / <code>fromOptionalF</code> factories to lift into <code>MultiFocus[F]</code>
+        and chain there.</p>
+        <p><strong><code>Traversal.each</code> × <code>Fold[F]</code> / <code>MultiFocus[F]</code></strong> — <code>MultiFocus[PSVec]</code>
+        (the <code>Traversal.each</code> carrier) cannot widen into Forget&#39;s classifier
+        representation without dropping its rebuild data, and cannot widen
+        into another <code>MultiFocus[G]</code>&#39;s per-candidate cardinality model without
+        a synthetic count. The idiomatic workaround pushes the inner under
+        the traversal: <code>traversal.modify(a =&gt; inner.replace(b)(a))(s)</code> for a
+        <code>MultiFocus</code> inner; <code>traversal.foldMapF(f)(s)</code> (read-only escape on
+        any <code>MultiFocus[F]</code>-carrier optic) when you only need the fold side.</p>
         <p><strong><code>SetterF</code> outbound</strong> — Setter is a composition terminal: ship it as
         the leaf of a chain (Lens → Setter via <code>Composer[Tuple2, SetterF]</code>)
         but don&#39;t try to chain off it. There is no <code>AssociativeFunctor[SetterF]</code>

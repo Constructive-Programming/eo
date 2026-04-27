@@ -430,11 +430,11 @@ Affine]</code> instance auto-lifts each Lens hop into the <code>Affine</code>
             </tr>
           </tbody>
         </table>
-        <p>A surprisingly large win — EO&#39;s <code>Traversal.forEach</code> keeps the
-        <code>Forget[T]</code> carrier linear by delegating straight to
-        <code>Functor[T].map</code>, while Monocle&#39;s <code>Traversal</code> wraps each
-        element in an <code>Applicative[Id]</code> traversal and pays the
-        per-element wrapping cost.</p>
+        <p>A surprisingly large win — EO&#39;s <code>Traversal.each</code> (carrier
+        <code>MultiFocus[PSVec]</code>) collects element references into a flat
+        focus vector and rebuilds via <code>Functor[PSVec].map</code>, while
+        Monocle&#39;s <code>Traversal</code> wraps each element in an <code>Applicative[Id]</code>
+        traversal and pays the per-element wrapping cost.</p>
         
         <h2 id="jsonprism-cursor-backed-json-edit" class="section"><a class="anchor-link left" href="#jsonprism-cursor-backed-json-edit"><i class="icofont-laika link">&#xef71;</i></a>JsonPrism — cursor-backed JSON edit</h2>
         <p>No Monocle equivalent at this layer. Two EO surfaces side by
@@ -737,11 +737,10 @@ ArraySeq[Phone]</code>. The two-hop chain exercises the flat &quot;dense
         sparse-Prism — the remaining gap on sparse is inherent Prism
         miss-branch plumbing and is substantially smaller than the
         5-10× ratios other optic libraries publish for the same shape.</p>
-        <p>For single-pass modify of a collection — no downstream optic
-        after the traversal — <code>Traversal.forEach[F, A, B]</code> (carrier
-        <code>Forget[F]</code>, identity-shaped, no composition support) is the
-        correct choice. Reach for <code>Traversal.each</code> / <code>pEach</code> when the
-        chain needs to continue past the traversal.</p>
+        <p><code>Traversal.each</code> / <code>pEach</code> (carrier <code>MultiFocus[PSVec]</code>) covers
+        both single-pass modifies and chains that continue past the
+        traversal — same optic, same <code>.modify</code>, with <code>.foldMapF</code> for
+        read-only aggregation and <code>.andThen</code> for downstream composition.</p>
         <p>See the
         <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes">composition notes</a>
         for the full tradeoff matrix.</p>

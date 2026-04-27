@@ -383,7 +383,7 @@ Either</code>.</p>
         inbound nor outbound <code>Composer</code>, and no <code>AssociativeFunctor</code>
         either — it&#39;s a pure leaf carrier. <code>Forget[F]</code> has one outbound
         bridge (<code>→ MultiFocus[F]</code>) but no inbound, so chains reach it only
-        via <code>Traversal.forEach</code> at construction time.</p>
+        via <code>Fold</code> at construction time.</p>
         
         <h2 id="why-the-existential-machinery-is-worth-it" class="section"><a class="anchor-link left" href="#why-the-existential-machinery-is-worth-it"><i class="icofont-laika link">&#xef71;</i></a>Why the existential machinery is worth it</h2>
         <p>Unifying every optic behind a single trait collapses the usual

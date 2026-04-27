@@ -94,7 +94,7 @@
     <li class="level2 nav-leaf"><a href="#polymorphic-constructors">Polymorphic constructors</a></li>
     <li class="level2 nav-leaf"><a href="#cross-family-composition-andthen-auto-morphs">Cross-family composition: <code>.andThen</code> auto-morphs</a></li>
     <li class="level2 nav-leaf"><a href="#getter-setter-don-t-compose-via-andthen">Getter / Setter don&#39;t compose via <code>.andThen</code></a></li>
-    <li class="level2 nav-leaf"><a href="#traversal-has-two-carriers">Traversal has two carriers</a></li>
+    <li class="level2 nav-leaf"><a href="#traversal-carrier">Traversal carrier</a></li>
     <li class="level2 nav-leaf"><a href="#jsonprism-has-no-monocle-equivalent">JsonPrism has no Monocle equivalent</a></li>
     <li class="level1 nav-leaf"><a href="#discipline-law-instances">Discipline law instances</a></li>
   </ul>
@@ -164,7 +164,7 @@
             </tr>
             <tr>
               <td><code>Traversal.fromTraverse[List, Int]</code></td>
-              <td><code>Traversal.forEach[List, Int, Int]</code> (map-only) / <code>Traversal.pEach[List, Int, Int]</code> (composable)</td>
+              <td><code>Traversal.each[List, Int]</code> (<code>Traversal.pEach[List, Int, Int]</code> for the polymorphic-write variant)</td>
             </tr>
             <tr>
               <td><code>lens.andThen(otherLens)</code></td>
@@ -261,22 +261,16 @@
         instead. See <a href="optics.html#getter">Optics → Getter</a> for the
         workaround.</p>
         
-        <h3 id="traversal-has-two-carriers" class="section"><a class="anchor-link left" href="#traversal-has-two-carriers"><i class="icofont-laika link">&#xef71;</i></a>Traversal has two carriers</h3>
-        <p>Monocle&#39;s <code>Traversal</code> is a single type with a single
-        <code>andThen</code> behaviour. cats-eo splits:</p>
+        <h3 id="traversal-carrier" class="section"><a class="anchor-link left" href="#traversal-carrier"><i class="icofont-laika link">&#xef71;</i></a>Traversal carrier</h3>
+        <p>cats-eo&#39;s <code>Traversal</code> is a single carrier:</p>
         <ul>
           <li><code>Traversal.each[F, A]</code> / <code>pEach[F, A, B]</code> — carrier
-          <code>PowerSeries</code>, the default. Composable with downstream optics;
-          pays a small constant-factor overhead over the naive map path.</li>
-          <li><code>Traversal.forEach[F, A, B]</code> — carrier <code>Forget[F]</code>, map-only
-          fast path. No downstream composition, identity-shaped carrier.</li>
+          <code>MultiFocus[PSVec]</code>. Supports <code>.modify</code>, <code>.foldMapF</code>, <code>.modifyA</code>,
+          and <code>.andThen</code> with downstream optics. Pays a small constant-
+          factor overhead over the naive map path; see the
+          <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers">PowerSeries benchmark notes</a>
+          for the cost breakdown.</li>
         </ul>
-        <p>Use <code>each</code> by default — it&#39;s the one Scala users reach for
-        intuitively, and it keeps the door open for <code>.andThen(lens)</code> after
-        the traversal. Switch to <code>forEach</code> when the chain terminates at
-        the traversal and you want the tight map-only path. See the
-        <a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers">PowerSeries benchmark notes</a>
-        for the cost breakdown.</p>
         
         <h3 id="jsonprism-has-no-monocle-equivalent" class="section"><a class="anchor-link left" href="#jsonprism-has-no-monocle-equivalent"><i class="icofont-laika link">&#xef71;</i></a>JsonPrism has no Monocle equivalent</h3>
         <p>Monocle&#39;s <code>monocle-circe</code> module only provides a
