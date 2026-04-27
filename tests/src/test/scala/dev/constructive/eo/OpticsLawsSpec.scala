@@ -272,46 +272,24 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         ((x, x), PSVec.unsafeWrap[Int](arr))
     )
 
-  // ----- FixedTraversal carrier laws ------------------------------
+  // ----- MultiFocus[Function1[Int, *]] carrier laws ----------------
+  // Replaces the legacy FixedTraversal[N] per-arity law sweep — the new
+  // `Traversal.{two,three,four}` carriers all share a single
+  // `MultiFocus[Function1[Int, *]]` instance, so one law block covers every
+  // arity. Net test count: 3 FT-arity blocks (× 2 functor laws) + 1 generic
+  // FT[2] block → 1 MF[Function1[Int, *]] block (× 2 functor laws). The
+  // absorbed laws are still exercised through the same `mfFunctor` instance.
 
-  import data.FixedTraversal
-  import data.FixedTraversal.given
-
-  private given arbFixedTrav2: Arbitrary[FixedTraversal[2][Unit, Int]] =
+  private given arbMultiFocusFunction1IntInt: Arbitrary[MultiFocus[Function1[Int, *]][Unit, Int]] =
     Arbitrary(
-      for
-        a0 <- Arbitrary.arbitrary[Int]
-        a1 <- Arbitrary.arbitrary[Int]
-      yield (a0, a1, ()).asInstanceOf[FixedTraversal[2][Unit, Int]]
+      Arbitrary.arbitrary[Int => Int].map(k => ((), k))
     )
 
-  // covers: FixedTraversal arity 2
-  checkAllFixedTraversalFor[2, Unit, Int]("FixedTraversal[2][Unit, Int]")
-
-  private given arbFixedTrav3: Arbitrary[FixedTraversal[3][Unit, Int]] =
-    Arbitrary(
-      for
-        a0 <- Arbitrary.arbitrary[Int]
-        a1 <- Arbitrary.arbitrary[Int]
-        a2 <- Arbitrary.arbitrary[Int]
-      yield (a0, a1, a2, ()).asInstanceOf[FixedTraversal[3][Unit, Int]]
-    )
-
-  // covers: FixedTraversal arity 3
-  checkAllFixedTraversalFor[3, Unit, Int]("FixedTraversal[3][Unit, Int]")
-
-  private given arbFixedTrav4: Arbitrary[FixedTraversal[4][Unit, Int]] =
-    Arbitrary(
-      for
-        a0 <- Arbitrary.arbitrary[Int]
-        a1 <- Arbitrary.arbitrary[Int]
-        a2 <- Arbitrary.arbitrary[Int]
-        a3 <- Arbitrary.arbitrary[Int]
-      yield (a0, a1, a2, a3, ()).asInstanceOf[FixedTraversal[4][Unit, Int]]
-    )
-
-  // covers: FixedTraversal arity 4
-  checkAllFixedTraversalFor[4, Unit, Int]("FixedTraversal[4][Unit, Int]")
+  // covers: ForgetfulFunctor over MultiFocus[Function1[Int, *]] —
+  // the unified successor of FixedTraversal[N]'s ForgetfulFunctor.
+  checkAllForgetfulFunctorFor[MultiFocus[Function1[Int, *]], Unit, Int](
+    "ForgetfulFunctor[MultiFocus[Function1[Int, *]]] on (Unit, Int => Int)"
+  )
 
   // ----- Carrier type-class laws via representative fixtures ------
   //
@@ -407,12 +385,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // composition. The shared ForgetfulFunctorLaws uses `==`, so we wire
   // the SetterF-specific laws directly (from dev.constructive.eo.laws.data) rather than
   // the carrier-generic ones.
-
-  // covers: ForgetfulFunctor over FixedTraversal[2] at the typeclass level —
-  // exercises the typeclass-level witness for the fixed-arity carrier.
-  checkAllForgetfulFunctorFor[FixedTraversal[2], Unit, Int](
-    "ForgetfulFunctor[FixedTraversal[2]] on (Int, Int, Unit)"
-  )
 
   // MultiFocus[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the
   // `ForgetfulFunctor` / `ForgetfulTraverse` laws across a representative cross-section of

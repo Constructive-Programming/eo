@@ -6,10 +6,8 @@ import org.specs2.mutable.SpecificationLike
 import org.specs2.specification.core.Fragment
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-import data.{FixedTraversal, Forget}
+import data.Forget
 import laws.{FoldLaws, MultiFocusLaws, TraversalLaws}
-import laws.data.FixedTraversalLaws
-import laws.data.discipline.FixedTraversalTests
 import laws.discipline.{FoldTests, MultiFocusTests, TraversalTests}
 import laws.eo.{FoldMapHomomorphismLaws, MorphLaws}
 import laws.eo.discipline.{FoldMapHomomorphismTests, MorphTests}
@@ -154,22 +152,6 @@ trait CheckAllHelpers extends Discipline:
           val optic = original
           val morphed = morphedOptic
       .morphPreservesGet,
-    )
-
-  // ===== FixedTraversal carrier laws over arity N =====
-
-  /** Runs `FixedTraversalTests` for a single arity `N`. */
-  def checkAllFixedTraversalFor[N <: Int, X, A](name: String)(using
-      Arbitrary[FixedTraversal[N][X, A]],
-      Arbitrary[A],
-      Cogen[A],
-      ForgetfulFunctor[FixedTraversal[N]],
-  ): Fragment =
-    checkAll(
-      name,
-      new FixedTraversalTests[N, X, A]:
-        val laws = new FixedTraversalLaws[N, X, A] {}
-      .fixedTraversal,
     )
 
   // ===== Traversal-as-Forget over T[_] =====

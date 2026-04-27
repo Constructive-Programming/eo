@@ -7,13 +7,12 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, FixedTraversal, Forget, Forgetful, MultiFocus, SetterF}
+import data.{Affine, Forget, Forgetful, MultiFocus, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
 import data.MultiFocus.given
 import data.SetterF.given
-import data.FixedTraversal.given
 import laws.eo.{
   ForgetAllModifyLaws,
   IsoComposeLaws,
@@ -343,10 +342,11 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
   // =============== Traversal.two: modify now works =================
   //
-  // With `ForgetfulFunctor[FixedTraversal[2]]` in core, the two/three/
-  // four-arity traversals can finally `modify` and `replace`. Behavior
-  // smoke-test nails down the semantics and lights up the previously-
-  // unreached `from` clauses of those constructors.
+  // With `Traversal.{two,three,four}` carrying `MultiFocus[Function1[Int, *]]`
+  // (post-FixedTraversal-fold), the fixed-arity traversals inherit `.modify`
+  // and `.replace` via the shared `mfFunctor[Function1[Int, *]]` instance.
+  // Behaviour smoke-test pins the semantics down and lights up the
+  // previously-unreached `from` clauses of those constructors.
 
   "Traversal.two modifies both components and preserves structure" >> {
     val t = Traversal.two[(Int, Int), (Int, Int), Int, Int](

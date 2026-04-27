@@ -5,7 +5,7 @@ import scala.collection.immutable.ArraySeq
 
 import cats.Traverse
 
-import data.{FixedTraversal, Forget, MultiFocus, ObjArrBuilder, PSVec}
+import data.{Forget, MultiFocus, ObjArrBuilder, PSVec}
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
   * traversable container. Two carriers coexist:
@@ -144,6 +144,15 @@ object Traversal:
   /** Traversal over exactly two per-element getters. `reverse` reassembles the `T` from two
     * modified `B`s.
     *
+    * Carrier: `MultiFocus[Function1[Int, *]]` — the homogeneous-arity `Tuple_N`-shaped traversal
+    * encoded as a representable `Int => A` lookup over the N getters. Same shape as
+    * [[MultiFocus.tuple]] but specialised to the per-element-getter API instead of the
+    * homogeneous-tuple-source API. Inherits the standard `MultiFocus[Function1[Int, *]]`
+    * composability surface: `Iso → MF[Function1[Int, *]]` (via `forgetful2multifocusFunction1`),
+    * `MF[Function1[Int, *]] → SetterF` (via `multifocus2setter`), and same-carrier `.andThen`
+    * (via `mfAssocFunction1`). Lens / Prism / Optional inputs are NOT bridged because
+    * `Function1[Int, *]` lacks `Foldable` / `Alternative` — same constraint as v1 Grate.
+    *
     * @group Constructors
     * @tparam S
     *   source type
@@ -158,13 +167,19 @@ object Traversal:
       a: S => A,
       b: S => A,
       reverse: (B, B) => T,
-  ): Optic[S, T, A, B, FixedTraversal[2]] =
-    new Optic[S, T, A, B, FixedTraversal[2]]:
+  ): Optic[S, T, A, B, MultiFocus[Function1[Int, *]]] =
+    new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
-      val to: S => (A, A, Unit) = s => (a(s), b(s), ())
 
-      val from: FixedTraversal[2][X, B] => T = {
-        case (b0, b1, _) => reverse(b0, b1)
+      val to: S => (Unit, Int => A) = s =>
+        val read: Int => A = (i: Int) =>
+          i match
+            case 0 => a(s)
+            case 1 => b(s)
+        ((), read)
+
+      val from: ((Unit, Int => B)) => T = {
+        case (_, k) => reverse(k(0), k(1))
       }
 
   /** Fixed-arity-3 traversal. See [[two]].
@@ -176,13 +191,20 @@ object Traversal:
       b: S => A,
       c: S => A,
       reverse: (B, B, B) => T,
-  ): Optic[S, T, A, B, FixedTraversal[3]] =
-    new Optic[S, T, A, B, FixedTraversal[3]]:
+  ): Optic[S, T, A, B, MultiFocus[Function1[Int, *]]] =
+    new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
-      val to: S => (A, A, A, Unit) = s => (a(s), b(s), c(s), ())
 
-      val from: FixedTraversal[3][X, B] => T = {
-        case (b0, b1, b2, _) => reverse(b0, b1, b2)
+      val to: S => (Unit, Int => A) = s =>
+        val read: Int => A = (i: Int) =>
+          i match
+            case 0 => a(s)
+            case 1 => b(s)
+            case 2 => c(s)
+        ((), read)
+
+      val from: ((Unit, Int => B)) => T = {
+        case (_, k) => reverse(k(0), k(1), k(2))
       }
 
   /** Fixed-arity-4 traversal. See [[two]].
@@ -195,11 +217,19 @@ object Traversal:
       c: S => A,
       d: S => A,
       reverse: (B, B, B, B) => T,
-  ): Optic[S, T, A, B, FixedTraversal[4]] =
-    new Optic[S, T, A, B, FixedTraversal[4]]:
+  ): Optic[S, T, A, B, MultiFocus[Function1[Int, *]]] =
+    new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
-      val to: S => (A, A, A, A, Unit) = s => (a(s), b(s), c(s), d(s), ())
 
-      val from: FixedTraversal[4][X, B] => T = {
-        case (b0, b1, b2, b3, _) => reverse(b0, b1, b2, b3)
+      val to: S => (Unit, Int => A) = s =>
+        val read: Int => A = (i: Int) =>
+          i match
+            case 0 => a(s)
+            case 1 => b(s)
+            case 2 => c(s)
+            case 3 => d(s)
+        ((), read)
+
+      val from: ((Unit, Int => B)) => T = {
+        case (_, k) => reverse(k(0), k(1), k(2), k(3))
       }
