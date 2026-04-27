@@ -4,7 +4,6 @@ package data
 import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
 import optics.Optic
-import PSVecInstances.given
 
 /** Unified pair carrier for the `AlgLens`, `Kaleidoscope`, and `Grate` optic families —
   * `MultiFocus[F][X, A] = (X, F[A])`.
