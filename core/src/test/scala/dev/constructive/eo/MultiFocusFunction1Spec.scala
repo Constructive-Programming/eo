@@ -17,10 +17,12 @@ import optics.Optic.*
 /** In-core smoke spec for the absorbed-Grate paths through `MultiFocus[Function1[X0, *]]`. Pins
   * down the v1 Grate use cases on the unified carrier:
   *
-  *   - `MultiFocus.representable` over a Naperian Function1 (formerly `Grate.apply[F: Representable]`)
+  *   - `MultiFocus.representable` over a Naperian Function1 (formerly
+  *     `Grate.apply[F: Representable]`)
   *   - `MultiFocus.representableAt` with explicit lead index (formerly `Grate.at`)
   *   - `MultiFocus.tuple[T <: Tuple, A]` (formerly `Grate.tuple`)
-  *   - `forgetful2multifocusFunction1` Iso → MultiFocus[Function1] bridge (formerly `forgetful2grate`)
+  *   - `forgetful2multifocusFunction1` Iso → MultiFocus[Function1] bridge (formerly
+  *     `forgetful2grate`)
   *   - The new typeclass-gated `.at(i: F.Representation)` extension method (Q2 surface)
   *   - Same-carrier `.andThen(grate)` exercising `mfAssocFunction1.composeFrom` (formerly
   *     `grateAssoc.composeFrom`)
@@ -146,8 +148,7 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
   // covers: MultiFocus.tuple .andThen MultiFocus.tuple — same-carrier composition exercises
   // mfAssocFunction1.composeFrom (the absorbed grateAssoc.composeFrom).
   "MultiFocus.tuple.andThen(MultiFocus.tuple) — same-carrier composition through mfAssocFunction1" >> {
-    val outer
-        : Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
+    val outer: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
       MultiFocus.tuple[(Int, Int), Int]
     val doubled = outer.modify(_ * 2)((10, 20))
     (doubled === ((20, 40))).and(outer.replace(0)((1, 2)) === ((0, 0)))

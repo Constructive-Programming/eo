@@ -11,15 +11,7 @@ import data.Affine.given
 import data.Forget.given
 import data.MultiFocus.given
 import data.SetterF.given
-import laws.{
-  AffineFoldLaws,
-  GetterLaws,
-  IsoLaws,
-  LensLaws,
-  OptionalLaws,
-  PrismLaws,
-  SetterLaws,
-}
+import laws.{AffineFoldLaws, GetterLaws, IsoLaws, LensLaws, OptionalLaws, PrismLaws, SetterLaws}
 import laws.discipline.{
   AffineFoldTests,
   GetterTests,
@@ -568,8 +560,8 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   val tuple2MultiFocus: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
     MultiFocus.tuple[(Int, Int), Int]
 
-  "MultiFocus.tuple[(Int, Int), Int] — modify-identity (G1)" >> forAll {
-    (s: (Int, Int)) => tuple2MultiFocus.modify(identity[Int])(s) == s
+  "MultiFocus.tuple[(Int, Int), Int] — modify-identity (G1)" >> forAll { (s: (Int, Int)) =>
+    tuple2MultiFocus.modify(identity[Int])(s) == s
   }
 
   "MultiFocus.tuple[(Int, Int), Int] — compose-modify (G2)" >> forAll {

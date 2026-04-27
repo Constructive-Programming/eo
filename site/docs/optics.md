@@ -520,7 +520,7 @@ reach for intuitively:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
-import dev.constructive.eo.data.PowerSeries
+import dev.constructive.eo.data.MultiFocus.given  // Functor / Foldable / Traverse for MultiFocus[PSVec]
 
 val listEach = Traversal.pEach[List, Int, Int]
 ```

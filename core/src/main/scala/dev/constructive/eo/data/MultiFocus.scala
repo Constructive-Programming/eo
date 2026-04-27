@@ -28,8 +28,9 @@ import optics.Optic
   *     / Naperian shapes. Setting `F = Function1[X0, *]` collapses the pair into the same
   *     `(Y, F[A]) = (Y, X0 => A)` shape; the lead-position field was not externally observable in
   *     any shipped path-through (`grateFunctor.map`'s eager `f(a)` was discarded by every shipped
-  *     `from`), so the spike dropped it entirely. See `docs/research/2026-04-28-grate-fold-spike.md`
-  *     for the empirical justification + perf evidence.
+  *     `from`), so the spike dropped it entirely. See
+  *     `docs/research/2026-04-28-grate-fold-spike.md` for the empirical justification + perf
+  *     evidence.
   *
   * `MultiFocus[F]` keeps the F-as-parameter encoding (matching AlgLens) and absorbs Kaleidoscope by
   * recognising that the only piece of `Reflector[F]` that wasn't already in cats was the
@@ -136,6 +137,7 @@ private[eo] object MultiFocusFromList:
     * `PowerSeries.assoc` did.
     */
   given forPSVec: MultiFocusFromList[PSVec] with
+
     def fromList[A](xs: List[A]): PSVec[A] = xs match
       case Nil      => PSVec.empty[A]
       case h :: Nil => PSVec.singleton[A](h)
@@ -169,6 +171,7 @@ private[eo] object MultiFocusFromList:
   * `Either` wrapper allocation is empirically observable on `PowerSeriesPrismBench`.
   */
 private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
+
   def collectTo(
       s: S,
       lenBuf: IntArrBuilder,
@@ -188,6 +191,7 @@ object MultiFocus:
   // ------------------------------------------------------------------
 
   given pSVecFunctor: Functor[PSVec] with
+
     def map[A, B](fa: PSVec[A])(f: A => B): PSVec[B] =
       val n = fa.length
       if n == 0 then PSVec.empty[B]
@@ -363,8 +367,7 @@ object MultiFocus:
   // doc for the load-bearing invariant).
   // ------------------------------------------------------------------
 
-  given mfAssocFunction1[X0, Xo, Xi]
-      : AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
+  given mfAssocFunction1[X0, Xo, Xi]: AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
     type Z = (Xo, Xi)
 
     def composeTo[S, T, A, B, C, D](
@@ -699,9 +702,9 @@ object MultiFocus:
     * access). Mirror of the legacy `tuple2ps`.
     *
     * The `to` body builds anonymous Optic[…, MultiFocus[PSVec]] values inline rather than via
-    * top-level classes — this is required so `MultiFocusSingleton[S, T, A, B, X0]` can refer to
-    * the original `o.X` path-dependent type without tripping Scala 3's "class parent cannot refer
-    * to constructor parameters" rule.
+    * top-level classes — this is required so `MultiFocusSingleton[S, T, A, B, X0]` can refer to the
+    * original `o.X` path-dependent type without tripping Scala 3's "class parent cannot refer to
+    * constructor parameters" rule.
     */
   given tuple2psvec: Composer[Tuple2, MultiFocus[PSVec]] with
 
@@ -871,8 +874,9 @@ object MultiFocus:
     * because no canonical Representation exists in `cats.Representable`. Use `representableAt` for
     * a well-typed lead.
     */
-  def representable[F[_], A](using F: Representable[F])
-      : Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
+  def representable[F[_], A](using
+      F: Representable[F]
+  ): Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
     new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
       with MultiFocusLeadPosition[Unit]:
       type X = Unit
@@ -881,8 +885,9 @@ object MultiFocus:
       val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
 
   /** Representable-indexed variant with explicit representative index — absorbs v1 `Grate.at`. */
-  def representableAt[F[_], A](F: Representable[F])(repr0: F.Representation)
-      : Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
+  def representableAt[F[_], A](F: Representable[F])(
+      repr0: F.Representation
+  ): Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
     val _ = repr0 // captured at construction; lead-position trait surfaces it for callers
     new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
       with MultiFocusLeadPosition[F.Representation]:

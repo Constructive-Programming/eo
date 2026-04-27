@@ -15,6 +15,7 @@ import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
 import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
+import dev.constructive.eo.data.MultiFocus.given   // Functor / Foldable / Traverse for MultiFocus[PSVec] (post-fold)
 ```
 
 ## Theme A — Product editing

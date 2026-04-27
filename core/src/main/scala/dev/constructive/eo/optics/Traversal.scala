@@ -13,8 +13,8 @@ import data.{FixedTraversal, Forget, MultiFocus, ObjArrBuilder, PSVec}
   *   - [[each]] / [[pEach]] use `MultiFocus[PSVec]` — the default. Supports downstream composition
   *     with [[Lens]] / [[Prism]] through the shared `MultiFocus[PSVec]` carrier. Pays a
   *     super-linear cost relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the
-  *     composition story is the whole point of having a Traversal in the first place, so `each`
-  *     is named to match what Scala users reach for intuitively.
+  *     composition story is the whole point of having a Traversal in the first place, so `each` is
+  *     named to match what Scala users reach for intuitively.
   *   - [[forEach]] uses `Forget[T]` — a map-only fast path. Identity-shaped carrier, linear time,
   *     no downstream composition. Use when the chain terminates at the traversal.
   *
