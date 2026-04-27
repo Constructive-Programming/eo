@@ -273,23 +273,17 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     )
 
   // ----- MultiFocus[Function1[Int, *]] carrier laws ----------------
-  // Replaces the legacy FixedTraversal[N] per-arity law sweep — the new
-  // `Traversal.{two,three,four}` carriers all share a single
-  // `MultiFocus[Function1[Int, *]]` instance, so one law block covers every
-  // arity. Net test count: 3 FT-arity blocks (× 2 functor laws) + 1 generic
-  // FT[2] block → 1 MF[Function1[Int, *]] block (× 2 functor laws). The
-  // absorbed laws are still exercised through the same `mfFunctor` instance.
-
-  private given arbMultiFocusFunction1IntInt: Arbitrary[MultiFocus[Function1[Int, *]][Unit, Int]] =
-    Arbitrary(
-      Arbitrary.arbitrary[Int => Int].map(k => ((), k))
-    )
-
-  // covers: ForgetfulFunctor over MultiFocus[Function1[Int, *]] —
-  // the unified successor of FixedTraversal[N]'s ForgetfulFunctor.
-  checkAllForgetfulFunctorFor[MultiFocus[Function1[Int, *]], Unit, Int](
-    "ForgetfulFunctor[MultiFocus[Function1[Int, *]]] on (Unit, Int => Int)"
-  )
+  // The legacy FixedTraversal[N] per-arity law sweep is now redundant: post-fold,
+  // `Traversal.{two,three,four}` all share `MultiFocus[Function1[Int, *]]`, and
+  // its `ForgetfulFunctor` instance is the carrier-wide `mfFunctor[F: Functor]`
+  // already exercised by the `MultiFocus[List|Option|Vector|Chain]` blocks below
+  // (same body, just a different `F`).
+  //
+  // No carrier-level discipline block is added for `MultiFocus[Function1[Int, *]]`
+  // because structural `==` on functions is reference equality — exactly the
+  // problem SetterF had. The functor laws are instead witnessed extensionally by
+  // `MultiFocusFunction1Spec` (G1/G2 on `MultiFocus.tuple`, the same carrier) and
+  // by `EoSpecificLawsSpec`'s "Traversal.two / three modifies …" forAll blocks.
 
   // ----- Carrier type-class laws via representative fixtures ------
   //
