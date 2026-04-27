@@ -1,11 +1,10 @@
 package dev.constructive.eo
 package laws
 
-import cats.Functor
-
 import _root_.dev.constructive.eo.data.MultiFocus
 import _root_.dev.constructive.eo.data.MultiFocus.collectMap
 import _root_.dev.constructive.eo.data.MultiFocus.given
+import cats.Functor
 
 import optics.Optic
 import optics.Optic.*
@@ -13,18 +12,17 @@ import optics.Optic.*
 /** Law equations for a `MultiFocus[F][S, A]` — `Optic[S, S, A, A, MultiFocus[F]]` — at a concrete
   * classifier shape `F[_]`.
   *
-  * `MultiFocus[F]` is the unified successor of `AlgLens[F]` and `Kaleidoscope`. The structural
-  * pair `(X, F[A])` is identical to the v1 `AlgLens[F]`, but the Kaleidoscope `.collect` universal
-  * is absorbed via the carrier-wide `collectMap` extension (Functor-broadcast, derives from
+  * `MultiFocus[F]` is the unified successor of `AlgLens[F]` and `Kaleidoscope`. The structural pair
+  * `(X, F[A])` is identical to the v1 `AlgLens[F]`, but the Kaleidoscope `.collect` universal is
+  * absorbed via the carrier-wide `collectMap` extension (Functor-broadcast, derives from
   * `Functor[F].map`). The `List`-singleton variant survives at the call site as `collectList`, but
-  * is not surfaced as a discipline law — the K3 statement now reads as a single
-  * `collectViaMap` law that holds for every `Functor[F]`.
+  * is not surfaced as a discipline law — the K3 statement now reads as a single `collectViaMap` law
+  * that holds for every `Functor[F]`.
   *
   *   - **MF1 modifyIdentity** — `mf.modify(identity)(s) == s`. Shared with every other family that
   *     admits `.modify`.
-  *   - **MF2 composeModify** —
-  *     `mf.modify(g)(mf.modify(f)(s)) == mf.modify(f andThen g)(s)`. Shared shape; witnesses that
-  *     `ForgetfulFunctor[MultiFocus[F]]` composes cleanly.
+  *   - **MF2 composeModify** — `mf.modify(g)(mf.modify(f)(s)) == mf.modify(f andThen g)(s)`. Shared
+  *     shape; witnesses that `ForgetfulFunctor[MultiFocus[F]]` composes cleanly.
   *   - **MF3 collectViaMap** — `mf.collectMap[A](agg)(s) == ev.flip(F.map(ev(s))(_ => agg(ev(s))))`
   *     at the generic `MultiFocus.apply[F, A]` factory (`X = F[A]`, rebuild = identity, `S =
   *     F[A]`). Witnesses that the carrier-wide `.collectMap` universal is precisely the

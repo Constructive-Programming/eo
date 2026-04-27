@@ -644,7 +644,8 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   private given cogenConstIntInt: Cogen[Const[Int, Int]] =
     Cogen[Int].contramap(_.getConst)
 
-  val constMultiFocus: Optic[Const[Int, Int], Const[Int, Int], Int, Int, MultiFocus[Const[Int, *]]] =
+  val constMultiFocus
+      : Optic[Const[Int, Int], Const[Int, Int], Int, Int, MultiFocus[Const[Int, *]]] =
     MultiFocus.apply[Const[Int, *], Int]
 
   // covers: MultiFocus over Const (phantom retag)

@@ -98,7 +98,7 @@ class MultiFocusSpec extends Specification with ScalaCheck:
       Iso[Int, Int, Int, Int](_ + 1, (b: Int) => b - 1)
     val asMF: Optic[Int, Int, Int, Int, MultiFocus[List]] =
       summon[Composer[Forgetful, MultiFocus[List]]].to(iso)
-    val res = asMF.modify(_ * 2)(5)  // 5 → 6 (forward) → 12 (×2) → 11 (back)
+    val res = asMF.modify(_ * 2)(5) // 5 → 6 (forward) → 12 (×2) → 11 (back)
     res == 11
   }
 
@@ -110,4 +110,3 @@ class MultiFocusSpec extends Specification with ScalaCheck:
       summon[Composer[MultiFocus[List], SetterF]].to(k)
     asSetter.modify(_ * 10)(List(1, 2, 3)) == List(10, 20, 30)
   }
-

@@ -36,8 +36,8 @@ trait Composer[F[_, _], G[_, _]]:
   *      [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] derivation with `Tuple2` as
   *      the fixed intermediate. Covers Forgetful-origin chains to Affine / SetterF / PowerSeries /
   *      MultiFocus[F] uniformly without introducing ambiguity. Carriers that don't have a
-  *      `Composer[Tuple2, G]` bridge (Grate) ship their own `Composer[Forgetful, X]`
-  *      directly at tier 1.
+  *      `Composer[Tuple2, G]` bridge (Grate) ship their own `Composer[Forgetful, X]` directly at
+  *      tier 1.
   *
   * An earlier `chain[F, G, H]` derivation over arbitrary intermediate `G` was removed during the
   * 2026-04-24 resolution refactor because it introduced implicit-search ambiguity whenever two

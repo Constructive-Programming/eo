@@ -10,8 +10,8 @@ import optics.Optic
   *
   * The two families are structurally identical: both pair a structural leftover `X` with a focus
   * collection / aggregate `F[A]`. Pre-unification:
-  *   - `AlgLens[F]` exposed the F as a type parameter, used `Functor` / `Foldable` / `Traverse[F]` +
-  *     `MonoidK[F]` from cats.
+  *   - `AlgLens[F]` exposed the F as a type parameter, used `Functor` / `Foldable` / `Traverse[F]`
+  *     + `MonoidK[F]` from cats.
   *   - `Kaleidoscope` hid F as a path-dependent type member (`type FCarrier[_]`) and required the
   *     project-local `Reflector[F]` typeclass for its `.collect` universal.
   *
@@ -26,8 +26,8 @@ import optics.Optic
   *     matches the v1 List Reflector. Requires `Applicative[F]`.
   *
   * Pick the first as the default. Users wanting the cartesian collapse compose with a downstream
-  * `_.headOption` fold, OR construct `MultiFocus[List]` explicitly with the singleton choice via the
-  * `collectVia` constructor.
+  * `_.headOption` fold, OR construct `MultiFocus[List]` explicitly with the singleton choice via
+  * the `collectVia` constructor.
   *
   * @tparam F
   *   classifier shape — constraint requirements depend on the operation:
@@ -55,9 +55,9 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
   * to gate the same-carrier `.andThen` push/pull paths.
   *
   * Q2 finding: `Traverse[F] + MonoidK[F]` is ENOUGH to derive `fromList` in principle —
-  * `xs.foldLeft(empty)((acc, a) => combineK(acc, pure(a)))` — but the asymptotics regress on
-  * Vector (O(n²)) and the cardinality is silently dropped on Option. The typeclass is therefore a
-  * known per-F cost we carry forward unchanged.
+  * `xs.foldLeft(empty)((acc, a) => combineK(acc, pure(a)))` — but the asymptotics regress on Vector
+  * (O(n²)) and the cardinality is silently dropped on Option. The typeclass is therefore a known
+  * per-F cost we carry forward unchanged.
   */
 private[eo] trait MultiFocusFromList[F[_]]:
   def fromList[A](xs: List[A]): F[A]

@@ -18,10 +18,10 @@ import data.{IntArrBuilder, ObjArrBuilder, PSVec}
   *   - ObjArrBuilder: 3 specs collapsed into one.
   *
   * '''2026-04-28 MultiFocus migration.''' The three Reflector-instance blocks (List / ZipList /
-  * Const) were dropped — `Reflector` is deleted and `MultiFocus[F]` derives its `.collect`
-  * variants directly from `Functor[F]` (broadcast) or per-instance `collectList` (cartesian
-  * singleton on List). The carrier-level surface is exercised by the `MultiFocusSpec` PoC and
-  * the discipline-laws blocks in `OpticsLawsSpec`.
+  * Const) were dropped — `Reflector` is deleted and `MultiFocus[F]` derives its `.collect` variants
+  * directly from `Functor[F]` (broadcast) or per-instance `collectList` (cartesian singleton on
+  * List). The carrier-level surface is exercised by the `MultiFocusSpec` PoC and the
+  * discipline-laws blocks in `OpticsLawsSpec`.
   */
 class InternalsCoverageSpec extends Specification:
 

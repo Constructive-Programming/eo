@@ -27,15 +27,7 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{
-  Affine,
-  Forget,
-  Forgetful,
-  MultiFocus,
-  MultiFocusSingleton,
-  PowerSeries,
-  SetterF,
-}
+import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PowerSeries, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given

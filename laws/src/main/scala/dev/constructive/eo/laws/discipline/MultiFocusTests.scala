@@ -11,8 +11,8 @@ import org.typelevel.discipline.Laws
   * etc.
   *
   * MF3 (`collect via map`) needs `S =:= F[A]` evidence to reach the focus — the generic
-  * `MultiFocus.apply[F, A]` factory witnesses exactly this equality. A `Cogen[F[A]]` is required
-  * to generate `F[A] => A` aggregator functions; callers pass it explicitly per instance because
+  * `MultiFocus.apply[F, A]` factory witnesses exactly this equality. A `Cogen[F[A]]` is required to
+  * generate `F[A] => A` aggregator functions; callers pass it explicitly per instance because
   * generic `Cogen[F[A]]` derivation isn't available for `ZipList` / `Const` out of the box.
   */
 abstract class MultiFocusTests[S, A, F[_]] extends Laws:
