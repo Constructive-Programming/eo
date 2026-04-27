@@ -312,3 +312,113 @@ object Kaleidoscope:
           // `focus: Id[B] = B` — hand it straight to the Iso's reverse side.
           val b = k.focus.asInstanceOf[B]
           o.from(b)
+
+  /** `Kaleidoscope ↪ SetterF` — every Kaleidoscope is a Setter. Collapses the Kaleidoscope's
+    * aggregation pattern to the Setter API by ignoring the structural readback of the rebuild and
+    * exposing only the `(A => B) => S => T` modify shape.
+    *
+    * Implementation reads the focus + reflector via `o.to(s) = k`, applies `f` over the focus
+    * using `k.reflector.map(k.focus)(f)`, and threads the result back through `o.from`. This is
+    * byte-identical to what [[kalFunctor]]'s `.modify(f)` produces — the SetterF lift just exposes
+    * it through the carrier-erasing Setter API rather than the Kaleidoscope's paired (focus,
+    * rebuild) shape.
+    *
+    * Resolves the K × S cell of the `Composer` matrix: a user can now
+    * `summon[Composer[Kaleidoscope, SetterF]].to(kaleidoscope)` (or `kaleidoscope.morph[SetterF]`)
+    * to interface a Kaleidoscope-carrier optic with code that consumes `Optic[…, SetterF]` —
+    * typically a downstream abstraction over Setter (e.g. an `eo-monocle` bridge) or a uniform
+    * Setter-shaped extension point. Like every other `Composer[X, SetterF]`, this does NOT enable
+    * `kaleidoscope.andThen(setter)` directly: SetterF lacks an `AssociativeFunctor` instance by
+    * design (see [[SetterF]] doc), so once both sides agree on SetterF the chain still has nowhere
+    * to compose at the `AssociativeFunctor` level. The cross-carrier value lives at the morph
+    * site, same as `tuple2setter` / `either2setter` / `affine2setter` / `powerseries2setter` /
+    * `grate2setter`.
+    *
+    * **Path-type FCarrier is opaque through this lift.** Because `FCarrier` is a path-dependent
+    * type member of each `Kaleidoscope` value, the morphed Setter doesn't need to know it
+    * statically — the rewrite runs entirely through the per-instance reflector witness on
+    * `o.to(s)`. The kal2setter lift is therefore uniform across `Kaleidoscope.apply[List, A]`,
+    * `Kaleidoscope.apply[ZipList, A]`, `Kaleidoscope.apply[Const[M, *], A]`, and any future
+    * Reflector-bearing factory.
+    *
+    * @group Instances
+    */
+  given kaleidoscope2setter: Composer[Kaleidoscope, SetterF] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Kaleidoscope]): Optic[S, T, A, B, SetterF] =
+      new Optic[S, T, A, B, SetterF]:
+        type X = (S, A)
+        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+        val from: SetterF[X, B] => T = sfxb =>
+          val (s, f) = sfxb.setter
+          val k = o.to(s)
+          val mapped = summon[ForgetfulFunctor[Kaleidoscope]].map(k, f)
+          o.from(mapped)
+
+  // ------------------------------------------------------------------
+  // Structurally unsound bridges — documented and deliberately absent
+  // ------------------------------------------------------------------
+  //
+  // The 2026-04-23 composition gap analysis surfaced two further candidates for closing the
+  // Kaleidoscope row of the Composer matrix. Both turn out to be structurally unsound for cats-eo's
+  // current shape; the rationale lives here so future maintainers don't re-spend the investigation
+  // budget. (Mirrors the equivalent block at the bottom of [[Grate]] — Kaleidoscope's structural
+  // profile is close enough to Grate's that the same two skip rationales apply.)
+  //
+  // 1. `Composer[Kaleidoscope, Forgetful]` (Kaleidoscope widens to Iso/Getter) — REJECTED.
+  //
+  //    A Kaleidoscope's `to: S => Kaleidoscope[S, A]` exposes a focus (`k.focus: FCarrier[A]`,
+  //    castable down to `A` for the `Id`-carrier Iso bridge), and `from: Kaleidoscope[S, B] => T`
+  //    could be fed an Id-carrier Kaleidoscope built from a fresh `B` to fake a write path. The
+  //    Forgetful-carrier shape would type-check. However, [[forgetful2kaleidoscope]] already ships
+  //    in the OPPOSITE direction (Iso → Kaleidoscope, lines 281–314 above). Adding the reverse
+  //    would create a bidirectional Composer pair, which the [[Morph]] resolution explicitly
+  //    forbids: `Morph.leftToRight` (via `Composer[Forgetful, Kaleidoscope]`) and
+  //    `Morph.rightToLeft` (via the hypothetical `Composer[Kaleidoscope, Forgetful]`) would BOTH
+  //    match for any `Iso × Kaleidoscope` pair, surfacing as ambiguous-implicit and breaking every
+  //    existing `iso.andThen(kaleidoscope)` call site (witnessed by KaleidoscopeTests + the Iso →
+  //    Kaleidoscope sample in `site/docs/optics.md`). Cats-eo's resolution invariant "we don't
+  //    ship bidirectional composers" (see `Composer.scala`'s class doc) is the deciding
+  //    constraint, NOT the type-level encodability — the composer would compile, but landing it
+  //    would regress the matrix's I × K cell from N to ambiguity.
+  //
+  //    Workaround for users who want a Kaleidoscope's read path as a Getter: at the user-known
+  //    `FCarrier = F` factory site, `Getter(s => kaleidoscope.to(s).focus.asInstanceOf[F[A]])` —
+  //    explicit, no carrier ambiguity. The Getter's `T = Unit` is what would have made the morph
+  //    degenerate anyway: a "Kaleidoscope-as-Iso" lift would falsely advertise a meaningful
+  //    `reverseGet`, since for a non-trivial Kaleidoscope (e.g. `Kaleidoscope.apply[ZipList,
+  //    Double]`) `reverseGet(b)` would broadcast `b` through the Reflector — NOT round-trip the
+  //    original source.
+  //
+  // 2. `Composer[Kaleidoscope, Forget[F]]` (Kaleidoscope widens to Traversal/Fold) — REJECTED.
+  //
+  //    The Composer signature is `def to[S, T, A, B](o: Optic[S, T, A, B, Kaleidoscope]): Optic[S,
+  //    T, A, B, Forget[F]]` — generic in `S, T, A, B`, with `F` quantified at the Composer level.
+  //    The target carrier is `Forget[F][X, A] = F[A]`, so the morphed optic's `to` would have to
+  //    produce `F[A]` from arbitrary `S`, and `from` would have to consume `F[B]` to produce `T`.
+  //    There's no path from a generic Kaleidoscope to an `F[A]` because:
+  //
+  //      a) The Kaleidoscope's `FCarrier` is a path-dependent type member, NOT a Composer
+  //         parameter. At the Composer site there's no way to thread a constraint
+  //         "FCarrier = F" — the member is fixed only per `Kaleidoscope` value, AFTER the optic
+  //         flows through the abstract `Optic[…, Kaleidoscope]` slot, where `FCarrier` becomes
+  //         opaque (the same opacity that forces `.collect[F, B]` to take `F` explicitly).
+  //
+  //      b) Even with `FCarrier = F` known at the call site (e.g. when the user constructs via
+  //         `Kaleidoscope.apply[F, A]` with a concrete `F`), the bridge would still need the
+  //         user's `F` to align with the `Forget[F]`'s `F` — and the natural Kaleidoscope use of
+  //         `F` (Apply for aggregation) is NOT the same as Forget's natural `F` use (Foldable
+  //         for fold/traversal). `Reflector[F]` provides `Apply[F]`, which can sometimes
+  //         substitute for `Foldable[F]` (e.g. `List` is both), but the carrier-shape identity is
+  //         coincidence, not a coherence law. Composer has no place to thread a `Foldable[F]`
+  //         instance OR a `FCarrier = F` equality, just as Grate's Composer can't thread
+  //         `Representable[F]`.
+  //
+  //    The structural mismatch is genuine, not an encoding accident: a generic Kaleidoscope over
+  //    arbitrary `S` simply does not carry enough information to materialise an `F[A]` for any
+  //    `F`. Users wanting "fold/traverse over the slots a Kaleidoscope's FCarrier exposes" can
+  //    construct the `Forget[F]`-carrier optic directly at the call site — e.g. `Fold[List, Int]`
+  //    paired with the user's known `Reflector[F]` factory. The two carriers solve different
+  //    problems (aggregation-shape-driven `.collect` vs. classifier-driven `.foldMap`); pretending
+  //    otherwise via a half-baked Composer would silently drop the Reflector witness on one side
+  //    or the other.

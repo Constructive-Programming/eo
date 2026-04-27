@@ -348,6 +348,45 @@ to construct the Kaleidoscope separately at the Lens's focus type and
 compose through `Lens.andThen` (staying in `Tuple2`), then apply the
 Kaleidoscope directly.
 
+**Composability — Kaleidoscope widens to Setter.** A
+`Composer[Kaleidoscope, SetterF]` ships (`kaleidoscope2setter`,
+`Kaleidoscope.scala`), so any Kaleidoscope can be morphed to the
+`SetterF` carrier via `kaleidoscope.morph[SetterF]`. The lifted
+Setter's `.modify(f)` is byte-identical to the Kaleidoscope's
+`.modify(f)` — same Reflector-driven element-wise rewrite, just exposed
+through the carrier-erasing Setter API. This makes Kaleidoscope uniform
+with `eo-monocle`-style cross-library interop and any code consuming
+the `Optic[…, SetterF]` shape. Like every other `Composer[X, SetterF]`,
+this morph does NOT enable `kaleidoscope.andThen(setter)` directly —
+`SetterF` lacks an `AssociativeFunctor` instance by design, so the
+cross-carrier value lives at the morph site, not the chain site.
+
+**Composition limits — Kaleidoscope to Iso/Getter and Kaleidoscope to
+Traversal/Fold.** Both directions were investigated for v0.1.x; both
+turn out to be structurally unsound under cats-eo's resolution rules
+(mirroring Grate's twin skip rationales):
+
+- `Composer[Kaleidoscope, Forgetful]` (Kaleidoscope → Iso/Getter) would
+  be type-level encodable (via an `Id`-carrier Kaleidoscope on either
+  side), but cats-eo already ships the reverse
+  (`Composer[Forgetful, Kaleidoscope]`). Adding the forward direction
+  would create a bidirectional Composer pair, which the [`Morph`](https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala)
+  resolution explicitly forbids — every `iso.andThen(kaleidoscope)`
+  call site would surface as ambiguous-implicit. Use
+  `kaleidoscope.to(s).focus.asInstanceOf[F[A]]` at a known-`F` factory
+  site for the read.
+- `Composer[Kaleidoscope, Forget[F]]` (Kaleidoscope → Traversal/Fold)
+  would have to produce `F[A]` from arbitrary `S`, but Kaleidoscope's
+  `FCarrier` is a path-dependent type member and opaque after morphing
+  through the abstract `Optic[…, Kaleidoscope]` slot. Composer has no
+  place to thread a `FCarrier = F` equality OR a `Foldable[F]` witness
+  even when the Reflector's `Apply[F]` happens to coincide with one.
+  Users wanting fold/traverse semantics on a Kaleidoscope's slots
+  should construct the `Forget[F]`-carrier optic directly.
+
+The full structural rationale lives at the bottom of
+`Kaleidoscope.scala` for future maintainers.
+
 ## Prism
 
 A `Prism[S, A]` focuses one branch of a sum type — `Some` over

@@ -27,12 +27,22 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, AlgLens, AlgLensSingleton, Forget, Forgetful, PowerSeries, SetterF}
+import data.{
+  Affine,
+  AlgLens,
+  AlgLensSingleton,
+  Forget,
+  Forgetful,
+  Kaleidoscope,
+  PowerSeries,
+  SetterF,
+}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
 import data.AlgLens.given
 import data.Grate.given
+import data.Kaleidoscope.given
 import data.SetterF.given
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
@@ -489,6 +499,34 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val fnOk = (modified(true) === 101).and(modified(false) === 201)
 
     tupleOk.and(fnOk)
+  }
+
+  // ----- Kaleidoscope lifted into SetterF ------------------------------
+
+  // covers: Kaleidoscope.apply[List] (cartesian Reflector) and Kaleidoscope.apply[ZipList]
+  // (zipping Reflector) lift into SetterF and modify element-wise via the Reflector's Apply-map.
+  // The lifted SetterF.modify must agree byte-for-byte with the original Kaleidoscope's
+  // .modify(f) — same Reflector-driven element-wise rewrite as ForgetfulFunctor[Kaleidoscope].
+  "Kaleidoscope.apply[List] / Kaleidoscope.apply[ZipList] → SetterF: element-wise modify" >> {
+    val listKal: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
+      Kaleidoscope.apply[List, Int]
+    val listLifted: Optic[List[Int], List[Int], Int, Int, SetterF] =
+      summon[Composer[Kaleidoscope, SetterF]].to(listKal)
+    val listOk =
+      (listLifted.modify(_ + 1)(List(1, 2, 3)) === List(2, 3, 4))
+        .and(listLifted.modify(_ * 10)(Nil) === Nil)
+        .and(listLifted.modify(identity[Int])(List(7, 8, 9)) === List(7, 8, 9))
+
+    import cats.data.ZipList
+    val zipKal: Optic[ZipList[Int], ZipList[Int], Int, Int, Kaleidoscope] =
+      Kaleidoscope.apply[ZipList, Int]
+    val zipLifted: Optic[ZipList[Int], ZipList[Int], Int, Int, SetterF] =
+      summon[Composer[Kaleidoscope, SetterF]].to(zipKal)
+    val zipOk =
+      (zipLifted.modify(_ * 10)(ZipList(List(1, 2, 3))).value === List(10, 20, 30))
+        .and(zipLifted.modify(_ + 1)(ZipList(Nil)).value === List.empty[Int])
+
+    listOk.and(zipOk)
   }
 
   // ----- Cross-carrier composition Lens → AlgLens classifier -----------

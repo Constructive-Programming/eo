@@ -7,11 +7,12 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, FixedTraversal, Forget, Forgetful, Grate, SetterF}
+import data.{Affine, FixedTraversal, Forget, Forgetful, Grate, Kaleidoscope, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
 import data.Grate.given
+import data.Kaleidoscope.given
 import data.SetterF.given
 import data.FixedTraversal.given
 import laws.eo.{
@@ -96,6 +97,23 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     "Grate.tuple[(Int,Int)].morph[SetterF] preserves modify (I1)",
     tuple2GrateForMorph,
     tuple2GrateForMorph.morph[SetterF],
+  )
+
+  // covers: Morph from Kaleidoscope → SetterF on a List-shaped Kaleidoscope.
+  //
+  // The new `Composer[Kaleidoscope, SetterF]` (`kaleidoscope2setter`, Kaleidoscope.scala) widens
+  // any Kaleidoscope-carrier optic to the Setter API. The MorphLaws.A1 check pins down that the
+  // lifted SetterF's `.modify(f)(s)` produces the same `T` as the original Kaleidoscope's
+  // `.modify(f)(s)` via `kalFunctor` — the whole structural soundness of the bridge in one law.
+  // List is Kaleidoscope's cartesian-Reflector instance; the law covers the path `o.to(s) →
+  // kalFunctor.map(_, f) → o.from(_)` end-to-end.
+  val listKaleidoscopeForMorph: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
+    Kaleidoscope.apply[List, Int]
+
+  checkAllMorphPreservesModifyFor[List[Int], Int, Kaleidoscope, SetterF](
+    "Kaleidoscope.apply[List,Int].morph[SetterF] preserves modify (I1)",
+    listKaleidoscopeForMorph,
+    listKaleidoscopeForMorph.morph[SetterF],
   )
 
   // =============== B1 — Iso reverse involution =====================
