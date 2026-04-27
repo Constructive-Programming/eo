@@ -63,11 +63,8 @@ this optic have?"
 | `Forgetful`     | `A` — identity; no leftover                    | `Iso`, `Getter`        |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
-| `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`, `Traversal`    |
-| `PowerSeries`   | `(Snd[X], PSVec[A])`                           | Composable `Traversal` |
-| `FixedTraversal[N]` | Fixed-length tuple of `A`s                  | `Traversal.{two,three,four}` |
-| `MultiFocus[F]` | `(X, F[A])` — classifier-shaped: pair leftover with an `F`-wrapped focus vector | `MultiFocus[F]` (algebraic-lens + Kaleidoscope-style aggregation; `.collectMap` / `.collectList` universals) |
-| `Grate`         | `(A, X => A)` — focus + per-slot rebuild     | `Grate` (distributive / Naperian optics) |
+| `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`                 |
+| `MultiFocus[F]` | `(X, F[A])` — pair leftover with an `F`-wrapped focus vector | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each`; `Function1[Int, *]` ⇒ `Traversal.{two,three,four}` and `MultiFocus.tuple` / `representable`); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:
@@ -152,9 +149,9 @@ val mainStreet = wrappedMaybe.andThen(mainOnly)
 `Composer[Tuple2, Affine]` is one of the stdlib instances;
 [`dev.constructive.eo.data.Affine`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html)
 ships it. Other bridges: `Tuple2 → SetterF`, `Tuple2 →
-PowerSeries`, `Either → Affine`, `Either → PowerSeries`,
-`Affine → PowerSeries`, `Forgetful → Tuple2`, `Forgetful →
-Either`.
+MultiFocus[F]`, `Either → Affine`, `Either → MultiFocus[F]`,
+`Affine → MultiFocus[F]`, `Forgetful → Tuple2`, `Forgetful →
+Either`, `Forgetful → MultiFocus[F]`.
 
 The transitive `Composer.chainViaTuple2` given lets you hop
 across two bridges using `Tuple2` as the fixed intermediate.
@@ -171,47 +168,39 @@ lifting both sides into `Affine`, which both carriers reach.
 Every edge below is a shipping `Composer[F, G]` given; solid
 arrows are tier-1 atomic bridges, dashed arrows are tier-2
 transitive derivations via `Composer.chainViaTuple2`. Terminal
-nodes (`SetterF`, `MultiFocus[F]`, `Grate`, `PowerSeries`,
-`FixedTraversal[N]`) sink — they have no outbound `Composer`
-instance other than to `SetterF` — so chains must land there
-last.
+nodes (`SetterF`, `MultiFocus[F]`) sink — they have no outbound
+`Composer` instance other than `MultiFocus[F] → SetterF` — so
+chains must land there last.
 
 ```mermaid
 flowchart LR
   Forgetful --> Tuple2
   Forgetful --> Either
-  Forgetful --> Grate
   Forgetful --> MFocus["MultiFocus[F]"]
   Tuple2 --> Affine
   Tuple2 --> SetterF
-  Tuple2 --> PowerSeries
   Tuple2 --> MFocus
   Either --> Affine
-  Either --> PowerSeries
   Either --> MFocus
-  Affine --> PowerSeries
   Affine --> MFocus
   ForgetF["Forget[F]"] --> MFocus
-  Grate --> SetterF
   MFocus --> SetterF
   Forgetful -.->|chainViaTuple2| Affine
   Forgetful -.->|chainViaTuple2| SetterF
-  Forgetful -.->|chainViaTuple2| PowerSeries
   Forgetful -.->|chainViaTuple2| MFocus
-  FixedN["FixedTraversal[N]"]
   SetterF:::sink
   MFocus:::sink
-  Grate:::sink
-  PowerSeries:::sink
-  FixedN:::sink
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
 ```
 
-`FixedTraversal[N]` is drawn standalone: it has neither
-inbound nor outbound `Composer`, and no `AssociativeFunctor`
-either — it's a pure leaf carrier. `Forget[F]` has one outbound
-bridge (`→ MultiFocus[F]`) but no inbound, so chains reach it only
-via `Fold` at construction time.
+`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) but no
+inbound, so chains reach it only via `Fold` at construction time.
+`MultiFocus[F]` covers five v1 carriers (`AlgLens[F]`,
+`Kaleidoscope`, `Grate`, `PowerSeries`, `FixedTraversal[N]`) post-
+fold; sub-shapes are selected by the choice of `F` (e.g.
+`MultiFocus[PSVec]` for `Traversal.each`,
+`MultiFocus[Function1[Int, *]]` for `Traversal.{two,three,four}` and
+`MultiFocus.tuple` / `representable`).
 
 ## Why the existential machinery is worth it
 

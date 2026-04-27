@@ -503,94 +503,186 @@ separately in
 
 ## Theme E — Algebraic / classifier
 
-### MultiFocus — partition + z-shift + column-wise aggregation
+`MultiFocus[F]` is the unified successor of five v1 carriers
+(`AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
+`FixedTraversal[N]`). Every former carrier becomes a sub-shape
+selected by `F`. The three recipes below cover the prototypical
+shapes — see the [MultiFocus reference](multifocus.md) for the full
+unification narrative.
 
-Three patterns that need the whole `F[A]` visible, not just a
-single `A`. `MultiFocus[F]` is the unified successor of the v1
-`AlgLens[F]` (algebraic-lens) and `Kaleidoscope` families — the
-two collapsed pre-0.1.0 because their value shape `(X, F[A])` was
-identical and `F`-as-parameter is the cleaner encoding.
+### Recipe A — Prototypical Grate-shape via `MultiFocus.tuple`
 
-**(a) z-shift — algebraic-lens flavour.** Subtract each row's
-score by the dataset-wide mean; the closure inspects the full
-list to decide what to do with each element:
+The "broadcast a uniform `A => B` over a homogeneous tuple"
+idiom — the absorbed-Grate sub-shape `MultiFocus[Function1[Int, *]]`.
+Same optic value carries `.modify` (uniform pointwise rewrite)
+and `.modifyA[G]` (effectful pointwise rewrite that short-circuits
+on `G`'s applicative).
 
 ```scala mdoc:silent
+import cats.instances.function.given  // Functor[Function1[Int, *]] for .modify
+import cats.instances.option.given     // Applicative[Option] for .modifyA
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 
-case class Row(id: Int, score: Double)
-
-// Lens whose focus is already the list — we're updating the whole
-// List[Row] through the dataset-wide mean.
-val rowsL =
-  Lens[List[Row], List[Row]](identity, (_, rs) => rs)
-
-// Lift the Lens into MultiFocus[List] so the inner focus is a single
-// Row but the modify function sees the whole list.
-val rowsMF = MultiFocus.fromLensF[List, List[Row], List[Row], Row, Row](rowsL)
+// Three colour channels — each a Double in [0.0, 1.0].
+val rgbMF = MultiFocus.tuple[(Double, Double, Double), Double]
 ```
 
 ```scala mdoc
-val rows = List(Row(1, 10.0), Row(2, 20.0), Row(3, 30.0))
+val violet = (0.5, 0.0, 0.5)
 
-// z-shift: each row's score minus the column-wide mean.
-rowsMF.modify { r =>
-  // The closure fires per-element; to read the whole list we reach
-  // back through the original data. In a MultiFocus-aware helper
-  // method (modifyWithAggregate — future work) the aggregator
-  // would be passed in explicitly.
-  val mean = rows.map(_.score).sum / rows.length
-  r.copy(score = r.score - mean)
-}(rows)
+// Brighten all three channels uniformly: the same `A => B` runs at
+// every slot. Same shape as the v1 Grate.modify.
+rgbMF.modify(c => (c * 1.4).min(1.0))(violet)
 
-// Partition: return only the rows at or above the mean. MultiFocus
-// accepts rebuild with a different cardinality than the source
-// when F is MonoidK-friendly (List is).
-rowsMF.modifyA[List] { r =>
-  val mean = rows.map(_.score).sum / rows.length
-  if r.score >= mean then List(r) else Nil
-}(rows)
+// Effectful rewrite: fail with None if any channel is out of range.
+def normalise(c: Double): Option[Double] =
+  Option.when(c >= 0.0 && c <= 1.0)(c)
+
+rgbMF.modifyA[Option](normalise)(violet)
+rgbMF.modifyA[Option](normalise)((0.5, 1.5, 0.0))   // out of range
 ```
 
-**(b) Column-wise aggregation — Kaleidoscope flavour.** The
-`.collectMap` and `.collectList` extensions reduce the entire
-`F[A]` focus to a single value and broadcast it back. The
-behaviour tracks the `Functor[F]` (length-preserving via
-`collectMap`) or stays cartesian (`MultiFocus[List].collectList`):
+The carrier is `MultiFocus[Function1[Int, *]]` — `Function1[Int, *]`
+is the Naperian shape over a finite index set. `.modify` runs the
+same closure at every index; `.modifyA[G]` traverses the indices
+under `Applicative[G]` and short-circuits per `G`'s semantics.
+
+This is the absorbed-Grate sub-shape from the
+[carrier consolidation](multifocus.md#the-unification-narrative);
+`MultiFocus.representable[F: Representable, A]` covers the same
+shape over arbitrary distributive `F`s (tuple-of-pair `(A, A)`,
+user-defined Naperian containers, etc.).
+
+**Source:** Penner — *Grate: yet another optic*,
+<https://chrispenner.ca/posts/grate>.
+
+### Recipe B — Prototypical Kaleidoscope-shape via `.collectMap` / `.collectList`
+
+The "applicative-aware aggregation" idiom — the absorbed-Kaleidoscope
+sub-shape. The same `MultiFocus[F]` optic carries two `.collect*`
+flavours, and the user picks whichever matches the aggregation shape
+they want:
 
 ```scala mdoc:silent
 import cats.data.ZipList
 
 val zipMF = MultiFocus.apply[ZipList, Double]
-val listMF = MultiFocus.apply[List, Int]
+val intListMF = MultiFocus.apply[List, Int]
 ```
 
 ```scala mdoc
-// Column-wise mean: the aggregator sees the whole ZipList, returns
-// the mean, Functor[ZipList].map broadcasts it back across positions.
+// (1) MultiFocus[ZipList] + .collectMap — column-wise mean broadcast
+//     back across positions. The aggregator sees the whole ZipList,
+//     returns one Double, Functor[ZipList].map fills it back at every
+//     index. Length-preserving.
 zipMF.collectMap[Double](zl => zl.value.sum / zl.value.size.toDouble)(
   ZipList(List(1.0, 2.0, 3.0, 4.0))
 )
 
-// Cartesian-singleton: collectList wraps the result in a one-element list.
-listMF.collectList(_.sum)(List(1, 2, 3, 4))
+// (2) MultiFocus[List] + .collectList — cartesian / singleton output:
+//     `List(agg(fa))`, regardless of input length. Reproduces the v1
+//     Reflector[List] semantics at the call site without a typeclass.
+intListMF.collectList(_.sum)(List(1, 2, 3, 4))
 
-// Length-preserving: collectMap broadcasts the sum back across every position.
-listMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
+// Same optic, .collectMap flavour: List collapses into the
+// length-preserving (Functor-broadcast) shape — equivalent to the v1
+// Reflector[ZipList] interpretation if it were applied to a List.
+intListMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
 ```
 
-The same optic value works for every aggregation shape; the
-semantics track whichever `Functor[F]` you plug in. See
-[Optics → MultiFocus](optics.md#multifocus) for the constructor
-table and the "when to reach for MultiFocus vs. Grate vs.
-Traversal" decision note.
+**When to reach for which `.collect*` flavour.**
 
-**Sources:** Penner — *Algebraic lenses*,
-<https://chrispenner.ca/posts/algebraic>; Penner —
-*Kaleidoscopes: lenses that never die*,
-<https://chrispenner.ca/posts/kaleidoscopes>.
+- `.collectMap[B](agg: F[A] => B)` requires `Functor[F]` and is the
+  carrier-wide default. Length-preserving via `Functor[F].map`.
+  Matches v1 `Reflector[ZipList]` and `Reflector[Const]` exactly.
+- `.collectList(agg: List[A] => B)` is `MultiFocus[List]`-specific,
+  produces `List(agg(fa))` — a one-element output regardless of
+  input length. Matches v1 `Reflector[List]`'s cartesian-singleton
+  choice.
+
+The post-fold story is the user picks per call site — the
+[carrier-consolidation Q1 finding](multifocus.md#why-two-collect-variants)
+explains why no single derivation from `Apply[F]` covers both
+behaviours uniformly; the v1 `Reflector[F]` typeclass that picked
+one or the other per `F` was deleted.
+
+**Sources:** Penner — *Kaleidoscopes: lenses that never die*,
+<https://chrispenner.ca/posts/kaleidoscopes>; Penner —
+*Algebraic lenses*, <https://chrispenner.ca/posts/algebraic>.
+
+### Recipe C — PowerSeries downstream composition (`Lens → each → Lens`)
+
+The post-consolidation crown jewel. The absorbed-PowerSeries
+sub-shape `MultiFocus[PSVec]` carries an
+`AssociativeFunctor[MultiFocus[PSVec], _, _]` instance
+(`mfAssocPSVec`), so `.andThen` continues *past* `Traversal.each`
+into a downstream `Lens`. Pre-fold the deleted `Traversal.forEach`
+shape (Forget[T]-based) was terminal — a chain ending at
+`.forEach(...)` could not extend further.
+
+```scala mdoc:silent
+case class Order(id: Int, name: String, total: Double)
+case class Cart(owner: String, orders: List[Order])
+
+val cartOrdersL =
+  Lens[Cart, List[Order]](_.orders, (c, os) => c.copy(orders = os))
+
+val orderNameL =
+  Lens[Order, String](_.name, (o, n) => o.copy(name = n))
+
+// Three hops, two carriers:
+//   Cart →(Tuple2)→ List[Order] →(MultiFocus[PSVec])→ Order →(Tuple2)→ String
+//
+// The cross-carrier hops fire transparently:
+//   - .andThen(Traversal.each[List, Order]) lifts the outer Lens
+//     into MultiFocus[PSVec] via `tuple2psvec`.
+//   - .andThen(orderNameL) is the DOWNSTREAM hop — `tuple2psvec`
+//     fires again to lift orderNameL into MultiFocus[PSVec], and
+//     mfAssocPSVec composes the two same-carrier optics.
+val everyOrderName =
+  cartOrdersL
+    .andThen(Traversal.each[List, Order])
+    .andThen(orderNameL)
+```
+
+```scala mdoc
+val cart = Cart("Alice", List(
+  Order(1, "apple",  1.0),
+  Order(2, "pear",   2.0),
+  Order(3, "lobster", 150.0),
+))
+
+// Modify every order's name through the chain.
+everyOrderName.modify(_.toUpperCase)(cart)
+
+// Read-only escape via .foldMap — Foldable[PSVec] is shipped
+// alongside the carrier instances.
+everyOrderName.foldMap((s: String) => List(s))(cart)
+```
+
+The pre-fold contrast: `Traversal.forEach[F, T](xs)` was a
+`Forget[T]`-carrier optic — the leftover side carried no rebuild
+information, only the read-side aggregation, so chains like
+`.forEach(...).andThen(orderNameL)` were unreachable. The
+post-fold `Traversal.each` is `MultiFocus[PSVec]`-carrier; same
+read-side capability via `.foldMap`, plus the rebuild side that
+makes `.andThen` continue past it.
+
+The `mfAssocPSVec` body is the absorbed `PowerSeries.assoc`
+verbatim — parallel-array `AssocSndZ` leftover, both `MultiFocusSingleton`
+(AlwaysHit, for morphed Lenses) and `MultiFocusPSMaybeHit`
+(MaybeHit, for morphed Prisms / Optionals) fast-paths preserved.
+The benchmark numbers in
+[`docs/research/2026-04-29-powerseries-fold-spike.md` §3.4](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-powerseries-fold-spike.md)
+show the post-fold carrier within ±5% of pre-fold PowerSeries at
+every size up to 1024.
+
+**Source:** the post-fold composability story; benchmark
+discussion in
+[Optics → Traversal](optics.md#traversal) and
+[benchmarks → PowerSeries with downstream composition](benchmarks.md#powerseries-traversal-with-downstream-composition).
 
 ## Theme F — Write-only / read-only escape
 

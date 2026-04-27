@@ -42,6 +42,10 @@ types alike.
   and how `Composer` bridges family boundaries.
 - [Optics reference](optics.md) — one section per family, with
   runnable examples.
+- [MultiFocus](multifocus.md) — the unified successor of five v1
+  carriers (`AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
+  `FixedTraversal[N]`); typeclass-gated capability matrix and
+  composability profile.
 - [Generics](generics.md) — the `lens[S](_.field)` and
   `prism[S, A]` macros, backed by Hearth.
 - [Circe integration](circe.md) — `JsonPrism` / `JsonTraversal`,

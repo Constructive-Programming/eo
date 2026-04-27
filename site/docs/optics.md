@@ -38,24 +38,23 @@ flowchart TD
   AffineFold --> Fold
   Traversal --> Fold
 
-  %% eo-only families that don't fit the classical lattice.
-  %% Iso → Grate is the only natural inbound edge to Grate
-  %% (gap analysis §0.3).
-  Iso --> Grate
-
-  %% MultiFocus[F] is a composition sink: inbound bridges from the
-  %% classical families exist (and one outbound to Setter via
-  %% multifocus2setter), but every other outbound is by design U.
+  %% MultiFocus[F] is a composition sink with five sub-shapes
+  %% selected by F: AlgLens (F: Functor / Foldable / Traverse),
+  %% Kaleidoscope (F: Apply aggregates), Grate (F = Function1[X0, *]),
+  %% PowerSeries (F = PSVec, the Traversal.each carrier), and
+  %% FixedTraversal[N] (F = Function1[Int, *] for the .{two,three,four}
+  %% factories). Inbound bridges from every classical family land
+  %% here; the only outbound is to Setter via multifocus2setter.
   %% Dotted edges mark *degraded* conversions where the result loses
   %% information the original carrier carried.
-  Optional -.-> MultiFocus["MultiFocus[F]"]
+  Iso --> MultiFocus["MultiFocus[F]"]
+  Optional -.-> MultiFocus
   MultiFocus --> Setter
   MultiFocus -.-> Fold
 
-  %% FixedTraversal[N] sits beside Traversal, not below: same rebuild
-  %% semantics, fixed arity, but no Composer in or out
-  %% (composition-terminal leaf).
-  FixedTraversal["FixedTraversal[N] — leaf, fixed arity"]
+  %% Traversal.each is the F = PSVec sub-shape of MultiFocus[F]; drawn
+  %% as Traversal in the lattice for legibility.
+  Traversal --> MultiFocus
 
   click Iso "#iso"
   click Lens "#lens"
@@ -66,9 +65,7 @@ flowchart TD
   click Getter "#getter"
   click AffineFold "#affinefold"
   click Fold "#fold"
-  click Grate "#grate"
   click MultiFocus "#multifocus"
-  click FixedTraversal "#traversal"
 ```
 
 How to read the diagram in practice:
@@ -86,10 +83,11 @@ How to read the diagram in practice:
   edges = degraded conversion** that loses information (documented
   in the MultiFocus section).
 
-The full 14×14 cell-by-cell composition matrix lives in
+The full cell-by-cell composition matrix lives in
 [`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md);
 that's the source of truth — the lattice above is the geometric view
-of the same data.
+of the same data. Post-fold the matrix is 12×12 with 17 U cells
+(down from 145 U cells across the 14×14 pre-fold matrix).
 
 The standalone `Review` family sits outside this tree — it
 deliberately doesn't extend `Optic` (no read side to fit the
@@ -132,82 +130,18 @@ a common carrier.
 
 ## Grate
 
-A `Grate[S, A]` is the dual of `Lens`: where a Lens decomposes a
-product `S` into a focus `A` alongside a leftover, a Grate lifts a
-source-reading function through a *distributive* / Naperian shape.
-Classical shape `((S => A) => B) => T`; carrier: `Grate` (paired
-encoding `(A, X => A)`).
+The v1 `Grate` carrier (paired encoding `(A, X => A)`, classical
+shape `((S => A) => B) => T` for distributive / Naperian rebuilds)
+was absorbed into the unified `MultiFocus[F]` carrier pre-0.1.0
+as `MultiFocus[Function1[X0, *]]`. The Grate-shaped factories ship
+as `MultiFocus.tuple[T <: Tuple, A]` (homogeneous-tuple uniform
+rewrite), `MultiFocus.representable[F: Representable, A]`
+(arbitrary Naperian rebuild), and `MultiFocus.representableAt`
+(representative-index variant).
 
-Use this for fixed-shape homogeneous containers — tuple-of-Doubles,
-finite-index function records — where every slot holds a value of the
-same type. The canonical operation is "apply `A => B` uniformly to
-every slot".
-
-After the 2026-04-28 carrier consolidation (see
-[`grate-fold-spike`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-28-grate-fold-spike.md)),
-v1's `Grate` was absorbed into the unified `MultiFocus[F]` carrier as
-`MultiFocus[Function1[X, *]]`. The same factories ship under new names
-— `MultiFocus.tuple[T <: Tuple, A]` for homogeneous tuples,
-`MultiFocus.representable[F: Representable, A]` for arbitrary distributive
-containers (Function1-of-index, tuple-of-pair `(A, A)`, user-defined
-Naperian shapes).
-
-> Worked-example rewrites for this section are pending the
-> post-consolidation docs sweep.
-
-**When to reach for the representable MultiFocus vs Traversal.** Use
-`Traversal.each` for container+downstream optic composition
-(`lens.andThen(each).andThen(lens)`) — the standard map-over-elements
-shape. Use the representable MultiFocus for fixed-shape homogeneous
-records where the structure is known at compile time and the operation
-is a uniform rewrite — tuples, function-shaped finite records, any
-`cats.Representable` container.
-
-**Composition.** `Iso.andThen(MultiFocus[Function1[X, *]])` works via
-`Composer[Forgetful, MultiFocus[F]]` — Iso → representable-MultiFocus is
-the inbound bridge that survived the consolidation.
-
-**Lens → Grate does NOT compose automatically.** A Lens's source `S`
-is not in general `Representable`, so there is no natural way to
-broadcast a fresh focus through the Lens's structural leftover. A
-user-written `iso.andThen(lens).andThen(grate)` fails with an
-implicit-resolution miss for `Morph[Tuple2, Grate]`. The workaround is
-to construct the Grate separately at the Lens's focus type and
-compose through `Lens.andThen` (staying in `Tuple2`), then apply the
-Grate directly.
-
-**Composability — Grate widens to Setter.** A `Composer[Grate, SetterF]`
-ships (`grate2setter`, `Grate.scala`), so any Grate can be morphed to
-the `SetterF` carrier via `grate.morph[SetterF]`. The lifted Setter's
-`.modify(f)` is byte-identical to the Grate's `.modify(f)` — same
-broadcast invariant, just exposed through the carrier-erasing Setter
-API. This makes Grate uniform with `eo-monocle`-style cross-library
-interop and any code consuming the `Optic[…, SetterF]` shape. Like
-every other `Composer[X, SetterF]`, this morph does NOT enable
-`grate.andThen(setter)` directly — `SetterF` lacks an
-`AssociativeFunctor` instance by design, so the cross-carrier value
-lives at the morph site, not the chain site.
-
-**Composition limits — Grate to Iso/Getter and Grate to
-Traversal/Fold.** Both directions were investigated for v0.1.x; both
-turn out to be structurally unsound under cats-eo's resolution rules:
-
-- `Composer[Grate, Forgetful]` (Grate → Iso/Getter) would be type-level
-  encodable, but cats-eo already ships the reverse
-  (`Composer[Forgetful, Grate]`). Adding the forward direction would
-  create a bidirectional Composer pair, which the [`Morph`](https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala)
-  resolution explicitly forbids — every `iso.andThen(grate)` call site
-  would surface as ambiguous-implicit. Use `grate.to(s)._1` for the
-  read, or `Getter(s => grate.to(s)._1)` when interop demands a Getter
-  shape.
-- `Composer[Grate, Forget[F]]` (Grate → Traversal/Fold) would have to
-  produce `F[A]` from arbitrary `S`, but the Grate's existential `X`
-  is unrelated to `F` and `S` is opaque. There is no carrier-shaped
-  bridge; users wanting fold/traverse semantics on a Grate's slots
-  should construct the `Forget[F]`-carrier optic directly.
-
-The full structural rationale lives at the bottom of `Grate.scala` for
-future maintainers.
+See the [MultiFocus reference](multifocus.md) for the unified
+treatment and [Cookbook → Recipe A](cookbook.md#recipe-a--prototypical-grate-shape-via-multifocustuple)
+for a worked example of the absorbed Grate-shape.
 
 ## Prism
 
@@ -504,17 +438,17 @@ element of a container. Single carrier:
   (`Functor[PSVec]`), `.foldMap` (`Foldable[PSVec]`),
   `.modifyA` / `.all` (`Traverse[PSVec]`), and `.andThen` with
   downstream optics through the shared `MultiFocus[PSVec]`
-  `AssociativeFunctor`. Linear scaling; overhead over a naive
-  `copy`/`map` runs at 2-3× for dense chains
+  `AssociativeFunctor` (`mfAssocPSVec`). Linear scaling; overhead
+  over a naive `copy`/`map` runs at 2-3× for dense chains
   (`Lens → Traversal → Lens`) and ~5× for the Prism miss-branch
   shape, amortising toward the lower end as the traversed-
   collection size grows (the
-  [PowerSeries benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition)
-  sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
-  `PSSingleton` protocol — morphed Lens / Prism / Optional
-  inners collect into pre-sized flat arrays without per-element
-  `PowerSeries` wrappers, and the always-hit refinement for
-  Lens morphs skips the length-tracking array entirely.
+  [benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition)
+  sweep sizes 4 / 32 / 256 / 1024). Internal machinery: the
+  `MultiFocusSingleton` (AlwaysHit, for morphed Lenses) and
+  `MultiFocusPSMaybeHit` (MaybeHit, for morphed Prisms / Optionals)
+  fast-paths collect into pre-sized flat arrays without per-element
+  wrapper allocations.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
@@ -555,214 +489,41 @@ for the cost tradeoff.
 ### Composer: `Iso` as the inner of `Traversal.each`
 
 `Traversal.each[T, A].andThen(iso)` composes cleanly. The direct
-`Composer[Forgetful, PowerSeries]` given ships in `dev.constructive.eo.data.PowerSeries`
-and takes priority over any transitive path (`Forgetful → Tuple2 →
-PowerSeries` or `Forgetful → Either → PowerSeries`) that would
-otherwise be ambiguous.
+`Composer[Forgetful, MultiFocus[F]]` given (`forgetful2multifocus`)
+ships in `dev.constructive.eo.data.MultiFocus` and takes priority
+over any transitive path (`Forgetful → Tuple2 → MultiFocus[PSVec]`
+or `Forgetful → Either → MultiFocus[PSVec]`) that would otherwise
+be ambiguous.
 
-Same story for `Iso` as the inner of an `Optional` (Affine carrier) or
-of a `MultiFocus[F]` — direct `Composer[Forgetful, Affine]` /
-`Composer[Forgetful, MultiFocus[F]]` givens ship beside the carrier.
+Same story for `Iso` as the inner of an `Optional` (Affine carrier)
+— direct `Composer[Forgetful, Affine]` ships beside the carrier.
 Earlier revisions of cats-eo required an explicit `.morph[Tuple2]`
 step for these chains; post-Unit 16 it's a one-hop `.andThen` call
 with no ceremony.
 
 ## MultiFocus
 
-A `MultiFocus[F][S, A]` focuses many candidate values at once — a
-focus with **classifier cardinality `F`**, where `F[_]` controls
-how the focus collection is shaped. Carrier `MultiFocus[F]`, value
-shape `(X, F[A])`.
+`MultiFocus[F][X, A] = (X, F[A])` — a structural leftover paired
+with an `F`-shaped focus. The unified successor of five v1 carriers
+(`AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
+`FixedTraversal[N]`); each is now a sub-shape selected by `F`.
 
-`MultiFocus[F]` is the **unified** successor of two earlier
-families: `AlgLens[F]` (algebraic lens, structural-leftover paired
-with a classifier vector) and `Kaleidoscope` (path-dependent-`F`
-aggregation optic over Chris Penner's
-[*Kaleidoscopes: lenses that never die*](https://chrispenner.ca/posts/kaleidoscopes)).
-Both pre-unification families had the same `(X, F[A])` value shape
-and only differed in their encoding choices (parameter-vs-path-type
-for `F`, and whether the `Functor[F]` source was cats or a
-project-local `Reflector`). Pre-0.1.0 the two collapsed into a
-single carrier with `F` as a plain type parameter; the merged
-surface keeps every shipped semantic and exposes them through one
-consistent vocabulary.
+The carrier is **just a pair** — it ships no typeclass machinery of
+its own and inherits whatever `F` brings. Surface lights up by
+typeclass: `.modify` (`Functor[F]`), `.foldMap` (`Foldable[F]`),
+`.modifyA` (`Traverse[F]`), `.collectMap` (`Functor[F]`),
+`.collectList` (List-only cartesian), `.at(i)` (`Representable[F]`),
+same-carrier `.andThen` (per-`F` `AssociativeFunctor` instances).
 
-Use `MultiFocus[F]` when the update function genuinely needs the
-whole `F[A]` visible — adaptive-k KNN, one-vs-rest rule matching,
-classifier output that varies per input, ZipList-shaped column-zip
-aggregation, Const-shaped monoidal summation. **Do NOT** reach for
-`MultiFocus.fromLensF` as a general replacement for
-`Traversal.each`: a head-to-head bench
-([`MultiFocusBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/MultiFocusBench.scala))
-shows `MultiFocus[List]` running 1.5–2.6× slower than `PowerSeries`
-on the traversal-shape common case. The tradeoff analysis lives in
-[`docs/research/2026-04-22-alglens-vs-powerseries.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-22-alglens-vs-powerseries.md).
-
-### Constructors
-
-Two construction roads — pick by what you have.
-
-**Generic factory** for a `MultiFocus[F][F[A], A]` whose source IS
-the `F[A]` itself (`X = F[A]`, rebuild = identity):
-
-```scala mdoc:silent
-import cats.data.ZipList
-import dev.constructive.eo.data.MultiFocus
-import dev.constructive.eo.data.MultiFocus.given
-import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
-
-val zipMF = MultiFocus.apply[ZipList, Double]
-val listMF = MultiFocus.apply[List, Int]
-```
-
-**Cross-carrier factories** lift an existing optic whose focus is
-already `F[A]` into a MultiFocus that exposes the inner `A`:
-
-- `MultiFocus.fromLensF[F, S, A]` — a Lens whose focus is `F[A]`
-  (e.g. `Lens[Person, List[Phone]]`).
-- `MultiFocus.fromPrismF[F, S, A]` — a Prism whose hit branch
-  carries `F[A]` (`Prism[Json, List[Int]]`); needs `MonoidK[F]` for
-  the miss-branch zero.
-- `MultiFocus.fromOptionalF[F, S, A]` — the Optional analogue.
-
-### Operations
-
-`.modify` / `.replace` (any `Functor[F]`), `.foldMap` (any
-`Foldable[F]`), `.modifyA` / `.all` (any `Traverse[F]`), and same-
-carrier `.andThen` (any `Traverse[F] + MultiFocusFromList[F]`) all
-work by inheritance — the standard ladder of optic capabilities
-matches the cats hierarchy on `F`.
-
-The Kaleidoscope-style aggregation universal ships as **two
-extension methods**, one carrier-wide and one List-specific:
-
-- `o.collectMap[B](agg: F[A] => B)` — Functor-broadcast. Reduces
-  the entire `F[A]` focus to a single `B` and broadcasts it back
-  through `Functor[F].map(_ => b)`. Length-preserving for `ZipList`
-  and `Const`; for `List` it produces a list of the same length
-  populated entirely with the aggregate.
-- `o.collectList(agg: List[A] => B)` — `MultiFocus[List]`-only
-  variant that produces the cartesian / singleton output `List(agg(fa))`
-  regardless of the input length. Reproduces the v1 `Reflector[List]`
-  semantics at the call site without needing a typeclass.
-
-```scala mdoc
-// Column-wise mean: aggregator sees the whole ZipList, returns the
-// mean, the broadcast fills back across the same length.
-zipMF.collectMap[Double](zl => zl.value.sum / zl.value.size.toDouble)(
-  ZipList(List(1.0, 2.0, 3.0, 4.0))
-)
-
-// `.modify` still works — element-wise via Functor[ZipList].
-zipMF.modify(_ * 10.0)(ZipList(List(1.0, 2.0, 3.0))).value
-
-// List + collectList: cartesian-singleton (length collapses to 1).
-listMF.collectList(_.sum)(List(1, 2, 3, 4))
-
-// List + collectMap: length-preserving (broadcast).
-listMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
-```
-
-**Why two `collect` variants and not one law.** The v1 `Reflector[F]`
-typeclass baked a single `reflect` op that collapsed differently
-per F (cartesian-singleton on List, length-preserving on ZipList,
-phantom retag on Const). Under the cats hierarchy, neither
-`Functor.map` nor `Applicative.pure` covers all three behaviours
-uniformly — picking one as the carrier-level law would have
-silently changed the v1 List semantics. The chosen split (Functor-
-broadcast as the law, List-cartesian as the call-site extension) is
-honest about the choice without cluttering the discipline surface.
-
-### When to reach for MultiFocus vs Grate vs Traversal
-
-Use `Traversal.each` for container-walking Applicative effects
-(positions independent, Applicative applied element-by-element).
-Use `Grate` for fixed-shape homogeneous records where `F` is
-`Representable` (tuples, function-shaped finite records). Reach
-for `MultiFocus[F]` when:
-
-- you need the **whole `F[A]` collection visible** at the update
-  site (classifier candidates, adaptive-k matching), OR
-- the `Functor[F]` semantics determines the **aggregation
-  structure** itself — ZipList-shaped column zip, List-shaped
-  cartesian via `collectList`, Const-shaped monoidal summation.
-
-The optic is the same value at every call site; the behaviour
-tracks the `F[_]` you plug in.
-
-### Composition
-
-**Composition INTO `MultiFocus[F]`** from `Lens` / `Prism` /
-`Optional` works through the shipped `Composer` bridges
-(`tuple2multifocus`, `either2multifocus`, `affine2multifocus`,
-`forget2multifocus`, `forgetful2multifocus`). The lifted optic's
-`ForgetfulFunctor` / `ForgetfulFold` / `ForgetfulTraverse` /
-`AssociativeFunctor` instances plug straight into `.modify` /
-`.foldMap` / `.modifyA`.
-
-**`Iso.andThen(MultiFocus[F])`** works via `forgetful2multifocus`:
-
-```scala mdoc:silent
-import dev.constructive.eo.optics.Iso
-import dev.constructive.eo.optics.Optic.*
-
-val singletonIso = Iso[Int, Int, List[Int], List[Int]](
-  i => List(i),
-  _.head,
-)
-
-val isoThenList = singletonIso.andThen(listMF)
-```
-
-```scala mdoc
-// Wraps the Int into List(i), runs the MultiFocus's modify on every
-// element, projects back via List.head.
-isoThenList.modify(_ * 3)(7)
-```
-
-**Lens → MultiFocus does NOT compose automatically.** A plain Lens's
-source `S` has no natural way to produce an `F[A]` (the same
-structural restriction Grate hits with `Representable`). A user-
-written `iso.andThen(lens).andThen(multifocus)` fails resolution.
-Workaround: build the `MultiFocus` directly from the Lens's focus
-type via `MultiFocus.fromLensF` and chain through `Lens.andThen`.
-
-**`MultiFocus[F]` widens to `Setter`** via `multifocus2setter` —
-any MultiFocus optic can be morphed to `SetterF` via
-`multiFocus.morph[SetterF]`. The lifted setter's `.modify(f)` is
-byte-identical to the original MultiFocus's `.modify(f)`. Like
-every other `Composer[X, SetterF]`, this does NOT enable
-`multiFocus.andThen(setter)` directly — SetterF lacks
-`AssociativeFunctor` by design.
-
-### Composition limits
-
-**MultiFocus is otherwise a composition sink.** Every other
-`Composer[MultiFocus[F], _]` is intentionally absent:
-
-- `Composer[MultiFocus[F], Forgetful]` (MultiFocus → Iso/Getter) —
-  type-level encodable, but `forgetful2multifocus` already ships
-  the reverse direction. Adding the forward edge would create a
-  bidirectional Composer pair, which the [`Morph`](https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala)
-  resolution explicitly forbids. Use `multiFocus.to(s)._2` for the
-  read side.
-- `Composer[MultiFocus[F], Forget[G]]` (MultiFocus → Traversal /
-  Fold) — would force the morphed `to` to produce `G[A]` from
-  arbitrary `S`. The carrier-shaped bridge has no place to thread
-  a `Foldable[F]` instance even when one happens to coincide with
-  the optic's `Functor[F]`. Users wanting fold/traverse semantics
-  on a MultiFocus's slots should construct the `Forget[F]`-carrier
-  optic directly.
-
-`Composer[MultiFocus[F], _]` (other than to `SetterF`) is out of
-scope for 0.1.0 and the roadmap through at least 0.2.x. The
-outbound-bridge story needs a concrete use case first — the
-composition-gap analysis
-([`2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md))
-flags it as a top-5 structural gap, but no user has asked for it.
-
-The full structural rationale lives at the bottom of
-`MultiFocus.scala` for future maintainers.
+See the [MultiFocus reference](multifocus.md) for the unification
+narrative, the typeclass-gated capability matrix, and the
+composability profile (inbound bridges from every classical family,
+single outbound to `SetterF`, structurally-rejected
+`MultiFocus → Forgetful` / `MultiFocus → Forget[G]`). Worked
+examples ground each absorbed sub-shape in the cookbook:
+[Recipe A — Grate-shape](cookbook.md#recipe-a--prototypical-grate-shape-via-multifocustuple),
+[Recipe B — Kaleidoscope-shape](cookbook.md#recipe-b--prototypical-kaleidoscope-shape-via-collectmap--collectlist),
+[Recipe C — PowerSeries downstream composition](cookbook.md#recipe-c--powerseries-downstream-composition-lens--each--lens).
 
 ## Composition limits
 
@@ -793,10 +554,13 @@ the leaf of a chain (Lens → Setter via `Composer[Tuple2, SetterF]`)
 but don't try to chain off it. There is no `AssociativeFunctor[SetterF]`
 and no outbound Composer.
 
-**`FixedTraversal[N]`** — fixed-arity (`Traversal.two` / `.three` /
-`.four`) is a leaf carrier with no outbound or inbound Composer. Use
-it when you need the exact-N shape; reach for `Traversal.each` when
-you want compositional reach.
+**Fixed-arity traversal (`Traversal.two` / `.three` / `.four`)** —
+post-fold these factories produce `MultiFocus[Function1[Int, *]]`-carrier
+optics, so they inherit the absorbed-Grate sub-shape's composability:
+`Iso ↪ MF[Function1[Int, *]]`, `MF[Function1[Int, *]] ↪ SetterF`, and
+same-carrier `.andThen` via `mfAssocFunction1`. Lens / Prism / Optional
+do NOT bridge in (Function1 lacks `Foldable` / `Alternative` — same
+constraint as the v1 Grate).
 
 The full taxonomy with cell-by-cell rationale lives in
 [`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md).
