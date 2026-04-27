@@ -147,6 +147,46 @@ class MultiFocusBench extends JmhDefaults:
   @Benchmark def naive_listSum: List[Int] =
     List(listData.sum)
 
+  // ----- Absorbed Grate fixtures: tuple3 / tuple6 modify -----
+  //
+  // Side-by-side comparison: the v1 GrateBench's `Grate.tuple` perf is now exercised through
+  // `MultiFocus.tuple` (the absorbed factory) which carries `MultiFocus[Function1[Int, *]]`. The
+  // `mfFunctor` for that F = `Function1[Int, *]` reduces `.modify` to one `andThen` allocation
+  // plus the per-slot tuple rebuild — semantically identical to the deleted Grate.tuple body.
+  //
+  // 3-deep is the v1 baseline (`(Double, Double, Double)`); 6-deep doubles the slot count to
+  // surface the per-slot constant factor.
+
+  private val tripleMF = MultiFocus.tuple[(Double, Double, Double), Double]
+
+  private val sextupleMF =
+    MultiFocus.tuple[(Double, Double, Double, Double, Double, Double), Double]
+
+  var tripleData: (Double, Double, Double) = (1.0, 2.0, 3.0)
+
+  var sextupleData: (Double, Double, Double, Double, Double, Double) =
+    (1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+
+  @Benchmark def eoModify_multiFocusTuple3: (Double, Double, Double) =
+    tripleMF.modify(_ * 2.0)(tripleData)
+
+  @Benchmark def naive_tuple3Rewrite: (Double, Double, Double) =
+    (tripleData._1 * 2.0, tripleData._2 * 2.0, tripleData._3 * 2.0)
+
+  @Benchmark def eoModify_multiFocusTuple6
+      : (Double, Double, Double, Double, Double, Double) =
+    sextupleMF.modify(_ * 2.0)(sextupleData)
+
+  @Benchmark def naive_tuple6Rewrite: (Double, Double, Double, Double, Double, Double) =
+    (
+      sextupleData._1 * 2.0,
+      sextupleData._2 * 2.0,
+      sextupleData._3 * 2.0,
+      sextupleData._4 * 2.0,
+      sextupleData._5 * 2.0,
+      sextupleData._6 * 2.0,
+    )
+
 object MultiFocusBench:
 
   case class Phone(isMobile: Boolean, number: String)

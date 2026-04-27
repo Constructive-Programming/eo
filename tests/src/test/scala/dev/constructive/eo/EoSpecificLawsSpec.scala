@@ -7,11 +7,10 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, FixedTraversal, Forget, Forgetful, Grate, MultiFocus, SetterF}
+import data.{Affine, FixedTraversal, Forget, Forgetful, MultiFocus, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
-import data.Grate.given
 import data.MultiFocus.given
 import data.SetterF.given
 import data.FixedTraversal.given
@@ -84,19 +83,19 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     doubleIso.morph[Tuple2],
   )
 
-  // covers: Morph from Grate → SetterF on a tuple-shaped Grate.
-  //
-  // The new `Composer[Grate, SetterF]` (`grate2setter`, Grate.scala) widens any Grate-carrier
-  // optic to the Setter API. The MorphLaws.A1 check pins down that the lifted SetterF's
-  // `.modify(f)(s)` produces the same `T` as the original Grate's `.modify(f)(s)` — the whole
-  // structural soundness of the bridge in one law.
-  val tuple2GrateForMorph: Optic[(Int, Int), (Int, Int), Int, Int, data.Grate] =
-    data.Grate.tuple[(Int, Int), Int]
+  // covers: Morph from MultiFocus[Function1[Int, *]] → SetterF on a tuple-shaped MultiFocus
+  // (the absorbed Grate). The `multifocus2setter` Composer widens any MultiFocus-carrier optic to
+  // the Setter API. The MorphLaws.A1 check pins down that the lifted SetterF's `.modify(f)(s)`
+  // produces the same `T` as the original MultiFocus's `.modify(f)(s)` — the whole structural
+  // soundness of the bridge in one law.
+  val tuple2MultiFocusFnForMorph
+      : Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
+    MultiFocus.tuple[(Int, Int), Int]
 
-  checkAllMorphPreservesModifyFor[(Int, Int), Int, data.Grate, SetterF](
-    "Grate.tuple[(Int,Int)].morph[SetterF] preserves modify (I1)",
-    tuple2GrateForMorph,
-    tuple2GrateForMorph.morph[SetterF],
+  checkAllMorphPreservesModifyFor[(Int, Int), Int, MultiFocus[Function1[Int, *]], SetterF](
+    "MultiFocus.tuple[(Int,Int)].morph[SetterF] preserves modify (I1)",
+    tuple2MultiFocusFnForMorph,
+    tuple2MultiFocusFnForMorph.morph[SetterF],
   )
 
   // covers: Morph from MultiFocus[List] → SetterF on a List-shaped MultiFocus.

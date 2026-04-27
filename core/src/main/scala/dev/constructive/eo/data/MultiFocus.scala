@@ -1,19 +1,25 @@
 package dev.constructive.eo
 package data
 
-import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Traverse}
+import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
 import optics.Optic
 
-/** Unified pair carrier for the `AlgLens` and `Kaleidoscope` optic families —
+/** Unified pair carrier for the `AlgLens`, `Kaleidoscope`, and `Grate` optic families —
   * `MultiFocus[F][X, A] = (X, F[A])`.
   *
-  * The two families are structurally identical: both pair a structural leftover `X` with a focus
-  * collection / aggregate `F[A]`. Pre-unification:
+  * The three families are structurally identical: each pairs a structural leftover `X` with a focus
+  * collection / aggregate / rebuild-closure `F[A]`. Pre-unification:
   *   - `AlgLens[F]` exposed the F as a type parameter, used `Functor` / `Foldable` / `Traverse[F]`
   *     + `MonoidK[F]` from cats.
   *   - `Kaleidoscope` hid F as a path-dependent type member (`type FCarrier[_]`) and required the
   *     project-local `Reflector[F]` typeclass for its `.collect` universal.
+  *   - `Grate` was `(A, X => A)` — pair of "lead position" + "rebuild closure" — for representable
+  *     / Naperian shapes. Setting `F = Function1[X0, *]` collapses the pair into the same
+  *     `(Y, F[A]) = (Y, X0 => A)` shape; the lead-position field was not externally observable in
+  *     any shipped path-through (`grateFunctor.map`'s eager `f(a)` was discarded by every shipped
+  *     `from`), so the spike dropped it entirely. See `docs/research/2026-04-28-grate-fold-spike.md`
+  *     for the empirical justification + perf evidence.
   *
   * `MultiFocus[F]` keeps the F-as-parameter encoding (matching AlgLens) and absorbs Kaleidoscope by
   * recognising that the only piece of `Reflector[F]` that wasn't already in cats was the
@@ -49,6 +55,28 @@ type MultiFocus[F[_]] = [X, A] =>> (X, F[A])
 private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
   def singletonTo(s: S): (X0, A)
   def singletonFrom(x: X0, b: B): T
+
+/** Lead-position capability — preserved from the v1 `Grate` carrier's `(A, X => A)` encoding,
+  * lifted into the unified MultiFocus surface. When an optic carries this trait, the `lead` value
+  * exposes an O(1) read of one focus position without re-running the rebuild closure.
+  *
+  * '''Grate-fold-spike finding (Q1).''' Empirically, no shipped path through Grate's `.modify`
+  * actually observed the lead — `grateFunctor.map` computed `f(ga._1)` eagerly only for it to be
+  * dropped on every shipped `from`. The trait is therefore retained as an OPTIONAL fast-path
+  * surface (a future `o.lead(s)` accessor or `.at(repr0)` shortcut may use it) but contributes no
+  * extra storage or branching to the hot `.modify` path.
+  *
+  * Populated by `MultiFocus.fromRepresentable` (the absorbed Grate.apply / Grate.at) and
+  * `MultiFocus.tuple` (the absorbed Grate.tuple). Not populated by the generic factories — they
+  * have no canonical "first" position.
+  *
+  * @tparam X0
+  *   the existential index type — same `X` as on the optic. Pinned to keep the trait compatible
+  *   with the carrier's existential.
+  */
+private[eo] trait MultiFocusLeadPosition[X0]:
+  /** A representative index — used to extract the lead focus by applying the rebuild closure. */
+  def leadIndex: X0
 
 /** Per-F O(n) builder, identical role to the prior `AlgLensFromList`. `MonoidK[F].combineK` has
   * inconsistent asymptotics across F (O(n²) on Vector, lossy on Option), so we keep this typeclass
@@ -200,6 +228,47 @@ object MultiFocus:
       )
 
   // ------------------------------------------------------------------
+  // Same-carrier composition — Grate-shaped Function1[X0, *] specialisation.
+  // Absorbs the v1 `grateAssoc`. The general `mfAssoc` requires `Traverse[F]`
+  // + `MultiFocusFromList[F]`; `Function1[X0, *]` admits neither, so this
+  // separate instance handles the Grate-style read-only / closure-rebuild
+  // case at higher priority for the Function1-shaped F. Z = (Xo, Xi); the
+  // outer rebuild is structurally unreachable post-collapse-through-outer-
+  // focus, identical to the v1 grateAssoc's design (see deleted Grate.scala
+  // doc for the load-bearing invariant).
+  // ------------------------------------------------------------------
+
+  given mfAssocFunction1[X0, Xo, Xi]
+      : AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
+    type Z = (Xo, Xi)
+
+    def composeTo[S, T, A, B, C, D](
+        s: S,
+        outer: Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] { type X = Xo },
+        inner: Optic[A, B, C, D, MultiFocus[Function1[X0, *]]] { type X = Xi },
+    ): ((Xo, Xi), X0 => C) =
+      val (_, kO) = outer.to(s)
+      // Read the outer focus via the rebuild closure at any X0 — null sentinel works because
+      // `.modify` only consumes the rebuild, not the lead. The `MultiFocusLeadPosition` capability
+      // (when present) lets us pick a real index here, but the spike-Q1 finding shows .modify
+      // doesn't observe the focus value.
+      val a: A = kO(null.asInstanceOf[X0])
+      val (_, kI) = inner.to(a)
+      ((null.asInstanceOf[Xo], null.asInstanceOf[Xi]), kI)
+
+    def composeFrom[S, T, A, B, C, D](
+        xd: ((Xo, Xi), X0 => D),
+        inner: Optic[A, B, C, D, MultiFocus[Function1[X0, *]]] { type X = Xi },
+        outer: Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] { type X = Xo },
+    ): T =
+      val (_, kD) = xd
+      // Inner rebuild = the supplied X0 => D closure. Outer rebuild = constant broadcast,
+      // identical to the v1 grateAssoc's design — for every shipped outer (iso-morphed,
+      // tuple-built) the rebuild is broadcast-shaped, so a constant fallback is exact.
+      val b: B = inner.from((null.asInstanceOf[Xi], kD))
+      outer.from((null.asInstanceOf[Xo], (_: X0) => b))
+
+  // ------------------------------------------------------------------
   // Kaleidoscope universal — `.collect`. Q1 finding: NOT derivable from
   // Apply alone in a way that preserves all three v1 Reflector instances.
   // We expose two variants and let the user pick the aggregation shape.
@@ -237,6 +306,24 @@ object MultiFocus:
         val b: C = agg(fa)
         val fb: F[B] = F.map(fa)(_ => b.asInstanceOf[B])
         o.from((x, fb))
+
+  // ------------------------------------------------------------------
+  // Distributive / Representable typeclass-gated method set — absorbed
+  // from the v1 Grate carrier's read surface. `.at(i)` is the single
+  // load-bearing addition; provides O(1) per-position read once a
+  // `Representable[F]` witness is in scope.
+  // ------------------------------------------------------------------
+
+  /** Read the focus at a representative position. Requires `Representable[F]` so the rebuild
+    * closure can be probed at index `i` to recover the focus there. For the absorbed-Grate carrier
+    * `MultiFocus[Function1[X0, *]]`, `Representable[Function1[X0, *]]` (from cats) makes this
+    * trivial — `Representation = X0`, `index(fa)(i) = fa(i)`.
+    */
+  extension [S, T, A, B, F[_]](o: Optic[S, T, A, B, MultiFocus[F]])(using F: Representable[F])
+
+    def at(i: F.Representation): S => A = (s: S) =>
+      val (_, fa) = o.to(s)
+      F.index(fa)(i)
 
   // ------------------------------------------------------------------
   // Constructors — preserved from both AlgLens (Forget/Tuple2/Either/Affine
@@ -370,6 +457,118 @@ object MultiFocus:
         case (Left(xMiss), _) => prism.from(Left(xMiss))
         case (Right(_), fb)   => prism.from(Right(fb))
       }
+
+  // ------------------------------------------------------------------
+  // Grate-fold absorbed factories — `representable` and `tuple` (both
+  // produce `MultiFocus[Function1[X0, *]]`-carrier optics with the
+  // `MultiFocusLeadPosition` capability mixed in for downstream
+  // fast-path readers).
+  // ------------------------------------------------------------------
+
+  /** Generic Function1-shaped MultiFocus factory — any `Representable[F]` container `F[_]` with
+    * element type `A` yields a `MultiFocus[Function1[F.Representation, *]]`-carrier optic over
+    * `F[A]` with focus `A`. Absorbs the v1 `Grate.apply[F: Representable]`.
+    *
+    * Encoding: `X = Unit`. The rebuild slot is `F.Representation => A` — a per-index read of the
+    * current container. On `to(fa)`, snapshot the index function `F.index(fa)`; on `from((_, k))`,
+    * materialise via `F.tabulate(k)`.
+    *
+    * After `.modify(f)` via `mfFunctor[Function1[F.Representation, *]]`:
+    *   1. `to(fa) = ((), F.index(fa))`
+    *   2. `mfFunctor.map(_, f) = ((), F.index(fa) andThen f)`
+    *   3. `from((_, k andThen f)) = F.tabulate(r => f(F.index(fa)(r))) = F.map(fa)(f)`
+    *
+    * which is exactly the Functor-map over the representable container — semantically identical to
+    * the v1 Grate's `representableGrate` body.
+    *
+    * The `MultiFocusLeadPosition` capability is mixed in but uses a null sentinel for `leadIndex`
+    * because no canonical Representation exists in `cats.Representable`. Use `representableAt` for
+    * a well-typed lead.
+    */
+  def representable[F[_], A](using F: Representable[F])
+      : Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
+    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
+      with MultiFocusLeadPosition[Unit]:
+      type X = Unit
+      def leadIndex: Unit = ()
+      val to: F[A] => (Unit, F.Representation => A) = fa => ((), F.index(fa))
+      val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+
+  /** Representable-indexed variant with explicit representative index — absorbs v1 `Grate.at`. */
+  def representableAt[F[_], A](F: Representable[F])(repr0: F.Representation)
+      : Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
+    val _ = repr0 // captured at construction; lead-position trait surfaces it for callers
+    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
+      with MultiFocusLeadPosition[F.Representation]:
+      type X = Unit
+      def leadIndex: F.Representation = repr0
+      val to: F[A] => (Unit, F.Representation => A) = fa => ((), F.index(fa))
+      val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+
+  /** Polymorphic homogeneous-tuple Function1-shaped MultiFocus factory. Absorbs the v1
+    * `Grate.tuple[T <: Tuple, A]`.
+    *
+    * Encoding: `X = Unit`, F = `Function1[Int, *]`. `to(t) = ((), i => t._i)`; `from((_, k))`
+    * materialises the result as `Tuple.fromArray(Array.tabulate(size)(i => k(i)))` — applying the
+    * rebuild at every slot. Same per-slot semantics as v1 Grate.tuple.
+    *
+    * Lead position is set to `0` (the canonical "first slot" of a homogeneous tuple).
+    *
+    * @example
+    *   {{{
+    *   val g3 = MultiFocus.tuple[(Int, Int, Int), Int]
+    *   g3.modify(_ + 1)((1, 2, 3))   // (2, 3, 4)
+    *   g3.replace(42)((1, 2, 3))     // (42, 42, 42)
+    *   }}}
+    */
+  def tuple[T <: Tuple, A](using
+      sz: ValueOf[Tuple.Size[T]],
+      ev: Tuple.Union[T] <:< A,
+  ): Optic[T, T, A, A, MultiFocus[Function1[Int, *]]] =
+    val _ = ev
+    val size = sz.value
+    new Optic[T, T, A, A, MultiFocus[Function1[Int, *]]] with MultiFocusLeadPosition[Int]:
+      type X = Unit
+      def leadIndex: Int = 0
+      val to: T => (Unit, Int => A) = t =>
+        val read: Int => A = (i: Int) => t.productElement(i).asInstanceOf[A]
+        ((), read)
+      val from: ((Unit, Int => A)) => T = {
+        case (_, k) =>
+          val arr = new Array[Object](size)
+          var i = 0
+          while i < size do
+            arr(i) = k(i).asInstanceOf[Object]
+            i += 1
+          Tuple.fromArray(arr).asInstanceOf[T]
+      }
+
+  // ------------------------------------------------------------------
+  // Iso → Function1-shaped MultiFocus bridge — absorbs v1 `forgetful2grate`.
+  // ------------------------------------------------------------------
+
+  /** Trivial injection `Forgetful ↪ MultiFocus[Function1[X0, *]]` for any X0. Lets an Iso-carrier
+    * optic compose against a Function1-shaped MultiFocus-carrier optic via cross-carrier
+    * `.andThen`. Absorbs v1 `forgetful2grate`.
+    *
+    * The Iso's forward `to: S => A` is broadcast to the constant rebuild closure `_ => o.to(s)`;
+    * the reverse `from: B => T` reads the rebuild at any X0 (null sentinel) and drives the pull
+    * side. This is a Forgetful → broadcasted-Function1 lift, semantically identical to v1
+    * forgetful2grate's `(o.to(s), s0 => o.to(s0))` pair (the lead is dropped, see Q1).
+    */
+  given forgetful2multifocusFunction1[X0]: Composer[Forgetful, MultiFocus[Function1[X0, *]]] with
+
+    def to[S, T, A, B](
+        o: Optic[S, T, A, B, Forgetful]
+    ): Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] =
+      new Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]:
+        type X = Unit
+        val to: S => (Unit, X0 => A) = s =>
+          val a = o.to(s)
+          ((), (_: X0) => a)
+        val from: ((Unit, X0 => B)) => T = {
+          case (_, k) => o.from(k(null.asInstanceOf[X0]))
+        }
 
   def fromOptionalF[F[_]: MonoidK, S, T, A, B](
       opt: Optic[S, T, F[A], F[B], Affine]

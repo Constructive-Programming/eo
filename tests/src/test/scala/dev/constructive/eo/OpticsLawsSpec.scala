@@ -6,14 +6,13 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Forgetful, Grate, MultiFocus, SetterF}
+import data.{Affine, Forget, Forgetful, MultiFocus, SetterF}
 import data.Affine.given
 import data.Forget.given
 import data.SetterF.given
 import laws.{
   AffineFoldLaws,
   GetterLaws,
-  GrateLaws,
   IsoLaws,
   LensLaws,
   OptionalLaws,
@@ -23,7 +22,6 @@ import laws.{
 import laws.discipline.{
   AffineFoldTests,
   GetterTests,
-  GrateTests,
   IsoTests,
   LensTests,
   OptionalTests,
@@ -564,33 +562,54 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     headOptional,
   )
 
-  // ----- Grate: tuple-indexed + Function1[Boolean, *] -------------
+  // ----- MultiFocus[Function1[Int, *]]: tuple-indexed (absorbed Grate) ----
   //
-  // Two fixtures per plan R7 — homogeneous tuples of arity 2 and 3,
-  // both via `Grate.tuple[T <: Tuple, A]`. All three laws are checked
-  // (G1 modify-identity, G2 compose-modify, G3 replace-idempotent).
+  // Two fixtures — homogeneous tuples of arity 2 and 3, both via
+  // `MultiFocus.tuple[T <: Tuple, A]` (the absorbed Grate.tuple). The three
+  // load-bearing laws (modify-identity, compose-modify, replace-idempotent
+  // — formerly G1/G2/G3 from GrateLaws) are checked inline as `forAll`
+  // props because `MultiFocusTests` requires `S =:= F[A]`, which doesn't
+  // hold for the tuple-shaped factory (S = TupleN, F = Function1[Int, *],
+  // so F[A] ≠ S). Same coverage as the deleted GrateTests.
 
-  val tuple2Grate: Optic[(Int, Int), (Int, Int), Int, Int, Grate] =
-    Grate.tuple[(Int, Int), Int]
+  val tuple2MultiFocus: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
+    MultiFocus.tuple[(Int, Int), Int]
 
-  checkAll(
-    "Grate[(Int, Int), Int] — tuple arity 2",
-    new GrateTests[(Int, Int), Int]:
-      val laws = new GrateLaws[(Int, Int), Int]:
-        val grate = tuple2Grate
-    .grate,
-  )
+  "MultiFocus.tuple[(Int, Int), Int] — modify-identity (G1)" >> forAll {
+    (s: (Int, Int)) => tuple2MultiFocus.modify(identity[Int])(s) == s
+  }
 
-  val tuple3Grate: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, Grate] =
-    Grate.tuple[(Int, Int, Int), Int]
+  "MultiFocus.tuple[(Int, Int), Int] — compose-modify (G2)" >> forAll {
+    (s: (Int, Int), f: Int => Int, g: Int => Int) =>
+      tuple2MultiFocus.modify(g)(tuple2MultiFocus.modify(f)(s)) ==
+        tuple2MultiFocus.modify(f.andThen(g))(s)
+  }
 
-  checkAll(
-    "Grate[(Int, Int, Int), Int] — tuple arity 3",
-    new GrateTests[(Int, Int, Int), Int]:
-      val laws = new GrateLaws[(Int, Int, Int), Int]:
-        val grate = tuple3Grate
-    .grate,
-  )
+  "MultiFocus.tuple[(Int, Int), Int] — replace-idempotent (G3)" >> forAll {
+    (s: (Int, Int), a: Int) =>
+      tuple2MultiFocus.replace(a)(tuple2MultiFocus.replace(a)(s)) ==
+        tuple2MultiFocus.replace(a)(s)
+  }
+
+  val tuple3MultiFocus
+      : Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
+    MultiFocus.tuple[(Int, Int, Int), Int]
+
+  "MultiFocus.tuple[(Int, Int, Int), Int] — modify-identity (G1)" >> forAll {
+    (s: (Int, Int, Int)) => tuple3MultiFocus.modify(identity[Int])(s) == s
+  }
+
+  "MultiFocus.tuple[(Int, Int, Int), Int] — compose-modify (G2)" >> forAll {
+    (s: (Int, Int, Int), f: Int => Int, g: Int => Int) =>
+      tuple3MultiFocus.modify(g)(tuple3MultiFocus.modify(f)(s)) ==
+        tuple3MultiFocus.modify(f.andThen(g))(s)
+  }
+
+  "MultiFocus.tuple[(Int, Int, Int), Int] — replace-idempotent (G3)" >> forAll {
+    (s: (Int, Int, Int), a: Int) =>
+      tuple3MultiFocus.replace(a)(tuple3MultiFocus.replace(a)(s)) ==
+        tuple3MultiFocus.replace(a)(s)
+  }
 
   // ----- MultiFocus: List + ZipList + Const fixtures --------------
   //
