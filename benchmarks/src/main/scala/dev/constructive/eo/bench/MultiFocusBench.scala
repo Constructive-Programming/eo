@@ -208,7 +208,7 @@ class MultiFocusBench extends JmhDefaults:
   // Lens → Traversal.each → Lens chain — identical shape to legacy
   // PowerSeriesBench.eoModify_powerEach but built against the post-fold
   // MultiFocus[PSVec] carrier. The cross-carrier `.andThen` summons
-  // `Composer[Tuple2, MultiFocus[PSVec]]` (`tuple2psvec`) for the lens
+  // `Composer[Tuple2, MultiFocus[PSVec]]` (`tuple2multifocusPSVec`) for the lens
   // hops; the Traversal hop is same-carrier under `mfAssocPSVec`.
   private val psPersonAllMobiles
       : dev.constructive.eo.optics.Optic[PsPerson, PsPerson, Boolean, Boolean, MultiFocus[PSVec]] =

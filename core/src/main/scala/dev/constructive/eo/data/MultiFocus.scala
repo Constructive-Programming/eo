@@ -29,8 +29,8 @@ import optics.Optic
   *     `(Y, F[A]) = (Y, X0 => A)` shape; the lead-position field was not externally observable in
   *     any shipped path-through (`grateFunctor.map`'s eager `f(a)` was discarded by every shipped
   *     `from`), so the spike dropped it entirely. See
-  *     `docs/research/2026-04-28-grate-fold-spike.md` for the empirical justification + perf
-  *     evidence.
+  *     `docs/research/2026-04-29-fixedtraversal-fold-spike.md` for the empirical justification +
+  *     perf evidence.
   *
   * `MultiFocus[F]` keeps the F-as-parameter encoding (matching AlgLens) and absorbs Kaleidoscope by
   * recognising that the only piece of `Reflector[F]` that wasn't already in cats was the
@@ -67,33 +67,12 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
   def singletonTo(s: S): (X0, A)
   def singletonFrom(x: X0, b: B): T
 
-/** Lead-position capability — preserved from the v1 `Grate` carrier's `(A, X => A)` encoding,
-  * lifted into the unified MultiFocus surface. When an optic carries this trait, the `lead` value
-  * exposes an O(1) read of one focus position without re-running the rebuild closure.
-  *
-  * '''Grate-fold-spike finding (Q1).''' Empirically, no shipped path through Grate's `.modify`
-  * actually observed the lead — `grateFunctor.map` computed `f(ga._1)` eagerly only for it to be
-  * dropped on every shipped `from`. The trait is therefore retained as an OPTIONAL fast-path
-  * surface (a future `o.lead(s)` accessor or `.at(repr0)` shortcut may use it) but contributes no
-  * extra storage or branching to the hot `.modify` path.
-  *
-  * Populated by `MultiFocus.fromRepresentable` (the absorbed Grate.apply / Grate.at) and
-  * `MultiFocus.tuple` (the absorbed Grate.tuple). Not populated by the generic factories — they
-  * have no canonical "first" position.
-  *
-  * @tparam X0
-  *   the existential index type — same `X` as on the optic. Pinned to keep the trait compatible
-  *   with the carrier's existential.
-  */
-private[eo] trait MultiFocusLeadPosition[X0]:
-  /** A representative index — used to extract the lead focus by applying the rebuild closure. */
-  def leadIndex: X0
-
 /** Per-F O(n) builder, identical role to the prior `AlgLensFromList`. `MonoidK[F].combineK` has
   * inconsistent asymptotics across F (O(n²) on Vector, lossy on Option), so we keep this typeclass
   * to gate the same-carrier `.andThen` push/pull paths.
   *
-  * Q2 finding: `Traverse[F] + MonoidK[F]` is ENOUGH to derive `fromList` in principle —
+  * Multifocus-unification spike Q2 finding: `Traverse[F] + MonoidK[F]` is ENOUGH to derive
+  * `fromList` in principle —
   * `xs.foldLeft(empty)((acc, a) => combineK(acc, pure(a)))` — but the asymptotics regress on Vector
   * (O(n²)) and the cardinality is silently dropped on Option. The typeclass is therefore a known
   * per-F cost we carry forward unchanged.
@@ -167,8 +146,9 @@ private[eo] object MultiFocusFromList:
   * `IntArrBuilder` (per-element 0/1 length) and `ObjArrBuilder` (parallel ys / flat) the
   * PSVec-specialised `mfAssoc` body uses.
   *
-  * Q3 finding: kept after measurement. The Prism fast-path's elision of the per-element `Option` /
-  * `Either` wrapper allocation is empirically observable on `PowerSeriesPrismBench`.
+  * Powerseries-fold-spike Q3 finding: kept after measurement. The Prism fast-path's elision of
+  * the per-element `Option` / `Either` wrapper allocation is empirically observable on
+  * `PowerSeriesPrismBench`.
   */
 private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
 
@@ -363,8 +343,10 @@ object MultiFocus:
   // separate instance handles the Grate-style read-only / closure-rebuild
   // case at higher priority for the Function1-shaped F. Z = (Xo, Xi); the
   // outer rebuild is structurally unreachable post-collapse-through-outer-
-  // focus, identical to the v1 grateAssoc's design (see deleted Grate.scala
-  // doc for the load-bearing invariant).
+  // focus, identical to the v1 grateAssoc's design — for every shipped outer
+  // (iso-morphed, tuple-built) the rebuild is broadcast-shaped, so a constant
+  // fallback is exact. See `docs/research/2026-04-29-fixedtraversal-fold-spike.md`
+  // for the load-bearing invariant absorbed from the deleted Grate.scala.
   // ------------------------------------------------------------------
 
   given mfAssocFunction1[X0, Xo, Xi]: AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
@@ -377,9 +359,9 @@ object MultiFocus:
     ): ((Xo, Xi), X0 => C) =
       val (_, kO) = outer.to(s)
       // Read the outer focus via the rebuild closure at any X0 — null sentinel works because
-      // `.modify` only consumes the rebuild, not the lead. The `MultiFocusLeadPosition` capability
-      // (when present) lets us pick a real index here, but the spike-Q1 finding shows .modify
-      // doesn't observe the focus value.
+      // `.modify` only consumes the rebuild, not the lead. The fixedtraversal-fold-spike's Q1
+      // finding shows .modify doesn't observe the focus value, so a real index here would be
+      // discarded by every shipped `from`.
       val a: A = kO(null.asInstanceOf[X0])
       val (_, kI) = inner.to(a)
       ((null.asInstanceOf[Xo], null.asInstanceOf[Xi]), kI)
@@ -411,9 +393,9 @@ object MultiFocus:
   // `(Xi, Int)` Tuple2 + `F[(Xi, Int)]` materialisation the generic body
   // pays.
   //
-  // Q3 (singleton fast-path) — the AlwaysHit branch reuses the carrier-
-  // wide `MultiFocusSingleton` trait (already mixed in by
-  // `tuple2multifocus`); no new trait is needed for AlwaysHit. The
+  // Singleton fast-path (powerseries-fold-spike Q3) — the AlwaysHit branch
+  // reuses the carrier-wide `MultiFocusSingleton` trait (already mixed in
+  // by `tuple2multifocus`); no new trait is needed for AlwaysHit. The
   // MaybeHit branch (Prism / Optional morphs) DOES use a separate
   // PSVec-scoped trait `MultiFocusPSMaybeHit` because its semantics —
   // pushing into `lenBuf` / `ysBuf` / `flatBuf` directly to skip the
@@ -456,6 +438,10 @@ object MultiFocus:
           val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
           (sndZ, flatBuf.freezeAsPSVec[C])
         case _ =>
+          // Generic fallback: reachable only via user-built MultiFocus[PSVec] optics that don't
+          // mix in MultiFocusSingleton or MultiFocusPSMaybeHit. The shipped factories
+          // (tuple2multifocusPSVec / either2multifocusPSVec / affine2multifocusPSVec) all do, so
+          // this branch is the structural escape hatch for downstream PSVec-carrier authors.
           val lenBuf = new IntArrBuilder(n)
           val flatBuf = new ObjArrBuilder()
           var i = 0
@@ -500,6 +486,9 @@ object MultiFocus:
             offset += len
             i += 1
         case _ =>
+          // Generic fallback — paired with the composeTo escape-hatch branch above. Reachable
+          // only via user-built MultiFocus[PSVec] optics that don't mix in MultiFocusSingleton
+          // or MultiFocusPSMaybeHit; every shipped factory provides one of those witnesses.
           val lensArr = lens.nn
           val n = lensArr.length
           var offset = 0
@@ -528,9 +517,10 @@ object MultiFocus:
   )
 
   // ------------------------------------------------------------------
-  // Kaleidoscope universal — `.collect`. Q1 finding: NOT derivable from
-  // Apply alone in a way that preserves all three v1 Reflector instances.
-  // We expose two variants and let the user pick the aggregation shape.
+  // Kaleidoscope universal — `.collect`. Multifocus-unification spike Q1
+  // finding: NOT derivable from Apply alone in a way that preserves all
+  // three v1 Reflector instances. We expose two variants and let the user
+  // pick the aggregation shape.
   // ------------------------------------------------------------------
 
   /** Length-preserving broadcast — `reflect(fa)(f) = fa.map(_ => f(fa))`. Matches the v1
@@ -625,6 +615,7 @@ object MultiFocus:
         type X = Unit
         val to: S => (Unit, F[A]) = s => ((), Applicative[F].pure(o.to(s)))
         val from: ((Unit, F[B])) => T = {
+          // precondition: fb is singleton (Applicative.pure-wrapped); throws on |fb| != 1
           case (_, fb) => o.from(pickSingletonOrThrow(fb, "Forgetful"))
         }
 
@@ -651,6 +642,7 @@ object MultiFocus:
           val (x, a) = o.to(s)
           (x, Applicative[F].pure(a))
         val from: ((X, F[B])) => T = {
+          // precondition: fb is singleton (Applicative.pure-wrapped); throws on |fb| != 1
           case (x, fb) =>
             o.from((x, pickSingletonOrThrow(fb, "Tuple2")))
         }
@@ -667,6 +659,7 @@ object MultiFocus:
             case Left(x)  => (Left(x), Alternative[F].empty[A])
         val from: ((X, F[B])) => T = {
           case (Left(xMiss), _) => o.from(Left(xMiss))
+          // precondition on Right branch: fb is singleton (Applicative.pure-wrapped); throws on |fb| != 1
           case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
         }
 
@@ -685,6 +678,7 @@ object MultiFocus:
         val from: ((X, F[B])) => T = {
           case (Left(fstX), _) =>
             o.from(new Affine.Miss[o.X, B](fstX))
+          // precondition on Hit branch: fb is singleton (Applicative.pure-wrapped); throws on |fb| != 1
           case (Right(sndX), fb) =>
             o.from(new Affine.Hit[o.X, B](sndX, pickSingletonOrThrow(fb, "Affine")))
         }
@@ -719,7 +713,7 @@ object MultiFocus:
     * original `o.X` path-dependent type without tripping Scala 3's "class parent cannot refer to
     * constructor parameters" rule.
     */
-  given tuple2psvec: Composer[Tuple2, MultiFocus[PSVec]] with
+  given tuple2multifocusPSVec: Composer[Tuple2, MultiFocus[PSVec]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       o match
@@ -748,7 +742,7 @@ object MultiFocus:
     * PSVec-specialised `mfAssocPSVec` body skips the per-element `Either[o.X, Unit]` wrapper the
     * generic `to` path would build. Mirror of the legacy `either2ps`.
     */
-  given either2psvec: Composer[Either, MultiFocus[PSVec]] with
+  given either2multifocusPSVec: Composer[Either, MultiFocus[PSVec]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
@@ -786,7 +780,7 @@ object MultiFocus:
     * PSVec-specialised `mfAssocPSVec` body skips the per-element `Affine[o.X, Unit]` wrapper the
     * generic `to` path would build. Mirror of the legacy `affine2ps`.
     */
-  given affine2psvec: Composer[Affine, MultiFocus[PSVec]] with
+  given affine2multifocusPSVec: Composer[Affine, MultiFocus[PSVec]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
@@ -862,9 +856,7 @@ object MultiFocus:
 
   // ------------------------------------------------------------------
   // Grate-fold absorbed factories — `representable` and `tuple` (both
-  // produce `MultiFocus[Function1[X0, *]]`-carrier optics with the
-  // `MultiFocusLeadPosition` capability mixed in for downstream
-  // fast-path readers).
+  // produce `MultiFocus[Function1[X0, *]]`-carrier optics).
   // ------------------------------------------------------------------
 
   /** Generic Function1-shaped MultiFocus factory — any `Representable[F]` container `F[_]` with
@@ -882,30 +874,26 @@ object MultiFocus:
     *
     * which is exactly the Functor-map over the representable container — semantically identical to
     * the v1 Grate's `representableGrate` body.
-    *
-    * The `MultiFocusLeadPosition` capability is mixed in but uses a null sentinel for `leadIndex`
-    * because no canonical Representation exists in `cats.Representable`. Use `representableAt` for
-    * a well-typed lead.
     */
   def representable[F[_], A](using
       F: Representable[F]
   ): Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
-    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
-      with MultiFocusLeadPosition[Unit]:
+    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]:
       type X = Unit
-      def leadIndex: Unit = ()
       val to: F[A] => (Unit, F.Representation => A) = fa => ((), F.index(fa))
       val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
 
-  /** Representable-indexed variant with explicit representative index — absorbs v1 `Grate.at`. */
+  /** Representable-indexed variant with explicit representative index — absorbs v1 `Grate.at`. The
+    * `repr0` argument is currently unused at runtime (the rebuild closure operates pointwise via
+    * `F.tabulate`); it is preserved for API parity with the v1 `Grate.at` and to leave the door
+    * open for a future `.lead` accessor.
+    */
   def representableAt[F[_], A](F: Representable[F])(
       repr0: F.Representation
   ): Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
-    val _ = repr0 // captured at construction; lead-position trait surfaces it for callers
-    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
-      with MultiFocusLeadPosition[F.Representation]:
+    val _ = repr0 // captured at construction; preserved for API parity with v1 `Grate.at`
+    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]:
       type X = Unit
-      def leadIndex: F.Representation = repr0
       val to: F[A] => (Unit, F.Representation => A) = fa => ((), F.index(fa))
       val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
 
@@ -915,8 +903,6 @@ object MultiFocus:
     * Encoding: `X = Unit`, F = `Function1[Int, *]`. `to(t) = ((), i => t._i)`; `from((_, k))`
     * materialises the result as `Tuple.fromArray(Array.tabulate(size)(i => k(i)))` — applying the
     * rebuild at every slot. Same per-slot semantics as v1 Grate.tuple.
-    *
-    * Lead position is set to `0` (the canonical "first slot" of a homogeneous tuple).
     *
     * @example
     *   {{{
@@ -931,9 +917,8 @@ object MultiFocus:
   ): Optic[T, T, A, A, MultiFocus[Function1[Int, *]]] =
     val _ = ev
     val size = sz.value
-    new Optic[T, T, A, A, MultiFocus[Function1[Int, *]]] with MultiFocusLeadPosition[Int]:
+    new Optic[T, T, A, A, MultiFocus[Function1[Int, *]]]:
       type X = Unit
-      def leadIndex: Int = 0
       val to: T => (Unit, Int => A) = t =>
         val read: Int => A = (i: Int) => t.productElement(i).asInstanceOf[A]
         ((), read)
@@ -958,7 +943,8 @@ object MultiFocus:
     * The Iso's forward `to: S => A` is broadcast to the constant rebuild closure `_ => o.to(s)`;
     * the reverse `from: B => T` reads the rebuild at any X0 (null sentinel) and drives the pull
     * side. This is a Forgetful → broadcasted-Function1 lift, semantically identical to v1
-    * forgetful2grate's `(o.to(s), s0 => o.to(s0))` pair (the lead is dropped, see Q1).
+    * forgetful2grate's `(o.to(s), s0 => o.to(s0))` pair (the lead is dropped, see
+    * fixedtraversal-fold-spike Q1).
     */
   given forgetful2multifocusFunction1[X0]: Composer[Forgetful, MultiFocus[Function1[X0, *]]] with
 
