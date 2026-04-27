@@ -637,7 +637,7 @@ object MultiFocus:
     * in the `MultiFocusSingleton` fast path — it just calls the generic `o.to(s)` to get the
     * `(xo, a)` tuple. Mirror of the legacy `GenericTuple2InPS`.
     */
-  final private class GenericTuple2InMFPSVec[S, T, A, B](o: Optic[S, T, A, B, Tuple2])
+  final private class GenericTuple2InMFPSVec[S, T, A, B](val o: Optic[S, T, A, B, Tuple2])
       extends Optic[S, T, A, B, MultiFocus[PSVec]]
       with MultiFocusSingleton[S, T, A, B, o.X]:
     type X = o.X
@@ -670,7 +670,7 @@ object MultiFocus:
     * PSVec-specialised `mfAssocPSVec` body skips the per-element `Either[o.X, Unit]` wrapper the
     * generic `to` path would build. Mirror of the legacy `EitherInPS`.
     */
-  final private class EitherInMFPSVec[S, T, A, B](o: Optic[S, T, A, B, Either])
+  final private class EitherInMFPSVec[S, T, A, B](val o: Optic[S, T, A, B, Either])
       extends Optic[S, T, A, B, MultiFocus[PSVec]]
       with MultiFocusPSMaybeHit[S, T, A, B]:
     type X = Option[o.X]
@@ -714,7 +714,7 @@ object MultiFocus:
     * PSVec-specialised `mfAssocPSVec` body skips the per-element `Affine[o.X, Unit]` wrapper the
     * generic `to` path would build. Mirror of the legacy `AffineInPS`.
     */
-  final private class AffineInMFPSVec[S, T, A, B](o: Optic[S, T, A, B, Affine])
+  final private class AffineInMFPSVec[S, T, A, B](val o: Optic[S, T, A, B, Affine])
       extends Optic[S, T, A, B, MultiFocus[PSVec]]
       with MultiFocusPSMaybeHit[S, T, A, B]:
     type X = Either[Fst[o.X], Snd[o.X]]
