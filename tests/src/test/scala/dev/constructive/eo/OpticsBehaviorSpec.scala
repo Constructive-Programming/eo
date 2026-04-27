@@ -27,22 +27,12 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{
-  Affine,
-  AlgLens,
-  AlgLensSingleton,
-  Forget,
-  Forgetful,
-  Kaleidoscope,
-  PowerSeries,
-  SetterF,
-}
+import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PowerSeries, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
-import data.AlgLens.given
+import data.MultiFocus.given
 import data.Grate.given
-import data.Kaleidoscope.given
 import data.SetterF.given
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
@@ -55,14 +45,19 @@ import data.SetterF.given
   *   - 3 Lens factory specs (first/second/curried) collapsed into one.
   *   - 4 Review specs collapsed into one (apply/compose/fromIso/fromPrism + ReversedLens alias).
   *   - 5 AffineFold specs collapsed into one (apply/select/fromOptional/fromPrism/Lens-narrow).
-  *   - 3 Lens-into-AlgLens[List] specs (Tuple2/Either/Affine) collapsed via the same parametric
+  *   - 3 Lens-into-MultiFocus[List] specs (Tuple2/Either/Affine) collapsed via the same parametric
   *     hit/miss assertion shape.
   *   - 3 SetterF lift specs (Either/Affine/PowerSeries → SetterF) collapsed similarly.
-  *   - 3 algFold cardinality specs collapsed.
+  *   - 3 mfFold cardinality specs collapsed.
   *   - 4 Optional.fused-andThen specs (Optional/GetReplaceLens/MendTearPrism/BijectionIso)
   *     collapsed via parametric hit/miss assertion.
   *
   * Each consolidated block lists the specific scenarios it absorbs in a `// covers: ...` comment.
+  *
+  * '''2026-04-28 MultiFocus migration.''' Every reference to the deleted `AlgLens[F]` and
+  * `Kaleidoscope` carriers is rewritten to `MultiFocus[F]`. The `AlgLensSingleton` tag is renamed
+  * to `MultiFocusSingleton`. The Kaleidoscope-list `morph[SetterF]` block is now exercised on
+  * `MultiFocus[List]` and `MultiFocus[ZipList]` via `multifocus2setter`.
   */
 class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
@@ -372,16 +367,16 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(composed.from(None) === 998)
   }
 
-  "Forget[Option] injects into AlgLens[Option] and composes under Monad[Option]" >> {
+  "Forget[Option] injects into MultiFocus[Option] and composes under Monad[Option]" >> {
     val pureForget = forgetOpt[Option](
       n => Option.when(n > 0)(n * 10),
       _.fold(-1)(_ + 7),
     )
-    val lifted = summon[Composer[Forget[Option], AlgLens[Option]]].to(pureForget)
+    val lifted = summon[Composer[Forget[Option], MultiFocus[Option]]].to(pureForget)
     val r1 = (lifted.modify(_ + 1)(5) === 58).and(lifted.modify(_ + 1)(-2) === -1)
 
-    val inner: Optic[Int, Int, Int, Int, AlgLens[Option]] =
-      new Optic[Int, Int, Int, Int, AlgLens[Option]]:
+    val inner: Optic[Int, Int, Int, Int, MultiFocus[Option]] =
+      new Optic[Int, Int, Int, Int, MultiFocus[Option]]:
         type X = String
         val to: Int => (String, Option[Int]) = n => (s"tag-$n", Option.when(n < 1000)(n + 1))
         val from: ((String, Option[Int])) => Int = {
@@ -394,24 +389,24 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     r1.and(r2)
   }
 
-  // ----- Lens / Prism / Optional → AlgLens[List] -----------------------
+  // ----- Lens / Prism / Optional → MultiFocus[List] -----------------------
 
   case class AdultOptCarrier(p: AdultPerson)
 
-  // covers: Tuple2 Lens lifts into AlgLens[List] and preserves .modify semantics,
-  // Either Prism lifts into AlgLens[List] preserves hit/miss, Affine Optional
-  // lifts into AlgLens[List] preserves hit/miss, Optional andThen AlgLens[List]
-  // classifier composes via affine2alg
-  "Lens / Prism / Optional → AlgLens[List]: hit/miss .modify semantics preserved + composer chain" >> {
+  // covers: Tuple2 Lens lifts into MultiFocus[List] and preserves .modify semantics,
+  // Either Prism lifts into MultiFocus[List] preserves hit/miss, Affine Optional
+  // lifts into MultiFocus[List] preserves hit/miss, Optional andThen MultiFocus[List]
+  // classifier composes via affine2multifocus
+  "Lens / Prism / Optional → MultiFocus[List]: hit/miss .modify semantics preserved + composer chain" >> {
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-    val tuple2Lifted = summon[Composer[Tuple2, AlgLens[List]]].to(fstLens)
+    val tuple2Lifted = summon[Composer[Tuple2, MultiFocus[List]]].to(fstLens)
     val tuple2Ok = (tuple2Lifted.modify(_ + 100)((3, "hi")) === ((103, "hi")))
       .and(tuple2Lifted.modify(_ * 2)((5, "x")) === ((10, "x")))
 
     val oddP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 1 then Right(n) else Left(n), identity)
-    val eitherLifted = summon[Composer[Either, AlgLens[List]]].to(oddP)
+    val eitherLifted = summon[Composer[Either, MultiFocus[List]]].to(oddP)
     val eitherOk =
       (eitherLifted.modify(_ * 2)(3) === 6).and(eitherLifted.modify(_ * 2)(4) === 4)
 
@@ -420,7 +415,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-    val affineLifted = summon[Composer[Affine, AlgLens[List]]].to(adultOpt)
+    val affineLifted = summon[Composer[Affine, MultiFocus[List]]].to(adultOpt)
     val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
       .and(affineLifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
@@ -429,10 +424,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         getOrModify = n => Either.cond(n > 0, n, n),
         reverseGet = { case (_, n) => n },
       )
-    val candidatesAlg = summon[Composer[Forget[List], AlgLens[List]]].to(
+    val candidatesMF = summon[Composer[Forget[List], MultiFocus[List]]].to(
       forgetOpt[List](n => List(n, n * 2), _.sum)
     )
-    val composed = posOpt.andThen(candidatesAlg)
+    val composed = posOpt.andThen(candidatesMF)
     val composedOk =
       (composed.modify(_ + 1)(3) === 11).and(composed.modify(_ + 1)(-1) === -1)
 
@@ -501,27 +496,27 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     tupleOk.and(fnOk)
   }
 
-  // ----- Kaleidoscope lifted into SetterF ------------------------------
+  // ----- MultiFocus[F] lifted into SetterF -----------------------------
 
-  // covers: Kaleidoscope.apply[List] (cartesian Reflector) and Kaleidoscope.apply[ZipList]
-  // (zipping Reflector) lift into SetterF and modify element-wise via the Reflector's Apply-map.
-  // The lifted SetterF.modify must agree byte-for-byte with the original Kaleidoscope's
-  // .modify(f) — same Reflector-driven element-wise rewrite as ForgetfulFunctor[Kaleidoscope].
-  "Kaleidoscope.apply[List] / Kaleidoscope.apply[ZipList] → SetterF: element-wise modify" >> {
-    val listKal: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
-      Kaleidoscope.apply[List, Int]
+  // covers: MultiFocus.apply[List] and MultiFocus.apply[ZipList] lift into SetterF and modify
+  // element-wise via Functor[F]. The lifted SetterF.modify must agree byte-for-byte with the
+  // original MultiFocus's .modify(f) — same Functor-driven element-wise rewrite as
+  // ForgetfulFunctor[MultiFocus[F]].
+  "MultiFocus.apply[List] / MultiFocus.apply[ZipList] → SetterF: element-wise modify" >> {
+    val listMF: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
+      MultiFocus.apply[List, Int]
     val listLifted: Optic[List[Int], List[Int], Int, Int, SetterF] =
-      summon[Composer[Kaleidoscope, SetterF]].to(listKal)
+      summon[Composer[MultiFocus[List], SetterF]].to(listMF)
     val listOk =
       (listLifted.modify(_ + 1)(List(1, 2, 3)) === List(2, 3, 4))
         .and(listLifted.modify(_ * 10)(Nil) === Nil)
         .and(listLifted.modify(identity[Int])(List(7, 8, 9)) === List(7, 8, 9))
 
     import cats.data.ZipList
-    val zipKal: Optic[ZipList[Int], ZipList[Int], Int, Int, Kaleidoscope] =
-      Kaleidoscope.apply[ZipList, Int]
+    val zipMF: Optic[ZipList[Int], ZipList[Int], Int, Int, MultiFocus[ZipList]] =
+      MultiFocus.apply[ZipList, Int]
     val zipLifted: Optic[ZipList[Int], ZipList[Int], Int, Int, SetterF] =
-      summon[Composer[Kaleidoscope, SetterF]].to(zipKal)
+      summon[Composer[MultiFocus[ZipList], SetterF]].to(zipMF)
     val zipOk =
       (zipLifted.modify(_ * 10)(ZipList(List(1, 2, 3))).value === List(10, 20, 30))
         .and(zipLifted.modify(_ + 1)(ZipList(Nil)).value === List.empty[Int])
@@ -529,31 +524,31 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     listOk.and(zipOk)
   }
 
-  // ----- Cross-carrier composition Lens → AlgLens classifier -----------
+  // ----- Cross-carrier composition Lens → MultiFocus classifier --------
 
-  "Lens andThen AlgLens[List] classifier composes end-to-end" >> {
+  "Lens andThen MultiFocus[List] classifier composes end-to-end" >> {
     case class Row(id: Int, value: Int)
     val valueLens: Optic[Row, Row, Int, Int, Tuple2] =
       Lens[Row, Int](_.value, (r, v) => r.copy(value = v))
     val candidatesForget = forgetOpt[List](n => List(n, n + 10), _.sum)
-    val candidatesAlg = summon[Composer[Forget[List], AlgLens[List]]].to(candidatesForget)
-    val composed = valueLens.andThen(candidatesAlg)
+    val candidatesMF = summon[Composer[Forget[List], MultiFocus[List]]].to(candidatesForget)
+    val composed = valueLens.andThen(candidatesMF)
     (composed.modify(_ * 3)(Row(1, 5)) === Row(1, 60))
       .and(composed.modify(identity)(Row(9, 5)) === Row(9, 20))
   }
 
   // ----- F[A]-focus factories -----------------------------------------
 
-  // covers: AlgLens.fromLensF rewraps a Lens[S, F[A]] with zero constraints,
-  // AlgLens.fromPrismF lifts a Prism[S, F[A]] with Alternative[F] only,
-  // AlgLens.fromOptionalF lifts an Optional[S, F[A]] through the Hit branch
-  "AlgLens.fromLensF / fromPrismF / fromOptionalF — F[A]-focus factories" >> {
+  // covers: MultiFocus.fromLensF rewraps a Lens[S, F[A]] with zero constraints,
+  // MultiFocus.fromPrismF lifts a Prism[S, F[A]] with MonoidK[F] only,
+  // MultiFocus.fromOptionalF lifts an Optional[S, F[A]] through the Hit branch
+  "MultiFocus.fromLensF / fromPrismF / fromOptionalF — F[A]-focus factories" >> {
     case class Table(rows: List[Int])
     val rowsLens: Optic[Table, Table, List[Int], List[Int], Tuple2] =
       Lens[Table, List[Int]](_.rows, (t, rs) => t.copy(rows = rs))
-    val listAlg = AlgLens.fromLensF(rowsLens)
-    val lensFOk = (listAlg.modify(_ + 1)(Table(List(1, 2, 3))) === Table(List(2, 3, 4)))
-      .and(listAlg.modify(_ * 10)(Table(Nil)) === Table(Nil))
+    val listMF = MultiFocus.fromLensF(rowsLens)
+    val lensFOk = (listMF.modify(_ + 1)(Table(List(1, 2, 3))) === Table(List(2, 3, 4)))
+      .and(listMF.modify(_ * 10)(Table(Nil)) === Table(Nil))
 
     val p: Optic[Option[List[Int]], Option[List[Int]], List[Int], List[Int], Either] =
       Prism[Option[List[Int]], List[Int]](
@@ -563,10 +558,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         },
         Some(_),
       )
-    val alg = AlgLens.fromPrismF(p)
-    val prismFOk = (alg.modify(_ * 2)(Some(List(1, 2, 3))) === Some(List(2, 4, 6)))
-      .and(alg.modify(_ * 2)(None) === None)
-      .and(alg.modify(_ * 2)(Some(Nil)) === Some(Nil))
+    val mf = MultiFocus.fromPrismF(p)
+    val prismFOk = (mf.modify(_ * 2)(Some(List(1, 2, 3))) === Some(List(2, 4, 6)))
+      .and(mf.modify(_ * 2)(None) === None)
+      .and(mf.modify(_ * 2)(Some(Nil)) === Some(Nil))
 
     val opt: Optic[
       (Int, List[Int]),
@@ -582,16 +577,16 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         },
         { case ((k, _), xs) => (k, xs) },
       )
-    val optAlg = AlgLens.fromOptionalF(opt)
-    val optionalFOk = (optAlg.modify(_ + 10)((7, List(1, 2, 3))) === ((7, List(11, 12, 13))))
-      .and(optAlg.modify(_ + 10)((7, Nil)) === ((7, Nil)))
+    val optMF = MultiFocus.fromOptionalF(opt)
+    val optionalFOk = (optMF.modify(_ + 10)((7, List(1, 2, 3))) === ((7, List(11, 12, 13))))
+      .and(optMF.modify(_ + 10)((7, Nil)) === ((7, Nil)))
 
     lensFOk.and(prismFOk).and(optionalFOk)
   }
 
-  // ----- 3-hop Lens → AlgLens[List] → Lens chain ----------------------
+  // ----- 3-hop Lens → MultiFocus[List] → Lens chain --------------------
 
-  "Lens → AlgLens[List] → Lens composes three carriers cleanly" >> {
+  "Lens → MultiFocus[List] → Lens composes three carriers cleanly" >> {
     case class Wrapper(owner: String, doc: Doc)
     case class Doc(title: String, tags: List[Tag])
     case class Tag(name: String, count: Int)
@@ -600,12 +595,12 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       Lens[Wrapper, Doc](_.doc, (w, d) => w.copy(doc = d))
     val tagsL: Optic[Doc, Doc, List[Tag], List[Tag], Tuple2] =
       Lens[Doc, List[Tag]](_.tags, (d, ts) => d.copy(tags = ts))
-    val eachTag: Optic[Doc, Doc, Tag, Tag, AlgLens[List]] =
-      AlgLens.fromLensF(tagsL)
+    val eachTag: Optic[Doc, Doc, Tag, Tag, MultiFocus[List]] =
+      MultiFocus.fromLensF(tagsL)
     val countL: Optic[Tag, Tag, Int, Int, Tuple2] =
       Lens[Tag, Int](_.count, (t, c) => t.copy(count = c))
 
-    val everyCount: Optic[Wrapper, Wrapper, Int, Int, AlgLens[List]] =
+    val everyCount: Optic[Wrapper, Wrapper, Int, Int, MultiFocus[List]] =
       docL.andThen(eachTag).andThen(countL)
 
     val w = Wrapper(
@@ -628,62 +623,62 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     r1.and(r2)
   }
 
-  // ----- Non-singleton × non-singleton AlgLens[List] composition -------
+  // ----- Non-singleton × non-singleton MultiFocus[List] composition ----
 
-  "Two Forget[List] classifiers compose via AlgLens[List] with non-uniform cardinalities" >> {
+  "Two Forget[List] classifiers compose via MultiFocus[List] with non-uniform cardinalities" >> {
     val outerForget = forgetOpt[List](n => List(n, n + 1), _.sum)
     val innerForget = forgetOpt[List](n => List(n * 10, n * 10 + 1, n * 10 + 2), _.product)
-    val outerAlg = summon[Composer[Forget[List], AlgLens[List]]].to(outerForget)
-    val innerAlg = summon[Composer[Forget[List], AlgLens[List]]].to(innerForget)
-    val composed = outerAlg.andThen(innerAlg)
+    val outerMF = summon[Composer[Forget[List], MultiFocus[List]]].to(outerForget)
+    val innerMF = summon[Composer[Forget[List], MultiFocus[List]]].to(innerForget)
+    val composed = outerMF.andThen(innerMF)
 
     (composed.foldMap(identity[Int])(5) === (50 + 51 + 52 + 60 + 61 + 62))
       .and(composed.modify(identity)(5) === (50 * 51 * 52 + 60 * 61 * 62))
       .and(composed.modify(_ + 1)(5) === (51 * 52 * 53 + 61 * 62 * 63))
   }
 
-  // ----- AlgLensSingleton tag regression --------------------------------
+  // ----- MultiFocusSingleton tag regression ----------------------------
 
-  "AlgLens carrier tags: only tuple2alg mixes in AlgLensSingleton; everyone else doesn't" >> {
+  "MultiFocus carrier tags: only tuple2multifocus mixes in MultiFocusSingleton; everyone else doesn't" >> {
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
     val someP: Optic[Option[Int], Option[Int], Int, Int, Either] =
       Prism[Option[Int], Int](opt => opt.toRight(opt), Some(_))
 
-    val liftedLens = summon[Composer[Tuple2, AlgLens[List]]].to(fstLens)
-    val tagOk1 = liftedLens must beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]]
+    val liftedLens = summon[Composer[Tuple2, MultiFocus[List]]].to(fstLens)
+    val tagOk1 = liftedLens must beAnInstanceOf[MultiFocusSingleton[?, ?, ?, ?, ?]]
 
-    val liftedPrism = summon[Composer[Either, AlgLens[List]]].to(someP)
-    val tagOk2 = liftedPrism must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+    val liftedPrism = summon[Composer[Either, MultiFocus[List]]].to(someP)
+    val tagOk2 = liftedPrism must not(beAnInstanceOf[MultiFocusSingleton[?, ?, ?, ?, ?]])
 
     val phonesLens: Optic[(String, List[Int]), (String, List[Int]), List[Int], List[Int], Tuple2] =
       Lens[(String, List[Int]), List[Int]](_._2, (s, a) => (s._1, a))
-    val fromLens = AlgLens.fromLensF(phonesLens)
-    val tagOk3 = fromLens must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+    val fromLens = MultiFocus.fromLensF(phonesLens)
+    val tagOk3 = fromLens must not(beAnInstanceOf[MultiFocusSingleton[?, ?, ?, ?, ?]])
 
     val forgetOptic = forgetOpt[List](n => List(n), _.sum)
-    val forgetLifted = summon[Composer[Forget[List], AlgLens[List]]].to(forgetOptic)
-    val tagOk4 = forgetLifted must not(beAnInstanceOf[AlgLensSingleton[?, ?, ?, ?, ?]])
+    val forgetLifted = summon[Composer[Forget[List], MultiFocus[List]]].to(forgetOptic)
+    val tagOk4 = forgetLifted must not(beAnInstanceOf[MultiFocusSingleton[?, ?, ?, ?, ?]])
 
     tagOk1.and(tagOk2).and(tagOk3).and(tagOk4)
   }
 
-  "Prism.andThen(Prism) via AlgLens[List] survives inner miss on an outer hit" >> {
+  "Prism.andThen(Prism) via MultiFocus[List] survives inner miss on an outer hit" >> {
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
     val positiveP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n > 0 then Right(n) else Left(n), identity)
 
-    val evenAlg = summon[Composer[Either, AlgLens[List]]].to(evenP)
-    val positiveAlg = summon[Composer[Either, AlgLens[List]]].to(positiveP)
-    val composed = evenAlg.andThen(positiveAlg)
+    val evenMF = summon[Composer[Either, MultiFocus[List]]].to(evenP)
+    val positiveMF = summon[Composer[Either, MultiFocus[List]]].to(positiveP)
+    val composed = evenMF.andThen(positiveMF)
 
     (composed.modify(_ + 10)(4) === 14)
       .and(composed.modify(_ + 10)(-2) === -2)
       .and(composed.modify(_ + 10)(3) === 3)
   }
 
-  "AlgLensSingleton fast path calls inner.to exactly once per outer element" >> {
+  "MultiFocusSingleton fast path calls inner.to exactly once per outer element" >> {
     import java.util.concurrent.atomic.AtomicInteger
     val counter = new AtomicInteger(0)
     val baseLens: Optic[Int, Int, Int, Int, Tuple2] =
@@ -691,8 +686,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         get = n => { counter.incrementAndGet(); n * 10 },
         enplace = (_, b) => b / 10,
       )
-    val liftedA = summon[Composer[Tuple2, AlgLens[List]]].to(baseLens)
-    val liftedB = summon[Composer[Tuple2, AlgLens[List]]].to(baseLens)
+    val liftedA = summon[Composer[Tuple2, MultiFocus[List]]].to(baseLens)
+    val liftedB = summon[Composer[Tuple2, MultiFocus[List]]].to(baseLens)
     val composed = liftedA.andThen(liftedB)
 
     counter.set(0)
@@ -700,23 +695,23 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     counter.get === 2
   }
 
-  // ----- algFold cardinality + miss branch coverage --------------------
+  // ----- mfFold cardinality + miss branch coverage ---------------------
 
-  // covers: algFold fromLensF empty list folds to Monoid.empty, multi-element list
+  // covers: mfFold fromLensF empty list folds to Monoid.empty, multi-element list
   // sums each element exactly once, fromPrismF miss branch folds to Monoid.empty
-  "algFold cardinality+miss: fromLensF (empty/multi) and fromPrismF (hit/miss) " >> {
+  "mfFold cardinality+miss: fromLensF (empty/multi) and fromPrismF (hit/miss) " >> {
     val listLens: Optic[List[Int], List[Int], List[Int], List[Int], Tuple2] =
       Lens[List[Int], List[Int]](identity, (_, b) => b)
-    val alg = AlgLens.fromLensF(listLens)
-    val emptyOk = alg.foldMap(identity[Int])(Nil) === 0
-    val multiOk = alg.foldMap(identity[Int])(List(2, 3, 5, 7, 11)) === (2 + 3 + 5 + 7 + 11)
+    val mf = MultiFocus.fromLensF(listLens)
+    val emptyOk = mf.foldMap(identity[Int])(Nil) === 0
+    val multiOk = mf.foldMap(identity[Int])(List(2, 3, 5, 7, 11)) === (2 + 3 + 5 + 7 + 11)
 
     val p: Optic[Option[List[Int]], Option[List[Int]], List[Int], List[Int], Either] =
       Prism[Option[List[Int]], List[Int]](
         { case Some(xs) if xs.nonEmpty => Right(xs); case other => Left(other) },
         Some(_),
       )
-    val pa = AlgLens.fromPrismF(p)
+    val pa = MultiFocus.fromPrismF(p)
     val missNone = pa.foldMap(identity[Int])(None) === 0
     val missEmpty = pa.foldMap(identity[Int])(Some(Nil)) === 0
     val hit = pa.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60

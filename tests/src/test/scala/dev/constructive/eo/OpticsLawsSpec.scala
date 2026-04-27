@@ -6,7 +6,7 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Forgetful, Grate, Kaleidoscope, SetterF}
+import data.{Affine, Forget, Forgetful, Grate, MultiFocus, SetterF}
 import data.Affine.given
 import data.Forget.given
 import data.SetterF.given
@@ -431,13 +431,12 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     "ForgetfulFunctor[FixedTraversal[2]] on (Int, Int, Unit)"
   )
 
-  // AlgLens[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the
+  // MultiFocus[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the
   // `ForgetfulFunctor` / `ForgetfulTraverse` laws across a representative cross-section of
   // classifier shapes. Custom Arbitraries below mix empty / singleton / multi-element
   // payloads so `ForgetfulTraverse`'s sequencing law sees non-trivial cardinalities (the
   // Scalacheck defaults skew to short lists and under-sample the empty edge).
-  import data.AlgLens
-  import data.AlgLens.given
+  import data.MultiFocus.given
   import cats.data.Chain
 
   // Weighted generator aimed at the cardinality edges most likely to break carrier-level laws:
@@ -455,10 +454,10 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       2 -> Gen.choose(2, 8).flatMap(n => Gen.listOfN(n, Arbitrary.arbitrary[A])),
     )
 
-  private given arbAlgLensListIntInt: Arbitrary[AlgLens[List][Int, Int]] =
+  private given arbMultiFocusListIntInt: Arbitrary[MultiFocus[List][Int, Int]] =
     Arbitrary(Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map((x, _))))
 
-  private given arbAlgLensOptionIntInt: Arbitrary[AlgLens[Option][Int, Int]] =
+  private given arbMultiFocusOptionIntInt: Arbitrary[MultiFocus[Option][Int, Int]] =
     Arbitrary(
       for
         x <- Arbitrary.arbitrary[Int]
@@ -469,46 +468,46 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       yield (x, o)
     )
 
-  private given arbAlgLensVectorIntInt: Arbitrary[AlgLens[Vector][Int, Int]] =
+  private given arbMultiFocusVectorIntInt: Arbitrary[MultiFocus[Vector][Int, Int]] =
     Arbitrary(
       Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, xs.toVector)))
     )
 
-  private given arbAlgLensChainIntInt: Arbitrary[AlgLens[Chain][Int, Int]] =
+  private given arbMultiFocusChainIntInt: Arbitrary[MultiFocus[Chain][Int, Int]] =
     Arbitrary(
       Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, Chain.fromSeq(xs))))
     )
 
-  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[List]
-  checkAllForgetfulFunctorFor[AlgLens[List], Int, Int](
-    "ForgetfulFunctor[AlgLens[List]] on (Int, List[Int])"
+  // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[List]
+  checkAllForgetfulFunctorFor[MultiFocus[List], Int, Int](
+    "ForgetfulFunctor[MultiFocus[List]] on (Int, List[Int])"
   )
-  checkAllForgetfulTraverseFor[AlgLens[List], Int, Int](
-    "ForgetfulTraverse[AlgLens[List], Applicative] on (Int, List[Int])"
-  )
-
-  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[Option]
-  checkAllForgetfulFunctorFor[AlgLens[Option], Int, Int](
-    "ForgetfulFunctor[AlgLens[Option]] on (Int, Option[Int])"
-  )
-  checkAllForgetfulTraverseFor[AlgLens[Option], Int, Int](
-    "ForgetfulTraverse[AlgLens[Option], Applicative] on (Int, Option[Int])"
+  checkAllForgetfulTraverseFor[MultiFocus[List], Int, Int](
+    "ForgetfulTraverse[MultiFocus[List], Applicative] on (Int, List[Int])"
   )
 
-  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[Vector]
-  checkAllForgetfulFunctorFor[AlgLens[Vector], Int, Int](
-    "ForgetfulFunctor[AlgLens[Vector]] on (Int, Vector[Int])"
+  // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[Option]
+  checkAllForgetfulFunctorFor[MultiFocus[Option], Int, Int](
+    "ForgetfulFunctor[MultiFocus[Option]] on (Int, Option[Int])"
   )
-  checkAllForgetfulTraverseFor[AlgLens[Vector], Int, Int](
-    "ForgetfulTraverse[AlgLens[Vector], Applicative] on (Int, Vector[Int])"
+  checkAllForgetfulTraverseFor[MultiFocus[Option], Int, Int](
+    "ForgetfulTraverse[MultiFocus[Option], Applicative] on (Int, Option[Int])"
   )
 
-  // covers: ForgetfulFunctor + ForgetfulTraverse over AlgLens[Chain]
-  checkAllForgetfulFunctorFor[AlgLens[Chain], Int, Int](
-    "ForgetfulFunctor[AlgLens[Chain]] on (Int, Chain[Int])"
+  // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[Vector]
+  checkAllForgetfulFunctorFor[MultiFocus[Vector], Int, Int](
+    "ForgetfulFunctor[MultiFocus[Vector]] on (Int, Vector[Int])"
   )
-  checkAllForgetfulTraverseFor[AlgLens[Chain], Int, Int](
-    "ForgetfulTraverse[AlgLens[Chain], Applicative] on (Int, Chain[Int])"
+  checkAllForgetfulTraverseFor[MultiFocus[Vector], Int, Int](
+    "ForgetfulTraverse[MultiFocus[Vector], Applicative] on (Int, Vector[Int])"
+  )
+
+  // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[Chain]
+  checkAllForgetfulFunctorFor[MultiFocus[Chain], Int, Int](
+    "ForgetfulFunctor[MultiFocus[Chain]] on (Int, Chain[Int])"
+  )
+  checkAllForgetfulTraverseFor[MultiFocus[Chain], Int, Int](
+    "ForgetfulTraverse[MultiFocus[Chain], Applicative] on (Int, Chain[Int])"
   )
 
   // ----- ForgetfulApplicative via Optic.put ---------------------
@@ -593,52 +592,50 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .grate,
   )
 
-  // ----- Kaleidoscope: List (cartesian) + ZipList (zipping) -------
+  // ----- MultiFocus: List + ZipList + Const fixtures --------------
   //
-  // Two Applicative-distinct fixtures per plan R8 — the whole point of
-  // Kaleidoscope is that the optic's behaviour tracks the supplied
-  // Reflector's Applicative semantics. Both fixtures go through the
-  // generic `Kaleidoscope.apply[F, A]` factory (`S = F[A]`, rebuild =
-  // identity), which is the only constructor shipped in v1.
+  // Three Functor-distinct fixtures — the whole point of `MultiFocus[F]` is that the optic's
+  // behaviour tracks the supplied `Functor[F]`. All three fixtures route through the generic
+  // `MultiFocus.apply[F, A]` factory (`X = F[A]`, rebuild = identity), the only constructor at this
+  // shape.
   //
-  // Three laws each: K1 modify-identity, K2 compose-modify, K3
-  // collect-via-reflect (the Kaleidoscope-specific universal).
+  // Three laws each: MF1 modify-identity, MF2 compose-modify, MF3 collect-via-map (Functor-
+  // broadcast). The K3 cartesian-singleton statement does NOT survive as a discipline law — per
+  // the user's option (a) we ship only `collectViaMap`. The List-singleton story stays at the call
+  // site as the `collectList` extension.
 
   import cats.data.ZipList
 
-  // Arbitrary[ZipList[Int]] — constructed from an Arbitrary[List[Int]]; the same fixture pattern
-  // the R1 spikes in `ReflectorInstancesSpec` used but kept local so this file is the single
-  // source of truth for law fixtures.
+  // Arbitrary[ZipList[Int]] — constructed from an Arbitrary[List[Int]].
   private given arbZipListInt: Arbitrary[ZipList[Int]] =
     Arbitrary(Arbitrary.arbitrary[List[Int]].map(ZipList(_)))
 
-  // Cogen[ZipList[Int]] — routes through the underlying List's Cogen so scalacheck can
-  // synthesise `ZipList[Int] => Int` aggregator functions for K3.
+  // Cogen[ZipList[Int]] — routes through the underlying List's Cogen so scalacheck can synthesise
+  // `ZipList[Int] => Int` aggregator functions for MF3.
   private given cogenZipListInt: Cogen[ZipList[Int]] =
     Cogen[List[Int]].contramap(_.value)
 
-  val listKaleidoscope: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
-    Kaleidoscope.apply[List, Int]
+  val listMultiFocus: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
+    MultiFocus.apply[List, Int]
 
-  // covers: Kaleidoscope over List (cartesian Reflector)
-  checkAllKaleidoscopeFor[List[Int], Int, List](
-    "Kaleidoscope[List[Int], Int] — cartesian Reflector",
-    listKaleidoscope,
+  // covers: MultiFocus over List
+  checkAllMultiFocusFor[List[Int], Int, List](
+    "MultiFocus[List][Int] — List carrier",
+    listMultiFocus,
   )
 
-  val zipListKaleidoscope: Optic[ZipList[Int], ZipList[Int], Int, Int, Kaleidoscope] =
-    Kaleidoscope.apply[ZipList, Int]
+  val zipListMultiFocus: Optic[ZipList[Int], ZipList[Int], Int, Int, MultiFocus[ZipList]] =
+    MultiFocus.apply[ZipList, Int]
 
-  // covers: Kaleidoscope over ZipList (zipping Reflector)
-  checkAllKaleidoscopeFor[ZipList[Int], Int, ZipList](
-    "Kaleidoscope[ZipList[Int], Int] — zipping Reflector",
-    zipListKaleidoscope,
+  // covers: MultiFocus over ZipList (length-preserving Functor.map)
+  checkAllMultiFocusFor[ZipList[Int], Int, ZipList](
+    "MultiFocus[ZipList][Int] — ZipList carrier",
+    zipListMultiFocus,
   )
 
   // Const[Int, *] summation fixture — the third "aggregation shape" (summation). Lands as a plain
-  // bonus fixture per plan R8's stretch goal. `Const[Int, Int]`'s `A` slot is phantom, so the K3
-  // law reduces to a retag witness (the aggregator is applied once, but the monoid value doesn't
-  // change). Scalacheck Arbitraries for Const are hand-rolled.
+  // bonus fixture. `Const[Int, Int]`'s `A` slot is phantom, so MF3 reduces to a retag witness.
+  // Scalacheck Arbitraries for Const are hand-rolled.
   import cats.data.Const
 
   private given arbConstIntInt: Arbitrary[Const[Int, Int]] =
@@ -647,11 +644,12 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   private given cogenConstIntInt: Cogen[Const[Int, Int]] =
     Cogen[Int].contramap(_.getConst)
 
-  val constKaleidoscope: Optic[Const[Int, Int], Const[Int, Int], Int, Int, Kaleidoscope] =
-    Kaleidoscope.apply[Const[Int, *], Int]
+  val constMultiFocus
+      : Optic[Const[Int, Int], Const[Int, Int], Int, Int, MultiFocus[Const[Int, *]]] =
+    MultiFocus.apply[Const[Int, *], Int]
 
-  // covers: Kaleidoscope over Const (summation Reflector)
-  checkAllKaleidoscopeFor[Const[Int, Int], Int, Const[Int, *]](
-    "Kaleidoscope[Const[Int, Int], Int] — summation Reflector",
-    constKaleidoscope,
+  // covers: MultiFocus over Const (phantom retag)
+  checkAllMultiFocusFor[Const[Int, Int], Int, Const[Int, *]](
+    "MultiFocus[Const[Int, *]][Int] — Const carrier",
+    constMultiFocus,
   )

@@ -66,9 +66,8 @@ this optic have?"
 | `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`, `Traversal`    |
 | `PowerSeries`   | `(Snd[X], PSVec[A])`                           | Composable `Traversal` |
 | `FixedTraversal[N]` | Fixed-length tuple of `A`s                  | `Traversal.{two,three,four}` |
-| `AlgLens[F]`    | `(X, F[A])` — classifier-shaped: pair leftover with an `F`-wrapped focus vector | Algebraic Lens (non-uniform classifier cardinality) |
+| `MultiFocus[F]` | `(X, F[A])` — classifier-shaped: pair leftover with an `F`-wrapped focus vector | `MultiFocus[F]` (algebraic-lens + Kaleidoscope-style aggregation; `.collectMap` / `.collectList` universals) |
 | `Grate`         | `(A, X => A)` — focus + per-slot rebuild     | `Grate` (distributive / Naperian optics) |
-| `Kaleidoscope`  | `(F[A], F[A] => X)` with `F: Reflector`       | `Kaleidoscope` (Applicative-parameterised aggregation: ZipList zip, List cartesian, Const summation) |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:
@@ -172,34 +171,36 @@ lifting both sides into `Affine`, which both carriers reach.
 Every edge below is a shipping `Composer[F, G]` given; solid
 arrows are tier-1 atomic bridges, dashed arrows are tier-2
 transitive derivations via `Composer.chainViaTuple2`. Terminal
-nodes (`SetterF`, `AlgLens[F]`, `Kaleidoscope`, `Grate`,
-`PowerSeries`, `FixedTraversal[N]`) sink — they have no
-outbound `Composer` instance — so chains must land there last.
+nodes (`SetterF`, `MultiFocus[F]`, `Grate`, `PowerSeries`,
+`FixedTraversal[N]`) sink — they have no outbound `Composer`
+instance other than to `SetterF` — so chains must land there
+last.
 
 ```mermaid
 flowchart LR
   Forgetful --> Tuple2
   Forgetful --> Either
   Forgetful --> Grate
-  Forgetful --> Kaleidoscope
+  Forgetful --> MFocus["MultiFocus[F]"]
   Tuple2 --> Affine
   Tuple2 --> SetterF
   Tuple2 --> PowerSeries
-  Tuple2 --> AlgLensF["AlgLens[F]"]
+  Tuple2 --> MFocus
   Either --> Affine
   Either --> PowerSeries
-  Either --> AlgLensF
+  Either --> MFocus
   Affine --> PowerSeries
-  Affine --> AlgLensF
-  ForgetF["Forget[F]"] --> AlgLensF
+  Affine --> MFocus
+  ForgetF["Forget[F]"] --> MFocus
+  Grate --> SetterF
+  MFocus --> SetterF
   Forgetful -.->|chainViaTuple2| Affine
   Forgetful -.->|chainViaTuple2| SetterF
   Forgetful -.->|chainViaTuple2| PowerSeries
-  Forgetful -.->|chainViaTuple2| AlgLensF
+  Forgetful -.->|chainViaTuple2| MFocus
   FixedN["FixedTraversal[N]"]
   SetterF:::sink
-  AlgLensF:::sink
-  Kaleidoscope:::sink
+  MFocus:::sink
   Grate:::sink
   PowerSeries:::sink
   FixedN:::sink
@@ -209,7 +210,7 @@ flowchart LR
 `FixedTraversal[N]` is drawn standalone: it has neither
 inbound nor outbound `Composer`, and no `AssociativeFunctor`
 either — it's a pure leaf carrier. `Forget[F]` has one outbound
-bridge (`→ AlgLens[F]`) but no inbound, so chains reach it only
+bridge (`→ MultiFocus[F]`) but no inbound, so chains reach it only
 via `Traversal.forEach` at construction time.
 
 ## Why the existential machinery is worth it

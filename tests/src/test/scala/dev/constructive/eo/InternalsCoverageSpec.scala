@@ -1,6 +1,5 @@
 package dev.constructive.eo
 
-import cats.data.{Const, ZipList}
 import org.specs2.mutable.Specification
 
 import data.{IntArrBuilder, ObjArrBuilder, PSVec}
@@ -17,7 +16,12 @@ import data.{IntArrBuilder, ObjArrBuilder, PSVec}
   *   - IntArrBuilder: 4 specs collapsed into one (append+freeze, grow, freeze-copies,
   *     initialCapacity=0).
   *   - ObjArrBuilder: 3 specs collapsed into one.
-  *   - Reflector instances: 3 specs already one-per-instance (kept).
+  *
+  * '''2026-04-28 MultiFocus migration.''' The three Reflector-instance blocks (List / ZipList /
+  * Const) were dropped — `Reflector` is deleted and `MultiFocus[F]` derives its `.collect` variants
+  * directly from `Functor[F]` (broadcast) or per-instance `collectList` (cartesian singleton on
+  * List). The carrier-level surface is exercised by the `MultiFocusSpec` PoC and the
+  * discipline-laws blocks in `OpticsLawsSpec`.
   */
 class InternalsCoverageSpec extends Specification:
 
@@ -175,40 +179,4 @@ class InternalsCoverageSpec extends Specification:
     val partialOk = (out.length === 1).and(out(0) === "x")
 
     exactOk.and(growOk).and(partialOk)
-  }
-
-  // ---- Reflector instance surface --------------------------------------
-
-  "Reflector[List]: pure / ap / map / product / reflect delegate through cats" >> {
-    val R = Reflector.forList
-    (R.pure(1) === List(1))
-      .and(R.ap(List((_: Int) + 1, (_: Int) * 10))(List(1, 2)) === List(2, 3, 10, 20))
-      .and(R.map(List(1, 2, 3))(_ + 1) === List(2, 3, 4))
-      .and(
-        R.product(List(1, 2), List("a", "b")) ===
-          List((1, "a"), (1, "b"), (2, "a"), (2, "b"))
-      )
-      .and(R.reflect(List(1, 2, 3))(_.sum) === List(6))
-  }
-
-  "Reflector[ZipList]: ap zips, map zips, reflect length-aware broadcasts" >> {
-    val R = Reflector.forZipList
-    (R.ap(ZipList(List((_: Int) * 2, (_: Int) + 10)))(ZipList(List(3, 5))).value === List(6, 15))
-      .and(R.map(ZipList(List(1, 2, 3)))(_ * 10).value === List(10, 20, 30))
-      .and(
-        R.product(ZipList(List(1, 2)), ZipList(List("a", "b"))).value === List((1, "a"), (2, "b"))
-      )
-      .and(
-        R.reflect(ZipList(List(1.0, 2.0, 3.0)))(zl => zl.value.sum / zl.value.size.toDouble)
-          .value === List(2.0, 2.0, 2.0)
-      )
-  }
-
-  "Reflector[Const[Int, *]]: ap / map / product / reflect delegate through cats Const" >> {
-    val R = Reflector.forConst[Int]
-    (R.pure(42).getConst === 0)
-      .and(R.ap(Const[Int, Int => Int](5))(Const[Int, Int](3)).getConst === 8)
-      .and(R.map(Const[Int, String](7))(_.length).getConst === 7)
-      .and(R.product(Const[Int, String](2), Const[Int, Int](3)).getConst === 5)
-      .and(R.reflect[String, Int](Const[Int, String](99))(_ => 0).getConst === 99)
   }

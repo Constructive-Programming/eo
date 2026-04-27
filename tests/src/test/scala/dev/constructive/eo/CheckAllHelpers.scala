@@ -7,10 +7,10 @@ import org.specs2.specification.core.Fragment
 import org.typelevel.discipline.specs2.mutable.Discipline
 
 import data.{FixedTraversal, Forget}
-import laws.{FoldLaws, KaleidoscopeLaws, TraversalLaws}
+import laws.{FoldLaws, MultiFocusLaws, TraversalLaws}
 import laws.data.FixedTraversalLaws
 import laws.data.discipline.FixedTraversalTests
-import laws.discipline.{FoldTests, KaleidoscopeTests, TraversalTests}
+import laws.discipline.{FoldTests, MultiFocusTests, TraversalTests}
 import laws.eo.{FoldMapHomomorphismLaws, MorphLaws}
 import laws.eo.discipline.{FoldMapHomomorphismTests, MorphTests}
 import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
@@ -61,16 +61,16 @@ trait CheckAllHelpers extends Discipline:
       .forgetfulTraverse,
     )
 
-  // ===== Kaleidoscope over a Reflector-bearing F =====
+  // ===== MultiFocus over a Functor-bearing F =====
 
-  /** Runs `KaleidoscopeTests` for an optic at carrier `Kaleidoscope` and Reflector `F`. The `=:='`
-    * evidence is what `KaleidoscopeTests.kaleidoscope` needs to thread `F[A]` through `K3`.
+  /** Runs `MultiFocusTests` for an optic at carrier `MultiFocus[F]` and Functor `F`. The `=:='`
+    * evidence is what `MultiFocusTests.multiFocus` needs to thread `F[A]` through `MF3`.
     */
-  def checkAllKaleidoscopeFor[S, A, F[_]](
+  def checkAllMultiFocusFor[S, A, F[_]](
       name: String,
-      kOptic: Optic[S, S, A, A, data.Kaleidoscope],
+      mfOptic: Optic[S, S, A, A, data.MultiFocus[F]],
   )(using
-      Reflector[F],
+      Functor[F],
       Arbitrary[S],
       Arbitrary[A],
       Cogen[A],
@@ -79,11 +79,11 @@ trait CheckAllHelpers extends Discipline:
   ): Fragment =
     checkAll(
       name,
-      new KaleidoscopeTests[S, A, F]:
-        val laws = new KaleidoscopeLaws[S, A, F]:
-          val kaleidoscope = kOptic
-          val reflector = summon[Reflector[F]]
-      .kaleidoscope,
+      new MultiFocusTests[S, A, F]:
+        val laws = new MultiFocusLaws[S, A, F]:
+          val multiFocus = mfOptic
+          val functor = summon[Functor[F]]
+      .multiFocus,
     )
 
   // ===== Fold / FoldMapHomomorphism over a `Forget[F]`-style carrier =====

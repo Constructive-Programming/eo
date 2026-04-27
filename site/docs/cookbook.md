@@ -503,17 +503,22 @@ separately in
 
 ## Theme E — Algebraic / classifier
 
-### AlgLens vignette — partition + z-shift
+### MultiFocus — partition + z-shift + column-wise aggregation
 
-Two patterns that need the whole `F[A]` visible, not just a
-single `A`: (a) split a list by its own mean, and (b) shift
-each row's score by the dataset-wide mean. Both are algebraic —
-the update function inspects the full classifier to decide what
-to do with each element:
+Three patterns that need the whole `F[A]` visible, not just a
+single `A`. `MultiFocus[F]` is the unified successor of the v1
+`AlgLens[F]` (algebraic-lens) and `Kaleidoscope` families — the
+two collapsed pre-0.1.0 because their value shape `(X, F[A])` was
+identical and `F`-as-parameter is the cleaner encoding.
+
+**(a) z-shift — algebraic-lens flavour.** Subtract each row's
+score by the dataset-wide mean; the closure inspects the full
+list to decide what to do with each element:
 
 ```scala mdoc:silent
-import dev.constructive.eo.data.AlgLens
-import dev.constructive.eo.data.AlgLens.given
+import dev.constructive.eo.data.MultiFocus
+import dev.constructive.eo.data.MultiFocus.given
+import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 
 case class Row(id: Int, score: Double)
 
@@ -522,78 +527,69 @@ case class Row(id: Int, score: Double)
 val rowsL =
   Lens[List[Row], List[Row]](identity, (_, rs) => rs)
 
-// Lift the Lens into AlgLens[List] so the inner focus is a single
+// Lift the Lens into MultiFocus[List] so the inner focus is a single
 // Row but the modify function sees the whole list.
-val rowsAlg = AlgLens.fromLensF[List, List[Row], List[Row], Row, Row](rowsL)
+val rowsMF = MultiFocus.fromLensF[List, List[Row], List[Row], Row, Row](rowsL)
 ```
 
 ```scala mdoc
 val rows = List(Row(1, 10.0), Row(2, 20.0), Row(3, 30.0))
 
 // z-shift: each row's score minus the column-wide mean.
-rowsAlg.modify { r =>
+rowsMF.modify { r =>
   // The closure fires per-element; to read the whole list we reach
-  // back through the original data. In an AlgLens-aware helper
+  // back through the original data. In a MultiFocus-aware helper
   // method (modifyWithAggregate — future work) the aggregator
   // would be passed in explicitly.
   val mean = rows.map(_.score).sum / rows.length
   r.copy(score = r.score - mean)
 }(rows)
 
-// Partition: return only the rows at or above the mean. AlgLens
+// Partition: return only the rows at or above the mean. MultiFocus
 // accepts rebuild with a different cardinality than the source
 // when F is MonoidK-friendly (List is).
-rowsAlg.modifyA[List] { r =>
+rowsMF.modifyA[List] { r =>
   val mean = rows.map(_.score).sum / rows.length
   if r.score >= mean then List(r) else Nil
 }(rows)
 ```
 
-The shipping surface is `.modify` + a closure that reaches back
-to the full list; the `modifyWithAggregate` / `.classify`
-conveniences sketched in Penner's blog post are tracked for a
-follow-up release. The family rationale — and why `AlgLens[F]`
-is a composition *sink* — lives in
-[Optics → AlgLens](optics.md#alglens).
-
-**Source:** Penner — *Algebraic lenses*,
-<https://chrispenner.ca/posts/algebraic>.
-
-### Kaleidoscope column-wise aggregation
-
-A `Kaleidoscope[F, A]` reduces the entire `F[A]` focus to a
-single `B` via an aggregator, broadcasts it back through the
-`Reflector[F]`, and returns the rebuilt structure. The
-behaviour depends on *which* Reflector you plug in — List gives
-cartesian (singleton) broadcast, ZipList gives column-zip,
-Const gives monoidal summation:
+**(b) Column-wise aggregation — Kaleidoscope flavour.** The
+`.collectMap` and `.collectList` extensions reduce the entire
+`F[A]` focus to a single value and broadcast it back. The
+behaviour tracks the `Functor[F]` (length-preserving via
+`collectMap`) or stays cartesian (`MultiFocus[List].collectList`):
 
 ```scala mdoc:silent
 import cats.data.ZipList
-import dev.constructive.eo.data.Kaleidoscope
 
-val zipK = Kaleidoscope.apply[ZipList, Double]
-val listK = Kaleidoscope.apply[List, Int]
+val zipMF = MultiFocus.apply[ZipList, Double]
+val listMF = MultiFocus.apply[List, Int]
 ```
 
 ```scala mdoc
 // Column-wise mean: the aggregator sees the whole ZipList, returns
-// the mean, Reflector[ZipList] broadcasts it back.
-zipK.collect[ZipList, Double](zl => zl.value.sum / zl.value.size.toDouble)(
+// the mean, Functor[ZipList].map broadcasts it back across positions.
+zipMF.collectMap[Double](zl => zl.value.sum / zl.value.size.toDouble)(
   ZipList(List(1.0, 2.0, 3.0, 4.0))
 )
 
-// Cartesian: Reflector[List] wraps the result in a singleton.
-listK.collect[List, Int](_.sum)(List(1, 2, 3, 4))
+// Cartesian-singleton: collectList wraps the result in a one-element list.
+listMF.collectList(_.sum)(List(1, 2, 3, 4))
+
+// Length-preserving: collectMap broadcasts the sum back across every position.
+listMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
 ```
 
-The same optic value at every call site; the semantics track
-whichever `Reflector` you plug in. See
-[Optics → Kaleidoscope](optics.md#kaleidoscope) for the full
-table of Reflector instances and the "when to reach for
-Kaleidoscope vs. Grate vs. Traversal" decision note.
+The same optic value works for every aggregation shape; the
+semantics track whichever `Functor[F]` you plug in. See
+[Optics → MultiFocus](optics.md#multifocus) for the constructor
+table and the "when to reach for MultiFocus vs. Grate vs.
+Traversal" decision note.
 
-**Source:** Penner — *Intro to Kaleidoscopes*,
+**Sources:** Penner — *Algebraic lenses*,
+<https://chrispenner.ca/posts/algebraic>; Penner —
+*Kaleidoscopes: lenses that never die*,
 <https://chrispenner.ca/posts/kaleidoscopes>.
 
 ## Theme F — Write-only / read-only escape

@@ -7,12 +7,12 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, FixedTraversal, Forget, Forgetful, Grate, Kaleidoscope, SetterF}
+import data.{Affine, FixedTraversal, Forget, Forgetful, Grate, MultiFocus, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
 import data.Grate.given
-import data.Kaleidoscope.given
+import data.MultiFocus.given
 import data.SetterF.given
 import data.FixedTraversal.given
 import laws.eo.{
@@ -99,21 +99,21 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     tuple2GrateForMorph.morph[SetterF],
   )
 
-  // covers: Morph from Kaleidoscope → SetterF on a List-shaped Kaleidoscope.
+  // covers: Morph from MultiFocus[List] → SetterF on a List-shaped MultiFocus.
   //
-  // The new `Composer[Kaleidoscope, SetterF]` (`kaleidoscope2setter`, Kaleidoscope.scala) widens
-  // any Kaleidoscope-carrier optic to the Setter API. The MorphLaws.A1 check pins down that the
-  // lifted SetterF's `.modify(f)(s)` produces the same `T` as the original Kaleidoscope's
-  // `.modify(f)(s)` via `kalFunctor` — the whole structural soundness of the bridge in one law.
-  // List is Kaleidoscope's cartesian-Reflector instance; the law covers the path `o.to(s) →
-  // kalFunctor.map(_, f) → o.from(_)` end-to-end.
-  val listKaleidoscopeForMorph: Optic[List[Int], List[Int], Int, Int, Kaleidoscope] =
-    Kaleidoscope.apply[List, Int]
+  // The `Composer[MultiFocus[F], SetterF]` (`multifocus2setter`, MultiFocus.scala) widens any
+  // MultiFocus-carrier optic to the Setter API. The MorphLaws.A1 check pins down that the lifted
+  // SetterF's `.modify(f)(s)` produces the same `T` as the original MultiFocus's `.modify(f)(s)`
+  // via `mfFunctor` — the whole structural soundness of the bridge in one law. List is the
+  // canonical multi-focus instance; the law covers the path `o.to(s) → mfFunctor.map(_, f) →
+  // o.from(_)` end-to-end.
+  val listMultiFocusForMorph: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
+    MultiFocus.apply[List, Int]
 
-  checkAllMorphPreservesModifyFor[List[Int], Int, Kaleidoscope, SetterF](
-    "Kaleidoscope.apply[List,Int].morph[SetterF] preserves modify (I1)",
-    listKaleidoscopeForMorph,
-    listKaleidoscopeForMorph.morph[SetterF],
+  checkAllMorphPreservesModifyFor[List[Int], Int, MultiFocus[List], SetterF](
+    "MultiFocus.apply[List,Int].morph[SetterF] preserves modify (I1)",
+    listMultiFocusForMorph,
+    listMultiFocusForMorph.morph[SetterF],
   )
 
   // =============== B1 — Iso reverse involution =====================
