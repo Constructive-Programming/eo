@@ -73,6 +73,7 @@
     <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
+    <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
     <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
     <li class="level1 active nav-leaf"><a href="#">Cookbook</a></li>
     <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
@@ -119,6 +120,8 @@
     <li class="level2 nav-leaf"><a href="#partial-success-array-walk-ior-both">Partial-success array walk — <code>Ior.Both</code></a></li>
     <li class="level2 nav-leaf"><a href="#parse-error-surface-json-string-input">Parse-error surface — <code>Json | String</code> input</a></li>
     <li class="level2 nav-leaf"><a href="#classify-failures-why-did-the-edit-no-op">Classify failures — <em>why</em> did the edit no-op?</a></li>
+    <li class="level1 nav-node"><a href="#theme-j-streaming-kafka">Theme J — Streaming / Kafka</a></li>
+    <li class="level2 nav-leaf"><a href="#kafka-payload-edit">Kafka payload edit</a></li>
     <li class="level1 nav-leaf"><a href="#further-reading">Further reading</a></li>
   </ul>
 
@@ -448,7 +451,7 @@
 //   )
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">everyItemName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
-</span><span class="comment">// everyItemName: JsonTraversal[String] = dev.constructive.eo.circe.JsonTraversal@6b6b5f8
+</span><span class="comment">// everyItemName: JsonTraversal[String] = dev.constructive.eo.circe.JsonTraversal@25a8c9c2
 </span><span>
 </span><span class="identifier">everyItemName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basket</span><span>.</span><span class="identifier">asJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res15: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;APPLE\&quot;,\&quot;price\&quot;:1.0},{\&quot;name\&quot;:\&quot;PEAR\&quot;,\&quot;price\&quot;:2.0}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
@@ -1053,6 +1056,116 @@
         service boundaries.</p>
         <p><strong>Source:</strong> cats-eo internal.</p>
         
+        <h2 id="theme-j-streaming-kafka" class="section"><a class="anchor-link left" href="#theme-j-streaming-kafka"><i class="icofont-laika link">&#xef71;</i></a>Theme J — Streaming / Kafka</h2>
+        
+        <h3 id="kafka-payload-edit" class="section"><a class="anchor-link left" href="#kafka-payload-edit"><i class="icofont-laika link">&#xef71;</i></a>Kafka payload edit</h3>
+        <p>Most Kafka consumers receive <code>Array[Byte]</code> payloads, want to
+        modify a single field, and re-emit binary on the producer side.
+        The <code>AvroPrism</code> triple-input surface accepts <code>Array[Byte]</code>
+        directly, parses it through apache-avro&#39;s <code>BinaryDecoder</code> under
+        the cached reader schema, and threads the modify back through
+        without ever materialising the full case-class tree:</p>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">avro</span><span> </span><span class="keyword">as</span><span> </span><span class="identifier">eoavro</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">avro</span><span>.</span><span class="type-name">AvroCodec</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">hearth</span><span>.</span><span class="identifier">kindlings</span><span>.</span><span class="identifier">avroderivation</span><span>.{</span><span class="type-name">AvroDecoder</span><span>, </span><span class="type-name">AvroEncoder</span><span>, </span><span class="type-name">AvroSchemaFor</span><span>}
+</span><span class="keyword">import</span><span> </span><span class="identifier">java</span><span>.</span><span class="identifier">io</span><span>.</span><span class="type-name">ByteArrayOutputStream</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">org</span><span>.</span><span class="identifier">apache</span><span>.</span><span class="identifier">avro</span><span>.</span><span class="identifier">generic</span><span>.{</span><span class="type-name">GenericDatumWriter</span><span>, </span><span class="type-name">GenericRecord</span><span>, </span><span class="type-name">IndexedRecord</span><span>}
+</span><span class="keyword">import</span><span> </span><span class="identifier">org</span><span>.</span><span class="identifier">apache</span><span>.</span><span class="identifier">avro</span><span>.</span><span class="identifier">io</span><span>.</span><span class="type-name">EncoderFactory</span><span>
+
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">OrderEvent</span><span>(</span><span class="identifier">orderId</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">customer</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">total</span><span>: </span><span class="type-name">Double</span><span>)
+</span><span class="keyword">object</span><span> </span><span class="type-name">OrderEvent</span><span>:
+  </span><span class="keyword">given</span><span> </span><span class="type-name">AvroEncoder</span><span>[</span><span class="type-name">OrderEvent</span><span>] = </span><span class="type-name">AvroEncoder</span><span>.</span><span class="identifier">derived</span><span>
+  </span><span class="keyword">given</span><span> </span><span class="type-name">AvroDecoder</span><span>[</span><span class="type-name">OrderEvent</span><span>] = </span><span class="type-name">AvroDecoder</span><span>.</span><span class="identifier">derived</span><span>
+  </span><span class="keyword">given</span><span> </span><span class="type-name">AvroSchemaFor</span><span>[</span><span class="type-name">OrderEvent</span><span>] = </span><span class="type-name">AvroSchemaFor</span><span>.</span><span class="identifier">derived</span><span>
+
+</span><span class="comment">// Stand-in for an inbound Kafka record: serialise an OrderEvent to
+// binary under the same schema the prism caches.
+</span><span class="keyword">val</span><span> </span><span class="identifier">outSchema</span><span> = </span><span class="identifier">summon</span><span>[</span><span class="type-name">AvroCodec</span><span>[</span><span class="type-name">OrderEvent</span><span>]].</span><span class="identifier">schema</span><span>
+</span><span class="keyword">val</span><span> </span><span class="identifier">sample</span><span> = </span><span class="type-name">OrderEvent</span><span>(</span><span class="string-literal">&quot;ord-42&quot;</span><span>, </span><span class="string-literal">&quot;alice&quot;</span><span>, </span><span class="number-literal">99.99</span><span>)
+</span><span class="keyword">val</span><span> </span><span class="identifier">sampleBytes</span><span>: </span><span class="type-name">Array</span><span>[</span><span class="type-name">Byte</span><span>] =
+  </span><span class="keyword">val</span><span> </span><span class="identifier">rec</span><span> = </span><span class="identifier">summon</span><span>[</span><span class="type-name">AvroCodec</span><span>[</span><span class="type-name">OrderEvent</span><span>]].</span><span class="identifier">encode</span><span>(</span><span class="identifier">sample</span><span>).</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>]
+  </span><span class="keyword">val</span><span> </span><span class="identifier">out</span><span> = </span><span class="keyword">new</span><span> </span><span class="type-name">ByteArrayOutputStream</span><span>()
+  </span><span class="keyword">val</span><span> </span><span class="identifier">encoder</span><span> = </span><span class="type-name">EncoderFactory</span><span>.</span><span class="identifier">get</span><span>().</span><span class="identifier">binaryEncoder</span><span>(</span><span class="identifier">out</span><span>, </span><span class="literal-value">null</span><span>)
+  </span><span class="keyword">val</span><span> </span><span class="identifier">writer</span><span> = </span><span class="keyword">new</span><span> </span><span class="type-name">GenericDatumWriter</span><span>[</span><span class="type-name">GenericRecord</span><span>](</span><span class="identifier">outSchema</span><span>)
+  </span><span class="identifier">writer</span><span>.</span><span class="identifier">write</span><span>(</span><span class="identifier">rec</span><span>, </span><span class="identifier">encoder</span><span>)
+  </span><span class="identifier">encoder</span><span>.</span><span class="identifier">flush</span><span>()
+  </span><span class="identifier">out</span><span>.</span><span class="identifier">toByteArray</span><span>
+
+</span><span class="comment">// The optic: walk into `customer` once at construction time,
+// reuse on every inbound record. Disambiguate the Avro
+// `codecPrism` from the circe one imported earlier in this page
+// by qualifying through the `eoavro` alias.
+</span><span class="keyword">val</span><span> </span><span class="identifier">upperCustomer</span><span> = </span><span class="identifier">eoavro</span><span>.</span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">OrderEvent</span><span>].</span><span class="identifier">customer</span><span>
+
+</span><span class="comment">// Re-serialise the modified IndexedRecord back to binary for the
+// producer side. In a real consumer this lives in your sink.
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">toBinary</span><span>(</span><span class="identifier">rec</span><span>: </span><span class="type-name">IndexedRecord</span><span>): </span><span class="type-name">Array</span><span>[</span><span class="type-name">Byte</span><span>] =
+  </span><span class="keyword">val</span><span> </span><span class="identifier">out</span><span> = </span><span class="keyword">new</span><span> </span><span class="type-name">ByteArrayOutputStream</span><span>()
+  </span><span class="keyword">val</span><span> </span><span class="identifier">encoder</span><span> = </span><span class="type-name">EncoderFactory</span><span>.</span><span class="identifier">get</span><span>().</span><span class="identifier">binaryEncoder</span><span>(</span><span class="identifier">out</span><span>, </span><span class="literal-value">null</span><span>)
+  </span><span class="keyword">val</span><span> </span><span class="identifier">writer</span><span> = </span><span class="keyword">new</span><span> </span><span class="type-name">GenericDatumWriter</span><span>[</span><span class="type-name">GenericRecord</span><span>](</span><span class="identifier">rec</span><span>.</span><span class="identifier">getSchema</span><span>)
+  </span><span class="identifier">writer</span><span>.</span><span class="identifier">write</span><span>(</span><span class="identifier">rec</span><span>.</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>], </span><span class="identifier">encoder</span><span>)
+  </span><span class="identifier">encoder</span><span>.</span><span class="identifier">flush</span><span>()
+  </span><span class="identifier">out</span><span>.</span><span class="identifier">toByteArray</span></code></pre>
+        <pre><code class="nohighlight"><span class="comment">// Kafka hot path: bytes in → modify in place → bytes out.
+</span><span class="keyword">val</span><span> </span><span class="identifier">outBytes</span><span>: </span><span class="type-name">Array</span><span>[</span><span class="type-name">Byte</span><span>] =
+  </span><span class="identifier">toBinary</span><span>(</span><span class="identifier">upperCustomer</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">sampleBytes</span><span>))
+</span><span class="comment">// outBytes: Array[Byte] = Array(
+//   12,
+//   111,
+//   114,
+//   100,
+//   45,
+//   52,
+//   50,
+//   10,
+//   65,
+//   76,
+//   73,
+//   67,
+//   69,
+//   -113,
+//   -62,
+//   -11,
+//   40,
+//   92,
+//   -1,
+//   88,
+//   64
+// )
+</span><span>
+</span><span class="comment">// Round-trip witness — decode the output to confirm the customer
+// field changed and the rest is preserved.
+</span><span class="keyword">val</span><span> </span><span class="identifier">outRec</span><span> = </span><span class="identifier">upperCustomer</span><span>
+  .</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">sampleBytes</span><span>)
+  .</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>]
+</span><span class="comment">// outRec: GenericRecord = {&quot;orderId&quot;: &quot;ord-42&quot;, &quot;customer&quot;: &quot;ALICE&quot;, &quot;total&quot;: 99.99}
+</span><span>(</span><span class="identifier">outRec</span><span>.</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;customer&quot;</span><span>).</span><span class="identifier">toString</span><span>,
+ </span><span class="identifier">outRec</span><span>.</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;orderId&quot;</span><span>).</span><span class="identifier">toString</span><span>,
+ </span><span class="identifier">outRec</span><span>.</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;total&quot;</span><span>))
+</span><span class="comment">// res36: Tuple3[String, String, Object] = (&quot;ALICE&quot;, &quot;ord-42&quot;, 99.99)</span></code></pre>
+        <p><code>modifyUnsafe</code> is the silent-pass-through variant — bad bytes,
+        missing fields, or decode mismatches leave the input bytes
+        unmodified rather than allocating an <code>Ior</code> chain. That matches
+        the Kafka consumer budget: at-least-once delivery already
+        implies the consumer must be tolerant of malformed payloads at
+        the offset commit boundary, and the per-record allocation cost
+        of <code>Ior</code> is a tax on the happy path. When you DO want the
+        diagnostic — for a dead-letter queue, say — the default
+        <code>.modify(...)</code> call returns
+        <code>Ior[Chain[AvroFailure], IndexedRecord]</code> for the exact same
+        fixture; route on the <code>Ior.Both</code> / <code>Ior.Left</code> shape from there.</p>
+        <p>The cached reader schema is the load-bearing piece: a single
+        <code>codecPrism[OrderEvent]</code> value pins the schema once, and the
+        parser reuses it across millions of inbound records. For the
+        schema-registry case where the reader schema arrives at
+        runtime, use the explicit-schema overload —
+        <code>AvroPrism.codecPrism[OrderEvent](runtimeSchema)</code> — to bypass
+        the kindlings-derived schema entirely.</p>
+        <p><strong>Source:</strong> cats-eo internal (<code>AvroPrism</code>&#39;s triple-input
+        surface, Unit 10). Background framing on the streaming /
+        Kafka use case lives in the
+        <a href="avro.html#why-this-exists">Avro integration intro</a>.</p>
+        
         <h2 id="further-reading" class="section"><a class="anchor-link left" href="#further-reading"><i class="icofont-laika link">&#xef71;</i></a>Further reading</h2>
         <ul>
           <li><a href="concepts.html">Concepts</a> — the theory behind the unified Optic
@@ -1067,6 +1180,9 @@
           <li><a href="circe.html">Circe integration</a> — cursor-backed JSON optics;
           <a href="circe.html#failure-flow">failure flow</a> for the Ior decision
           tree.</li>
+          <li><a href="avro.html">Avro integration</a> — cursor-backed Avro optics;
+          <a href="avro.html#failure-flow">failure flow</a> for the schema-driven
+          Ior decision tree.</li>
           <li><a href="migration-from-monocle.html">Migrating from Monocle</a> —
           side-by-side translation guide.</li>
         </ul>

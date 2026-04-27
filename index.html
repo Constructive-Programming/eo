@@ -73,6 +73,7 @@
     <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
+    <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
     <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
     <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
     <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
@@ -158,6 +159,9 @@
           <code>prism[S, A]</code> macros, backed by Hearth.</li>
           <li><a href="circe.html">Circe integration</a> — <code>JsonPrism</code> / <code>JsonTraversal</code>,
           cursor-backed navigation into circe <code>Json</code> with no full decode.</li>
+          <li><a href="avro.html">Avro integration</a> — <code>AvroPrism</code> / <code>AvroTraversal</code>,
+          cursor-backed navigation into Apache Avro <code>IndexedRecord</code> with no
+          full decode; binary + JSON wire-format input dual.</li>
           <li><a href="extensibility.html">Extensibility</a> — how to ship a custom optic
           tuned for your domain&#39;s hot path without losing the rest of the
           cats-eo universe.</li>
