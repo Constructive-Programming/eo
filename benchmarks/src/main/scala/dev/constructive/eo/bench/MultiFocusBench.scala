@@ -187,6 +187,50 @@ class MultiFocusBench extends JmhDefaults:
       sextupleData._6 * 2.0,
     )
 
+  // ----- Absorbed PowerSeries fixtures: Lens → Traversal.each → Lens -----
+  //
+  // After the powerseries-fold spike, `Traversal.each` returns
+  // `Optic[..., MultiFocus[PSVec]]` directly. The `MultiFocus[PSVec]`
+  // path is exercised here at the same shape `PowerSeriesBench` covers
+  // — `Person → phones (List) → each → Phone → isMobile (Bool)`.
+
+  import dev.constructive.eo.data.PSVec
+  import scala.collection.immutable.ArraySeq
+  import cats.instances.arraySeq.given
+
+  // Reuses the class-level `size` @Param from above (4 / 32 / 256 / 1024).
+
+  case class PsPhone(isMobile: Boolean, number: String)
+  case class PsPerson(name: String, phones: ArraySeq[PsPhone])
+
+  var psPerson: PsPerson = uninitialized
+
+  // Lens → Traversal.each → Lens chain — identical shape to legacy
+  // PowerSeriesBench.eoModify_powerEach but built against the post-fold
+  // MultiFocus[PSVec] carrier. The cross-carrier `.andThen` summons
+  // `Composer[Tuple2, MultiFocus[PSVec]]` (`tuple2psvec`) for the lens
+  // hops; the Traversal hop is same-carrier under `mfAssocPSVec`.
+  private val psPersonAllMobiles
+      : dev.constructive.eo.optics.Optic[PsPerson, PsPerson, Boolean, Boolean, MultiFocus[PSVec]] =
+    EoLens[PsPerson, ArraySeq[PsPhone]](_.phones, (s, b) => s.copy(phones = b))
+      .andThen(EoTraversal.each[ArraySeq, PsPhone])
+      .andThen(EoLens[PsPhone, Boolean](_.isMobile, (s, b) => s.copy(isMobile = b)))
+
+  @Setup(Level.Iteration)
+  def initPS(): Unit =
+    psPerson = PsPerson(
+      "Alice",
+      ArraySeq.tabulate(size)(i => PsPhone(isMobile = i % 2 == 0, s"n-$i")),
+    )
+
+  @Benchmark def eoModify_psVecEach: PsPerson =
+    psPersonAllMobiles.modify(!_)(psPerson)
+
+  @Benchmark def naive_psVecEach: PsPerson =
+    psPerson.copy(
+      phones = psPerson.phones.map(ph => ph.copy(isMobile = !ph.isMobile))
+    )
+
 object MultiFocusBench:
 
   case class Phone(isMobile: Boolean, number: String)
