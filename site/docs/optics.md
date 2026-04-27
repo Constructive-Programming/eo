@@ -519,6 +519,7 @@ element of a container. Single carrier:
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
 import dev.constructive.eo.data.MultiFocus.given  // Functor / Foldable / Traverse for MultiFocus[PSVec]
+import dev.constructive.eo.data.MultiFocus.foldMapF // read-only escape on MultiFocus[F]-carrier optics
 
 val listEach = Traversal.pEach[List, Int, Int]
 ```
