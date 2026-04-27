@@ -151,8 +151,8 @@
               <td><code>AffineFold(p =&gt; ...)</code> / <code>AffineFold.select(p)</code> / <code>AffineFold.fromOptional(opt)</code> / <code>AffineFold.fromPrism(p)</code> — read-only 0-or-1 focus, <code>T = Unit</code> forbids <code>.modify</code></td>
             </tr>
             <tr>
-              <td><em>(no direct equivalent — algebraic lenses are not in Monocle)</em></td>
-              <td><code>AlgLens.fromLensF</code> / <code>fromPrismF</code> / <code>fromOptionalF</code> — classifier-shaped lens over <code>F[A]</code> focus; see <a href="optics.html#alglens">Optics → AlgLens</a></td>
+              <td><em>(no direct equivalent — algebraic lenses + Kaleidoscopes are not in Monocle)</em></td>
+              <td><code>MultiFocus.fromLensF</code> / <code>fromPrismF</code> / <code>fromOptionalF</code> — classifier-shaped optic over <code>F[A]</code> focus, plus <code>.collectMap</code> / <code>.collectList</code> aggregation universals; see <a href="optics.html#multifocus">Optics → MultiFocus</a></td>
             </tr>
             <tr>
               <td><code>Setter[S, A](f =&gt; s =&gt; …)</code></td>

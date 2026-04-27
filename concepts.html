@@ -214,19 +214,14 @@ mermaid.initialize({
               <td><code>Traversal.{two,three,four}</code></td>
             </tr>
             <tr>
-              <td><code>AlgLens[F]</code></td>
+              <td><code>MultiFocus[F]</code></td>
               <td><code>(X, F[A])</code> — classifier-shaped: pair leftover with an <code>F</code>-wrapped focus vector</td>
-              <td>Algebraic Lens (non-uniform classifier cardinality)</td>
+              <td><code>MultiFocus[F]</code> (algebraic-lens + Kaleidoscope-style aggregation; <code>.collectMap</code> / <code>.collectList</code> universals)</td>
             </tr>
             <tr>
               <td><code>Grate</code></td>
               <td><code>(A, X =&gt; A)</code> — focus + per-slot rebuild</td>
               <td><code>Grate</code> (distributive / Naperian optics)</td>
-            </tr>
-            <tr>
-              <td><code>Kaleidoscope</code></td>
-              <td><code>(F[A], F[A] =&gt; X)</code> with <code>F: Reflector</code></td>
-              <td><code>Kaleidoscope</code> (Applicative-parameterised aggregation: ZipList zip, List cartesian, Const summation)</td>
             </tr>
           </tbody>
         </table>
@@ -352,32 +347,34 @@ Either</code>.</p>
         <p>Every edge below is a shipping <code>Composer[F, G]</code> given; solid
         arrows are tier-1 atomic bridges, dashed arrows are tier-2
         transitive derivations via <code>Composer.chainViaTuple2</code>. Terminal
-        nodes (<code>SetterF</code>, <code>AlgLens[F]</code>, <code>Kaleidoscope</code>, <code>Grate</code>,
-        <code>PowerSeries</code>, <code>FixedTraversal[N]</code>) sink — they have no
-        outbound <code>Composer</code> instance — so chains must land there last.</p>
+        nodes (<code>SetterF</code>, <code>MultiFocus[F]</code>, <code>Grate</code>, <code>PowerSeries</code>,
+        <code>FixedTraversal[N]</code>) sink — they have no outbound <code>Composer</code>
+        instance other than to <code>SetterF</code> — so chains must land there
+        last.</p>
         <pre class="mermaid">flowchart LR
   Forgetful --&gt; Tuple2
   Forgetful --&gt; Either
   Forgetful --&gt; Grate
-  Forgetful --&gt; Kaleidoscope
+  Forgetful --&gt; MFocus[&quot;MultiFocus[F]&quot;]
   Tuple2 --&gt; Affine
   Tuple2 --&gt; SetterF
   Tuple2 --&gt; PowerSeries
-  Tuple2 --&gt; AlgLensF[&quot;AlgLens[F]&quot;]
+  Tuple2 --&gt; MFocus
   Either --&gt; Affine
   Either --&gt; PowerSeries
-  Either --&gt; AlgLensF
+  Either --&gt; MFocus
   Affine --&gt; PowerSeries
-  Affine --&gt; AlgLensF
-  ForgetF[&quot;Forget[F]&quot;] --&gt; AlgLensF
+  Affine --&gt; MFocus
+  ForgetF[&quot;Forget[F]&quot;] --&gt; MFocus
+  Grate --&gt; SetterF
+  MFocus --&gt; SetterF
   Forgetful -.-&gt;|chainViaTuple2| Affine
   Forgetful -.-&gt;|chainViaTuple2| SetterF
   Forgetful -.-&gt;|chainViaTuple2| PowerSeries
-  Forgetful -.-&gt;|chainViaTuple2| AlgLensF
+  Forgetful -.-&gt;|chainViaTuple2| MFocus
   FixedN[&quot;FixedTraversal[N]&quot;]
   SetterF:::sink
-  AlgLensF:::sink
-  Kaleidoscope:::sink
+  MFocus:::sink
   Grate:::sink
   PowerSeries:::sink
   FixedN:::sink
@@ -385,7 +382,7 @@ Either</code>.</p>
         <p><code>FixedTraversal[N]</code> is drawn standalone: it has neither
         inbound nor outbound <code>Composer</code>, and no <code>AssociativeFunctor</code>
         either — it&#39;s a pure leaf carrier. <code>Forget[F]</code> has one outbound
-        bridge (<code>→ AlgLens[F]</code>) but no inbound, so chains reach it only
+        bridge (<code>→ MultiFocus[F]</code>) but no inbound, so chains reach it only
         via <code>Traversal.forEach</code> at construction time.</p>
         
         <h2 id="why-the-existential-machinery-is-worth-it" class="section"><a class="anchor-link left" href="#why-the-existential-machinery-is-worth-it"><i class="icofont-laika link">&#xef71;</i></a>Why the existential machinery is worth it</h2>
