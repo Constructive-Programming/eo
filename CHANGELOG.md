@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - circe integration — `JsonPrism` / `JsonTraversal` / `JsonFieldsPrism`
   / `JsonFieldsTraversal` with **observable-by-default** failure
   surface (`Ior` — see plan 005 in `docs/plans/`).
+- Avro integration (`cats-eo-avro`) — `AvroPrism` / `AvroTraversal` /
+  `AvroFieldsPrism` / `AvroFieldsTraversal` with the same Ior surface,
+  plus `.union[Branch]` for schema unions (Option, sealed traits,
+  Scala 3 enums) and a triple-input shape
+  (`IndexedRecord | Array[Byte] | String`) covering parsed records,
+  binary wire payloads, and Avro JSON wire format. Codec backend is
+  [kindlings-avro-derivation](https://github.com/MateuszKubuszok/kindlings)
+  (auto-derived `AvroEncoder` / `AvroDecoder` / `AvroSchemaFor`,
+  combined into one project-internal `AvroCodec[A]`). Hot-path walks
+  beat the kindlings-codec round-trip baseline by 3-7&times; on the
+  shipped JMH benches.
 - `lens` / `prism` Scala 3 macros via [Hearth](https://github.com/MateuszKubuszok/hearth):
   multi-field NamedTuple focus and full-cover Iso upgrade.
 - Sonatype Central Portal publishing via `sbt-typelevel-ci-release`.

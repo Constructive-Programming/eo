@@ -85,6 +85,17 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   `.each` traversal across JSON arrays.
 - [`JsonFieldsTraversal`](https://eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
   multi-field flavour of `JsonTraversal`.
+- [`AvroPrism`](https://eo.constructive.dev/avro.html) —
+  schema-aware Avro optic over `IndexedRecord`, with the same `Ior`
+  failure surface as `JsonPrism` plus a `.union[Branch]` macro for
+  Avro union types. Triple input — parsed record, binary wire bytes,
+  or Avro JSON.
+- [`AvroFieldsPrism`](https://eo.constructive.dev/avro.html) — multi-
+  field flavour of `AvroPrism`.
+- [`AvroTraversal`](https://eo.constructive.dev/avro.html) — `.each`
+  traversal across Avro arrays.
+- [`AvroFieldsTraversal`](https://eo.constructive.dev/avro.html) —
+  multi-field flavour of `AvroTraversal`.
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do
@@ -94,6 +105,8 @@ for cats typeclasses.
 
 - Getting started: <https://eo.constructive.dev/getting-started.html>
 - Macro-derived optics (`generics`): <https://eo.constructive.dev/generics.html>
+- circe integration: <https://eo.constructive.dev/circe.html>
+- Avro integration: <https://eo.constructive.dev/avro.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
 - Composition gap analysis (research):
   [`docs/research/2026-04-23-composition-gap-analysis.md`](./docs/research/2026-04-23-composition-gap-analysis.md)
@@ -118,5 +131,9 @@ Apache License 2.0. See [`LICENSE`](./LICENSE).
   optic-family vocabulary descends from, and the benchmark baseline.
 - [Hearth](https://github.com/MateuszKubuszok/hearth) — the macro-commons
   library that powers `cats-eo-generics`.
+- [kindlings](https://github.com/MateuszKubuszok/kindlings) — the
+  Hearth-powered codec-derivation library backing `cats-eo-circe`
+  (kindlings-circe-derivation) and `cats-eo-avro`
+  (kindlings-avro-derivation).
 - [discipline](https://github.com/typelevel/discipline) — the rule-set
   harness behind `cats-eo-laws`.
