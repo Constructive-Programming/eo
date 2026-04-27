@@ -12,6 +12,7 @@ import org.specs2.mutable.Specification
 import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
 import data.{MultiFocus, PSVec}
+import data.MultiFocus.given
 
 /** Behaviour-level spec for `PowerSeries`, `Traversal.each`, and the
   * `Composer[Tuple2 → PowerSeries]` bridge.

@@ -1,7 +1,17 @@
 package dev.constructive.eo
 package data
 
-import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
+import cats.{
+  Alternative,
+  Applicative,
+  Eval,
+  Foldable,
+  Functor,
+  Monoid,
+  MonoidK,
+  Representable,
+  Traverse,
+}
 
 import optics.Optic
 
@@ -169,6 +179,73 @@ private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
   def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T
 
 object MultiFocus:
+
+  // ------------------------------------------------------------------
+  // PSVec cats instances — load-bearing for `MultiFocus[PSVec]`'s
+  // `mfFunctor` / `mfFold` / `mfTraverse` derivations. Ship them inside
+  // the companion so callers picking up `import data.MultiFocus.given`
+  // get them transitively, alongside `mfFunctor` etc.
+  // ------------------------------------------------------------------
+
+  given pSVecFunctor: Functor[PSVec] with
+    def map[A, B](fa: PSVec[A])(f: A => B): PSVec[B] =
+      val n = fa.length
+      if n == 0 then PSVec.empty[B]
+      else
+        val arr = new Array[AnyRef](n)
+        var i = 0
+        while i < n do
+          arr(i) = f(fa(i)).asInstanceOf[AnyRef]
+          i += 1
+        PSVec.unsafeWrap[B](arr)
+
+  given pSVecFoldable: Foldable[PSVec] with
+
+    def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
+      var acc = b
+      val n = fa.length
+      var i = 0
+      while i < n do
+        acc = f(acc, fa(i))
+        i += 1
+      acc
+
+    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
+        f: (A, Eval[B]) => Eval[B]
+    ): Eval[B] =
+      val n = fa.length
+      def loop(i: Int): Eval[B] =
+        if i >= n then lb
+        else f(fa(i), Eval.defer(loop(i + 1)))
+      Eval.defer(loop(0))
+
+    override def size[A](fa: PSVec[A]): Long = fa.length.toLong
+
+  given pSVecTraverse: Traverse[PSVec] with
+
+    def traverse[G[_]: Applicative, A, B](fa: PSVec[A])(f: A => G[B]): G[PSVec[B]] =
+      val G = Applicative[G]
+      val n = fa.length
+      if n == 0 then G.pure(PSVec.empty[B])
+      else
+        var acc: G[Array[AnyRef]] = G.pure(new Array[AnyRef](n))
+        var i = 0
+        while i < n do
+          val idx = i
+          val gb = f(fa(idx))
+          acc = G.map2(acc, gb) { (a, b) =>
+            a(idx) = b.asInstanceOf[AnyRef]
+            a
+          }
+          i += 1
+        G.map(acc)(arr => PSVec.unsafeWrap[B](arr))
+
+    def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
+      pSVecFoldable.foldLeft(fa, b)(f)
+
+    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
+        f: (A, Eval[B]) => Eval[B]
+    ): Eval[B] = pSVecFoldable.foldRight(fa, lb)(f)
 
   // ------------------------------------------------------------------
   // Capability instances — Functor / Foldable / Traverse over the F[A] half.

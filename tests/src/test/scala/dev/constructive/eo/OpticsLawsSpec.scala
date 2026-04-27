@@ -6,9 +6,10 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Forgetful, MultiFocus, SetterF}
+import data.{Affine, Forget, Forgetful, MultiFocus, PSVec, SetterF}
 import data.Affine.given
 import data.Forget.given
+import data.MultiFocus.given
 import data.SetterF.given
 import laws.{
   AffineFoldLaws,
