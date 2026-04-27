@@ -143,68 +143,29 @@ finite-index function records — where every slot holds a value of the
 same type. The canonical operation is "apply `A => B` uniformly to
 every slot".
 
-```scala mdoc:silent
-import dev.constructive.eo.data.Grate
-import dev.constructive.eo.data.Grate.given
+After the 2026-04-28 carrier consolidation (see
+[`grate-fold-spike`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-28-grate-fold-spike.md)),
+v1's `Grate` was absorbed into the unified `MultiFocus[F]` carrier as
+`MultiFocus[Function1[X, *]]`. The same factories ship under new names
+— `MultiFocus.tuple[T <: Tuple, A]` for homogeneous tuples,
+`MultiFocus.representable[F: Representable, A]` for arbitrary distributive
+containers (Function1-of-index, tuple-of-pair `(A, A)`, user-defined
+Naperian shapes).
 
-val triple = Grate.tuple[(Double, Double, Double), Double]
-```
+> Worked-example rewrites for this section are pending the
+> post-consolidation docs sweep.
 
-```scala mdoc
-triple.modify(_ * 2)((1.0, 2.0, 3.0))
-triple.replace(0.0)((1.0, 2.0, 3.0))
-```
+**When to reach for the representable MultiFocus vs Traversal.** Use
+`Traversal.each` for container+downstream optic composition
+(`lens.andThen(each).andThen(lens)`) — the standard map-over-elements
+shape. Use the representable MultiFocus for fixed-shape homogeneous
+records where the structure is known at compile time and the operation
+is a uniform rewrite — tuples, function-shaped finite records, any
+`cats.Representable` container.
 
-The `Grate.tuple[T <: Tuple, A]` factory accepts any homogeneous
-tuple (arity 2 upward) whose element type matches `A`; the constraint
-is `Tuple.Union[T] <:< A`.
-
-A distributive-container flavour ships as `Grate.apply[F: Representable]`
-— any `cats.Representable[F]` works (Function1-of-index, tuple-of-pair
-`(A, A)`, user-defined Naperian shapes):
-
-```scala mdoc:silent
-import cats.instances.function.given  // Representable[Function1[Boolean, *]]
-
-val funGrate = Grate[[a] =>> Boolean => a, Int]
-val f: Boolean => Int = b => if b then 1 else 2
-```
-
-```scala mdoc
-val doubled = funGrate.modify(_ * 2)(f)
-doubled(true)
-doubled(false)
-```
-
-**When to reach for Grate vs Traversal.** Use `Traversal.each` for
-container+downstream optic composition (`lens.andThen(each).andThen(lens)`)
-— the standard map-over-elements shape. Use Grate for fixed-shape
-homogeneous records where the structure is known at compile time and
-the operation is a uniform rewrite — tuples, function-shaped finite
-records, any `cats.Representable` container. Grate's future `zipWithF`
-/ `collect` extensions (not in this v1) will unlock operations that
-Traversal can't express.
-
-**Composition.** `Iso.andThen(Grate)` works via
-`Composer[Forgetful, Grate]`:
-
-```scala mdoc:silent
-import dev.constructive.eo.optics.Iso
-import dev.constructive.eo.optics.Optic.*
-
-val rotate =
-  Iso[(Double, Double, Double), (Double, Double, Double), (Double, Double, Double),
-    (Double, Double, Double)](
-    t => (t._2, t._3, t._1),
-    t => (t._3, t._1, t._2),
-  )
-
-val composed = rotate.andThen(triple)
-```
-
-```scala mdoc
-composed.modify((x: Double) => x + 1)((1.0, 2.0, 3.0))
-```
+**Composition.** `Iso.andThen(MultiFocus[Function1[X, *]])` works via
+`Composer[Forgetful, MultiFocus[F]]` — Iso → representable-MultiFocus is
+the inbound bridge that survived the consolidation.
 
 **Lens → Grate does NOT compose automatically.** A Lens's source `S`
 is not in general `Representable`, so there is no natural way to
