@@ -13,21 +13,21 @@ import org.specs2.mutable.Specification
   *
   * Mirrors `dev.constructive.eo.circe.StringInputSpec` block-for-block — one composite block per
   * carrier (AvroPrism / AvroFieldsPrism / AvroTraversal) covering happy-path,
-  * `Ior.Left(JsonParseFailed)` on bad input, and synthetic-empty-record / empty-vector fallbacks
-  * on the Unsafe surface; one extra block for record-input parity (the widened union still routes
+  * `Ior.Left(JsonParseFailed)` on bad input, and synthetic-empty-record / empty-vector fallbacks on
+  * the Unsafe surface; one extra block for record-input parity (the widened union still routes
   * record input through the no-op arm).
   *
   * '''Avro JSON wire format quirks.'''
-  *   - For `Person(name, age)` the wire form is the unsurprising
-  *     `{"name":"Alice","age":30}` (the schema has no unions).
+  *   - For `Person(name, age)` the wire form is the unsurprising `{"name":"Alice","age":30}` (the
+  *     schema has no unions).
   *   - For `Basket(owner, items: List[Order])` the wire form quotes both sub-records and the
   *     enclosing array — `{"owner":"Alice","items":[{"name":"x","price":1.0,"qty":1},…]}`.
   *
   * '''JsonDecoder failure-class survey.'''
   *   - genuinely bad JSON (`"not json at all"`) → `org.apache.avro.AvroTypeException`;
   *   - JSON-but-wrong-shape (missing required field) → `AvroTypeException` ("Expected field …");
-  *   - unknown field → silently dropped by apache-avro on read, so the parser succeeds and the
-  *     test asserts on the resulting `Ior.Right`. (See [[AvroFailure.decodeJsonString]] doc.)
+  *   - unknown field → silently dropped by apache-avro on read, so the parser succeeds and the test
+  *     asserts on the resulting `Ior.Right`. (See [[AvroFailure.decodeJsonString]] doc.)
   */
 class StringInputSpec extends Specification:
 
@@ -172,4 +172,3 @@ object StringInputSpec:
   given AvroEncoder[NameAge] = AvroEncoder.derived
   given AvroDecoder[NameAge] = AvroDecoder.derived
   given AvroSchemaFor[NameAge] = AvroSchemaFor.derived
-

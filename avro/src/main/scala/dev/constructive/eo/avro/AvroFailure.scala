@@ -51,11 +51,10 @@ enum AvroFailure:
   case BinaryParseFailed(cause: Throwable)
 
   /** Input `String` didn't parse as Avro JSON wire format under the supplied schema. Surfaced only
-    * by the `Avro | Array[Byte] | String` overloads; record / bytes input cannot trigger this
-    * case. The wrapped [[Throwable]] is whatever apache-avro's `JsonDecoder` /
-    * `GenericDatumReader` threw — typically an `AvroTypeException` for shape mismatches, an
-    * `IOException` for malformed JSON, or an `org.apache.avro.AvroRuntimeException` for misc
-    * apache-avro complaints.
+    * by the `Avro | Array[Byte] | String` overloads; record / bytes input cannot trigger this case.
+    * The wrapped [[Throwable]] is whatever apache-avro's `JsonDecoder` / `GenericDatumReader` threw
+    * — typically an `AvroTypeException` for shape mismatches, an `IOException` for malformed JSON,
+    * or an `org.apache.avro.AvroRuntimeException` for misc apache-avro complaints.
     */
   case JsonParseFailed(cause: Throwable)
 
@@ -110,10 +109,10 @@ object AvroFailure:
     *   - `String` runs through apache-avro's `JsonDecoder` (Avro JSON wire format under the reader
     *     schema); parse failures arrive as `Ior.Left(Chain(AvroFailure.JsonParseFailed(t)))`.
     *
-    * Match arms are ordered `IndexedRecord, Array[Byte], String` — this matches both the
-    * declared union order and observed-frequency. The `String` arm uses `case s: String =>` (exact
-    * runtime type), not `case _: CharSequence =>`, since `org.apache.avro.util.Utf8` also
-    * implements `CharSequence` and would otherwise be miscaptured as JSON.
+    * Match arms are ordered `IndexedRecord, Array[Byte], String` — this matches both the declared
+    * union order and observed-frequency. The `String` arm uses `case s: String =>` (exact runtime
+    * type), not `case _: CharSequence =>`, since `org.apache.avro.util.Utf8` also implements
+    * `CharSequence` and would otherwise be miscaptured as JSON.
     *
     * @param schema
     *   the reader schema used to decode binary / JSON input. Ignored for record input.
@@ -179,8 +178,8 @@ object AvroFailure:
       Right(reader.read(null, decoder))
     catch case NonFatal(t) => Left(t)
 
-  /** Use apache-avro's `JsonDecoder` to parse the Avro JSON wire format. Same boundary semantics
-    * as [[decodeBinary]] — kindlings owns native↔`Any` decoding, apache-avro owns the wire-format
+  /** Use apache-avro's `JsonDecoder` to parse the Avro JSON wire format. Same boundary semantics as
+    * [[decodeBinary]] — kindlings owns native↔`Any` decoding, apache-avro owns the wire-format
     * boundary; this helper plugs into the latter for the JSON arm.
     *
     * Empirical failure-class survey (compiled against apache-avro 1.12.1):
@@ -188,16 +187,15 @@ object AvroFailure:
     *     `com.fasterxml.jackson.core.JsonParseException` (Jackson is apache-avro's underlying
     *     parser);
     *   - well-formed JSON of the wrong shape (missing required field, wrong primitive type) →
-    *     `JsonParseFailed` wrapping an `org.apache.avro.AvroTypeException`
-    *     ("Expected int. Got END_OBJECT" / "Expected int. Got VALUE_STRING");
-    *   - JSON with an unknown extra field → silently accepted (apache-avro skips fields not in
-    *     the schema). Returns `Right`, not `JsonParseFailed`. Trailing garbage after a complete
-    *     record is also silently accepted — apache-avro stops reading once the schema is
-    *     satisfied.
+    *     `JsonParseFailed` wrapping an `org.apache.avro.AvroTypeException` ("Expected int. Got
+    *     END_OBJECT" / "Expected int. Got VALUE_STRING");
+    *   - JSON with an unknown extra field → silently accepted (apache-avro skips fields not in the
+    *     schema). Returns `Right`, not `JsonParseFailed`. Trailing garbage after a complete record
+    *     is also silently accepted — apache-avro stops reading once the schema is satisfied.
     *
     * Decode-vs-parse boundary: `JsonParseFailed` covers ANY apache-avro failure at the wire-
-    * format-to-`IndexedRecord` boundary (parse + schema-validation). Codec-level decode
-    * failures (e.g. native `A` value rejected by kindlings' decoder) surface separately as
+    * format-to-`IndexedRecord` boundary (parse + schema-validation). Codec-level decode failures
+    * (e.g. native `A` value rejected by kindlings' decoder) surface separately as
     * `DecodeFailed(step, cause)` from the per-record optic hooks, after parsing succeeds.
     */
   private def decodeJsonString(

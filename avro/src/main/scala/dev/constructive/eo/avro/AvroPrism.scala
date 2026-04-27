@@ -24,8 +24,8 @@ import org.apache.avro.generic.IndexedRecord
   * Two call-surface tiers (parallel to JsonPrism, supplied via [[AvroOpticOps]]):
   *
   *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` return
-  *     `(IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord]`; `get` returns
-  *     `Ior[Chain[AvroFailure], A]`. Failures (path miss, non-record / non-array parent,
+  *     `(IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord]`; `get`
+  *     returns `Ior[Chain[AvroFailure], A]`. Failures (path miss, non-record / non-array parent,
   *     out-of-range index, decode failure, union mismatch) accumulate into `Chain[AvroFailure]`.
   *     Partial success returns `Ior.Both(chain, inputRecord)`.
   *   - '''`*Unsafe` (silent).''' `modifyUnsafe` / `transformUnsafe` / `placeUnsafe` /
@@ -45,10 +45,10 @@ import org.apache.avro.generic.IndexedRecord
   * dual-input boundary; pinning it here means callers don't have to thread it through every
   * `.modify` / `.get` call.
   *
-  * '''Per OQ-avro-3 (Unit 10).''' The triple-input shape is
-  * `IndexedRecord | Array[Byte] | String` — `String` is the Avro JSON wire format, parsed via
-  * apache-avro's `JsonDecoder`. The original plan deferred `String` to v0.2; Unit 10 lifted it
-  * into v0.1.0 because the parser shape mirrors the binary path one-for-one.
+  * '''Per OQ-avro-3 (Unit 10).''' The triple-input shape is `IndexedRecord | Array[Byte] | String`
+  * — `String` is the Avro JSON wire format, parsed via apache-avro's `JsonDecoder`. The original
+  * plan deferred `String` to v0.2; Unit 10 lifted it into v0.1.0 because the parser shape mirrors
+  * the binary path one-for-one.
   *
   * '''Per OQ-avro-7:''' [[AvroOpticOps]] is a deliberate copy-paste of `JsonOpticOps`; a future
   * `core.OpticOps[Carrier, Failure, A]` generalisation lands when the third cursor module appears.

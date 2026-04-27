@@ -52,7 +52,9 @@ private[avro] trait AvroOpticOps[A]:
     * failure, type mismatch) accumulate into `Chain[AvroFailure]`; partial success returns
     * `Ior.Both(chain, inputRecord)` (the modify-family preserves the input as the silent fallback).
     */
-  def modify(f: A => A): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
+  def modify(
+      f: A => A
+  ): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
     input => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => modifyIor(j, f))
 
   /** Apply `f` to the raw [[IndexedRecord]] at the focused position (no decode / encode through the
@@ -70,7 +72,9 @@ private[avro] trait AvroOpticOps[A]:
     input => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => transformIor(j, f))
 
   /** Replace the focused value with `a`. Same failure surface as [[modify]]. */
-  def place(a: A): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
+  def place(
+      a: A
+  ): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
     input => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, a))
 
   /** Lift a `C => A` into a focus-replacer: `transfer(f)(record)(c)` decodes `c` to `A` via `f` and
