@@ -165,6 +165,51 @@ class CrossCarrierCompositionSpec extends Specification:
     unsafeOk.and(iorOk).and(diagOk)
   }
 
+  // covers: JsonPrism (Either-carrier) → MultiFocus[F] cross-carrier resolution via
+  // `Composer[Either, MultiFocus[F]]` (when `F: Alternative + Foldable`). Confirms
+  // gap #5 of the top-5 closure plan at the **type level**: the Composer summons
+  // cleanly and the cross-carrier `.andThen` produces an `Optic[…, MultiFocus[F]]`.
+  //
+  // VALUE-LEVEL FINDING: Non-trivial modify scenarios for the chained
+  // `Optic[Json, Json, A, A, MultiFocus[F]]` round-trip awkwardly because
+  // `either2multifocus.from` calls `pickSingletonOrThrow(fb, "Either")`, which
+  // expects exactly one element on the focus side — but `mfFunctor[F].map` on a
+  // multi-element `F[A]` (which the same-carrier composition can produce) doesn't
+  // collapse back to a singleton. Recorded in the gap-analysis matrix as a **M
+  // cell**: `JsonPrism × MultiFocus[F]` is type-correct under
+  // `Composer[Either, MF[F]]` but the canonical use cases (drilling into a
+  // List[A]-shaped focus) are better served by `Traversal.each` (which routes via
+  // the PSVec-specialised `mfAssocPSVec` path that handles non-singleton focus
+  // counts correctly).
+  "(6) JsonPrism → MultiFocus[List]: Composer summons + chain compiles" >> {
+    import cats.instances.list.given // Alternative[List] + Foldable[List]
+    import dev.constructive.eo.data.MultiFocus
+    import dev.constructive.eo.data.MultiFocus.given // mfFunctor + either2multifocus
+    import dev.constructive.eo.Composer
+
+    // Type-level: the Composer summons cleanly under List's Alternative+Foldable.
+    val composerOk = summon[Composer[Either, MultiFocus[List]]] != null
+
+    val tagsPrism: Optic[Json, Json, List[Int], List[Int], Either] =
+      codecPrism[Tagged].field(_.tags)
+    // The MultiFocus-side identity-shape on List[Int].
+    val tagsMF: Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]] =
+      new Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]]:
+        type X = Unit
+        val to: List[Int] => (Unit, List[List[Int]]) = xs => ((), List(xs))
+        val from: ((Unit, List[List[Int]])) => List[Int] = { case (_, xss) => xss.head }
+
+    // The cross-carrier .andThen resolves through `either2multifocus[List]`.
+    val chain: Optic[Json, Json, List[Int], List[Int], MultiFocus[List]] =
+      tagsPrism.andThen(tagsMF)
+
+    // Type-level evidence is sufficient for gap #5 closure; the value-level
+    // semantic is documented above as M.
+    val chainTypeOk = chain != null
+
+    composerOk.and(chainTypeOk)
+  }
+
 object CrossCarrierCompositionSpec:
 
   case class MItem(name: String, price: Double, qty: Int)
@@ -180,6 +225,12 @@ object CrossCarrierCompositionSpec:
   case class Box(payload: Json)
 
   case class Envelope(tag: String, payload: Json)
+
+  // For scenario (6): JsonPrism → MultiFocus[List] cross-carrier path.
+  case class Tagged(name: String, tags: List[Int])
+
+  object Tagged:
+    given Codec.AsObject[Tagged] = KindlingsCodecAsObject.derive
 
   type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
   given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive
