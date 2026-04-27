@@ -4,6 +4,7 @@ package laws
 import cats.Functor
 
 import _root_.dev.constructive.eo.data.MultiFocus
+import _root_.dev.constructive.eo.data.MultiFocus.collectMap
 import _root_.dev.constructive.eo.data.MultiFocus.given
 
 import optics.Optic
