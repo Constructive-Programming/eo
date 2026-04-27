@@ -2,6 +2,7 @@ package dev.constructive.eo.avro
 
 import scala.jdk.CollectionConverters.*
 
+import cats.syntax.foldable.*
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
 /** Shared internal helpers for the fold-based Avro walks used by [[AvroPrism]] and (in Unit 6+) its
@@ -114,65 +115,62 @@ private[avro] object AvroWalk:
   /** Walk an entire `path` from `record`, accumulating parents at each step. Strict by default —
     * pass `OnMissingField.Lenient` to tolerate missing field-steps as `null` leaves.
     *
-    * UnionBranch failures are post-processed: when the heuristic-based branch comparison rejects
-    * the runtime value, we look back at the most recent `Field` step on the path to recover the
-    * parent's union schema and rewrite the failure's `branches` list to enumerate all schema-
-    * declared alternatives (instead of just the single "actual" branch the heuristic produced).
-    * That way `UnionResolutionFailed.branches` always carries the full `["null", "long", ...]`-
-    * shaped diagnostic the user wants to see.
+    * UnionBranch failures are post-processed in the per-step lambda: when [[stepInto]] rejects the
+    * runtime value at an `UnionBranch` step, we look back at the most recent `Field` step on the
+    * path to recover the parent's union schema and rewrite the failure's `branches` list to
+    * enumerate all schema-declared alternatives (instead of the single "actual"-branch list the
+    * runtime heuristic produces). That way `UnionResolutionFailed.branches` always carries the full
+    * `["null", "long", ...]`-shaped diagnostic.
     */
   def walkPath(
       record: IndexedRecord,
       path: Array[PathStep],
       policy: OnMissingField = OnMissingField.Strict,
   ): Either[AvroFailure, State] =
-    var i = 0
-    var state: Either[AvroFailure, State] = Right((record: Any, Vector.empty[AnyRef]))
-    while i < path.length && state.isRight do
-      val (cur, parents) = state.toOption.get
-      val step = path(i)
-      val next = stepInto(step, cur, parents, policy)
-      next match
-        case Left(AvroFailure.UnionResolutionFailed(_, badStep)) =>
-          state = Left(
-            AvroFailure.UnionResolutionFailed(unionBranchesAt(path, i, parents), badStep)
-          )
-        case other => state = other
-      i += 1
-    state
+    path
+      .toVector
+      .zipWithIndex
+      .foldLeftM[[T] =>> Either[AvroFailure, T], State]((record: Any, Vector.empty)) {
+        case ((cur, parents), (step, i)) =>
+          stepInto(step, cur, parents, policy).left.map {
+            case AvroFailure.UnionResolutionFailed(_, badStep) =>
+              AvroFailure.UnionResolutionFailed(unionBranchesAt(path, i, parents), badStep)
+            case other => other
+          }
+      }
 
   /** Recover the union-schema branch list from the path step that produced the current parent.
     *
-    * Walks back from `unionStepIdx - 1` to find the most recent `Field` step; the parent record at
-    * that position carries the field whose schema is the union we're trying to resolve. The
-    * fall-back when no such step is found is the single "actual"-branch list the heuristic walker
-    * already provided (we re-fire `unionBranchName` against the most-recent parent's value at the
-    * Field-step name).
+    * Walks backwards from `unionStepIdx - 1` to find the most recent `Field` step; the parent
+    * record collected at that position carries the field whose schema is the union we're trying to
+    * resolve. Returns `Nil` when no such step is found — callers preserve the single "actual"-
+    * branch list the heuristic walker already provided.
     */
   private def unionBranchesAt(
       path: Array[PathStep],
       unionStepIdx: Int,
       parents: Vector[AnyRef],
   ): List[String] =
-    // Walk backwards looking for the most recent Field step whose parent record can be inspected.
-    var j = unionStepIdx - 1
-    var result: List[String] = Nil
-    var done = false
-    while !done && j >= 0 do
-      path(j) match
-        case PathStep.Field(name) =>
-          if j < parents.length then
-            parents(j) match
-              case rec: IndexedRecord =>
-                val f = rec.getSchema.getField(name)
-                if f != null && f.schema.getType == org.apache.avro.Schema.Type.UNION then
-                  result = f.schema.getTypes.asScala.map(_.getFullName).toList
-                done = true
-              case _ => done = true
-          else done = true
-        case _ =>
-          j -= 1
-    result
+    // The most recent Field step before the union step; its index `j` aligns with `parents(j)`,
+    // which holds the IndexedRecord that owned the field whose schema is the union we want.
+    Iterator
+      .from(unionStepIdx - 1, -1)
+      .takeWhile(_ >= 0)
+      .map(j => (j, path(j)))
+      .collectFirst { case (j, PathStep.Field(name)) => (j, name) }
+      .flatMap {
+        case (j, name) =>
+          Option
+            .when(j < parents.length)(parents(j))
+            .collect { case rec: IndexedRecord => rec }
+            .map { rec =>
+              val f = rec.getSchema.getField(name)
+              if f != null && f.schema.getType == org.apache.avro.Schema.Type.UNION then
+                f.schema.getTypes.asScala.map(_.getFullName).toList
+              else Nil
+            }
+      }
+      .getOrElse(Nil)
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't of the expected type")

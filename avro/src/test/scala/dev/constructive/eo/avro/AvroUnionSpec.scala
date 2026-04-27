@@ -159,10 +159,9 @@ class AvroUnionSpec extends Specification:
             org
               .specs2
               .execute
-              .Failure(s"expected UnionResolutionFailed(_, UnionBranch(Card)), got $other"): org
-              .specs2
-              .execute
-              .Result
+              .Failure(
+                s"expected UnionResolutionFailed(_, UnionBranch(Card)), got $other"
+              ): org.specs2.execute.Result
       case other =>
         org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
   }
@@ -188,33 +187,42 @@ class AvroUnionSpec extends Specification:
   // covers: .union[NotInSchema] on a Payment-shaped focus aborts at compile time with a
   // "not a known alternative" diagnostic.
   "compile error: .union[Int] on Payment is rejected by the macro" >> {
-    val errors = scala.compiletime.testing.typeCheckErrors(
-      """
+    val errors = scala
+      .compiletime
+      .testing
+      .typeCheckErrors(
+        """
         import dev.constructive.eo.avro.AvroPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Payment
         AvroPrism.codecPrism[Payment].union[Int]
       """
-    )
+      )
     errors.exists(e => e.message.contains("not a known alternative")) === true
   }
 
   // covers: .union on a non-union focus (e.g. Person) aborts with a "not a union-shaped type" error.
   "compile error: .union on a Person focus is rejected" >> {
-    val errors = scala.compiletime.testing.typeCheckErrors(
-      """
+    val errors = scala
+      .compiletime
+      .testing
+      .typeCheckErrors(
+        """
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].union[String]
       """
-    )
+      )
     errors.exists(e => e.message.contains("not a union-shaped type")) === true
   }
 
   // covers: .union[Branch] with a Scala 3 untagged union focus aborts with the kindlings-doesn't-
   // support-these diagnostic.
   "compile error: .union on a Scala 3 union focus is rejected" >> {
-    val errors = scala.compiletime.testing.typeCheckErrors(
-      """
+    val errors = scala
+      .compiletime
+      .testing
+      .typeCheckErrors(
+        """
         import dev.constructive.eo.avro.{AvroCodec, AvroPrism}
         // Stub AvroCodec for the union — the parent codec is irrelevant since the macro should
         // abort before summoning anything else; supply a `???` codec to keep the test focused on
@@ -226,7 +234,7 @@ class AvroUnionSpec extends Specification:
             def decodeEither(any: Any): Either[Throwable, Long | String] = ???
         AvroPrism.codecPrism[Long | String].union[Long]
       """
-    )
+      )
     errors.exists(e =>
       e.message.contains("Scala 3 untagged union") ||
         e.message.contains("kindlings-avro-derivation does not")
@@ -235,13 +243,16 @@ class AvroUnionSpec extends Specification:
 
   // covers: .union[Branch] on Option[T] when Branch != T is rejected
   "compile error: .union[String] on Option[Long] is rejected" >> {
-    val errors = scala.compiletime.testing.typeCheckErrors(
-      """
+    val errors = scala
+      .compiletime
+      .testing
+      .typeCheckErrors(
+        """
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Transaction
         codecPrism[Transaction].field(_.amount).union[String]
       """
-    )
+      )
     errors.exists(e =>
       e.message.contains("the only valid branch is") ||
         e.message.contains("not a known alternative")
