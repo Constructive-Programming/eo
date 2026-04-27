@@ -5,23 +5,16 @@ import scala.collection.immutable.ArraySeq
 
 import cats.Traverse
 
-import data.{Forget, MultiFocus, ObjArrBuilder, PSVec}
+import data.{MultiFocus, ObjArrBuilder, PSVec}
 
 /** Constructors for `Traversal` — the multi-focus optic that modifies every element of a
-  * traversable container. Two carriers coexist:
+  * traversable container.
   *
-  *   - [[each]] / [[pEach]] use `MultiFocus[PSVec]` — the default. Supports downstream composition
-  *     with [[Lens]] / [[Prism]] through the shared `MultiFocus[PSVec]` carrier. Pays a
-  *     super-linear cost relative to [[forEach]] (see `benchmarks/PowerSeriesBench`), but the
-  *     composition story is the whole point of having a Traversal in the first place, so `each` is
-  *     named to match what Scala users reach for intuitively.
-  *   - [[forEach]] uses `Forget[T]` — a map-only fast path. Identity-shaped carrier, linear time,
-  *     no downstream composition. Use when the chain terminates at the traversal.
-  *
-  * Scala naming convention: `each` is the "power" tool that composes; `forEach` is the "just map"
-  * escape hatch. If you ever find yourself writing `Traversal.each.something` and wishing it were
-  * faster, check whether the chain actually continues past the traversal — if not, [[forEach]] is
-  * the cheaper choice.
+  *   - [[each]] / [[pEach]] use `MultiFocus[PSVec]`. The single Traversal carrier — supports
+  *     `.modify`, `.foldMapF`, `.modifyA`, AND downstream composition with [[Lens]] / [[Prism]] /
+  *     [[Optional]] / [[Iso]] / further Traversals through the shared `MultiFocus[PSVec]`
+  *     `AssociativeFunctor`. Read-only escape via the `.foldMapF` extension method on
+  *     `MultiFocus[F]`-carrier optics.
   *
   * The [[two]] / [[three]] / [[four]] fixed-arity variants expose a Traversal over a fixed number
   * of per-element getters — useful for "every element of this record that happens to share a type"
@@ -29,44 +22,10 @@ import data.{Forget, MultiFocus, ObjArrBuilder, PSVec}
   */
 object Traversal:
 
-  /** Map-only traversal over a `Traverse` container, using `Forget[T]` as the carrier.
-    *
-    * Linear-time, no downstream composition beyond the focus. The law / behaviour / benchmark
-    * suites depend on this exact three-type-param signature — do not refactor without updating all
-    * three.
-    *
-    * @group Constructors
-    * @tparam T
-    *   container type constructor; must admit a `Traverse[T]` instance at the call site
-    * @tparam A
-    *   element type being read
-    * @tparam B
-    *   element type being written back
-    *
-    * @example
-    *   {{{
-    * import cats.instances.list.given
-    * import dev.constructive.eo.optics.Optic.*
-    * val listForEach = Traversal.forEach[List, Int, Int]
-    * listForEach.modify(_ + 1)(List(1, 2, 3))   // List(2, 3, 4)
-    *   }}}
-    */
-  def forEach[T[_], A, B](using
-      @scala.annotation.unused ev: Traverse[T]
-  ): Optic[T[A], T[B], A, B, Forget[T]] =
-    // `Traverse[T]` not used in the body: the carrier is identity-shaped,
-    // and `.modifyA` / `.all` summon the ForgetfulTraverse instance for
-    // `Forget[T]` themselves. Bound is kept as API documentation.
-    new Optic[T[A], T[B], A, B, Forget[T]]:
-      type X = Nothing
-      val to: T[A] => T[A] = identity
-      val from: T[B] => T[B] = identity
-
-  /** `each` — the composable traversal, built on the `MultiFocus[PSVec]` carrier. Enables
-    * downstream optic composition via the `MultiFocus[PSVec]` `AssociativeFunctor`.
-    *
-    * Reach for this when the chain continues past the traversal (`.andThen(lens)` etc.); if the
-    * chain terminates, prefer [[forEach]] for the map-only fast path.
+  /** `each` — the Traversal constructor, built on the `MultiFocus[PSVec]` carrier. Supports
+    * `.modify` / `.replace` (`Functor[PSVec]`), `.foldMapF` (`Foldable[PSVec]`), `.modifyA` / `.all`
+    * (`Traverse[PSVec]`), and downstream optic composition via the `MultiFocus[PSVec]`
+    * `AssociativeFunctor`.
     *
     * @group Constructors
     * @tparam T

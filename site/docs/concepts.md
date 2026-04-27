@@ -211,7 +211,7 @@ flowchart LR
 inbound nor outbound `Composer`, and no `AssociativeFunctor`
 either — it's a pure leaf carrier. `Forget[F]` has one outbound
 bridge (`→ MultiFocus[F]`) but no inbound, so chains reach it only
-via `Traversal.forEach` at construction time.
+via `Fold` at construction time.
 
 ## Why the existential machinery is worth it
 

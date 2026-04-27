@@ -207,25 +207,25 @@ Wlaschin — *Domain Modeling Made Functional*, ch. 4,
 
 ## Theme C — Collection walks
 
-### `each` vs. `forEach` — the composable traversal and its tight twin
+### `each` — the composable traversal
 
-cats-eo ships two Traversal carriers for two different situations.
-Reach for `Traversal.forEach` when the chain terminates at the
-traversal — map once and done, no downstream optic:
+cats-eo ships a single Traversal carrier — `Traversal.each`. Map
+over every element of a container, fold via `.foldMapF`, and chain
+further optics past the traversal in the same call:
 
 ```scala mdoc:silent
 import cats.instances.list.given
 
-val bumpList = Traversal.forEach[List, Int, Int]
+val bumpList = Traversal.each[List, Int]
 ```
 
 ```scala mdoc
 bumpList.modify(_ + 1)(List(1, 2, 3))
-bumpList.foldMap(identity[Int])(List(1, 2, 3))   // sum
+bumpList.foldMapF(identity[Int])(List(1, 2, 3))   // sum
 ```
 
-Reach for `Traversal.each` when the chain continues past the
-traversal — the same map, then drill further into each element:
+`each` shines when the chain continues past the traversal — the
+same map, then drill further into each element:
 
 ```scala mdoc:silent
 case class Dial(isMobile: Boolean, number: String)
@@ -249,7 +249,7 @@ The cost tradeoff is documented in
 [PowerSeries benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition):
 `each` runs 2-3× over a naive `copy`/`map` for dense
 Lens-Traversal-Lens chains, amortising toward 1.9× as the
-container size grows; `forEach` matches the naive path.
+container size grows.
 
 **Source:** Penner — *Optics By Example* ch. 7 (Simple
 Traversals), <https://leanpub.com/optics-by-example/>; Gonzalez
@@ -835,15 +835,14 @@ case class Payload(id: Int, body: String)
 def fetchAll(ids: List[Int]): Map[Int, Payload] =
   ids.map(i => i -> Payload(i, s"body-$i")).toMap
 
-val leaves = Traversal.forEach[List, Node, Node]
 val eachLeaf = Traversal.each[List, Node]
 ```
 
 ```scala mdoc
 val nodes = List(Node(1, "a"), Node(2, "b"), Node(3, "c"))
 
-// Pass 1: collect every ID into a single list via foldMap.
-val allIds = leaves.foldMap((n: Node) => List(n.id))(nodes)
+// Pass 1: collect every ID into a single list via foldMapF.
+val allIds = eachLeaf.foldMapF((n: Node) => List(n.id))(nodes)
 
 // Pass 2: issue ONE query for the whole set.
 val byId = fetchAll(allIds)
@@ -855,7 +854,7 @@ eachLeaf.modify(n => n.copy(label = byId(n.id).body))(nodes)
 
 The pattern generalises to trees, graphs, nested containers,
 anything with a `Traverse`. The two-pass idiom is what cats-eo's
-`foldMap` + `modify` pair already enables out of the box — no
+`foldMapF` + `modify` pair already enables out of the box — no
 cats-eo-specific API to learn.
 
 **Source:** Penner — *Using traversals to batch database

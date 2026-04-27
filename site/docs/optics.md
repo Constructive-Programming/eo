@@ -497,26 +497,24 @@ for that, construct a `Review` directly with your own
 ## Traversal
 
 A `Traversal` is the multi-focus modify optic — map over every
-element of a container. Two carriers coexist:
+element of a container. Single carrier:
 
 * `Traversal.each[F, A]` / `Traversal.pEach[F, A, B]` — carrier
-  `PowerSeries`, the default. Supports `.andThen` with downstream
-  optics. Linear scaling; overhead over a naive `copy`/`map` runs
-  at 2-3× for dense chains (`Lens → Traversal → Lens`) and ~5×
-  for the Prism miss-branch shape, amortising toward the lower
-  end as the traversed-collection size grows (the
+  `MultiFocus[PSVec]`. Supports `.modify` / `.replace`
+  (`Functor[PSVec]`), `.foldMapF` (`Foldable[PSVec]`),
+  `.modifyA` / `.all` (`Traverse[PSVec]`), and `.andThen` with
+  downstream optics through the shared `MultiFocus[PSVec]`
+  `AssociativeFunctor`. Linear scaling; overhead over a naive
+  `copy`/`map` runs at 2-3× for dense chains
+  (`Lens → Traversal → Lens`) and ~5× for the Prism miss-branch
+  shape, amortising toward the lower end as the traversed-
+  collection size grows (the
   [PowerSeries benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition)
   sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
   `PSSingleton` protocol — morphed Lens / Prism / Optional
   inners collect into pre-sized flat arrays without per-element
   `PowerSeries` wrappers, and the always-hit refinement for
   Lens morphs skips the length-tracking array entirely.
-* `Traversal.forEach[F, A, B]` — carrier `Forget[F]`, map-only
-  fast path. Identity-shaped carrier, linear time, no downstream
-  optic composition.
-
-Use `each` for the composable default — it's what Scala users
-reach for intuitively:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
@@ -527,17 +525,7 @@ val listEach = Traversal.pEach[List, Int, Int]
 
 ```scala mdoc
 listEach.modify(_ + 1)(List(1, 2, 3))
-```
-
-Stick with `forEach` when the chain terminates — no downstream
-optics — and you want the tight map-only path:
-
-```scala mdoc:silent
-val listForEach = Traversal.forEach[List, Int, Int]
-```
-
-```scala mdoc
-listForEach.modify(_ + 1)(List(1, 2, 3))
+listEach.foldMapF(identity[Int])(List(1, 2, 3))   // sum
 ```
 
 `each` shines when the chain continues past the traversal — e.g.
@@ -783,34 +771,22 @@ of pair are intentionally **not** bridged in 0.1.0. The short answer
 is "the type system rules them out, and the natural workaround is a
 plain Scala expression":
 
-**Lens / Prism / Optional × `Fold[F]` (or `Traversal.forEach`) when
-the outer focuses on a scalar `A`** — the outer never produces an
-`F`-shape, so there's nothing for the `Fold` to traverse. Use
-`fold.foldMap(f)(lens.get(s))` directly. If your outer *does* focus
-on an `F[A]` (e.g. `Lens[Row, List[Int]]`), use one of the
-`MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` factories to
-lift into `MultiFocus[F]` and chain there.
+**Lens / Prism / Optional × `Fold[F]` when the outer focuses on a
+scalar `A`** — the outer never produces an `F`-shape, so there's
+nothing for the `Fold` to traverse. Use `fold.foldMap(f)(lens.get(s))`
+directly. If your outer *does* focus on an `F[A]` (e.g.
+`Lens[Row, List[Int]]`), use one of the `MultiFocus.fromLensF` /
+`fromPrismF` / `fromOptionalF` factories to lift into `MultiFocus[F]`
+and chain there.
 
-**`Traversal.each` × `Fold[F]` / `Traversal.forEach` / `MultiFocus[F]`** —
-PowerSeries (the `Traversal.each` carrier) cannot widen into Forget's
-classifier representation without dropping its rebuild data, and
-cannot widen into MultiFocus's per-candidate cardinality model without a
-synthetic count. The idiomatic workaround pushes the inner under the
-traversal: `traversal.modify(a => inner.replace(b)(a))(s)` for a
-`MultiFocus` inner; `traversal.foldMap(f)(s)` (the ForgetfulFold instance
-on PowerSeries) when you only need the fold side.
-
-**`Traversal.forEach` × `Traversal.forEach` across different `F` /
-`G`** — `assocForgetMonad` requires `F = G`. Composing
-`Forget[List]` with `Forget[Option]` would need either a
-`FunctionK`-witness Composer or a specialised nested-Foldable flatten;
-both are deferred to 0.2.x. Until then, run the inner foldable inside
-a `modify`:
-
-```scala
-val total: Int =
-  list.foldLeft(0)((acc, opt) => acc + opt.foldMap(_.length))
-```
+**`Traversal.each` × `Fold[F]` / `MultiFocus[F]`** — `MultiFocus[PSVec]`
+(the `Traversal.each` carrier) cannot widen into Forget's classifier
+representation without dropping its rebuild data, and cannot widen
+into another `MultiFocus[G]`'s per-candidate cardinality model without
+a synthetic count. The idiomatic workaround pushes the inner under
+the traversal: `traversal.modify(a => inner.replace(b)(a))(s)` for a
+`MultiFocus` inner; `traversal.foldMapF(f)(s)` (read-only escape on
+any `MultiFocus[F]`-carrier optic) when you only need the fold side.
 
 **`SetterF` outbound** — Setter is a composition terminal: ship it as
 the leaf of a chain (Lens → Setter via `Composer[Tuple2, SetterF]`)

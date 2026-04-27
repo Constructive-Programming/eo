@@ -7,14 +7,12 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, Forget, Forgetful, MultiFocus, SetterF}
+import data.{Affine, Forgetful, MultiFocus, PSVec, SetterF}
 import data.Forgetful.given
-import data.Forget.given
 import data.Affine.given
 import data.MultiFocus.given
 import data.SetterF.given
 import laws.eo.{
-  ForgetAllModifyLaws,
   IsoComposeLaws,
   LensComposeLaws,
   ModifyAConstLaws,
@@ -24,10 +22,8 @@ import laws.eo.{
   PutIsReverseGetLaws,
   ReverseInvolutionLaws,
   TransformLaws,
-  TraverseAllLaws,
 }
 import laws.eo.discipline.{
-  ForgetAllModifyTests,
   IsoComposeTests,
   LensComposeTests,
   ModifyAConstTests,
@@ -37,7 +33,6 @@ import laws.eo.discipline.{
   PutIsReverseGetTests,
   ReverseInvolutionTests,
   TransformTests,
-  TraverseAllTests,
 }
 import laws.typeclass.{ComposerPathIndependenceLaws, ComposerPreservesGetLaws}
 import laws.typeclass.discipline.{ComposerPathIndependenceTests, ComposerPreservesGetTests}
@@ -56,8 +51,8 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   val firstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
     Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
 
-  val listTraversal: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-    Traversal.forEach[List, Int, Int]
+  val listTraversal: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
+    Traversal.each[List, Int]
 
   // =============== A1/I1 — morph preserves modify ==================
 
@@ -147,10 +142,10 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   // =============== D1 — modifyA at Id ≡ modify =====================
 
   checkAll(
-    "Traversal.forEach modifyA[Id] ≡ modify",
-    new ModifyAIdTests[List[Int], Int, Forget[List]]:
+    "Traversal.each modifyA[Id] ≡ modify",
+    new ModifyAIdTests[List[Int], Int, MultiFocus[PSVec]]:
 
-      val laws = new ModifyAIdLaws[List[Int], Int, Forget[List]]:
+      val laws = new ModifyAIdLaws[List[Int], Int, MultiFocus[PSVec]]:
         val optic = listTraversal
     .modifyAId,
   )
@@ -158,19 +153,19 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   // =============== D3 — modifyA at Const ≡ foldMap =================
 
   checkAll(
-    "Traversal.forEach modifyA[Const[Int,*]].getConst ≡ foldMap",
-    new ModifyAConstTests[List[Int], Int, Forget[List]]:
+    "Traversal.each modifyA[Const[Int,*]].getConst ≡ foldMap",
+    new ModifyAConstTests[List[Int], Int, MultiFocus[PSVec]]:
 
-      val laws = new ModifyAConstLaws[List[Int], Int, Forget[List]]:
+      val laws = new ModifyAConstLaws[List[Int], Int, MultiFocus[PSVec]]:
         val optic = listTraversal
     .modifyAConst,
   )
 
   // =============== E1 — foldMap Monoid homomorphism ================
 
-  // covers: foldMap homomorphism on Traversal (Forget[List] carrier)
-  checkAllFoldMapHomomorphismFor[List[Int], Int, Forget[List]](
-    "Traversal.forEach.foldMap is a Monoid[Int] homomorphism",
+  // covers: foldMap homomorphism on Traversal (MultiFocus[PSVec] carrier)
+  checkAllFoldMapHomomorphismFor[List[Int], Int, MultiFocus[PSVec]](
+    "Traversal.each.foldMap is a Monoid[Int] homomorphism",
     listTraversal,
   )
 
@@ -245,28 +240,6 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
           given accessorH: data.Accessor[Tuple2] =
             data.Accessor.tupleAccessor
     .composerPreservesGet,
-  )
-
-  // =============== G1 + G2 — Optic.all on Forget[T] ================
-
-  checkAll(
-    "Traversal.forEach[List, Int]: all has length 1 and head == input",
-    new TraverseAllTests[List, Int]:
-
-      val laws = new TraverseAllLaws[List, Int]:
-        val traversal = listTraversal
-    .traverseAll,
-  )
-
-  // =============== G3 — all-then-map ≡ modify on Forget[T] =========
-
-  checkAll(
-    "Traversal.forEach[List, Int]: T.map(all(s).head)(f) ≡ modify(f)(s)",
-    new ForgetAllModifyTests[List, Int]:
-
-      val laws = new ForgetAllModifyLaws[List, Int]:
-        val traversal = listTraversal
-    .allMap,
   )
 
   // =============== C3 + C4 — Iso ∘ Iso =============================

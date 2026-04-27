@@ -130,15 +130,15 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(posIntPrism.reverseGet(7) === 7)
   }
 
-  // ----- Traversal/foldMap/modifyA shorthand ---------------------------
+  // ----- Traversal/foldMapF/modifyA shorthand --------------------------
 
-  // covers: Traversal.forEach.foldMap totals the list under Monoid[Int],
-  // Traversal.forEach.modifyA short-circuits on None, Lens morphed into an Affine
+  // covers: Traversal.each.foldMapF totals the list under Monoid[Int],
+  // Traversal.each.modifyA short-circuits on None, Lens morphed into an Affine
   // behaves like the original Lens
-  "Traversal.forEach: foldMap totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
-    val t: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-      Traversal.forEach[List, Int, Int]
-    val sumOk = forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
+  "Traversal.each: foldMapF totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
+    val t: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
+      Traversal.each[List, Int]
+    val sumOk = forAll((xs: List[Int]) => t.foldMapF(identity[Int])(xs) == xs.sum)
 
     val positivesDoubled: Int => Option[Int] =
       a => if a > 0 then Some(a * 2) else None

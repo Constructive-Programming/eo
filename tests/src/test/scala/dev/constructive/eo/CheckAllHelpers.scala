@@ -6,7 +6,7 @@ import org.specs2.mutable.SpecificationLike
 import org.specs2.specification.core.Fragment
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-import data.Forget
+import data.{MultiFocus, PSVec}
 import laws.{FoldLaws, MultiFocusLaws, TraversalLaws}
 import laws.discipline.{FoldTests, MultiFocusTests, TraversalTests}
 import laws.eo.{FoldMapHomomorphismLaws, MorphLaws}
@@ -154,15 +154,15 @@ trait CheckAllHelpers extends Discipline:
       .morphPreservesGet,
     )
 
-  // ===== Traversal-as-Forget over T[_] =====
+  // ===== Traversal-as-MultiFocus[PSVec] over T[_] =====
   //
   // Not currently used by EoSpecificLawsSpec (only one Traversal there); kept here for the
   // OpticsLawsSpec single-site to round out the helper set.
 
-  /** Runs `TraversalTests.traversal` for a `Traversal.forEach[T, A]` optic. */
+  /** Runs `TraversalTests.traversal` for a `Traversal.each[T, A]` optic. */
   def checkAllTraversalFor[T[_]: Functor, A](
       name: String,
-      traversalOptic: Optic[T[A], T[A], A, A, Forget[T]],
+      traversalOptic: Optic[T[A], T[A], A, A, MultiFocus[PSVec]],
   )(using Arbitrary[T[A]], Arbitrary[A], Cogen[A]): Fragment =
     checkAll(
       name,

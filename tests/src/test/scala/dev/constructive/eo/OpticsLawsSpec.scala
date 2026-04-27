@@ -143,13 +143,13 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .setter,
   )
 
-  // ----- Traversal.forEach on List[Int] ---------------------------
+  // ----- Traversal.each on List[Int] ------------------------------
 
-  val listTraversal: Optic[List[Int], List[Int], Int, Int, data.Forget[List]] =
-    Traversal.forEach[List, Int, Int]
+  val listTraversal: Optic[List[Int], List[Int], Int, Int, data.MultiFocus[PSVec]] =
+    Traversal.each[List, Int]
 
-  // covers: Traversal.forEach over List[Int]
-  checkAllTraversalFor[List, Int]("Traversal.forEach[List, Int]", listTraversal)
+  // covers: Traversal.each over List[Int]
+  checkAllTraversalFor[List, Int]("Traversal.each[List, Int]", listTraversal)
 
   // ----- Getter: first projection and a synthetic one ------------
 
@@ -492,9 +492,8 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // The ForgetfulFold instances for Tuple2 / Either / Affine in
   // core/src/main/scala/eo/ForgetfulFold.scala are only reachable
   // through an optic-level fold. These checkAll blocks wire the
-  // EO-specific FoldMapHomomorphismLaws (used earlier on
-  // Traversal.forEach) against the tuple / prism / optional fixtures
-  // already declared above.
+  // EO-specific FoldMapHomomorphismLaws against the tuple / prism /
+  // optional fixtures already declared above.
   // covers: foldMap homomorphism on Lens (Tuple2 carrier)
   checkAllFoldMapHomomorphismFor[(Int, String), Int, Tuple2](
     "Lens foldMap homomorphism (Tuple2 carrier)",

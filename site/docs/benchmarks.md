@@ -147,11 +147,11 @@ adds a small per-element dispatch layer through
 | 64   |   145.7 ns  |             1 352.5 ns   |  9.28×  |
 | 512  | 1 939.5 ns  |            16 214.0 ns   |  8.36×  |
 
-A surprisingly large win — EO's `Traversal.forEach` keeps the
-`Forget[T]` carrier linear by delegating straight to
-`Functor[T].map`, while Monocle's `Traversal` wraps each
-element in an `Applicative[Id]` traversal and pays the
-per-element wrapping cost.
+A surprisingly large win — EO's `Traversal.each` (carrier
+`MultiFocus[PSVec]`) collects element references into a flat
+focus vector and rebuilds via `Functor[PSVec].map`, while
+Monocle's `Traversal` wraps each element in an `Applicative[Id]`
+traversal and pays the per-element wrapping cost.
 
 ## JsonPrism — cursor-backed JSON edit
 
@@ -332,11 +332,10 @@ sparse-Prism — the remaining gap on sparse is inherent Prism
 miss-branch plumbing and is substantially smaller than the
 5-10× ratios other optic libraries publish for the same shape.
 
-For single-pass modify of a collection — no downstream optic
-after the traversal — `Traversal.forEach[F, A, B]` (carrier
-`Forget[F]`, identity-shaped, no composition support) is the
-correct choice. Reach for `Traversal.each` / `pEach` when the
-chain needs to continue past the traversal.
+`Traversal.each` / `pEach` (carrier `MultiFocus[PSVec]`) covers
+both single-pass modifies and chains that continue past the
+traversal — same optic, same `.modify`, with `.foldMapF` for
+read-only aggregation and `.andThen` for downstream composition.
 
 See the
 [composition notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes)

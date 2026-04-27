@@ -65,7 +65,8 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
 - [`Fold`](https://eo.constructive.dev/optics.html#fold) — N foci
   summarised through a `Monoid`.
 - [`Traversal`](https://eo.constructive.dev/optics.html#traversal) —
-  N foci, each individually modifiable; `.each` and `.forEach` flavours.
+  N foci, each individually modifiable, via `.each` over the
+  `MultiFocus[PSVec]` carrier.
 - [`MultiFocus`](https://eo.constructive.dev/optics.html#multifocus) —
   classifier-shaped update where the whole `F[A]` is visible (adaptive
   KNN, one-vs-rest), plus Kaleidoscope-style aggregation universals

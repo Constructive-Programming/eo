@@ -1,25 +1,25 @@
 package dev.constructive.eo
 package laws
 
-import _root_.dev.constructive.eo.data.Forget
-import _root_.dev.constructive.eo.data.Forget.given
+import _root_.dev.constructive.eo.data.MultiFocus
+import _root_.dev.constructive.eo.data.MultiFocus.given
+import _root_.dev.constructive.eo.data.PSVec
 import cats.Functor
 
 import optics.Optic
 
-/** Law equations for a `Traversal[T[_], A]` — `Optic[T[A], T[A], A, A, Forget[T]]`.
+/** Law equations for a `Traversal[T[_], A]` — `Optic[T[A], T[A], A, A, MultiFocus[PSVec]]`.
   *
-  * For `Traversal.forEach` the carrier is `Forget[T]`, which carries the right `ForgetfulFunctor` /
-  * `ForgetfulFold` instances to drive the modify-side laws.
+  * The `MultiFocus[PSVec]` carrier carries the right `ForgetfulFunctor` instance to drive the
+  * modify-side laws.
   *
   * We deliberately do NOT port `getAll` / `headOption` here — EO's `Optic.all` returns the whole
   * container wrapped in a single-element list (cartesian-product semantics from
   * `traverse(List(_))`), not the individual elements, so Monocle's phrasing of those laws would not
-  * be testing what the name suggests. See `dev.constructive.eo.laws.eo.TraverseAllLaws` for the
-  * EO-specific laws that pin down `all`'s real behaviour.
+  * be testing what the name suggests.
   */
 trait TraversalLaws[T[_], A](using val FT: Functor[T]):
-  def traversal: Optic[T[A], T[A], A, A, Forget[T]]
+  def traversal: Optic[T[A], T[A], A, A, MultiFocus[PSVec]]
 
   def modifyIdentity(s: T[A]): Boolean =
     traversal.modify(identity[A])(s) == s

@@ -12,6 +12,7 @@ case class UP(a: Int, b: Boolean)
 
   import Optic.*
   import Forget.given
+  import MultiFocus.given
 
   val aLens = Lens[UP, Int](_.a, (s, b) => s.copy(a = b))
   val bLens = Lens.second[Int, Boolean]
@@ -29,7 +30,7 @@ case class UP(a: Int, b: Boolean)
   val bplace = bLens.place(true)
   val cplace = cLens.place(56)
 
-  val t = Traversal.forEach[List, Int, Int]
+  val t = Traversal.each[List, Int]
 
   println(mod(UP(1, false)))
   println(split(UP(4, false)))

@@ -13,8 +13,8 @@ import dev.constructive.eo.optics.{
   Prism => EoPrism,
   Traversal => EoTraversal,
 }
-import dev.constructive.eo.data.Forget
-import dev.constructive.eo.data.Forget.given
+import dev.constructive.eo.data.{MultiFocus, PSVec}
+import dev.constructive.eo.data.MultiFocus.given
 
 import cats.instances.list.given
 
@@ -147,7 +147,7 @@ class IsoBench extends JmhDefaults:
 /** Traversal.modify over a moderately sized List[Int].
   *
   * The Monocle traversal walks the list with a Traverse[List]; the EO traversal walks via the
-  * Forget[List] carrier's bifunctor map. Same shape, different machinery.
+  * MultiFocus[PSVec] carrier (Functor[PSVec].map after collecting into the focus vector).
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -162,8 +162,8 @@ class TraversalBench extends JmhDefaults:
 
   var xs: List[Int] = uninitialized
 
-  val eoEach: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
-    EoTraversal.forEach[List, Int, Int]
+  val eoEach: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
+    EoTraversal.each[List, Int]
 
   val mEach: MTraversal[List[Int], Int] =
     MTraversal.fromTraverse[List, Int]

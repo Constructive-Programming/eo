@@ -18,7 +18,7 @@ plus a note on where EO diverges.
 | *(no direct equivalent — algebraic lenses + Kaleidoscopes are not in Monocle)* | `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` — classifier-shaped optic over `F[A]` focus, plus `.collectMap` / `.collectList` aggregation universals; see [Optics → MultiFocus](optics.md#multifocus) |
 | `Setter[S, A](f => s => …)`                        | `Setter[S, S, A, A](f => s => …)`                   |
 | `Fold.fromFoldable[List, Int]`                     | `Fold[List, Int]` (with `cats.instances.list.given`)|
-| `Traversal.fromTraverse[List, Int]`                | `Traversal.forEach[List, Int, Int]` (map-only) / `Traversal.pEach[List, Int, Int]` (composable) |
+| `Traversal.fromTraverse[List, Int]`                | `Traversal.each[List, Int]` (`Traversal.pEach[List, Int, Int]` for the polymorphic-write variant) |
 | `lens.andThen(otherLens)`                          | `lens.andThen(otherLens)` — same                    |
 | `lens.andThen(optional)`                           | `lens.andThen(optional)` — cross-carrier `.andThen` lifts via `Composer[Tuple2, Affine]` |
 | `traversal.andThen(lens)`                          | `traversal = Traversal.each[…]; traversal.andThen(lens)` — auto-morph via `Composer[Tuple2, PowerSeries]` |
@@ -86,23 +86,16 @@ carrier) and reach for `.get` / `.modify` at the leaf
 instead. See [Optics → Getter](optics.md#getter) for the
 workaround.
 
-### Traversal has two carriers
+### Traversal carrier
 
-Monocle's `Traversal` is a single type with a single
-`andThen` behaviour. cats-eo splits:
+cats-eo's `Traversal` is a single carrier:
 
 - `Traversal.each[F, A]` / `pEach[F, A, B]` — carrier
-  `PowerSeries`, the default. Composable with downstream optics;
-  pays a small constant-factor overhead over the naive map path.
-- `Traversal.forEach[F, A, B]` — carrier `Forget[F]`, map-only
-  fast path. No downstream composition, identity-shaped carrier.
-
-Use `each` by default — it's the one Scala users reach for
-intuitively, and it keeps the door open for `.andThen(lens)` after
-the traversal. Switch to `forEach` when the chain terminates at
-the traversal and you want the tight map-only path. See the
-[PowerSeries benchmark notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers)
-for the cost breakdown.
+  `MultiFocus[PSVec]`. Supports `.modify`, `.foldMapF`, `.modifyA`,
+  and `.andThen` with downstream optics. Pays a small constant-
+  factor overhead over the naive map path; see the
+  [PowerSeries benchmark notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers)
+  for the cost breakdown.
 
 ### JsonPrism has no Monocle equivalent
 

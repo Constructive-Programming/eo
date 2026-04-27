@@ -12,9 +12,9 @@ import optics.Optic
   * `X`. Equivalent to the classic Haskell `newtype Forget r a b = Forget (a -> r)` construction but
   * applied to a type constructor `F`: `Forget[F][X, A] = F[A]`, ignoring `X` completely.
   *
-  * Used by [[dev.constructive.eo.optics.Fold]], [[dev.constructive.eo.optics.Traversal.forEach]],
-  * and the multi-focus family ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape
-  * carrier" whose optic-level capabilities scale with the typeclasses `F` itself admits.
+  * Used by [[dev.constructive.eo.optics.Fold]] and the multi-focus family
+  * ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape carrier" whose optic-level
+  * capabilities scale with the typeclasses `F` itself admits.
   */
 type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
 
@@ -127,7 +127,7 @@ object Forget extends LowPriorityForgetInstances:
     def pure[X, A](a: A): F[A] = Applicative[F].pure(a)
 
   /** `ForgetfulFold[Forget[F]]` — delegates to the underlying `Foldable[F]`. Powers
-    * `Fold.apply[F, A]` and `Traversal.forEach.foldMap`.
+    * `Fold.apply[F, A]`.
     *
     * @group Instances
     */
@@ -137,7 +137,7 @@ object Forget extends LowPriorityForgetInstances:
       f => fa => Foldable[F].foldMap(fa)(f)
 
   /** `ForgetfulTraverse[Forget[F], Applicative]` — lifts `Traverse[F]` into the two-parameter
-    * carrier shape. Core of `Traversal.forEach` and `Fold` in their effectful forms.
+    * carrier shape. Core of `Fold` in its effectful form.
     *
     * @group Instances
     */
