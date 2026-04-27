@@ -22,8 +22,8 @@ private[avro] trait AvroOpticOps[A]:
   // ---- Abstract members supplied by each carrier ---------------------
 
   /** The reader schema used to decode `Array[Byte]` inputs. The carrier's constructor cached this
-    * off the user's `vulcan.Codec[Root]` (or accepted it as a `given Schema` per OQ-avro-5);
-    * exposing it here lets [[AvroFailure.parseInputIor]] thread it without re-summoning.
+    * off the user's `AvroCodec[Root]` (or accepted it as a `given Schema` per OQ-avro-5); exposing
+    * it here lets [[AvroFailure.parseInputIor]] thread it without re-summoning.
     */
   protected def rootSchema: Schema
 

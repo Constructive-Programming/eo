@@ -201,7 +201,6 @@ val ScalaCheckOrg = "org.scalacheck"
 val Optics = "dev.optics"
 val Kubuszok = "com.kubuszok"
 val Circe = "io.circe"
-val Fd4s = "com.github.fd4s"
 val ApacheAvro = "org.apache.avro"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
@@ -212,16 +211,14 @@ lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 lazy val hearth = Kubuszok %% "hearth" % "0.3.0"
 lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.1.0"
 lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.1.0"
+lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.1.2"
 lazy val circe = Circe %% "circe-core" % "0.14.10"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
-// `vulcan` is the cats-native Avro codec library (single `Codec[A]`
-// typeclass, `Either[AvroError, A]` failure surface, tasty-mima
-// enforced). Brings in apache-avro 1.11.5 transitively.
-lazy val vulcan = Fd4s %% "vulcan" % "1.13.0"
-// Pin apache-avro 1.11.5 explicitly even though vulcan brings it
-// transitively — keeps the reachable runtime jar visible in dependency
-// reports.
-lazy val avro = ApacheAvro % "avro" % "1.11.5"
+// Pin apache-avro 1.12.1 explicitly even though kindlings-avro-derivation
+// brings it transitively — keeps the reachable runtime jar visible in
+// dependency reports. cats-eo-avro touches `IndexedRecord` /
+// `GenericData` / `Schema` directly on the hot path.
+lazy val avro = ApacheAvro % "avro" % "1.12.1"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
@@ -421,10 +418,13 @@ lazy val circeIntegration: Project = project
 // / `Array[Byte]`). The flagship is `AvroPrism[S, A]` — a Prism whose
 // write path lets you `transform` an `IndexedRecord` field in place
 // without round-tripping through S. Mirrors `circeIntegration`'s
-// architecture decisions; built on `com.github.fd4s:vulcan` for the
-// codec surface (single-typeclass `Codec[A]`, `Either[AvroError, A]`
-// failure model). Kept in its own module so projects that only want
-// the base library don't pull in vulcan / avro.
+// architecture decisions; built on Mateusz Kubuszok's
+// `kindlings-avro-derivation` for the codec surface (the
+// `AvroEncoder[A]` / `AvroDecoder[A]` / `AvroSchemaFor[A]` triplet,
+// macro-derived via Hearth). cats-eo-avro wraps the triplet in its own
+// `AvroCodec[A]` shorthand so user code summons one thing per type.
+// Kept in its own module so projects that only want the base library
+// don't pull in kindlings / avro.
 lazy val avroIntegration: Project = project
   .in(file("avro"))
   .dependsOn(
@@ -437,9 +437,9 @@ lazy val avroIntegration: Project = project
   .settings(
     name := "cats-eo-avro",
     libraryDependencies += cats,
-    libraryDependencies += vulcan,
-    // Pin apache-avro explicitly even though vulcan brings it
-    // transitively — the optic surface uses `IndexedRecord` /
+    libraryDependencies += kindlingsAvro,
+    // Pin apache-avro explicitly even though kindlings-avro-derivation
+    // brings it transitively — the optic surface uses `IndexedRecord` /
     // `GenericData` directly for hot-path walks, so the dep is part
     // of our reachable API.
     libraryDependencies += avro,

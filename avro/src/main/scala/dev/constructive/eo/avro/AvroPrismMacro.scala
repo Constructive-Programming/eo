@@ -2,11 +2,9 @@ package dev.constructive.eo.avro
 
 import scala.quoted.*
 
-import vulcan.Codec
-
 /** Macros backing `AvroPrism.field(_.x)`, `selectDynamic`, `at(i)`, and `union[Branch]`. Mirrors
   * `dev.constructive.eo.circe.JsonPrismMacro` with codec summoning collapsed from two givens
-  * (Encoder + Decoder) to one (vulcan `Codec`).
+  * (`AvroEncoder` + `AvroDecoder`) to one project-internal [[AvroCodec]] wrapper.
   *
   * '''Macro-quote shorthand.''' Following the `JsonPrismMacro` convention, the macros use `'{ this
   * }` rather than `'this` for the parent reference — `scalafix-parser` v0.x has a known issue
@@ -15,12 +13,12 @@ import vulcan.Codec
 object AvroPrismMacro:
 
   /** Build a child `AvroPrism[B]` from a parent `AvroPrism[A]` via a compile-time selector
-    * `(_.field)` plus an in-scope vulcan `Codec[B]`.
+    * `(_.field)` plus an in-scope [[AvroCodec]]`[B]`.
     */
   def fieldImpl[A: Type, B: Type](
       parent: Expr[AvroPrism[A]],
       selector: Expr[A => B],
-      codecB: Expr[Codec[B]],
+      codecB: Expr[AvroCodec[B]],
   )(using q: Quotes): Expr[AvroPrism[B]] =
     import quotes.reflect.*
 
@@ -39,7 +37,7 @@ object AvroPrismMacro:
 
   /** Drives the Selectable sugar: `codecPrism[Person].name` compiles to `selectFieldImpl` with
     * `name = "name"`. We look the field up on `A`'s case-class schema, verify it exists, grab its
-    * declared type (widened to strip precise singletons), summon `Codec[B]` from the enclosing
+    * declared type (widened to strip precise singletons), summon `AvroCodec[B]` from the enclosing
     * scope, and emit the same `widenPath` call that the explicit `.field(_.x)` macro does.
     *
     * Returns `Expr[Any]` so the `transparent inline def selectDynamic` wrapper can refine the type
@@ -52,13 +50,13 @@ object AvroPrismMacro:
     selectDynamicCommon[A](
       "AvroPrism selectDynamic",
       nameE,
-    ) { [b] => (name: String, codecB: Expr[Codec[b]]) =>
+    ) { [b] => (name: String, codecB: Expr[AvroCodec[b]]) =>
       '{ $parent.widenPath[b](${ Expr(name) })(using $codecB) }
     }
 
   /** Macro for `avroPrism.at(i)`. Verifies the parent focus `A` looks like a Scala collection (i.e.
     * derives from `Iterable`), extracts the element type via `A`'s `Iterable` base type, summons
-    * the element's vulcan `Codec`, and emits a `widenPathIndex` call.
+    * the element's [[AvroCodec]], and emits a `widenPathIndex` call.
     */
   def atImpl[A: Type](
       parent: Expr[AvroPrism[A]],
@@ -69,15 +67,15 @@ object AvroPrismMacro:
     elemTpe.asType match
       case '[b] =>
         val codecB = summonCodec[b](
-          s"AvroPrism.at: no given Codec[${Type
+          s"AvroPrism.at: no given AvroCodec[${Type
               .show[b]}] in scope for the element type of ${Type.show[A]}."
         )
         '{ $parent.widenPathIndex[b]($iE)(using $codecB) }
 
   /** Skeleton macro for `avroPrism.union[Branch]`. Unit 8 will fill in the schema-driven branch-
     * name resolution; for v0.1.0 we emit a `widenPathUnion` call using the simple-name of `Branch`
-    * as the branch name. Vulcan-friendly: vulcan's `Codec[A]` for a branch type carries its own
-    * type name; the simple class name often matches the schema's named branch.
+    * as the branch name. Kindlings' macro-derived schemas use the case class' simple name for each
+    * branch by default, so this matches what the reader schema declares for the common case.
     */
   def unionImpl[A: Type, B: Type](
       parent: Expr[AvroPrism[A]]
@@ -94,7 +92,7 @@ object AvroPrismMacro:
       case other     => other
 
     val codecB = summonCodec[B](
-      s"AvroPrism.union[${Type.show[B]}]: no given Codec[${Type.show[B]}] in scope."
+      s"AvroPrism.union[${Type.show[B]}]: no given AvroCodec[${Type.show[B]}] in scope."
     )
     '{ $parent.widenPathUnion[B](${ Expr(branchName) })(using $codecB) }
 
@@ -103,7 +101,7 @@ object AvroPrismMacro:
   private def selectDynamicCommon[A: Type](
       who: String,
       nameE: Expr[String],
-  )(emit: [b] => (String, Expr[Codec[b]]) => Type[b] ?=> Expr[Any])(using
+  )(emit: [b] => (String, Expr[AvroCodec[b]]) => Type[b] ?=> Expr[Any])(using
       q: Quotes
   ): Expr[Any] =
     import quotes.reflect.*
@@ -130,7 +128,7 @@ object AvroPrismMacro:
     fieldTpe.asType match
       case '[b] =>
         val codecB = summonCodec[b](
-          s"$who: no given Codec[${Type.show[b]}] in scope for field '$name' of ${Type.show[A]}."
+          s"$who: no given AvroCodec[${Type.show[b]}] in scope for field '$name' of ${Type.show[A]}."
         )
         emit[b](name, codecB)
 
@@ -148,15 +146,16 @@ object AvroPrismMacro:
               .show[A]}."
         )
 
-  /** Summon a single `Codec[B]` from the enclosing scope, with a caller-supplied error message on
-    * failure. Counterpart to `JsonPrismMacro.summonCodecs` (which summoned both an Encoder and a
-    * Decoder); vulcan collapses the pair into one.
+  /** Summon a single [[AvroCodec]]`[B]` from the enclosing scope, with a caller-supplied error
+    * message on failure. Counterpart to `JsonPrismMacro.summonCodecs` (which summoned both an
+    * Encoder and a Decoder); cats-eo-avro's [[AvroCodec]] wrapper collapses kindlings'
+    * `AvroEncoder` / `AvroDecoder` / `AvroSchemaFor` triplet into one.
     */
   private def summonCodec[B: Type](
       errorMsg: String
-  )(using q: Quotes): Expr[Codec[B]] =
+  )(using q: Quotes): Expr[AvroCodec[B]] =
     import quotes.reflect.*
-    Expr.summon[Codec[B]].getOrElse(report.errorAndAbort(errorMsg))
+    Expr.summon[AvroCodec[B]].getOrElse(report.errorAndAbort(errorMsg))
 
   /** Strip `Inlined` / `Typed` wrappers around a lambda and pull the field name out of its body.
     * Mirrors the eo-circe `extractFieldName` helper so both macros agree on what a "single-field

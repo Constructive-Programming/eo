@@ -8,7 +8,6 @@ import java.io.ByteArrayInputStream
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
 import org.apache.avro.io.DecoderFactory
-import vulcan.AvroError
 
 /** Structured failure surfaced by the default Ior-bearing surface of [[AvroPrism]].
   *
@@ -39,10 +38,11 @@ enum AvroFailure:
   case IndexOutOfRange(step: PathStep, size: Int)
 
   /** Codec refused at `step`. `step` is `PathStep.Field("")` at root-level decode failures on a
-    * path-empty prism. The wrapped [[vulcan.AvroError]] carries vulcan's specific failure category
-    * (e.g. `decodeUnexpectedType`, `decodeMissingRecordField`).
+    * path-empty prism. The wrapped [[Throwable]] is whatever the kindlings decoder threw —
+    * typically an `AvroRuntimeException`, an `AvroTypeException`, or a `ClassCastException` when
+    * the runtime payload doesn't line up with the schema.
     */
-  case DecodeFailed(step: PathStep, cause: AvroError)
+  case DecodeFailed(step: PathStep, cause: Throwable)
 
   /** Input `Array[Byte]` didn't parse as an Avro binary record under the supplied schema. Surfaced
     * only by the `Avro | Array[Byte]` overloads; when the caller passes a parsed
@@ -70,7 +70,7 @@ enum AvroFailure:
     case NotARecord(s)               => s"expected Avro record at $s"
     case NotAnArray(s)               => s"expected Avro array at $s"
     case IndexOutOfRange(s, n)       => s"index out of range at $s (size=$n)"
-    case DecodeFailed(s, c)          => s"decode failed at $s: ${c.message}"
+    case DecodeFailed(s, c)          => s"decode failed at $s: ${c.getMessage}"
     case BinaryParseFailed(c)        => s"input bytes didn't parse as Avro binary: ${c.getMessage}"
     case UnionResolutionFailed(b, s) =>
       s"union resolution failed at $s (branches: ${b.mkString(", ")})"
@@ -80,9 +80,9 @@ enum AvroFailure:
 object AvroFailure:
 
   /** Structural equality — two [[AvroFailure]] values are equal iff they are the same case with the
-    * same arguments. Vulcan's [[vulcan.AvroError]] uses universal equality
-    * (`Eq.fromUniversalEquals`-style) inside [[DecodeFailed]]; [[Throwable]] inside
-    * [[BinaryParseFailed]] falls back to reference equality.
+    * same arguments. [[Throwable]] cases ([[DecodeFailed]] and [[BinaryParseFailed]]) fall back to
+    * reference equality; tests that need to assert on the failure shape pattern-match the case
+    * instead of comparing whole values.
     *
     * Required for `Eq[Chain[AvroFailure]]` to be summonable at specs2-`===` call sites.
     */
@@ -136,10 +136,9 @@ object AvroFailure:
           case Left(_)  => new org.apache.avro.generic.GenericData.Record(schema)
 
   /** Use apache-avro's `GenericDatumReader` to parse a binary payload under the supplied schema.
-    * Vulcan's `Codec[A]` doesn't expose a `fromBinary` shortcut at v1.13.x — the user encodes /
-    * decodes through `Codec.encode` / `Codec.decode` against an `Any` payload, and binary
-    * serialisation is delegated to the apache-avro layer underneath. This helper is the eo-avro
-    * counterpart to that delegation.
+    * Kindlings' `AvroEncoder` / `AvroDecoder` operate over already-parsed `Any` payloads, leaving
+    * binary serialisation to the apache-avro layer. This helper is the eo-avro counterpart to that
+    * boundary.
     *
     * Catches every NonFatal Throwable (apache-avro's binary decoder throws a wide variety —
     * `IOException`, `EOFException`, `AvroRuntimeException`) and surfaces them through the

@@ -5,7 +5,6 @@ import scala.language.implicitConversions
 import cats.data.{Chain, Ior}
 import org.apache.avro.generic.GenericRecord
 import org.specs2.mutable.Specification
-import vulcan.AvroError
 
 /** Observable-identity behaviour spec for [[AvroFailure]] and the [[AvroFailure.parseInputIor]] /
   * [[AvroFailure.parseInputUnsafe]] dual-input parse helpers.
@@ -44,12 +43,12 @@ class AvroFailureSpec extends Specification:
     f.message must contain("size=3")
   }
 
-  // covers: DecodeFailed constructible, message wraps the underlying AvroError
+  // covers: DecodeFailed constructible, message wraps the underlying Throwable
   "AvroFailure.DecodeFailed constructible + wraps cause message" >> {
-    val cause = AvroError("missing record field 'name'")
+    val cause = new RuntimeException("missing record field 'name'")
     val f: AvroFailure = AvroFailure.DecodeFailed(PathStep.Field("name"), cause)
     (f.message must contain("decode failed"))
-      .and(f.message must contain(cause.message))
+      .and(f.message must contain(cause.getMessage))
   }
 
   // covers: BinaryParseFailed constructible, message wraps the underlying Throwable
