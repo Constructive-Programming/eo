@@ -28,8 +28,8 @@ import laws.discipline.{
   PrismTests,
   SetterTests,
 }
-import laws.data.{AffineLaws, PowerSeriesLaws, SetterFLaws}
-import laws.data.discipline.{AffineTests, PowerSeriesTests, SetterFTests}
+import laws.data.{AffineLaws, SetterFLaws}
+import laws.data.discipline.{AffineTests, SetterFTests}
 import laws.typeclass.AssociativeFunctorLaws
 import laws.typeclass.discipline.AssociativeFunctorTests
 
@@ -259,13 +259,14 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .setterF,
   )
 
-  // ----- PowerSeries carrier laws ---------------------------------
+  // ----- MultiFocus[PSVec] carrier carrier laws -------------------
+  // Replaces the legacy PowerSeries-carrier law sweep — the optic shape is
+  // identical (the X leftover and the PSVec[A] focus vector); only the
+  // top-level carrier name changed.
 
-  import data.PowerSeries
-  import data.PowerSeries.given
-  import data.PSVec
+  import data.{MultiFocus, PSVec}
 
-  private given arbPowerSeries: Arbitrary[PowerSeries[(Int, Int), Int]] =
+  private given arbMultiFocusPSVec: Arbitrary[((Int, Int), PSVec[Int])] =
     Arbitrary(
       for
         x <- Arbitrary.arbitrary[Int]
@@ -277,15 +278,8 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         arr(0) = a0.asInstanceOf[AnyRef]
         arr(1) = a1.asInstanceOf[AnyRef]
         arr(2) = a2.asInstanceOf[AnyRef]
-        PowerSeries[(Int, Int), Int](x, PSVec.unsafeWrap[Int](arr))
+        ((x, x), PSVec.unsafeWrap[Int](arr))
     )
-
-  checkAll(
-    "PowerSeries[(Int, Int), Int]",
-    new PowerSeriesTests[(Int, Int), Int]:
-      val laws = new PowerSeriesLaws[(Int, Int), Int] {}
-    .powerSeries,
-  )
 
   // ----- FixedTraversal carrier laws ------------------------------
 
@@ -393,12 +387,12 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     "ForgetfulTraverse[Affine, Applicative] on Affine[(Int, String), Boolean]"
   )
 
-  // covers: ForgetfulFunctor + ForgetfulTraverse over PowerSeries (uses arbPowerSeries)
-  checkAllForgetfulFunctorFor[PowerSeries, (Int, Int), Int](
-    "ForgetfulFunctor[PowerSeries] on PowerSeries[(Int, Int), Int]"
+  // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[PSVec] (uses arbMultiFocusPSVec)
+  checkAllForgetfulFunctorFor[MultiFocus[PSVec], (Int, Int), Int](
+    "ForgetfulFunctor[MultiFocus[PSVec]] on ((Int, Int), PSVec[Int])"
   )
-  checkAllForgetfulTraverseFor[PowerSeries, (Int, Int), Int](
-    "ForgetfulTraverse[PowerSeries, Applicative] on PowerSeries[(Int, Int), Int]"
+  checkAllForgetfulTraverseFor[MultiFocus[PSVec], (Int, Int), Int](
+    "ForgetfulTraverse[MultiFocus[PSVec], Applicative] on ((Int, Int), PSVec[Int])"
   )
 
   // covers: ForgetfulFunctor + ForgetfulTraverse over Forget[List] —

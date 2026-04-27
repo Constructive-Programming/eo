@@ -17,8 +17,7 @@ import org.specs2.mutable.Specification
 import optics.{Optic, Traversal}
 import optics.Optic.*
 import generics.lens
-import data.PowerSeries
-import data.PowerSeries.given
+import data.{MultiFocus, PSVec}
 
 /** Motivating example for cats-eo — the "why this library exists" showcase.
   *
@@ -229,7 +228,7 @@ object CrudRoundtripSpec:
     * extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on each hop. A single
     * `modifyA[Result]` then threads an `Either`-effectful validator through every leaf at once.
     */
-  val everyZip: Optic[User, User, String, String, PowerSeries] =
+  val everyZip: Optic[User, User, String, String, MultiFocus[PSVec]] =
     lens[User](_.orders)
       .andThen(Traversal.each[List, Order])
       .andThen(orderShippingZip)

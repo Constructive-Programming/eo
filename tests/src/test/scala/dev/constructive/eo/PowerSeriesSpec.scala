@@ -11,8 +11,7 @@ import org.specs2.mutable.Specification
 
 import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
-import data.PowerSeries
-import data.PowerSeries.given
+import data.{MultiFocus, PSVec}
 
 /** Behaviour-level spec for `PowerSeries`, `Traversal.each`, and the
   * `Composer[Tuple2 → PowerSeries]` bridge.
@@ -77,14 +76,14 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
     identityOk && distributeOk && replaceOk
   }
 
-  // covers: lift a Lens into a PowerSeries optic whose inner Vector has size 1,
-  // round-trip modify(identity) through a PowerSeries-lifted Lens,
+  // covers: lift a Lens into a MultiFocus[PSVec] optic whose inner PSVec has size 1,
+  // round-trip modify(identity) through a MultiFocus[PSVec]-lifted Lens,
   // modify-through-morph agrees with modify on the original Lens
-  "Tuple2 → PowerSeries composer: length-1 inner vector / identity round-trip / modify agreement" >> {
+  "Tuple2 → MultiFocus[PSVec] composer: length-1 inner vector / identity round-trip / modify agreement" >> {
     val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-    val morphd = lens.morph[PowerSeries]
+    val morphd = lens.morph[MultiFocus[PSVec]]
 
-    val sizeOk = forAll { (p: (Int, String)) => morphd.to(p).vs.length == 1 }
+    val sizeOk = forAll { (p: (Int, String)) => morphd.to(p)._2.length == 1 }
     val identityOk = forAll { (p: (Int, String)) => morphd.modify(identity[Int])(p) == p }
     val agreeOk =
       forAll { (p: (Int, String), f: Int => Int) => morphd.modify(f)(p) == lens.modify(f)(p) }

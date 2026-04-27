@@ -27,7 +27,7 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PowerSeries, SetterF}
+import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
@@ -456,10 +456,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
       .and(affineLifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
-    val each: Optic[List[Int], List[Int], Int, Int, PowerSeries] =
+    val each: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
       Traversal.each[List, Int]
     val psLifted: Optic[List[Int], List[Int], Int, Int, data.SetterF] =
-      summon[Composer[PowerSeries, data.SetterF]].to(each)
+      summon[Composer[MultiFocus[PSVec], data.SetterF]].to(each)
     val psOk =
       (psLifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30))
         .and(psLifted.modify(_ * 10)(Nil) === Nil)
