@@ -34,9 +34,8 @@ representation, modifying only the focused leaf and rebuilding
 the parents on the way up. The
 [`AvroOpticsBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/AvroOpticsBench.scala)
 suite documents the speedup against the kindlings-avro-derivation
-codec round-trip — see the
-[Avro benchmarks section](benchmarks.md#avroprism--direct-walk-over-indexedrecord)
-for the full table.
+codec round-trip — see the [benchmarks page](benchmarks.md) for the
+full table.
 
 The codec backend is
 [kindlings-avro-derivation](https://github.com/MateuszKubuszok/kindlings-avro-derivation)
@@ -575,7 +574,7 @@ call-site budget — every prism / traversal class ships both.
 | Parse + edit Avro JSON wire payloads                       | `AvroPrism.modify(...)` on `String`                |
 
 For the Kafka end-to-end recipe (read bytes, modify, re-emit),
-see the [Cookbook → Kafka payload edit](cookbook.md#kafka-payload-edit--binary-in-binary-out).
+see the [Cookbook → Kafka payload edit](cookbook.md#kafka-payload-edit).
 For the full failure-mode matrix and the per-case behaviour
 specs, see
 [`AvroPrismSpec`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/test/scala/dev/constructive/eo/avro/AvroPrismSpec.scala)

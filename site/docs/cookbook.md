@@ -979,7 +979,7 @@ service boundaries.
 
 ## Theme J — Streaming / Kafka
 
-### Kafka payload edit — binary in, binary out
+### Kafka payload edit
 
 Most Kafka consumers receive `Array[Byte]` payloads, want to
 modify a single field, and re-emit binary on the producer side.
