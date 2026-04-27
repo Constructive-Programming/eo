@@ -15,7 +15,7 @@ plus a note on where EO diverges.
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
 | `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A, Affine](getOrModify, rg)`     |
 | *(no standalone equivalent — Monocle reaches for `Optional.getOption`)* | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold.fromOptional(opt)` / `AffineFold.fromPrism(p)` — read-only 0-or-1 focus, `T = Unit` forbids `.modify` |
-| *(no direct equivalent — algebraic lenses are not in Monocle)* | `AlgLens.fromLensF` / `fromPrismF` / `fromOptionalF` — classifier-shaped lens over `F[A]` focus; see [Optics → AlgLens](optics.md#alglens) |
+| *(no direct equivalent — algebraic lenses + Kaleidoscopes are not in Monocle)* | `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` — classifier-shaped optic over `F[A]` focus, plus `.collectMap` / `.collectList` aggregation universals; see [Optics → MultiFocus](optics.md#multifocus) |
 | `Setter[S, A](f => s => …)`                        | `Setter[S, S, A, A](f => s => …)`                   |
 | `Fold.fromFoldable[List, Int]`                     | `Fold[List, Int]` (with `cats.instances.list.given`)|
 | `Traversal.fromTraverse[List, Int]`                | `Traversal.forEach[List, Int, Int]` (map-only) / `Traversal.pEach[List, Int, Int]` (composable) |

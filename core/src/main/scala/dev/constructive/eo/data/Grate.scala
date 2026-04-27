@@ -14,7 +14,7 @@ import optics.Optic
   *   - `a: A` — a representative focus (read by `.modify`, `.replace`), and
   *   - `k: X => A` — a rebuild function that re-reads the focus from a reassembled source.
   *
-  * This paired encoding fits every existing pair-shaped carrier (`Tuple2`, `Affine`, `AlgLens[F]`,
+  * This paired encoding fits every existing pair-shaped carrier (`Tuple2`, `Affine`, `MultiFocus[F]`,
   * `SetterF`, `PowerSeries`). The "continuation" encoding `(X => A) => A` is closer to the textbook
   * shape but would force a `Closed` profunctor analogue that `cats-eo` does not ship; see the plan
   * at `docs/plans/2026-04-23-004-feat-grate-optic-family-plan.md` (Key Technical Decisions D1) for

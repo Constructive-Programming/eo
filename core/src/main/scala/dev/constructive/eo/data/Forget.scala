@@ -13,7 +13,7 @@ import optics.Optic
   * applied to a type constructor `F`: `Forget[F][X, A] = F[A]`, ignoring `X` completely.
   *
   * Used by [[dev.constructive.eo.optics.Fold]], [[dev.constructive.eo.optics.Traversal.forEach]],
-  * and the algebraic-lens family ([[dev.constructive.eo.data.AlgLens]]) as a uniform "F-shape
+  * and the multi-focus family ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape
   * carrier" whose optic-level capabilities scale with the typeclasses `F` itself admits.
   */
 type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
@@ -34,10 +34,10 @@ type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
   *
   * `Forget[F]`'s `X` is phantom (`Forget[F][X, A] = F[A]`), which is exactly what `Traversal` /
   * `Fold` want — those families never need outer-structural context on the `from` side. For the
-  * richer algebraic-lens family, where a `Lens` / `Prism` / `Optional` must be bridged into a
+  * richer multi-focus family, where a `Lens` / `Prism` / `Optional` must be bridged into a
   * classifier-shape carrier and the outer's leftover `X` has to survive the round-trip, the pair
-  * carrier [[AlgLens]] (`[X, A] =>> (X, F[A])`) is the right home; `Forget[F]` injects trivially
-  * into it via `Composer[Forget[F], AlgLens[F]]`.
+  * carrier [[MultiFocus]] (`[X, A] =>> (X, F[A])`) is the right home; `Forget[F]` injects trivially
+  * into it via `Composer[Forget[F], MultiFocus[F]]`.
   *
   * Instances that don't target `Forget[F]` specifically (for example `AssociativeFunctor[Forgetful,
   * _, _]` used by `Iso` / `Getter`) live in [[Forgetful]].

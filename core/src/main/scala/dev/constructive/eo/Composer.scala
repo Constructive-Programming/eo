@@ -35,8 +35,8 @@ trait Composer[F[_, _], G[_, _]]:
   *   2. Low priority (inherited from [[LowPriorityComposerInstances]]): a single
   *      [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] derivation with `Tuple2` as
   *      the fixed intermediate. Covers Forgetful-origin chains to Affine / SetterF / PowerSeries /
-  *      AlgLens[F] uniformly without introducing ambiguity. Carriers that don't have a
-  *      `Composer[Tuple2, G]` bridge (Grate, Kaleidoscope) ship their own `Composer[Forgetful, X]`
+  *      MultiFocus[F] uniformly without introducing ambiguity. Carriers that don't have a
+  *      `Composer[Tuple2, G]` bridge (Grate) ship their own `Composer[Forgetful, X]`
   *      directly at tier 1.
   *
   * An earlier `chain[F, G, H]` derivation over arbitrary intermediate `G` was removed during the
@@ -104,7 +104,7 @@ trait LowPriorityComposerInstances:
 
   /** Transitive derivation via `Tuple2` as the intermediate carrier: given `F → Tuple2` and
     * `Tuple2 → G`, derive `F → G`. Fires cleanly for Forgetful-origin chains to any target with a
-    * `Composer[Tuple2, _]` direct (Affine / SetterF / PowerSeries / AlgLens[F]).
+    * `Composer[Tuple2, _]` direct (Affine / SetterF / PowerSeries / MultiFocus[F]).
     *
     * @group Instances
     */

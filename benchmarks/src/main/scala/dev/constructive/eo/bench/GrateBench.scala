@@ -18,7 +18,7 @@ import dev.constructive.eo.data.Grate.given
   *
   * Documents the cost envelope rather than a "Grate is faster" story, mirroring the plan's D6.
   *
-  * Annotations mirror `AlgLensBench.scala`: `@Fork(3)` for three forks, 3 warmup + 5 measurement
+  * Annotations mirror `MultiFocusBench.scala`: `@Fork(3)` for three forks, 3 warmup + 5 measurement
   * iterations of 1 second each. Run with:
   * {{{
   * sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 1 .*GrateBench.*"

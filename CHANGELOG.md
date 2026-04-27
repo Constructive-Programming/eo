@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Internal carrier unification — `AlgLens[F]` + `Kaleidoscope` collapse
+  into `MultiFocus[F]`.** The two pre-0.1.0 carriers had identical
+  `(X, F[A])` value shapes and only differed in their encoding (parameter
+  vs path-dependent F; cats-`Functor` vs project-local `Reflector`).
+  `MultiFocus[F][X, A] = (X, F[A])` is now the single home for
+  classifier-shaped optics + aggregation universals. The
+  `Reflector[F]` typeclass is deleted. The K3 `collectViaReflect` law is
+  replaced by a carrier-wide `collectViaMap` (Functor-broadcast); the
+  `Reflector[List]` cartesian-singleton story survives at the call site as
+  the `MultiFocus[List].collectList` extension. Pre-0.1.0 — no published
+  artifact to break, but the rename is mechanical for any external code
+  on the spike branch (`AlgLens[F]` → `MultiFocus[F]`, `Kaleidoscope` →
+  `MultiFocus[F]`, `kal.collect[F, B](agg)` → `mf.collectMap[B](agg)` or
+  `mf.collectList(agg)`).
+
 ## [0.1.0] - 2026-04-25
 
 ### Added

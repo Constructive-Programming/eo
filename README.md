@@ -66,15 +66,13 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   summarised through a `Monoid`.
 - [`Traversal`](https://eo.constructive.dev/optics.html#traversal) —
   N foci, each individually modifiable; `.each` and `.forEach` flavours.
-- [`AlgLens`](https://eo.constructive.dev/optics.html#alglens) —
+- [`MultiFocus`](https://eo.constructive.dev/optics.html#multifocus) —
   classifier-shaped update where the whole `F[A]` is visible (adaptive
-  KNN, one-vs-rest).
+  KNN, one-vs-rest), plus Kaleidoscope-style aggregation universals
+  (`.collectMap` / `.collectList`).
 - [`Grate`](https://eo.constructive.dev/optics.html#grate) — the
   dual of `Lens`; lifts a function on the focus to a function on the
   whole structure.
-- [`Kaleidoscope`](https://eo.constructive.dev/optics.html#kaleidoscope) —
-  applicative-aware aggregation; folds a structure under any
-  `Apply` carrier.
 - [`Review`](https://eo.constructive.dev/optics.html#review) — the
   reverse-only half of a `Prism`; build, never observe.
 - [`JsonPrism`](https://eo.constructive.dev/circe.html#jsonprism) —
