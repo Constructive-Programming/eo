@@ -2,7 +2,6 @@ package dev.constructive.eo.avro
 
 import scala.jdk.CollectionConverters.*
 
-import cats.syntax.foldable.*
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
 /** Shared internal helpers for the fold-based Avro walks used by [[AvroPrism]] and (in Unit 6+) its
@@ -21,6 +20,17 @@ import org.apache.avro.generic.{GenericData, IndexedRecord}
   * The structural `Eq[IndexedRecord]` / `Eq[GenericRecord]` givens (per Gap-5 / OQ-avro-9) live in
   * the [[dev.constructive.eo.avro]] package object — that's the public-facing user surface;
   * `AvroWalk` itself is implementation detail.
+  *
+  * '''Unit 12 (perf).''' Two parallel entry points:
+  *
+  *   - [[walkPath]] — the legacy `(Any, Vector[AnyRef])`-shaped surface, kept for tests / direct
+  *     introspection.
+  *   - [[walkPathArr]] — the hot-path entry. Stores parents in a pre-allocated `Array[AnyRef]` of
+  *     size `path.length` and runs as a tail-recursive while-loop. Per-step `Right(...)` boxing,
+  *     `Vector.:+` constant factor (~5× `ArrayBuilder`), and `Vector` materialisation from the
+  *     `Array` are all eliminated. The companion [[rebuildPathArr]] folds the array backwards via a
+  *     `while` loop. Used by the four [[AvroFocus]] hot paths (`modifyImpl` / `transformImpl` /
+  *     `placeImpl` / `readImpl`) and the corresponding Ior surfaces.
   */
 private[avro] object AvroWalk:
 
@@ -31,6 +41,15 @@ private[avro] object AvroWalk:
     * the terminal value.
     */
   type State = (Any, Vector[AnyRef])
+
+  /** Hot-path walk result: the current Avro focus, the parents array (sized to `path.length` —
+    * `path` is the input passed to [[walkPathArr]]), and the count of parent slots actually filled.
+    * `UnionBranch` steps don't push parents, so `parentsLen <= path.length`.
+    *
+    * Allocated once per walk. Held by reference through the per-record hooks in [[AvroFocus]] and
+    * fed straight into [[rebuildPathArr]] without intermediate copying.
+    */
+  final class WalkRes(val cur: Any, val parents: Array[AnyRef], val parentsLen: Int)
 
   /** Per-step policy controlling how missing field-steps behave. Mirrors
     * [[dev.constructive.eo.circe.JsonWalk.OnMissingField]].
@@ -55,6 +74,9 @@ private[avro] object AvroWalk:
     * for map keys (with the same `PathStep.Field(name)` shape), `java.util.List[_]` for array
     * indices, and pass-through for `UnionBranch` (the apache-avro reader has already resolved the
     * alternative; we just verify the runtime type aligns).
+    *
+    * Kept as a single-step, Vector-shaped entry point for direct tests; the hot path uses
+    * [[walkPathArr]]'s inlined loop.
     */
   def stepInto(
       step: PathStep,
@@ -74,8 +96,6 @@ private[avro] object AvroWalk:
                 case OnMissingField.Lenient => Right((null, parents :+ rec))
             else Right((rec.get(field.pos), parents :+ rec))
           case map: java.util.Map[?, ?] =>
-            // Map keys are stored as CharSequence (Utf8) in apache-avro's
-            // generic data; check both `String` and CharSequence forms.
             val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
             val direct = asMap.get(name)
             val viaUtf8 =
@@ -98,11 +118,6 @@ private[avro] object AvroWalk:
           case _ => Left(AvroFailure.NotAnArray(step))
 
       case PathStep.UnionBranch(branchName) =>
-        // For union steps we don't actually walk into a child container; the
-        // "value-at-this-position" already IS the resolved alternative as far
-        // as apache-avro's generic data model is concerned. We only need to
-        // verify the runtime type lines up with the requested branch name; if
-        // it doesn't, surface UnionResolutionFailed pointing at this step.
         cur match
           case null =>
             if branchName == "null" then Right((null, parents))
@@ -112,65 +127,164 @@ private[avro] object AvroWalk:
             if actualName == branchName then Right((other, parents))
             else Left(AvroFailure.UnionResolutionFailed(List(actualName), step))
 
-  /** Walk an entire `path` from `record`, accumulating parents at each step. Strict by default —
-    * pass `OnMissingField.Lenient` to tolerate missing field-steps as `null` leaves.
+  /** Walk an entire `path` from `record`, accumulating parents in a `Vector[AnyRef]`. Strict by
+    * default — pass `OnMissingField.Lenient` to tolerate missing field-steps as `null` leaves.
     *
-    * UnionBranch failures are post-processed in the per-step lambda: when [[stepInto]] rejects the
-    * runtime value at an `UnionBranch` step, we look back at the most recent `Field` step on the
-    * path to recover the parent's union schema and rewrite the failure's `branches` list to
-    * enumerate all schema-declared alternatives (instead of the single "actual"-branch list the
-    * runtime heuristic produces). That way `UnionResolutionFailed.branches` always carries the full
-    * `["null", "long", ...]`-shaped diagnostic.
+    * Legacy entry point — preserved for tests and for the few callers that historically held
+    * parents as a Vector. Hot-path callers should use [[walkPathArr]] instead, which avoids the
+    * Vector materialisation.
     */
   def walkPath(
       record: IndexedRecord,
       path: Array[PathStep],
       policy: OnMissingField = OnMissingField.Strict,
   ): Either[AvroFailure, State] =
-    path
-      .toVector
-      .zipWithIndex
-      .foldLeftM[[T] =>> Either[AvroFailure, T], State]((record: Any, Vector.empty)) {
-        case ((cur, parents), (step, i)) =>
-          stepInto(step, cur, parents, policy).left.map {
-            case AvroFailure.UnionResolutionFailed(_, badStep) =>
-              AvroFailure.UnionResolutionFailed(unionBranchesAt(path, i, parents), badStep)
-            case other => other
-          }
-      }
+    walkPathArr(record, path, policy) match
+      case Left(failure) => Left(failure)
+      case Right(walked) =>
+        val parentsVec =
+          if walked.parentsLen == 0 then Vector.empty[AnyRef]
+          else
+            val b = Vector.newBuilder[AnyRef]
+            b.sizeHint(walked.parentsLen)
+            var i = 0
+            while i < walked.parentsLen do
+              b += walked.parents(i)
+              i += 1
+            b.result()
+        Right((walked.cur, parentsVec))
+
+  /** Hot-path walk — array-indexed `while` loop with a pre-allocated parents array sized to
+    * `path.length`. Always returns the same [[WalkRes]] shape; UnionBranch failures are
+    * post-processed in-line so [[AvroFailure.UnionResolutionFailed.branches]] always carries the
+    * full schema-declared alternative list.
+    *
+    * Failure short-circuit uses an in-loop sentinel (`failure: AvroFailure | Null`) rather than
+    * `return` so the scalafix `DisableSyntax.return` linter doesn't fire. The JIT inlines the
+    * one-instruction `null` check on the loop guard.
+    */
+  def walkPathArr(
+      record: IndexedRecord,
+      path: Array[PathStep],
+      policy: OnMissingField = OnMissingField.Strict,
+  ): Either[AvroFailure, WalkRes] =
+    val len = path.length
+    if len == 0 then Right(new WalkRes(record, EmptyParents, 0))
+    else
+      val parents = new Array[AnyRef](len)
+      var parentsLen = 0
+      var cur: Any = record
+      var failure: AvroFailure | Null = null
+      var i = 0
+      while i < len && failure == null do
+        val step = path(i)
+        step match
+          case PathStep.Field(name) =>
+            cur match
+              case rec: IndexedRecord =>
+                val schema = rec.getSchema
+                val field = schema.getField(name)
+                if field == null then
+                  policy match
+                    case OnMissingField.Strict =>
+                      failure = AvroFailure.PathMissing(step)
+                    case OnMissingField.Lenient =>
+                      parents(parentsLen) = rec
+                      parentsLen += 1
+                      cur = null
+                else
+                  parents(parentsLen) = rec
+                  parentsLen += 1
+                  cur = rec.get(field.pos)
+              case map: java.util.Map[?, ?] =>
+                val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
+                val direct = asMap.get(name)
+                val viaUtf8 =
+                  if direct == null then asMap.get(new org.apache.avro.util.Utf8(name)) else direct
+                if viaUtf8 == null then
+                  policy match
+                    case OnMissingField.Strict =>
+                      failure = AvroFailure.PathMissing(step)
+                    case OnMissingField.Lenient =>
+                      parents(parentsLen) = map.asInstanceOf[AnyRef]
+                      parentsLen += 1
+                      cur = null
+                else
+                  parents(parentsLen) = map.asInstanceOf[AnyRef]
+                  parentsLen += 1
+                  cur = viaUtf8
+              case _ =>
+                failure = AvroFailure.NotARecord(step)
+
+          case PathStep.Index(idx) =>
+            cur match
+              case lst: java.util.List[?] =>
+                val size = lst.size
+                if idx < 0 || idx >= size then failure = AvroFailure.IndexOutOfRange(step, size)
+                else
+                  parents(parentsLen) = lst.asInstanceOf[AnyRef]
+                  parentsLen += 1
+                  cur = lst.get(idx)
+              case _ =>
+                failure = AvroFailure.NotAnArray(step)
+
+          case PathStep.UnionBranch(branchName) =>
+            cur match
+              case null =>
+                if branchName == "null" then ()
+                else
+                  failure = AvroFailure
+                    .UnionResolutionFailed(unionBranchesAtArr(path, i, parents, parentsLen), step)
+              case other =>
+                val actualName = unionBranchName(other)
+                if actualName == branchName then ()
+                else
+                  failure = AvroFailure
+                    .UnionResolutionFailed(unionBranchesAtArr(path, i, parents, parentsLen), step)
+        i += 1
+      if failure == null then Right(new WalkRes(cur, parents, parentsLen))
+      else Left(failure)
+
+  private val EmptyParents: Array[AnyRef] = new Array[AnyRef](0)
 
   /** Recover the union-schema branch list from the path step that produced the current parent.
     *
-    * Walks backwards from `unionStepIdx - 1` to find the most recent `Field` step; the parent
-    * record collected at that position carries the field whose schema is the union we're trying to
-    * resolve. Returns `Nil` when no such step is found — callers preserve the single "actual"-
-    * branch list the heuristic walker already provided.
+    * Walks backwards from `unionStepIdx - 1` to find the most recent `Field` step on the path; the
+    * parent record collected at that position carries the field whose schema is the union we're
+    * trying to resolve. Operates directly on the partially-filled parents array — tracks a `pIdx`
+    * cursor that decrements only on non-UnionBranch steps so it stays aligned with the walker's
+    * parents-array layout. Returns `Nil` when no such step is found.
     */
-  private def unionBranchesAt(
+  private def unionBranchesAtArr(
       path: Array[PathStep],
       unionStepIdx: Int,
-      parents: Vector[AnyRef],
+      parents: Array[AnyRef],
+      parentsLen: Int,
   ): List[String] =
-    // The most recent Field step before the union step; its index `j` aligns with `parents(j)`,
-    // which holds the IndexedRecord that owned the field whose schema is the union we want.
-    Iterator
-      .from(unionStepIdx - 1, -1)
-      .takeWhile(_ >= 0)
-      .map(j => (j, path(j)))
-      .collectFirst { case (j, PathStep.Field(name)) => (j, name) }
-      .flatMap {
-        case (j, name) =>
-          Option
-            .when(j < parents.length)(parents(j))
-            .collect { case rec: IndexedRecord => rec }
-            .map { rec =>
-              val f = rec.getSchema.getField(name)
-              if f != null && f.schema.getType == org.apache.avro.Schema.Type.UNION then
-                f.schema.getTypes.asScala.map(_.getFullName).toList
-              else Nil
-            }
-      }
-      .getOrElse(Nil)
+    // The union step itself didn't push a parent, so the most recent parent index equals
+    // `parentsLen - 1`. Decrement on each non-UnionBranch step as we walk backwards.
+    var pIdx = parentsLen - 1
+    var j = unionStepIdx - 1
+    var result: List[String] | Null = null
+    while j >= 0 && result == null do
+      path(j) match
+        case PathStep.Field(name) =>
+          if pIdx >= 0 then
+            parents(pIdx) match
+              case rec: IndexedRecord =>
+                val f = rec.getSchema.getField(name)
+                if f != null && f.schema.getType == org.apache.avro.Schema.Type.UNION then
+                  result = f.schema.getTypes.asScala.map(_.getFullName).toList
+                else result = Nil
+              case _ => result = Nil
+          else result = Nil
+        case PathStep.UnionBranch(_) =>
+          // doesn't decrement pIdx (UnionBranch steps don't push parents)
+          ()
+        case _ =>
+          pIdx -= 1
+      j -= 1
+    if result == null then Nil else result
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't of the expected type")
@@ -187,16 +301,41 @@ private[avro] object AvroWalk:
     * [[org.apache.avro.generic.GenericData.Record]] (or [[GenericData.Array]] / `HashMap`) on each
     * splice so successive `.modify` calls don't corrupt the input record. Cost: one allocation per
     * parent step, per `modify`.
+    *
+    * Legacy Vector-shaped entry point — kept for callers that historically held parents as a Vector
+    * (currently `AvroTraversal.iorMapElements` and `AvroFocus.Fields.rebuild`). Hot-path callers
+    * should use [[rebuildPathArr]].
     */
   def rebuildPath(
       parents: Vector[AnyRef],
       path: Array[PathStep],
       newLeaf: Any,
   ): Any =
-    parents.zip(path.toIndexedSeq).foldRight(newLeaf) {
-      case ((parent, step), child) =>
-        rebuildStep(parent, step, child)
-    }
+    var i = parents.length - 1
+    var child: Any = newLeaf
+    while i >= 0 do
+      child = rebuildStep(parents(i), path(i), child)
+      i -= 1
+    child
+
+  /** Hot-path rebuild — folds the parents array backwards via a `while` loop. The pairing with
+    * `path` mirrors the legacy `parents.zip(path).foldRight` shape: i-th parent pairs with i-th
+    * path step, iterating `parentsLen` times. UnionBranch steps in the prefix that didn't push
+    * parents simply aren't visited (matching the legacy `zip` semantics that drops dangling path
+    * tail steps).
+    */
+  def rebuildPathArr(
+      parents: Array[AnyRef],
+      parentsLen: Int,
+      path: Array[PathStep],
+      newLeaf: Any,
+  ): Any =
+    var i = parentsLen - 1
+    var child: Any = newLeaf
+    while i >= 0 do
+      child = rebuildStep(parents(i), path(i), child)
+      i -= 1
+    child
 
   /** Splice `child` into `parent` at `step`. The parent's runtime shape is determined by the step
     * kind plus the parent's runtime class:
@@ -219,13 +358,16 @@ private[avro] object AvroWalk:
           case rec: IndexedRecord =>
             val schema = rec.getSchema
             val fresh = new GenericData.Record(schema)
-            schema
-              .getFields
-              .asScala
-              .foreach { f =>
-                if f.name == name then fresh.put(f.pos, child.asInstanceOf[AnyRef])
-                else fresh.put(f.pos, rec.get(f.pos))
-              }
+            // Iterate fields by index — avoids the asScala iterator allocation; the field-name
+            // → position lookup runs once at construction (the matching slot only).
+            val fields = schema.getFields
+            val n = fields.size
+            val targetPos = schema.getField(name).pos
+            var i = 0
+            while i < n do
+              if i == targetPos then fresh.put(i, child.asInstanceOf[AnyRef])
+              else fresh.put(i, rec.get(i))
+              i += 1
             fresh
           case map: java.util.Map[?, ?] =>
             val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
@@ -278,14 +420,15 @@ private[avro] object AvroWalk:
   ): IndexedRecord =
     val schema = parent.getSchema
     val fresh = new GenericData.Record(schema)
-    schema
-      .getFields
-      .asScala
-      .foreach { f =>
-        updates.get(f.name) match
-          case Some(v) => fresh.put(f.pos, v.asInstanceOf[AnyRef])
-          case None    => fresh.put(f.pos, parent.get(f.pos))
-      }
+    val fields = schema.getFields
+    val n = fields.size
+    var i = 0
+    while i < n do
+      val fname = fields.get(i).name
+      updates.get(fname) match
+        case Some(v) => fresh.put(i, v.asInstanceOf[AnyRef])
+        case None    => fresh.put(i, parent.get(i))
+      i += 1
     fresh
 
   /** Look up the union-branch name for a runtime value. Apache-avro's `GenericData.resolveUnion`

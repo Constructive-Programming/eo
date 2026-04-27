@@ -136,27 +136,31 @@ private[avro] object AvroFocus:
     protected def terminalStep: PathStep = AvroWalk.terminalOf(path)
 
     def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any] =
-      AvroWalk.walkPath(record, path).map(_._1)
+      AvroWalk.walkPathArr(record, path).map(_.cur)
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      AvroWalk.walkPath(record, path) match
-        case Left(_)               => record
-        case Right((cur, parents)) =>
-          codec.decodeEither(cur) match
+      AvroWalk.walkPathArr(record, path) match
+        case Left(_)       => record
+        case Right(walked) =>
+          codec.decodeEither(walked.cur) match
             case Left(_)  => record
             case Right(a) =>
               try
                 val encoded = codec.encode(f(a))
-                AvroWalk.rebuildPath(parents, path, encoded).asInstanceOf[IndexedRecord]
+                AvroWalk
+                  .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
+                  .asInstanceOf[IndexedRecord]
               catch case NonFatal(_) => record
 
     def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
-      AvroWalk.walkPath(record, path) match
-        case Left(_)               => record
-        case Right((cur, parents)) =>
-          cur match
+      AvroWalk.walkPathArr(record, path) match
+        case Left(_)       => record
+        case Right(walked) =>
+          walked.cur match
             case asRecord: IndexedRecord =>
-              AvroWalk.rebuildPath(parents, path, f(asRecord)).asInstanceOf[IndexedRecord]
+              AvroWalk
+                .rebuildPathArr(walked.parents, walked.parentsLen, path, f(asRecord))
+                .asInstanceOf[IndexedRecord]
             case _ => record
 
     def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
@@ -167,36 +171,42 @@ private[avro] object AvroFocus:
             case _                    => record
         catch case NonFatal(_) => record
       else
-        AvroWalk.walkPath(record, path) match
-          case Left(_)             => record
-          case Right((_, parents)) =>
+        AvroWalk.walkPathArr(record, path) match
+          case Left(_)       => record
+          case Right(walked) =>
             try
               val encoded = codec.encode(a)
-              AvroWalk.rebuildPath(parents, path, encoded).asInstanceOf[IndexedRecord]
+              AvroWalk
+                .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
+                .asInstanceOf[IndexedRecord]
             catch case NonFatal(_) => record
 
     def readImpl(record: IndexedRecord): Option[A] =
-      AvroWalk.walkPath(record, path).toOption.flatMap(s => codec.decodeEither(s._1).toOption)
+      AvroWalk.walkPathArr(record, path).toOption.flatMap(s => codec.decodeEither(s.cur).toOption)
 
     def modifyIor(record: IndexedRecord, f: A => A): Ior[Chain[AvroFailure], IndexedRecord] =
-      AvroWalk.walkPath(record, path) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), record)
-        case Right((cur, parents)) =>
-          decodeOrFail(cur, record)(a =>
-            AvroWalk.rebuildPath(parents, path, codec.encode(f(a))).asInstanceOf[IndexedRecord]
+      AvroWalk.walkPathArr(record, path) match
+        case Left(failure) => Ior.Both(Chain.one(failure), record)
+        case Right(walked) =>
+          decodeOrFail(walked.cur, record)(a =>
+            AvroWalk
+              .rebuildPathArr(walked.parents, walked.parentsLen, path, codec.encode(f(a)))
+              .asInstanceOf[IndexedRecord]
           )
 
     def transformIor(
         record: IndexedRecord,
         f: IndexedRecord => IndexedRecord,
     ): Ior[Chain[AvroFailure], IndexedRecord] =
-      AvroWalk.walkPath(record, path) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), record)
-        case Right((cur, parents)) =>
-          cur match
+      AvroWalk.walkPathArr(record, path) match
+        case Left(failure) => Ior.Both(Chain.one(failure), record)
+        case Right(walked) =>
+          walked.cur match
             case asRecord: IndexedRecord =>
               Ior.Right(
-                AvroWalk.rebuildPath(parents, path, f(asRecord)).asInstanceOf[IndexedRecord]
+                AvroWalk
+                  .rebuildPathArr(walked.parents, walked.parentsLen, path, f(asRecord))
+                  .asInstanceOf[IndexedRecord]
               )
             case _ =>
               Ior.Both(Chain.one(AvroFailure.NotARecord(terminalStep)), record)
@@ -212,20 +222,24 @@ private[avro] object AvroFocus:
           case NonFatal(t) =>
             Ior.Both(Chain.one(AvroFailure.DecodeFailed(terminalStep, t)), record)
       else
-        AvroWalk.walkPath(record, path) match
-          case Left(failure)       => Ior.Both(Chain.one(failure), record)
-          case Right((_, parents)) =>
+        AvroWalk.walkPathArr(record, path) match
+          case Left(failure) => Ior.Both(Chain.one(failure), record)
+          case Right(walked) =>
             try
               val encoded = codec.encode(a)
-              Ior.Right(AvroWalk.rebuildPath(parents, path, encoded).asInstanceOf[IndexedRecord])
+              Ior.Right(
+                AvroWalk
+                  .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
+                  .asInstanceOf[IndexedRecord]
+              )
             catch
               case NonFatal(t) =>
                 Ior.Both(Chain.one(AvroFailure.DecodeFailed(terminalStep, t)), record)
 
     def readIor(record: IndexedRecord): Ior[Chain[AvroFailure], A] =
-      AvroWalk.walkPath(record, path) match
-        case Left(failure)   => Ior.Left(Chain.one(failure))
-        case Right((cur, _)) => decodeOrLeft(cur)
+      AvroWalk.walkPathArr(record, path) match
+        case Left(failure) => Ior.Left(Chain.one(failure))
+        case Right(walked) => decodeOrLeft(walked.cur)
 
   end Leaf
 
@@ -338,47 +352,51 @@ private[avro] object AvroFocus:
           .toMap
       AvroWalk.replaceRecordFields(parent, updates)
 
-    /** Walk the parent path and project the terminal as an [[IndexedRecord]]. */
+    /** Walk the parent path and project the terminal as an [[IndexedRecord]]. The walk result is
+      * the array-shaped [[AvroWalk.WalkRes]] — the per-record hot paths re-use it directly via
+      * [[rebuild]] without materialising parents as a `Vector`.
+      */
     private def walkParent(
         record: IndexedRecord
-    ): Either[AvroFailure, (IndexedRecord, Vector[AnyRef])] =
-      AvroWalk.walkPath(record, parentPath).flatMap {
-        case (cur, parents) =>
-          cur match
-            case rec: IndexedRecord => Right((rec, parents))
-            case _                  => Left(AvroFailure.NotARecord(terminalStep))
+    ): Either[AvroFailure, (IndexedRecord, AvroWalk.WalkRes)] =
+      AvroWalk.walkPathArr(record, parentPath).flatMap { walked =>
+        walked.cur match
+          case rec: IndexedRecord => Right((rec, walked))
+          case _                  => Left(AvroFailure.NotARecord(terminalStep))
       }
 
-    private def rebuild(newParent: IndexedRecord, parents: Vector[AnyRef]): IndexedRecord =
-      AvroWalk.rebuildPath(parents, parentPath, newParent).asInstanceOf[IndexedRecord]
+    private def rebuild(newParent: IndexedRecord, walked: AvroWalk.WalkRes): IndexedRecord =
+      AvroWalk
+        .rebuildPathArr(walked.parents, walked.parentsLen, parentPath, newParent)
+        .asInstanceOf[IndexedRecord]
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
       walkParent(record) match
-        case Left(_)                  => record
-        case Right((parent, parents)) =>
+        case Left(_)                 => record
+        case Right((parent, walked)) =>
           readFields(parent) match
             case Left(_)    => record
             case Right(sub) =>
               codec.decodeEither(sub) match
                 case Left(_)  => record
                 case Right(a) =>
-                  try rebuild(writeFields(parent, f(a)), parents)
+                  try rebuild(writeFields(parent, f(a)), walked)
                   catch case NonFatal(_) => record
 
     def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
       walkParent(record) match
-        case Left(_)                  => record
-        case Right((parent, parents)) =>
+        case Left(_)                 => record
+        case Right((parent, walked)) =>
           try
             val newSub = f(buildSubRecord(parent))
-            rebuild(overlayFields(parent, newSub), parents)
+            rebuild(overlayFields(parent, newSub), walked)
           catch case NonFatal(_) => record
 
     def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
       walkParent(record) match
-        case Left(_)                  => record
-        case Right((parent, parents)) =>
-          try rebuild(writeFields(parent, a), parents)
+        case Left(_)                 => record
+        case Right((parent, walked)) =>
+          try rebuild(writeFields(parent, a), walked)
           catch case NonFatal(_) => record
 
     def readImpl(record: IndexedRecord): Option[A] =
@@ -389,32 +407,32 @@ private[avro] object AvroFocus:
 
     def modifyIor(record: IndexedRecord, f: A => A): Ior[Chain[AvroFailure], IndexedRecord] =
       walkParent(record) match
-        case Left(failure)            => Ior.Both(Chain.one(failure), record)
-        case Right((parent, parents)) =>
+        case Left(failure)           => Ior.Both(Chain.one(failure), record)
+        case Right((parent, walked)) =>
           readFields(parent) match
             case Left(chain) => Ior.Both(chain, record)
             case Right(sub)  =>
-              decodeOrFail(sub, record)(a => rebuild(writeFields(parent, f(a)), parents))
+              decodeOrFail(sub, record)(a => rebuild(writeFields(parent, f(a)), walked))
 
     def transformIor(
         record: IndexedRecord,
         f: IndexedRecord => IndexedRecord,
     ): Ior[Chain[AvroFailure], IndexedRecord] =
       walkParent(record) match
-        case Left(failure)            => Ior.Both(Chain.one(failure), record)
-        case Right((parent, parents)) =>
+        case Left(failure)           => Ior.Both(Chain.one(failure), record)
+        case Right((parent, walked)) =>
           try
             val newSub = f(buildSubRecord(parent))
-            Ior.Right(rebuild(overlayFields(parent, newSub), parents))
+            Ior.Right(rebuild(overlayFields(parent, newSub), walked))
           catch
             case NonFatal(t) =>
               Ior.Both(Chain.one(AvroFailure.DecodeFailed(terminalStep, t)), record)
 
     def placeIor(record: IndexedRecord, a: A): Ior[Chain[AvroFailure], IndexedRecord] =
       walkParent(record) match
-        case Left(failure)            => Ior.Both(Chain.one(failure), record)
-        case Right((parent, parents)) =>
-          try Ior.Right(rebuild(writeFields(parent, a), parents))
+        case Left(failure)           => Ior.Both(Chain.one(failure), record)
+        case Right((parent, walked)) =>
+          try Ior.Right(rebuild(writeFields(parent, a), walked))
           catch
             case NonFatal(t) =>
               Ior.Both(Chain.one(AvroFailure.DecodeFailed(terminalStep, t)), record)
