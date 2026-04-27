@@ -11,7 +11,6 @@ case class UP(a: Int, b: Boolean)
 @main def samples =
 
   import Optic.*
-  import Forget.given
   import MultiFocus.given
 
   val aLens = Lens[UP, Int](_.a, (s, b) => s.copy(a = b))
