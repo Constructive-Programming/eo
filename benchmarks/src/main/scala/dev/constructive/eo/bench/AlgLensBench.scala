@@ -6,8 +6,8 @@ import scala.compiletime.uninitialized
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
-import dev.constructive.eo.data.AlgLens
-import dev.constructive.eo.data.AlgLens.given
+import dev.constructive.eo.data.MultiFocus
+import dev.constructive.eo.data.MultiFocus.given
 
 import cats.instances.list.*
 
@@ -44,7 +44,7 @@ class AlgLensBench extends JmhDefaults:
   // `fromLensF(phonesLens)` already exposes the Phone focus at the
   // Person level, so the chain is just `(algLens).andThen(isMobileLens)`.
   private val algPath =
-    AlgLens.fromLensF(phonesLens).andThen(isMobileLens)
+    MultiFocus.fromLensF(phonesLens).andThen(isMobileLens)
 
   // Path B: PowerSeries via Traversal.each[List, Phone] — specialized
   // PSVec-backed traversal carrier. The chain needs the outer lens
