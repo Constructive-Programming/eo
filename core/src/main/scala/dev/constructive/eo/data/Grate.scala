@@ -287,3 +287,89 @@ object Grate:
         type X = S
         val to: S => (A, S => A) = s => (o.to(s), s0 => o.to(s0))
         val from: ((B, S => B)) => T = { case (b, _) => o.from(b) }
+
+  /** `Grate ↪ SetterF` — every Grate is a Setter. Collapses the Grate's broadcast pattern to the
+    * Setter API by ignoring the structural readback of the rebuild and exposing only the `(A => B)
+    * => S => T` modify shape.
+    *
+    * Implementation reads the focus + rebuild via `o.to(s) = (a, k)`, applies `f` at the focus, and
+    * threads `k.andThen(f)` back through `o.from`. This is byte-identical to what
+    * [[grateFunctor]]'s `.modify(f)` produces — the SetterF lift just exposes it through the
+    * carrier-erasing Setter API rather than the Grate's pair shape.
+    *
+    * Resolves the Gr × S cell of the `Composer` matrix: a user can now
+    * `summon[Composer[Grate, SetterF]].to(grate)` (or `grate.morph[SetterF]`) to interface a
+    * Grate-carrier optic with code that consumes `Optic[…, SetterF]` — typically a downstream
+    * abstraction over Setter (e.g. an `eo-monocle` bridge) or a uniform Setter-shaped extension
+    * point. Like every other `Composer[X, SetterF]`, this does NOT enable `grate.andThen(setter)`
+    * directly: SetterF lacks an `AssociativeFunctor` instance by design (see [[SetterF]] doc), so
+    * once both sides agree on SetterF the chain still has nowhere to compose at the
+    * `AssociativeFunctor` level. The cross-carrier value lives at the morph site, same as
+    * `tuple2setter` / `either2setter` / `affine2setter` / `powerseries2setter`.
+    *
+    * @group Instances
+    */
+  given grate2setter: Composer[Grate, SetterF] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Grate]): Optic[S, T, A, B, SetterF] =
+      new Optic[S, T, A, B, SetterF]:
+        type X = (S, A)
+        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+        val from: SetterF[X, B] => T = sfxb =>
+          val (s, f) = sfxb.setter
+          val (a, k) = o.to(s)
+          o.from((f(a), k.andThen(f)))
+
+  // ------------------------------------------------------------------
+  // Structurally unsound bridges — documented and deliberately absent
+  // ------------------------------------------------------------------
+  //
+  // The 2026-04-23 composition gap analysis surfaced two further candidates for closing the Grate
+  // row of the Composer matrix. Both turn out to be structurally unsound for cats-eo's current
+  // shape; the rationale lives here so future maintainers don't re-spend the investigation budget.
+  //
+  // 1. `Composer[Grate, Forgetful]` (Grate widens to Iso/Getter) — REJECTED.
+  //
+  //    A Grate's `to: S => (A, X => A)` exposes a focus, and `from: ((B, X => B)) => T` could
+  //    accept `(b, _ => b)` to fake a write path. The Forgetful-carrier shape would type-check.
+  //    However, [[forgetful2grate]] already ships in the OTHER direction (Iso → Grate). Adding
+  //    the reverse would create a bidirectional Composer pair, which the [[Morph]] resolution
+  //    explicitly forbids: `Morph.leftToRight` (via `Composer[Forgetful, Grate]`) and
+  //    `Morph.rightToLeft` (via the hypothetical `Composer[Grate, Forgetful]`) would BOTH match
+  //    for any `Iso × Grate` pair, surfacing as ambiguous-implicit and breaking every existing
+  //    `iso.andThen(grate)` call site (witnessed in [[GrateSpec]]). Cats-eo's resolution invariant
+  //    "we don't ship bidirectional composers" (see `Composer.scala`'s class doc) is the
+  //    deciding constraint, NOT the type-level encodability — the composer would compile, but
+  //    landing it would regress the matrix's I × Gr cell from N to ambiguity.
+  //
+  //    Workaround for users who want a Grate's read path as a Getter: use `grate.to(s)._1`
+  //    directly; or, when interop demands a Getter shape, build `Getter(s => grate.to(s)._1)`
+  //    explicitly. The Getter's `T = Unit` is what would have made the morph degenerate anyway —
+  //    a "Grate-as-Iso" lift would falsely advertise a meaningful `reverseGet`, since for a
+  //    non-trivial Grate (e.g. `Grate.tuple[(Int, Int, Int), Int]`) `reverseGet(b)` would broadcast
+  //    `b` to every slot, NOT round-trip the original source.
+  //
+  // 2. `Composer[Grate, Forget[F]]` (Grate widens to Traversal/Fold) — REJECTED.
+  //
+  //    The Composer signature is `def to[S, T, A, B](o: Optic[S, T, A, B, Grate]): Optic[S, T, A,
+  //    B, Forget[F]]` — generic in `S, T, A, B`. The target carrier is `Forget[F][X, A] = F[A]`,
+  //    so the morphed optic's `to` would have to produce `F[A]` from an arbitrary `S`, and `from`
+  //    would have to consume `F[B]` to produce `T`. There's no path from a generic Grate's
+  //    `(A, X => A)` to an `F[A]` because:
+  //
+  //      a) The Grate's existential `X` is unrelated to `F`. For `Grate.apply[F: Representable]`
+  //         it happens that `X = F.Representation`, and one COULD synthesise `tabulate(k): F[A]`
+  //         from the rebuild — but that path requires a `Representable[F]` witness AND a
+  //         constraint that `S = F[A]`. Neither is available at the Composer site (`S` is opaque,
+  //         and Composer has no place to thread a `Representable` instance).
+  //
+  //      b) For the tuple-shaped Grate (`Grate.tuple[T <: Tuple, A]`) the natural target `F` would
+  //         be `Vector` or similar, but again the bridge depends on `S = T <: Tuple` and on a
+  //         specific tuple-to-Vector conversion — domain-specific, not Composer-shaped.
+  //
+  //    The structural mismatch is genuine, not an encoding accident: a generic Grate over an
+  //    arbitrary `S` simply does not carry enough information to materialise an `F[A]` for any
+  //    `F`. Users who want "fold/traverse over the slots a Grate exposes" can construct the
+  //    `Forget[F]`-carrier optic directly at the call site — e.g. `Fold[Vector, Int]` paired with
+  //    a tuple-to-Vector convert. The two carriers solve different problems; pretending otherwise
+  //    via a half-baked Composer would silently drop information on one side or the other.

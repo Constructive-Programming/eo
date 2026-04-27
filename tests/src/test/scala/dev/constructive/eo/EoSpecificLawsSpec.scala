@@ -7,10 +7,11 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, FixedTraversal, Forget, Forgetful, SetterF}
+import data.{Affine, FixedTraversal, Forget, Forgetful, Grate, SetterF}
 import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
+import data.Grate.given
 import data.SetterF.given
 import data.FixedTraversal.given
 import laws.eo.{
@@ -80,6 +81,21 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     "Iso.morph[Tuple2] preserves get",
     doubleIso,
     doubleIso.morph[Tuple2],
+  )
+
+  // covers: Morph from Grate → SetterF on a tuple-shaped Grate.
+  //
+  // The new `Composer[Grate, SetterF]` (`grate2setter`, Grate.scala) widens any Grate-carrier
+  // optic to the Setter API. The MorphLaws.A1 check pins down that the lifted SetterF's
+  // `.modify(f)(s)` produces the same `T` as the original Grate's `.modify(f)(s)` — the whole
+  // structural soundness of the bridge in one law.
+  val tuple2GrateForMorph: Optic[(Int, Int), (Int, Int), Int, Int, data.Grate] =
+    data.Grate.tuple[(Int, Int), Int]
+
+  checkAllMorphPreservesModifyFor[(Int, Int), Int, data.Grate, SetterF](
+    "Grate.tuple[(Int,Int)].morph[SetterF] preserves modify (I1)",
+    tuple2GrateForMorph,
+    tuple2GrateForMorph.morph[SetterF],
   )
 
   // =============== B1 — Iso reverse involution =====================

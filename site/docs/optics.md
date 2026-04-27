@@ -216,6 +216,39 @@ to construct the Grate separately at the Lens's focus type and
 compose through `Lens.andThen` (staying in `Tuple2`), then apply the
 Grate directly.
 
+**Composability — Grate widens to Setter.** A `Composer[Grate, SetterF]`
+ships (`grate2setter`, `Grate.scala`), so any Grate can be morphed to
+the `SetterF` carrier via `grate.morph[SetterF]`. The lifted Setter's
+`.modify(f)` is byte-identical to the Grate's `.modify(f)` — same
+broadcast invariant, just exposed through the carrier-erasing Setter
+API. This makes Grate uniform with `eo-monocle`-style cross-library
+interop and any code consuming the `Optic[…, SetterF]` shape. Like
+every other `Composer[X, SetterF]`, this morph does NOT enable
+`grate.andThen(setter)` directly — `SetterF` lacks an
+`AssociativeFunctor` instance by design, so the cross-carrier value
+lives at the morph site, not the chain site.
+
+**Composition limits — Grate to Iso/Getter and Grate to
+Traversal/Fold.** Both directions were investigated for v0.1.x; both
+turn out to be structurally unsound under cats-eo's resolution rules:
+
+- `Composer[Grate, Forgetful]` (Grate → Iso/Getter) would be type-level
+  encodable, but cats-eo already ships the reverse
+  (`Composer[Forgetful, Grate]`). Adding the forward direction would
+  create a bidirectional Composer pair, which the [`Morph`](https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala)
+  resolution explicitly forbids — every `iso.andThen(grate)` call site
+  would surface as ambiguous-implicit. Use `grate.to(s)._1` for the
+  read, or `Getter(s => grate.to(s)._1)` when interop demands a Getter
+  shape.
+- `Composer[Grate, Forget[F]]` (Grate → Traversal/Fold) would have to
+  produce `F[A]` from arbitrary `S`, but the Grate's existential `X`
+  is unrelated to `F` and `S` is opaque. There is no carrier-shaped
+  bridge; users wanting fold/traverse semantics on a Grate's slots
+  should construct the `Forget[F]`-carrier optic directly.
+
+The full structural rationale lives at the bottom of `Grate.scala` for
+future maintainers.
+
 ## Kaleidoscope
 
 A `Kaleidoscope[S, A]` is an aggregation optic whose behaviour at

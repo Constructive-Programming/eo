@@ -97,6 +97,7 @@ Two extension methods exist on `Optic` (see
 | `Tuple2 → AlgLens[F]` (F: Applicative+Foldable) | `AlgLens.scala:343` |
 | `Either → AlgLens[F]` (F: Alternative+Foldable) | `AlgLens.scala:378` |
 | `Forgetful → Grate` | `Grate.scala:273` |
+| `Grate → SetterF` | `Grate.scala` (shipped 2026-04-27 — closes Gr × S) |
 
 **Absent by design / not yet shipped** (documented or inferred):
 
@@ -138,12 +139,12 @@ Two extension methods exist on `Optic` (see
 The full 14×14 same-family-ish matrix (`Optic`-extending families 1-14;
 standalone JsonTraversal + Review are handled separately in §4):
 
-| Category | Count (initial) | After Unit 21 | After 2026-04-25 SetterF | % of 196 (post) |
-|---|---|---|---|---|
-| **N** (native `.andThen`) | 94 | 96 | 99 | 51% |
-| **M** (manual idiom) | 56 | 60 | 59 | 30% |
-| **U** (unsupported) | 34 | 40 | 40 | 20% |
-| **?** (unexplored) | 12 | 0 | 0 | 0% |
+| Category | Count (initial) | After Unit 21 | After 2026-04-25 SetterF | After 2026-04-27 Grate-row | % of 196 (post) |
+|---|---|---|---|---|---|
+| **N** (native `.andThen`) | 94 | 96 | 99 | 100 | 51% |
+| **M** (manual idiom) | 56 | 60 | 59 | 59 | 30% |
+| **U** (unsupported) | 34 | 40 | 40 | 39 | 20% |
+| **?** (unexplored) | 12 | 0 | 0 | 0 | 0% |
 
 (2026-04-25 SetterF row delta: +3 N from `Either → SetterF`, `Affine →
 SetterF`, `PowerSeries → SetterF` — shipped to close eo-monocle Gap-1.
@@ -151,6 +152,13 @@ Three cells flip: P × S `M → N`, O × S `? → N`, Te × S `? → N`. The
 Unit 21 "0 ?" count was a count of the 12 *numbered groups* in §2.2,
 not a literal cell-by-cell tally — a handful of ? cells outside those
 groups remained until this batch.)
+
+(2026-04-27 Grate-row delta: +1 N from `Composer[Grate, SetterF]`
+(`grate2setter`, `Grate.scala`). One cell flips: Gr × S `U → N`. The
+two adjacent candidates investigated in the same batch
+(`Composer[Grate, Forgetful]` and `Composer[Grate, Forget[F]]`) were
+rejected as structurally unsound — see §3.2.4 for the resolution
+rationale.)
 
 The Unit-21 resolution closed every numbered `?` group from §3.3:
 +2 N (`affine2alg` + `chainViaTuple2(Forgetful → Tuple2 → Forget[F]`
@@ -247,7 +255,7 @@ Each cell indicates the classification and a one-line "why".
 | **Tf**  | U (Tf's T=Unit outer) | U | U | U | U | U | U | U | U | ? (same Forget[F] same-F is fine via assocForgetMonad if F: Monad; different F not bridged) | U | U | U | U |
 | **FT**  | U (FT lacks AssociativeFunctor; no outbound composer) | U | U | U | U | U | U | U | U | U | U | U | U | U |
 | **AL**  | N (Forgetful→Tuple2→AlgLens[F] via chain on inner) | N (Composer[Tuple2, AlgLens[F]] on inner — OpticsBehaviorSpec) | N (Composer[Either, AlgLens[F]] on inner — OpticsBehaviorSpec) | ? (no Composer[Affine, AlgLens[F]] shipped) | M (AF T=Unit) | U (Getter T=Unit) | ? (SetterF terminal) | N (Composer[Forget[F], AlgLens[F]] on inner when same F — OpticsBehaviorSpec) | ? (no Composer[PowerSeries, AlgLens[F]]) | ? (no Composer[AlgLens[F], Forget[F]]) | U (no Composer[_, FT]) | N (assocAlgMonad; OpticsBehaviorSpec "Two Forget[List] classifiers compose") | U (no Composer[AlgLens[F], Grate]) | ? (Either→AlgLens bridge works per-prism — JsonPrism.andThen(AlgLens) plausible but untested) |
-| **Gr**  | U (Composer[Forgetful, Grate] is ONE-WAY; Iso→Grate yes, Grate→Iso no) | U (no Composer[Tuple2, Grate]) | U | U | U | U | U | U | U | U | U | U | N (grateAssoc same-carrier — untested with two Grates beyond law suite) | U |
+| **Gr**  | U (Composer[Forgetful, Grate] is ONE-WAY; Iso→Grate yes, Grate→Iso no — see §3.2.4) | U (no Composer[Tuple2, Grate]) | U | U | U | U | N (Composer[Grate, SetterF] — `grate2setter`, Grate.scala; shipped 2026-04-27) | U | U | U | U | U | N (grateAssoc same-carrier — untested with two Grates beyond law suite) | U |
 | **JP**  | N (forgetful2either morphs inner Iso into Either; eitherAssocF) | N (bothViaAffine — CCCS scenarios 1-3) | N (eitherAssocF — fused `.andThen` lives on JsonPrism itself via stock Either carrier) | N (Composer[Either, Affine]) | M (AF T=Unit) | U | ? (no coverage) | ? | N (Composer[Either, PowerSeries] — untested) | ? | U | ? (Composer[Either, AlgLens] applies but unverified for JsonPrism specifically) | U | N (eitherAssocF — JsonPrism nested via `.field(...).field(...)` is this pattern) |
 
 ### 2.1 Standalone-family borders
@@ -419,18 +427,64 @@ No `Composer[SetterF, _]` ships either. So:
 is a composition-terminal leaf used by `Traversal.two` / `.three` /
 `.four` for fixed-arity same-family projections.
 
-#### 3.2.4 Grate × non-Grate, non-Grate × Grate (except Iso→Grate)
+#### 3.2.4 Grate × non-Grate, non-Grate × Grate
 
-Ships only `Composer[Forgetful, Grate]`. Grate plan D3 explicitly
-documents the absence of:
+**2026-04-27 update — Gr × S resolved (N).** Shipped `Composer[Grate,
+SetterF]` (`grate2setter`, `Grate.scala`); the Gr × S cell flips from
+**U** to **N**. The bridge collapses Grate's broadcast pattern to the
+Setter API by reusing the existing `(a, k) = o.to(s)` /
+`o.from((f(a), k.andThen(f)))` shape from [[grateFunctor]]. Witnessed by
+`EoSpecificLawsSpec` (MorphLaws.A1 on the lifted Grate.tuple) and
+`OpticsBehaviorSpec` (per-slot broadcast behaviour on tuple Grates and
+on `Grate.apply[Function1[Boolean, *]]`). Like every other
+`Composer[X, SetterF]`, this does NOT enable `grate.andThen(setter)`
+directly — SetterF lacks `AssociativeFunctor` by design — but it does
+unlock the morph-site value (`grate.morph[SetterF]`, `eo-monocle`-style
+interop, uniform Setter-shaped extension points).
+
+**Two further candidates investigated and rejected as structurally
+unsound** (rationale also lives at the bottom of `Grate.scala` so the
+investigation isn't re-spent):
+
+- **`Composer[Grate, Forgetful]` (Grate widens to Iso/Getter).**
+  Type-level the bridge encodes (`to: S => A` reads the focus,
+  `from: B => T` calls `o.from((b, _ => b))`). However,
+  [[forgetful2grate]] already ships in the OPPOSITE direction. Adding
+  the reverse would create a bidirectional Composer pair, which the
+  `Morph` resolution explicitly forbids: both `Morph.leftToRight` and
+  `Morph.rightToLeft` would match for any `Iso × Grate` pair, surfacing
+  as ambiguous-implicit and breaking every existing `iso.andThen(grate)`
+  call site (witnessed in [[GrateSpec]]). Cats-eo's resolution invariant
+  *"we don't ship bidirectional composers"* is the deciding constraint,
+  NOT the type-level encodability. Workaround: `grate.to(s)._1` for the
+  read, or `Getter(s => grate.to(s)._1)` when interop demands a Getter
+  shape.
+
+- **`Composer[Grate, Forget[F]]` (Grate widens to Traversal/Fold).**
+  Generic in `S, T, A, B`. The target carrier `Forget[F][X, A] = F[A]`
+  forces the morphed `to` to produce `F[A]` from arbitrary `S`, and the
+  morphed `from` to consume `F[B]`. There is no path from a generic
+  Grate's `(A, X => A)` to an `F[A]` because (a) the existential `X` is
+  unrelated to `F` (the `Grate.apply[F: Representable]` case
+  *coincidentally* has `X = F.Representation`, but Composer can't
+  thread a `Representable[F]` instance and `S` is opaque), and (b) for
+  the tuple-shaped Grate the natural target `F` would be `Vector` or
+  similar, but again the bridge is domain-specific, not Composer-shaped.
+  The structural mismatch is genuine; users wanting "fold/traverse over
+  the slots a Grate exposes" should construct the `Forget[F]`-carrier
+  optic directly.
+
+Grate plan D3 documents the absence of:
 
 - `Composer[Tuple2, Grate]` (Lens → Grate) — see Grate.scala lines
-  260-269.
+  270-279.
 
 By symmetry, `Either → Grate`, `Affine → Grate`, `PowerSeries → Grate`,
-and every `Grate → non-Grate` are also absent. The one working pair
-outside Grate×Grate is Iso × Grate (witnessed in `core/src/test/scala/
-eo/GrateSpec.scala` lines 91-122).
+and every `Grate → non-Grate` *except* Gr → SetterF are absent. The two
+shipped non-symmetric pairs are Iso × Grate (`forgetful2grate`;
+witnessed in `core/src/test/scala/eo/GrateSpec.scala` lines 91-122) and
+Gr × SetterF (`grate2setter`; witnessed in `EoSpecificLawsSpec` and
+`OpticsBehaviorSpec`).
 
 #### 3.2.5 AlgLens outbound
 

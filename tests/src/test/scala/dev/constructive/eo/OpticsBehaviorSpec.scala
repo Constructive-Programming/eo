@@ -32,6 +32,7 @@ import data.Forgetful.given
 import data.Forget.given
 import data.Affine.given
 import data.AlgLens.given
+import data.Grate.given
 import data.SetterF.given
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
@@ -460,6 +461,34 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         .and(psLifted.modify(_ * 10)(Nil) === Nil)
 
     eitherOk.and(affineOk).and(psOk)
+  }
+
+  // ----- Grate lifted into SetterF -------------------------------------
+
+  // covers: Grate.tuple lifts into SetterF and rebroadcasts via the per-slot rebuild,
+  // Grate.apply over a Representable[Function1[Boolean, *]] lifts identically (pointwise
+  // map). The lifted SetterF.modify must agree byte-for-byte with the original Grate's
+  // .modify(f) — same broadcast invariant as ForgetfulFunctor[Grate].
+  "Grate.tuple / Grate.apply[Function1] → SetterF: per-slot broadcast under .modify" >> {
+    val tupleGrate: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, data.Grate] =
+      data.Grate.tuple[(Int, Int, Int), Int]
+    val tupleLifted: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, data.SetterF] =
+      summon[Composer[data.Grate, data.SetterF]].to(tupleGrate)
+    val tupleOk =
+      (tupleLifted.modify(_ + 1)((10, 20, 30)) === ((11, 21, 31)))
+        .and(tupleLifted.modify(_ * 2)((1, 2, 3)) === ((2, 4, 6)))
+        .and(tupleLifted.modify(identity[Int])((7, 8, 9)) === ((7, 8, 9)))
+
+    import cats.instances.function.given
+    val fnGrate: Optic[Boolean => Int, Boolean => Int, Int, Int, data.Grate] =
+      data.Grate[[a] =>> Boolean => a, Int]
+    val fnLifted: Optic[Boolean => Int, Boolean => Int, Int, Int, data.SetterF] =
+      summon[Composer[data.Grate, data.SetterF]].to(fnGrate)
+    val srcFn: Boolean => Int = b => if b then 100 else 200
+    val modified: Boolean => Int = fnLifted.modify(_ + 1)(srcFn)
+    val fnOk = (modified(true) === 101).and(modified(false) === 201)
+
+    tupleOk.and(fnOk)
   }
 
   // ----- Cross-carrier composition Lens → AlgLens classifier -----------
