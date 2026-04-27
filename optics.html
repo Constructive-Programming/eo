@@ -541,7 +541,7 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
         <ul>
           <li><code>Traversal.each[F, A]</code> / <code>Traversal.pEach[F, A, B]</code> — carrier
           <code>MultiFocus[PSVec]</code>. Supports <code>.modify</code> / <code>.replace</code>
-          (<code>Functor[PSVec]</code>), <code>.foldMapF</code> (<code>Foldable[PSVec]</code>),
+          (<code>Functor[PSVec]</code>), <code>.foldMap</code> (<code>Foldable[PSVec]</code>),
           <code>.modifyA</code> / <code>.all</code> (<code>Traverse[PSVec]</code>), and <code>.andThen</code> with
           downstream optics through the shared <code>MultiFocus[PSVec]</code>
           <code>AssociativeFunctor</code>. Linear scaling; overhead over a naive
@@ -558,12 +558,11 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
         </ul>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Traversal</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="keyword">given</span><span>  </span><span class="comment">// Functor / Foldable / Traverse for MultiFocus[PSVec]
-</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">foldMapF</span><span> </span><span class="comment">// read-only escape on MultiFocus[F]-carrier optics
 </span><span>
 </span><span class="keyword">val</span><span> </span><span class="identifier">listEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">pEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
 </span><span class="comment">// res25: List[Int] = List(2, 3, 4)
-</span><span class="identifier">listEach</span><span>.</span><span class="identifier">foldMapF</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))   </span><span class="comment">// sum
+</span><span class="identifier">listEach</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))   </span><span class="comment">// sum
 // res26: Int = 6</span></code></pre>
         <p><code>each</code> shines when the chain continues past the traversal — e.g.
         &quot;for every phone, toggle <code>isMobile</code>&quot;:</p>
@@ -795,7 +794,7 @@ PowerSeries</code> or <code>Forgetful → Either → PowerSeries</code>) that wo
         into another <code>MultiFocus[G]</code>&#39;s per-candidate cardinality model without
         a synthetic count. The idiomatic workaround pushes the inner under
         the traversal: <code>traversal.modify(a =&gt; inner.replace(b)(a))(s)</code> for a
-        <code>MultiFocus</code> inner; <code>traversal.foldMapF(f)(s)</code> (read-only escape on
+        <code>MultiFocus</code> inner; <code>traversal.foldMap(f)(s)</code> (read-only escape on
         any <code>MultiFocus[F]</code>-carrier optic) when you only need the fold side.</p>
         <p><strong><code>SetterF</code> outbound</strong> — Setter is a composition terminal: ship it as
         the leaf of a chain (Lens → Setter via <code>Composer[Tuple2, SetterF]</code>)
