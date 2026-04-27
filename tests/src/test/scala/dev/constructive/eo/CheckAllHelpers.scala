@@ -6,7 +6,7 @@ import org.specs2.mutable.SpecificationLike
 import org.specs2.specification.core.Fragment
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-import data.{FixedTraversal, Forget, MultiFocus}
+import data.{FixedTraversal, Forget}
 import laws.{FoldLaws, MultiFocusLaws, TraversalLaws}
 import laws.data.FixedTraversalLaws
 import laws.data.discipline.FixedTraversalTests
