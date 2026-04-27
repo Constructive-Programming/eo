@@ -505,6 +505,7 @@ lazy val benchmarks: Project = project
   .dependsOn(
     LocalProject("core"),
     LocalProject("circeIntegration"),
+    LocalProject("avroIntegration"),
   )
   .settings(commonSettings *)
   .settings(
@@ -515,4 +516,9 @@ lazy val benchmarks: Project = project
     // Codec derivation used by the JsonPrism bench fixture.
     libraryDependencies += circeParser,
     libraryDependencies += kindlingsCirce,
+    // kindlings-avro-derivation for the AvroOpticsBench fixture
+    // codecs; cats-eo-avro itself is wired through the .dependsOn
+    // edge above so AvroPrism / codecPrism are on the bench
+    // classpath.
+    libraryDependencies += kindlingsAvro,
   )
