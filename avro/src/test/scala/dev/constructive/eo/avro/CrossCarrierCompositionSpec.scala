@@ -66,16 +66,22 @@ class CrossCarrierCompositionSpec extends Specification:
       .and(chain(brokenBox) === None)
   }
 
-  // covers: getOption reads the embedded name on a valid envelope, getOption returns
-  // None when the payload doesn't decode, diagnostic case via direct AvroPrism
-  "(2) generics lens[S](_.field) → single-field AvroPrism: success / Affine miss / Ior diagnostic" >> {
-    val outer = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
-    val inner: Optic[IndexedRecord, IndexedRecord, String, String, Either] =
+  // covers: scenario (2) — generics lens[S](_.field) → single-field AvroPrism cross-carrier,
+  //   getOption reads the embedded name on a valid envelope, getOption returns None when
+  //   the payload doesn't decode (Affine miss), diagnostic case via direct AvroPrism's
+  //   .modify on an empty record surfaces Ior.Both(PathMissing(name));
+  //   scenario (3) — generics lens → multi-field AvroPrism (.fields) cross-carrier modify
+  //   updates name + age through the chain, concrete-class Ior surface preserves age,
+  //   diagnostic case via direct .fields.get on a name-only record surfaces Ior.Left
+  //   accumulating PathMissing(age)
+  "(2)+(3) generics lens → single-field AvroPrism + multi-field .fields: cross-carrier + Ior diagnostics" >> {
+    // ---- (2) single-field ----
+    val outer2 = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
+    val inner2: Optic[IndexedRecord, IndexedRecord, String, String, Either] =
       codecPrism[Person].field(_.name)
-    val chain = outer.andThen(inner)
+    val chain2 = outer2.andThen(inner2)
 
     val validEnv = Envelope("env", personRecord(Person("Alice", 30)))
-    // An envelope whose payload is an empty record under a schema with no `name` field.
     val emptySchema = {
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
       fields.add(
@@ -93,29 +99,24 @@ class CrossCarrierCompositionSpec extends Specification:
     val emptyEnv = Envelope("env", emptyRec)
 
     val direct = codecPrism[Person](personSchema).field(_.name)
-    val diagOk = direct.modify(_.toUpperCase)(emptyRec) match
+    val diag2 = direct.modify(_.toUpperCase)(emptyRec) match
       case Ior.Both(c, _) => c.headOption.get === AvroFailure.PathMissing(PathStep.Field("name"))
       case other          => ko(s"expected Ior.Both, got $other")
+    val s2 = (chain2.getOption(validEnv) === Some("Alice"))
+      .and(chain2.getOption(emptyEnv) === None)
+      .and(diag2)
 
-    (chain.getOption(validEnv) === Some("Alice"))
-      .and(chain.getOption(emptyEnv) === None)
-      .and(diagOk)
-  }
-
-  // covers: modify updates name and age through the cross-carrier chain,
-  // concrete-class Ior surface preserves age (direct call), diagnostic case:
-  // missing age surfaces through direct Ior surface
-  "(3) generics lens → multi-field AvroPrism (.fields): cross-carrier modify + Ior diagnostic" >> {
+    // ---- (3) multi-field ----
     val outerGen: Optic[Envelope, Envelope, IndexedRecord, IndexedRecord, Tuple2] =
       lens[Envelope](_.payload)
-    val inner: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Either] =
+    val inner3: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Either] =
       codecPrism[Person].fields(_.name, _.age)
-    val chain: Optic[Envelope, Envelope, NameAge, NameAge, dev.constructive.eo.data.Affine] =
-      outerGen.andThen(inner)
-    val validEnv = Envelope("env", personRecord(Person("Alice", 30)))
+    val chain3: Optic[Envelope, Envelope, NameAge, NameAge, dev.constructive.eo.data.Affine] =
+      outerGen.andThen(inner3)
+    val validEnv3 = Envelope("env", personRecord(Person("Alice", 30)))
 
     val f: NameAge => NameAge = nt => (name = nt.name.toUpperCase, age = nt.age + 1)
-    val out: Envelope = chain.modify(f)(validEnv)
+    val out: Envelope = chain3.modify(f)(validEnv3)
     val outName = out.payload.asInstanceOf[GenericData.Record].get("name").toString
     val outAge = out.payload.asInstanceOf[GenericData.Record].get("age").asInstanceOf[Int]
     val modOk = (outName === "ALICE").and(outAge === 31)
@@ -129,8 +130,6 @@ class CrossCarrierCompositionSpec extends Specification:
         (nameOut === "ALICE").and(ageOut === 31)
       case other => ko(s"expected Ior.Right, got $other")
 
-    // Diagnostic case: a record under a schema that has only the `name` field but not `age`. The
-    // multi-field prism should accumulate one PathMissing(age) failure.
     val nameOnlySchema = {
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
       fields.add(
@@ -145,12 +144,14 @@ class CrossCarrierCompositionSpec extends Specification:
     }
     val nameOnlyRec = new GenericData.Record(nameOnlySchema)
     nameOnlyRec.put(0, "Alice")
-    val diagOk = codecPrism[Person](personSchema).fields(_.name, _.age).get(nameOnlyRec) match
+    val diag3 = codecPrism[Person](personSchema).fields(_.name, _.age).get(nameOnlyRec) match
       case Ior.Left(c) =>
         c.toList.contains(AvroFailure.PathMissing(PathStep.Field("age"))) === true
       case other => ko(s"expected Ior.Left, got $other")
 
-    modOk.and(concreteOk).and(diagOk)
+    val s3 = modOk.and(concreteOk).and(diag3)
+
+    s2.and(s3)
   }
 
   // covers: manual composition outer.modify(trav.modifyUnsafe(f)) works,

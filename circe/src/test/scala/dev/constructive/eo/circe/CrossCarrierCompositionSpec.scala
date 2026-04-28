@@ -44,39 +44,38 @@ class CrossCarrierCompositionSpec extends Specification:
       .and(chain(brokenBox) === None)
   }
 
-  // covers: getOption reads the embedded name on a valid envelope, getOption returns
-  // None when the payload doesn't decode, diagnostic case via direct JsonPrism
-  "(2) generics lens[S](_.field) → single-field JsonPrism: success / Affine miss / Ior diagnostic" >> {
-    val outer = Lens[Envelope, Json](_.payload, (e, j) => e.copy(payload = j))
-    val inner: Optic[Json, Json, String, String, Either] = codecPrism[Person].field(_.name)
-    val chain = outer.andThen(inner)
+  // covers: scenario (2) — generics lens[S](_.field) → single-field JsonPrism cross-carrier,
+  //   getOption reads embedded name on valid envelope, getOption returns None on undecodable
+  //   payload (Affine miss), direct .modify on Json.obj() surfaces Ior.Both(PathMissing(name));
+  //   scenario (3) — generics lens → multi-field JsonPrism (.fields), modify updates name+age
+  //   through the chain, concrete-class .modify preserves address, direct .fields.get on a
+  //   name-only payload surfaces Ior.Left accumulating PathMissing(age)
+  "(2)+(3) generics lens → single-field JsonPrism + multi-field .fields: cross-carrier + Ior diagnostics" >> {
+    // ---- (2) single-field ----
+    val outer2 = Lens[Envelope, Json](_.payload, (e, j) => e.copy(payload = j))
+    val inner2: Optic[Json, Json, String, String, Either] = codecPrism[Person].field(_.name)
+    val chain2 = outer2.andThen(inner2)
 
     val validEnv = Envelope("env", Person("Alice", 30, Address("Main St", 1)).asJson)
     val emptyEnv = Envelope("env", Json.obj())
 
     val direct = codecPrism[Person].field(_.name)
-    val diagOk = direct.modify(_.toUpperCase)(Json.obj()) match
+    val diag2 = direct.modify(_.toUpperCase)(Json.obj()) match
       case Ior.Both(c, _) => c.headOption.get === JsonFailure.PathMissing(PathStep.Field("name"))
       case other          => ko(s"expected Ior.Both, got $other")
+    val s2 = (chain2.getOption(validEnv) === Some("Alice"))
+      .and(chain2.getOption(emptyEnv) === None)
+      .and(diag2)
 
-    (chain.getOption(validEnv) === Some("Alice"))
-      .and(chain.getOption(emptyEnv) === None)
-      .and(diagOk)
-  }
-
-  // covers: modify updates name and age through the cross-carrier chain,
-  // concrete-class Ior surface preserves address (direct call), diagnostic case:
-  // missing age surfaces through direct Ior surface
-  "(3) generics lens → multi-field JsonPrism (.fields): cross-carrier modify + Ior diagnostic" >> {
+    // ---- (3) multi-field ----
     val outerGen: Optic[Envelope, Envelope, Json, Json, Tuple2] = lens[Envelope](_.payload)
-    val inner: Optic[Json, Json, NameAge, NameAge, Either] =
+    val inner3: Optic[Json, Json, NameAge, NameAge, Either] =
       codecPrism[Person].fields(_.name, _.age)
-    val chain: Optic[Envelope, Envelope, NameAge, NameAge, dev.constructive.eo.data.Affine] =
-      outerGen.andThen(inner)
-    val validEnv = Envelope("env", Person("Alice", 30, Address("Main St", 1)).asJson)
+    val chain3: Optic[Envelope, Envelope, NameAge, NameAge, dev.constructive.eo.data.Affine] =
+      outerGen.andThen(inner3)
 
     val f: NameAge => NameAge = nt => (name = nt.name.toUpperCase, age = nt.age + 1)
-    val out: Envelope = chain.modify(f)(validEnv)
+    val out: Envelope = chain3.modify(f)(validEnv)
     val modOk = (out.payload.hcursor.downField("name").as[String] === Right("ALICE"))
       .and(out.payload.hcursor.downField("age").as[Int] === Right(31))
 
@@ -88,11 +87,12 @@ class CrossCarrierCompositionSpec extends Specification:
       case other => ko(s"expected Ior.Right, got $other")
 
     val payload = Json.obj("name" -> Json.fromString("Alice"))
-    val diagOk = codecPrism[Person].fields(_.name, _.age).get(payload) match
+    val diag3 = codecPrism[Person].fields(_.name, _.age).get(payload) match
       case Ior.Left(c) => c.toList.contains(JsonFailure.PathMissing(PathStep.Field("age"))) === true
       case other       => ko(s"expected Ior.Left, got $other")
 
-    modOk.and(concreteOk).and(diagOk)
+    val s3 = modOk.and(concreteOk).and(diag3)
+    s2.and(s3)
   }
 
   // covers: manual composition outer.modify(trav.modifyUnsafe(f)) works,
