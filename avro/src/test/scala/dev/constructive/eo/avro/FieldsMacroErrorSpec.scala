@@ -20,130 +20,110 @@ import org.specs2.mutable.Specification
   *   - Unknown field name.
   *   - Duplicate selectors.
   *   - NamedTuple AvroCodec unreachable (no given `AvroCodec[NT]` in scope).
+  *
+  * '''2026-04-29 consolidation.''' 8 → 1 named composite block; every D10 row still asserts.
   */
 class FieldsMacroErrorSpec extends Specification:
 
   import FieldsMacroErrorSpec.*
 
-  // ---- Arity --------------------------------------------------------
-
-  "`.fields` requires at least two selectors" should {
-
-    "empty varargs -> compile error with the arity message" >> {
-      val errors = typeCheckErrors("""
+  // covers: empty varargs -> arity message,
+  //   single-selector -> arity + ".field(_.x)" suggestion,
+  //   selector-invokes-method -> "selector at position 0 must be a single-field accessor",
+  //   nested path selector -> single-field-accessor + "Nested paths" hint,
+  //   unknown field -> "'nope' is not a field of" + "Known fields:",
+  //   duplicate selectors -> "duplicate field selector 'name'" + "positions 0, 1",
+  //   non-case-class parent -> "has no case fields",
+  //   NamedTuple codec unreachable -> "no given AvroCodec" or kindlings schema-derivation diagnostic
+  "`.fields` D10 catalogue: every row's exact diagnostic surfaces" >> {
+    val empty = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].fields()
       """)
-      errors.exists(e => e.message.contains("requires at least two field selectors")) === true
-    }
+    val emptyOk = empty.exists(_.message.contains("requires at least two field selectors"))
 
-    "single-selector varargs -> suggests .field(_.x) instead" >> {
-      val errors = typeCheckErrors("""
+    val single = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].fields(_.name)
       """)
-      errors.exists(e =>
-        e.message.contains("requires at least two field selectors") &&
-          e.message.contains(".field(_.x)")
-      ) === true
-    }
-  }
+    val singleOk = single.exists(e =>
+      e.message.contains("requires at least two field selectors") &&
+        e.message.contains(".field(_.x)")
+    )
 
-  // ---- Selector shape ----------------------------------------------
-
-  "`.fields` rejects non-single-field selectors" should {
-
-    "selector invoking a method -> \"not yet supported\" message with position" >> {
-      val errors = typeCheckErrors("""
+    val method = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].fields(_.name.toUpperCase, _.age)
       """)
-      errors.exists(e =>
-        e.message.contains("selector at position 0 must be a single-field accessor")
-      ) === true
-    }
+    val methodOk =
+      method.exists(_.message.contains("selector at position 0 must be a single-field accessor"))
 
-    "nested path selector -> same message (recommends chaining .field)" >> {
-      val errors = typeCheckErrors("""
+    val nested = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.FieldsMacroErrorSpec.Outer
         codecPrism[Outer].fields(_.inner.value, _.tag)
       """)
-      errors.exists(e =>
-        e.message.contains("must be a single-field accessor") &&
-          e.message.contains("Nested paths")
-      ) === true
-    }
-  }
+    val nestedOk = nested.exists(e =>
+      e.message.contains("must be a single-field accessor") &&
+        e.message.contains("Nested paths")
+    )
 
-  // ---- Unknown field -----------------------------------------------
-
-  "`.fields` rejects unknown field names" in {
-    val errors = typeCheckErrors("""
+    val unknown = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].fields(_.name, _.nope)
       """)
-    errors.exists(e =>
-      e.message.contains("'nope' is not a field of") &&
-        e.message.contains("Known fields:")
-    ) === true
-  }
+    val unknownOk = unknown.exists(e =>
+      e.message.contains("'nope' is not a field of") && e.message.contains("Known fields:")
+    )
 
-  // ---- Duplicates --------------------------------------------------
-
-  "`.fields` rejects duplicate selectors" in {
-    val errors = typeCheckErrors("""
+    val dup = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].fields(_.name, _.name)
       """)
-    errors.exists(e =>
+    val dupOk = dup.exists(e =>
       e.message.contains("duplicate field selector 'name'") &&
         e.message.contains("positions 0, 1")
-    ) === true
-  }
+    )
 
-  // ---- Non-case-class ----------------------------------------------
-  //
-  // Using a class without case-class shape — `FieldsMacroErrorSpec.NotCase`
-  // is declared without the `case` modifier; it has no `caseFields`.
-
-  "`.fields` rejects non-case-class parent types" in {
-    val errors = typeCheckErrors("""
+    val notCase = typeCheckErrors("""
         import dev.constructive.eo.avro.{AvroCodec, codecPrism}
         import dev.constructive.eo.avro.FieldsMacroErrorSpec.NotCase
         given AvroCodec[NotCase] = ???
         codecPrism[NotCase].fields(_.name, _.age)
       """)
-    errors.exists(e => e.message.contains("has no case fields")) === true
-  }
+    val notCaseOk = notCase.exists(_.message.contains("has no case fields"))
 
-  // ---- NamedTuple codec unreachable --------------------------------
-
-  "`.fields` aborts when NamedTuple codec is not summonable" in {
     // `NoCodec` has a hand-written `AvroCodec[NoCodec]` (so the parent prism is constructible)
     // but one of its fields is `Opaque` — a type for which no `AvroSchemaFor` (and no other
     // kindlings typeclasses) are derivable. The macro asks for `AvroCodec[NamedTuple[("a","b"),
     // (Int, Opaque)]]`; `AvroCodec.derived` chains into kindlings' `AvroEncoder` /
     // `AvroDecoder` / `AvroSchemaFor`, kindlings' schema-derivation walks the NT's field types,
-    // and bottoms out on `Opaque` with a "schema for ... was not handled by any schema
-    // derivation rule" error. The macro's "no given AvroCodec" wording is the cats-eo-side
-    // diagnostic; kindlings' wording is the upstream surface — either is acceptable here, both
-    // signal "the user needs to derive a codec for the synthesised NamedTuple".
-    val errors = typeCheckErrors("""
+    // and bottoms out on `Opaque`. Either the cats-eo-side or the kindlings-side diagnostic is
+    // acceptable here.
+    val noCodec = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.FieldsMacroErrorSpec.NoCodec
         codecPrism[NoCodec].fields(_.a, _.b)
       """)
-    errors.exists(e =>
+    val noCodecOk = noCodec.exists(e =>
       e.message.contains("no given AvroCodec") ||
         e.message.contains("was not handled by any schema derivation rule") ||
         e.message.contains("AvroSchemaFor[dev.constructive.eo.avro.FieldsMacroErrorSpec.Opaque]")
-    ) === true
+    )
+
+    (emptyOk === true)
+      .and(singleOk === true)
+      .and(methodOk === true)
+      .and(nestedOk === true)
+      .and(unknownOk === true)
+      .and(dupOk === true)
+      .and(notCaseOk === true)
+      .and(noCodecOk === true)
   }
 
 end FieldsMacroErrorSpec

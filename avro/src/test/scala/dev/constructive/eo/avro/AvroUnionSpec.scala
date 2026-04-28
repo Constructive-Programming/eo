@@ -23,56 +23,41 @@ class AvroUnionSpec extends Specification:
   import AvroSpecFixtures.*
 
   // ---- Option[Long] branch via Transaction.amount -----------------
+  //
+  // 2026-04-29 consolidation: 4 Option[Long] branch tests → 1 composite.
 
-  // covers: Some(long) branch round-trip on .field(_.amount).union[Long]
-  "field(_.amount).union[Long] modify increments the long branch" >> {
-    val t = Transaction("t-1", Some(42L))
-    val record = transactionRecord(t)
-    val prism = codecPrism[Transaction]
-      .field(_.amount)
-      .union[Long]
+  // covers: Some(long) branch round-trip on .field(_.amount).union[Long].modify (Ior.Right + schema preserved),
+  //   .get on Some(long) returns Ior.Right(longValue),
+  //   None / null-branch on .union[Long].get surfaces UnionResolutionFailed with schema-declared
+  //     alternatives ["null", "long"],
+  //   None / null-branch on .modify yields Ior.Both(UnionResolutionFailed, originalRecord),
+  //   .getOptionUnsafe on the null-branch returns None silently
+  "field(_.amount).union[Long]: Some round-trip + None branch surfaces UnionResolutionFailed" >> {
+    val record1 = transactionRecord(Transaction("t-1", Some(42L)))
+    val prism = codecPrism[Transaction].field(_.amount).union[Long]
 
-    val result = prism.modify(_ + 1L)(record)
-    result match
+    val modifyOk = prism.modify(_ + 1L)(record1) match
       case Ior.Right(out) =>
         val rec = out.asInstanceOf[GenericRecord]
         val amount = rec.get(transactionSchema.getField("amount").pos)
         (amount.toString === "43").and(rec.getSchema === transactionSchema)
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
-  }
 
-  // covers: get on the long-branch path returns Ior.Right(longValue)
-  "field(_.amount).union[Long] get returns Ior.Right on Some(long)" >> {
-    val record = transactionRecord(Transaction("t-1", Some(99L)))
-    codecPrism[Transaction]
-      .field(_.amount)
-      .union[Long]
-      .get(record) match
+    val record2 = transactionRecord(Transaction("t-1", Some(99L)))
+    val getSomeOk = prism.get(record2) match
       case Ior.Right(v) => v === 99L
       case other        =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-  }
 
-  // covers: branch mismatch (None / null branch) on a .union[Long] surfaces UnionResolutionFailed
-  // accumulating the schema-declared alternatives, AND the modify default-surface preserves the
-  // original record on Ior.Both.
-  "field(_.amount).union[Long] on null-branch surfaces UnionResolutionFailed" >> {
-    val record = transactionRecord(Transaction("t-2", None))
-    val prism = codecPrism[Transaction]
-      .field(_.amount)
-      .union[Long]
-
-    val getResult = prism.get(record)
-    val modifyResult = prism.modify(_ + 1L)(record)
-
-    val getOk = getResult match
+    val record3 = transactionRecord(Transaction("t-2", None))
+    val getNoneOk = prism.get(record3) match
       case Ior.Left(chain) =>
         chain.headOption.get match
           case AvroFailure.UnionResolutionFailed(branches, PathStep.UnionBranch("long")) =>
             // The post-processing in walkPath should enumerate ["null", "long"] from the parent
             // record's `amount` field schema.
-            (branches === List("null", "long")): org.specs2.execute.Result
+            branches === List("null", "long"): org.specs2.execute.Result
           case other =>
             org
               .specs2
@@ -81,35 +66,33 @@ class AvroUnionSpec extends Specification:
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
 
-    val modifyOk = modifyResult match
+    val modifyNoneOk = prism.modify(_ + 1L)(record3) match
       case Ior.Both(chain, out) =>
         val isUnion = chain.headOption.get match
           case AvroFailure.UnionResolutionFailed(_, _) => true
           case _                                       => false
-        (isUnion === true).and((out eq record) === true): org.specs2.execute.Result
+        (isUnion === true).and((out eq record3) === true): org.specs2.execute.Result
       case other =>
         org
           .specs2
           .execute
           .Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
-    getOk.and(modifyOk)
-  }
+    val record4 = transactionRecord(Transaction("t-3", None))
+    val unsafeNoneOk = prism.getOptionUnsafe(record4) === None
 
-  // covers: getOptionUnsafe on the null-branch returns None silently
-  "field(_.amount).union[Long] getOptionUnsafe is None on null-branch" >> {
-    val record = transactionRecord(Transaction("t-3", None))
-    codecPrism[Transaction]
-      .field(_.amount)
-      .union[Long]
-      .getOptionUnsafe(record) === None
+    modifyOk.and(getSomeOk).and(getNoneOk).and(modifyNoneOk).and(unsafeNoneOk)
   }
 
   // ---- Sealed-trait Payment union ---------------------------------
 
   // covers: sealed-trait .union[Cash] resolves the schema branch by full-name and modifies the
-  // amount field on the Cash record-alternative; getOptionUnsafe returns the Cash value.
-  "Payment .union[Cash] modify on the Cash branch round-trips" >> {
+  // amount field on the Cash record-alternative; getOptionUnsafe returns the Cash value;
+  // sealed-trait .union[Card] on a Cash-branch record surfaces UnionResolutionFailed with
+  // PathStep.UnionBranch("Card");
+  // macro emits the schema's getFullName as the branch identifier — "long" (lowercase) for
+  // primitives, "Cash"/"Card" for records (witnessed by the path accessor).
+  "Payment .union[Cash] / .union[Card]: happy modify + Cash→Card mismatch + macro emits fullname branch ids" >> {
     // Build a record-of-Payment by encoding through kindlings: the encoded value is a
     // GenericData.Record under the `Cash` schema (per the kindlings probe).
     val paymentSchema: Schema = summon[AvroCodec[Payment]].schema
@@ -133,24 +116,16 @@ class AvroUnionSpec extends Specification:
       .codecPrism[Payment](envSchema.getField("payment").schema)
       .union[Cash]
 
-    val out = cashL.modify((c: Cash) => c.copy(amount = c.amount + 5L))(cashRec)
-    out match
+    val cashHappy = cashL.modify((c: Cash) => c.copy(amount = c.amount + 5L))(cashRec) match
       case Ior.Right(rec) =>
         val updated = rec.asInstanceOf[GenericRecord]
         val amount = updated.get(updated.getSchema.getField("amount").pos)
-        amount.toString === "105"
+        amount.toString === "105": org.specs2.execute.Result
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-  }
 
-  // covers: sealed-trait .union[Card] on a Cash-branch record surfaces UnionResolutionFailed
-  "Payment .union[Card] on Cash branch surfaces UnionResolutionFailed" >> {
-    val cashRec = summon[AvroCodec[Cash]].encode(Cash(100L)).asInstanceOf[GenericRecord]
-    val cardL = AvroPrism
-      .codecPrism[Payment]
-      .union[Card]
-
-    cardL.get(cashRec) match
+    val cardL = AvroPrism.codecPrism[Payment].union[Card]
+    val cashOnCardOk = cardL.get(cashRec) match
       case Ior.Left(chain) =>
         chain.headOption.get match
           case AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch("Card")) =>
@@ -164,99 +139,83 @@ class AvroUnionSpec extends Specification:
               ): org.specs2.execute.Result
       case other =>
         org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
-  }
 
-  // ---- Macro identifier semantics ---------------------------------
-
-  // covers: the macro emits the schema's getFullName as the branch identifier — i.e. "long"
-  // (lowercase) for primitives, "Cash"/"Card" for records. Witness: we walk the path back via
-  // the prism's path accessor.
-  "macro emits schema-fullname as branch identifier" >> {
+    // Macro identifier: "long" lowercase for primitives, "Cash"/"Card" record-fullname.
     val longUnion = codecPrism[Transaction].field(_.amount).union[Long]
     val cashUnion = AvroPrism.codecPrism[Payment].union[Cash]
+    val branchIdsOk = (longUnion.path.toList.last === PathStep.UnionBranch("long"))
+      .and(cashUnion.path.toList.last === PathStep.UnionBranch("Cash"))
 
-    val longSteps = longUnion.path.toList
-    val cashSteps = cashUnion.path.toList
-
-    (longSteps.last === PathStep.UnionBranch("long"))
-      .and(cashSteps.last === PathStep.UnionBranch("Cash"))
+    cashHappy.and(cashOnCardOk).and(branchIdsOk)
   }
 
   // ---- Compile-error coverage --------------------------------------
+  //
+  // 2026-04-29 consolidation: 4 compile-error specs → 1 composite with reverse-index.
 
-  // covers: .union[NotInSchema] on a Payment-shaped focus aborts at compile time with a
-  // "not a known alternative" diagnostic.
-  "compile error: .union[Int] on Payment is rejected by the macro" >> {
-    val errors = scala
+  // covers: .union[NotInSchema] on a Payment-shaped focus -> "not a known alternative",
+  //   .union on a non-union focus (Person) -> "not a union-shaped type",
+  //   .union on a Scala 3 untagged union focus -> kindlings "Scala 3 untagged union" or
+  //     "kindlings-avro-derivation does not" diagnostic,
+  //   .union[String] on Option[Long] -> "the only valid branch is" or "not a known alternative"
+  "compile errors: .union macro rejects non-union, wrong-branch, and Scala-3-union focuses" >> {
+    val notInSchema = scala
       .compiletime
       .testing
-      .typeCheckErrors(
-        """
+      .typeCheckErrors("""
         import dev.constructive.eo.avro.AvroPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Payment
         AvroPrism.codecPrism[Payment].union[Int]
-      """
-      )
-    errors.exists(e => e.message.contains("not a known alternative")) === true
-  }
+      """)
+    val notInSchemaOk = notInSchema.exists(_.message.contains("not a known alternative"))
 
-  // covers: .union on a non-union focus (e.g. Person) aborts with a "not a union-shaped type" error.
-  "compile error: .union on a Person focus is rejected" >> {
-    val errors = scala
+    val nonUnion = scala
       .compiletime
       .testing
-      .typeCheckErrors(
-        """
+      .typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Person
         codecPrism[Person].union[String]
-      """
-      )
-    errors.exists(e => e.message.contains("not a union-shaped type")) === true
-  }
+      """)
+    val nonUnionOk = nonUnion.exists(_.message.contains("not a union-shaped type"))
 
-  // covers: .union[Branch] with a Scala 3 untagged union focus aborts with the kindlings-doesn't-
-  // support-these diagnostic.
-  "compile error: .union on a Scala 3 union focus is rejected" >> {
-    val errors = scala
+    // Stub AvroCodec for the union — the parent codec is irrelevant since the macro should
+    // abort before summoning anything else; supply a `???` codec to keep the test focused on
+    // the macro's compile-time check, not on kindlings' refusal to derive.
+    val scala3Union = scala
       .compiletime
       .testing
-      .typeCheckErrors(
-        """
+      .typeCheckErrors("""
         import dev.constructive.eo.avro.{AvroCodec, AvroPrism}
-        // Stub AvroCodec for the union — the parent codec is irrelevant since the macro should
-        // abort before summoning anything else; supply a `???` codec to keep the test focused on
-        // the macro's compile-time check, not on kindlings' refusal to derive.
         given AvroCodec[Long | String] =
           new AvroCodec[Long | String]:
             def schema: org.apache.avro.Schema = ???
             def encode(a: Long | String): Any = ???
             def decodeEither(any: Any): Either[Throwable, Long | String] = ???
         AvroPrism.codecPrism[Long | String].union[Long]
-      """
-      )
-    errors.exists(e =>
+      """)
+    val scala3UnionOk = scala3Union.exists(e =>
       e.message.contains("Scala 3 untagged union") ||
         e.message.contains("kindlings-avro-derivation does not")
-    ) === true
-  }
+    )
 
-  // covers: .union[Branch] on Option[T] when Branch != T is rejected
-  "compile error: .union[String] on Option[Long] is rejected" >> {
-    val errors = scala
+    val wrongOptionBranch = scala
       .compiletime
       .testing
-      .typeCheckErrors(
-        """
+      .typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.AvroSpecFixtures.Transaction
         codecPrism[Transaction].field(_.amount).union[String]
-      """
-      )
-    errors.exists(e =>
+      """)
+    val wrongOptionBranchOk = wrongOptionBranch.exists(e =>
       e.message.contains("the only valid branch is") ||
         e.message.contains("not a known alternative")
-    ) === true
+    )
+
+    (notInSchemaOk === true)
+      .and(nonUnionOk === true)
+      .and(scala3UnionOk === true)
+      .and(wrongOptionBranchOk === true)
   }
 
 end AvroUnionSpec

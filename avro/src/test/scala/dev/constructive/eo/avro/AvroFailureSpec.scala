@@ -11,6 +11,10 @@ import org.specs2.mutable.Specification
   *
   * Mirrors `JsonFailureSpec`'s consolidation density: one composite block per case + one block per
   * parse-helper code path.
+  *
+  * '''2026-04-29 consolidation.''' 9 per-case "constructible + message" blocks → 1 composite. The
+  * Eq case stays separate since it lives on a different code path. The parse helpers also stay
+  * separate (their own code paths).
   */
 class AvroFailureSpec extends Specification:
 
@@ -18,72 +22,63 @@ class AvroFailureSpec extends Specification:
 
   // ---- Per-case constructibility + message format -----------------
 
-  // covers: PathMissing constructible, message includes step identifier
-  "AvroFailure.PathMissing constructible + message includes step" >> {
-    val f: AvroFailure = AvroFailure.PathMissing(PathStep.Field("name"))
-    (f.message must contain("path missing"))
-      .and(f.message must contain("Field(name)"))
-  }
+  // covers: PathMissing constructible w/ "path missing" + step identifier in message,
+  //   NotARecord constructible w/ "expected Avro record",
+  //   NotAnArray constructible w/ "expected Avro array",
+  //   IndexOutOfRange constructible w/ "size=N",
+  //   DecodeFailed constructible w/ "decode failed" + wrapped cause message,
+  //   BinaryParseFailed constructible w/ "binary" tag + wrapped cause message,
+  //   JsonParseFailed constructible w/ "Avro JSON" tag + wrapped cause message,
+  //   UnionResolutionFailed constructible w/ "union resolution" + alternatives in message,
+  //   BadEnumSymbol constructible w/ invalid symbol + valid-set listing in message
+  "AvroFailure: every case constructible + message contains its diagnostic anchors" >> {
+    val pm: AvroFailure = AvroFailure.PathMissing(PathStep.Field("name"))
+    val pmOk = (pm.message must contain("path missing"))
+      .and(pm.message must contain("Field(name)"))
 
-  // covers: NotARecord constructible, distinctive message
-  "AvroFailure.NotARecord constructible + distinctive message" >> {
-    val f: AvroFailure = AvroFailure.NotARecord(PathStep.Field("x"))
-    f.message must contain("expected Avro record")
-  }
+    val nr: AvroFailure = AvroFailure.NotARecord(PathStep.Field("x"))
+    val nrOk = nr.message must contain("expected Avro record")
 
-  // covers: NotAnArray constructible, distinctive message
-  "AvroFailure.NotAnArray constructible + distinctive message" >> {
-    val f: AvroFailure = AvroFailure.NotAnArray(PathStep.Index(3))
-    f.message must contain("expected Avro array")
-  }
+    val na: AvroFailure = AvroFailure.NotAnArray(PathStep.Index(3))
+    val naOk = na.message must contain("expected Avro array")
 
-  // covers: IndexOutOfRange constructible, message includes size
-  "AvroFailure.IndexOutOfRange constructible + message includes size" >> {
-    val f: AvroFailure = AvroFailure.IndexOutOfRange(PathStep.Index(7), 3)
-    f.message must contain("size=3")
-  }
+    val ix: AvroFailure = AvroFailure.IndexOutOfRange(PathStep.Index(7), 3)
+    val ixOk = ix.message must contain("size=3")
 
-  // covers: DecodeFailed constructible, message wraps the underlying Throwable
-  "AvroFailure.DecodeFailed constructible + wraps cause message" >> {
-    val cause = new RuntimeException("missing record field 'name'")
-    val f: AvroFailure = AvroFailure.DecodeFailed(PathStep.Field("name"), cause)
-    (f.message must contain("decode failed"))
-      .and(f.message must contain(cause.getMessage))
-  }
+    val dCause = new RuntimeException("missing record field 'name'")
+    val df: AvroFailure = AvroFailure.DecodeFailed(PathStep.Field("name"), dCause)
+    val dfOk = (df.message must contain("decode failed"))
+      .and(df.message must contain(dCause.getMessage))
 
-  // covers: BinaryParseFailed constructible, message wraps the underlying Throwable
-  "AvroFailure.BinaryParseFailed constructible + wraps Throwable message" >> {
-    val cause = new RuntimeException("binary went sideways")
-    val f: AvroFailure = AvroFailure.BinaryParseFailed(cause)
-    (f.message must contain("binary"))
-      .and(f.message must contain("binary went sideways"))
-  }
+    val bCause = new RuntimeException("binary went sideways")
+    val bf: AvroFailure = AvroFailure.BinaryParseFailed(bCause)
+    val bfOk = (bf.message must contain("binary")).and(bf.message must contain(bCause.getMessage))
 
-  // covers: JsonParseFailed constructible, message wraps the underlying Throwable + tags Avro JSON
-  "AvroFailure.JsonParseFailed constructible + wraps Throwable message" >> {
-    val cause = new RuntimeException("json went sideways")
-    val f: AvroFailure = AvroFailure.JsonParseFailed(cause)
-    (f.message must contain("Avro JSON"))
-      .and(f.message must contain("json went sideways"))
-  }
+    val jCause = new RuntimeException("json went sideways")
+    val jf: AvroFailure = AvroFailure.JsonParseFailed(jCause)
+    val jfOk = (jf.message must contain("Avro JSON")).and(jf.message must contain(jCause.getMessage))
 
-  // covers: UnionResolutionFailed constructible, message includes branches
-  "AvroFailure.UnionResolutionFailed constructible + message includes branches" >> {
-    val f: AvroFailure = AvroFailure.UnionResolutionFailed(
+    val ur: AvroFailure = AvroFailure.UnionResolutionFailed(
       List("null", "long", "string"),
       PathStep.UnionBranch("long"),
     )
-    (f.message must contain("union resolution"))
-      .and(f.message must contain("long"))
-      .and(f.message must contain("string"))
-  }
+    val urOk = (ur.message must contain("union resolution"))
+      .and(ur.message must contain("long"))
+      .and(ur.message must contain("string"))
 
-  // covers: BadEnumSymbol constructible, message includes invalid symbol + valid set
-  "AvroFailure.BadEnumSymbol constructible + message includes valid set" >> {
-    val f: AvroFailure =
+    val be: AvroFailure =
       AvroFailure.BadEnumSymbol("MAGENTA", List("RED", "GREEN", "BLUE"), PathStep.Field("color"))
-    (f.message must contain("MAGENTA"))
-      .and(f.message must contain("RED"))
+    val beOk = (be.message must contain("MAGENTA")).and(be.message must contain("RED"))
+
+    pmOk
+      .and(nrOk)
+      .and(naOk)
+      .and(ixOk)
+      .and(dfOk)
+      .and(bfOk)
+      .and(jfOk)
+      .and(urOk)
+      .and(beOk)
   }
 
   // ---- Eq instance --------------------------------------------------
