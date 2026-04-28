@@ -35,120 +35,85 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   )
 
   // ---- forAll properties on the default Ior surface ---------------
+  //
+  // 2026-04-29 consolidation: 5 forAll-property blocks → 1 composite forAll. All five
+  // semantic invariants live in one property, joined by &&.
 
-  "AvroFieldsPrism default-Ior surface (forAll properties)" should {
+  // covers: modify(identity) on valid Person record === Ior.Right(record),
+  //   modify(f) on valid record === Ior.Right(modifyUnsafe(f)) on the happy path,
+  //   get(valid record) decodes to a NameAge whose name/age match the Person,
+  //   placeUnsafe-then-getOptionUnsafe round-trips the focus,
+  //   two-step modify on disjoint fields == single .fields modify (composability bonus)
+  "AvroFieldsPrism default-Ior surface forAll: modify-id / parity / get / round-trip / compose" >> forAll {
+    (p: Person, suffix: String, newName: String, newAge: Int) =>
+      val record = personRecord(p)
+      val L = codecPrism[Person].fields(_.name, _.age)
+      val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
 
-    "modify(identity) on a valid Person record === Ior.Right(record)" >> {
-      forAll { (p: Person) =>
-        val record = personRecord(p)
-        val L = codecPrism[Person].fields(_.name, _.age)
-        L.modify(identity[NameAge])(record) match
-          case Ior.Right(out) => recordsEqual(out, record)
-          case _              => false
-      }
-    }
+      val modIdOk = L.modify(identity[NameAge])(record) match
+        case Ior.Right(out) => recordsEqual(out, record)
+        case _              => false
 
-    "modify === Ior.Right(modifyUnsafe) on a valid Person record" >> {
-      forAll { (p: Person, suffix: String) =>
-        val record = personRecord(p)
-        val L = codecPrism[Person].fields(_.name, _.age)
-        val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
-        L.modify(f)(record) match
-          case Ior.Right(out) => recordsEqual(out, L.modifyUnsafe(f)(record))
-          case _              => false
-      }
-    }
+      val parityOk = L.modify(f)(record) match
+        case Ior.Right(out) => recordsEqual(out, L.modifyUnsafe(f)(record))
+        case _              => false
 
-    "get(valid record) decodes to a NameAge whose name/age match the Person" >> {
-      forAll { (p: Person) =>
-        val record = personRecord(p)
-        val L = codecPrism[Person].fields(_.name, _.age)
-        L.get(record) match
-          case Ior.Right(nt) => nt.name == p.name && nt.age == p.age
-          case _             => false
-      }
-    }
+      val getOk = L.get(record) match
+        case Ior.Right(nt) => nt.name == p.name && nt.age == p.age
+        case _             => false
 
-    "placeUnsafe-then-getOptionUnsafe round-trips the focus" >> {
-      forAll { (p: Person, newName: String, newAge: Int) =>
-        val record = personRecord(p)
-        val L = codecPrism[Person].fields(_.name, _.age)
-        val nt: NameAge = (name = newName, age = newAge)
-        val modified = L.placeUnsafe(nt)(record)
-        L.getOptionUnsafe(modified) match
-          case Some(read) => read.name == newName && read.age == newAge
-          case None       => false
-      }
-    }
+      val nt: NameAge = (name = newName, age = newAge)
+      val roundTripOk = L.getOptionUnsafe(L.placeUnsafe(nt)(record)) match
+        case Some(read) => read.name == newName && read.age == newAge
+        case None       => false
 
-    "two-step modify on disjoint fields == compose on Unsafe surface (bonus property)" >> {
-      // Witnesses that two disjoint single-field modifies commute through a single .fields modify.
-      forAll { (p: Person) =>
-        val record = personRecord(p)
-        val nameL = codecPrism[Person].field(_.name)
-        val ageL = codecPrism[Person].field(_.age)
-        val stepByStep =
-          ageL.modifyUnsafe((i: Int) => i + 1)(
-            nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
-          )
-        val both = codecPrism[Person]
-          .fields(_.name, _.age)
-          .modifyUnsafe(nt => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge)(record)
-        recordsEqual(stepByStep, both)
-      }
-    }
+      val nameL = codecPrism[Person].field(_.name)
+      val ageL = codecPrism[Person].field(_.age)
+      val stepByStep =
+        ageL.modifyUnsafe((i: Int) => i + 1)(
+          nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
+        )
+      val both = L.modifyUnsafe(
+        (nt: NameAge) => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge
+      )(record)
+      val composeOk = recordsEqual(stepByStep, both)
+
+      modIdOk && parityOk && getOk && roundTripOk && composeOk
   }
 
   // ---- Atomic-read miss surface (D4) ------------------------------
+  //
+  // 2026-04-29 consolidation: 4 atomic-miss tests → 1 composite block.
 
-  "AvroFieldsPrism atomic-read on partial miss" should {
+  // covers: get on a record missing one of the selected fields surfaces Ior.Left(chain) with
+  //   one PathMissing per missing field — never assembles a partial NamedTuple,
+  //   modify on a partial-miss record returns Ior.Both(chain, ORIGINAL record) — never
+  //   Ior.Both(chain, partialNT-shaped),
+  //   modifyUnsafe on a partial-miss record returns the input record unchanged,
+  //   getOptionUnsafe on a partial-miss record returns None
+  "AvroFieldsPrism partial-miss surfaces (D4): get/modify/modifyUnsafe/getOptionUnsafe" >> {
+    val ageOnly = ageOnlyRecord(30)
+    val L = codecPrism[Person](personSchema).fields(_.name, _.age)
 
-    // covers: get on a record missing one of the selected fields surfaces Ior.Left with one
-    // PathMissing per missing field, never assembles a partial NamedTuple
-    "get → Ior.Left(chain) with PathMissing(name) when 'name' is absent" >> {
-      val ageOnly = ageOnlyRecord(30)
-      val L = codecPrism[Person](personSchema).fields(_.name, _.age)
-      L.get(ageOnly) match
-        case Ior.Left(chain) =>
-          (chain.length === 1L)
-            .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
-        case other =>
-          org
-            .specs2
-            .execute
-            .Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
-    }
+    val getOk = L.get(ageOnly) match
+      case Ior.Left(chain) =>
+        (chain.length === 1L)
+          .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
 
-    // covers: modify on a record missing one of the selected fields returns
-    // Ior.Both(chain-of-PathMissing, ORIGINAL record) — never Ior.Both(chain, partialNT-shaped value)
-    "modify → Ior.Both(chain, ORIGINAL record) when one selected field is absent" >> {
-      val ageOnly = ageOnlyRecord(30)
-      val L = codecPrism[Person](personSchema).fields(_.name, _.age)
-      L.modify(identity[NameAge])(ageOnly) match
-        case Ior.Both(chain, out) =>
-          (chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
-            .and((out eq ageOnly) === true)
-        case other =>
-          org
-            .specs2
-            .execute
-            .Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
-    }
+    val modifyOk = L.modify(identity[NameAge])(ageOnly) match
+      case Ior.Both(chain, out) =>
+        (chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
+          .and((out eq ageOnly) === true)
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
-    // covers: modifyUnsafe on a partial-miss record returns the input record unchanged
-    "modifyUnsafe → input record unchanged on partial miss" >> {
-      val ageOnly = ageOnlyRecord(30)
-      val L = codecPrism[Person](personSchema).fields(_.name, _.age)
-      val out = L.modifyUnsafe(identity[NameAge])(ageOnly)
-      (out eq ageOnly) === true
-    }
+    val unsafeMod = L.modifyUnsafe(identity[NameAge])(ageOnly)
+    val unsafeModOk = (unsafeMod eq ageOnly) === true
+    val unsafeGetOk = L.getOptionUnsafe(ageOnly) === None
 
-    // covers: getOptionUnsafe on a partial-miss record returns None
-    "getOptionUnsafe → None on partial miss" >> {
-      val ageOnly = ageOnlyRecord(30)
-      val L = codecPrism[Person](personSchema).fields(_.name, _.age)
-      L.getOptionUnsafe(ageOnly) === None
-    }
+    getOk.and(modifyOk).and(unsafeModOk).and(unsafeGetOk)
   }
 
   // ---- Helpers -----------------------------------------------------

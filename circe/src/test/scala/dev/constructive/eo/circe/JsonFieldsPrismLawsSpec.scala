@@ -57,61 +57,44 @@ class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCh
   )
 
   // ---- forAll properties on the default Ior surface ---------------
+  //
+  // 2026-04-29 consolidation: 5 forAll-property blocks → 1 composite forAll. The discipline
+  // PrismTests checkAll above stays 1:1 (each named law preserved).
 
-  "JsonFieldsPrism default-Ior surface (forAll properties)" should {
+  // covers: modify(identity) on valid Person JSON === Ior.Right(inputJson),
+  //   modify(f) on valid Person JSON === Ior.Right(modifyUnsafe(f)) on the happy path,
+  //   get(valid json) decodes to a NameAge whose name/age match the Person,
+  //   placeUnsafe-then-getOptionUnsafe round-trips the focus,
+  //   two-step modify on disjoint fields == composed single .fields modify
+  "JsonFieldsPrism default-Ior surface forAll: modify-id / parity / get / round-trip / compose" >> forAll {
+    (p: Person, suffix: String, newName: String, newAge: Int) =>
+      val json = p.asJson
+      val L = codecPrism[Person].fields(_.name, _.age)
+      val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
 
-    "modify(identity) on valid Person JSON === Ior.Right(inputJson)" >> {
-      forAll { (p: Person) =>
-        val json = p.asJson
-        val L = codecPrism[Person].fields(_.name, _.age)
-        L.modify(identity[NameAge])(json) == Ior.Right(json)
-      }
-    }
+      val modIdOk = L.modify(identity[NameAge])(json) == Ior.Right(json)
+      val parityOk = L.modify(f)(json) == Ior.Right(L.modifyUnsafe(f)(json))
 
-    "modify = Ior.Right(modifyUnsafe) on valid Person JSON" >> {
-      forAll { (p: Person, suffix: String) =>
-        val json = p.asJson
-        val L = codecPrism[Person].fields(_.name, _.age)
-        val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
-        L.modify(f)(json) == Ior.Right(L.modifyUnsafe(f)(json))
-      }
-    }
+      val getOk = L.get(json) match
+        case Ior.Right(nt) => nt.name == p.name && nt.age == p.age
+        case _             => false
 
-    "get(valid json) decodes to a NameAge whose name/age match the Person" >> {
-      forAll { (p: Person) =>
-        val L = codecPrism[Person].fields(_.name, _.age)
-        L.get(p.asJson) match
-          case Ior.Right(nt) => nt.name == p.name && nt.age == p.age
-          case _             => false
-      }
-    }
+      val nt: NameAge = (name = newName, age = newAge)
+      val roundTripOk = L.getOptionUnsafe(L.placeUnsafe(nt)(json)) match
+        case Some(read) => read.name == newName && read.age == newAge
+        case None       => false
 
-    "placeUnsafe-then-getOptionUnsafe round-trips the focus" >> {
-      forAll { (p: Person, newName: String, newAge: Int) =>
-        val L = codecPrism[Person].fields(_.name, _.age)
-        val nt: NameAge = (name = newName, age = newAge)
-        val modified = L.placeUnsafe(nt)(p.asJson)
-        L.getOptionUnsafe(modified) match
-          case Some(read) => read.name == newName && read.age == newAge
-          case None       => false
-      }
-    }
+      val nameL = codecPrism[Person].field(_.name)
+      val ageL = codecPrism[Person].field(_.age)
+      val stepByStep =
+        ageL.modifyUnsafe((i: Int) => i + 1)(nameL.modifyUnsafe((s: String) => s.toUpperCase)(json))
+      val both =
+        L.modifyUnsafe((nt: NameAge) => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge)(
+          json
+        )
+      val composeOk = stepByStep == both
 
-    "two-step modify on disjoint fields == compose on Unsafe surface (bonus property)" >> {
-      // Not a Prism law; witnesses that two disjoint single-field modifies
-      // commute through composed single updates.
-      forAll { (p: Person) =>
-        val nameL = codecPrism[Person].field(_.name)
-        val ageL = codecPrism[Person].field(_.age)
-        val json = p.asJson
-        val stepByStep =
-          ageL.modifyUnsafe(_ + 1)(nameL.modifyUnsafe(_.toUpperCase)(json))
-        val fields = codecPrism[Person].fields(_.name, _.age)
-        val both =
-          fields.modifyUnsafe(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(json)
-        stepByStep == both
-      }
-    }
+      modIdOk && parityOk && getOk && roundTripOk && composeOk
   }
 
 object JsonFieldsPrismLawsSpec:

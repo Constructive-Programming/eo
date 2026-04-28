@@ -92,165 +92,121 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   )
 
   // ---- forAll properties on the default Ior surface ---------------
+  //
+  // 2026-04-29 consolidation: 11 forAll blocks across 3 should{}'s → 3 composite forAll
+  // properties (one per surface). The discipline `checkAll` PrismTests block above stays 1:1.
 
-  "AvroPrism .fields default-Ior surface (forAll properties)" should {
+  // covers: AvroFieldsPrism modify(identity) on valid Person === Ior.Right(record),
+  //   modify(f) === Ior.Right(modifyUnsafe(f)) on the happy path,
+  //   get(valid record) decodes to a NameAge whose name/age match the Person,
+  //   placeUnsafe-then-getOptionUnsafe round-trips the focus,
+  //   two-step modify on disjoint fields == composed single .fields modify
+  "AvroFieldsPrism .fields default-Ior forAll: modify-id / parity / get / round-trip / compose" >> forAll {
+    (p: Person, suffix: String, newName: String, newAge: Int) =>
+      val record = personRecord(p)
+      val L = codecPrism[Person].fields(_.name, _.age)
+      val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
 
-    "modify(identity) on a valid Person record === Ior.Right(record)" >> {
-      forAll { (p: Person) =>
-        val record = personRecord(p)
-        val L = codecPrism[Person].fields(_.name, _.age)
-        L.modify(identity[NameAge])(record) match
-          case Ior.Right(out) => recordsEqual(out, record)
-          case _              => false
-      }
-    }
+      val modIdOk = L.modify(identity[NameAge])(record) match
+        case Ior.Right(out) => recordsEqual(out, record)
+        case _              => false
 
-    "modify === Ior.Right(modifyUnsafe) on a valid Person record" >> {
-      forAll { (p: Person, suffix: String) =>
-        val record = personRecord(p)
-        val L = codecPrism[Person].fields(_.name, _.age)
-        val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
-        L.modify(f)(record) match
-          case Ior.Right(out) => recordsEqual(out, L.modifyUnsafe(f)(record))
-          case _              => false
-      }
-    }
+      val parityOk = L.modify(f)(record) match
+        case Ior.Right(out) => recordsEqual(out, L.modifyUnsafe(f)(record))
+        case _              => false
 
-    "get(valid record) decodes to a NameAge whose name/age match the Person" >> {
-      forAll { (p: Person) =>
-        val L = codecPrism[Person].fields(_.name, _.age)
-        L.get(personRecord(p)) match
-          case Ior.Right(nt) => nt.name == p.name && nt.age == p.age
-          case _             => false
-      }
-    }
+      val getOk = L.get(record) match
+        case Ior.Right(nt) => nt.name == p.name && nt.age == p.age
+        case _             => false
 
-    "placeUnsafe-then-getOptionUnsafe round-trips the focus" >> {
-      forAll { (p: Person, newName: String, newAge: Int) =>
-        val L = codecPrism[Person].fields(_.name, _.age)
-        val nt: NameAge = (name = newName, age = newAge): NameAge
-        val modified = L.placeUnsafe(nt)(personRecord(p))
-        L.getOptionUnsafe(modified) match
-          case Some(read) => read.name == newName && read.age == newAge
-          case None       => false
-      }
-    }
+      val nt: NameAge = (name = newName, age = newAge): NameAge
+      val roundTripOk = L.getOptionUnsafe(L.placeUnsafe(nt)(record)) match
+        case Some(read) => read.name == newName && read.age == newAge
+        case None       => false
 
-    "two-step modify on disjoint fields == compose on Unsafe surface (bonus property)" >> {
-      // Witnesses that two disjoint single-field modifies commute through composed single updates.
-      forAll { (p: Person) =>
-        val record = personRecord(p)
-        val nameL = codecPrism[Person].field(_.name)
-        val ageL = codecPrism[Person].field(_.age)
-        val stepByStep =
-          ageL.modifyUnsafe((i: Int) => i + 1)(
-            nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
-          )
-        val both = codecPrism[Person]
-          .fields(_.name, _.age)
-          .modifyUnsafe(nt => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge)(record)
-        recordsEqual(stepByStep, both)
-      }
-    }
+      val nameL = codecPrism[Person].field(_.name)
+      val ageL = codecPrism[Person].field(_.age)
+      val stepByStep =
+        ageL.modifyUnsafe((i: Int) => i + 1)(
+          nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
+        )
+      val both = L.modifyUnsafe(
+        (nt: NameAge) => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge
+      )(record)
+      val composeOk = recordsEqual(stepByStep, both)
+
+      modIdOk && parityOk && getOk && roundTripOk && composeOk
   }
 
-  // ---- forAll properties on the union prism (laws-by-hand) -------
+  // covers: AvroPrism .union[Long] get-then-place on the Some(long) branch round-trips the long,
+  //   .union[Long] modify(identity) on the Some(long) branch is record-equivalent to the input,
+  //   .union[Long] compose-modify on the Some(long) branch: (g ∘ f) ≡ g.after(f) on the hit branch
   //
-  // Discipline `PrismTests` is unsound on `.union[Long]` for the same reverseGet-loses-parent
-  // reason documented in the class doc. The two Prism laws that ARE meaningful on the `Some`
-  // branch of an `Option[Long]` parent — partial round-trip on a hit, modify-identity on a hit —
-  // are witnessed by hand here.
+  // Discipline `PrismTests` is unsound on `.union[Long]` for the reverseGet-loses-parent reason
+  // documented in the class doc — these three laws are the meaningful ones on the Some branch.
+  "AvroPrism .union[Long] on Option[Long] forAll: get / modify-id / compose-modify on Some" >> forAll {
+    (id: String, n: Long) =>
+      val record = transactionRecord(Transaction(id, Some(n)))
+      val U = codecPrism[Transaction].field(_.amount).union[Long]
 
-  "AvroPrism .union[Long] on Option[Long] parent (forAll properties on the Some branch)" should {
+      val getOk = U.get(record) match
+        case Ior.Right(read) => read == n
+        case _               => false
 
-    "get-then-place on the Some(long) branch round-trips the long" >> {
-      forAll { (id: String, n: Long) =>
-        val record = transactionRecord(Transaction(id, Some(n)))
-        val U = codecPrism[Transaction].field(_.amount).union[Long]
-        U.get(record) match
-          case Ior.Right(read) => read == n
-          case _               => false
-      }
-    }
+      val modIdOk = U.modify(identity[Long])(record) match
+        case Ior.Right(out) => recordsEqual(out, record)
+        case _              => false
 
-    "modify(identity) on the Some(long) branch is record-equivalent to the input" >> {
-      forAll { (id: String, n: Long) =>
-        val record = transactionRecord(Transaction(id, Some(n)))
-        val U = codecPrism[Transaction].field(_.amount).union[Long]
-        U.modify(identity[Long])(record) match
-          case Ior.Right(out) => recordsEqual(out, record)
-          case _              => false
-      }
-    }
+      val f: Long => Long = _ + 1L
+      val g: Long => Long = _ * 2L
+      val twoStep = U.modify(g)(U.modify(f)(record) match
+        case Ior.Right(r)   => r
+        case Ior.Both(_, r) => r
+        case Ior.Left(_)    => record)
+      val composed = U.modify(f.andThen(g))(record)
+      val composeOk = (twoStep, composed) match
+        case (Ior.Right(a), Ior.Right(b)) => recordsEqual(a, b)
+        case _                            => false
 
-    "compose-modify on the Some(long) branch: (g ∘ f) ≡ g.after(f)" >> {
-      forAll { (id: String, n: Long) =>
-        val record = transactionRecord(Transaction(id, Some(n)))
-        val U = codecPrism[Transaction].field(_.amount).union[Long]
-        val f: Long => Long = _ + 1L
-        val g: Long => Long = _ * 2L
-        val twoStep = U.modify(g)(U.modify(f)(record) match
-          case Ior.Right(r)   => r
-          case Ior.Both(_, r) => r
-          case Ior.Left(_)    => record)
-        val composed = U.modify(f.andThen(g))(record)
-        (twoStep, composed) match
-          case (Ior.Right(a), Ior.Right(b)) => recordsEqual(a, b)
-          case _                            => false
-      }
-    }
+      getOk && modIdOk && composeOk
   }
 
-  // ---- forAll properties witnessing AvroTraversal laws -----------
+  // covers: AvroTraversal modify(identity) on a valid Basket record === Ior.Right(record),
+  //   compose-modify: T.modify(f).andThen(T.modify(g)) == T.modify(g.compose(f)),
+  //   replaceIdempotent: T.replace(a).andThen(T.replace(a)) == T.replace(a)
   //
-  // EO's `TraversalTests` parameterises on `T[_]` + `Forget[T]` carrier — the AvroTraversal
-  // doesn't fit (its source is a flat IndexedRecord; the multi-focus shape lives entirely
-  // inside the carrier). So the two universal Traversal laws — modify-identity and
-  // compose-modify — are witnessed by forAll on a `Basket(items: List[Order])` fixture where
-  // the traversal walks `items.each.name`.
+  // EO's `TraversalTests` parameterises on `T[_]` + `Forget[T]` carrier — AvroTraversal doesn't
+  // fit (source is a flat IndexedRecord; the multi-focus shape lives entirely inside the carrier).
+  // The two universal Traversal laws + the replace-idempotence behaviour are witnessed by hand.
+  "AvroTraversal default-Ior forAll: modify-id / compose-modify / replace-idempotent" >> forAll {
+    (b: AvroSpecFixtures.Basket, suffix: String, name: String) =>
+      val record = AvroSpecFixtures.basketRecord(b)
+      val T = codecPrism[AvroSpecFixtures.Basket].items.each.name
 
-  "AvroTraversal default-Ior surface (forAll properties for the Traversal laws)" should {
+      val modIdOk = T.modify(identity[String])(record) match
+        case Ior.Right(out) => recordsEqual(out, record)
+        case _              => false
 
-    "modify(identity) on a valid Basket record === Ior.Right(record)" >> {
-      forAll { (b: AvroSpecFixtures.Basket) =>
-        val record = AvroSpecFixtures.basketRecord(b)
-        val T = codecPrism[AvroSpecFixtures.Basket].items.each.name
-        T.modify(identity[String])(record) match
-          case Ior.Right(out) => recordsEqual(out, record)
-          case _              => false
-      }
-    }
+      val f: String => String = _.toUpperCase
+      val g: String => String = _ + suffix
+      val twoStep = (T.modify(f)(record), T) match
+        case (Ior.Right(r), tr) => tr.modify(g)(r)
+        case _                  => Ior.left(cats.data.Chain.empty[AvroFailure])
+      val composed = T.modify(f.andThen(g))(record)
+      val composeOk = (twoStep, composed) match
+        case (Ior.Right(a), Ior.Right(c)) => recordsEqual(a, c)
+        case _                            => false
 
-    "compose-modify: T.modify(f).andThen(T.modify(g)) == T.modify(g.compose(f))" >> {
-      forAll { (b: AvroSpecFixtures.Basket, suffix: String) =>
-        val record = AvroSpecFixtures.basketRecord(b)
-        val T = codecPrism[AvroSpecFixtures.Basket].items.each.name
-        val f: String => String = _.toUpperCase
-        val g: String => String = _ + suffix
-        val twoStep = (T.modify(f)(record), T) match
-          case (Ior.Right(r), tr) => tr.modify(g)(r)
-          case _                  => Ior.left(cats.data.Chain.empty[AvroFailure])
-        val composed = T.modify(f.andThen(g))(record)
-        (twoStep, composed) match
-          case (Ior.Right(a), Ior.Right(c)) => recordsEqual(a, c)
-          case _                            => false
-      }
-    }
+      val once = T.modify(_ => name)(record)
+      val twice = once match
+        case Ior.Right(r)   => T.modify(_ => name)(r)
+        case Ior.Both(_, r) => T.modify(_ => name)(r)
+        case Ior.Left(_)    => once
+      val idemOk = (once, twice) match
+        case (Ior.Right(a), Ior.Right(c)) => recordsEqual(a, c)
+        case _                            => false
 
-    "replaceIdempotent: T.replace(a).andThen(T.replace(a)) == T.replace(a)" >> {
-      forAll { (b: AvroSpecFixtures.Basket, name: String) =>
-        val record = AvroSpecFixtures.basketRecord(b)
-        val T = codecPrism[AvroSpecFixtures.Basket].items.each.name
-        val once = T.modify(_ => name)(record)
-        val twice = once match
-          case Ior.Right(r)   => T.modify(_ => name)(r)
-          case Ior.Both(_, r) => T.modify(_ => name)(r)
-          case Ior.Left(_)    => once
-        (once, twice) match
-          case (Ior.Right(a), Ior.Right(c)) => recordsEqual(a, c)
-          case _                            => false
-      }
-    }
+      modIdOk && composeOk && idemOk
   }
 
   // ---- Helpers -----------------------------------------------------

@@ -41,128 +41,104 @@ class AvroWalkSpec extends Specification:
     fields.add(new Schema.Field("amount", unionSchema, null, null))
     Schema.createRecord("MaybeLong", null, "eo.avro.test", false, fields)
 
-  // ---- Record walk -------------------------------------------------
+  // ---- Record / Array / Map / Union walks (one composite per shape) ---------
+  //
+  // 2026-04-29 consolidation: 11 → 5 named blocks. Each block covers the strict-happy +
+  // strict-miss + (where applicable) lenient or mismatch branches for one shape.
 
-  // covers: walk a 1-deep record path → terminal value matches direct `record.get(name)`
-  "walkPath: 1-deep record field" >> {
+  // covers: walk a 1-deep record field returns terminal value + parent stack of length 1,
+  //   walk a missing record field with Strict policy surfaces PathMissing,
+  //   walk a missing record field with Lenient policy returns null leaf + parent,
+  //   stepInto on a non-record parent surfaces NotARecord
+  "Record walk: 1-deep field, Strict miss, Lenient miss, non-record parent" >> {
     val r = personRecord(Person("Alice", 30))
-    val result = AvroWalk.walkPath(r, Array(PathStep.Field("name")))
-    result match
+
+    val happy = AvroWalk.walkPath(r, Array(PathStep.Field("name"))) match
       case Right((cur, parents)) =>
         (cur.toString === "Alice").and(parents.length === 1).and(parents(0) === r)
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-  }
 
-  // covers: walk a missing record field surfaces PathMissing
-  "stepInto strict: missing field surfaces PathMissing" >> {
-    val r = personRecord(Person("Alice", 30))
-    val result = AvroWalk.walkPath(r, Array(PathStep.Field("nope")))
-    result === Left(AvroFailure.PathMissing(PathStep.Field("nope")))
-  }
+    val strictMiss = AvroWalk.walkPath(r, Array(PathStep.Field("nope"))) ===
+      Left(AvroFailure.PathMissing(PathStep.Field("nope")))
 
-  // covers: walk a missing record field with Lenient policy returns null + parent
-  "stepInto lenient: missing field returns null leaf" >> {
-    val r = personRecord(Person("Alice", 30))
-    val result =
-      AvroWalk.walkPath(r, Array(PathStep.Field("nope")), AvroWalk.OnMissingField.Lenient)
-    result match
-      case Right((cur, parents)) =>
-        (cur === null).and(parents.length === 1)
-      case other =>
-        org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-  }
+    val lenientMiss =
+      AvroWalk.walkPath(r, Array(PathStep.Field("nope")), AvroWalk.OnMissingField.Lenient) match
+        case Right((cur, parents)) => (cur === null).and(parents.length === 1)
+        case other =>
+          org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-  // covers: walking a non-record parent at a Field step surfaces NotARecord
-  "stepInto strict: non-record parent surfaces NotARecord" >> {
-    val cur: Any = "I am not a record"
-    AvroWalk.stepInto(
+    val notARecord = AvroWalk.stepInto(
       PathStep.Field("x"),
-      cur,
+      "I am not a record": Any,
       Vector.empty,
       AvroWalk.OnMissingField.Strict,
     ) === Left(AvroFailure.NotARecord(PathStep.Field("x")))
+
+    happy.and(strictMiss).and(lenientMiss).and(notARecord)
   }
 
-  // ---- Array walk --------------------------------------------------
-
-  // covers: walk an array index, sibling indices visible, OOB index surfaces IndexOutOfRange
-  "stepInto: array index walk + OOB → IndexOutOfRange" >> {
+  // covers: walk into people[0].name + parent stack length 3,
+  //   OOB array index surfaces IndexOutOfRange,
+  //   indexing into a non-array surfaces NotAnArray
+  "Array walk: index, OOB → IndexOutOfRange, non-array parent → NotAnArray" >> {
     val people: GenericData.Array[GenericRecord] =
       buildArray(personSchema, Vector(personRecord(Person("Alice", 30))))
     val wrapper = buildRecord(wrapperSchema)("people" -> people)
 
-    // Happy path: walk into people[0].name
-    val result = AvroWalk.walkPath(
+    val happy = AvroWalk.walkPath(
       wrapper,
       Array(PathStep.Field("people"), PathStep.Index(0), PathStep.Field("name")),
-    )
-    val happy = result match
+    ) match
       case Right((cur, parents)) =>
         (cur.toString === "Alice").and(parents.length === 3)
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-    // OOB path
-    val oob = AvroWalk.walkPath(
-      wrapper,
-      Array(PathStep.Field("people"), PathStep.Index(5)),
-    )
-    val oobOk = oob === Left(AvroFailure.IndexOutOfRange(PathStep.Index(5), 1))
+    val oob = AvroWalk.walkPath(wrapper, Array(PathStep.Field("people"), PathStep.Index(5))) ===
+      Left(AvroFailure.IndexOutOfRange(PathStep.Index(5), 1))
 
-    happy.and(oobOk)
-  }
-
-  // covers: indexing into a non-array surfaces NotAnArray
-  "stepInto: non-array parent at Index step surfaces NotAnArray" >> {
-    val cur: Any = personRecord(Person("Alice", 30))
-    AvroWalk.stepInto(
+    val notArray = AvroWalk.stepInto(
       PathStep.Index(0),
-      cur,
+      personRecord(Person("Alice", 30)): Any,
       Vector.empty,
       AvroWalk.OnMissingField.Strict,
     ) === Left(AvroFailure.NotAnArray(PathStep.Index(0)))
+
+    happy.and(oob).and(notArray)
   }
 
-  // ---- Map walk ----------------------------------------------------
-
-  // covers: walk into a map<string> entry by key
-  "stepInto: map walk by string key" >> {
+  // covers: walk into a map<string> entry by key returns the entry value
+  "Map walk: by string key" >> {
     val tags = new java.util.LinkedHashMap[String, String]()
     tags.put("env", "prod")
     tags.put("region", "us")
     val record = buildRecord(taggedMapSchema)("tags" -> tags)
 
-    val result = AvroWalk.walkPath(
-      record,
-      Array(PathStep.Field("tags"), PathStep.Field("env")),
-    )
-    result match
+    AvroWalk.walkPath(record, Array(PathStep.Field("tags"), PathStep.Field("env"))) match
       case Right((cur, _)) => cur.toString === "prod"
       case other           =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
   }
 
-  // ---- Union walk --------------------------------------------------
-
-  // covers: union branch matching, union branch mismatch surfaces UnionResolutionFailed
-  "stepInto: UnionBranch resolves long alt + mismatched branch surfaces UnionResolutionFailed" >> {
+  // covers: union branch matching resolves "long" alt to its long value,
+  //   mismatched union branch ("string" on long) surfaces UnionResolutionFailed,
+  //   terminalOf returns Field("") for empty, last step otherwise
+  "Union walk + terminalOf: long-alt resolution, branch mismatch, terminalOf endpoints" >> {
     val record = buildRecord(maybeLongSchema)("amount" -> java.lang.Long.valueOf(42L))
-    val resultLong = AvroWalk.walkPath(
+
+    val longOk = AvroWalk.walkPath(
       record,
       Array(PathStep.Field("amount"), PathStep.UnionBranch("long")),
-    )
-    val longOk = resultLong match
+    ) match
       case Right((cur, _)) => cur === java.lang.Long.valueOf(42L)
       case other           =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-    // Mismatch: ask for a "string" branch on a long value
-    val resultString = AvroWalk.walkPath(
+    val mismatchOk = AvroWalk.walkPath(
       record,
       Array(PathStep.Field("amount"), PathStep.UnionBranch("string")),
-    )
-    val stringOk = resultString match
+    ) match
       case Left(AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch("string"))) =>
         org.specs2.execute.Success(): org.specs2.execute.Result
       case other =>
@@ -171,45 +147,35 @@ class AvroWalkSpec extends Specification:
           .execute
           .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
 
-    longOk.and(stringOk)
+    val terminalEmpty = AvroWalk.terminalOf(Array.empty[PathStep]) === PathStep.Field("")
+    val terminalLast =
+      AvroWalk.terminalOf(Array(PathStep.Field("a"), PathStep.Index(2))) === PathStep.Index(2)
+
+    longOk.and(mismatchOk).and(terminalEmpty).and(terminalLast)
   }
 
-  // ---- terminalOf --------------------------------------------------
-
-  // covers: terminalOf returns sentinel for empty path, last step otherwise
-  "terminalOf: empty → Field(\"\"), non-empty → last step" >> {
-    val empty = AvroWalk.terminalOf(Array.empty[PathStep])
-    val nonEmpty = AvroWalk.terminalOf(Array(PathStep.Field("a"), PathStep.Index(2)))
-    (empty === PathStep.Field("")).and(nonEmpty === PathStep.Index(2))
-  }
-
-  // ---- Round-trip walk + rebuild -----------------------------------
-
-  // covers: walk + identity rebuild yields a structurally-equal record (immutable boundary).
-  "rebuildPath: identity rebuild yields a structurally-equal record" >> {
+  // covers: identity rebuild yields a structurally-equal record (immutable boundary),
+  //   walk-into people[0].name, modify the leaf, rebuild — original untouched + rebuilt updated
+  "Round-trip walk + rebuild: identity rebuild equals input; deep-modify leaves original untouched" >> {
     val r = personRecord(Person("Alice", 30))
     val path = Array[PathStep](PathStep.Field("name"))
-    val result = AvroWalk.walkPath(r, path) match
+    val identityRebuild = AvroWalk.walkPath(r, path) match
       case Right((cur, parents)) =>
         val rebuilt = AvroWalk.rebuildPath(parents, path, cur)
         rebuilt.asInstanceOf[IndexedRecord] === r
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-    result
-  }
 
-  // covers: walk into people[0].name, modify the leaf, rebuild — yields a new record where the
-  // original is unchanged (immutable boundary)
-  "rebuildPath: modify leaf produces fresh record, original untouched" >> {
     val originalAlice = personRecord(Person("Alice", 30))
     val people: GenericData.Array[GenericRecord] = buildArray(personSchema, Vector(originalAlice))
     val wrapper = buildRecord(wrapperSchema)("people" -> people)
-    val path = Array[PathStep](PathStep.Field("people"), PathStep.Index(0), PathStep.Field("name"))
+    val deepPath =
+      Array[PathStep](PathStep.Field("people"), PathStep.Index(0), PathStep.Field("name"))
 
-    val result = AvroWalk.walkPath(wrapper, path) match
+    val deepModify = AvroWalk.walkPath(wrapper, deepPath) match
       case Right((_, parents)) =>
         val rebuilt = AvroWalk
-          .rebuildPath(parents, path, "Bob")
+          .rebuildPath(parents, deepPath, "Bob")
           .asInstanceOf[IndexedRecord]
         // After rebuild, original wrapper is still Alice; rebuilt is Bob.
         val origPeople = wrapper
@@ -223,7 +189,8 @@ class AvroWalkSpec extends Specification:
         (origName === "Alice").and(newName === "Bob")
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-    result
+
+    identityRebuild.and(deepModify)
   }
 
 end AvroWalkSpec
