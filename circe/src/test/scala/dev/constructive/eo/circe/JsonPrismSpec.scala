@@ -192,26 +192,18 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       codecPrism[Basket].items.at(-1).name.modifyUnsafe(_.toUpperCase)(basket.asJson) ===
         basket.asJson
 
-    r1.and(r2).and(r3).and(r4).and(unsafeOOR).and(defaultOOR).and(negIndex)
-  }
-
-  // ---- Traversal (.each) — *Unsafe surface --------------------------
-  //
-  // Paired default-Ior traversal specs live in JsonTraversalSpec.
-  // Keeping the *Unsafe flavour here preserves the pre-v0.2 spec
-  // for the prism-fluent sugar chains.
-
-  // covers: modify every element's focused field in one pass, transform applies
-  // to each raw Json leaf, getAllUnsafe collects every focus, on an empty array
-  // modifyUnsafe is a no-op, *Unsafe a missing prefix field leaves input unchanged,
-  // at the root: modifyUnsafe every element of a top-level array
-  ".each Unsafe surface: modify+transform+getAll + empty/missing/root variants" >> {
-    val basket = Basket(owner = "Alice", items = Vector(Order("x"), Order("y"), Order("z")))
-    val r1 = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(basket.asJson) ===
-      basket.copy(items = Vector(Order("X"), Order("Y"), Order("Z"))).asJson
+    // ---- .each Unsafe surface (absorbed) ----
+    // covers: .each modifyUnsafe applies to every element, transformUnsafe applies to each
+    //   raw Json leaf, getAllUnsafe collects every focus, modifyUnsafe on empty array no-op,
+    //   modifyUnsafe on missing prefix leaves input unchanged, top-level Vector modifyUnsafe
+    //   applies to every element of a root-level array
+    val basket3way = Basket(owner = "Alice", items = Vector(Order("x"), Order("y"), Order("z")))
+    val rEach1 =
+      codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(basket3way.asJson) ===
+        basket3way.copy(items = Vector(Order("X"), Order("Y"), Order("Z"))).asJson
 
     val basket2 = Basket(owner = "Alice", items = Vector(Order("ab"), Order("cd")))
-    val r2 = codecPrism[Basket]
+    val rEach2 = codecPrism[Basket]
       .items
       .each
       .name
@@ -219,20 +211,23 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       basket2.copy(items = Vector(Order("ba"), Order("dc"))).asJson
 
     val basket3 = Basket(owner = "Alice", items = Vector(Order("x"), Order("y")))
-    val r3 = codecPrism[Basket].items.each.name.getAllUnsafe(basket3.asJson) === Vector("x", "y")
+    val rEach3 = codecPrism[Basket].items.each.name.getAllUnsafe(basket3.asJson) ===
+      Vector("x", "y")
 
     val emptyB = Basket(owner = "Alice", items = Vector.empty)
-    val r4 = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(emptyB.asJson) ===
+    val rEach4 = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(emptyB.asJson) ===
       emptyB.asJson
 
     val stump = Json.obj("owner" -> Json.fromString("Alice"))
-    val r5 = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) === stump
+    val rEach5 = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) === stump
 
     val rootArr = Vector(Order("a"), Order("b"))
-    val r6 = codecPrism[Vector[Order]].each.name.modifyUnsafe(_.toUpperCase)(rootArr.asJson) ===
-      Vector(Order("A"), Order("B")).asJson
+    val rEach6 =
+      codecPrism[Vector[Order]].each.name.modifyUnsafe(_.toUpperCase)(rootArr.asJson) ===
+        Vector(Order("A"), Order("B")).asJson
 
-    r1.and(r2).and(r3).and(r4).and(r5).and(r6)
+    r1.and(r2).and(r3).and(r4).and(unsafeOOR).and(defaultOOR).and(negIndex)
+      .and(rEach1).and(rEach2).and(rEach3).and(rEach4).and(rEach5).and(rEach6)
   }
 
   // ---- Place / transfer ---------------------------------------------
