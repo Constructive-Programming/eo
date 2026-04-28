@@ -238,40 +238,35 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   val adultAge: Optic[AdultPerson, Unit, Int, Int, Affine] =
     Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
 
-  // covers: Optional.readOnly.foldMap folds the hit branch, returns empty on miss,
-  // Optional.selectReadOnly keeps values matching the predicate, Optional.readOnly.modifyA
-  // lifts a hit-branch read under Applicative[G]
-  "Optional.readOnly: foldMap hit/miss + selectReadOnly predicate + modifyA[Option]" >> {
-    val foldOk = (adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20)
-      .and(adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0)
-
-    val evenAF = Optional.selectReadOnly[Int](_ % 2 == 0)
-    val selOk = (evenAF.foldMap(identity[Int])(4) === 4)
-      .and(evenAF.foldMap(identity[Int])(3) === 0)
-      .and(evenAF.foldMap(identity[Int])(0) === 0)
-
-    val mf: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
-    val mAOk = (adultAge.modifyA[Option](mf)(AdultPerson(20)) === Some(()))
-      .and(adultAge.modifyA[Option](mf)(AdultPerson(15)) === Some(()))
-
-    foldOk.and(selOk).and(mAOk)
-  }
-
-  // ----- AffineFold behaviour ------------------------------------------
-
   val adultAgeAF: AffineFold[AdultPerson, Int] =
     AffineFold(p => Option.when(p.age >= 18)(p.age))
 
-  // covers: AffineFold.apply hits on Some and misses on None,
-  // AffineFold.select keeps values matching the predicate, AffineFold.fromOptional
-  // drops write path, AffineFold.fromPrism drops build path,
-  // AffineFold.fromOptional narrows a Lens-composed Optional
-  "AffineFold: apply / select / fromOptional / fromPrism / Lens-narrow all preserve getOption" >> {
+  // covers: Optional.readOnly.foldMap folds the hit branch, returns empty on miss,
+  //   Optional.selectReadOnly keeps values matching the predicate (4 even / 3 odd / 0 zero),
+  //   Optional.readOnly.modifyA lifts a hit-branch read under Applicative[Option];
+  //   AffineFold.apply hits on Some and misses on None,
+  //   AffineFold.select keeps values matching the predicate,
+  //   AffineFold.fromOptional drops the write path (Lens-composed Optional narrowed),
+  //   AffineFold.fromPrism drops the build path (String→Int prism),
+  //   AffineFold.fromOptional narrows a Lens-composed Optional (Wrapper.inner.age)
+  "Optional.readOnly + AffineFold: predicate-gated AdultPerson hit/miss across all factories" >> {
+    val foldOk = (adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20)
+      .and(adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0)
+
+    val evenSelectAF = Optional.selectReadOnly[Int](_ % 2 == 0)
+    val selOk = (evenSelectAF.foldMap(identity[Int])(4) === 4)
+      .and(evenSelectAF.foldMap(identity[Int])(3) === 0)
+      .and(evenSelectAF.foldMap(identity[Int])(0) === 0)
+
+    val mfo: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
+    val mAOk = (adultAge.modifyA[Option](mfo)(AdultPerson(20)) === Some(()))
+      .and(adultAge.modifyA[Option](mfo)(AdultPerson(15)) === Some(()))
+
     val applyOk = (adultAgeAF.getOption(AdultPerson(20)) === Some(20))
       .and(adultAgeAF.getOption(AdultPerson(15)) === None)
 
     val evenAF = AffineFold.select[Int](_ % 2 == 0)
-    val selOk = (evenAF.getOption(4) === Some(4)).and(evenAF.getOption(3) === None)
+    val afSelOk = (evenAF.getOption(4) === Some(4)).and(evenAF.getOption(3) === None)
 
     val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
@@ -296,7 +291,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val chainOk = (chained.getOption(Wrapper(AdultPerson(20))) === Some(20))
       .and(chained.getOption(Wrapper(AdultPerson(15))) === None)
 
-    applyOk.and(selOk).and(fromOptOk).and(fromPrismOk).and(chainOk)
+    foldOk.and(selOk).and(mAOk)
+      .and(applyOk).and(afSelOk).and(fromOptOk).and(fromPrismOk).and(chainOk)
   }
 
   // ----- Review behaviour ----------------------------------------------
@@ -526,10 +522,15 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   // ----- F[A]-focus factories -----------------------------------------
 
-  // covers: MultiFocus.fromLensF rewraps a Lens[S, F[A]] with zero constraints,
-  // MultiFocus.fromPrismF lifts a Prism[S, F[A]] with MonoidK[F] only,
-  // MultiFocus.fromOptionalF lifts an Optional[S, F[A]] through the Hit branch
-  "MultiFocus.fromLensF / fromPrismF / fromOptionalF — F[A]-focus factories" >> {
+  // covers: MultiFocus.fromLensF rewraps a Lens[S, F[A]] with zero constraints
+  //   (Table.rows modify per-element, empty list short-circuits),
+  //   MultiFocus.fromPrismF lifts a Prism[S, F[A]] with MonoidK[F] only (Some/None/empty branches),
+  //   MultiFocus.fromOptionalF lifts an Optional[S, F[A]] through the Hit branch;
+  //   mfFold cardinality+miss — fromLensF empty list folds to Monoid.empty,
+  //   fromLensF multi-element list sums each element exactly once,
+  //   fromPrismF None / Some(Nil) miss branches fold to Monoid.empty,
+  //   fromPrismF Some(non-empty) hit branch sums correctly
+  "MultiFocus.fromLensF / fromPrismF / fromOptionalF — F[A]-focus factories + mfFold cardinality" >> {
     case class Table(rows: List[Int])
     val rowsLens: Optic[Table, Table, List[Int], List[Int], Tuple2] =
       Lens[Table, List[Int]](_.rows, (t, rs) => t.copy(rows = rs))
@@ -568,7 +569,19 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val optionalFOk = (optMF.modify(_ + 10)((7, List(1, 2, 3))) === ((7, List(11, 12, 13))))
       .and(optMF.modify(_ + 10)((7, Nil)) === ((7, Nil)))
 
+    // ---- mfFold cardinality + miss (absorbed standalone test) ----
+    val listLens: Optic[List[Int], List[Int], List[Int], List[Int], Tuple2] =
+      Lens[List[Int], List[Int]](identity, (_, b) => b)
+    val mfFromLens = MultiFocus.fromLensF(listLens)
+    val foldEmptyOk = mfFromLens.foldMap(identity[Int])(Nil) === 0
+    val foldMultiOk = mfFromLens.foldMap(identity[Int])(List(2, 3, 5, 7, 11)) ===
+      (2 + 3 + 5 + 7 + 11)
+    val foldMissNone = mf.foldMap(identity[Int])(None) === 0
+    val foldMissEmpty = mf.foldMap(identity[Int])(Some(Nil)) === 0
+    val foldHit = mf.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60
+
     lensFOk.and(prismFOk).and(optionalFOk)
+      .and(foldEmptyOk).and(foldMultiOk).and(foldMissNone).and(foldMissEmpty).and(foldHit)
   }
 
   // ----- Cross-carrier composition: Lens → MultiFocus[List] chains -----------------
@@ -691,29 +704,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     tagOk1.and(tagOk2).and(tagOk3).and(tagOk4).and(missSurviveOk).and(counterOk)
   }
 
-  // ----- mfFold cardinality + miss branch coverage ---------------------
-
-  // covers: mfFold fromLensF empty list folds to Monoid.empty, multi-element list
-  // sums each element exactly once, fromPrismF miss branch folds to Monoid.empty
-  "mfFold cardinality+miss: fromLensF (empty/multi) and fromPrismF (hit/miss) " >> {
-    val listLens: Optic[List[Int], List[Int], List[Int], List[Int], Tuple2] =
-      Lens[List[Int], List[Int]](identity, (_, b) => b)
-    val mf = MultiFocus.fromLensF(listLens)
-    val emptyOk = mf.foldMap(identity[Int])(Nil) === 0
-    val multiOk = mf.foldMap(identity[Int])(List(2, 3, 5, 7, 11)) === (2 + 3 + 5 + 7 + 11)
-
-    val p: Optic[Option[List[Int]], Option[List[Int]], List[Int], List[Int], Either] =
-      Prism[Option[List[Int]], List[Int]](
-        { case Some(xs) if xs.nonEmpty => Right(xs); case other => Left(other) },
-        Some(_),
-      )
-    val pa = MultiFocus.fromPrismF(p)
-    val missNone = pa.foldMap(identity[Int])(None) === 0
-    val missEmpty = pa.foldMap(identity[Int])(Some(Nil)) === 0
-    val hit = pa.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60
-
-    emptyOk.and(multiOk).and(missNone).and(missEmpty).and(hit)
-  }
 
   // ---- R11a — Traversal.each × downstream cross-carrier chains --------
 
