@@ -378,35 +378,48 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     sameOk.and(liftedOk).and(composedOk)
   }
 
-  // ----- Lens / Prism / Optional → MultiFocus[List] -----------------------
+  // ----- Lens / Prism / Optional → MultiFocus[List] / SetterF cross-carrier ----------------
+  //
+  // 2026-04-29 consolidation: dropped a standalone case class `AdultOptCarrier` (was unused).
 
   case class AdultOptCarrier(p: AdultPerson)
 
-  // covers: Tuple2 Lens lifts into MultiFocus[List] and preserves .modify semantics,
-  // Either Prism lifts into MultiFocus[List] preserves hit/miss, Affine Optional
-  // lifts into MultiFocus[List] preserves hit/miss, Optional andThen MultiFocus[List]
-  // classifier composes via affine2multifocus
-  "Lens / Prism / Optional → MultiFocus[List]: hit/miss .modify semantics preserved + composer chain" >> {
+  // ----- Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → SetterF
+  //
+  // 2026-04-29 consolidation: 2 SetterF-themed blocks → 1 composite. Both witness the
+  // canonical "lift into SetterF + .modify byte-for-byte agrees with the source carrier".
+
+  // covers: Lens(Tuple2) lifts into MultiFocus[List] preserving .modify semantics,
+  //   Either Prism lifts into MultiFocus[List] preserves hit/miss,
+  //   Affine Optional lifts into MultiFocus[List] preserves hit/miss,
+  //   Optional.andThen(Forget[List]→MultiFocus[List]) classifier composes via affine2multifocus;
+  //   Either Prism lifts into SetterF and preserves hit/miss,
+  //   Affine Optional lifts into SetterF and preserves hit/miss,
+  //   PowerSeries (MultiFocus[PSVec]) Traversal lifts into SetterF and applies f to every focus,
+  //   MultiFocus.tuple lifts into SetterF and rebroadcasts via per-slot rebuild,
+  //   MultiFocus.representable over Representable[Function1[Boolean, *]] lifts identically
+  "Lens/Prism/Optional → MultiFocus[List] + → SetterF: cross-carrier lifts (one composite block)" >> {
+    // ---- → MultiFocus[List] half (absorbed standalone test) ----
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-    val tuple2Lifted = summon[Composer[Tuple2, MultiFocus[List]]].to(fstLens)
-    val tuple2Ok = (tuple2Lifted.modify(_ + 100)((3, "hi")) === ((103, "hi")))
-      .and(tuple2Lifted.modify(_ * 2)((5, "x")) === ((10, "x")))
+    val tuple2LiftedMF = summon[Composer[Tuple2, MultiFocus[List]]].to(fstLens)
+    val tuple2MFOk = (tuple2LiftedMF.modify(_ + 100)((3, "hi")) === ((103, "hi")))
+      .and(tuple2LiftedMF.modify(_ * 2)((5, "x")) === ((10, "x")))
 
     val oddP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 1 then Right(n) else Left(n), identity)
-    val eitherLifted = summon[Composer[Either, MultiFocus[List]]].to(oddP)
-    val eitherOk =
-      (eitherLifted.modify(_ * 2)(3) === 6).and(eitherLifted.modify(_ * 2)(4) === 4)
+    val eitherLiftedMF = summon[Composer[Either, MultiFocus[List]]].to(oddP)
+    val eitherMFOk =
+      (eitherLiftedMF.modify(_ * 2)(3) === 6).and(eitherLiftedMF.modify(_ * 2)(4) === 4)
 
     val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-    val affineLifted = summon[Composer[Affine, MultiFocus[List]]].to(adultOpt)
-    val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
-      .and(affineLifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
+    val affineLiftedMF = summon[Composer[Affine, MultiFocus[List]]].to(adultOpt)
+    val affineMFOk = (affineLiftedMF.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
+      .and(affineLiftedMF.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
     val posOpt: Optic[Int, Int, Int, Int, Affine] =
       Optional[Int, Int, Int, Int, Affine](
@@ -416,26 +429,11 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val candidatesMF = summon[Composer[Forget[List], MultiFocus[List]]].to(
       forgetOpt[List](n => List(n, n * 2), _.sum)
     )
-    val composed = posOpt.andThen(candidatesMF)
-    val composedOk =
-      (composed.modify(_ + 1)(3) === 11).and(composed.modify(_ + 1)(-1) === -1)
+    val composedMF = posOpt.andThen(candidatesMF)
+    val composedMFOk =
+      (composedMF.modify(_ + 1)(3) === 11).and(composedMF.modify(_ + 1)(-1) === -1)
 
-    tuple2Ok.and(eitherOk).and(affineOk).and(composedOk)
-  }
-
-  // ----- Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → SetterF
-  //
-  // 2026-04-29 consolidation: 2 SetterF-themed blocks → 1 composite. Both witness the
-  // canonical "lift into SetterF + .modify byte-for-byte agrees with the source carrier".
-
-  // covers: Either Prism lifts into SetterF and preserves hit/miss,
-  //   Affine Optional lifts into SetterF and preserves hit/miss,
-  //   PowerSeries (MultiFocus[PSVec]) Traversal lifts into SetterF and applies f to every focus,
-  //   MultiFocus.tuple lifts into SetterF and rebroadcasts via per-slot rebuild,
-  //   MultiFocus.representable over Representable[Function1[Boolean, *]] lifts identically
-  //   (pointwise map). All five lifts go through `multifocus2setter` / `affine2setter` /
-  //   `either2setter` and agree byte-for-byte with the source carrier's .modify(f)
-  "Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → SetterF" >> {
+    // ---- → SetterF half ----
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
     val eitherLifted: Optic[Int, Int, Int, Int, data.SetterF] =
@@ -443,11 +441,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val eitherOk =
       (eitherLifted.modify(_ + 10)(4) === 14).and(eitherLifted.modify(_ + 10)(5) === 5)
 
-    val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
-      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
-        getOrModify = p => Either.cond(p.age >= 18, p.age, p),
-        reverseGet = { case (_, a) => AdultPerson(a) },
-      )
     val affineLifted: Optic[AdultPerson, AdultPerson, Int, Int, data.SetterF] =
       summon[Composer[Affine, data.SetterF]].to(adultOpt)
     val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
@@ -479,7 +472,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val modified: Boolean => Int = fnLifted.modify(_ + 1)(srcFn)
     val fnOk = (modified(true) === 101).and(modified(false) === 201)
 
-    eitherOk.and(affineOk).and(psOk).and(tupleOk).and(fnOk)
+    tuple2MFOk.and(eitherMFOk).and(affineMFOk).and(composedMFOk)
+      .and(eitherOk).and(affineOk).and(psOk).and(tupleOk).and(fnOk)
   }
 
   // ----- MultiFocus[F] lifted into SetterF + Foldable-aggregated escape ----------------
