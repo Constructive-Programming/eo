@@ -91,11 +91,9 @@ class GenericsSpec extends Specification with ScalaCheck:
   // covers: derived Prism (Shape.Circle) — round-trip on matching variants,
   //   non-matching variants return Left (Square / Triangle hit the miss branch),
   //   reverseGet widens the variant to parent, reverseGet ∘ to == Right(input),
-  //   partial-round-trip law on any Shape;
-  //   derived Prism on Tree[Int] — pick variant (Leaf / Branch on the right input,
-  //   Left on the miss), reverseGet ∘ to == Right(leaf) on Leaf input
-  "derived Prism (Shape.Circle / Tree[Int]): round-trip + non-match + widen + partial-round-trip" >> {
-    val shapeOk = forAll { (r: Double, s: Shape) =>
+  //   partial-round-trip law on any Shape
+  "derived Prism (Shape.Circle): round-trip + non-match + widen + partial-round-trip" >> {
+    forAll { (r: Double, s: Shape) =>
       val c: Shape.Circle = Shape.Circle(r)
       val rt = circleP.to(c) == Right(c)
       val sq: Shape = Shape.Square(2.0)
@@ -108,16 +106,6 @@ class GenericsSpec extends Specification with ScalaCheck:
         case Left(s2)  => s2 == s
       rt && nonMatch && widen && rgGet && partial
     }
-    val treeOk = forAll { (n: Int) =>
-      val l: Tree[Int] = Tree.Leaf(n)
-      val b: Tree[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(n))
-      val pickOk = leafP.to(l) == Right(Tree.Leaf(n)) && leafP.to(b) == Left(b) &&
-        branchP.to(b).isRight && branchP.to(l) == Left(l)
-      val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
-      val rt = leafP.to(leafP.reverseGet(leaf)) == Right(leaf)
-      pickOk && rt
-    }
-    shapeOk && treeOk
   }
 
   // ---------- Scala 3 union-type Prism derivation ----------
@@ -203,7 +191,21 @@ class GenericsSpec extends Specification with ScalaCheck:
     leafRead && leafRoundTrip && branchRead && branchReplace && branchSetSet && d2Inv
   }
 
-  // (Tree[Int] Prism coverage absorbed into the Shape.Circle composite block above.)
+  // covers: derived Prism on a recursive ADT picks the matching variant,
+  //   round-trips on its own variant
+  "derived Prism on Tree[Int]: pick variant + round-trip own variant" >> {
+    val pick = forAll { (n: Int) =>
+      val l: Tree[Int] = Tree.Leaf(n)
+      val b: Tree[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(n))
+      leafP.to(l) == Right(Tree.Leaf(n)) && leafP.to(b) == Left(b) &&
+      branchP.to(b).isRight && branchP.to(l) == Left(l)
+    }
+    val rt = forAll { (n: Int) =>
+      val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
+      leafP.to(leafP.reverseGet(leaf)) == Right(leaf)
+    }
+    pick && rt
+  }
 
   // ---------- Multi-field Lens (partial cover) ----------
 
