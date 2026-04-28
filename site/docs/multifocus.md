@@ -271,9 +271,13 @@ setter.modify(_ * 2)(List(1, 2, 3))
 `multifocus2setter[F: Functor]` — closes the U → N gap for both
 the prior `kaleidoscope2setter` and the latent never-shipped
 `alg2setter`. Like every other `Composer[X, SetterF]`, this does NOT
-enable `multiFocus.andThen(setter)` directly: `SetterF` lacks
-`AssociativeFunctor` by design. The morph value lives at the morph
-site, not at the chain site.
+enable `multiFocus.andThen(setter)` directly: cross-carrier `.andThen`
+goes through `AssociativeFunctor[F]` on a single carrier, and SetterF
+deliberately doesn't ship one (the deferred-modify semantic doesn't
+fit `composeTo` / `composeFrom`). The morph value lives at the morph
+site, not at the chain site. Same-carrier `setter.andThen(setter)`
+*does* work — see the [Setter section](optics.md#setter) for the
+`AssociativeFunctor[SetterF]` instance shipped in `SetterF.scala`.
 
 ### Composition limits
 

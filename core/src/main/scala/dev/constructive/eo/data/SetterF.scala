@@ -5,9 +5,17 @@ import cats.Distributive
 import cats.instances.function.*
 import cats.syntax.functor.*
 
-/** Carrier for the `Setter` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B`. No
-  * `AssociativeFunctor[SetterF]` ships, so SetterF.andThen(SetterF) is not supported; compose a
-  * Lens chain in `Tuple2` and reach for SetterF at the leaf.
+/** Carrier for the `Setter` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B`.
+  *
+  * Same-carrier composition (`setter.andThen(setter)`) ships via [[SetterF.assocSetterF]] —
+  * `AssociativeFunctor[SetterF, Xo, Xi]` with `type Z = (Fst[Xo], Snd[Xi])`. The deferred-modify
+  * semantic fits the protocol once you observe that `composeTo` only needs to seed `(xo, identity)`
+  * (no inner-`to` call required, since SetterF's continuation is structurally identity at every
+  * canonical construction site — `coerceToSetter` and `Setter.apply`); `composeFrom` then extracts
+  * the user's `c2d` from the mapped continuation and routes it through `inner.from` then
+  * `outer.from`. The asInstanceOf casts inside the instance are sound under the universal
+  * convention that every SetterF optic stores `X = (S_outer, A_focus)` (enforced at every
+  * construction site).
   *
   * @tparam A
   *   existential leftover tuple
@@ -98,3 +106,41 @@ object SetterF:
             o.from(m.widenB[B])
 
   // MultiFocus[F] → SetterF lives in `MultiFocus.scala` (`multifocus2setter`).
+
+  /** Same-carrier composition for `Optic[…, SetterF]` — closes top-5 plan gap #4.
+    *
+    * Encoding: `Z = (Fst[Xo], Snd[Xi])`. `composeTo` seeds the SetterF with `(outer-source,
+    * identity[C])` — no `inner.to` call needed because SetterF's continuation is structurally
+    * `identity[C]` at every canonical construction site (every bundled SetterF optic uses
+    * [[coerceToSetter]] or [[optics.Setter.apply]], both of which seed identity). `composeFrom`
+    * extracts the user's `c2d: C => D` from the post-`map` continuation and applies it through
+    * `inner.from` then `outer.from`, matching the deferred-modify semantic
+    * `composedModify(c2d)(s) = outer.modify(inner.modify(c2d))(s)`.
+    *
+    * The asInstanceOf casts coerce abstract `Fst[Xo] / Snd[Xo] / Fst[Xi] / Snd[Xi]` to the
+    * canonical `(S, A)` / `(A, C)` decomposition. Sound under the universal SetterF convention,
+    * unsafe only for hand-built SetterF optics that violate it — and there's no public API path to
+    * build such an optic.
+    *
+    * @group Instances
+    */
+  given assocSetterF[Xo, Xi]: AssociativeFunctor[SetterF, Xo, Xi] with
+    type Z = (Fst[Xo], Snd[Xi])
+
+    def composeTo[S, T, A, B, C, D](
+        s: S,
+        outer: optics.Optic[S, T, A, B, SetterF] { type X = Xo },
+        inner: optics.Optic[A, B, C, D, SetterF] { type X = Xi },
+    ): SetterF[Z, C] =
+      val xo: Fst[Xo] = outer.to(s).setter._1
+      SetterF((xo, identity[C].asInstanceOf[Snd[Xi] => C]))
+
+    def composeFrom[S, T, A, B, C, D](
+        xd: SetterF[Z, D],
+        inner: optics.Optic[A, B, C, D, SetterF] { type X = Xi },
+        outer: optics.Optic[S, T, A, B, SetterF] { type X = Xo },
+    ): T =
+      val xo: Fst[Xo] = xd.setter._1.asInstanceOf[Fst[Xo]]
+      val c2d: Snd[Xi] => D = xd.setter._2.asInstanceOf[Snd[Xi] => D]
+      val innerModify: A => B = a => inner.from(SetterF((a.asInstanceOf[Fst[Xi]], c2d)))
+      outer.from(SetterF((xo, innerModify.asInstanceOf[Snd[Xo] => B])))

@@ -107,7 +107,7 @@ Two extension methods exist on `Optic` (see
 | `MultiFocus[Function1[X0, *]]` | `MultiFocus.mfAssocFunction1` | `core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala` (covers absorbed-Grate `tuple` factory and absorbed `FixedTraversal[N]` `Traversal.{two,three,four}`) |
 | `MultiFocus[PSVec]` | `MultiFocus.mfAssocPSVec` | `core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala` |
 | `Grate` | `Grate.grateAssoc` | `core/src/main/scala/eo/data/Grate.scala:88` |
-| `SetterF` | **absent** | `core/src/main/scala/eo/data/SetterF.scala` L14 comment: *"SetterF has no AssociativeFunctor instance"* |
+| `SetterF` | `SetterF.assocSetterF` (`Z = (Fst[Xo], Snd[Xi])`; uses asInstanceOf casts under the universal `X = (S, A)` SetterF convention) | `core/src/main/scala/dev/constructive/eo/data/SetterF.scala` |
 
 **`Composer[F, G]`** (bridges for cross-carrier):
 
@@ -278,7 +278,12 @@ already covered by existing tests once chain refactor landed);
 +4 M (idiom-documented `Forgetful/Tuple2/Either/Affine × Fold` cases
 where outer focuses on `F[A]`); +6 U (structurally-decided cells
 where the carrier round-trip cannot work — MultiFocus outbound,
-PowerSeries × Forget/MultiFocus, cross-F Forget pairs).
+PowerSeries × Forget/MultiFocus, cross-F Forget pairs). **Cross-F
+Forget pairs were lifted from U → N on 2026-04-29** via the
+`Optic[…, Forget[F]].andThen(…, Forget[G])` extension shipped in
+`Forget.scala` (top-5 gap #1) — the user supplies a `cats.~>[F, G]`
+nat plus `FlatMap[G]`, and the result is a `Forget[G]`-carrier optic.
+Restricted to `T = Unit` (the Fold case).
 
 Adding the border cells for the two standalone families: JsonTraversal
 rows/columns are **M** (documented in `CrossCarrierCompositionSpec`
@@ -320,11 +325,20 @@ borders), post-2026-04-30:
    no `Composer[MultiFocus[PSVec], Grate]` exists. Same structural
    reason as Lens × Grate: a `MultiFocus[PSVec]` source isn't in
    general `Representable`.
-4. **Setter composition is flat-out absent.** `SetterF` has
-   `ForgetfulFunctor` and `ForgetfulTraverse` but NO
-   `AssociativeFunctor`, so `setter.andThen(setter)` does not compile.
-   Documented in `SetterF.scala` line 14 but nowhere near the user-
-   facing `Setter.scala` ctor.
+4. **Setter composition — closed 2026-04-29 (gap #4 ship).**
+   Same-carrier `setter.andThen(setter)` now compiles via
+   `SetterF.assocSetterF`: `AssociativeFunctor[SetterF, Xo, Xi]` with
+   `Z = (Fst[Xo], Snd[Xi])`. The deferred-modify semantic fits the
+   protocol — `composeTo` seeds `(outer-source, identity[C])`, no
+   `inner.to` call needed (SetterF's continuation is structurally
+   identity at every canonical construction site); `composeFrom`
+   extracts the user's `c2d` from the post-`map` continuation and
+   routes it through `inner.from` then `outer.from`. asInstanceOf
+   casts coerce abstract Fst/Snd to the canonical `(S, A)` / `(A, C)`
+   decomposition — sound under the universal SetterF convention
+   enforced at every construction site. Behaviour spec:
+   `OpticsBehaviorSpec.scala` block "SetterF same-carrier composition:
+   setter.andThen(setter)".
 5. **JsonPrism.andThen(MultiFocus)** — both are `Either`-based at
    their respective outer layers, but JsonPrism's `Either`-carrier
    meets MultiFocus via `Composer[Either, MultiFocus[F]]` only when
@@ -377,7 +391,7 @@ Each cell indicates the classification and a one-line "why".
 | **AF**  | U (outer T=Unit; can't feed into any inner B slot) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) | U (T=Unit) |
 | **G**   | U (outer T=Unit) | U | U | U | U | U | U | U | U | U | U | U |
 | **S**   | U (SetterF lacks AssociativeFunctor; even with same-F inner no andThen) | U (no Composer[SetterF, _]) | U | U | U | U | U | U | U | U | U | U |
-| **F**   | U (Fold's T=Unit) | U | U | U | U | U | U | U | U | U | U | U |
+| **F**   | U (Fold's T=Unit) | U | U | U | U | U | U | N same-F (`assocForgetMonad`); N cross-F (gap #1 — `.andThen` extension under `cats.~>[F, G]` + `FlatMap[G]`, T=Unit only) | U | U | U | U |
 | **Te**  | N (Forgetful→MultiFocus[PSVec] via `forgetful2multifocus` on inner) | N (Composer[Tuple2, MultiFocus[PSVec]] on inner) | N (Composer[Either, MultiFocus[PSVec]] on inner) | N (Composer[Affine, MultiFocus[PSVec]] on inner) | M (T=Unit on inner AF) | U (Getter T=Unit) | N (Composer[MultiFocus[F], SetterF] — `multifocus2setter` — at `F = PSVec`) | N (Composer[Forget[F], MultiFocus[F]] on inner when same F; covers Te × Fold[PSVec] — Te × Fold[F] for `F ≠ PSVec` falls through to the same-F bridge gap) | N (same-carrier `mfAssocPSVec` — same as MF × MF at `F = PSVec`) | U (no Composer between distinct MultiFocus[F] / MultiFocus[G] carriers) | U (no Composer between MultiFocus[PSVec] and Grate) | ? (Either→MultiFocus bridge works per-prism — JsonPrism.andThen(Te) plausible but untested) |
 | **MF**  | U (no Composer[MultiFocus[F], Forgetful] — would shadow `forgetful2multifocus`; see §3.2.6) | N (Composer[Tuple2, MultiFocus[F]] on inner — OpticsBehaviorSpec) | N (Composer[Either, MultiFocus[F]] on inner — OpticsBehaviorSpec) | N (Composer[Affine, MultiFocus[F]] on inner — `affine2multifocus`) | M (AF T=Unit) | U (Getter T=Unit) | N (Composer[MultiFocus[F], SetterF] — `multifocus2setter` — covers all F including Function1[Int, *]) | N (Composer[Forget[F], MultiFocus[F]] on inner when same F — OpticsBehaviorSpec) | U (no Composer[MultiFocus[F], MultiFocus[PSVec]] when `F ≠ PSVec`) | N (mfAssoc / mfAssocPSVec / `mfAssocFunction1` same-carrier; the FT-absorbed `MF[Function1[Int, *]]` self-compose lights up `mfAssocFunction1`'s Z=(Xo, Xi) closure-rebuild path) | U (no Composer between MultiFocus and Grate in either direction) | ? (Either→MultiFocus bridge works per-prism — JsonPrism.andThen(MultiFocus) plausible but untested) |
 | **Gr**  | U (Composer[Forgetful, Grate] is ONE-WAY; Iso→Grate yes, Grate→Iso no — see §3.2.4) | U (no Composer[Tuple2, Grate]) | U | U | U | U | N (Composer[Grate, SetterF] — `grate2setter`, Grate.scala; shipped 2026-04-27) | U | U | U (no Composer between Grate and MultiFocus in either direction) | N (grateAssoc same-carrier — untested with two Grates beyond law suite) | U |
@@ -522,6 +536,16 @@ which the current Optic ADT doesn't specialise for — so in practice
 the U here also covers "Getter as outer" / "Fold as outer" / "AffineFold
 as outer" — any subsequent read-write step would require the outer's
 `from` to observe a `B` but the Getter produces `Unit`.
+
+**Exception (added 2026-04-29):** `Fold × Fold` is N — both sides have
+`T = Unit`, so the chain stays at T=Unit consistently. Same-F
+composition via `assocForgetMonad`; cross-F composition via the
+`.andThen` extension (gap #1 close) which takes a user-supplied
+`cats.~>[F, G]` plus `FlatMap[G]`. Result carrier is `Forget[G]`.
+`AffineFold × AffineFold` would be the analogous exception but
+AffineFold has no carrier-specific Composer — the `Affine`-based
+encoding `Optic[S, Unit, A, A, Affine]` already composes via
+`assocAffine`, so it's covered.
 
 #### 3.2.2 Setter × anything (and vice versa)
 

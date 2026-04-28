@@ -305,16 +305,44 @@ val bumpAll = Setter[SetterConfig, SetterConfig, Int, Int] { f => cfg =>
 bumpAll.modify(_ + 1)(SetterConfig(Map("a" -> 1, "b" -> 2)))
 ```
 
-**Setter is a composition terminal.** `lens.andThen(setter)` works —
-a Lens to a focus, then a Setter that writes into it. The reverse
-chain, `setter.andThen(inner)`, does *not* work: there's no
-`AssociativeFunctor[SetterF, _, _]` shipped, and no `Composer[SetterF,
-_]`. That's intentional — SetterF's shape `(Fst[X], Snd[X] => A)`
-doesn't carry a read side, so "compose another optic on top of a
-write-only endpoint" doesn't have a natural semantics. If you want
-`setter.andThen(…)`, restructure the chain so the Setter is the
-inner — build `lens/prism/traversal.andThen(setter)` and call
-`.modify` on the result.
+**`lens.andThen(setter)`** works — a Lens to a focus, then a Setter
+that writes into it. **`setter.andThen(setter)`** also works:
+`SetterF` ships an `AssociativeFunctor[SetterF, Xo, Xi]` instance
+(`SetterF.assocSetterF`) with `Z = (Fst[Xo], Snd[Xi])`. The
+deferred-modify semantic fits the protocol once you observe that
+`composeTo` only needs to seed `(outer-source, identity[C])` (no
+`inner.to` call required, since SetterF's continuation is structurally
+identity at every canonical construction site); `composeFrom` extracts
+the user's `c2d` from the post-`map` continuation and applies it
+through `inner.from` then `outer.from`. The standard
+`Optic.andThen[SetterF]` resolution picks the instance up
+transparently.
+
+```scala mdoc:silent
+import dev.constructive.eo.Composer
+import dev.constructive.eo.data.SetterF
+import dev.constructive.eo.data.SetterF.given
+
+final case class Box(value: Int)
+final case class Holder(box: Box, tag: String)
+
+val outer = summon[Composer[Tuple2, SetterF]].to(
+  Lens[Holder, Box](_.box, (s, b) => s.copy(box = b))
+)
+val inner = summon[Composer[Tuple2, SetterF]].to(
+  Lens[Box, Int](_.value, (s, v) => s.copy(value = v))
+)
+val composed = outer.andThen(inner)
+```
+
+```scala mdoc
+composed.modify(_ + 1)(Holder(Box(10), "tag"))
+```
+
+There is no `Composer[SetterF, _]` outbound — Setter remains a
+read-side terminal, so to *escape* a SetterF chain into a Forget /
+MultiFocus / Lens you have to restructure with the Setter on the
+inside.
 
 ## Getter
 
@@ -527,10 +555,11 @@ examples ground each absorbed sub-shape in the cookbook:
 
 ## Composition limits
 
-Beyond the MultiFocus-outbound sink documented above, three categories
-of pair are intentionally **not** bridged in 0.1.0. The short answer
-is "the type system rules them out, and the natural workaround is a
-plain Scala expression":
+Beyond the MultiFocus-outbound sink documented above, several
+categories of pair are either intentionally **not** bridged in 0.1.0
+or only bridged through a user-opt-in side-channel. Each entry below
+states the structural shape, the rationale, and the idiomatic
+workaround or opt-in:
 
 **Lens / Prism / Optional × `Fold[F]` when the outer focuses on a
 scalar `A`** — the outer never produces an `F`-shape, so there's
@@ -549,10 +578,36 @@ the traversal: `traversal.modify(a => inner.replace(b)(a))(s)` for a
 `MultiFocus` inner; `traversal.foldMap(f)(s)` (read-only escape on
 any `MultiFocus[F]`-carrier optic) when you only need the fold side.
 
-**`SetterF` outbound** — Setter is a composition terminal: ship it as
-the leaf of a chain (Lens → Setter via `Composer[Tuple2, SetterF]`)
-but don't try to chain off it. There is no `AssociativeFunctor[SetterF]`
-and no outbound Composer.
+**Cross-F `Fold[F].andThen(Fold[G])`** — `Composer[Forget[F], Forget[G]]`
+doesn't ship (Composer's signature has no slot for a per-call natural
+transformation, and the carrier-generic `Optic.andThen` requires the
+same `F`). Instead, `Forget.scala` ships a Forget-specific `.andThen`
+extension that takes a user-supplied `cats.~>[F, G]` plus
+`FlatMap[G]` and produces a `Forget[G]`-carrier optic:
+
+```scala
+import cats.~>
+val outer: Optic[Source, Unit, A, A, Forget[List]]   = ...
+val inner: Optic[A, Unit, B, B, Forget[Option]]      = ...
+given listHead: List ~> Option = new (List ~> Option):
+  def apply[T](xs: List[T]): Option[T] = xs.headOption
+val composed: Optic[Source, Unit, B, B, Forget[Option]] =
+  outer.andThen(inner)
+```
+
+The user picks the meaning by choosing the nat (e.g. `List ~> Option`
+via `headOption`, `Option ~> List` via `toList`, `List ~> LazyList`
+for streaming). Result carrier is `Forget[G]` — downstream composition
+continues in `G`'s typeclass landscape. Restricted to `T = Unit`
+(the Fold case) since cross-F composition has no natural way to
+thread `from` for general `T`.
+
+**`SetterF` outbound** — Setter is a read-side terminal: there is no
+outbound `Composer[SetterF, _]`, so a chain that reaches Setter cannot
+widen back into a Forget / MultiFocus / Lens. Same-carrier
+`setter.andThen(setter)` *does* work — `SetterF.assocSetterF` ships
+`AssociativeFunctor[SetterF, Xo, Xi]` with `Z = (Fst[Xo], Snd[Xi])`,
+so the standard `Optic.andThen` resolves transparently.
 
 **Fixed-arity traversal (`Traversal.two` / `.three` / `.four`)** —
 post-fold these factories produce `MultiFocus[Function1[Int, *]]`-carrier

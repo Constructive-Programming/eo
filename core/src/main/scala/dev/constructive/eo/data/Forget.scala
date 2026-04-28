@@ -135,6 +135,45 @@ object Forget extends LowPriorityForgetInstances:
   given assocForgetMonad[F[_]: Monad, Xo, Xi]: AssociativeFunctor[Forget[F], Xo, Xi] =
     assocFor[F, Xo, Xi](ForgetPull.monadicPull[F])
 
+  /** Cross-F Fold composition — chain `Forget[F]` outer with `Forget[G]` inner by lifting the
+    * outer's `F[A]` through a user-supplied natural transformation `F ~> G`, then `flatMap`-ing
+    * with the inner under `FlatMap[G]`. Closes top-5 gap #1 (`Forget[F].andThen(Forget[G])` for
+    * `F ≠ G`).
+    *
+    * Same name as the trait `Optic.andThen`. Overload resolution: the trait method's signature
+    * requires the inner's `T_inner` to unify with the outer's `B`, which fails for Fold × Fold
+    * because both Folds have `T = Unit` while `B = focus type ≠ Unit`. So the trait method is
+    * inapplicable for the canonical Fold shape and Scala falls through to this extension — for both
+    * same-`F` (with `cats.arrow.FunctionK.id[F]`) and cross-`F` (`F ≠ G`). For non-Fold
+    * `Forget[F]`-carrier optics with non-Unit `T` (rare in practice), the trait method via
+    * [[assocForgetMonad]] / `assocForgetComonad` still wins.
+    *
+    * Result carrier is `Forget[G]` — the user picks the downstream context by choosing the nat.
+    *
+    * Common nat choices and what they mean:
+    *   - `List ~> LazyList`: lazily stream the outer's results to the inner.
+    *   - `Option ~> List` (`None → Nil`, `Some(a) → List(a)`): coerce a possibly-empty single value
+    *     into a list before fanning out.
+    *   - `NonEmptyList ~> List`: drop the non-emptiness witness so the inner can produce empty.
+    *
+    * Restricted to `T = Unit` (the Fold case): cross-F composition has no natural way to thread the
+    * inner's `from: G[B] => Unit` and the outer's `from: F[B] => T` through an `F ~> G` bridge for
+    * general `T` — `T = Unit` is the only shape where the discard semantic on both sides agrees
+    * trivially.
+    *
+    * @group Cross-F composition
+    */
+  extension [S, A, F[_]](outer: Optic[S, Unit, A, A, Forget[F]])
+
+    def andThen[G[_], B](inner: Optic[A, Unit, B, B, Forget[G]])(using
+        nat: cats.~>[F, G],
+        flatG: FlatMap[G],
+    ): Optic[S, Unit, B, B, Forget[G]] =
+      new Optic[S, Unit, B, B, Forget[G]]:
+        type X = Unit
+        val to: S => Forget[G][Unit, B] = s => flatG.flatMap(nat(outer.to(s)))(inner.to)
+        val from: Forget[G][Unit, B] => Unit = _ => ()
+
 /** Lower-priority instance drawer — holds the `FlatMap + Comonad` `AssociativeFunctor` which
   * composes via `coflatMap` (parallel-fold semantics, genuinely different from the Monad-based
   * algebraic-lens composition in the main object). Kept at lower priority so Monad wins when both

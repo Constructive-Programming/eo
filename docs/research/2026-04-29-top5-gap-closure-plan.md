@@ -6,37 +6,64 @@
 
 ## 1. Cross-F Forget composition — `Forget[F].andThen(Forget[G])` for `F ≠ G`
 
+**Status: SHIPPED 2026-04-29.** A Forget-specific `.andThen` extension lives in `Forget.scala` (inside `object Forget`). The user supplies a natural transformation `F ~> G` and `FlatMap[G]`; the result carrier is `Forget[G]`. The original "U + workaround" plan was upgraded to a real ship after the user observed that supplying nat transformations is a perfectly principled side-channel — the meaning shift (result carrier ≠ outer's F) is documented, not hidden.
+
 ### Restatement
 
-`Fold[List].andThen(Fold[Option])` fails implicit resolution silently. No `Composer[Forget[List], Forget[Option]]` ships, and the natural-transformation witness `F ~> G` (or `G ~> F`) that a generic Composer would need isn't expressible in cats-eo's `Composer[F, G]` shape (which is over carrier kinds, not value-typed witnesses).
+`Fold[List].andThen(Fold[Option])` fails implicit resolution silently via the Composer/AssociativeFunctor route — `Composer[F, G]` is over carrier kinds, not value-typed witnesses, so a per-call `F ~> G` doesn't fit. The `.andThen` extension on Optic requires same-`F` (via `AssociativeFunctor[F]`).
 
-### Decision
+### Decision (revised)
 
-**Document as U + ship a workaround pattern.** No code change; one prose update to `site/docs/optics.md` "Composition limits" subsection.
+**Ship a dedicated `.andThen` extension method on `Optic[S, Unit, A, A, Forget[F]]`.** The user opts into the meaning shift by passing a nat. Same shape as gap #4's SetterF extension: more-specific extension method, sidesteps the typeclass-protocol ergonomics question.
 
 ### Rationale
 
-The cross-F bridge fundamentally needs `F ~> G` or a `Foldable[F] + Monad[G]` combination. `Composer[F, G]` is over `F[_, _]` / `G[_, _]` carrier kinds; the witness it consumes can't carry a per-call natural transformation without widening the typeclass surface. That widening is broader than 0.1.0 scope — it changes how every Composer in the codebase resolves.
-
-### Workaround pattern (the U-cell idiom)
+The cross-F bridge needs `F ~> G` plus `FlatMap[G]`. Both are typeclass evidence the user can supply at the call site. The shipped form:
 
 ```scala
-val outerFold: Fold[Source, A] = ...     // Forget[List]-carrier
-val innerFold: Fold[A, B] = ...          // Forget[Option]-carrier
-def composed(s: Source): Vector[B] =
-  outerFold.toList(s).flatMap(a => innerFold.toList(a)).toVector
+extension [S, A, F[_]](outer: Optic[S, Unit, A, A, Forget[F]])
+  def andThen[G[_], B](inner: Optic[A, Unit, B, B, Forget[G]])(using
+      nat: cats.~>[F, G],
+      flatG: FlatMap[G],
+  ): Optic[S, Unit, B, B, Forget[G]] = ...
 ```
 
-The user falls back to plain Scala `flatMap` to bridge the two F's. Ergonomics regression vs `.andThen`, but no information loss.
+The implementation is direct: `composed.to(s) = flatG.flatMap(nat(outer.to(s)))(inner.to)`; `composed.from = _ => ()` (T = Unit).
+
+Restricted to `T = Unit` (the Fold case): cross-F composition has no natural way to thread `from` for general `T`, since the F → G nat doesn't tell us how to bridge `T` types. T = Unit is the only shape where the discard semantic on both sides agrees trivially.
+
+### Worked examples
+
+```scala
+import cats.~>
+import cats.arrow.FunctionK
+
+// List ~> Option (head): pick the head, run inner on it
+given listHead: List ~> Option = new (List ~> Option):
+  def apply[T](fa: List[T]): Option[T] = fa.headOption
+
+val composedHeadEven = triplet.andThen(evenOpt)
+// composed.to(5) = headOption([4,5,6]).flatMap(...) = Some(4) (4 is even → Some(4))
+
+// Option ~> List (None → Nil, Some(a) → [a]): expand the optional through the inner
+given liftK: Option ~> List = new (Option ~> List):
+  def apply[T](fa: Option[T]): List[T] = fa.toList
+val composedExpand = maybe.andThen(expand)
+
+// Identity nat (F = G) works too — equivalent to same-F flatMap
+given idListK: List ~> List = FunctionK.id[List]
+```
 
 ### Files touched
 
-- `site/docs/optics.md` — add subsection "Cross-F Fold composition" under "Composition limits" with the workaround pattern, citing the structural reason.
-- `docs/research/2026-04-23-composition-gap-analysis.md` §1.2 / §3 — replace the gap's `?`-ish flavour with explicit U classification + cross-link.
+- `core/src/main/scala/dev/constructive/eo/data/Forget.scala` — added `andThen` extension inside `object Forget` (~30 LoC including the docstring + meaning-shift documentation).
+- `tests/src/test/scala/dev/constructive/eo/OpticsBehaviorSpec.scala` — new block "Cross-F Forget composition: forget.andThen(forget)..." exercising List ~> Option, Option ~> List, and identity-nat parity.
+- `docs/research/2026-04-23-composition-gap-analysis.md` §1.2 / §3 — flip the U-cell mention to "shipped via `.andThen` extension; user supplies nat".
+- `site/docs/optics.md` — Composition-limits section: replace "cross-F is ruled out" with "cross-F ships under nat-supplied opt-in".
 
 ### Effort
 
-~1 hour (docs only).
+~2 hours actual (vs ~1 h budgeted for docs-only path). The expanded scope was the user's call: the nat-supplied side-channel is too useful to leave unshipped.
 
 ---
 
@@ -105,34 +132,56 @@ Same nested-modify pattern users had pre-folds, just on a single carrier name no
 
 ## 4. SetterF composition — `setter.andThen(setter)` doesn't compile
 
-### Restatement
+**Status: SHIPPED 2026-04-29.** `AssociativeFunctor[SetterF, Xo, Xi]` lives in `SetterF.scala` as `assocSetterF` with `Z = (Fst[Xo], Snd[Xi])`. Standard `Optic.andThen[SetterF]` resolution picks it up — no extension method, no naming gymnastics. Outcome **(a) Yes** in the original plan terms.
 
-`SetterF` has `ForgetfulFunctor` and `ForgetfulTraverse` but no `AssociativeFunctor`. `setter.andThen(setter)` fails with a silent implicit miss. Documented in `SetterF.scala` line 14 but nowhere user-facing.
+### Outcome of the investigation
 
-### Decision
+The investigation initially landed on (b) No (extension method) when the AssociativeFunctor protocol seemed to require recovering the user's `c2d` from a post-`mfFunctor.map` continuation. That reading was wrong. The fix is: `composeTo` doesn't need to call `inner.to` at all. Seeding the result SetterF with `(outer-source, identity[C])` is sufficient because:
 
-**Investigate whether `AssociativeFunctor[SetterF]` is structurally possible. Two possible outcomes:**
-- **(a) Yes**: ship the instance + a behaviour spec.
-- **(b) No**: surface the absence prominently in `site/docs/optics.md` Setter section AND in the SetterF carrier doc, with a worked example showing the correct idiom.
+- SetterF's continuation is structurally `identity[A]` at every canonical construction site (`coerceToSetter` line 60, `Setter.apply` line 29).
+- After `mfFunctor.map` applies `c2d`, the continuation becomes `c2d` directly (since `f ∘ identity = f`).
+- `composeFrom` then extracts `c2d` from `xd.setter._2` and applies it through `inner.from` then `outer.from` — that's the deferred-modify semantic verbatim.
 
-### Rationale
+The trick is `Z = (Fst[Xo], Snd[Xi])`, which makes `Fst[Z] = Fst[Xo]` and `Snd[Z] = Snd[Xi]` after match-type reduction. asInstanceOf casts coerce abstract `Fst[Xo] / Snd[Xo] / Fst[Xi] / Snd[Xi]` to the canonical `(S, A)` / `(A, C)` decomposition — sound under the universal SetterF convention enforced at every construction site, unsafe only for hand-built optics that violate it (and there's no public API path to build such an optic).
 
-A `Setter[S, T, A, B]` has shape `(A => B) => (S => T)`. Composing `Setter[S, T, A, B]` with `Setter[A, B, C, D]` should give `Setter[S, T, C, D]` via plain function composition — the inner consumes `(C => D)` and produces `(A => B)`, which the outer consumes. So Setter × Setter SHOULD be expressible.
+### What shipped
 
-The question: does cats-eo's specific `SetterF` carrier encoding admit an `AssociativeFunctor[SetterF]` instance, or is the absence a structural feature of the encoding (e.g., the existential `X` type on `Optic[S, T, A, B, SetterF]` doesn't thread through composition)? **The investigation is the load-bearing step**: the gap's text says "by design" but doesn't cite the design. Confirm or refute.
+```scala
+given assocSetterF[Xo, Xi]: AssociativeFunctor[SetterF, Xo, Xi] with
+  type Z = (Fst[Xo], Snd[Xi])
+
+  def composeTo[S, T, A, B, C, D](
+      s: S,
+      outer: optics.Optic[S, T, A, B, SetterF] { type X = Xo },
+      inner: optics.Optic[A, B, C, D, SetterF] { type X = Xi },
+  ): SetterF[Z, C] =
+    val xo: Fst[Xo] = outer.to(s).setter._1
+    SetterF((xo, identity[C].asInstanceOf[Snd[Xi] => C]))
+
+  def composeFrom[S, T, A, B, C, D](
+      xd: SetterF[Z, D],
+      inner: optics.Optic[A, B, C, D, SetterF] { type X = Xi },
+      outer: optics.Optic[S, T, A, B, SetterF] { type X = Xo },
+  ): T =
+    val xo: Fst[Xo] = xd.setter._1.asInstanceOf[Fst[Xo]]
+    val c2d: Snd[Xi] => D = xd.setter._2.asInstanceOf[Snd[Xi] => D]
+    val innerModify: A => B = a => inner.from(SetterF((a.asInstanceOf[Fst[Xi]], c2d)))
+    outer.from(SetterF((xo, innerModify.asInstanceOf[Snd[Xo] => B])))
+```
+
+### Why not the extension-method route
+
+A first attempt at this gap shipped a SetterF-specific `.andThen` extension method, on the assumption that the AssociativeFunctor protocol couldn't fit. That attempt failed at compile time: trait member methods in Scala 3 always shadow imported extension methods with the same name, so `outerSf.andThen(innerSf)` resolved to `Optic.andThen` (the trait method, requiring `AssociativeFunctor[SetterF]`) before the extension was ever consulted. The fix isn't to refactor the trait method — it's to ship the AssociativeFunctor instance the trait method already wants.
 
 ### Files touched
 
-- `core/src/main/scala/dev/constructive/eo/data/SetterF.scala` — either ship `AssociativeFunctor[SetterF]` or expand the comment block on why not.
-- `site/docs/optics.md` Setter section — surface the outcome (either "and Setter composes via the AssociativeFunctor instance" or "Setter is composition-terminal; here's why and the workaround").
-- If shipping: `tests/src/test/scala/.../OpticsBehaviorSpec.scala` adds a `setter.andThen(setter)` behaviour test.
+- `core/src/main/scala/dev/constructive/eo/data/SetterF.scala` — class docstring updated to describe the assocSetterF encoding; `assocSetterF` given lives at the bottom of `object SetterF`.
+- `tests/src/test/scala/dev/constructive/eo/OpticsBehaviorSpec.scala` — new block "SetterF same-carrier composition: setter.andThen(setter)" exercising Lens-into-SetterF × Lens-into-SetterF, then × Prism-into-SetterF (hit/miss), then × Optional-into-SetterF (hit/miss).
+- `site/docs/optics.md` — Setter section rewritten to show `setter.andThen(setter)` as a working chain with the AssocFunctor; "Composition limits" SetterF entry rescoped to outbound Composers only.
 
 ### Effort
 
-- (a) ~4 hours: investigation + shipping + tests
-- (b) ~1 hour: investigation + docs
-
-Effort is bounded by the investigation. Worst case is a clear "structurally impossible" verdict + half a page of optics.md.
+~3 hours actual: failed extension-method attempt + course-correct + AssocFunctor implementation + behaviour spec + docs. The protocol-fit re-examination is the core of the work.
 
 ---
 
@@ -167,10 +216,10 @@ A passing test confirms the matrix's `?`-ish cell as N. A failing test surfaces 
 
 | # | Gap | Action | Effort | Outcome |
 |---|---|---|---|---|
-| 1 | Cross-F `Forget[F].andThen(Forget[G])` | Document U + workaround | 1 h | structural; no carrier change |
+| 1 | Cross-F `Forget[F].andThen(Forget[G])` | SHIPPED — `.andThen` extension under `F ~> G` + `FlatMap[G]` | 2 h | nat-supplied side-channel |
 | 2 | MultiFocus outbound (read-only) | Ship `Composer[MultiFocus[F], Forget[F]]` for `Foldable[F]` | 3 h | 4 cells flip U → N |
 | 3 | Cross-F MultiFocus composition | Document U + workaround (cross-link to #1) | 0.5 h | structural; same shape as #1 |
-| 4 | SetterF composition | Investigate; ship XOR document loudly | 1-4 h | TBD (depends on investigation) |
+| 4 | SetterF composition | SHIPPED — `AssociativeFunctor[SetterF]` (`assocSetterF`) | 3 h | `setter.andThen(setter)` compiles |
 | 5 | JsonPrism × MultiFocus | Write behaviour spec | 1 h | confirms existing N cell |
 
 **Total effort**: ~6.5–9.5 hours, depending on gap #4's investigation outcome.
