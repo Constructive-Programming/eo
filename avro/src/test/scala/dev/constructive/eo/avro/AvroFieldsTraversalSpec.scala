@@ -167,7 +167,11 @@ class AvroFieldsTraversalSpec extends Specification:
 
   // covers: empty array — modify returns Ior.Right(input), missing prefix —
   // modify returns Ior.Left (nothing to iterate)
-  "forgiving on empty array / missing prefix" >> {
+  // covers: empty array — modify returns Ior.Right(record),
+  //   missing prefix — modify returns Ior.Left (nothing to iterate);
+  //   place / placeUnsafe overwrite every element's focused fields with a constant
+  //   (default ↔ Unsafe parity)
+  "empty / missing prefix + place / placeUnsafe overwrites" >> {
     val emptyB = Basket("Alice", List.empty)
     val emptyRec = basketRecord(emptyB)
     val emptyOk = codecPrism[Basket]
@@ -198,30 +202,21 @@ class AvroFieldsTraversalSpec extends Specification:
       .modify(nt => (name = nt.name, price = nt.price))(stump)
       .isLeft === true
 
-    (emptyOk === true).and(missingOk)
-  }
-
-  // ---- place / placeUnsafe ----------------------------------------
-
-  // covers: place overwrites every element's focused fields with a constant,
-  // placeUnsafe overwrites every element's focused fields with a constant
-  "place / placeUnsafe overwrite every element's focused fields (default↔Unsafe parity)" >> {
     val basket = Basket("Alice", List(Order("a", 0.5, qty = 1), Order("b", 0.6, qty = 2)))
     val nt: NamePrice = (name = "Z", price = 99.0)
-
-    val expected = basketRecord(
+    val expectedZ = basketRecord(
       basket.copy(items = List(Order("Z", 99.0, qty = 1), Order("Z", 99.0, qty = 2)))
     )
-
     val place =
       codecPrism[Basket].items.each.fields(_.name, _.price).place(nt)(basketRecord(basket))
     val placeUnsafe =
       codecPrism[Basket].items.each.fields(_.name, _.price).placeUnsafe(nt)(basketRecord(basket))
-
     val placeOk = place match
-      case Ior.Right(out) => recordsEqual(out, expected)
+      case Ior.Right(out) => recordsEqual(out, expectedZ)
       case _              => false
-    (placeOk === true).and(recordsEqual(placeUnsafe, expected) === true)
+
+    (emptyOk === true).and(missingOk)
+      .and(placeOk === true).and(recordsEqual(placeUnsafe, expectedZ) === true)
   }
 
 end AvroFieldsTraversalSpec

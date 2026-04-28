@@ -129,11 +129,11 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
     singleOk.and(bothMissOk)
   }
 
-  // ---- Empty array / missing prefix --------------------------------
-
-  // covers: empty array — modify returns Ior.Right(input), missing prefix —
-  // modify returns Ior.Left (nothing to iterate)
-  "forgiving on empty array / missing prefix" >> {
+  // covers: empty array — modify returns Ior.Right(input),
+  //   missing prefix — modify returns Ior.Left (nothing to iterate);
+  //   place / placeUnsafe overwrite every element's focused fields with a constant
+  //   (default ↔ Unsafe parity)
+  "empty / missing prefix + place / placeUnsafe overwrites" >> {
     val emptyB = Basket("Alice", Vector.empty)
     val emptyJson = emptyB.asJson
     val emptyOk = codecPrism[Basket]
@@ -150,31 +150,16 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
       .modify(nt => (name = nt.name, price = nt.price))(stump)
       .isLeft === true
 
-    emptyOk.and(missingOk)
-  }
-
-  // ---- place / placeUnsafe ----------------------------------------
-
-  // covers: place overwrites every element's focused fields with a constant,
-  // placeUnsafe overwrites every element's focused fields with a constant
-  "place / placeUnsafe overwrite every element's focused fields (default↔Unsafe parity)" >> {
     val basket = Basket("Alice", Vector(Order("a", 0.5, qty = 1), Order("b", 0.6, qty = 2)))
     val nt: NamePrice = (name = "Z", price = 99.0)
-
-    val expected = basket
-      .copy(items =
-        Vector(
-          Order("Z", 99.0, qty = 1),
-          Order("Z", 99.0, qty = 2),
-        )
-      )
+    val expectedZ = basket
+      .copy(items = Vector(Order("Z", 99.0, qty = 1), Order("Z", 99.0, qty = 2)))
       .asJson
-
     val place = codecPrism[Basket].items.each.fields(_.name, _.price).place(nt)(basket.asJson)
     val placeUnsafe =
       codecPrism[Basket].items.each.fields(_.name, _.price).placeUnsafe(nt)(basket.asJson)
 
-    (place === Ior.Right(expected)).and(placeUnsafe === expected)
+    emptyOk.and(missingOk).and(place === Ior.Right(expectedZ)).and(placeUnsafe === expectedZ)
   }
 
 object JsonFieldsTraversalSpec:
