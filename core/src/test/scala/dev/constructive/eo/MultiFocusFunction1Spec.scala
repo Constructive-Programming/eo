@@ -115,9 +115,11 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
     idOk && rotOk
   }
 
-  // covers: representableAt — the explicit-lead variant — modify-at-position and replace-broadcast
-  // both round-trip through the per-position read.
-  "MultiFocus.representableAt — Representable-indexed factory: modify-at + replace-broadcast" >> {
+  // covers: MultiFocus.representableAt — explicit-lead variant — modify-at-position and
+  //   replace-broadcast both round-trip through the per-position read;
+  //   MultiFocus[Function1].at(i) — typeclass-gated `.at(i: F.Representation)` read surface
+  //   uses Representable[Function1[X0, *]] to read the focus at a chosen position (Q2 deliverable)
+  "MultiFocus.representableAt + .at(i): Representable-indexed factory + position read" >> {
     val F = summon[Representable[[a] =>> Boolean => a]]
     val gTrue: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
       MultiFocus.representableAt[[a] =>> Boolean => a, Int](F)(true)
@@ -132,17 +134,12 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
     val flat = gFalse.replace(99)(fn2)
     val replOk = (flat(true) === 99).and(flat(false) === 99)
 
-    modOk.and(replOk)
-  }
-
-  // covers: the new typeclass-gated `.at(i: F.Representation)` read surface — uses
-  // Representable[Function1[X0, *]] to read the focus at a chosen position. Q2 deliverable.
-  "MultiFocus[Function1].at(i) — Representable-gated position read" >> {
     val g: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
       MultiFocus.representable[[a] =>> Boolean => a, Int]
+    val readFn: Boolean => Int = b => if b then 100 else 200
+    val readOk = (g.at(true)(readFn) === 100).and(g.at(false)(readFn) === 200)
 
-    val fn: Boolean => Int = b => if b then 100 else 200
-    (g.at(true)(fn) === 100).and(g.at(false)(fn) === 200)
+    modOk.and(replOk).and(readOk)
   }
 
   // covers: MultiFocus.tuple .andThen MultiFocus.tuple — same-carrier composition exercises

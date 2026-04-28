@@ -92,21 +92,26 @@ class MultiFocusSpec extends Specification with ScalaCheck:
     modList && modOpt && modVec && modChain && modA
   }
 
-  // ----- Iso bridge (Composer[Forgetful, MultiFocus[F]]) -----------------
-  "Iso → MultiFocus[List] — forgetful2multifocus bridge round-trips .modify" >> {
+  // ----- Composer bridges: Forgetful → MultiFocus[List] + MultiFocus[List] → SetterF ----
+  //
+  // 2026-04-29 consolidation: 2 same-shape composer-bridge tests → 1 composite.
+
+  // covers: Composer[Forgetful, MultiFocus[List]] (forgetful2multifocus) round-trips an
+  //   Iso's .modify through the bridge — 5 → 6 (forward) → 12 (×2) → 11 (back);
+  //   Composer[MultiFocus[F], SetterF] (multifocus2setter) widens MultiFocus[List]'s
+  //   element-wise modify to SetterF and preserves the modify byte-for-byte
+  "Composer bridges: Forgetful → MultiFocus[List] (Iso round-trip) + MultiFocus[List] → SetterF" >> {
     val iso: Optic[Int, Int, Int, Int, Forgetful] =
       Iso[Int, Int, Int, Int](_ + 1, (b: Int) => b - 1)
     val asMF: Optic[Int, Int, Int, Int, MultiFocus[List]] =
       summon[Composer[Forgetful, MultiFocus[List]]].to(iso)
-    val res = asMF.modify(_ * 2)(5) // 5 → 6 (forward) → 12 (×2) → 11 (back)
-    res == 11
-  }
+    val isoOk = asMF.modify(_ * 2)(5) == 11
 
-  // ----- SetterF widening (Composer[MultiFocus[F], SetterF]) ------------
-  "MultiFocus[List] → SetterF — element-wise modify preserved" >> {
     val k: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
       MultiFocus.apply[List, Int]
     val asSetter: Optic[List[Int], List[Int], Int, Int, SetterF] =
       summon[Composer[MultiFocus[List], SetterF]].to(k)
-    asSetter.modify(_ * 10)(List(1, 2, 3)) == List(10, 20, 30)
+    val setterOk = asSetter.modify(_ * 10)(List(1, 2, 3)) == List(10, 20, 30)
+
+    isoOk && setterOk
   }

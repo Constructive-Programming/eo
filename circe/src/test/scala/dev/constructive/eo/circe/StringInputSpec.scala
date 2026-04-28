@@ -19,11 +19,13 @@ class StringInputSpec extends JsonSpecBase:
   import StringInputSpec.*
   import StringInputSpec.given
 
-  // covers: parse the String and modify via default Ior, return Ior.Left(ParseFailed)
-  // on an unparseable String, return Json.Null on unparseable Unsafe, round-trip get
-  // on well-formed String, return None from getOptionUnsafe on unparseable, place via
-  // Ior from String
-  "JsonPrism String-input: parse+modify+place + Ior.Left/Json.Null on bad input" >> {
+  // covers: JsonPrism String-input — happy parse + modify (Ior.Right), .get round-trips, .place,
+  //   bad-string surfaces Ior.Left(ParseFailed), modifyUnsafe on bad string returns Json.Null,
+  //   getOptionUnsafe on bad string returns None;
+  //   JsonFieldsPrism String-input — happy multi-field parse + modify (Ior.Right),
+  //   bad-string surfaces Ior.Left(ParseFailed) on the multi-field surface;
+  //   Json input still routes through the widened signatures (parity with String input)
+  "JsonPrism + JsonFieldsPrism String-input: parse+modify, ParseFailed on bad input, Json pass-through" >> {
     val str = """{"name":"Alice","age":30,"address":{"street":"Main St","zip":12345}}"""
     val expectedUpper = Person("ALICE", 30, Address("Main St", 12345)).asJson
 
@@ -32,7 +34,6 @@ class StringInputSpec extends JsonSpecBase:
     val getOk = codecPrism[Person].field(_.name).get(str) === Ior.Right("Alice")
     val placeOk = codecPrism[Person].field(_.name).place("Bob")(str) ===
       Ior.Right(Person("Bob", 30, Address("Main St", 12345)).asJson)
-
     val badIor = codecPrism[Person].field(_.name).modify(_.toUpperCase)("not json at all")
     val badIorOk = (badIor.left.map(_.size) === Some(1L))
       .and(
@@ -40,33 +41,30 @@ class StringInputSpec extends JsonSpecBase:
           Some("yes")
       )
       .and(badIor.right === None)
-
     val unsafeNullOk =
       codecPrism[Person].field(_.name).modifyUnsafe(_.toUpperCase)("still not json") === Json.Null
     val unsafeNoneOk = codecPrism[Person].field(_.name).getOptionUnsafe("not json") === None
 
-    modOk.and(getOk).and(placeOk).and(badIorOk).and(unsafeNullOk).and(unsafeNoneOk)
-  }
-
-  // covers: parse the String and modify via default Ior (multi-field), return
-  // Ior.Left(ParseFailed) on unparseable
-  "JsonFieldsPrism String-input: parse+modify + Ior.Left(ParseFailed) on bad input" >> {
-    val str = """{"name":"Alice","age":30,"address":{"street":"Main St","zip":12345}}"""
     val p = codecPrism[Person].fields(_.name, _.age)
-    val modOk = p.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(str) ===
+    val fieldsOk = p.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(str) ===
       Ior.Right(Person("ALICE", 31, Address("Main St", 12345)).asJson)
-
-    val badOk = p
+    val fieldsBadOk = p
       .modify(identity)("{ malformed")
       .left
       .flatMap(_.headOption)
       .collect { case _: JsonFailure.ParseFailed => "yes" } === Some("yes")
 
-    modOk.and(badOk)
+    val passThruJson = Person("Alice", 30, Address("Main St", 12345)).asJson
+    val passThruOk = codecPrism[Person].field(_.name).modify(_.toUpperCase)(passThruJson) ===
+      Ior.Right(Person("ALICE", 30, Address("Main St", 12345)).asJson)
+
+    modOk.and(getOk).and(placeOk).and(badIorOk).and(unsafeNullOk).and(unsafeNoneOk)
+      .and(fieldsOk).and(fieldsBadOk).and(passThruOk)
   }
 
-  // covers: parse String and uppercase every name, return Ior.Left(ParseFailed) on
-  // unparseable, return Vector.empty from getAllUnsafe on unparseable
+  // covers: JsonTraversal String-input — happy parse + per-element modify (Ior.Right with the
+  //   uppercased basket), bad-string surfaces Ior.Left(ParseFailed), getAllUnsafe on bad string
+  //   returns Vector.empty
   "JsonTraversal String-input: parse+modify + Ior.Left(ParseFailed) + getAllUnsafe-empty on bad input" >> {
     val str = """{"items":[{"name":"a","qty":1},{"name":"b","qty":2}]}"""
     val expected = Basket(List(Item("A", 1), Item("B", 2))).asJson
@@ -84,14 +82,6 @@ class StringInputSpec extends JsonSpecBase:
       codecPrism[Basket].items.each.name.getAllUnsafe("not json") === Vector.empty
 
     modOk.and(badIorOk).and(unsafeEmptyOk)
-  }
-
-  // covers: A Json input still works through the widened signatures
-  "Json input pass-through still works through the String-widened signatures" >> {
-    val json = Person("Alice", 30, Address("Main St", 12345)).asJson
-    val out = codecPrism[Person].field(_.name).modify(_.toUpperCase)(json)
-    val expected = Person("ALICE", 30, Address("Main St", 12345)).asJson
-    out === Ior.Right(expected)
   }
 
 object StringInputSpec:

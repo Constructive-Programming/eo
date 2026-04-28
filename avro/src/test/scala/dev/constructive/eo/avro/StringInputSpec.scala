@@ -34,16 +34,22 @@ class StringInputSpec extends Specification:
   import AvroSpecFixtures.*
   import StringInputSpec.given
 
-  // ---- AvroPrism String input --------------------------------------
+  // ---- AvroPrism + AvroFieldsPrism + record-pass-through (one composite) ----------
+  //
+  // 2026-04-29 consolidation: 4 String-input tests → 2 composites (one for prism+fields+
+  // pass-through, one for traversal). Same code paths witnessed exhaustively per surface.
 
-  // covers: parse the String and modify via default Ior, return Ior.Left(JsonParseFailed) on
-  // unparseable, return synthetic empty record on unparseable Unsafe, round-trip get on
-  // well-formed String, return None from getOptionUnsafe on unparseable, place via Ior, transfer
-  // via Ior
-  "AvroPrism String-input: parse+modify+place + Ior.Left/empty-record on bad input" >> {
+  // covers: AvroPrism String-input — happy parse + modify (Ior.Right + structural record equality),
+  //   .get round-trips on well-formed String, .place via Ior, .transfer via Ior,
+  //   bad-JSON surfaces Ior.Left(JsonParseFailed), modifyUnsafe on bad JSON returns synthetic
+  //   empty record under personSchema, getOptionUnsafe on bad JSON returns None;
+  //   AvroFieldsPrism (multi-field NamedTuple focus) — happy parse + modify (Ior.Right),
+  //   bad-JSON surfaces Ior.Left(JsonParseFailed) on the multi-field surface;
+  //   IndexedRecord input still routes cleanly through the widened (record | bytes | String)
+  //   signature — parity with String input on the Person.field(_.name) modify
+  "AvroPrism + AvroFieldsPrism String-input + record pass-through (one composite)" >> {
     val str = """{"name":"Alice","age":30}"""
     val expected = personRecord(Person("ALICE", 30))
-
     val nameL = codecPrism[Person].field(_.name)
 
     val modOk = nameL.modify((s: String) => s.toUpperCase)(str) match
@@ -65,43 +71,41 @@ class StringInputSpec extends Specification:
       case Ior.Left(chain) =>
         (chain.length == 1L) && chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
       case _ => false
-
-    // Unsafe path: bad JSON → synthetic empty record under personSchema
     val unsafeBad = nameL.modifyUnsafe((s: String) => s.toUpperCase)(badStr)
     val unsafeBadOk = unsafeBad.getSchema == personSchema
     val unsafeNoneOk = nameL.getOptionUnsafe(badStr) == None
 
-    (modOk === true)
-      .and(getOk === true)
-      .and(placeOk === true)
-      .and(transferOk === true)
-      .and(badIorOk === true)
-      .and(unsafeBadOk === true)
-      .and(unsafeNoneOk === true)
-  }
-
-  // covers: AvroFieldsPrism (multi-field NamedTuple focus) parse+modify via default Ior,
-  // Ior.Left(JsonParseFailed) on bad input
-  "AvroFieldsPrism String-input: parse+modify + Ior.Left(JsonParseFailed) on bad input" >> {
-    val str = """{"name":"Alice","age":30}"""
-    val expected = personRecord(Person("ALICE", 31))
-
-    val p = codecPrism[Person].fields(_.name, _.age)
-    val modOk = p.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(str) match
-      case Ior.Right(out) => recordsEqual(out, expected)
+    val fp = codecPrism[Person].fields(_.name, _.age)
+    val fieldsExpected = personRecord(Person("ALICE", 31))
+    val fieldsOk = fp.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(str) match
+      case Ior.Right(out) => recordsEqual(out, fieldsExpected)
       case _              => false
-
-    val badResult = p.modify(identity)("{ malformed")
-    val badOk = badResult match
+    val fieldsBadOk = fp.modify(identity)("{ malformed") match
       case Ior.Left(chain) =>
         chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
       case _ => false
 
-    (modOk === true).and(badOk === true)
+    val p = Person("Alice", 30)
+    val recordInput = personRecord(p)
+    val fromRecord = nameL.modify((s: String) => s.toUpperCase)(recordInput)
+    val fromString = nameL.modify((s: String) => s.toUpperCase)(str)
+    val parity = (fromRecord, fromString) match
+      case (Ior.Right(a), Ior.Right(b)) => recordsEqual(a, b)
+      case _                            => false
+    val passExpected = personRecord(p.copy(name = "ALICE"))
+    val recordOk = fromRecord match
+      case Ior.Right(out) => recordsEqual(out, passExpected)
+      case _              => false
+
+    (modOk === true).and(getOk === true).and(placeOk === true).and(transferOk === true)
+      .and(badIorOk === true).and(unsafeBadOk === true).and(unsafeNoneOk === true)
+      .and(fieldsOk === true).and(fieldsBadOk === true)
+      .and(parity === true).and(recordOk === true)
   }
 
-  // covers: AvroTraversal parse + per-element modify via default Ior, Ior.Left(JsonParseFailed) on
-  // unparseable, Vector.empty from getAllUnsafe on unparseable
+  // covers: AvroTraversal String-input — happy parse + per-element modify (Ior.Right),
+  //   bad-JSON surfaces Ior.Left(JsonParseFailed),
+  //   getAllUnsafe on bad JSON returns Vector.empty
   "AvroTraversal String-input: parse+modify + Ior.Left(JsonParseFailed) + getAllUnsafe-empty on bad input" >> {
     val basket = Basket("Alice", List(Order("a", 1.0, 1), Order("b", 2.0, 2)))
     val str =
@@ -124,32 +128,6 @@ class StringInputSpec extends Specification:
     val unsafeEmptyOk = unsafeEmpty == Vector.empty
 
     (modOk === true).and(badIorOk === true).and(unsafeEmptyOk === true)
-  }
-
-  // covers: mixed-input parity — the same modify on String input and on the parsed-record input
-  // produces structurally equal records (sanity that the union arm choice doesn't change
-  // observable behaviour). Also: IndexedRecord input still routes cleanly through the widened
-  // (record | bytes | String) signature.
-  "Record input pass-through still works through the String-widened signatures" >> {
-    val p = Person("Alice", 30)
-    val recordInput = personRecord(p)
-    val strInput = """{"name":"Alice","age":30}"""
-
-    val nameL = codecPrism[Person].field(_.name)
-
-    val fromRecord = nameL.modify((s: String) => s.toUpperCase)(recordInput)
-    val fromString = nameL.modify((s: String) => s.toUpperCase)(strInput)
-
-    val parity = (fromRecord, fromString) match
-      case (Ior.Right(a), Ior.Right(b)) => recordsEqual(a, b)
-      case _                            => false
-
-    val expected = personRecord(p.copy(name = "ALICE"))
-    val recordOk = fromRecord match
-      case Ior.Right(out) => recordsEqual(out, expected)
-      case _              => false
-
-    (parity === true).and(recordOk === true)
   }
 
   /** Compare two records via apache-avro's structural compare; sidesteps the Eq-given import. */
