@@ -151,53 +151,34 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   // ----- Fold ---------------------------------------------------------
 
-  // covers: Fold.apply[List] folds all elements, Fold.select keeps values matching
-  // the predicate
-  "Fold.apply[List] sums + Fold.select keeps matching predicates" >> {
+  // covers: Fold.apply[List] folds all elements (forAll over List[Int]),
+  //   Fold.select keeps values matching the predicate (predicate-gated Forget[Option] carrier),
+  //   Optional.foldMap returns the focus when matched, empty otherwise (Affine carrier hit/miss)
+  "Fold.apply[List] / Fold.select / Optional.foldMap: predicate-gated + Monoid-empty on miss" >> {
     val f: Optic[List[Int], Unit, Int, Int, Forget[List]] = Fold[List, Int]
     val sumOk = forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
 
-    val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] =
-      Fold.select[Int](_ % 2 == 0)
+    val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] = Fold.select[Int](_ % 2 == 0)
     val selectOk = forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
 
-    sumOk && selectOk
-  }
-
-  // covers: Optional.foldMap returns the focus when matched, empty otherwise
-  "Optional.foldMap returns the focus when matched, empty otherwise" >> {
     val evenFstOpt: Optic[(Int, Int), (Int, Int), Int, Int, Affine] =
       Optional[(Int, Int), (Int, Int), Int, Int, Tuple2](
         { case (a, b) => if a % 2 == 0 then Right(a) else Left((a, b)) },
         { case ((_, b), newA) => (newA, b) },
       )
-    forAll((a: Int, b: Int) =>
+    val foldMapOk = forAll((a: Int, b: Int) =>
       evenFstOpt.foldMap(identity[Int])((a, b)) == (if a % 2 == 0 then a else 0)
     )
+
+    sumOk && selectOk && foldMapOk
   }
 
   // ----- Composer morphs from Forgetful --------------------------------
 
-  // covers: Iso.morph[Tuple2] behaves like a Lens, Iso.morph[Either] behaves like a
-  // Prism, Iso.morph[Tuple2].morph[Affine] is a valid Affine-shaped optic
-  "Iso.morph[Tuple2/Either/Tuple2→Affine] — Forgetful → Tuple2 → Affine chain" >> {
-    val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
-      Iso[Int, Int, Int, Int](_ * 2, _ / 2)
-
-    val asLens = doubleIso.morph[Tuple2]
-    val tuple2Ok = forAll((n: Int) => asLens.get(n) == n * 2)
-
-    val asPrism = doubleIso.morph[Either]
-    val eitherOk =
-      (asPrism.to(10) == Right(20)) && (asPrism.reverseGet(20) == 10)
-
-    val asAffine = doubleIso.morph[Tuple2].morph[Affine]
-    val affineOk = forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
-
-    tuple2Ok && affineOk && eitherOk
-  }
-
-  // ----- Cross-carrier andThen via Morph.bothViaAffine -----------------
+  // ----- Iso.morph + cross-carrier andThen via Morph.bothViaAffine ---------------
+  //
+  // 2026-04-29 consolidation: 2 morph-themed tests → 1 composite. Both exercise the
+  // `morph[…]` machinery + the affine bridge for cross-carrier composition.
 
   private enum Shape3:
     case Tri(side: Int)
@@ -215,24 +196,39 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   private val triSideL: Optic[Shape3.Tri, Shape3.Tri, Int, Int, Tuple2] =
     Lens[Shape3.Tri, Int](_.side, (t, s) => t.copy(side = s))
 
-  // covers: Prism.andThen(Lens) composes via Morph.bothViaAffine, Lens.andThen(Prism)
-  // composes via Morph.bothViaAffine (symmetric)
-  "Morph.bothViaAffine: Prism→Lens and Lens→Prism both compose via the affine bridge" >> {
+  // covers: Iso.morph[Tuple2] behaves like a Lens (forAll over Int),
+  //   Iso.morph[Either] behaves like a Prism (.to / .reverseGet),
+  //   Iso.morph[Tuple2].morph[Affine] is a valid Affine-shaped optic;
+  //   Morph.bothViaAffine — Prism.andThen(Lens) composes via the affine bridge (hit + miss),
+  //   Lens.andThen(Prism) composes symmetrically via the affine bridge (hit + miss)
+  "Iso.morph[Tuple2/Either/Affine] + Morph.bothViaAffine: Prism↔Lens cross-carrier composition" >> {
+    val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
+      Iso[Int, Int, Int, Int](_ * 2, _ / 2)
+
+    val asLens = doubleIso.morph[Tuple2]
+    val tuple2Ok = forAll((n: Int) => asLens.get(n) == n * 2)
+
+    val asPrism = doubleIso.morph[Either]
+    val eitherOk = (asPrism.to(10) == Right(20)) && (asPrism.reverseGet(20) == 10)
+
+    val asAffine = doubleIso.morph[Tuple2].morph[Affine]
+    val affineOk = forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
+
     val triSide: Optic[Shape3, Shape3, Int, Int, Affine] = triP.andThen(triSideL)
-    val r1 = (triSide.modify(_ + 10)(Shape3.Tri(3)) === Shape3.Tri(13))
-      .and(triSide.modify(_ + 10)(Shape3.Sq(5)) === Shape3.Sq(5))
+    val r1 = (triSide.modify(_ + 10)(Shape3.Tri(3)) == Shape3.Tri(13)) &&
+      (triSide.modify(_ + 10)(Shape3.Sq(5)) == Shape3.Sq(5))
 
     case class Wrapper(shape: Shape3)
     val wrapperShape = Lens[Wrapper, Shape3](_.shape, (w, s) => w.copy(shape = s))
     val wrappedTri: Optic[Wrapper, Wrapper, Shape3.Tri, Shape3.Tri, Affine] =
       wrapperShape.andThen(triP)
     val r2 =
-      (wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Tri(3))) ===
-        Wrapper(Shape3.Tri(4))).and(
-        wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ===
-          Wrapper(Shape3.Sq(5))
-      )
-    r1.and(r2)
+      (wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Tri(3))) ==
+        Wrapper(Shape3.Tri(4))) &&
+        (wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ==
+          Wrapper(Shape3.Sq(5)))
+
+    tuple2Ok && affineOk && eitherOk && r1 && r2
   }
 
   // ----- Optional.readOnly behaviour -----------------------------------
@@ -431,12 +427,19 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     tuple2Ok.and(eitherOk).and(affineOk).and(composedOk)
   }
 
-  // ----- Prism / Optional / Traversal lifted into SetterF --------------
+  // ----- Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → SetterF
+  //
+  // 2026-04-29 consolidation: 2 SetterF-themed blocks → 1 composite. Both witness the
+  // canonical "lift into SetterF + .modify byte-for-byte agrees with the source carrier".
 
-  // covers: Either Prism lifts into SetterF and preserves hit/miss, Affine Optional
-  // lifts into SetterF and preserves hit/miss, PowerSeries Traversal lifts into
-  // SetterF and applies f to every focus
-  "Prism / Optional / Traversal → SetterF: hit/miss + every-focus broadcast" >> {
+  // covers: Either Prism lifts into SetterF and preserves hit/miss,
+  //   Affine Optional lifts into SetterF and preserves hit/miss,
+  //   PowerSeries (MultiFocus[PSVec]) Traversal lifts into SetterF and applies f to every focus,
+  //   MultiFocus.tuple lifts into SetterF and rebroadcasts via per-slot rebuild,
+  //   MultiFocus.representable over Representable[Function1[Boolean, *]] lifts identically
+  //   (pointwise map). All five lifts go through `multifocus2setter` / `affine2setter` /
+  //   `either2setter` and agree byte-for-byte with the source carrier's .modify(f)
+  "Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → SetterF" >> {
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
     val eitherLifted: Optic[Int, Int, Int, Int, data.SetterF] =
@@ -462,17 +465,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       (psLifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30))
         .and(psLifted.modify(_ * 10)(Nil) === Nil)
 
-    eitherOk.and(affineOk).and(psOk)
-  }
-
-  // ----- MultiFocus[Function1] (absorbed Grate) lifted into SetterF -----
-
-  // covers: MultiFocus.tuple lifts into SetterF and rebroadcasts via the per-slot rebuild,
-  // MultiFocus.representable over Representable[Function1[Boolean, *]] lifts identically
-  // (pointwise map). The lifted SetterF.modify must agree byte-for-byte with the original
-  // MultiFocus's .modify(f) — same Functor[Function1[X0, *]]-broadcast invariant as the deleted
-  // ForgetfulFunctor[Grate].
-  "MultiFocus.tuple / MultiFocus.representable[Function1] → SetterF: per-slot broadcast under .modify" >> {
     val tupleMF: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
       MultiFocus.tuple[(Int, Int, Int), Int]
     val tupleLifted: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, data.SetterF] =
@@ -491,7 +483,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val modified: Boolean => Int = fnLifted.modify(_ + 1)(srcFn)
     val fnOk = (modified(true) === 101).and(modified(false) === 201)
 
-    tupleOk.and(fnOk)
+    eitherOk.and(affineOk).and(psOk).and(tupleOk).and(fnOk)
   }
 
   // ----- MultiFocus[F] lifted into SetterF + Foldable-aggregated escape ----------------
@@ -588,8 +580,12 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // covers: Lens(Wrapper.doc) → MultiFocus.fromLensF(Doc.tags) → Lens(Tag.count) chains three
   //   carriers cleanly, multi-element rebuild preserved, empty list short-circuits to id;
   //   Lens.andThen(MultiFocus.classifier) propagates modify-multiplier under non-uniform
-  //   element counts (subsumes the 2-hop "Lens andThen MultiFocus[List] classifier" test)
-  "Lens → MultiFocus[List] → Lens composes three carriers cleanly" >> {
+  //   element counts (subsumes the 2-hop "Lens andThen MultiFocus[List] classifier" test);
+  //   Two Forget[List] classifiers (different non-uniform cardinalities — outer = 2 elements,
+  //   inner = 3 elements) compose via MultiFocus[List] (non-singleton × non-singleton),
+  //   foldMap aggregates across the cartesian product, modify(identity) preserves the per-branch
+  //   product, modify(f) applies through both layers
+  "Lens → MultiFocus[List] → Lens composes three carriers cleanly + non-singleton×non-singleton" >> {
     case class Wrapper(owner: String, doc: Doc)
     case class Doc(title: String, tags: List[Tag])
     case class Tag(name: String, count: Int)
@@ -623,22 +619,20 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     )
     val wEmpty = Wrapper("rh", Doc("notes", Nil))
     val r2 = everyCount.modify(_ * 100)(wEmpty) === wEmpty
-    r1.and(r2)
-  }
 
-  // ----- Non-singleton × non-singleton MultiFocus[List] composition ----
-
-  "Two Forget[List] classifiers compose via MultiFocus[List] with non-uniform cardinalities" >> {
+    // ---- Non-singleton × non-singleton MultiFocus[List] composition ----
     val outerForget = forgetOpt[List](n => List(n, n + 1), _.sum)
     val innerForget = forgetOpt[List](n => List(n * 10, n * 10 + 1, n * 10 + 2), _.product)
     val outerMF = summon[Composer[Forget[List], MultiFocus[List]]].to(outerForget)
     val innerMF = summon[Composer[Forget[List], MultiFocus[List]]].to(innerForget)
-    val composed = outerMF.andThen(innerMF)
+    val composedNN = outerMF.andThen(innerMF)
+    val nonUniformOk = (composedNN.foldMap(identity[Int])(5) === (50 + 51 + 52 + 60 + 61 + 62))
+      .and(composedNN.modify(identity)(5) === (50 * 51 * 52 + 60 * 61 * 62))
+      .and(composedNN.modify(_ + 1)(5) === (51 * 52 * 53 + 61 * 62 * 63))
 
-    (composed.foldMap(identity[Int])(5) === (50 + 51 + 52 + 60 + 61 + 62))
-      .and(composed.modify(identity)(5) === (50 * 51 * 52 + 60 * 61 * 62))
-      .and(composed.modify(_ + 1)(5) === (51 * 52 * 53 + 61 * 62 * 63))
+    r1.and(r2).and(nonUniformOk)
   }
+
 
   // ----- MultiFocusSingleton tag regression + Prism→Prism miss-survival + counter ---
   //
