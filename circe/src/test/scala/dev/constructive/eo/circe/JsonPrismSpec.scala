@@ -47,9 +47,11 @@ class JsonPrismSpec extends Specification with ScalaCheck:
 
   // ---- Root-level codecPrism[S] -------------------------------------
 
-  // covers: round-trip modify via full decode/encode (default), round-trip modify
-  // (Unsafe), pass through Json that doesn't decode (Unsafe)
-  "codecPrism[S] modify round-trips on the happy path with default↔Unsafe parity" >> forAll {
+  // covers: codecPrism[S] modify round-trips on happy path (default ↔ Unsafe parity),
+  //   decode failure surfaces Ior.Both(chain-of-one DecodeFailed, inputJson) on modify,
+  //   decode failure surfaces Ior.Left on get,
+  //   *Unsafe modify on undecodable Json passes the input through unchanged
+  "codecPrism[S]: modify happy round-trip (parity) + decode-failure Ior.Both / Ior.Left / pass-through" >> forAll {
     (p: Person) =>
       val json = p.asJson
       val expected = p.copy(name = p.name.toUpperCase).asJson
@@ -57,34 +59,32 @@ class JsonPrismSpec extends Specification with ScalaCheck:
         codecPrism[Person].modifyUnsafe((q: Person) => q.copy(name = q.name.toUpperCase))(json)
       val default =
         codecPrism[Person].modify((q: Person) => q.copy(name = q.name.toUpperCase))(json)
-      (unsafe == expected) && (default == Ior.Right(expected))
-  }
+      val happyOk = (unsafe == expected) && (default == Ior.Right(expected))
 
-  // covers: decode failure surfaces Ior.Both(chain-of-one, inputJson) on modify,
-  // decode failure surfaces Ior.Left on get, pass through Json that doesn't decode (Unsafe)
-  "codecPrism[S] decode failure surfaces Ior.Both on modify, Ior.Left on get, no-op on Unsafe" >> {
-    val notAPerson = Json.fromString("not a person")
-    val ior = codecPrism[Person].modify(identity[Person])(notAPerson)
-    val getResult = codecPrism[Person].get(notAPerson)
-    val unsafeOut = codecPrism[Person].modifyUnsafe(identity[Person])(notAPerson)
-    val iorOk = ior match
-      case Ior.Both(chain, json) =>
-        (json === notAPerson)
-          .and(chain.length === 1L)
-          .and(chain.headOption.get.isInstanceOf[JsonFailure.DecodeFailed] === true)
-      case _ =>
-        org.specs2.execute.Failure(s"expected Ior.Both, got $ior"): org.specs2.execute.Result
-    iorOk.and(getResult.isLeft === true).and(unsafeOut === notAPerson)
+      val notAPerson = Json.fromString("not a person")
+      val iorBad = codecPrism[Person].modify(identity[Person])(notAPerson)
+      val getBad = codecPrism[Person].get(notAPerson)
+      val unsafeBad = codecPrism[Person].modifyUnsafe(identity[Person])(notAPerson)
+      val iorOk = iorBad match
+        case Ior.Both(chain, j) =>
+          j == notAPerson && chain.length == 1L &&
+          chain.headOption.exists(_.isInstanceOf[JsonFailure.DecodeFailed])
+        case _ => false
+      val badOk = iorOk && getBad.isLeft && (unsafeBad == notAPerson)
+
+      happyOk && badOk
   }
 
   // ---- One-level drill (.field) -------------------------------------
 
-  // covers: modify the focused field in place (default), modify the focused field
-  // in place (Unsafe), leave every other field byte-identical to the input,
-  // transform default surface, transform *Unsafe surface, get returns
-  // Ior.Right(decoded focus), getOptionUnsafe returns Some(decoded focus), modify
-  // and modifyUnsafe agree on the happy path
-  "field(_.name) happy path: modify+transform+get default↔Unsafe parity, siblings preserved" >> forAll {
+  // covers: field(_.name) modify on happy input — default ↔ Unsafe parity,
+  //   modify in place leaves every other field byte-identical (age + address),
+  //   transform default ↔ Unsafe parity (raw Json leaf rewrite),
+  //   get returns Ior.Right(decoded focus), getOptionUnsafe returns Some(decoded focus);
+  //   field(_.name) on a missing-path Json: get returns Ior.Left(chain-of-one PathMissing),
+  //   getOptionUnsafe returns None, modify returns Ior.Both(PathMissing, inputJson),
+  //   modifyUnsafe returns the input unchanged
+  "field(_.name): happy parity (modify/transform/get) + sibling preservation + missing-path PathMissing" >> forAll {
     (p: Person) =>
       val nameL = codecPrism[Person].field(_.name)
       val json = p.asJson
@@ -101,49 +101,38 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       val getOk = nameL.get(json) == Ior.Right(p.name)
       val unsafeGetOk = nameL.getOptionUnsafe(json) == Some(p.name)
 
-      // Sibling fields are byte-identical after the modify.
       val out = nameL.modifyUnsafe(mFn)(json)
       val ageOk = out.hcursor.downField("age").as[Int] == Right(p.age)
       val addrOk = out.hcursor.downField("address").as[Address] == Right(p.address)
 
+      // ---- Missing-path branch ----
+      val missing = Json.obj("age" -> Json.fromInt(30))
+      val getMiss = nameL.get(missing)
+      val modMiss = nameL.modify(_.toUpperCase)(missing)
+      val unsafeModMiss = nameL.modifyUnsafe(_.toUpperCase)(missing)
+      val unsafeGetMiss = nameL.getOptionUnsafe(missing)
+
+      val missGetOk = getMiss match
+        case Ior.Left(chain) =>
+          chain.length == 1L &&
+          chain.headOption.contains(JsonFailure.PathMissing(PathStep.Field("name")))
+        case _ => false
+
+      val missModOk = modMiss ==
+        Ior.Both(Chain.one(JsonFailure.PathMissing(PathStep.Field("name"))), unsafeModMiss)
+
       parityModify && correctModify && parityTransform && correctTransform &&
-      getOk && unsafeGetOk && ageOk && addrOk
-  }
-
-  // covers: get returns Ior.Left with PathMissing when the path is absent,
-  // getOptionUnsafe returns None when the path is missing, modify on a missing-path
-  // Json produces Ior.Both(PathMissing, inputJson), modifyUnsafe on a missing-path
-  // Json returns input unchanged, modify on broken === Ior.Both(chain, modifyUnsafe(broken))
-  "field(_.name) on missing path: default↔Unsafe parity surfaces PathMissing" >> {
-    val nameL = codecPrism[Person].field(_.name)
-    val missing = Json.obj("age" -> Json.fromInt(30))
-    val getResult = nameL.get(missing)
-    val modifyResult = nameL.modify(_.toUpperCase)(missing)
-    val unsafeModify = nameL.modifyUnsafe(_.toUpperCase)(missing)
-    val unsafeGet = nameL.getOptionUnsafe(missing)
-
-    val getOk = getResult match
-      case Ior.Left(chain) =>
-        (chain.length === 1L)
-          .and(chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("name")))
-      case _ =>
-        org.specs2.execute.Failure(s"expected Ior.Left, got $getResult"): org.specs2.execute.Result
-
-    val modifyOk = modifyResult ===
-      Ior.Both(Chain.one(JsonFailure.PathMissing(PathStep.Field("name"))), unsafeModify)
-
-    getOk
-      .and(modifyOk)
-      .and(unsafeModify === missing)
-      .and(unsafeGet === None)
+      getOk && unsafeGetOk && ageOk && addrOk && missGetOk && missModOk &&
+      unsafeModMiss == missing && unsafeGetMiss == None
   }
 
   // ---- Two-level drill ---------------------------------------------
 
-  // covers: modify a nested field without touching siblings, the middle address
-  // Codec is not invoked beyond cursor navigation, *Unsafe missing path returns
-  // input unchanged, default missing path returns Ior.Both(PathMissing(address))
-  "field(_.address).field(_.street): nested drill with default↔Unsafe parity" >> forAll {
+  // covers: nested drill (.field(_.address).field(_.street)) modify without touching siblings,
+  //   getOptionUnsafe through nested drill returns Some(decoded leaf),
+  //   *Unsafe missing-path drill returns input unchanged,
+  //   default-Ior missing-path drill returns Ior.Both(PathMissing(address), inputJson)
+  "field(_.address).field(_.street): nested drill happy + missing-path PathMissing" >> forAll {
     (p: Person) =>
       val streetL = codecPrism[Person].field(_.address).field(_.street)
       val json = p.asJson
@@ -152,20 +141,15 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       val unsafeOk = streetL.modifyUnsafe(_.toUpperCase)(json) == expected
       val getOk = streetL.getOptionUnsafe(json) == Some(p.address.street)
 
-      unsafeOk && getOk
-  }
+      val stump = Json.obj("name" -> Json.fromString("Alice"))
+      val unsafeMissOk = streetL.modifyUnsafe(_.toUpperCase)(stump) == stump
+      val defaultMissOk = streetL.modify(_.toUpperCase)(stump) match
+        case Ior.Both(chain, j) =>
+          j == stump &&
+          chain.headOption.contains(JsonFailure.PathMissing(PathStep.Field("address")))
+        case _ => false
 
-  "field(_.address).field(_.street) missing path: Unsafe is no-op, default surfaces PathMissing(address)" >> {
-    val streetL = codecPrism[Person].field(_.address).field(_.street)
-    val stump = Json.obj("name" -> Json.fromString("Alice"))
-    val unsafeMiss = streetL.modifyUnsafe(_.toUpperCase)(stump) === stump
-    val defaultMiss = streetL.modify(_.toUpperCase)(stump) match
-      case Ior.Both(chain, j) =>
-        (j === stump).and(
-          chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("address"))
-        )
-      case _ => org.specs2.execute.Failure("expected Ior.Both"): org.specs2.execute.Result
-    unsafeMiss.and(defaultMiss)
+      unsafeOk && getOk && unsafeMissOk && defaultMissOk
   }
 
   // ---- Selectable field sugar (.address.street) ---------------------
@@ -195,10 +179,13 @@ class JsonPrismSpec extends Specification with ScalaCheck:
 
   // ---- Array indexing (.at) -----------------------------------------
 
-  // covers: modify the i-th element of a root-level array, leave sibling indices
-  // byte-identical, modify an element reached through a nested field path,
-  // getOptionUnsafe on a nested array index returns the element
-  "at(i) on Vector focus: index modify + sibling preservation + nested field path" >> {
+  // covers: at(i) on root-level Vector modify the i-th element + leave siblings byte-identical,
+  //   at(i) on nested Basket.items modifies the right element + leaves others alone,
+  //   nested at(i) getOptionUnsafe returns the element,
+  //   *Unsafe out-of-range index leaves input unchanged,
+  //   default-Ior out-of-range surfaces Ior.Both(IndexOutOfRange, inputJson),
+  //   *Unsafe negative index leaves input unchanged
+  "at(i) on Vector focus: index modify + sibling preservation + OOR / negative index handling" >> {
     val orders = Vector(Order("A"), Order("B"), Order("C"))
     val json = orders.asJson
     val outAt1 = codecPrism[Vector[Order]].at(1).name.modifyUnsafe(_.toUpperCase)(json)
@@ -213,30 +200,23 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     val r3 = outNested ===
       basket.copy(items = Vector(Order("X".toUpperCase), Order("Y"))).asJson
     val r4 = codecPrism[Basket].items.at(1).getOptionUnsafe(basket.asJson) === Some(Order("Y"))
-    r1.and(r2).and(r3).and(r4)
-  }
 
-  // covers: *Unsafe out-of-range index leaves input unchanged, default
-  // out-of-range index surfaces IndexOutOfRange, *Unsafe negative index leaves
-  // input unchanged
-  "at(i) out-of-range / negative index: Unsafe is no-op, default surfaces IndexOutOfRange" >> {
-    val basket = Basket(owner = "Alice", items = Vector(Order("X")))
-    val json = basket.asJson
+    // ---- OOR / negative index branches ----
+    val basket1 = Basket(owner = "Alice", items = Vector(Order("X")))
+    val json1 = basket1.asJson
     val unsafeOOR =
-      codecPrism[Basket].items.at(5).name.modifyUnsafe(_.toUpperCase)(json) === json
-    val defaultOOR = codecPrism[Basket].items.at(5).name.modify(_.toUpperCase)(json) match
+      codecPrism[Basket].items.at(5).name.modifyUnsafe(_.toUpperCase)(json1) === json1
+    val defaultOOR = codecPrism[Basket].items.at(5).name.modify(_.toUpperCase)(json1) match
       case Ior.Both(chain, out) =>
-        (out === json)
+        (out === json1)
           .and(chain.length === 1L)
           .and(chain.headOption.get === JsonFailure.IndexOutOfRange(PathStep.Index(5), 1))
       case _ => org.specs2.execute.Failure("expected Ior.Both"): org.specs2.execute.Result
-
-    val basket2 = Basket(owner = "Alice", items = Vector(Order("X"), Order("Y")))
     val negIndex =
-      codecPrism[Basket].items.at(-1).name.modifyUnsafe(_.toUpperCase)(basket2.asJson) ===
-        basket2.asJson
+      codecPrism[Basket].items.at(-1).name.modifyUnsafe(_.toUpperCase)(basket.asJson) ===
+        basket.asJson
 
-    unsafeOOR.and(defaultOOR).and(negIndex)
+    r1.and(r2).and(r3).and(r4).and(unsafeOOR).and(defaultOOR).and(negIndex)
   }
 
   // ---- Traversal (.each) — *Unsafe surface --------------------------
@@ -304,12 +284,17 @@ class JsonPrismSpec extends Specification with ScalaCheck:
 
   // ---- Multi-field focus (.fields) ---------------------------------
 
-  // covers: modify round-trips two focused fields atomically (Unsafe), modify
-  // (default) round-trips on happy path as Ior.Right, leaves non-focused fields
-  // byte-identical, get (default) returns the NamedTuple on happy path,
-  // getOptionUnsafe returns Some(NamedTuple) on happy path, place (default)
-  // overwrites all selected fields atomically
-  ".fields(_.name, _.age) happy path: round-trip modify + atomic place + non-focused preserved" >> forAll {
+  // covers: .fields(_.name, _.age) modify round-trips two focused fields atomically (Unsafe),
+  //   default modify returns Ior.Right on happy path,
+  //   non-focused fields (address) preserved byte-identical,
+  //   get returns NamedTuple in selector order, getOptionUnsafe returns Some(NT),
+  //   place (default) overwrites all selected fields atomically;
+  //   missing-one-field get returns Ior.Left(chain-of-one PathMissing),
+  //   missing-both-fields get returns Ior.Left(chain-of-two PathMissings),
+  //   missing-one-field modify returns Ior.Both(chain, inputJson) — atomicity preserved;
+  //   selector-order != declaration-order — NT slots in selector order;
+  //   full-cover stays a JsonFieldsPrism, never collapses to a JsonIso (D1 invariant)
+  ".fields(_.name, _.age): happy modify+place + missing/both PathMissing + selector-order + full-cover D1" >> forAll {
     (p: Person) =>
       val nameAgeL = codecPrism[Person].fields(_.name, _.age)
       val json = p.asJson
@@ -331,57 +316,46 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       val placeOk = nameAgeL.place(newNt)(json) ==
         Ior.Right(p.copy(name = "Carol", age = 55).asJson)
 
-      unsafeOk && defaultOk && addrPreserved && getOk && unsafeGetOk && placeOk
-  }
+      // ---- Failure paths (constants — not parametric) ----
+      val missingAge = Json.obj("name" -> Json.fromString("Alice"))
+      val missingOneOk = nameAgeL.get(missingAge) match
+        case Ior.Left(chain) =>
+          chain.length == 1L &&
+          chain.headOption.contains(JsonFailure.PathMissing(PathStep.Field("age")))
+        case _ => false
 
-  // covers: get on Json missing one focused field returns Ior.Left with
-  // PathMissing, get on Json missing both focused fields accumulates both failures,
-  // modify on a Json missing one field returns Ior.Both(chain, inputJson) (atomicity)
-  ".fields(_.name, _.age) failure paths: PathMissing accumulates + atomicity preserved" >> {
-    val nameAgeL = codecPrism[Person].fields(_.name, _.age)
+      val missingBoth = Json.obj("address" -> Address("Main St", 12345).asJson)
+      val missingBothOk = nameAgeL.get(missingBoth) match
+        case Ior.Left(chain) =>
+          chain.length == 2L &&
+          chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("name"))) &&
+          chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("age")))
+        case _ => false
 
-    val missingAge = Json.obj("name" -> Json.fromString("Alice"))
-    val r1 = nameAgeL.get(missingAge) match
-      case Ior.Left(chain) =>
-        (chain.length === 1L)
-          .and(chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("age")))
-      case _ => org.specs2.execute.Failure("expected Ior.Left"): org.specs2.execute.Result
+      val atomicityOk = nameAgeL.modify(nt => nt)(missingAge) match
+        case Ior.Both(chain, out) =>
+          out == missingAge &&
+          chain.headOption.contains(JsonFailure.PathMissing(PathStep.Field("age")))
+        case _ => false
 
-    val missingBoth = Json.obj("address" -> Address("Main St", 12345).asJson)
-    val r2 = nameAgeL.get(missingBoth) match
-      case Ior.Left(chain) =>
-        (chain.length === 2L)
-          .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("name"))) === true)
-          .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("age"))) === true)
-      case _ => org.specs2.execute.Failure("expected Ior.Left"): org.specs2.execute.Result
-
-    val r3 = nameAgeL.modify(nt => nt)(missingAge) match
-      case Ior.Both(chain, out) =>
-        (out === missingAge)
-          .and(chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("age")))
-      case _ => org.specs2.execute.Failure("expected Ior.Both"): org.specs2.execute.Result
-
-    r1.and(r2).and(r3)
-  }
-
-  // covers: carries the NamedTuple in selector order, modify round-trips via
-  // selector-order NT
-  ".fields with selector-order != declaration-order — NT in selector order" >> forAll {
-    (p: Person) =>
+      // ---- selector order != declaration order ----
       val ageNameL = codecPrism[Person].fields(_.age, _.name)
-      val getOk = ageNameL.get(p.asJson).toOption.exists(nt => nt.age == p.age && nt.name == p.name)
-      val out = ageNameL.modifyUnsafe(nt => (age = nt.age + 100, name = nt.name))(p.asJson)
-      getOk && (out == p.copy(age = p.age + 100).asJson)
-  }
+      val selOrderGetOk =
+        ageNameL.get(json).toOption.exists(nt => nt.age == p.age && nt.name == p.name)
+      val selOrderModOk =
+        ageNameL.modifyUnsafe(nt => (age = nt.age + 100, name = nt.name))(json) ==
+          p.copy(age = p.age + 100).asJson
 
-  // covers: full-cover does NOT produce a JsonIso (still returns JsonFieldsPrism per D1)
-  "codecPrism[Person].fields full-cover stays a JsonFieldsPrism (D1 invariant)" >> {
-    val fullL = codecPrism[Person].fields(_.name, _.age, _.address)
-    val p = Person("Alice", 30, Address("Main St", 12345))
-    val out = fullL.modifyUnsafe(nt =>
-      (name = nt.name.toUpperCase, age = nt.age, address = nt.address)
-    )(p.asJson)
-    out === p.copy(name = "ALICE").asJson
+      // ---- full-cover D1 invariant ----
+      val fullL = codecPrism[Person].fields(_.name, _.age, _.address)
+      val fullOut = fullL.modifyUnsafe(nt =>
+        (name = nt.name.toUpperCase, age = nt.age, address = nt.address)
+      )(json)
+      val fullCoverOk = fullOut == p.copy(name = p.name.toUpperCase).asJson
+
+      unsafeOk && defaultOk && addrPreserved && getOk && unsafeGetOk && placeOk &&
+      missingOneOk && missingBothOk && atomicityOk &&
+      selOrderGetOk && selOrderModOk && fullCoverOk
   }
 
 object JsonPrismSpec:

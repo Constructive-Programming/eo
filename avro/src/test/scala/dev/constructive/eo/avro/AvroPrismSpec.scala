@@ -54,10 +54,16 @@ class AvroPrismSpec extends Specification with ScalaCheck:
   }
 
   // ---- One-level drill (.field) ------------------------------------
+  //
+  // 2026-04-29 consolidation: 2 .field tests (happy + missing path) → 1 composite.
 
-  // covers: modify focused field in place (default + Unsafe parity), get returns Ior.Right(focus),
-  // getOptionUnsafe returns Some(focus), siblings preserved after the modify
-  "field(_.name) happy path: modify+get default↔Unsafe parity, siblings preserved" >> forAll {
+  // covers: field(_.name) happy modify (default ↔ Unsafe parity), get returns Ior.Right(focus),
+  //   getOptionUnsafe returns Some(focus), siblings preserved (age intact after modify);
+  //   missing-path get returns Ior.Left(chain-of-one PathMissing),
+  //   missing-path modify returns Ior.Both(PathMissing, inputRecord),
+  //   modifyUnsafe on missing-path returns input unchanged,
+  //   getOptionUnsafe on missing-path returns None
+  "field(_.name): happy modify (parity) + sibling preservation + missing-path PathMissing" >> forAll {
     (p: Person) =>
       val nameL = codecPrism[Person].field(_.name)
       val record = personRecord(p)
@@ -75,58 +81,39 @@ class AvroPrismSpec extends Specification with ScalaCheck:
         case Ior.Right(s) => s == p.name
         case _            => false
       val unsafeGetOk = nameL.getOptionUnsafe(record) == Some(p.name)
-      // Sibling preservation: age intact after modify
       val out = unsafe.asInstanceOf[GenericRecord]
       val ageOk = out.get("age").asInstanceOf[Int] == p.age
 
-      parity && correct && getOk && unsafeGetOk && ageOk
-  }
-
-  // covers: get returns Ior.Left with PathMissing on missing path, getOptionUnsafe returns None,
-  // modify on missing-path record returns Ior.Both(PathMissing, inputRecord),
-  // modifyUnsafe on missing-path record returns input unchanged
-  "field(_.name) on missing path: default↔Unsafe parity surfaces PathMissing" >> {
-    // Build a record under a one-field schema (no `name`).
-    val ageOnlySchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
-      fields.add(
-        new org.apache.avro.Schema.Field(
-          "age",
-          org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
-          null,
-          null,
+      // ---- Missing-path branch (constants) ----
+      val ageOnlySchema =
+        val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+        fields.add(
+          new org.apache.avro.Schema.Field(
+            "age",
+            org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
+            null,
+            null,
+          )
         )
-      )
-      org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
-    val partial = buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30))
-    val nameL = codecPrism[Person](personSchema).field(_.name)
+        org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
+      val partial = buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30))
+      val nameLfix = codecPrism[Person](personSchema).field(_.name)
 
-    val getResult = nameL.get(partial)
-    val modifyResult = nameL.modify(_.toUpperCase)(partial)
-    val unsafeModify = nameL.modifyUnsafe(_.toUpperCase)(partial)
-    val unsafeGet = nameL.getOptionUnsafe(partial)
+      val missGetOk = nameLfix.get(partial) match
+        case Ior.Left(chain) =>
+          chain.length == 1L &&
+          chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name")))
+        case _ => false
+      val missModifyOk = nameLfix.modify(_.toUpperCase)(partial) match
+        case Ior.Both(chain, out) =>
+          chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name"))) &&
+          (out eq partial)
+        case _ => false
+      val missUnsafeMod = nameLfix.modifyUnsafe(_.toUpperCase)(partial) eq partial
+      val missUnsafeGet = nameLfix.getOptionUnsafe(partial) == None
 
-    val getOk = getResult match
-      case Ior.Left(chain) =>
-        (chain.length === 1L)
-          .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
-      case _ =>
-        org.specs2.execute.Failure(s"expected Ior.Left, got $getResult"): org.specs2.execute.Result
-
-    val modifyOk = modifyResult match
-      case Ior.Both(chain, out) =>
-        (chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
-          .and((out eq partial) === true)
-      case _ =>
-        org
-          .specs2
-          .execute
-          .Failure(s"expected Ior.Both, got $modifyResult"): org.specs2.execute.Result
-
-    getOk
-      .and(modifyOk)
-      .and((unsafeModify eq partial) === true)
-      .and(unsafeGet === None)
+      parity && correct && getOk && unsafeGetOk && ageOk &&
+      missGetOk && missModifyOk && missUnsafeMod && missUnsafeGet
   }
 
   // ---- Selectable field sugar (.name) ------------------------------
