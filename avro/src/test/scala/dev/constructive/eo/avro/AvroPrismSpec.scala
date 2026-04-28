@@ -112,39 +112,31 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       val missUnsafeMod = nameLfix.modifyUnsafe(_.toUpperCase)(partial) eq partial
       val missUnsafeGet = nameLfix.getOptionUnsafe(partial) == None
 
+      // ---- selectDynamic sugar parity (absorbed standalone test) ----
+      // covers: codecPrism[Person].name behaves identically to .field(_.name),
+      //   getOptionUnsafe through sugar, placeUnsafe / place(default) / transfer surfaces
+      val sugared = codecPrism[Person].name
+      val explicit = codecPrism[Person].field(_.name)
+      val mFn: String => String = _.toUpperCase
+      val sugarParityModify = recordsEqual(
+        sugared.modifyUnsafe(mFn)(record),
+        explicit.modifyUnsafe(mFn)(record),
+      )
+      val sugarGet = sugared.getOptionUnsafe(record) == Some(p.name)
+      val sugarPlaceUnsafe = recordsEqual(
+        sugared.placeUnsafe("Carol")(record),
+        personRecord(p.copy(name = "Carol")),
+      )
+      val sugarPlaceDefault = sugared.place("Carol")(record) match
+        case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "Carol")))
+        case _              => false
+      val sugarTransfer = sugared.transfer((s: String) => s.toUpperCase)(record)("alice") match
+        case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "ALICE")))
+        case _              => false
+
       parity && correct && getOk && unsafeGetOk && ageOk &&
-      missGetOk && missModifyOk && missUnsafeMod && missUnsafeGet
-  }
-
-  // ---- Selectable field sugar (.name) ------------------------------
-
-  // covers: behave identically to .field(_.name), getOptionUnsafe through sugar, place/transfer
-  // surfaces (Unsafe + default), default surface returns Ior.Right
-  "selectDynamic sugar `codecPrism[Person].name` matches .field(_.name)" >> forAll { (p: Person) =>
-    val record = personRecord(p)
-    val explicit = codecPrism[Person].field(_.name)
-    val sugared = codecPrism[Person].name
-    val mFn: String => String = _.toUpperCase
-
-    val parityModify = recordsEqual(
-      sugared.modifyUnsafe(mFn)(record),
-      explicit.modifyUnsafe(mFn)(record),
-    )
-    val sugarGet = sugared.getOptionUnsafe(record) == Some(p.name)
-
-    val sugarPlaceUnsafe = recordsEqual(
-      sugared.placeUnsafe("Carol")(record),
-      personRecord(p.copy(name = "Carol")),
-    )
-    val sugarPlaceDefault = sugared.place("Carol")(record) match
-      case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "Carol")))
-      case _              => false
-
-    val sugarTransfer = sugared.transfer((s: String) => s.toUpperCase)(record)("alice") match
-      case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "ALICE")))
-      case _              => false
-
-    parityModify && sugarGet && sugarPlaceUnsafe && sugarPlaceDefault && sugarTransfer
+      missGetOk && missModifyOk && missUnsafeMod && missUnsafeGet &&
+      sugarParityModify && sugarGet && sugarPlaceUnsafe && sugarPlaceDefault && sugarTransfer
   }
 
   // ---- Binary + JSON dual surface -----------------------------------

@@ -152,30 +152,6 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       unsafeOk && getOk && unsafeMissOk && defaultMissOk
   }
 
-  // ---- Selectable field sugar (.address.street) ---------------------
-
-  // covers: behave identically to .field(_.address).field(_.street), single-level
-  // sugar drill, round-trip getOptionUnsafe through deep sugar, placeUnsafe through
-  // sugar, place (default) returns Ior.Right
-  "selectDynamic sugar `codecPrism[Person].address.street` matches .field chain" >> forAll {
-    (p: Person) =>
-      val json = p.asJson
-      val explicit = codecPrism[Person].field(_.address).field(_.street)
-      val sugared = codecPrism[Person].address.street
-      val mFn: String => String = _.toUpperCase
-
-      val parityModify = sugared.modifyUnsafe(mFn)(json) == explicit.modifyUnsafe(mFn)(json)
-      val singleSugar = codecPrism[Person]
-        .name
-        .modifyUnsafe(_.toUpperCase)(json) == p.copy(name = p.name.toUpperCase).asJson
-      val sugarGet = sugared.getOptionUnsafe(json) == Some(p.address.street)
-      val sugarPlaceUnsafe = sugared.placeUnsafe("Broadway")(json) ==
-        p.copy(address = p.address.copy(street = "Broadway")).asJson
-      val sugarPlaceDefault = sugared.place("Broadway")(json) ==
-        Ior.Right(p.copy(address = p.address.copy(street = "Broadway")).asJson)
-
-      parityModify && singleSugar && sugarGet && sugarPlaceUnsafe && sugarPlaceDefault
-  }
 
   // ---- Array indexing (.at) -----------------------------------------
 
@@ -261,25 +237,43 @@ class JsonPrismSpec extends Specification with ScalaCheck:
 
   // ---- Place / transfer ---------------------------------------------
 
-  // covers: placeUnsafe overwrites the focused field, transferUnsafe lifts a C => A
-  // into a focus-replacer, place (default) returns Ior.Right on the happy path,
-  // transfer (default) returns Ior.Right on the happy path
-  "place / transfer drilled JsonPrism: default↔Unsafe parity" >> forAll { (p: Person) =>
-    val streetL = codecPrism[Person].field(_.address).field(_.street)
-    val json = p.asJson
+  // covers: placeUnsafe overwrites the focused field, place (default) returns Ior.Right,
+  //   transferUnsafe lifts a C => A into a focus-replacer, transfer (default) returns Ior.Right;
+  //   selectDynamic sugar `codecPrism[Person].address.street` behaves identically to
+  //   .field(_.address).field(_.street) (parity on modifyUnsafe / getOptionUnsafe),
+  //   single-level selectDynamic sugar `codecPrism[Person].name` matches .field(_.name),
+  //   sugared placeUnsafe / place (default) on a deep selectDynamic chain
+  "place / transfer drilled JsonPrism + selectDynamic sugar: default↔Unsafe parity + sugar parity" >> forAll {
+    (p: Person) =>
+      val streetL = codecPrism[Person].field(_.address).field(_.street)
+      val json = p.asJson
 
-    val placeUnsafe = streetL.placeUnsafe("Broadway")(json) ==
-      p.copy(address = p.address.copy(street = "Broadway")).asJson
-    val placeDefault = streetL.place("Broadway")(json) ==
-      Ior.Right(p.copy(address = p.address.copy(street = "Broadway")).asJson)
+      val placeUnsafe = streetL.placeUnsafe("Broadway")(json) ==
+        p.copy(address = p.address.copy(street = "Broadway")).asJson
+      val placeDefault = streetL.place("Broadway")(json) ==
+        Ior.Right(p.copy(address = p.address.copy(street = "Broadway")).asJson)
 
-    val upcase: String => String = _.toUpperCase
-    val transferUnsafe = streetL.transferUnsafe(upcase)(json)("main ave") ==
-      p.copy(address = p.address.copy(street = "MAIN AVE")).asJson
-    val transferDefault = streetL.transfer(upcase)(json)("main ave") ==
-      Ior.Right(p.copy(address = p.address.copy(street = "MAIN AVE")).asJson)
+      val upcase: String => String = _.toUpperCase
+      val transferUnsafe = streetL.transferUnsafe(upcase)(json)("main ave") ==
+        p.copy(address = p.address.copy(street = "MAIN AVE")).asJson
+      val transferDefault = streetL.transfer(upcase)(json)("main ave") ==
+        Ior.Right(p.copy(address = p.address.copy(street = "MAIN AVE")).asJson)
 
-    placeUnsafe && placeDefault && transferUnsafe && transferDefault
+      // selectDynamic sugar parity (the deleted standalone test).
+      val sugared = codecPrism[Person].address.street
+      val mFn: String => String = _.toUpperCase
+      val parityModify = sugared.modifyUnsafe(mFn)(json) == streetL.modifyUnsafe(mFn)(json)
+      val singleSugar = codecPrism[Person]
+        .name
+        .modifyUnsafe(_.toUpperCase)(json) == p.copy(name = p.name.toUpperCase).asJson
+      val sugarGet = sugared.getOptionUnsafe(json) == Some(p.address.street)
+      val sugarPlaceUnsafe = sugared.placeUnsafe("Broadway")(json) ==
+        p.copy(address = p.address.copy(street = "Broadway")).asJson
+      val sugarPlaceDefault = sugared.place("Broadway")(json) ==
+        Ior.Right(p.copy(address = p.address.copy(street = "Broadway")).asJson)
+
+      placeUnsafe && placeDefault && transferUnsafe && transferDefault &&
+      parityModify && singleSugar && sugarGet && sugarPlaceUnsafe && sugarPlaceDefault
   }
 
   // ---- Multi-field focus (.fields) ---------------------------------
