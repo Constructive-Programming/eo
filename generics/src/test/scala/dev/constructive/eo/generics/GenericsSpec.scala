@@ -22,40 +22,22 @@ class GenericsSpec extends Specification with ScalaCheck:
   val ageL = lens[Person](_.age)
   val nameL = lens[Person](_.name)
 
-  // covers: derived Lens has the correct getter, set-get law, get-set law,
-  // set-set law, modify matches replace ∘ get
-  "derived single-field Lens (Person.age, Person.name): get + set-get + get-set + set-set + modify" >> {
-    val getOk = forAll { (p: Person) => ageL.get(p) == p.age && nameL.get(p) == p.name }
-    val setGet = forAll { (p: Person, a: Int, s: String) =>
-      ageL.get(ageL.replace(a)(p)) == a && nameL.get(nameL.replace(s)(p)) == s
+  // covers: derived single-field Lens has the correct getter (forAll over Person),
+  //   set-get law, get-set law, set-set law, modify matches replace ∘ get;
+  //   .place overwrites focus, .transfer lifts a C => A, .transfer is curried place ∘ f
+  "derived single-field Lens (Person.age, Person.name): all laws + place/transfer" >> {
+    forAll { (p: Person, a: Int, a1: Int, a2: Int, s: String, d: Double) =>
+      val getOk = ageL.get(p) == p.age && nameL.get(p) == p.name
+      val setGet = ageL.get(ageL.replace(a)(p)) == a && nameL.get(nameL.replace(s)(p)) == s
+      val getSet = ageL.replace(ageL.get(p))(p) == p && nameL.replace(nameL.get(p))(p) == p
+      val setSet = ageL.replace(a2)(ageL.replace(a1)(p)) == ageL.replace(a2)(p)
+      val modify = ageL.modify(_ + 1)(p) == ageL.replace(ageL.get(p) + 1)(p)
+      val placeOk = ageL.place(a)(p) == Person(p.name, a) &&
+        nameL.place("Bob")(p) == Person("Bob", p.age)
+      val transferToInt = ageL.transfer((x: Double) => x.toInt)(p)(d) == Person(p.name, d.toInt)
+      val transferCurried = ageL.transfer((x: Int) => x + 1)(p)(a) == ageL.place(a + 1)(p)
+      getOk && setGet && getSet && setSet && modify && placeOk && transferToInt && transferCurried
     }
-    val getSet = forAll { (p: Person) =>
-      ageL.replace(ageL.get(p))(p) == p && nameL.replace(nameL.get(p))(p) == p
-    }
-    val setSet = forAll { (p: Person, a1: Int, a2: Int) =>
-      ageL.replace(a2)(ageL.replace(a1)(p)) == ageL.replace(a2)(p)
-    }
-    val modify = forAll { (p: Person) =>
-      ageL.modify(_ + 1)(p) == ageL.replace(ageL.get(p) + 1)(p)
-    }
-    getOk && setGet && getSet && setSet && modify
-  }
-
-  // covers: place overwrites focus, transfer lifts a C => A, transfer is curried
-  // form of place ∘ f
-  "derived Lens.place / .transfer: overwrite focus + lift C=>A + curried place∘f" >> {
-    val placeOk = forAll { (p: Person, a: Int) =>
-      ageL.place(a)(p) == Person(p.name, a) && nameL.place("Bob")(p) == Person("Bob", p.age)
-    }
-    val transferToInt = forAll { (p: Person, d: Double) =>
-      val toInt: Double => Int = _.toInt
-      ageL.transfer(toInt)(p)(d) == Person(p.name, d.toInt)
-    }
-    val transferCurried = forAll { (p: Person, c: Int) =>
-      val f: Int => Int = _ + 1
-      ageL.transfer(f)(p)(c) == ageL.place(f(c))(p)
-    }
-    placeOk && transferToInt && transferCurried
   }
 
   // ---------- N-field (>=3) Lens derivation ----------
@@ -65,46 +47,40 @@ class GenericsSpec extends Specification with ScalaCheck:
   val empSalaryL = lens[Employee](_.salary)
   val empDepartmentL = lens[Employee](_.department)
 
-  // covers: get reads the right field across head/middle/tail, set-get law,
-  // get-set law, replace preserves non-focused fields, modify runs on the focus
-  "N-field Lens (Employee 4 fields): get + set-get + get-set + non-focused-preserve + modify" >> {
-    val getOk = forAll { (e: Employee) =>
-      empIdL.get(e) == e.id && empNameL.get(e) == e.name &&
-      empSalaryL.get(e) == e.salary && empDepartmentL.get(e) == e.department
-    }
-    val setGet = forAll { (e: Employee, i: Long, n: String, s: Double, d: String) =>
-      empIdL.get(empIdL.replace(i)(e)) == i &&
-      empNameL.get(empNameL.replace(n)(e)) == n &&
-      empSalaryL.get(empSalaryL.replace(s)(e)) == s &&
-      empDepartmentL.get(empDepartmentL.replace(d)(e)) == d
-    }
-    val getSet = forAll { (e: Employee) =>
-      empIdL.replace(empIdL.get(e))(e) == e &&
-      empNameL.replace(empNameL.get(e))(e) == e &&
-      empSalaryL.replace(empSalaryL.get(e))(e) == e &&
-      empDepartmentL.replace(empDepartmentL.get(e))(e) == e
-    }
-    val nonFocused = forAll { (e: Employee, n: String) =>
+  // covers: derived N-field Lens (4-field Employee) — get reads right field across head/middle/tail,
+  //   set-get law per field, get-set law per field, replace preserves non-focused fields,
+  //   modify applies on the focus (e.g. salary × 1.1);
+  //   complement Tuple2 exposes non-focused fields by name (NamedTuple in declaration order)
+  "N-field Lens (Employee 4 fields): all laws + non-focused-preserve + modify + complement-by-name" >> {
+    forAll { (e: Employee, i: Long, n: String, s: Double, d: String) =>
+      val getOk = empIdL.get(e) == e.id && empNameL.get(e) == e.name &&
+        empSalaryL.get(e) == e.salary && empDepartmentL.get(e) == e.department
+      val setGet = empIdL.get(empIdL.replace(i)(e)) == i &&
+        empNameL.get(empNameL.replace(n)(e)) == n &&
+        empSalaryL.get(empSalaryL.replace(s)(e)) == s &&
+        empDepartmentL.get(empDepartmentL.replace(d)(e)) == d
+      val getSet = empIdL.replace(empIdL.get(e))(e) == e &&
+        empNameL.replace(empNameL.get(e))(e) == e &&
+        empSalaryL.replace(empSalaryL.get(e))(e) == e &&
+        empDepartmentL.replace(empDepartmentL.get(e))(e) == e
       val after = empNameL.replace(n)(e)
-      after.id == e.id && after.name == n && after.salary == e.salary &&
-      after.department == e.department
-    }
-    val modify = forAll { (e: Employee) =>
-      empSalaryL.modify(_ * 1.1)(e) == e.copy(salary = e.salary * 1.1)
-    }
-    getOk && setGet && getSet && nonFocused && modify
-  }
+      val nonFocused = after.id == e.id && after.name == n && after.salary == e.salary &&
+        after.department == e.department
+      val modify = empSalaryL.modify(_ * 1.1)(e) == e.copy(salary = e.salary * 1.1)
 
-  // covers: derived N-field Lens exposes complement fields by name
-  "derived N-field Lens exposes complement fields by name" >> forAll { (e: Employee) =>
-    val (complement, focus) = empNameL.to(e)
-    type Complement = scala.NamedTuple.NamedTuple[
-      ("id", "salary", "department"),
-      (Long, Double, String),
-    ]
-    val named = complement.asInstanceOf[Complement]
-    focus == e.name && named.id == e.id && named.salary == e.salary &&
-    named.department == e.department
+      // Complement-by-name: Lens.to returns the (complement, focus) pair where the
+      // complement is a NamedTuple over non-focused fields in declaration order.
+      val (complement, focus) = empNameL.to(e)
+      type Complement = scala.NamedTuple.NamedTuple[
+        ("id", "salary", "department"),
+        (Long, Double, String),
+      ]
+      val named = complement.asInstanceOf[Complement]
+      val complementOk = focus == e.name && named.id == e.id && named.salary == e.salary &&
+        named.department == e.department
+
+      getOk && setGet && getSet && nonFocused && modify && complementOk
+    }
   }
 
   // ---------- Sum-type Prism derivation ----------
@@ -112,33 +88,36 @@ class GenericsSpec extends Specification with ScalaCheck:
   val circleP: dev.constructive.eo.optics.Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either] =
     prism[Shape, Shape.Circle]
 
-  // covers: round-trips on matching variants, returns Left on non-matching variants,
-  // reverseGet widens variant to parent, reverseGet-then-getOption == Some,
-  // partial-round-trip on any Shape
-  "derived Prism (Shape.Circle): round-trip + non-match Left + widen + partial-round-trip" >> {
-    val roundTrip = forAll { (r: Double) =>
+  // covers: derived Prism (Shape.Circle) — round-trip on matching variants,
+  //   non-matching variants return Left (Square / Triangle hit the miss branch),
+  //   reverseGet widens the variant to parent, reverseGet ∘ to == Right(input),
+  //   partial-round-trip law on any Shape;
+  //   derived Prism on Tree[Int] — pick variant (Leaf / Branch on the right input,
+  //   Left on the miss), reverseGet ∘ to == Right(leaf) on Leaf input
+  "derived Prism (Shape.Circle / Tree[Int]): round-trip + non-match + widen + partial-round-trip" >> {
+    val shapeOk = forAll { (r: Double, s: Shape) =>
       val c = Shape.Circle(r)
-      circleP.to(c) == Right(c)
-    }
-    val nonMatch = {
+      val rt = circleP.to(c) == Right(c)
       val sq: Shape = Shape.Square(2.0)
       val tr: Shape = Shape.Triangle(1.0, 2.0)
-      circleP.to(sq) == Left(sq) && circleP.to(tr) == Left(tr)
+      val nonMatch = circleP.to(sq) == Left(sq) && circleP.to(tr) == Left(tr)
+      val widen = circleP.reverseGet(c) == (c: Shape)
+      val rgGet = circleP.to(circleP.reverseGet(c)) == Right(c)
+      val partial = circleP.to(s) match
+        case Right(cc) => circleP.reverseGet(cc) == s
+        case Left(s2)  => s2 == s
+      rt && nonMatch && widen && rgGet && partial
     }
-    val widen = forAll { (r: Double) =>
-      val c: Shape.Circle = Shape.Circle(r)
-      circleP.reverseGet(c) == (c: Shape)
+    val treeOk = forAll { (n: Int) =>
+      val l: Tree[Int] = Tree.Leaf(n)
+      val b: Tree[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(n))
+      val pickOk = leafP.to(l) == Right(Tree.Leaf(n)) && leafP.to(b) == Left(b) &&
+        branchP.to(b).isRight && branchP.to(l) == Left(l)
+      val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
+      val rt = leafP.to(leafP.reverseGet(leaf)) == Right(leaf)
+      pickOk && rt
     }
-    val rgGet = forAll { (r: Double) =>
-      val c: Shape.Circle = Shape.Circle(r)
-      circleP.to(circleP.reverseGet(c)) == Right(c)
-    }
-    val partial = forAll { (s: Shape) =>
-      circleP.to(s) match
-        case Right(c) => circleP.reverseGet(c) == s
-        case Left(s2) => s2 == s
-    }
-    roundTrip && nonMatch && widen && rgGet && partial
+    shapeOk && treeOk
   }
 
   // ---------- Scala 3 union-type Prism derivation ----------
@@ -224,21 +203,7 @@ class GenericsSpec extends Specification with ScalaCheck:
     leafRead && leafRoundTrip && branchRead && branchReplace && branchSetSet && d2Inv
   }
 
-  // covers: derived Prism on a recursive ADT picks the matching variant,
-  // round-trips on its own variant
-  "derived Prism on Tree[Int]: pick variant + round-trip own variant" >> {
-    val pick = forAll { (n: Int) =>
-      val l: Tree[Int] = Tree.Leaf(n)
-      val b: Tree[Int] = Tree.Branch(Tree.Leaf(n), Tree.Leaf(n))
-      leafP.to(l) == Right(Tree.Leaf(n)) && leafP.to(b) == Left(b) &&
-      branchP.to(b).isRight && branchP.to(l) == Left(l)
-    }
-    val rt = forAll { (n: Int) =>
-      val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
-      leafP.to(leafP.reverseGet(leaf)) == Right(leaf)
-    }
-    pick && rt
-  }
+  // (Tree[Int] Prism coverage absorbed into the Shape.Circle composite block above.)
 
   // ---------- Multi-field Lens (partial cover) ----------
 
@@ -249,67 +214,57 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   val salaryIdL = lens[Employee](_.salary, _.id)
 
-  // covers: get packs focus in selector order, set-get law (2-of-4 selector ≠
-  // decl-order), get-set law, replace preserves non-focused fields, set-set law,
-  // complement exposes non-focused fields by name
-  "multi-field Lens 2-of-4 (Employee.salary, .id selector-rev): all laws + complement-by-name" >> {
-    val getOrder = forAll { (e: Employee) =>
-      val focus = salaryIdL.get(e).asInstanceOf[EmpSalaryIdFocus]
-      focus.salary == e.salary && focus.id == e.id
-    }
-    val setGet = forAll { (e: Employee, s: Double, i: Long) =>
-      val newFocus = (s, i).asInstanceOf[EmpSalaryIdFocus]
-      val got = salaryIdL.get(salaryIdL.replace(newFocus)(e)).asInstanceOf[EmpSalaryIdFocus]
-      got.salary == s && got.id == i
-    }
-    val getSet = forAll { (e: Employee) => salaryIdL.replace(salaryIdL.get(e))(e) == e }
-    val nonFocused = forAll { (e: Employee, i: Long, s: Double) =>
-      val newFocus = (s, i).asInstanceOf[EmpSalaryIdFocus]
-      val after = salaryIdL.replace(newFocus)(e)
-      after.name == e.name && after.department == e.department
-    }
-    val setSet = forAll { (e: Employee, s1: Double, s2: Double) =>
-      val f1 = (s1, 1L).asInstanceOf[EmpSalaryIdFocus]
-      val f2 = (s2, 2L).asInstanceOf[EmpSalaryIdFocus]
-      salaryIdL.replace(f2)(salaryIdL.replace(f1)(e)) == salaryIdL.replace(f2)(e)
-    }
-    val complement = forAll { (e: Employee) =>
-      val (comp, _) = salaryIdL.to(e)
-      val named = comp.asInstanceOf[EmpSalaryIdComplement]
-      named.name == e.name && named.department == e.department
-    }
-    getOrder && setGet && getSet && nonFocused && setSet && complement
-  }
-
   type EmpNameDeptIdFocus =
     scala.NamedTuple.NamedTuple[("name", "department", "id"), (String, String, Long)]
 
   val nameDeptIdL = lens[Employee](_.name, _.department, _.id)
-
-  // covers: 3-of-4 get reads in selector order, replace preserves non-focused salary
-  "multi-field Lens 3-of-4 (Employee.name, .department, .id): get-order + non-focused-salary preserved" >> {
-    val getOrder = forAll { (e: Employee) =>
-      val focus = nameDeptIdL.get(e).asInstanceOf[EmpNameDeptIdFocus]
-      focus.name == e.name && focus.department == e.department && focus.id == e.id
-    }
-    val nonFocused = forAll { (e: Employee, n: String, d: String, i: Long) =>
-      val newFocus = (n, d, i).asInstanceOf[EmpNameDeptIdFocus]
-      val after = nameDeptIdL.replace(newFocus)(e)
-      after.salary == e.salary && after.name == n && after.department == d && after.id == i
-    }
-    getOrder && nonFocused
-  }
-
-  // ---------- Recursive parameterised ADT, multi-field partial cover ----
 
   val lBranchRightLeftL = lens[LTree.LBranch[Int]](_.right, _.left)
 
   type LBranchFocus =
     scala.NamedTuple.NamedTuple[("right", "left"), (LTree[Int], LTree[Int])]
 
-  // covers: recursive parameterised ADT set-get law, preserves middle
-  "multi-field Lens on recursive LTree.LBranch[Int] (right, left): set-get + middle preserved" >> {
-    val setGet = forAll { (x: Int, y: Int) =>
+  // covers: multi-field Lens 2-of-4 (Employee.salary, .id, selector-rev) — get packs focus
+  //   in selector order, set-get law, get-set law, replace preserves non-focused fields,
+  //   set-set law, complement exposes non-focused fields by name (NamedTuple, decl-order);
+  //   multi-field Lens 3-of-4 (Employee.name, .department, .id) — get reads in selector
+  //   order, replace preserves non-focused salary;
+  //   recursive parameterised ADT (LTree.LBranch[Int] with selectors right + left) —
+  //   set-get law on a recursive focus type, middle field preserved through replace
+  "multi-field Lens 2-of-4 / 3-of-4 / recursive LBranch[Int]: laws + complement + middle preserved" >> {
+    val twoOfFour = forAll { (e: Employee, s: Double, i: Long, s1: Double, s2: Double) =>
+      val getOrder = {
+        val focus = salaryIdL.get(e).asInstanceOf[EmpSalaryIdFocus]
+        focus.salary == e.salary && focus.id == e.id
+      }
+      val newFocus = (s, i).asInstanceOf[EmpSalaryIdFocus]
+      val setGet = {
+        val got = salaryIdL.get(salaryIdL.replace(newFocus)(e)).asInstanceOf[EmpSalaryIdFocus]
+        got.salary == s && got.id == i
+      }
+      val getSet = salaryIdL.replace(salaryIdL.get(e))(e) == e
+      val after = salaryIdL.replace(newFocus)(e)
+      val nonFocused = after.name == e.name && after.department == e.department
+      val f1 = (s1, 1L).asInstanceOf[EmpSalaryIdFocus]
+      val f2 = (s2, 2L).asInstanceOf[EmpSalaryIdFocus]
+      val setSet = salaryIdL.replace(f2)(salaryIdL.replace(f1)(e)) == salaryIdL.replace(f2)(e)
+      val (comp, _) = salaryIdL.to(e)
+      val named = comp.asInstanceOf[EmpSalaryIdComplement]
+      val complement = named.name == e.name && named.department == e.department
+      getOrder && setGet && getSet && nonFocused && setSet && complement
+    }
+
+    val threeOfFour = forAll { (e: Employee, n: String, d: String, i: Long) =>
+      val focus = nameDeptIdL.get(e).asInstanceOf[EmpNameDeptIdFocus]
+      val getOrder = focus.name == e.name && focus.department == e.department && focus.id == e.id
+      val newFocus = (n, d, i).asInstanceOf[EmpNameDeptIdFocus]
+      val after = nameDeptIdL.replace(newFocus)(e)
+      val nonFocused =
+        after.salary == e.salary && after.name == n && after.department == d && after.id == i
+      getOrder && nonFocused
+    }
+
+    val recursive = forAll { (x: Int, y: Int, k: Int) =>
       val branch: LTree.LBranch[Int] =
         LTree.LBranch[Int](LTree.LLeaf(x), x + y, LTree.LLeaf(y))
       val newRight: LTree[Int] = LTree.LLeaf(999)
@@ -318,18 +273,20 @@ class GenericsSpec extends Specification with ScalaCheck:
       val got = lBranchRightLeftL
         .get(lBranchRightLeftL.replace(newFocus)(branch))
         .asInstanceOf[LBranchFocus]
-      got.right == newRight && got.left == newLeft
-    }
-    val middle = forAll { (x: Int, y: Int, k: Int) =>
-      val branch: LTree.LBranch[Int] =
+      val setGet = got.right == newRight && got.left == newLeft
+
+      val middleBranch: LTree.LBranch[Int] =
         LTree.LBranch[Int](LTree.LLeaf(x), k, LTree.LLeaf(y))
-      val newFocus =
+      val middleFocus =
         (LTree.LLeaf[Int](1): LTree[Int], LTree.LLeaf[Int](2): LTree[Int])
           .asInstanceOf[LBranchFocus]
-      val after = lBranchRightLeftL.replace(newFocus)(branch)
-      after.middle == k
+      val middlePreserved =
+        lBranchRightLeftL.replace(middleFocus)(middleBranch).middle == k
+
+      setGet && middlePreserved
     }
-    setGet && middle
+
+    twoOfFour && threeOfFour && recursive
   }
 
   // ---------- Full-cover Iso derivation ----------
@@ -346,58 +303,54 @@ class GenericsSpec extends Specification with ScalaCheck:
 
   val empAllIso = lens[Employee](_.department, _.id, _.salary, _.name)
 
-  // covers: full-cover Iso reverseGet ∘ get = id on 2-of-2 reversed, get ∘
-  // reverseGet = id on 2-of-2 reversed, modify on 2-of-2 reversed, reverseGet
-  // ∘ get = id on 2-of-2 declaration order, reverseGet ∘ get = id on 4-of-4
-  // scrambled, get ∘ reverseGet = id on 4-of-4 scrambled, reverseGet places
-  // fields in declaration order
-  "full-cover Iso (Person 2-of-2 + Employee 4-of-4 scrambled): all Iso laws + decl-order placement" >> {
-    val rgGet2Rev = forAll { (p: Person) =>
-      personAgeNameIso.reverseGet(personAgeNameIso.get(p)) == p
-    }
-    val getRg2Rev = forAll { (a: Int, s: String) =>
-      val focus = (a, s).asInstanceOf[PersonAgeNameFocus]
-      val got = personAgeNameIso
-        .get(personAgeNameIso.reverseGet(focus))
-        .asInstanceOf[PersonAgeNameFocus]
-      got.age == a && got.name == s
-    }
-    val mod2Rev = forAll { (p: Person, a: Int) =>
-      val focus = (a, p.name).asInstanceOf[PersonAgeNameFocus]
-      personAgeNameIso.reverseGet(focus) == Person(p.name, a)
-    }
-    val rgGet2Decl = forAll { (p: Person) =>
-      personNameAgeIso.reverseGet(personNameAgeIso.get(p)) == p
-    }
-    val rgGet4 = forAll { (e: Employee) => empAllIso.reverseGet(empAllIso.get(e)) == e }
-    val getRg4 = forAll { (d: String, i: Long, s: Double, n: String) =>
-      val focus = (d, i, s, n).asInstanceOf[EmpAllFocus]
-      val got = empAllIso.get(empAllIso.reverseGet(focus)).asInstanceOf[EmpAllFocus]
-      got.department == d && got.id == i && got.salary == s && got.name == n
-    }
-    val declOrder = forAll { (d: String, i: Long, s: Double, n: String) =>
-      val focus = (d, i, s, n).asInstanceOf[EmpAllFocus]
-      empAllIso.reverseGet(focus) == Employee(i, n, s, d)
-    }
-    rgGet2Rev && getRg2Rev && mod2Rev && rgGet2Decl && rgGet4 && getRg4 && declOrder
-  }
+  // covers: full-cover Iso (Person 2-of-2 reversed) — reverseGet ∘ get = id, get ∘ reverseGet = id,
+  //   modify on the reversed 2-of-2 NamedTuple,
+  //   full-cover Iso (Person 2-of-2 declaration order) — reverseGet ∘ get = id,
+  //   full-cover Iso (Employee 4-of-4 scrambled) — both Iso laws hold,
+  //   reverseGet places fields in declaration order despite scrambled selector ordering,
+  //   1-field Iso D2 witness — leafValueI.reverseGet ∘ leafValueI.get = id on Tree.Leaf,
+  //   full-cover Iso composes with a downstream Lens via fused andThen (chained.get / chained.replace)
+  "full-cover Iso (Person 2-of-2 + Employee 4-of-4 scrambled) + 1-field D2 + downstream-Lens fusion" >> {
+    forAll { (p: Person, e: Employee, a: Int, s: String, n: Int, d: String, i: Long, sa: Double) =>
+      val rgGet2Rev = personAgeNameIso.reverseGet(personAgeNameIso.get(p)) == p
+      val focus2Rev = (a, s).asInstanceOf[PersonAgeNameFocus]
+      val getRg2Rev = {
+        val got = personAgeNameIso
+          .get(personAgeNameIso.reverseGet(focus2Rev))
+          .asInstanceOf[PersonAgeNameFocus]
+        got.age == a && got.name == s
+      }
+      val mod2Rev = personAgeNameIso.reverseGet(
+        (a, p.name).asInstanceOf[PersonAgeNameFocus]
+      ) == Person(p.name, a)
 
-  // covers: 1-field Iso obeys reverseGet ∘ get = id (D2 witness)
-  "1-field Iso D2 witness — leaf round-trip" >> forAll { (n: Int) =>
-    val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
-    leafValueI.reverseGet(leafValueI.get(leaf)) == leaf
-  }
+      val rgGet2Decl = personNameAgeIso.reverseGet(personNameAgeIso.get(p)) == p
 
-  // covers: full-cover Iso composes with a downstream Lens (fused andThen)
-  "full-cover Iso composes with a downstream Lens (fused andThen)" >> forAll { (e: Employee) =>
-    import dev.constructive.eo.optics.{GetReplaceLens, Lens}
-    val idInFocusL: GetReplaceLens[EmpAllFocus, EmpAllFocus, Long, Long] =
-      Lens(
-        (f: EmpAllFocus) => f.asInstanceOf[(String, Long, Double, String)]._2,
-        (f: EmpAllFocus, i: Long) =>
-          val t = f.asInstanceOf[(String, Long, Double, String)]
-          (t._1, i, t._3, t._4).asInstanceOf[EmpAllFocus],
-      )
-    val chained = empAllIso.andThen(idInFocusL)
-    chained.get(e) == e.id && chained.replace(e.id + 1)(e) == e.copy(id = e.id + 1)
+      val rgGet4 = empAllIso.reverseGet(empAllIso.get(e)) == e
+      val focus4 = (d, i, sa, "x").asInstanceOf[EmpAllFocus]
+      val getRg4 = {
+        val got = empAllIso.get(empAllIso.reverseGet(focus4)).asInstanceOf[EmpAllFocus]
+        got.department == d && got.id == i && got.salary == sa && got.name == "x"
+      }
+      val declOrder = empAllIso.reverseGet(focus4) == Employee(i, "x", sa, d)
+
+      // 1-field Iso D2 witness — leafValueI round-trips on Tree.Leaf.
+      val leaf: Tree.Leaf[Int] = Tree.Leaf(n)
+      val d2 = leafValueI.reverseGet(leafValueI.get(leaf)) == leaf
+
+      // Full-cover Iso composed with a downstream GetReplaceLens (fused andThen).
+      import dev.constructive.eo.optics.{GetReplaceLens, Lens}
+      val idInFocusL: GetReplaceLens[EmpAllFocus, EmpAllFocus, Long, Long] =
+        Lens(
+          (f: EmpAllFocus) => f.asInstanceOf[(String, Long, Double, String)]._2,
+          (f: EmpAllFocus, i: Long) =>
+            val t = f.asInstanceOf[(String, Long, Double, String)]
+            (t._1, i, t._3, t._4).asInstanceOf[EmpAllFocus],
+        )
+      val chained = empAllIso.andThen(idInFocusL)
+      val fusedOk = chained.get(e) == e.id && chained.replace(e.id + 1)(e) == e.copy(id = e.id + 1)
+
+      rgGet2Rev && getRg2Rev && mod2Rev && rgGet2Decl &&
+      rgGet4 && getRg4 && declOrder && d2 && fusedOk
+    }
   }
