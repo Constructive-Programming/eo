@@ -96,7 +96,7 @@ class GenericsSpec extends Specification with ScalaCheck:
   //   Left on the miss), reverseGet ∘ to == Right(leaf) on Leaf input
   "derived Prism (Shape.Circle / Tree[Int]): round-trip + non-match + widen + partial-round-trip" >> {
     val shapeOk = forAll { (r: Double, s: Shape) =>
-      val c = Shape.Circle(r)
+      val c: Shape.Circle = Shape.Circle(r)
       val rt = circleP.to(c) == Right(c)
       val sq: Shape = Shape.Square(2.0)
       val tr: Shape = Shape.Triangle(1.0, 2.0)
