@@ -89,6 +89,7 @@ mermaid.initialize({
     <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
     <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
     <li class="level1 active nav-leaf"><a href="#">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="multifocus.html">MultiFocus</a></li>
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
     <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
@@ -121,13 +122,8 @@ mermaid.initialize({
     <li class="level1 nav-leaf"><a href="#review">Review</a></li>
     <li class="level1 nav-node"><a href="#traversal">Traversal</a></li>
     <li class="level2 nav-leaf"><a href="#composer-iso-as-the-inner-of-traversal-each">Composer: <code>Iso</code> as the inner of <code>Traversal.each</code></a></li>
-    <li class="level1 nav-node"><a href="#multifocus">MultiFocus</a></li>
-    <li class="level2 nav-leaf"><a href="#constructors">Constructors</a></li>
-    <li class="level2 nav-leaf"><a href="#operations">Operations</a></li>
-    <li class="level2 nav-leaf"><a href="#when-to-reach-for-multifocus-vs-grate-vs-traversal">When to reach for MultiFocus vs Grate vs Traversal</a></li>
-    <li class="level2 nav-leaf"><a href="#composition">Composition</a></li>
-    <li class="level2 nav-leaf"><a href="#composition-limits-1">Composition limits</a></li>
-    <li class="level1 nav-leaf"><a href="#composition-limits-2">Composition limits</a></li>
+    <li class="level1 nav-leaf"><a href="#multifocus">MultiFocus</a></li>
+    <li class="level1 nav-leaf"><a href="#composition-limits">Composition limits</a></li>
   </ul>
 
   <p class="footer"></p>
@@ -172,24 +168,23 @@ mermaid.initialize({
   AffineFold --&gt; Fold
   Traversal --&gt; Fold
 
-  %% eo-only families that don&#39;t fit the classical lattice.
-  %% Iso → Grate is the only natural inbound edge to Grate
-  %% (gap analysis §0.3).
-  Iso --&gt; Grate
-
-  %% MultiFocus[F] is a composition sink: inbound bridges from the
-  %% classical families exist (and one outbound to Setter via
-  %% multifocus2setter), but every other outbound is by design U.
+  %% MultiFocus[F] is a composition sink with five sub-shapes
+  %% selected by F: AlgLens (F: Functor / Foldable / Traverse),
+  %% Kaleidoscope (F: Apply aggregates), Grate (F = Function1[X0, *]),
+  %% PowerSeries (F = PSVec, the Traversal.each carrier), and
+  %% FixedTraversal[N] (F = Function1[Int, *] for the .{two,three,four}
+  %% factories). Inbound bridges from every classical family land
+  %% here; the only outbound is to Setter via multifocus2setter.
   %% Dotted edges mark *degraded* conversions where the result loses
   %% information the original carrier carried.
-  Optional -.-&gt; MultiFocus[&quot;MultiFocus[F]&quot;]
+  Iso --&gt; MultiFocus[&quot;MultiFocus[F]&quot;]
+  Optional -.-&gt; MultiFocus
   MultiFocus --&gt; Setter
   MultiFocus -.-&gt; Fold
 
-  %% FixedTraversal[N] sits beside Traversal, not below: same rebuild
-  %% semantics, fixed arity, but no Composer in or out
-  %% (composition-terminal leaf).
-  FixedTraversal[&quot;FixedTraversal[N] — leaf, fixed arity&quot;]
+  %% Traversal.each is the F = PSVec sub-shape of MultiFocus[F]; drawn
+  %% as Traversal in the lattice for legibility.
+  Traversal --&gt; MultiFocus
 
   click Iso &quot;#iso&quot;
   click Lens &quot;#lens&quot;
@@ -200,9 +195,7 @@ mermaid.initialize({
   click Getter &quot;#getter&quot;
   click AffineFold &quot;#affinefold&quot;
   click Fold &quot;#fold&quot;
-  click Grate &quot;#grate&quot;
-  click MultiFocus &quot;#multifocus&quot;
-  click FixedTraversal &quot;#traversal&quot;</pre>
+  click MultiFocus &quot;#multifocus&quot;</pre>
         <p>How to read the diagram in practice:</p>
         <ul>
           <li><strong>Same-family compose</strong>: result stays in that family. <code>Lens ∘ Lens =
@@ -218,10 +211,11 @@ Lens</code>, <code>Prism ∘ Prism = Prism</code>, <code>Iso ∘ Iso = Iso</code
           edges = degraded conversion</strong> that loses information (documented
           in the MultiFocus section).</li>
         </ul>
-        <p>The full 14×14 cell-by-cell composition matrix lives in
+        <p>The full cell-by-cell composition matrix lives in
         <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>docs/research/2026-04-23-composition-gap-analysis.md</code></a>;
         that&#39;s the source of truth — the lattice above is the geometric view
-        of the same data.</p>
+        of the same data. Post-fold the matrix is 12×12 with 17 U cells
+        (down from 145 U cells across the 14×14 pre-fold matrix).</p>
         <p>The standalone <code>Review</code> family sits outside this tree — it
         deliberately doesn&#39;t extend <code>Optic</code> (no read side to fit the
         trait&#39;s <code>to</code> contract) and lives in its own section below.</p>
@@ -253,74 +247,17 @@ Lens</code>, <code>Prism ∘ Prism = Prism</code>, <code>Iso ∘ Iso = Iso</code
         a common carrier.</p>
         
         <h2 id="grate" class="section"><a class="anchor-link left" href="#grate"><i class="icofont-laika link">&#xef71;</i></a>Grate</h2>
-        <p>A <code>Grate[S, A]</code> is the dual of <code>Lens</code>: where a Lens decomposes a
-        product <code>S</code> into a focus <code>A</code> alongside a leftover, a Grate lifts a
-        source-reading function through a <em>distributive</em> / Naperian shape.
-        Classical shape <code>((S =&gt; A) =&gt; B) =&gt; T</code>; carrier: <code>Grate</code> (paired
-        encoding <code>(A, X =&gt; A)</code>).</p>
-        <p>Use this for fixed-shape homogeneous containers — tuple-of-Doubles,
-        finite-index function records — where every slot holds a value of the
-        same type. The canonical operation is &quot;apply <code>A =&gt; B</code> uniformly to
-        every slot&quot;.</p>
-        <p>After the 2026-04-28 carrier consolidation (see
-        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-28-grate-fold-spike.md"><code>grate-fold-spike</code></a>),
-        v1&#39;s <code>Grate</code> was absorbed into the unified <code>MultiFocus[F]</code> carrier as
-        <code>MultiFocus[Function1[X, *]]</code>. The same factories ship under new names
-        — <code>MultiFocus.tuple[T &lt;: Tuple, A]</code> for homogeneous tuples,
-        <code>MultiFocus.representable[F: Representable, A]</code> for arbitrary distributive
-        containers (Function1-of-index, tuple-of-pair <code>(A, A)</code>, user-defined
-        Naperian shapes).</p>
-        <blockquote>Worked-example rewrites for this section are pending the
-        post-consolidation docs sweep.</blockquote>
-        <p><strong>When to reach for the representable MultiFocus vs Traversal.</strong> Use
-        <code>Traversal.each</code> for container+downstream optic composition
-        (<code>lens.andThen(each).andThen(lens)</code>) — the standard map-over-elements
-        shape. Use the representable MultiFocus for fixed-shape homogeneous
-        records where the structure is known at compile time and the operation
-        is a uniform rewrite — tuples, function-shaped finite records, any
-        <code>cats.Representable</code> container.</p>
-        <p><strong>Composition.</strong> <code>Iso.andThen(MultiFocus[Function1[X, *]])</code> works via
-        <code>Composer[Forgetful, MultiFocus[F]]</code> — Iso → representable-MultiFocus is
-        the inbound bridge that survived the consolidation.</p>
-        <p><strong>Lens → Grate does NOT compose automatically.</strong> A Lens&#39;s source <code>S</code>
-        is not in general <code>Representable</code>, so there is no natural way to
-        broadcast a fresh focus through the Lens&#39;s structural leftover. A
-        user-written <code>iso.andThen(lens).andThen(grate)</code> fails with an
-        implicit-resolution miss for <code>Morph[Tuple2, Grate]</code>. The workaround is
-        to construct the Grate separately at the Lens&#39;s focus type and
-        compose through <code>Lens.andThen</code> (staying in <code>Tuple2</code>), then apply the
-        Grate directly.</p>
-        <p><strong>Composability — Grate widens to Setter.</strong> A <code>Composer[Grate, SetterF]</code>
-        ships (<code>grate2setter</code>, <code>Grate.scala</code>), so any Grate can be morphed to
-        the <code>SetterF</code> carrier via <code>grate.morph[SetterF]</code>. The lifted Setter&#39;s
-        <code>.modify(f)</code> is byte-identical to the Grate&#39;s <code>.modify(f)</code> — same
-        broadcast invariant, just exposed through the carrier-erasing Setter
-        API. This makes Grate uniform with <code>eo-monocle</code>-style cross-library
-        interop and any code consuming the <code>Optic[…, SetterF]</code> shape. Like
-        every other <code>Composer[X, SetterF]</code>, this morph does NOT enable
-        <code>grate.andThen(setter)</code> directly — <code>SetterF</code> lacks an
-        <code>AssociativeFunctor</code> instance by design, so the cross-carrier value
-        lives at the morph site, not the chain site.</p>
-        <p><strong>Composition limits — Grate to Iso/Getter and Grate to
-        Traversal/Fold.</strong> Both directions were investigated for v0.1.x; both
-        turn out to be structurally unsound under cats-eo&#39;s resolution rules:</p>
-        <ul>
-          <li><code>Composer[Grate, Forgetful]</code> (Grate → Iso/Getter) would be type-level
-          encodable, but cats-eo already ships the reverse
-          (<code>Composer[Forgetful, Grate]</code>). Adding the forward direction would
-          create a bidirectional Composer pair, which the <a href="https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala"><code>Morph</code></a>
-          resolution explicitly forbids — every <code>iso.andThen(grate)</code> call site
-          would surface as ambiguous-implicit. Use <code>grate.to(s)._1</code> for the
-          read, or <code>Getter(s =&gt; grate.to(s)._1)</code> when interop demands a Getter
-          shape.</li>
-          <li><code>Composer[Grate, Forget[F]]</code> (Grate → Traversal/Fold) would have to
-          produce <code>F[A]</code> from arbitrary <code>S</code>, but the Grate&#39;s existential <code>X</code>
-          is unrelated to <code>F</code> and <code>S</code> is opaque. There is no carrier-shaped
-          bridge; users wanting fold/traverse semantics on a Grate&#39;s slots
-          should construct the <code>Forget[F]</code>-carrier optic directly.</li>
-        </ul>
-        <p>The full structural rationale lives at the bottom of <code>Grate.scala</code> for
-        future maintainers.</p>
+        <p>The v1 <code>Grate</code> carrier (paired encoding <code>(A, X =&gt; A)</code>, classical
+        shape <code>((S =&gt; A) =&gt; B) =&gt; T</code> for distributive / Naperian rebuilds)
+        was absorbed into the unified <code>MultiFocus[F]</code> carrier pre-0.1.0
+        as <code>MultiFocus[Function1[X0, *]]</code>. The Grate-shaped factories ship
+        as <code>MultiFocus.tuple[T &lt;: Tuple, A]</code> (homogeneous-tuple uniform
+        rewrite), <code>MultiFocus.representable[F: Representable, A]</code>
+        (arbitrary Naperian rebuild), and <code>MultiFocus.representableAt</code>
+        (representative-index variant).</p>
+        <p>See the <a href="multifocus.html">MultiFocus reference</a> for the unified
+        treatment and <a href="cookbook.html">Cookbook → Recipe A</a>
+        for a worked example of the absorbed Grate-shape.</p>
         
         <h2 id="prism" class="section"><a class="anchor-link left" href="#prism"><i class="icofont-laika link">&#xef71;</i></a>Prism</h2>
         <p>A <code>Prism[S, A]</code> focuses one branch of a sum type — <code>Some</code> over
@@ -544,17 +481,17 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
           (<code>Functor[PSVec]</code>), <code>.foldMap</code> (<code>Foldable[PSVec]</code>),
           <code>.modifyA</code> / <code>.all</code> (<code>Traverse[PSVec]</code>), and <code>.andThen</code> with
           downstream optics through the shared <code>MultiFocus[PSVec]</code>
-          <code>AssociativeFunctor</code>. Linear scaling; overhead over a naive
-          <code>copy</code>/<code>map</code> runs at 2-3× for dense chains
+          <code>AssociativeFunctor</code> (<code>mfAssocPSVec</code>). Linear scaling; overhead
+          over a naive <code>copy</code>/<code>map</code> runs at 2-3× for dense chains
           (<code>Lens → Traversal → Lens</code>) and ~5× for the Prism miss-branch
           shape, amortising toward the lower end as the traversed-
           collection size grows (the
-          <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">PowerSeries benchmarks</a>
-          sweep sizes 4 / 32 / 256 / 1024). Internal machinery is the
-          <code>PSSingleton</code> protocol — morphed Lens / Prism / Optional
-          inners collect into pre-sized flat arrays without per-element
-          <code>PowerSeries</code> wrappers, and the always-hit refinement for
-          Lens morphs skips the length-tracking array entirely.</li>
+          <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">benchmarks</a>
+          sweep sizes 4 / 32 / 256 / 1024). Internal machinery: the
+          <code>MultiFocusSingleton</code> (AlwaysHit, for morphed Lenses) and
+          <code>MultiFocusPSMaybeHit</code> (MaybeHit, for morphed Prisms / Optionals)
+          fast-paths collect into pre-sized flat arrays without per-element
+          wrapper allocations.</li>
         </ul>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Traversal</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="keyword">given</span><span>  </span><span class="comment">// Functor / Foldable / Traverse for MultiFocus[PSVec]
@@ -589,194 +526,39 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
         
         <h3 id="composer-iso-as-the-inner-of-traversal-each" class="section"><a class="anchor-link left" href="#composer-iso-as-the-inner-of-traversal-each"><i class="icofont-laika link">&#xef71;</i></a>Composer: <code>Iso</code> as the inner of <code>Traversal.each</code></h3>
         <p><code>Traversal.each[T, A].andThen(iso)</code> composes cleanly. The direct
-        <code>Composer[Forgetful, PowerSeries]</code> given ships in <code>dev.constructive.eo.data.PowerSeries</code>
-        and takes priority over any transitive path (<code>Forgetful → Tuple2 →
-PowerSeries</code> or <code>Forgetful → Either → PowerSeries</code>) that would
-        otherwise be ambiguous.</p>
-        <p>Same story for <code>Iso</code> as the inner of an <code>Optional</code> (Affine carrier) or
-        of a <code>MultiFocus[F]</code> — direct <code>Composer[Forgetful, Affine]</code> /
-        <code>Composer[Forgetful, MultiFocus[F]]</code> givens ship beside the carrier.
+        <code>Composer[Forgetful, MultiFocus[F]]</code> given (<code>forgetful2multifocus</code>)
+        ships in <code>dev.constructive.eo.data.MultiFocus</code> and takes priority
+        over any transitive path (<code>Forgetful → Tuple2 → MultiFocus[PSVec]</code>
+        or <code>Forgetful → Either → MultiFocus[PSVec]</code>) that would otherwise
+        be ambiguous.</p>
+        <p>Same story for <code>Iso</code> as the inner of an <code>Optional</code> (Affine carrier)
+        — direct <code>Composer[Forgetful, Affine]</code> ships beside the carrier.
         Earlier revisions of cats-eo required an explicit <code>.morph[Tuple2]</code>
         step for these chains; post-Unit 16 it&#39;s a one-hop <code>.andThen</code> call
         with no ceremony.</p>
         
         <h2 id="multifocus" class="section"><a class="anchor-link left" href="#multifocus"><i class="icofont-laika link">&#xef71;</i></a>MultiFocus</h2>
-        <p>A <code>MultiFocus[F][S, A]</code> focuses many candidate values at once — a
-        focus with <strong>classifier cardinality <code>F</code></strong>, where <code>F[_]</code> controls
-        how the focus collection is shaped. Carrier <code>MultiFocus[F]</code>, value
-        shape <code>(X, F[A])</code>.</p>
-        <p><code>MultiFocus[F]</code> is the <strong>unified</strong> successor of two earlier
-        families: <code>AlgLens[F]</code> (algebraic lens, structural-leftover paired
-        with a classifier vector) and <code>Kaleidoscope</code> (path-dependent-<code>F</code>
-        aggregation optic over Chris Penner&#39;s
-        <a href="https://chrispenner.ca/posts/kaleidoscopes"><em>Kaleidoscopes: lenses that never die</em></a>).
-        Both pre-unification families had the same <code>(X, F[A])</code> value shape
-        and only differed in their encoding choices (parameter-vs-path-type
-        for <code>F</code>, and whether the <code>Functor[F]</code> source was cats or a
-        project-local <code>Reflector</code>). Pre-0.1.0 the two collapsed into a
-        single carrier with <code>F</code> as a plain type parameter; the merged
-        surface keeps every shipped semantic and exposes them through one
-        consistent vocabulary.</p>
-        <p>Use <code>MultiFocus[F]</code> when the update function genuinely needs the
-        whole <code>F[A]</code> visible — adaptive-k KNN, one-vs-rest rule matching,
-        classifier output that varies per input, ZipList-shaped column-zip
-        aggregation, Const-shaped monoidal summation. <strong>Do NOT</strong> reach for
-        <code>MultiFocus.fromLensF</code> as a general replacement for
-        <code>Traversal.each</code>: a head-to-head bench
-        (<a href="https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/MultiFocusBench.scala"><code>MultiFocusBench</code></a>)
-        shows <code>MultiFocus[List]</code> running 1.5–2.6× slower than <code>PowerSeries</code>
-        on the traversal-shape common case. The tradeoff analysis lives in
-        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-22-alglens-vs-powerseries.md"><code>docs/research/2026-04-22-alglens-vs-powerseries.md</code></a>.</p>
+        <p><code>MultiFocus[F][X, A] = (X, F[A])</code> — a structural leftover paired
+        with an <code>F</code>-shaped focus. The unified successor of five v1 carriers
+        (<code>AlgLens[F]</code>, <code>Kaleidoscope</code>, <code>Grate</code>, <code>PowerSeries</code>,
+        <code>FixedTraversal[N]</code>); each is now a sub-shape selected by <code>F</code>.</p>
+        <p>The carrier is <strong>just a pair</strong> — it ships no typeclass machinery of
+        its own and inherits whatever <code>F</code> brings. Surface lights up by
+        typeclass: <code>.modify</code> (<code>Functor[F]</code>), <code>.foldMap</code> (<code>Foldable[F]</code>),
+        <code>.modifyA</code> (<code>Traverse[F]</code>), <code>.collectMap</code> (<code>Functor[F]</code>),
+        <code>.collectList</code> (List-only cartesian), <code>.at(i)</code> (<code>Representable[F]</code>),
+        same-carrier <code>.andThen</code> (per-<code>F</code> <code>AssociativeFunctor</code> instances).</p>
+        <p>See the <a href="multifocus.html">MultiFocus reference</a> for the unification
+        narrative, the typeclass-gated capability matrix, and the
+        composability profile (inbound bridges from every classical family,
+        single outbound to <code>SetterF</code>, structurally-rejected
+        <code>MultiFocus → Forgetful</code> / <code>MultiFocus → Forget[G]</code>). Worked
+        examples ground each absorbed sub-shape in the cookbook:
+        <a href="cookbook.html">Recipe A — Grate-shape</a>,
+        <a href="cookbook.html">Recipe B — Kaleidoscope-shape</a>,
+        <a href="cookbook.html">Recipe C — PowerSeries downstream composition</a>.</p>
         
-        <h3 id="constructors" class="section"><a class="anchor-link left" href="#constructors"><i class="icofont-laika link">&#xef71;</i></a>Constructors</h3>
-        <p>Two construction roads — pick by what you have.</p>
-        <p><strong>Generic factory</strong> for a <code>MultiFocus[F][F[A], A]</code> whose source IS
-        the <code>F[A]</code> itself (<code>X = F[A]</code>, rebuild = identity):</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">ZipList</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="keyword">given</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.{</span><span class="identifier">collectList</span><span>, </span><span class="identifier">collectMap</span><span>}
-
-</span><span class="keyword">val</span><span> </span><span class="identifier">zipMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>]
-</span><span class="keyword">val</span><span> </span><span class="identifier">listMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
-        <p><strong>Cross-carrier factories</strong> lift an existing optic whose focus is
-        already <code>F[A]</code> into a MultiFocus that exposes the inner <code>A</code>:</p>
-        <ul>
-          <li><code>MultiFocus.fromLensF[F, S, A]</code> — a Lens whose focus is <code>F[A]</code>
-          (e.g. <code>Lens[Person, List[Phone]]</code>).</li>
-          <li><code>MultiFocus.fromPrismF[F, S, A]</code> — a Prism whose hit branch
-          carries <code>F[A]</code> (<code>Prism[Json, List[Int]]</code>); needs <code>MonoidK[F]</code> for
-          the miss-branch zero.</li>
-          <li><code>MultiFocus.fromOptionalF[F, S, A]</code> — the Optional analogue.</li>
-        </ul>
-        
-        <h3 id="operations" class="section"><a class="anchor-link left" href="#operations"><i class="icofont-laika link">&#xef71;</i></a>Operations</h3>
-        <p><code>.modify</code> / <code>.replace</code> (any <code>Functor[F]</code>), <code>.foldMap</code> (any
-        <code>Foldable[F]</code>), <code>.modifyA</code> / <code>.all</code> (any <code>Traverse[F]</code>), and same-
-        carrier <code>.andThen</code> (any <code>Traverse[F] + MultiFocusFromList[F]</code>) all
-        work by inheritance — the standard ladder of optic capabilities
-        matches the cats hierarchy on <code>F</code>.</p>
-        <p>The Kaleidoscope-style aggregation universal ships as <strong>two
-        extension methods</strong>, one carrier-wide and one List-specific:</p>
-        <ul>
-          <li><code>o.collectMap[B](agg: F[A] =&gt; B)</code> — Functor-broadcast. Reduces
-          the entire <code>F[A]</code> focus to a single <code>B</code> and broadcasts it back
-          through <code>Functor[F].map(_ =&gt; b)</code>. Length-preserving for <code>ZipList</code>
-          and <code>Const</code>; for <code>List</code> it produces a list of the same length
-          populated entirely with the aggregate.</li>
-          <li><code>o.collectList(agg: List[A] =&gt; B)</code> — <code>MultiFocus[List]</code>-only
-          variant that produces the cartesian / singleton output <code>List(agg(fa))</code>
-          regardless of the input length. Reproduces the v1 <code>Reflector[List]</code>
-          semantics at the call site without needing a typeclass.</li>
-        </ul>
-        <pre><code class="nohighlight"><span class="comment">// Column-wise mean: aggregator sees the whole ZipList, returns the
-// mean, the broadcast fills back across the same length.
-</span><span class="identifier">zipMF</span><span>.</span><span class="identifier">collectMap</span><span>[</span><span class="type-name">Double</span><span>](</span><span class="identifier">zl</span><span> =&gt; </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">sum</span><span> / </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">size</span><span>.</span><span class="identifier">toDouble</span><span>)(
-  </span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>, </span><span class="number-literal">4.0</span><span>))
-)
-</span><span class="comment">// res28: ZipList[Double] = cats.data.ZipList@b588d106
-</span><span>
-</span><span class="comment">// `.modify` still works — element-wise via Functor[ZipList].
-</span><span class="identifier">zipMF</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">10.0</span><span>)(</span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>))).</span><span class="identifier">value</span><span>
-</span><span class="comment">// res29: List[Double] = List(10.0, 20.0, 30.0)
-</span><span>
-</span><span class="comment">// List + collectList: cartesian-singleton (length collapses to 1).
-</span><span class="identifier">listMF</span><span>.</span><span class="identifier">collectList</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
-</span><span class="comment">// res30: List[Int] = List(10)
-</span><span>
-</span><span class="comment">// List + collectMap: length-preserving (broadcast).
-</span><span class="identifier">listMF</span><span>.</span><span class="identifier">collectMap</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
-</span><span class="comment">// res31: List[Int] = List(10, 10, 10, 10)</span></code></pre>
-        <p><strong>Why two <code>collect</code> variants and not one law.</strong> The v1 <code>Reflector[F]</code>
-        typeclass baked a single <code>reflect</code> op that collapsed differently
-        per F (cartesian-singleton on List, length-preserving on ZipList,
-        phantom retag on Const). Under the cats hierarchy, neither
-        <code>Functor.map</code> nor <code>Applicative.pure</code> covers all three behaviours
-        uniformly — picking one as the carrier-level law would have
-        silently changed the v1 List semantics. The chosen split (Functor-
-        broadcast as the law, List-cartesian as the call-site extension) is
-        honest about the choice without cluttering the discipline surface.</p>
-        
-        <h3 id="when-to-reach-for-multifocus-vs-grate-vs-traversal" class="section"><a class="anchor-link left" href="#when-to-reach-for-multifocus-vs-grate-vs-traversal"><i class="icofont-laika link">&#xef71;</i></a>When to reach for MultiFocus vs Grate vs Traversal</h3>
-        <p>Use <code>Traversal.each</code> for container-walking Applicative effects
-        (positions independent, Applicative applied element-by-element).
-        Use <code>Grate</code> for fixed-shape homogeneous records where <code>F</code> is
-        <code>Representable</code> (tuples, function-shaped finite records). Reach
-        for <code>MultiFocus[F]</code> when:</p>
-        <ul>
-          <li>you need the <strong>whole <code>F[A]</code> collection visible</strong> at the update
-          site (classifier candidates, adaptive-k matching), OR</li>
-          <li>the <code>Functor[F]</code> semantics determines the <strong>aggregation
-          structure</strong> itself — ZipList-shaped column zip, List-shaped
-          cartesian via <code>collectList</code>, Const-shaped monoidal summation.</li>
-        </ul>
-        <p>The optic is the same value at every call site; the behaviour
-        tracks the <code>F[_]</code> you plug in.</p>
-        
-        <h3 id="composition" class="section"><a class="anchor-link left" href="#composition"><i class="icofont-laika link">&#xef71;</i></a>Composition</h3>
-        <p><strong>Composition INTO <code>MultiFocus[F]</code></strong> from <code>Lens</code> / <code>Prism</code> /
-        <code>Optional</code> works through the shipped <code>Composer</code> bridges
-        (<code>tuple2multifocus</code>, <code>either2multifocus</code>, <code>affine2multifocus</code>,
-        <code>forget2multifocus</code>, <code>forgetful2multifocus</code>). The lifted optic&#39;s
-        <code>ForgetfulFunctor</code> / <code>ForgetfulFold</code> / <code>ForgetfulTraverse</code> /
-        <code>AssociativeFunctor</code> instances plug straight into <code>.modify</code> /
-        <code>.foldMap</code> / <code>.modifyA</code>.</p>
-        <p><strong><code>Iso.andThen(MultiFocus[F])</code></strong> works via <code>forgetful2multifocus</code>:</p>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Iso</span><span>
-</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
-
-</span><span class="keyword">val</span><span> </span><span class="identifier">singletonIso</span><span> = </span><span class="type-name">Iso</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">List</span><span>[</span><span class="type-name">Int</span><span>]](
-  </span><span class="identifier">i</span><span> =&gt; </span><span class="type-name">List</span><span>(</span><span class="identifier">i</span><span>),
-  </span><span class="identifier">_</span><span>.</span><span class="identifier">head</span><span>,
-)
-
-</span><span class="keyword">val</span><span> </span><span class="identifier">isoThenList</span><span> = </span><span class="identifier">singletonIso</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">listMF</span><span>)</span></code></pre>
-        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Wraps the Int into List(i), runs the MultiFocus&#39;s modify on every
-// element, projects back via List.head.
-</span><span class="identifier">isoThenList</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">3</span><span>)(</span><span class="number-literal">7</span><span>)
-</span><span class="comment">// res32: Int = 21</span></code></pre>
-        <p><strong>Lens → MultiFocus does NOT compose automatically.</strong> A plain Lens&#39;s
-        source <code>S</code> has no natural way to produce an <code>F[A]</code> (the same
-        structural restriction Grate hits with <code>Representable</code>). A user-
-        written <code>iso.andThen(lens).andThen(multifocus)</code> fails resolution.
-        Workaround: build the <code>MultiFocus</code> directly from the Lens&#39;s focus
-        type via <code>MultiFocus.fromLensF</code> and chain through <code>Lens.andThen</code>.</p>
-        <p><strong><code>MultiFocus[F]</code> widens to <code>Setter</code></strong> via <code>multifocus2setter</code> —
-        any MultiFocus optic can be morphed to <code>SetterF</code> via
-        <code>multiFocus.morph[SetterF]</code>. The lifted setter&#39;s <code>.modify(f)</code> is
-        byte-identical to the original MultiFocus&#39;s <code>.modify(f)</code>. Like
-        every other <code>Composer[X, SetterF]</code>, this does NOT enable
-        <code>multiFocus.andThen(setter)</code> directly — SetterF lacks
-        <code>AssociativeFunctor</code> by design.</p>
-        
-        <h3 id="composition-limits-1" class="section"><a class="anchor-link left" href="#composition-limits-1"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h3>
-        <p><strong>MultiFocus is otherwise a composition sink.</strong> Every other
-        <code>Composer[MultiFocus[F], _]</code> is intentionally absent:</p>
-        <ul>
-          <li><code>Composer[MultiFocus[F], Forgetful]</code> (MultiFocus → Iso/Getter) —
-          type-level encodable, but <code>forgetful2multifocus</code> already ships
-          the reverse direction. Adding the forward edge would create a
-          bidirectional Composer pair, which the <a href="https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala"><code>Morph</code></a>
-          resolution explicitly forbids. Use <code>multiFocus.to(s)._2</code> for the
-          read side.</li>
-          <li><code>Composer[MultiFocus[F], Forget[G]]</code> (MultiFocus → Traversal /
-          Fold) — would force the morphed <code>to</code> to produce <code>G[A]</code> from
-          arbitrary <code>S</code>. The carrier-shaped bridge has no place to thread
-          a <code>Foldable[F]</code> instance even when one happens to coincide with
-          the optic&#39;s <code>Functor[F]</code>. Users wanting fold/traverse semantics
-          on a MultiFocus&#39;s slots should construct the <code>Forget[F]</code>-carrier
-          optic directly.</li>
-        </ul>
-        <p><code>Composer[MultiFocus[F], _]</code> (other than to <code>SetterF</code>) is out of
-        scope for 0.1.0 and the roadmap through at least 0.2.x. The
-        outbound-bridge story needs a concrete use case first — the
-        composition-gap analysis
-        (<a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>2026-04-23-composition-gap-analysis.md</code></a>)
-        flags it as a top-5 structural gap, but no user has asked for it.</p>
-        <p>The full structural rationale lives at the bottom of
-        <code>MultiFocus.scala</code> for future maintainers.</p>
-        
-        <h2 id="composition-limits-2" class="section"><a class="anchor-link left" href="#composition-limits-2"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h2>
+        <h2 id="composition-limits" class="section"><a class="anchor-link left" href="#composition-limits"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h2>
         <p>Beyond the MultiFocus-outbound sink documented above, three categories
         of pair are intentionally <strong>not</strong> bridged in 0.1.0. The short answer
         is &quot;the type system rules them out, and the natural workaround is a
@@ -800,10 +582,13 @@ PowerSeries</code> or <code>Forgetful → Either → PowerSeries</code>) that wo
         the leaf of a chain (Lens → Setter via <code>Composer[Tuple2, SetterF]</code>)
         but don&#39;t try to chain off it. There is no <code>AssociativeFunctor[SetterF]</code>
         and no outbound Composer.</p>
-        <p><strong><code>FixedTraversal[N]</code></strong> — fixed-arity (<code>Traversal.two</code> / <code>.three</code> /
-        <code>.four</code>) is a leaf carrier with no outbound or inbound Composer. Use
-        it when you need the exact-N shape; reach for <code>Traversal.each</code> when
-        you want compositional reach.</p>
+        <p><strong>Fixed-arity traversal (<code>Traversal.two</code> / <code>.three</code> / <code>.four</code>)</strong> —
+        post-fold these factories produce <code>MultiFocus[Function1[Int, *]]</code>-carrier
+        optics, so they inherit the absorbed-Grate sub-shape&#39;s composability:
+        <code>Iso ↪ MF[Function1[Int, *]]</code>, <code>MF[Function1[Int, *]] ↪ SetterF</code>, and
+        same-carrier <code>.andThen</code> via <code>mfAssocFunction1</code>. Lens / Prism / Optional
+        do NOT bridge in (Function1 lacks <code>Foldable</code> / <code>Alternative</code> — same
+        constraint as the v1 Grate).</p>
         <p>The full taxonomy with cell-by-cell rationale lives in
         <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>docs/research/2026-04-23-composition-gap-analysis.md</code></a>.</p>
 

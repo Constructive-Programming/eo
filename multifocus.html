@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+  
+  <head>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="generator" content="Typelevel Laika + Helium Theme" />
+  <title>MultiFocus</title>
+  
+  <meta name="author" content="Rodolfo Hansen"/>
+  
+  
+  <meta name="description" content="cats-eo-docs"/>
+  
+  
+  
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Lato:400,700">
+  
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Fira+Mono:500">
+  
+  <link rel="stylesheet" type="text/css" href="helium/site/icofont.min.css" />
+    <link rel="stylesheet" type="text/css" href="helium/site/laika-helium.css" />
+  <script src="helium/site/laika-helium.js"></script>
+  
+  
+  <script> /* for avoiding page load transitions */ </script>
+</head>
+
+  <body>
+
+    <header id="top-bar" class="light-default dark-default">
+
+  <div class="row">
+    <a id="nav-icon">
+      <i class="icofont-laika navigationMenu" title="Navigation">&#xefa2;</i>
+    </a>
+    
+    
+  </div>
+
+  <a class="image-link" href="https://github.com/Constructive-Programming/eo"><img src=""></a>
+
+  <div class="row links">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>  
+
+</header>
+    
+    <nav id="sidebar">
+
+  <div class="row">
+    
+    <a class="icon-link svg-link" href="https://github.com/Constructive-Programming/eo"><span class="github" title="Source Code"><svg class="svg-icon" width="100%" height="100%" viewBox="0 0 100 100" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+  <g class="svg-shape">
+    <path d="M49.995,1c-27.609,-0 -49.995,22.386 -49.995,50.002c-0,22.09 14.325,40.83 34.194,47.444c2.501,0.458 3.413,-1.086 3.413,-2.412c0,-1.185 -0.043,-4.331 -0.067,-8.503c-13.908,3.021 -16.843,-6.704 -16.843,-6.704c-2.274,-5.773 -5.552,-7.311 -5.552,-7.311c-4.54,-3.103 0.344,-3.042 0.344,-3.042c5.018,0.356 7.658,5.154 7.658,5.154c4.46,7.64 11.704,5.433 14.552,4.156c0.454,-3.232 1.744,-5.436 3.174,-6.685c-11.102,-1.262 -22.775,-5.553 -22.775,-24.713c-0,-5.457 1.949,-9.92 5.147,-13.416c-0.516,-1.265 -2.231,-6.348 0.488,-13.233c0,0 4.199,-1.344 13.751,5.126c3.988,-1.108 8.266,-1.663 12.518,-1.682c4.245,0.019 8.523,0.574 12.517,1.682c9.546,-6.47 13.736,-5.126 13.736,-5.126c2.728,6.885 1.013,11.968 0.497,13.233c3.204,3.496 5.141,7.959 5.141,13.416c0,19.209 -11.691,23.436 -22.83,24.673c1.795,1.544 3.394,4.595 3.394,9.26c0,6.682 -0.061,12.076 -0.061,13.715c0,1.338 0.899,2.894 3.438,2.406c19.853,-6.627 34.166,-25.354 34.166,-47.438c-0,-27.616 -22.389,-50.002 -50.005,-50.002"/>
+  </g>
+</svg></span></a>
+    
+  </div>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="index.html">cats-eo</a></li>
+    <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
+    <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
+    <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 active nav-leaf"><a href="#">MultiFocus</a></li>
+    <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
+    <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
+    <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
+    <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
+    <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
+    <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
+    <li class="level1 nav-leaf"><a href="migration-from-monocle.html">Migrating from Monocle</a></li>
+  </ul>
+
+</nav>
+
+    <div id="container">
+
+      
+<nav id="page-nav">
+  <p class="header"><a href="#">MultiFocus</a></p>
+
+  <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#the-unification-narrative">The unification narrative</a></li>
+    <li class="level1 nav-leaf"><a href="#the-general-flexibility-win">The general flexibility win</a></li>
+    <li class="level1 nav-node"><a href="#the-capability-set">The capability set</a></li>
+    <li class="level2 nav-leaf"><a href="#modify-functor-f"><code>.modify</code> — <code>Functor[F]</code></a></li>
+    <li class="level2 nav-leaf"><a href="#foldmap-foldable-f"><code>.foldMap</code> — <code>Foldable[F]</code></a></li>
+    <li class="level2 nav-leaf"><a href="#modifya-traverse-f"><code>.modifyA</code> — <code>Traverse[F]</code></a></li>
+    <li class="level2 nav-leaf"><a href="#collectmap-functor-broadcast-aggregation"><code>.collectMap</code> — Functor-broadcast aggregation</a></li>
+    <li class="level2 nav-leaf"><a href="#collectlist-list-only-cartesian-collapse"><code>.collectList</code> — List-only cartesian collapse</a></li>
+    <li class="level2 nav-leaf"><a href="#at-i-representable-f"><code>.at(i)</code> — <code>Representable[F]</code></a></li>
+    <li class="level2 nav-leaf"><a href="#why-two-collect-variants">Why two <code>collect</code> variants</a></li>
+    <li class="level1 nav-node"><a href="#composability-profile">Composability profile</a></li>
+    <li class="level2 nav-leaf"><a href="#inbound-bridges">Inbound bridges</a></li>
+    <li class="level2 nav-leaf"><a href="#same-carrier-andthen">Same-carrier <code>.andThen</code></a></li>
+    <li class="level2 nav-leaf"><a href="#outbound-only-to-setterf">Outbound — only to <code>SetterF</code></a></li>
+    <li class="level2 nav-leaf"><a href="#composition-limits">Composition limits</a></li>
+    <li class="level1 nav-leaf"><a href="#worked-examples">Worked examples</a></li>
+    <li class="level1 nav-leaf"><a href="#historical-landmarks">Historical landmarks</a></li>
+    <li class="level1 nav-leaf"><a href="#constructors-at-a-glance">Constructors at a glance</a></li>
+    <li class="level1 nav-leaf"><a href="#further-reading">Further reading</a></li>
+  </ul>
+
+  <p class="footer"></p>
+</nav>
+
+
+      <main class="content">
+
+        <h1 id="multifocus" class="title">MultiFocus</h1>
+        <p><code>MultiFocus[F][X, A] = (X, F[A])</code> — a structural leftover paired with
+        an <code>F</code>-shaped focus. One carrier, classifier-shaped through the type
+        parameter <code>F</code>, that absorbed five separate carriers in the lead-up
+        to 0.1.0. This page is the consolidated reference: the unification
+        narrative, the typeclass-gated capability matrix, the composability
+        profile, and the historical landmarks.</p>
+        <p>For the mechanical intro see <a href="optics.html#multifocus">Optics → MultiFocus</a>;
+        for runnable patterns the <a href="cookbook.html">Cookbook</a> ships three
+        end-to-end recipes that exercise the prototypical Grate / Kaleidoscope /
+        PowerSeries-downstream shapes.</p>
+        
+        <h2 id="the-unification-narrative" class="section"><a class="anchor-link left" href="#the-unification-narrative"><i class="icofont-laika link">&#xef71;</i></a>The unification narrative</h2>
+        <p>Five carriers — <code>AlgLens[F]</code>, <code>Kaleidoscope</code>, <code>Grate</code>, <code>PowerSeries</code>,
+        <code>FixedTraversal[N]</code> — each pairing a structural leftover with some
+        flavour of focus container, all collapse pre-0.1.0 into the single
+        <code>MultiFocus[F]</code> carrier. Each former carrier is now a sub-shape
+        selected by the choice of <code>F</code>:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Former carrier</th>
+              <th>Post-fold shape</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>AlgLens[F]</code></td>
+              <td><code>MultiFocus[F]</code> for <code>F: Functor / Foldable / Traverse</code></td>
+              <td>Direct rename. <code>F</code>-as-parameter encoding survived verbatim.</td>
+            </tr>
+            <tr>
+              <td><code>Kaleidoscope</code></td>
+              <td><code>MultiFocus[F]</code> for <code>F: Apply</code> aggregates</td>
+              <td>The path-dependent <code>FCarrier</code> member became a plain type parameter; <code>Reflector[F]</code> was deleted in favour of two extension methods (<code>.collectMap</code>, <code>.collectList</code>) — see <a href="#why-two-collect-variants">Q1 below</a>.</td>
+            </tr>
+            <tr>
+              <td><code>Grate</code></td>
+              <td><code>MultiFocus[Function1[X0, *]]</code></td>
+              <td>The <code>(A, X =&gt; A)</code> pair collapsed into <code>(Unit, F.Representation =&gt; A)</code>; the lead-position field was empirically dead (see <a href="#historical-landmarks">Q1 of the Grate fold</a> — 20% perf win on <code>.modify</code> from dropping it).</td>
+            </tr>
+            <tr>
+              <td><code>PowerSeries</code></td>
+              <td><code>MultiFocus[PSVec]</code></td>
+              <td>The <code>(Snd[A], PSVec[B])</code> shape lost its <code>Snd</code> match-type vestige and gained the same-carrier <code>mfAssocPSVec</code> <code>AssociativeFunctor</code> instance. The parallel-array <code>AssocSndZ</code> representation survived inside the PSVec specialisation; both <code>MultiFocusSingleton</code> (AlwaysHit) and <code>MultiFocusPSMaybeHit</code> (Prism / Optional) fast-paths are preserved.</td>
+            </tr>
+            <tr>
+              <td><code>FixedTraversal[N]</code></td>
+              <td><code>MultiFocus[Function1[Int, *]]</code></td>
+              <td><code>Traversal.{two,three,four}</code> factories now produce the absorbed-Grate sub-shape over an <code>Int =&gt; A</code> lookup; same carrier as <code>MultiFocus.tuple</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>The empirical justification lives in four research spike documents
+        referenced under <a href="#historical-landmarks">Historical landmarks</a>
+        below. Two headline numbers from those spikes:</p>
+        <ul>
+          <li><strong>20% perf gain on Grate&#39;s <code>.modify</code></strong> from the lead-position
+          field deletion — the field was carried unconditionally by
+          every shipped Grate constructor but discarded by every shipped
+          <code>.from</code>. The post-fold <code>MultiFocus[Function1[X0, *]]</code> body
+          carries no equivalent.</li>
+          <li><strong>Composition matrix collapse from 145 U cells to 17 U cells</strong>
+          in the gap analysis. Five separate &quot;all U&quot; rows (and matching
+          columns) became one <code>MultiFocus[F]</code> row + column with shipped
+          inbound bridges from every classical family. Carrier count:
+          pre-spike 14, post-fold 9.</li>
+        </ul>
+        <p>The pre-fold split was accidental complexity. Each carrier had been
+        introduced for a real semantic distinction at construction time, but
+        the runtime shape — pair of leftover and focus container — was
+        identical in every case. Lifting <code>F</code> to a plain type parameter and
+        letting the cats hierarchy supply <code>Functor</code> / <code>Foldable</code> / <code>Traverse</code>
+        on demand collapsed the surface without losing any capability.</p>
+        
+        <h2 id="the-general-flexibility-win" class="section"><a class="anchor-link left" href="#the-general-flexibility-win"><i class="icofont-laika link">&#xef71;</i></a>The general flexibility win</h2>
+        <p><code>MultiFocus[F][X, A] = (X, F[A])</code> is <strong>just a pair</strong>. The carrier
+        ships no typeclass machinery of its own; it inherits whatever <code>F</code>
+        brings.</p>
+        <p>That distinguishes cats-eo&#39;s encoding from monolithic-carrier
+        alternatives — Monocle&#39;s per-family classes (<code>Lens</code>, <code>Prism</code>,
+        <code>Traversal</code>, <code>IndexedTraversal</code>, …) bake the typeclass requirements
+        into the carrier definition itself. Adding a new optic family means
+        introducing a new carrier with a new typeclass set. cats-eo&#39;s
+        existential encoding lets the user add a new <code>F</code> and the existing
+        <code>MultiFocus</code> surface lights up automatically: <code>.modify</code> if <code>F</code> has
+        <code>Functor</code>, <code>.foldMap</code> if <code>F</code> has <code>Foldable</code>, <code>.modifyA</code> if <code>F</code> has
+        <code>Traverse</code>, <code>.at(i)</code> if <code>F</code> has <code>Representable</code>, same-carrier
+        <code>.andThen</code> if <code>F</code> has <code>Traverse + MultiFocusFromList</code>. No new carrier
+        file, no new law surface, no new <code>AssociativeFunctor</code> instance — the
+        generic body in <code>MultiFocus.scala</code> covers it.</p>
+        <p>The five-carrier collapse is the demonstration: each former carrier
+        was just a different <code>F</code> plugged into the same shape. The <code>PSVec</code>
+        case adds a hand-tuned same-carrier specialisation
+        (<code>mfAssocPSVec</code>) for perf, but the <em>capability</em> set is the
+        generic one, lit up by <code>cats.Functor[PSVec]</code> etc. shipped in the
+        companion.</p>
+        
+        <h2 id="the-capability-set" class="section"><a class="anchor-link left" href="#the-capability-set"><i class="icofont-laika link">&#xef71;</i></a>The capability set</h2>
+        <p>Every method below is gated on a typeclass that <code>F</code> either has or
+        doesn&#39;t have. Bring an <code>F</code> to the table and the optic&#39;s surface is
+        exactly the intersection of cats&#39;s hierarchy on <code>F</code> with what the
+        generic body supports.</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">ZipList</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">list</span><span>.</span><span class="keyword">given</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">option</span><span>.</span><span class="keyword">given</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">function</span><span>.</span><span class="keyword">given</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">optics</span><span>.</span><span class="type-name">Optic</span><span>.*
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="keyword">given</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.{</span><span class="identifier">at</span><span>, </span><span class="identifier">collectList</span><span>, </span><span class="identifier">collectMap</span><span>}</span></code></pre>
+        
+        <h3 id="modify-functor-f" class="section"><a class="anchor-link left" href="#modify-functor-f"><i class="icofont-laika link">&#xef71;</i></a><code>.modify</code> — <code>Functor[F]</code></h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">listMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listMF</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
+</span><span class="comment">// res0: List[Int] = List(2, 3, 4)</span></code></pre>
+        <p><code>mfFunctor[F: Functor]</code> provides <code>ForgetfulFunctor[MultiFocus[F]]</code>,
+        which <code>Optic.modify</code> consumes. <code>Functor[List]</code> arrives via
+        <code>cats.instances.list.given</code>; the same body lights up for
+        <code>Vector</code>, <code>Option</code>, <code>ZipList</code>, <code>PSVec</code>, <code>Function1[X, *]</code>, and any
+        user-defined <code>F: Functor</code>.</p>
+        
+        <h3 id="foldmap-foldable-f" class="section"><a class="anchor-link left" href="#foldmap-foldable-f"><i class="icofont-laika link">&#xef71;</i></a><code>.foldMap</code> — <code>Foldable[F]</code></h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listMF</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
+</span><span class="comment">// res1: Int = 10</span></code></pre>
+        <p><code>mfFold[F: Foldable]</code> provides <code>ForgetfulFold[MultiFocus[F]]</code>. The
+        carrier-wide <code>Optic.foldMap</code> extension picks it up — no
+        MultiFocus-specific extension method ships, the read-only escape
+        flows through the carrier-generic body.</p>
+        
+        <h3 id="modifya-traverse-f" class="section"><a class="anchor-link left" href="#modifya-traverse-f"><i class="icofont-laika link">&#xef71;</i></a><code>.modifyA</code> — <code>Traverse[F]</code></h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">def</span><span> </span><span class="declaration-name">safeRecip</span><span>(</span><span class="identifier">d</span><span>: </span><span class="type-name">Double</span><span>): </span><span class="type-name">Option</span><span>[</span><span class="type-name">Double</span><span>] =
+  </span><span class="keyword">if</span><span> </span><span class="identifier">d</span><span> == </span><span class="number-literal">0.0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">None</span><span> </span><span class="keyword">else</span><span> </span><span class="type-name">Some</span><span>(</span><span class="number-literal">1.0</span><span> / </span><span class="identifier">d</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">doubleMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Double</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">doubleMF</span><span>.</span><span class="identifier">modifyA</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">safeRecip</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">4.0</span><span>))
+</span><span class="comment">// res2: Option[List[Double]] = Some(List(1.0, 0.5, 0.25))
+</span><span class="identifier">doubleMF</span><span>.</span><span class="identifier">modifyA</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">safeRecip</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">0.0</span><span>, </span><span class="number-literal">4.0</span><span>))
+</span><span class="comment">// res3: Option[List[Double]] = None</span></code></pre>
+        <p><code>mfTraverse[F: Traverse]</code> provides
+        <code>ForgetfulTraverse[MultiFocus[F], Applicative]</code>. Failures short-circuit
+        on whatever <code>Applicative[G]</code> the user supplies.</p>
+        
+        <h3 id="collectmap-functor-broadcast-aggregation" class="section"><a class="anchor-link left" href="#collectmap-functor-broadcast-aggregation"><i class="icofont-laika link">&#xef71;</i></a><code>.collectMap</code> — Functor-broadcast aggregation</h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">zipMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="comment">// Column-wise mean: aggregator sees the whole ZipList, returns
+// the mean, the broadcast fills back through Functor[ZipList].map.
+</span><span class="identifier">zipMF</span><span>.</span><span class="identifier">collectMap</span><span>[</span><span class="type-name">Double</span><span>](</span><span class="identifier">zl</span><span> =&gt; </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">sum</span><span> / </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">size</span><span>.</span><span class="identifier">toDouble</span><span>)(
+  </span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>, </span><span class="number-literal">4.0</span><span>))
+)
+</span><span class="comment">// res4: ZipList[Double] = cats.data.ZipList@b588d106</span></code></pre>
+        <p><code>.collectMap[B](agg: F[A] =&gt; B)</code> requires only <code>Functor[F]</code>. The
+        aggregator collapses the entire <code>F[A]</code> focus to a single <code>B</code>; the
+        broadcast <code>F.map(_ =&gt; b)</code> puts the aggregate back into every position,
+        preserving the <code>F</code>-shape exactly.</p>
+        
+        <h3 id="collectlist-list-only-cartesian-collapse" class="section"><a class="anchor-link left" href="#collectlist-list-only-cartesian-collapse"><i class="icofont-laika link">&#xef71;</i></a><code>.collectList</code> — List-only cartesian collapse</h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listMF</span><span>.</span><span class="identifier">collectList</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
+</span><span class="comment">// res5: List[Int] = List(10)</span></code></pre>
+        <p><code>MultiFocus[List]</code>-only, produces <code>List(agg(fa))</code> — a one-element
+        output regardless of input length. Reproduces the v1
+        <code>Reflector[List]</code>&#39;s cartesian-singleton choice at the call site
+        without a typeclass.</p>
+        
+        <h3 id="at-i-representable-f" class="section"><a class="anchor-link left" href="#at-i-representable-f"><i class="icofont-laika link">&#xef71;</i></a><code>.at(i)</code> — <code>Representable[F]</code></h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">grateF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">representable</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">payment</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">100</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">0</span><span>
+</span><span class="comment">// payment: Function1[Boolean, Int] = repl.MdocSession$MdocApp$$Lambda$17180/0x00007fd7d6687240@595948e9
+</span><span class="identifier">grateF</span><span>.</span><span class="identifier">at</span><span>(</span><span class="boolean-literal">true</span><span>)(</span><span class="identifier">payment</span><span>)
+</span><span class="comment">// res6: Int = 100
+</span><span class="identifier">grateF</span><span>.</span><span class="identifier">at</span><span>(</span><span class="boolean-literal">false</span><span>)(</span><span class="identifier">payment</span><span>)
+</span><span class="comment">// res7: Int = 0</span></code></pre>
+        <p><code>.at(i: F.Representation)</code> reads the focus at a representative
+        index — typed against the cats <code>Representable[F]</code> instance. For
+        <code>Function1[X, *]</code> this is the natural <code>apply(i)</code> lookup; for
+        custom Naperian containers the user&#39;s <code>Representable</code> witness
+        defines the index space. Surface gated on <code>Representable[F]</code>,
+        which most <code>F</code>s with <code>Functor + Foldable + Distributive</code> already
+        admit.</p>
+        
+        <h3 id="why-two-collect-variants" class="section"><a class="anchor-link left" href="#why-two-collect-variants"><i class="icofont-laika link">&#xef71;</i></a>Why two <code>collect</code> variants</h3>
+        <p>The v1 <code>Reflector[F]</code> typeclass collapsed differently per <code>F</code>:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Instance</th>
+              <th><code>reflect(fa)(f)</code> returns</th>
+              <th>Functor.map fits?</th>
+              <th>Applicative.pure fits?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>forList</code></td>
+              <td><code>List(f(fa))</code> (singleton / cartesian)</td>
+              <td>NO (would broadcast)</td>
+              <td>YES</td>
+            </tr>
+            <tr>
+              <td><code>forZipList</code></td>
+              <td><code>ZipList(List.fill(size)(f(fa)))</code> (length-preserving)</td>
+              <td>YES</td>
+              <td>NO (no top-level pure)</td>
+            </tr>
+            <tr>
+              <td><code>forConst[M]</code></td>
+              <td><code>fa.retag[B]</code> (phantom retag)</td>
+              <td>YES</td>
+              <td>YES</td>
+            </tr>
+            <tr>
+              <td><code>forId</code></td>
+              <td><code>f(fa)</code></td>
+              <td>YES</td>
+              <td>YES</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>No single derivation from <code>Apply[F]</code> covers all four behaviours
+        uniformly — picking one would have silently changed the v1 List
+        semantics. The chosen split (Functor-broadcast as the carrier-wide
+        default, List-cartesian as the call-site extension) is honest about
+        the choice without cluttering the discipline surface.</p>
+        
+        <h2 id="composability-profile" class="section"><a class="anchor-link left" href="#composability-profile"><i class="icofont-laika link">&#xef71;</i></a>Composability profile</h2>
+        <p><code>MultiFocus[F]</code> has shipped inbound bridges from every classical
+        read-write family (conditional on <code>F</code>&#39;s typeclass set) and a single
+        outbound bridge to <code>SetterF</code>. Every other outbound direction is
+        <strong>structurally rejected</strong> rather than absent — see
+        <a href="#composition-limits">Composition limits</a> below.</p>
+        
+        <h3 id="inbound-bridges" class="section"><a class="anchor-link left" href="#inbound-bridges"><i class="icofont-laika link">&#xef71;</i></a>Inbound bridges</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Bridge</th>
+              <th>Composer</th>
+              <th><code>F</code> constraints</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Iso → MF[F]</code></td>
+              <td><code>forgetful2multifocus</code></td>
+              <td><code>Applicative + Foldable</code></td>
+              <td>Broadcasts the Iso&#39;s <code>S =&gt; A</code> to a singleton <code>F[A]</code>.</td>
+            </tr>
+            <tr>
+              <td><code>Iso → MF[Function1[X0, *]]</code></td>
+              <td><code>forgetful2multifocusFunction1</code></td>
+              <td>(none — Function1 carrier)</td>
+              <td>Direct broadcast; lights up <code>Iso → Traversal.{two,three,four}</code> and <code>Iso → MultiFocus.representable / tuple</code>.</td>
+            </tr>
+            <tr>
+              <td><code>Lens → MF[F]</code></td>
+              <td><code>tuple2multifocus</code></td>
+              <td><code>Applicative + Foldable</code></td>
+              <td>Mixes in <code>MultiFocusSingleton</code> so the same-carrier <code>mfAssoc</code> fast-path fires. Alongside <code>tuple2multifocusPSVec</code> for the <code>F = PSVec</code> specialisation.</td>
+            </tr>
+            <tr>
+              <td><code>Prism → MF[F]</code></td>
+              <td><code>either2multifocus</code></td>
+              <td><code>Alternative + Foldable</code></td>
+              <td>Miss branch produces <code>MonoidK[F].empty</code>. PSVec specialisation: <code>either2multifocusPSVec</code>.</td>
+            </tr>
+            <tr>
+              <td><code>Optional → MF[F]</code></td>
+              <td><code>affine2multifocus</code></td>
+              <td><code>Alternative + Foldable</code></td>
+              <td>Same shape as Prism. PSVec specialisation: <code>affine2multifocusPSVec</code>.</td>
+            </tr>
+            <tr>
+              <td><code>Forget[F] → MF[F]</code></td>
+              <td><code>forget2multifocus</code></td>
+              <td>(none)</td>
+              <td>Lifts a Fold into a MultiFocus on the same <code>F</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p>Each inbound bridge produces a <code>MultiFocus[F]</code>-carrier optic that
+        inherits the full capability set above without per-bridge surface
+        work. The PSVec-specialised bridges (<code>tuple2multifocusPSVec</code>, <code>either2multifocusPSVec</code>,
+        <code>affine2multifocusPSVec</code>) sidestep the generic <code>Applicative[F]</code> /
+        <code>Alternative[F]</code> constraint because PSVec admits neither — instead
+        they directly call <code>PSVec.singleton</code> / <code>PSVec.empty</code> and mix in
+        <code>MultiFocusPSMaybeHit</code> for the Prism / Optional fast-paths inside
+        <code>mfAssocPSVec</code>&#39;s body.</p>
+        
+        <h3 id="same-carrier-andthen" class="section"><a class="anchor-link left" href="#same-carrier-andthen"><i class="icofont-laika link">&#xef71;</i></a>Same-carrier <code>.andThen</code></h3>
+        <p>Three <code>AssociativeFunctor[MultiFocus[F], _, _]</code> instances ship,
+        specialised by <code>F</code>:</p>
+        <ul>
+          <li><strong><code>mfAssoc</code></strong> — the generic body for <code>F: Traverse +
+MultiFocusFromList</code>. Covers <code>List</code>, <code>Vector</code>, <code>Option</code>,
+          <code>cats.data.Chain</code>. Singleton fast-path via <code>MultiFocusSingleton</code>
+          (so morphed Lenses skip the per-element <code>F.pure</code> round-trip).</li>
+          <li><strong><code>mfAssocFunction1</code></strong> — the absorbed-Grate sub-shape&#39;s body for
+          <code>F = Function1[X0, *]</code>. <code>Z = (Xo, Xi)</code>; the rebuild is a
+          closure-on-closure, no per-element accumulator. Lights up for
+          <code>MultiFocus.representable</code>, <code>MultiFocus.tuple</code>, and
+          <code>Traversal.{two,three,four}</code>.</li>
+          <li><strong><code>mfAssocPSVec</code></strong> — the absorbed-PowerSeries body for <code>F = PSVec</code>.
+          Parallel-array <code>AssocSndZ</code> leftover (saves the per-element Tuple2
+          the generic body would build). AlwaysHit fast-path via
+          <code>MultiFocusSingleton</code>, MaybeHit fast-path via
+          <code>MultiFocusPSMaybeHit</code> (Prism / Optional inners skip the
+          per-element wrapper allocation).</li>
+        </ul>
+        
+        <h3 id="outbound-only-to-setterf" class="section"><a class="anchor-link left" href="#outbound-only-to-setterf"><i class="icofont-laika link">&#xef71;</i></a>Outbound — only to <code>SetterF</code></h3>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="type-name">Composer</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">SetterF</span><span>
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">setter</span><span> = </span><span class="identifier">summon</span><span>[</span><span class="type-name">Composer</span><span>[</span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">List</span><span>], </span><span class="type-name">SetterF</span><span>]].</span><span class="identifier">to</span><span>(</span><span class="identifier">listMF</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">setter</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> * </span><span class="number-literal">2</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
+</span><span class="comment">// res8: List[Int] = List(2, 4, 6)</span></code></pre>
+        <p><code>multifocus2setter[F: Functor]</code> — closes the U → N gap for both
+        the prior <code>kaleidoscope2setter</code> and the latent never-shipped
+        <code>alg2setter</code>. Like every other <code>Composer[X, SetterF]</code>, this does NOT
+        enable <code>multiFocus.andThen(setter)</code> directly: <code>SetterF</code> lacks
+        <code>AssociativeFunctor</code> by design. The morph value lives at the morph
+        site, not at the chain site.</p>
+        
+        <h3 id="composition-limits" class="section"><a class="anchor-link left" href="#composition-limits"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h3>
+        <p>Two further outbound directions are <strong>structurally rejected</strong> rather
+        than absent. The rationale lives at the bottom of <code>MultiFocus.scala</code>
+        and in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>docs/research/2026-04-23-composition-gap-analysis.md</code> §3.2.6</a>:</p>
+        <ul>
+          <li><strong><code>Composer[MultiFocus[F], Forgetful]</code></strong> (MultiFocus widens to
+          Iso/Getter). Type-level encodable, but <code>forgetful2multifocus</code>
+          already ships in the OPPOSITE direction. Adding the reverse would
+          create a bidirectional Composer pair, which the
+          <a href="https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/Morph.scala"><code>Morph</code></a>
+          resolution explicitly forbids — both <code>Morph.leftToRight</code> and
+          <code>Morph.rightToLeft</code> would match for any <code>Iso × MultiFocus</code> pair,
+          surfacing as ambiguous-implicit and breaking every
+          <code>iso.andThen(multifocus)</code> call site. Workaround:
+          <code>multiFocus.to(s)._2</code> for the read side.</li>
+          <li><strong><code>Composer[MultiFocus[F], Forget[G]]</code></strong> (MultiFocus widens to
+          Traversal/Fold). Generic in <code>S, T, A, B</code>. The target carrier
+          forces the morphed <code>to</code> to produce <code>G[A]</code> from arbitrary <code>S</code>. Even
+          with <code>F = G</code> matching, the Composer has no place to thread the
+          <code>Foldable[G]</code> instance through the Composer surface. Users wanting
+          fold/traverse semantics on a MultiFocus&#39;s slots construct the
+          <code>Forget[F]</code>-carrier optic directly, or stay on MultiFocus and use
+          <code>.foldMap</code> / <code>.modifyA</code>.</li>
+        </ul>
+        <p>Lens / Prism / Optional → <code>MultiFocus[Function1[X0, *]]</code> is also
+        structurally absent: <code>Function1[X0, *]</code> lacks <code>Foldable</code> /
+        <code>Alternative</code>, so the constraint set on <code>tuple2multifocus[F:
+Applicative: Foldable]</code> (and the Prism / Optional variants) doesn&#39;t
+        fire for the Naperian carrier. The Iso bridge
+        <code>forgetful2multifocusFunction1</code> carries no constraint — it&#39;s the
+        only inbound for the absorbed-Grate sub-shape — so chains of the
+        form <code>iso.andThen(MultiFocus.tuple[...])</code> and
+        <code>iso.andThen(Traversal.two(...))</code> work, but <code>lens.andThen(grate)</code>
+        does not.</p>
+        
+        <h2 id="worked-examples" class="section"><a class="anchor-link left" href="#worked-examples"><i class="icofont-laika link">&#xef71;</i></a>Worked examples</h2>
+        <p>Three end-to-end recipes in the <a href="cookbook.html">Cookbook</a> cover the
+        prototypical post-fold shapes:</p>
+        <ul>
+          <li><strong><a href="cookbook.html">Recipe A — Prototypical Grate-shape via <code>MultiFocus.tuple</code></a></strong> —
+          the &quot;broadcast a uniform <code>A =&gt; B</code> over a homogeneous tuple&quot;
+          idiom. Exercises the absorbed-Grate sub-shape
+          <code>MultiFocus[Function1[Int, *]]</code>.</li>
+          <li><strong><a href="cookbook.html">Recipe B — Prototypical Kaleidoscope-shape via <code>.collectMap</code> / <code>.collectList</code></a></strong> —
+          the &quot;applicative-aware aggregation&quot; idiom. Exercises the
+          absorbed-Kaleidoscope reasoning across <code>MultiFocus[ZipList]</code>
+          (length-preserving broadcast) and <code>MultiFocus[List]</code> (cartesian
+          collapse).</li>
+          <li><strong><a href="cookbook.html">Recipe C — PowerSeries downstream composition (<code>Lens → each → Lens</code>)</a></strong> —
+          the post-consolidation crown jewel: the absorbed-PowerSeries
+          sub-shape <code>MultiFocus[PSVec]</code> lets <code>.andThen</code> continue past
+          <code>Traversal.each</code> into a downstream <code>Lens</code>. The deleted
+          <code>Traversal.forEach</code> shape (<code>Forget[T]</code>-based, terminal) couldn&#39;t.</li>
+        </ul>
+        
+        <h2 id="historical-landmarks" class="section"><a class="anchor-link left" href="#historical-landmarks"><i class="icofont-laika link">&#xef71;</i></a>Historical landmarks</h2>
+        <p>This page absorbed the previous &quot;Grate&quot; and &quot;MultiFocus&quot; sections
+        of <code>optics.md</code> in the post-fold doc sweep. The empirical
+        justification for each absorbed carrier lives in a research spike
+        on the worktree branch that landed it:</p>
+        <ul>
+          <li><strong>AlgLens + Kaleidoscope merge</strong> — the foundational fold;
+          <code>Reflector[F]</code> deleted, two <code>.collect</code> flavours (<code>.collectMap</code>
+          Functor-broadcast and <code>.collectList</code> cartesian) replace the v1
+          typeclass.
+          See <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-28-multifocus-unification.md"><code>docs/research/2026-04-28-multifocus-unification.md</code></a>.</li>
+          <li><strong>Grate fold</strong> — the lead-position field&#39;s empirical dead-code
+          deletion; +20% perf on <code>Grate.modify</code>; absorbed factories ship
+          as <code>MultiFocus.representable</code> / <code>MultiFocus.representableAt</code> /
+          <code>MultiFocus.tuple</code>. The spike&#39;s research doc was lost in
+          consolidation; the surviving evidence is the carrier-doc
+          comment in <code>MultiFocus.scala</code> and the absorbed factory code.</li>
+          <li><strong>PowerSeries fold</strong> — <code>Snd[A]</code> match-type vestige eliminated;
+          <code>mfAssocPSVec</code> preserves the parallel-array <code>AssocSndZ</code>
+          representation and both <code>MultiFocusSingleton</code> /
+          <code>MultiFocusPSMaybeHit</code> fast-paths verbatim. JMH within ±5%
+          of baseline at every size up to 1024.
+          See <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-powerseries-fold-spike.md"><code>docs/research/2026-04-29-powerseries-fold-spike.md</code></a>.</li>
+          <li><strong>FixedTraversal <code>[N]</code> fold</strong> — <code>Traversal.{two,three,four}</code> rerouted
+          through <code>MultiFocus[Function1[Int, *]]</code>; the FT-shape gains the
+          inbound <code>Iso ↪</code>, outbound <code>↪ SetterF</code>, and same-carrier
+          <code>.andThen</code> from the unified MF carrier — three new compositions
+          the user can write today that pre-fold were all U.
+          See <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-fixedtraversal-fold-spike.md"><code>docs/research/2026-04-29-fixedtraversal-fold-spike.md</code></a>.</li>
+        </ul>
+        <p>The composition gap analysis tracks the matrix collapse cell by
+        cell:
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md"><code>docs/research/2026-04-23-composition-gap-analysis.md</code></a>.
+        The pre-spike analysis of <code>MultiFocus[List]</code> vs PowerSeries on the
+        traversal-shape common case (1.5–2.6× slower, hence both carriers
+        shipped pre-fold) lives in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-22-alglens-vs-powerseries.md"><code>docs/research/2026-04-22-alglens-vs-powerseries.md</code></a>;
+        post-fold the gap is closed by <code>mfAssocPSVec</code>&#39;s parallel-array
+        specialisation.</p>
+        
+        <h2 id="constructors-at-a-glance" class="section"><a class="anchor-link left" href="#constructors-at-a-glance"><i class="icofont-laika link">&#xef71;</i></a>Constructors at a glance</h2>
+        <pre><code class="nohighlight"><span class="comment">// Generic factory — F[A] source, identity rebuild
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">apply</span><span>[</span><span class="type-name">F</span><span>[</span><span class="identifier">_</span><span>], </span><span class="type-name">A</span><span>]: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">A</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">F</span><span>]]
+
+</span><span class="comment">// Cross-carrier lifts — focus is already F[A], inner gets A
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">fromLensF</span><span>[</span><span class="type-name">F</span><span>, </span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](
+  </span><span class="identifier">lens</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">F</span><span>[</span><span class="type-name">B</span><span>], </span><span class="type-name">Tuple2</span><span>]
+): </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">F</span><span>]]
+
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">fromPrismF</span><span>[</span><span class="type-name">F</span><span>: </span><span class="type-name">MonoidK</span><span>, </span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](
+  </span><span class="identifier">prism</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">F</span><span>[</span><span class="type-name">B</span><span>], </span><span class="type-name">Either</span><span>]
+): </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">F</span><span>]]
+
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">fromOptionalF</span><span>[</span><span class="type-name">F</span><span>: </span><span class="type-name">MonoidK</span><span>, </span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>](
+  </span><span class="identifier">opt</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">F</span><span>[</span><span class="type-name">B</span><span>], </span><span class="type-name">Affine</span><span>]
+): </span><span class="type-name">Optic</span><span>[</span><span class="type-name">S</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">F</span><span>]]
+
+</span><span class="comment">// Absorbed-Grate factories — F = Function1[F.Representation, *]
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">representable</span><span>[</span><span class="type-name">F</span><span>: </span><span class="type-name">Representable</span><span>, </span><span class="type-name">A</span><span>]
+  : </span><span class="type-name">Optic</span><span>[</span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">A</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">Function1</span><span>[</span><span class="type-name">F</span><span>.</span><span class="type-name">Representation</span><span>, *]]]
+
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">representableAt</span><span>[</span><span class="type-name">F</span><span>, </span><span class="type-name">A</span><span>](</span><span class="type-name">F</span><span>: </span><span class="type-name">Representable</span><span>[</span><span class="type-name">F</span><span>])(</span><span class="identifier">repr0</span><span>: </span><span class="type-name">F</span><span>.</span><span class="type-name">Representation</span><span>)
+  : </span><span class="type-name">Optic</span><span>[</span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">F</span><span>[</span><span class="type-name">A</span><span>], </span><span class="type-name">A</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">Function1</span><span>[</span><span class="type-name">F</span><span>.</span><span class="type-name">Representation</span><span>, *]]]
+
+</span><span class="comment">// Absorbed-Grate.tuple — F = Function1[Int, *]
+</span><span class="keyword">def</span><span> </span><span class="declaration-name">tuple</span><span>[</span><span class="type-name">T</span><span> &lt;: </span><span class="type-name">Tuple</span><span>, </span><span class="type-name">A</span><span>](</span><span class="keyword">using</span><span> </span><span class="type-name">ValueOf</span><span>[</span><span class="type-name">Tuple</span><span>.</span><span class="type-name">Size</span><span>[</span><span class="type-name">T</span><span>]], </span><span class="type-name">Tuple</span><span>.</span><span class="type-name">Union</span><span>[</span><span class="type-name">T</span><span>] &lt;:&lt; </span><span class="type-name">A</span><span>)
+  : </span><span class="type-name">Optic</span><span>[</span><span class="type-name">T</span><span>, </span><span class="type-name">T</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">MultiFocus</span><span>[</span><span class="type-name">Function1</span><span>[</span><span class="type-name">Int</span><span>, *]]]</span></code></pre>
+        <p><code>Traversal.each[T, A]</code> and <code>Traversal.{two,three,four}</code> are shipped
+        in <code>dev.constructive.eo.optics.Traversal</code> and produce
+        <code>MultiFocus[PSVec]</code> / <code>MultiFocus[Function1[Int, *]]</code> carriers
+        respectively.</p>
+        
+        <h2 id="further-reading" class="section"><a class="anchor-link left" href="#further-reading"><i class="icofont-laika link">&#xef71;</i></a>Further reading</h2>
+        <ul>
+          <li><a href="optics.html#multifocus">Optics → MultiFocus</a> — the introductory
+          treatment in the family taxonomy.</li>
+          <li><a href="cookbook.html">Cookbook → Theme E (Algebraic / classifier)</a> —
+          the three end-to-end recipes that ground each absorbed
+          sub-shape.</li>
+          <li><a href="concepts.html#composition">Concepts → Composition</a> — the carrier
+          graph and the bridge / lattice diagrams.</li>
+          <li><a href="https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala"><code>MultiFocus.scala</code></a> —
+          the canonical source for the carrier definition, capability
+          traits, and Composer instances; bottom-of-file comment carries
+          the structural-rejection rationale for the directions
+          <code>MultiFocus → Forgetful</code> and <code>MultiFocus → Forget[G]</code>.</li>
+        </ul>
+
+        
+<hr class="footer-rule"/>
+<footer>
+  Site generated by <a href="https://typelevel.org/Laika/">Laika</a> with the Helium theme.
+</footer>
+
+
+      </main>
+
+    </div>
+
+  </body>
+
+</html>

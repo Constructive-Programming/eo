@@ -71,6 +71,7 @@
     <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
     <li class="level1 nav-leaf"><a href="concepts.html">Concepts</a></li>
     <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="multifocus.html">MultiFocus</a></li>
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
     <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
@@ -104,7 +105,9 @@
     <li class="level2 nav-leaf"><a href="#jq-style-path-predicate">jq-style path + predicate</a></li>
     <li class="level2 nav-leaf"><a href="#recursive-rename-over-a-user-defined-tree">Recursive rename over a user-defined Tree</a></li>
     <li class="level1 nav-node"><a href="#theme-e-algebraic-classifier">Theme E — Algebraic / classifier</a></li>
-    <li class="level2 nav-leaf"><a href="#multifocus-partition-z-shift-column-wise-aggregation">MultiFocus — partition + z-shift + column-wise aggregation</a></li>
+    <li class="level2 nav-leaf"><a href="#recipe-a-prototypical-grate-shape-via-multifocus-tuple">Recipe A — Prototypical Grate-shape via <code>MultiFocus.tuple</code></a></li>
+    <li class="level2 nav-leaf"><a href="#recipe-b-prototypical-kaleidoscope-shape-via-collectmap-collectlist">Recipe B — Prototypical Kaleidoscope-shape via <code>.collectMap</code> / <code>.collectList</code></a></li>
+    <li class="level2 nav-leaf"><a href="#recipe-c-powerseries-downstream-composition-lens-each-lens">Recipe C — PowerSeries downstream composition (<code>Lens → each → Lens</code>)</a></li>
     <li class="level1 nav-node"><a href="#theme-f-write-only-read-only-escape">Theme F — Write-only / read-only escape</a></li>
     <li class="level2 nav-leaf"><a href="#review-reverse-only-build-path">Review — reverse-only build path</a></li>
     <li class="level2 nav-leaf"><a href="#getter-derive-a-read-only-view">Getter — derive a read-only view</a></li>
@@ -450,7 +453,7 @@
 //   )
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">everyItemName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
-</span><span class="comment">// everyItemName: JsonTraversal[String] = dev.constructive.eo.circe.JsonTraversal@5436495
+</span><span class="comment">// everyItemName: JsonTraversal[String] = dev.constructive.eo.circe.JsonTraversal@1f983ba1
 </span><span>
 </span><span class="identifier">everyItemName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basket</span><span>.</span><span class="identifier">asJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res15: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;APPLE\&quot;,\&quot;price\&quot;:1.0},{\&quot;name\&quot;:\&quot;PEAR\&quot;,\&quot;price\&quot;:2.0}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
@@ -591,92 +594,180 @@
         <a href="https://stanch.github.io/reftree/docs/talks/Visualize/">https://stanch.github.io/reftree/docs/talks/Visualize/</a>.</p>
         
         <h2 id="theme-e-algebraic-classifier" class="section"><a class="anchor-link left" href="#theme-e-algebraic-classifier"><i class="icofont-laika link">&#xef71;</i></a>Theme E — Algebraic / classifier</h2>
+        <p><code>MultiFocus[F]</code> is the unified successor of five v1 carriers
+        (<code>AlgLens[F]</code>, <code>Kaleidoscope</code>, <code>Grate</code>, <code>PowerSeries</code>,
+        <code>FixedTraversal[N]</code>). Every former carrier becomes a sub-shape
+        selected by <code>F</code>. The three recipes below cover the prototypical
+        shapes — see the <a href="multifocus.html">MultiFocus reference</a> for the full
+        unification narrative.</p>
         
-        <h3 id="multifocus-partition-z-shift-column-wise-aggregation" class="section"><a class="anchor-link left" href="#multifocus-partition-z-shift-column-wise-aggregation"><i class="icofont-laika link">&#xef71;</i></a>MultiFocus — partition + z-shift + column-wise aggregation</h3>
-        <p>Three patterns that need the whole <code>F[A]</code> visible, not just a
-        single <code>A</code>. <code>MultiFocus[F]</code> is the unified successor of the v1
-        <code>AlgLens[F]</code> (algebraic-lens) and <code>Kaleidoscope</code> families — the
-        two collapsed pre-0.1.0 because their value shape <code>(X, F[A])</code> was
-        identical and <code>F</code>-as-parameter is the cleaner encoding.</p>
-        <p><strong>(a) z-shift — algebraic-lens flavour.</strong> Subtract each row&#39;s
-        score by the dataset-wide mean; the closure inspects the full
-        list to decide what to do with each element:</p>
-        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>
+        <h3 id="recipe-a-prototypical-grate-shape-via-multifocus-tuple" class="section"><a class="anchor-link left" href="#recipe-a-prototypical-grate-shape-via-multifocus-tuple"><i class="icofont-laika link">&#xef71;</i></a>Recipe A — Prototypical Grate-shape via <code>MultiFocus.tuple</code></h3>
+        <p>The &quot;broadcast a uniform <code>A =&gt; B</code> over a homogeneous tuple&quot;
+        idiom — the absorbed-Grate sub-shape <code>MultiFocus[Function1[Int, *]]</code>.
+        Same optic value carries <code>.modify</code> (uniform pointwise rewrite)
+        and <code>.modifyA[G]</code> (effectful pointwise rewrite that short-circuits
+        on <code>G</code>&#39;s applicative).</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">instances</span><span>.</span><span class="identifier">function</span><span>.</span><span class="keyword">given</span><span>  </span><span class="comment">// Functor[Function1[Int, *]] for .modify
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.</span><span class="keyword">given</span><span>
 </span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">MultiFocus</span><span>.{</span><span class="identifier">collectList</span><span>, </span><span class="identifier">collectMap</span><span>}
 
-</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Row</span><span>(</span><span class="identifier">id</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">score</span><span>: </span><span class="type-name">Double</span><span>)
-
-</span><span class="comment">// Lens whose focus is already the list — we&#39;re updating the whole
-// List[Row] through the dataset-wide mean.
-</span><span class="keyword">val</span><span> </span><span class="identifier">rowsL</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>], </span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>]](</span><span class="identifier">identity</span><span>, (</span><span class="identifier">_</span><span>, </span><span class="identifier">rs</span><span>) =&gt; </span><span class="identifier">rs</span><span>)
-
-</span><span class="comment">// Lift the Lens into MultiFocus[List] so the inner focus is a single
-// Row but the modify function sees the whole list.
-</span><span class="keyword">val</span><span> </span><span class="identifier">rowsMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">fromLensF</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>], </span><span class="type-name">List</span><span>[</span><span class="type-name">Row</span><span>], </span><span class="type-name">Row</span><span>, </span><span class="type-name">Row</span><span>](</span><span class="identifier">rowsL</span><span>)</span></code></pre>
-        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">rows</span><span> = </span><span class="type-name">List</span><span>(</span><span class="type-name">Row</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">10.0</span><span>), </span><span class="type-name">Row</span><span>(</span><span class="number-literal">2</span><span>, </span><span class="number-literal">20.0</span><span>), </span><span class="type-name">Row</span><span>(</span><span class="number-literal">3</span><span>, </span><span class="number-literal">30.0</span><span>))
-</span><span class="comment">// rows: List[Row] = List(
-//   Row(id = 1, score = 10.0),
-//   Row(id = 2, score = 20.0),
-//   Row(id = 3, score = 30.0)
-// )
+</span><span class="comment">// Three colour channels — each a Double in [0.0, 1.0].
+</span><span class="keyword">val</span><span> </span><span class="identifier">rgbMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">tuple</span><span>[(</span><span class="type-name">Double</span><span>, </span><span class="type-name">Double</span><span>, </span><span class="type-name">Double</span><span>), </span><span class="type-name">Double</span><span>]</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">violet</span><span> = (</span><span class="number-literal">0.5</span><span>, </span><span class="number-literal">0.0</span><span>, </span><span class="number-literal">0.5</span><span>)
+</span><span class="comment">// violet: Tuple3[Double, Double, Double] = (0.5, 0.0, 0.5)
 </span><span>
-</span><span class="comment">// z-shift: each row&#39;s score minus the column-wide mean.
-</span><span class="identifier">rowsMF</span><span>.</span><span class="identifier">modify</span><span> { </span><span class="identifier">r</span><span> =&gt;
-  </span><span class="comment">// The closure fires per-element; to read the whole list we reach
-</span><span>  </span><span class="comment">// back through the original data. In a MultiFocus-aware helper
-</span><span>  </span><span class="comment">// method (modifyWithAggregate — future work) the aggregator
-</span><span>  </span><span class="comment">// would be passed in explicitly.
-</span><span>  </span><span class="keyword">val</span><span> </span><span class="identifier">mean</span><span> = </span><span class="identifier">rows</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">score</span><span>).</span><span class="identifier">sum</span><span> / </span><span class="identifier">rows</span><span>.</span><span class="identifier">length</span><span>
-  </span><span class="identifier">r</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">score</span><span> = </span><span class="identifier">r</span><span>.</span><span class="identifier">score</span><span> - </span><span class="identifier">mean</span><span>)
-}(</span><span class="identifier">rows</span><span>)
-</span><span class="comment">// res19: List[Row] = List(
-//   Row(id = 1, score = -10.0),
-//   Row(id = 2, score = 0.0),
-//   Row(id = 3, score = 10.0)
-// )
+</span><span class="comment">// Brighten all three channels uniformly: the same `A =&gt; B` runs at
+// every slot. Same shape as the v1 Grate.modify.
+</span><span class="identifier">rgbMF</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">c</span><span> =&gt; (</span><span class="identifier">c</span><span> * </span><span class="number-literal">1.4</span><span>).</span><span class="identifier">min</span><span>(</span><span class="number-literal">1.0</span><span>))(</span><span class="identifier">violet</span><span>)
+</span><span class="comment">// res19: Tuple3[Double, Double, Double] = (0.7, 0.0, 0.7)
 </span><span>
-</span><span class="comment">// Partition: return only the rows at or above the mean. MultiFocus
-// accepts rebuild with a different cardinality than the source
-// when F is MonoidK-friendly (List is).
-</span><span class="identifier">rowsMF</span><span>.</span><span class="identifier">modifyA</span><span>[</span><span class="type-name">List</span><span>] { </span><span class="identifier">r</span><span> =&gt;
-  </span><span class="keyword">val</span><span> </span><span class="identifier">mean</span><span> = </span><span class="identifier">rows</span><span>.</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">score</span><span>).</span><span class="identifier">sum</span><span> / </span><span class="identifier">rows</span><span>.</span><span class="identifier">length</span><span>
-  </span><span class="keyword">if</span><span> </span><span class="identifier">r</span><span>.</span><span class="identifier">score</span><span> &gt;= </span><span class="identifier">mean</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">List</span><span>(</span><span class="identifier">r</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">Nil</span><span>
-}(</span><span class="identifier">rows</span><span>)
-</span><span class="comment">// res20: List[List[Row]] = List()</span></code></pre>
-        <p><strong>(b) Column-wise aggregation — Kaleidoscope flavour.</strong> The
-        <code>.collectMap</code> and <code>.collectList</code> extensions reduce the entire
-        <code>F[A]</code> focus to a single value and broadcast it back. The
-        behaviour tracks the <code>Functor[F]</code> (length-preserving via
-        <code>collectMap</code>) or stays cartesian (<code>MultiFocus[List].collectList</code>):</p>
+</span><span class="comment">// Replace every slot with the same constant — the broadcast pattern.
+</span><span class="identifier">rgbMF</span><span>.</span><span class="identifier">replace</span><span>(</span><span class="number-literal">0.0</span><span>)(</span><span class="identifier">violet</span><span>)
+</span><span class="comment">// res20: Tuple3[Double, Double, Double] = (0.0, 0.0, 0.0)</span></code></pre>
+        <p>The carrier is <code>MultiFocus[Function1[Int, *]]</code> — <code>Function1[Int, *]</code>
+        is the Naperian shape over a finite index set. <code>.modify</code> runs the
+        same closure at every index; <code>.replace(b)</code> fills every slot with <code>b</code>.
+        The absorbed-Grate sub-shape does NOT admit <code>.modifyA[G]</code> because
+        <code>Function1[Int, *]</code> lacks <code>Traverse</code> in cats — short-circuiting
+        effectful traversal needs a <code>Foldable + Functor</code> shape that the
+        representable encoding doesn&#39;t supply. Reach for
+        <code>MultiFocus.apply[List, Double]</code> (<code>F = List</code>) when the use case
+        needs <code>.modifyA</code>.</p>
+        <p>This is the absorbed-Grate sub-shape from the
+        <a href="multifocus.html#the-unification-narrative">carrier consolidation</a>;
+        <code>MultiFocus.representable[F: Representable, A]</code> covers the same
+        shape over arbitrary distributive <code>F</code>s (tuple-of-pair <code>(A, A)</code>,
+        user-defined Naperian containers, etc.).</p>
+        <p><strong>Source:</strong> Penner — <em>Grate: yet another optic</em>,
+        <a href="https://chrispenner.ca/posts/grate">https://chrispenner.ca/posts/grate</a>.</p>
+        
+        <h3 id="recipe-b-prototypical-kaleidoscope-shape-via-collectmap-collectlist" class="section"><a class="anchor-link left" href="#recipe-b-prototypical-kaleidoscope-shape-via-collectmap-collectlist"><i class="icofont-laika link">&#xef71;</i></a>Recipe B — Prototypical Kaleidoscope-shape via <code>.collectMap</code> / <code>.collectList</code></h3>
+        <p>The &quot;applicative-aware aggregation&quot; idiom — the absorbed-Kaleidoscope
+        sub-shape. The same <code>MultiFocus[F]</code> optic carries two <code>.collect*</code>
+        flavours, and the user picks whichever matches the aggregation shape
+        they want:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">ZipList</span><span>
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">zipMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">ZipList</span><span>, </span><span class="type-name">Double</span><span>]
-</span><span class="keyword">val</span><span> </span><span class="identifier">listMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
-        <pre><code class="nohighlight"><span class="comment">// Column-wise mean: the aggregator sees the whole ZipList, returns
-// the mean, Functor[ZipList].map broadcasts it back across positions.
+</span><span class="keyword">val</span><span> </span><span class="identifier">intListMF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">apply</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
+        <pre><code class="nohighlight"><span class="comment">// (1) MultiFocus[ZipList] + .collectMap — column-wise mean broadcast
+//     back across positions. The aggregator sees the whole ZipList,
+//     returns one Double, Functor[ZipList].map fills it back at every
+//     index. Length-preserving.
 </span><span class="identifier">zipMF</span><span>.</span><span class="identifier">collectMap</span><span>[</span><span class="type-name">Double</span><span>](</span><span class="identifier">zl</span><span> =&gt; </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">sum</span><span> / </span><span class="identifier">zl</span><span>.</span><span class="identifier">value</span><span>.</span><span class="identifier">size</span><span>.</span><span class="identifier">toDouble</span><span>)(
   </span><span class="type-name">ZipList</span><span>(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1.0</span><span>, </span><span class="number-literal">2.0</span><span>, </span><span class="number-literal">3.0</span><span>, </span><span class="number-literal">4.0</span><span>))
 )
 </span><span class="comment">// res21: ZipList[Double] = cats.data.ZipList@b588d106
 </span><span>
-</span><span class="comment">// Cartesian-singleton: collectList wraps the result in a one-element list.
-</span><span class="identifier">listMF</span><span>.</span><span class="identifier">collectList</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
+</span><span class="comment">// (2) MultiFocus[List] + .collectList — cartesian / singleton output:
+//     `List(agg(fa))`, regardless of input length. Reproduces the v1
+//     Reflector[List] semantics at the call site without a typeclass.
+</span><span class="identifier">intListMF</span><span>.</span><span class="identifier">collectList</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
 </span><span class="comment">// res22: List[Int] = List(10)
 </span><span>
-</span><span class="comment">// Length-preserving: collectMap broadcasts the sum back across every position.
-</span><span class="identifier">listMF</span><span>.</span><span class="identifier">collectMap</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
+</span><span class="comment">// Same optic, .collectMap flavour: List collapses into the
+// length-preserving (Functor-broadcast) shape — equivalent to the v1
+// Reflector[ZipList] interpretation if it were applied to a List.
+</span><span class="identifier">intListMF</span><span>.</span><span class="identifier">collectMap</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">sum</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>, </span><span class="number-literal">4</span><span>))
 </span><span class="comment">// res23: List[Int] = List(10, 10, 10, 10)</span></code></pre>
-        <p>The same optic value works for every aggregation shape; the
-        semantics track whichever <code>Functor[F]</code> you plug in. See
-        <a href="optics.html#multifocus">Optics → MultiFocus</a> for the constructor
-        table and the &quot;when to reach for MultiFocus vs. Grate vs.
-        Traversal&quot; decision note.</p>
-        <p><strong>Sources:</strong> Penner — <em>Algebraic lenses</em>,
-        <a href="https://chrispenner.ca/posts/algebraic">https://chrispenner.ca/posts/algebraic</a>; Penner —
-        <em>Kaleidoscopes: lenses that never die</em>,
-        <a href="https://chrispenner.ca/posts/kaleidoscopes">https://chrispenner.ca/posts/kaleidoscopes</a>.</p>
+        <p><strong>When to reach for which <code>.collect*</code> flavour.</strong></p>
+        <ul>
+          <li><code>.collectMap[B](agg: F[A] =&gt; B)</code> requires <code>Functor[F]</code> and is the
+          carrier-wide default. Length-preserving via <code>Functor[F].map</code>.
+          Matches v1 <code>Reflector[ZipList]</code> and <code>Reflector[Const]</code> exactly.</li>
+          <li><code>.collectList(agg: List[A] =&gt; B)</code> is <code>MultiFocus[List]</code>-specific,
+          produces <code>List(agg(fa))</code> — a one-element output regardless of
+          input length. Matches v1 <code>Reflector[List]</code>&#39;s cartesian-singleton
+          choice.</li>
+        </ul>
+        <p>The post-fold story is the user picks per call site — the
+        <a href="multifocus.html#why-two-collect-variants">carrier-consolidation Q1 finding</a>
+        explains why no single derivation from <code>Apply[F]</code> covers both
+        behaviours uniformly; the v1 <code>Reflector[F]</code> typeclass that picked
+        one or the other per <code>F</code> was deleted.</p>
+        <p><strong>Sources:</strong> Penner — <em>Kaleidoscopes: lenses that never die</em>,
+        <a href="https://chrispenner.ca/posts/kaleidoscopes">https://chrispenner.ca/posts/kaleidoscopes</a>; Penner —
+        <em>Algebraic lenses</em>, <a href="https://chrispenner.ca/posts/algebraic">https://chrispenner.ca/posts/algebraic</a>.</p>
+        
+        <h3 id="recipe-c-powerseries-downstream-composition-lens-each-lens" class="section"><a class="anchor-link left" href="#recipe-c-powerseries-downstream-composition-lens-each-lens"><i class="icofont-laika link">&#xef71;</i></a>Recipe C — PowerSeries downstream composition (<code>Lens → each → Lens</code>)</h3>
+        <p>The post-consolidation crown jewel. The absorbed-PowerSeries
+        sub-shape <code>MultiFocus[PSVec]</code> carries an
+        <code>AssociativeFunctor[MultiFocus[PSVec], _, _]</code> instance
+        (<code>mfAssocPSVec</code>), so <code>.andThen</code> continues <em>past</em> <code>Traversal.each</code>
+        into a downstream <code>Lens</code>. Pre-fold the deleted <code>Traversal.forEach</code>
+        shape (<code>Forget[T]</code>-based) was terminal — a chain ending at
+        <code>.forEach(...)</code> could not extend further.</p>
+        <pre><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Order</span><span>(</span><span class="identifier">id</span><span>: </span><span class="type-name">Int</span><span>, </span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">total</span><span>: </span><span class="type-name">Double</span><span>)
+</span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Cart</span><span>(</span><span class="identifier">owner</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>])
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">cartOrdersL</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Cart</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">orders</span><span>, (</span><span class="identifier">c</span><span>, </span><span class="identifier">os</span><span>) =&gt; </span><span class="identifier">c</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">orders</span><span> = </span><span class="identifier">os</span><span>))
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">orderNameL</span><span> =
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Order</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, (</span><span class="identifier">o</span><span>, </span><span class="identifier">n</span><span>) =&gt; </span><span class="identifier">o</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">name</span><span> = </span><span class="identifier">n</span><span>))
+
+</span><span class="comment">// Three hops, two carriers:
+//   Cart →(Tuple2)→ List[Order] →(MultiFocus[PSVec])→ Order →(Tuple2)→ String
+//
+// The cross-carrier hops fire transparently:
+//   - .andThen(Traversal.each[List, Order]) lifts the outer Lens
+//     into MultiFocus[PSVec] via `tuple2multifocusPSVec`.
+//   - .andThen(orderNameL) is the DOWNSTREAM hop — `tuple2multifocusPSVec`
+//     fires again to lift orderNameL into MultiFocus[PSVec], and
+//     mfAssocPSVec composes the two same-carrier optics.
+</span><span class="keyword">val</span><span> </span><span class="identifier">everyOrderName</span><span> =
+  </span><span class="identifier">cartOrdersL</span><span>
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Order</span><span>])
+    .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">orderNameL</span><span>)</span></code></pre>
+        <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">cart</span><span> = </span><span class="type-name">Cart</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">List</span><span>(
+  </span><span class="type-name">Order</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="string-literal">&quot;apple&quot;</span><span>,  </span><span class="number-literal">1.0</span><span>),
+  </span><span class="type-name">Order</span><span>(</span><span class="number-literal">2</span><span>, </span><span class="string-literal">&quot;pear&quot;</span><span>,   </span><span class="number-literal">2.0</span><span>),
+  </span><span class="type-name">Order</span><span>(</span><span class="number-literal">3</span><span>, </span><span class="string-literal">&quot;lobster&quot;</span><span>, </span><span class="number-literal">150.0</span><span>),
+))
+</span><span class="comment">// cart: Cart = Cart(
+//   owner = &quot;Alice&quot;,
+//   orders = List(
+//     Order(id = 1, name = &quot;apple&quot;, total = 1.0),
+//     Order(id = 2, name = &quot;pear&quot;, total = 2.0),
+//     Order(id = 3, name = &quot;lobster&quot;, total = 150.0)
+//   )
+// )
+</span><span>
+</span><span class="comment">// Modify every order&#39;s name through the chain.
+</span><span class="identifier">everyOrderName</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">cart</span><span>)
+</span><span class="comment">// res24: Cart = Cart(
+//   owner = &quot;Alice&quot;,
+//   orders = List(
+//     Order(id = 1, name = &quot;APPLE&quot;, total = 1.0),
+//     Order(id = 2, name = &quot;PEAR&quot;, total = 2.0),
+//     Order(id = 3, name = &quot;LOBSTER&quot;, total = 150.0)
+//   )
+// )
+</span><span>
+</span><span class="comment">// Read-only escape via .foldMap — Foldable[PSVec] is shipped
+// alongside the carrier instances.
+</span><span class="identifier">everyOrderName</span><span>.</span><span class="identifier">foldMap</span><span>((</span><span class="identifier">s</span><span>: </span><span class="type-name">String</span><span>) =&gt; </span><span class="type-name">List</span><span>(</span><span class="identifier">s</span><span>))(</span><span class="identifier">cart</span><span>)
+</span><span class="comment">// res25: List[String] = List(&quot;apple&quot;, &quot;pear&quot;, &quot;lobster&quot;)</span></code></pre>
+        <p>The pre-fold contrast: <code>Traversal.forEach[F, T](xs)</code> was a
+        <code>Forget[T]</code>-carrier optic — the leftover side carried no rebuild
+        information, only the read-side aggregation, so chains like
+        <code>.forEach(...).andThen(orderNameL)</code> were unreachable. The
+        post-fold <code>Traversal.each</code> is <code>MultiFocus[PSVec]</code>-carrier; same
+        read-side capability via <code>.foldMap</code>, plus the rebuild side that
+        makes <code>.andThen</code> continue past it.</p>
+        <p>The <code>mfAssocPSVec</code> body is the absorbed <code>PowerSeries.assoc</code>
+        verbatim — parallel-array <code>AssocSndZ</code> leftover, both <code>MultiFocusSingleton</code>
+        (AlwaysHit, for morphed Lenses) and <code>MultiFocusPSMaybeHit</code>
+        (MaybeHit, for morphed Prisms / Optionals) fast-paths preserved.
+        The benchmark numbers in
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-powerseries-fold-spike.md"><code>docs/research/2026-04-29-powerseries-fold-spike.md</code> §3.4</a>
+        show the post-fold carrier within ±5% of pre-fold PowerSeries at
+        every size up to 1024.</p>
+        <p><strong>Source:</strong> the post-fold composability story; benchmark
+        discussion in
+        <a href="optics.html#traversal">Optics → Traversal</a> and
+        <a href="benchmarks.html#powerseries-traversal-with-downstream-composition">benchmarks → PowerSeries with downstream composition</a>.</p>
         
         <h2 id="theme-f-write-only-read-only-escape" class="section"><a class="anchor-link left" href="#theme-f-write-only-read-only-escape"><i class="icofont-laika link">&#xef71;</i></a>Theme F — Write-only / read-only escape</h2>
         
@@ -691,7 +782,7 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">userIdR</span><span>: </span><span class="type-name">Review</span><span>[</span><span class="type-name">UserId</span><span>, </span><span class="type-name">UUID</span><span>] = </span><span class="type-name">Review</span><span>(</span><span class="type-name">UserId</span><span>(</span><span class="identifier">_</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">userIdR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="type-name">UUID</span><span>.</span><span class="identifier">fromString</span><span>(</span><span class="string-literal">&quot;00000000-0000-0000-0000-000000000001&quot;</span><span>))
-</span><span class="comment">// res24: UserId = UserId(00000000-0000-0000-0000-000000000001)</span></code></pre>
+</span><span class="comment">// res26: UserId = UserId(00000000-0000-0000-0000-000000000001)</span></code></pre>
         <p>Name the &quot;build-only&quot; intent as first-class and team members
         stop reaching for bare smart constructors. Contrast with
         <code>Getter</code> (next recipe) for read-only. <code>Review</code> deliberately
@@ -712,7 +803,7 @@
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">nameInitial</span><span> = </span><span class="type-name">Getter</span><span>[</span><span class="type-name">Shopper</span><span>, </span><span class="type-name">Char</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">head</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">nameInitial</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Shopper</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res25: Char = &#39;A&#39;</span></code></pre>
+</span><span class="comment">// res27: Char = &#39;A&#39;</span></code></pre>
         <p>See the composition note at
         <a href="optics.html#getter">Optics → Getter</a> — <code>Getter.andThen(Getter)</code>
         is handled by composing the underlying <code>S =&gt; A</code> functions
@@ -735,7 +826,7 @@
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">encryptAll</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">pw</span><span> =&gt; </span><span class="string-literal">s&quot;bcrypt(</span><span class="substitution">$pw</span><span class="string-literal">)&quot;</span><span>)(
   </span><span class="type-name">Users</span><span>(</span><span class="type-name">Map</span><span>(</span><span class="string-literal">&quot;alice&quot;</span><span> -&gt; </span><span class="string-literal">&quot;s3cret&quot;</span><span>, </span><span class="string-literal">&quot;bob&quot;</span><span> -&gt; </span><span class="string-literal">&quot;hunter2&quot;</span><span>))
 )
-</span><span class="comment">// res26: Users = Users(
+</span><span class="comment">// res28: Users = Users(
 //   Map(&quot;alice&quot; -&gt; &quot;bcrypt(s3cret)&quot;, &quot;bob&quot; -&gt; &quot;bcrypt(hunter2)&quot;)
 // )</span></code></pre>
         <p><code>Setter</code> is a composition terminal: <code>lens.andThen(setter)</code>
@@ -755,9 +846,9 @@
 </span><span class="keyword">val</span><span> </span><span class="identifier">adultAge</span><span>: </span><span class="type-name">AffineFold</span><span>[</span><span class="type-name">Person</span><span>, </span><span class="type-name">Int</span><span>] =
   </span><span class="type-name">AffineFold</span><span>(</span><span class="identifier">p</span><span> =&gt; </span><span class="type-name">Option</span><span>.</span><span class="identifier">when</span><span>(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">18</span><span>)(</span><span class="identifier">p</span><span>.</span><span class="identifier">age</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="number-literal">20</span><span>))
-</span><span class="comment">// res27: Option[Int] = Some(20)
+</span><span class="comment">// res29: Option[Int] = Some(20)
 </span><span class="identifier">adultAge</span><span>.</span><span class="identifier">getOption</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="number-literal">15</span><span>))
-</span><span class="comment">// res28: Option[Int] = None</span></code></pre>
+</span><span class="comment">// res30: Option[Int] = None</span></code></pre>
         <p>Narrow an existing <code>Optional</code> or <code>Prism</code> to its read-only
         projection via <code>AffineFold.fromOptional</code> /
         <code>AffineFold.fromPrism</code> — both discard the write / build path
@@ -774,12 +865,12 @@
         <p>One vignette exercises every <code>Composer</code> bridge cats-eo ships,
         with no explicit <code>.morph</code> calls anywhere. From a <code>UserTuple</code>
         (structurally the same as <code>UserRecord</code>), pull out the
-        <code>orders: List[Order]</code>, filter to the <code>Paid</code> variant, and
+        <code>orders: List[Payment]</code>, filter to the <code>Paid</code> variant, and
         increment their <code>amount</code>:</p>
-        <pre><code class="nohighlight"><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>])
-</span><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserRecord</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>])
+        <pre><code class="nohighlight"><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserTuple</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Payment</span><span>])
+</span><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">UserRecord</span><span>(</span><span class="identifier">name</span><span>: </span><span class="type-name">String</span><span>, </span><span class="identifier">orders</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">Payment</span><span>])
 
-</span><span class="keyword">enum</span><span> </span><span class="type-name">Order</span><span>:
+</span><span class="keyword">enum</span><span> </span><span class="type-name">Payment</span><span>:
   </span><span class="keyword">case</span><span> </span><span class="type-name">Paid</span><span>(</span><span class="identifier">amount</span><span>: </span><span class="type-name">Double</span><span>)
   </span><span class="keyword">case</span><span> </span><span class="type-name">Pending</span><span>(</span><span class="identifier">amount</span><span>: </span><span class="type-name">Double</span><span>)
   </span><span class="keyword">case</span><span> </span><span class="type-name">Cancelled</span><span>
@@ -791,37 +882,37 @@
   )
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">userOrders</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">UserRecord</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Order</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">orders</span><span>, (</span><span class="identifier">u</span><span>, </span><span class="identifier">os</span><span>) =&gt; </span><span class="identifier">u</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">orders</span><span> = </span><span class="identifier">os</span><span>))
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">UserRecord</span><span>, </span><span class="type-name">List</span><span>[</span><span class="type-name">Payment</span><span>]](</span><span class="identifier">_</span><span>.</span><span class="identifier">orders</span><span>, (</span><span class="identifier">u</span><span>, </span><span class="identifier">os</span><span>) =&gt; </span><span class="identifier">u</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">orders</span><span> = </span><span class="identifier">os</span><span>))
 
-</span><span class="keyword">val</span><span> </span><span class="identifier">paidP</span><span> = </span><span class="type-name">Prism</span><span>[</span><span class="type-name">Order</span><span>, </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>](
+</span><span class="keyword">val</span><span> </span><span class="identifier">paidP</span><span> = </span><span class="type-name">Prism</span><span>[</span><span class="type-name">Payment</span><span>, </span><span class="type-name">Payment</span><span>.</span><span class="type-name">Paid</span><span>](
   {
-    </span><span class="keyword">case</span><span> </span><span class="identifier">p</span><span>: </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span> =&gt; </span><span class="type-name">Right</span><span>(</span><span class="identifier">p</span><span>)
+    </span><span class="keyword">case</span><span> </span><span class="identifier">p</span><span>: </span><span class="type-name">Payment</span><span>.</span><span class="type-name">Paid</span><span> =&gt; </span><span class="type-name">Right</span><span>(</span><span class="identifier">p</span><span>)
     </span><span class="keyword">case</span><span> </span><span class="identifier">other</span><span>         =&gt; </span><span class="type-name">Left</span><span>(</span><span class="identifier">other</span><span>)
   },
   </span><span class="identifier">identity</span><span>,
 )
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">paidAmount</span><span> =
-  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>, </span><span class="type-name">Double</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">amount</span><span>, (</span><span class="identifier">p</span><span>, </span><span class="identifier">a</span><span>) =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">amount</span><span> = </span><span class="identifier">a</span><span>))
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Payment</span><span>.</span><span class="type-name">Paid</span><span>, </span><span class="type-name">Double</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">amount</span><span>, (</span><span class="identifier">p</span><span>, </span><span class="identifier">a</span><span>) =&gt; </span><span class="identifier">p</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">amount</span><span> = </span><span class="identifier">a</span><span>))
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">bumpPaid</span><span> =
   </span><span class="identifier">userIso</span><span>
     .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">userOrders</span><span>)
-    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Order</span><span>])
+    .</span><span class="identifier">andThen</span><span>(</span><span class="type-name">Traversal</span><span>.</span><span class="identifier">each</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Payment</span><span>])
     .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">paidP</span><span>)
     .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">paidAmount</span><span>)</span></code></pre>
         <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">input</span><span> = </span><span class="type-name">UserTuple</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">List</span><span>(
-  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>(</span><span class="number-literal">10.0</span><span>),
-  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Pending</span><span>(</span><span class="number-literal">20.0</span><span>),
-  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Cancelled</span><span>,
-  </span><span class="type-name">Order</span><span>.</span><span class="type-name">Paid</span><span>(</span><span class="number-literal">30.0</span><span>),
+  </span><span class="type-name">Payment</span><span>.</span><span class="type-name">Paid</span><span>(</span><span class="number-literal">10.0</span><span>),
+  </span><span class="type-name">Payment</span><span>.</span><span class="type-name">Pending</span><span>(</span><span class="number-literal">20.0</span><span>),
+  </span><span class="type-name">Payment</span><span>.</span><span class="type-name">Cancelled</span><span>,
+  </span><span class="type-name">Payment</span><span>.</span><span class="type-name">Paid</span><span>(</span><span class="number-literal">30.0</span><span>),
 ))
 </span><span class="comment">// input: UserTuple = UserTuple(
 //   name = &quot;Alice&quot;,
 //   orders = List(Paid(10.0), Pending(20.0), Cancelled, Paid(30.0))
 // )
 </span><span class="identifier">bumpPaid</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">5.0</span><span>)(</span><span class="identifier">input</span><span>)
-</span><span class="comment">// res29: UserTuple = UserTuple(
+</span><span class="comment">// res31: UserTuple = UserTuple(
 //   name = &quot;Alice&quot;,
 //   orders = List(Paid(15.0), Pending(20.0), Cancelled, Paid(35.0))
 // )</span></code></pre>
@@ -852,12 +943,12 @@
 </span><span class="identifier">visitorAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt;
   </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>
 )(</span><span class="type-name">Visitor</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res30: Option[Visitor] = Some(Visitor(name = &quot;Alice&quot;, age = 31))
+</span><span class="comment">// res32: Option[Visitor] = Some(Visitor(name = &quot;Alice&quot;, age = 31))
 </span><span>
 </span><span class="identifier">visitorAgeL</span><span>.</span><span class="identifier">modifyF</span><span>[</span><span class="type-name">Option</span><span>](</span><span class="identifier">age</span><span> =&gt;
   </span><span class="keyword">if</span><span> </span><span class="identifier">age</span><span> &gt;= </span><span class="number-literal">0</span><span> </span><span class="keyword">then</span><span> </span><span class="type-name">Some</span><span>(</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>) </span><span class="keyword">else</span><span> </span><span class="type-name">None</span><span>
 )(</span><span class="type-name">Visitor</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, -</span><span class="number-literal">1</span><span>))
-</span><span class="comment">// res31: Option[Visitor] = None</span></code></pre>
+</span><span class="comment">// res33: Option[Visitor] = None</span></code></pre>
         <p><code>.modifyA[G]</code> is the <code>Applicative[G]</code> variant — reach for it
         when the chain has branching effects to combine (traversal +
         validation, for instance). <code>Witherable</code>-style filter-and-drop
@@ -903,7 +994,7 @@
 </span><span class="comment">// Pass 3: broadcast the resolved payloads back through the same
 // traversal. The structure is preserved; only the labels shift.
 </span><span class="identifier">eachLeaf</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">n</span><span> =&gt; </span><span class="identifier">n</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">label</span><span> = </span><span class="identifier">byId</span><span>(</span><span class="identifier">n</span><span>.</span><span class="identifier">id</span><span>).</span><span class="identifier">body</span><span>))(</span><span class="identifier">nodes</span><span>)
-</span><span class="comment">// res32: List[Node] = List(
+</span><span class="comment">// res34: List[Node] = List(
 //   Node(id = 1, label = &quot;body-1&quot;),
 //   Node(id = 2, label = &quot;body-2&quot;),
 //   Node(id = 3, label = &quot;body-3&quot;)
@@ -966,7 +1057,7 @@
   .</span><span class="identifier">each</span><span>
   .</span><span class="identifier">name</span><span>
   .</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">brokenBasket</span><span>)
-</span><span class="comment">// res33: Ior[Chain[JsonFailure], Json] = Both(
+</span><span class="comment">// res35: Ior[Chain[JsonFailure], Json] = Both(
 //   a = Singleton(NotAnObject(Field(&quot;name&quot;))),
 //   b = JObject(
 //     object[owner -&gt; &quot;Alice&quot;,items -&gt; [
@@ -996,13 +1087,13 @@
 </span><span class="identifier">upperName</span><span>(
   </span><span class="string-literal">&quot;&quot;&quot;{&quot;owner&quot;:&quot;Alice&quot;,&quot;items&quot;:[{&quot;name&quot;:&quot;apple&quot;}]}&quot;&quot;&quot;</span><span>
 ).</span><span class="identifier">map</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">noSpacesSortKeys</span><span>)
-</span><span class="comment">// res34: Ior[Chain[JsonFailure], String] = Right(
+</span><span class="comment">// res36: Ior[Chain[JsonFailure], String] = Right(
 //   &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;APPLE\&quot;}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;
 // )
 </span><span>
 </span><span class="comment">// Parse failure: Ior.Left(Chain(JsonFailure.ParseFailed(_))).
 </span><span class="identifier">upperName</span><span>(</span><span class="string-literal">&quot;not json at all&quot;</span><span>)
-</span><span class="comment">// res35: Ior[Chain[JsonFailure], Json] = Left(
+</span><span class="comment">// res37: Ior[Chain[JsonFailure], Json] = Left(
 //   Singleton(
 //     ParseFailed(
 //       ParsingFailure(
@@ -1045,7 +1136,7 @@
   </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Right</span><span>(</span><span class="identifier">_</span><span>)        =&gt; </span><span class="type-name">List</span><span>(</span><span class="string-literal">&quot;ok&quot;</span><span>)
   </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Both</span><span>(</span><span class="identifier">chain</span><span>, </span><span class="identifier">_</span><span>)  =&gt; </span><span class="identifier">route</span><span>(</span><span class="identifier">chain</span><span>)
   </span><span class="keyword">case</span><span> </span><span class="type-name">Ior</span><span>.</span><span class="type-name">Left</span><span>(</span><span class="identifier">chain</span><span>)     =&gt; </span><span class="identifier">route</span><span>(</span><span class="identifier">chain</span><span>)
-</span><span class="comment">// res36: List[String] = List(&quot;miss:    Field(address)&quot;)</span></code></pre>
+</span><span class="comment">// res38: List[String] = List(&quot;miss:    Field(address)&quot;)</span></code></pre>
         <p>The Ior surface isn&#39;t a curiosity — it&#39;s production-grade
         observability. One vignette demonstrates how; per-case routing
         generalises to metrics, structured logs, or error surfaces at
@@ -1138,7 +1229,7 @@
 </span><span>(</span><span class="identifier">outRec</span><span>.</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;customer&quot;</span><span>).</span><span class="identifier">toString</span><span>,
  </span><span class="identifier">outRec</span><span>.</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;orderId&quot;</span><span>).</span><span class="identifier">toString</span><span>,
  </span><span class="identifier">outRec</span><span>.</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;total&quot;</span><span>))
-</span><span class="comment">// res37: Tuple3[String, String, Object] = (&quot;ALICE&quot;, &quot;ord-42&quot;, 99.99)</span></code></pre>
+</span><span class="comment">// res39: Tuple3[String, String, Object] = (&quot;ALICE&quot;, &quot;ord-42&quot;, 99.99)</span></code></pre>
         <p><code>modifyUnsafe</code> is the silent-pass-through variant — bad bytes,
         missing fields, or decode mismatches leave the input bytes
         unmodified rather than allocating an <code>Ior</code> chain. That matches

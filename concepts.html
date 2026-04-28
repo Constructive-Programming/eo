@@ -89,6 +89,7 @@ mermaid.initialize({
     <li class="level1 nav-leaf"><a href="getting-started.html">Getting started</a></li>
     <li class="level1 active nav-leaf"><a href="#">Concepts</a></li>
     <li class="level1 nav-leaf"><a href="optics.html">Optics reference</a></li>
+    <li class="level1 nav-leaf"><a href="multifocus.html">MultiFocus</a></li>
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
     <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
@@ -201,27 +202,12 @@ mermaid.initialize({
             <tr>
               <td><code>Forget[F]</code></td>
               <td><code>F[A]</code> — a <code>Foldable</code>/<code>Traverse</code> container</td>
-              <td><code>Fold</code>, <code>Traversal</code></td>
-            </tr>
-            <tr>
-              <td><code>PowerSeries</code></td>
-              <td><code>(Snd[X], PSVec[A])</code></td>
-              <td>Composable <code>Traversal</code></td>
-            </tr>
-            <tr>
-              <td><code>FixedTraversal[N]</code></td>
-              <td>Fixed-length tuple of <code>A</code>s</td>
-              <td><code>Traversal.{two,three,four}</code></td>
+              <td><code>Fold</code></td>
             </tr>
             <tr>
               <td><code>MultiFocus[F]</code></td>
-              <td><code>(X, F[A])</code> — classifier-shaped: pair leftover with an <code>F</code>-wrapped focus vector</td>
-              <td><code>MultiFocus[F]</code> (algebraic-lens + Kaleidoscope-style aggregation; <code>.collectMap</code> / <code>.collectList</code> universals)</td>
-            </tr>
-            <tr>
-              <td><code>Grate</code></td>
-              <td><code>(A, X =&gt; A)</code> — focus + per-slot rebuild</td>
-              <td><code>Grate</code> (distributive / Naperian optics)</td>
+              <td><code>(X, F[A])</code> — pair leftover with an <code>F</code>-wrapped focus vector</td>
+              <td>unified successor of <code>AlgLens[F]</code> + <code>Kaleidoscope</code> + <code>Grate</code> + <code>PowerSeries</code> + <code>FixedTraversal[N]</code>; sub-shapes selected by <code>F</code> (<code>PSVec</code> ⇒ <code>Traversal.each</code>; <code>Function1[Int, *]</code> ⇒ <code>Traversal.{two,three,four}</code> and <code>MultiFocus.tuple</code> / <code>representable</code>); <code>.collectMap</code> / <code>.collectList</code> Kaleidoscope universals — see <a href="multifocus.html">MultiFocus</a></td>
             </tr>
           </tbody>
         </table>
@@ -330,9 +316,9 @@ mermaid.initialize({
         <p><code>Composer[Tuple2, Affine]</code> is one of the stdlib instances;
         <a href="https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html"><code>dev.constructive.eo.data.Affine</code></a>
         ships it. Other bridges: <code>Tuple2 → SetterF</code>, <code>Tuple2 →
-PowerSeries</code>, <code>Either → Affine</code>, <code>Either → PowerSeries</code>,
-        <code>Affine → PowerSeries</code>, <code>Forgetful → Tuple2</code>, <code>Forgetful →
-Either</code>.</p>
+MultiFocus[F]</code>, <code>Either → Affine</code>, <code>Either → MultiFocus[F]</code>,
+        <code>Affine → MultiFocus[F]</code>, <code>Forgetful → Tuple2</code>, <code>Forgetful →
+Either</code>, <code>Forgetful → MultiFocus[F]</code>.</p>
         <p>The transitive <code>Composer.chainViaTuple2</code> given lets you hop
         across two bridges using <code>Tuple2</code> as the fixed intermediate.
         <code>Morph</code>&#39;s four instances (<code>same</code>, <code>leftToRight</code>, <code>rightToLeft</code>,
@@ -347,43 +333,35 @@ Either</code>.</p>
         <p>Every edge below is a shipping <code>Composer[F, G]</code> given; solid
         arrows are tier-1 atomic bridges, dashed arrows are tier-2
         transitive derivations via <code>Composer.chainViaTuple2</code>. Terminal
-        nodes (<code>SetterF</code>, <code>MultiFocus[F]</code>, <code>Grate</code>, <code>PowerSeries</code>,
-        <code>FixedTraversal[N]</code>) sink — they have no outbound <code>Composer</code>
-        instance other than to <code>SetterF</code> — so chains must land there
-        last.</p>
+        nodes (<code>SetterF</code>, <code>MultiFocus[F]</code>) sink — they have no outbound
+        <code>Composer</code> instance other than <code>MultiFocus[F] → SetterF</code> — so
+        chains must land there last.</p>
         <pre class="mermaid">flowchart LR
   Forgetful --&gt; Tuple2
   Forgetful --&gt; Either
-  Forgetful --&gt; Grate
   Forgetful --&gt; MFocus[&quot;MultiFocus[F]&quot;]
   Tuple2 --&gt; Affine
   Tuple2 --&gt; SetterF
-  Tuple2 --&gt; PowerSeries
   Tuple2 --&gt; MFocus
   Either --&gt; Affine
-  Either --&gt; PowerSeries
   Either --&gt; MFocus
-  Affine --&gt; PowerSeries
   Affine --&gt; MFocus
   ForgetF[&quot;Forget[F]&quot;] --&gt; MFocus
-  Grate --&gt; SetterF
   MFocus --&gt; SetterF
   Forgetful -.-&gt;|chainViaTuple2| Affine
   Forgetful -.-&gt;|chainViaTuple2| SetterF
-  Forgetful -.-&gt;|chainViaTuple2| PowerSeries
   Forgetful -.-&gt;|chainViaTuple2| MFocus
-  FixedN[&quot;FixedTraversal[N]&quot;]
   SetterF:::sink
   MFocus:::sink
-  Grate:::sink
-  PowerSeries:::sink
-  FixedN:::sink
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef</pre>
-        <p><code>FixedTraversal[N]</code> is drawn standalone: it has neither
-        inbound nor outbound <code>Composer</code>, and no <code>AssociativeFunctor</code>
-        either — it&#39;s a pure leaf carrier. <code>Forget[F]</code> has one outbound
-        bridge (<code>→ MultiFocus[F]</code>) but no inbound, so chains reach it only
-        via <code>Fold</code> at construction time.</p>
+        <p><code>Forget[F]</code> has one outbound bridge (<code>→ MultiFocus[F]</code>) but no
+        inbound, so chains reach it only via <code>Fold</code> at construction time.
+        <code>MultiFocus[F]</code> covers five v1 carriers (<code>AlgLens[F]</code>,
+        <code>Kaleidoscope</code>, <code>Grate</code>, <code>PowerSeries</code>, <code>FixedTraversal[N]</code>) post-
+        fold; sub-shapes are selected by the choice of <code>F</code> (e.g.
+        <code>MultiFocus[PSVec]</code> for <code>Traversal.each</code>,
+        <code>MultiFocus[Function1[Int, *]]</code> for <code>Traversal.{two,three,four}</code> and
+        <code>MultiFocus.tuple</code> / <code>representable</code>).</p>
         
         <h2 id="why-the-existential-machinery-is-worth-it" class="section"><a class="anchor-link left" href="#why-the-existential-machinery-is-worth-it"><i class="icofont-laika link">&#xef71;</i></a>Why the existential machinery is worth it</h2>
         <p>Unifying every optic behind a single trait collapses the usual
