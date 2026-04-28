@@ -213,10 +213,13 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       case _               => false
     val unsafeJsonNone = nameL.getOptionUnsafe(badJson) === None
 
-    (happyBytesOk === true).and(badBytesOk === true).and(unsafeBytesNone)
-      .and(happyJsonOk === true).and(badJsonOk === true).and(unsafeJsonNone)
+    (happyBytesOk === true)
+      .and(badBytesOk === true)
+      .and(unsafeBytesNone)
+      .and(happyJsonOk === true)
+      .and(badJsonOk === true)
+      .and(unsafeJsonNone)
   }
-
 
   /** Compare two records via apache-avro's structural compare. The public Eq[IndexedRecord] given
     * (per Gap-5 / OQ-avro-9) lives on [[AvroWalk]]; here we go through `GenericData.compare`

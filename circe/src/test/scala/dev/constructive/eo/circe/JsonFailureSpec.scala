@@ -85,6 +85,13 @@ class JsonFailureSpec extends Specification:
           case other                          => ko(s"expected DecodeFailed, got $other")
       case other => ko(s"expected Ior.Left, got $other")
 
-    pmFireOk.and(pmMessageOk).and(noFireOk).and(noMessageOk)
-      .and(naFireOk).and(naMessageOk).and(iorFireOk).and(iorMessageOk).and(dfFireOk)
+    pmFireOk
+      .and(pmMessageOk)
+      .and(noFireOk)
+      .and(noMessageOk)
+      .and(naFireOk)
+      .and(naMessageOk)
+      .and(iorFireOk)
+      .and(iorMessageOk)
+      .and(dfFireOk)
   }

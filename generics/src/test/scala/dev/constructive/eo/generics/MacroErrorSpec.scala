@@ -83,7 +83,10 @@ class MacroErrorSpec extends Specification:
         + " lens[Widget](_.name, _.bogus)"
     ).map(_.message)
     val unknownOk =
-      anyMatches(unknown, "'bogus' is not a field of dev.constructive.eo.generics.samples.Widget") &&
+      anyMatches(
+        unknown,
+        "'bogus' is not a field of dev.constructive.eo.generics.samples.Widget",
+      ) &&
         anyMatches(unknown, "Known fields: name, size")
 
     val dup2 = typeCheckErrors(

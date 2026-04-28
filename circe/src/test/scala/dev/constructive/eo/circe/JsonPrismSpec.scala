@@ -152,7 +152,6 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       unsafeOk && getOk && unsafeMissOk && defaultMissOk
   }
 
-
   // ---- Array indexing (.at) -----------------------------------------
 
   // covers: at(i) on root-level Vector modify the i-th element + leave siblings byte-identical,
@@ -226,8 +225,18 @@ class JsonPrismSpec extends Specification with ScalaCheck:
       codecPrism[Vector[Order]].each.name.modifyUnsafe(_.toUpperCase)(rootArr.asJson) ===
         Vector(Order("A"), Order("B")).asJson
 
-    r1.and(r2).and(r3).and(r4).and(unsafeOOR).and(defaultOOR).and(negIndex)
-      .and(rEach1).and(rEach2).and(rEach3).and(rEach4).and(rEach5).and(rEach6)
+    r1.and(r2)
+      .and(r3)
+      .and(r4)
+      .and(unsafeOOR)
+      .and(defaultOOR)
+      .and(negIndex)
+      .and(rEach1)
+      .and(rEach2)
+      .and(rEach3)
+      .and(rEach4)
+      .and(rEach5)
+      .and(rEach6)
   }
 
   // ---- Place / transfer ---------------------------------------------

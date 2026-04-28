@@ -65,7 +65,7 @@ class AvroWalkSpec extends Specification:
     val lenientMiss =
       AvroWalk.walkPath(r, Array(PathStep.Field("nope")), AvroWalk.OnMissingField.Lenient) match
         case Right((cur, parents)) => (cur === null).and(parents.length === 1)
-        case other =>
+        case other                 =>
           org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
     val notARecord = AvroWalk.stepInto(

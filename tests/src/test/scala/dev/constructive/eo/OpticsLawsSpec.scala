@@ -518,6 +518,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   val tuple2MultiFocus: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
     MultiFocus.tuple[(Int, Int), Int]
+
   val tuple3MultiFocus
       : Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
     MultiFocus.tuple[(Int, Int, Int), Int]

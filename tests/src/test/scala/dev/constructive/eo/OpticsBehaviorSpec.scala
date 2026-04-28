@@ -291,8 +291,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val chainOk = (chained.getOption(Wrapper(AdultPerson(20))) === Some(20))
       .and(chained.getOption(Wrapper(AdultPerson(15))) === None)
 
-    foldOk.and(selOk).and(mAOk)
-      .and(applyOk).and(afSelOk).and(fromOptOk).and(fromPrismOk).and(chainOk)
+    foldOk
+      .and(selOk)
+      .and(mAOk)
+      .and(applyOk)
+      .and(afSelOk)
+      .and(fromOptOk)
+      .and(fromPrismOk)
+      .and(chainOk)
   }
 
   // ----- Review behaviour ----------------------------------------------
@@ -472,8 +478,15 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val modified: Boolean => Int = fnLifted.modify(_ + 1)(srcFn)
     val fnOk = (modified(true) === 101).and(modified(false) === 201)
 
-    tuple2MFOk.and(eitherMFOk).and(affineMFOk).and(composedMFOk)
-      .and(eitherOk).and(affineOk).and(psOk).and(tupleOk).and(fnOk)
+    tuple2MFOk
+      .and(eitherMFOk)
+      .and(affineMFOk)
+      .and(composedMFOk)
+      .and(eitherOk)
+      .and(affineOk)
+      .and(psOk)
+      .and(tupleOk)
+      .and(fnOk)
   }
 
   // ----- MultiFocus[F] lifted into SetterF + Foldable-aggregated escape ----------------
@@ -512,7 +525,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     sumOk.and(sizeOk).and(emptyOk).and(listOk).and(zipOk)
   }
-
 
   // ----- F[A]-focus factories -----------------------------------------
 
@@ -574,8 +586,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val foldMissEmpty = mf.foldMap(identity[Int])(Some(Nil)) === 0
     val foldHit = mf.foldMap(identity[Int])(Some(List(10, 20, 30))) === 60
 
-    lensFOk.and(prismFOk).and(optionalFOk)
-      .and(foldEmptyOk).and(foldMultiOk).and(foldMissNone).and(foldMissEmpty).and(foldHit)
+    lensFOk
+      .and(prismFOk)
+      .and(optionalFOk)
+      .and(foldEmptyOk)
+      .and(foldMultiOk)
+      .and(foldMissNone)
+      .and(foldMissEmpty)
+      .and(foldHit)
   }
 
   // ----- Cross-carrier composition: Lens → MultiFocus[List] chains -----------------
@@ -640,7 +658,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     r1.and(r2).and(nonUniformOk)
   }
 
-
   // ----- MultiFocusSingleton tag regression + Prism→Prism miss-survival + counter ---
   //
   // 2026-04-29 consolidation: 3 singleton-related blocks → 1 composite.
@@ -697,7 +714,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     tagOk1.and(tagOk2).and(tagOk3).and(tagOk4).and(missSurviveOk).and(counterOk)
   }
-
 
   // ---- R11a — Traversal.each × downstream cross-carrier chains --------
 

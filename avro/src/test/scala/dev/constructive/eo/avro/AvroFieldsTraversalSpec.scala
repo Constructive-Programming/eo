@@ -215,8 +215,10 @@ class AvroFieldsTraversalSpec extends Specification:
       case Ior.Right(out) => recordsEqual(out, expectedZ)
       case _              => false
 
-    (emptyOk === true).and(missingOk)
-      .and(placeOk === true).and(recordsEqual(placeUnsafe, expectedZ) === true)
+    (emptyOk === true)
+      .and(missingOk)
+      .and(placeOk === true)
+      .and(recordsEqual(placeUnsafe, expectedZ) === true)
   }
 
 end AvroFieldsTraversalSpec

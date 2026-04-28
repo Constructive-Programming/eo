@@ -130,8 +130,8 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
         ageL.modifyUnsafe((i: Int) => i + 1)(
           nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
         )
-      val both = L.modifyUnsafe(
-        (nt: NameAge) => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge
+      val both = L.modifyUnsafe((nt: NameAge) =>
+        (name = nt.name.toUpperCase, age = nt.age + 1): NameAge
       )(record)
       val composeOk = recordsEqual(stepByStep, both)
 

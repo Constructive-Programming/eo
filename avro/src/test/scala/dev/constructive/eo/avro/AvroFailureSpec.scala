@@ -56,7 +56,8 @@ class AvroFailureSpec extends Specification:
 
     val jCause = new RuntimeException("json went sideways")
     val jf: AvroFailure = AvroFailure.JsonParseFailed(jCause)
-    val jfOk = (jf.message must contain("Avro JSON")).and(jf.message must contain(jCause.getMessage))
+    val jfOk =
+      (jf.message must contain("Avro JSON")).and(jf.message must contain(jCause.getMessage))
 
     val ur: AvroFailure = AvroFailure.UnionResolutionFailed(
       List("null", "long", "string"),

@@ -45,7 +45,8 @@ class InternalsCoverageSpec extends Specification:
   //   PSVec.toString uses "PSVec(...)" format
   "PSVec Empty / Single / Slice / unsafeWrap / equality+hashCode+toString — full surface" >> {
     val empty: PSVec[Nothing] = PSVec.empty[Nothing]
-    val emptyLen = (empty.length === 0).and(empty.isEmpty === true)
+    val emptyLen = (empty.length === 0)
+      .and(empty.isEmpty === true)
       .and(empty.toAnyRefArray.length === 0)
     val emptyApplyThrows =
       try { PSVec.empty[Nothing].apply(0); false }
@@ -57,18 +58,24 @@ class InternalsCoverageSpec extends Specification:
     val emptyAcrossTypeArgs = (PSVec.empty[Int] == PSVec.empty[String]) === true
 
     val s: PSVec[Int] = PSVec.singleton(42)
-    val singleBasics = (s.length === 1).and(s.apply(0) === 42).and(s.head === 42)
+    val singleBasics = (s.length === 1)
+      .and(s.apply(0) === 42)
+      .and(s.head === 42)
       .and(s.toAnyRefArray.toList === List(42))
     val singleOvershoot =
       try { PSVec.singleton(1).apply(1); false }
       catch case _: IndexOutOfBoundsException => true
     val s2 = PSVec.singleton(7)
-    val singleSlice = (s2.slice(0, 1) === s2).and(s2.slice(0, 0) === PSVec.Empty)
-      .and(s2.slice(1, 1) === PSVec.Empty).and(s2.slice(-5, 5) === s2)
+    val singleSlice = (s2.slice(0, 1) === s2)
+      .and(s2.slice(0, 0) === PSVec.Empty)
+      .and(s2.slice(1, 1) === PSVec.Empty)
+      .and(s2.slice(-5, 5) === s2)
 
     val arrS: Array[AnyRef] = Array("a", "b", "c", "d").map(_.asInstanceOf[AnyRef])
     val v: PSVec[String] = PSVec.unsafeWrap[String](arrS)
-    val sliceBasics = (v.length === 4).and(v.apply(2) === "c").and(v.head === "a")
+    val sliceBasics = (v.length === 4)
+      .and(v.apply(2) === "c")
+      .and(v.head === "a")
       .and(v.toAnyRefArray.toList === List("a", "b", "c", "d"))
     val arrI: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
     val w: PSVec[Int] = PSVec.unsafeWrap[Int](arrI)
@@ -96,12 +103,23 @@ class InternalsCoverageSpec extends Specification:
     val toStringOk =
       PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef])).toString === "PSVec(1, 2)"
 
-    emptyLen.and(emptyApplyThrows === true).and(emptyHeadThrows === true)
-      .and(emptySlice).and(emptyAcrossTypeArgs)
-      .and(singleBasics).and(singleOvershoot === true).and(singleSlice)
-      .and(sliceBasics).and(sliceOk).and(identityOk).and(copyOk)
-      .and(unsafeWrapEmpty).and(unsafeWrapSingle).and(unsafeWrapMulti)
-      .and(eqOk).and(toStringOk)
+    emptyLen
+      .and(emptyApplyThrows === true)
+      .and(emptyHeadThrows === true)
+      .and(emptySlice)
+      .and(emptyAcrossTypeArgs)
+      .and(singleBasics)
+      .and(singleOvershoot === true)
+      .and(singleSlice)
+      .and(sliceBasics)
+      .and(sliceOk)
+      .and(identityOk)
+      .and(copyOk)
+      .and(unsafeWrapEmpty)
+      .and(unsafeWrapSingle)
+      .and(unsafeWrapMulti)
+      .and(eqOk)
+      .and(toStringOk)
   }
 
   // ---- IntArrBuilder ---------------------------------------------------

@@ -97,10 +97,17 @@ class StringInputSpec extends Specification:
       case Ior.Right(out) => recordsEqual(out, passExpected)
       case _              => false
 
-    (modOk === true).and(getOk === true).and(placeOk === true).and(transferOk === true)
-      .and(badIorOk === true).and(unsafeBadOk === true).and(unsafeNoneOk === true)
-      .and(fieldsOk === true).and(fieldsBadOk === true)
-      .and(parity === true).and(recordOk === true)
+    (modOk === true)
+      .and(getOk === true)
+      .and(placeOk === true)
+      .and(transferOk === true)
+      .and(badIorOk === true)
+      .and(unsafeBadOk === true)
+      .and(unsafeNoneOk === true)
+      .and(fieldsOk === true)
+      .and(fieldsBadOk === true)
+      .and(parity === true)
+      .and(recordOk === true)
   }
 
   // covers: AvroTraversal String-input — happy parse + per-element modify (Ior.Right),

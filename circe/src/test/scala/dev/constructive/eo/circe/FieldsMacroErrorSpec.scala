@@ -19,8 +19,8 @@ import org.specs2.mutable.Specification
   *   - NamedTuple codec unreachable (no given `Codec.AsObject[NT]` in scope).
   *
   * '''2026-04-29 consolidation.''' 9 → 1 named composite block; every D10 row still asserts its
-  * exact-substring diagnostic. The compiletime `typeCheckErrors` literal-string requirement
-  * forces each snippet to stay distinct, only the spec-frame collapses.
+  * exact-substring diagnostic. The compiletime `typeCheckErrors` literal-string requirement forces
+  * each snippet to stay distinct, only the spec-frame collapses.
   */
 class FieldsMacroErrorSpec extends Specification:
 

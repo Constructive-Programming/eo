@@ -58,8 +58,15 @@ class StringInputSpec extends JsonSpecBase:
     val passThruOk = codecPrism[Person].field(_.name).modify(_.toUpperCase)(passThruJson) ===
       Ior.Right(Person("ALICE", 30, Address("Main St", 12345)).asJson)
 
-    modOk.and(getOk).and(placeOk).and(badIorOk).and(unsafeNullOk).and(unsafeNoneOk)
-      .and(fieldsOk).and(fieldsBadOk).and(passThruOk)
+    modOk
+      .and(getOk)
+      .and(placeOk)
+      .and(badIorOk)
+      .and(unsafeNullOk)
+      .and(unsafeNoneOk)
+      .and(fieldsOk)
+      .and(fieldsBadOk)
+      .and(passThruOk)
   }
 
   // covers: JsonTraversal String-input — happy parse + per-element modify (Ior.Right with the

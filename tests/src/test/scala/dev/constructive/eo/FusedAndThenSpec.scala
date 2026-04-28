@@ -184,6 +184,12 @@ class FusedAndThenSpec extends Specification:
       .and(optChain.getOrModify(Wrapper(Inner(15, "m"))) === Left(Wrapper(Inner(15, "m"))))
       .and(optChain.reverseGet(Wrapper(Inner(30, "a")), 99) === Wrapper(Inner(99, "a")))
 
-    pmOk.and(pmMtOk).and(pmIsoOk)
-      .and(lensOk).and(isoOk).and(mtOk).and(pmGrlOk).and(optOk)
+    pmOk
+      .and(pmMtOk)
+      .and(pmIsoOk)
+      .and(lensOk)
+      .and(isoOk)
+      .and(mtOk)
+      .and(pmGrlOk)
+      .and(optOk)
   }
