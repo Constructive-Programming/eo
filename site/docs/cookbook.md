@@ -520,7 +520,6 @@ on `G`'s applicative).
 
 ```scala mdoc:silent
 import cats.instances.function.given  // Functor[Function1[Int, *]] for .modify
-import cats.instances.option.given     // Applicative[Option] for .modifyA
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
@@ -536,18 +535,19 @@ val violet = (0.5, 0.0, 0.5)
 // every slot. Same shape as the v1 Grate.modify.
 rgbMF.modify(c => (c * 1.4).min(1.0))(violet)
 
-// Effectful rewrite: fail with None if any channel is out of range.
-def normalise(c: Double): Option[Double] =
-  Option.when(c >= 0.0 && c <= 1.0)(c)
-
-rgbMF.modifyA[Option](normalise)(violet)
-rgbMF.modifyA[Option](normalise)((0.5, 1.5, 0.0))   // out of range
+// Replace every slot with the same constant — the broadcast pattern.
+rgbMF.replace(0.0)(violet)
 ```
 
 The carrier is `MultiFocus[Function1[Int, *]]` — `Function1[Int, *]`
 is the Naperian shape over a finite index set. `.modify` runs the
-same closure at every index; `.modifyA[G]` traverses the indices
-under `Applicative[G]` and short-circuits per `G`'s semantics.
+same closure at every index; `.replace(b)` fills every slot with `b`.
+The absorbed-Grate sub-shape does NOT admit `.modifyA[G]` because
+`Function1[Int, *]` lacks `Traverse` in cats — short-circuiting
+effectful traversal needs a `Foldable + Functor` shape that the
+representable encoding doesn't supply. Reach for
+`MultiFocus.apply[List, Double]` (`F = List`) when the use case
+needs `.modifyA`.
 
 This is the absorbed-Grate sub-shape from the
 [carrier consolidation](multifocus.md#the-unification-narrative);
@@ -619,7 +619,7 @@ sub-shape `MultiFocus[PSVec]` carries an
 `AssociativeFunctor[MultiFocus[PSVec], _, _]` instance
 (`mfAssocPSVec`), so `.andThen` continues *past* `Traversal.each`
 into a downstream `Lens`. Pre-fold the deleted `Traversal.forEach`
-shape (Forget[T]-based) was terminal — a chain ending at
+shape (`Forget[T]`-based) was terminal — a chain ending at
 `.forEach(...)` could not extend further.
 
 ```scala mdoc:silent
@@ -637,8 +637,8 @@ val orderNameL =
 //
 // The cross-carrier hops fire transparently:
 //   - .andThen(Traversal.each[List, Order]) lifts the outer Lens
-//     into MultiFocus[PSVec] via `tuple2psvec`.
-//   - .andThen(orderNameL) is the DOWNSTREAM hop — `tuple2psvec`
+//     into MultiFocus[PSVec] via `tuple2multifocusPSVec`.
+//   - .andThen(orderNameL) is the DOWNSTREAM hop — `tuple2multifocusPSVec`
 //     fires again to lift orderNameL into MultiFocus[PSVec], and
 //     mfAssocPSVec composes the two same-carrier optics.
 val everyOrderName =
@@ -810,14 +810,14 @@ Values), <https://leanpub.com/optics-by-example/>.
 One vignette exercises every `Composer` bridge cats-eo ships,
 with no explicit `.morph` calls anywhere. From a `UserTuple`
 (structurally the same as `UserRecord`), pull out the
-`orders: List[Order]`, filter to the `Paid` variant, and
+`orders: List[Payment]`, filter to the `Paid` variant, and
 increment their `amount`:
 
-```scala mdoc:silent
-final case class UserTuple(name: String, orders: List[Order])
-final case class UserRecord(name: String, orders: List[Order])
+```scala mdoc:nest:silent
+final case class UserTuple(name: String, orders: List[Payment])
+final case class UserRecord(name: String, orders: List[Payment])
 
-enum Order:
+enum Payment:
   case Paid(amount: Double)
   case Pending(amount: Double)
   case Cancelled
@@ -829,33 +829,33 @@ val userIso =
   )
 
 val userOrders =
-  Lens[UserRecord, List[Order]](_.orders, (u, os) => u.copy(orders = os))
+  Lens[UserRecord, List[Payment]](_.orders, (u, os) => u.copy(orders = os))
 
-val paidP = Prism[Order, Order.Paid](
+val paidP = Prism[Payment, Payment.Paid](
   {
-    case p: Order.Paid => Right(p)
+    case p: Payment.Paid => Right(p)
     case other         => Left(other)
   },
   identity,
 )
 
 val paidAmount =
-  Lens[Order.Paid, Double](_.amount, (p, a) => p.copy(amount = a))
+  Lens[Payment.Paid, Double](_.amount, (p, a) => p.copy(amount = a))
 
 val bumpPaid =
   userIso
     .andThen(userOrders)
-    .andThen(Traversal.each[List, Order])
+    .andThen(Traversal.each[List, Payment])
     .andThen(paidP)
     .andThen(paidAmount)
 ```
 
 ```scala mdoc
 val input = UserTuple("Alice", List(
-  Order.Paid(10.0),
-  Order.Pending(20.0),
-  Order.Cancelled,
-  Order.Paid(30.0),
+  Payment.Paid(10.0),
+  Payment.Pending(20.0),
+  Payment.Cancelled,
+  Payment.Paid(30.0),
 ))
 bumpPaid.modify(_ + 5.0)(input)
 ```

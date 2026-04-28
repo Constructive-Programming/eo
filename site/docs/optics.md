@@ -140,7 +140,7 @@ rewrite), `MultiFocus.representable[F: Representable, A]`
 (representative-index variant).
 
 See the [MultiFocus reference](multifocus.md) for the unified
-treatment and [Cookbook → Recipe A](cookbook.md#recipe-a--prototypical-grate-shape-via-multifocustuple)
+treatment and [Cookbook → Recipe A](cookbook.md)
 for a worked example of the absorbed Grate-shape.
 
 ## Prism
@@ -521,9 +521,9 @@ composability profile (inbound bridges from every classical family,
 single outbound to `SetterF`, structurally-rejected
 `MultiFocus → Forgetful` / `MultiFocus → Forget[G]`). Worked
 examples ground each absorbed sub-shape in the cookbook:
-[Recipe A — Grate-shape](cookbook.md#recipe-a--prototypical-grate-shape-via-multifocustuple),
-[Recipe B — Kaleidoscope-shape](cookbook.md#recipe-b--prototypical-kaleidoscope-shape-via-collectmap--collectlist),
-[Recipe C — PowerSeries downstream composition](cookbook.md#recipe-c--powerseries-downstream-composition-lens--each--lens).
+[Recipe A — Grate-shape](cookbook.md),
+[Recipe B — Kaleidoscope-shape](cookbook.md),
+[Recipe C — PowerSeries downstream composition](cookbook.md).
 
 ## Composition limits
 

@@ -220,15 +220,15 @@ outbound bridge to `SetterF`. Every other outbound direction is
 |--------|----------|-----------------|-------|
 | `Iso → MF[F]` | `forgetful2multifocus` | `Applicative + Foldable` | Broadcasts the Iso's `S => A` to a singleton `F[A]`. |
 | `Iso → MF[Function1[X0, *]]` | `forgetful2multifocusFunction1` | (none — Function1 carrier) | Direct broadcast; lights up `Iso → Traversal.{two,three,four}` and `Iso → MultiFocus.representable / tuple`. |
-| `Lens → MF[F]` | `tuple2multifocus` | `Applicative + Foldable` | Mixes in `MultiFocusSingleton` so the same-carrier `mfAssoc` fast-path fires. Alongside `tuple2psvec` for the `F = PSVec` specialisation. |
-| `Prism → MF[F]` | `either2multifocus` | `Alternative + Foldable` | Miss branch produces `MonoidK[F].empty`. PSVec specialisation: `either2psvec`. |
-| `Optional → MF[F]` | `affine2multifocus` | `Alternative + Foldable` | Same shape as Prism. PSVec specialisation: `affine2psvec`. |
+| `Lens → MF[F]` | `tuple2multifocus` | `Applicative + Foldable` | Mixes in `MultiFocusSingleton` so the same-carrier `mfAssoc` fast-path fires. Alongside `tuple2multifocusPSVec` for the `F = PSVec` specialisation. |
+| `Prism → MF[F]` | `either2multifocus` | `Alternative + Foldable` | Miss branch produces `MonoidK[F].empty`. PSVec specialisation: `either2multifocusPSVec`. |
+| `Optional → MF[F]` | `affine2multifocus` | `Alternative + Foldable` | Same shape as Prism. PSVec specialisation: `affine2multifocusPSVec`. |
 | `Forget[F] → MF[F]` | `forget2multifocus` | (none) | Lifts a Fold into a MultiFocus on the same `F`. |
 
 Each inbound bridge produces a `MultiFocus[F]`-carrier optic that
 inherits the full capability set above without per-bridge surface
-work. The PSVec-specialised bridges (`tuple2psvec`, `either2psvec`,
-`affine2psvec`) sidestep the generic `Applicative[F]` /
+work. The PSVec-specialised bridges (`tuple2multifocusPSVec`, `either2multifocusPSVec`,
+`affine2multifocusPSVec`) sidestep the generic `Applicative[F]` /
 `Alternative[F]` constraint because PSVec admits neither — instead
 they directly call `PSVec.singleton` / `PSVec.empty` and mix in
 `MultiFocusPSMaybeHit` for the Prism / Optional fast-paths inside
@@ -258,9 +258,10 @@ specialised by `F`:
 ### Outbound — only to `SetterF`
 
 ```scala mdoc:silent
+import dev.constructive.eo.Composer
 import dev.constructive.eo.data.SetterF
 
-val setter = listMF.morph[SetterF]
+val setter = summon[Composer[MultiFocus[List], SetterF]].to(listMF)
 ```
 
 ```scala mdoc
@@ -316,20 +317,20 @@ does not.
 Three end-to-end recipes in the [Cookbook](cookbook.md) cover the
 prototypical post-fold shapes:
 
-- **[Recipe A — Prototypical Grate-shape via `MultiFocus.tuple`](cookbook.md#recipe-a--prototypical-grate-shape-via-multifocustuple)** —
+- **[Recipe A — Prototypical Grate-shape via `MultiFocus.tuple`](cookbook.md)** —
   the "broadcast a uniform `A => B` over a homogeneous tuple"
   idiom. Exercises the absorbed-Grate sub-shape
   `MultiFocus[Function1[Int, *]]`.
-- **[Recipe B — Prototypical Kaleidoscope-shape via `.collectMap` / `.collectList`](cookbook.md#recipe-b--prototypical-kaleidoscope-shape-via-collectmap--collectlist)** —
+- **[Recipe B — Prototypical Kaleidoscope-shape via `.collectMap` / `.collectList`](cookbook.md)** —
   the "applicative-aware aggregation" idiom. Exercises the
   absorbed-Kaleidoscope reasoning across `MultiFocus[ZipList]`
   (length-preserving broadcast) and `MultiFocus[List]` (cartesian
   collapse).
-- **[Recipe C — PowerSeries downstream composition (`Lens → each → Lens`)](cookbook.md#recipe-c--powerseries-downstream-composition-lens--each--lens)** —
+- **[Recipe C — PowerSeries downstream composition (`Lens → each → Lens`)](cookbook.md)** —
   the post-consolidation crown jewel: the absorbed-PowerSeries
   sub-shape `MultiFocus[PSVec]` lets `.andThen` continue past
   `Traversal.each` into a downstream `Lens`. The deleted
-  `Traversal.forEach` shape (Forget[T]-based, terminal) couldn't.
+  `Traversal.forEach` shape (`Forget[T]`-based, terminal) couldn't.
 
 ## Historical landmarks
 
@@ -355,7 +356,7 @@ on the worktree branch that landed it:
   `MultiFocusPSMaybeHit` fast-paths verbatim. JMH within ±5%
   of baseline at every size up to 1024.
   See [`docs/research/2026-04-29-powerseries-fold-spike.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-powerseries-fold-spike.md).
-- **FixedTraversal[N] fold** — `Traversal.{two,three,four}` rerouted
+- **FixedTraversal `[N]` fold** — `Traversal.{two,three,four}` rerouted
   through `MultiFocus[Function1[Int, *]]`; the FT-shape gains the
   inbound `Iso ↪`, outbound `↪ SetterF`, and same-carrier
   `.andThen` from the unified MF carrier — three new compositions
@@ -365,7 +366,7 @@ on the worktree branch that landed it:
 The composition gap analysis tracks the matrix collapse cell by
 cell:
 [`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md).
-The pre-spike analysis of MultiFocus[List] vs PowerSeries on the
+The pre-spike analysis of `MultiFocus[List]` vs PowerSeries on the
 traversal-shape common case (1.5–2.6× slower, hence both carriers
 shipped pre-fold) lives in
 [`docs/research/2026-04-22-alglens-vs-powerseries.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-22-alglens-vs-powerseries.md);
@@ -412,7 +413,7 @@ respectively.
 
 - [Optics → MultiFocus](optics.md#multifocus) — the introductory
   treatment in the family taxonomy.
-- [Cookbook → Theme E (Algebraic / classifier)](cookbook.md#theme-e--algebraic--classifier) —
+- [Cookbook → Theme E (Algebraic / classifier)](cookbook.md) —
   the three end-to-end recipes that ground each absorbed
   sub-shape.
 - [Concepts → Composition](concepts.md#composition) — the carrier
