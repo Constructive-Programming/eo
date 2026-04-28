@@ -202,6 +202,7 @@ val Optics = "dev.optics"
 val Kubuszok = "com.kubuszok"
 val Circe = "io.circe"
 val ApacheAvro = "org.apache.avro"
+val FasterXmlJackson = "com.fasterxml.jackson.core"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
@@ -219,6 +220,13 @@ lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
 // `GenericData` / `Schema` directly on the hot path.
 lazy val avro = ApacheAvro % "avro" % "1.12.1"
+// Force jackson-core to the patched 2.21.1 — `apache-avro 1.12.1` brings
+// `jackson-databind 2.20.0` transitively, which depends on the
+// CVE-affected `jackson-core` range `>= 2.19.0, < 2.21.1` (GHSA dependabot
+// alert #2). Override applies via `commonSettings.dependencyOverrides`
+// across every module so any future jackson-pulling transitive (e.g. a
+// future kindlings-circe bump) inherits the safe version automatically.
+lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.1"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
@@ -237,6 +245,9 @@ lazy val commonSettings = Seq(
   // library's code and the warning is a Hearth-side concern rather
   // than a cats-eo bug.
   Test / scalacOptions += "-Wconf:src=.*/cats-derivation/.*:silent",
+  // Pin jackson-core at the CVE-patched 2.21.1 across every module —
+  // see the `jacksonCore` definition above for context.
+  dependencyOverrides += jacksonCore,
 )
 
 // Library-appropriate scalac options layered on top of the baseline set
