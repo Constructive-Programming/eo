@@ -840,3 +840,42 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     optOk.and(lensOk).and(prismOk).and(isoOk)
   }
+
+  // ----- ForgetfulFold extension methods: headOption / length / exists -----
+  //
+  // covers: .headOption (first focus), .length (focus count), .exists (predicate
+  // over foci) on three carrier shapes — Lens (Tuple2 = always 1 focus), Prism
+  // (Either = 0 or 1 focus), Traversal (MultiFocus[PSVec] = 0..n foci) — and the
+  // Fold-carrier read shape (Forget[List]).
+  "ForgetfulFold extensions: headOption / length / exists across Lens / Prism / Traversal / Fold" >> {
+    val ageL: Optic[(String, Int), (String, Int), Int, Int, Tuple2] =
+      Lens(_._2, (s, a) => (s._1, a))
+    val lensOk = (ageL.headOption(("Alice", 30)) === Some(30))
+      .and(ageL.length(("Alice", 30)) === 1)
+      .and(ageL.exists((_: Int) > 18)(("Alice", 30)) === true)
+      .and(ageL.exists((_: Int) > 100)(("Alice", 30)) === false)
+
+    val posIntPrism: Optic[Int, Int, Int, Int, Either] =
+      Prism.optional[Int, Int](n => if n >= 0 then Some(n) else None, identity)
+    val prismOk = (posIntPrism.headOption(5) === Some(5))
+      .and(posIntPrism.headOption(-1) === None)
+      .and(posIntPrism.length(5) === 1)
+      .and(posIntPrism.length(-1) === 0)
+      .and(posIntPrism.exists((n: Int) => n > 3)(5) === true)
+      .and(posIntPrism.exists((n: Int) => n > 3)(-1) === false)
+
+    val each = Traversal.each[List, Int]
+    val travOk = (each.headOption(List(7, 8, 9)) === Some(7))
+      .and(each.headOption(List.empty[Int]) === None)
+      .and(each.length(List(1, 2, 3, 4, 5)) === 5)
+      .and(each.length(List.empty[Int]) === 0)
+      .and(each.exists((n: Int) => n > 3)(List(1, 2, 3, 4)) === true)
+      .and(each.exists((n: Int) => n > 99)(List(1, 2, 3, 4)) === false)
+
+    val listFold = Fold[List, Int]
+    val foldOk = (listFold.headOption(List(10, 20, 30)) === Some(10))
+      .and(listFold.length(List(10, 20, 30)) === 3)
+      .and(listFold.exists((n: Int) => n == 20)(List(10, 20, 30)) === true)
+
+    lensOk.and(prismOk).and(travOk).and(foldOk)
+  }

@@ -322,6 +322,43 @@ object Optic:
     inline def foldMap[M: Monoid](f: A => M): S => M =
       s => FF.foldMap(using Monoid[M])(f)(o.to(s))
 
+    /** First focus visible through the optic, if any. Available on any carrier admitting
+      * `ForgetfulFold[F]` — `Forget[F]` (Fold), `MultiFocus[F]` (Traversal), `Affine` (Optional /
+      * AffineFold), `Either` (Prism), `Tuple2` (Lens). For 0-or-1-focus carriers this is the same
+      * Option you'd get from `.getOption`; for multi-focus carriers it picks the first focus the
+      * underlying `Foldable` enumerates.
+      *
+      * Implemented via `foldMap` under a custom "first-`Some`" `Monoid[Option[A]]` — the same shape
+      * Monocle's `Fold.headOption` uses. The custom monoid short-circuits via `_.orElse(_)`, so on
+      * a `Foldable[F]` whose `foldMap` is itself short-circuit-aware (e.g. `LazyList`) the walk
+      * stops at the first focus.
+      *
+      * @group Operations
+      */
+    def headOption(s: S): Option[A] =
+      o.foldMap[Option[A]](a => Some(a))(using
+        Monoid.instance[Option[A]](None, (l, r) => l.orElse(r))
+      )(s)
+
+    /** Number of foci visible through the optic. O(n) in the focus count via `Foldable.foldMap`
+      * under `Monoid[Int]`. Distinct from `Foldable.size` only in that it routes through the
+      * carrier's `ForgetfulFold[F]` — same end result, available wherever `foldMap` is.
+      *
+      * @group Operations
+      */
+    def length(s: S): Int =
+      o.foldMap[Int](_ => 1)(using cats.Monoid[Int])(s)
+
+    /** True iff at least one focus satisfies `p`. Short-circuits on the first hit when the
+      * carrier's `ForgetfulFold[F]` is short-circuit-aware. The default `Monoid[Boolean]` cats
+      * exposes is conjunction (`&&`); we instantiate a disjunction monoid inline so a single match
+      * can win without consulting the rest.
+      *
+      * @group Operations
+      */
+    def exists(p: A => Boolean)(s: S): Boolean =
+      o.foldMap[Boolean](p)(using Monoid.instance[Boolean](false, _ || _))(s)
+
   /** `getOption` over an `Affine`-carrier optic — the canonical read for [[Optional]] and
     * [[AffineFold]]. Pattern-matches the Affine directly, so the miss branch allocates nothing
     * beyond the already-produced `Affine.Miss` and the hit branch wraps the focus in `Some`.
