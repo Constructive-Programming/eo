@@ -117,10 +117,10 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       //   getOptionUnsafe through sugar, placeUnsafe / place(default) / transfer surfaces
       val sugared = codecPrism[Person].name
       val explicit = codecPrism[Person].field(_.name)
-      val mFn: String => String = _.toUpperCase
+      val sugarFn: String => String = _.toUpperCase
       val sugarParityModify = recordsEqual(
-        sugared.modifyUnsafe(mFn)(record),
-        explicit.modifyUnsafe(mFn)(record),
+        sugared.modifyUnsafe(sugarFn)(record),
+        explicit.modifyUnsafe(sugarFn)(record),
       )
       val sugarGet = sugared.getOptionUnsafe(record) == Some(p.name)
       val sugarPlaceUnsafe = recordsEqual(
