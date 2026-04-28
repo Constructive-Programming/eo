@@ -147,65 +147,45 @@ class AvroPrismSpec extends Specification with ScalaCheck:
     parityModify && sugarGet && sugarPlaceUnsafe && sugarPlaceDefault && sugarTransfer
   }
 
-  // ---- Binary-input dual surface -----------------------------------
+  // ---- Binary + JSON dual surface -----------------------------------
+  //
+  // 2026-04-29 consolidation: the Array[Byte] and Avro JSON String input tests share the
+  // exact same shape — happy parse+modify, bad-input surfaces a Parse-Failed variant in
+  // the chain, getOptionUnsafe returns None on bad input. Collapsed 2 → 1.
 
-  // covers: modify on Array[Byte] input parses + applies (Ior.Right) on the happy path,
-  // modify on bad bytes surfaces BinaryParseFailed in the chain, getOptionUnsafe on bad bytes
-  // returns None
-  "Array[Byte] input: parse + modify, bad bytes surface BinaryParseFailed" >> {
+  // covers: Array[Byte] input — happy parse + modify (Ior.Right with the modified record),
+  //   bad bytes surface BinaryParseFailed in the chain (Ior.Left),
+  //   getOptionUnsafe on bad bytes returns None;
+  //   String input (Avro JSON wire format) — happy parse + modify (Ior.Right),
+  //   bad JSON surfaces JsonParseFailed in the chain (Ior.Left),
+  //   getOptionUnsafe on bad JSON returns None
+  "Binary + JSON dual-input surfaces: parse + modify, bad input surfaces *ParseFailed" >> {
     val p = Person("Alice", 30)
     val record = personRecord(p)
+    val nameL = codecPrism[Person].field(_.name)
+
     val goodBytes = toBinary(record, personSchema)
     val badBytes: Array[Byte] = Array(0.toByte)
-
-    val nameL = codecPrism[Person].field(_.name)
-
-    val happyResult = nameL.modify((s: String) => s.toUpperCase)(goodBytes)
-    val happyOk = happyResult match
+    val happyBytesOk = nameL.modify((s: String) => s.toUpperCase)(goodBytes) match
       case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "ALICE")))
       case _              => false
+    val badBytesOk = nameL.modify((s: String) => s)(badBytes) match
+      case Ior.Left(chain) => chain.headOption.exists(_.isInstanceOf[AvroFailure.BinaryParseFailed])
+      case _               => false
+    val unsafeBytesNone = nameL.getOptionUnsafe(badBytes) === None
 
-    val badResult = nameL.modify((s: String) => s)(badBytes)
-    val badOk = badResult match
-      case Ior.Left(chain) =>
-        chain.headOption.get.isInstanceOf[AvroFailure.BinaryParseFailed]
-      case _ => false
-
-    val unsafeBad = nameL.getOptionUnsafe(badBytes)
-
-    (happyOk === true)
-      .and(badOk === true)
-      .and(unsafeBad === None)
-  }
-
-  // ---- String-input dual surface (Avro JSON wire format) -----------
-
-  // covers: modify on String input parses + applies (Ior.Right) on the happy path,
-  // modify on bad JSON surfaces JsonParseFailed in the chain, getOptionUnsafe on bad JSON
-  // returns None (synthetic-empty-record fallback can't decode the focus)
-  "String input: parse + modify, bad JSON surfaces JsonParseFailed" >> {
-    val p = Person("Alice", 30)
     val goodJson = """{"name":"Alice","age":30}"""
     val badJson = "not json at all"
-
-    val nameL = codecPrism[Person].field(_.name)
-
-    val happyResult = nameL.modify((s: String) => s.toUpperCase)(goodJson)
-    val happyOk = happyResult match
+    val happyJsonOk = nameL.modify((s: String) => s.toUpperCase)(goodJson) match
       case Ior.Right(out) => recordsEqual(out, personRecord(p.copy(name = "ALICE")))
       case _              => false
+    val badJsonOk = nameL.modify((s: String) => s)(badJson) match
+      case Ior.Left(chain) => chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
+      case _               => false
+    val unsafeJsonNone = nameL.getOptionUnsafe(badJson) === None
 
-    val badResult = nameL.modify((s: String) => s)(badJson)
-    val badOk = badResult match
-      case Ior.Left(chain) =>
-        chain.headOption.get.isInstanceOf[AvroFailure.JsonParseFailed]
-      case _ => false
-
-    val unsafeBad = nameL.getOptionUnsafe(badJson)
-
-    (happyOk === true)
-      .and(badOk === true)
-      .and(unsafeBad === None)
+    (happyBytesOk === true).and(badBytesOk === true).and(unsafeBytesNone)
+      .and(happyJsonOk === true).and(badJsonOk === true).and(unsafeJsonNone)
   }
 
   // ---- Codec-level decode failure ----------------------------------

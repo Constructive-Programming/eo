@@ -56,46 +56,33 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
   private val personAllMobiles =
     personPhones.andThen(phoneIsMobile)
 
-  // covers: leave structure unchanged under modify(identity), distribute a modify
-  // across every phone, replace propagates through the whole ArraySeq
-  "Traversal.each: identity / distribute modify / replace propagation" >> {
+  // covers: Traversal.each leave structure unchanged under modify(identity),
+  //   distribute a modify across every phone (toggle isMobile / preserve number),
+  //   replace propagates through the whole ArraySeq;
+  //   Tuple2 → MultiFocus[PSVec] composer — lifts a Lens with inner PSVec of size 1,
+  //   identity round-trip through the morph, modify-through-morph agrees with the original Lens;
+  //   empty / single-element ArraySeq edge cases — modify(identity) on empty is no-op,
+  //   non-identity modify on empty is still no-op, single-element modify applies exactly once
+  "Traversal.each + Tuple2→MultiFocus[PSVec] composer + empty/single edge cases" >> {
     val identityOk = forAll((p: Person) => personPhones.modify(identity[Phone])(p) == p)
-
     val distributeOk = forAll { (p: Person) =>
-      val toggled = personPhones
-        .modify(ph => Phone(!ph.isMobile, ph.number))(p)
+      val toggled = personPhones.modify(ph => Phone(!ph.isMobile, ph.number))(p)
       toggled.phones.zip(p.phones).forall { (after, before) =>
         after.isMobile != before.isMobile && after.number == before.number
       }
     }
-
     val replaceOk = forAll { (p: Person) =>
       val replaced = personAllMobiles.replace(false)(p)
       replaced.phones.forall(ph => ph.isMobile == false)
     }
 
-    identityOk && distributeOk && replaceOk
-  }
-
-  // covers: lift a Lens into a MultiFocus[PSVec] optic whose inner PSVec has size 1,
-  // round-trip modify(identity) through a MultiFocus[PSVec]-lifted Lens,
-  // modify-through-morph agrees with modify on the original Lens
-  "Tuple2 → MultiFocus[PSVec] composer: length-1 inner vector / identity round-trip / modify agreement" >> {
     val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
     val morphd = lens.morph[MultiFocus[PSVec]]
-
     val sizeOk = forAll { (p: (Int, String)) => morphd.to(p)._2.length == 1 }
-    val identityOk = forAll { (p: (Int, String)) => morphd.modify(identity[Int])(p) == p }
+    val morphIdOk = forAll { (p: (Int, String)) => morphd.modify(identity[Int])(p) == p }
     val agreeOk =
       forAll { (p: (Int, String), f: Int => Int) => morphd.modify(f)(p) == lens.modify(f)(p) }
 
-    sizeOk && identityOk && agreeOk
-  }
-
-  // covers: leave the container unchanged under modify(identity) on empty,
-  // still leave the container unchanged under a non-identity modify on empty,
-  // apply the modify exactly once on a single-element ArraySeq
-  "Traversal.each edge cases: empty + single-element ArraySeq" >> {
     val empty = Person(0, "noone", ArraySeq.empty[Phone])
     val emptyIdOk = personPhones.modify(identity[Phone])(empty) == empty
     val emptyConstOk = personPhones.modify((_: Phone) => Phone(true, "x"))(empty) == empty
@@ -106,6 +93,8 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
       after.phones(0).isMobile == true &&
       after.phones(0).number == "555-0001"
 
+    identityOk && distributeOk && replaceOk &&
+    sizeOk && morphIdOk && agreeOk &&
     emptyIdOk && emptyConstOk && singleOk
   }
 
