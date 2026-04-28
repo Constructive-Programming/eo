@@ -27,109 +27,81 @@ class InternalsCoverageSpec extends Specification:
 
   // ---- PSVec variants --------------------------------------------------
 
-  // covers: have length 0 and toAnyRefArray empty, apply throws
-  // IndexOutOfBoundsException, head throws NoSuchElementException, slice returns
-  // Empty, equals itself and another empty
-  "PSVec.Empty: length-0 / apply-throws / head-throws / slice / equals" >> {
-    val e: PSVec[Nothing] = PSVec.empty[Nothing]
-    val lengthOk = (e.length === 0)
-      .and(e.isEmpty === true)
-      .and(e.toAnyRefArray.length === 0)
-
-    val applyThrows =
+  // covers: PSVec.Empty has length 0 + isEmpty + toAnyRefArray empty,
+  //   PSVec.Empty apply throws IndexOutOfBoundsException,
+  //   PSVec.Empty head throws NoSuchElementException,
+  //   PSVec.Empty slice returns Empty,
+  //   PSVec.empty[A] == PSVec.empty[B] across type args (Nothing-arg unification);
+  //   PSVec.Single has length 1 + apply(0) + head + toAnyRefArray exposes element,
+  //   PSVec.Single apply(i>0) throws IndexOutOfBoundsException,
+  //   PSVec.Single slice(0,1) returns self, slice(0,0) / slice(1,1) return Empty,
+  //   PSVec.Single slice(-5,5) clamps to self;
+  //   PSVec.Slice apply / head / length / toAnyRefArray over the backing,
+  //   PSVec.Slice slice produces smaller Slice / Single / Empty,
+  //   unsafeShareableArray returns backing on full slice (identity),
+  //   unsafeShareableArray copies on partial slice (no aliasing);
+  //   PSVec.unsafeWrap returns Empty / Single / Slice based on size;
+  //   PSVec equality + hashCode treat same-shape vectors as equal regardless of variant,
+  //   PSVec.toString uses "PSVec(...)" format
+  "PSVec Empty / Single / Slice / unsafeWrap / equality+hashCode+toString — full surface" >> {
+    val empty: PSVec[Nothing] = PSVec.empty[Nothing]
+    val emptyLen = (empty.length === 0).and(empty.isEmpty === true)
+      .and(empty.toAnyRefArray.length === 0)
+    val emptyApplyThrows =
       try { PSVec.empty[Nothing].apply(0); false }
       catch case _: IndexOutOfBoundsException => true
-
-    val headThrows =
+    val emptyHeadThrows =
       try { PSVec.empty[Nothing].head; false }
       catch case _: NoSuchElementException => true
+    val emptySlice = PSVec.empty[Int].slice(0, 5) === PSVec.Empty
+    val emptyAcrossTypeArgs = (PSVec.empty[Int] == PSVec.empty[String]) === true
 
-    val sliceEmpty = PSVec.empty[Int].slice(0, 5) === PSVec.Empty
-    val equalsAcrossTypeArgs = (PSVec.empty[Int] == PSVec.empty[String]) === true
-
-    lengthOk
-      .and(applyThrows === true)
-      .and(headThrows === true)
-      .and(sliceEmpty)
-      .and(equalsAcrossTypeArgs)
-  }
-
-  // covers: have length 1, apply(0) returns the element, head returns the element,
-  // toAnyRefArray; apply(i>0) throws IndexOutOfBoundsException; slice(0,1) returns
-  // self, others return Empty
-  "PSVec.Single: length-1 / apply / head / slice variants / overshoot-throws" >> {
     val s: PSVec[Int] = PSVec.singleton(42)
-    val basics = (s.length === 1)
-      .and(s.apply(0) === 42)
-      .and(s.head === 42)
+    val singleBasics = (s.length === 1).and(s.apply(0) === 42).and(s.head === 42)
       .and(s.toAnyRefArray.toList === List(42))
-
-    val applyOvershootThrows =
+    val singleOvershoot =
       try { PSVec.singleton(1).apply(1); false }
       catch case _: IndexOutOfBoundsException => true
-
     val s2 = PSVec.singleton(7)
-    val sliceOk =
-      (s2.slice(0, 1) === s2)
-        .and(s2.slice(0, 0) === PSVec.Empty)
-        .and(s2.slice(1, 1) === PSVec.Empty)
-        .and(s2.slice(-5, 5) === s2)
+    val singleSlice = (s2.slice(0, 1) === s2).and(s2.slice(0, 0) === PSVec.Empty)
+      .and(s2.slice(1, 1) === PSVec.Empty).and(s2.slice(-5, 5) === s2)
 
-    basics.and(applyOvershootThrows === true).and(sliceOk)
-  }
-
-  // covers: apply/head/length/toAnyRefArray work over the backing, slice produces
-  // smaller Slice/Single/Empty, unsafeShareableArray returns backing on full slice,
-  // unsafeShareableArray copies on partial slice
-  "PSVec.Slice: apply/head/length, slice variants, unsafeShareableArray identity vs copy" >> {
     val arrS: Array[AnyRef] = Array("a", "b", "c", "d").map(_.asInstanceOf[AnyRef])
     val v: PSVec[String] = PSVec.unsafeWrap[String](arrS)
-    val basics = (v.length === 4)
-      .and(v.apply(2) === "c")
-      .and(v.head === "a")
+    val sliceBasics = (v.length === 4).and(v.apply(2) === "c").and(v.head === "a")
       .and(v.toAnyRefArray.toList === List("a", "b", "c", "d"))
-
     val arrI: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
     val w: PSVec[Int] = PSVec.unsafeWrap[Int](arrI)
     val sliceOk = (w.slice(1, 4).toAnyRefArray.toList === List(2, 3, 4))
       .and(w.slice(2, 3).toAnyRefArray.toList === List(3))
       .and(w.slice(3, 3) === PSVec.Empty)
-
     val arrFull: Array[AnyRef] = Array(1, 2, 3).map(_.asInstanceOf[AnyRef])
     val full: PSVec[Int] = PSVec.unsafeWrap[Int](arrFull)
     val identityOk = (full.unsafeShareableArray eq arrFull) === true
-
     val arrP: Array[AnyRef] = Array(1, 2, 3, 4).map(_.asInstanceOf[AnyRef])
     val partial: PSVec[Int] = PSVec.unsafeWrap[Int](arrP).slice(1, 3)
     val copyOk = ((partial.unsafeShareableArray eq arrP) === false)
       .and(partial.unsafeShareableArray.toList === List(2, 3))
 
-    basics.and(sliceOk).and(identityOk).and(copyOk)
-  }
+    val unsafeWrapEmpty = PSVec.unsafeWrap(Array.empty[AnyRef]) === PSVec.Empty
+    val singleWrap: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1).map(_.asInstanceOf[AnyRef]))
+    val unsafeWrapSingle = (singleWrap.length === 1).and(singleWrap.head === 1)
+    val multiWrap: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef]))
+    val unsafeWrapMulti = multiWrap.length === 2
 
-  // covers: return Empty for empty arrays, Single for one-element arrays, Slice
-  // otherwise
-  "PSVec.unsafeWrap: returns Empty / Single / Slice based on size" >> {
-    val empty = PSVec.unsafeWrap(Array.empty[AnyRef]) === PSVec.Empty
-    val single: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1).map(_.asInstanceOf[AnyRef]))
-    val singleOk = (single.length === 1).and(single.head === 1)
-    val multi: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef]))
-    val multiOk = multi.length === 2
-    empty.and(singleOk).and(multiOk)
-  }
-
-  // covers: treat same-shape vectors as equal regardless of variant; toString
-  // uses PSVec(...) format
-  "PSVec equality+hashCode across variants and toString format" >> {
-    val s1: PSVec[Int] = PSVec.singleton(7)
-    val s2: PSVec[Int] =
+    val eqA: PSVec[Int] = PSVec.singleton(7)
+    val eqB: PSVec[Int] =
       PSVec.unsafeWrap[Int](Array(7, 8).map(_.asInstanceOf[AnyRef])).slice(0, 1)
-    val eqOk = (s1 === s2).and(s1.hashCode === s2.hashCode)
+    val eqOk = (eqA === eqB).and(eqA.hashCode === eqB.hashCode)
+    val toStringOk =
+      PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef])).toString === "PSVec(1, 2)"
 
-    val v: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef]))
-    val toStringOk = v.toString === "PSVec(1, 2)"
-
-    eqOk.and(toStringOk)
+    emptyLen.and(emptyApplyThrows === true).and(emptyHeadThrows === true)
+      .and(emptySlice).and(emptyAcrossTypeArgs)
+      .and(singleBasics).and(singleOvershoot === true).and(singleSlice)
+      .and(sliceBasics).and(sliceOk).and(identityOk).and(copyOk)
+      .and(unsafeWrapEmpty).and(unsafeWrapSingle).and(unsafeWrapMulti)
+      .and(eqOk).and(toStringOk)
   }
 
   // ---- IntArrBuilder ---------------------------------------------------
