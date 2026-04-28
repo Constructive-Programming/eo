@@ -384,16 +384,38 @@ Lens</code>, <code>Prism ∘ Prism = Prism</code>, <code>Iso ∘ Iso = Iso</code
 }</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">bumpAll</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">SetterConfig</span><span>(</span><span class="type-name">Map</span><span>(</span><span class="string-literal">&quot;a&quot;</span><span> -&gt; </span><span class="number-literal">1</span><span>, </span><span class="string-literal">&quot;b&quot;</span><span> -&gt; </span><span class="number-literal">2</span><span>)))
 </span><span class="comment">// res15: SetterConfig = SetterConfig(Map(&quot;a&quot; -&gt; 2, &quot;b&quot; -&gt; 3))</span></code></pre>
-        <p><strong>Setter is a composition terminal.</strong> <code>lens.andThen(setter)</code> works —
-        a Lens to a focus, then a Setter that writes into it. The reverse
-        chain, <code>setter.andThen(inner)</code>, does <em>not</em> work: there&#39;s no
-        <code>AssociativeFunctor[SetterF, _, _]</code> shipped, and no <code>Composer[SetterF,
-_]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] =&gt; A)</code>
-        doesn&#39;t carry a read side, so &quot;compose another optic on top of a
-        write-only endpoint&quot; doesn&#39;t have a natural semantics. If you want
-        <code>setter.andThen(…)</code>, restructure the chain so the Setter is the
-        inner — build <code>lens/prism/traversal.andThen(setter)</code> and call
-        <code>.modify</code> on the result.</p>
+        <p><strong><code>lens.andThen(setter)</code></strong> works — a Lens to a focus, then a Setter
+        that writes into it. <strong><code>setter.andThen(setter)</code></strong> also works:
+        <code>SetterF</code> ships an <code>AssociativeFunctor[SetterF, Xo, Xi]</code> instance
+        (<code>SetterF.assocSetterF</code>) with <code>Z = (Fst[Xo], Snd[Xi])</code>. The
+        deferred-modify semantic fits the protocol once you observe that
+        <code>composeTo</code> only needs to seed <code>(outer-source, identity[C])</code> (no
+        <code>inner.to</code> call required, since SetterF&#39;s continuation is structurally
+        identity at every canonical construction site); <code>composeFrom</code> extracts
+        the user&#39;s <code>c2d</code> from the post-<code>map</code> continuation and applies it
+        through <code>inner.from</code> then <code>outer.from</code>. The standard
+        <code>Optic.andThen[SetterF]</code> resolution picks the instance up
+        transparently.</p>
+        <pre><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="type-name">Composer</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">SetterF</span><span>
+</span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">data</span><span>.</span><span class="type-name">SetterF</span><span>.</span><span class="keyword">given</span><span>
+
+</span><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Box</span><span>(</span><span class="identifier">value</span><span>: </span><span class="type-name">Int</span><span>)
+</span><span class="keyword">final</span><span> </span><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Holder</span><span>(</span><span class="identifier">box</span><span>: </span><span class="type-name">Box</span><span>, </span><span class="identifier">tag</span><span>: </span><span class="type-name">String</span><span>)
+
+</span><span class="keyword">val</span><span> </span><span class="identifier">outer</span><span> = </span><span class="identifier">summon</span><span>[</span><span class="type-name">Composer</span><span>[</span><span class="type-name">Tuple2</span><span>, </span><span class="type-name">SetterF</span><span>]].</span><span class="identifier">to</span><span>(
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Holder</span><span>, </span><span class="type-name">Box</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">box</span><span>, (</span><span class="identifier">s</span><span>, </span><span class="identifier">b</span><span>) =&gt; </span><span class="identifier">s</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">box</span><span> = </span><span class="identifier">b</span><span>))
+)
+</span><span class="keyword">val</span><span> </span><span class="identifier">inner</span><span> = </span><span class="identifier">summon</span><span>[</span><span class="type-name">Composer</span><span>[</span><span class="type-name">Tuple2</span><span>, </span><span class="type-name">SetterF</span><span>]].</span><span class="identifier">to</span><span>(
+  </span><span class="type-name">Lens</span><span>[</span><span class="type-name">Box</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">value</span><span>, (</span><span class="identifier">s</span><span>, </span><span class="identifier">v</span><span>) =&gt; </span><span class="identifier">s</span><span>.</span><span class="identifier">copy</span><span>(</span><span class="identifier">value</span><span> = </span><span class="identifier">v</span><span>))
+)
+</span><span class="keyword">val</span><span> </span><span class="identifier">composed</span><span> = </span><span class="identifier">outer</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">inner</span><span>)</span></code></pre>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">composed</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">Holder</span><span>(</span><span class="type-name">Box</span><span>(</span><span class="number-literal">10</span><span>), </span><span class="string-literal">&quot;tag&quot;</span><span>))
+</span><span class="comment">// res16: Holder = Holder(box = Box(11), tag = &quot;tag&quot;)</span></code></pre>
+        <p>There is no <code>Composer[SetterF, _]</code> outbound — Setter remains a
+        read-side terminal, so to <em>escape</em> a SetterF chain into a Forget /
+        MultiFocus / Lens you have to restructure with the Setter on the
+        inside.</p>
         
         <h2 id="getter" class="section"><a class="anchor-link left" href="#getter"><i class="icofont-laika link">&#xef71;</i></a>Getter</h2>
         <p>A <code>Getter[S, A]</code> is the read-only counterpart to <code>Setter</code> — a
@@ -402,7 +424,7 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">nameLen</span><span> = </span><span class="type-name">Getter</span><span>[</span><span class="type-name">Person</span><span>, </span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">length</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">nameLen</span><span>.</span><span class="identifier">get</span><span>(</span><span class="type-name">Person</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="number-literal">30</span><span>))
-</span><span class="comment">// res16: Int = 5</span></code></pre>
+</span><span class="comment">// res17: Int = 5</span></code></pre>
         <p>Getter → Getter doesn&#39;t compose via <code>Optic.andThen</code> today
         (Getter&#39;s <code>T = Unit</code> mismatches the outer <code>B</code> slot). For a
         deeper read, compose a Lens chain and call <code>.get</code> on the
@@ -416,15 +438,15 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">listFold</span><span> = </span><span class="type-name">Fold</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listFold</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res17: Int = 6
+</span><span class="comment">// res18: Int = 6
 </span><span class="identifier">listFold</span><span>.</span><span class="identifier">foldMap</span><span>((</span><span class="identifier">i</span><span>: </span><span class="type-name">Int</span><span>) =&gt; </span><span class="identifier">i</span><span> * </span><span class="identifier">i</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res18: Int = 14</span></code></pre>
+</span><span class="comment">// res19: Int = 14</span></code></pre>
         <p><code>Fold.select(p)</code> narrows to elements matching a predicate:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">positive</span><span> = </span><span class="type-name">Fold</span><span>.</span><span class="identifier">select</span><span>[</span><span class="type-name">Int</span><span>](</span><span class="identifier">_</span><span> &gt; </span><span class="number-literal">0</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">positive</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res19: Int = 3
+</span><span class="comment">// res20: Int = 3
 </span><span class="identifier">positive</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(-</span><span class="number-literal">3</span><span>)
-</span><span class="comment">// res20: Int = 0</span></code></pre>
+</span><span class="comment">// res21: Int = 0</span></code></pre>
         
         <h2 id="review" class="section"><a class="anchor-link left" href="#review"><i class="icofont-laika link">&#xef71;</i></a>Review</h2>
         <p>A <code>Review[S, A]</code> is the reverse-only counterpart to <code>Getter</code> —
@@ -436,14 +458,14 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
 
 </span><span class="keyword">val</span><span> </span><span class="identifier">someIntR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">Int</span><span>](</span><span class="type-name">Some</span><span>(</span><span class="identifier">_</span><span>))</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">42</span><span>)
-</span><span class="comment">// res21: Option[Int] = Some(42)</span></code></pre>
+</span><span class="comment">// res22: Option[Int] = Some(42)</span></code></pre>
         <p>Compose by composing the underlying <code>A =&gt; S</code> functions directly:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">lengthR</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Int</span><span>, </span><span class="type-name">String</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">length</span><span>)
 </span><span class="keyword">val</span><span> </span><span class="identifier">someLen</span><span> = </span><span class="type-name">Review</span><span>[</span><span class="type-name">Option</span><span>[</span><span class="type-name">Int</span><span>], </span><span class="type-name">String</span><span>](
   </span><span class="identifier">s</span><span> =&gt; </span><span class="identifier">someIntR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">lengthR</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="identifier">s</span><span>))
 )</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">someLen</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="string-literal">&quot;hello&quot;</span><span>)
-</span><span class="comment">// res22: Option[Int] = Some(5)</span></code></pre>
+</span><span class="comment">// res23: Option[Int] = Some(5)</span></code></pre>
         <p>Two factory methods pull the natural build direction out of an
         Iso or a Prism — aliased as <code>ReversedLens</code> and <code>ReversedPrism</code>
         for users who expect to find those names next to the rest of
@@ -463,9 +485,9 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
 )
 </span><span class="keyword">val</span><span> </span><span class="identifier">revPrism</span><span> = </span><span class="type-name">ReversedPrism</span><span>(</span><span class="identifier">somePrism</span><span>)</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">revIso</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">5</span><span>)
-</span><span class="comment">// res23: Int = 2
+</span><span class="comment">// res24: Int = 2
 </span><span class="identifier">revPrism</span><span>.</span><span class="identifier">reverseGet</span><span>(</span><span class="number-literal">7</span><span>)
-</span><span class="comment">// res24: Option[Int] = Some(7)</span></code></pre>
+</span><span class="comment">// res25: Option[Int] = Some(7)</span></code></pre>
         <p><strong><code>ReversedLens</code> only accepts a bijective Lens</strong> (an
         <code>BijectionIso</code>). A general Lens doesn&#39;t carry enough
         information to reconstruct its source from the focus alone —
@@ -498,9 +520,9 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
 </span><span>
 </span><span class="keyword">val</span><span> </span><span class="identifier">listEach</span><span> = </span><span class="type-name">Traversal</span><span>.</span><span class="identifier">pEach</span><span>[</span><span class="type-name">List</span><span>, </span><span class="type-name">Int</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="identifier">listEach</span><span>.</span><span class="identifier">modify</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1</span><span>)(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))
-</span><span class="comment">// res25: List[Int] = List(2, 3, 4)
+</span><span class="comment">// res26: List[Int] = List(2, 3, 4)
 </span><span class="identifier">listEach</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Int</span><span>])(</span><span class="type-name">List</span><span>(</span><span class="number-literal">1</span><span>, </span><span class="number-literal">2</span><span>, </span><span class="number-literal">3</span><span>))   </span><span class="comment">// sum
-// res26: Int = 6</span></code></pre>
+// res27: Int = 6</span></code></pre>
         <p><code>each</code> shines when the chain continues past the traversal — e.g.
         &quot;for every phone, toggle <code>isMobile</code>&quot;:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">case</span><span> </span><span class="keyword">class</span><span> </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span>: </span><span class="type-name">Boolean</span><span>, </span><span class="identifier">number</span><span>: </span><span class="type-name">String</span><span>)
@@ -514,7 +536,7 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
   </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">false</span><span>, </span><span class="string-literal">&quot;555-0001&quot;</span><span>),
   </span><span class="type-name">Phone</span><span>(</span><span class="identifier">isMobile</span><span> = </span><span class="boolean-literal">true</span><span>,  </span><span class="string-literal">&quot;555-0002&quot;</span><span>),
 )))
-</span><span class="comment">// res27: Owner = Owner(
+</span><span class="comment">// res28: Owner = Owner(
 //   List(
 //     Phone(isMobile = true, number = &quot;555-0001&quot;),
 //     Phone(isMobile = false, number = &quot;555-0002&quot;)
@@ -559,10 +581,11 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
         <a href="cookbook.html">Recipe C — PowerSeries downstream composition</a>.</p>
         
         <h2 id="composition-limits" class="section"><a class="anchor-link left" href="#composition-limits"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h2>
-        <p>Beyond the MultiFocus-outbound sink documented above, three categories
-        of pair are intentionally <strong>not</strong> bridged in 0.1.0. The short answer
-        is &quot;the type system rules them out, and the natural workaround is a
-        plain Scala expression&quot;:</p>
+        <p>Beyond the MultiFocus-outbound sink documented above, several
+        categories of pair are either intentionally <strong>not</strong> bridged in 0.1.0
+        or only bridged through a user-opt-in side-channel. Each entry below
+        states the structural shape, the rationale, and the idiomatic
+        workaround or opt-in:</p>
         <p><strong>Lens / Prism / Optional × <code>Fold[F]</code> when the outer focuses on a
         scalar <code>A</code></strong> — the outer never produces an <code>F</code>-shape, so there&#39;s
         nothing for the <code>Fold</code> to traverse. Use <code>fold.foldMap(f)(lens.get(s))</code>
@@ -578,10 +601,31 @@ _]</code>. That&#39;s intentional — SetterF&#39;s shape <code>(Fst[X], Snd[X] 
         the traversal: <code>traversal.modify(a =&gt; inner.replace(b)(a))(s)</code> for a
         <code>MultiFocus</code> inner; <code>traversal.foldMap(f)(s)</code> (read-only escape on
         any <code>MultiFocus[F]</code>-carrier optic) when you only need the fold side.</p>
-        <p><strong><code>SetterF</code> outbound</strong> — Setter is a composition terminal: ship it as
-        the leaf of a chain (Lens → Setter via <code>Composer[Tuple2, SetterF]</code>)
-        but don&#39;t try to chain off it. There is no <code>AssociativeFunctor[SetterF]</code>
-        and no outbound Composer.</p>
+        <p><strong>Cross-F <code>Fold[F].andThen(Fold[G])</code></strong> — <code>Composer[Forget[F], Forget[G]]</code>
+        doesn&#39;t ship (Composer&#39;s signature has no slot for a per-call natural
+        transformation, and the carrier-generic <code>Optic.andThen</code> requires the
+        same <code>F</code>). Instead, <code>Forget.scala</code> ships a Forget-specific <code>.andThen</code>
+        extension that takes a user-supplied <code>cats.~&gt;[F, G]</code> plus
+        <code>FlatMap[G]</code> and produces a <code>Forget[G]</code>-carrier optic:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">import</span><span> </span><span class="identifier">cats</span><span>.~&gt;
+</span><span class="keyword">val</span><span> </span><span class="identifier">outer</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">Source</span><span>, </span><span class="type-name">Unit</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">A</span><span>, </span><span class="type-name">Forget</span><span>[</span><span class="type-name">List</span><span>]]   = ...
+</span><span class="keyword">val</span><span> </span><span class="identifier">inner</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">A</span><span>, </span><span class="type-name">Unit</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">Forget</span><span>[</span><span class="type-name">Option</span><span>]]      = ...
+</span><span class="keyword">given</span><span> </span><span class="identifier">listHead</span><span>: </span><span class="type-name">List</span><span> ~&gt; </span><span class="type-name">Option</span><span> = </span><span class="keyword">new</span><span> (</span><span class="type-name">List</span><span> ~&gt; </span><span class="type-name">Option</span><span>):
+  </span><span class="keyword">def</span><span> </span><span class="declaration-name">apply</span><span>[</span><span class="type-name">T</span><span>](</span><span class="identifier">xs</span><span>: </span><span class="type-name">List</span><span>[</span><span class="type-name">T</span><span>]): </span><span class="type-name">Option</span><span>[</span><span class="type-name">T</span><span>] = </span><span class="identifier">xs</span><span>.</span><span class="identifier">headOption</span><span>
+</span><span class="keyword">val</span><span> </span><span class="identifier">composed</span><span>: </span><span class="type-name">Optic</span><span>[</span><span class="type-name">Source</span><span>, </span><span class="type-name">Unit</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">B</span><span>, </span><span class="type-name">Forget</span><span>[</span><span class="type-name">Option</span><span>]] =
+  </span><span class="identifier">outer</span><span>.</span><span class="identifier">andThen</span><span>(</span><span class="identifier">inner</span><span>)</span></code></pre>
+        <p>The user picks the meaning by choosing the nat (e.g. <code>List ~&gt; Option</code>
+        via <code>headOption</code>, <code>Option ~&gt; List</code> via <code>toList</code>, <code>List ~&gt; LazyList</code>
+        for streaming). Result carrier is <code>Forget[G]</code> — downstream composition
+        continues in <code>G</code>&#39;s typeclass landscape. Restricted to <code>T = Unit</code>
+        (the Fold case) since cross-F composition has no natural way to
+        thread <code>from</code> for general <code>T</code>.</p>
+        <p><strong><code>SetterF</code> outbound</strong> — Setter is a read-side terminal: there is no
+        outbound <code>Composer[SetterF, _]</code>, so a chain that reaches Setter cannot
+        widen back into a Forget / MultiFocus / Lens. Same-carrier
+        <code>setter.andThen(setter)</code> <em>does</em> work — <code>SetterF.assocSetterF</code> ships
+        <code>AssociativeFunctor[SetterF, Xo, Xi]</code> with <code>Z = (Fst[Xo], Snd[Xi])</code>,
+        so the standard <code>Optic.andThen</code> resolves transparently.</p>
         <p><strong>Fixed-arity traversal (<code>Traversal.two</code> / <code>.three</code> / <code>.four</code>)</strong> —
         post-fold these factories produce <code>MultiFocus[Function1[Int, *]]</code>-carrier
         optics, so they inherit the absorbed-Grate sub-shape&#39;s composability:

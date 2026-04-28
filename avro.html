@@ -194,7 +194,7 @@ mermaid.initialize({
 </span><span class="keyword">val</span><span> </span><span class="identifier">record</span><span>  = </span><span class="identifier">summon</span><span>[</span><span class="type-name">AvroCodec</span><span>[</span><span class="type-name">Person</span><span>]].</span><span class="identifier">encode</span><span>(</span><span class="identifier">alice</span><span>).</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>]
 </span><span class="comment">// record: GenericRecord = {&quot;name&quot;: &quot;Alice&quot;, &quot;age&quot;: 30, &quot;address&quot;: {&quot;street&quot;: &quot;Main St&quot;, &quot;zip&quot;: 12345}}
 </span><span class="keyword">val</span><span> </span><span class="identifier">streetP</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">address</span><span>.</span><span class="identifier">street</span><span>
-</span><span class="comment">// streetP: AvroPrism[String] = dev.constructive.eo.avro.AvroPrism@61e1dd08
+</span><span class="comment">// streetP: AvroPrism[String] = dev.constructive.eo.avro.AvroPrism@b75d81b
 </span><span>
 </span><span class="identifier">streetP</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">record</span><span>)
   .</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>].</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;address&quot;</span><span>)
@@ -251,7 +251,7 @@ mermaid.initialize({
   </span><span class="identifier">summon</span><span>[</span><span class="type-name">AvroCodec</span><span>[</span><span class="type-name">Basket</span><span>]].</span><span class="identifier">encode</span><span>(</span><span class="identifier">basket</span><span>).</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>]
 </span><span class="comment">// basketRec: GenericRecord = {&quot;owner&quot;: &quot;Alice&quot;, &quot;items&quot;: [{&quot;name&quot;: &quot;X&quot;}, {&quot;name&quot;: &quot;Y&quot;}, {&quot;name&quot;: &quot;Z&quot;}]}
 </span><span class="keyword">val</span><span> </span><span class="identifier">secondName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">at</span><span>(</span><span class="number-literal">1</span><span>).</span><span class="identifier">name</span><span>
-</span><span class="comment">// secondName: AvroPrism[String] = dev.constructive.eo.avro.AvroPrism@651c6ba
+</span><span class="comment">// secondName: AvroPrism[String] = dev.constructive.eo.avro.AvroPrism@6333a492
 </span><span>
 </span><span class="identifier">secondName</span><span>.</span><span class="identifier">getOptionUnsafe</span><span>(</span><span class="identifier">basketRec</span><span>)
 </span><span class="comment">// res7: Option[String] = Some(&quot;Y&quot;)
@@ -269,7 +269,7 @@ mermaid.initialize({
         <code>.at</code> / selectable-sugar calls on the traversal extend the
         per-element suffix:</p>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">everyName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
-</span><span class="comment">// everyName: AvroTraversal[String] = dev.constructive.eo.avro.AvroTraversal@555e06b9
+</span><span class="comment">// everyName: AvroTraversal[String] = dev.constructive.eo.avro.AvroTraversal@44a320df
 </span><span>
 </span><span class="identifier">everyName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basketRec</span><span>)
   .</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>].</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;items&quot;</span><span>).</span><span class="identifier">toString</span><span>
@@ -292,7 +292,7 @@ mermaid.initialize({
 </span><span class="keyword">given</span><span> </span><span class="type-name">AvroDecoder</span><span>[</span><span class="type-name">NameAge</span><span>] = </span><span class="type-name">AvroDecoder</span><span>.</span><span class="identifier">derived</span><span>
 </span><span class="keyword">given</span><span> </span><span class="type-name">AvroSchemaFor</span><span>[</span><span class="type-name">NameAge</span><span>] = </span><span class="type-name">AvroSchemaFor</span><span>.</span><span class="identifier">derived</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nameAge</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">fields</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>, </span><span class="identifier">_</span><span>.</span><span class="identifier">age</span><span>)
-</span><span class="comment">// nameAge: AvroPrism[NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, EmptyTuple]], *:[String, *:[Int, EmptyTuple]]]] = dev.constructive.eo.avro.AvroPrism@4acb0cbf
+</span><span class="comment">// nameAge: AvroPrism[NamedTuple[*:[&quot;name&quot;, *:[&quot;age&quot;, EmptyTuple]], *:[String, *:[Int, EmptyTuple]]]] = dev.constructive.eo.avro.AvroPrism@57478ae2
 </span><span>
 </span><span class="identifier">nameAge</span><span>
   .</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">nt</span><span> =&gt; (</span><span class="identifier">name</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">name</span><span>.</span><span class="identifier">toUpperCase</span><span>, </span><span class="identifier">age</span><span> = </span><span class="identifier">nt</span><span>.</span><span class="identifier">age</span><span> + </span><span class="number-literal">1</span><span>))(</span><span class="identifier">record</span><span>)
@@ -323,7 +323,7 @@ mermaid.initialize({
 </span><span class="comment">// txRec: GenericRecord = {&quot;id&quot;: &quot;t-1&quot;, &quot;amount&quot;: 42}
 </span><span>
 </span><span class="keyword">val</span><span> </span><span class="identifier">amountP</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Transaction</span><span>].</span><span class="identifier">field</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">amount</span><span>).</span><span class="identifier">union</span><span>[</span><span class="type-name">Long</span><span>]
-</span><span class="comment">// amountP: AvroPrism[Long] = dev.constructive.eo.avro.AvroPrism@b0d38b5
+</span><span class="comment">// amountP: AvroPrism[Long] = dev.constructive.eo.avro.AvroPrism@39794180
 </span><span>
 </span><span class="identifier">amountP</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span> + </span><span class="number-literal">1L</span><span>)(</span><span class="identifier">txRec</span><span>)
   .</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>].</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;amount&quot;</span><span>)
@@ -606,7 +606,7 @@ mermaid.initialize({
         allocation, every default method has a sibling <code>*Unsafe</code> variant
         that ships the silent-pass-through hot path:</p>
         <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nameP</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Person</span><span>].</span><span class="identifier">field</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>)
-</span><span class="comment">// nameP: AvroPrism[String] = dev.constructive.eo.avro.AvroPrism@141f35ff
+</span><span class="comment">// nameP: AvroPrism[String] = dev.constructive.eo.avro.AvroPrism@542d289b
 </span><span>
 </span><span class="comment">// Hot-path: silent pass-through on miss.
 </span><span class="identifier">nameP</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">stump</span><span>).</span><span class="identifier">asInstanceOf</span><span>[</span><span class="type-name">GenericRecord</span><span>].</span><span class="identifier">get</span><span>(</span><span class="string-literal">&quot;name&quot;</span><span>)

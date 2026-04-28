@@ -285,7 +285,7 @@
         <h3 id="at-i-representable-f" class="section"><a class="anchor-link left" href="#at-i-representable-f"><i class="icofont-laika link">&#xef71;</i></a><code>.at(i)</code> — <code>Representable[F]</code></h3>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">grateF</span><span> = </span><span class="type-name">MultiFocus</span><span>.</span><span class="identifier">representable</span><span>[[</span><span class="identifier">a</span><span>] =&gt;&gt; </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="identifier">a</span><span>, </span><span class="type-name">Int</span><span>]</span></code></pre>
         <pre class="keep-together pdf epub"><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">payment</span><span>: </span><span class="type-name">Boolean</span><span> =&gt; </span><span class="type-name">Int</span><span> = </span><span class="identifier">b</span><span> =&gt; </span><span class="keyword">if</span><span> </span><span class="identifier">b</span><span> </span><span class="keyword">then</span><span> </span><span class="number-literal">100</span><span> </span><span class="keyword">else</span><span> </span><span class="number-literal">0</span><span>
-</span><span class="comment">// payment: Function1[Boolean, Int] = repl.MdocSession$MdocApp$$Lambda$17197/0x00007f7cea6905f0@177c63d2
+</span><span class="comment">// payment: Function1[Boolean, Int] = repl.MdocSession$MdocApp$$Lambda$17218/0x00007f71a66b5240@71c37955
 </span><span class="identifier">grateF</span><span>.</span><span class="identifier">at</span><span>(</span><span class="boolean-literal">true</span><span>)(</span><span class="identifier">payment</span><span>)
 </span><span class="comment">// res6: Int = 100
 </span><span class="identifier">grateF</span><span>.</span><span class="identifier">at</span><span>(</span><span class="boolean-literal">false</span><span>)(</span><span class="identifier">payment</span><span>)
@@ -438,9 +438,13 @@ MultiFocusFromList</code>. Covers <code>List</code>, <code>Vector</code>, <code>
         <p><code>multifocus2setter[F: Functor]</code> — closes the U → N gap for both
         the prior <code>kaleidoscope2setter</code> and the latent never-shipped
         <code>alg2setter</code>. Like every other <code>Composer[X, SetterF]</code>, this does NOT
-        enable <code>multiFocus.andThen(setter)</code> directly: <code>SetterF</code> lacks
-        <code>AssociativeFunctor</code> by design. The morph value lives at the morph
-        site, not at the chain site.</p>
+        enable <code>multiFocus.andThen(setter)</code> directly: cross-carrier <code>.andThen</code>
+        goes through <code>AssociativeFunctor[F]</code> on a single carrier, and SetterF
+        deliberately doesn&#39;t ship one (the deferred-modify semantic doesn&#39;t
+        fit <code>composeTo</code> / <code>composeFrom</code>). The morph value lives at the morph
+        site, not at the chain site. Same-carrier <code>setter.andThen(setter)</code>
+        <em>does</em> work — see the <a href="optics.html#setter">Setter section</a> for the
+        <code>AssociativeFunctor[SetterF]</code> instance shipped in <code>SetterF.scala</code>.</p>
         
         <h3 id="composition-limits" class="section"><a class="anchor-link left" href="#composition-limits"><i class="icofont-laika link">&#xef71;</i></a>Composition limits</h3>
         <p>Two further outbound directions are <strong>structurally rejected</strong> rather
