@@ -494,18 +494,24 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // 2026-04-29 consolidation: 2 MultiFocus[F]→SetterF / read-only-escape blocks → 1.
 
   // covers: MultiFocus[F] read-only escape via .foldMap (sum / count / empty) — the gap-#2
-  //   closure (Composer[MultiFocus[F], Forget[F]] would clash with forget2multifocus, so
-  //   the extension method gives equivalent capability without touching implicit search),
-  //   MultiFocus.apply[List] and MultiFocus.apply[ZipList] lift into SetterF and modify
-  //   element-wise via Functor[F] (byte-for-byte agreement with the original MultiFocus's
-  //   .modify(f), same Functor-driven element-wise rewrite as ForgetfulFunctor[MultiFocus[F]])
-  "MultiFocus[F] read-only escape (foldMap) + List/ZipList → SetterF (element-wise modify)" >> {
+  //   closure shipped two ways: (a) extension methods (.foldMap / .headOption / .length / .exists)
+  //   on every `ForgetfulFold[F]`-bearing carrier; (b) `multifocus2forget[F]: Composer[MultiFocus[F],
+  //   Forget[F]]` — the explicit carrier morph, defensive about the bidirectional pair with
+  //   `forget2multifocus` (works when the user routes via `summon[Composer[..]].to(o)` rather
+  //   than `.andThen` to avoid the Morph-resolution ambiguity).
+  //   Plus: MultiFocus.apply[List] / MultiFocus.apply[ZipList] → SetterF element-wise modify.
+  "MultiFocus[F] read-only escape (foldMap, → Forget[F]) + List/ZipList → SetterF" >> {
     val listMF: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
       MultiFocus.apply[List, Int]
 
     val sumOk = listMF.foldMap(identity[Int])(List(1, 2, 3, 4)) === 10
     val sizeOk = listMF.foldMap(_ => 1)(List(1, 2, 3)) === 3
     val emptyOk = listMF.foldMap(identity[Int])(Nil) === 0
+
+    // multifocus2forget Composer — explicit morph from MultiFocus[List] → Forget[List].
+    val asFold: Optic[List[Int], List[Int], Int, Int, Forget[List]] =
+      summon[Composer[MultiFocus[List], Forget[List]]].to(listMF)
+    val foldReadOk = asFold.to(List(7, 8, 9)) === List(7, 8, 9)
 
     val listLifted: Optic[List[Int], List[Int], Int, Int, SetterF] =
       summon[Composer[MultiFocus[List], SetterF]].to(listMF)
@@ -523,7 +529,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       (zipLifted.modify(_ * 10)(ZipList(List(1, 2, 3))).value === List(10, 20, 30))
         .and(zipLifted.modify(_ + 1)(ZipList(Nil)).value === List.empty[Int])
 
-    sumOk.and(sizeOk).and(emptyOk).and(listOk).and(zipOk)
+    sumOk.and(sizeOk).and(emptyOk).and(foldReadOk).and(listOk).and(zipOk)
   }
 
   // ----- F[A]-focus factories -----------------------------------------

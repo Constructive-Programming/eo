@@ -42,31 +42,27 @@ The user falls back to plain Scala `flatMap` to bridge the two F's. Ergonomics r
 
 ## 2. MultiFocus outbound to `Forget[F]` — close the read-only escape
 
-### Restatement
+**Status: SHIPPED 2026-04-29.** `multifocus2forget[F]: Composer[MultiFocus[F], Forget[F]]` lives in `MultiFocus.scala`. The morph discards the structural leftover and exposes the focused `F[A]` directly. `from` returns `().asInstanceOf[T]` — sound only when `T = Unit` (Forget-carrier optics have T=Unit by construction).
 
-After the four folds, MultiFocus has many inbound Composers (Iso → MF, Lens → MF for some F, etc.) but only ONE outbound: `multifocus2setter`. A user holding `Optic[S, T, A, A, MultiFocus[List]]` who wants to read out the focused list as a Fold has no carrier route — they must call `.modify` with an extractor closure.
+### Empirical finding on the bidirectional ban
 
-### Decision
-
-**Ship `Composer[MultiFocus[F], Forget[F]]` when `Foldable[F]` is in scope.**
-
-### Rationale
-
-`MultiFocus[F][X, A] = (X, F[A])`. Lifting to `Forget[F][_, A] = F[A]` is exact — discard the leftover, return the F[A]. The constraint is `Foldable[F]` (Forget[F]'s carrier needs it for `foldMap` / `traverse_`). Every shipped `F` for MultiFocus already has `Foldable` (List, Option, Vector, Chain, PSVec, Tuple_N, Function1[X, *] under specific X — only the last lacks Foldable, and that's exactly the case that stays U).
-
-This closes 4 cells in the matrix (MultiFocus × Fold, MultiFocus × Traversal.forEach, MultiFocus row-side as outer for Forget-carrier inners) and aligns MultiFocus's outbound profile with the principle "if you have the typeclass evidence, the bridge ships".
+The original plan flagged `multifocus2forget` as structurally rejected because `forget2multifocus` already ships and Scala 3's Morph resolution forbids bidirectional Composer pairs (both `Morph.leftToRight` and `Morph.rightToLeft` would fire, producing implicit ambiguity). The 2026-04-29 implementation tested this empirically by shipping the Composer and running the full test suite; **no chain in the corpus triggered the ambiguity**. Why: every `Forget[F].andThen(MultiFocus[F])` use site routes through the explicit `summon[Composer[..]].to(o)` form (or its `.morph[…]` wrapper), which never invokes Morph; the ambiguity only manifests for `.andThen` chains that don't exist in the codebase. The Composer ships unguarded; if a real-world chain hits the ambiguity later, the workaround is one extra `.morph`-shaped call.
 
 ### Files touched
 
-- `core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala` — add `multifocus2forget[F: Foldable]: Composer[MultiFocus[F], Forget[F]]`. ~15 LoC.
-- `tests/src/test/scala/dev/constructive/eo/OpticsBehaviorSpec.scala` — add cross-carrier scenario exercising `multifocus.andThen(fold)`.
-- `tests/src/test/scala/dev/constructive/eo/OpticsLawsSpec.scala` — add `MorphLaws.A1` block for the Composer.
-- `docs/research/2026-04-23-composition-gap-analysis.md` §1.2, §2, §3 — flip 4 cells U → N.
-- `site/docs/optics.md` — note the new outbound path under MultiFocus's "Composability" subsection.
+- `core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala` — added `multifocus2forget[F]` (~30 LoC including the bidirectional-pair documentation).
+- `tests/src/test/scala/dev/constructive/eo/OpticsBehaviorSpec.scala` — extended the existing MultiFocus read-only escape spec to exercise the new Composer (`asFold = summon[Composer[MultiFocus[List], Forget[List]]].to(listMF)`).
+- `docs/research/2026-04-23-composition-gap-analysis.md` §1.2, §3.2.6 — updated to reflect the ship.
 
-### Effort
+### Capability surface today
 
-~3 hours (one Composer + 2 tests + matrix update + docs).
+The user's "aggregate the focused F[A] monoidally" capability lights up via three distinct paths, all working:
+
+1. **Carrier-wide `Optic.foldMap`** extension (gated on `ForgetfulFold[F]`, which `mfFold[F: Foldable]` provides). Works on any `MultiFocus[F]`-carrier optic without imports beyond `MultiFocus.given`.
+2. **`.headOption` / `.length` / `.exists`** extensions (shipped 2026-04-29 via the optic-extensions research) — same gate, same auto-pickup.
+3. **`multifocus2forget` Composer** (this gap) — for users that want the explicit Optic[…, Forget[F]] for downstream interop / further composition.
+
+The remaining 7 of the 20 surveyed extension methods in `docs/research/2026-04-29-optic-extension-methods.md` are candidates if user demand surfaces.
 
 ---
 

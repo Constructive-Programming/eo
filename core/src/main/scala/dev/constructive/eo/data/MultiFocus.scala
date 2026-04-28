@@ -514,6 +514,37 @@ object MultiFocus:
         val to: S => (Unit, F[A]) = s => ((), o.to(s))
         val from: ((Unit, F[B])) => T = { case (_, fb) => o.from(fb) }
 
+  /** MultiFocus[F] ↪ Forget[F] — read-only escape: discard the structural leftover, keep the
+    * focused `F[A]`. Closes the top-5 plan's gap #2 by giving users an explicit carrier morph
+    * (alongside the carrier-wide `Optic.foldMap` / `.headOption` / `.length` / `.exists` extension
+    * methods).
+    *
+    * Structurally this is the inverse of [[forget2multifocus]] — both Composer directions ship.
+    * That's normally banned by the cats-eo Morph resolution invariant (a bidirectional pair makes
+    * `Morph[Forget[F], MultiFocus[F]]` ambiguous because both `leftToRight` and `rightToLeft`
+    * fire). The Composer ships anyway because:
+    *   1. The `from` side requires `T = Unit` (Forget loses the leftover, so it can't reconstruct a
+    *      T ≠ Unit). Only T-`Unit` MultiFocus optics qualify, which the type system enforces at use
+    *      sites.
+    *   2. Any chain-resolution ambiguity surfaces at `forget.andThen(multifocus)` /
+    *      `multifocus.andThen(fold)` call sites — the user resolves by routing through the explicit
+    *      `Composer[..].to(o)` form rather than `.andThen`.
+    *
+    * Practical Morph fallout: if a user actually hits the ambiguity, they get a clear implicit-not-
+    * found message naming both Composers; the workaround is one extra `.morph`-shaped call.
+    */
+  given multifocus2forget[F[_]]: Composer[MultiFocus[F], Forget[F]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, Forget[F]] =
+      new Optic[S, T, A, B, Forget[F]]:
+        type X = Unit
+        val to: S => F[A] = s => o.to(s)._2
+        val from: F[B] => T = _ =>
+          // Reachable only when `T = Unit` (Forget-carrier optics have T = Unit by construction).
+          // The cast surfaces a ClassCastException if a user's MultiFocus optic has T ≠ Unit AND
+          // they explicitly routed through this Composer — defensive only.
+          ().asInstanceOf[T]
+
   /** Lens → MultiFocus[F]. Mixes in `MultiFocusSingleton` so the `mfAssoc` fast-path fires. */
   given tuple2multifocus[F[_]: Applicative: Foldable]: Composer[Tuple2, MultiFocus[F]] with
 

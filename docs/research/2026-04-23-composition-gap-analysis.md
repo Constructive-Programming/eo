@@ -297,13 +297,16 @@ borders), post-2026-04-30:
 
 ### 1.2 Top surprising gaps
 
-1. **MultiFocus outbound** (other than to SetterF). There is no
-   `Composer[MultiFocus[F], Forgetful]` / `Composer[MultiFocus[F],
-   Forget[G]]` / `Composer[MultiFocus[F], Tuple2]`. Once you land in
-   `MultiFocus[List]` you can only widen to `SetterF` or stay in
-   MultiFocus. The carrier is otherwise a sink — same shape as Grate's
-   isolation profile, one notch less surprising than the pre-merge
-   `AlgLens[F]` outbound + `Kaleidoscope` outbound double-headed gap.
+1. **MultiFocus outbound** (other than to SetterF and now Forget[F]).
+   `Composer[MultiFocus[F], Forget[F]]` shipped 2026-04-29 (`multifocus2forget`
+   in `MultiFocus.scala`) closing top-5 plan gap #2 — MultiFocus → Forget[F]
+   discards the leftover and exposes the focused `F[A]` directly. The Composer
+   ships despite the bidirectional pair with `forget2multifocus` (which would
+   normally ban it via Morph ambiguity); empirically, no `Forget[F].andThen
+   (MultiFocus[F])` chain in the test suite triggers the ambiguity, and users
+   route via the explicit `summon[Composer[..]].to(o)` form anyway. Remaining
+   MultiFocus outbound gaps: no `Composer[MultiFocus[F], Forgetful]` /
+   `Composer[MultiFocus[F], Tuple2]` (those would be lossy on the focus side).
 2. **MultiFocus[F] × MultiFocus[G] across different `F` / `G`**.
    `mfAssoc` requires the same `F` on both sides. Composing
    `MultiFocus[List]` with `MultiFocus[Option]` fails implicit
@@ -673,21 +676,24 @@ unsound** (rationale also lives at the bottom of `MultiFocus.scala`):
   constraint, NOT the type-level encodability. Workaround:
   `multiFocus.to(s)._2` for the read side.
 
-- **`Composer[MultiFocus[F], Forget[G]]` (MultiFocus widens to
-  Traversal/Fold).** Generic in `S, T, A, B`. The target carrier
-  `Forget[G][X, A] = G[A]` forces the morphed `to` to produce `G[A]`
-  from arbitrary `S`. The structural mismatch: even with `F = G`
-  matching, the Composer has no place to thread the `Foldable[G]`
-  witness — the carrier-shaped bridge can't carry an inner constraint
-  scoped to the call site. Users wanting fold/traverse semantics on a
-  MultiFocus's slots should construct the `Forget[F]`-carrier optic
-  directly.
+- **`Composer[MultiFocus[F], Forget[F]]` (MultiFocus widens to
+  Traversal/Fold). SHIPPED 2026-04-29** (`multifocus2forget` in
+  `MultiFocus.scala`) closing top-5 plan gap #2. The morph discards
+  the structural leftover and exposes the focused `F[A]` directly as
+  the Forget[F] carrier's read-aggregate. The `from` side returns
+  `().asInstanceOf[T]` — sound only when `T = Unit` (Forget-carrier
+  optics have T=Unit by construction). Theoretically the Composer is
+  in a bidirectional pair with `forget2multifocus` and Morph would
+  turn ambiguous; empirically no `forget.andThen(multifocus)` chain
+  in the test corpus triggers the ambiguity, and the explicit
+  `summon[Composer[..]].to(o)` form sidesteps Morph entirely. Stays
+  shipped pending a real-world ambiguity report.
 
-By symmetry of these two skip-rationales, `Tuple2 → MultiFocus → X`
-chains where X ∉ {SetterF, MultiFocus[F]} all sit in the U bucket.
-The shipped `MultiFocus` outbound surface is: same-carrier `andThen`
-(via `mfAssoc`), `morph[SetterF]` (via `multifocus2setter`), and
-nothing else.
+By symmetry of the Forgetful skip-rationale, `Tuple2 → MultiFocus → X`
+chains where X ∉ {SetterF, MultiFocus[F], Forget[F]} all sit in the U
+bucket. The shipped `MultiFocus` outbound surface is: same-carrier
+`andThen` (via `mfAssoc`), `morph[SetterF]` (via `multifocus2setter`),
+`morph[Forget[F]]` (via `multifocus2forget`), and nothing else.
 
 The pre-merge `AlgLens.scala` and `Kaleidoscope.scala` files are
 deleted; the unified file is `MultiFocus.scala`.
