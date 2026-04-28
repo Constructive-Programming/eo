@@ -29,9 +29,22 @@ class CrossCarrierCompositionSpec extends Specification:
   import CrossCarrierCompositionSpec.*
   import CrossCarrierCompositionSpec.given
 
-  // covers: chain on adult payload returns Some(name), chain on minor returns
-  // None (AffineFold miss), chain on a payload that doesn't decode returns None
-  "(1) plain Lens → AvroFieldsPrism → AffineFold: success / minor-miss / undecodable miss" >> {
+  // covers: scenario (1) — plain Lens(Box) → AvroFieldsPrism → AffineFold chain returns
+  //   Some(name) on an adult payload, None on a minor (AffineFold miss), None on an
+  //   undecodable payload (record under a schema with no `name` field)
+  // ... continues into the (2)+(3) composite block below.
+  // (Scenario (1) absorbed into the (1)+(2)+(3) composite immediately following.)
+
+  // covers: scenario (2) — generics lens[S](_.field) → single-field AvroPrism cross-carrier,
+  //   getOption reads the embedded name on a valid envelope, getOption returns None when
+  //   the payload doesn't decode (Affine miss), diagnostic case via direct AvroPrism's
+  //   .modify on an empty record surfaces Ior.Both(PathMissing(name));
+  //   scenario (3) — generics lens → multi-field AvroPrism (.fields) cross-carrier modify
+  //   updates name + age through the chain, concrete-class Ior surface preserves age,
+  //   diagnostic case via direct .fields.get on a name-only record surfaces Ior.Left
+  //   accumulating PathMissing(age)
+  "(1)+(2)+(3) lens → AvroFieldsPrism + AffineFold + multi-field .fields: cross-carrier + diagnostics" >> {
+    // ---- (1) plain Lens → AvroFieldsPrism → AffineFold ----
     val box = Lens[Box, IndexedRecord](_.payload, (b, r) => b.copy(payload = r))
     val personFields: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Either] =
       codecPrism[Person].fields(_.name, _.age)
@@ -39,12 +52,11 @@ class CrossCarrierCompositionSpec extends Specification:
       AffineFold(nt => Option.when(nt.age >= 18)(nt.name))
     val boxToFields: Optic[Box, Box, NameAge, NameAge, dev.constructive.eo.data.Affine] =
       box.andThen(personFields)
-    val chain: Box => Option[String] =
+    val boxChain: Box => Option[String] =
       (b: Box) => boxToFields.getOption(b).flatMap(nt => adultName.getOption(nt))
 
     val adultBox = Box(personRecord(Person("Alice", 30)))
     val minorBox = Box(personRecord(Person("Bob", 12)))
-    // An "undecodable" Avro record: a record under a schema that has no `name` field at all.
     val brokenSchema = {
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
       fields.add(
@@ -60,21 +72,10 @@ class CrossCarrierCompositionSpec extends Specification:
     val brokenRec = new GenericData.Record(brokenSchema)
     brokenRec.put(0, "not a person")
     val brokenBox = Box(brokenRec)
+    val s1 = (boxChain(adultBox) === Some("Alice"))
+      .and(boxChain(minorBox) === None)
+      .and(boxChain(brokenBox) === None)
 
-    (chain(adultBox) === Some("Alice"))
-      .and(chain(minorBox) === None)
-      .and(chain(brokenBox) === None)
-  }
-
-  // covers: scenario (2) — generics lens[S](_.field) → single-field AvroPrism cross-carrier,
-  //   getOption reads the embedded name on a valid envelope, getOption returns None when
-  //   the payload doesn't decode (Affine miss), diagnostic case via direct AvroPrism's
-  //   .modify on an empty record surfaces Ior.Both(PathMissing(name));
-  //   scenario (3) — generics lens → multi-field AvroPrism (.fields) cross-carrier modify
-  //   updates name + age through the chain, concrete-class Ior surface preserves age,
-  //   diagnostic case via direct .fields.get on a name-only record surfaces Ior.Left
-  //   accumulating PathMissing(age)
-  "(2)+(3) generics lens → single-field AvroPrism + multi-field .fields: cross-carrier + Ior diagnostics" >> {
     // ---- (2) single-field ----
     val outer2 = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
     val inner2: Optic[IndexedRecord, IndexedRecord, String, String, Either] =
@@ -151,7 +152,7 @@ class CrossCarrierCompositionSpec extends Specification:
 
     val s3 = modOk.and(concreteOk).and(diag3)
 
-    s2.and(s3)
+    s1.and(s2).and(s3)
   }
 
   // covers: manual composition outer.modify(trav.modifyUnsafe(f)) works,

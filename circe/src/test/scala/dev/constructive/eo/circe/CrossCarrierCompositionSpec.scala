@@ -22,9 +22,17 @@ class CrossCarrierCompositionSpec extends Specification:
   import CrossCarrierCompositionSpec.*
   import CrossCarrierCompositionSpec.given
 
-  // covers: chain on adult payload returns Some(name), chain on minor returns
-  // None (AffineFold miss), chain on a payload that doesn't decode returns None
-  "(1) plain Lens → JsonFieldsPrism → AffineFold: success / minor-miss / undecodable miss" >> {
+  // covers: scenario (1) — plain Lens(Box) → JsonFieldsPrism → AffineFold chain returns
+  //   Some(name) on an adult payload, None on a minor (AffineFold miss), None on a payload
+  //   that doesn't decode (Either-prism miss);
+  //   scenario (2) — generics lens[S](_.field) → single-field JsonPrism cross-carrier,
+  //   getOption reads embedded name on valid envelope, getOption returns None on undecodable
+  //   payload (Affine miss), direct .modify on Json.obj() surfaces Ior.Both(PathMissing(name));
+  //   scenario (3) — generics lens → multi-field JsonPrism (.fields), modify updates name+age
+  //   through the chain, concrete-class .modify preserves address, direct .fields.get on a
+  //   name-only payload surfaces Ior.Left accumulating PathMissing(age)
+  "(1)+(2)+(3) lens → JsonFieldsPrism + AffineFold + multi-field .fields: cross-carrier + diagnostics" >> {
+    // ---- (1) plain Lens → JsonFieldsPrism → AffineFold ----
     val box = Lens[Box, Json](_.payload, (b, j) => b.copy(payload = j))
     val personFields: Optic[Json, Json, NameAge, NameAge, Either] =
       codecPrism[Person].fields(_.name, _.age)
@@ -32,25 +40,16 @@ class CrossCarrierCompositionSpec extends Specification:
       AffineFold(nt => Option.when(nt.age >= 18)(nt.name))
     val boxToFields: Optic[Box, Box, NameAge, NameAge, dev.constructive.eo.data.Affine] =
       box.andThen(personFields)
-    val chain: Box => Option[String] =
+    val boxChain: Box => Option[String] =
       (b: Box) => boxToFields.getOption(b).flatMap(nt => adultName.getOption(nt))
 
     val adultBox = Box(Person("Alice", 30, Address("Main St", 1)).asJson)
     val minorBox = Box(Person("Bob", 12, Address("Oak Ave", 2)).asJson)
     val brokenBox = Box(Json.fromString("not a person"))
+    val s1 = (boxChain(adultBox) === Some("Alice"))
+      .and(boxChain(minorBox) === None)
+      .and(boxChain(brokenBox) === None)
 
-    (chain(adultBox) === Some("Alice"))
-      .and(chain(minorBox) === None)
-      .and(chain(brokenBox) === None)
-  }
-
-  // covers: scenario (2) — generics lens[S](_.field) → single-field JsonPrism cross-carrier,
-  //   getOption reads embedded name on valid envelope, getOption returns None on undecodable
-  //   payload (Affine miss), direct .modify on Json.obj() surfaces Ior.Both(PathMissing(name));
-  //   scenario (3) — generics lens → multi-field JsonPrism (.fields), modify updates name+age
-  //   through the chain, concrete-class .modify preserves address, direct .fields.get on a
-  //   name-only payload surfaces Ior.Left accumulating PathMissing(age)
-  "(2)+(3) generics lens → single-field JsonPrism + multi-field .fields: cross-carrier + Ior diagnostics" >> {
     // ---- (2) single-field ----
     val outer2 = Lens[Envelope, Json](_.payload, (e, j) => e.copy(payload = j))
     val inner2: Optic[Json, Json, String, String, Either] = codecPrism[Person].field(_.name)
@@ -92,7 +91,7 @@ class CrossCarrierCompositionSpec extends Specification:
       case other       => ko(s"expected Ior.Left, got $other")
 
     val s3 = modOk.and(concreteOk).and(diag3)
-    s2.and(s3)
+    s1.and(s2).and(s3)
   }
 
   // covers: manual composition outer.modify(trav.modifyUnsafe(f)) works,
