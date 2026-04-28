@@ -321,21 +321,24 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   // Behaviour smoke-test pins the semantics down and lights up the
   // previously-unreached `from` clauses of those constructors.
 
-  "Traversal.two modifies both components and preserves structure" >> {
-    val t = Traversal.two[(Int, Int), (Int, Int), Int, Int](
+  // covers: Traversal.two modifies both components and preserves structure
+  //   (mfFunctor[Function1] with arity 2),
+  //   Traversal.three modifies all three components (the same mfFunctor instance, arity 3)
+  "Traversal.two / Traversal.three: pointwise modify across MultiFocus[Function1[Int, *]]" >> {
+    val t2 = Traversal.two[(Int, Int), (Int, Int), Int, Int](
       _._1,
       _._2,
       (a, b) => (a, b),
     )
-    forAll((p: (Int, Int)) => t.modify(_ + 100)(p) == (p._1 + 100, p._2 + 100))
-  }
-
-  "Traversal.three modifies all three components" >> {
-    val t = Traversal.three[(Int, Int, Int), (Int, Int, Int), Int, Int](
+    val t3 = Traversal.three[(Int, Int, Int), (Int, Int, Int), Int, Int](
       _._1,
       _._2,
       _._3,
       (a, b, c) => (a, b, c),
     )
-    forAll((p: (Int, Int, Int)) => t.modify(_ + 1)(p) == (p._1 + 1, p._2 + 1, p._3 + 1))
+    forAll { (p2: (Int, Int), p3: (Int, Int, Int)) =>
+      val a2 = t2.modify(_ + 100)(p2) == (p2._1 + 100, p2._2 + 100)
+      val a3 = t3.modify(_ + 1)(p3) == (p3._1 + 1, p3._2 + 1, p3._3 + 1)
+      a2 && a3
+    }
   }

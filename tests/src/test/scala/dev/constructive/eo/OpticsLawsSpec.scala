@@ -199,16 +199,15 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // covers: Fold.select over Int (Forget[Option] carrier)
   checkAllFoldFor[Int, Int, data.Forget[Option]]("Fold.select[Int](even)", evenSelectFold)
 
-  "Fold.select" should {
-    "expose the value via .to when the predicate holds, None otherwise" >> {
-      forAll((n: Int) => evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None))
-    }
-
-    "for the always-false predicate, foldMap always returns Monoid.empty" >> {
+  // covers: Fold.select.to exposes the value when the predicate holds and None otherwise,
+  //   the always-false predicate's foldMap always returns Monoid.empty (zero for Int)
+  "Fold.select: predicate-gated .to + always-false foldMap returns Monoid.empty" >> forAll {
+    (n: Int) =>
       val neverFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
         Fold.select[Int](_ => false)
-      forAll((n: Int) => neverFold.foldMap[Int](identity)(n) == 0)
-    }
+      val toOk = evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None)
+      val neverOk = neverFold.foldMap[Int](identity)(n) == 0
+      toOk && neverOk
   }
 
   // ----- AffineFold: partial projection + filtering select -------
@@ -464,26 +463,21 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // Exercise Optic.put which requires ForgetfulApplicative[F] — this
   // lights up ForgetfulApplicative.scala (0% baseline).
 
-  "ForgetfulApplicative" should {
-    // Exercise Optic.put on a Forgetful-carrier Iso (covers
-    // Forgetful.applicative in core/src/main/scala/eo/data/Forgetful.scala)
-    // AND exercise the forgetFApplicative given on a Forget[List]-carrier
-    // Fold (covers core/src/main/scala/eo/ForgetfulApplicative.scala).
+  // covers: lift Optic.put via pure on Forgetful — exercises Forgetful.applicative,
+  //   forgetFApplicative[List].pure wraps a single element + .map composes — exercises
+  //   ForgetfulApplicative.scala (forgetFApplicative)
+  "ForgetfulApplicative: Optic.put on Forgetful + forgetFApplicative[List].pure / .map" >> {
     import Optic.*
     given ForgetfulApplicative[Forgetful] = Forgetful.applicative
     given data.ReverseAccessor[Forgetful] = Forgetful.reverseAccessor
     val intDouble: Optic[Int, Int, Int, Int, Forgetful] =
       optics.Iso[Int, Int, Int, Int](_ * 2, _ / 2)
-    "lift Optic.put via pure on Forgetful" >> {
-      forAll((a: Int, f: Int => Int) => intDouble.put(f)(a) == intDouble.reverseGet(f(a)))
-    }
-
-    "forgetFApplicative[List].pure wraps a single element" >> {
-      val ap = summon[ForgetfulApplicative[data.Forget[List]]]
-      forAll((n: Int) =>
-        ap.pure[Unit, Int](n) == List(n) &&
-          ap.map[Unit, Int, Int](List(n), _ + 1) == List(n + 1)
-      )
+    val ap = summon[ForgetfulApplicative[data.Forget[List]]]
+    forAll { (a: Int, f: Int => Int, n: Int) =>
+      val putOk = intDouble.put(f)(a) == intDouble.reverseGet(f(a))
+      val pureOk = ap.pure[Unit, Int](n) == List(n)
+      val mapOk = ap.map[Unit, Int, Int](List(n), _ + 1) == List(n + 1)
+      putOk && pureOk && mapOk
     }
   }
 
@@ -524,41 +518,31 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   val tuple2MultiFocus: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
     MultiFocus.tuple[(Int, Int), Int]
-
-  "MultiFocus.tuple[(Int, Int), Int] — modify-identity (G1)" >> forAll { (s: (Int, Int)) =>
-    tuple2MultiFocus.modify(identity[Int])(s) == s
-  }
-
-  "MultiFocus.tuple[(Int, Int), Int] — compose-modify (G2)" >> forAll {
-    (s: (Int, Int), f: Int => Int, g: Int => Int) =>
-      tuple2MultiFocus.modify(g)(tuple2MultiFocus.modify(f)(s)) ==
-        tuple2MultiFocus.modify(f.andThen(g))(s)
-  }
-
-  "MultiFocus.tuple[(Int, Int), Int] — replace-idempotent (G3)" >> forAll {
-    (s: (Int, Int), a: Int) =>
-      tuple2MultiFocus.replace(a)(tuple2MultiFocus.replace(a)(s)) ==
-        tuple2MultiFocus.replace(a)(s)
-  }
-
   val tuple3MultiFocus
       : Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
     MultiFocus.tuple[(Int, Int, Int), Int]
 
-  "MultiFocus.tuple[(Int, Int, Int), Int] — modify-identity (G1)" >> forAll {
-    (s: (Int, Int, Int)) => tuple3MultiFocus.modify(identity[Int])(s) == s
-  }
+  // covers: MultiFocus.tuple[(Int, Int)] G1 modify-identity, G2 compose-modify, G3
+  //   replace-idempotent (the formerly-Grate trio at arity 2),
+  //   MultiFocus.tuple[(Int, Int, Int)] G1, G2, G3 (the same trio at arity 3)
+  // MultiFocusTests requires S =:= F[A], which doesn't hold for the tuple-shape factory
+  // (S = TupleN, F = Function1[Int, *], so F[A] ≠ S), so the laws are checked inline as
+  // forAlls. This composite block witnesses both arities in one property sweep.
+  "MultiFocus.tuple at arity 2 + 3: G1 modify-id / G2 compose-modify / G3 replace-idempotent" >> forAll {
+    (s2: (Int, Int), s3: (Int, Int, Int), f: Int => Int, g: Int => Int, a: Int) =>
+      val a2g1 = tuple2MultiFocus.modify(identity[Int])(s2) == s2
+      val a2g2 = tuple2MultiFocus.modify(g)(tuple2MultiFocus.modify(f)(s2)) ==
+        tuple2MultiFocus.modify(f.andThen(g))(s2)
+      val a2g3 = tuple2MultiFocus.replace(a)(tuple2MultiFocus.replace(a)(s2)) ==
+        tuple2MultiFocus.replace(a)(s2)
 
-  "MultiFocus.tuple[(Int, Int, Int), Int] — compose-modify (G2)" >> forAll {
-    (s: (Int, Int, Int), f: Int => Int, g: Int => Int) =>
-      tuple3MultiFocus.modify(g)(tuple3MultiFocus.modify(f)(s)) ==
-        tuple3MultiFocus.modify(f.andThen(g))(s)
-  }
+      val a3g1 = tuple3MultiFocus.modify(identity[Int])(s3) == s3
+      val a3g2 = tuple3MultiFocus.modify(g)(tuple3MultiFocus.modify(f)(s3)) ==
+        tuple3MultiFocus.modify(f.andThen(g))(s3)
+      val a3g3 = tuple3MultiFocus.replace(a)(tuple3MultiFocus.replace(a)(s3)) ==
+        tuple3MultiFocus.replace(a)(s3)
 
-  "MultiFocus.tuple[(Int, Int, Int), Int] — replace-idempotent (G3)" >> forAll {
-    (s: (Int, Int, Int), a: Int) =>
-      tuple3MultiFocus.replace(a)(tuple3MultiFocus.replace(a)(s)) ==
-        tuple3MultiFocus.replace(a)(s)
+      a2g1 && a2g2 && a2g3 && a3g1 && a3g2 && a3g3
   }
 
   // ----- MultiFocus: List + ZipList + Const fixtures --------------
