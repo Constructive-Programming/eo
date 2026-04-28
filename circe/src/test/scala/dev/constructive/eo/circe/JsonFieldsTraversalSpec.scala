@@ -85,20 +85,22 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
 
   // ---- Per-element atomicity (D4) ---------------------------------
 
-  // covers: leave element unchanged when one of its focused fields misses
-  "atomicity: element with one focused field missing is left untouched, failure recorded" >> {
+  // covers: element with ONE focused field missing — chain-of-one PathMissing(price); the
+  //   broken element's slots are NOT atomically touched (modify never produces a partial NT)
+  //   but the good elements still apply the modify (witnessed via downN(0) and downN(2));
+  //   element with BOTH focused fields missing contributes TWO PathMissing entries to the
+  //   chain (one per missing field) — same accumulation across cross-element splits
+  "atomicity: per-element failures (single-field miss + both-missing + cross-element split)" >> {
     val good = Order("x", 1.0, qty = 1).asJson
     val brokenElem = Json.obj(
       "name" -> Json.fromString("y"),
       "qty" -> Json.fromInt(2),
       // "price" missing
     )
-    val result =
-      runFieldsModify(
-        Seq(good, brokenElem, Order("z", 3.0, qty = 3).asJson),
-        nt => (name = nt.name.toUpperCase, price = nt.price * 2),
-      )
-    result match
+    val singleOk = runFieldsModify(
+      Seq(good, brokenElem, Order("z", 3.0, qty = 3).asJson),
+      nt => (name = nt.name.toUpperCase, price = nt.price * 2),
+    ) match
       case Ior.Both(chain, out) =>
         val outArr = out.hcursor.downField("items").focus.flatMap(_.asArray)
         (out.hcursor.downField("items").downN(0).downField("name").as[String] === Right("X"))
@@ -107,12 +109,8 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
           .and(out.hcursor.downField("items").downN(2).downField("name").as[String] === Right("Z"))
           .and(chain.length === 1L)
           .and(chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("price")))
-      case _ => ko(s"expected Ior.Both, got $result")
-  }
+      case other => ko(s"expected Ior.Both, got $other")
 
-  // covers: element with BOTH fields missing contributes TWO entries to the chain,
-  // accumulate across elements: two different broken elements contribute two entries
-  "atomicity: per-element failures accumulate (both-missing + cross-element split)" >> {
     def assertNamePriceMissing(elems: Seq[Json]) =
       runFieldsModify(elems) match
         case Ior.Both(chain, _) =>
@@ -121,15 +119,14 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
             .and(chain.toList.contains(JsonFailure.PathMissing(PathStep.Field("price"))) === true)
         case other => ko(s"expected Ior.Both, got $other")
 
-    val good = Order("x", 1.0, qty = 1).asJson
     val emptyElem = Json.obj("qty" -> Json.fromInt(2))
-
     val missingName = Json.obj("price" -> Json.fromDoubleOrNull(1.0), "qty" -> Json.fromInt(1))
     val missingPrice = Json.obj("name" -> Json.fromString("y"), "qty" -> Json.fromInt(2))
     val good2 = Order("z", 3.0, qty = 3).asJson
-
-    assertNamePriceMissing(Seq(good, emptyElem))
+    val bothMissOk = assertNamePriceMissing(Seq(good, emptyElem))
       .and(assertNamePriceMissing(Seq(missingName, missingPrice, good2)))
+
+    singleOk.and(bothMissOk)
   }
 
   // ---- Empty array / missing prefix --------------------------------

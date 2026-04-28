@@ -57,20 +57,19 @@ class AvroTraversalSpec extends Specification:
     (parityM === true).and(correctM === true).and(parityGA).and(correctGA)
   }
 
-  // covers: return Ior.Right(input) on an empty array (no elements to iterate),
-  // yield Chain.empty on happy path even at size zero
-  "AvroTraversal empty array: modify returns Ior.Right(input)" >> {
-    val basket = Basket("Alice", List.empty)
-    val record = basketRecord(basket)
-    codecPrism[Basket].items.each.name.modify(_.toUpperCase)(record) match
-      case Ior.Right(out) => recordsEqual(out, record) === true
-      case other          =>
-        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
-  }
+  // covers: empty array — modify returns Ior.Right(record) (no elements to iterate),
+  //   missing prefix — modify surfaces Ior.Left(PathMissing(items)),
+  //   missing prefix — getAll surfaces Ior.Left,
+  //   missing prefix — modifyUnsafe returns input unchanged
+  "AvroTraversal empty / missing prefix: Ior.Right on empty + PathMissing on missing" >> {
+    val emptyBasket = Basket("Alice", List.empty)
+    val emptyRecord = basketRecord(emptyBasket)
+    val emptyOk =
+      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(emptyRecord) match
+        case Ior.Right(out) => recordsEqual(out, emptyRecord) === true
+        case other          =>
+          org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
 
-  // covers: return Ior.Left on a missing prefix field (modify), return Ior.Left
-  // on a missing prefix (getAll), modifyUnsafe on broken prefix returns input
-  "AvroTraversal missing prefix: default → Ior.Left, Unsafe → input unchanged" >> {
     // Build a stump record whose schema lacks `items` entirely.
     val stumpSchema =
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
@@ -93,18 +92,19 @@ class AvroTraversalSpec extends Specification:
           .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("items")))
       case _ =>
         org.specs2.execute.Failure(s"expected Ior.Left, got $mResult"): org.specs2.execute.Result
-
     val gaOk = codecPrism[Basket].items.each.name.getAll(stump).isLeft === true
     val unsafeOk =
       (codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) eq stump) === true
 
-    mOk.and(gaOk).and(unsafeOk)
+    emptyOk.and(mOk).and(gaOk).and(unsafeOk)
   }
 
-  // covers: return Ior.Both when one element's suffix misses (element left
-  // unchanged, failure recorded), yield a single-element Chain for one per-element
-  // failure
-  "AvroTraversal single per-element failure: Ior.Both(chain-of-one, partial output)" >> {
+  // covers: single per-element failure — Ior.Both with chain-of-one PathMissing(name) (the
+  //   per-element walker surfaces the missing-field for the malformed element while the
+  //   surviving elements still apply the modify);
+  //   multiple per-element failures (two malformed elements) accumulate to a chain-of-two
+  //   PathMissing entries while the third element's modify still applies
+  "AvroTraversal per-element failures: chain-of-one + cross-element accumulation (Ior.Both)" >> {
     val good = orderRecord(Order("x", 1.0, 1))
     // A record whose schema lacks the `name` field — the per-element walk surfaces PathMissing.
     val malformedSchema =
@@ -121,18 +121,14 @@ class AvroTraversalSpec extends Specification:
     val malformed = new GenericData.Record(malformedSchema)
     malformed.put(0, Integer.valueOf(99))
 
-    val result = runItemsModify(good, malformed, orderRecord(Order("z", 3.0, 3)))
-    result match
+    val singleOk = runItemsModify(good, malformed, orderRecord(Order("z", 3.0, 3))) match
       case Ior.Both(chain, _) =>
         (chain.length === 1L)
           .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
-  }
 
-  // covers: accumulate multiple per-element failures across the array
-  "AvroTraversal accumulates multiple per-element failures across the array" >> {
-    val nameless =
+    def nameless =
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
       fields.add(
         new org.apache.avro.Schema.Field(
@@ -147,14 +143,15 @@ class AvroTraversalSpec extends Specification:
       r.put(0, Integer.valueOf(1))
       r
 
-    val result = runItemsModify(nameless, nameless, orderRecord(Order("z", 3.0, 3)))
-    result match
+    val multiOk = runItemsModify(nameless, nameless, orderRecord(Order("z", 3.0, 3))) match
       case Ior.Both(chain, _) =>
         val missingName = AvroFailure.PathMissing(PathStep.Field("name"))
         (chain.length === 2L)
           .and(chain.toList.forall(_ == missingName) === true)
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
+
+    singleOk.and(multiOk)
   }
 
   // covers: place overwrites every element's focused field with a constant,

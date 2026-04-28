@@ -54,17 +54,16 @@ class JsonTraversalSpec extends JsonSpecBase:
     parityM.and(correctM).and(correctT).and(parityGA).and(correctGA)
   }
 
-  // covers: return Ior.Right(input) on an empty array (no elements to iterate),
-  // yield Chain.empty on happy path even at size zero
-  "JsonTraversal empty array: modify returns Ior.Right(input)" >> {
-    val basket = Basket("Alice", Vector.empty)
-    val json = basket.asJson
-    codecPrism[Basket].items.each.name.modify(_.toUpperCase)(json) === Ior.Right(json)
-  }
+  // covers: empty array — modify returns Ior.Right(input) (no elements to iterate, Chain.empty),
+  //   missing prefix — default modify surfaces Ior.Left(PathMissing(items)),
+  //   missing prefix — getAll surfaces Ior.Left,
+  //   missing prefix — modifyUnsafe returns input unchanged
+  "JsonTraversal empty / missing prefix: Ior.Right(input) on empty + PathMissing on missing" >> {
+    val emptyBasket = Basket("Alice", Vector.empty)
+    val emptyJson = emptyBasket.asJson
+    val emptyOk =
+      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(emptyJson) === Ior.Right(emptyJson)
 
-  // covers: return Ior.Left on a missing prefix field (modify), return Ior.Left
-  // on a missing prefix (getAll), modifyUnsafe on broken prefix returns input
-  "JsonTraversal missing prefix: default → Ior.Left, Unsafe → input unchanged" >> {
     val stump = Json.obj("owner" -> Json.fromString("Alice"))
     val mResult = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(stump)
     val mOk = mResult match
@@ -72,17 +71,17 @@ class JsonTraversalSpec extends JsonSpecBase:
         (chain.length === 1L)
           .and(chain.headOption.get === JsonFailure.PathMissing(PathStep.Field("items")))
       case _ => ko(s"expected Ior.Left, got $mResult")
-
     val gaOk = codecPrism[Basket].items.each.name.getAll(stump).isLeft === true
     val unsafeOk = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) === stump
 
-    mOk.and(gaOk).and(unsafeOk)
+    emptyOk.and(mOk).and(gaOk).and(unsafeOk)
   }
 
-  // covers: return Ior.Both when one element's suffix misses (element left
-  // unchanged, failure recorded), yield a single-element Chain for one per-element
-  // failure, return Ior.Both(chain, partial) for getAll
-  "JsonTraversal single per-element failure: Ior.Both(chain-of-one, partial output)" >> {
+  // covers: single per-element failure — Ior.Both with chain-of-one NotAnObject + partial output,
+  //   getAll on the same input yields Ior.Both with the surviving Vector + chain-of-one;
+  //   multiple per-element failures (NotAnObject + PathMissing(name)) accumulate in the chain
+  //   while the third element (z) still applies the modify
+  "JsonTraversal per-element failures: chain-of-one + cross-element accumulation (Ior.Both)" >> {
     val good = Order("x").asJson
     val malformed = Json.fromString("oops")
     val result = runItemsModify(good, malformed, Order("z").asJson)
@@ -104,18 +103,12 @@ class JsonTraversalSpec extends JsonSpecBase:
           .and(chain.headOption.get === JsonFailure.NotAnObject(PathStep.Field("name")))
       case other => ko(s"expected Ior.Both, got $other")
 
-    mOk.and(gaOk)
-  }
-
-  // covers: accumulate multiple per-element failures across the array
-  "JsonTraversal accumulates multiple per-element failures across the array" >> {
-    val result =
-      runItemsModify(
-        Json.fromString("oops"), // not an object
-        Json.obj(), // object missing "name"
-        Order("z").asJson, // succeeds
-      )
-    result match
+    val multi = runItemsModify(
+      Json.fromString("oops"), // not an object
+      Json.obj(), // object missing "name"
+      Order("z").asJson, // succeeds
+    )
+    val multiOk = multi match
       case Ior.Both(chain, out) =>
         (chain.length === 2L)
           .and(chain.toList.contains(JsonFailure.NotAnObject(PathStep.Field("name"))) === true)
@@ -123,7 +116,9 @@ class JsonTraversalSpec extends JsonSpecBase:
           .and(
             out.hcursor.downField("items").downN(2).downField("name").as[String] === Right("Z")
           )
-      case _ => ko(s"expected Ior.Both, got $result")
+      case _ => ko(s"expected Ior.Both, got $multi")
+
+    mOk.and(gaOk).and(multiOk)
   }
 
   // covers: place overwrites every element's focused field with a constant,

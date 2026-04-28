@@ -95,8 +95,12 @@ class AvroFieldsTraversalSpec extends Specification:
 
   // ---- Per-element atomicity (D4) ---------------------------------
 
-  // covers: leave element unchanged when one of its focused fields misses
-  "atomicity: element with one focused field missing is left untouched, failure recorded" >> {
+  // covers: element with ONE focused field missing — chain-of-one PathMissing(price); the
+  //   broken element's slots are NOT atomically touched (modify produces no partial NT) but
+  //   the surviving good elements still apply the modify;
+  //   element with BOTH focused fields missing contributes TWO PathMissing entries to the
+  //   chain (one per missing field), confirming per-element accumulation
+  "atomicity: per-element failures (single-field miss + both-missing accumulation)" >> {
     val good = orderRecord(Order("x", 1.0, qty = 1))
     val brokenElem =
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
@@ -123,22 +127,16 @@ class AvroFieldsTraversalSpec extends Specification:
       r
 
     val third = orderRecord(Order("z", 3.0, qty = 3))
-    val result =
-      runFieldsModify(
-        Seq(good, brokenElem, third),
-        nt => (name = nt.name.toUpperCase, price = nt.price * 2),
-      )
-    result match
+    val singleOk = runFieldsModify(
+      Seq(good, brokenElem, third),
+      nt => (name = nt.name.toUpperCase, price = nt.price * 2),
+    ) match
       case Ior.Both(chain, _) =>
         (chain.length === 1L)
           .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("price")))
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
-  }
 
-  // covers: element with BOTH fields missing contributes TWO entries to the chain,
-  // accumulate across elements: two different broken elements contribute two entries
-  "atomicity: per-element failures accumulate (both-missing + cross-element split)" >> {
     def emptyOrder =
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
       fields.add(
@@ -154,10 +152,7 @@ class AvroFieldsTraversalSpec extends Specification:
       r.put(0, Integer.valueOf(2))
       r
 
-    val good = orderRecord(Order("x", 1.0, qty = 1))
-
-    val both = runFieldsModify(Seq(good, emptyOrder))
-    val bothOk = both match
+    val bothOk = runFieldsModify(Seq(good, emptyOrder)) match
       case Ior.Both(chain, _) =>
         (chain.length === 2L)
           .and(chain.toList.contains(AvroFailure.PathMissing(PathStep.Field("name"))) === true)
@@ -165,7 +160,7 @@ class AvroFieldsTraversalSpec extends Specification:
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
-    bothOk
+    singleOk.and(bothOk)
   }
 
   // ---- Empty array / missing prefix --------------------------------
