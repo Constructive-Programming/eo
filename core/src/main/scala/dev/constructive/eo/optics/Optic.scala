@@ -8,33 +8,22 @@ import cats.{Applicative, Functor, Monoid}
 import data.*
 
 /** Existential encoding of a profunctor optic — the single trait behind every optic family in
-  * `cats-eo`.
-  *
-  * The profunctor presentation of optics quantifies *universally* over a profunctor: `type Optic[S,
-  * T, A, B] = forall p. Profunctor[p]
-  * => p[A, B] => p[S, T]`. The existential presentation flips the quantifier: it exposes a carrier
-  * `F[_, _]` and an existential witness `X`, so the optic becomes a plain value — a pair of
-  * functions `(S => F[X, A], F[X, B] => T)` — rather than a polymorphic method. Each optic family
-  * picks a different carrier (`Tuple2` for Lens, `Either` for Prism, `Affine` for Optional, …); the
-  * existential `X` threads the "leftover" information the carrier needs to rebuild `T` from a
-  * modified `B`.
-  *
-  * A typical call site drives the optic through extension methods in this companion (`.get`,
-  * `.modify`, `.replace`, `.foldMap`, …); the carrier-specific typeclasses (`Accessor[F]`,
-  * `ForgetfulFunctor[F]`, …) wire each extension to the right `F[X, A]` manipulation.
+  * `cats-eo`. The optic is a pair of functions `(S => F[X, A], F[X, B] => T)` over a carrier
+  * `F[_, _]` and an existential `X` that threads the leftover information needed to rebuild `T`.
+  * Each family picks a different carrier (`Tuple2` for Lens, `Either` for Prism, `Affine` for
+  * Optional, …). Operations live in the companion as capability-gated extensions; each extension's
+  * `(using …)` clause names the typeclass on `F` that unlocks it.
   *
   * @tparam S
   *   source type being observed / modified
   * @tparam T
   *   result type after modification (often `= S`)
   * @tparam A
-  *   focus type read out of `S`
+  *   focus read out of `S`
   * @tparam B
-  *   focus type written back to produce `T` (often `= A`)
+  *   focus written back to produce `T` (often `= A`)
   * @tparam F
-  *   carrier functor-of-two-arguments; the family's carrier determines which operations are
-  *   available (e.g. `Accessor[F]` unlocks `.get`, `ForgetfulFunctor[F]` unlocks `.modify` /
-  *   `.replace`).
+  *   two-argument carrier; capabilities scale with the typeclasses `F` admits.
   *
   * @see
   *   [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Setter]], [[Traversal]], [[Getter]], [[Fold]]
@@ -42,10 +31,9 @@ import data.*
 trait Optic[S, T, A, B, F[_, _]]:
   self =>
 
-  /** Existential "leftover" carried alongside the focus — the type-level witness each carrier uses
-    * to rebuild `T` from a modified `B`. Concrete at each construction site (`Lens.apply` sets it
-    * to `Tuple2[S, ?]`'s second slot, `Prism.apply` sets it to `S`, …) and abstract when the optic
-    * is bound to `Optic[…, F]` without further refinement.
+  /** Existential leftover carried alongside the focus — the type-level witness the carrier uses to
+    * rebuild `T`. Concrete at construction (`Lens.apply` sets `X = S`, `Prism.apply` sets `X = S`,
+    * …) and abstract when the optic is bound to `Optic[…, F]` without refinement.
     */
   type X
 
@@ -59,25 +47,16 @@ trait Optic[S, T, A, B, F[_, _]]:
     */
   def from: F[X, B] => T
 
-  /** Compose with another optic under the shared carrier `F`. Requires an `AssociativeFunctor`
-    * instance for `F`; `Tuple2` / `Either` / `Forgetful` / `Forget[F]` / `Affine` / `PowerSeries`
-    * all ship one.
-    *
-    * For cross-carrier composition (e.g. `Lens → Optional` or `Lens → Traversal`), use the
-    * cross-carrier overloads of this same method: they take an `o` whose carrier `G` differs from
-    * `F`, summon a `Composer[F, G]` or `Composer[G, F]` to bring both sides under a common carrier,
-    * and then compose under that carrier.
+  /** Compose with another optic under the shared carrier `F`. Requires `AssociativeFunctor[F]`.
+    * Cross-carrier composition (Lens → Optional, Lens → Traversal, …) goes through the
+    * `Morph`-summoning overload of this same method.
     *
     * @example
     *   {{{
-    * import dev.constructive.eo.optics.Optic.*
-    * import dev.constructive.eo.generics.lens
-    *
     * case class Address(street: String)
     * case class Person(address: Address)
     *
-    * val streetLens =
-    *   lens[Person](_.address).andThen(lens[Address](_.street))
+    * val streetLens = lens[Person](_.address).andThen(lens[Address](_.street))
     *   }}}
     */
   def andThen[C, D](o: Optic[A, B, C, D, F])(using
@@ -90,13 +69,11 @@ trait Optic[S, T, A, B, F[_, _]]:
       val to: S => F[X, C] = s => af.composeTo(s, outerRef, innerRef)
       val from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
 
-/** Companion for [[Optic]]. Hosts the profunctor instances (`outerProfunctor` / `innerProfunctor`)
-  * and the catalogue of extension methods that drive every public operation on
-  * `Optic[S, T, A, B, F]` — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`,
-  * `.reverseGet`, `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen`, `.morph`.
-  * Each extension is gated on a capability typeclass instance for the carrier (`Accessor[F]` for
-  * `.get`, `ForgetfulFunctor[F]` for `.modify`, etc.), so adding a new carrier that wants to
-  * support `.modify` means supplying a `ForgetfulFunctor[F]` and nothing else.
+/** Companion for [[Optic]]. Hosts the profunctor instances and the capability-gated extension
+  * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`, `.reverseGet`,
+  * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen`, `.morph`, `.headOption`,
+  * `.length`, `.exists`. Adding a new carrier means supplying the typeclass instances of the
+  * operations it should support.
   */
 object Optic:
 
@@ -143,21 +120,12 @@ object Optic:
       val to: A => A = identity
       val from: A => A = identity
 
-  // ---- Cross-carrier composition (auto-morph) -----------------------
-  //
-  // One extension, one typeclass (`Morph[F, G]`), three implicit
-  // directions (same, left-morph via `Composer[F, G]`, right-morph via
-  // `Composer[G, F]`). Scala picks whichever is available; since we
-  // don't ship bidirectional composers, at most one applies per
-  // carrier pair and there's no ambiguity.
-
-  /** Cross-carrier composition — when the two optics carry different `F` and `G`, this extension
-    * picks the direction via a summoned [[Morph]] (which wraps the appropriate `Composer`) and
-    * composes under the resulting shared carrier.
+  /** Cross-carrier `.andThen` — picks the direction via a summoned [[Morph]] when the two optics'
+    * carriers differ. cats-eo doesn't ship bidirectional composers, so at most one Morph applies
+    * per carrier pair (no ambiguity).
     *
     * @example
     *   {{{
-    * // `lens.andThen(each).andThen(lens)` — no explicit `.morph` anywhere.
     * lens[Person](_.phones)
     *   .andThen(Traversal.each[ArraySeq, Phone])
     *   .andThen(lens[Phone](_.isMobile))
@@ -175,19 +143,14 @@ object Optic:
         scala.compiletime.summonInline[AssociativeFunctor[m.Out, morphedSelf.X, morphedO.X]]
       )
 
-    /** Re-express this optic over a different carrier `G`. Package-private — users compose
-      * cross-carrier via the [[andThen]] overload above, which invokes this internally via the
-      * `Composer.to` it summons. Still available to law / behaviour specs inside `eo.*` for direct
-      * testing of the `Composer[F, G]` bridges.
+    /** Re-express this optic over a different carrier `G`. Package-private; users compose
+      * cross-carrier via [[andThen]] above. Reachable for law / behaviour specs inside `eo.*`.
       */
     private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
       cf.to(self)
 
-  // ---- Generic Optic extensions -------------------------------------
-  //
-  // Grouped by the carrier capability each extension requires.
-  // Read the extension's `(using …)` clause to see which carriers
-  // can call which method.
+  // Capability-gated extensions follow. The `(using …)` clause names the typeclass each extension
+  // requires; carriers without that instance simply don't see the method.
 
   /** Read the focus out of `s`. Available when the carrier has an `Accessor[F]` instance (today:
     * `Tuple2` and `Forgetful`).
@@ -217,11 +180,8 @@ object Optic:
       o: Optic[S, T, A, B, F]
   )(using A: Accessor[F], RA: ReverseAccessor[F])
 
-    // Intentionally NOT `inline`: the body constructs a fresh `Optic`
-    // anonymous class, and `inline` would duplicate that class definition
-    // at every call site (E197 warning). Since the body already allocates
-    // a new Optic, inlining wouldn't eliminate that allocation -- so we
-    // keep the method as a normal `def` and avoid the bytecode bloat.
+    // Not `inline`: the body builds a fresh anonymous `Optic`; `inline` would duplicate that
+    // class definition per call site (E197) without eliminating the allocation.
     def reverse: Optic[B, A, T, S, F] =
       new Optic[B, A, T, S, F]:
         type X = o.X
@@ -360,12 +320,8 @@ object Optic:
       o.foldMap[Boolean](p)(using Monoid.instance[Boolean](false, _ || _))(s)
 
   /** `getOption` over an `Affine`-carrier optic — the canonical read for [[Optional]] and
-    * [[AffineFold]]. Pattern-matches the Affine directly, so the miss branch allocates nothing
-    * beyond the already-produced `Affine.Miss` and the hit branch wraps the focus in `Some`.
-    *
-    * Distinct from [[Optic.foldMap]] in that it does not require a `Monoid[A]`: a miss produces
-    * `None` rather than `Monoid.empty`. For full Optional values this is exactly Monocle's
-    * `Optional.getOption`.
+    * [[AffineFold]]. Pattern-matches the Affine directly; miss produces `None`, hit wraps the focus
+    * in `Some` (no `Monoid[A]` needed, unlike [[foldMap]]).
     *
     * @group Operations
     */

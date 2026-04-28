@@ -5,54 +5,22 @@ import scala.quoted.*
 
 import dev.constructive.eo.optics.{Optic, Prism}
 
-/** Compile-time derivation of a `Prism` from a parent sum / enum / union type `S` to one of its
-  * direct child types `A <: S`.
+/** Compile-time derivation of a Prism from a sum / enum / union type `S` to a direct child
+  * `A <: S`. Routes through Hearth's `Enum.parse[S]` (recognises sealed traits, Scala 3 enums, AND
+  * union types). The reconstruct is the plain upcast `(a: A) => a: S`. Macro-time validation checks
+  * `A` is a direct child of `S`.
   *
-  * Usage:
   * {{{
-  * import dev.constructive.eo.generics.prism
-  *
-  * // Sealed trait / enum case:
   * enum Shape:
   *   case Circle(radius: Double)
   *   case Square(side: Double)
   * val circleP = prism[Shape, Shape.Circle]
-  *
-  * // Scala 3 union type:
-  * val intP = prism[Int | String, Int]
+  * val intP    = prism[Int | String, Int]
   * }}}
-  *
-  * Implementation notes:
-  *   - The deconstruct (`S => Either[S, A]`) is built through Hearth's
-  *     [[hearth.typed.Classes.Enum]] view: `Enum.parse[S]` recognises sealed traits, Scala 3 enums,
-  *     AND union types; `matchOn` generates an exhaustive pattern match over `directChildren`,
-  *     using `MatchCase.eqValue` for parameterless enum cases / Java enum vals (which would
-  *     otherwise lose their type at erasure) and `MatchCase.typeMatch` for the rest.
-  *   - The reconstruct is a plain upcast `(a: A) => a: S`, valid for every well-formed `prism[S, A
-  *     <: S]`.
-  *   - Validation: we check at macro time that `A` actually appears among `directChildren` of `S`,
-  *     and produce a useful error if not (e.g. when the user writes `prism[Shape, OtherEnum.Foo]`).
   */
 object PrismMacro:
 
-  /** Derive a Prism from a sum / enum / union type `S` to one of its direct children `A <: S`.
-    * Delegates to [[deriveImpl]] through a `transparent inline` splice so the synthesised
-    * `MendTearPrism` propagates to the call site.
-    *
-    * @group Constructors
-    * @tparam S
-    *   parent sum / enum / union type
-    * @tparam A
-    *   child variant type being focused; must be a subtype of `S`
-    *
-    * @example
-    *   {{{
-    * import dev.constructive.eo.generics.prism
-    * enum Shape:
-    *   case Circle(r: Double), Square(s: Double)
-    * val circleP = prism[Shape, Shape.Circle]
-    *   }}}
-    */
+  /** @group Constructors */
   inline def derive[S, A <: S]: Optic[S, S, A, A, Either] =
     ${ deriveImpl[S, A] }
 
@@ -61,8 +29,6 @@ object PrismMacro:
   ): Expr[Optic[S, S, A, A, Either]] =
     new HearthPrismMacro(q).derivePrism[S, A]
 
-/** Hearth-backed Prism macro implementation.
-  */
 final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommonsScala3(using q):
 
   import quotes.reflect.*
@@ -79,8 +45,7 @@ final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommo
           s"prism[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]: $reason"
         )
       case Right(enumView) =>
-        // Verify A is among S's direct children: catches typos and
-        // cases where the user passes a non-variant subtype.
+        // Verify A is a direct child of S (catches typos / non-variant subtypes).
         val aIsChild = enumView.directChildren.values.exists { c =>
           import c.Underlying
           Type[c.Underlying] =:= Type[A]
@@ -99,12 +64,8 @@ final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommo
               val matchExpr: Option[Expr[Either[S, A]]] =
                 enumView.matchOn[Id, Either[S, A]]('{ s }) { matched =>
                   import matched.{Underlying as Variant, value as variantExpr}
-                  if Type[Variant] =:= Type[A] then
-                    // Target variant: lift to Right(_).
-                    '{ Right[S, A](${ variantExpr.asExprOf[A] }) }
-                  else
-                    // Non-target variant: surface the original `s` as Left.
-                    '{ Left[S, A](s) }
+                  if Type[Variant] =:= Type[A] then '{ Right[S, A](${ variantExpr.asExprOf[A] }) }
+                  else '{ Left[S, A](s) }
                 }
               matchExpr.getOrElse {
                 report.errorAndAbort(

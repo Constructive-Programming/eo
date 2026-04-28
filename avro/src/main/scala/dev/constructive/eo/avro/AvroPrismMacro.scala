@@ -2,13 +2,9 @@ package dev.constructive.eo.avro
 
 import scala.quoted.*
 
-/** Macros backing `AvroPrism.field(_.x)`, `selectDynamic`, `at(i)`, and `union[Branch]`. Mirrors
-  * `dev.constructive.eo.circe.JsonPrismMacro` with codec summoning collapsed from two givens
-  * (`AvroEncoder` + `AvroDecoder`) to one project-internal [[AvroCodec]] wrapper.
-  *
-  * '''Macro-quote shorthand.''' Following the `JsonPrismMacro` convention, the macros use `'{ this
-  * }` rather than `'this` for the parent reference — `scalafix-parser` v0.x has a known issue
-  * parsing the bare `'this` form. (See `JsonPrismMacro.selectFieldImpl`'s shape.)
+/** Macros backing `AvroPrism.field(_.x)`, `selectDynamic`, `at(i)`, `union[Branch]`. Mirror of
+  * `circe.JsonPrismMacro`, with two-given codec summoning (`AvroEncoder + AvroDecoder`) collapsed
+  * to one [[AvroCodec]] wrapper. Uses `'{ this }` rather than `'this` (scalafix-parser limitation).
   */
 object AvroPrismMacro:
 
@@ -35,13 +31,8 @@ object AvroPrismMacro:
       $parent.widenPath[B](${ Expr(name) })(using $codecB)
     }
 
-  /** Drives the Selectable sugar: `codecPrism[Person].name` compiles to `selectFieldImpl` with
-    * `name = "name"`. We look the field up on `A`'s case-class schema, verify it exists, grab its
-    * declared type (widened to strip precise singletons), summon `AvroCodec[B]` from the enclosing
-    * scope, and emit the same `widenPath` call that the explicit `.field(_.x)` macro does.
-    *
-    * Returns `Expr[Any]` so the `transparent inline def selectDynamic` wrapper can refine the type
-    * at each call site.
+  /** Drives `codecPrism[Person].name`. Looks `name` up on `A`'s schema, summons `AvroCodec[B]`,
+    * emits `widenPath`. Returns `Expr[Any]` so `transparent inline` refines per call site.
     */
   def selectFieldImpl[A: Type](
       parent: Expr[AvroPrism[A]],
@@ -54,9 +45,8 @@ object AvroPrismMacro:
       '{ $parent.widenPath[b](${ Expr(name) })(using $codecB) }
     }
 
-  /** Macro for `avroPrism.at(i)`. Verifies the parent focus `A` looks like a Scala collection (i.e.
-    * derives from `Iterable`), extracts the element type via `A`'s `Iterable` base type, summons
-    * the element's [[AvroCodec]], and emits a `widenPathIndex` call.
+  /** Macro for `.at(i)`. Verifies `A <: Iterable`, extracts the element type, summons the codec,
+    * emits `widenPathIndex`.
     */
   def atImpl[A: Type](
       parent: Expr[AvroPrism[A]],
@@ -72,29 +62,10 @@ object AvroPrismMacro:
         )
         '{ $parent.widenPathIndex[b]($iE)(using $codecB) }
 
-  /** Macro for `avroPrism.union[Branch]` — drill into one alternative of a union-shaped focus.
-    *
-    * '''Compile-time validation.''' The parent focus `A` must be union-shaped at the kindlings-Avro
-    * schema layer. Empirically (per `docs/research/2026-04-28-kindlings-avro-union-schema.md`),
-    * kindlings derives `union<...>` schemas for:
-    *
-    *   - Scala `Option[T]` → `union<null, T>` — the user writes `.union[T]` (not
-    *     `.union[Some[T]]`).
-    *   - Sealed traits with concrete subclasses — branch name is the schema's `getFullName` of the
-    *     subclass.
-    *   - Scala 3 `enum` types — same as sealed traits.
-    *
-    * Scala 3 untagged union types (`A | B`) are NOT supported by kindlings; this macro aborts with
-    * a clear error in that case.
-    *
-    * '''Runtime branch identifier.''' Rather than re-deriving kindlings' name convention at macro
-    * time, the macro emits a runtime read of `AvroCodec[Branch].schema.getFullName`. This is robust
-    * against any schema-name convention drift in future kindlings versions.
-    *
-    * '''Validation flow.''' (1) Identify the union shape of `A`; abort on Scala 3 union types. (2)
-    * Verify `Branch` is a known alternative — for `Option[T]`, the inner `T`; for sealed traits /
-    * enums, a direct child via Hearth's `Enum.parse`. (3) Summon `AvroCodec[Branch]`. (4) Emit
-    * `widenPathUnion[Branch](codecB.schema.getFullName)`.
+  /** `.union[Branch]` — drill into one alternative of a union-shaped focus. Supported parent
+    * shapes: `Option[T]` (user writes `.union[T]`), sealed traits, Scala 3 `enum`. Scala 3 untagged
+    * unions (`A | B`) abort. Branch identifier resolves at runtime off
+    * `AvroCodec[Branch].schema.getFullName` (robust against kindlings naming drift).
     */
   def unionImpl[A: Type, B: Type](
       parent: Expr[AvroPrism[A]]
@@ -104,7 +75,7 @@ object AvroPrismMacro:
     val aTpe = TypeRepr.of[A].dealias
     val bTpe = TypeRepr.of[B].dealias
 
-    // Reject Scala 3 untagged union types up front — kindlings doesn't derive AvroCodec for these.
+    // Reject Scala 3 untagged unions — kindlings doesn't derive for these.
     aTpe match
       case OrType(_, _) =>
         report.errorAndAbort(
@@ -114,8 +85,7 @@ object AvroPrismMacro:
         )
       case _ => ()
 
-    // Special case: Option[T]. Kindlings emits `union<null, T>`; the user writes `.union[T]` and
-    // we reach into Option's element type. Other parent shapes go through Hearth's Enum view.
+    // Option[T]: kindlings emits union<null, T>; the user writes .union[T].
     val optionElemTpe: Option[TypeRepr] =
       aTpe match
         case AppliedType(tycon, elem :: Nil) if tycon =:= TypeRepr.of[Option] =>
@@ -130,9 +100,7 @@ object AvroPrismMacro:
               + s" the only valid branch is ${elem.show} (got ${Type.show[B]})."
           )
       case None =>
-        // Sealed-trait / enum / union: Hearth's Enum.parse[A] returns Some only when `A` is sealed,
-        // Scala 3 enum, or Scala 3 union type. The OrType branch above already rejected the union
-        // shape; for the remaining two, verify `Branch` is among the direct children.
+        // Sealed trait / Scala 3 enum: verify Branch is among the direct children.
         val aSym = aTpe.typeSymbol
         val isSealed = aSym.flags.is(Flags.Sealed)
         val isEnum = aSym.flags.is(Flags.Enum)
@@ -143,9 +111,6 @@ object AvroPrismMacro:
               + " union types (`A | B`) are not supported by kindlings."
           )
 
-        // Walk direct children — sealed: `aSym.children`; enum: `aSym.companionModule.declarations`
-        // is messier, so use `aSym.children` uniformly (Scala 3 enum cases are still flagged Sealed
-        // children of their parent type).
         val children: List[Symbol] = aSym.children
         if children.isEmpty then
           report.errorAndAbort(
@@ -153,12 +118,7 @@ object AvroPrismMacro:
               + " cannot resolve a union alternative."
           )
 
-        val childTypes: List[TypeRepr] = children.map { c =>
-          // For parametric ADTs the child symbol's typeRef has unbound type parameters.
-          // baseType against the parent gives a properly applied type for matching.
-          val ref = c.typeRef
-          ref.dealias
-        }
+        val childTypes: List[TypeRepr] = children.map(c => c.typeRef.dealias)
         val matched = childTypes.exists(t => bTpe =:= t || bTpe =:= t.widen)
         if !matched then
           val knownNames = children.map(_.name).mkString(", ")
@@ -172,18 +132,13 @@ object AvroPrismMacro:
         + s" Derive one via `given AvroCodec[${Type.show[B]}] = AvroCodec.derived` (which"
         + " auto-summons kindlings' AvroEncoder / AvroDecoder / AvroSchemaFor)."
     )
-    // Resolve branch name at runtime off the codec's schema — robust against any kindlings naming
-    // convention. For primitives kindlings emits `"long"` / `"string"`; for records the schema's
-    // `getFullName` matches the union alternative declared by the parent codec.
+    // Branch name resolved at runtime off the codec schema (robust against kindlings naming).
     '{
       val branchName: String = $codecB.schema.getFullName
       $parent.widenPathUnion[B](branchName)(using $codecB)
     }
 
-  /** Macro for `avroPrism.each`. Reads the element type from `A`'s `Iterable` base, summons the
-    * element's [[AvroCodec]], and emits a `toTraversal[B]` call that hands the current path off as
-    * the new traversal's prefix. Mirror of `JsonPrismMacro.eachImpl`.
-    */
+  /** `.each` — emits `toTraversal[B]` over `A`'s element type. */
   def eachImpl[A: Type](
       parent: Expr[AvroPrism[A]]
   )(using q: Quotes): Expr[Any] =
@@ -197,9 +152,7 @@ object AvroPrismMacro:
         )
         '{ $parent.toTraversal[b](using $codecB) }
 
-  /** Macro for `traversal.field(_.x)`. Counterpart to [[fieldImpl]] — extends the traversal's
-    * suffix by a named field.
-    */
+  /** Traversal counterpart to [[fieldImpl]] — extends the suffix by a named field. */
   def fieldTraversalImpl[A: Type, B: Type](
       parent: Expr[AvroTraversal[A]],
       selector: Expr[A => B],
@@ -218,9 +171,7 @@ object AvroPrismMacro:
       $parent.widenSuffix[B](${ Expr(name) })(using $codecB)
     }
 
-  /** Macro for `traversal.at(i)`. Counterpart to [[atImpl]] — extends the traversal's suffix by an
-    * array index.
-    */
+  /** Traversal counterpart to [[atImpl]] — extends the suffix by an array index. */
   def atTraversalImpl[A: Type](
       parent: Expr[AvroTraversal[A]],
       iE: Expr[Int],
@@ -235,13 +186,9 @@ object AvroPrismMacro:
         )
         '{ $parent.widenSuffixIndex[b]($iE)(using $codecB) }
 
-  /** Macro for `codecPrism[A].fields(_.a, _.b, ...)` — multi-field focus. Parses the varargs
-    * selector list, validates arity (≥ 2), duplicate-ness, known-fields-ness, non-nested-ness,
-    * synthesises a Scala 3 NamedTuple type in SELECTOR order, summons `AvroCodec[NT]` from the
-    * enclosing scope, and emits a `toFieldsPrism` call on the parent prism.
-    *
-    * Mirrors `JsonPrismMacro.fieldsImpl` row-for-row; the codec-summoning side is simpler than
-    * circe's because [[AvroCodec]] is one typeclass instead of two (`Encoder` + `Decoder`).
+  /** `.fields(_.a, _.b, ...)` — multi-field focus. Validates arity ≥ 2, duplicate-ness, known
+    * fields, non-nested. Synthesises an NT in SELECTOR order, summons `AvroCodec[NT]`, emits
+    * `toFieldsPrism`. Mirrors `JsonPrismMacro.fieldsImpl`.
     */
   def fieldsImpl[A: Type](
       parent: Expr[AvroPrism[A]],
@@ -254,10 +201,7 @@ object AvroPrismMacro:
       ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $codecNT) }
     }
 
-  /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
-    * [[fieldsImpl]] on the traversal side: parses varargs, validates per D10, synthesises the
-    * NamedTuple type in SELECTOR order, summons the codec, emits `toFieldsTraversal`.
-    */
+  /** Traversal counterpart to [[fieldsImpl]]. */
   def fieldsTraversalImpl[A: Type](
       parent: Expr[AvroTraversal[A]],
       selectorsE: Expr[Seq[A => Any]],
@@ -269,8 +213,7 @@ object AvroPrismMacro:
       ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $codecNT) }
     }
 
-  /** Macro for `traversal.<fieldName>`. Counterpart to [[selectFieldImpl]] — drives the Dynamic
-    * sugar on [[AvroTraversal]] by extending the suffix.
+  /** Traversal counterpart to [[selectFieldImpl]] — drives Dynamic sugar by extending the suffix.
     */
   def selectFieldTraversalImpl[A: Type](
       parent: Expr[AvroTraversal[A]],
@@ -345,8 +288,7 @@ object AvroPrismMacro:
         (i, name)
       }
 
-    // Duplicate selectors: compile error (D10). Routed through the shared selector-validation
-    // helper in `eo-generics` (this module already depends on generics for the lens macro).
+    // Duplicate selectors → compile error (via the shared MacroSelectors helper in eo-generics).
     dev
       .constructive
       .eo
@@ -359,8 +301,7 @@ object AvroPrismMacro:
 
     val selectedNames: List[String] = resolved.map(_._2)
 
-    // Build the NamedTuple type in SELECTOR order. `namesTpe` is the
-    // singleton-String names tuple, `valuesTpe` the field-types tuple.
+    // NamedTuple type in SELECTOR order (singleton-String names + field-types tuple).
     val selectorSyms: List[Symbol] = selectedNames.map { name =>
       caseFields.find(_.name == name).getOrElse {
         report.errorAndAbort(
@@ -390,15 +331,13 @@ object AvroPrismMacro:
             + " auto-summons kindlings' AvroEncoder / AvroDecoder / AvroSchemaFor)."
         )
 
-        // Emit `parent.toFieldsPrism[nt](Array(n1, n2, ...))(using codecNT)`.
-        // We splice the field names as a compile-time-known Array[String]
-        // so the runtime class doesn't need to re-parse them.
+        // Compile-time-known Array[String] of field names.
         val namesExpr: Expr[Array[String]] =
           '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
 
         emit[nt](namesExpr, codecNT)
 
-  // ---- Shared helpers (selectDynamic backbone, iterable elem, codec summon) -----
+  // ---- Shared helpers ----------------------------------------------------------
 
   private def selectDynamicCommon[A: Type](
       who: String,
@@ -448,21 +387,14 @@ object AvroPrismMacro:
               .show[A]}."
         )
 
-  /** Summon a single [[AvroCodec]]`[B]` from the enclosing scope, with a caller-supplied error
-    * message on failure. Counterpart to `JsonPrismMacro.summonCodecs` (which summoned both an
-    * Encoder and a Decoder); cats-eo-avro's [[AvroCodec]] wrapper collapses kindlings'
-    * `AvroEncoder` / `AvroDecoder` / `AvroSchemaFor` triplet into one.
-    */
+  /** Summon `AvroCodec[B]` with a caller-supplied error message. */
   private def summonCodec[B: Type](
       errorMsg: String
   )(using q: Quotes): Expr[AvroCodec[B]] =
     import quotes.reflect.*
     Expr.summon[AvroCodec[B]].getOrElse(report.errorAndAbort(errorMsg))
 
-  /** Strip `Inlined` / `Typed` wrappers around a lambda and pull the field name out of its body.
-    * Mirrors the eo-circe `extractFieldName` helper so both macros agree on what a "single-field
-    * selector" looks like.
-    */
+  /** Pull the field name out of a `_.field` selector lambda. */
   private def extractFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
     import quotes.reflect.*
     t match
@@ -473,10 +405,8 @@ object AvroPrismMacro:
       case Lambda(_, Typed(Select(_, name), _))      => Some(name)
       case _                                         => None
 
-  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — routes through the
-    * shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to keep the strict
-    * receiver-is-Ident rule consistent with the lens macro's selector parsing (and the circe-side
-    * `JsonPrismMacro.fields` selector validation).
+  /** Strict variant — rejects nested Select chains; routes to the shared
+    * `MacroSelectors.extractSingleFieldName`.
     */
   private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
     dev.constructive.eo.generics.MacroSelectors.extractSingleFieldName(t)

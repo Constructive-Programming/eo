@@ -3,26 +3,15 @@ package optics
 
 import data.Forgetful
 
-/** Constructor for `Getter` — the read-only single-focus optic, backed by the `Forgetful` carrier
-  * (identity in its focus parameter) with `T = Unit` to signal "no write path".
-  *
-  * A `Getter[S, A]` (short for `Optic[S, Unit, A, A, Forgetful]`) encodes a pure projection —
-  * `name.length`, `person.age`, any derived view. `.get(s)` is the primary operation; `modify` /
-  * `replace` / `reverseGet` are unavailable because `T = Unit` provides no way back to `S`.
-  *
-  * Composition note: `Getter` does not compose with other Getters via `Optic.andThen`, because the
-  * inner Getter's `T = Unit` mismatches the outer Getter's expected `B` slot. Compose the
-  * underlying functions directly, or use a `Lens` chain and call `.get` on the composed lens.
+/** Constructor for `Getter` — read-only single-focus optic, backed by `Forgetful` with `T = Unit`.
+  * `.get(s)` is the only operation; no write path. Doesn't compose with other Getters (the inner
+  * `T = Unit` mismatches the outer `B` slot); use a Lens chain and call `.get` on the result.
   */
 object Getter:
 
-  /** Construct a Getter from `get: S => A`.
+  /** Construct from `get: S => A`.
     *
     * @group Constructors
-    * @tparam S
-    *   source type
-    * @tparam A
-    *   focus type produced by `get`
     *
     * @example
     *   {{{

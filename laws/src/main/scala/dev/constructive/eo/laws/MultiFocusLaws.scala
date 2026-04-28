@@ -9,31 +9,15 @@ import cats.Functor
 import optics.Optic
 import optics.Optic.*
 
-/** Law equations for a `MultiFocus[F][S, A]` — `Optic[S, S, A, A, MultiFocus[F]]` — at a concrete
-  * classifier shape `F[_]`.
+/** Laws for `MultiFocus[F][S, A]` — `Optic[S, S, A, A, MultiFocus[F]]` — at a concrete `F[_]`.
   *
-  * `MultiFocus[F]` is the unified successor of `AlgLens[F]` and `Kaleidoscope`. The structural pair
-  * `(X, F[A])` is identical to the v1 `AlgLens[F]`, but the Kaleidoscope `.collect` universal is
-  * absorbed via the carrier-wide `collectMap` extension (Functor-broadcast, derives from
-  * `Functor[F].map`). The `List`-singleton variant survives at the call site as `collectList`, but
-  * is not surfaced as a discipline law — the K3 statement now reads as a single `collectViaMap` law
-  * that holds for every `Functor[F]`.
-  *
-  *   - **MF1 modifyIdentity** — `mf.modify(identity)(s) == s`. Shared with every other family that
-  *     admits `.modify`.
-  *   - **MF2 composeModify** — `mf.modify(g)(mf.modify(f)(s)) == mf.modify(f andThen g)(s)`. Shared
-  *     shape; witnesses that `ForgetfulFunctor[MultiFocus[F]]` composes cleanly.
-  *   - **MF3 collectViaMap** — `mf.collectMap[A](agg)(s) == ev.flip(F.map(ev(s))(_ => agg(ev(s))))`
-  *     at the generic `MultiFocus.apply[F, A]` factory (`X = F[A]`, rebuild = identity, `S =
-  *     F[A]`). Witnesses that the carrier-wide `.collectMap` universal is precisely the
-  *     Functor-broadcast through the rebuild. Replaces the v1 K3 `collectViaReflect` law.
-  *
-  * Per the user's option (a) on the K3 restatement: ship a single Functor-broadcast law at the
-  * carrier level. List users can still get the v1 cartesian-Reflector singleton story via the
-  * `collectList` extension at the call site — it's a function, not a law.
+  *   - MF1 modifyIdentity — `mf.modify(identity)(s) == s`.
+  *   - MF2 composeModify — `mf.modify(g) ∘ mf.modify(f) == mf.modify(f andThen g)`.
+  *   - MF3 collectViaMap — `mf.collectMap[A](agg)(s) == F.map(s)(_ => agg(s))` at the generic
+  *     `MultiFocus.apply[F, A]` factory.
   *
   * @see
-  *   `dev.constructive.eo.laws.discipline.MultiFocusTests` for the discipline RuleSet.
+  *   `dev.constructive.eo.laws.discipline.MultiFocusTests`.
   */
 trait MultiFocusLaws[S, A, F[_]]:
   def multiFocus: Optic[S, S, A, A, MultiFocus[F]]

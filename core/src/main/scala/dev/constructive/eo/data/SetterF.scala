@@ -5,26 +5,22 @@ import cats.Distributive
 import cats.instances.function.*
 import cats.syntax.functor.*
 
-/** Carrier for the `Setter` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B` that
-  * decides what to do with the focus when it's written back.
-  *
-  * Like [[Affine]], SetterF's `A` is encoded as a `Tuple2` that threads both halves of the write
-  * path together. SetterF has no `AssociativeFunctor` instance: composing two `SetterF` optics via
-  * `Optic.andThen` is not yet supported. Compose a Lens chain in `Tuple2` and reach for SetterF
-  * only at the leaf.
+/** Carrier for the `Setter` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B`. No
+  * `AssociativeFunctor[SetterF]` ships, so SetterF.andThen(SetterF) is not supported; compose a
+  * Lens chain in `Tuple2` and reach for SetterF at the leaf.
   *
   * @tparam A
-  *   existential leftover tuple — `Fst[A]` / `Snd[A]` reduce when `A` is a concrete `Tuple2`.
+  *   existential leftover tuple
   * @tparam B
-  *   focus written back through the continuation.
+  *   focus written back
   */
 class SetterF[A, B](val setter: (Fst[A], Snd[A] => B)) extends AnyVal
 
 /** Typeclass instances for [[SetterF]]. */
 object SetterF:
 
-  /** `ForgetfulFunctor[SetterF]` — maps the right-side continuation through `f`, leaving the source
-    * unchanged. Unlocks `.modify` and `.replace` on Setter-carrier optics.
+  /** `ForgetfulFunctor[SetterF]` — maps the continuation through `f`, leaving the source unchanged.
+    * Unlocks `.modify` / `.replace` on Setter-carrier optics.
     *
     * @group Instances
     */
@@ -35,8 +31,7 @@ object SetterF:
       SetterF(fa.setter._1, a => f(inner(a)))
 
   /** `ForgetfulTraverse[SetterF, Distributive]` — lifts an effectful `B => G[C]` through the
-    * continuation using `Distributive[G]` (a stronger counterpart to `Applicative` that suits the
-    * read-once / write-once Setter shape).
+    * continuation under `Distributive[G]` (the right shape for read-once / write-once Setter).
     *
     * @group Instances
     */
@@ -47,16 +42,9 @@ object SetterF:
     ): SetterF[X, B] => (B => G[C]) => G[SetterF[X, C]] =
       s => g => D.tupleLeft(D.distribute(s.setter._2)(g), s.setter._1).map(SetterF(_))
 
-  /** Shared skeleton for the `Composer[F, SetterF]` instances below. Every carrier (`Tuple2`,
-    * `Either`, `Affine`, `MultiFocus[F]`) materialises a coerced `Optic[S, T, A, B, SetterF]` with
-    * the same shape — `type X = (S, A)`, the same identity `to` ("seed the SetterF with the
-    * original `s` and the identity focus-fn"), and a `from` that delegates the per-carrier focus
-    * rewrite to `applyWrite`.
-    *
-    * Routing through this helper collapses the four near-identical bodies that previously sat in
-    * each `Composer` instance. Not `inline` — anonymous-class definitions in inline bodies trigger
-    * `-Werror`-fatal "duplicated at each inline site" warnings, and the per-carrier call-site
-    * allocates the same single anonymous-`Optic` instance either way.
+  /** Shared skeleton for `Composer[F, SetterF]` instances. Every carrier materialises a coerced
+    * Optic with the same `type X = (S, A)` shape and an identity `to` that seeds the SetterF; only
+    * `applyWrite` differs per carrier.
     */
   private def coerceToSetter[F[_, _], S, T, A, B](
       applyWrite: (S, A => B) => T
@@ -69,9 +57,7 @@ object SetterF:
         val (s, f) = sfxb.setter
         applyWrite(s, f)
 
-  /** Coerce any Tuple2-carrier optic (typically a Lens) into a SetterF optic. Every Lens is-a
-    * Setter: modify is `setter.from(SetterF(s, f))`, which re-runs the Lens's get/replace path with
-    * `f` applied to the focus. Powers cross-carrier `lens.andThen(setter)`, via
+  /** Lens → SetterF. Every Lens is-a Setter; powers cross-carrier `lens.andThen(setter)` via
     * `Morph[Tuple2, SetterF]`.
     *
     * @group Instances
@@ -83,14 +69,8 @@ object SetterF:
         val (xo, a) = o.to(s)
         o.from((xo, f(a)))
 
-  /** Coerce an `Either`-carrier optic (Prism) into a SetterF optic. Hit branch: write `f(a)`
-    * through the Prism's build path. Miss branch: pass the original leftover back through the
-    * Prism's miss reconstruction — `o.from(Left(xo))`. Both halves are observably the same as the
-    * original Prism's `.modify(f)`, just with a Setter-shaped read API that doesn't expose the
-    * hit/miss structure to downstream callers.
-    *
-    * Resolves Gap-1 (Prism × Setter) for cross-library `eo Prism + monocle Setter` chains in
-    * `eo-monocle` Unit 6.
+  /** Prism → SetterF. Hit writes `f(a)` through the Prism's build path; miss passes the leftover
+    * back via `o.from(Left(xo))` — observably the same as the Prism's own `.modify(f)`.
     *
     * @group Instances
     */
@@ -102,11 +82,8 @@ object SetterF:
           case Right(a) => o.from(Right(f(a)))
           case Left(xo) => o.from(Left(xo))
 
-  /** Coerce an `Affine`-carrier optic (Optional) into a SetterF optic. Same shape as
-    * [[either2setter]] split across the explicit `Affine.Hit` / `Affine.Miss` constructors so the
-    * miss path uses [[Affine.Miss.widenB widenB]] rather than allocating a fresh `Miss`.
-    *
-    * Resolves Gap-1 (Optional × Setter) for cross-library `eo Optional + monocle Setter` chains.
+  /** Optional → SetterF. Mirror of [[either2setter]] split across `Affine.Hit` / `Affine.Miss`;
+    * miss uses `widenB` instead of allocating a fresh `Miss`.
     *
     * @group Instances
     */
@@ -120,8 +97,4 @@ object SetterF:
           case m: Affine.Miss[o.X, A] =>
             o.from(m.widenB[B])
 
-  // Note: the `multifocus2setter` Composer in `MultiFocus.scala` covers
-  // `MultiFocus[PSVec]` → `SetterF` via the carrier-wide widening. The legacy
-  // `powerseries2setter` is gone — the new `Traversal.each` already returns
-  // `Optic[..., MultiFocus[PSVec]]`, which routes through `multifocus2setter`
-  // when widened.
+  // MultiFocus[F] → SetterF lives in `MultiFocus.scala` (`multifocus2setter`).

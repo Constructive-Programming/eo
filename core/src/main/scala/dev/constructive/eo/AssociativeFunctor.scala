@@ -4,17 +4,11 @@ import cats.syntax.either.*
 
 import optics.Optic
 
-/** Composition algebra for a two-parameter carrier `F[_, _]` — given two optics that share `F`,
-  * [[composeTo]] produces the combined `F[Z, C]` from a source `S` and [[composeFrom]] unfolds a
-  * combined `F[Z, D]` back through the inner and outer optics.
-  *
-  * The class-level type parameters `Xo` ("outer" X) and `Xi` ("inner" X) are the existentials of
-  * the two optics being composed: `Xo` is the outer optic's existential, `Xi` is the inner's. Named
-  * without shadowing the `type X` member on [[Optic]] so [[composeTo]] and [[composeFrom]] can
-  * refinement-type on them.
-  *
-  * Any carrier that wants to support `Optic.andThen` must supply an instance. Carriers can
-  * specialise on concrete optic shapes by pattern-matching on the `outer` / `inner` arguments.
+/** Composition algebra for a two-parameter carrier `F[_, _]`. [[composeTo]] threads the focus
+  * through inner ∘ outer to produce `F[Z, C]`; [[composeFrom]] unfolds it back. `Xo` / `Xi` are the
+  * outer / inner optics' existentials; named distinct from `Optic#X` so `composeTo` / `composeFrom`
+  * can refinement-type on them. Carriers can specialise by pattern-matching on the `outer` /
+  * `inner` arguments.
   *
   * @tparam F
   *   carrier
@@ -27,44 +21,14 @@ trait AssociativeFunctor[F[_, _], Xo, Xi]:
   /** Combined existential carried through the composed optic. */
   type Z
 
-  /** Push-side composition — run `outer.to(s)` to get an `F[Xo, A]`, feed the focus through
-    * `inner.to` to produce `F[Xi, C]`, reassemble as `F[Z, C]`.
-    *
-    * @tparam S
-    *   outer source type
-    * @tparam T
-    *   outer result type
-    * @tparam A
-    *   outer focus read (which becomes the inner source)
-    * @tparam B
-    *   outer focus written back
-    * @tparam C
-    *   inner focus read (the combined optic's focus)
-    * @tparam D
-    *   inner focus written back
-    */
+  /** Push-side: `outer.to(s)` → focus through `inner.to` → reassemble as `F[Z, C]`. */
   def composeTo[S, T, A, B, C, D](
       s: S,
       outer: Optic[S, T, A, B, F] { type X = Xo },
       inner: Optic[A, B, C, D, F] { type X = Xi },
   ): F[Z, C]
 
-  /** Pull-side composition — unfold `F[Z, D]` back through `inner.from` and `outer.from` to produce
-    * `T`. Dual of [[composeTo]].
-    *
-    * @tparam S
-    *   outer source type
-    * @tparam T
-    *   outer result type
-    * @tparam A
-    *   outer focus read
-    * @tparam B
-    *   outer focus written back (intermediate — produced by `inner.from`)
-    * @tparam C
-    *   inner focus read
-    * @tparam D
-    *   inner focus written back
-    */
+  /** Pull-side: unfold `F[Z, D]` back through `inner.from` and `outer.from`. */
   def composeFrom[S, T, A, B, C, D](
       xd: F[Z, D],
       inner: Optic[A, B, C, D, F] { type X = Xi },
@@ -74,8 +38,7 @@ trait AssociativeFunctor[F[_, _], Xo, Xi]:
 /** Typeclass instances for [[AssociativeFunctor]]. */
 object AssociativeFunctor:
 
-  /** `AssociativeFunctor[Tuple2, Xo, Xi]` — pairs Xo and Xi into `Z = (Xo, Xi)`. Powers
-    * `lens.andThen(lens)` composition.
+  /** `Tuple2` — `Z = (Xo, Xi)`. Powers `lens.andThen(lens)`.
     *
     * @group Instances
     */
@@ -99,8 +62,7 @@ object AssociativeFunctor:
       val ((x, y), d) = xd
       outer.from(x, inner.from(y, d))
 
-  /** `AssociativeFunctor[Either, Xo, Xi]` — threads `Left` miss branches by bubbling them up.
-    * Powers `prism.andThen(prism)` composition.
+  /** `Either` — bubbles `Left` miss branches up. Powers `prism.andThen(prism)`.
     *
     * @group Instances
     */

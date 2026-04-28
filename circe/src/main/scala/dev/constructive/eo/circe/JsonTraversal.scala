@@ -5,26 +5,12 @@ import scala.language.dynamics
 import cats.data.{Chain, Ior}
 import io.circe.{Decoder, Encoder, Json}
 
-/** Multi-focus counterpart to [[JsonPrism]]: walks the JSON from the root down to some array, then
-  * applies the focus update to every element of that array.
+/** Multi-focus counterpart to [[JsonPrism]]: walks the JSON to some array, then applies the focus
+  * update to every element. Two pieces: `prefix: Array[PathStep]` (root-to-array, walked once) and
+  * `focus: JsonFocus[A]` (per-element). The Leaf-vs-Fields split lives in `focus`. Compat alias
+  * [[JsonFieldsTraversal]] points back here.
   *
-  * '''Design (2026-04-26 unification).''' A traversal is "a JsonPrism applied per-element after a
-  * prefix walk". So this class holds two pieces:
-  *
-  *   - `prefix: Array[PathStep]` — the root-to-array path, walked once;
-  *   - `focus: JsonFocus[A]` — the per-element focus, applied to every element of the array.
-  *
-  * The Fields-vs-Leaf split lives entirely inside `focus` (per the `JsonFocus` enum), so the four
-  * legacy carriers — `JsonTraversal` over a single field, `JsonFieldsTraversal` over a NamedTuple —
-  * collapse to one class. The compatibility alias [[JsonFieldsTraversal]] points back here.
-  *
-  * Two call-surface tiers (unchanged):
-  *
-  *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` / `getAll`
-  *     accumulate per-element failures into the chain. Prefix-walk failures return `Ior.Left` —
-  *     nothing to iterate.
-  *   - '''`*Unsafe` (silent).''' Drops failures; preserves pre-v0.2 forgiving semantics
-  *     byte-for-byte.
+  * Two tiers (Ior-bearing default + `*Unsafe`), same shape as [[JsonPrism]].
   */
 final class JsonTraversal[A] private[circe] (
     private[circe] val prefix: Array[PathStep],
@@ -32,9 +18,8 @@ final class JsonTraversal[A] private[circe] (
 ) extends JsonOpticOps[A],
       Dynamic:
 
-  /** Compatibility shim — historically the `suffix: Array[PathStep]` was a bare `val` on the
-    * traversal. With the focus unification this shape is internal to a Leaf focus; the read-side
-    * accessor is preserved for the macro extensions that route through `widenSuffix*`.
+  /** Compat shim — historically the suffix was a bare `val`; the read-side accessor is preserved
+    * for `widenSuffix*` macro extensions.
     */
   private[circe] def suffix: Array[PathStep] = focus match
     case l: JsonFocus.Leaf[A]   => l.path
@@ -77,10 +62,7 @@ final class JsonTraversal[A] private[circe] (
     newSuffix(suffix.length) = step
     new JsonTraversal[B](prefix, new JsonFocus.Leaf[B](newSuffix, encB, decB))
 
-  /** Hand off the current (prefix, suffix) as a multi-field [[JsonTraversal]] whose focus is a
-    * [[JsonFocus.Fields]] enumerating `fieldNames`. Historically returned `JsonFieldsTraversal[B]`;
-    * the alias is preserved.
-    */
+  /** Hand off as a multi-field traversal whose focus is `JsonFocus.Fields` over `fieldNames`. */
   private[circe] def toFieldsTraversal[B](
       fieldNames: Array[String]
   )(using encB: Encoder[B], decB: Decoder[B]): JsonTraversal[B] =
@@ -117,9 +99,7 @@ final class JsonTraversal[A] private[circe] (
   override protected def placeImpl(json: Json, a: A): Json =
     mapAtPrefix(json)(elem => focus.placeImpl(elem, a))
 
-  /** Walk the prefix, replace the focused array by mapping every element through `elemUpdate`. On
-    * prefix miss the input is returned unchanged.
-    */
+  /** Walk prefix, replace the focused array by mapping each element. Prefix miss → input. */
   private def mapAtPrefix(json: Json)(elemUpdate: Json => Json): Json =
     JsonWalk
       .walkPath(json, prefix)
@@ -142,10 +122,7 @@ final class JsonTraversal[A] private[circe] (
   override protected def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
     iorMapElements(json)(elem => focus.placeIor(elem, a))
 
-  /** Shared backbone for the three Ior-bearing modify/transform/place surfaces: walk the prefix,
-    * map each element through `elemUpdate`, lift the (chain, vector) pair to a single Ior, rebuild
-    * the prefix.
-    */
+  /** Shared backbone for the three Ior-bearing modify/transform/place surfaces. */
   private def iorMapElements(
       json: Json
   )(elemUpdate: Json => Ior[Chain[JsonFailure], Json]): Ior[Chain[JsonFailure], Json] =

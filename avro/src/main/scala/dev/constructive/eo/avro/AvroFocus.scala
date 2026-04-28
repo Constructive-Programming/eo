@@ -6,42 +6,29 @@ import cats.data.{Chain, Ior}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
-/** What it means to focus on a value of type `A` somewhere inside an Avro [[IndexedRecord]].
+/** Focus on a value of type `A` somewhere inside an Avro [[IndexedRecord]]. Mirrors
+  * `circe.JsonFocus` for the Avro carrier. Storage decomposition along two axes:
   *
-  * Mirrors `dev.constructive.eo.circe.JsonFocus` for the Avro carrier. The four legacy carrier
-  * classes — `AvroPrism`, `AvroFieldsPrism`, and (Units 6/7) their traversal siblings — collapse to
-  * two real classes by factoring the storage variation along two orthogonal axes:
+  *   1. Where the focus lives — at a leaf reached by a path (Leaf), or as a NamedTuple assembled
+  *      from selected fields under a parent record (Fields).
+  *   2. Single- vs multi-focus — applied once at the root ([[AvroPrism]]) or per-element after a
+  *      prefix walk ([[AvroTraversal]]).
   *
-  *   1. ''Where does the focus live?'' — at a leaf reached by a path (Leaf), or as a NamedTuple
-  *      assembled from selected fields under a parent record (Fields).
-  *   2. ''Single-focus or multi-focus?'' — applied once at the root (Prism), or applied per-element
-  *      after walking a `prefix` to an array (Traversal — Unit 6).
-  *
-  * Axis 1 lives here as a sealed hierarchy. Axis 2 lives in [[AvroPrism]] (and the future
-  * `AvroTraversal`), each of which holds an `AvroFocus[A]` and delegates the per-element focus
-  * operations to it.
-  *
-  * Each focus exposes the same six per-record operations: three Ior-bearing (decoded modify, raw
-  * transform, decoded place) for the default surface, and three silent (input pass-through) for the
-  * `*Unsafe` escape hatches. Plus two reads (decoded get, decoded silent get) and two abstract
-  * Optic-trait `to`-side hooks (`navigateRaw` returning the value-ready-for-decode, then a shared
-  * one-line `decodeFrom` default delegating to the focus's [[AvroCodec]]).
+  * Each focus exposes six per-record operations (three Ior-bearing default + three silent) plus two
+  * reads and two Optic-trait `to`-side hooks.
   */
 sealed abstract private[avro] class AvroFocus[A]:
 
-  /** Codec for the focused value `A`. For Leaf focuses this is the user's `AvroCodec[A]`; for
-    * Fields focuses this is the codec for the synthesised NamedTuple type.
+  /** Codec for `A`. For Leaf this is the user's `AvroCodec[A]`; for Fields it's the synthesised
+    * NamedTuple codec.
     */
   private[avro] def codec: AvroCodec[A]
 
-  /** The terminal step of this focus's path — used by failure surfaces to point at the last cursor
-    * position the walk attempted. `PathStep.Field("")` for root-level focuses with empty paths.
-    */
+  /** Terminal path step — used by failure surfaces. `PathStep.Field("")` for root-level focuses. */
   protected def terminalStep: PathStep
 
-  /** Decode `cur` and either fold the resulting `A` into a rebuild record (`onHit`), or surface a
-    * `DecodeFailed` against the terminal step. Threaded through every Ior-bearing decoded-modify
-    * body. Both Leaf and Fields share this exact decode-then-rebuild-or-fail shape.
+  /** Decode `cur` and fold success into `onHit`, or surface a `DecodeFailed`. Shared between Leaf
+    * and Fields.
     */
   final protected def decodeOrFail(
       cur: Any,
@@ -56,77 +43,47 @@ sealed abstract private[avro] class AvroFocus[A]:
       case Left(t) =>
         Ior.Both(Chain.one(AvroFailure.DecodeFailed(terminalStep, t)), record)
 
-  /** Read variant of [[decodeOrFail]] — decode `cur`; success → `Ior.Right(a)`, failure →
-    * `Ior.Left(Chain(DecodeFailed(terminalStep, ...)))`. Used by both Leaf and Fields `readIor`.
-    */
+  /** Read counterpart to [[decodeOrFail]] — decode → `Ior.Right(a)` or `Ior.Left(chain)`. */
   final protected def decodeOrLeft(cur: Any): Ior[Chain[AvroFailure], A] =
     codec.decodeEither(cur) match
       case Right(a) => Ior.Right(a)
       case Left(t)  => Ior.Left(Chain.one(AvroFailure.DecodeFailed(terminalStep, t)))
 
-  // ---- Default Ior-bearing ops ------------------------------------
+  // Default Ior-bearing ops — failures surface as `Ior.Both(chain, inputRecord)` (input preserved
+  // as silent fallback). `readIor` returns `Ior.Left(chain)` on failure (a read produces an `A` or
+  // it doesn't, no fallback).
 
-  /** Walk to the focus, decode, apply `f`, encode, rebuild root. Failures (path miss, decode
-    * failure) surface as `Ior.Both(chain, inputRecord)` — the input is preserved as the silent
-    * fallback while the diagnostic chain documents what went wrong.
-    */
   def modifyIor(record: IndexedRecord, f: A => A): Ior[Chain[AvroFailure], IndexedRecord]
 
-  /** Walk to the focus, apply `f` to the raw [[IndexedRecord]] there, rebuild root. Same failure
-    * surface as [[modifyIor]].
-    */
   def transformIor(
       record: IndexedRecord,
       f: IndexedRecord => IndexedRecord,
   ): Ior[Chain[AvroFailure], IndexedRecord]
 
-  /** Walk to the focus, write the encoded `a`, rebuild root. Same failure surface. */
   def placeIor(record: IndexedRecord, a: A): Ior[Chain[AvroFailure], IndexedRecord]
-
-  /** Walk to the focus, decode. Success = `Ior.Right(a)`; failure = `Ior.Left(chain)` — a read
-    * either produces an `A` or it doesn't, so the record is intentionally not carried as a
-    * fallback.
-    */
   def readIor(record: IndexedRecord): Ior[Chain[AvroFailure], A]
 
-  // ---- *Unsafe (silent) ops ---------------------------------------
-
-  /** Silent counterpart to [[modifyIor]] — input pass-through on any failure. */
+  // *Unsafe (silent) ops — input pass-through on any failure (read returns None).
   def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord
-
-  /** Silent counterpart to [[transformIor]]. */
   def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord
-
-  /** Silent counterpart to [[placeIor]]. */
   def placeImpl(record: IndexedRecord, a: A): IndexedRecord
-
-  /** Silent read — `None` on any failure. */
   def readImpl(record: IndexedRecord): Option[A]
 
-  // ---- Optic-trait `to` side --------------------------------------
-
-  /** Walk to the focus's "thing ready for decode" — for a Leaf focus that's the walked-to leaf
-    * value; for a Fields focus that's the assembled atomic-read sub-record. Failures (path miss,
-    * non-record parent, partial-fields miss) surface as a structured [[AvroFailure]].
-    *
-    * Counterpart to `JsonFocus.navigateCursor`, but returning the value-ready-for-decode rather
-    * than a navigable cursor (Avro has no cursor abstraction — apache-avro's `IndexedRecord` is a
-    * positional Java interface). The decode step is the shared [[decodeFrom]] default below.
+  /** Walk to the value ready for decode (Leaf: leaf value; Fields: assembled atomic-read record).
+    * Counterpart to `JsonFocus.navigateCursor`, but returning the raw value (Avro has no cursor
+    * abstraction). Decode step is the shared [[decodeFrom]] default below.
     */
   def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any]
 
-  /** Decode an Avro-shaped runtime value to an `A`. One-line shared default — both Leaf and Fields
-    * use the focus's codec the same way. Counterpart to `JsonFocus.decodeFromCursor`.
-    */
+  /** Decode an Avro-shaped runtime value to `A`. Shared one-line default. */
   final def decodeFrom(any: Any): Either[Throwable, A] = codec.decodeEither(any)
 
 end AvroFocus
 
 private[avro] object AvroFocus:
 
-  /** Single-leaf focus — reaches an `A` via the `path` walk and reads / writes it through the
-    * user-supplied [[AvroCodec]]. Powers root-level [[AvroPrism]]s and (in Unit 6+) per-element
-    * steps of `AvroTraversal[A]` when the user did `.each.<field>` style chains.
+  /** Single-leaf focus — reaches `A` via `path` and reads / writes through the user-supplied
+    * [[AvroCodec]]. Powers root-level [[AvroPrism]]s and per-element steps of `AvroTraversal[A]`.
     */
   final class Leaf[A] private[avro] (
       private[avro] val path: Array[PathStep],
@@ -243,13 +200,9 @@ private[avro] object AvroFocus:
 
   end Leaf
 
-  /** Multi-field focus — reaches a parent [[IndexedRecord]] via `parentPath`, then assembles a
-    * NamedTuple `A` by reading the selected `fieldNames` from it. Powers the multi-field variants
-    * (formerly `AvroFieldsPrism` — now a type alias).
-    *
-    * Per-element atomicity: the NamedTuple is all-or-nothing, so partial reads (some selected
-    * fields missing) cannot synthesise an `A` — the chain accumulates one `AvroFailure.PathMissing`
-    * per missing field, and the modify family preserves the input unchanged at that location.
+  /** Multi-field focus — reaches a parent record via `parentPath`, then assembles a NamedTuple `A`
+    * from `fieldNames`. All-or-nothing: a partial read accumulates one `PathMissing` per missing
+    * field and the modify family leaves the input unchanged at that location.
     */
   final class Fields[A] private[avro] (
       private[avro] val parentPath: Array[PathStep],
@@ -259,10 +212,8 @@ private[avro] object AvroFocus:
 
     protected def terminalStep: PathStep = AvroWalk.terminalOf(parentPath)
 
-    /** The NamedTuple's own schema, read off the codec once at construction. The sub-record built
-      * for atomic reads / overlays is always allocated under this schema; kindlings derives the NT
-      * with field names matching the case-class field names, so the NT's positional layout aligns
-      * with the parent record by name.
+    /** NT's schema (kindlings derives field names matching the case class so positional layout
+      * aligns with the parent record by name).
       */
     private val ntSchema: Schema = codec.schema
 
@@ -271,18 +222,15 @@ private[avro] object AvroFocus:
         case (cur, _) =>
           cur match
             case parent: IndexedRecord =>
-              readFields(parent).left.map { chain =>
-                // navigateRaw returns a single failure; readFields can produce a chain of
-                // PathMissings on partial-cover. Surface the first as the head failure — the
-                // Ior-bearing readIor below carries the full chain; this path is for the
-                // abstract Optic.to surface where only one failure can fit.
-                chain.headOption.getOrElse(AvroFailure.PathMissing(terminalStep))
-              }
+              // navigateRaw can only carry one failure; surface readFields' first PathMissing.
+              readFields(parent)
+                .left
+                .map(_.headOption.getOrElse(AvroFailure.PathMissing(terminalStep)))
             case _ => Left(AvroFailure.NotARecord(terminalStep))
       }
 
-    /** Atomic read — succeeds with the assembled sub-record only when ALL selected fields are
-      * present. Missing fields accumulate as `PathMissing` failures.
+    /** Atomic read — succeeds only when ALL selected fields are present; missing fields accumulate
+      * as `PathMissing`.
       */
     private def readFields(parent: IndexedRecord): Either[Chain[AvroFailure], IndexedRecord] =
       val parentSchema = parent.getSchema
@@ -294,16 +242,14 @@ private[avro] object AvroFocus:
         val parentField = parentSchema.getField(name)
         if parentField == null then chain = chain :+ AvroFailure.PathMissing(PathStep.Field(name))
         else
+          // ntField is non-null for any selector the macro accepted.
           val ntField = ntSchema.getField(name)
-          // NT schema is derived from the case class' field set; `ntField` is non-null for any
-          // selector the macro accepted.
           sub.put(ntField.pos, parent.get(parentField.pos))
         i += 1
       if chain.isEmpty then Right(sub) else Left(chain)
 
-    /** Project the selected fields out of `parent` for transform-shape ops, missing fields default
-      * to `null`. Used whenever transform-shape ops need a synthesis of "the focus sub-record"
-      * without insisting on atomicity.
+    /** Project selected fields out of `parent` for transform-shape ops; missing → `null`.
+      * Non-atomic counterpart to [[readFields]].
       */
     private def buildSubRecord(parent: IndexedRecord): IndexedRecord =
       val parentSchema = parent.getSchema
@@ -318,8 +264,8 @@ private[avro] object AvroFocus:
         i += 1
       sub
 
-    /** Overlay the encoder's output for a focus value `a` onto `parent`. Encoders that omit a
-      * selected field leave the parent's existing entry untouched.
+    /** Overlay the encoder's output for `a` onto `parent`; encoders that omit a selected field
+      * leave the parent's entry untouched.
       */
     private def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
       codec.encode(a) match
@@ -335,11 +281,10 @@ private[avro] object AvroFocus:
               .toMap
           AvroWalk.replaceRecordFields(parent, updates)
         case _ =>
-          // The encoder produced a non-record value (shouldn't happen for a NamedTuple under a
-          // record schema, but be defensive — leave parent untouched).
+          // Encoder produced a non-record (shouldn't happen for an NT under a record schema).
           parent
 
-    /** Overlay a foreign sub-record (the result of a `transform`'s user function) onto `parent`. */
+    /** Overlay a foreign sub-record (transform's result) onto `parent`. */
     private def overlayFields(parent: IndexedRecord, newSub: IndexedRecord): IndexedRecord =
       val newSchema = newSub.getSchema
       val updates: Map[String, Any] =
@@ -352,9 +297,8 @@ private[avro] object AvroFocus:
           .toMap
       AvroWalk.replaceRecordFields(parent, updates)
 
-    /** Walk the parent path and project the terminal as an [[IndexedRecord]]. The walk result is
-      * the array-shaped [[AvroWalk.WalkRes]] — the per-record hot paths re-use it directly via
-      * [[rebuild]] without materialising parents as a `Vector`.
+    /** Walk the parent path; projects the terminal as `IndexedRecord`. Returns the array-shaped
+      * `WalkRes` so [[rebuild]] re-uses parents without materialising a Vector.
       */
     private def walkParent(
         record: IndexedRecord

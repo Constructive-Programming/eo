@@ -3,28 +3,16 @@ package optics
 
 import data.Forgetful
 
-/** Constructor for `Iso` — a bijective single-focus optic, backed by the `Forgetful` carrier.
-  *
-  * An `Iso[S, A]` (short for `Optic[S, S, A, A, Forgetful]`) encodes a data-shape conversion where
-  * every `S` round-trips to exactly one `A` and back. The `Forgetful` carrier (`type Forgetful[X,
-  * A]
-  * = A`) carries no leftover — it forgets everything except the focus — which is why every Iso
-  * operation reduces to plain function application.
+/** Constructor for `Iso` — a bijective single-focus optic, backed by `Forgetful`. An `Iso[S, A]`
+  * (short for `Optic[S, S, A, A, Forgetful]`) encodes a data-shape bijection. `Forgetful[X, A] = A`
+  * carries no leftover, so every Iso operation reduces to plain function application.
   */
 object Iso:
 
-  /** Construct an Iso from a forward `get: S => A` and a reverse `reverseGet: B => T`. Polymorphic
-    * variant — `S = T` / `A = B` for the common monomorphic case, differing types for refinement.
+  /** Construct an Iso from forward `get: S => A` and reverse `reverseGet: B => T`. Polymorphic; use
+    * `S = T = A = B` for the monomorphic case.
     *
     * @group Constructors
-    * @tparam S
-    *   source type being read
-    * @tparam T
-    *   result type after the reverse lift
-    * @tparam A
-    *   focus read
-    * @tparam B
-    *   focus written back
     *
     * @example
     *   {{{
@@ -38,16 +26,10 @@ object Iso:
   def apply[S, T, A, B](f: S => A, g: B => T) =
     BijectionIso[S, T, A, B](f, g)
 
-/** Concrete Optic subclass for an isomorphism — a bijection between `S` / `T` and `A` / `B`. Stores
-  * `get: S => A` and `reverseGet: B => T` directly as fields so the hot path never goes through the
-  * `Accessor[Forgetful]` / `ReverseAccessor[Forgetful]` type-class dispatches that the generic
-  * `Optic` extensions would otherwise perform.
-  *
-  * Mirrors Monocle's `case class Iso[S, A](get: S => A, reverseGet: A => S)` storage shape, which
-  * is the reason their 1.5-ns hot paths are reachable.
-  *
-  * Returned by [[Iso.apply]] so every hand-written iso picks up the fused path without a type
-  * annotation at the call site.
+/** Concrete Optic subclass for an isomorphism. Stores `get` / `reverseGet` directly so the hot path
+  * skips the `Accessor[Forgetful]` / `ReverseAccessor[Forgetful]` typeclass dispatches the generic
+  * extensions would perform — same storage shape as Monocle's `Iso`. Returned by [[Iso.apply]] so
+  * hand-written isos pick up the fused path automatically.
   */
 final class BijectionIso[S, T, A, B](
     val get: S => A,
@@ -64,28 +46,21 @@ final class BijectionIso[S, T, A, B](
     val t = reverseGet(b)
     _ => t
 
-  /** Fused `BijectionIso.andThen(BijectionIso)` — composes `get`s and `reverseGet`s directly,
-    * skipping the generic `Forgetful.assoc` path.
-    */
+  /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): BijectionIso[S, T, C, D] =
     new BijectionIso(
       get = s => inner.get(get(s)),
       reverseGet = d => reverseGet(inner.reverseGet(d)),
     )
 
-  /** Fused `BijectionIso.andThen(GetReplaceLens)` — result is a `GetReplaceLens` that threads the
-    * iso around the inner lens. Skips the cross-carrier `Composer[Forgetful, Tuple2]` hop.
-    */
+  /** Fused `Iso.andThen(Lens)` — threads the iso around the inner lens. */
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
       get = s => inner.get(get(s)),
       enplace = (s, d) => reverseGet(inner.enplace(get(s), d)),
     )
 
-  /** Fused `BijectionIso.andThen(MendTearPrism)` — result is a `MendTearPrism`. Skips the
-    * `Composer[Forgetful, Either]` hop. On inner miss, the outer's `reverseGet` lifts the inner's
-    * `B`-shaped leftover back to `T`.
-    */
+  /** Fused `Iso.andThen(Prism)` — on inner miss, outer.reverseGet lifts the leftover. */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
     new MendTearPrism(
       tear = s =>
@@ -95,9 +70,7 @@ final class BijectionIso[S, T, A, B](
       mend = d => reverseGet(inner.mend(d)),
     )
 
-  /** Fused `BijectionIso.andThen(Optional)` — iso is transparent; result is an `Optional` with the
-    * iso threaded around the inner Optional's partial focus.
-    */
+  /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(
       getOrModify = s =>

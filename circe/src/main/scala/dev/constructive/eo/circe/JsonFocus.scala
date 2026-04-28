@@ -3,47 +3,27 @@ package dev.constructive.eo.circe
 import cats.data.{Chain, Ior}
 import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
 
-/** What it means to focus on a value of type `A` somewhere inside a `Json`.
+/** Focus on a value of type `A` somewhere inside a `Json`. Storage decomposition along two axes:
   *
-  * The four legacy carrier classes — `JsonPrism`, `JsonFieldsPrism`, `JsonTraversal`,
-  * `JsonFieldsTraversal` — used to be four classes, but they only varied along two orthogonal axes:
+  *   1. Where the focus lives — at a leaf reached by a path (Leaf), or as a NamedTuple assembled
+  *      from selected fields under a parent record (Fields).
+  *   2. Single- vs multi-focus — applied once at the root ([[JsonPrism]]) or per-element after a
+  *      prefix walk ([[JsonTraversal]]).
   *
-  *   1. ''Where does the focus live?'' — at a leaf reached by a path (Leaf), or as a NamedTuple
-  *      assembled from selected fields under a parent (Fields).
-  *   2. ''Single-focus or multi-focus?'' — applied once at the root (Prism), or applied per-element
-  *      after walking a `prefix` to an array (Traversal).
-  *
-  * Axis 1 lives here: a `JsonFocus[A]` factors out everything that depends on the storage shape of
-  * the focus. Axis 2 lives in [[JsonPrism]] / [[JsonTraversal]], each of which holds a
-  * `JsonFocus[A]` and delegates the per-element focus operations to it. The four-class hierarchy
-  * collapses to two, with the storage variation captured here as a sealed enum.
-  *
-  * Each focus exposes the same six per-Json operations: three Ior-bearing (decoded modify, raw
-  * transform, decoded place) for the default surface, and three silent (input-on-failure) for the
-  * `*Unsafe` escape hatches. Plus two reads (decoded get, decoded silent get) and the abstract
-  * Optic-trait diagnostics (`navigateCursor` returning an `ACursor` for the (DecodingFailure,
-  * HCursor) shape).
+  * Each focus exposes six per-Json ops (three Ior-bearing default + three silent) plus two reads
+  * and Optic-trait `to`-side hooks (`navigateCursor` / `decodeFromCursor`).
   */
 sealed abstract private[circe] class JsonFocus[A]:
 
-  /** Codec for the focused value `A`. For Leaf focuses this is the user's `Encoder[A]` /
-    * `Decoder[A]`; for Fields focuses this is the codec for the synthesised NamedTuple type.
-    */
+  /** Codec for `A`. Leaf: user's `Encoder[A]` / `Decoder[A]`. Fields: synthesised NT codec. */
   private[circe] def encoder: Encoder[A]
-
-  /** See [[encoder]]. */
   private[circe] def decoder: Decoder[A]
 
-  /** The terminal step of this focus's path — used by the failure surfaces to point at the last
-    * cursor position the walk attempted. `PathStep.Field("")` for root-level focuses with empty
-    * paths.
-    */
+  /** Terminal path step — used by failure surfaces. `PathStep.Field("")` for root-level focuses. */
   protected def terminalStep: PathStep
 
-  /** Decode `cur` and either fold the resulting `A` into a rebuild Json (`onHit`), or surface a
-    * `DecodeFailed` against the terminal step. Threaded through every Ior-bearing decoded-modify
-    * body — `modifyIor`, `placeIor`, the post-fields-read on `Fields.modifyIor`. Both Leaf and
-    * Fields share this exact decode-then-rebuild-or-fail shape.
+  /** Decode `cur` and fold success into `onHit`, or surface a `DecodeFailed`. Shared between Leaf
+    * and Fields.
     */
   final protected def decodeOrFail(
       cur: Json,
@@ -53,64 +33,35 @@ sealed abstract private[circe] class JsonFocus[A]:
       case Right(a) => Ior.Right(onHit(a))
       case Left(df) => Ior.Both(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)), json)
 
-  /** Read variant of [[decodeOrFail]] — decode `cur`; success → `Ior.Right(a)`, failure →
-    * `Ior.Left(Chain(DecodeFailed(terminalStep, ...)))`. Used by both Leaf and Fields `readIor`.
-    */
+  /** Read counterpart to [[decodeOrFail]] — decode → `Ior.Right(a)` or `Ior.Left(chain)`. */
   final protected def decodeOrLeft(cur: Json): Ior[Chain[JsonFailure], A] =
     decoder.decodeJson(cur) match
       case Right(a) => Ior.Right(a)
       case Left(df) => Ior.Left(Chain.one(JsonFailure.DecodeFailed(terminalStep, df)))
 
-  // ---- Default Ior-bearing ops ------------------------------------
-
-  /** Walk to the focus, decode, apply `f`, encode, rebuild root. Failures (path miss, decode
-    * failure) surface as `Ior.Both(chain, inputJson)` — the input is preserved as the silent
-    * fallback while the diagnostic chain documents what went wrong.
-    */
+  // Default Ior-bearing ops — failures surface as `Ior.Both(chain, inputJson)` (input preserved as
+  // silent fallback). `readIor` returns `Ior.Left(chain)` on failure.
   def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json]
-
-  /** Walk to the focus, apply `f` to the raw Json there, rebuild root. Same failure surface as
-    * [[modifyIor]].
-    */
   def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json]
-
-  /** Walk to the focus, write the encoded `a`, rebuild root. Same failure surface. */
   def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json]
-
-  /** Walk to the focus, decode. Success = `Ior.Right(a)`; failure = `Ior.Left(chain)` — a read
-    * either produces an `A` or it doesn't, so the Json is intentionally not carried as a fallback.
-    */
   def readIor(json: Json): Ior[Chain[JsonFailure], A]
 
-  // ---- *Unsafe (silent) ops ---------------------------------------
-
-  /** Silent counterpart to [[modifyIor]] — input pass-through on any failure. */
+  // *Unsafe (silent) ops — input pass-through on any failure (read returns None).
   def modifyImpl(json: Json, f: A => A): Json
-
-  /** Silent counterpart to [[transformIor]]. */
   def transformImpl(json: Json, f: Json => Json): Json
-
-  /** Silent counterpart to [[placeIor]]. */
   def placeImpl(json: Json, a: A): Json
-
-  /** Silent read — `None` on any failure. */
   def readImpl(json: Json): Option[A]
 
-  // ---- Optic-trait diagnostics (HCursor-based) --------------------
-
-  /** Build the ACursor for the abstract `to` method. The HCursor route is used by the generic
-    * `Optic` extensions; the hot-path Ior / Unsafe surfaces above bypass it.
-    */
+  /** Build the ACursor for the abstract `to` method. */
   def navigateCursor(json: Json): ACursor
 
-  /** Decode an `A` from the navigated `ACursor` — used by the abstract `to` method. */
+  /** Decode an `A` from the navigated `ACursor`. */
   def decodeFromCursor(c: ACursor): Either[DecodingFailure, A] = c.as[A](using decoder)
 
 private[circe] object JsonFocus:
 
-  /** Single-leaf focus — reaches an `A` via the `path` walk and reads / writes it through the
-    * user-supplied codec. Powers `JsonPrism[A]` and the per-element step of `JsonTraversal[A]` when
-    * the user did `.each.<field>` style chains.
+  /** Single-leaf focus — reaches `A` via `path` and reads / writes through the user-supplied codec.
+    * Powers root-level `JsonPrism[A]` and per-element steps of `JsonTraversal[A]`.
     */
   final class Leaf[A] private[circe] (
       private[circe] val path: Array[PathStep],
@@ -178,14 +129,9 @@ private[circe] object JsonFocus:
         case Left(failure)   => Ior.Left(Chain.one(failure))
         case Right((cur, _)) => decodeOrLeft(cur)
 
-  /** Multi-field focus — reaches a parent JsonObject via `parentPath`, then assembles a NamedTuple
-    * `A` by reading the selected `fieldNames` from it. Powers the multi-field variants (formerly
-    * `JsonFieldsPrism` / `JsonFieldsTraversal`).
-    *
-    * Per-element atomicity (D4 of the multi-field plan): the NamedTuple is all-or-nothing, so
-    * partial reads (some selected fields missing) cannot synthesise an `A` — the chain accumulates
-    * one `JsonFailure.PathMissing` per missing field, and the modify family preserves the input
-    * unchanged at that location.
+  /** Multi-field focus — reaches a parent `JsonObject` via `parentPath`, then assembles a
+    * NamedTuple `A` from `fieldNames`. All-or-nothing: a partial read accumulates one `PathMissing`
+    * per missing field and the modify family leaves the input unchanged.
     */
   final class Fields[A] private[circe] (
       private[circe] val parentPath: Array[PathStep],
@@ -203,18 +149,13 @@ private[circe] object JsonFocus:
           case PathStep.Index(idx)  => c.downN(idx)
       }
 
-    /** Project the selected fields out of `obj`, missing fields default to `Json.Null`. Used
-      * whenever transform-shape ops need a synthesis of "the focus subobject" without insisting on
-      * atomicity.
-      */
+    /** Non-atomic projection — missing → `Json.Null`. Used by transform-shape ops. */
     private def buildSubObject(obj: JsonObject): JsonObject =
       fieldNames.foldLeft(JsonObject.empty)((sub, name) =>
         sub.add(name, obj(name).getOrElse(Json.Null))
       )
 
-    /** Atomic read — succeeds with the assembled sub-object only when ALL selected fields are
-      * present. Missing fields accumulate as `PathMissing` failures.
-      */
+    /** Atomic read — succeeds only when ALL fields are present; missing → `PathMissing`. */
     private def readFields(obj: JsonObject): Either[Chain[JsonFailure], JsonObject] =
       val (chain, sub) =
         fieldNames.toVector.foldLeft((Chain.empty[JsonFailure], JsonObject.empty)) {
@@ -225,14 +166,14 @@ private[circe] object JsonFocus:
         }
       Either.cond(chain.isEmpty, sub, chain)
 
-    /** Overlay the encoder's output for a focus value `a` onto `parent`. Encoders that omit a
-      * selected field leave the parent's existing entry untouched.
+    /** Overlay the encoder's output for `a` onto `parent`; encoders that omit a selected field
+      * leave the parent's entry untouched.
       */
     private def writeFields(parent: JsonObject, a: A): JsonObject =
       val encoded: JsonObject = encoder(a).asObject.getOrElse(JsonObject.empty)
       fieldNames.foldLeft(parent)((out, name) => encoded(name).fold(out)(v => out.add(name, v)))
 
-    /** Overlay a foreign sub-object (the result of a `transform`'s user function) onto `parent`. */
+    /** Overlay a foreign sub-object (transform's result) onto `parent`. */
     private def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =
       fieldNames.foldLeft(parent)((out, name) => newSub(name).fold(out)(v => out.add(name, v)))
 

@@ -4,25 +4,18 @@ import scala.quoted.*
 
 import io.circe.{Decoder, Encoder}
 
-/** `.field(_.fieldName)` on a `JsonPrism[S]` — macro sugar over [[JsonPrism.widenPath]]. Extracts
-  * the field name from the selector AST (same pattern as eo-generics' `lens[S](_.field)`) and emits
-  * a cursor-step via `ACursor.downField`.
-  *
-  * Usage:
+/** Macros backing `JsonPrism.field(_.fieldName)`, `selectDynamic`, `at(i)`, `each`, `fields`.
+  * Extracts the field name from the selector AST (same pattern as eo-generics' `lens[S](_.field)`)
+  * and emits a `widenPath` call.
   *
   * {{{
   *   val streetPrism: JsonPrism[String] =
   *     codecPrism[Person].field(_.address).field(_.street)
   * }}}
-  *
-  * Nested paths chain naturally — each `.field` call appends one `downField` to the stored
-  * navigation function.
   */
 object JsonPrismMacro:
 
-  /** Build a child `JsonPrism[B]` from a parent `JsonPrism[A]` via a compile-time selector
-    * `(_.field)` plus in-scope circe `Encoder[B]` and `Decoder[B]`.
-    */
+  /** Child `JsonPrism[B]` from `parent: JsonPrism[A]` via a `(_.field)` selector. */
   def fieldImpl[A: Type, B: Type](
       parent: Expr[JsonPrism[A]],
       selector: Expr[A => B],
@@ -44,14 +37,8 @@ object JsonPrismMacro:
       $parent.widenPath[B](${ Expr(name) })(using $encB, $decB)
     }
 
-  /** Drives the Selectable sugar: `codecPrism[Person].address` compiles to `selectFieldImpl` with
-    * `name = "address"`. We look the field up on `A`'s case-class schema, verify it exists, grab
-    * its declared type (widened to strip precise singletons), summon `Encoder[B]` / `Decoder[B]`
-    * from the enclosing scope, and emit the same `widenPath` call that the explicit `.field(_.x)`
-    * macro does.
-    *
-    * Returns `Expr[Any]` so the `transparent inline def selectDynamic` wrapper can refine the type
-    * at each call site.
+  /** Drives `codecPrism[Person].address`. Looks the field up on `A`'s schema, summons its codecs,
+    * emits `widenPath`. Returns `Expr[Any]` so `transparent inline` refines per call site.
     */
   def selectFieldImpl[A: Type](
       parent: Expr[JsonPrism[A]],
@@ -65,10 +52,7 @@ object JsonPrismMacro:
       ) => '{ $parent.widenPath[b](${ Expr(name) })(using $enc, $dec) }
     }
 
-  /** Macro for `jsonPrism.at(i)`. Verifies the parent focus `A` looks like a Scala collection (i.e.
-    * derives from `Iterable`), extracts the element type via `A`'s `Iterable` base type, summons
-    * the element's circe `Encoder` / `Decoder`, and emits a `widenPathIndex` call.
-    */
+  /** `.at(i)` — verifies `A <: Iterable`, summons element codecs, emits `widenPathIndex`. */
   def atImpl[A: Type](
       parent: Expr[JsonPrism[A]],
       iE: Expr[Int],
@@ -83,10 +67,7 @@ object JsonPrismMacro:
         )
         '{ $parent.widenPathIndex[b]($iE)(using $enc, $dec) }
 
-  /** Macro for `jsonPrism.each`. Reads the element type from `A`'s `Iterable` base, summons the
-    * element's `Encoder` / `Decoder`, and emits a `toTraversal[B]` call that hands the current path
-    * off as the new traversal's prefix.
-    */
+  /** `.each` — emits `toTraversal[B]` over `A`'s element type. */
   def eachImpl[A: Type](
       parent: Expr[JsonPrism[A]]
   )(using q: Quotes): Expr[Any] =
@@ -100,9 +81,7 @@ object JsonPrismMacro:
         )
         '{ $parent.toTraversal[b](using $enc, $dec) }
 
-  /** Macro for `traversal.field(_.x)`. Counterpart to [[fieldImpl]] — extends the traversal's
-    * suffix by a named field.
-    */
+  /** Traversal counterpart to [[fieldImpl]] — extends the suffix by a named field. */
   def fieldTraversalImpl[A: Type, B: Type](
       parent: Expr[JsonTraversal[A]],
       selector: Expr[A => B],
@@ -122,9 +101,7 @@ object JsonPrismMacro:
       $parent.widenSuffix[B](${ Expr(name) })(using $encB, $decB)
     }
 
-  /** Macro for `traversal.at(i)`. Counterpart to [[atImpl]] — extends the traversal's suffix by an
-    * array index.
-    */
+  /** Traversal counterpart to [[atImpl]] — extends the suffix by an array index. */
   def atTraversalImpl[A: Type](
       parent: Expr[JsonTraversal[A]],
       iE: Expr[Int],
@@ -139,13 +116,9 @@ object JsonPrismMacro:
         )
         '{ $parent.widenSuffixIndex[b]($iE)(using $enc, $dec) }
 
-  /** Macro for `codecPrism[A].fields(_.a, _.b, ...)` — multi-field focus. Parses the varargs
-    * selector list, validates arity (≥ 2), duplicate-ness, known-fields-ness, non-nested-ness,
-    * synthesises a Scala 3 NamedTuple type in SELECTOR order, summons `Encoder[NT]` / `Decoder[NT]`
-    * from the enclosing scope, and emits a `toFieldsPrism` call on the parent prism.
-    *
-    * See the plan's D10 for the full error-message catalogue — every row has an exact-message test
-    * in `FieldsMacroErrorSpec` (Unit 5).
+  /** `.fields(_.a, _.b, ...)` — multi-field focus. Validates arity ≥ 2, duplicate-ness, known
+    * fields, non-nested. Synthesises an NT in SELECTOR order, summons codecs, emits
+    * `toFieldsPrism`. Error-message catalogue tested by `FieldsMacroErrorSpec`.
     */
   def fieldsImpl[A: Type](
       parent: Expr[JsonPrism[A]],
@@ -159,10 +132,7 @@ object JsonPrismMacro:
       ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $enc, $dec) }
     }
 
-  /** Macro for `traversal.fields(_.a, _.b, ...)` — multi-field focus on a traversal. Mirror of
-    * [[fieldsImpl]] on the traversal side: parses varargs, validates per D10, synthesises the
-    * NamedTuple type in SELECTOR order, summons codecs, emits `toFieldsTraversal`.
-    */
+  /** Traversal counterpart to [[fieldsImpl]]. */
   def fieldsTraversalImpl[A: Type](
       parent: Expr[JsonTraversal[A]],
       selectorsE: Expr[Seq[A => Any]],
@@ -175,13 +145,8 @@ object JsonPrismMacro:
       ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $enc, $dec) }
     }
 
-  /** Shared backbone for `fieldsImpl` (JsonPrism side) and `fieldsTraversalImpl` (JsonTraversal
-    * side). Validates the varargs selector list per D10, synthesises the SELECTOR-order NamedTuple
-    * type, summons its `Encoder` / `Decoder`, and hands the four pieces (`namesExpr`, `enc`, `dec`,
-    * plus the `Type[nt]` evidence) to the caller-supplied `emit` callback. The two former entry
-    * points differed only in the error tag and the final `toFieldsPrism` / `toFieldsTraversal`
-    * emit; everything else (~115 lines of validation + NamedTuple construction) was copy-pasted
-    * between them.
+  /** Shared backbone for the prism / traversal `fieldsImpl`. Validates the varargs selector list,
+    * synthesises the SELECTOR-order NT, summons its codecs, hands them to `emit`.
     */
   private def fieldsCommon[A: Type](
       who: String,
@@ -239,8 +204,7 @@ object JsonPrismMacro:
         (i, name)
       }
 
-    // Duplicate selectors: compile error (D10). Routed through the shared selector-validation
-    // helper in `eo-generics` (this module already depends on generics for the lens macro).
+    // Duplicate selectors → compile error (via the shared MacroSelectors helper in eo-generics).
     dev
       .constructive
       .eo
@@ -253,8 +217,7 @@ object JsonPrismMacro:
 
     val selectedNames: List[String] = resolved.map(_._2)
 
-    // Build the NamedTuple type in SELECTOR order. `namesTpe` is the
-    // singleton-String names tuple, `valuesTpe` the field-types tuple.
+    // NamedTuple type in SELECTOR order (singleton-String names + field-types tuple).
     val selectorSyms: List[Symbol] = selectedNames.map { name =>
       caseFields.find(_.name == name).getOrElse {
         report.errorAndAbort(
@@ -284,16 +247,13 @@ object JsonPrismMacro:
             + " KindlingsCodecAsObject.derive`, or provide one manually."
         )
 
-        // Emit `parent.toFields*[nt](Array(n1, n2, ...))(using enc, dec)`.
-        // We splice the field names as a compile-time-known Array[String]
-        // so the runtime class doesn't need to re-parse them.
+        // Compile-time-known Array[String] of field names.
         val namesExpr: Expr[Array[String]] =
           '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
 
         emit[nt](namesExpr, enc, dec)
 
-  /** Macro for `traversal.<fieldName>`. Counterpart to [[selectFieldImpl]] — drives the Dynamic
-    * sugar on [[JsonTraversal]] by extending the suffix.
+  /** Traversal counterpart to [[selectFieldImpl]] — drives Dynamic sugar by extending the suffix.
     */
   def selectFieldTraversalImpl[A: Type](
       parent: Expr[JsonTraversal[A]],

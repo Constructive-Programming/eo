@@ -15,58 +15,45 @@ type Fst[T] = T match
 type Snd[T] = T match
   case (f, s) => s
 
-/** Carrier for the `Optional` family of optics: sealed hierarchy with two variants —
-  * [[Affine.Miss]] (no focus; carries `Fst[A]`) and [[Affine.Hit]] (focus present; carries `Snd[A]`
-  * + `B`).
+/** Carrier for the `Optional` family — sealed hierarchy: [[Affine.Miss]] (no focus; carries
+  * `Fst[A]`) and [[Affine.Hit]] (focus present; carries `Snd[A]` + `B`). Miss / Hit store fields
+  * directly (no Either / Tuple2 wrapper); a `.affine: Either[Fst[A], (Snd[A], B)]` legacy accessor
+  * reconstructs the old view on demand. Prefer matching `Miss(...)` / `Hit(...)` for zero-alloc
+  * access.
   *
-  * This representation drops the AnyVal wrapper and the inner `Tuple2` (for Hit) / inner `Either`
-  * (for both) that the old `Affine[A, B](val affine: Either[Fst[A], (Snd[A], B)]) extends AnyVal`
-  * paid. The new shape:
-  *   - **Miss** stores `fst: Fst[A]` directly — no Either wrapper.
-  *   - **Hit** stores `snd: Snd[A]` and `b: B` as two direct fields — no Tuple2.
-  *
-  * Net ~40 bytes/op saved on the hit branch and ~16 bytes/op on the miss branch versus the old
-  * AnyVal-over-Either shape. The `.affine: Either[Fst[A], (Snd[A], B)]` accessor is preserved as a
-  * legacy view (reconstructs an Either + Tuple2 on read) so law suites and external pattern matches
-  * that walked the Either shape keep working; new code should pattern-match `Miss(...)` /
-  * `Hit(...)` directly for zero-alloc access.
-  *
-  * At every constructor site the existential `A` is instantiated to a concrete `Tuple2` (so
-  * `Fst[A]` / `Snd[A]` reduce); when Affine is carried through the existential position of an
-  * `Optic[…, Affine]` value, `A` becomes abstract and the match types stay inert. Both uses are
-  * supported.
+  * At every constructor site `A` is a concrete `Tuple2` (so `Fst[A]` / `Snd[A]` reduce); when
+  * carried through an `Optic[…, Affine]` existential, `A` is abstract and the match types stay
+  * inert.
   *
   * @tparam A
-  *   existential leftover tuple — the `Tuple2` encoding of the miss and hit contexts
+  *   existential leftover tuple
   * @tparam B
-  *   focus type the caller reads / writes
+  *   focus type
   */
 sealed trait Affine[A, B]:
   import Affine.*
 
-  /** Monomorphic fold — pattern-matches on the Miss/Hit variant and runs the matching branch. No
-    * boxing, no allocation beyond what the branches themselves do.
+  /** Monomorphic fold — pattern-match on Miss/Hit and run the matching branch.
     *
     * @tparam C
-    *   output type produced by either branch
+    *   output type
     */
   def fold[C](onMiss: Fst[A] => C, onHit: (Snd[A], B) => C): C = this match
     case m: Miss[A, B] => onMiss(m.fst)
     case h: Hit[A, B]  => onHit(h.snd, h.b)
 
-  /** Legacy Either-shaped accessor. Reconstructs a fresh `Either` (and a fresh `Tuple2` on Hit) on
-    * every call — kept for law suites and external code that pattern-match on `.affine`. Prefer
-    * `fold` or direct pattern matching on `Miss` / `Hit` in new code.
+  /** Legacy Either-shaped accessor (reconstructs a fresh `Either` + Tuple2 on each call). Kept for
+    * law suites; new code should pattern-match `Miss` / `Hit` directly.
     */
   def affine: Either[Fst[A], (Snd[A], B)] = this match
     case m: Miss[A, B] => Left(m.fst)
     case h: Hit[A, B]  => Right((h.snd, h.b))
 
-  /** Fold both branches into a new `Affine[A, C]`. Mirrors the old `aFold` but dispatches via
-    * `Miss`/`Hit` pattern match directly, so neither branch allocates an intermediate Either.
+  /** Fold both branches into a new `Affine[A, C]`. Dispatches via direct pattern match (no
+    * intermediate Either).
     *
     * @tparam C
-    *   focus type of the output Affine
+    *   focus type of the output
     */
   def aFold[C](
       f: Fst[A] => Affine[A, C],
@@ -75,13 +62,13 @@ sealed trait Affine[A, B]:
     case m: Miss[A, B] => f(m.fst)
     case h: Hit[A, B]  => g((h.snd, h.b))
 
-  /** Effectful traversal over the focus — runs `f` only on the hit branch, passes the miss branch
-    * through unchanged via `Applicative.pure`.
+  /** Effectful traversal — runs `f` on the hit branch, passes the miss branch through via
+    * `Applicative.pure`.
     *
     * @tparam C
     *   focus produced by `f`
     * @tparam G
-    *   effect constructor; must have `Applicative[G]`
+    *   effect constructor
     */
   def aTraverse[C, G[_]: Applicative](f: B => G[C]): G[Affine[A, C]] = this match
     case m: Miss[A, B] =>
@@ -92,12 +79,8 @@ sealed trait Affine[A, B]:
 /** Constructors and typeclass instances for [[Affine]]. */
 object Affine:
 
-  /** Miss-branch variant: no focus present. Stores `fst: Fst[A]` directly.
-    *
-    * `B` is phantom at the runtime shape — every `Miss[A, B]` stores only `fst: Fst[A]`, regardless
-    * of `B`. Callers that need to re-type a Miss instance across a phantom-B change (e.g. when
-    * adapting an `Affine`-carrier optic into another carrier whose variant type differs on the
-    * focus side only) should prefer [[widenB]] to a raw `asInstanceOf`.
+  /** Miss-branch variant — no focus, stores `fst: Fst[A]` directly. `B` is phantom at runtime;
+    * callers re-typing across a phantom-B change should prefer [[widenB]] over `asInstanceOf`.
     */
   final class Miss[A, B](val fst: Fst[A]) extends Affine[A, B]:
     override def toString(): String = s"Miss($fst)"
@@ -123,15 +106,10 @@ object Affine:
 
     override def hashCode(): Int = snd.hashCode * 31 + (if b == null then 0 else b.hashCode)
 
-  /** Legacy smart constructor — accept a raw `Either[Fst[A], (Snd[A], B)]` and dispatch to the
-    * matching variant. Kept so call sites that still build an Either manually keep working; prefer
-    * `new Miss(...)` / `new Hit(...)` in new code to avoid the intermediate Either allocation.
+  /** Legacy smart constructor — dispatches a raw Either to the matching variant. Prefer
+    * `new Miss(...)` / `new Hit(...)` in new code.
     *
     * @group Constructors
-    * @tparam A
-    *   existential leftover tuple
-    * @tparam B
-    *   focus
     */
   def apply[A, B](e: Either[Fst[A], (Snd[A], B)]): Affine[A, B] = e match
     case Left(l)       => new Miss[A, B](l)
@@ -157,9 +135,8 @@ object Affine:
     */
   def ofRight[X, B](r: (Snd[X], B)): Affine[X, B] = new Hit[X, B](r._1, r._2)
 
-  /** `ForgetfulFunctor[Affine]` — maps the focus `B` through `f`, passing the miss branch through
-    * unchanged. One allocation per hit-branch map (fresh `Hit`); pure pass-through on the miss
-    * branch.
+  /** `ForgetfulFunctor[Affine]` — maps the focus `B`, passing the miss branch through. One
+    * allocation per hit-branch map; pure pass-through on miss.
     *
     * @group Instances
     */
@@ -180,30 +157,10 @@ object Affine:
     def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =
       fa => f => fa.aTraverse(f)
 
-  /** Composition functor for `Affine` carriers.
-    *
-    * The type parameters `X` and `Y` are **deliberately unbounded**. Affine's internals use
-    * `Fst[X]` / `Snd[X]` match types, which stay inert (they do not reduce, but do not error
-    * either) when `X` is not a `Tuple`; this makes the instance sound for all concrete optic
-    * constructors we ship (`Optional.apply` sets `type X = (T, S)`; `Composer[Tuple2, Affine].to`
-    * sets `type X = (T, o.X)`; `Composer[Either, Affine].to` sets `type X = (o.X, S)` — every
-    * concrete X is a Tuple2).
-    *
-    * Prior to 0.1.0 this given carried `X <: Tuple, Y <: Tuple`. The bound was load-bearing
-    * *defensively* — it prevented pathological composition over an Affine whose X isn't a tuple —
-    * but it also blocked legitimate `Lens.andThen(Optional)` because the post-`morph[Affine]`
-    * existential is abstract and Scala could not prove the bound through the Optic trait's
-    * unbounded `F[_, _]` slot. Dropping the bound preserves composition at the cost of the
-    * defensive guard.
-    *
-    * **Future work — `ValidCarrier[F, X]` witness.** A cleaner long-term story is to thread a
-    * `ValidCarrier[F[_, _], X]` typeclass through every optic operation, so each carrier can
-    * declare which existentials it admits (`ValidCarrier[Affine, X]` requires `X <: Tuple`;
-    * `ValidCarrier[Tuple2, X]` is universal). This lives the constraint at the call-site rather
-    * than at the class, and avoids the kind-compatibility wall that hits any attempt to put the
-    * bound on `Affine` itself (`class Affine[A <: Tuple, B]` produces a kind mismatch when Affine
-    * is passed to `Optic[…, F[_, _]]`). Tracked for a post-0.1.0 release when the public API is
-    * stable enough to absorb the witness threading.
+  /** Composition functor for `Affine` carriers. `X` / `Y` are deliberately unbounded — Affine's
+    * `Fst[X]` / `Snd[X]` match types stay inert when `X` is not a `Tuple`, which is sound for every
+    * shipped concrete optic (every concrete X is a Tuple2). A `ValidCarrier[F, X]` threading is a
+    * possible post-0.1.0 cleanup.
     *
     * @group Instances
     */
@@ -244,10 +201,8 @@ object Affine:
         val b: B = inner.from(new Hit[Xi, D](xiSnd, h.b))
         outer.from(new Hit[Xo, B](xoSnd, b))
 
-  /** `Composer[Tuple2, Affine]` — lets a Lens be expressed as an Optional so
-    * `lens.andThen(optional)` type-checks through cross-carrier `.andThen` (which summons a
-    * `Morph[Tuple2, Affine]` whose resolution picks up this composer). The resulting
-    * `Optic[…, Affine]` always takes the "Hit" branch at read time: the Lens never fails.
+  /** Lens → Affine. Always-Hit at read; lets `lens.andThen(optional)` type-check via the
+    * cross-carrier `Morph[Tuple2, Affine]` that picks up this composer.
     *
     * @group Instances
     */
@@ -266,12 +221,10 @@ object Affine:
             case m: Miss[X, B] => m.fst
             case h: Hit[X, B]  => o.from((h.snd, h.b))
 
-  // Iso → Affine composition is handled by the low-priority `Morph.viaTuple2` fallback
-  // (see `dev.constructive.eo.LowPriorityMorphInstances`). No direct `Composer[Forgetful, Affine]` is shipped
-  // here — the fallback fires cleanly once `Composer.chain` is at low priority.
+  // Iso → Affine is handled by the low-priority `chainViaTuple2` fallback in
+  // `LowPriorityComposerInstances`. No direct `Composer[Forgetful, Affine]` is shipped.
 
-  /** `Composer[Either, Affine]` — express a Prism as an Optional by reusing its `Either`
-    * decomposition for Affine's miss / hit branches.
+  /** Prism → Affine — reuses the `Either` decomposition for Affine's miss / hit branches.
     *
     * @group Instances
     */

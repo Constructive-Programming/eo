@@ -4,79 +4,45 @@ import scala.jdk.CollectionConverters.*
 
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
-/** Shared internal helpers for the fold-based Avro walks used by [[AvroPrism]] and (in Unit 6+) its
-  * traversal siblings.
+/** Shared internal helpers for fold-based Avro walks used by [[AvroPrism]] and [[AvroTraversal]].
+  * Mirrors `circe.JsonWalk` with parent-type dispatch generalised across `IndexedRecord` /
+  * `java.util.List` / `java.util.Map` / union alternatives.
   *
-  * Mirrors `dev.constructive.eo.circe.JsonWalk` line-by-line, with parent-type dispatch generalised
-  * from "JsonObject vs Vector\[Json\]" to "IndexedRecord vs java.util.List vs java.util.Map" so the
-  * walker can pierce all four reachable Avro shapes (records, arrays, maps, union alternatives)
-  * under one fold.
+  * Avro's runtime string type is `Utf8 <: CharSequence`; the walker uses `instanceof CharSequence`.
   *
-  * '''Gap-6 (per the eo-avro plan).''' Avro's runtime string type is `org.apache.avro.util.Utf8`, a
-  * subtype of `CharSequence`. The walker is lenient about string shapes — fields whose schema is
-  * `STRING` come back as `Utf8` from the apache-avro reader and the codec layer converts to Scala
-  * `String` at the leaf. The string check uses `instanceof CharSequence`, not `instanceof String`.
-  *
-  * The structural `Eq[IndexedRecord]` / `Eq[GenericRecord]` givens (per Gap-5 / OQ-avro-9) live in
-  * the [[dev.constructive.eo.avro]] package object — that's the public-facing user surface;
-  * `AvroWalk` itself is implementation detail.
-  *
-  * '''Unit 12 (perf).''' Two parallel entry points:
-  *
-  *   - [[walkPath]] — the legacy `(Any, Vector[AnyRef])`-shaped surface, kept for tests / direct
-  *     introspection.
-  *   - [[walkPathArr]] — the hot-path entry. Stores parents in a pre-allocated `Array[AnyRef]` of
-  *     size `path.length` and runs as a tail-recursive while-loop. Per-step `Right(...)` boxing,
-  *     `Vector.:+` constant factor (~5× `ArrayBuilder`), and `Vector` materialisation from the
-  *     `Array` are all eliminated. The companion [[rebuildPathArr]] folds the array backwards via a
-  *     `while` loop. Used by the four [[AvroFocus]] hot paths (`modifyImpl` / `transformImpl` /
-  *     `placeImpl` / `readImpl`) and the corresponding Ior surfaces.
+  * Two entry points: [[walkPath]] — legacy `(Any, Vector[AnyRef])` shape; [[walkPathArr]] —
+  * hot-path entry storing parents in a pre-allocated `Array[AnyRef]`. The latter eliminates
+  * `Right(...)` boxing, `Vector.:+`, and `Vector` materialisation; [[rebuildPathArr]] folds it
+  * backwards. The four `AvroFocus` hot paths (`modifyImpl` / `transformImpl` / `placeImpl` /
+  * `readImpl`) plus their Ior siblings use `walkPathArr`.
   */
 private[avro] object AvroWalk:
 
-  /** A walked-cursor state: the current Avro focus (typed as `Any` because Avro's runtime values
-    * span [[IndexedRecord]] / [[java.util.List]] / [[java.util.Map]] / `Utf8` / unboxed
-    * primitives), paired with the Vector of parents collected so far. Parents are ordered
-    * root-to-leaf — `parents(0)` is the root container, `parents(n-1)` is the immediate parent of
-    * the terminal value.
+  /** Walked-cursor state: current focus (Avro runtime values span `IndexedRecord` / `List` / `Map`
+    * / `Utf8` / primitives), paired with parents Vector. Root-to-leaf ordered.
     */
   type State = (Any, Vector[AnyRef])
 
-  /** Hot-path walk result: the current Avro focus, the parents array (sized to `path.length` —
-    * `path` is the input passed to [[walkPathArr]]), and the count of parent slots actually filled.
-    * `UnionBranch` steps don't push parents, so `parentsLen <= path.length`.
-    *
-    * Allocated once per walk. Held by reference through the per-record hooks in [[AvroFocus]] and
-    * fed straight into [[rebuildPathArr]] without intermediate copying.
+  /** Hot-path walk result. `parents` is sized to `path.length`; `parentsLen` counts filled slots
+    * (`UnionBranch` steps don't push parents). Held through `AvroFocus` hooks and fed straight into
+    * [[rebuildPathArr]].
     */
   final class WalkRes(val cur: Any, val parents: Array[AnyRef], val parentsLen: Int)
 
-  /** Per-step policy controlling how missing field-steps behave. Mirrors
-    * [[dev.constructive.eo.circe.JsonWalk.OnMissingField]].
-    */
+  /** Missing-field policy. */
   enum OnMissingField:
 
-    /** Missing field at a Field step → `Left(AvroFailure.PathMissing(step))`. The strict default,
-      * used by every read / decoded-modify path.
-      */
+    /** Missing → `Left(PathMissing(step))`. Default for read / decoded-modify. */
     case Strict
 
-    /** Missing field at a Field step → `Right((null, parents :+ parent))`. Used by the per-element
-      * raw-transform / place paths on a Traversal, where a missing-field element is treated as
-      * "synthesise a null leaf and let the user-supplied f or value take over".
+    /** Missing → `Right((null, parents :+ parent))`. Used by Traversal raw-transform / place where
+      * missing elements are synthesised as `null` leaves.
       */
     case Lenient
 
-  /** One step of a walk under the given `OnMissingField` policy. Index steps always fail strictly
-    * (out-of-range indices and non-array parents are uniform errors regardless of policy).
-    *
-    * The runtime dispatch is type-driven: `IndexedRecord` for record fields, `java.util.Map[_, _]`
-    * for map keys (with the same `PathStep.Field(name)` shape), `java.util.List[_]` for array
-    * indices, and pass-through for `UnionBranch` (the apache-avro reader has already resolved the
-    * alternative; we just verify the runtime type aligns).
-    *
-    * Kept as a single-step, Vector-shaped entry point for direct tests; the hot path uses
-    * [[walkPathArr]]'s inlined loop.
+  /** One walk step. Index steps always fail strictly. Runtime dispatch: `IndexedRecord` → field,
+    * `Map` → key (same `Field(name)` shape), `List` → index, `UnionBranch` → type-check passthrough
+    * (apache-avro reader has already resolved the alternative).
     */
   def stepInto(
       step: PathStep,
@@ -127,12 +93,8 @@ private[avro] object AvroWalk:
             if actualName == branchName then Right((other, parents))
             else Left(AvroFailure.UnionResolutionFailed(List(actualName), step))
 
-  /** Walk an entire `path` from `record`, accumulating parents in a `Vector[AnyRef]`. Strict by
-    * default — pass `OnMissingField.Lenient` to tolerate missing field-steps as `null` leaves.
-    *
-    * Legacy entry point — preserved for tests and for the few callers that historically held
-    * parents as a Vector. Hot-path callers should use [[walkPathArr]] instead, which avoids the
-    * Vector materialisation.
+  /** Legacy entry — Vector-shaped parents. Preserved for tests; hot-path callers use
+    * [[walkPathArr]].
     */
   def walkPath(
       record: IndexedRecord,
@@ -154,14 +116,9 @@ private[avro] object AvroWalk:
             b.result()
         Right((walked.cur, parentsVec))
 
-  /** Hot-path walk — array-indexed `while` loop with a pre-allocated parents array sized to
-    * `path.length`. Always returns the same [[WalkRes]] shape; UnionBranch failures are
-    * post-processed in-line so [[AvroFailure.UnionResolutionFailed.branches]] always carries the
-    * full schema-declared alternative list.
-    *
-    * Failure short-circuit uses an in-loop sentinel (`failure: AvroFailure | Null`) rather than
-    * `return` so the scalafix `DisableSyntax.return` linter doesn't fire. The JIT inlines the
-    * one-instruction `null` check on the loop guard.
+  /** Hot-path walk — array-indexed `while` loop. Failure short-circuit uses an in-loop sentinel
+    * (`failure: AvroFailure | Null`) rather than `return` (scalafix `DisableSyntax.return`).
+    * UnionBranch failures resolve the full schema-declared alternative list inline.
     */
   def walkPathArr(
       record: IndexedRecord,
@@ -247,13 +204,10 @@ private[avro] object AvroWalk:
 
   private val EmptyParents: Array[AnyRef] = new Array[AnyRef](0)
 
-  /** Recover the union-schema branch list from the path step that produced the current parent.
-    *
-    * Walks backwards from `unionStepIdx - 1` to find the most recent `Field` step on the path; the
-    * parent record collected at that position carries the field whose schema is the union we're
-    * trying to resolve. Operates directly on the partially-filled parents array — tracks a `pIdx`
-    * cursor that decrements only on non-UnionBranch steps so it stays aligned with the walker's
-    * parents-array layout. Returns `Nil` when no such step is found.
+  /** Recover the union schema's branch list. Walks backwards from `unionStepIdx - 1` to the most
+    * recent `Field` step; the parent at that position carries the union field. `pIdx` cursor
+    * decrements only on non-UnionBranch steps to stay aligned with parents-array layout. `Nil` if
+    * no such step is found.
     */
   private def unionBranchesAtArr(
       path: Array[PathStep],
@@ -261,8 +215,6 @@ private[avro] object AvroWalk:
       parents: Array[AnyRef],
       parentsLen: Int,
   ): List[String] =
-    // The union step itself didn't push a parent, so the most recent parent index equals
-    // `parentsLen - 1`. Decrement on each non-UnionBranch step as we walk backwards.
     var pIdx = parentsLen - 1
     var j = unionStepIdx - 1
     var result: List[String] | Null = null
@@ -286,25 +238,15 @@ private[avro] object AvroWalk:
       j -= 1
     if result == null then Nil else result
 
-  /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
-    * when a non-step-shaped failure (decode failure, "terminal value isn't of the expected type")
-    * needs to point at "the last step we tried to interpret".
+  /** Terminal step of `path` (sentinel `PathStep.Field("")` when empty). Used by non-step-shaped
+    * failures.
     */
   inline def terminalOf(path: Array[PathStep]): PathStep =
     if path.length == 0 then PathStep.Field("") else path(path.length - 1)
 
-  /** Rebuild an Avro record from the leaf back to the root, using the parents collected during a
-    * walk.
-    *
-    * '''D15 (per the eo-avro plan).''' Avro's [[IndexedRecord.put]] mutates in place; we choose the
-    * immutable shape — `rebuildStep` allocates a fresh
-    * [[org.apache.avro.generic.GenericData.Record]] (or [[GenericData.Array]] / `HashMap`) on each
-    * splice so successive `.modify` calls don't corrupt the input record. Cost: one allocation per
-    * parent step, per `modify`.
-    *
-    * Legacy Vector-shaped entry point — kept for callers that historically held parents as a Vector
-    * (currently `AvroTraversal.iorMapElements` and `AvroFocus.Fields.rebuild`). Hot-path callers
-    * should use [[rebuildPathArr]].
+  /** Rebuild from leaf to root using the parents collected during a walk. Always allocates fresh
+    * records (avro's `put` mutates in place); cost is one allocation per parent step. Legacy
+    * Vector-shaped entry; hot-path callers use [[rebuildPathArr]].
     */
   def rebuildPath(
       parents: Vector[AnyRef],
@@ -318,11 +260,8 @@ private[avro] object AvroWalk:
       i -= 1
     child
 
-  /** Hot-path rebuild — folds the parents array backwards via a `while` loop. The pairing with
-    * `path` mirrors the legacy `parents.zip(path).foldRight` shape: i-th parent pairs with i-th
-    * path step, iterating `parentsLen` times. UnionBranch steps in the prefix that didn't push
-    * parents simply aren't visited (matching the legacy `zip` semantics that drops dangling path
-    * tail steps).
+  /** Hot-path rebuild — folds parents backwards. UnionBranch steps that didn't push parents are
+    * skipped (matches the legacy `parents.zip(path).foldRight` shape).
     */
   def rebuildPathArr(
       parents: Array[AnyRef],
@@ -337,15 +276,11 @@ private[avro] object AvroWalk:
       i -= 1
     child
 
-  /** Splice `child` into `parent` at `step`. The parent's runtime shape is determined by the step
-    * kind plus the parent's runtime class:
-    *   - `Field` step on [[IndexedRecord]]: clone via [[GenericData.deepCopy]] then `put`
-    *     positionally (immutable boundary per D15).
-    *   - `Field` step on [[java.util.Map]]: build a fresh `LinkedHashMap` with the entry replaced.
-    *   - `Index` step on [[java.util.List]]: build a fresh [[GenericData.Array]] with the entry
-    *     replaced.
-    *   - `UnionBranch` step: passthrough — the union representation in apache-avro generic data is
-    *     just the alternative value directly.
+  /** Splice `child` into `parent` at `step`. Dispatch:
+    *   - `Field` on `IndexedRecord` — fresh record with `put` at the matching slot.
+    *   - `Field` on `Map` — fresh `LinkedHashMap` with the entry replaced.
+    *   - `Index` on `List` — fresh `GenericData.Array` with the entry replaced.
+    *   - `UnionBranch` — passthrough (union value is the alternative directly).
     */
   def rebuildStep(
       parent: AnyRef,
@@ -358,8 +293,7 @@ private[avro] object AvroWalk:
           case rec: IndexedRecord =>
             val schema = rec.getSchema
             val fresh = new GenericData.Record(schema)
-            // Iterate fields by index — avoids the asScala iterator allocation; the field-name
-            // → position lookup runs once at construction (the matching slot only).
+            // Iterate by index — avoids the asScala iterator alloc.
             val fields = schema.getFields
             val n = fields.size
             val targetPos = schema.getField(name).pos
@@ -372,8 +306,7 @@ private[avro] object AvroWalk:
           case map: java.util.Map[?, ?] =>
             val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
             val fresh = new java.util.LinkedHashMap[Any, Any](asMap)
-            // Replace by string key; if the parent stored a Utf8 key, drop both forms first
-            // and re-insert.
+            // Drop both string + Utf8 forms before re-inserting under the string key.
             fresh.remove(name)
             fresh.remove(new org.apache.avro.util.Utf8(name))
             fresh.put(name, child)
@@ -403,16 +336,9 @@ private[avro] object AvroWalk:
         // Union steps don't change the parent shape — the alternative IS the value directly.
         child
 
-  /** Allocate a fresh [[IndexedRecord]] by copying `parent`'s positional slots, replacing any slot
-    * whose schema field name appears in `updates`. The fresh record is allocated under
-    * `parent.getSchema`, so the result has the same schema identity as the input.
-    *
-    * Used by the multi-field overlay paths in [[AvroFocus.Fields]] (and, in Unit 6+, the matching
-    * traversal Fields focus). Counterpart to circe's `JsonFieldsPrism.writeFields` /
-    * `overlayFields` helpers; the underlying mechanic — "rewrite a subset of named slots in one
-    * shot" — is uniform enough to live in [[AvroWalk]] alongside [[rebuildStep]].
-    *
-    * Per D15 (immutable boundary): always allocates a new record so the input is never mutated.
+  /** Allocate a fresh `IndexedRecord` under `parent.getSchema`, replacing slots whose name appears
+    * in `updates`. Used by [[AvroFocus.Fields]]'s multi-field overlay paths (counterpart to
+    * `JsonFieldsPrism`'s overlay helpers).
     */
   def replaceRecordFields(
       parent: IndexedRecord,
@@ -431,12 +357,9 @@ private[avro] object AvroWalk:
       i += 1
     fresh
 
-  /** Look up the union-branch name for a runtime value. Apache-avro's `GenericData.resolveUnion`
-    * returns the index of the matching alternative; we map back to the schema's name list to
-    * surface a stable, schema-driven identifier in [[AvroFailure.UnionResolutionFailed]].
-    *
-    * Defensive: returns the raw class name when no schema is in scope (the walker's `UnionBranch`
-    * step is reachable only from a parent that has a schema, so this fallback is mostly cosmetic).
+  /** Union-branch name for a runtime value. Schema-driven where possible; falls back to the raw
+    * class name (the fallback is cosmetic — UnionBranch steps reach this only from a schemaful
+    * parent).
     */
   private def unionBranchName(value: Any): String =
     value match

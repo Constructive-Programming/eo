@@ -2,25 +2,16 @@ package dev.constructive.eo.generics
 
 import scala.quoted.*
 
-/** Quote-context selector-AST helpers shared between [[LensMacro]] (this module) and
-  * `JsonPrismMacro` in the circe integration module. Both macros parse single-field selector
-  * lambdas (`_.fieldName`) and validate that no field appears twice in a multi-selector list; the
-  * parsing and validation routines were duplicated across the two files.
-  *
-  * '''2026-04-26 dedup.''' Both macros now call into [[MacroSelectors]] from inside their splice
-  * bodies. The macro-quote-context plumbing is the same on both sides — the only place the macros
-  * still differ is in the per-call error-message tag (`"lens[S]"` vs `"JsonPrism.fields[A]"`),
-  * which is passed in as a string argument.
+/** Quote-context selector-AST helpers shared between [[LensMacro]] and `JsonPrismMacro` /
+  * `AvroPrismMacro`. Both parse single-field selector lambdas (`_.fieldName`) and validate
+  * non-duplicates; the per-macro divergence is just the error-message tag.
   */
 object MacroSelectors:
 
-  /** Strips Inlined / Typed wrappers and peeks inside the lambda body for a single Select whose
-    * receiver is exactly the lambda parameter (an `Ident`). Same shape used by every macro that
-    * accepts a single-field selector lambda.
-    *
-    * Receiver-is-Ident is load-bearing: nested paths like `_.inner.count` parse as
-    * `Select(Select(Ident(param), "inner"), "count")`. The strict variant rejects them with `None`,
-    * which lets each macro produce its own "nested paths not supported" message.
+  /** Strips `Inlined` / `Typed` wrappers and peeks inside the lambda body for a single `Select`
+    * whose receiver is exactly the lambda parameter (an `Ident`). Receiver-is-Ident is load-bearing
+    * — nested paths like `_.a.b` parse as `Select(Select(Ident(_), "a"), "b")` and fall through to
+    * `None` so each macro can produce its own "nested paths" message.
     */
   def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
     import quotes.reflect.*
@@ -36,11 +27,8 @@ object MacroSelectors:
       case Lambda(_, body)      => oneHop(body)
       case _                    => None
 
-  /** Validate that a `(positionIndex, fieldName)` list contains no duplicate field name. Both
-    * `lens[S](...)` and `JsonPrism.fields[A](...)` reject duplicates as compile errors with the
-    * same diagnostic shape — the only divergence is the leading "who" tag.
-    *
-    * Calls `report.errorAndAbort` on the first duplicate found, never returns. Pure side-effect.
+  /** Reject duplicate field names; aborts on the first duplicate. The `who` tag prefixes the
+    * message.
     */
   def reportDuplicateSelectors(using
       Quotes

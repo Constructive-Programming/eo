@@ -18,8 +18,7 @@ import optics.Optic
   */
 type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
 
-/** Capability ladder for [[Forget]]. Each typeclass on `F` unlocks a matching optic-level operation
-  * via a dedicated given instance:
+/** Capability ladder for [[Forget]]. Each typeclass on `F` unlocks a matching optic operation:
   *
   * {{{
   *   F: Functor      →  ForgetfulFunctor[Forget[F]]              →  .modify / .replace
@@ -27,28 +26,13 @@ type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
   *   F: Traverse     →  ForgetfulTraverse[Forget[F], Applicative] →  .modifyA, .all
   *   F: Applicative  →  ForgetfulApplicative[Forget[F]]          →  .put
   *   F: Monad        →  AssociativeFunctor[Forget[F], _, _]      →  same-carrier .andThen
-  *                                                                  (algebraic-lens composition:
-  *                                                                   `flatMap` on push, `pure`
-  *                                                                   on pull)
+  *                                                                  (algebraic-lens shape)
   * }}}
   *
-  * `Forget[F]`'s `X` is phantom (`Forget[F][X, A] = F[A]`), which is exactly what `Traversal` /
-  * `Fold` want — those families never need outer-structural context on the `from` side. For the
-  * richer multi-focus family, where a `Lens` / `Prism` / `Optional` must be bridged into a
-  * classifier-shape carrier and the outer's leftover `X` has to survive the round-trip, the pair
-  * carrier [[MultiFocus]] (`[X, A] =>> (X, F[A])`) is the right home; `Forget[F]` injects trivially
-  * into it via `Composer[Forget[F], MultiFocus[F]]`.
-  *
-  * Instances that don't target `Forget[F]` specifically (for example `AssociativeFunctor[Forgetful,
-  * _, _]` used by `Iso` / `Getter`) live in [[Forgetful]].
-  *
-  * '''2026-04-26 dedup.''' The two `AssociativeFunctor[Forget[F], _, _]` instances —
-  * Monad-via-`pure-then-from` and FlatMap+Comonad-via-`coflatMap-from` — used to be 14-line near-
-  * twin instance bodies that only differed in the last line of `composeFrom`. They now share a
-  * single `Forget.assocFor[F]` builder that takes the pull-side `redistribute: F[D] => F[B]` as a
-  * parameter. The `assocForgetMonad` / `assocForgetComonad` givens reduce to `assocFor[F](pure)` /
-  * `assocFor[F](_.coflatMap(_))` plumbing, the priority ordering is preserved, and the wider "users
-  * can opt into the Comonad pull explicitly" contract is unchanged.
+  * `Forget[F]`'s `X` is phantom — Traversal / Fold need no outer-structural context on `from`. For
+  * cases where the outer's leftover must survive, use the pair carrier [[MultiFocus]]; `Forget[F]`
+  * injects trivially into it via `Composer[Forget[F], MultiFocus[F]]`. Forgetful-targeting
+  * instances live in [[Forgetful]].
   */
 object Forget extends LowPriorityForgetInstances:
 
@@ -75,12 +59,8 @@ object Forget extends LowPriorityForgetInstances:
         Applicative[F].pure(fromInner(xd))
 
   /** Shared `AssociativeFunctor[Forget[F], Xo, Xi]` body — push uses `flatMap`, pull threads the
-    * inner's `from` through the supplied [[ForgetPull]] strategy, hands the resulting `F[B]` to the
-    * outer's `from`.
-    *
-    * Both `assocForgetMonad` (Monad pull) and `assocForgetComonad` (Comonad pull) reduce to
-    * `assocFor[F]` plus a strategy. The duplicated 14-line bodies that used to live on each
-    * instance are gone — only the per-strategy plumbing differs.
+    * inner's `from` through the supplied [[ForgetPull]] strategy. Both `assocForgetMonad` (Monad
+    * pull) and `assocForgetComonad` (Comonad pull) reduce to `assocFor[F]` plus a strategy.
     */
   private[data] def assocFor[F[_]: FlatMap, Xo, Xi](
       pull: ForgetPull[F]
@@ -146,33 +126,23 @@ object Forget extends LowPriorityForgetInstances:
     def traverse[X, A, B, G[_]: Applicative]: F[A] => (A => G[B]) => G[F[B]] =
       Traverse[F].traverse[G, A, B]
 
-  /** `AssociativeFunctor[Forget[F], Xo, Xi]` for any `F: Monad` — algebraic-lens composition of two
-    * classifier-style optics `S -> F[A], F[B] -> T`:
-    *
-    *   - push side: `outer.to(s).flatMap(inner.to)` threads the F-context through the inner
-    *     classifier, collecting `F[C]` candidates.
-    *   - pull side: `outer.from(F.pure(inner.from(xd)))` — the inner collapses `F[D]` back to a
-    *     single `B`, which is re-lifted via `pure` so the outer's `F[B] => T` can rebuild.
-    *
-    * Higher priority than the [[LowPriorityForgetInstances.assocForgetComonad]] `FlatMap + Comonad`
-    * variant so that whenever an `F` is a full `Monad` this composition wins.
+  /** Algebraic-lens composition for `F: Monad`. Push: `outer.to(s).flatMap(inner.to)`. Pull: the
+    * inner's `from` collapses `F[D]` to `B`, re-lifted via `pure` for the outer's `F[B] => T`.
+    * Higher priority than [[LowPriorityForgetInstances.assocForgetComonad]] so Monad wins.
     *
     * @group Instances
     */
   given assocForgetMonad[F[_]: Monad, Xo, Xi]: AssociativeFunctor[Forget[F], Xo, Xi] =
     assocFor[F, Xo, Xi](ForgetPull.monadicPull[F])
 
-/** Lower-priority instance drawer for [[Forget]]. Holds the older `FlatMap + Comonad` associative
-  * functor, which composes via `coflatMap` — genuinely different semantics from the `Monad`-based
-  * classifier composition in the main object, and kept at lower priority so that whenever an `F` is
-  * a full `Monad` the algebraic-lens composition wins implicit resolution. Users who want the
-  * Comonad-based parallel-fold semantics explicitly can still summon this instance by hand.
+/** Lower-priority instance drawer — holds the `FlatMap + Comonad` `AssociativeFunctor` which
+  * composes via `coflatMap` (parallel-fold semantics, genuinely different from the Monad-based
+  * algebraic-lens composition in the main object). Kept at lower priority so Monad wins when both
+  * apply.
   */
 trait LowPriorityForgetInstances:
 
-  /** `AssociativeFunctor[Forget[F], Xo, Xi]` for any `F` with both `FlatMap` (push side) and
-    * `Comonad` (pull side). Composes via `coflatMap` on the `from` direction — distributes the
-    * inner's `from` across the context. Predates the algebraic-lens framing.
+  /** Comonad-pull composition for `F: FlatMap + Comonad`. Composes via `coflatMap` on `from`.
     *
     * @group Instances
     */
@@ -181,10 +151,5 @@ trait LowPriorityForgetInstances:
       new Forget.ForgetPull[F]:
 
         def redistribute[D, B](xd: F[D])(fromInner: F[D] => B): F[B] =
-          // Comonad pull: distribute fromInner across each "shape" of the F[D] via
-          // coflatMap. The classical Comonad.coflatMap takes (W[A], W[A] => B) ⇒ W[B];
-          // the inner's `from: F[D] => B` is exactly that shape after the partial
-          // application. Predates the algebraic-lens framing but kept for backwards
-          // compatibility — see the `LowPriorityForgetInstances` doc.
           xd.coflatMap(fromInner)
     )

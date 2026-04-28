@@ -2,9 +2,9 @@ package dev.constructive.eo
 
 import optics.Optic
 
-/** Bridge between two carriers — reshape an `F`-carrier optic into a `G`-carrier optic preserving
-  * both halves. Required by `Optic.morph`; the principal mechanism by which optic families cross
-  * boundaries (Lens → Optional, Lens → Setter, Iso → Lens, …).
+/** Bridge between carriers — reshape an `F`-carrier optic into a `G`-carrier optic. Used by
+  * `Optic.morph`; the mechanism by which optic families cross boundaries (Lens → Optional, Lens →
+  * Setter, Iso → Lens, …).
   *
   * @tparam F
   *   source carrier
@@ -12,38 +12,17 @@ import optics.Optic
   *   target carrier
   */
 trait Composer[F[_, _], G[_, _]]:
-  /** Bridge an `F`-carrier optic into a `G`-carrier optic.
-    *
-    * @tparam S
-    *   source type
-    * @tparam T
-    *   result type
-    * @tparam A
-    *   focus read
-    * @tparam B
-    *   focus written back
-    */
   def to[S, T, A, B](o: Optic[S, T, A, B, F]): Optic[S, T, A, B, G]
 
-/** Typeclass instances for [[Composer]]. Additional composers live near the carrier they produce:
-  * `Composer[Tuple2, Affine]` under [[data.Affine]], `Composer[Tuple2, SetterF]` under
-  * [[data.SetterF]], `Composer[Tuple2, PowerSeries]` under [[data.PowerSeries]], etc.
+/** Typeclass instances for [[Composer]]. Additional composers live near the carrier they produce
+  * (e.g. `Composer[Tuple2, Affine]` in [[data.Affine]]).
   *
   * Resolution tiers:
-  *   1. Regular priority: atomic direct bridges defined here and in each carrier's companion. Fast
-  *      at both compile and runtime.
-  *   2. Low priority (inherited from [[LowPriorityComposerInstances]]): a single
-  *      [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] derivation with `Tuple2` as
-  *      the fixed intermediate. Covers Forgetful-origin chains to Affine / SetterF / PowerSeries /
-  *      MultiFocus[F] uniformly without introducing ambiguity. Carriers that don't have a
-  *      `Composer[Tuple2, G]` bridge (e.g. the Function1-shaped MultiFocus absorbed from the v1
-  *      Grate carrier) ship their own `Composer[Forgetful, X]` directly at tier 1.
-  *
-  * An earlier `chain[F, G, H]` derivation over arbitrary intermediate `G` was removed during the
-  * 2026-04-24 resolution refactor because it introduced implicit-search ambiguity whenever two
-  * intermediate carriers both reached the target (e.g. `Composer[Forgetful, PowerSeries]` via
-  * `Tuple2` OR via `Either`). The fixed-intermediate `chainViaTuple2` is unambiguous by
-  * construction.
+  *   1. Regular: direct bridges here and in each carrier's companion.
+  *   2. Low (from [[LowPriorityComposerInstances]]):
+  *      [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] with `Tuple2` as a fixed
+  *      intermediate. Covers Forgetful-origin chains uniformly without introducing the implicit
+  *      ambiguity the earlier fully-general `chain[F, G, H]` had.
   */
 object Composer extends LowPriorityComposerInstances:
 
@@ -78,27 +57,11 @@ object Composer extends LowPriorityComposerInstances:
             case Right(b) => o.from(b)
             case Left(_)  => ???
 
-/** Low-priority `Composer` instances. The lone inhabitant is
-  * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] — a transitive derivation with
-  * `Tuple2` pinned as the intermediate carrier. Lifts any `Composer[F, Tuple2]` +
-  * `Composer[Tuple2, G]` pair into `Composer[F, G]` without introducing the ambiguity the older
-  * fully-general `chain[F, G, H]` did.
-  *
-  * Why fixed-intermediate:
-  *
-  *   - Runtime: identical to a direct 2-hop chain — one `cf.to` call, one `cg.to` call, two optic
-  *     wrapper allocations. Same cost as the previous direct `Composer[Forgetful, X]` givens that
-  *     explicitly spelled out `tuple2X.to(forgetful2tuple.to(o))`.
-  *   - Compile time: one named given to consider at the low-priority tier, with two direct implicit
-  *     parameters. No combinatorial enumeration over intermediate carriers.
-  *   - Correctness: unambiguous by construction. Previously `chain` matched with multiple `G`
-  *     instantiations whenever two paths existed (e.g. Tuple2 and Either both bridging Forgetful to
-  *     PowerSeries), and Scala 3's ambiguity rule killed the entire search. With a fixed
-  *     intermediate, there's only one candidate path.
-  *
-  * Non-Tuple2 intermediate paths — currently none exist in the shipped composer table — can be
-  * added as additional fixed-intermediate givens if future carriers need them (e.g. a hypothetical
-  * `chainViaEither` at a still-lower priority).
+/** Low-priority `Composer` instances —
+  * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]], a transitive derivation pinned
+  * to `Tuple2` as the intermediate. Same runtime cost as the explicit 2-hop call; compile-time
+  * single given, no combinatorial enumeration; unambiguous by construction. Add a `chainViaEither`
+  * at a still-lower priority if a future carrier needs it.
   */
 trait LowPriorityComposerInstances:
 

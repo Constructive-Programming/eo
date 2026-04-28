@@ -7,51 +7,25 @@ import dev.constructive.eo.optics.Optic
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
 
-/** A specialised Prism from [[org.apache.avro.generic.IndexedRecord]] to a native type `A`.
-  *
-  * Mirrors `dev.constructive.eo.circe.JsonPrism` for the Avro carrier:
+/** Specialised Prism from [[org.apache.avro.generic.IndexedRecord]] to a native type `A`. Mirrors
+  * `dev.constructive.eo.circe.JsonPrism` for the Avro carrier:
   *
   * {{{
   *   AvroPrism[A] <: Optic[IndexedRecord, IndexedRecord, A, A, Either]
   *   type X = (AvroFailure, IndexedRecord)
   * }}}
   *
-  * '''2026-04-27 (Unit 5).''' The four legacy carriers (`AvroPrism`, `AvroFieldsPrism`, and Units
-  * 6/7 traversal siblings) collapse to two real classes by factoring the storage variation along
-  * two orthogonal axes — see [[AvroFocus]] for the design note. An `AvroPrism[A]` now holds an
-  * `AvroFocus[A]` and a cached root schema; the per-record hooks delegate straight to the focus.
+  * Two call-surface tiers (via [[AvroOpticOps]]):
   *
-  * Two call-surface tiers (parallel to JsonPrism, supplied via [[AvroOpticOps]]):
+  *   - Default Ior-bearing: `modify` / `get` etc. accumulate `Chain[AvroFailure]` on failure;
+  *     partial success surfaces as `Ior.Both(chain, inputRecord)`.
+  *   - `*Unsafe`: silent pass-through hot path.
   *
-  *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` return
-  *     `(IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord]`; `get`
-  *     returns `Ior[Chain[AvroFailure], A]`. Failures (path miss, non-record / non-array parent,
-  *     out-of-range index, decode failure, union mismatch) accumulate into `Chain[AvroFailure]`.
-  *     Partial success returns `Ior.Both(chain, inputRecord)`.
-  *   - '''`*Unsafe` (silent).''' `modifyUnsafe` / `transformUnsafe` / `placeUnsafe` /
-  *     `transferUnsafe` / `getOptionUnsafe` ship the silent pass-through hot path: input pass-
-  *     through on the modify family, `Option[A]` on the read family.
+  * Triple-input shape `IndexedRecord | Array[Byte] | String` (where `String` is the Avro JSON wire
+  * format). The prism caches the root schema in [[rootSchemaCached]] for byte-input decoding.
   *
-  * Failure diagnostics on the abstract [[Optic]] surface: the inherited `to` returns
-  * `Left((AvroFailure, IndexedRecord))` — the same shape `JsonPrism` ships as
-  * `(DecodingFailure, HCursor)`: a structured failure paired with the recoverable input. Walk
-  * misses surface the relevant `AvroFailure.PathMissing` / `NotARecord` / etc. cases; decode
-  * failures surface `AvroFailure.DecodeFailed(step, cause)` carrying kindlings' underlying
-  * Throwable on the `cause` side.
-  *
-  * '''D6 / OQ-avro-5 (plan).''' The prism caches the root schema in [[rootSchema]] (read off the
-  * user-supplied `AvroCodec[Root]` at construction time, OR accepted explicitly via the
-  * `codecPrism[S](schema)` overload). The schema is needed to decode `Array[Byte]` inputs at the
-  * dual-input boundary; pinning it here means callers don't have to thread it through every
-  * `.modify` / `.get` call.
-  *
-  * '''Per OQ-avro-3 (Unit 10).''' The triple-input shape is `IndexedRecord | Array[Byte] | String`
-  * — `String` is the Avro JSON wire format, parsed via apache-avro's `JsonDecoder`. The original
-  * plan deferred `String` to v0.2; Unit 10 lifted it into v0.1.0 because the parser shape mirrors
-  * the binary path one-for-one.
-  *
-  * '''Per OQ-avro-7:''' [[AvroOpticOps]] is a deliberate copy-paste of `JsonOpticOps`; a future
-  * `core.OpticOps[Carrier, Failure, A]` generalisation lands when the third cursor module appears.
+  * Storage decomposition (Unit 5): an `AvroPrism[A]` holds an [[AvroFocus]] (Leaf vs Fields) and a
+  * cached root schema; per-record hooks delegate to the focus.
   */
 final class AvroPrism[A] private[avro] (
     private[avro] val focus: AvroFocus[A],
@@ -77,13 +51,8 @@ final class AvroPrism[A] private[avro] (
     */
   private[avro] def codec: AvroCodec[A] = focus.codec
 
-  // ---- Selectable field sugar ---------------------------------------
-  //
-  // `codecPrism[Person].name` compiles to
-  // `codecPrism[Person].field(_.name)` — no explicit selector lambdas,
-  // no extension-method noise. The macro looks the field up on `A`'s
-  // case-class schema at compile time, summons its AvroCodec, and
-  // delegates to `widenPath`.
+  // Selectable field sugar — `codecPrism[Person].name` lowers to
+  // `codecPrism[Person].field(_.name)` via the macro.
 
   transparent inline def selectDynamic(inline name: String): Any =
     ${ AvroPrismMacro.selectFieldImpl[A]('{ this }, 'name) }
@@ -112,9 +81,8 @@ final class AvroPrism[A] private[avro] (
   def get(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], A] =
     AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
 
-  /** Construct a record-shaped value from `a` by encoding through the codec. Counterpart to
-    * `JsonPrism.reverseGet` — encodes `a` standalone, returning the codec's [[IndexedRecord]]
-    * payload (or a synthesised empty record when the encoded value isn't record-shaped).
+  /** Encode `a` standalone, returning the codec's [[IndexedRecord]] payload (or a synthesised empty
+    * record when the encoded value isn't record-shaped). Counterpart to `JsonPrism.reverseGet`.
     */
   def reverseGet(a: A): IndexedRecord =
     focus.codec.encode(a) match
@@ -162,20 +130,15 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Path widening (used by macro extensions) ---------------------
 
-  /** Extend the leaf focus's path by a field step and swap to a narrower codec. Only valid when the
-    * current focus is a Leaf (the `field` macro never composes Fields focuses with further
-    * `.field`). Used by [[field]] / `selectDynamic`.
-    */
+  /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. */
   private[avro] def widenPath[B](step: String)(using codecB: AvroCodec[B]): AvroPrism[B] =
     widenPathStep[B](PathStep.Field(step))
 
-  /** Extend the leaf focus's path by an array-index step. Used by [[at]]. */
+  /** Extend by an array-index step. Used by [[at]]. */
   private[avro] def widenPathIndex[B](i: Int)(using codecB: AvroCodec[B]): AvroPrism[B] =
     widenPathStep[B](PathStep.Index(i))
 
-  /** Extend the leaf focus's path by a union-branch step. Used by `.union[Branch]` macro (Unit 8
-    * ships the macro entry; the helper is in place for early adopters / hand-written paths).
-    */
+  /** Extend by a union-branch step. Used by `.union[Branch]`. */
   private[avro] def widenPathUnion[B](
       branchName: String
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
@@ -189,19 +152,14 @@ final class AvroPrism[A] private[avro] (
     newPath(path.length) = step
     new AvroPrism[B](new AvroFocus.Leaf[B](newPath, codecB), rootSchemaCached)
 
-  /** Hand off the current path as a [[AvroPrism]] whose focus is a Fields focus enumerating
-    * `fieldNames` under that parent. Used by the `.fields` macro.
+  /** Hand off as an `AvroPrism` whose focus is a Fields focus over `fieldNames`. Used by `.fields`.
     */
   private[avro] def toFieldsPrism[B](
       fieldNames: Array[String]
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
     new AvroPrism[B](new AvroFocus.Fields[B](path, fieldNames, codecB), rootSchemaCached)
 
-  /** Hand off the current path as an [[AvroTraversal]] prefix; the new focus is a Leaf focus over
-    * the iterated element type `B`. Used by the `.each` macro. The prism's cached root schema
-    * threads straight through — the traversal needs it for `Array[Byte]` parsing at the dual-input
-    * boundary.
-    */
+  /** Hand off as an `AvroTraversal[B]` over the iterated element type. Used by `.each`. */
   private[avro] def toTraversal[B](using codecB: AvroCodec[B]): AvroTraversal[B] =
     new AvroTraversal[B](
       path,
@@ -213,24 +171,17 @@ end AvroPrism
 
 object AvroPrism:
 
-  /** Construct a root-level `AvroPrism[S]`, summoning the schema from the codec.
-    *
-    * Per OQ-avro-5: the schema is read off `AvroCodec[S].schema`. Kindlings' `AvroSchemaFor[A]`
-    * always resolves a schema for any derivable type, so this never throws on the happy path.
-    */
+  /** Root `AvroPrism[S]`, summoning the schema from the codec (`AvroCodec[S].schema`). */
   def codecPrism[S](using codec: AvroCodec[S]): AvroPrism[S] =
     new AvroPrism[S](new AvroFocus.Leaf[S](Array.empty[PathStep], codec), codec.schema)
 
-  /** Construct a root-level `AvroPrism[S]` with an explicit reader schema. Use when the schema is
-    * loaded at runtime from an `.avsc` file or a Schema Registry rather than derived from the codec
-    * — the user-supplied schema overrides whatever `codec.schema` would produce.
+  /** Root `AvroPrism[S]` with an explicit reader schema (overrides `codec.schema`). Use when
+    * loading from `.avsc` / Schema Registry.
     */
   def codecPrism[S](schema: Schema)(using codec: AvroCodec[S]): AvroPrism[S] =
     new AvroPrism[S](new AvroFocus.Leaf[S](Array.empty[PathStep], codec), schema)
 
-  /** `.field(_.x)` — drill into a named field via a selector lambda. The macro extracts the field
-    * name at compile time, summons the inner [[AvroCodec]], and emits `widenPath`.
-    */
+  /** `.field(_.x)` — drill via selector lambda. */
   extension [A](o: AvroPrism[A])
 
     transparent inline def field[B](
@@ -238,32 +189,25 @@ object AvroPrism:
     )(using codecB: AvroCodec[B]): AvroPrism[B] =
       ${ AvroPrismMacro.fieldImpl[A, B]('o, 'selector, 'codecB) }
 
-  /** `.at(i)` — drill into the i-th element of an array (or the value for the i-th map entry).
-    * Requires the parent focus `A` to be a Scala collection.
-    */
+  /** `.at(i)` — drill into the i-th array element / map entry. */
   extension [A](o: AvroPrism[A])
 
     transparent inline def at(i: Int): Any =
       ${ AvroPrismMacro.atImpl[A]('o, 'i) }
 
-  /** `.union[Branch]` — drill into a union alternative by branch type. Skeleton entry; Unit 8 lands
-    * the full macro implementation including schema-side branch-name resolution.
-    */
+  /** `.union[Branch]` — drill into a union alternative by branch type. */
   extension [A](o: AvroPrism[A])
 
     transparent inline def union[Branch]: Any =
       ${ AvroPrismMacro.unionImpl[A, Branch]('o) }
 
-  /** `.each` — split into an [[AvroTraversal]] over the iterated array's elements. */
+  /** `.each` — split into an `AvroTraversal` over the iterated array. */
   extension [A](o: AvroPrism[A])
 
     transparent inline def each: Any =
       ${ AvroPrismMacro.eachImpl[A]('o) }
 
-  /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields. Returns an `AvroPrism[NT]`
-    * whose focus is an [[AvroFocus.Fields]] (with the [[AvroFieldsPrism]] alias still pointing at
-    * the same shape).
-    */
+  /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields. */
   extension [A](o: AvroPrism[A])
 
     transparent inline def fields(inline selectors: (A => Any)*): Any =

@@ -1,20 +1,15 @@
 package dev.constructive.eo
 package data
 
-/** Lightweight array-backed focus vector for [[PowerSeries]]. Specialised into three shape variants
-  * so empty and singleton focus vectors don't pay a backing-array allocation:
+/** Lightweight array-backed focus vector underlying `MultiFocus[PSVec]`. Three variants so empty
+  * and singleton focus vectors don't pay a backing-array allocation:
   *
-  *   - [[PSVec.Empty]] — zero elements, a shared singleton. Miss-branch Prism / Affine morphs into
-  *     PowerSeries produce this with no heap allocation at all.
-  *   - [[PSVec.Single]] — exactly one element, stored inline in the variant. Lens / Prism / Affine
-  *     morphs into PowerSeries produce these for the hit branch; ~16 B per instance vs the ~40 B a
-  *     backing `Array[AnyRef](1)` + slice-view wrapper would cost.
-  *   - [[PSVec.Slice]] — arbitrary `(arr, offset, length)` view. [[slice]] stays zero-copy — a
-  *     pointer update on the same backing array — which is what `PowerSeries.assoc` relies on to
-  *     feed per-element reassembly without per-element array allocation.
+  *   - [[PSVec.Empty]] — shared singleton; Prism / Affine miss branches allocate nothing.
+  *   - [[PSVec.Single]] — element stored inline (~16 B vs a backing-array view's ~40 B).
+  *   - [[PSVec.Slice]] — arbitrary `(arr, offset, length)` view. [[slice]] is a zero-copy pointer
+  *     update — what `mfAssocPSVec.composeFrom` relies on for O(1) per-element reassembly.
   *
-  * Equality is value-based across variants: two vectors of the same length whose elements pairwise
-  * `==` compare equal regardless of underlying shape.
+  * Equality is value-based across variants.
   */
 sealed trait PSVec[+B]:
   def length: Int
@@ -30,11 +25,8 @@ sealed trait PSVec[+B]:
 
   inline def isEmpty: Boolean = length == 0
 
-  /** Materialise the focus sequence as a fresh `Array[AnyRef]`. Default impl walks via [[apply]];
-    * [[PSVec.Slice]] overrides with `System.arraycopy` (a JVM intrinsic) so the common "rebuild an
-    * `ArraySeq` from a PSVec" path in [[optics.Traversal.pEach]]'s `from` becomes one memcpy rather
-    * than a per-element loop with element-by-element checkcast. `Empty` / `Single` have trivial
-    * overrides.
+  /** Materialise as a fresh `Array[AnyRef]`. `Slice` overrides with `System.arraycopy` (intrinsic)
+    * so the common rebuild path in `Traversal.pEach`'s `from` is one memcpy.
     */
   def toAnyRefArray: Array[AnyRef] =
     val n = length
@@ -45,14 +37,10 @@ sealed trait PSVec[+B]:
       i += 1
     a
 
-  /** Like [[toAnyRefArray]] but MAY return the PSVec's own backing array without copying when it
-    * densely covers the full focus range (`Slice` with `offset == 0 && length == arr.length`).
-    * Callers MUST treat the returned array as immutable — any mutation would change the PSVec's
-    * observable content. Used by consumers that also won't mutate (notably
-    * [[optics.Traversal.pEach]]'s `from` which hands the result to `ArraySeq.unsafeWrapArray`,
-    * whose contract likewise forbids mutation).
-    *
-    * Default implementation is the safe `toAnyRefArray` copy; only `Slice` overrides to share.
+  /** Like [[toAnyRefArray]] but MAY share the backing array zero-copy when a dense Slice covers its
+    * full range. Callers MUST treat the result as immutable. Used by consumers that also won't
+    * mutate, e.g. [[optics.Traversal.pEach]]'s `from` → `ArraySeq.unsafeWrapArray`). Default is the
+    * safe copy; only `Slice` overrides to share.
     */
   def unsafeShareableArray: Array[AnyRef] = toAnyRefArray
 
@@ -93,9 +81,7 @@ sealed trait PSVec[+B]:
   */
 object PSVec:
 
-  /** Zero-element vector — shared singleton. Miss branches of Prism / Affine morphs into
-    * PowerSeries allocate zero focus storage by returning this.
-    */
+  /** Zero-element shared singleton; Prism / Affine miss branches allocate nothing. */
   case object Empty extends PSVec[Nothing]:
     def length: Int = 0
 
@@ -109,9 +95,7 @@ object PSVec:
 
     def slice(from: Int, until: Int): PSVec[Nothing] = Empty
 
-  /** Single-element vector — stores the element inline, no backing array. Lens / Prism hit branches
-    * morphed into PowerSeries allocate one of these per element.
-    */
+  /** Single-element vector — stores the element inline, no backing array. */
   final class Single[+B](val b: B) extends PSVec[B]:
     def length: Int = 1
 
@@ -132,7 +116,7 @@ object PSVec:
       a
 
   /** Array-backed view with offset + length. [[slice]] is a pointer update over the shared backing
-    * array — the zero-copy reassembly path that `PowerSeries.assoc` depends on.
+    * array — the zero-copy reassembly path `mfAssocPSVec` depends on.
     */
   final class Slice[+B] private[data] (
       private[data] val arr: Array[AnyRef],

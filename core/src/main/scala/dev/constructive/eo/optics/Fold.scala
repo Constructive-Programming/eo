@@ -4,26 +4,15 @@ package optics
 import cats.Foldable
 import dev.constructive.eo.data.Forget
 
-/** Constructors for `Fold` — the read-only multi-focus optic, backed by the `Forget[F]` carrier
-  * (`type Forget[F] = [X, A] =>> F[A]`).
-  *
-  * A `Fold[F, A]` walks every element of a `Foldable[F]` and exposes them through `foldMap[M:
-  * Monoid]`. `Fold.select(p)` narrows the walk to the single-element `Option` stream of values
-  * matching the predicate.
-  *
-  * Like [[Getter]], Fold has `T = Unit` so it does not write — the sole consumption path is
-  * `foldMap`, available through [[Optic.foldMap]].
+/** Constructors for `Fold` — read-only multi-focus optic, backed by `Forget[F]` (`Forget[F][X, A] =
+  * F[A]`). `T = Unit` rules out the write path; `.foldMap` is the consumption surface.
+  * `Fold.select(p)` narrows to a one-element `Option` stream.
   */
 object Fold:
 
-  /** Construct a Fold over any `Foldable[F]`. The focus type is the element type `A`;
-    * `.foldMap(g)(s)` combines every `A` in `s: F[A]` via `Monoid[M]`.
+  /** Fold over any `Foldable[F]`.
     *
     * @group Constructors
-    * @tparam F
-    *   container type constructor — must admit `Foldable[F]`
-    * @tparam A
-    *   element type being folded
     *
     * @example
     *   {{{
@@ -35,23 +24,13 @@ object Fold:
   def apply[F[_], A](using
       @scala.annotation.unused ev: Foldable[F]
   ): Optic[F[A], Unit, A, A, Forget[F]] =
-    // `Foldable[F]` not used in the body: the Forget[F] carrier's
-    // ForgetfulFold instance (summoned at the call site via `.foldMap`)
-    // is what does the actual work. Bound is kept as API documentation
-    // ("Fold only makes sense when F is Foldable").
+    // `Foldable[F]` is documentation; `.foldMap` summons `ForgetfulFold[Forget[F]]` at use site.
     new Optic[F[A], Unit, A, A, Forget[F]]:
       type X = Nothing
       val to: F[A] => F[A] = identity
       val from: F[A] => Unit = _ => ()
 
-  /** Filtering Fold — keeps only elements matching `p`. Backed by `Forget[Option]`, so
-    * `.foldMap(f)(a)` produces `f(a)` when the predicate holds and `Monoid[M].empty` when it
-    * doesn't.
-    *
-    * @group Constructors
-    * @tparam A
-    *   element type being filtered
-    */
+  /** Filtering Fold — backed by `Forget[Option]`. @group Constructors */
   def select[A](p: A => Boolean): Optic[A, Unit, A, A, Forget[Option]] =
     new Optic[A, Unit, A, A, Forget[Option]]:
       type X = Nothing

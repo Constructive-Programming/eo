@@ -3,27 +3,15 @@ package optics
 
 import data.SetterF
 
-/** Constructor for `Setter` — the modify-only single-focus optic, backed by the `SetterF` carrier.
-  *
-  * A `Setter[S, A]` (short for `Optic[S, S, A, A, SetterF]`) encodes a write-through position where
-  * the caller can apply a function at the focus but cannot read the focus back out. Useful when
-  * observation would leak information the author doesn't want exposed, or when the focus is
-  * genuinely unreadable (e.g. a value defined only inside a closure).
+/** Constructor for `Setter` — write-only single-focus optic, backed by `SetterF`. The caller
+  * applies a function at the focus but cannot read it back; useful when observation would leak
+  * information or when the focus is genuinely unreadable (e.g. inside a closure).
   */
 object Setter:
 
-  /** Construct a Setter from a `modify: (A => B) => S => T` that applies an arbitrary function at
-    * the focus and returns the modified `T`.
+  /** Construct from `modify: (A => B) => S => T`.
     *
     * @group Constructors
-    * @tparam S
-    *   source type
-    * @tparam T
-    *   result type (often `= S`)
-    * @tparam A
-    *   focus read
-    * @tparam B
-    *   focus written back
     *
     * @example
     *   {{{

@@ -1,14 +1,9 @@
 package dev.constructive.eo
 package data
 
-/** Minimal grow-on-demand `Array[AnyRef]` builder, used by [[PowerSeries]] and
-  * [[optics.Traversal.pEach]] to accumulate focus elements without paying `ArrayBuffer.toArray`'s
-  * final copy. Doubles capacity on overflow; the `freeze*` methods each publish the accumulated
-  * array in a different shape (raw `Array[AnyRef]`, or a [[PSVec]] view).
-  *
-  * No `ClassTag` required: `Array[AnyRef]` is legal storage for every generic `B` on the JVM
-  * (generic parameters erase to `Object`), and the final cast inside [[freezeAsPSVec]] is always
-  * safe for reference-typed `B`.
+/** Minimal grow-on-demand `Array[AnyRef]` builder. Used by [[MultiFocus]]'s `mfAssocPSVec` and
+  * [[optics.Traversal.pEach]] to accumulate focus elements without `ArrayBuffer.toArray`'s final
+  * copy. No `ClassTag` needed; the cast in [[freezeAsPSVec]] is sound (generic B erases to Object).
   */
 final private[eo] class ObjArrBuilder(initialCapacity: Int = 16):
   private var arr: Array[AnyRef] = new Array[AnyRef](math.max(initialCapacity, 1))
@@ -21,10 +16,8 @@ final private[eo] class ObjArrBuilder(initialCapacity: Int = 16):
     arr(len) = x
     len += 1
 
-  /** Append without the grow-check. Caller MUST have pre-sized the builder at construction time
-    * with `initialCapacity` ≥ the total append count for this builder's lifetime, otherwise an
-    * `ArrayIndexOutOfBoundsException` fires. Used on hot paths where the total is known upfront
-    * (`PowerSeries.assoc`'s PSSingleton fast paths) — skips a branch + length read per call.
+  /** Append without the grow-check; caller must pre-size at construction. Used on the
+    * `mfAssocPSVec` always-hit fast path where the total is known upfront.
     */
   inline def unsafeAppend(x: AnyRef): Unit =
     arr(len) = x
@@ -47,15 +40,13 @@ final private[eo] class ObjArrBuilder(initialCapacity: Int = 16):
     System.arraycopy(arr, 0, newArr, 0, len)
     arr = newArr
 
-  /** Return the accumulated storage as a [[PSVec]]. The PowerSeries focus-storage shape — uses
-    * `PSVec.unsafeWrap` so 0/1-element results are normalised into the `Empty` / `Single` variant
-    * without a backing array.
+  /** Return the accumulated storage as a [[PSVec]]. `PSVec.unsafeWrap` normalises 0/1-element
+    * results into `Empty` / `Single` (no backing array).
     */
   def freezeAsPSVec[A]: PSVec[A] = PSVec.unsafeWrap[A](freezeArr)
 
-  /** Return the raw `Array[AnyRef]` exactly-sized. No copy when the builder filled its internal
-    * array exactly; one arraycopy to truncate when it didn't. Used by `PowerSeries.AssocSndZ`,
-    * which stores per-element leftovers as parallel arrays directly.
+  /** Return the raw `Array[AnyRef]` exactly-sized (one arraycopy to truncate when needed). Used by
+    * `MultiFocus.AssocSndZ` for parallel-array per-element leftovers.
     */
   def freezeArr: Array[AnyRef] =
     if len == arr.length then arr

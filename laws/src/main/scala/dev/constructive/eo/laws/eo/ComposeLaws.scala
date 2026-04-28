@@ -9,19 +9,10 @@ import _root_.dev.constructive.eo.data.{Affine, Forgetful}
 import optics.Optic
 import optics.Optic.*
 
-// Laws governing `Optic.andThen` for each pair of like-shaped optics
-// (Lens ∘ Lens, Iso ∘ Iso, Prism ∘ Prism, Optional ∘ Optional).
-//
-// The composition laws all boil down to: the composed optic behaves
-// as if you read/wrote the outer carrier, then applied the inner
-// optic to that focus. For Kleisli-shaped carriers (Prism, Optional)
-// the law becomes a flatMap equivalence over `Option`.
-//
-// C1/C2 (Lens), C3/C4 (Iso), C5 (Prism), plus the Optional variant
-// are grouped in this one file because they share a dependency on
-// `AssociativeFunctor` instances for the relevant carriers; keeping
-// them together avoids duplicating the `given affineAssoc` /
-// `given forgetfulAssoc` shadow-management blocks.
+// Laws governing `Optic.andThen` for each pair of like-shaped optics. The composition laws boil
+// down to: the composed optic reads/writes the outer carrier and applies the inner to the focus.
+// Kleisli carriers (Prism, Optional) become a flatMap equivalence over Option. Grouped here to
+// share the `given *Assoc` shadow-management.
 
 /** C1/C2 — Lens ∘ Lens composition laws. */
 trait LensComposeLaws[S, A, B]:
@@ -40,10 +31,8 @@ trait IsoComposeLaws[S, A, B]:
   def outer: Optic[S, S, A, A, Forgetful]
   def inner: Optic[A, A, B, B, Forgetful]
 
-  // Forgetful.assoc and Affine.assoc both go by the bare name `assoc`,
-  // so the wildcard `data.*.given` imports at the top of the file let
-  // them shadow each other for by-name implicit search. This alias
-  // pins the Forgetful instance for just this trait's `andThen` calls.
+  // Both `Forgetful.assoc` and `Affine.assoc` go by the bare name `assoc`; this alias pins the
+  // Forgetful instance for this trait's `andThen` calls.
   private given forgetfulAssoc[X, Y]: AssociativeFunctor[Forgetful, X, Y] = Forgetful.assoc
 
   def composedGet(s: S): Boolean =
@@ -76,15 +65,11 @@ trait PrismComposeLaws[S, A, B]:
 
 /** Optional ∘ Optional composition laws. */
 trait OptionalComposeLaws[S, A, B]:
-  // Affine's AssociativeFunctor instance requires both Xs to be tuple
-  // subtypes (matching how `Optional.apply` materialises
-  // `type X = (T, S)`). The refinement surfaces that constraint to
-  // the trait boundary.
+  // X <: Tuple matches `Optional.apply`'s `type X = (T, S)` materialisation.
   val outer: Optic[S, S, A, A, Affine] { type X <: Tuple }
   val inner: Optic[A, A, B, B, Affine] { type X <: Tuple }
 
-  // Disambiguate `Affine.assoc` from the ambient `Forgetful.assoc`
-  // wildcard import.
+  // Disambiguate `Affine.assoc` from the ambient `Forgetful.assoc` wildcard import.
   private given affineAssoc[X <: Tuple, Y <: Tuple]: AssociativeFunctor[Affine, X, Y] = Affine.assoc
 
   private def getOpt[X, Y](
