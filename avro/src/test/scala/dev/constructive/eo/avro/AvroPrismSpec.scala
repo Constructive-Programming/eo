@@ -31,9 +31,13 @@ class AvroPrismSpec extends Specification with ScalaCheck:
 
   // ---- Root-level codecPrism[S] ------------------------------------
 
-  // covers: round-trip modify via full decode/encode (default), round-trip modify (Unsafe),
-  // pass through record that doesn't decode (Unsafe), get returns Ior.Right
-  "codecPrism[S] modify round-trips on the happy path with default↔Unsafe parity" >> forAll {
+  // covers: codecPrism[S] modify happy round-trip (default ↔ Unsafe parity),
+  //   modifyUnsafe on undecodable record passes through unchanged,
+  //   get on happy input returns Ior.Right;
+  //   schema-violating record (age slot holding a String against an Int-expected schema) —
+  //   .get surfaces Ior.Left(DecodeFailed),
+  //   .modify surfaces Ior.Both(DecodeFailed, originalRecord)
+  "codecPrism[S] modify happy round-trip + DecodeFailed on schema-violating record" >> forAll {
     (p: Person) =>
       val record = personRecord(p)
       val expected = personRecord(p.copy(name = p.name.toUpperCase))
@@ -50,7 +54,40 @@ class AvroPrismSpec extends Specification with ScalaCheck:
         case Ior.Right(p2) => p2 == p
         case _             => false
 
-      parity && correctness && getOk
+      // ---- Schema-violating record: DecodeFailed on get + Ior.Both on modify (absorbed) ----
+      val violSchema =
+        val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+        fields.add(
+          new org.apache.avro.Schema.Field(
+            "name",
+            org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
+            null,
+            null,
+          )
+        )
+        fields.add(
+          new org.apache.avro.Schema.Field(
+            "age",
+            org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
+            null,
+            null,
+          )
+        )
+        org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
+      val viol = buildRecord(violSchema)(
+        "name" -> "Alice",
+        "age" -> "thirty",
+      )
+      val pPrism = codecPrism[Person](personSchema)
+      val violGetOk = pPrism.get(viol) match
+        case Ior.Left(chain) => chain.headOption.exists(_.isInstanceOf[AvroFailure.DecodeFailed])
+        case _               => false
+      val violModifyOk = pPrism.modify(identity[Person])(viol) match
+        case Ior.Both(chain, out) =>
+          chain.headOption.exists(_.isInstanceOf[AvroFailure.DecodeFailed]) && (out eq viol)
+        case _ => false
+
+      parity && correctness && getOk && violGetOk && violModifyOk
   }
 
   // ---- One-level drill (.field) ------------------------------------
@@ -180,54 +217,6 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       .and(happyJsonOk === true).and(badJsonOk === true).and(unsafeJsonNone)
   }
 
-  // ---- Codec-level decode failure ----------------------------------
-
-  // covers: decode failure on get surfaces Ior.Left(DecodeFailed),
-  // decode failure on modify surfaces Ior.Both(DecodeFailed, inputRecord)
-  "decode failure surfaces DecodeFailed on get + Ior.Both on modify" >> {
-    // Build a record where the `age` slot holds a String (schema-violating).
-    // Using a schema with `age: string` so the codec sees a type mismatch
-    // when decoding back to Person (which expects age: Int).
-    val violSchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
-      fields.add(
-        new org.apache.avro.Schema.Field(
-          "name",
-          org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
-          null,
-          null,
-        )
-      )
-      fields.add(
-        new org.apache.avro.Schema.Field(
-          "age",
-          org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
-          null,
-          null,
-        )
-      )
-      org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
-    val viol = buildRecord(violSchema)(
-      "name" -> "Alice",
-      "age" -> "thirty",
-    )
-
-    val pPrism = codecPrism[Person](personSchema)
-    val getResult = pPrism.get(viol)
-    val modifyResult = pPrism.modify(identity[Person])(viol)
-
-    val getOk = getResult match
-      case Ior.Left(chain) =>
-        chain.headOption.get.isInstanceOf[AvroFailure.DecodeFailed]
-      case _ => false
-
-    val modifyOk = modifyResult match
-      case Ior.Both(chain, out) =>
-        chain.headOption.get.isInstanceOf[AvroFailure.DecodeFailed] && (out eq viol)
-      case _ => false
-
-    (getOk === true).and(modifyOk === true)
-  }
 
   /** Compare two records via apache-avro's structural compare. The public Eq[IndexedRecord] given
     * (per Gap-5 / OQ-avro-9) lives on [[AvroWalk]]; here we go through `GenericData.compare`
