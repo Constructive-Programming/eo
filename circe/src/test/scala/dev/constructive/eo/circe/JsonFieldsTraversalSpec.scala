@@ -159,7 +159,9 @@ class JsonFieldsTraversalSpec extends JsonSpecBase:
     val placeUnsafe =
       codecPrism[Basket].items.each.fields(_.name, _.price).placeUnsafe(nt)(basket.asJson)
 
-    emptyOk.and(missingOk).and(place === Ior.Right(expectedZ)).and(placeUnsafe === expectedZ)
+    val placeOk = place === Ior.Right(expectedZ)
+    val placeUnsafeOk = placeUnsafe === expectedZ
+    emptyOk.and(missingOk).and(placeOk).and(placeUnsafeOk)
   }
 
 object JsonFieldsTraversalSpec:
