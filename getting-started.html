@@ -121,7 +121,7 @@
 </span><span class="keyword">import</span><span> </span><span class="identifier">dev</span><span>.</span><span class="identifier">constructive</span><span>.</span><span class="identifier">eo</span><span>.</span><span class="identifier">docs</span><span>.{</span><span class="type-name">Address</span><span>, </span><span class="type-name">Person</span><span>, </span><span class="type-name">Zip</span><span>}</span></code></pre>
         <p>A Lens focuses a single field of a product:</p>
         <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">nameL</span><span> = </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">name</span><span>)
-</span><span class="comment">// nameL: SimpleLens[Person, String, NamedTuple[*:[&quot;address&quot;, EmptyTuple], *:[Address, EmptyTuple]]] = dev.constructive.eo.optics.SimpleLens@665a5ef3
+</span><span class="comment">// nameL: SimpleLens[Person, String, NamedTuple[*:[&quot;address&quot;, EmptyTuple], *:[Address, EmptyTuple]]] = dev.constructive.eo.optics.SimpleLens@565d650c
 </span><span>
 </span><span class="keyword">val</span><span> </span><span class="identifier">alice</span><span> = </span><span class="type-name">Person</span><span>(</span><span class="string-literal">&quot;Alice&quot;</span><span>, </span><span class="type-name">Address</span><span>(</span><span class="string-literal">&quot;Main St&quot;</span><span>, </span><span class="type-name">Zip</span><span>(</span><span class="number-literal">12345</span><span>, </span><span class="string-literal">&quot;6789&quot;</span><span>)))
 </span><span class="comment">// alice: Person = Person(
@@ -147,7 +147,7 @@
         <pre><code class="nohighlight"><span class="keyword">val</span><span> </span><span class="identifier">streetL</span><span> =
   </span><span class="identifier">lens</span><span>[</span><span class="type-name">Person</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">address</span><span>)
     .</span><span class="identifier">andThen</span><span>(</span><span class="identifier">lens</span><span>[</span><span class="type-name">Address</span><span>](</span><span class="identifier">_</span><span>.</span><span class="identifier">street</span><span>))
-</span><span class="comment">// streetL: Optic[Person, Person, String, String, [T1 &gt;: Nothing &lt;: Any, T2 &gt;: Nothing &lt;: Any] =&gt;&gt; Tuple2[T1, T2]] = dev.constructive.eo.optics.Optic$$anon$1@e7eb376
+</span><span class="comment">// streetL: Optic[Person, Person, String, String, [T1 &gt;: Nothing &lt;: Any, T2 &gt;: Nothing &lt;: Any] =&gt;&gt; Tuple2[T1, T2]] = dev.constructive.eo.optics.Optic$$anon$1@683a59c8
 </span><span>
 </span><span class="identifier">streetL</span><span>.</span><span class="identifier">get</span><span>(</span><span class="identifier">alice</span><span>)
 </span><span class="comment">// res2: String = &quot;Main St&quot;

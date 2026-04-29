@@ -226,7 +226,7 @@
 </span><span>
 </span><span class="comment">// Miss: path doesn&#39;t resolve, returns Monoid.empty
 </span><span class="keyword">val</span><span> </span><span class="identifier">absentP</span><span> = </span><span class="type-name">JsoniterPrism</span><span>[</span><span class="type-name">Long</span><span>](</span><span class="string-literal">&quot;$.payload.user.absent&quot;</span><span>)
-</span><span class="comment">// absentP: Optic[Array[Byte], Array[Byte], Long, Long, [A &gt;: Nothing &lt;: Any, B &gt;: Nothing &lt;: Any] =&gt;&gt; Affine[A, B]] = dev.constructive.eo.jsoniter.JsoniterPrism$$anon$1@2bc86b09
+</span><span class="comment">// absentP: Optic[Array[Byte], Array[Byte], Long, Long, [A &gt;: Nothing &lt;: Any, B &gt;: Nothing &lt;: Any] =&gt;&gt; Affine[A, B]] = dev.constructive.eo.jsoniter.JsoniterPrism$$anon$1@22834279
 </span><span class="identifier">absentP</span><span>.</span><span class="identifier">foldMap</span><span>(</span><span class="identifier">identity</span><span>[</span><span class="type-name">Long</span><span>])(</span><span class="identifier">sample</span><span>)
 </span><span class="comment">// res2: Long = 0L</span></code></pre>
         <p><code>.headOption</code> / <code>.length</code> / <code>.exists</code> light up the same way through
