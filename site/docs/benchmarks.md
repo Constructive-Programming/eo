@@ -187,6 +187,69 @@ short overall work units). Otherwise the default is the
 recommended entry — you get structured `JsonFailure` diagnostics
 for the same order-of-magnitude speedup over naive.
 
+## JsoniterBench — byte-cursor JSON read+write vs eo-circe
+
+EO-only — different niche from eo-circe: jsoniter-scala codecs are
+compile-time-derived, so the optic walks bytes directly with no AST
+materialised. Six fixtures cover the read and write surface; the
+`c*` rows are eo-circe `JsonPrism` after `circeParse(new String(bytes,
+"UTF-8"))` (the realistic per-call workflow), the `j*` rows are
+[`JsoniterPrism`](https://github.com/Constructive-Programming/eo/blob/main/jsoniter/src/main/scala/dev/constructive/eo/jsoniter/JsoniterPrism.scala)
+/
+[`JsoniterTraversal`](https://github.com/Constructive-Programming/eo/blob/main/jsoniter/src/main/scala/dev/constructive/eo/jsoniter/JsoniterTraversal.scala)
+on the same `Array[Byte]`.
+
+Run, 3 forks / 5 measured iterations / 15 samples per cell on a
+~250-byte synthetic JSON fixture:
+
+| Bench                                    | eo-circe (ns/op) | eo-jsoniter (ns/op) | Speedup |
+|------------------------------------------|-----------------:|--------------------:|--------:|
+| Read scalar `Long` at depth 3            |   801.8 ± 24.8   |       49.6 ± 0.4    | **16.2×** |
+| Read scalar `String` at depth 4          |   830.9 ± 16.5   |      102.1 ± 1.9    |  **8.1×** |
+| Read miss (path doesn't resolve)         |   807.2 ± 28.7   |       68.2 ± 0.5    | **11.8×** |
+| `[*]` fold-sum over 10-element array     |   822.4 ± 37.7   |      340.0 ± 5.0    |  **2.4×** |
+| `.replace` Long at depth 3               |  1447.9 ± 44.6   |      101.4 ± 32.5   | **14.3×** |
+| `.modify` Long at depth 3                |  1444.4 ± 27.1   |       87.4 ± 1.3    | **16.5×** |
+
+eo-circe's number always includes the `circeParse` step — that's
+what dominates the per-call cost, not the drill. If a caller caches
+the parsed `Json` across calls, the speedup narrows; most real-world
+JSON workloads (HTTP request handlers, log processors) are
+one-shot, which is what the bench measures.
+
+The miss case is faster on the eo-jsoniter side than the depth-4
+hit (~68 vs ~100 ns) — the byte scanner aborts on the first
+non-matching field before any decode runs. eo-circe's miss case
+costs the same as hit because the parse always runs.
+
+The traversal speedup (2.4×) is more honest than the scalar reads:
+per-element decode + `Array[AnyRef]` allocation accumulates over the
+10 elements. Larger arrays push the ratio higher (constant parse
+cost spread over more elements); smaller arrays would push it lower.
+
+Writes don't degrade vs reads on the eo-jsoniter side — the splice
+is bounded by `O(src.length)` memcpy, which is ~50 ns for a 250-byte
+fixture. eo-circe writes pay parse + AST modify + emit, roughly
+double the read cost. **`.modify` slightly beats `.replace`** because
+`replace = modify(_ => b)` adds a closure layer; difference is
+within noise.
+
+The `jReplaceLong` row's wide ±32 ns half-width is a JIT-warmup
+outlier from one fork; re-runs cluster in 80–120 ns. Bumping
+`-f 5 -wi 5` tightens it.
+
+Run the suite with:
+
+```sh
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*JsoniterBench.*"
+```
+
+The
+[design spike](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-eo-jsoniter-spike.md)
+documents the carrier choice (no new carrier — Affine for the Prism,
+`MultiFocus[PSVec]` for the Traversal), the splice mechanics, and
+the phased-build outcome.
+
 ## AvroPrism — direct-walk over `IndexedRecord`
 
 EO-only — no Monocle equivalent at this layer. `AvroPrism.modify` walks

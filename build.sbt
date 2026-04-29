@@ -506,6 +506,7 @@ lazy val docs: Project = project
     LocalProject("generics"),
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
+    LocalProject("jsoniterIntegration"),
     LocalProject("laws"),
   )
   .settings(commonSettings *)
@@ -521,6 +522,10 @@ lazy val docs: Project = project
     // blocks can summon `AvroEncoder.derived` / `AvroDecoder.derived`
     // / `AvroSchemaFor.derived` against the live module classpath.
     libraryDependencies += kindlingsAvro,
+    // jsoniter-scala-macros is `Test`-scoped on jsoniterIntegration; surface
+    // it here so jsoniter.md mdoc blocks can derive `JsonValueCodec[A]` via
+    // `JsonCodecMaker.make` against the live classpath.
+    libraryDependencies += jsoniterMacros,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,

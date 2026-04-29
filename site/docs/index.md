@@ -8,6 +8,27 @@ One `Optic[S, T, A, B, F]` trait, parameterised over a carrier
 families through `Composer[F, G]` bridges rather than N² hand-
 written `.andThen` overloads.
 
+## What optics buy you
+
+An optic is a tool for cleanly specifying a complex, pinpointed
+operation against a value — at a much higher level of interpretation
+than the operation itself. You name *which* part of a value you care
+about; the carrier names *how* that focus is reached and rebuilt;
+your action against the focus stays a one-liner regardless of how
+deep the structure goes or how heterogeneously the layers are
+encoded.
+
+The Lens / Prism / Traversal vocabulary you'd normally use for
+in-memory case-class trees is the same vocabulary that lights up
+when one side of the structure is a JSON byte stream
+([eo-jsoniter](jsoniter.md)) or an Apache Avro record on the wire
+([eo-avro](avro.md)) or a circe `Json` AST ([eo-circe](circe.md)).
+You get to specify one side of the mirror — the focus, the
+operation, the path — and let the carrier implement the other.
+On one side: the bytestream, the wire, the buffered representation.
+On the other: your domain classes. Same `.modify` / `.replace` /
+`.andThen` reads against both.
+
 Current version: @VERSION@.
 
 ## 60-second example
@@ -53,6 +74,11 @@ types alike.
 - [Avro integration](avro.md) — `AvroPrism` / `AvroTraversal`,
   cursor-backed navigation into Apache Avro `IndexedRecord` with no
   full decode; binary + JSON wire-format input dual.
+- [Jsoniter integration](jsoniter.md) — `JsoniterPrism` /
+  `JsoniterTraversal`, byte-cursor navigation directly into
+  `Array[Byte]` JSON via jsoniter-scala codecs. Read at
+  ~50 ns/op (16× eo-circe), write via splice at ~100 ns/op (14×
+  eo-circe).
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.
