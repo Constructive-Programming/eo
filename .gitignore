@@ -1,7 +1,10 @@
 .bloop/
 .bsp/
 .cellar/
-.claude/
+.claude/*
+# Skills are checked-in agent guidance — track them across the .claude/
+# blanket ignore for per-user worktree / scheduling state.
+!.claude/skills/
 .envrc
 .envrc.local
 .idea/
