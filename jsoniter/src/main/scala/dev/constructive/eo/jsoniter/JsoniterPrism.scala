@@ -15,14 +15,12 @@ import dev.constructive.eo.optics.Optic
   *     - `Fst[X] = Array[Byte]` — original source bytes (Miss carries this for pass-through)
   *     - `Snd[X] = (Array[Byte], Int, Int)` — bytes + the focused span (Hit carries this; future
   *       phase-2 splice writes use the start/end to memcpy the new encoding back in)
-  *
   *   - `to: Array[Byte] => Affine[X, A]` runs the path scanner; on hit, decodes the slice via
-  *     `readFromSubArray` and packs `Hit(snd = (bytes, start, end), b = decoded)`. On miss
-  *     (path doesn't resolve, decode throws), packs `Miss(fst = bytes)` for pass-through.
-  *
+  *     `readFromSubArray` and packs `Hit(snd = (bytes, start, end), b = decoded)`. On miss (path
+  *     doesn't resolve, decode throws), packs `Miss(fst = bytes)` for pass-through.
   *   - `from: Affine[X, A] => Array[Byte]` is identity in phase 1 — read-only spike. Hit returns
-  *     `h.snd._1` (the original bytes); Miss returns `m.fst`. Phase 2 will splice the encoded
-  *     focus into the byte buffer at the recorded span.
+  *     `h.snd._1` (the original bytes); Miss returns `m.fst`. Phase 2 will splice the encoded focus
+  *     into the byte buffer at the recorded span.
   *
   * Composability: the standard cats-eo extension methods on `Optic[..., Affine]` light up
   * automatically — `.foldMap`, `.modify` (no-op for read-only since `from` is identity),

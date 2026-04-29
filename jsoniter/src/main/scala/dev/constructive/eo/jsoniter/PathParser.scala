@@ -22,7 +22,8 @@ object PathParser:
     */
   def parse(input: String): Either[String, List[PathStep]] =
     if input.isEmpty then Left("empty path")
-    else if input.charAt(0) != '$' then Left(s"path must start with '$$' (got '${input.charAt(0)}')")
+    else if input.charAt(0) != '$' then
+      Left(s"path must start with '$$' (got '${input.charAt(0)}')")
     else parseSteps(input, 1, Nil)
 
   private def parseSteps(
@@ -58,8 +59,7 @@ object PathParser:
     var end = pos
     while end < s.length && s.charAt(end).isDigit do end += 1
     if end == pos then Left(s"expected integer at position $pos")
-    else if end >= s.length || s.charAt(end) != ']' then
-      Left(s"expected ']' at position $end")
+    else if end >= s.length || s.charAt(end) != ']' then Left(s"expected ']' at position $end")
     else
       val i = s.substring(pos, end).toInt
       parseSteps(s, end + 1, PathStep.Index(i) :: acc)

@@ -14,9 +14,9 @@ import dev.constructive.eo.optics.Optic.*
   *
   *   - path scanner over object/array/scalar/nested cases
   *   - decode-failure surfacing as `Affine.Miss`
-  *   - `.foldMap` over the Affine carrier (read-only escape: hit decodes via the codec,
-  *     miss returns the Monoid identity), confirming the standard cats-eo extension methods
-  *     light up over `Optic[..., Affine]` without any new typeclass shipping
+  *   - `.foldMap` over the Affine carrier (read-only escape: hit decodes via the codec, miss
+  *     returns the Monoid identity), confirming the standard cats-eo extension methods light up
+  *     over `Optic[..., Affine]` without any new typeclass shipping
   *   - parser error paths
   *
   * Phase 2 (read-write splice) is out of scope here; those tests live in a future
@@ -92,20 +92,20 @@ class JsoniterPrismSpec extends Specification:
 
     val hitOk = idP.to(sample) match
       case h: Affine.Hit[idP.X, Long]  => h.b === 42L
-      case _: Affine.Miss[idP.X, Long] => (false === true) // expected Hit
+      case _: Affine.Miss[idP.X, Long] => false === true // expected Hit
 
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
       JsoniterPrism[Long]("$.payload.user.missing")
     val missOk = absentP.to(sample) match
       case m: Affine.Miss[absentP.X, Long] => m.fst === sample
-      case _: Affine.Hit[absentP.X, Long]  => (false === true)
+      case _: Affine.Hit[absentP.X, Long]  => false === true
 
     // Field 'email' is a String; decoding it as Long throws → Miss.
     val mistypedP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
       JsoniterPrism[Long]("$.payload.user.email")
     val mistypedOk = mistypedP.to(sample) match
       case _: Affine.Miss[mistypedP.X, Long] => true === true
-      case _: Affine.Hit[mistypedP.X, Long]  => (false === true)
+      case _: Affine.Hit[mistypedP.X, Long]  => false === true
 
     hitOk.and(missOk).and(mistypedOk)
   }

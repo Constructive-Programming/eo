@@ -559,6 +559,7 @@ lazy val benchmarks: Project = project
     LocalProject("core"),
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
+    LocalProject("jsoniterIntegration"),
   )
   .settings(commonSettings *)
   .settings(
@@ -574,4 +575,9 @@ lazy val benchmarks: Project = project
     // edge above so AvroPrism / codecPrism are on the bench
     // classpath.
     libraryDependencies += kindlingsAvro,
+    // jsoniter-scala-macros for the JsoniterReadBench fixture's
+    // JsonValueCodec[A] derivations. Compile-scope here so the JMH
+    // class can `JsonCodecMaker.make` directly without a separate
+    // codec module.
+    libraryDependencies += jsoniterMacros,
   )

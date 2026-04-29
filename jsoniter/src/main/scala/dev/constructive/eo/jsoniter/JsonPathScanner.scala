@@ -18,8 +18,8 @@ package dev.constructive.eo.jsoniter
   */
 object JsonPathScanner:
 
-  /** Result of a scan: `start >= 0` means hit, `start == -1` means miss. Avoids `Option`
-    * allocation on the hot path. End is `bytes.length` on miss.
+  /** Result of a scan: `start >= 0` means hit, `start == -1` means miss. Avoids `Option` allocation
+    * on the hot path. End is `bytes.length` on miss.
     *
     * @group Scanner
     */
@@ -49,20 +49,22 @@ object JsonPathScanner:
 
       case PathStep.Field(name) :: rest =>
         if peek(bytes, pos) != '{' then Miss
-        else findFieldValue(bytes, pos + 1, name) match
-          case -1 => Miss
-          case vp => walk(bytes, vp, rest)
+        else
+          findFieldValue(bytes, pos + 1, name) match
+            case -1 => Miss
+            case vp => walk(bytes, vp, rest)
 
       case PathStep.Index(i) :: rest =>
         if peek(bytes, pos) != '[' then Miss
-        else findArrayElement(bytes, pos + 1, i) match
-          case -1 => Miss
-          case vp => walk(bytes, vp, rest)
+        else
+          findArrayElement(bytes, pos + 1, i) match
+            case -1 => Miss
+            case vp => walk(bytes, vp, rest)
 
   // ----- object field lookup -------------------------------------------
 
-  /** From a position just past `{`, scan key/value pairs looking for `target`. Returns the
-    * position of the value, or -1 if not found / malformed.
+  /** From a position just past `{`, scan key/value pairs looking for `target`. Returns the position
+    * of the value, or -1 if not found / malformed.
     */
   private def findFieldValue(bytes: Array[Byte], pos0: Int, target: String): Int =
     var pos = skipWs(bytes, pos0)
@@ -144,12 +146,12 @@ object JsonPathScanner:
     if p >= bytes.length then -1
     else
       bytes(p) match
-        case '{'                                         => skipObject(bytes, p + 1)
-        case '['                                         => skipArray(bytes, p + 1)
-        case '"'                                         => skipString(bytes, p)
-        case 't' | 'f' | 'n'                             => skipLiteral(bytes, p)
-        case c if c == '-' || (c >= '0' && c <= '9')     => skipNumber(bytes, p)
-        case _                                           => -1
+        case '{'                                     => skipObject(bytes, p + 1)
+        case '['                                     => skipArray(bytes, p + 1)
+        case '"'                                     => skipString(bytes, p)
+        case 't' | 'f' | 'n'                         => skipLiteral(bytes, p)
+        case c if c == '-' || (c >= '0' && c <= '9') => skipNumber(bytes, p)
+        case _                                       => -1
 
   private def skipObject(bytes: Array[Byte], pos0: Int): Int =
     var pos = skipWs(bytes, pos0)
@@ -185,17 +187,18 @@ object JsonPathScanner:
         case _   => return -1
     -1
 
-  /** Skip a JSON string starting at `pos` (pointing at the opening `"`). Returns the position
-    * just past the closing quote. Handles `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`,
-    * `\uXXXX`. Returns -1 on unterminated string.
+  /** Skip a JSON string starting at `pos` (pointing at the opening `"`). Returns the position just
+    * past the closing quote. Handles `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\uXXXX`.
+    * Returns -1 on unterminated string.
     */
   private def skipString(bytes: Array[Byte], pos: Int): Int =
     var i = pos + 1
     while i < bytes.length do
       bytes(i) match
         case '"'  => return i + 1
-        case '\\' => i += 2 // any escape is one extra byte; \uXXXX consumes 5 but the trailing 4 are scanned through naturally
-        case _    => i += 1
+        case '\\' =>
+          i += 2 // any escape is one extra byte; \uXXXX consumes 5 but the trailing 4 are scanned through naturally
+        case _ => i += 1
     -1
 
   /** Skip `true` / `false` / `null`. Returns -1 if the literal isn't a recognised one. */
@@ -228,8 +231,7 @@ object JsonPathScanner:
     var i = pos
     while i < bytes.length && (bytes(i) match
         case ' ' | '\t' | '\n' | '\r' => true
-        case _                        => false
-      )
+        case _                        => false)
     do i += 1
     i
 
