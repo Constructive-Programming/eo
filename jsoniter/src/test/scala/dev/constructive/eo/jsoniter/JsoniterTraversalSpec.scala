@@ -6,7 +6,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import org.specs2.mutable.Specification
 
-import dev.constructive.eo.data.MultiFocus
+import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
@@ -18,8 +18,8 @@ import dev.constructive.eo.optics.Optic.*
   *   - JsoniterTraversal[A].foldMap sums over hit elements, returns Monoid.empty on miss
   *   - JsoniterPrism rejects wildcard paths at construction (cross-check)
   *
-  * Phase 2 (write-back splice — `.modify` re-encoding each element back into the buffer) is out
-  * of scope here.
+  * Phase 2 (write-back splice — `.modify` re-encoding each element back into the buffer) is out of
+  * scope here.
   */
 class JsoniterTraversalSpec extends Specification:
 
@@ -44,11 +44,14 @@ class JsoniterTraversalSpec extends Specification:
     val itemsSteps = PathParser.parse("$.items[*]").toOption.get
     val itemSpans = JsonPathScanner.findAll(sample, itemsSteps)
     val countOk = itemSpans.length === 5
-    val firstOk = new String(sample.slice(itemSpans.head.start, itemSpans.head.end), "UTF-8") === "1"
+    val firstOk =
+      new String(sample.slice(itemSpans.head.start, itemSpans.head.end), "UTF-8") === "1"
     val lastOk = new String(sample.slice(itemSpans.last.start, itemSpans.last.end), "UTF-8") === "5"
 
-    val emptyOk = JsonPathScanner.findAll(sample, PathParser.parse("$.empty[*]").toOption.get) === Nil
-    val missingOk = JsonPathScanner.findAll(sample, PathParser.parse("$.absent[*]").toOption.get) === Nil
+    val emptyOk =
+      JsonPathScanner.findAll(sample, PathParser.parse("$.empty[*]").toOption.get) === Nil
+    val missingOk =
+      JsonPathScanner.findAll(sample, PathParser.parse("$.absent[*]").toOption.get) === Nil
 
     countOk.and(firstOk).and(lastOk).and(emptyOk).and(missingOk)
   }
@@ -56,11 +59,11 @@ class JsoniterTraversalSpec extends Specification:
   "JsoniterTraversal: foldMap over array hits / empty / missing" >> {
     import cats.instances.long.given
 
-    val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+    val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
       JsoniterTraversal[Long]("$.items[*]")
-    val emptyT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+    val emptyT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
       JsoniterTraversal[Long]("$.empty[*]")
-    val missingT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+    val missingT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
       JsoniterTraversal[Long]("$.absent[*]")
 
     (itemsT.foldMap(identity[Long])(sample) === 15L) // 1+2+3+4+5
@@ -69,7 +72,7 @@ class JsoniterTraversalSpec extends Specification:
   }
 
   "JsoniterTraversal: from is identity in phase-1.5 (returns the original bytes)" >> {
-    val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+    val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
       JsoniterTraversal[Long]("$.items[*]")
     itemsT.from(itemsT.to(sample)) === sample
   }
@@ -78,7 +81,7 @@ class JsoniterTraversalSpec extends Specification:
     import cats.instances.long.given
     // Mixed array — a string element among integers will fail Long decode and get dropped.
     val mixed = bytes("""{"vals":[1,"oops",3,4]}""")
-    val valsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+    val valsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
       JsoniterTraversal[Long]("$.vals[*]")
     valsT.foldMap(identity[Long])(mixed) === 8L // 1 + 3 + 4 (the "oops" String drops)
   }

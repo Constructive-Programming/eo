@@ -13,7 +13,7 @@ import io.circe.{Codec, Json}
 import io.circe.parser.parse as circeParse
 
 import dev.constructive.eo.circe.{JsonPrism, codecPrism}
-import dev.constructive.eo.data.{Affine, MultiFocus}
+import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
 import dev.constructive.eo.optics.{Optic, Traversal}
@@ -125,7 +125,7 @@ class JsoniterReadBench extends JmhDefaults:
   // Phase-1.5 traversal — sums `$.payload.items[*]`, ten elements,
   // each a single-digit Long.
 
-  private val jItemsSum: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+  private val jItemsSum: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
     JsoniterTraversal[Long]("$.payload.items[*]")
 
   // eo-circe peer: focus the items array via codecPrism, then traverse it

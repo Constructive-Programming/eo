@@ -97,11 +97,11 @@ Confirmed in `JsoniterPrismSpec` (6 specs / 21 expectations).
 ### 3.3 SHIPPED (phase 1.5) — `JsoniterTraversal[A]` over `[*]` paths
 
 ```scala
-import dev.constructive.eo.data.MultiFocus
+import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.jsoniter.JsoniterTraversal
 
-val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
   JsoniterTraversal[Long]("$.cart.items[*]")
 
 itemsT.foldMap(identity[Long])(bytes)   // sum, no AST
@@ -109,7 +109,12 @@ itemsT.length(bytes)                    // count via .foldMap _ => 1
 itemsT.exists(_ > 0)(bytes)             // short-circuit on first hit
 ```
 
-Carrier: `MultiFocus[List]` (peer to `Traversal.each`'s `MultiFocus[PSVec]`). The `[*]` step expands the current array via `JsonPathScanner.findAll`; spans are decoded lazily through the user-supplied `JsonValueCodec[A]`. Spans whose decode throws are silently dropped — `foldMap` reads the focuses that exist, ignores the rest. `JsoniterPrism` rejects wildcard paths at construction, redirects the user to this Traversal factory.
+**Carrier: `MultiFocus[PSVec]` — same carrier as `Traversal.each`.** Initially shipped on `MultiFocus[List]`, then swapped to PSVec for two reasons:
+
+1. **Same-carrier `.andThen` composition.** PSVec ships `mfAssocPSVec` (`AssociativeFunctor[MultiFocus[PSVec], _, _]`) — chains like `JsoniterTraversal.andThen(Traversal.each[List, A])` resolve through the standard `Optic.andThen` route with zero-copy per-element reassembly. List would have forced a Composer hop.
+2. **Single allocation per traversal.** PSVec wraps an `Array[AnyRef]` zero-copy via `PSVec.unsafeWrap`. `JsoniterTraversal.to` allocates one array of length `spans.length`, decodes each span into it, then wraps. List would allocate one cons cell per element.
+
+The `[*]` step expands the current array via `JsonPathScanner.findAll`; spans are decoded eagerly into the array (jsoniter's `readFromSubArray`), but the cost is paid only when `.to` runs. Spans whose decode throws are silently dropped — `foldMap` reads the focuses that exist, ignores the rest. `JsoniterPrism` rejects wildcard paths at construction, redirects the user to this Traversal factory.
 
 Existential `X = (Array[Byte], List[JsonPathScanner.Span])` carries the bytes + per-element spans for the future phase-2 splice path. Phase-1.5 `from` is identity — returns `bytes` unchanged.
 
@@ -159,12 +164,14 @@ The bridge needs a `JsonValueCodec[io.circe.Json]` instance — non-trivial to d
 
 | Bench | eo-circe (ns/op) | eo-jsoniter (ns/op) | Speedup | Phase-2 bar (≥3×) |
 |---|---|---|---|---|
-| Hit @ depth 3, `Long` (`$.payload.user.id`) | 813.620 ± 15.967 | 50.093 ± 0.508 | **16.2×** | clear |
-| Hit @ depth 4, `String` (`$.payload.user.profile.email`) | 813.540 ± 26.909 | 103.515 ± 2.877 | **7.9×** | clear |
-| Miss @ depth 3 (path doesn't exist) | 811.309 ± 9.191 | 68.123 ± 0.427 | **11.9×** | clear |
-| `[*]` fold-sum over 10-element array (phase 1.5) | 805.797 ± 24.325 | 350.643 ± 9.468 | **2.3×** | marginal |
+| Hit @ depth 3, `Long` (`$.payload.user.id`) | 799.059 ± 17.169 | 49.929 ± 0.610 | **16.0×** | clear |
+| Hit @ depth 4, `String` (`$.payload.user.profile.email`) | 810.451 ± 6.127 | 102.311 ± 1.447 | **7.9×** | clear |
+| Miss @ depth 3 (path doesn't exist) | 796.048 ± 16.501 | 69.298 ± 2.448 | **11.5×** | clear |
+| `[*]` fold-sum over 10-element array (PSVec carrier) | 798.638 ± 21.105 | 342.476 ± 4.343 | **2.3×** | marginal |
 
-Standard errors are tight — `JsoniterPrism[Long]`'s 50.1 ns/op has a ±0.5 ns half-width.
+Standard errors are tight — `JsoniterPrism[Long]`'s 49.9 ns/op has a ±0.6 ns half-width.
+
+**Carrier note for the traversal row.** Initially shipped on `MultiFocus[List]` at 350.6 ± 9.5 ns/op (2.3×); swapped to `MultiFocus[PSVec]` for downstream composability with `Traversal.each` (mfAssocPSVec) and tightened to 342.5 ± 4.3 ns/op — modest perf bump (~2%, single Array alloc vs cons-cell allocation), no speedup-ratio change. The composability win is qualitative: the JsoniterTraversal now sits in the same carrier as the entire classical Traversal family.
 
 **Why the scalar speedup is large.** eo-circe's `JsonPrism.foldMap` measures the realistic workload: parse `Array[Byte]` → `Json` AST via `io.circe.parser.parse`, then drill the AST. Most of the 800+ ns/op is in the parse, not the drill. Jsoniter skips the AST entirely — `JsonPathScanner.find` walks the bytes once, jsoniter's `readFromSubArray` decodes only the focused span.
 
