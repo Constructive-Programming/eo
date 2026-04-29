@@ -75,6 +75,7 @@
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
     <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
+    <li class="level1 nav-leaf"><a href="jsoniter.html">jsoniter integration</a></li>
     <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
     <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
     <li class="level1 active nav-leaf"><a href="#">Benchmarks</a></li>
@@ -100,6 +101,7 @@
     <li class="level1 nav-leaf"><a href="#fold-forget-f-carrier">Fold (<code>Forget[F]</code> carrier)</a></li>
     <li class="level1 nav-leaf"><a href="#traversal">Traversal</a></li>
     <li class="level1 nav-leaf"><a href="#jsonprism-cursor-backed-json-edit">JsonPrism — cursor-backed JSON edit</a></li>
+    <li class="level1 nav-leaf"><a href="#jsoniterbench-byte-cursor-json-read-write-vs-eo-circe">JsoniterBench — byte-cursor JSON read+write vs eo-circe</a></li>
     <li class="level1 nav-leaf"><a href="#avroprism-direct-walk-over-indexedrecord">AvroPrism — direct-walk over <code>IndexedRecord</code></a></li>
     <li class="level1 nav-leaf"><a href="#jsontraversal-items-each-name-edits">JsonTraversal — <code>items.each.name</code> edits</a></li>
     <li class="level1 nav-node"><a href="#powerseries-traversal-with-downstream-composition">PowerSeries traversal with downstream composition</a></li>
@@ -502,6 +504,96 @@ Affine]</code> instance auto-lifts each Lens hop into the <code>Affine</code>
         short overall work units). Otherwise the default is the
         recommended entry — you get structured <code>JsonFailure</code> diagnostics
         for the same order-of-magnitude speedup over naive.</p>
+        
+        <h2 id="jsoniterbench-byte-cursor-json-read-write-vs-eo-circe" class="section"><a class="anchor-link left" href="#jsoniterbench-byte-cursor-json-read-write-vs-eo-circe"><i class="icofont-laika link">&#xef71;</i></a>JsoniterBench — byte-cursor JSON read+write vs eo-circe</h2>
+        <p>EO-only — different niche from eo-circe: jsoniter-scala codecs are
+        compile-time-derived, so the optic walks bytes directly with no AST
+        materialised. Six fixtures cover the read and write surface; the
+        <code>c*</code> rows are eo-circe <code>JsonPrism</code> after <code>circeParse(new String(bytes,
+&quot;UTF-8&quot;))</code> (the realistic per-call workflow), the <code>j*</code> rows are
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/jsoniter/src/main/scala/dev/constructive/eo/jsoniter/JsoniterPrism.scala"><code>JsoniterPrism</code></a>
+        /
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/jsoniter/src/main/scala/dev/constructive/eo/jsoniter/JsoniterTraversal.scala"><code>JsoniterTraversal</code></a>
+        on the same <code>Array[Byte]</code>.</p>
+        <p>Run, 3 forks / 5 measured iterations / 15 samples per cell on a
+        ~250-byte synthetic JSON fixture:</p>
+        <table>
+          <thead>
+            <tr>
+              <th>Bench</th>
+              <th>eo-circe (ns/op)</th>
+              <th>eo-jsoniter (ns/op)</th>
+              <th>Speedup</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Read scalar <code>Long</code> at depth 3</td>
+              <td>801.8 ± 24.8</td>
+              <td>49.6 ± 0.4</td>
+              <td><strong>16.2×</strong></td>
+            </tr>
+            <tr>
+              <td>Read scalar <code>String</code> at depth 4</td>
+              <td>830.9 ± 16.5</td>
+              <td>102.1 ± 1.9</td>
+              <td><strong>8.1×</strong></td>
+            </tr>
+            <tr>
+              <td>Read miss (path doesn&#39;t resolve)</td>
+              <td>807.2 ± 28.7</td>
+              <td>68.2 ± 0.5</td>
+              <td><strong>11.8×</strong></td>
+            </tr>
+            <tr>
+              <td><code>[*]</code> fold-sum over 10-element array</td>
+              <td>822.4 ± 37.7</td>
+              <td>340.0 ± 5.0</td>
+              <td><strong>2.4×</strong></td>
+            </tr>
+            <tr>
+              <td><code>.replace</code> Long at depth 3</td>
+              <td>1447.9 ± 44.6</td>
+              <td>101.4 ± 32.5</td>
+              <td><strong>14.3×</strong></td>
+            </tr>
+            <tr>
+              <td><code>.modify</code> Long at depth 3</td>
+              <td>1444.4 ± 27.1</td>
+              <td>87.4 ± 1.3</td>
+              <td><strong>16.5×</strong></td>
+            </tr>
+          </tbody>
+        </table>
+        <p>eo-circe&#39;s number always includes the <code>circeParse</code> step — that&#39;s
+        what dominates the per-call cost, not the drill. If a caller caches
+        the parsed <code>Json</code> across calls, the speedup narrows; most real-world
+        JSON workloads (HTTP request handlers, log processors) are
+        one-shot, which is what the bench measures.</p>
+        <p>The miss case is faster on the eo-jsoniter side than the depth-4
+        hit (~68 vs ~100 ns) — the byte scanner aborts on the first
+        non-matching field before any decode runs. eo-circe&#39;s miss case
+        costs the same as hit because the parse always runs.</p>
+        <p>The traversal speedup (2.4×) is more honest than the scalar reads:
+        per-element decode + <code>Array[AnyRef]</code> allocation accumulates over the
+        10 elements. Larger arrays push the ratio higher (constant parse
+        cost spread over more elements); smaller arrays would push it lower.</p>
+        <p>Writes don&#39;t degrade vs reads on the eo-jsoniter side — the splice
+        is bounded by <code>O(src.length)</code> memcpy, which is ~50 ns for a 250-byte
+        fixture. eo-circe writes pay parse + AST modify + emit, roughly
+        double the read cost. <strong><code>.modify</code> slightly beats <code>.replace</code></strong> because
+        <code>replace = modify(_ =&gt; b)</code> adds a closure layer; difference is
+        within noise.</p>
+        <p>The <code>jReplaceLong</code> row&#39;s wide ±32 ns half-width is a JIT-warmup
+        outlier from one fork; re-runs cluster in 80–120 ns. Bumping
+        <code>-f 5 -wi 5</code> tightens it.</p>
+        <p>Run the suite with:</p>
+        <pre class="keep-together pdf epub"><code class="nohighlight"><span>sbt </span><span class="string-literal">&quot;benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*JsoniterBench.*&quot;</span></code></pre>
+        <p>The
+        <a href="https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-eo-jsoniter-spike.md">design spike</a>
+        documents the carrier choice (no new carrier — Affine for the Prism,
+        <code>MultiFocus[PSVec]</code> for the Traversal), the splice mechanics, and
+        the phased-build outcome.</p>
         
         <h2 id="avroprism-direct-walk-over-indexedrecord" class="section"><a class="anchor-link left" href="#avroprism-direct-walk-over-indexedrecord"><i class="icofont-laika link">&#xef71;</i></a>AvroPrism — direct-walk over <code>IndexedRecord</code></h2>
         <p>EO-only — no Monocle equivalent at this layer. <code>AvroPrism.modify</code> walks

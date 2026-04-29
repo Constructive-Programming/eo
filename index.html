@@ -75,6 +75,7 @@
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
     <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
+    <li class="level1 nav-leaf"><a href="jsoniter.html">jsoniter integration</a></li>
     <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
     <li class="level1 nav-leaf"><a href="cookbook.html">Cookbook</a></li>
     <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
@@ -90,6 +91,7 @@
   <p class="header"><a href="#">cats-eo</a></p>
 
   <ul class="nav-list">
+    <li class="level1 nav-leaf"><a href="#what-optics-buy-you">What optics buy you</a></li>
     <li class="level1 nav-leaf"><a href="#_60-second-example">60-second example</a></li>
     <li class="level1 nav-leaf"><a href="#keep-reading">Keep reading</a></li>
   </ul>
@@ -107,6 +109,25 @@
         <code>F[_, _]</code>, unifies every optic family. Composition crosses
         families through <code>Composer[F, G]</code> bridges rather than N² hand-
         written <code>.andThen</code> overloads.</p>
+        
+        <h2 id="what-optics-buy-you" class="section"><a class="anchor-link left" href="#what-optics-buy-you"><i class="icofont-laika link">&#xef71;</i></a>What optics buy you</h2>
+        <p>An optic is a tool for cleanly specifying a complex, pinpointed
+        operation against a value — at a much higher level of interpretation
+        than the operation itself. You name <em>which</em> part of a value you care
+        about; the carrier names <em>how</em> that focus is reached and rebuilt;
+        your action against the focus stays a one-liner regardless of how
+        deep the structure goes or how heterogeneously the layers are
+        encoded.</p>
+        <p>The Lens / Prism / Traversal vocabulary you&#39;d normally use for
+        in-memory case-class trees is the same vocabulary that lights up
+        when one side of the structure is a JSON byte stream
+        (<a href="jsoniter.html">eo-jsoniter</a>) or an Apache Avro record on the wire
+        (<a href="avro.html">eo-avro</a>) or a circe <code>Json</code> AST (<a href="circe.html">eo-circe</a>).
+        You get to specify one side of the mirror — the focus, the
+        operation, the path — and let the carrier implement the other.
+        On one side: the bytestream, the wire, the buffered representation.
+        On the other: your domain classes. Same <code>.modify</code> / <code>.replace</code> /
+        <code>.andThen</code> reads against both.</p>
         <p>Current version: 0.1.</p>
         
         <h2 id="_60-second-example" class="section"><a class="anchor-link left" href="#_60-second-example"><i class="icofont-laika link">&#xef71;</i></a>60-second example</h2>
@@ -167,6 +188,11 @@
           <li><a href="avro.html">Avro integration</a> — <code>AvroPrism</code> / <code>AvroTraversal</code>,
           cursor-backed navigation into Apache Avro <code>IndexedRecord</code> with no
           full decode; binary + JSON wire-format input dual.</li>
+          <li><a href="jsoniter.html">Jsoniter integration</a> — <code>JsoniterPrism</code> /
+          <code>JsoniterTraversal</code>, byte-cursor navigation directly into
+          <code>Array[Byte]</code> JSON via jsoniter-scala codecs. Read at
+          ~50 ns/op (16× eo-circe), write via splice at ~100 ns/op (14×
+          eo-circe).</li>
           <li><a href="extensibility.html">Extensibility</a> — how to ship a custom optic
           tuned for your domain&#39;s hot path without losing the rest of the
           cats-eo universe.</li>

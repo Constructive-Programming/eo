@@ -75,6 +75,7 @@
     <li class="level1 nav-leaf"><a href="generics.html">Generics</a></li>
     <li class="level1 nav-leaf"><a href="circe.html">circe integration</a></li>
     <li class="level1 nav-leaf"><a href="avro.html">Avro integration</a></li>
+    <li class="level1 nav-leaf"><a href="jsoniter.html">jsoniter integration</a></li>
     <li class="level1 nav-leaf"><a href="extensibility.html">Extensibility</a></li>
     <li class="level1 active nav-leaf"><a href="#">Cookbook</a></li>
     <li class="level1 nav-leaf"><a href="benchmarks.html">Benchmarks</a></li>
@@ -453,7 +454,7 @@
 //   )
 // )
 </span><span class="keyword">val</span><span> </span><span class="identifier">everyItemName</span><span> = </span><span class="identifier">codecPrism</span><span>[</span><span class="type-name">Basket</span><span>].</span><span class="identifier">items</span><span>.</span><span class="identifier">each</span><span>.</span><span class="identifier">name</span><span>
-</span><span class="comment">// everyItemName: JsonTraversal[String] = dev.constructive.eo.circe.JsonTraversal@3acd00aa
+</span><span class="comment">// everyItemName: JsonTraversal[String] = dev.constructive.eo.circe.JsonTraversal@2eb7d5e4
 </span><span>
 </span><span class="identifier">everyItemName</span><span>.</span><span class="identifier">modifyUnsafe</span><span>(</span><span class="identifier">_</span><span>.</span><span class="identifier">toUpperCase</span><span>)(</span><span class="identifier">basket</span><span>.</span><span class="identifier">asJson</span><span>).</span><span class="identifier">noSpacesSortKeys</span><span>
 </span><span class="comment">// res15: String = &quot;{\&quot;items\&quot;:[{\&quot;name\&quot;:\&quot;APPLE\&quot;,\&quot;price\&quot;:1.0},{\&quot;name\&quot;:\&quot;PEAR\&quot;,\&quot;price\&quot;:2.0}],\&quot;owner\&quot;:\&quot;Alice\&quot;}&quot;</span></code></pre>
