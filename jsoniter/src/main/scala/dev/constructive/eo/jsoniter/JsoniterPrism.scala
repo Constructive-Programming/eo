@@ -1,31 +1,30 @@
 package dev.constructive.eo.jsoniter
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonValueCodec, readFromSubArray}
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonValueCodec, readFromSubArray, writeToArray}
 
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 
-/** Read-only optic over a JSON byte buffer. Resolves a JSONPath subset against `Array[Byte]`,
-  * decodes the focused slice via `JsonValueCodec[A]` only when the user reads it. No runtime AST.
+/** Read-write optic over a JSON byte buffer. Resolves a JSONPath subset against `Array[Byte]`,
+  * decodes the focused slice via `JsonValueCodec[A]` on read, encodes-and-splices on write. No
+  * runtime AST.
   *
-  * Carrier: [[Affine]]. The shape `Optic[Array[Byte], Array[Byte], A, A, Affine]` is deliberately
-  * read-write-shaped even though phase-1 only ships read-only operations:
+  * Carrier: [[Affine]]. Shape `Optic[Array[Byte], Array[Byte], A, A, Affine]`:
   *
   *   - `type X = (Array[Byte], (Array[Byte], Int, Int))`
   *     - `Fst[X] = Array[Byte]` — original source bytes (Miss carries this for pass-through)
-  *     - `Snd[X] = (Array[Byte], Int, Int)` — bytes + the focused span (Hit carries this; future
-  *       phase-2 splice writes use the start/end to memcpy the new encoding back in)
+  *     - `Snd[X] = (Array[Byte], Int, Int)` — bytes + the focused span (Hit carries this; phase-2
+  *       splice writes use the span to memcpy the new encoding back in)
   *   - `to: Array[Byte] => Affine[X, A]` runs the path scanner; on hit, decodes the slice via
   *     `readFromSubArray` and packs `Hit(snd = (bytes, start, end), b = decoded)`. On miss (path
   *     doesn't resolve, decode throws), packs `Miss(fst = bytes)` for pass-through.
-  *   - `from: Affine[X, A] => Array[Byte]` is identity in phase 1 — read-only spike. Hit returns
-  *     `h.snd._1` (the original bytes); Miss returns `m.fst`. Phase 2 will splice the encoded focus
-  *     into the byte buffer at the recorded span.
+  *   - `from: Affine[X, A] => Array[Byte]` (phase 2) — Hit encodes `h.b` via `writeToArray` and
+  *     splices into the source bytes at the recorded `[start, end)` span. Three `arraycopy`s into a
+  *     fresh buffer; cost is O(src.length). Miss returns the original bytes unchanged.
   *
   * Composability: the standard cats-eo extension methods on `Optic[..., Affine]` light up
-  * automatically — `.foldMap`, `.modify` (no-op for read-only since `from` is identity),
-  * `.andThen`, etc. No new Composer / AssociativeFunctor needed; reuses the existing Affine
-  * machinery.
+  * automatically — `.foldMap`, `.modify`, `.replace`, `.andThen`, etc. No new Composer /
+  * AssociativeFunctor needed; reuses the existing Affine machinery.
   *
   * @group Optics
   */
@@ -83,5 +82,16 @@ object JsoniterPrism:
 
       val from: Affine[X, A] => Array[Byte] = aff =>
         aff match
-          case h: Affine.Hit[X, A]  => h.snd._1
+          case h: Affine.Hit[X, A] =>
+            // Phase-2 splice. h.snd carries (src, start, end). The user's `.modify` /
+            // `.replace` arrives baked into h.b — encode it via the codec, then memcpy
+            // src[0, start) ++ encoded ++ src[end, src.length) into a fresh buffer.
+            val (src, start, end) = h.snd
+            val encoded = writeToArray(h.b)(using codec)
+            val tail = src.length - end
+            val out = new Array[Byte](start + encoded.length + tail)
+            System.arraycopy(src, 0, out, 0, start)
+            System.arraycopy(encoded, 0, out, start, encoded.length)
+            System.arraycopy(src, end, out, start + encoded.length, tail)
+            out
           case m: Affine.Miss[X, A] => m.fst

@@ -1,7 +1,7 @@
 # eo-jsoniter spike — design sketch
 
 **Date:** 2026-04-29
-**Status:** **Phase 1 + 1.5 SHIPPED 2026-04-29** (commits `481b7cb`, `3b75460`, this commit). Read-only optics on the **`Affine` carrier (Prism) and `MultiFocus[List]` carrier (Traversal) — no new carriers**. Phase-2 read-write splice greenlit by JMH (16.2× / 7.9× / 11.9× scalar speedups; 2.3× on 10-element array fold).
+**Status:** **Phase 1 + 1.5 + 2 SHIPPED 2026-04-29.** Read-write `JsoniterPrism` on `Affine` and read-only `JsoniterTraversal` on `MultiFocus[PSVec]`. **No new carriers shipped — both reuse existing cats-eo carriers.** Phase-2 splice writes land at **14.3× `.replace` / 16.5× `.modify`** vs eo-circe; full bench in §4.
 **Context:** Companion module to [`eo-circe`](../../circe/) for jsoniter-scala. Goal of this spike: figure out whether `eo-jsoniter` would *complement* eo-circe (different niche, both ship), *replace* it (jsoniter's perf wins, eo-circe goes away), or *be redundant* (jsoniter users don't need an AST optic). Outcome: **complement**. The original draft of this doc proposed a new `ByteSpanF` carrier; the actual ship reuses the existing `Affine` carrier — see §2 for the revision.
 
 ## 1. Why this is not "circe but faster"
@@ -118,31 +118,30 @@ The `[*]` step expands the current array via `JsonPathScanner.findAll`; spans ar
 
 Existential `X = (Array[Byte], List[JsonPathScanner.Span])` carries the bytes + per-element spans for the future phase-2 splice path. Phase-1.5 `from` is identity — returns `bytes` unchanged.
 
-### 3.4 QUEUED — `JsoniterPrism[A].replace` write-back (phase 2)
+### 3.4 SHIPPED (phase 2) — `JsoniterPrism[A].replace` / `.modify` write-back
 
-Same carrier, plug splice mechanics into `from`:
+Same carrier, splice mechanics in `from`:
 
 ```scala
 val updated: Array[Byte] = emailP.replace("new@example.com")(bytes)
+val incremented: Array[Byte] = idP.modify(_ + 1)(bytes)
 ```
 
-Implementation: replace `from` from identity to:
+Implementation in `from`:
 ```scala
-val from: Affine[X, A] => Array[Byte] = aff =>
-  aff match
-    case h: Affine.Hit[X, A] =>
-      val (src, start, end) = h.snd
-      val encoded = jsoniter.writeToArray(h.b)  // via JsonValueCodec[A]
-      // memcpy: src[0, start) ++ encoded ++ src[end, src.length)
-      val out = new Array[Byte](start + encoded.length + (src.length - end))
-      System.arraycopy(src, 0, out, 0, start)
-      System.arraycopy(encoded, 0, out, start, encoded.length)
-      System.arraycopy(src, end, out, start + encoded.length, src.length - end)
-      out
-    case m: Affine.Miss[X, A] => m.fst
+case h: Affine.Hit[X, A] =>
+  val (src, start, end) = h.snd
+  val encoded = writeToArray(h.b)(using codec)
+  val tail = src.length - end
+  val out = new Array[Byte](start + encoded.length + tail)
+  System.arraycopy(src, 0, out, 0, start)
+  System.arraycopy(encoded, 0, out, start, encoded.length)
+  System.arraycopy(src, end, out, start + encoded.length, tail)
+  out
+case m: Affine.Miss[X, A] => m.fst
 ```
 
-Estimated: ~30 LoC inside the existing factory + a `JsoniterPrismWriteSpec`. Gated on §6 bench numbers.
+`.replace` and `.modify` light up via the existing `ForgetfulFunctor[Affine]` (in `Affine.given`) — no new typeclass shipping. The splice handles same-length, longer, and shorter encodings transparently. Behaviour spec: `JsoniterPrismWriteSpec` (9 specs / 10 expectations) covers `.replace` over Long / String, length-changing replacement, miss no-op, round-trip identity, `.modify(identity)` byte-equivalence, array-index splice.
 
 ### 3.5 QUEUED — cross-module bridge to `eo-circe`
 
@@ -162,16 +161,20 @@ The bridge needs a `JsonValueCodec[io.circe.Json]` instance — non-trivial to d
 
 `JsoniterReadBench` lives in `benchmarks/`. Four fixture shapes, run with the project default `-i 5 -wi 3 -f 3` (15 measured iterations across 3 forks):
 
-| Bench | eo-circe (ns/op) | eo-jsoniter (ns/op) | Speedup | Phase-2 bar (≥3×) |
-|---|---|---|---|---|
-| Hit @ depth 3, `Long` (`$.payload.user.id`) | 799.059 ± 17.169 | 49.929 ± 0.610 | **16.0×** | clear |
-| Hit @ depth 4, `String` (`$.payload.user.profile.email`) | 810.451 ± 6.127 | 102.311 ± 1.447 | **7.9×** | clear |
-| Miss @ depth 3 (path doesn't exist) | 796.048 ± 16.501 | 69.298 ± 2.448 | **11.5×** | clear |
-| `[*]` fold-sum over 10-element array (PSVec carrier) | 798.638 ± 21.105 | 342.476 ± 4.343 | **2.3×** | marginal |
+| Bench | eo-circe (ns/op) | eo-jsoniter (ns/op) | Speedup |
+|---|---|---|---|
+| Hit @ depth 3, `Long` (`$.payload.user.id`) | 801.777 ± 24.816 | 49.626 ± 0.376 | **16.2×** |
+| Hit @ depth 4, `String` (`$.payload.user.profile.email`) | 830.892 ± 16.458 | 102.089 ± 1.902 | **8.1×** |
+| Miss @ depth 3 (path doesn't exist) | 807.206 ± 28.721 | 68.177 ± 0.462 | **11.8×** |
+| `[*]` fold-sum over 10-element array (PSVec carrier) | 822.357 ± 37.690 | 339.963 ± 5.013 | **2.4×** |
+| **`.replace` Long @ depth 3** (phase 2) | **1447.870 ± 44.568** | **101.417 ± 32.457** | **14.3×** |
+| **`.modify` Long @ depth 3** (phase 2) | **1444.385 ± 27.110** | **87.406 ± 1.262** | **16.5×** |
 
-Standard errors are tight — `JsoniterPrism[Long]`'s 49.9 ns/op has a ±0.6 ns half-width.
+Standard errors are tight on most fixtures — the `.replace` row's ±32 ns half-width is a JIT-warmup outlier from one of the three forks; re-runs cluster in the 80–120 ns/op range.
 
-**Carrier note for the traversal row.** Initially shipped on `MultiFocus[List]` at 350.6 ± 9.5 ns/op (2.3×); swapped to `MultiFocus[PSVec]` for downstream composability with `Traversal.each` (mfAssocPSVec) and tightened to 342.5 ± 4.3 ns/op — modest perf bump (~2%, single Array alloc vs cons-cell allocation), no speedup-ratio change. The composability win is qualitative: the JsoniterTraversal now sits in the same carrier as the entire classical Traversal family.
+**Carrier note for the traversal row.** Initially shipped on `MultiFocus[List]` at 350.6 ns/op (2.3×); swapped to `MultiFocus[PSVec]` for downstream composability with `Traversal.each` (mfAssocPSVec) and tightened to 340.0 ns/op — modest perf bump (~2%, single Array alloc vs cons-cell allocation), no speedup-ratio change. The composability win is qualitative: the JsoniterTraversal now sits in the same carrier as the entire classical Traversal family.
+
+**Why writes don't degrade vs reads.** The eo-circe write cost (~1450 ns/op) is roughly `parse (~800 ns) + AST modify + emit (~650 ns)` — adding the modify+emit doubles the read cost. Jsoniter writes at `path-walk + decode (~50 ns) + write-encode + 3× memcpy (~50 ns)` ≈ 100 ns. The splice is bounded by O(src.length) memcpy, which is ~50 ns for a 250-byte fixture; for a much larger document the memcpy cost would grow linearly and the speedup would narrow. The 250-byte fixture is the hot-path / API-handler shape; for KB-MB documents the perf shape is different and worth a follow-up bench. **`.modify` slightly beats `.replace`** because `replace = modify(_ => b)` adds a closure layer — within noise.
 
 **Why the scalar speedup is large.** eo-circe's `JsonPrism.foldMap` measures the realistic workload: parse `Array[Byte]` → `Json` AST via `io.circe.parser.parse`, then drill the AST. Most of the 800+ ns/op is in the parse, not the drill. Jsoniter skips the AST entirely — `JsonPathScanner.find` walks the bytes once, jsoniter's `readFromSubArray` decodes only the focused span.
 
@@ -184,7 +187,7 @@ Standard errors are tight — `JsoniterPrism[Long]`'s 49.9 ns/op has a ±0.6 ns 
 - `String` focus (8.0×) is slower than `Long` focus (16.6×) because String decode has more allocation — a UTF-8 substring copy. The Long focus is closer to the theoretical floor.
 - These numbers are a quick-run; trust them indicatively, not absolutely. JMH's standard caveats apply (machine noise, JIT warmup, GC).
 
-**Verdict for phase-2 gating:** scalar bars (16.2× / 7.9× / 11.9×) clear by a wide margin; traversal sits at 2.3× — under the ≥3× original bar but above the 1.5× "marginal" bar. Read-write splice ships in phase 2 anyway: the scalar fixtures dominate real-world workloads and the traversal cost is honest about its shape (more elements per array would push it higher).
+**Verdict for phase-2 gating:** scalar reads clear ≥3× by a wide margin (8–16×); scalar writes do too (14.3× / 16.5×); traversal reads sit at 2.4×. Phase 2 is now SHIPPED. The phase-3 question (traversal write-back) is more delicate: each write would invalidate subsequent spans, so a naive splice loop is wrong. Punt to phase 3 unless a real user shows up needing it.
 
 Bench source: `benchmarks/src/main/scala/dev/constructive/eo/bench/JsoniterReadBench.scala`. Re-run with `sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 .*JsoniterReadBench.*"`.
 
@@ -216,29 +219,35 @@ Original draft worried about an 8th carrier (`ByteSpanF` + 40 cells of matrix pa
 
 Tracking jsoniter-scala upstream changes, both for codec-maker macros and for stream-reader API drift. eo-circe's circe surface has been remarkably stable; jsoniter's underlying API has more churn. Pinned to `2.38.9` for now; bumps will be Dependabot-driven.
 
-## 6. Build-or-skip — phase 1 + phase 1.5 verdicts, phase 2 gating
+## 6. Build-or-skip — all three phases SHIPPED
 
 **Phase 1: SHIPPED.** Read-only `JsoniterPrism` on the Affine carrier. Commit `481b7cb`.
 
-**Phase 1.5: SHIPPED.** `JsoniterTraversal` on the `MultiFocus[List]` carrier with `[*]` wildcard support. Adds `PathStep.Wildcard`, `JsonPathScanner.findAll`, and the new factory. 6 more specs / 14 more expectations green; full jsoniter spec count is now 12 specs / 35 expectations.
+**Phase 1.5: SHIPPED.** `JsoniterTraversal` on the `MultiFocus[PSVec]` carrier with `[*]` wildcard support.
 
-Effort actuals vs estimates (cumulative through phase 1.5):
-- Carrier (Affine reuse) + path parser + scanner + Prism factory + Traversal factory: ~3 hours
-- Specs (Prism + Traversal): ~1 hour
-- Module wiring + scalafmt + bench: ~1 hour
-- **Total: ~5 hours actual** through phase 1.5 (vs ~3.5 days estimate for phase 1 alone, sans bench + docs)
+**Phase 2: SHIPPED.** Read-write `JsoniterPrism.replace` / `.modify` via splice (`writeToArray` + 3× `arraycopy`) inside the existing `Affine.from` closure. No new typeclass shipping; `.replace` / `.modify` light up via the existing `ForgetfulFunctor[Affine]`.
 
-Underran the estimate by ~5× because the Affine + MultiFocus[List] carrier reuse eliminated:
+Effort actuals vs estimates (cumulative through phase 2):
+- Carrier (Affine + MultiFocus[PSVec] reuse) + path parser + scanner + factories + splice: ~4 hours
+- Specs (Prism read + Traversal + Prism write): ~1.5 hours
+- Module wiring + scalafmt + bench: ~1.5 hours
+- **Total: ~7 hours actual** through all three phases (vs ~3.5+ days estimate for phase 1 alone, sans bench + docs).
+
+Underran the original estimate by ~5–10× because the Affine + MultiFocus[PSVec] carrier reuse eliminated:
 - Carrier design + typeclass instances
 - Matrix-update paperwork
-- Custom extension-method shipping (`.foldMap` / `.headOption` / `.length` / `.exists` all light up free)
+- Custom extension-method shipping (`.foldMap` / `.headOption` / `.length` / `.exists` / `.replace` / `.modify` all light up free)
+- Phase-2 splice mechanics fit cleanly inside the existing `from` closure — no protocol fight
 
-**Phase 2 gating: PASS for scalar paths.** Scalar JMH numbers land at 7.9× / 11.9× / 16.2× across the three single-focus fixtures (§4) — comfortably above the 3× gating bar. Traversal sits at 2.3× over a 10-element array, under the original ≥3× bar but above 1.5×. Read-write splice (`JsoniterPrism.replace`) is greenlit for phase 2; traversal write-back is more nuanced (write-side cost dominated by re-encoding each element + cumulative splice O(N) shifts).
+**Bench gating verdict.**
+- Read scalar (≥3×): PASS at 8.1× / 11.8× / 16.2×.
+- Read traversal (≥3×): MARGINAL at 2.4× — shipped anyway because the scalar wins dominate real workloads and a larger array would push the ratio higher.
+- Write scalar (≥3×): PASS at 14.3× / 16.5×.
 
-Original gating thresholds (for the record):
-- ≥3× on `Fold.foldMap` over 1 KB synthetic JSON, depth 3 → ship phase 2. **Hit (16.2×).**
-- 1.5–3× → ship phase 2, but flag in docs as "marginal — pick based on workload".
-- <1.5× → abandon phase 2.
+Original gating thresholds, for the record:
+- ≥3× on `Fold.foldMap` over 1 KB synthetic JSON, depth 3 → ship phase 2. **Hit at 16.2×.**
+- 1.5–3× → ship phase 2 with a "marginal" docs flag.
+- <1.5× → abandon.
 
 ## 7. Decision matrix — phase 1 outcome
 
@@ -253,14 +262,15 @@ Original gating thresholds (for the record):
 
 ## 8. Open questions still worth pushback
 
-Resolved during phase 1 + 1.5 (no longer open):
-- ~~Could `Forget[F]` be reused with `F = ByteSpan`?~~ — Reused **Affine** + **MultiFocus[List]** instead, even cleaner.
+Resolved during phases 1 / 1.5 / 2 (no longer open):
+- ~~Could `Forget[F]` be reused with `F = ByteSpan`?~~ — Reused **Affine** + **MultiFocus[PSVec]** instead, even cleaner.
 - ~~JSONPath dependency vs hand-rolled?~~ — Hand-rolled, ~280 LoC across `find` + `findAll`, no external dep.
-- ~~Traversal phase 1.5?~~ — Shipped, 2.3× on 10-element array. Smaller-than-scalar speedup but honest about its shape.
+- ~~Traversal phase 1.5?~~ — Shipped on `MultiFocus[PSVec]`, 2.4× on 10-element array. Smaller-than-scalar speedup but honest about its shape.
+- ~~Phase-2 splice approach (memcpy vs delta-rope)?~~ — Memcpy ships at 14.3× / 16.5× — well above any threshold where rope complexity would be worth it for the typical request-handler fixture size.
 
 Still open:
-- **Phase-2 splice approach.** "Memcpy three slices on every write" or delta-rope structure? Delta-ropes win on hot-loop modify but cost design days. JMH-driven decision after the simple memcpy ships.
-- **Phase-2 traversal write-back.** `JsoniterTraversal.modify` is structurally trickier than Prism — each element splice invalidates subsequent spans. Punt to phase 3 unless a user shows up demanding it.
+- **Phase-3 traversal write-back.** `JsoniterTraversal.modify` is structurally trickier than the Prism splice — each element splice invalidates subsequent spans, so a naive loop is wrong. Two routes: (a) re-encode the whole array as `Array[Byte]` and splice once; (b) walk in reverse, splicing each element while accumulating offset deltas. Both have edge cases worth a separate spike. Punt unless a user shows up demanding it.
 - **Cross-module bridge to eo-circe (§3.5).** Worth shipping in v0.1.0 of eo-jsoniter, or wait for a real user to ask? Inclined toward "wait" — manual `JsonValueCodec[io.circe.Json]` is awkward to derive.
+- **Bench at KB-MB document sizes.** The 250-byte fixture is the hot-path / API-handler shape. Larger documents push memcpy cost linearly — at some doc size the splice approach loses to circe's structural-sharing AST modify. Worth a follow-up bench to find the crossover point.
 
-Phase 1 + 1.5 doc revision complete. Phase 2 (Prism splice writes) is the next concrete unit.
+Phase 1 + 1.5 + 2 complete. eo-jsoniter is feature-complete for the v0.1.0 read+write story.

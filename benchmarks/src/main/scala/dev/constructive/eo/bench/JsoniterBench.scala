@@ -21,30 +21,36 @@ import dev.constructive.eo.optics.Optic.*
 
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
-/** Phase-1 read-side bench for `eo-jsoniter` vs `eo-circe` on three fixtures:
+/** Bench for `eo-jsoniter` vs `eo-circe` covering both read and write paths:
   *
+  * **Read fixtures (phase 1 / 1.5):**
   *   1. **Hit at depth 3, scalar (`Long`).** `$.payload.user.id` on a synthetic 1 KB JSON.
   *      jsoniter's expected sweet spot — skip the AST, decode just the Long.
-  *
   *   2. **Hit at depth 4, scalar (`String`).** `$.payload.user.profile.email`. Same shape one
   *      level deeper to confirm the perf gap doesn't degrade with depth.
-  *
   *   3. **Miss at depth 3.** `$.payload.user.absent`. Honest stress test: if the perf advantage
   *      collapses when the path doesn't resolve (because both libraries have to walk most of the
   *      document anyway), the perf story is more nuanced.
+  *   4. **`[*]` fold-sum over 10-element array.** `$.payload.items[*]`. Phase-1.5 traversal.
+  *
+  * **Write fixtures (phase 2):**
+  *   5. **`.replace` at depth 3, scalar (`Long`).** `$.payload.user.id` to a same-length value.
+  *      Measures the splice cost (encode + 3× memcpy) vs the eo-circe AST-modify-then-emit path.
+  *   6. **`.modify` at depth 3, transformation (`*10`).** Same focus; isolates the codec
+  *      round-trip cost (decode + transform + re-encode) on the jsoniter side.
   *
   * Each pair compares:
-  *   - `j*` — `JsoniterPrism[A].foldMap(identity)(bytes)` — phase-1 read on `Array[Byte]`.
-  *   - `c*` — eo-circe `JsonPrism[A].foldMap(identity)(json)` after a `circeParse` to materialise
-  *      the AST. The circe side starts from `Array[Byte]` to make the comparison fair: parse +
-  *      drill is the realistic eo-circe workflow.
+  *   - `j*` — eo-jsoniter on `Array[Byte]`.
+  *   - `c*` — eo-circe after `circeParse(new String(bytes, "UTF-8"))` to materialise the AST.
+  *      The circe side always starts from `Array[Byte]` to make the comparison fair: parse +
+  *      drill (or parse + modify + emit) is the realistic eo-circe workflow.
   *
-  * Everything else is deliberately the same: same input bytes, same focus type, same Monoid (the
-  * focus's identity Monoid).
+  * Everything else is deliberately the same: same input bytes, same focus type, same Monoid /
+  * same write target.
   *
   * Run:
   * {{{
-  *   sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 .*JsoniterReadBench.*"
+  *   sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 .*JsoniterBench.*"
   * }}}
   */
 @State(Scope.Benchmark)
@@ -53,9 +59,9 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 @Fork(3)
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
-class JsoniterReadBench extends JmhDefaults:
+class JsoniterBench extends JmhDefaults:
 
-  import JsoniterReadBench.{*, given}
+  import JsoniterBench.{*, given}
   import cats.instances.int.given
   import cats.instances.list.given
   import cats.instances.long.given
@@ -141,7 +147,29 @@ class JsoniterReadBench extends JmhDefaults:
     val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
     cItemsSum.foldMap(identity[Int])(json)
 
-object JsoniterReadBench:
+  // ---- benchmarks: .replace at depth 3, Long ---------------------------
+  // Phase-2 splice — encode the new value, memcpy three slices into a fresh
+  // Array[Byte]. eo-circe peer modifies the AST and re-emits via printJson.
+
+  @Benchmark def jReplaceLong: Array[Byte] =
+    jIdLong.replace(99L)(bytes)
+
+  @Benchmark def cReplaceLong: String =
+    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
+    cIdLong.placeUnsafe(99L)(json).noSpaces
+
+  // ---- benchmarks: .modify at depth 3, Long ----------------------------
+  // Same shape but exercises the full codec round-trip on the jsoniter side
+  // (decode + transform + re-encode). The eo-circe side modifies in-AST.
+
+  @Benchmark def jModifyLong: Array[Byte] =
+    jIdLong.modify(_ * 10)(bytes)
+
+  @Benchmark def cModifyLong: String =
+    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
+    cIdLong.modifyUnsafe(_ * 10)(json).noSpaces
+
+object JsoniterBench:
 
   // ---- circe codec fixture ---------------------------------------------
   // eo-circe drills through `codecPrism[Payload].field(_.user).field(_.id)`,
