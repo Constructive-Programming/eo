@@ -203,6 +203,7 @@ val Kubuszok = "com.kubuszok"
 val Circe = "io.circe"
 val ApacheAvro = "org.apache.avro"
 val FasterXmlJackson = "com.fasterxml.jackson.core"
+val Plokhotnyuk = "com.github.plokhotnyuk.jsoniter-scala"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
@@ -227,6 +228,13 @@ lazy val avro = ApacheAvro % "avro" % "1.12.1"
 // across every module so any future jackson-pulling transitive (e.g. a
 // future kindlings-circe bump) inherits the safe version automatically.
 lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.1"
+// jsoniter-scala — high-perf JSON codec (~5–10× circe on hot paths).
+// Used by `eo-jsoniter` to back byte-cursor JSON optics that decode
+// directly from `Array[Byte]` without allocating a runtime AST. The
+// `-macros` artifact ships `JsonCodecMaker` so callers can derive a
+// `JsonValueCodec[A]` per focus type at compile time.
+lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.9"
+lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.9"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
@@ -315,7 +323,7 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
 
 lazy val root: Project = project
   .in(file("."))
-  .aggregate(core, laws, tests, generics, circeIntegration, avroIntegration)
+  .aggregate(core, laws, tests, generics, circeIntegration, avroIntegration, jsoniterIntegration)
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-root",
@@ -454,6 +462,34 @@ lazy val avroIntegration: Project = project
     // `GenericData` directly for hot-path walks, so the dep is part
     // of our reachable API.
     libraryDependencies += avro,
+    libraryDependencies += discipline % Test,
+  )
+
+// Read-only spike: byte-cursor JSON optics over `Array[Byte]`, backed
+// by jsoniter-scala. Reuses the existing `Affine` carrier — the optic
+// shape `Optic[Array[Byte], Array[Byte], A, A, Affine]` keeps the
+// source bytes in the structural leftover (Hit's `snd` carries
+// `(bytes, span)`, Miss's `fst` carries `bytes` for pass-through), so
+// future read-write phase 2 can splice into the same structure without
+// a carrier change. No runtime AST allocation: the path scanner walks
+// raw bytes and the focus is decoded via `JsonValueCodec[A]` only when
+// the user reads it.
+lazy val jsoniterIntegration: Project = project
+  .in(file("jsoniter"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-jsoniter",
+    libraryDependencies += cats,
+    libraryDependencies += jsoniterCore,
+    // -macros is Test-scoped: the optic factory only needs
+    // `JsonValueCodec[A]` evidence at the call site, and the spec
+    // derives codecs for fixtures via JsonCodecMaker.make.
+    libraryDependencies += jsoniterMacros % Test,
     libraryDependencies += discipline % Test,
   )
 
