@@ -13,9 +13,10 @@ import io.circe.{Codec, Json}
 import io.circe.parser.parse as circeParse
 
 import dev.constructive.eo.circe.{JsonPrism, codecPrism}
-import dev.constructive.eo.data.Affine
-import dev.constructive.eo.jsoniter.JsoniterPrism
-import dev.constructive.eo.optics.Optic
+import dev.constructive.eo.data.{Affine, MultiFocus}
+import dev.constructive.eo.data.MultiFocus.given
+import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
+import dev.constructive.eo.optics.{Optic, Traversal}
 import dev.constructive.eo.optics.Optic.*
 
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
@@ -55,6 +56,8 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 class JsoniterReadBench extends JmhDefaults:
 
   import JsoniterReadBench.{*, given}
+  import cats.instances.int.given
+  import cats.instances.list.given
   import cats.instances.long.given
   import cats.instances.string.given
 
@@ -117,6 +120,26 @@ class JsoniterReadBench extends JmhDefaults:
     // the miss comparison.
     val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
     cIdLongForMiss.foldMap(identity[Long])(json)
+
+  // ---- benchmarks: fold over array of 10 Long elements ------------------
+  // Phase-1.5 traversal — sums `$.payload.items[*]`, ten elements,
+  // each a single-digit Long.
+
+  private val jItemsSum: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[List]] =
+    JsoniterTraversal[Long]("$.payload.items[*]")
+
+  // eo-circe peer: focus the items array via codecPrism, then traverse it
+  // with the existing Traversal.each over List. This is the realistic
+  // eo-circe shape for "fold over an array field".
+  private val cItemsSum =
+    codecPrism[Payload].field(_.items).andThen(Traversal.each[List, Int])
+
+  @Benchmark def jSumItems: Long =
+    jItemsSum.foldMap(identity[Long])(bytes)
+
+  @Benchmark def cSumItems: Int =
+    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
+    cItemsSum.foldMap(identity[Int])(json)
 
 object JsoniterReadBench:
 

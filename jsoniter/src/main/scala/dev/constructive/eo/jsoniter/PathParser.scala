@@ -4,13 +4,14 @@ package dev.constructive.eo.jsoniter
   *
   * {{{
   *   path  := '$' (step)*
-  *   step  := '.' ident | '[' int ']'
+  *   step  := '.' ident | '[' int ']' | '[*]'
   *   ident := [A-Za-z_][A-Za-z_0-9]*
   *   int   := [0-9]+
   * }}}
   *
-  * Wildcards / filters / recursive descent are not in scope; reject them at parse time so the
-  * scanner doesn't have to.
+  * `[*]` is the wildcard step — only meaningful inside a multi-focus [[JsoniterTraversal]];
+  * [[JsoniterPrism]] rejects paths containing it at construction. Filters / recursive descent are
+  * still out of scope.
   *
   * @group Parser
   */
@@ -56,13 +57,18 @@ object PathParser:
       pos: Int,
       acc: List[PathStep],
   ): Either[String, List[PathStep]] =
-    var end = pos
-    while end < s.length && s.charAt(end).isDigit do end += 1
-    if end == pos then Left(s"expected integer at position $pos")
-    else if end >= s.length || s.charAt(end) != ']' then Left(s"expected ']' at position $end")
+    if pos < s.length && s.charAt(pos) == '*' then
+      if pos + 1 >= s.length || s.charAt(pos + 1) != ']' then
+        Left(s"expected ']' after '*' at position ${pos + 1}")
+      else parseSteps(s, pos + 2, PathStep.Wildcard :: acc)
     else
-      val i = s.substring(pos, end).toInt
-      parseSteps(s, end + 1, PathStep.Index(i) :: acc)
+      var end = pos
+      while end < s.length && s.charAt(end).isDigit do end += 1
+      if end == pos then Left(s"expected integer or '*' at position $pos")
+      else if end >= s.length || s.charAt(end) != ']' then Left(s"expected ']' at position $end")
+      else
+        val i = s.substring(pos, end).toInt
+        parseSteps(s, end + 1, PathStep.Index(i) :: acc)
 
   private inline def isIdentStart(c: Char): Boolean =
     (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'

@@ -55,6 +55,10 @@ object JsoniterPrism:
     val steps = PathParser.parse(path) match
       case Right(s) => s
       case Left(e)  => throw new IllegalArgumentException(s"invalid JSONPath '$path': $e")
+    if steps.contains(PathStep.Wildcard) then
+      throw new IllegalArgumentException(
+        s"JsoniterPrism path '$path' contains '[*]' — use JsoniterTraversal for wildcard paths"
+      )
     fromSteps(steps)
 
   /** Build a Prism from an already-parsed step list — useful for reusing a parsed path across

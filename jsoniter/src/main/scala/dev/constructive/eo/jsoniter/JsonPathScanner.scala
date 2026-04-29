@@ -30,13 +30,29 @@ object JsonPathScanner:
   val Miss: Span = Span(-1, -1)
 
   /** Resolve `path` against `bytes`. Returns the byte span of the focused value (start, end), or
-    * [[Miss]] if any step fails to match.
+    * [[Miss]] if any step fails to match. Rejects [[PathStep.Wildcard]] — wildcards produce
+    * 0-or-many results and don't fit a single-Span return; route them through [[findAll]].
     *
     * @group Scanner
     */
   def find(bytes: Array[Byte], path: List[PathStep]): Span =
     val start0 = skipWs(bytes, 0)
     if start0 >= bytes.length then Miss else walk(bytes, start0, path)
+
+  /** Resolve `path` against `bytes`, returning every span that matches. Wildcard steps fan out
+    * across array elements; a path with no wildcards returns 0 or 1 spans. Spans are returned in
+    * document order. On any structural mismatch (wrong context for a step, malformed JSON), the
+    * sub-tree is silently skipped — the caller sees fewer spans, not an error.
+    *
+    * @group Scanner
+    */
+  def findAll(bytes: Array[Byte], path: List[PathStep]): List[Span] =
+    val start0 = skipWs(bytes, 0)
+    if start0 >= bytes.length then Nil
+    else
+      val buf = scala.collection.mutable.ListBuffer.empty[Span]
+      walkAll(bytes, start0, path, buf)
+      buf.toList
 
   // ----- recursive walker ----------------------------------------------
 
@@ -60,6 +76,57 @@ object JsonPathScanner:
           findArrayElement(bytes, pos + 1, i) match
             case -1 => Miss
             case vp => walk(bytes, vp, rest)
+
+      case PathStep.Wildcard :: _ =>
+        // Wildcard is multi-focus — single-Span [[find]] can't represent it. Route via [[findAll]].
+        Miss
+
+  private def walkAll(
+      bytes: Array[Byte],
+      pos: Int,
+      path: List[PathStep],
+      buf: scala.collection.mutable.ListBuffer[Span],
+  ): Unit =
+    path match
+      case Nil =>
+        val end = skipValue(bytes, pos)
+        if end >= 0 then buf += Span(pos, end)
+        ()
+
+      case PathStep.Field(name) :: rest =>
+        if peek(bytes, pos) == '{' then
+          val vp = findFieldValue(bytes, pos + 1, name)
+          if vp >= 0 then walkAll(bytes, vp, rest, buf)
+
+      case PathStep.Index(i) :: rest =>
+        if peek(bytes, pos) == '[' then
+          val vp = findArrayElement(bytes, pos + 1, i)
+          if vp >= 0 then walkAll(bytes, vp, rest, buf)
+
+      case PathStep.Wildcard :: rest =>
+        if peek(bytes, pos) == '[' then walkAllArrayElements(bytes, pos + 1, rest, buf)
+
+  /** From a position just past `[`, walk every element and apply `rest` to each, accumulating into
+    * `buf`. On an empty array (`[]`), produces no spans.
+    */
+  private def walkAllArrayElements(
+      bytes: Array[Byte],
+      pos0: Int,
+      rest: List[PathStep],
+      buf: scala.collection.mutable.ListBuffer[Span],
+  ): Unit =
+    var pos = skipWs(bytes, pos0)
+    if pos < bytes.length && bytes(pos) == ']' then return
+    while pos < bytes.length do
+      walkAll(bytes, pos, rest, buf)
+      pos = skipValue(bytes, pos)
+      if pos < 0 then return
+      pos = skipWs(bytes, pos)
+      if pos >= bytes.length then return
+      bytes(pos) match
+        case ',' => pos = skipWs(bytes, pos + 1)
+        case ']' => return
+        case _   => return
 
   // ----- object field lookup -------------------------------------------
 
