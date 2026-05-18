@@ -45,7 +45,9 @@ class JsoniterPrismWriteSpec extends Specification:
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
       JsoniterPrism[Long]("$.payload.user.id")
     val out = idP.replace(1234567L)(sample)
-    str(out) === """{"payload":{"user":{"id":1234567,"email":"alice@example.com"},"items":[1,2,3]}}"""
+    str(
+      out
+    ) === """{"payload":{"user":{"id":1234567,"email":"alice@example.com"},"items":[1,2,3]}}"""
   }
 
   "JsoniterPrism .replace: shorter scalar — array shrinks, surrounding bytes preserved" >> {
@@ -82,7 +84,7 @@ class JsoniterPrismWriteSpec extends Specification:
     val written = idP.replace(99L)(sample)
     idP.to(written) match
       case h: Affine.Hit[idP.X, Long]  => h.b === 99L
-      case _: Affine.Miss[idP.X, Long] => (false === true)
+      case _: Affine.Miss[idP.X, Long] => false === true
   }
 
   "JsoniterPrism .modify(identity): byte-equivalent output for canonical encodings" >> {
