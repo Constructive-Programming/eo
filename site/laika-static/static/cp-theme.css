@@ -1,0 +1,86 @@
+/* =====================================================================
+ * cp-theme.css — Constructive Programming brand overlay for Helium.
+ *
+ * Helium 1.x lets us set ThemeColors via the build.sbt API, but two
+ * things still need to be done in CSS:
+ *
+ *   1. Font stacks. Helium.fontFamilies wraps each value as
+ *      `"<value>", sans-serif`, which mangles any comma-separated
+ *      fallback stack. We just redefine --body-font / --header-font /
+ *      --code-font here with the same stacks the constructive.dev
+ *      Jekyll site uses ($cp-sans, $cp-mono).
+ *
+ *   2. Manual dark / light toggle. Helium's dark mode is OS-driven
+ *      (prefers-color-scheme media query). To let a visitor force a
+ *      mode we override the generated `:root { ... }` vars under the
+ *      higher-specificity `[data-theme="..."]` selector, which beats
+ *      both the bare :root and the @media block.
+ *
+ * Values mirror the ThemeColors set in build.sbt's `tlSiteHelium`
+ * block. Keep them in sync if you tweak the palette.
+ * ===================================================================== */
+
+:root {
+  --body-font:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --header-font:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --code-font:
+    "JetBrains Mono", "Cascadia Code", "Fira Code", "SF Mono", Menlo,
+    Consolas, "Liberation Mono", monospace;
+}
+
+/* ---- Forced light mode --------------------------------------------- */
+:root[data-theme="light"] {
+  --primary-color:    #3b3b8c;
+  --primary-medium:   #8585c5;
+  --primary-light:    #eaeaf5;
+  --secondary-color:  #5e5eb8;
+  --text-color:       #23272e;
+  --bg-color:         #ffffff;
+  --gradient-top:     #ffffff;
+  --gradient-bottom:  #ffffff;
+  --component-color:  var(--primary-color);
+  --component-area-bg:var(--primary-light);
+  --component-hover:  var(--secondary-color);
+  --component-border: var(--primary-medium);
+  --subtle-highlight: rgba(0, 0, 0, 0.05);
+  color-scheme: light;
+}
+
+/* ---- Forced dark mode ---------------------------------------------- */
+:root[data-theme="dark"] {
+  --primary-color:    #7878d6;
+  --primary-medium:   #5e5eb8;
+  --primary-light:    #2d333b;
+  --secondary-color:  #a3a3e6;
+  --text-color:       #e6edf3;
+  --bg-color:         #1f242b;
+  --gradient-top:     #1f242b;
+  --gradient-bottom:  #23272e;
+  --component-color:  var(--primary-color);
+  --component-area-bg:var(--primary-light);
+  --component-hover:  var(--secondary-color);
+  --component-border: var(--primary-medium);
+  --subtle-highlight: rgba(255, 255, 255, 0.15);
+  color-scheme: dark;
+}
+
+/* ---- Toggle-button affordance in the top nav ----------------------- */
+#cp-theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin-left: .5rem;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: inherit;
+  text-decoration: none;
+  user-select: none;
+}
+#cp-theme-toggle:hover { color: var(--secondary-color); }
