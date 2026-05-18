@@ -552,42 +552,50 @@ lazy val docs: Project = project
     //   - Top nav: home -> https://www.constructive.dev/, plus a
     //     GitHub icon link to the repo.
     tlSiteHelium ~= {
-      import laika.ast.{ Image, Path }
+      import laika.ast.{Image, Path}
       import laika.helium.config.ImageLink
       import laika.theme.config.Color
-      _.all.themeColors(
-        primary       = Color.hex("3b3b8c"),
-        primaryMedium = Color.hex("8585c5"),
-        primaryLight  = Color.hex("eaeaf5"),
-        secondary     = Color.hex("5e5eb8"),
-        text          = Color.hex("23272e"),
-        background    = Color.hex("ffffff"),
-        bgGradient    = (Color.hex("ffffff"), Color.hex("ffffff")),
-      ).site.darkMode.themeColors(
-        primary       = Color.hex("7878d6"),
-        primaryMedium = Color.hex("5e5eb8"),
-        primaryLight  = Color.hex("2d333b"),
-        secondary     = Color.hex("a3a3e6"),
-        text          = Color.hex("e6edf3"),
-        background    = Color.hex("1f242b"),
-        bgGradient    = (Color.hex("1f242b"), Color.hex("23272e")),
-      )
-      // NB: Helium.fontFamilies wraps the value in
-      //   "<value>", sans-serif    /  "<value>", monospace
-      // which breaks any comma-separated stack we pass. The
-      // --body-font / --header-font / --code-font CSS vars are
-      // overridden in site/docs/static/cp-theme.css instead.
-      .site.topNavigationBar(
-        // Home link points back at the main brand site, using the
-        // constructive.dev favicon as the mark. GenericSiteSettings
-        // already adds a GitHub IconLink from scmInfo, so we don't
-        // add one explicitly here (otherwise we get duplicates).
-        homeLink = ImageLink.external(
-          "https://www.constructive.dev/",
-          Image.external("https://www.constructive.dev/assets/img/favicon.svg"),
-        ),
-      ).site.internalCSS(Path.Root / "static" / "cp-theme.css")
-        .site.internalJS(Path.Root / "static" / "cp-theme-toggle.js")
+      _.all
+        .themeColors(
+          primary = Color.hex("3b3b8c"),
+          primaryMedium = Color.hex("8585c5"),
+          primaryLight = Color.hex("eaeaf5"),
+          secondary = Color.hex("5e5eb8"),
+          text = Color.hex("23272e"),
+          background = Color.hex("ffffff"),
+          bgGradient = (Color.hex("ffffff"), Color.hex("ffffff")),
+        )
+        .site
+        .darkMode
+        .themeColors(
+          primary = Color.hex("7878d6"),
+          primaryMedium = Color.hex("5e5eb8"),
+          primaryLight = Color.hex("2d333b"),
+          secondary = Color.hex("a3a3e6"),
+          text = Color.hex("e6edf3"),
+          background = Color.hex("1f242b"),
+          bgGradient = (Color.hex("1f242b"), Color.hex("23272e")),
+        )
+        // NB: Helium.fontFamilies wraps the value in
+        //   "<value>", sans-serif    /  "<value>", monospace
+        // which breaks any comma-separated stack we pass. The
+        // --body-font / --header-font / --code-font CSS vars are
+        // overridden in site/docs/static/cp-theme.css instead.
+        .site
+        .topNavigationBar(
+          // Home link points back at the main brand site, using the
+          // constructive.dev favicon as the mark. GenericSiteSettings
+          // already adds a GitHub IconLink from scmInfo, so we don't
+          // add one explicitly here (otherwise we get duplicates).
+          homeLink = ImageLink.external(
+            "https://www.constructive.dev/",
+            Image.external("https://www.constructive.dev/assets/img/favicon.svg"),
+          )
+        )
+        .site
+        .internalCSS(Path.Root / "static" / "cp-theme.css")
+        .site
+        .internalJS(Path.Root / "static" / "cp-theme-toggle.js")
     },
   )
 
