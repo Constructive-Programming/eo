@@ -549,11 +549,18 @@ lazy val docs: Project = project
     //     $cp-sans / $cp-mono CSS variables in the main site.
     //   - OS-driven dark mode (prefers-color-scheme), augmented by a
     //     manual toggle injected from site/laika/js/cp-theme-toggle.js.
-    //   - Top nav: home -> https://www.constructive.dev/, plus a
-    //     GitHub icon link to the repo.
+    //   - Top nav: keep the Helium default home link (the small
+    //     home icon), and add an explicit pair of icons on the right
+    //     — constructive.dev favicon (back to the brand site) first,
+    //     GitHub source link second. To keep the favicon ahead of
+    //     the GitHub icon in display order, we suppress the GitHub
+    //     IconLink that `GenericSiteSettings` auto-derives from
+    //     `scmInfo` (it would otherwise prepend and force the wrong
+    //     order) and re-add it ourselves inside this call.
+    scmInfo := None,
     tlSiteHelium ~= {
       import laika.ast.{Image, Path}
-      import laika.helium.config.ImageLink
+      import laika.helium.config.{HeliumIcon, IconLink, ImageLink, TextLink}
       import laika.theme.config.Color
       _.all
         .themeColors(
@@ -583,14 +590,25 @@ lazy val docs: Project = project
         // overridden in site/docs/static/cp-theme.css instead.
         .site
         .topNavigationBar(
-          // Home link points back at the main brand site, using the
-          // constructive.dev favicon as the mark. GenericSiteSettings
-          // already adds a GitHub IconLink from scmInfo, so we don't
-          // add one explicitly here (otherwise we get duplicates).
-          homeLink = ImageLink.external(
-            "https://www.constructive.dev/",
-            Image.external("https://www.constructive.dev/assets/img/favicon.svg"),
-          )
+          // Home link: project name as a text link to the docs root.
+          // Helium's default home link (`DynamicHomeLink.default`)
+          // expects a configured landing page; we don't have one.
+          homeLink = TextLink.internal(Path.Root / "index.md", "cats-eo"),
+          // Right-side nav: constructive.dev favicon (back to brand
+          // site) first, GitHub source link second. Order matters —
+          // the auto-derived IconLink from scmInfo was suppressed
+          // above (scmInfo := None) so this list is the full set in
+          // the rendered order.
+          navLinks = Seq(
+            ImageLink.external(
+              "https://www.constructive.dev/",
+              Image.external("https://www.constructive.dev/assets/img/favicon.svg"),
+            ),
+            IconLink.external(
+              "https://github.com/Constructive-Programming/eo",
+              HeliumIcon.github,
+            ),
+          ),
         )
         .site
         .internalCSS(Path.Root / "static" / "cp-theme.css")
