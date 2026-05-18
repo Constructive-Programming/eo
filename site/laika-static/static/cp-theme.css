@@ -84,3 +84,20 @@
   user-select: none;
 }
 #cp-theme-toggle:hover { color: var(--secondary-color); }
+
+/* ---- Right-nav constructive.dev favicon link ----------------------
+ * The favicon SVG ships with viewBox="0 0 64 64" but no explicit
+ * width or height attribute, so the browser renders it at 0 unless
+ * we give it an explicit size. Match the GitHub icon's visual
+ * weight: about 1.5rem square, vertically centered with the rest
+ * of the nav row.
+ */
+#top-bar .row.links .image-link {
+  display: inline-flex;
+  align-items: center;
+  height: var(--top-bar-height);
+}
+#top-bar .row.links .image-link img {
+  width: 1.5rem;
+  height: 1.5rem;
+}
