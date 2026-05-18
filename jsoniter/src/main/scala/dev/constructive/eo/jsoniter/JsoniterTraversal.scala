@@ -1,7 +1,6 @@
 package dev.constructive.eo.jsoniter
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonValueCodec, readFromSubArray}
-
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, JsonValueCodec}
 import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.optics.Optic
 

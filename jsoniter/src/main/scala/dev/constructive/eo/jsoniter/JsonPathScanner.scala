@@ -1,5 +1,15 @@
 package dev.constructive.eo.jsoniter
 
+// Project policy bans `return` (DisableSyntax.return). This module is the
+// one deliberate exception: every method is a hot bytecode-level scan
+// that short-circuits on miss / hit. Translating each `return -1`,
+// `return pos + 1`, etc. into nested if/else or an outer @tailrec
+// helper would compile to the same JVM control flow but cost a lot of
+// readability — the imperative shape mirrors the JSON grammar the
+// scanner walks. Suppression is file-wide; do not lift these `return`s
+// elsewhere without re-reading this note.
+// scalafix:off DisableSyntax.return
+
 /** Hand-rolled JSON byte scanner. Resolves a [[PathStep]] list against an `Array[Byte]` JSON
   * document and returns the byte span `[start, end)` of the resolved value, or `-1` for the start
   * if the path doesn't match.
