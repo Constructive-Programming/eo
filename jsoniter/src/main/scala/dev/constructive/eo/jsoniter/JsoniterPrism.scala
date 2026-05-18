@@ -1,7 +1,6 @@
 package dev.constructive.eo.jsoniter
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonValueCodec, readFromSubArray, writeToArray}
-
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, writeToArray, JsonValueCodec}
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 

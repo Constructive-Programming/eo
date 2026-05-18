@@ -4,12 +4,11 @@ import scala.language.implicitConversions
 
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import org.specs2.mutable.Specification
-
-import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.data.MultiFocus.given
+import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
+import org.specs2.mutable.Specification
 
 /** Phase-1.5 spike for `JsoniterTraversal`. Exercises:
   *
