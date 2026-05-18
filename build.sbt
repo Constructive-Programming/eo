@@ -513,6 +513,16 @@ lazy val docs: Project = project
   .settings(
     name := "cats-eo-docs",
     publish / skip := true,
+    // Disable sbt-typelevel-site's default ci.yml "Publish site" step.
+    // That step pushes the rendered site to a `gh-pages` branch via
+    // `peaceiris/actions-gh-pages`, but GitHub Pages is disabled on
+    // this repo — `gh-pages` is consumed by nothing. Production is
+    // served from Cloudflare Pages via .github/workflows/deploy-site.yml.
+    // Leaving the default on means every push to main also pushes a
+    // dead site to gh-pages, churns Dependabot on the peaceiris
+    // version, and burns CI minutes.
+    tlSitePublishBranch := None,
+    tlSitePublishTags := false,
     // Laika's input tree is mdoc's output by default. Append a
     // `laika-static/` sibling so we can ship hand-authored CSS / JS
     // (under `static/`) without putting them through mdoc, which
