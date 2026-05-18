@@ -3,24 +3,39 @@ name: Deploy docs site
 # Builds the Laika/mdoc site via `sbt docs/tlSite` and publishes
 # the resulting static HTML to Cloudflare Pages.
 #
-# Two trigger paths:
+# Three trigger paths:
+#   - Pull request            → preview deployment tagged with the
+#                               head branch name; sticky comment lands
+#                               on the PR with the deployment URL.
 #   - Push to `main`           → preview deployment tagged `main-<sha>`
 #   - Tag push `v*`            → production deployment pinned to
 #                                the release version
 #
-# Both flows use the same Pages project (`cats-eo-docs` by
+# All three flows use the same Pages project (`cats-eo-docs` by
 # default); Cloudflare assigns each non-production deployment its
 # own preview URL while the production URL always reflects the
 # latest `v*` tag.
+#
+# Fork-PR caveat: secrets aren't exposed to workflows triggered by
+# PRs from forks, so this job silently no-ops for fork PRs. All
+# current contributors push branches inside the same repo, so this
+# is acceptable. Switch to `pull_request_target` if external
+# contributors need previews (with the usual security caveats).
 
 on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize]
   push:
     branches: [main]
     tags: [v*]
   workflow_dispatch:
 
 concurrency:
-  group: deploy-site-${{ github.ref }}
+  # Group by branch / PR so a new push to the same PR cancels the
+  # in-flight build. `github.head_ref` is set on PR events;
+  # `github.ref` covers pushes and tags.
+  group: deploy-site-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -28,12 +43,18 @@ jobs:
     name: Build and deploy to Cloudflare Pages
     runs-on: ubuntu-22.04
     timeout-minutes: 30
+    # Skip for PRs from forks — they can't access the Cloudflare
+    # secrets and would fail noisily.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       # `pages deploy` only needs a Cloudflare API token, but
       # keeping permissions minimal closes the "compromised
-      # workflow can push to the repo" blast radius.
+      # workflow can push to the repo" blast radius. PR runs also
+      # need pull-requests:write so the sticky comment step can
+      # post / update its message.
       contents: read
       deployments: write
+      pull-requests: write
     steps:
       - name: Checkout current branch
         uses: actions/checkout@v6
@@ -54,11 +75,29 @@ jobs:
         run: sbt 'docs/tlSite'
 
       - name: Deploy to Cloudflare Pages
+        id: deploy
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # `github.head_ref` is the source branch on PR events;
+          # falls back to `github.ref_name` (`main`, `v0.x.y`, etc.)
+          # on push events.
           command: >-
             pages deploy site/target/docs/site
             --project-name=${{ vars.CLOUDFLARE_PAGES_PROJECT || 'cats-eo-docs' }}
-            --branch=${{ github.ref_name }}
+            --branch=${{ github.head_ref || github.ref_name }}
+
+      - name: Post preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: cloudflare-pages-preview
+          message: |
+            :rocket: **Cloudflare Pages preview** for `${{ github.head_ref }}` is live:
+
+            ${{ steps.deploy.outputs.deployment-url }}
+
+            ${{ steps.deploy.outputs.pages-deployment-alias-url && format('Branch alias: {0}', steps.deploy.outputs.pages-deployment-alias-url) || '' }}
+
+            <sub>Built from commit `${{ github.event.pull_request.head.sha }}` · updated on every push.</sub>
