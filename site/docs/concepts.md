@@ -195,8 +195,10 @@ flowchart LR
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
 ```
 
-`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) but no
-inbound, so chains reach it only via `Fold` at construction time.
+`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) and one
+restricted inbound (`MultiFocus[F] → Forget[F]`, the `T = Unit`
+read-only escape); chains otherwise reach it via `Fold` at
+construction time.
 `MultiFocus[F]` covers five v1 carriers (`AlgLens[F]`,
 `Kaleidoscope`, `Grate`, `PowerSeries`, `FixedTraversal[N]`) post-
 fold; sub-shapes are selected by the choice of `F` (e.g.

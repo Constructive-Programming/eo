@@ -38,13 +38,14 @@ flowchart TD
   AffineFold --> Fold
   Traversal --> Fold
 
-  %% MultiFocus[F] is a composition sink with five sub-shapes
+  %% MultiFocus[F] is a near-terminal node with five sub-shapes
   %% selected by F: AlgLens (F: Functor / Foldable / Traverse),
   %% Kaleidoscope (F: Apply aggregates), Grate (F = Function1[X0, *]),
   %% PowerSeries (F = PSVec, the Traversal.each carrier), and
   %% FixedTraversal[N] (F = Function1[Int, *] for the .{two,three,four}
   %% factories). Inbound bridges from every classical family land
-  %% here; the only outbound is to Setter via multifocus2setter.
+  %% here; outbound goes to Setter via multifocus2setter, plus a
+  %% read-only T=Unit escape to Forget[F] via multifocus2forget.
   %% Dotted edges mark *degraded* conversions where the result loses
   %% information the original carrier carried.
   Iso --> MultiFocus["MultiFocus[F]"]

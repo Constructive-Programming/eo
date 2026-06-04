@@ -3,7 +3,7 @@
 A JMH harness comparing `cats-eo` optics against
 [Monocle](https://www.optics.dev/Monocle/) on the operations both
 libraries implement, plus EO-only benches for the features Monocle
-has no equivalent for (`PowerSeries`, `JsonPrism`, `JsonTraversal`).
+has no equivalent for (`MultiFocus[PSVec]` traversals, `JsonPrism`, `JsonTraversal`).
 
 **The `benchmarks/` sub-project is deliberately outside the root
 aggregator** — `sbt compile` and `sbt test` skip it. Run explicitly.
@@ -72,14 +72,19 @@ Specifically — the numbers are only meaningful when:
 
 | Bench class              | Subject | Monocle equivalent |
 |--------------------------|---------|--------------------|
-| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/32/256/1024) | None. PowerSeries is the carrier behind EO's cross-optic composition. |
+| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/32/256/1024) | None. The `MultiFocus[PSVec]` carrier is the mechanism behind EO's cross-optic composition. |
 | `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/32/256 × 4-dept fanout) | None. Stress-tests tree-of-traversals composition. |
 | `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/64/512) | None. Regression oracle for Prism miss-branch plumbing. |
 | `JsonPrismBench`         | `JsonPrism.modify` at depths 1/2/3 | None. Cursor-backed JSON navigation is cats-eo specific. |
 | `JsonPrismWideBench`     | Same on wide (8/14/6 field) records   | None |
 | `JsonTraversalBench`     | `codecPrism[Basket].items.each.name.modify` over N elements | None |
+| `MultiFocusBench`        | `MultiFocus[List]` (`fromLensF`) vs `MultiFocus[PSVec]` (`Traversal.each`) on the same `Lens → List/each → Lens` chain (sweeps 4/32/256/1024), plus `collectMap`/`collectList` aggregators and `MultiFocus.tuple` 3-/6-slot modifies | None. The unified carrier that absorbed the v1 AlgLens/Kaleidoscope/Grate/PowerSeries families. |
+| `AvroOpticsBench`        | `AvroPrism.modifyUnsafe`/`getOptionUnsafe` at depths 1/3 over an `IndexedRecord`, paired against a native kindlings decode-modify-encode round-trip; plus an `Ior`-bearing `modify` row | None. Path-stepped Avro field navigation is cats-eo specific. |
+| `JsoniterBench`         | `eo-jsoniter` vs `eo-circe` read/write at depths 3/4, miss path, `[*]` fold-sum, and `replace`/`modify` writes | None. Schema-free direct-buffer JSON navigation. |
 
-All benches share the same shape: a paired `eoXxx` / `mXxx` (or `naiveXxx`) method per metric, so the generated JMH report shows them side-by-side in one table.
+All benches share the same shape: a paired `eoXxx` / `mXxx` (or `naiveXxx` / `nativeXxx` / `jXxx`) method per metric, so the generated JMH report shows them side-by-side in one table.
+
+`AffineFoldBench` (`AffineFold.getOption` at depths 0/3/6 against Monocle's `Optional.getOption`) rounds out the Monocle-paired set; Monocle 3.x ships no standalone `AffineFold`, so it sits between the paired and EO-only tables.
 
 ### Shared fixture
 
@@ -96,8 +101,8 @@ Not every optic family composes in EO via the universal `Optic.andThen`:
 - **`Lens.andThen(Lens)`** — `Tuple2` carrier, composes cleanly.
 - **`Prism.andThen(Prism)`** — `Either` carrier, composes cleanly.
 - **`Iso.andThen(Iso)`** — `Forgetful` carrier, composes cleanly.
-- **`Traversal.andThen` via `PowerSeries`** — works, but pays the
-  `PowerSeries` machinery cost (see `PowerSeriesBench`).
+- **`Traversal.andThen` via `MultiFocus[PSVec]`** — works, but pays the
+  `MultiFocus[PSVec]` machinery cost (see `PowerSeriesBench`).
 - **`Lens.andThen(Optional)`** — works via cross-carrier `.andThen`. `Affine.assoc[X, Y]` carries no Tuple bound, so a `Morph[Tuple2, Affine]` lifts the Lens chain into the Affine carrier automatically; no explicit `.morph` step on the call site.
 - **`Getter.andThen(Getter)`** — blocked: Getter's `T = Unit` vs the outer `B = A` in the `Optic.andThen` slot. The bench nests `get` calls manually: `leaf.get(n1.get(n2.get(...)))`.
 - **`Setter.andThen(Setter)`** — blocked: `SetterF` has no `AssociativeFunctor` instance. The bench nests `modify` calls: `n1.modify(leafSetter.modify(f))`.
@@ -116,6 +121,6 @@ Current ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries--trav
 - **`PowerSeriesNestedBench` (5-hop tree):** 5.4× at N=4 → 2.4× at N=256.
 - **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.5× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
 
-Under the hood the hot paths use a private `PSSingleton` protocol — morphed Lens/Prism/Optional inners `collectTo` into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders without per-element `PowerSeries` or `PSVec.Single` wrappers. The `PSSingletonAlwaysHit` refinement (for Lens morphs, which always hit) additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
+Under the hood the hot paths use two private fast-path markers on the `MultiFocus[PSVec]` carrier. Prism/Optional morphs mix in `MultiFocusPSMaybeHit` (maybe-hit), whose `collectTo` writes directly into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders (`IntArrBuilder` / `ObjArrBuilder`) without per-element `Either`/`Option` wrappers. Lens morphs mix in the carrier-wide `MultiFocusSingleton` (always-hit), which additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
 
 Use `Traversal.each` / `pEach` (carrier `MultiFocus[PSVec]`) for both single-pass element-wise modifies and chains that continue past the traversal — same optic, same `.modify`, with `.foldMap` for read-only aggregation and `.andThen` for downstream composition.

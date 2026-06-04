@@ -67,7 +67,7 @@ trait LowPriorityComposerInstances:
 
   /** Transitive derivation via `Tuple2` as the intermediate carrier: given `F → Tuple2` and
     * `Tuple2 → G`, derive `F → G`. Fires cleanly for Forgetful-origin chains to any target with a
-    * `Composer[Tuple2, _]` direct (Affine / SetterF / PowerSeries / MultiFocus[F]).
+    * `Composer[Tuple2, _]` direct (Affine / SetterF / MultiFocus[F] / MultiFocus[PSVec]).
     *
     * @group Instances
     */
