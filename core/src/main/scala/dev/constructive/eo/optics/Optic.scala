@@ -121,9 +121,9 @@ object Optic:
       val from: A => A = identity
 
   /** Cross-carrier `.andThen` — picks the direction via a summoned [[Morph]] when the two optics'
-    * carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), cats-eo
-    * ships no bidirectional Composer pairs, so at most one Morph applies per carrier pair. That one
-    * pair can make a `Forget[F]` ⇄ `MultiFocus[F]` chain ambiguous; it's resolved via the explicit
+    * carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), cats-eo ships
+    * no bidirectional Composer pairs, so at most one Morph applies per carrier pair. That one pair
+    * can make a `Forget[F]` ⇄ `MultiFocus[F]` chain ambiguous; it's resolved via the explicit
     * `Composer[..].to(o)` form (see `multifocus2forget`).
     *
     * @example
