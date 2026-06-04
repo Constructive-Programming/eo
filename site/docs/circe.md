@@ -26,9 +26,9 @@ leaf is changing. For wide records the work is mostly wasted.
 circe's `JsonObject` / array representation, modifying only
 the focused leaf and rebuilding the parents on the way up.
 The
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala)
+[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
 and
-[`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonTraversalBench.scala)
+[`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonTraversalBench.scala)
 suites document a roughly 2× speedup at every depth and
 every array size.
 
@@ -389,4 +389,4 @@ path-level diagnostic.
 For the full failure-mode matrix (missing paths, non-array
 focuses, empty collections, out-of-range indices), see the
 behaviour
-[spec](https://github.com/Constructive-Programming/eo/blob/main/circe/src/test/scala/eo/circe/JsonPrismSpec.scala).
+[spec](https://github.com/Constructive-Programming/eo/blob/main/circe/src/test/scala/dev/constructive/eo/circe/JsonPrismSpec.scala).

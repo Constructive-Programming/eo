@@ -38,7 +38,7 @@ From cheapest to heaviest:
 | 1. **New concrete subclass on an existing carrier** | `class MyOptic[...] extends Optic[S, T, A, B, F]` — your own `type X`, `to`, `from` | Every generic extension the carrier already supports (`.get` / `.modify` / `.modifyA` / `.foldMap`), plus `.andThen` with every optic family that shares `F` — and, via cross-carrier `Morph`, with every family whose carrier has a `Composer[F, G]` bridge | Minutes. Zero runtime overhead versus the built-in subclasses — same typeclass dispatch |
 | 2. **Shadow generic extensions with fused class-level methods** | `inline def modify(f: A => B): S => T = …` on the concrete subclass | Callers who bind to the concrete type get the fused code; callers who bind to the generic `Optic` trait still route through the carrier. Both paths type-check — pick which one you need | Per hot-path method. Lets you skip the carrier round-trip without losing the trait contract |
 | 3. **New `Composer[F, G]` bridge** | A `given Composer[F, G]` that expresses an `Optic[…, F]` as an `Optic[…, G]` | `.andThen` between any optic in `F` and any optic in `G`, in either direction, via the stock `Morph` instances | Hours. You pick the direction of expression; `Morph` picks the direction of composition |
-| 4. **New carrier + full typeclass instance set** | A new `F[_, _]` plus `AssociativeFunctor[F, X, Y]` and whichever `Forgetful*` typeclasses the operations you want require | A new carrier that's a first-class citizen alongside `Tuple2` / `Either` / `Affine` / `PowerSeries` | Days. Only when the existing carriers genuinely can't express your shape |
+| 4. **New carrier + full typeclass instance set** | A new `F[_, _]` plus `AssociativeFunctor[F, X, Y]` and whichever `Forgetful*` typeclasses the operations you want require | A new carrier that's a first-class citizen alongside `Tuple2` / `Either` / `Affine` / `MultiFocus[F]` | Days. Only when the existing carriers genuinely can't express your shape |
 
 Axis 1 + 2 together is the sweet spot for most domain optics —
 you use what already works, and you override only the methods
@@ -76,11 +76,11 @@ directly via `Json.asObject` and `JsonObject.add`, bypassing
 
 ```scala
 final class JsonPrism[A] private[circe] (
-    private[circe] val path:    Array[PathStep],   // flat root-to-leaf path
-    private[circe] val encoder: Encoder[A],
-    private[circe] val decoder: Decoder[A],
-) extends Optic[Json, Json, A, A, Either]:
-  type X = (DecodingFailure, HCursor)              // miss branch carries diagnostics
+    private[circe] val focus: JsonFocus[A]    // Leaf (flat path) or Fields (parent path + codecs)
+) extends Optic[Json, Json, A, A, Either],    // same carrier as Prism
+      JsonOpticOps[A],                        // the public modify / transform / place surface
+      Dynamic:                                // `.field` selector sugar
+  type X = (DecodingFailure, HCursor)         // miss branch carries diagnostics
 ```
 
 Look at what's picked here and what's not.
@@ -98,9 +98,11 @@ Look at what's picked here and what's not.
   value — the cross-carrier machinery handles both directions,
   without a single line of new `Composer` code in
   `cats-eo-circe`.
-- **Storage.** An `Array[PathStep]` — a cheap flat
+- **Storage.** A `JsonFocus[A]` — either a `Leaf` (a flat
+  `Array[PathStep]` root-to-leaf path) or a `Fields` (a parent
+  path plus per-field codecs). The path is a cheap flat
   representation that copies-and-extends on each `.field(_.x)`
-  step. Stored once at construction; no closure allocation
+  step, stored once at construction; no closure allocation
   per call.
 - **Existential `X`.** The miss-branch's `(DecodingFailure,
   HCursor)` gives generic-path callers both a diagnostic
@@ -109,28 +111,23 @@ Look at what's picked here and what's not.
   unchanged on a miss.
 
 The full code is
-[`circe/src/main/scala/eo/circe/JsonPrism.scala`](https://github.com/Constructive-Programming/eo/blob/main/circe/src/main/scala/eo/circe/JsonPrism.scala).
+[`circe/src/main/scala/dev/constructive/eo/circe/JsonPrism.scala`](https://github.com/Constructive-Programming/eo/blob/main/circe/src/main/scala/dev/constructive/eo/circe/JsonPrism.scala).
 
 ### The fused hot path
 
-The class body shadows the generic Optic extensions with
-`inline` methods that walk the path directly:
+The concrete class supplies six per-`Json` hooks — three
+Ior-bearing and three silent — that walk the path directly, and
+`JsonOpticOps[A]` wires them into the public surface:
 
 ```scala
-inline def modify[X](f: A => A): Json => Json =
-  json => modifyImpl(json, f)
+// Hooks the carrier supplies (JsonPrism's class body):
+protected def modifyImpl(json: Json, f: A => A): Json                          // silent hot path
+protected def modifyIor (json: Json, f: A => A): Ior[Chain[JsonFailure], Json] // failure-accumulating
+// …transformImpl / placeImpl and their *Ior counterparts likewise.
 
-inline def transform[X](f: Json => Json): Json => Json =
-  json => transformImpl(json, f)
-
-inline def place[X](a: A): Json => Json =
-  json => placeImpl(json, a)
-
-inline def reverseGet(a: A): Json = encoder(a)
-
-inline def getOption(json: Json): Option[A] =
-  val c = navigateCursor(json)
-  c.as[A](using decoder).toOption
+// Public surface JsonOpticOps derives from those hooks:
+def modify(f: A => A):       (Json | String) => Ior[Chain[JsonFailure], Json]  // observable default
+def modifyUnsafe(f: A => A): (Json | String) => Json                           // silent escape hatch
 ```
 
 `modifyImpl` is a pair of `while` loops: walk down collecting
@@ -193,11 +190,11 @@ Some domain optics don't need the full Optic trait integration.
 `JsonTraversal` — the multi-focus edit under `.each` — is one
 of them.
 
-### Why not PowerSeries
+### Why not `MultiFocus[PSVec]`
 
-cats-eo's generic multi-focus carrier is `PowerSeries`. You
+cats-eo's generic multi-focus carrier is `MultiFocus[PSVec]`. You
 could express `codecPrism[Basket].items.each.name` as a
-PowerSeries-carrier optic — but PowerSeries pays per-element
+`MultiFocus[PSVec]`-carrier optic — but that carrier pays per-element
 bookkeeping to support arbitrary downstream composition, and
 for the JSON-array case you know the structure: a flat array
 under a known prefix, with a fixed per-element suffix.
@@ -206,21 +203,22 @@ under a known prefix, with a fixed per-element suffix.
 
 ```scala
 final class JsonTraversal[A] private[circe] (
-    private[circe] val prefix:  Array[PathStep],   // root → array
-    private[circe] val suffix:  Array[PathStep],   // element → leaf
-    private[circe] val encoder: Encoder[A],
-    private[circe] val decoder: Decoder[A],
-) extends Dynamic                                  // NOT Optic
+    private[circe] val prefix: Array[PathStep],   // root → array, walked once
+    private[circe] val focus:  JsonFocus[A],       // per-element (Leaf or Fields)
+) extends JsonOpticOps[A],                          // same Ior + *Unsafe surface as JsonPrism
+      Dynamic:                                      // NOT Optic
 ```
 
-`JsonTraversal` does **not** extend `Optic`. It has its own
-surface — `modify`, `transform`, `getAll` — and its own path
-walker that traverses the prefix once, maps the array, and
-unwinds. For a traversal whose only integration surface is
-"call me from a JsonPrism via `.each`" and whose exit point is
-a normal `Json`, stepping outside the Optic trait is the
-correct call: you pay zero overhead for a contract you weren't
-going to use.
+`JsonTraversal` does **not** extend `Optic`. It reuses the same
+`JsonOpticOps` surface as `JsonPrism` — the Ior-bearing
+`modify` / `transform` / `place` plus their `*Unsafe` escapes, and a
+multi-focus `getAll` read — over its own path walker that traverses
+the prefix once, maps the array, and unwinds. For a traversal whose
+only integration surface is "call me from a JsonPrism via `.each`" and
+whose exit point is a normal `Json`, stepping outside the Optic *trait*
+is the correct call: you pay zero overhead for the trait contract you
+weren't going to use, while still sharing the failure-aware call
+surface.
 
 This is axis 4 — a new domain-specific carrier — but the
 "carrier" here is JSON-specific and doesn't need to integrate
@@ -237,11 +235,11 @@ because nothing downstream of it needs the integration.
 
 Both domain optics deliver the expected constant factor over
 the decode / re-encode baseline —
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala)
+[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
 lands at ~2× across depths 1/2/3 and ~1× at the "wide"
 (28-field) shape where the naive decoder already touches
 every field;
-[`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonTraversalBench.scala)
+[`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonTraversalBench.scala)
 holds ~2× across array sizes 8 / 64 / 512. See the
 [Benchmarks](benchmarks.md) page's JsonPrism and JsonTraversal
 sections for the full tables.

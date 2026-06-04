@@ -516,18 +516,22 @@ for the cost tradeoff.
 
 ### Composer: `Iso` as the inner of `Traversal.each`
 
-`Traversal.each[T, A].andThen(iso)` composes cleanly. The direct
-`Composer[Forgetful, MultiFocus[F]]` given (`forgetful2multifocus`)
-ships in `dev.constructive.eo.data.MultiFocus` and takes priority
-over any transitive path (`Forgetful → Tuple2 → MultiFocus[PSVec]`
-or `Forgetful → Either → MultiFocus[PSVec]`) that would otherwise
-be ambiguous.
+`Traversal.each[T, A].andThen(iso)` composes cleanly. `Traversal.each`
+is `MultiFocus[PSVec]`, and the generic `forgetful2multifocus` given is
+constrained `[F[_]: Applicative: Foldable]` — which PSVec does not
+satisfy (it ships `Functor` / `Foldable` / `Traverse`, not
+`Applicative`). So the chain resolves through the PSVec-specialised
+bridge `tuple2multifocusPSVec` via `Composer.chainViaTuple2`
+(`Forgetful → Tuple2 → MultiFocus[PSVec]`), not through the generic
+direct given. The `forgetful2multifocus` direct given is what takes
+priority for the `Applicative + Foldable` carriers (`List`, `Vector`,
+`Option`, …).
 
 Same story for `Iso` as the inner of an `Optional` (Affine carrier)
-— direct `Composer[Forgetful, Affine]` ships beside the carrier.
-Earlier revisions of cats-eo required an explicit `.morph[Tuple2]`
-step for these chains; post-Unit 16 it's a one-hop `.andThen` call
-with no ceremony.
+— but note there is **no** direct `Composer[Forgetful, Affine]`. That
+chain resolves through the low-priority `chainViaTuple2` fallback
+(`Forgetful → Tuple2 → Affine`), and it's still a one-hop `.andThen`
+call with no ceremony.
 
 ## MultiFocus
 
@@ -546,8 +550,9 @@ same-carrier `.andThen` (per-`F` `AssociativeFunctor` instances).
 See the [MultiFocus reference](multifocus.md) for the unification
 narrative, the typeclass-gated capability matrix, and the
 composability profile (inbound bridges from every classical family,
-single outbound to `SetterF`, structurally-rejected
-`MultiFocus → Forgetful` / `MultiFocus → Forget[G]`). Worked
+outbound to `SetterF` plus a read-only `→ Forget[F]` escape, and
+structurally-rejected `MultiFocus → Forgetful` / `MultiFocus →
+Forget[G]` for `G ≠ F`). Worked
 examples ground each absorbed sub-shape in the cookbook:
 [Recipe A — Grate-shape](cookbook.md),
 [Recipe B — Kaleidoscope-shape](cookbook.md),
@@ -555,7 +560,7 @@ examples ground each absorbed sub-shape in the cookbook:
 
 ## Composition limits
 
-Beyond the MultiFocus-outbound sink documented above, several
+Beyond the near-terminal MultiFocus-outbound bridges documented above, several
 categories of pair are either intentionally **not** bridged in 0.1.0
 or only bridged through a user-opt-in side-channel. Each entry below
 states the structural shape, the rationale, and the idiomatic

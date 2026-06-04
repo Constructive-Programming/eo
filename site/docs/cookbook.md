@@ -338,7 +338,7 @@ userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
 ```
 
 The
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala)
+[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
 suite documents a 2× speedup at every depth over the
 decode / `.copy` / re-encode path. circe-optics' analogous
 `root.user.address.street` surface forces a full decode per

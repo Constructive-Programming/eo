@@ -209,9 +209,11 @@ the choice without cluttering the discipline surface.
 ## Composability profile
 
 `MultiFocus[F]` has shipped inbound bridges from every classical
-read-write family (conditional on `F`'s typeclass set) and a single
-outbound bridge to `SetterF`. Every other outbound direction is
-**structurally rejected** rather than absent — see
+read-write family (conditional on `F`'s typeclass set) and two
+outbound bridges: `→ SetterF` (write) and a restricted `→ Forget[F]`
+read-only escape (`multifocus2forget`, available only when
+`T = Unit`). The remaining outbound directions are **structurally
+rejected** rather than absent — see
 [Composition limits](#composition-limits) below.
 
 ### Inbound bridges
@@ -255,7 +257,7 @@ specialised by `F`:
   `MultiFocusPSMaybeHit` (Prism / Optional inners skip the
   per-element wrapper allocation).
 
-### Outbound — only to `SetterF`
+### Outbound — `SetterF` and a read-only `Forget[F]` escape
 
 ```scala mdoc:silent
 import dev.constructive.eo.Composer
@@ -279,11 +281,24 @@ site, not at the chain site. Same-carrier `setter.andThen(setter)`
 *does* work — see the [Setter section](optics.md#setter) for the
 `AssociativeFunctor[SetterF]` instance shipped in `SetterF.scala`.
 
+The second outbound bridge, `multifocus2forget[F]`, expresses a
+`MultiFocus[F]`-carrier optic as a read-only `Forget[F]` — discard the
+structural leftover, keep the focused `F[A]`. It is the structural
+inverse of the `forget2multifocus` inbound bridge above and ships
+*only* for `T = Unit` optics: once `Forget` drops the leftover it can't
+reconstruct a `T ≠ Unit` target, and that same `T = Unit` restriction is
+what keeps the bidirectional `Forget[F] ⇄ MultiFocus[F]` pair from making
+`Morph` resolution ambiguous (see [Composition
+limits](#composition-limits) below). It's the explicit-`Composer`
+companion to the carrier-wide `.foldMap` / `.headOption` / `.length`
+read methods.
+
 ### Composition limits
 
-Two further outbound directions are **structurally rejected** rather
-than absent. The rationale lives at the bottom of `MultiFocus.scala`
-and in
+One further outbound direction is **structurally rejected** outright,
+and the `→ Forget` direction is rejected only for a *different* effect
+(`G ≠ F`) — the same-`F` case ships as the `multifocus2forget` escape
+above. The rationale lives at the bottom of `MultiFocus.scala` and in
 [`docs/research/2026-04-23-composition-gap-analysis.md` §3.2.6](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md):
 
 - **`Composer[MultiFocus[F], Forgetful]`** (MultiFocus widens to
@@ -296,12 +311,15 @@ and in
   surfacing as ambiguous-implicit and breaking every
   `iso.andThen(multifocus)` call site. Workaround:
   `multiFocus.to(s)._2` for the read side.
-- **`Composer[MultiFocus[F], Forget[G]]`** (MultiFocus widens to
-  Traversal/Fold). Generic in `S, T, A, B`. The target carrier
-  forces the morphed `to` to produce `G[A]` from arbitrary `S`. Even
-  with `F = G` matching, the Composer has no place to thread the
-  `Foldable[G]` instance through the Composer surface. Users wanting
-  fold/traverse semantics on a MultiFocus's slots construct the
+- **`Composer[MultiFocus[F], Forget[G]]` for `G ≠ F`** (MultiFocus
+  widens to a *different* effect's Traversal/Fold). Generic in
+  `S, T, A, B`. The morphed `to` has the MultiFocus's `F[A]` in hand
+  but must yield `G[A]`, and with no relationship between `F` and `G`
+  there's no way to convert one to the other. The same-`F` case
+  (`Forget[F]`) is exactly the `multifocus2forget` read-only escape
+  documented above (restricted to `T = Unit`), so it ships rather than
+  being rejected. Users wanting fold/traverse semantics on a
+  MultiFocus's slots reach for that escape, construct the
   `Forget[F]`-carrier optic directly, or stay on MultiFocus and use
   `.foldMap` / `.modifyA`.
 

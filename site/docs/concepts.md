@@ -167,10 +167,12 @@ lifting both sides into `Affine`, which both carriers reach.
 
 Every edge below is a shipping `Composer[F, G]` given; solid
 arrows are tier-1 atomic bridges, dashed arrows are tier-2
-transitive derivations via `Composer.chainViaTuple2`. Terminal
-nodes (`SetterF`, `MultiFocus[F]`) sink — they have no outbound
-`Composer` instance other than `MultiFocus[F] → SetterF` — so
-chains must land there last.
+transitive derivations via `Composer.chainViaTuple2`. `SetterF`
+is the only true sink — no outbound `Composer`. `MultiFocus[F]`
+is near-terminal: its only outbound bridges are `→ SetterF`
+(write) and a restricted `→ Forget[F]` read-only escape
+(`multifocus2forget`, available only when `T = Unit`) — so
+chains effectively land there last.
 
 ```mermaid
 flowchart LR
@@ -185,11 +187,11 @@ flowchart LR
   Affine --> MFocus
   ForgetF["Forget[F]"] --> MFocus
   MFocus --> SetterF
+  MFocus -.->|read-only, T=Unit| ForgetF
   Forgetful -.->|chainViaTuple2| Affine
   Forgetful -.->|chainViaTuple2| SetterF
   Forgetful -.->|chainViaTuple2| MFocus
   SetterF:::sink
-  MFocus:::sink
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
 ```
 
