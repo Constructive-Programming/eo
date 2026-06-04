@@ -77,7 +77,8 @@ class AvroOpticsBench extends JmhDefaults:
     val d = codec.decodeEither(deep3Record).toOption.get
     val updated =
       d.copy(d2 =
-        d.d2.copy(d1 = d.d2.d1.copy(atom = d.d2.d1.atom.copy(value = d.d2.d1.atom.value.toUpperCase)))
+        d.d2
+          .copy(d1 = d.d2.d1.copy(atom = d.d2.d1.atom.copy(value = d.d2.d1.atom.value.toUpperCase)))
       )
     codec.encode(updated).asInstanceOf[IndexedRecord]
 
