@@ -1,54 +1,41 @@
 # MultiFocus
 
-`MultiFocus[F][X, A] = (X, F[A])` — a structural leftover paired with
-an `F`-shaped focus. One carrier, classifier-shaped through the type
-parameter `F`, that absorbed five separate carriers in the lead-up
-to 0.1.0. This page is the consolidated reference: the unification
-narrative, the typeclass-gated capability matrix, the composability
-profile, and the historical landmarks.
+`MultiFocus[F][X, A] = (X, F[A])` is cats-eo's multi-focus carrier: a
+structural leftover `X` paired with an `F`-shaped bundle of foci. A
+single carrier, specialised through the type parameter `F`, backs
+every optic that focuses more than one value at once — traversals,
+grates, algebraic lenses, and aggregating (Kaleidoscope) reads.
+
+What you get: the optic's surface is exactly the intersection of cats's
+typeclass hierarchy on `F` with what the generic carrier body supports.
+Pick an `F` and the methods light up automatically — `.modify`
+(`Functor`), `.foldMap` (`Foldable`), `.modifyA` (`Traverse`), `.at(i)`
+(`Representable`), `.collectMap` / `.collectList` aggregation, and
+same-carrier `.andThen` — with no new carrier, law surface, or
+`AssociativeFunctor` instance to write.
 
 For the mechanical intro see [Optics → MultiFocus](optics.md#multifocus);
 for runnable patterns the [Cookbook](cookbook.md) ships three
 end-to-end recipes that exercise the prototypical Grate / Kaleidoscope /
 PowerSeries-downstream shapes.
 
-## The unification narrative
+## Sub-shapes
 
-Five carriers — `AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
-`FixedTraversal[N]` — each pairing a structural leftover with some
-flavour of focus container, all collapse pre-0.1.0 into the single
-`MultiFocus[F]` carrier. Each former carrier is now a sub-shape
-selected by the choice of `F`:
+The choice of `F` selects a sub-shape, each suited to a different
+multi-focus job:
 
-| Former carrier | Post-fold shape | Notes |
-|----------------|-----------------|-------|
-| `AlgLens[F]` | `MultiFocus[F]` for `F: Functor / Foldable / Traverse` | Direct rename. `F`-as-parameter encoding survived verbatim. |
-| `Kaleidoscope` | `MultiFocus[F]` for `F: Apply` aggregates | The path-dependent `FCarrier` member became a plain type parameter; `Reflector[F]` was deleted in favour of two extension methods (`.collectMap`, `.collectList`) — see [Q1 below](#why-two-collect-variants). |
-| `Grate` | `MultiFocus[Function1[X0, *]]` | The `(A, X => A)` pair collapsed into `(Unit, F.Representation => A)`; the lead-position field was empirically dead (see [Q1 of the Grate fold](#historical-landmarks) — 20% perf win on `.modify` from dropping it). |
-| `PowerSeries` | `MultiFocus[PSVec]` | The `(Snd[A], PSVec[B])` shape lost its `Snd` match-type vestige and gained the same-carrier `mfAssocPSVec` `AssociativeFunctor` instance. The parallel-array `AssocSndZ` representation survived inside the PSVec specialisation; both `MultiFocusSingleton` (AlwaysHit) and `MultiFocusPSMaybeHit` (Prism / Optional) fast-paths are preserved. |
-| `FixedTraversal[N]` | `MultiFocus[Function1[Int, *]]` | `Traversal.{two,three,four}` factories now produce the absorbed-Grate sub-shape over an `Int => A` lookup; same carrier as `MultiFocus.tuple`. |
+| Sub-shape | `F` | What it's for |
+|-----------|-----|---------------|
+| **`AlgLens[F]`** | `F: Functor / Foldable / Traverse` | Algebraic ("classifier") lenses — a focus computed as a fold / classification over the structure, broadcast back on write. |
+| **Kaleidoscope** | `F: Apply` | Aggregating reads — collapse every focus to one value via `.collectMap` / `.collectList`. |
+| **Grate** | `Function1[X0, *]` | Uniform rewrite across a fixed shape — homogeneous tuples and Naperian / representable containers (`MultiFocus.tuple` / `representable` / `representableAt`). |
+| **PowerSeries** | `PSVec` | Element-wise traversal of a collection with downstream `.andThen` composition — the `Traversal.each` carrier; carries the hand-tuned `mfAssocPSVec` fast paths (`MultiFocusSingleton` for Lens morphs, `MultiFocusPSMaybeHit` for Prism / Optional). |
+| **`FixedTraversal[N]`** | `Function1[Int, *]` | Fixed-arity traversal — the `Traversal.{two,three,four}` factories, same carrier as `MultiFocus.tuple`. |
 
-The empirical justification lives in four research spike documents
-referenced under [Historical landmarks](#historical-landmarks)
-below. Two headline numbers from those spikes:
-
-- **20% perf gain on Grate's `.modify`** from the lead-position
-  field deletion — the field was carried unconditionally by
-  every shipped Grate constructor but discarded by every shipped
-  `.from`. The post-fold `MultiFocus[Function1[X0, *]]` body
-  carries no equivalent.
-- **Composition matrix collapse from 145 U cells to 17 U cells**
-  in the gap analysis. Five separate "all U" rows (and matching
-  columns) became one `MultiFocus[F]` row + column with shipped
-  inbound bridges from every classical family. Carrier count:
-  pre-spike 14, post-fold 9.
-
-The pre-fold split was accidental complexity. Each carrier had been
-introduced for a real semantic distinction at construction time, but
-the runtime shape — pair of leftover and focus container — was
-identical in every case. Lifting `F` to a plain type parameter and
-letting the cats hierarchy supply `Functor` / `Foldable` / `Traverse`
-on demand collapsed the surface without losing any capability.
+All five share one runtime shape — a leftover paired with a focus
+container — so they live as a single carrier rather than five. See
+[Historical landmarks](#historical-landmarks) for that consolidation
+and its measured payoff.
 
 ## The general flexibility win
 
@@ -69,12 +56,11 @@ existential encoding lets the user add a new `F` and the existing
 file, no new law surface, no new `AssociativeFunctor` instance — the
 generic body in `MultiFocus.scala` covers it.
 
-The five-carrier collapse is the demonstration: each former carrier
-was just a different `F` plugged into the same shape. The `PSVec`
-case adds a hand-tuned same-carrier specialisation
-(`mfAssocPSVec`) for perf, but the *capability* set is the
-generic one, lit up by `cats.Functor[PSVec]` etc. shipped in the
-companion.
+The sub-shapes are the demonstration: each is just a different `F`
+plugged into the same shape. The `PSVec` case adds a hand-tuned
+same-carrier specialisation (`mfAssocPSVec`) for perf, but its
+*capability* set is the generic one, lit up by `cats.Functor[PSVec]`
+etc. shipped in the companion.
 
 ## The capability set
 
