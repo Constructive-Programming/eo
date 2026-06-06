@@ -68,9 +68,12 @@ jobs:
       - name: Run JMH
         # `inputs.*` are only populated for workflow_dispatch; the `|| 'default'`
         # fallbacks keep the step working when triggered by push too.
+        # NB: under sbt, JMH's working dir is the `benchmarks/` subproject, so
+        # `-rff jmh-results.json` writes to `benchmarks/jmh-results.json` at the
+        # repo level — which the summary / upload steps below read.
         run: |
           sbt -batch -Dsbt.color=false \
-            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true -rf json -rff benchmarks/jmh-results.json ${{ inputs.filter || '(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*' }}"
+            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true -rf json -rff jmh-results.json ${{ inputs.filter || '(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*' }}"
 
       - name: Render summary
         if: always()
