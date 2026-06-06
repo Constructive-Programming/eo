@@ -100,23 +100,33 @@ event — deliberately **deep** (`customer.address.street`, depth 3), **wide**
 (`customer.loyaltyId`) — drives every integration bench on the *same logical
 schema*, so the three byte/AST backends are directly comparable.
 
-Each metric ships every relevant baseline side-by-side in one report row:
+Each metric ships every relevant baseline side-by-side in one report row.
+The vocabulary is consistent across backends:
 
 - `eo*` / `eoIor*` — the EO optic (silent `*Unsafe` hot path and, where it
   differs, the default `Ior`-bearing surface).
-- `naive*` — decode the whole record, rebuild via `copy`, re-encode (what you'd
-  write without optics).
-- `native*` — the backend's own idiomatic path (circe `ACursor`, jsoniter
-  codec round-trip, Avro kindlings round-trip).
+- `naive*` — full decode → modify → re-encode; materialises the whole
+  record. The "what you'd write without optics" baseline, present in every
+  backend.
+- `native*` — a hand-optimized, backend-specific path that **avoids the full
+  read**. Only jsoniter ships one here: a `JsonReader` codec that walks to the
+  focus and `skip()`s every sibling. It's exactly what eo automates generically
+  — and a correctness guard in the bench's `@Setup` asserts it agrees with the
+  full decode. circe and avro have no separate `native*`; eo *is* their partial
+  walk.
+- `hcursor*` / `direct*` (circe only) — two ways to edit the circe AST without
+  decoding: `HCursor` (whose `.top` replays the zipper to rebuild — sometimes
+  *slower* than a full decode) vs direct `JsonObject` surgery (rebuild only the
+  touched parents).
 - `monocle*` — decode to the case class, run a Monocle optic, re-encode. Monocle
   has no byte/AST carrier, so it must pay the full round-trip — this is where
   EO's structural-edit advantage shows.
 
 | Bench class          | Foci | Baselines | Notes |
 |----------------------|------|-----------|-------|
-| `OrderCirceBench`    | `customer.address.street` modify; `lines[*].name` traversal | `eo`/`eoIor`/`naive`/`native` (ACursor)/`monocle` | circe `Json` AST |
-| `OrderJsoniterBench` | `customer.address.street` read+write; `lines[*].price` fold | `eo`/`native`/`monocle` | Raw `Array[Byte]`. `[*]` is read-only in jsoniter phase-1.5, so its array story is a fold, not a write traversal. |
-| `OrderAvroBench`     | `customer.address.street` read+write; `lines[*].name` write traversal | `eo`/`native`/`monocle` | `IndexedRecord`. `loyaltyId` omitted — kindlings encodes `Option` as a union navigated via `.union[Branch]`, not a transparent field. |
+| `OrderCirceBench`    | `customer.address.street` modify; `lines[*].name` traversal | `eo`/`eoIor`/`naive`/`hcursor`/`direct`/`monocle` | circe `Json` AST |
+| `OrderJsoniterBench` | `customer.address.street` read+write; `lines[*].price` fold | `eo`/`native` (partial scan, read only)/`naive`/`monocle` | Raw `Array[Byte]`. `[*]` is read-only in jsoniter phase-1.5, so its array story is a fold, not a write traversal. |
+| `OrderAvroBench`     | `customer.address.street` read+write; `lines[*].name` write traversal | `eo`/`naive`/`monocle` | `IndexedRecord`. `loyaltyId` omitted — kindlings encodes `Option` as a union navigated via `.union[Branch]`, not a transparent field. |
 
 `@Param size ∈ {8, 64, 512}` grows the surrounding document so the
 edit-without-decoding cost (depth/size-insensitive) shows against the

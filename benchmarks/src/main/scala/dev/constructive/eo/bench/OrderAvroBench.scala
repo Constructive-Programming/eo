@@ -19,7 +19,9 @@ import org.apache.avro.generic.IndexedRecord
   *
   *   - `eo*` — eo-avro `AvroPrism` / `AvroTraversal` walking the `IndexedRecord` (`*Unsafe` hot
   *     path).
-  *   - `native*` — the kindlings codec round-trip (`decodeEither` → case-class `copy` → `encode`).
+  *   - `naive*` — the kindlings codec round-trip (`decodeEither` → case-class `copy` → `encode`),
+  *     which materialises the whole record. (No hand-optimized `native*` partial-walk is benched —
+  *     that's exactly what eo-avro already is.)
   *   - `monocle*` — same codec round-trip, but the in-memory modify is a Monocle optic.
   *
   * Foci: `customer.address.street` (depth-3 scalar, modify + read) and `lines[*].name` (array write
@@ -59,7 +61,7 @@ class OrderAvroBench extends JmhDefaults:
   @Benchmark def eoReadStreet: Option[String] =
     streetPrism.getOptionUnsafe(record)
 
-  @Benchmark def nativeReadStreet: String =
+  @Benchmark def naiveReadStreet: String =
     codec.decodeEither(record).toOption.get.customer.address.street
 
   @Benchmark def monocleReadStreet: String =
@@ -70,7 +72,7 @@ class OrderAvroBench extends JmhDefaults:
   @Benchmark def eoModifyStreet: IndexedRecord =
     streetPrism.modifyUnsafe(_.toUpperCase)(record)
 
-  @Benchmark def nativeModifyStreet: IndexedRecord =
+  @Benchmark def naiveModifyStreet: IndexedRecord =
     val o = codec.decodeEither(record).toOption.get
     codec
       .encode(
@@ -90,7 +92,7 @@ class OrderAvroBench extends JmhDefaults:
   @Benchmark def eoModifyNames: IndexedRecord =
     namesTraversal.modifyUnsafe(_.toUpperCase)(record)
 
-  @Benchmark def nativeModifyNames: IndexedRecord =
+  @Benchmark def naiveModifyNames: IndexedRecord =
     val o = codec.decodeEither(record).toOption.get
     codec
       .encode(o.copy(lines = o.lines.map(li => li.copy(name = li.name.toUpperCase))))

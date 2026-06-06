@@ -25,8 +25,10 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
   *     default `Ior`-bearing surface).
   *   - `naive*` — decode the whole `Order`, rebuild via `copy`, re-encode (what you'd write without
   *     optics).
-  *   - `native*` — circe's own `ACursor` navigation, no EO. The honest "use the library directly"
-  *     comparator.
+  *   - `hcursor*` — circe's `HCursor` navigation. `.top` replays the zipper to rebuild the root, so
+  *     this is often *slower* than a full decode — a cautionary datapoint, not an optimum.
+  *   - `direct*` — direct `JsonObject` surgery (rebuild only the touched parents, no cursor). The
+  *     hand-written shape of what `JsonPrism` does, so it lands near `eo*`.
   *   - `monocle*` — decode to the case class, run a Monocle optic, re-encode. A general optics
   *     library that has *no* AST carrier, so it must pay the full decode/encode round-trip — this
   *     is where EO's structural-edit advantage shows.
@@ -79,7 +81,9 @@ class OrderCirceBench extends JmhDefaults:
       .get
       .asJson
 
-  @Benchmark def nativeStreet: Json =
+  // hcursor walk: `.top` replays the zipper from the focus back to the root
+  // to rebuild — the surprising "slower than a full decode" cost.
+  @Benchmark def hcursorStreet: Json =
     json
       .hcursor
       .downField("customer")
@@ -88,6 +92,21 @@ class OrderCirceBench extends JmhDefaults:
       .withFocus(_.mapString(_.toUpperCase))
       .top
       .get
+
+  // Direct AST surgery: destructure the JsonObjects on the path and rebuild
+  // only the touched parents — no cursor, no `.top` rewalk. The hand-written
+  // shape of what `JsonPrism` does internally.
+  @Benchmark def directStreet: Json =
+    (for
+      obj <- json.asObject
+      cust <- obj("customer").flatMap(_.asObject)
+      addr <- cust("address").flatMap(_.asObject)
+      street <- addr("street").flatMap(_.asString)
+    yield
+      val addr2 = addr.add("street", Json.fromString(street.toUpperCase))
+      val cust2 = cust.add("address", Json.fromJsonObject(addr2))
+      Json.fromJsonObject(obj.add("customer", Json.fromJsonObject(cust2)))
+    ).getOrElse(json)
 
   @Benchmark def monocleStreet: Json =
     val o = json.as[Order].toOption.get
@@ -109,7 +128,7 @@ class OrderCirceBench extends JmhDefaults:
       .get
       .asJson
 
-  @Benchmark def nativeNames: Json =
+  @Benchmark def hcursorNames: Json =
     json
       .hcursor
       .downField("lines")
@@ -126,6 +145,20 @@ class OrderCirceBench extends JmhDefaults:
       )
       .top
       .get
+
+  // Direct AST surgery: rebuild the `lines` array in place, no cursor.
+  @Benchmark def directNames: Json =
+    (for
+      obj <- json.asObject
+      arr <- obj("lines").flatMap(_.asArray)
+    yield
+      val arr2 = arr.map(
+        _.mapObject(o =>
+          o("name").flatMap(_.asString).fold(o)(s => o.add("name", Json.fromString(s.toUpperCase)))
+        )
+      )
+      Json.fromJsonObject(obj.add("lines", Json.fromValues(arr2)))
+    ).getOrElse(json)
 
   @Benchmark def monocleNames: Json =
     val o = json.as[Order].toOption.get
