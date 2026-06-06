@@ -12,6 +12,9 @@
 target/
 metals.sbt
 jmh-result.*
+# JMH result files (local runs + the benchmarks.yml CI artifact)
+benchmarks/*-results.json
+benchmarks/jmh-results.json
 
 # sbt-typelevel-site / Laika output
 site/target/
