@@ -241,8 +241,15 @@ non-degenerate case that bench was built to demonstrate.
       canonical benches). `JsoniterBench` **kept** — it's the only cross-EO
       comparison (eo-jsoniter byte-walk vs eo-circe AST on the same bytes), which
       the `Order*` benches don't cover. `benchmarks/README.md` updated.
-- [ ] **Blocking before merge — site/docs accuracy.** Retiring the four benches
-      left dangling references *and* stale numeric claims in the published docs:
+- [~] **Blocking before merge — site/docs accuracy.** Retiring the four benches
+      left dangling references *and* stale numeric claims in the published docs.
+      A local re-run came back too noisy to publish (±50–100% on a dev box), so
+      numbers will come from a reproducible CI run instead: added
+      `.github/workflows/benchmarks.yml` (manual `workflow_dispatch`; runs the
+      `Order*` suite at `-f 3 -wi 3 -i 5`, uploads `jmh-results.json` + renders a
+      summary table). The `avro.md` dead link is repointed. Remaining: trigger the
+      workflow, then rewrite the doc sections + remaining links/claims with the
+      CI numbers. Detail of what's stale:
       - Source links (404 after merge): `site/docs/avro.md` (→ `OrderAvroBench`),
         `site/docs/circe.md`, `site/docs/cookbook.md`, `site/docs/extensibility.md`
         (→ `OrderCirceBench`).

@@ -1,0 +1,103 @@
+# Manually-triggered JMH benchmark run.
+#
+# Deliberately hand-written and OUTSIDE the sbt-github-actions-generated
+# `ci.yml` (which must not be edited by hand). Benchmarks are not part of the
+# root aggregate and must never run on the push / PR critical path — this
+# workflow is `workflow_dispatch` only.
+#
+# A GitHub-hosted runner is a shared 2-vCPU VM, so JMH's standard disclaimer
+# applies in full: treat the output as reproducible *directional* data, not
+# sub-nanosecond truth. The win is reproducibility — anyone can re-run this and
+# get numbers from the same documented environment (ubuntu-22.04 / temurin@21).
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+    inputs:
+      filter:
+        description: "JMH class/method regex (sbt-jmh syntax)"
+        required: false
+        default: "(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*"
+      forks:
+        description: "Forks (-f)"
+        required: false
+        default: "3"
+      iterations:
+        description: "Measurement iterations (-i)"
+        required: false
+        default: "5"
+      warmups:
+        description: "Warmup iterations (-wi)"
+        required: false
+        default: "3"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  jmh:
+    name: JMH (${{ inputs.filter }})
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Setup Java (temurin@21)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+
+      - name: Run JMH
+        run: |
+          sbt -batch -Dsbt.color=false \
+            "benchmarks/Jmh/run -i ${{ inputs.iterations }} -wi ${{ inputs.warmups }} -f ${{ inputs.forks }} -t 1 -foe true -rf json -rff benchmarks/jmh-results.json ${{ inputs.filter }}"
+
+      - name: Render summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json, os, pathlib
+          p = pathlib.Path("benchmarks/jmh-results.json")
+          out = os.environ["GITHUB_STEP_SUMMARY"]
+          if not p.exists():
+              with open(out, "a") as f:
+                  f.write("## JMH results\n\nNo results file produced (the run may have failed).\n")
+              raise SystemExit(0)
+          data = json.load(open(p))
+          rows = []
+          for b in data:
+              parts = b["benchmark"].split(".")
+              name = parts[-2] + "." + parts[-1]
+              size = b.get("params", {}).get("size", "-")
+              m = b["primaryMetric"]
+              rows.append((name, size, m["score"], m["scoreError"], m["scoreUnit"]))
+          rows.sort(key=lambda r: (r[0].split(".")[0], int(r[1]) if r[1] != "-" else 0, r[0]))
+          with open(out, "a") as f:
+              f.write("## JMH results\n\n")
+              f.write("GitHub-hosted runner (shared VM) — directional data, see JMH disclaimer.\n\n")
+              f.write("| Benchmark | size | Score | Error | Unit |\n|---|---:|---:|---:|---|\n")
+              for (name, size, score, err, unit) in rows:
+                  e = f"± {err:.1f}" if err == err else ""
+                  f.write(f"| `{name}` | {size} | {score:.1f} | {e} | {unit} |\n")
+          PY
+
+      - name: Upload results JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmh-results
+          path: benchmarks/jmh-results.json
+          retention-days: 30
+          if-no-files-found: warn

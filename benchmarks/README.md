@@ -31,6 +31,13 @@ while iterating on a bench, not for comparisons:
 sbt "benchmarks/Jmh/run -i 1 -wi 1 -f 1 -t 1"
 ```
 
+Or run them reproducibly in CI: the **Benchmarks** workflow
+(`.github/workflows/benchmarks.yml`, manual `workflow_dispatch`) runs a JMH
+filter at `-f 3 -wi 3 -i 5` on a GitHub-hosted runner, renders a summary table
+to the Actions UI, and uploads `jmh-results.json` as an artifact. A shared CI VM
+is not a quiet machine — treat the output as reproducible *directional* data per
+JMH's disclaimer below.
+
 Filter by class (`.*` is JMH's regex syntax):
 
 ```sh
