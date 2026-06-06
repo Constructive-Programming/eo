@@ -156,39 +156,55 @@ focus vector and rebuilds via `Functor[PSVec].map`, while
 Monocle's `Traversal` wraps each element in an `Applicative[Id]`
 traversal and pays the per-element wrapping cost.
 
-## JsonPrism — cursor-backed JSON edit
+## OrderCirceBench — canonical-schema JSON edit
 
-No Monocle equivalent at this layer. Two EO surfaces side by
-side: `.modifyUnsafe` (silent, pre-v0.2 shape) and `.modify`
-(default, returns `Ior[Chain[JsonFailure], Json]`). Baseline is
-the classical `decode → modify → re-encode`.
+The three integration benches share one realistic `Order` document — deep
+(`customer.address.street`, depth 3), wide (≥5 fields per level), and arrayed
+(`lines`). Two foci, several baselines: `eo` (`JsonPrism` / `JsonTraversal`,
+`*Unsafe` hot path and the default `Ior`-bearing surface), `naive`
+(`decode → copy → re-encode`), `hcursor` / `direct` (circe AST *without* EO —
+`HCursor` navigation vs direct `JsonObject` surgery), and `monocle`
+(`decode → Monocle optic → re-encode`). `@Param size` is the line-item count, so
+the document grows with it.
 
-| Depth | `.modifyUnsafe` |    `.modify` (Ior) |     naive | Unsafe vs naive | Ior vs naive | Ior tax |
-|:-----:|----------------:|-------------------:|----------:|----------------:|-------------:|--------:|
-| 1     |    68.8 ± 2.7   |    67.4 ± 1.4      |    151 ns |         2.20×   |       2.24×  | ~0 ns   |
-| 2     |   114.6 ± 0.7   |   117.3 ± 2.8      |    151 ns |         1.32×   |       1.29×  | +2.7 ns |
-| 3     |   129.3 ± 5.3   |   131.9 ± 4.9      |    234 ns |         1.81×   |       1.77×  | +2.5 ns |
+> Numbers below come from the reproducible `benchmarks.yml` CI workflow
+> (ubuntu-22.04 / temurin@21, `-f 3 -wi 3 -i 5`; error half-widths ≤ ~3 %). A
+> shared CI runner still isn't a quiet desk — read these as the *shape* of the
+> cost, not exact constants. See [Reproducing](#reproducing).
 
-The "Ior tax" column isolates the cost of opting into the
-default diagnostic-bearing surface: a single `Ior.Right(json)`
-case-class allocation per call, flat per path depth (not per
-step). At d1 the number is inside measurement noise (d1 Ior
-actually comes out slightly faster on this run — JMH standard
-error territory).
+### Scalar deep edit — `customer.address.street` (depth 3), ns/op
 
-A fourth "wide" fixture (28-field record, measured separately)
-showed the ratio narrow to ~1.04× because the naive decoder
-touches every field regardless of arity, while EO still walks
-only the focused path. That wide-record bench stayed on the
-pre-rename harness; the numbers in the table above are for the
-standard Person / Deep3 fixtures.
+| size | eo (Unsafe) | eo (Ior) | hcursor | direct | naive | monocle | eo vs naive |
+|----:|----:|----:|----:|----:|----:|----:|----:|
+| 8   | 1 277 | 1 318 | 1 163 | 1 071 |   4 124 |   4 127 |   3.2× |
+| 64  | 1 283 | 1 334 | 1 170 | 1 067 |  25 695 |  24 506 |    20× |
+| 512 | 1 274 | 1 387 | 1 166 | 1 075 | 208 089 | 210 073 |   163× |
 
-**When to reach for `.modifyUnsafe`.** If you've measured and
-want pre-v0.2 throughput exactly, or you have a hot path where
-the `Ior.Right` allocation matters (heap-sensitive loops, very
-short overall work units). Otherwise the default is the
-recommended entry — you get structured `JsonFailure` diagnostics
-for the same order-of-magnitude speedup over naive.
+The EO edit is **flat in document size** — it walks only the path to the focus.
+`naive` and `monocle` decode and re-encode the whole record, so they scale
+linearly with the payload: the gap is ~3× on a tiny doc and ~160× by 512 line
+items. Direct `JsonObject` surgery is the fastest hand-written form (and what
+`JsonPrism` mirrors internally); `hcursor` is competitive — its `.top` rebuild
+is cheap here, so the old "hcursor is pathologically slow" reading was warm-up
+noise. The default `Ior` surface costs ~40–110 ns over `*Unsafe` (one
+`Ior.Right` allocation, flat per call); reach for `*Unsafe` only on
+heap-sensitive hot paths.
+
+### Array write-traversal — `lines[*].name`, ns/op
+
+| size | eo (Unsafe) | eo (Ior) | hcursor | direct | naive | monocle |
+|----:|----:|----:|----:|----:|----:|----:|
+| 8   |   5 263 |   5 406 |   4 293 |   4 206 |   4 428 |   4 861 |
+| 64  |  37 618 |  40 899 |  30 336 |  31 371 |  27 353 |  29 413 |
+| 512 | 302 606 | 331 334 | 241 304 | 243 950 | 223 535 | 261 365 |
+
+Honest result: a write that touches **every** array element is O(elements) for
+*all* approaches, so the cursor walk has no structural advantage — EO is
+~1.2–1.35× *slower* than the naive decode/re-encode here (the per-element cursor
+descent + array reassembly costs more than a straight `Vector.map`). Reach for
+EO traversals on JSON for **composition and diagnostics**, not raw
+array-rewrite throughput. (Contrast `OrderAvroBench` below, where the
+per-element decode is expensive enough that EO's element-walk wins ~9×.)
 
 ## JsoniterBench — byte-cursor JSON read+write vs eo-circe
 
@@ -253,63 +269,77 @@ documents the carrier choice (no new carrier — Affine for the Prism,
 `MultiFocus[PSVec]` for the Traversal), the splice mechanics, and
 the phased-build outcome.
 
-## AvroPrism — direct-walk over `IndexedRecord`
+## OrderAvroBench — direct-walk over `IndexedRecord`
 
-EO-only — no Monocle equivalent at this layer. `AvroPrism.modify` walks
-the `IndexedRecord` tree along its precomputed `PathStep` array, decodes
-only at the focused leaf, and stitches the parents back together — the
-classical alternative is to decode the whole record into its
-case-class tree, mutate the leaf, and re-encode end-to-end.
+The same canonical `Order`, encoded to an Avro `IndexedRecord`. `AvroPrism` /
+`AvroTraversal` walk the record along a precomputed `PathStep` array, decode
+only at the focused leaf, and stitch the parents back together. Baselines:
+`naive` (the [kindlings-avro-derivation][kindlings-avro] codec round-trip —
+`decodeEither` → case-class `.copy` → `encode`) and `monocle` (decode → Monocle
+→ encode). `loyaltyId` is omitted — kindlings encodes `Option` as a union
+navigated via `.union[Branch]`, not a transparent field.
 
-Two depths benched in `AvroOpticsBench`: depth 1 (`Person.name`,
-shallow) and depth 3 (`Deep3.d2.d1.atom.value`, deep). Each depth has
-paired `eo*` / `native*` rows so JMH reports them side-by-side. The
-`eo*` side is the silent `*Unsafe` hot path; the `native*` side is the
-raw [kindlings-avro-derivation][kindlings-avro] codec round-trip
-(`AvroCodec.decodeEither` → case-class `.copy` chain →
-`AvroCodec.encode`). Same shape as `JsonPrismBench` for eo-circe; the
-codec library swap is the only difference.
+### Scalar — `customer.address.street` (depth 3), ns/op
 
-Run them with the standard JMH invocation, filtering by class:
+| size | eo read | naive read | eo modify | naive modify | read speedup | modify speedup |
+|----:|----:|----:|----:|----:|----:|----:|
+| 8   | 35.5 |   4 995 | 139 |   6 361 |   141× |    46× |
+| 64  | 35.2 |  32 469 | 134 |  39 429 |   922× |   294× |
+| 512 | 36.1 | 244 717 | 137 | 315 918 | 6 780× | 2 310× |
 
-```sh
-sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*AvroOpticsBench.*"
-```
+Avro takes the flat-vs-linear story to its extreme: reading a field off an
+`IndexedRecord` is **~35 ns regardless of record size**, while the codec
+round-trip decodes every field — a ~6 800× gap at 512 line items. `monocle*`
+tracks `naive*` (same decode/encode). The default `Ior` surface adds one
+`Ior.Right(record)` allocation per call, as in eo-circe.
 
-A third pair of rows (`eoModifyIor*`) reports the default
-Ior-bearing surface for the same fixtures — the additional cost is a
-single `Ior.Right(record)` allocation per call, mirroring the "Ior
-tax" datapoint reported for `JsonPrism`.
+### Array write-traversal — `lines[*].name`, ns/op
 
-The plan target is "≤2× the unwrapped baseline at deep paths" — the
-direct-walk speedup absorbs Avro's per-step `IndexedRecord.get(i)` /
-`put(i, v)` cost without ever materialising the case-class tree at the
-intermediate depths.
+| size | eo | naive | monocle | eo speedup |
+|----:|----:|----:|----:|----:|
+| 8   |    663 |   6 552 |   6 895 | 9.9× |
+| 64  |  4 758 |  40 987 |  42 613 | 8.6× |
+| 512 | 37 549 | 334 374 | 372 100 | 8.9× |
+
+Unlike circe, EO **wins ~9× even on a full-array write** here: Avro's
+per-element record decode is costly enough that the element-walk (decode only
+the focused leaf, rebuild the parent) handily beats decoding every line item.
 
 [kindlings-avro]: https://github.com/MateuszKubuszok/kindlings-avro-derivation
 
-## JsonTraversal — `items.each.name` edits
+## OrderJsoniterBench — canonical-schema byte buffer
 
-Uppercasing every `items[*].name` inside a `Basket` record, at
-three array sizes. Same two-surface story as JsonPrism above:
+The same `Order`, as a raw `Array[Byte]`. `eo` (`JsoniterPrism` /
+`JsoniterTraversal`, byte-walk) vs `native` (a hand-rolled `JsonReader` that
+walks to the focus and `skip()`s every sibling — the optimum a jsoniter expert
+writes, and what eo automates) vs `naive` (`readFromArray[Order]` full decode)
+vs `monocle`.
 
-| Items | `.modifyUnsafe` | `.modify` (Ior) |      naive | Unsafe vs naive | Ior vs naive | Ior tax   |
-|:-----:|----------------:|----------------:|-----------:|----------------:|-------------:|----------:|
-| 8     |    797 ±  18    |    819 ±  22    |  1 659 ns  |         2.08×   |       2.03×  |   +22 ns / +2.9 % |
-| 64    |  5 991 ± 188    |  6 128 ±  83    | 12 196 ns  |         2.04×   |       1.99×  |  +137 ns / +2.3 % |
-| 512   | 47 046 ± 601    | 48 928 ±1 428   | 92 710 ns  |         1.97×   |       1.89×  | +1 882 ns / +4.0 % |
+### Scalar read — `customer.address.street`, ns/op
 
-Traversal's Ior tax scales with element count (~3.7 ns per
-element at size 512), consistent with per-element `Chain`
-bookkeeping on the success path. The gap to naive is ~2× at
-every size and stays ~2× when switching to the default
-Ior-bearing surface — the cursor-walk speedup absorbs the
-accumulator cost comfortably.
+| size | eo | native (partial scan) | naive (full decode) | monocle | eo vs naive |
+|----:|----:|----:|----:|----:|----:|
+| 8   | 172 |    732 |  1 972 |  1 984 |  11.5× |
+| 64  | 172 |  3 662 | 11 959 | 11 758 |    70× |
+| 512 | 173 | 27 714 | 97 917 | 94 772 |   565× |
 
-The ratio is roughly constant across sizes — the naive path
-pays a full decode / re-encode for every element, so both sides
-scale linearly and EO wins by a constant factor from avoiding
-the per-element codec round-trip.
+eo's byte-walk read is **flat at ~172 ns**. Even the hand-rolled `native`
+partial scan scales — it still tokenises everything it walks past — so eo beats
+it ~4×, and `native` beats the full decode ~3×.
+
+### Scalar modify + array fold, ns/op
+
+| metric | size | eo | native | naive | monocle |
+|---|----:|----:|----:|----:|----:|
+| `street` modify     | 512 |  5 801 |  — | 175 728 | 177 531 |
+| `lines[*].price` fold | 512 | 79 243 | 62 597 | 101 733 | 410 561 |
+
+The scalar **modify** splice is O(bytes), so it grows mildly with the document
+(307 ns at size 8 → 5 801 ns at 512) but stays ~30× under the full re-encode.
+The **fold** must touch every element, so eo (~79 µs) lands near the hand-rolled
+`native` scan (~63 µs) and ~1.3× under `naive` — the modest gap of a
+visit-everything operation. (No `native` write row: a hand-rolled partial-splice
+writer is essentially eo-jsoniter itself.)
 
 ## PowerSeries traversal with downstream composition
 
@@ -409,7 +439,13 @@ for the full tradeoff matrix.
 
 ## Reproducing
 
-From the repo root:
+The integration tables above were produced by the **Benchmarks** CI workflow
+(`.github/workflows/benchmarks.yml`, manual `workflow_dispatch`) on an
+ubuntu-22.04 / temurin@21 runner — reproducible by anyone with Actions access,
+which is why those numbers are quoted rather than a local dev run. It uploads a
+`jmh-results.json` artifact and renders a summary table to the run page.
+
+Locally, from the repo root:
 
 ```sh
 # Trustworthy numbers — three forks, five iterations, three warmups.
@@ -419,7 +455,7 @@ sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1"
 sbt "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1"
 
 # Filter by class (JMH regex):
-sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*JsonTraversalBench.*"
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 .*OrderAvroBench.*"
 ```
 
 JMH's GC and stack profilers are useful when a number is

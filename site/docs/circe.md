@@ -26,11 +26,16 @@ leaf is changing. For wide records the work is mostly wasted.
 circe's `JsonObject` / array representation, modifying only
 the focused leaf and rebuilding the parents on the way up.
 The
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
-and
-[`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonTraversalBench.scala)
-suites document a roughly 2× speedup at every depth and
-every array size.
+[`OrderCirceBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderCirceBench.scala)
+suite shows the payoff is a *scaling* one, not a constant factor: a
+deep scalar edit is **flat in document size** (~1.3 µs whether the record
+carries 8 or 512 line items), while `decode → modify → re-encode` scales with
+the whole payload — so the gap grows from ~3× on a tiny record to ~160× on a
+large one. For a write that touches *every* element of an array, though, both
+sides are O(elements) and the cursor walk has no edge (it is in fact slightly
+slower) — reach for the traversal there for composition and diagnostics, not
+raw throughput. See the [benchmarks page](benchmarks.md)
+for the full tables.
 
 ## JsonPrism
 
