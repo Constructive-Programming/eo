@@ -338,11 +338,12 @@ userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
 ```
 
 The
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
-suite documents a 2× speedup at every depth over the
-decode / `.copy` / re-encode path. circe-optics' analogous
-`root.user.address.street` surface forces a full decode per
-level; cats-eo's cursor walk does not.
+[`OrderCirceBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderCirceBench.scala)
+suite shows this edit is **flat in document size** — ~1.3 µs whether the record
+is small or large — while the decode / `.copy` / re-encode path scales with the
+whole payload, so the gap grows from ~3× on a tiny record to ~160× on a large
+one. circe-optics' analogous `root.user.address.street` surface forces a full
+decode per level; cats-eo's cursor walk does not.
 
 #### Act 2 — edit every element of a JSON array
 

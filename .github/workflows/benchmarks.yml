@@ -12,12 +12,6 @@
 name: Benchmarks
 
 on:
-  # TEMPORARY: branch-scoped push trigger so the suite can run before the
-  # workflow is on the default branch (workflow_dispatch requires that).
-  # REMOVE this `push:` block before merge — workflow_dispatch is the
-  # intended permanent trigger.
-  push:
-    branches: [feat/benchmark-suite-unification]
   workflow_dispatch:
     inputs:
       filter:
