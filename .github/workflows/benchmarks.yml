@@ -12,6 +12,12 @@
 name: Benchmarks
 
 on:
+  # TEMPORARY: branch-scoped push trigger so the suite can run before the
+  # workflow is on the default branch (workflow_dispatch requires that).
+  # REMOVE this `push:` block before merge — workflow_dispatch is the
+  # intended permanent trigger.
+  push:
+    branches: [feat/benchmark-suite-unification]
   workflow_dispatch:
     inputs:
       filter:
@@ -60,9 +66,11 @@ jobs:
           cache: sbt
 
       - name: Run JMH
+        # `inputs.*` are only populated for workflow_dispatch; the `|| 'default'`
+        # fallbacks keep the step working when triggered by push too.
         run: |
           sbt -batch -Dsbt.color=false \
-            "benchmarks/Jmh/run -i ${{ inputs.iterations }} -wi ${{ inputs.warmups }} -f ${{ inputs.forks }} -t 1 -foe true -rf json -rff benchmarks/jmh-results.json ${{ inputs.filter }}"
+            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true -rf json -rff benchmarks/jmh-results.json ${{ inputs.filter || '(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*' }}"
 
       - name: Render summary
         if: always()
