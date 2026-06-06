@@ -244,7 +244,7 @@ everyMobile.modify(!_)(Subscriber(List(
 ```
 
 The cost tradeoff is documented in
-[Optics → Traversal](optics.md#traversal) and the
+[Optics → PowerSeries](optics.md#powerseries) and the
 [PowerSeries benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition):
 `each` runs 2-3× over a naive `copy`/`map` for dense
 Lens-Traversal-Lens chains, amortising toward 1.9× as the
@@ -338,7 +338,7 @@ userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
 ```
 
 The
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsonPrismBench.scala)
+[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
 suite documents a 2× speedup at every depth over the
 decode / `.copy` / re-encode path. circe-optics' analogous
 `root.user.address.street` surface forces a full decode per
@@ -550,7 +550,7 @@ representable encoding doesn't supply. Reach for
 needs `.modifyA`.
 
 This is the absorbed-Grate sub-shape from the
-[carrier consolidation](multifocus.md#the-unification-narrative);
+[carrier consolidation](multifocus.md#sub-shapes);
 `MultiFocus.representable[F: Representable, A]` covers the same
 shape over arbitrary distributive `F`s (tuple-of-pair `(A, A)`,
 user-defined Naperian containers, etc.).
@@ -681,7 +681,7 @@ every size up to 1024.
 
 **Source:** the post-fold composability story; benchmark
 discussion in
-[Optics → Traversal](optics.md#traversal) and
+[Optics → PowerSeries](optics.md#powerseries) and
 [benchmarks → PowerSeries with downstream composition](benchmarks.md#powerseries-traversal-with-downstream-composition).
 
 ## Theme F — Write-only / read-only escape

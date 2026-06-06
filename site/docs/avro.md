@@ -32,7 +32,7 @@ run.
 the [`IndexedRecord`](https://avro.apache.org/docs/current/api/java/org/apache/avro/generic/IndexedRecord.html)
 representation, modifying only the focused leaf and rebuilding
 the parents on the way up. The
-[`AvroOpticsBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/AvroOpticsBench.scala)
+[`AvroOpticsBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/AvroOpticsBench.scala)
 suite documents the speedup against the kindlings-avro-derivation
 codec round-trip — see the [benchmarks page](benchmarks.md) for the
 full table.

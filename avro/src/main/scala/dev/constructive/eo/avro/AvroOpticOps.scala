@@ -4,8 +4,8 @@ import cats.data.{Chain, Ior}
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
 
-/** Public surface forwarder for the Avro optic carriers (Unit 4: just [[AvroPrism]]; Units 6 / 7
-  * will add `AvroTraversal` / `AvroFieldsTraversal`).
+/** Public surface forwarder for the Avro optic carriers [[AvroPrism]] and [[AvroTraversal]] (plus
+  * the `AvroFieldsPrism` / `AvroFieldsTraversal` aliases).
   *
   * '''Per OQ-avro-7 (plan):''' this is a deliberate copy-paste of
   * `dev.constructive.eo.circe.JsonOpticOps`. When a third cursor module appears (eo-protobuf,

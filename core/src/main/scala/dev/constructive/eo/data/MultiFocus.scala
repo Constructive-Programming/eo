@@ -470,9 +470,11 @@ object MultiFocus:
         o.from((x, fb))
 
   // Read-only escape (`.foldMap`) is provided by the carrier-wide `Optic.foldMap` extension via
-  // `ForgetfulFold[MultiFocus[F]]` (`mfFold[F: Foldable]`). No `Composer[MultiFocus[F], Forget[F]]`
-  // ships — `forget2multifocus` goes the other direction; a bidirectional pair would break Morph
-  // resolution.
+  // `ForgetfulFold[MultiFocus[F]]` (`mfFold[F: Foldable]`). An explicit `Composer[MultiFocus[F],
+  // Forget[F]]` (`multifocus2forget`, defined below) also ships as a read-only escape — it's the
+  // structural inverse of `forget2multifocus`. A bidirectional pair would normally break Morph
+  // resolution; this one ships safely only because it's restricted to `T = Unit` (see that given's
+  // docstring for the full rationale).
 
   /** Read the focus at a representative position. Requires `Representable[F]`. For
     * `MultiFocus[Function1[X0, *]]`, this is `index(fa)(i) = fa(i)`.

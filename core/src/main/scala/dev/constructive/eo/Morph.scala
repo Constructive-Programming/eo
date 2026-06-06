@@ -11,7 +11,11 @@ import data.Affine
   *   - [[LowPriorityMorphInstances.bothViaAffine]] — both into `Affine` when neither bridges
   *     directly (covers e.g. Prism ∘ Lens).
   *
-  * cats-eo doesn't ship bidirectional composers, so at most one of the first three fires per pair.
+  * cats-eo ships essentially one bidirectional Composer pair — `forget2multifocus` /
+  * `multifocus2forget` (the latter restricted to `T = Unit`). For every other carrier pair at most
+  * one of the first three fires; for that one pair a `Forget[F]` ⇄ `MultiFocus[F]` chain can be
+  * ambiguous, resolved by routing through the explicit `Composer[..].to(o)` form (see
+  * `multifocus2forget`'s docstring).
   *
   * @tparam F
   *   outer carrier

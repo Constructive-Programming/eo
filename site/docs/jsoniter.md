@@ -42,7 +42,7 @@ on the hot path:
 | Write `.modify` Long at depth 3          | ~1440 ns |     ~87 ns  |  16.5×  |
 
 Numbers from the
-[`JsoniterBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/eo/bench/JsoniterBench.scala)
+[`JsoniterBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsoniterBench.scala)
 suite — see [benchmarks → JsoniterBench](benchmarks.md) for the full
 table with confidence intervals and caveats. The traversal speedup
 narrows because per-element decode + array allocation accumulates;
@@ -189,7 +189,7 @@ fall through to eo-circe.
 
 The
 [`JsonPathScanner`](https://github.com/Constructive-Programming/eo/blob/main/jsoniter/src/main/scala/dev/constructive/eo/jsoniter/JsonPathScanner.scala)
-is a hand-rolled byte walker (~280 LoC) that resolves a path to a
+is a hand-rolled byte walker (~325 LoC) that resolves a path to a
 `(start, end)` byte span without parsing the document. It skips JSON
 strings (with all backslash escapes), numbers, objects, arrays, and
 literals; reports a Miss on the first structural mismatch. The
