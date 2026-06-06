@@ -6,9 +6,11 @@ import scala.compiletime.uninitialized
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
+import dev.constructive.eo.bench.fixture.{Domain, LineItem}
 import dev.constructive.eo.data.Forget.given
 import dev.constructive.eo.optics.{Fold => EoFold}
 
+import cats.instances.double.given
 import cats.instances.list.given
 
 import monocle.{Fold => MFold}
@@ -33,12 +35,23 @@ class FoldBench extends JmhDefaults:
 
   var xs: List[Int] = uninitialized
 
+  // Real-world fold: sum a price field across a list of records (canonical
+  // `LineItem`s), the in-memory analogue of the JSON `lines[*].price` fold.
+  var lines: List[LineItem] = uninitialized
+
   val eoFold = EoFold[List, Int]
   val mFold = MFold.fromFoldable[List, Int]
+
+  val eoLineFold = EoFold[List, LineItem]
+  val mLineFold = MFold.fromFoldable[List, LineItem]
 
   @Setup(Level.Iteration)
   def init(): Unit =
     xs = List.tabulate(size)(identity)
+    lines = Domain.mkOrder(size).lines
 
   @Benchmark def eoFoldMap: Int = eoFold.foldMap(identity[Int])(xs)
   @Benchmark def mFoldMap: Int = mFold.foldMap(identity[Int])(xs)
+
+  @Benchmark def eoFoldPrices: Double = eoLineFold.foldMap[Double](_.price)(lines)
+  @Benchmark def mFoldPrices: Double = mLineFold.foldMap[Double](_.price)(lines)
