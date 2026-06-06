@@ -6,7 +6,13 @@ import scala.compiletime.uninitialized
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonValueCodec, readFromArray, writeToArray}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  JsonReader,
+  JsonValueCodec,
+  JsonWriter,
+  readFromArray,
+  writeToArray,
+}
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
 import dev.constructive.eo.bench.fixture.*
@@ -17,19 +23,21 @@ import dev.constructive.eo.optics.Optic
 
 /** Canonical-schema jsoniter bench (plan 009, Phase 1).
   *
-  * eo-jsoniter walks the raw `Array[Byte]` directly (skip the AST entirely), so its baselines
-  * differ from the circe bench: jsoniter has no cursor, so "native" and "naive" collapse into the
-  * single full-codec round-trip (`readFromArray` → modify → `writeToArray`). Three baselines per
-  * metric:
+  * eo-jsoniter walks the raw `Array[Byte]` directly (skip the AST entirely). Baselines:
   *
   *   - `eo*` — eo-jsoniter `JsoniterPrism` / `JsoniterTraversal` over the bytes.
-  *   - `native*` — jsoniter's own codec round-trip (decode the whole `Order`, modify, re-encode).
-  *   - `monocle*` — same jsoniter codec round-trip, but the in-memory modify is a Monocle optic.
+  *   - `native*` (read only) — a hand-rolled `JsonReader` codec that walks to the focus and
+  *     `skip()`s every sibling, so the whole `Order` is never materialised. This is the optimum a
+  *     jsoniter expert would write by hand — and exactly what eo-jsoniter does generically.
+  *   - `naive*` — jsoniter's full-codec round-trip (`readFromArray[Order]` → modify →
+  *     `writeToArray`), which materialises the entire object.
+  *   - `monocle*` — same full round-trip, but the in-memory modify is a Monocle optic.
   *
   * Three foci:
-  *   - **read** a depth-3 scalar `$.customer.address.street` (extract without materialising the
-  *     doc).
-  *   - **write** the same scalar (`.modify` re-splices only the focus span).
+  *   - **read** a depth-3 scalar `$.customer.address.street` (`eo` / `native` partial-scan /
+  *     `naive` full-decode / `monocle`).
+  *   - **write** the same scalar (`.modify` re-splices only the focus span; only `eo` avoids the
+  *     full read here — a hand-rolled partial-splice writer is essentially eo-jsoniter itself).
   *   - **fold** the `$.lines[*].price` array (read-only `[*]` traversal — jsoniter's phase-1.5
   *     array surface is fold-only; the write-traversal story lives in the circe / avro benches).
   *
@@ -44,7 +52,7 @@ import dev.constructive.eo.optics.Optic
 @Measurement(iterations = 5, time = 1)
 class OrderJsoniterBench extends JmhDefaults:
 
-  import OrderJsoniterBench.given
+  import OrderJsoniterBench.{streetScanCodec, given}
   import cats.instances.double.given
   import cats.instances.string.given
 
@@ -62,13 +70,32 @@ class OrderJsoniterBench extends JmhDefaults:
   @Setup(Level.Iteration)
   def init(): Unit =
     bytes = writeToArray(Domain.mkOrder(size))
+    // Correctness guard: the hand-rolled partial scanner must agree with the
+    // full decode (street = "Main St" for the default customer). JMH never
+    // checks return values, so this is the only thing keeping the `native*`
+    // read honest.
+    require(
+      readFromArray(bytes)(using streetScanCodec) == readFromArray[Order](bytes)
+        .customer
+        .address
+        .street,
+      "streetScanCodec disagrees with the full decode",
+    )
 
   // ---- read scalar: $.customer.address.street -----------------------
 
   @Benchmark def eoReadStreet: String =
     eoStreetP.foldMap(identity[String])(bytes)
 
+  // The optimum native read: a hand-rolled JsonReader that walks to the focus
+  // and `skip()`s every other field — the whole object is *not* materialised.
+  // This is exactly what eo-jsoniter does generically; here it's spelled out
+  // by hand for the one path.
   @Benchmark def nativeReadStreet: String =
+    readFromArray(bytes)(using streetScanCodec)
+
+  // The naive read: decode the entire `Order`, then project the field.
+  @Benchmark def naiveReadStreet: String =
     readFromArray[Order](bytes).customer.address.street
 
   @Benchmark def monocleReadStreet: String =
@@ -79,7 +106,10 @@ class OrderJsoniterBench extends JmhDefaults:
   @Benchmark def eoModifyStreet: Array[Byte] =
     eoStreetP.modify(_.toUpperCase)(bytes)
 
-  @Benchmark def nativeModifyStreet: Array[Byte] =
+  // Naive write: full decode → copy → re-encode. (A native partial-splice
+  // write is what eo-jsoniter's `.modify` already does — there's no simpler
+  // hand-rolled JsonReader form for the write path, so it's not benched here.)
+  @Benchmark def naiveModifyStreet: Array[Byte] =
     val o = readFromArray[Order](bytes)
     writeToArray(
       o.copy(customer =
@@ -96,7 +126,7 @@ class OrderJsoniterBench extends JmhDefaults:
   @Benchmark def eoSumPrices: Double =
     eoPricesT.foldMap(identity[Double])(bytes)
 
-  @Benchmark def nativeSumPrices: Double =
+  @Benchmark def naiveSumPrices: Double =
     readFromArray[Order](bytes).lines.map(_.price).sum
 
   @Benchmark def monocleSumPrices: Double =
@@ -104,9 +134,44 @@ class OrderJsoniterBench extends JmhDefaults:
 
 object OrderJsoniterBench:
 
-  // Whole-document codec for the native / monocle round-trip baselines.
+  // Whole-document codec for the naive / monocle round-trip baselines.
   given JsonValueCodec[Order] = JsonCodecMaker.make
 
   // Leaf codecs the JsoniterPrism / JsoniterTraversal foci decode through.
   given JsonValueCodec[String] = JsonCodecMaker.make
+
+  /** Read the value of `target` inside the current JSON object, skipping every other field, then
+    * return `inner` applied to the reader positioned at that value. Returns `default` if the object
+    * / field is absent.
+    */
+  private def field[A](in: JsonReader, target: String, default: A)(inner: JsonReader => A): A =
+    if in.isNextToken('{') then
+      var result = default
+      if !in.isNextToken('}') then
+        in.rollbackToken()
+        while
+          if in.readKeyAsString() == target then result = inner(in)
+          else in.skip()
+          in.isNextToken(',')
+        do ()
+      result
+    else
+      in.rollbackToken()
+      in.skip()
+      default
+
+  /** Hand-rolled scanner for `$.customer.address.street` — walks only the path and `skip()`s
+    * siblings, so the full `Order` is never materialised. A plain `val` (not `given`) so it doesn't
+    * collide with the derived `JsonValueCodec[String]`; passed explicitly to `readFromArray`.
+    */
+  val streetScanCodec: JsonValueCodec[String] = new JsonValueCodec[String]:
+    def nullValue: String = null
+    def encodeValue(x: String, out: JsonWriter): Unit = out.writeVal(x)
+    def decodeValue(in: JsonReader, default: String): String =
+      field(in, "customer", default) { in =>
+        field(in, "address", default) { in =>
+          field(in, "street", default)(_.readString(null))
+        }
+      }
+
   given JsonValueCodec[Double] = JsonCodecMaker.make
