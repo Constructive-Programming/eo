@@ -125,7 +125,7 @@ The vocabulary is consistent across backends:
 | Bench class          | Foci | Baselines | Notes |
 |----------------------|------|-----------|-------|
 | `OrderCirceBench`    | `customer.address.street` modify; `lines[*].name` traversal | `eo`/`eoIor`/`naive`/`hcursor`/`direct`/`monocle` | circe `Json` AST |
-| `OrderJsoniterBench` | `customer.address.street` read+write; `lines[*].price` fold | `eo`/`native` (partial scan, read only)/`naive`/`monocle` | Raw `Array[Byte]`. `[*]` is read-only in jsoniter phase-1.5, so its array story is a fold, not a write traversal. |
+| `OrderJsoniterBench` | `customer.address.street` read+write; `lines[*].price` fold | `eo`/`native` (partial scan, reads + fold)/`naive`/`monocle` | Raw `Array[Byte]`. `[*]` is read-only in jsoniter phase-1.5, so its array story is a fold, not a write traversal. |
 | `OrderAvroBench`     | `customer.address.street` read+write; `lines[*].name` write traversal | `eo`/`naive`/`monocle` | `IndexedRecord`. `loyaltyId` omitted — kindlings encodes `Option` as a union navigated via `.union[Branch]`, not a transparent field. |
 
 `@Param size ∈ {8, 64, 512}` grows the surrounding document so the
