@@ -331,3 +331,20 @@ object Optic:
 
     inline def getOption(s: S): Option[A] =
       o.to(s).fold(_ => None, (_, a) => Some(a))
+
+  /** `getOption` over an `Either`-carrier optic — the canonical read for a [[Prism]]. Mirrors the
+    * `Affine` overload above so a derived `prism` (which surfaces as the bare
+    * `Optic[S, T, A, B, Either]`, not the concrete [[Prism]] subclass) reads through the same
+    * `getOption` call. `Either#toOption` discards the residual `Left` (the miss branch); a hit's
+    * `Right(a)` becomes `Some(a)`. The concrete `Prism`'s own `getOption` member still wins at its
+    * static type (member over extension), so this only fills the gap for the erased carrier.
+    *
+    * @group Operations
+    */
+  extension [S, T, A, B](o: Optic[S, T, A, B, Either])
+
+    // `@targetName` disambiguates from the `Affine` overload above: the carrier type param erases,
+    // so both `getOption`s collide at the JVM level. Call sites still resolve by carrier statically.
+    @annotation.targetName("getOptionEither")
+    inline def getOption(s: S): Option[A] =
+      o.to(s).toOption

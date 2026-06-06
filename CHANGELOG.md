@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`getOption` for `Either`-carrier optics.** Previously `getOption` was
+  defined only for the `Affine` carrier (`Optional` / `AffineFold`). A `Prism`
+  surfaced as the bare `Optic[S, T, A, B, Either]` — e.g. a derived
+  `generics.prism`, whose static type is the base `Optic`, not the concrete
+  `Prism` subclass — had no `getOption`. An `Either`-carrier overload now fills
+  that gap (`@targetName`-disambiguated; the concrete `Prism`'s own member still
+  wins at its static type), so a read on a derived prism reads through the same
+  `getOption` call as everything else.
+
 ### Changed
 
 - **Internal carrier unification — `AlgLens[F]` + `Kaleidoscope` collapse
