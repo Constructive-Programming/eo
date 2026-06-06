@@ -636,6 +636,7 @@ lazy val benchmarks: Project = project
   .enablePlugins(JmhPlugin)
   .dependsOn(
     LocalProject("core"),
+    LocalProject("generics"),
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),

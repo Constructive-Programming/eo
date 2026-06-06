@@ -254,7 +254,14 @@ non-degenerate case that bench was built to demonstrate.
         need a **measured re-run** of the `Order*` suite (`-f 3 -wi 3 -i 5`, quiet
         machine) and a prose rewrite — not a find-replace. Deliberately left
         untouched here to avoid publishing unverified numbers.
-- [ ] Phase 2: `CompositionBench`, `GenericsBench`, `OpticBuildBench`
+- [x] Phase 2: `CompositionBench` (build-vs-reuse `.andThen`, same- and
+      cross-carrier, depth 1/3/6), `GenericsBench` (derived lens/prism vs
+      hand-written vs raw `copy`/match), `OpticBuildBench` (codecPrism
+      construction vs reuse). All compile + smoke-run.
+  - Spun out of Phase 2: **core `getOption` for the `Either` carrier** so a
+    derived `generics.prism` (bare `Optic[…,Either]`) reads via `getOption` like
+    any other optic. New extension in `Optic.scala` (`@targetName`-disambiguated),
+    behaviour test in `OpticsBehaviorSpec`, CHANGELOG entry. Full `sbt test` green.
 - [ ] Phase 3 remainder: FoldBench real-world (`lines[*].price`) row
 - [ ] Phase 4: JMH preamble decision
 
