@@ -229,7 +229,13 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         (wrappedTri.modify(t => Shape3.Tri(t.side + 1))(Wrapper(Shape3.Sq(5))) ==
           Wrapper(Shape3.Sq(5)))
 
-    tuple2Ok && affineOk && eitherOk && r1 && r2
+    // getOption lights up on the bare Either-carrier optic (not just the concrete Prism):
+    // hit unwraps the Right branch, miss returns None.
+    val getOptionOk =
+      (triP.getOption(Shape3.Tri(3)) == Some(Shape3.Tri(3))) &&
+        (triP.getOption(Shape3.Sq(5)) == None)
+
+    tuple2Ok && affineOk && eitherOk && r1 && r2 && getOptionOk
   }
 
   // ----- Optional.readOnly behaviour -----------------------------------
