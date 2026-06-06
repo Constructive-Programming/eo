@@ -26,7 +26,7 @@ import dev.constructive.eo.optics.Optic
   * eo-jsoniter walks the raw `Array[Byte]` directly (skip the AST entirely). Baselines:
   *
   *   - `eo*` — eo-jsoniter `JsoniterPrism` / `JsoniterTraversal` over the bytes.
-  *   - `native*` (read only) — a hand-rolled `JsonReader` codec that walks to the focus and
+  *   - `native*` (reads / fold) — a hand-rolled `JsonReader` codec that walks to the focus and
   *     `skip()`s every sibling, so the whole `Order` is never materialised. This is the optimum a
   *     jsoniter expert would write by hand — and exactly what eo-jsoniter does generically.
   *   - `naive*` — jsoniter's full-codec round-trip (`readFromArray[Order]` → modify →
@@ -38,8 +38,9 @@ import dev.constructive.eo.optics.Optic
   *     `naive` full-decode / `monocle`).
   *   - **write** the same scalar (`.modify` re-splices only the focus span; only `eo` avoids the
   *     full read here — a hand-rolled partial-splice writer is essentially eo-jsoniter itself).
-  *   - **fold** the `$.lines[*].price` array (read-only `[*]` traversal — jsoniter's phase-1.5
-  *     array surface is fold-only; the write-traversal story lives in the circe / avro benches).
+  *   - **fold** the `$.lines[*].price` array (`eo` / `native` partial-scan sum / `naive`
+  *     full-decode / `monocle`). eo's `[*]` is read-only in jsoniter phase-1.5, so this is a fold,
+  *     not a write traversal — the write-traversal story lives in the circe / avro benches.
   *
   * `@Param size` grows the surrounding document so the byte-walk's depth-independent cost shows
   * against the codec round-trip's O(all-fields) cost.
@@ -52,7 +53,7 @@ import dev.constructive.eo.optics.Optic
 @Measurement(iterations = 5, time = 1)
 class OrderJsoniterBench extends JmhDefaults:
 
-  import OrderJsoniterBench.{streetScanCodec, given}
+  import OrderJsoniterBench.{pricesSumScanCodec, streetScanCodec, given}
   import cats.instances.double.given
   import cats.instances.string.given
 
@@ -80,6 +81,15 @@ class OrderJsoniterBench extends JmhDefaults:
         .address
         .street,
       "streetScanCodec disagrees with the full decode",
+    )
+    require(
+      math.abs(
+        readFromArray(bytes)(using pricesSumScanCodec) - readFromArray[Order](bytes)
+          .lines
+          .map(_.price)
+          .sum
+      ) < 1e-9,
+      "pricesSumScanCodec disagrees with the full decode",
     )
 
   // ---- read scalar: $.customer.address.street -----------------------
@@ -125,6 +135,13 @@ class OrderJsoniterBench extends JmhDefaults:
 
   @Benchmark def eoSumPrices: Double =
     eoPricesT.foldMap(identity[Double])(bytes)
+
+  // The optimum native fold: walk to `lines`, sum each element's `price`,
+  // skip()ing every sibling field at both levels — the line objects are never
+  // fully materialised. (A fold must still visit every element, so this won't
+  // beat the full decode by the margin the scalar read does.)
+  @Benchmark def nativeSumPrices: Double =
+    readFromArray(bytes)(using pricesSumScanCodec)
 
   @Benchmark def naiveSumPrices: Double =
     readFromArray[Order](bytes).lines.map(_.price).sum
@@ -172,6 +189,27 @@ object OrderJsoniterBench:
         field(in, "address", default) { in =>
           field(in, "street", default)(_.readString(null))
         }
+      }
+
+  /** Hand-rolled scanner for `$.lines[*].price` — walks to the `lines` array, sums each element's
+    * `price`, and `skip()`s every sibling at both levels. The line objects are never fully
+    * materialised.
+    */
+  val pricesSumScanCodec: JsonValueCodec[Double] = new JsonValueCodec[Double]:
+    def nullValue: Double = 0.0
+    def encodeValue(x: Double, out: JsonWriter): Unit = out.writeVal(x)
+    def decodeValue(in: JsonReader, default: Double): Double =
+      field(in, "lines", default) { in =>
+        var sum = 0.0
+        if in.isNextToken('[') then
+          if !in.isNextToken(']') then
+            in.rollbackToken()
+            while
+              sum += field(in, "price", 0.0)(_.readDouble())
+              in.isNextToken(',')
+            do ()
+        else in.rollbackToken()
+        sum
       }
 
   given JsonValueCodec[Double] = JsonCodecMaker.make
