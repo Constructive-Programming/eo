@@ -204,21 +204,18 @@ through the `prism[S, A]` macro — see
 Wlaschin — *Domain Modeling Made Functional*, ch. 4,
 <https://pragprog.com/titles/swdddf/domain-modeling-made-functional/>.
 
-### …and across the whole tree — `Plated` (cats-eo-unique)
+### …and across the whole tree — `Plated` + `everywhere` (cats-eo-unique)
 
-The Prism above edits *one* `Var`. To uppercase every variable
-*everywhere* in the same `Expr` tree — down through `App` and `Lam`
-nesting — give `Expr` a `Plated` and `transform`. A `Plated`'s job
-is to name the immediate `Expr` children of each case (the recursion
-points); `transform` then walks bottom-up, so you only write the
-per-node rule. In real code reach for `plate[Expr]` from
-[eo-generics](generics.md) to derive the instance — it finds
-exactly the same self-typed children — but it's spelled out here so
-the page stays macro-free:
+The Prism above edits *one* `Var`. Give `Expr` a `Plated` and the
+**same `varName` optic composes into `everywhere`** — a recursive
+optic that reaches every sub-term — so one `.andThen` chain plus
+`.modify` uppercases every variable at every depth:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Plated
 
+// `plate[Expr]` from eo-generics derives this; spelled out by hand so
+// the page stays macro-free. It names each case's immediate Expr children.
 given Plated[Expr] = Plated.fromChildren(
   {
     case Expr.App(f, x)    => List(f, x)
@@ -232,28 +229,28 @@ given Plated[Expr] = Plated.fromChildren(
   },
 )
 
-val shout: Expr => Expr =
-  case Expr.Var(n) => Expr.Var(n.toUpperCase)
-  case other       => other
+// `everywhere` is `transform` in optic form: everywhere.andThen(d).modify(g)
+// applies `d` at every node, bottom-up. Reuse `varName` (Prism → Lens) from above.
+val everyVarName = Plated.everywhere[Expr].andThen(varName)
 ```
 
 ```scala mdoc
 val term = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
 
-// Every Var occurrence is uppercased — the bound `y` too — while the
-// Lam binder "y" (a String, not an Expr child) is left alone.
-Plated.transform(shout)(term)
-
-// Read-only companions: count every sub-term, list the immediate children.
-Plated.universe(term).length
-Plated.children(term)
+// Every variable, at every depth: f -> F and the nested y -> Y. The Lam
+// binder "y" (a String, not a Var node) is left alone.
+everyVarName.modify(_.toUpperCase)(term)
 ```
 
-`transform` is stack-safe — it trampolines through `cats.Eval`, so a
-million-node tree won't overflow — and `rewrite` repeats an
-`Expr => Option[Expr]` rule to a fixpoint when one pass isn't enough.
-The derivation follows the *exact self-type* rule: only fields whose
-type is `Expr` are recursion points, which is why `Lam`'s
+`everywhere` composes like any other optic — `.andThen` a Prism to
+pick a case, a Lens to reach a field — and the `.modify` runs at every
+node, bottom-up and stack-safe (it trampolines through `cats.Eval`, so
+a million-node tree won't overflow). When the rewrite is easier as a
+plain per-node function, `Plated.transform(f)` is the same engine;
+`Plated.universe` / `children` are the read side (every sub-term /
+immediate children); `rewrite` repeats an `Expr => Option[Expr]` rule
+to a fixpoint. The derivation follows the *exact self-type* rule —
+only `Expr`-typed fields are recursion points, so `Lam`'s
 `bind: String` stays a leaf. See [Generics → `plate[S]`](generics.md).
 
 **Source:** Mitchell & Runciman — *Uniform Boilerplate and List

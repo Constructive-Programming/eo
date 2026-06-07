@@ -121,6 +121,29 @@ class PlatedSpec extends Specification with Discipline:
       Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("y")))
   }
 
+  // ----- The headline: a recursive `everywhere` optic that composes with Prism + Lens -----
+
+  "everywhere (Setter modify = transform) composes with a Prism + Lens to rewrite ALL variables" >> {
+    val varP = Prism[Expr, Expr.Var](
+      {
+        case v: Expr.Var => Right(v)
+        case other       => Left(other)
+      },
+      identity,
+    )
+    val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
+
+    // `everywhere`.modify(h) == transform(h); by the composition law,
+    // everywhere.andThen(d).modify(g) == transform(d.modify(g)) — apply d at every node.
+    val allVarNames = Plated.everywhere[Expr].andThen(varP).andThen(nameL)
+
+    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+    // EVERY variable, at every depth: f -> F and the nested y -> Y (Lam binder "y" is a String,
+    // not a Var node, so it stays — same semantics as the transform recipe).
+    allVarNames.modify(_.toUpperCase)(tree) ==
+      Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
+  }
+
   // ----- Behaviour: rewrite re-fires to a fixpoint (bottom-up constant fold) -----
 
   "rewrite folds Node(Leaf,Leaf) repeatedly until a single total remains" >> {

@@ -4,7 +4,7 @@ package optics
 import cats.{Eval, Monad}
 import cats.syntax.flatMap.*
 
-import data.{MultiFocus, PSVec}
+import data.{MultiFocus, PSVec, SetterF}
 import data.MultiFocus.given // ForgetfulFunctor / Fold / Traverse for MultiFocus[PSVec]
 
 /** A self-similar structure: a value of `S` whose immediate sub-terms are themselves `S`. The
@@ -116,6 +116,23 @@ object Plated:
         ret = f(P.rebuild(fr.node, PSVec.unsafeWrap[S](fr.out)))
         val _ = stack.pop()
     ret
+
+  /** The whole structure as a composable optic that reaches *every* sub-term — `transform` in optic
+    * form. `everywhere.modify(h) == transform(h)`, so composing a downstream optic and modifying
+    * rewrites that focus at every depth, bottom-up:
+    *
+    * {{{
+    * // uppercase EVERY variable anywhere in the tree:
+    * everywhere[Expr].andThen(varPrism).andThen(nameLens).modify(_.toUpperCase)(tree)
+    * }}}
+    *
+    * It is a write-side optic (a [[Setter]] whose `modify` is the recursive [[transform]]); it
+    * composes as the *outer* of `.andThen` with any inner optic that bridges into `SetterF` (Lens /
+    * Prism / Optional / …), and the composite is `transform(inner.modify(_))` by the optic
+    * composition law. For the read side — every sub-term as a list — use [[universe]].
+    */
+  def everywhere[S](using P: Plated[S]): Optic[S, S, S, S, SetterF] =
+    Setter[S, S, S, S](g => s => transform(g)(s))
 
   /** Effectful bottom-up rewrite over any monad `G` — the engine [[transform]] and [[rewrite]] are
     * specialisations of. Stack-safe when `G` is a trampolining monad (`Eval`, `IO`).

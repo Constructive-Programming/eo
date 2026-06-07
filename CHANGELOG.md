@@ -13,7 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `optics.Plated[S]` (the cats-eo analogue of Haskell `lens`'s `Plated`) whose
   `plate` is a `Traversal[S, S]` over the immediate same-typed children of a
   recursive ADT, plus stack-safe combinators `transform` (bottom-up rewrite),
-  `rewrite` (Option-rule fixpoint), `children`, and `universe`. All trampoline
+  `rewrite` (Option-rule fixpoint), `children`, and `universe`. The headline is
+  `Plated.everywhere` — `transform` in *composable optic* form: a `Setter` whose
+  `modify` is the recursive `transform`, so `everywhere.andThen(prism).andThen(lens).modify(f)`
+  applies `f` at the focus *at every depth* (e.g. uppercase every variable in an
+  expression tree). It reuses the existing `SetterF` carrier and `Morph`/`Composer`
+  bridges — no new carrier — so it composes with any inner optic (Lens / Prism /
+  Optional / …) as the outer of `.andThen`. All trampoline
   through `cats.Eval` (or an explicit worklist), so deep trees don't overflow.
   Build one with `Plated.fromChildren`, derive it with `generics.plate[S]`
   (focuses every exact-`S`-typed field across all cases; enums, sealed
