@@ -252,11 +252,11 @@ carrier is PSVec-native, so neither path converts to a `List` and back.
 
 | Op | Subject | eo | monocle | visitor |
 |---|---|--:|--:|--:|
-| `universe` | `Expr` balanced | 16 000 | 191 000 | 8 000 |
-| | `Json` balanced | 31 000 | 216 000 | 25 000 |
-| | `Bin` deep spine | 20 000 | **SO** | 7 000 |
-| `transform` | `Expr` balanced | 28 000 | 25 000 | 15 000 |
-| | `Bin` deep spine | 17 000 | **SO** | 5 000 |
+| `universe` | `Expr` balanced | 15 000 | 176 000 | 7 000 |
+| | `Json` balanced | 20 000 | 210 000 | 16 000 |
+| | `Bin` deep spine | 15 500 | **SO** | 7 000 |
+| `transform` | `Expr` balanced | 18 000 | 16 000 | 8 000 |
+| | `Bin` deep spine | 13 000 | **SO** | 4 000 |
 
 (ns/op at n=512, 3-fork; **indicative only** — this machine is noisy enough that
 sub-2× differences aren't significant. The CI workflow produces the canonical
@@ -269,24 +269,28 @@ Three results:
   where it survives at 1024, runs ~700× slower than EO — its lazy-`#:::` append
   going quadratic). EO clears the spine at every size here and at 100k in the
   stack-safety test, so the deep rows compare EO against the visitor only.
-- **`universe` beats Monocle by ~10× and rivals the visitor.** Reading children
-  straight off the PSVec carrier (no `List` round-trip, explicit worklist) puts
-  the JSON subject ~on par with the bare visitor and `Expr` within ~2×.
+- **`universe` beats Monocle by ~10–12× and rivals the visitor.** Reading
+  children straight off the PSVec carrier (no `List` round-trip, explicit
+  worklist) puts the JSON subject ~on par with the bare visitor (~1.3×) and
+  `Expr` within ~2×.
 - **`transform` is on par with Monocle and stack-safe.** It went from an
   `Eval` trampoline (was ~10× slower) to a **hybrid**: a direct call-stack
   recursion (≈ a hand-written rebuild — no per-node heap `Frame`) while shallow,
   handing any subtree past a depth bound to the heap-stack machine so a
-  degenerate spine still can't overflow. With `childrenVec` / `rebuild` (no
-  `to`/`from` tuple per node) and leaves applied in place, allocation is now
-  ~80 B/node on `Expr` (down from 96; visitor is 44) and ~56 B/node on the deep
-  spine (down from 78). Both paths sit within **~2×** of the bare visitor.
+  degenerate spine still can't overflow. (`rewrite` keeps its own `cats.Eval`
+  trampoline — it stays stack-safe on *both* the descent and a long re-fire
+  chain, which a synchronous machine would put back on the call stack.) With
+  `childrenVec` / `rebuild` (no `to`/`from` tuple per node) and
+  leaves applied in place, allocation is ~80 B/node on `Expr` (visitor is 44)
+  and ~56 B/node on the deep spine. Both paths sit within **~2–3×** of the bare
+  visitor.
 
 The residual gap to the visitor is the **carrier materialisation**: even on the
 fast recursive path EO allocates a `PSVec` of children + an `out` array per
 internal node, where a hand visitor fuses extract-and-rebuild into one
 `new Node(go(l), go(r))` and allocates neither — plus the heap stack the deep
 fallback uses (so it never overflows; the visitor and Monocle both do on the
-spine). Closing the last ~2× would mean fusing the recursion into the `plate[S]`
+spine). Closing the last ~2–3× would mean fusing the recursion into the `plate[S]`
 macro — but that emits a *function*, not an `Optic`, which would break the
 `.andThen` composition `everywhere` relies on, so it's deliberately not done.
 
