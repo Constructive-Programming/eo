@@ -274,7 +274,15 @@ non-degenerate case that bench was built to demonstrate.
     any other optic. New extension in `Optic.scala` (`@targetName`-disambiguated),
     behaviour test in `OpticsBehaviorSpec`, CHANGELOG entry. Full `sbt test` green.
 - [ ] Phase 3 remainder: FoldBench real-world (`lines[*].price`) row
-- [ ] Phase 4: JMH preamble decision
+- [x] Phase 4: JMH preamble decision — **settled by probe.** A `@BenchDefaults`
+      meta-annotation was tested empirically and does not work: JMH's generator
+      doesn't resolve an annotation's own annotations through to the bench class,
+      and silently fell back to all-defaults (Throughput/seconds, default
+      scope/forks) without erroring on the missing `@State`. So stripping the
+      preamble would yield silently wrong-mode numbers — the per-class preamble is
+      structurally required and kept deliberately (documented in `JmhDefaults`).
+      The safe DRY — the run invocation — is centralised as the `bench` /
+      `benchQuick` sbt aliases.
 
 ### Early signal (size 64, `-i 1 -wi 1 -f 1`, smoke only — not publishable)
 

@@ -660,3 +660,9 @@ lazy val benchmarks: Project = project
     // codec module.
     libraryDependencies += jsoniterMacros,
   )
+
+// Single source of truth for the JMH invocation (the config that the per-class
+// annotations pin — see JmhDefaults' Phase-4 note for why that preamble can't be
+// DRY'd). Append a filter: `sbt "bench .*OrderAvroBench.*"`.
+addCommandAlias("bench", "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1")
+addCommandAlias("benchQuick", "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1")

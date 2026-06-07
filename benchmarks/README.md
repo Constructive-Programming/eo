@@ -18,18 +18,34 @@ aggregator** — `sbt compile` and `sbt test` skip it. Run explicitly.
 
 ## Running
 
-Trustworthy numbers (five iterations, three warm-ups, three forks):
+Trustworthy numbers (five iterations, three warm-ups, three forks) — the
+`bench` sbt alias bakes in that config (single source of truth; append a JMH
+filter to scope it):
+
+```sh
+sbt bench                          # whole suite
+sbt "bench .*OrderAvroBench.*"     # one class
+```
+
+Quick smoke check (faster, noisier — useful while iterating on a bench, not for
+comparisons) via the `benchQuick` alias (`-i 3 -wi 2 -f 1`):
+
+```sh
+sbt benchQuick
+```
+
+The raw forms still work if you need a non-standard config:
 
 ```sh
 sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1"
-```
-
-Quick smoke check (one iteration, one warm-up, one fork) — useful
-while iterating on a bench, not for comparisons:
-
-```sh
 sbt "benchmarks/Jmh/run -i 1 -wi 1 -f 1 -t 1"
 ```
+
+> The per-bench `@Fork`/`@Warmup`/`@Measurement`/`@BenchmarkMode`/
+> `@OutputTimeUnit`/`@State` preamble can't be shared via a trait *or* a
+> meta-annotation (JMH reads its config off the concrete class only — see the
+> `JmhDefaults` scaladoc); these aliases centralise the *invocation*, which is
+> the part that safely can be.
 
 Or run them reproducibly in CI: the **Benchmarks** workflow
 (`.github/workflows/benchmarks.yml`, manual `workflow_dispatch`) runs a JMH
