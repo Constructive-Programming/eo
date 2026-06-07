@@ -952,6 +952,78 @@ cats-eo-specific API to learn.
 **Source:** Penner — *Using traversals to batch database
 queries*, <https://chrispenner.ca/posts/traversals-for-batching>.
 
+### Persist-and-stamp — return the stored object with its DB id
+
+A `PUT` (or `POST`) handler receives a draft entity on the wire,
+persists it, and must return the *same* entity enriched with the
+database-assigned id. The id only exists after the effectful store
+runs, so this is the classic "set one field to the result of an
+effect" shape — and a derived id-lens makes the stamp a one-liner.
+With circe carrying the value across the wire on both ends, the
+whole handler is a short pipeline: `decode → store → stamp →
+encode`.
+
+```scala mdoc:silent
+import io.circe.{Codec, Json}
+import io.circe.syntax.*
+import io.circe.parser.decode
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import dev.constructive.eo.generics.lens
+
+// Stand-in for your effect type (cats-effect IO, ZIO, Future…).
+final class IO[A](val unsafeRun: () => A):
+  def map[B](f: A => B): IO[B] = IO(f(unsafeRun()))
+  def flatMap[B](f: A => IO[B]): IO[B] = IO(f(unsafeRun()).unsafeRun())
+object IO:
+  def apply[A](a: => A): IO[A] = new IO(() => a)
+
+final case class BalanceSheet(id: Long, owner: String, total: Double)
+object BalanceSheet:
+  given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derive
+
+// One derived lens onto the id — no hand-written getter/setter, and
+// it works even though `id` shares the case class with two other fields.
+val sheetId = lens[BalanceSheet](_.id)
+
+// The effectful store: inserts the row, hands back the generated id.
+def save(sheet: BalanceSheet): IO[Long] = IO {
+  val _ = sheet // pretend: INSERT … RETURNING id
+  42L
+}
+
+// Persist, then stamp the returned id back onto the object with the
+// lens — `save(...).map(sheetId.replace(_)(sheet))`.
+def store(sheet: BalanceSheet): IO[BalanceSheet] =
+  save(sheet).map(sheetId.replace(_)(sheet))
+
+// The whole PUT handler: request bytes in, response bytes out.
+def handlePut(body: String): IO[String] =
+  decode[BalanceSheet](body) match
+    case Right(draft) => store(draft).map(_.asJson.noSpaces)
+    case Left(err)    => IO(Json.obj("error" -> err.getMessage.asJson).noSpaces)
+```
+
+```scala mdoc
+// Incoming PUT body — `id` is a placeholder the store overwrites.
+val request = """{"id":0,"owner":"Acme Corp","total":1234.5}"""
+
+handlePut(request).unsafeRun()
+```
+
+Every step earns its place: `decode` is the wire → domain hop
+(circe), `store` is your effect, the stamp is the derived lens
+standing in for a hand-written `sheet.copy(id = newId)`, and
+`asJson` is the domain → wire hop back out. The lens is the only
+optic, and it stays a reusable value — compose it further
+(`orderLens.andThen(sheetId)`) the moment the entity nests inside a
+larger request. In production you'd reach for an opaque `DbId`
+rather than a bare `Long`, and likely a separate `Draft` type
+without the id field; the shape of the pipeline doesn't change.
+
+**Source:** the lens-stamps-the-effect-result pattern,
+<https://gist.github.com/kryptt/af0a626849f0e3f5b16fcd161a5545e4>;
+see also [Generics → Composing into pipelines](generics.md#composing-derived-optics-into-pipelines).
+
 ## Theme I — Observable failure (cats-eo-unique)
 
 The next three recipes cover the observability story for the
