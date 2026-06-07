@@ -20,8 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   expression tree). It reuses the existing `SetterF` carrier and `Morph`/`Composer`
   bridges — no new carrier — so it composes with any inner optic (Lens / Prism /
   Optional / …) as the outer of `.andThen`. All are stack-safe on deep trees —
-  `transform` via an explicit post-order stack machine, `universe` / `children`
-  via a worklist, `rewrite` via a `cats.Eval` trampoline.
+  `transform` recurses on the call stack while shallow and falls back to a
+  heap-stack machine past a depth bound, `universe` / `children` use a worklist,
+  `rewrite` a `cats.Eval` trampoline.
   Build one with `Plated.fromChildren`, derive it with `generics.plate[S]`
   (focuses every exact-`S`-typed field across all cases; enums, sealed
   hierarchies, recursive case classes), or call the combinators directly on any
@@ -32,9 +33,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   focus vector directly, with a `List`-shaped `fromChildren` kept as a
   hand-writing convenience — so neither path pays a `List ↔ PSVec` round-trip.
   `universe` reads children straight off the carrier (no `List` per node) and
-  `transform` walks an explicit post-order stack machine (via `childrenVec` /
-  `rebuild`, no `to`/`from` tuple per node; leaves applied in place) instead of
-  an `Eval` trampoline; both stay stack-safe (deep + 100k trees) while running
+  `transform` is hybrid — a direct call-stack recursion while shallow, a
+  heap-stack machine past a depth bound (via `childrenVec` / `rebuild`, no
+  `to`/`from` tuple per node; leaves applied in place) instead of an `Eval`
+  trampoline; both stay stack-safe (deep + 100k trees) while running
   within ~2–3× of a hand-written recursive visitor and ahead of Monocle's
   `Plated` (which is not stack-safe). See the
   [benchmarks](https://github.com/Constructive-Programming/eo/blob/main/site/docs/benchmarks.md).

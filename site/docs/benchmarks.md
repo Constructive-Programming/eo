@@ -272,20 +272,23 @@ Three results:
 - **`universe` beats Monocle by ~10× and rivals the visitor.** Reading children
   straight off the PSVec carrier (no `List` round-trip, explicit worklist) puts
   the JSON subject ~on par with the bare visitor and `Expr` within ~2×.
-- **`transform` is on par with Monocle and stack-safe.** The carrier work goes
-  through `childrenVec` / `rebuild` (no `to`/`from` tuple per node), an explicit
-  post-order stack machine replaces the `Eval` trampoline (was ~10× slower), and
-  leaves are applied in place (no frame, no rebuild copy) — together cutting the
-  deep spine ~−74 % (47 µs → 17 µs at 512). Both paths now sit within **~2–3×**
-  of the bare visitor.
+- **`transform` is on par with Monocle and stack-safe.** It went from an
+  `Eval` trampoline (was ~10× slower) to a **hybrid**: a direct call-stack
+  recursion (≈ a hand-written rebuild — no per-node heap `Frame`) while shallow,
+  handing any subtree past a depth bound to the heap-stack machine so a
+  degenerate spine still can't overflow. With `childrenVec` / `rebuild` (no
+  `to`/`from` tuple per node) and leaves applied in place, allocation is now
+  ~80 B/node on `Expr` (down from 96; visitor is 44) and ~56 B/node on the deep
+  spine (down from 78). Both paths sit within **~2×** of the bare visitor.
 
-The residual gap to the visitor is the **stack-safety tax**: EO walks a heap
-stack / worklist (so it never overflows — the visitor and Monocle both do on the
-deep spine), and the carrier materialises a `PSVec` of children + an `out` array
-per internal node, where a hand visitor fuses extract-and-rebuild into one
-`new Node(go(l), go(r))` and allocates neither. Closing it further means either
-recursing on the call stack for shallow trees (hybrid, keeps stack-safety) or
-fusing the recursion into the `plate[S]` macro — tracked as future work.
+The residual gap to the visitor is the **carrier materialisation**: even on the
+fast recursive path EO allocates a `PSVec` of children + an `out` array per
+internal node, where a hand visitor fuses extract-and-rebuild into one
+`new Node(go(l), go(r))` and allocates neither — plus the heap stack the deep
+fallback uses (so it never overflows; the visitor and Monocle both do on the
+spine). Closing the last ~2× would mean fusing the recursion into the `plate[S]`
+macro — but that emits a *function*, not an `Optic`, which would break the
+`.andThen` composition `everywhere` relies on, so it's deliberately not done.
 
 ## Reproducing
 

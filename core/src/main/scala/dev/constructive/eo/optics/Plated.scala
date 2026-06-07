@@ -12,8 +12,9 @@ import data.MultiFocus.given // ForgetfulFunctor / Fold / Traverse for MultiFocu
   *
   * The recursion combinators in the companion ([[Plated.transform]], [[Plated.rewrite]],
   * [[Plated.children]], [[Plated.universe]]) build on `plate` to walk the *whole* tree. They are
-  * **stack-safe**: the structural recursions trampoline through `cats.Eval` (or an explicit
-  * worklist), so a degenerate 100k-deep tree is fine.
+  * **stack-safe** on deep trees: `transform` recurses on the call stack while shallow and falls
+  * back to a heap-stack machine past a depth bound, `rewrite` trampolines through `cats.Eval`, and
+  * `universe` / `children` use an explicit worklist — a degenerate 100k-deep tree is fine.
   *
   * The children are carried as a `PSVec` (the `MultiFocus[PSVec]` carrier's focus vector), so the
   * read path and the write path share one representation with no `List` round-trips — see
@@ -84,26 +85,50 @@ object Plated:
       (s, vec) => rebuild(s, vec.toList),
     )
 
+  /** Largest call-stack recursion depth [[transform]] takes before handing a subtree to the heap
+    * machine. Tree *depth*, not node count — a balanced tree of a billion nodes is ~30 deep, so it
+    * stays entirely on the fast recursive path; only a degenerate spine deeper than this crosses
+    * into the machine. Kept well under any reasonable `-Xss` so the recursion itself can't
+    * overflow.
+    */
+  final private val transformRecursionLimit = 512
+
   /** Bottom-up rewrite: rewrite every node's children first, then apply `f` to the node. The single
     * pass each `lens` user reaches for.
     *
-    * Stack-safe *without* the per-node `Eval` allocation an `Eval`-trampolined recursion would pay:
-    * an explicit post-order stack machine walks the tree on a heap-allocated stack, reading
-    * children via [[Plated.childrenVec]] and rebuilding via [[Plated.rebuild]] (no carrier-tuple
-    * per node). Leaves are applied in place — no frame, no rebuild copy — so a balanced tree
-    * allocates a frame only for its internal nodes. Keeps the deep-tree guarantee while running
-    * close to a hand-written recursive rebuild.
+    * Hybrid for speed without giving up stack-safety: it recurses on the JVM call stack (≈ a
+    * hand-written recursive rebuild — no per-node heap `Frame`) while the depth stays under
+    * [[transformRecursionLimit]], and hands any deeper subtree to [[transformMachine]] — an
+    * explicit heap-stack post-order walk — so a degenerate spine of any depth (100k+) still can't
+    * overflow. Both paths read children via [[Plated.childrenVec]] and rebuild via
+    * [[Plated.rebuild]] (no carrier tuple per node), and apply `f` in place at leaves — the `f(s)`
+    * shortcut (rather than `f(rebuild(s, empty))`) matches the non-leaf path because
+    * `rebuild(leaf, empty) == leaf`, the `plateModifyIdentity` law.
     */
   def transform[S](f: S => S)(root: S)(using P: Plated[S]): S =
-    // One frame per internal node on the path to the cursor: the node, its children still to
-    // rewrite, and the rebuilt-children array filled in as each child completes.
+    def rec(s: S, depth: Int): S =
+      val kids = P.childrenVec(s)
+      if kids.isEmpty then f(s) // leaf
+      else if depth >= transformRecursionLimit then transformMachine(f)(s) // deep: go to the heap
+      else
+        val n = kids.length
+        val out = new Array[AnyRef](n)
+        var i = 0
+        while i < n do
+          out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
+          i += 1
+        f(P.rebuild(s, PSVec.unsafeWrap[S](out)))
+    rec(root, 0)
+
+  /** The stack-safe fallback for [[transform]] — an explicit post-order stack machine on the heap,
+    * so depth is bounded by available heap, not the call stack. One frame per internal node on the
+    * path to the cursor, holding its children and the rebuilt-children array filled in as each
+    * child completes; leaves are applied in place.
+    */
+  private def transformMachine[S](f: S => S)(root: S)(using P: Plated[S]): S =
     final class Frame(val node: S, val kids: PSVec[S], val out: Array[AnyRef], var i: Int)
     val stack = new java.util.ArrayDeque[Frame]()
     var ret: S = root // overwritten before any read (only read once a child has completed)
-    // Enter a node: apply `f` straight to a leaf; otherwise push a frame to rewrite its children.
-    // The leaf shortcut `f(s)` (rather than `f(rebuild(s, empty))`) matches the non-leaf path
-    // because `rebuild(leaf, empty) == leaf` — i.e. the `plateModifyIdentity` law. For a
-    // law-abiding plate the two are identical; the law is what guarantees it.
     def enter(s: S): Unit =
       val kids = P.childrenVec(s)
       if kids.isEmpty then ret = f(s)
