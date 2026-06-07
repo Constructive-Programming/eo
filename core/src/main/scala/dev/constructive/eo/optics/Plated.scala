@@ -28,6 +28,15 @@ trait Plated[S]:
   /** The immediate-children self-traversal. */
   def plate: Optic[S, S, S, S, MultiFocus[PSVec]]
 
+  /** Immediate children as a `List` — the read-side fast path behind [[Plated.children]] /
+    * [[Plated.universe]]. Defaults to a `foldMap` through [[plate]], but [[Plated.fromChildren]]
+    * (and therefore every `generics.plate[S]`-derived instance) overrides it with the raw children
+    * function, so the read path skips the `List → Array → PSVec → List` round-trip the optic's `to`
+    * / `foldMap` would otherwise pay per node.
+    */
+  def childrenList(s: S): List[S] =
+    plate.foldMap[List[S]](List(_))(s)
+
 /** Combinators over [[Plated]] — recursion schemes faithful to `Control.Lens.Plated`, all
   * stack-safe. Each is offered both as a `using Plated[S]` method here and as an extension on any
   * self-traversal optic you build directly (so `myPlate.transform(f)(s)` works without a
@@ -44,6 +53,7 @@ object Plated:
   def fromChildren[S](children: S => List[S], rebuild: (S, List[S]) => S): Plated[S] =
     new Plated[S]:
       val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = Traversal.selfChildren(children, rebuild)
+      override def childrenList(s: S): List[S] = children(s)
 
   /** Bottom-up rewrite: rewrite every node's children first, then apply `f` to the node. The single
     * pass each `lens` user reaches for. Stack-safe via an `Eval` trampoline.
@@ -68,9 +78,11 @@ object Plated:
     def go(x: S): Eval[S] = Eval.defer(P.plate.modifyA[Eval](go)(x)).flatMap(step)
     go(s).value
 
-  /** The immediate sub-terms of `s` (one level down) — `plate.foldMap(List(_))`. */
+  /** The immediate sub-terms of `s` (one level down). Routes through [[Plated.childrenList]], so a
+    * derived / `fromChildren` plate reads its children directly rather than through the optic.
+    */
   def children[S](s: S)(using P: Plated[S]): List[S] =
-    P.plate.foldMap[List[S]](List(_))(s)
+    P.childrenList(s)
 
   /** Every sub-term of `s`, `s` itself first, in pre-order. Stack-safe via an explicit worklist. */
   def universe[S](s: S)(using P: Plated[S]): List[S] =
@@ -78,7 +90,7 @@ object Plated:
     def loop(stack: List[S], acc: List[S]): List[S] =
       stack match
         case Nil    => acc.reverse
-        case h :: t => loop(children(h) ::: t, h :: acc)
+        case h :: t => loop(P.childrenList(h) ::: t, h :: acc)
     loop(s :: Nil, Nil)
 
   /** The "both" surface: treat any self-traversal optic as a [[Plated]] and call the combinators on

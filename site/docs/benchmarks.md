@@ -242,6 +242,45 @@ write directly into pre-sized builders instead of allocating a per-element
 wrapper. The full mechanics and the −59 %…−67 % optimisation history are in the
 [composition notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes).
 
+## Plated `universe` — recursion vs Monocle vs a hand visitor
+
+`Plated.universe` enumerates every sub-term of a recursive structure.
+`PlatedUniverseBench` pits cats-eo against Monocle's
+`monocle.function.Plated.universe` and the hand-written recursive collector
+("visitor") you'd write without optics, over three subjects: a normal-depth
+`Expr` tree, a degenerate deep `Bin` spine, and a normal-depth circe `Json` tree
+(via the universal `Plated[Json]`).
+
+| Subject (bench) | Size | eo | monocle | visitor |
+|---|--:|--:|--:|--:|
+| `Expr` balanced | 512 | 27 100 | 178 000 | 10 500 |
+| | 4096 | 213 000 | 2 234 000 | 70 500 |
+| `Json` balanced | 512 | 52 300 | 200 000 | 51 700 |
+| | 4096 | 474 000 | 2 314 000 | 148 000 |
+| `Bin` deep spine | 512 | 27 300 | **SO** | 14 500 |
+| | 4096 | 96 900 | **SO** | 124 600 |
+
+(ns/op; indicative single-fork local numbers — the CI workflow produces the
+canonical figures.)
+
+Two results:
+
+- **Monocle's `universe` is not stack-safe.** On the degenerate spine it
+  `StackOverflowError`s at depth ≳2048 (and, where it survives — depth 1024 —
+  runs ~700× slower than EO, its lazy-`#:::` append going quadratic). EO's
+  `Eval` trampoline clears the spine at every size here and at 100k in the
+  stack-safety test, so the deep row compares EO against the visitor only. On
+  the normal trees EO's `universe` is **~1.6–6× faster** than Monocle's.
+- **EO sits near the hand visitor.** The read path (`children` / `universe`)
+  reads a `fromChildren` / derived plate's children directly via
+  `Plated.childrenList`, skipping the optic's `List → Array → PSVec → List`
+  round-trip — which cut the deep subject ~80 % (133 µs → 27 µs at 512) and
+  brought the deep and JSON subjects to **~parity** with the bare recursive
+  visitor, the dense `Expr` tree to **~2.5×**. The residual `Expr` gap is the
+  per-node children `List` the `fromChildren` contract allocates, which a direct
+  visitor sidesteps (a zero-alloc `childrenForeach` callback would close it, at
+  the cost of another derivation path).
+
 ## Reproducing
 
 The integration tables are produced by the **Benchmarks** CI workflow
