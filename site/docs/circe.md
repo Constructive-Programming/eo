@@ -390,7 +390,7 @@ elements or an object's field values — so the
 
 ```scala mdoc:silent
 import dev.constructive.eo.circe.given
-import dev.constructive.eo.optics.Plated
+import dev.constructive.eo.optics.{Plated, Prism}
 import io.circe.Json
 ```
 
@@ -409,10 +409,30 @@ Plated
 Plated.universe(doc).length
 ```
 
-`transform` / `rewrite` / `universe` are stack-safe (they
-trampoline through `cats.Eval`), so a deep document won't overflow.
-See the [cookbook Plated recipe](cookbook.md) for the data-type
-side of the same API.
+Better still, `Plated.everywhere[Json]` turns that whole-tree walk into
+a *composable optic*: build the focus once as an ordinary `Prism`, then
+`.andThen` it onto `everywhere` and the `.modify` runs at every depth —
+the same `.andThen` / `.modify` vocabulary the rest of this page uses
+for a single path, now reaching the entire document:
+
+```scala mdoc:silent
+// A Prism focusing any Json string leaf.
+val jsonString = Prism.optional[Json, String](_.asString, Json.fromString)
+
+// One optic, every depth: uppercase every string in the tree.
+val everyString = Plated.everywhere[Json].andThen(jsonString)
+```
+
+```scala mdoc
+everyString.modify(_.toUpperCase)(doc).noSpacesSortKeys
+```
+
+`transform` / `rewrite` / `universe` / `everywhere` are all stack-safe
+to any depth (`transform` / `everywhere` on a call-stack/heap-machine
+hybrid, `universe` on a worklist, `rewrite` trampolined through
+`cats.Eval` so even a long re-fire chain won't overflow), so a deep
+document is safe. See the [cookbook Plated recipe](cookbook.md) for the
+data-type side of the same API.
 
 ## When to reach for which
 
