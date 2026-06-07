@@ -201,3 +201,46 @@ class PlatedSpec extends Specification with Discipline:
     binPlate.universeOf(bumped).length == (2 * n + 1) &&
     extrasOk
   }
+
+  "rewrite is stack-safe on both axes: a 100k-deep descent AND a 200k-long re-fire chain" >> {
+    // `rewrite` trampolines through `cats.Eval`, so neither the bottom-up *descent* over a deep
+    // tree nor the *fixpoint re-firing* at a single node runs on the JVM call stack. Both of the
+    // shapes below would overflow a naive call-stack implementation; both must complete here.
+    val binPlate = Plated
+      .fromChildren[Bin](
+        {
+          case Bin.Node(l, r) => List(l, r)
+          case Bin.Leaf(_)    => Nil
+        },
+        {
+          case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
+          case (leaf, _)                       => leaf
+        },
+      )
+
+    // Axis 1 — deep descent: a 100k-deep spine, folding Node(Leaf, Leaf) at every node up to a
+    // single Leaf. Each fire re-processes only a shallow result, so this stresses the descent.
+    val n = 100000
+    var deep: Bin = Bin.Leaf(0)
+    var i = 1
+    while i <= n do
+      deep = Bin.Node(deep, Bin.Leaf(i))
+      i += 1
+    val foldAdjacent: Bin => Option[Bin] = {
+      case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
+      case _                                  => None
+    }
+    val descentOk = Plated.rewrite(foldAdjacent)(deep)(using binPlate) match
+      case Bin.Leaf(_) => true
+      case _           => false
+
+    // Axis 2 — deep re-fire: a single Leaf whose rule re-fires 200k times in a chain (decrement
+    // to zero). This is the case that overflows a call-stack re-fire; the Eval trampoline clears it.
+    val decrement: Bin => Option[Bin] = {
+      case Bin.Leaf(k) if k > 0 => Some(Bin.Leaf(k - 1))
+      case _                    => None
+    }
+    val refireOk = Plated.rewrite(decrement)(Bin.Leaf(200000))(using binPlate) == Bin.Leaf(0)
+
+    descentOk && refireOk
+  }

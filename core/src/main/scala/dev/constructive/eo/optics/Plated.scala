@@ -165,7 +165,15 @@ object Plated:
 
   /** Apply the rule everywhere, bottom-up, and keep re-firing on each rewritten sub-term until the
     * rule returns `None` at every node — Haskell `lens`'s `rewrite`. The caller owns termination (a
-    * rule that always fires loops forever). Stack-safe via `Eval`.
+    * rule that always fires loops forever).
+    *
+    * Trampolined through `cats.Eval`, so it is '''fully stack-safe on both axes''': the bottom-up
+    * descent over a deep tree (a 100k-deep spine is fine) '''and''' the fixpoint re-firing — a rule
+    * that fires in a long chain at one position (e.g. `Counter(n) => Counter(n-1)` repeated many
+    * times) bounces through the heap, not the call stack, so it won't overflow either. (This is why
+    * `rewrite` keeps the `Eval` trampoline rather than reusing [[transform]]'s synchronous
+    * call-stack/heap-machine the way `everywhere` does — sharing it would put the re-fire chain
+    * back on the JVM call stack.)
     */
   def rewrite[S](f: S => Option[S])(s: S)(using P: Plated[S]): S =
     def step(x: S): Eval[S] = f(x).fold(Eval.now(x))(go)
