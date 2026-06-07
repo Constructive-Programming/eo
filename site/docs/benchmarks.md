@@ -252,14 +252,15 @@ carrier is PSVec-native, so neither path converts to a `List` and back.
 
 | Op | Subject | eo | monocle | visitor |
 |---|---|--:|--:|--:|
-| `universe` | `Expr` balanced | 27 000 | ~180 000 | 5 000 |
-| | `Json` balanced | 15 000 | ~200 000 | 20 000 |
+| `universe` | `Expr` balanced | 16 000 | 191 000 | 8 000 |
+| | `Json` balanced | 31 000 | 216 000 | 25 000 |
 | | `Bin` deep spine | 20 000 | **SO** | 7 000 |
-| `transform` | `Expr` balanced | 18 000 | 28 000 | 5 000 |
-| | `Bin` deep spine | 50 000 | **SO** | 4 000 |
+| `transform` | `Expr` balanced | 28 000 | 25 000 | 15 000 |
+| | `Bin` deep spine | 17 000 | **SO** | 5 000 |
 
-(ns/op at n=512; indicative single-fork local numbers — Monocle's `universe`
-varies a lot run-to-run, and the CI workflow produces the canonical figures.)
+(ns/op at n=512, 3-fork; **indicative only** — this machine is noisy enough that
+sub-2× differences aren't significant. The CI workflow produces the canonical
+figures.)
 
 Three results:
 
@@ -270,14 +271,21 @@ Three results:
   stack-safety test, so the deep rows compare EO against the visitor only.
 - **`universe` beats Monocle by ~10× and rivals the visitor.** Reading children
   straight off the PSVec carrier (no `List` round-trip, explicit worklist) puts
-  the JSON subject ahead of the bare visitor and `Expr` within ~5×.
-- **`transform` is now on par with Monocle and stack-safe.** Replacing the
-  per-node `Eval` trampoline with an explicit post-order stack machine (heap
-  stack, rebuild through the carrier on a PSVec) cut `Expr` ~96 % (407 µs → 18 µs
-  at 512) — *faster* than Monocle's non-stack-safe `transformOf` — and keeps the
-  deep-tree guarantee. The residual gap to the hand visitor is the one
-  `Frame` + children array the machine allocates per node, which direct
-  recursion sidesteps.
+  the JSON subject ~on par with the bare visitor and `Expr` within ~2×.
+- **`transform` is on par with Monocle and stack-safe.** The carrier work goes
+  through `childrenVec` / `rebuild` (no `to`/`from` tuple per node), an explicit
+  post-order stack machine replaces the `Eval` trampoline (was ~10× slower), and
+  leaves are applied in place (no frame, no rebuild copy) — together cutting the
+  deep spine ~−74 % (47 µs → 17 µs at 512). Both paths now sit within **~2–3×**
+  of the bare visitor.
+
+The residual gap to the visitor is the **stack-safety tax**: EO walks a heap
+stack / worklist (so it never overflows — the visitor and Monocle both do on the
+deep spine), and the carrier materialises a `PSVec` of children + an `out` array
+per internal node, where a hand visitor fuses extract-and-rebuild into one
+`new Node(go(l), go(r))` and allocates neither. Closing it further means either
+recursing on the call stack for shallow trees (hybrid, keeps stack-safety) or
+fusing the recursion into the `plate[S]` macro — tracked as future work.
 
 ## Reproducing
 

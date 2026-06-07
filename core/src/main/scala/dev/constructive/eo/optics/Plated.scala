@@ -40,6 +40,16 @@ trait Plated[S]:
     */
   def childrenVec(s: S): PSVec[S] = plate.to(s)._2
 
+  /** Reassemble `parent` with `children` swapped in (same arity / order) — the write-path
+    * counterpart to [[childrenVec]]. Defaults to threading the carrier; [[Plated.fromChildren]] /
+    * [[Plated.fromChildrenVec]] (hence every `generics.plate[S]`-derived instance) override it with
+    * the raw rebuild function so [[Plated.transform]] rebuilds without allocating the carrier's
+    * `(x, PSVec)` tuple per node.
+    */
+  def rebuild(parent: S, children: PSVec[S]): S =
+    val p = plate // bind once so `p.X` is a single stable existential across `to` / `from`
+    p.from((p.to(parent)._1, children))
+
 /** Combinators over [[Plated]] — recursion schemes faithful to `Control.Lens.Plated`, all
   * stack-safe. Each is offered both as a `using Plated[S]` method here and as an extension on any
   * self-traversal optic you build directly (so `myPlate.transformAll(f)(s)` works without a
@@ -55,10 +65,12 @@ object Plated:
     * that many children swapped in, same order. This is what `generics.plate[S]` emits, and it pays
     * zero `List` conversion on either the read or the write path.
     */
-  def fromChildrenVec[S](children: S => PSVec[S], rebuild: (S, PSVec[S]) => S): Plated[S] =
+  def fromChildrenVec[S](childrenFn: S => PSVec[S], rebuildFn: (S, PSVec[S]) => S): Plated[S] =
     new Plated[S]:
-      val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = Traversal.selfChildren(children, rebuild)
-      override def childrenVec(s: S): PSVec[S] = children(s)
+      val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
+        Traversal.selfChildren(childrenFn, rebuildFn)
+      override def childrenVec(s: S): PSVec[S] = childrenFn(s)
+      override def rebuild(parent: S, kids: PSVec[S]): S = rebuildFn(parent, kids)
 
   /** Build a [[Plated]] from a `List`-shaped children view — the ergonomic hand-writing entry point
     * (`{ case Node(l, r) => List(l, r); … }`). Wraps the `List` into the PSVec-native
@@ -76,29 +88,32 @@ object Plated:
     *
     * Stack-safe *without* the per-node `Eval` allocation an `Eval`-trampolined recursion would pay:
     * an explicit post-order stack machine walks the tree on a heap-allocated stack, reading
-    * children straight off the carrier (`to`) and rebuilding through it (`from`) on a `PSVec`. That
-    * keeps the deep-tree guarantee while running close to a hand-written recursive rebuild.
+    * children via [[Plated.childrenVec]] and rebuilding via [[Plated.rebuild]] (no carrier-tuple
+    * per node). Leaves are applied in place — no frame, no rebuild copy — so a balanced tree
+    * allocates a frame only for its internal nodes. Keeps the deep-tree guarantee while running
+    * close to a hand-written recursive rebuild.
     */
   def transform[S](f: S => S)(root: S)(using P: Plated[S]): S =
-    val plate = P.plate
-    // One frame per node on the path to the cursor: the carrier leftover `x`, the children still to
+    // One frame per internal node on the path to the cursor: the node, its children still to
     // rewrite, and the rebuilt-children array filled in as each child completes.
-    final class Frame(val x: plate.X, val kids: PSVec[S], val out: Array[AnyRef], var i: Int)
+    final class Frame(val node: S, val kids: PSVec[S], val out: Array[AnyRef], var i: Int)
     val stack = new java.util.ArrayDeque[Frame]()
-    def push(s: S): Unit =
-      val (x, kids) = plate.to(s)
-      stack.push(new Frame(x, kids, new Array[AnyRef](kids.length), 0))
-    push(root)
     var ret: S = root // overwritten before any read (only read once a child has completed)
+    // Enter a node: apply `f` straight to a leaf; otherwise push a frame to rewrite its children.
+    def enter(s: S): Unit =
+      val kids = P.childrenVec(s)
+      if kids.isEmpty then ret = f(s)
+      else stack.push(new Frame(s, kids, new Array[AnyRef](kids.length), 0))
+    enter(root)
     while !stack.isEmpty do
       val fr = stack.peek()
       if fr.i > 0 then fr.out(fr.i - 1) = ret.asInstanceOf[AnyRef] // stash the child just finished
       if fr.i < fr.kids.length then
         val child = fr.kids(fr.i)
         fr.i += 1
-        push(child)
+        enter(child)
       else
-        ret = f(plate.from((fr.x, PSVec.unsafeWrap[S](fr.out))))
+        ret = f(P.rebuild(fr.node, PSVec.unsafeWrap[S](fr.out)))
         val _ = stack.pop()
     ret
 

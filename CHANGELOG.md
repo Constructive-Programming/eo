@@ -25,10 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   focus vector directly, with a `List`-shaped `fromChildren` kept as a
   hand-writing convenience — so neither path pays a `List ↔ PSVec` round-trip.
   `universe` reads children straight off the carrier (no `List` per node) and
-  `transform` walks an explicit post-order stack machine instead of an `Eval`
-  trampoline; both stay stack-safe (deep + 100k trees) while running close to a
-  hand-written recursive visitor and ahead of Monocle's `Plated` (which is not
-  stack-safe). See the
+  `transform` walks an explicit post-order stack machine (via `childrenVec` /
+  `rebuild`, no `to`/`from` tuple per node; leaves applied in place) instead of
+  an `Eval` trampoline; both stay stack-safe (deep + 100k trees) while running
+  within ~2–3× of a hand-written recursive visitor and ahead of Monocle's
+  `Plated` (which is not stack-safe). See the
   [benchmarks](https://github.com/Constructive-Programming/eo/blob/main/site/docs/benchmarks.md).
 - **Universal `Plated` instances for the JSON and Avro carriers.**
   `dev.constructive.eo.circe.platedJson` makes `io.circe.Json` a recursive
