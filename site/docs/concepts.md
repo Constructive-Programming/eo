@@ -62,9 +62,9 @@ this optic have?"
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
-| `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
-| `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`                 |
 | `MultiFocus[F]` | `(X, F[A])` — pair leftover with an `F`-wrapped focus vector | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each`; `Function1[Int, *]` ⇒ `Traversal.{two,three,four}` and `MultiFocus.tuple` / `representable`); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
+| `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`                 |
+| `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:
@@ -121,8 +121,15 @@ for any `X, Y`.
 
 ### Cross-family: `.andThen` across carriers
 
-When the downstream optic uses a different carrier, the same
-`.andThen` still works — no explicit morph step:
+The point of the implicit morph layer is that cross-carrier
+composition reads *exactly* like same-carrier composition. You
+write the same `.andThen(inner)` whether `inner` shares your
+carrier or not — there is no `.morph`, no lift, no carrier
+annotation, no "which direction" decision at the call site. A
+Lens-then-Optional chain looks the same as a Lens-then-Lens
+chain, and the result type is inferred to whichever carrier the
+two ends bridge into. The seam exists only in the implicit
+search, never in the surface syntax:
 
 ```scala mdoc:silent
 import dev.constructive.eo.data.Affine
@@ -162,6 +169,17 @@ between `F` and `G`. `bothViaAffine` fills the gap for pairs
 that have no direct bridge in either direction — a Prism
 (`Either`) composed with a Lens (`Tuple2`), for instance — by
 lifting both sides into `Affine`, which both carriers reach.
+
+All of that resolution happens during implicit search at compile
+time and collapses to a single composed `Optic` value — so from
+the caller's side the carrier is an implementation detail the
+compiler reconciles, not a concept they have to track. Adding a
+new carrier that ships the right `Composer` bridges makes it
+compose with everything reachable through the lattice, again with
+no change to call sites. That is the whole payoff of treating
+composition as a bridge problem (consequence 3 of the
+[existential encoding](#existential-vs-profunctor-encoding)): the
+ergonomics of one carrier, extended across all of them.
 
 ### Composition lattice
 
@@ -206,21 +224,53 @@ fold; sub-shapes are selected by the choice of `F` (e.g.
 `MultiFocus[Function1[Int, *]]` for `Traversal.{two,three,four}` and
 `MultiFocus.tuple` / `representable`).
 
-## Why the existential machinery is worth it
+## Why the existential encoding suits an eager language
 
-Unifying every optic behind a single trait collapses the usual
-per-family surface ten-fold: no `Lens.modify`,
-`Prism.getOption`, `Iso.reverseGet` each written separately.
-Extensions on `Optic` are written once against a capability
-typeclass (`ForgetfulFunctor[F]` for `.modify`) and any family
-whose carrier supplies the instance gets the method for free.
+The profunctor encoding and the existential encoding describe the
+same optics — the choice between them is really a choice about
+*when binding happens*, and that lands very differently on a lazy
+runtime than on an eager one.
 
-The runtime cost is also neutral. Each carrier's
-concrete-class specialisation
+In the profunctor form, an optic is a polymorphic function
+`[P] => Profunctor[P] ?=> P[A, B] => P[S, T]`. The concrete
+behaviour isn't chosen until a call site fixes `P` and threads its
+`Profunctor` instance through the universal quantifier; a composed
+optic is a tower of such forall-quantified functions, each
+deferring its work behind that instance. This is a natural fit for
+**Haskell**: GHC specialises polymorphic code aggressively
+(`SPECIALIZE`, cross-module inlining, rewrite rules), and laziness
+means the intermediate profunctor structure is never forced into
+existence — the late binding is erased before it costs anything.
+
+On an **eager JVM language like Scala** that erasure doesn't
+happen. The forall-threaded instance becomes a real interface
+dispatch, a deeply composed optic is a real chain of allocated
+closures, and the call sites the JIT sees are megamorphic — so the
+optimisations that matter on the JVM (monomorphic inlining, escape
+analysis / scalar replacement of the intermediate `P[_, _]`
+values, devirtualisation) are exactly the ones the encoding
+defeats. You get back an opaque `S => T` that the compiler can't
+see through.
+
+The existential encoding moves the binding *earlier*. By exposing
+the carrier `F` and witness `X` as a plain value
+`(S => F[X, A], F[X, B] => T)` instead of quantifying over them,
+each optic is a concrete `trait` instance with a known carrier,
+and each family ships a concrete specialisation
 ([`GetReplaceLens`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/optics/GetReplaceLens.html),
 [`MendTearPrism`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/optics/MendTearPrism.html),
 [`BijectionIso`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/optics/BijectionIso.html))
-stores `get`/`replace`/`reverseGet` as plain fields so the hot
-path bypasses typeclass dispatch entirely. See the
-[benchmark notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md)
-for side-by-side numbers against Monocle.
+that stores `get` / `replace` / `reverseGet` as plain fields and
+fuses its hot-path `modify`. The result is monomorphic call sites
+the JIT inlines, intermediate carrier values escape analysis can
+stack-allocate or remove, and no per-call re-instantiation through
+a quantifier — the shape an eager runtime can actually optimise.
+The [benchmarks](benchmarks.md) bear this out: EO matches or beats
+Monocle's hand-specialised classes on the single-optic hot paths,
+without writing a bespoke method per family.
+
+And the unification is the same win at the source level: `.modify`,
+`.getOption`, `.reverseGet` are written *once* on `Optic` against a
+capability typeclass (`ForgetfulFunctor[F]` for `.modify`), and any
+family whose carrier supplies the instance gets the method — no
+per-family surface to maintain.
