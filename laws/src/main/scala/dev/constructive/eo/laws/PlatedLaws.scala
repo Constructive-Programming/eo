@@ -8,14 +8,14 @@ import optics.Optic.*
 
 /** Law equations for a [[dev.constructive.eo.optics.Plated]] instance.
   *
-  * These are the unconditional checks — they hold for *any* `S` and validate the three moving
-  * parts at once: the self-traversal `plate` (round-trips), `transform` (identity-preserving), and
+  * These are the unconditional checks — they hold for *any* `S` and validate the three moving parts
+  * at once: the self-traversal `plate` (round-trips), `transform` (identity-preserving), and
   * `universe` / `children` (mutually consistent). Running them on a macro-derived `plate[S]` is the
   * primary correctness signal for the derivation; `rewrite` needs a terminating rule and so is
   * exercised behaviourally instead of here.
   *
-  * `equals` is used for the comparisons, so `S` must have structural equality (every case
-  * class / enum does; `io.circe.Json` does too).
+  * `equals` is used for the comparisons, so `S` must have structural equality (every case class /
+  * enum does; `io.circe.Json` does too).
   */
 trait PlatedLaws[S](using val P: Plated[S]):
 

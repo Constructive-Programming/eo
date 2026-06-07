@@ -21,6 +21,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   self-traversal optic via the `.transformAll` / `.universeOf` extensions. New
   `Traversal.selfChildren` constructor builds the underlying `MultiFocus[PSVec]`
   self-traversal from an explicit children view.
+- **Universal `Plated` instances for the JSON and Avro carriers.**
+  `dev.constructive.eo.circe.platedJson` makes `io.circe.Json` a recursive
+  self-traversal (children = an array's elements / an object's field values), so
+  `transform` / `rewrite` / `universe` walk a whole document — redact every
+  field at any depth, rewrite every string, rename keys throughout — no decode.
+  `dev.constructive.eo.avro.platedAvro` is the Avro mirror over `IndexedRecord`
+  (children = directly-record-valued fields; records nested inside array / map /
+  union fields are leftover skeleton in this version).
 
 ### Changed
 

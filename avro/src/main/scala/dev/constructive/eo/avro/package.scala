@@ -4,6 +4,8 @@ import cats.Eq
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 
+import dev.constructive.eo.optics.Plated
+
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
   *
   * The entry point is [[AvroPrism.codecPrism]] (read-aloud API parallel to
@@ -76,5 +78,46 @@ package object avro:
     * `compare`-based implementation.
     */
   given Eq[GenericRecord] = Eq.by(identity[IndexedRecord])
+
+  /** A [[dev.constructive.eo.optics.Plated]] over the Avro record tree — the Avro analogue of
+    * `dev.constructive.eo.circe.platedJson`. The immediate children of a record are its
+    * directly-record-valued fields, so `Plated.transform` / `rewrite` / `universe` walk a whole
+    * nested-record document recursively (redact a field in every nested record, rewrite a value at
+    * any depth, …). Rebuild copies into a fresh `GenericData.Record` so the walk stays pure;
+    * stack-safe via the combinators' `cats.Eval` trampoline.
+    *
+    * '''Scope (v1):''' only fields whose value is *itself* an `IndexedRecord` are recursion points.
+    * Records nested inside array / map / union-of-record fields are leftover skeleton — descending
+    * those is a future extension (mirrors the core `plate`'s exact-self-type rule).
+    */
+  given platedAvro: Plated[IndexedRecord] =
+    Plated.fromChildren(avroRecordChildren, avroRecordRebuild)
+
+  private def avroRecordChildren(rec: IndexedRecord): List[IndexedRecord] =
+    val n = rec.getSchema.getFields.size
+    val b = List.newBuilder[IndexedRecord]
+    var i = 0
+    while i < n do
+      rec.get(i) match
+        case child: IndexedRecord => b += child
+        case _                    => ()
+      i += 1
+    b.result()
+
+  private def avroRecordRebuild(rec: IndexedRecord, cs: List[IndexedRecord]): IndexedRecord =
+    val schema = rec.getSchema
+    val n = schema.getFields.size
+    val copy = new GenericData.Record(schema)
+    var i = 0
+    var rest = cs
+    while i < n do
+      rec.get(i) match
+        case _: IndexedRecord =>
+          copy.put(i, rest.head)
+          rest = rest.tail
+        case other =>
+          copy.put(i, other)
+      i += 1
+    copy
 
 end avro

@@ -379,6 +379,41 @@ shape — no behaviour change, just the rename. The default Ior
 surface is a new option: reach for it when you want to see the
 path-level diagnostic.
 
+## Recursive edits — `Plated[Json]`
+
+Sometimes the edit isn't at a fixed path but *everywhere*: redact
+every field named `ssn` at any depth, uppercase every string,
+round every number. `Plated[Json]` makes `Json` a recursive
+self-traversal — the immediate children of a node are an array's
+elements or an object's field values — so the
+[`Plated`](cookbook.md) combinators walk the whole document:
+
+```scala mdoc:silent
+import dev.constructive.eo.circe.given
+import dev.constructive.eo.optics.Plated
+import io.circe.Json
+```
+
+```scala mdoc
+val doc = Json.obj(
+  "name" -> Json.fromString("alice"),
+  "tags" -> Json.arr(Json.fromString("x"), Json.fromString("y")),
+)
+
+// Uppercase every string anywhere in the document, recursively.
+Plated
+  .transform[Json](j => j.asString.fold(j)(s => Json.fromString(s.toUpperCase)))(doc)
+  .noSpacesSortKeys
+
+// Every sub-node, self first.
+Plated.universe(doc).length
+```
+
+`transform` / `rewrite` / `universe` are stack-safe (they
+trampoline through `cats.Eval`), so a deep document won't overflow.
+See the [cookbook Plated recipe](cookbook.md) for the data-type
+side of the same API.
+
 ## When to reach for which
 
 | Task                                                  | Use                       |

@@ -30,7 +30,8 @@ trait Plated[S]:
 
 /** Combinators over [[Plated]] — recursion schemes faithful to `Control.Lens.Plated`, all
   * stack-safe. Each is offered both as a `using Plated[S]` method here and as an extension on any
-  * self-traversal optic you build directly (so `myPlate.transform(f)(s)` works without a typeclass).
+  * self-traversal optic you build directly (so `myPlate.transform(f)(s)` works without a
+  * typeclass).
   */
 object Plated:
 
@@ -59,8 +60,8 @@ object Plated:
     go(s)
 
   /** Apply the rule everywhere, bottom-up, and keep re-firing on each rewritten sub-term until the
-    * rule returns `None` at every node — Haskell `lens`'s `rewrite`. The caller owns termination
-    * (a rule that always fires loops forever). Stack-safe via `Eval`.
+    * rule returns `None` at every node — Haskell `lens`'s `rewrite`. The caller owns termination (a
+    * rule that always fires loops forever). Stack-safe via `Eval`.
     */
   def rewrite[S](f: S => Option[S])(s: S)(using P: Plated[S]): S =
     def step(x: S): Eval[S] = f(x).fold(Eval.now(x))(go)
@@ -84,6 +85,7 @@ object Plated:
     * it directly. Lets you skip the typeclass when you have built `plate` by hand.
     */
   extension [S](self: Optic[S, S, S, S, MultiFocus[PSVec]])
+
     def asPlated: Plated[S] =
       new Plated[S]:
         val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = self
