@@ -244,9 +244,9 @@ everyVarName.modify(_.toUpperCase)(term)
 
 `everywhere` composes like any other optic — `.andThen` a Prism to
 pick a case, a Lens to reach a field — and the `.modify` runs at every
-node, bottom-up and stack-safe (it trampolines through `cats.Eval`, so
-a million-node tree won't overflow). When the rewrite is easier as a
-plain per-node function, `Plated.transform(f)` is the same engine;
+node, bottom-up and stack-safe to any depth (a million-node tree, or a
+100k-deep degenerate spine, won't overflow). When the rewrite is easier
+as a plain per-node function, `Plated.transform(f)` is the same engine;
 `Plated.universe` / `children` are the read side (every sub-term /
 immediate children); `rewrite` repeats an `Expr => Option[Expr]` rule
 to a fixpoint. The derivation follows the *exact self-type* rule —
