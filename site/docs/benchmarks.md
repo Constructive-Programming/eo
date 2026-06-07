@@ -218,16 +218,16 @@ hand-written `copy` + `map` equivalent.
 
 | Chain (bench) | Size | eo | naive | ratio |
 |---|--:|--:|--:|--:|
-| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 164 | 29 | 5.8× |
-| | 32 | 575 | 217 | 2.7× |
-| | 256 | 3 725 | 1 689 | 2.2× |
-| | 1024 | 15 838 | 5 854 | 2.7× |
-| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 727 | 138 | 5.3× |
-| | 32 | 2 371 | 744 | 3.2× |
-| | 256 | 16 628 | 5 170 | 3.2× |
-| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 137 | 26 | 5.3× |
-| | 64 | 766 | 161 | 4.8× |
-| | 512 | 6 916 | 1 291 | 5.4× |
+| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 152 | 26 | 5.8× |
+| | 32 | 504 | 203 | 2.5× |
+| | 256 | 3 409 | 1 616 | 2.1× |
+| | 1024 | 14 364 | 5 530 | 2.6× |
+| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 754 | 130 | 5.8× |
+| | 32 | 2 368 | 698 | 3.4× |
+| | 256 | 15 210 | 4 804 | 3.2× |
+| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 146 | 25 | 5.8× |
+| | 64 | 742 | 169 | 4.4× |
+| | 512 | 6 755 | 1 292 | 5.2× |
 
 All three scale **linearly**; the ratio to naive is largest on tiny inputs
 (fixed per-op setup dominates) and settles around 2–3× on the dense Lens and
@@ -252,11 +252,11 @@ carrier is PSVec-native, so neither path converts to a `List` and back.
 
 | Op | Subject | eo | monocle | visitor |
 |---|---|--:|--:|--:|
-| `universe` | `Expr` balanced | 15 000 | 176 000 | 7 000 |
-| | `Json` balanced | 20 000 | 210 000 | 16 000 |
-| | `Bin` deep spine | 15 500 | **SO** | 7 000 |
-| `transform` | `Expr` balanced | 18 000 | 16 000 | 8 000 |
-| | `Bin` deep spine | 13 000 | **SO** | 4 000 |
+| `universe` | `Expr` balanced | 15 000 | 172 100 | 6 800 |
+| | `Json` balanced | 20 300 | 207 900 | 16 100 |
+| | `Bin` deep spine | 15 600 | **SO** | 6 900 |
+| `transform` | `Expr` balanced | 18 200 | 14 700 | 8 400 |
+| | `Bin` deep spine | 13 000 | **SO** | 4 100 |
 
 (ns/op at n=512, 3-fork; **indicative only** — this machine is noisy enough that
 sub-2× differences aren't significant. The CI workflow produces the canonical
