@@ -37,6 +37,14 @@ class SetterBench extends JmhDefaults:
     mSet6,
     mSetValue,
   }
+  import DomainOptics.{eoSetId, mSetId, order}
+
+  // ---- canonical scalar focus: order.id ($.id) ----------------------
+
+  @Benchmark def eoModify_orderId: Order = eoSetId.modify(_ + 1)(order)
+  @Benchmark def mModify_orderId: Order = mSetId.modify(_ + 1)(order)
+
+  // ---- Nested depth sweep (composition, which Order can't express) --
 
   @Benchmark def eoModify_0: Nested0 = eoSetValue.modify(_ + 1)(leaf)
   @Benchmark def mModify_0: Nested0 = mSetValue.modify(_ + 1)(leaf)

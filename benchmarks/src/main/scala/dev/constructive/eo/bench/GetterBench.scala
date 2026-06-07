@@ -38,6 +38,14 @@ class GetterBench extends JmhDefaults:
     mGet6,
     mGetValue,
   }
+  import DomainOptics.{eoGetId, mGetId, order}
+
+  // ---- canonical scalar focus: order.id ($.id) ----------------------
+
+  @Benchmark def eoGet_orderId: Long = eoGetId.get(order)
+  @Benchmark def mGet_orderId: Long = mGetId.get(order)
+
+  // ---- Nested depth sweep (composition, which Order can't express) --
 
   @Benchmark def eoGet_0: Int = eoGetValue.get(leaf)
   @Benchmark def mGet_0: Int = mGetValue.get(leaf)

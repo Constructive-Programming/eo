@@ -51,6 +51,17 @@ class AffineFoldBench extends JmhDefaults:
     mOpt3,
     mOpt6,
   }
+  import DomainOptics.{eoLoyaltyAF, mLoyalty, order, orderNoLoyalty}
+
+  // ---- canonical focus: customer.loyaltyId (Option[String]) ---------
+  // The advertised AffineFold focus, in memory. Monocle has no standalone
+  // AffineFold, so its peer is `Optional.getOption` (same as the depth rows).
+
+  @Benchmark def eoGetOption_loyalty: Option[String] = eoLoyaltyAF.getOption(order)
+  @Benchmark def mGetOption_loyalty: Option[String] = mLoyalty.getOption(order)
+
+  @Benchmark def eoGetOption_loyalty_empty: Option[String] = eoLoyaltyAF.getOption(orderNoLoyalty)
+  @Benchmark def mGetOption_loyalty_empty: Option[String] = mLoyalty.getOption(orderNoLoyalty)
 
   // ---- Composed EO Optionals narrowed to AffineFold via .getOption.
   //      The Monocle `mOpt3` / `mOpt6` peers live on the shared NestedOptics

@@ -43,6 +43,20 @@ class OptionalBench extends JmhDefaults:
     mOpt3,
     mOpt6,
   }
+  import DomainOptics.{eoLoyalty, mLoyalty, order, orderNoLoyalty}
+
+  // ---- canonical focus: customer.loyaltyId (Option[String]) ---------
+  // The advertised Optional focus, in memory (avro omits it — union, not a
+  // transparent field). Some-branch on `order`, None-branch on `orderNoLoyalty`.
+
+  @Benchmark def eoModify_loyalty: Order = eoLoyalty.modify(_.toUpperCase)(order)
+  @Benchmark def mModify_loyalty: Order = mLoyalty.modify(_.toUpperCase)(order)
+
+  @Benchmark def eoModify_loyalty_empty: Order = eoLoyalty.modify(_.toUpperCase)(orderNoLoyalty)
+  @Benchmark def mModify_loyalty_empty: Order = mLoyalty.modify(_.toUpperCase)(orderNoLoyalty)
+
+  @Benchmark def eoReplace_loyalty: Order = eoLoyalty.replace("LOYAL-999")(order)
+  @Benchmark def mReplace_loyalty: Order = mLoyalty.replace("LOYAL-999")(order)
 
   // ---- Composed EO optionals — Lens chain composed directly with the
   //      leaf Optional via cross-carrier `.andThen`. The Monocle peer
