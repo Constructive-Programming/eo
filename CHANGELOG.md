@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Getter`s now compose with `Getter`s via `andThen`.** `g1.andThen(g2)` reads
   `s => g2.get(g1.get(s))` and yields a `Getter`, matching how `Iso` / `Lens`
   compose through their fused subclasses. `Getter.apply` now returns a concrete
-  `ReadGetter` carrying the fused `andThen` (previously a bare anonymous `Optic`
+  `DirectGetter` carrying the fused `andThen` (previously a bare anonymous `Optic`
   with no `andThen`, forcing callers to hand-nest `get` calls). As part of this,
   a `Getter`'s back-focus slot is now `Unit` (`Optic[S, Unit, A, Unit, Direct]`,
   was `Optic[S, Unit, A, A, Direct]`) — making the read-only-ness explicit in the
