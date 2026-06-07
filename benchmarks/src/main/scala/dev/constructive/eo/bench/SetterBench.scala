@@ -6,13 +6,14 @@ import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
 
-/** `Setter.modify` at the leaf plus deep manual composition, paired EO vs Monocle.
+/** `Setter.modify` at the leaf plus deep composition, paired EO vs Monocle.
   *
-  * '''Scope note.''' EO's `Setter` carrier is `SetterF`, which has a `ForgetfulFunctor[SetterF]`
-  * instance but no `AssociativeFunctor[SetterF, X, Y]` instance — so two Setters cannot be composed
-  * via `Optic.andThen`. For depth-3 / depth-6 writes the bench nests `modify` calls — each outer
-  * Setter modifies the next `n`, with the innermost modifying the leaf's `value`. Monocle's
-  * first-class `Setter.andThen` produces the equivalent composed Setter on its side.
+  * EO's `Setter` carrier `SetterF` has both a `ForgetfulFunctor[SetterF]` (powers `.modify`) and an
+  * `AssociativeFunctor[SetterF]` (`assocSetterF`), so two Setters compose through the ordinary
+  * `andThen` — `s1.andThen(s2).modify(f) == s1.modify(s2.modify(f))`. The depth-3 / depth-6 rows
+  * build a *composed* `Setter` on both sides (EO's `s3.andThen(s2)…` vs Monocle's
+  * `mS3.andThen(mS2)…`) and dispatch through it once, rather than hand-nesting `modify` on the EO
+  * side.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -46,29 +47,17 @@ class SetterBench extends JmhDefaults:
 
   // ---- Nested depth sweep (composition, which Order can't express) --
 
+  // Both sides build a composed Setter and dispatch through it once.
+  private val eoSet3 = eoS3.andThen(eoS2).andThen(eoS1).andThen(eoSetValue)
+
+  private val eoSet6 =
+    eoS6.andThen(eoS5).andThen(eoS4).andThen(eoS3).andThen(eoS2).andThen(eoS1).andThen(eoSetValue)
+
   @Benchmark def eoModify_0: Nested0 = eoSetValue.modify(_ + 1)(leaf)
   @Benchmark def mModify_0: Nested0 = mSetValue.modify(_ + 1)(leaf)
 
-  @Benchmark def eoModify_3: Nested3 =
-    eoS3.modify(
-      eoS2.modify(
-        eoS1.modify(eoSetValue.modify(_ + 1))
-      )
-    )(d3)
-
+  @Benchmark def eoModify_3: Nested3 = eoSet3.modify(_ + 1)(d3)
   @Benchmark def mModify_3: Nested3 = mSet3.modify(_ + 1)(d3)
 
-  @Benchmark def eoModify_6: Nested6 =
-    eoS6.modify(
-      eoS5.modify(
-        eoS4.modify(
-          eoS3.modify(
-            eoS2.modify(
-              eoS1.modify(eoSetValue.modify(_ + 1))
-            )
-          )
-        )
-      )
-    )(d6)
-
+  @Benchmark def eoModify_6: Nested6 = eoSet6.modify(_ + 1)(d6)
   @Benchmark def mModify_6: Nested6 = mSet6.modify(_ + 1)(d6)
