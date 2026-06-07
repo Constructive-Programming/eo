@@ -204,6 +204,64 @@ through the `prism[S, A]` macro — see
 Wlaschin — *Domain Modeling Made Functional*, ch. 4,
 <https://pragprog.com/titles/swdddf/domain-modeling-made-functional/>.
 
+### …and across the whole tree — `Plated` (cats-eo-unique)
+
+The Prism above edits *one* `Var`. To uppercase every variable
+*everywhere* in the same `Expr` tree — down through `App` and `Lam`
+nesting — give `Expr` a `Plated` and `transform`. A `Plated`'s job
+is to name the immediate `Expr` children of each case (the recursion
+points); `transform` then walks bottom-up, so you only write the
+per-node rule. In real code reach for `plate[Expr]` from
+[eo-generics](generics.md) to derive the instance — it finds
+exactly the same self-typed children — but it's spelled out here so
+the page stays macro-free:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Plated
+
+given Plated[Expr] = Plated.fromChildren(
+  {
+    case Expr.App(f, x)    => List(f, x)
+    case Expr.Lam(_, body) => List(body)
+    case Expr.Var(_)       => Nil
+  },
+  {
+    case (Expr.App(_, _), f :: x :: Nil) => Expr.App(f, x)
+    case (Expr.Lam(b, _), body :: Nil)   => Expr.Lam(b, body)
+    case (leaf, _)                       => leaf
+  },
+)
+
+val shout: Expr => Expr =
+  case Expr.Var(n) => Expr.Var(n.toUpperCase)
+  case other       => other
+```
+
+```scala mdoc
+val term = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+
+// Every Var occurrence is uppercased — the bound `y` too — while the
+// Lam binder "y" (a String, not an Expr child) is left alone.
+Plated.transform(shout)(term)
+
+// Read-only companions: count every sub-term, list the immediate children.
+Plated.universe(term).length
+Plated.children(term)
+```
+
+`transform` is stack-safe — it trampolines through `cats.Eval`, so a
+million-node tree won't overflow — and `rewrite` repeats an
+`Expr => Option[Expr]` rule to a fixpoint when one pass isn't enough.
+The derivation follows the *exact self-type* rule: only fields whose
+type is `Expr` are recursion points, which is why `Lam`'s
+`bind: String` stays a leaf. See [Generics → `plate[S]`](generics.md).
+
+**Source:** Mitchell & Runciman — *Uniform Boilerplate and List
+Processing* (Uniplate),
+<https://ndmitchell.com/downloads/paper-uniform_boilerplate_and_list_processing-30_sep_2007.pdf>;
+Haskell `lens` `Control.Lens.Plated`,
+<https://hackage.haskell.org/package/lens/docs/Control-Lens-Plated.html>.
+
 ## Theme C — Collection walks
 
 ### `each` — the composable traversal

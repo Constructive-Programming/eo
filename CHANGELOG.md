@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Plated` — recursive self-traversal + recursion combinators.** A new
+  `optics.Plated[S]` (the cats-eo analogue of Haskell `lens`'s `Plated`) whose
+  `plate` is a `Traversal[S, S]` over the immediate same-typed children of a
+  recursive ADT, plus stack-safe combinators `transform` (bottom-up rewrite),
+  `rewrite` (Option-rule fixpoint), `children`, and `universe`. All trampoline
+  through `cats.Eval` (or an explicit worklist), so deep trees don't overflow.
+  Build one with `Plated.fromChildren`, derive it with `generics.plate[S]`
+  (focuses every exact-`S`-typed field across all cases; enums, sealed
+  hierarchies, recursive case classes), or call the combinators directly on any
+  self-traversal optic via the `.transformAll` / `.universeOf` extensions. New
+  `Traversal.selfChildren` constructor builds the underlying `MultiFocus[PSVec]`
+  self-traversal from an explicit children view.
+
 ### Changed
 
 - **Identity carrier renamed `Forgetful` → `Direct`.** The carrier behind `Iso`

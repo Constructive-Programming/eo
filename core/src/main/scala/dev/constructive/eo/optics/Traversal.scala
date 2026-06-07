@@ -63,6 +63,47 @@ object Traversal:
               }
       }
 
+  /** Monomorphic self-traversal from an explicit immediate-children view — focuses the values of
+    * `S` that are themselves `S` (the immediate sub-terms), with `S` itself as the leftover
+    * skeleton. `children(s)` lists the immediate children in some fixed order; `rebuild(s, cs)`
+    * reassembles `s` with that same number of children swapped in (same order). The two must agree
+    * on arity and order: `rebuild(s, children(s)) == s`.
+    *
+    * This is the carrier behind [[Plated]] — a recursive ADT's `plate`. Unlike [[each]] / [[pEach]]
+    * there is no container `T[_]`; the children of a node are gathered case-by-case. Variable arity
+    * across cases (a binary node has two children, a leaf none) is exactly the `PSVec` shape.
+    *
+    * @group Constructors
+    */
+  def selfChildren[S](
+      children: S => List[S],
+      rebuild: (S, List[S]) => S,
+  ): Optic[S, S, S, S, MultiFocus[PSVec]] =
+    new Optic[S, S, S, S, MultiFocus[PSVec]]:
+      type X = S
+
+      val to: S => (S, PSVec[S]) = s =>
+        val cs = children(s)
+        val arr = new Array[AnyRef](cs.length)
+        var i = 0
+        var rest = cs
+        while rest.nonEmpty do
+          arr(i) = rest.head.asInstanceOf[AnyRef]
+          i += 1
+          rest = rest.tail
+        (s, PSVec.unsafeWrap[S](arr))
+
+      val from: ((S, PSVec[S])) => S = {
+        case (s, vec) =>
+          val n = vec.length
+          val b = List.newBuilder[S]
+          var i = 0
+          while i < n do
+            b += vec(i)
+            i += 1
+          rebuild(s, b.result())
+      }
+
   /** Traversal over two per-element getters with a `reverse` reassembly. Carrier is
     * `MultiFocus[Function1[Int, *]]` — the homogeneous-arity Tuple_N-shaped traversal encoded as an
     * `Int => A` lookup over the N getters. Lens / Prism / Optional inputs aren't bridged
