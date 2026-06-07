@@ -359,19 +359,38 @@ object MultiFocus:
           val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
           (sndZ, flatBuf.freezeAsPSVec[C])
         case _ =>
-          // Generic fallback: reachable only via user-built MultiFocus[PSVec] optics that don't
-          // mix in MultiFocusSingleton or MultiFocusPSMaybeHit (escape hatch for downstream).
-          val lenBuf = new IntArrBuilder(n)
-          val flatBuf = new ObjArrBuilder()
-          var i = 0
-          while i < n do
-            val (xi, vy) = inner.to(va(i))
-            lenBuf.append(vy.length)
-            ysBuf.append(xi.asInstanceOf[AnyRef])
-            flatBuf.appendAllFromPSVec(vy)
-            i += 1
-          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-          (sndZ, flatBuf.freezeAsPSVec[C])
+          // Generic fallback: taken when `inner` is neither a `MultiFocusSingleton` (Lens bridge)
+          // nor a `MultiFocusPSMaybeHit` (Prism / Optional bridge) — i.e. a multi-focus inner such
+          // as `each` itself, or any composed `MultiFocus[PSVec]` optic. Reached on the common
+          // left-associated `lens.andThen(each)…` shape, so it is a real hot path, not merely a
+          // downstream escape hatch.
+          if n == 1 then
+            // Single outer focus (e.g. a Lens onto a collection field, then `each`): the inner's
+            // own focus vector IS the entire flat focus. Emit it zero-copy — no `flatBuf`, no
+            // grow, no O(n) `appendAllFromPSVec` copy. `composeFrom`'s generic branch reconstructs
+            // from a one-entry `lens` array + `vys.slice`, so this stays symmetric.
+            val (xi, vy) = inner.to(va(0))
+            ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
+            val lenArr = new Array[Int](1)
+            lenArr(0) = vy.length
+            val sndZ = new AssocSndZ[Xo, Xi](xo, lenArr, ysBuf.freezeArr)
+            (sndZ, vy)
+          else
+            // `flatBuf`'s final size is the sum of the inners' cardinalities — unknown up front.
+            // Floor the capacity at `max(n, 16)`: `n` is a lower bound on the total, and the `16`
+            // keeps a small-`n`/high-fanout chain (e.g. `each.andThen(each)` over few-but-large
+            // sub-containers) from doubling *more* than the old default-capacity-16 builder did.
+            val lenBuf = new IntArrBuilder(n)
+            val flatBuf = new ObjArrBuilder(math.max(n, 16))
+            var i = 0
+            while i < n do
+              val (xi, vy) = inner.to(va(i))
+              lenBuf.append(vy.length)
+              ysBuf.append(xi.asInstanceOf[AnyRef])
+              flatBuf.appendAllFromPSVec(vy)
+              i += 1
+            val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+            (sndZ, flatBuf.freezeAsPSVec[C])
 
     def composeFrom[S, T, A, B, C, D](
         xd: (Z, PSVec[D]),
@@ -381,6 +400,10 @@ object MultiFocus:
       val (sndZ, vys) = xd
       val lens = sndZ.lens
       val ys = sndZ.ys
+      // `resultBuf` is sized to `ys.length` and every branch below appends EXACTLY `ys.length`
+      // times (each outer element produced one `ys` entry and one `lens` entry in `composeTo`, so
+      // `lensArr.length == ys.length`). That invariant is what makes the `unsafeAppend`s sound — it
+      // must hold for all three branches; do not append conditionally.
       val resultBuf = new ObjArrBuilder(ys.length)
       inner match
         case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
@@ -388,7 +411,7 @@ object MultiFocus:
           val n = ys.length
           var i = 0
           while i < n do
-            resultBuf.append(
+            resultBuf.unsafeAppend(
               ah.singletonFrom(ys(i).asInstanceOf[Xi], vys(i)).asInstanceOf[AnyRef]
             )
             i += 1
@@ -399,7 +422,7 @@ object MultiFocus:
           var i = 0
           while i < n do
             val len = lensArr(i)
-            resultBuf.append(
+            resultBuf.unsafeAppend(
               mh.reconstructSingleton(ys(i), vys, offset, len).asInstanceOf[AnyRef]
             )
             offset += len
@@ -414,7 +437,7 @@ object MultiFocus:
             val len = lensArr(i)
             val y = ys(i).asInstanceOf[Xi]
             val chunk = vys.slice(offset, offset + len)
-            resultBuf.append(inner.from((y, chunk)).asInstanceOf[AnyRef])
+            resultBuf.unsafeAppend(inner.from((y, chunk)).asInstanceOf[AnyRef])
             offset += len
             i += 1
       outer.from((sndZ.xo, resultBuf.freezeAsPSVec[B]))
