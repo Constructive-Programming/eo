@@ -62,6 +62,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`Direct` is now an `opaque type`, not a transparent alias.** `Direct[X, A]`
+  was `type Direct[X, A] = A`, which the compiler dealiased to `A` during implicit
+  search — so `object Direct`'s givens (`Accessor[Direct]`, `AssociativeFunctor
+  [Direct, …]`, …) were *not* in the implicit scope of a bare `A`, and same-carrier
+  composition (`iso.andThen(iso)` via the generic path, `getter.andThen(getter)`)
+  couldn't summon them. `opaque type Direct[X, A] = A` makes `Direct` a distinct
+  type whose companion *is* in scope, so those givens resolve with no import and
+  the generic `andThen` works for `Direct`-carrier optics. It still erases to `A`
+  (zero runtime cost); `Direct.apply` (wrap) / `.value` (unwrap) are
+  `transparent inline` identities that compile away entirely, and exist only so
+  construction sites outside `object Direct` satisfy the type.
+  `Forget[F]` is decoupled from `Direct` (now `[X, A] =>> F[A]` directly, the same
+  type it always was) so the Fold/Forget machinery is unaffected. No behaviour
+  change; pre-1.0, no MiMa baseline.
+
 - **Identity carrier renamed `Forgetful` → `Direct`.** The carrier behind `Iso`
   and `Getter` (`type Direct[X, A] = A`) now reads as what it does — direct
   function application, no leftover — rather than naming the category-theory

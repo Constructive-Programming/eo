@@ -117,8 +117,8 @@ object Optic:
   def id[A]: Optic[A, A, A, A, Direct] =
     new Optic[A, A, A, A, Direct]:
       type X = Nothing
-      val to: A => A = identity
-      val from: A => A = identity
+      val to: A => Direct[X, A] = a => Direct(a)
+      val from: Direct[X, A] => A = _.value
 
   /** Cross-carrier `.andThen` — picks the direction via a summoned [[Morph]] when the two optics'
     * carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), cats-eo ships

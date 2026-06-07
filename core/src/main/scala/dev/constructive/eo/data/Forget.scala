@@ -16,7 +16,10 @@ import optics.Optic
   * ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape carrier" whose optic-level
   * capabilities scale with the typeclasses `F` itself admits.
   */
-type Forget[F[_]] = [X, A] =>> Direct[X, F[A]]
+// `[X, A] =>> F[A]` — the `X` is phantom, so `Forget` is its own transparent carrier (it does *not*
+// route through the now-opaque `Direct`; all the Fold / Forget machinery treats `Forget[F][X, A]`
+// as a plain `F[A]` and relies on that transparency).
+type Forget[F[_]] = [X, A] =>> F[A]
 
 /** Capability ladder for [[Forget]]. Each typeclass on `F` unlocks a matching optic operation:
   *

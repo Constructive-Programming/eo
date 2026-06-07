@@ -34,8 +34,8 @@ object Getter:
   */
 final class DirectGetter[S, A](val get: S => A) extends Optic[S, Unit, A, Unit, Direct]:
   type X = Nothing
-  val to: S => A = get
-  val from: Unit => Unit = identity
+  val to: S => Direct[X, A] = s => Direct(get(s))
+  val from: Direct[X, Unit] => Unit = _ => ()
 
   /** Fused `Getter.andThen(Getter)` — composes the read functions; the vestigial `Unit` write path
     * needs no threading.

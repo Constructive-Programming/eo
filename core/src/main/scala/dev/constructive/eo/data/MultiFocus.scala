@@ -525,9 +525,9 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Unit
-        val to: S => (Unit, F[A]) = s => ((), Applicative[F].pure(o.to(s)))
+        val to: S => (Unit, F[A]) = s => ((), Applicative[F].pure(o.to(s).value))
         val from: ((Unit, F[B])) => T = {
-          case (_, fb) => o.from(pickSingletonOrThrow(fb, "Direct"))
+          case (_, fb) => o.from(Direct(pickSingletonOrThrow(fb, "Direct")))
         }
 
   /** Forget[F] ↪ MultiFocus[F]. */
@@ -840,10 +840,10 @@ object MultiFocus:
       new Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]:
         type X = Unit
         val to: S => (Unit, X0 => A) = s =>
-          val a = o.to(s)
+          val a = o.to(s).value
           ((), (_: X0) => a)
         val from: ((Unit, X0 => B)) => T = {
-          case (_, k) => o.from(k(null.asInstanceOf[X0]))
+          case (_, k) => o.from(Direct(k(null.asInstanceOf[X0])))
         }
 
   def fromOptionalF[F[_]: MonoidK, S, T, A, B](

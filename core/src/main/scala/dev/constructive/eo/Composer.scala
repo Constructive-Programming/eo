@@ -38,8 +38,8 @@ object Composer extends LowPriorityComposerInstances:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
         type X = Unit
-        val to: S => (X, A) = s => ((), o.to(s))
-        val from: ((X, B)) => T = pair => o.from(pair._2)
+        val to: S => (X, A) = s => ((), o.to(s).value)
+        val from: ((X, B)) => T = pair => o.from(Direct(pair._2))
 
   /** Express an Iso (or Getter) as a Prism — always takes the `Right` branch; `Nothing` in the
     * `Left` slot so the miss branch is uninhabited.
@@ -51,10 +51,10 @@ object Composer extends LowPriorityComposerInstances:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Either] =
       new Optic[S, T, A, B, Either]:
         type X = Nothing
-        val to: S => Either[X, A] = s => Right(o.to(s))
+        val to: S => Either[X, A] = s => Right(o.to(s).value)
         val from: Either[X, B] => T = e =>
           e match
-            case Right(b) => o.from(b)
+            case Right(b) => o.from(Direct(b))
             case Left(_)  => ???
 
 /** Low-priority `Composer` instances —
