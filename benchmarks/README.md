@@ -196,7 +196,7 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 All three PowerSeries benches scale **linearly** with traversed-collection size; the eo-to-naive ratios tighten as size grows (fixed per-op setup amortises).
 
-Current ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries--traversal-with-downstream-composition) for full tables):
+Current ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries-traversal-with-downstream-composition) for full tables):
 
 - **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 5.1× at N=4 → 1.9× at N=1024.
 - **`PowerSeriesNestedBench` (5-hop tree):** 5.4× at N=4 → 2.4× at N=256.
