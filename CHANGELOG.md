@@ -19,8 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   applies `f` at the focus *at every depth* (e.g. uppercase every variable in an
   expression tree). It reuses the existing `SetterF` carrier and `Morph`/`Composer`
   bridges — no new carrier — so it composes with any inner optic (Lens / Prism /
-  Optional / …) as the outer of `.andThen`. All trampoline
-  through `cats.Eval` (or an explicit worklist), so deep trees don't overflow.
+  Optional / …) as the outer of `.andThen`. All are stack-safe on deep trees —
+  `transform` via an explicit post-order stack machine, `universe` / `children`
+  via a worklist, `rewrite` via a `cats.Eval` trampoline.
   Build one with `Plated.fromChildren`, derive it with `generics.plate[S]`
   (focuses every exact-`S`-typed field across all cases; enums, sealed
   hierarchies, recursive case classes), or call the combinators directly on any

@@ -118,7 +118,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
   private def selfFieldVec[S: Type, V: Type](
       src: Expr[V],
       sTpe: TypeRepr,
-  ): Expr[PSVec[S]] =
+  )(using Quotes): Expr[PSVec[S]] =
     val reads: List[Expr[S]] =
       selfFieldNames[V](sTpe).map(name => Select.unique(src.asTerm, name).asExprOf[S])
     reads match
@@ -135,7 +135,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       src: Expr[V],
       vec: Expr[PSVec[S]],
       sTpe: TypeRepr,
-  ): Expr[S] =
+  )(using Quotes): Expr[S] =
     // `V` is an enum child of `S` (so `V <: S` at runtime) but the macro carries no `<: S` bound,
     // hence the explicit upcast cast rather than an ascription.
     CaseClass.parse[V].toEither match
@@ -150,7 +150,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       src: Expr[S],
       vec: Expr[PSVec[S]],
       sTpe: TypeRepr,
-  ): Expr[S] =
+  )(using Quotes): Expr[S] =
     reconstructFields[S, S](cc, src, vec, sTpe)
 
   /** The constructor-threading core: route each declaration-order parameter to either the matching
@@ -161,7 +161,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       src: Expr[V],
       vec: Expr[PSVec[S]],
       sTpe: TypeRepr,
-  ): Expr[V] =
+  )(using Quotes): Expr[V] =
     val vTpe = TypeRepr.of[V]
     val nameToType: Map[String, TypeRepr] =
       vTpe.typeSymbol.caseFields.map(f => f.name -> vTpe.memberType(f)).toMap

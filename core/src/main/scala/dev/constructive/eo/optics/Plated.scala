@@ -1,8 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.{Eval, Monad}
-import cats.syntax.flatMap.*
+import cats.Eval
 
 import data.{MultiFocus, PSVec, SetterF}
 import data.MultiFocus.given // ForgetfulFunctor / Fold / Traverse for MultiFocus[PSVec]
@@ -44,7 +43,9 @@ trait Plated[S]:
     * counterpart to [[childrenVec]]. Defaults to threading the carrier; [[Plated.fromChildren]] /
     * [[Plated.fromChildrenVec]] (hence every `generics.plate[S]`-derived instance) override it with
     * the raw rebuild function so [[Plated.transform]] rebuilds without allocating the carrier's
-    * `(x, PSVec)` tuple per node.
+    * `(x, PSVec)` tuple per node. On the default (`.asPlated`) path this and [[childrenVec]] each
+    * call `plate.to`, so a `transform` over a hand-built optic pays two `to` calls per internal
+    * node — derived / `fromChildrenVec` instances override both and pay none.
     */
   def rebuild(parent: S, children: PSVec[S]): S =
     val p = plate // bind once so `p.X` is a single stable existential across `to` / `from`
@@ -100,6 +101,9 @@ object Plated:
     val stack = new java.util.ArrayDeque[Frame]()
     var ret: S = root // overwritten before any read (only read once a child has completed)
     // Enter a node: apply `f` straight to a leaf; otherwise push a frame to rewrite its children.
+    // The leaf shortcut `f(s)` (rather than `f(rebuild(s, empty))`) matches the non-leaf path
+    // because `rebuild(leaf, empty) == leaf` — i.e. the `plateModifyIdentity` law. For a
+    // law-abiding plate the two are identical; the law is what guarantees it.
     def enter(s: S): Unit =
       val kids = P.childrenVec(s)
       if kids.isEmpty then ret = f(s)
@@ -133,13 +137,6 @@ object Plated:
     */
   def everywhere[S](using P: Plated[S]): Optic[S, S, S, S, SetterF] =
     Setter[S, S, S, S](g => s => transform(g)(s))
-
-  /** Effectful bottom-up rewrite over any monad `G` — the engine [[transform]] and [[rewrite]] are
-    * specialisations of. Stack-safe when `G` is a trampolining monad (`Eval`, `IO`).
-    */
-  def transformM[S, G[_]: Monad](f: S => G[S])(s: S)(using P: Plated[S]): G[S] =
-    def go(x: S): G[S] = P.plate.modifyA[G](go)(x).flatMap(f)
-    go(s)
 
   /** Apply the rule everywhere, bottom-up, and keep re-firing on each rewritten sub-term until the
     * rule returns `None` at every node — Haskell `lens`'s `rewrite`. The caller owns termination (a

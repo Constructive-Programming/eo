@@ -18,7 +18,7 @@ import dev.constructive.eo.optics.Plated as EoPlated
   * (`transform`, bottom-up rebuild) — measured three ways:
   *
   *   - `eo*`      — cats-eo `Plated.universe` / `Plated.transform` (PSVec-native carrier, stack-safe
-  *                  via an `Eval` trampoline / worklist).
+  *                  via an explicit post-order stack machine / worklist on the heap).
   *   - `m*`       — Monocle `monocle.function.Plated.universe` / `.transform` over a hand-written
   *                  `Plated` instance.
   *   - `visitor*` — the hand-rolled recursive collector / rebuild you'd write without optics.
@@ -37,7 +37,7 @@ import dev.constructive.eo.optics.Plated as EoPlated
   * '''No `*Deep` for Monocle.''' Monocle's `universe` / `transform` are not stack-safe: on the
   * degenerate spine they `StackOverflowError` at depth ≳ 2048 (and, where `universe` does survive —
   * depth 1024 — it runs ~700× slower than EO, its lazy-`#:::` append going quadratic). So the deep
-  * subject compares EO against the hand visitor only. EO's `Eval` trampoline clears the spine at
+  * subject compares EO against the hand visitor only. EO's heap-stack machine clears the spine at
   * every size here and at 100k in the stack-safety test; the recursive visitor shares Monocle's
   * call-stack ceiling and only survives because `n` is bounded.
   */

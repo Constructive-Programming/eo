@@ -186,7 +186,18 @@ class PlatedSpec extends Specification with Discipline:
       case node        => node
     }(deep)
 
+    // Exercise the remaining extension-API methods (`childrenOf`, `rewriteAll`) on a small tree.
+    val small = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
+    val foldAdjacent: Bin => Option[Bin] = {
+      case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
+      case _                                  => None
+    }
+    val extrasOk =
+      binPlate.childrenOf(small).length == 2 &&
+        binPlate.rewriteAll(foldAdjacent)(small) == Bin.Leaf(6)
+
     // node count = 1 (initial leaf) + 2 per iteration; universe must enumerate them all.
     binPlate.universeOf(deep).length == (2 * n + 1) &&
-    binPlate.universeOf(bumped).length == (2 * n + 1)
+    binPlate.universeOf(bumped).length == (2 * n + 1) &&
+    extrasOk
   }
