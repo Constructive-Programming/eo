@@ -22,10 +22,13 @@ object JsonPlatedFixtures:
     else
       Gen.frequency(
         3 -> leaf,
-        1 -> Gen.lzy(Gen.choose(0, 3).flatMap(n => Gen.listOfN(n, genJson(depth / 2)).map(Json.fromValues))),
+        1 -> Gen.lzy(
+          Gen.choose(0, 3).flatMap(n => Gen.listOfN(n, genJson(depth / 2)).map(Json.fromValues))
+        ),
         // Distinct keys (k0, k1, …) so rebuild can't collapse duplicates.
         1 -> Gen.lzy(
-          Gen.choose(0, 3)
+          Gen
+            .choose(0, 3)
             .flatMap(n => Gen.listOfN(n, genJson(depth / 2)))
             .map(vs => Json.obj(vs.zipWithIndex.map((v, i) => s"k$i" -> v)*))
         ),
