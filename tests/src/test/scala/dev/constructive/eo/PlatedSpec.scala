@@ -4,8 +4,10 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
+import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.generics.plate
-import dev.constructive.eo.optics.Plated
+import dev.constructive.eo.optics.{Lens, Plated, Prism}
+import dev.constructive.eo.optics.Optic.* // .andThen / .modify
 import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
 import laws.PlatedLaws
 import laws.discipline.PlatedTests
@@ -93,6 +95,30 @@ class PlatedSpec extends Specification with Discipline:
     // f -> F, the bound occurrence y -> Y, but the Lam binder "y" stays lowercase.
     Plated.transform(shout)(tree) ==
       Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
+  }
+
+  // ----- Composition: `plate` is a first-class optic — it `.andThen`s a Prism + Lens -----
+
+  "plate composes with a Prism + Lens via andThen (one level of children)" >> {
+    val varP = Prism[Expr, Expr.Var](
+      {
+        case v: Expr.Var => Right(v)
+        case other       => Left(other)
+      },
+      identity,
+    )
+    val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
+
+    // plate (immediate children) → Prism (those that are Var) → Lens (their name).
+    // The composed value is itself an Optic, so `.modify` works on the whole chain.
+    val immediateVarNames = Plated[Expr].plate.andThen(varP).andThen(nameL)
+
+    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+    // App's immediate children are Var("f") and the Lam; only Var("f") is hit (-> "F").
+    // The Lam, and the nested Var("y") under it, are deeper than one level, so untouched.
+    // (For *every* variable in the tree, iterate plate via `transform` / `universe` above.)
+    immediateVarNames.modify(_.toUpperCase)(tree) ==
+      Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("y")))
   }
 
   // ----- Behaviour: rewrite re-fires to a fixpoint (bottom-up constant fold) -----
