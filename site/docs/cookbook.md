@@ -1,64 +1,32 @@
 # Cookbook
 
-Runnable patterns for the questions that come up most often.
-Every fence is compiled by mdoc against the current library
-version, and every recipe cites the source — Penner's *Optics By
-Example*, Monocle docs, Haskell `lens` tutorial, circe-optics, or
-cats-eo itself where the surface is novel.
+Runnable patterns for the questions that come up most often. Each
+recipe opens with the problem it solves, every fence is compiled by
+mdoc against the current library version, and every recipe cites
+the source — Penner's *Optics By Example*, Monocle docs, Haskell
+`lens` tutorial, circe-optics, or cats-eo itself where the surface
+is novel.
 
-Recipes are grouped by theme. The order inside each theme moves
-from the most familiar framing to the most cats-eo-unique
-capability; skim the headings for a jumping-off point.
+These are worked examples, not a tutorial — for the optic families
+themselves see the [Optics reference](optics.md). Recipes are
+grouped by theme, moving from the everyday to the most
+cats-eo-unique capability; skim the headings for a jumping-off
+point.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.data.Direct.given    // Accessor[Direct] — powers .get on Iso / Getter
 import dev.constructive.eo.data.MultiFocus.given   // Functor / Foldable / Traverse for MultiFocus[PSVec] (post-fold)
 ```
 
 ## Theme A — Product editing
 
-### Edit a deeply-nested coordinate
-
-The canonical Atom/Molecule walk every Haskell tutorial opens
-with — increment a deeply-buried leaf through four composition
-hops:
-
-```scala mdoc:silent
-case class Point(x: Int, y: Int)
-case class Atom(point: Point, mass: Double)
-case class Molecule(atoms: List[Atom])
-
-val everyX =
-  Lens[Molecule, List[Atom]](_.atoms, (m, as) => m.copy(atoms = as))
-    .andThen(Traversal.each[List, Atom])
-    .andThen(Lens[Atom, Point](_.point, (a, p) => a.copy(point = p)))
-    .andThen(Lens[Point, Int](_.x, (p, x) => p.copy(x = x)))
-```
-
-```scala mdoc
-val water = Molecule(List(
-  Atom(Point(0, 0), 1.0),
-  Atom(Point(1, 0), 16.0),
-  Atom(Point(2, 0), 1.0),
-))
-everyX.modify(_ + 1)(water).atoms.map(_.point.x)
-```
-
-Same-carrier Lens hops fuse through `Tuple2`'s
-`AssociativeFunctor`; the cross-carrier hop into `PowerSeries` at
-`.each` happens without a manual `.morph` call. For macro-derived
-versions of these Lenses see [Generics](generics.md).
-
-**Source:** Gonzalez — *Control.Lens.Tutorial*,
-<https://hackage.haskell.org/package/lens-tutorial-1.0.5/docs/Control-Lens-Tutorial.html>.
-
 ### Virtual-field Iso — Celsius ↔ Fahrenheit facade
 
-Expose a `fahrenheit` handle on a `Temperature` whose underlying
-representation is Celsius. Callers `get` and `reverseGet` without
-knowing which unit the type stores:
+**Why:** your type stores Celsius, but half your callers think in
+Fahrenheit. Expose a `fahrenheit` handle that reads and writes as
+if the field were really there — one representation, no drift, and
+the unit choice stays an implementation detail callers never see.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.BijectionIso
@@ -92,79 +60,59 @@ details.
 **Source:** Penner — *Virtual Record Fields Using Lenses*,
 <https://chrispenner.ca/posts/virtual-fields>.
 
-### Multi-field NamedTuple focus (cats-eo-unique)
+### Total inventory value — multi-field focus into a fold (cats-eo-unique)
 
-Focus several case-class fields at once and update them
-atomically. The `lens[S](_.a, _.b, ...)` macro returns a Lens
-whose focus is a Scala 3 `NamedTuple` in selector order — no
-Monocle analogue:
+**Why:** you have a basket of line items and want one number —
+total value — without writing a fold by hand or threading two
+fields through a loop. The `lens[S](_.a, _.b)` macro focuses both
+`quantity` and `price` as a single Scala 3 `NamedTuple`, so the
+multiply-and-sum drops straight into `foldMap`. No Monocle
+analogue for the multi-field focus.
 
 ```scala mdoc:silent
+import cats.instances.list.given     // Traverse[List] for .each
+import cats.instances.double.given   // Monoid[Double] for .foldMap
 import dev.constructive.eo.generics.lens
 
 case class OrderItem(sku: String, quantity: Int, price: Double)
 
-val qtyAndPrice = lens[OrderItem](_.quantity, _.price)
+// Focus both pricing fields at once, then walk every item.
+val lineValue =
+  Traversal.each[List, OrderItem]
+    .andThen(lens[OrderItem](_.quantity, _.price))
 ```
 
 ```scala mdoc
-val order = OrderItem("abc-123", 3, 9.99)
+val inventory = List(
+  OrderItem("apple",   3, 9.99),
+  OrderItem("pear",   10, 2.50),
+  OrderItem("lobster", 2, 45.00),
+)
 
-// Atomic multi-field update: see both fields as a NamedTuple,
-// return the NamedTuple with new values.
-qtyAndPrice.modify { nt =>
-  (quantity = nt.quantity * 2, price = nt.price * 0.9)
-}(order)
+// One pass: see each item's (quantity, price) NamedTuple, multiply,
+// and let the Double monoid sum the line values into a grand total.
+lineValue.foldMap(nt => nt.quantity * nt.price)(inventory)
 ```
 
-The selector order determines the NamedTuple shape, so
-`lens[OrderItem](_.price, _.quantity)` would produce a focus
-whose `.price` field comes first. Partial cover → `SimpleLens`;
-full cover flips to a `BijectionIso` (next recipe). See
-[Generics → Multi-field Lens](generics.md)
-for the full treatment.
+The focus arrives in selector order, so `nt.quantity` and
+`nt.price` are named — the lambda reads like the business rule it
+encodes. The same `lineValue` optic also writes (`.modify` to
+re-price every line); the fold is just the read-side escape. See
+[Generics → Multi-field Lens](generics.md) for the full treatment
+of the NamedTuple focus.
 
-**Source:** cats-eo internal.
-
-### Full-cover Iso upgrade (cats-eo-unique)
-
-When the selector set spans *every* case field of `S`, the macro
-silently upgrades from `SimpleLens` to `BijectionIso`. The user
-writes a Lens and the macro delivers a round-trip bijection —
-handy at serialization boundaries:
-
-```scala mdoc:silent
-case class ProductCode(value: String)
-
-// arity-1 wrapper: single-selector full-cover returns BijectionIso,
-// not SimpleLens. The focus type is the Scala 3 NamedTuple
-// NamedTuple[("value",), (String,)] — selector name preserved.
-val codeIso = lens[ProductCode](_.value)
-```
-
-```scala mdoc
-val pc = ProductCode("abc-42")
-val nt = codeIso.get(pc)
-nt.value
-codeIso.reverseGet((value = "zzz-99"))
-codeIso.modify(n => (value = n.value.toUpperCase))(pc)
-```
-
-The return-type switch is deliberate: on full cover there's no
-structural complement left, so the lens degenerates into a
-bijection. Same holds for multi-field full cover — see
-[Generics → Full-cover Iso](generics.md).
-
-**Source:** cats-eo internal.
+**Source:** cats-eo internal; fold framing from Penner — *Optics
+By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 
 ## Theme B — Sum-branch access
 
 ### Prism + Lens — branch into a case, then edit inside
 
-Branch into a specific enum case and modify a field inside the
-hit branch; the miss branch passes through unchanged. The pattern
-covers both the "update one variant" discriminated-union use case
-and the F#-style expression-tree AST case-dispatch:
+**Why:** you want to rewrite one variant of a sum type — rename
+the bound variable of every `Var` node in an AST, say — and leave
+every other case untouched, without a hand-written `match` that
+re-builds the misses. The Prism selects the branch, the Lens edits
+inside it, and misses pass through for free.
 
 ```scala mdoc:silent
 enum Expr:
@@ -261,25 +209,13 @@ Haskell `lens` `Control.Lens.Plated`,
 
 ## Theme C — Collection walks
 
-### `each` — the composable traversal
+### `each` past the traversal — drill, then keep drilling
 
-cats-eo ships a single Traversal carrier — `Traversal.each`. Map
-over every element of a container, fold via `.foldMap`, and chain
-further optics past the traversal in the same call:
-
-```scala mdoc:silent
-import cats.instances.list.given
-
-val bumpList = Traversal.each[List, Int]
-```
-
-```scala mdoc
-bumpList.modify(_ + 1)(List(1, 2, 3))
-bumpList.foldMap(identity[Int])(List(1, 2, 3))   // sum
-```
-
-`each` shines when the chain continues past the traversal — the
-same map, then drill further into each element:
+**Why:** flip the `isMobile` flag on every phone a subscriber owns.
+The point isn't the map — it's that `each` keeps composing: walk
+into the list, traverse it, *and* drill into a field of each
+element, all in one optic. A plain `.map` would make you re-assemble
+the surrounding `Subscriber` by hand on the way back out.
 
 ```scala mdoc:silent
 case class Dial(isMobile: Boolean, number: String)
@@ -312,11 +248,11 @@ Traversals), <https://leanpub.com/optics-by-example/>; Gonzalez
 
 ### Sparse traversal over a Prism (cats-eo-unique)
 
-For every element of a container, drill through a Prism and
-modify only the hit branch — `Err` elements pass through
-unchanged, `Ok` elements get their `value` bumped. This is the
-"sparse traversal" pattern that's genuinely annoying to
-hand-roll, and the optic spelling is a one-liner:
+**Why:** you have a list of results, some `Ok` and some `Err`, and
+want to bump only the successes — leaving the failures exactly
+where they are. Walking the container *and* matching the branch in
+one pass is the "sparse traversal" that's genuinely annoying to
+hand-roll; here it's a one-liner.
 
 ```scala mdoc:silent
 import scala.collection.immutable.ArraySeq
@@ -359,11 +295,13 @@ Actions) + ch. 10 (Missing Values),
 
 ### The JSON arc — edit leaf, edit array, diagnose
 
-One vignette in three acts: walk a deep JSON path and modify a
-leaf without decoding the siblings; walk every element of a
-nested array; and observe *why* an edit was a silent no-op.
-The [Ior failure-flow diagram](circe.md#failure-flow) covers
-the full decision tree.
+**Why:** you need to change one field deep inside a JSON payload
+and pass the rest through untouched — no full decode into a
+case-class tree, no re-encode, no decoder for the siblings you
+never read. One vignette in three acts: edit a deep leaf, edit
+every element of a nested array, then see *why* an edit was a
+silent no-op. The [Ior failure-flow
+diagram](circe.md#failure-flow) covers the full decision tree.
 
 #### Act 1 — edit one leaf deep in a JSON tree (no decode)
 
@@ -450,7 +388,7 @@ The `Ior.Both(chain, json)` carries both the pre-v0.2 behaviour
 (the unchanged Json) and the diagnostic (the chain). Fold the
 chain into a readable message, route each case to its own log
 stream, or collapse on the `getOrElse` escape hatch — the full
-cascade is Theme I below.
+cascade is Theme H below.
 
 **Source:** cats-eo internal (`JsonPrism`, `JsonTraversal`);
 related to circe-optics' `root.*` idiom
@@ -460,11 +398,12 @@ inspiration from cats' `Ior` typeclass and
 
 ### jq-style path + predicate
 
-"For every `item` whose `price > 100`, uppercase its `name`" —
-expressible in jq as
-`.items[] | select(.price > 100) | .name |= ascii_upcase`. The
-cats-eo rendering reaches through the multi-field focus (Scala 3
-NamedTuple) and branches inside the modify lambda:
+**Why:** the jq one-liner you'd reach for at the shell —
+`.items[] | select(.price > 100) | .name |= ascii_upcase`,
+"uppercase the name of every item over $100" — but in typed Scala,
+over a `Json` you never fully decode. The optic reaches through the
+multi-field focus (a Scala 3 NamedTuple) and branches inside the
+modify lambda:
 
 ```scala mdoc:silent
 type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
@@ -506,10 +445,10 @@ which is honest about the shape of the work.
 
 ### Recursive rename over a user-defined Tree
 
-Walk a user-supplied tree type — the library doesn't need to
-ship a tree carrier when the user's type already has
-`cats.Traverse`. Bring your own `Traverse` and `each` picks it
-up:
+**Why:** rename every leaf of *your own* recursive tree type —
+not a container the library knows about. cats-eo ships no tree
+carrier and doesn't need one: if your type has a `cats.Traverse`,
+`each` picks it up and walks it. Bring your own instance:
 
 ```scala mdoc:silent
 import cats.Traverse
@@ -557,22 +496,25 @@ separately in
 **Source:** Stanislav Glebik — *RefTree talk*,
 <https://stanch.github.io/reftree/docs/talks/Visualize/>.
 
-## Theme E — Algebraic / classifier
+## Theme E — Many focuses at once: rewrite, aggregate, broadcast
 
-`MultiFocus[F]` is the unified successor of five v1 carriers
-(`AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
-`FixedTraversal[N]`). Every former carrier becomes a sub-shape
-selected by `F`. The three recipes below cover the prototypical
-shapes — see the [MultiFocus reference](multifocus.md) for the full
-unification narrative.
+A `Lens` sees one value; a `Traversal` sees many but only lets you
+map over them. `MultiFocus[F]` is the optic for the jobs in between:
+rewrite *every* slot of a fixed-shape record with one function,
+fold the focused values into a summary and scatter it back across
+them, or walk a nested collection and keep composing past it. The
+three recipes below are the prototypical jobs; the [MultiFocus
+reference](multifocus.md) carries the design story (it unifies five
+separate optics from v1 into this one carrier).
 
-### Recipe A — Prototypical Grate-shape via `MultiFocus.tuple`
+### Recipe A — Adjust every channel of a colour at once
 
-The "broadcast a uniform `A => B` over a homogeneous tuple"
-idiom — the absorbed-Grate sub-shape `MultiFocus[Function1[Int, *]]`.
-Same optic value carries `.modify` (uniform pointwise rewrite)
-and `.modifyA[G]` (effectful pointwise rewrite that short-circuits
-on `G`'s applicative).
+**Why:** you have a fixed-shape record of same-typed fields — the
+R, G, B of a colour, the x/y/z of a vector, the left/right of a
+stereo frame — and you want to hit *all* of them with one function.
+There's no collection to traverse and no reason to write three
+`.copy` calls: focus the whole tuple and rewrite every slot
+uniformly, or fill them all with a constant.
 
 ```scala mdoc:silent
 import cats.instances.function.given  // Functor[Function1[Int, *]] for .modify
@@ -587,39 +529,34 @@ val rgbMF = MultiFocus.tuple[(Double, Double, Double), Double]
 ```scala mdoc
 val violet = (0.5, 0.0, 0.5)
 
-// Brighten all three channels uniformly: the same `A => B` runs at
-// every slot. Same shape as the v1 Grate.modify.
+// Brighten all three channels uniformly: the same function runs at
+// every slot.
 rgbMF.modify(c => (c * 1.4).min(1.0))(violet)
 
 // Replace every slot with the same constant — the broadcast pattern.
 rgbMF.replace(0.0)(violet)
 ```
 
-The carrier is `MultiFocus[Function1[Int, *]]` — `Function1[Int, *]`
-is the Naperian shape over a finite index set. `.modify` runs the
-same closure at every index; `.replace(b)` fills every slot with `b`.
-The absorbed-Grate sub-shape does NOT admit `.modifyA[G]` because
-`Function1[Int, *]` lacks `Traverse` in cats — short-circuiting
-effectful traversal needs a `Foldable + Functor` shape that the
-representable encoding doesn't supply. Reach for
-`MultiFocus.apply[List, Double]` (`F = List`) when the use case
-needs `.modifyA`.
-
-This is the absorbed-Grate sub-shape from the
-[carrier consolidation](multifocus.md#sub-shapes);
-`MultiFocus.representable[F: Representable, A]` covers the same
-shape over arbitrary distributive `F`s (tuple-of-pair `(A, A)`,
-user-defined Naperian containers, etc.).
+`.modify` runs the same function at every slot; `.replace(b)` fills
+every slot with `b`. This is the *Grate* shape of `MultiFocus`
+([details](multifocus.md#sub-shapes)), and it works over any
+fixed-arity homogeneous structure, not just tuples. One caveat: the
+tuple/Grate shape is map-only — when you need an *effectful*
+per-slot rewrite (`.modifyA[G]`), reach for a collection-backed
+`MultiFocus.apply[List, A]` instead.
 
 **Source:** Penner — *Grate: yet another optic*,
 <https://chrispenner.ca/posts/grate>.
 
-### Recipe B — Prototypical Kaleidoscope-shape via `.collectMap` / `.collectList`
+### Recipe B — Summarise a batch, then broadcast or collapse
 
-The "applicative-aware aggregation" idiom — the absorbed-Kaleidoscope
-sub-shape. The same `MultiFocus[F]` optic carries two `.collect*`
-flavours, and the user picks whichever matches the aggregation shape
-they want:
+**Why:** you have a column of numbers from a batch — sensor
+readings, line-item amounts, weights — and you need a summary in a
+particular shape. Sometimes you want it written back into every
+position (so each row carries the batch total as the denominator
+for a "share of total", or the mean as a baseline); sometimes you
+want the batch collapsed to a single value. The same `MultiFocus[F]`
+optic does both — you pick the flavour at the call site:
 
 ```scala mdoc:silent
 import cats.data.ZipList
@@ -629,54 +566,50 @@ val intListMF = MultiFocus.apply[List, Int]
 ```
 
 ```scala mdoc
-// (1) MultiFocus[ZipList] + .collectMap — column-wise mean broadcast
-//     back across positions. The aggregator sees the whole ZipList,
-//     returns one Double, Functor[ZipList].map fills it back at every
-//     index. Length-preserving.
+// (1) .collectMap broadcasts one summary back to every position —
+//     here the batch mean, so every slot ends up holding the average.
+//     (.value just unwraps the ZipList so the result prints legibly.)
 zipMF.collectMap[Double](zl => zl.value.sum / zl.value.size.toDouble)(
   ZipList(List(1.0, 2.0, 3.0, 4.0))
-)
+).value
 
-// (2) MultiFocus[List] + .collectList — cartesian / singleton output:
-//     `List(agg(fa))`, regardless of input length. Reproduces the v1
-//     Reflector[List] semantics at the call site without a typeclass.
+// (2) .collectList collapses the whole batch to a single value —
+//     the total as a one-element result, whatever the input length.
 intListMF.collectList(_.sum)(List(1, 2, 3, 4))
 
-// Same optic, .collectMap flavour: List collapses into the
-// length-preserving (Functor-broadcast) shape — equivalent to the v1
-// Reflector[ZipList] interpretation if it were applied to a List.
+// (3) Same optic, .collectMap flavour: the grand total stamped onto
+//     every position — the denominator for a later "share of total".
 intListMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
 ```
 
-**When to reach for which `.collect*` flavour.**
+**Which flavour?**
 
-- `.collectMap[B](agg: F[A] => B)` requires `Functor[F]` and is the
-  carrier-wide default. Length-preserving via `Functor[F].map`.
-  Matches v1 `Reflector[ZipList]` and `Reflector[Const]` exactly.
-- `.collectList(agg: List[A] => B)` is `MultiFocus[List]`-specific,
-  produces `List(agg(fa))` — a one-element output regardless of
-  input length. Matches v1 `Reflector[List]`'s cartesian-singleton
-  choice.
+- `.collectMap[B](agg: F[A] => B)` keeps the shape — the summary
+  lands in every position. Reach for it when a downstream step needs
+  the aggregate *alongside* the originals (share-of-total, a
+  normalisation baseline).
+- `.collectList(agg: List[A] => B)` produces a single-element result
+  regardless of input length. Reach for it when you just want the
+  summary.
 
-The post-fold story is the user picks per call site — the
-[carrier-consolidation Q1 finding](multifocus.md#why-two-collect-variants)
-explains why no single derivation from `Apply[F]` covers both
-behaviours uniformly; the v1 `Reflector[F]` typeclass that picked
-one or the other per `F` was deleted.
+Why two flavours, rather than one derived automatically? The
+[MultiFocus reference](multifocus.md#why-two-collect-variants) has
+the answer.
 
 **Sources:** Penner — *Kaleidoscopes: lenses that never die*,
 <https://chrispenner.ca/posts/kaleidoscopes>; Penner —
 *Algebraic lenses*, <https://chrispenner.ca/posts/algebraic>.
 
-### Recipe C — PowerSeries downstream composition (`Lens → each → Lens`)
+### Recipe C — Bulk-edit a nested collection, then read it back
 
-The post-consolidation crown jewel. The absorbed-PowerSeries
-sub-shape `MultiFocus[PSVec]` carries an
-`AssociativeFunctor[MultiFocus[PSVec], _, _]` instance
-(`mfAssocPSVec`), so `.andThen` continues *past* `Traversal.each`
-into a downstream `Lens`. Pre-fold the deleted `Traversal.forEach`
-shape (`Forget[T]`-based) was terminal — a chain ending at
-`.forEach(...)` could not extend further.
+**Why:** the everyday "update all the line items" edit — rename
+every order in a cart, bump every price, flag every overdue
+invoice. The focus lives two hops deep: into the record, then
+across the list it holds. The payoff is that the traversal doesn't
+dead-end — the *same* optic keeps composing past `.each` to reach
+the exact field you want, and folds back out, so one value gives
+you both the write (rename every order) and the read (pull every
+name for a report).
 
 ```scala mdoc:silent
 case class Order(id: Int, name: String, total: Double)
@@ -688,19 +621,12 @@ val cartOrdersL =
 val orderNameL =
   Lens[Order, String](_.name, (o, n) => o.copy(name = n))
 
-// Three hops, two carriers:
-//   Cart →(Tuple2)→ List[Order] →(MultiFocus[PSVec])→ Order →(Tuple2)→ String
-//
-// The cross-carrier hops fire transparently:
-//   - .andThen(Traversal.each[List, Order]) lifts the outer Lens
-//     into MultiFocus[PSVec] via `tuple2multifocusPSVec`.
-//   - .andThen(orderNameL) is the DOWNSTREAM hop — `tuple2multifocusPSVec`
-//     fires again to lift orderNameL into MultiFocus[PSVec], and
-//     mfAssocPSVec composes the two same-carrier optics.
+// Three hops, one .andThen each, no manual .morph:
+//   Cart → its orders (a List) → each order → that order's name
 val everyOrderName =
   cartOrdersL
     .andThen(Traversal.each[List, Order])
-    .andThen(orderNameL)
+    .andThen(orderNameL)   // the downstream hop past .each that pays off
 ```
 
 ```scala mdoc
@@ -718,156 +644,30 @@ everyOrderName.modify(_.toUpperCase)(cart)
 everyOrderName.foldMap((s: String) => List(s))(cart)
 ```
 
-The pre-fold contrast: `Traversal.forEach[F, T](xs)` was a
-`Forget[T]`-carrier optic — the leftover side carried no rebuild
-information, only the read-side aggregation, so chains like
-`.forEach(...).andThen(orderNameL)` were unreachable. The
-post-fold `Traversal.each` is `MultiFocus[PSVec]`-carrier; same
-read-side capability via `.foldMap`, plus the rebuild side that
-makes `.andThen` continue past it.
+The `.andThen(orderNameL)` *after* the traversal is the part that
+earns its keep: because `.each` doesn't dead-end, you compose
+toward the field you actually want instead of stopping at the list
+and re-drilling by hand — and the same value still `.foldMap`s for
+the read side. At scale it stays cheap, within a few percent of a
+hand-tuned traversal up to ~1k elements; the
+[PowerSeries benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition)
+have the curve.
 
-The `mfAssocPSVec` body is the absorbed `PowerSeries.assoc`
-verbatim — parallel-array `AssocSndZ` leftover, both `MultiFocusSingleton`
-(AlwaysHit, for morphed Lenses) and `MultiFocusPSMaybeHit`
-(MaybeHit, for morphed Prisms / Optionals) fast-paths preserved.
-The benchmark numbers in
-[`docs/research/2026-04-29-powerseries-fold-spike.md` §3.4](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-powerseries-fold-spike.md)
-show the post-fold carrier within ±5% of pre-fold PowerSeries at
-every size up to 1024.
+**Source:** cats-eo internal; performance discussion in
+[Optics → PowerSeries](optics.md#powerseries) and the
+[benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition).
 
-**Source:** the post-fold composability story; benchmark
-discussion in
-[Optics → PowerSeries](optics.md#powerseries) and
-[benchmarks → PowerSeries with downstream composition](benchmarks.md#powerseries-traversal-with-downstream-composition).
-
-## Theme F — Write-only / read-only escape
-
-### Review — reverse-only build path
-
-Build a `UserId` from a `UUID` through a `Review` so tests and
-prod share one construction path — reverse-only, no observable
-read side:
-
-```scala mdoc:silent
-import java.util.UUID
-import dev.constructive.eo.optics.Review
-
-case class UserId(value: UUID)
-
-val userIdR: Review[UserId, UUID] = Review(UserId(_))
-```
-
-```scala mdoc
-userIdR.reverseGet(UUID.fromString("00000000-0000-0000-0000-000000000001"))
-```
-
-Name the "build-only" intent as first-class and team members
-stop reaching for bare smart constructors. Contrast with
-`Getter` (next recipe) for read-only. `Review` deliberately
-sits *outside* the `Optic` trait — its lack of a read side
-would force an artificial `to` member. See
-[Optics → Review](optics.md#review) for the rationale.
-
-**Source:** Penner — *Optics By Example* ch. 13,
-<https://leanpub.com/optics-by-example/>.
-
-### Getter — derive a read-only view
-
-Expose a derived projection so callers can't try to write
-through it. `Getter[S, A]` wraps a pure `S => A` with
-`T = Unit` on the full optic trait — the mismatch with `B`
-statically rules out `.modify`:
-
-```scala mdoc:silent
-import dev.constructive.eo.optics.Getter
-
-case class Shopper(name: String, age: Int)
-
-val nameInitial = Getter[Shopper, Char](_.name.head)
-```
-
-```scala mdoc
-nameInitial.get(Shopper("Alice", 30))
-```
-
-See the composition note at
-[Optics → Getter](optics.md#getter) — `Getter.andThen(Getter)`
-is handled by composing the underlying `S => A` functions
-directly rather than through `Optic.andThen`, because the
-`T = Unit` slot doesn't align with the outer `B`.
-
-**Source:** Monocle — Focus docs,
-<https://www.optics.dev/Monocle/docs/focus>.
-
-### Setter — opaque bulk write
-
-Encrypt every password in a `UserDb` without exposing the
-plaintext to the call site. `Setter[S, A]` writes but doesn't
-read — the carrier `SetterF` carries no observable read side:
-
-```scala mdoc:silent
-import dev.constructive.eo.optics.Setter
-
-case class Users(credentials: Map[String, String])
-
-val encryptAll = Setter[Users, Users, String, String] { f => users =>
-  users.copy(credentials = users.credentials.view.mapValues(f).toMap)
-}
-```
-
-```scala mdoc
-encryptAll.modify(pw => s"bcrypt($pw)")(
-  Users(Map("alice" -> "s3cret", "bob" -> "hunter2"))
-)
-```
-
-`Setter` is a composition terminal: `lens.andThen(setter)`
-works, `setter.andThen(...)` does not. See the [Setter
-section](optics.md#setter) for the intentional asymmetry.
-
-**Source:** Monocle — Optics docs,
-<https://www.optics.dev/Monocle/docs/optics>.
-
-### AffineFold — predicate-narrowed read
-
-Return `Some(age)` only when the subject is an adult; no
-write-back. `AffineFold` is the 0-or-1 read-only shape with
-`T = Unit`:
-
-```scala mdoc:silent
-import dev.constructive.eo.optics.AffineFold
-
-case class Person(age: Int)
-
-val adultAge: AffineFold[Person, Int] =
-  AffineFold(p => Option.when(p.age >= 18)(p.age))
-```
-
-```scala mdoc
-adultAge.getOption(Person(20))
-adultAge.getOption(Person(15))
-```
-
-Narrow an existing `Optional` or `Prism` to its read-only
-projection via `AffineFold.fromOptional` /
-`AffineFold.fromPrism` — both discard the write / build path
-but keep the matcher. See
-[Optics → AffineFold](optics.md#affinefold) for the
-composition-corner note (direct `.andThen` off a Lens into an
-AffineFold doesn't type-check; narrow after composing).
-
-**Source:** Penner — *Optics By Example* ch. 10 (Missing
-Values), <https://leanpub.com/optics-by-example/>.
-
-## Theme G — Composition
+## Theme F — Composition
 
 ### Three-family ladder: Iso → Lens → Traversal → Prism → Lens
 
-One vignette exercises every `Composer` bridge cats-eo ships,
-with no explicit `.morph` calls anywhere. From a `UserTuple`
-(structurally the same as `UserRecord`), pull out the
-`orders: List[Payment]`, filter to the `Paid` variant, and
-increment their `amount`:
+**Why:** real edits cross optic families — an Iso here, a Lens, a
+Traversal over a list, a Prism into one variant, another Lens
+inside it. In Monocle each adjacent pair needs the right `compose*`
+overload; in cats-eo one `.andThen` bridges every seam with no
+manual `.morph`. Here: from a `UserTuple`, pull out the
+`orders: List[Payment]`, narrow to the `Paid` variant, and bump
+their `amount`:
 
 ```scala mdoc:nest:silent
 final case class UserTuple(name: String, orders: List[Payment])
@@ -928,13 +728,14 @@ concepts page.
 and Borjas' lunar-phase example
 <https://tech.lfborjas.com/optics/>.
 
-## Theme H — Effectful modification
+## Theme G — Effectful modification
 
 ### Validate-in-place with `modifyF`
 
-Bump `age` by 1, but fail with `None` if the input is negative.
-`.modifyF[G]` lifts an `A => G[B]` through any carrier that
-admits `Functor[G]`:
+**Why:** the update can fail. Bump `age` by 1, but reject a
+negative input with `None` — and keep the validation and the write
+as one expression instead of a get / check / set dance. `.modifyF[G]`
+lifts an `A => G[B]` through any carrier that admits `Functor[G]`:
 
 ```scala mdoc:silent
 case class Visitor(name: String, age: Int)
@@ -968,11 +769,12 @@ generalised.
 
 ### Batch-load nested IDs — O(N) → O(1) queries (cats-eo-unique)
 
-Each node in a tree carries an ID that needs to resolve to a
-DB-backed record. Naive `.modifyA` fires one query per node;
-the optic spelling collects all IDs through a `foldMap` pass,
-issues one batched query, then `.modify` again to distribute
-results. 100×–300× without restructuring the domain types:
+**Why:** every node in a structure carries an ID you need to
+resolve against a database, and the naive `.modifyA` fires one
+query per node — the classic N+1. Use the same traversal twice:
+`foldMap` collects every ID in one pass, you issue a single batched
+query, then `.modify` distributes the results back. 100×–300×
+fewer queries with no change to the domain types:
 
 ```scala mdoc:silent
 case class Node(id: Int, label: String)
@@ -1009,11 +811,11 @@ queries*, <https://chrispenner.ca/posts/traversals-for-batching>.
 
 ### Persist-and-stamp — return the stored object with its DB id
 
-A `PUT` (or `POST`) handler receives a draft entity on the wire,
-persists it, and must return the *same* entity enriched with the
-database-assigned id. The id only exists after the effectful store
-runs, so this is the classic "set one field to the result of an
-effect" shape — and a derived id-lens makes the stamp a one-liner.
+**Why:** a `PUT` (or `POST`) handler receives a draft entity on the
+wire, persists it, and must return the *same* entity enriched with
+the database-assigned id. The id only exists after the effectful
+store runs, so this is the classic "set one field to the result of
+an effect" shape — and a derived id-lens makes the stamp a one-liner.
 With circe carrying the value across the wire on both ends, the
 whole handler is a short pipeline: `decode → store → stamp →
 encode`.
@@ -1079,7 +881,7 @@ without the id field; the shape of the pipeline doesn't change.
 <https://gist.github.com/kryptt/af0a626849f0e3f5b16fcd161a5545e4>;
 see also [Generics → Composing into pipelines](generics.md#composing-derived-optics-into-pipelines).
 
-## Theme I — Observable failure (cats-eo-unique)
+## Theme H — Observable failure (cats-eo-unique)
 
 The next three recipes cover the observability story for the
 JSON cursor optics: partial-success walks, parse errors surfaced
@@ -1089,10 +891,11 @@ the full decision tree.
 
 ### Partial-success array walk — `Ior.Both`
 
-Across a mixed-failure array, produce the updated JSON *and*
-the per-element miss list. `Ior.Both(chain, partialJson)` is
-the observable shape — every element that *did* succeed is
-reflected in the payload, every refusal accumulates into the
+**Why:** some elements of the array decode, some don't, and you
+want *both* outcomes — the JSON updated where it could be, and a
+list of which elements were skipped — not a silent drop.
+`Ior.Both(chain, partialJson)` is exactly that shape: every
+success lands in the payload, every refusal accumulates into the
 chain:
 
 ```scala mdoc:silent
@@ -1131,9 +934,11 @@ know you don't want the diagnostic.
 
 ### Parse-error surface — `Json | String` input
 
-When the input is a `String`, unparseable input surfaces as
-`Ior.Left(Chain(JsonFailure.ParseFailed(_)))` through the same
-chain as every other failure mode:
+**Why:** the bytes on the wire might not be JSON at all. Feed the
+optic a raw `String` and a parse failure comes back as
+`Ior.Left(Chain(JsonFailure.ParseFailed(_)))` — through the *same*
+channel as every other failure, so you handle malformed input and
+a missing field with one match:
 
 ```scala mdoc:silent
 val upperName = codecPrism[SimpleBasket].items.each.name.modify(_.toUpperCase)
@@ -1158,10 +963,11 @@ unchanged. Parse cost is zero when the input is already a
 
 ### Classify failures — *why* did the edit no-op?
 
-Pattern-match on each `JsonFailure` case and route to distinct
-log / metric streams. The chain collects one entry per refusal
-point on the walk; the cases cover every way a cursor walk can
-skip:
+**Why:** the edit did nothing and you need to know which step
+refused — a missing path? the wrong shape? a decode failure? — so
+each cause can go to its own log or metric. Pattern-match the
+`JsonFailure` cases; the chain holds one entry per refusal point on
+the walk, covering every way a cursor walk can skip:
 
 ```scala mdoc:silent
 import dev.constructive.eo.circe.JsonFailure
@@ -1192,16 +998,17 @@ service boundaries.
 
 **Source:** cats-eo internal.
 
-## Theme J — Streaming / Kafka
+## Theme I — Streaming / Kafka
 
 ### Kafka payload edit
 
-Most Kafka consumers receive `Array[Byte]` payloads, want to
-modify a single field, and re-emit binary on the producer side.
-The `AvroPrism` triple-input surface accepts `Array[Byte]`
-directly, parses it through apache-avro's `BinaryDecoder` under
-the cached reader schema, and threads the modify back through
-without ever materialising the full case-class tree:
+**Why:** a Kafka consumer gets an `Array[Byte]` payload, needs to
+change one field, and re-emits binary on the producer side — on a
+hot path where decoding the whole record into a case-class tree per
+message is pure overhead. The `AvroPrism` triple-input surface
+takes the `Array[Byte]` directly, parses it through apache-avro's
+`BinaryDecoder` under a cached reader schema, and threads the modify
+back through without ever materialising the full tree:
 
 ```scala mdoc:silent
 import dev.constructive.eo.avro as eoavro
