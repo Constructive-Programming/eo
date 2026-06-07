@@ -221,6 +221,13 @@ Prism miss-branch shape, amortising down as the collection grows (the
 [benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition)
 sweep sizes 4 / 32 / 256 / 1024).
 
+`Plated` — the recursive self-traversal behind `transform` / `universe`
+/ `everywhere` — rides this same `MultiFocus[PSVec]` carrier via
+`Traversal.selfChildren`; it's a typeclass over the carrier, not a new
+family node. See [Generics → `plate[S]`](generics.md), the
+[Cookbook](cookbook.md), and the [Setter section](#setter) for
+`everywhere`.
+
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
 import dev.constructive.eo.data.MultiFocus.given  // Functor / Foldable / Traverse for MultiFocus[PSVec]
@@ -356,6 +363,56 @@ composed.modify(_ + 1)(Holder(Box(10), "tag"))
 Setter is a write-side terminal: there is no `Composer[SetterF, _]`
 outbound, so to *escape* a SetterF chain into a Forget / MultiFocus /
 Lens you have to restructure with the Setter on the inside.
+
+#### `everywhere` — a Setter that reaches every depth
+
+`Plated.everywhere[S]` is a `Setter` over a recursive type whose
+`.modify` is the bottom-up recursive `transform` (see
+[Generics → `plate[S]`](generics.md)).
+Because it's an ordinary Setter, the same `.andThen` you'd use to reach
+*one* focus now applies that focus at **every** node of the tree — the
+"specify once, run everywhere" payoff. Give the type a `Plated`
+(by hand here; `plate[S]` from eo-generics derives it):
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Plated
+
+enum Tree:
+  case Leaf(n: Int)
+  case Branch(l: Tree, r: Tree)
+
+given Plated[Tree] = Plated.fromChildren(
+  {
+    case Tree.Branch(l, r) => List(l, r)
+    case Tree.Leaf(_)      => Nil
+  },
+  {
+    case (Tree.Branch(_, _), l :: r :: Nil) => Tree.Branch(l, r)
+    case (leaf, _)                          => leaf
+  },
+)
+
+// A Setter that writes the Int in a Leaf; everywhere lifts it to all depths.
+val leafN = Setter[Tree, Tree, Int, Int] { f =>
+  {
+    case Tree.Leaf(n) => Tree.Leaf(f(n))
+    case other        => other
+  }
+}
+
+val everyLeaf = Plated.everywhere[Tree].andThen(leafN)
+```
+
+```scala mdoc
+everyLeaf.modify(_ + 1)(Tree.Branch(Tree.Leaf(1), Tree.Branch(Tree.Leaf(2), Tree.Leaf(3))))
+```
+
+`everywhere` composes outward with any inner optic that bridges into
+`SetterF` (Lens / Prism / Optional / Setter), and the `.modify` runs
+bottom-up, stack-safe to any depth. For the read side (every sub-term
+as a list) use `Plated.universe`; for the full worked Prism-composition
+recipe see the [Cookbook](cookbook.md), and for the macro that derives
+the `Plated` see [Generics → `plate[S]`](generics.md).
 
 ### Review
 

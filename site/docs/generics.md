@@ -282,6 +282,12 @@ over a recursive ADT. It focuses every field whose type is exactly
 `S` across all cases (the *exact self-type* rule); fields of other
 types stay as leftover skeleton.
 
+The derived instance also backs `Plated.everywhere[S]` — a composable
+`Setter` that lifts any downstream optic to *every* depth, so
+`everywhere[S].andThen(prism).modify(f)` rewrites that focus across the
+whole tree. See [Optics → Setter](optics.md#setter) and the
+[Cookbook recipe](cookbook.md).
+
 ```scala
 import dev.constructive.eo.generics.plate
 import dev.constructive.eo.optics.Plated
