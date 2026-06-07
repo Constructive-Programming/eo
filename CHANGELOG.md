@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`Getter`s now compose with `Getter`s via `andThen`.** `g1.andThen(g2)` reads
+  `s => g2.get(g1.get(s))` and yields a `Getter`, matching how `Iso` / `Lens`
+  compose through their fused subclasses. `Getter.apply` now returns a concrete
+  `ReadGetter` carrying the fused `andThen` (previously a bare anonymous `Optic`
+  with no `andThen`, forcing callers to hand-nest `get` calls). As part of this,
+  a `Getter`'s back-focus slot is now `Unit` (`Optic[S, Unit, A, Unit, Direct]`,
+  was `Optic[S, Unit, A, A, Direct]`) — making the read-only-ness explicit in the
+  type and lining the inner `T` up with the outer `B` for composition. Pre-1.0,
+  no published baseline, so no MiMa break; external code that ascribed the full
+  `Optic[S, Unit, A, A, Direct]` type updates the final type argument to `Unit`.
+
 - **`Plated` — recursive self-traversal + recursion combinators.** A new
   `optics.Plated[S]` (the cats-eo analogue of Haskell `lens`'s `Plated`) whose
   `plate` is a `Traversal[S, S]` over the immediate same-typed children of a

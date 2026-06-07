@@ -87,6 +87,13 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val getter = Getter[(Int, String), Int](_._1)
     val getterOk = forAll((s: (Int, String)) => getter.get(s) == s._1)
 
+    // Getter ∘ Getter composes through the ordinary `andThen` (B = T = Unit, so
+    // the inner T lines up with the outer B and Direct's composeFrom is Unit=>Unit).
+    val composedGetter =
+      Getter[((Int, String), Boolean), (Int, String)](_._1)
+        .andThen(Getter[(Int, String), Int](_._1))
+    val composeOk = forAll((s: ((Int, String), Boolean)) => composedGetter.get(s) == s._1._1)
+
     val l1 = Lens.first[Int, String]
     val l2 = Lens.second[Int, String]
     val curried = Lens.curried[(Int, Int), Int](_._1, a => s => (a, s._2))
@@ -120,7 +127,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(posIntPrism.to(-1) === Left(-1))
       .and(posIntPrism.reverseGet(7) === 7)
 
-    getterOk && l1Ok.and(l2Ok) && curriedOk && nestedOk && isoRevOk && prismOk
+    getterOk && composeOk && l1Ok.and(l2Ok) && curriedOk && nestedOk && isoRevOk && prismOk
   }
 
   // ----- Traversal/foldMap/modifyA shorthand --------------------------

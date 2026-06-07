@@ -153,7 +153,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Getter: first projection and a synthetic one ------------
 
-  val firstGetter: Optic[(Int, String), Unit, Int, Int, Direct] =
+  val firstGetter: Optic[(Int, String), Unit, Int, Unit, Direct] =
     Getter[(Int, String), Int](_._1)
 
   checkAll(
@@ -165,7 +165,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .getter,
   )
 
-  val lengthGetter: Optic[String, Unit, Int, Int, Direct] =
+  val lengthGetter: Optic[String, Unit, Int, Unit, Direct] =
     Getter[String, Int](_.length)
 
   checkAll(
