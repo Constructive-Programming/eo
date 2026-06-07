@@ -110,12 +110,12 @@ object Optic:
         val from: F[X, D] => T = d => o.from(F.map(d, f))
 
   /** The identity optic — `S` is its own focus and modification has no effect. Carrier is
-    * [[data.Forgetful]] (no leftover).
+    * [[data.Direct]] (no leftover).
     *
     * @group Constructors
     */
-  def id[A]: Optic[A, A, A, A, Forgetful] =
-    new Optic[A, A, A, A, Forgetful]:
+  def id[A]: Optic[A, A, A, A, Direct] =
+    new Optic[A, A, A, A, Direct]:
       type X = Nothing
       val to: A => A = identity
       val from: A => A = identity
@@ -155,7 +155,7 @@ object Optic:
   // requires; carriers without that instance simply don't see the method.
 
   /** Read the focus out of `s`. Available when the carrier has an `Accessor[F]` instance (today:
-    * `Tuple2` and `Forgetful`).
+    * `Tuple2` and `Direct`).
     *
     * @group Operations
     */
@@ -164,8 +164,7 @@ object Optic:
   )(using A: Accessor[F]) inline def get(s: S): A = A.get(o.to(s))
 
   /** Build the "no context" reverse — takes a fresh `B` and produces the corresponding `T`.
-    * Available when the carrier has a `ReverseAccessor[F]` instance (today: `Either` and
-    * `Forgetful`).
+    * Available when the carrier has a `ReverseAccessor[F]` instance (today: `Either` and `Direct`).
     *
     * @group Operations
     */
@@ -206,8 +205,8 @@ object Optic:
       s => o.from(FF.map(o.to(s), _ => b))
 
   /** Overwrite a `T`-shaped value at the focus — available when the carrier can witness `T => F[X,
-    * B]` (e.g. `Forgetful`, where `F[X, B] = B`). [[transfer]] lifts a `C => B` into this same
-    * shape with an extra `C` argument.
+    * B]` (e.g. `Direct`, where `F[X, B] = B`). [[transfer]] lifts a `C => B` into this same shape
+    * with an extra `C` argument.
     *
     * @group Operations
     */
@@ -234,7 +233,7 @@ object Optic:
       t => o.from(FF.map(ev(t), f))
 
   /** Construct a `T` directly from an `A`, running `f: A => B` at the focus — available for
-    * carriers with a `ForgetfulApplicative[F]` instance (today: `Forgetful`).
+    * carriers with a `ForgetfulApplicative[F]` instance (today: `Direct`).
     *
     * @group Operations
     */

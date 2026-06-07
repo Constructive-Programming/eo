@@ -13,7 +13,7 @@ capability; skim the headings for a jumping-off point.
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
+import dev.constructive.eo.data.Direct.given    // Accessor[Direct] — powers .get on Iso / Getter
 import dev.constructive.eo.data.MultiFocus.given   // Functor / Foldable / Traverse for MultiFocus[PSVec] (post-fold)
 ```
 
@@ -861,7 +861,7 @@ val input = UserTuple("Alice", List(
 bumpPaid.modify(_ + 5.0)(input)
 ```
 
-Five hops, carriers `Forgetful → Tuple2 → PowerSeries → Either
+Five hops, carriers `Direct → Tuple2 → PowerSeries → Either
 → Tuple2`. The cross-carrier `.andThen` does the morph lifting
 at each seam — the per-pair Monocle overload table becomes one
 `Composer[F, G]` lookup per hop. The full carrier graph is the

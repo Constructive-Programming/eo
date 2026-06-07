@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Identity carrier renamed `Forgetful` → `Direct`.** The carrier behind `Iso`
+  and `Getter` (`type Direct[X, A] = A`) now reads as what it does — direct
+  function application, no leftover — rather than naming the category-theory
+  mechanism. The `Forgetful*` typeclasses (`ForgetfulFunctor`, `ForgetfulFold`,
+  `ForgetfulTraverse`, `ForgetfulApplicative`) keep their names, and the
+  scaladoc still notes `Direct` *is* the forgetful functor. Mechanical rename
+  for any external code: `Optic[…, Forgetful]` → `Optic[…, Direct]`,
+  `import …data.Forgetful.given` → `…data.Direct.given`. Pre-1.0 / no published
+  baseline (`tlMimaPreviousVersions` is empty), so no MiMa break.
+
 ### Added
 
 - **`getOption` for `Either`-carrier optics.** Previously `getOption` was

@@ -6,7 +6,7 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Forgetful, MultiFocus, PSVec, SetterF}
+import data.{Affine, Forget, Direct, MultiFocus, PSVec, SetterF}
 import data.Affine.given
 import data.Forget.given
 import data.MultiFocus.given
@@ -47,7 +47,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Iso: tuple swap (Int, String) <-> (String, Int) ----------
 
-  val swapIso: Optic[(Int, String), (Int, String), (String, Int), (String, Int), Forgetful] =
+  val swapIso: Optic[(Int, String), (Int, String), (String, Int), (String, Int), Direct] =
     Iso[(Int, String), (Int, String), (String, Int), (String, Int)](
       _.swap,
       _.swap,
@@ -153,7 +153,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Getter: first projection and a synthetic one ------------
 
-  val firstGetter: Optic[(Int, String), Unit, Int, Int, Forgetful] =
+  val firstGetter: Optic[(Int, String), Unit, Int, Int, Direct] =
     Getter[(Int, String), Int](_._1)
 
   checkAll(
@@ -165,7 +165,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .getter,
   )
 
-  val lengthGetter: Optic[String, Unit, Int, Int, Forgetful] =
+  val lengthGetter: Optic[String, Unit, Int, Int, Direct] =
     Getter[String, Int](_.length)
 
   checkAll(
@@ -287,7 +287,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // ----- Carrier type-class laws via representative fixtures ------
   //
   // Uses the same Arbitrary givens as the carrier-specific law blocks
-  // above. The full fixture matrix (Tuple2, Either, Forget[F], Forgetful)
+  // above. The full fixture matrix (Tuple2, Either, Forget[F], Direct)
   // is partially covered — sufficient to witness that each instance
   // satisfies the shared ForgetfulFunctor / ForgetfulTraverse laws.
   // Expanding the matrix is a follow-up (0.1.1).
@@ -358,7 +358,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   )
 
   // covers: ForgetfulFunctor + ForgetfulTraverse over Forget[List] —
-  // exercises Forgetful.scala's traverse2 and bifunctor paths that pure Forgetful
+  // exercises Direct.scala's traverse2 and bifunctor paths that pure Direct
   // fixtures don't land.
   checkAllForgetfulFunctorFor[Forget[List], Unit, Int](
     "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]"
@@ -463,14 +463,14 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // Exercise Optic.put which requires ForgetfulApplicative[F] — this
   // lights up ForgetfulApplicative.scala (0% baseline).
 
-  // covers: lift Optic.put via pure on Forgetful — exercises Forgetful.applicative,
+  // covers: lift Optic.put via pure on Direct — exercises Direct.applicative,
   //   forgetFApplicative[List].pure wraps a single element + .map composes — exercises
   //   ForgetfulApplicative.scala (forgetFApplicative)
-  "ForgetfulApplicative: Optic.put on Forgetful + forgetFApplicative[List].pure / .map" >> {
+  "ForgetfulApplicative: Optic.put on Direct + forgetFApplicative[List].pure / .map" >> {
     import Optic.*
-    given ForgetfulApplicative[Forgetful] = Forgetful.applicative
-    given data.ReverseAccessor[Forgetful] = Forgetful.reverseAccessor
-    val intDouble: Optic[Int, Int, Int, Int, Forgetful] =
+    given ForgetfulApplicative[Direct] = Direct.applicative
+    given data.ReverseAccessor[Direct] = Direct.reverseAccessor
+    val intDouble: Optic[Int, Int, Int, Int, Direct] =
       optics.Iso[Int, Int, Int, Int](_ * 2, _ / 2)
     val ap = summon[ForgetfulApplicative[data.Forget[List]]]
     forAll { (a: Int, f: Int => Int, n: Int) =>

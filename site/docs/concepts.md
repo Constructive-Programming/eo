@@ -58,9 +58,9 @@ this optic have?"
 
 | Carrier         | Shape                                          | Family                 |
 |-----------------|------------------------------------------------|------------------------|
+| `Direct`        | `A` — identity; no leftover (forgetful functor) | `Iso`, `Getter`       |
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
-| `Forgetful`     | `A` — identity; no leftover                    | `Iso`, `Getter`        |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 | `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`                 |
@@ -150,8 +150,8 @@ val mainStreet = wrappedMaybe.andThen(mainOnly)
 [`dev.constructive.eo.data.Affine`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html)
 ships it. Other bridges: `Tuple2 → SetterF`, `Tuple2 →
 MultiFocus[F]`, `Either → Affine`, `Either → MultiFocus[F]`,
-`Affine → MultiFocus[F]`, `Forgetful → Tuple2`, `Forgetful →
-Either`, `Forgetful → MultiFocus[F]`.
+`Affine → MultiFocus[F]`, `Direct → Tuple2`, `Direct →
+Either`, `Direct → MultiFocus[F]`.
 
 The transitive `Composer.chainViaTuple2` given lets you hop
 across two bridges using `Tuple2` as the fixed intermediate.
@@ -176,9 +176,9 @@ chains effectively land there last.
 
 ```mermaid
 flowchart LR
-  Forgetful --> Tuple2
-  Forgetful --> Either
-  Forgetful --> MFocus["MultiFocus[F]"]
+  Direct --> Tuple2
+  Direct --> Either
+  Direct --> MFocus["MultiFocus[F]"]
   Tuple2 --> Affine
   Tuple2 --> SetterF
   Tuple2 --> MFocus
@@ -188,9 +188,9 @@ flowchart LR
   ForgetF["Forget[F]"] --> MFocus
   MFocus --> SetterF
   MFocus -.->|read-only, T=Unit| ForgetF
-  Forgetful -.->|chainViaTuple2| Affine
-  Forgetful -.->|chainViaTuple2| SetterF
-  Forgetful -.->|chainViaTuple2| MFocus
+  Direct -.->|chainViaTuple2| Affine
+  Direct -.->|chainViaTuple2| SetterF
+  Direct -.->|chainViaTuple2| MFocus
   SetterF:::sink
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
 ```

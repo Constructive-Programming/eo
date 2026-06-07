@@ -67,7 +67,7 @@ selected by `F`. The full cell-by-cell composition matrix lives in
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic}
 import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.data.Forgetful.given    // Accessor[Forgetful] — powers .get on Iso / Getter
+import dev.constructive.eo.data.Direct.given    // Accessor[Direct] — powers .get on Iso / Getter
 import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
 ```
 
@@ -78,7 +78,7 @@ macro-derived `lens[S](_.field)` / `prism[S, A]` flavour, see
 ## Iso
 
 An `Iso[S, A]` is a bijection — every `S` round-trips to exactly
-one `A` and back. Carrier: `Forgetful` (the identity carrier).
+one `A` and back. Carrier: `Direct` (the identity carrier).
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Iso
@@ -291,7 +291,7 @@ or a build side, but not the round trip.
 ### Getter
 
 A `Getter[S, A]` is a pure projection — read-only. Carrier:
-`Forgetful` with `T = Unit`.
+`Direct` with `T = Unit`.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Getter

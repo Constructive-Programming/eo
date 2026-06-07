@@ -27,8 +27,8 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, Forget, Forgetful, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
-import data.Forgetful.given
+import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
+import data.Direct.given
 import data.Forget.given
 import data.Forget.andThen
 import data.Affine.given
@@ -108,7 +108,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(nested.replace(9)(((1, 2), 3)) === (((9, 2), 3)))
       .and(nested.modify(_ + 100)(((1, 2), 3)) === (((101, 2), 3)))
 
-    val longIso: Optic[Int, Int, Long, Long, Forgetful] =
+    val longIso: Optic[Int, Int, Long, Long, Direct] =
       Iso[Int, Int, Long, Long](_.toLong, _.toInt)
     val isoRevOk = forAll((n: Int) => longIso.reverse.get(n.toLong) == n)
 
@@ -174,7 +174,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     sumOk && selectOk && foldMapOk
   }
 
-  // ----- Composer morphs from Forgetful --------------------------------
+  // ----- Composer morphs from Direct --------------------------------
 
   // ----- Iso.morph + cross-carrier andThen via Morph.bothViaAffine ---------------
   //
@@ -203,7 +203,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   Morph.bothViaAffine — Prism.andThen(Lens) composes via the affine bridge (hit + miss),
   //   Lens.andThen(Prism) composes symmetrically via the affine bridge (hit + miss)
   "Iso.morph[Tuple2/Either/Affine] + Morph.bothViaAffine: Prism↔Lens cross-carrier composition" >> {
-    val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
+    val doubleIso: Optic[Int, Int, Int, Int, Direct] =
       Iso[Int, Int, Int, Int](_ * 2, _ / 2)
 
     val asLens = doubleIso.morph[Tuple2]

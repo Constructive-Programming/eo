@@ -287,7 +287,7 @@ and the `→ Forget` direction is rejected only for a *different* effect
 above. The rationale lives at the bottom of `MultiFocus.scala` and in
 [`docs/research/2026-04-23-composition-gap-analysis.md` §3.2.6](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md):
 
-- **`Composer[MultiFocus[F], Forgetful]`** (MultiFocus widens to
+- **`Composer[MultiFocus[F], Direct]`** (MultiFocus widens to
   Iso/Getter). Type-level encodable, but `forgetful2multifocus`
   already ships in the OPPOSITE direction. Adding the reverse would
   create a bidirectional Composer pair, which the
@@ -430,4 +430,4 @@ respectively.
   the canonical source for the carrier definition, capability
   traits, and Composer instances; bottom-of-file comment carries
   the structural-rejection rationale for the directions
-  `MultiFocus → Forgetful` and `MultiFocus → Forget[G]`.
+  `MultiFocus → Direct` and `MultiFocus → Forget[G]`.

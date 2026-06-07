@@ -16,7 +16,7 @@ import optics.Optic
   * ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape carrier" whose optic-level
   * capabilities scale with the typeclasses `F` itself admits.
   */
-type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
+type Forget[F[_]] = [X, A] =>> Direct[X, F[A]]
 
 /** Capability ladder for [[Forget]]. Each typeclass on `F` unlocks a matching optic operation:
   *
@@ -31,8 +31,8 @@ type Forget[F[_]] = [X, A] =>> Forgetful[X, F[A]]
   *
   * `Forget[F]`'s `X` is phantom — Traversal / Fold need no outer-structural context on `from`. For
   * cases where the outer's leftover must survive, use the pair carrier [[MultiFocus]]; `Forget[F]`
-  * injects trivially into it via `Composer[Forget[F], MultiFocus[F]]`. Forgetful-targeting
-  * instances live in [[Forgetful]].
+  * injects trivially into it via `Composer[Forget[F], MultiFocus[F]]`. Direct-targeting instances
+  * live in [[Direct]].
   */
 object Forget extends LowPriorityForgetInstances:
 

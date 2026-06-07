@@ -58,7 +58,7 @@ Right-prism:
 | Right `getOption` (Left)  | 0.46 | 0.80 |
 | Right `reverseGet`        | 1.06 | 1.11 |
 
-**Iso** (`Forgetful` carrier) — `(Int, String) ↔ Person`:
+**Iso** (`Direct` carrier) — `(Int, String) ↔ Person`:
 
 | Operation | eo | Monocle |
 |---|--:|--:|
@@ -83,7 +83,7 @@ auto-lifts each hop):
 Within ~2× across depths — EO pays `Affine`'s branching where Monocle has
 `Option`-specialised internals.
 
-**Getter / Setter** (`Forgetful` / `SetterF`) — depth-0/3/6 over `Nested`.
+**Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`.
 Neither family composes through `Optic.andThen` in EO today (see
 [Optics → Getter](optics.md#getter)), so the `_3` / `_6` EO numbers nest `.get`
 / `.modify` calls by hand; Monocle composes natively.

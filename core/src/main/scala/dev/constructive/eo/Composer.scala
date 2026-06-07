@@ -21,21 +21,21 @@ trait Composer[F[_, _], G[_, _]]:
   *   1. Regular: direct bridges here and in each carrier's companion.
   *   2. Low (from [[LowPriorityComposerInstances]]):
   *      [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]] with `Tuple2` as a fixed
-  *      intermediate. Covers Forgetful-origin chains uniformly without introducing the implicit
+  *      intermediate. Covers Direct-origin chains uniformly without introducing the implicit
   *      ambiguity the earlier fully-general `chain[F, G, H]` had.
   */
 object Composer extends LowPriorityComposerInstances:
 
-  import data.Forgetful
+  import data.Direct
 
   /** Express an Iso (or Getter) as a Lens — the Lens's leftover is `Unit` because the bijection
     * doesn't need any.
     *
     * @group Instances
     */
-  given forgetful2tuple: Composer[Forgetful, Tuple2] with
+  given forgetful2tuple: Composer[Direct, Tuple2] with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Tuple2] =
+    def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
         type X = Unit
         val to: S => (X, A) = s => ((), o.to(s))
@@ -46,9 +46,9 @@ object Composer extends LowPriorityComposerInstances:
     *
     * @group Instances
     */
-  given forgetful2either: Composer[Forgetful, Either] with
+  given forgetful2either: Composer[Direct, Either] with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, Either] =
+    def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Either] =
       new Optic[S, T, A, B, Either]:
         type X = Nothing
         val to: S => Either[X, A] = s => Right(o.to(s))
@@ -66,7 +66,7 @@ object Composer extends LowPriorityComposerInstances:
 trait LowPriorityComposerInstances:
 
   /** Transitive derivation via `Tuple2` as the intermediate carrier: given `F → Tuple2` and
-    * `Tuple2 → G`, derive `F → G`. Fires cleanly for Forgetful-origin chains to any target with a
+    * `Tuple2 → G`, derive `F → G`. Fires cleanly for Direct-origin chains to any target with a
     * `Composer[Tuple2, _]` direct (Affine / SetterF / MultiFocus[F] / MultiFocus[PSVec]).
     *
     * @group Instances

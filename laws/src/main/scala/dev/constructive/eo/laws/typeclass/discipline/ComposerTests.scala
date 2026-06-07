@@ -18,7 +18,7 @@ abstract class ComposerPathIndependenceTests[S, A] extends Laws:
   ): RuleSet =
     new SimpleRuleSet(
       "Composer.chain path independence",
-      "Forgetful→Tuple2→Affine ≡ Forgetful→Either→Affine on modify" ->
+      "Direct→Tuple2→Affine ≡ Direct→Either→Affine on modify" ->
         forAll((s: S, f: A => A) => laws.pathIndependence(s, f)),
     )
 

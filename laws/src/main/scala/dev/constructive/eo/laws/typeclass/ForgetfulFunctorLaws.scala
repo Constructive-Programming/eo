@@ -7,9 +7,9 @@ import dev.constructive.eo.ForgetfulFunctor
   *
   * * `map(id) == id` * `map(g) ∘ map(f) == map(f andThen g)`
   *
-  * Holds for every carrier EO uses: `Tuple2`, `Either`, `Affine`, `SetterF`, `Forgetful`,
-  * `Forget[F]`, `MultiFocus[F]`. The law trait is parameterised so downstream adding a new carrier
-  * can witness its `ForgetfulFunctor` instance here.
+  * Holds for every carrier EO uses: `Tuple2`, `Either`, `Affine`, `SetterF`, `Direct`, `Forget[F]`,
+  * `MultiFocus[F]`. The law trait is parameterised so downstream adding a new carrier can witness
+  * its `ForgetfulFunctor` instance here.
   *
   * Equality is structural — if the carrier wraps a function (as `SetterF` does),
   * discipline-checking this law requires an extensional comparison. See

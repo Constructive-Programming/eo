@@ -3,7 +3,7 @@ package laws
 package typeclass
 
 import _root_.dev.constructive.eo.data.Affine.given
-import _root_.dev.constructive.eo.data.{Affine, Forgetful}
+import _root_.dev.constructive.eo.data.{Affine, Direct}
 
 import optics.Optic
 import optics.Optic.*
@@ -14,7 +14,7 @@ import optics.Optic.*
 
 /** C1 — path independence. An Iso → Affine via Tuple2 vs via Either should be modify-equivalent. */
 trait ComposerPathIndependenceLaws[S, A]:
-  def iso: Optic[S, S, A, A, Forgetful]
+  def iso: Optic[S, S, A, A, Direct]
 
   // Spelled out explicitly to sidestep the `iso.morph[Affine]` ambiguity.
   private def viaTuple2: Optic[S, S, A, A, Affine] =

@@ -83,7 +83,7 @@ object NestedOptics:
   val d3: Nested3 = Nested.Default3
   val d6: Nested6 = Nested.Default6
 
-  // ---- Per-level EO Getters (Forgetful carrier) -----------------
+  // ---- Per-level EO Getters (Direct carrier) -----------------
 
   val eoGetValue = EoGetter[Nested0, Int](_.value)
 

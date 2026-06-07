@@ -7,8 +7,8 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, Forgetful, MultiFocus, PSVec, SetterF}
-import data.Forgetful.given
+import data.{Affine, Direct, MultiFocus, PSVec, SetterF}
+import data.Direct.given
 import data.Affine.given
 import data.MultiFocus.given
 import data.SetterF.given
@@ -45,7 +45,7 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Concrete optics used by several checkAlls ---------------
 
-  val doubleIso: Optic[Int, Int, Int, Int, Forgetful] =
+  val doubleIso: Optic[Int, Int, Int, Int, Direct] =
     Iso[Int, Int, Int, Int](_ * 2, _ / 2)
 
   val firstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
@@ -70,8 +70,8 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     firstLens.morph[Affine],
   )
 
-  // covers: Morph from Forgetful → Tuple2 on an Iso (preserves-get arm)
-  checkAllMorphPreservesGetFor[Int, Int, Forgetful, Tuple2](
+  // covers: Morph from Direct → Tuple2 on an Iso (preserves-get arm)
+  checkAllMorphPreservesGetFor[Int, Int, Direct, Tuple2](
     "Iso.morph[Tuple2] preserves get",
     doubleIso,
     doubleIso.morph[Tuple2],
@@ -214,17 +214,17 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
   // =============== C2 — Composer preserves get ===================
   //
-  // Forgetful → Tuple2 → Tuple2 with a locally-declared identity
+  // Direct → Tuple2 → Tuple2 with a locally-declared identity
   // composer at the second hop. Degenerate because Tuple2 is the
-  // only non-Forgetful carrier with Accessor right now, but the
+  // only non-Direct carrier with Accessor right now, but the
   // trait is ready to accept more witnesses.
 
   checkAll(
-    "doubleIso: Forgetful → Tuple2 → Tuple2 chain preserves get",
-    new ComposerPreservesGetTests[Int, Int, Forgetful, Tuple2, Tuple2]:
+    "doubleIso: Direct → Tuple2 → Tuple2 chain preserves get",
+    new ComposerPreservesGetTests[Int, Int, Direct, Tuple2, Tuple2]:
 
       val laws =
-        new ComposerPreservesGetLaws[Int, Int, Forgetful, Tuple2, Tuple2]:
+        new ComposerPreservesGetLaws[Int, Int, Direct, Tuple2, Tuple2]:
           val optic = doubleIso
           val fToG = Composer.forgetful2tuple
 
@@ -234,8 +234,8 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
                 o: Optic[S, T, A, B, Tuple2]
             ): Optic[S, T, A, B, Tuple2] = o
 
-          given accessorF: data.Accessor[Forgetful] =
-            Forgetful.accessor
+          given accessorF: data.Accessor[Direct] =
+            Direct.accessor
 
           given accessorH: data.Accessor[Tuple2] =
             data.Accessor.tupleAccessor
@@ -250,10 +250,10 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
       val laws = new IsoComposeLaws[Int, Int, Int]:
 
-        val outer: Optic[Int, Int, Int, Int, Forgetful] =
+        val outer: Optic[Int, Int, Int, Int, Direct] =
           Iso[Int, Int, Int, Int](-_, -_)
 
-        val inner: Optic[Int, Int, Int, Int, Forgetful] =
+        val inner: Optic[Int, Int, Int, Int, Direct] =
           Iso[Int, Int, Int, Int](~_, ~_)
     .isoCompose,
   )
