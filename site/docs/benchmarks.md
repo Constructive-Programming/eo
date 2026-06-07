@@ -242,6 +242,58 @@ write directly into pre-sized builders instead of allocating a per-element
 wrapper. The full mechanics and the −59 %…−67 % optimisation history are in the
 [composition notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes).
 
+## Plated recursion — read (`universe`) + write (`transform`) vs Monocle vs a hand visitor
+
+`PlatedBench` pits cats-eo's `Plated` against Monocle's `monocle.function.Plated`
+and the hand-written recursion ("visitor") you'd write without optics, over three
+subjects: a normal-depth `Expr` tree, a degenerate deep `Bin` spine, and a
+normal-depth circe `Json` tree (via the universal `Plated[Json]`). The `Plated`
+carrier is PSVec-native, so neither path converts to a `List` and back.
+
+| Op | Subject | eo | monocle | visitor |
+|---|---|--:|--:|--:|
+| `universe` | `Expr` balanced | 15 000 | 176 000 | 7 000 |
+| | `Json` balanced | 20 000 | 210 000 | 16 000 |
+| | `Bin` deep spine | 15 500 | **SO** | 7 000 |
+| `transform` | `Expr` balanced | 18 000 | 16 000 | 8 000 |
+| | `Bin` deep spine | 13 000 | **SO** | 4 000 |
+
+(ns/op at n=512, 3-fork; **indicative only** — this machine is noisy enough that
+sub-2× differences aren't significant. The CI workflow produces the canonical
+figures.)
+
+Three results:
+
+- **Monocle's `Plated` is not stack-safe.** On the degenerate spine both
+  `universe` and `transform` `StackOverflowError` at depth ≳2048 (and `universe`,
+  where it survives at 1024, runs ~700× slower than EO — its lazy-`#:::` append
+  going quadratic). EO clears the spine at every size here and at 100k in the
+  stack-safety test, so the deep rows compare EO against the visitor only.
+- **`universe` beats Monocle by ~10–12× and rivals the visitor.** Reading
+  children straight off the PSVec carrier (no `List` round-trip, explicit
+  worklist) puts the JSON subject ~on par with the bare visitor (~1.3×) and
+  `Expr` within ~2×.
+- **`transform` is on par with Monocle and stack-safe.** It went from an
+  `Eval` trampoline (was ~10× slower) to a **hybrid**: a direct call-stack
+  recursion (≈ a hand-written rebuild — no per-node heap `Frame`) while shallow,
+  handing any subtree past a depth bound to the heap-stack machine so a
+  degenerate spine still can't overflow. (`rewrite` keeps its own `cats.Eval`
+  trampoline — it stays stack-safe on *both* the descent and a long re-fire
+  chain, which a synchronous machine would put back on the call stack.) With
+  `childrenVec` / `rebuild` (no `to`/`from` tuple per node) and
+  leaves applied in place, allocation is ~80 B/node on `Expr` (visitor is 44)
+  and ~56 B/node on the deep spine. Both paths sit within **~2–3×** of the bare
+  visitor.
+
+The residual gap to the visitor is the **carrier materialisation**: even on the
+fast recursive path EO allocates a `PSVec` of children + an `out` array per
+internal node, where a hand visitor fuses extract-and-rebuild into one
+`new Node(go(l), go(r))` and allocates neither — plus the heap stack the deep
+fallback uses (so it never overflows; the visitor and Monocle both do on the
+spine). Closing the last ~2–3× would mean fusing the recursion into the `plate[S]`
+macro — but that emits a *function*, not an `Optic`, which would break the
+`.andThen` composition `everywhere` relies on, so it's deliberately not done.
+
 ## Reproducing
 
 The integration tables are produced by the **Benchmarks** CI workflow

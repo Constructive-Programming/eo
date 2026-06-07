@@ -274,6 +274,44 @@ circleCoordsX.modify(_ + 10)(Shape2.Circle(Coords(3, 4), 1.0))
 circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
 ```
 
+## `plate[S]` — recursive self-traversal (`Plated`)
+
+`plate[S]` derives a `Plated[S]` — the immediate same-typed-children
+traversal behind `transform` / `rewrite` / `children` / `universe`
+over a recursive ADT. It focuses every field whose type is exactly
+`S` across all cases (the *exact self-type* rule); fields of other
+types stay as leftover skeleton.
+
+The derived instance also backs `Plated.everywhere[S]` — a composable
+`Setter` that lifts any downstream optic to *every* depth, so
+`everywhere[S].andThen(prism).modify(f)` rewrites that focus across the
+whole tree. See [Optics → Setter](optics.md#setter) and the
+[Cookbook recipe](cookbook.md).
+
+```scala
+import dev.constructive.eo.generics.plate
+import dev.constructive.eo.optics.Plated
+
+enum Expr:
+  case Var(name: String)
+  case App(f: Expr, x: Expr)
+  case Lam(bind: String, body: Expr)
+
+// App.f, App.x and Lam.body are the recursion points; Lam.bind is a leaf.
+given Plated[Expr] = plate[Expr]
+
+// Uppercase every variable occurrence, anywhere in the tree (stack-safe).
+Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(
+  Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+)
+```
+
+Works on enums, sealed hierarchies, and recursive case classes. See
+the [cookbook Plated recipe](cookbook.md) for a worked, runnable
+example. (The block above is illustrative — the `new` the macro
+emits for an enum case can't run inside this page's doc sandbox, so
+the cookbook spells the instance out by hand instead.)
+
 ## Macro errors
 
 Both macros fail at compile time with explicit errors when

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Plated` — recursive self-traversal + recursion combinators.** A new
+  `optics.Plated[S]` (the cats-eo analogue of Haskell `lens`'s `Plated`) whose
+  `plate` is a `Traversal[S, S]` over the immediate same-typed children of a
+  recursive ADT, plus stack-safe combinators `transform` (bottom-up rewrite),
+  `rewrite` (Option-rule fixpoint), `children`, and `universe`. The headline is
+  `Plated.everywhere` — `transform` in *composable optic* form: a `Setter` whose
+  `modify` is the recursive `transform`, so `everywhere.andThen(prism).andThen(lens).modify(f)`
+  applies `f` at the focus *at every depth* (e.g. uppercase every variable in an
+  expression tree). It reuses the existing `SetterF` carrier and `Morph`/`Composer`
+  bridges — no new carrier — so it composes with any inner optic (Lens / Prism /
+  Optional / …) as the outer of `.andThen`. All are stack-safe on deep trees —
+  `transform` recurses on the call stack while shallow and falls back to a
+  heap-stack machine past a depth bound, `universe` / `children` use a worklist,
+  `rewrite` a `cats.Eval` trampoline.
+  Build one with `Plated.fromChildren`, derive it with `generics.plate[S]`
+  (focuses every exact-`S`-typed field across all cases; enums, sealed
+  hierarchies, recursive case classes), or call the combinators directly on any
+  self-traversal optic via the `.transformAll` / `.universeOf` extensions. New
+  `Traversal.selfChildren` constructor builds the underlying `MultiFocus[PSVec]`
+  self-traversal from an explicit children view. The carrier is PSVec-native end
+  to end — `fromChildrenVec` / `generics.plate[S]` speak the `MultiFocus[PSVec]`
+  focus vector directly, with a `List`-shaped `fromChildren` kept as a
+  hand-writing convenience — so neither path pays a `List ↔ PSVec` round-trip.
+  `universe` reads children straight off the carrier (no `List` per node) and
+  `transform` is hybrid — a direct call-stack recursion while shallow, a
+  heap-stack machine past a depth bound (via `childrenVec` / `rebuild`, no
+  `to`/`from` tuple per node; leaves applied in place) instead of an `Eval`
+  trampoline; both stay stack-safe (deep + 100k trees) while running
+  within ~2–3× of a hand-written recursive visitor and ahead of Monocle's
+  `Plated` (which is not stack-safe). See the
+  [benchmarks](https://github.com/Constructive-Programming/eo/blob/main/site/docs/benchmarks.md).
+- **Universal `Plated` instances for the JSON and Avro carriers.**
+  `dev.constructive.eo.circe.platedJson` makes `io.circe.Json` a recursive
+  self-traversal (children = an array's elements / an object's field values), so
+  `transform` / `rewrite` / `universe` walk a whole document — redact every
+  field at any depth, rewrite every string, rename keys throughout — no decode.
+  `dev.constructive.eo.avro.platedAvro` is the Avro mirror over `IndexedRecord`
+  (children = directly-record-valued fields; records nested inside array / map /
+  union fields are leftover skeleton in this version).
+
 ### Changed
 
 - **Identity carrier renamed `Forgetful` → `Direct`.** The carrier behind `Iso`

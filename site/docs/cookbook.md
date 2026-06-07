@@ -204,6 +204,61 @@ through the `prism[S, A]` macro — see
 Wlaschin — *Domain Modeling Made Functional*, ch. 4,
 <https://pragprog.com/titles/swdddf/domain-modeling-made-functional/>.
 
+### …and across the whole tree — `Plated` + `everywhere` (cats-eo-unique)
+
+The Prism above edits *one* `Var`. Give `Expr` a `Plated` and the
+**same `varName` optic composes into `everywhere`** — a recursive
+optic that reaches every sub-term — so one `.andThen` chain plus
+`.modify` uppercases every variable at every depth:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Plated
+
+// `plate[Expr]` from eo-generics derives this; spelled out by hand so
+// the page stays macro-free. It names each case's immediate Expr children.
+given Plated[Expr] = Plated.fromChildren(
+  {
+    case Expr.App(f, x)    => List(f, x)
+    case Expr.Lam(_, body) => List(body)
+    case Expr.Var(_)       => Nil
+  },
+  {
+    case (Expr.App(_, _), f :: x :: Nil) => Expr.App(f, x)
+    case (Expr.Lam(b, _), body :: Nil)   => Expr.Lam(b, body)
+    case (leaf, _)                       => leaf
+  },
+)
+
+// `everywhere` is `transform` in optic form: everywhere.andThen(d).modify(g)
+// applies `d` at every node, bottom-up. Reuse `varName` (Prism → Lens) from above.
+val everyVarName = Plated.everywhere[Expr].andThen(varName)
+```
+
+```scala mdoc
+val term = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+
+// Every variable, at every depth: f -> F and the nested y -> Y. The Lam
+// binder "y" (a String, not a Var node) is left alone.
+everyVarName.modify(_.toUpperCase)(term)
+```
+
+`everywhere` composes like any other optic — `.andThen` a Prism to
+pick a case, a Lens to reach a field — and the `.modify` runs at every
+node, bottom-up and stack-safe to any depth (a million-node tree, or a
+100k-deep degenerate spine, won't overflow). When the rewrite is easier
+as a plain per-node function, `Plated.transform(f)` is the same engine;
+`Plated.universe` / `children` are the read side (every sub-term /
+immediate children); `rewrite` repeats an `Expr => Option[Expr]` rule
+to a fixpoint. The derivation follows the *exact self-type* rule —
+only `Expr`-typed fields are recursion points, so `Lam`'s
+`bind: String` stays a leaf. See [Generics → `plate[S]`](generics.md).
+
+**Source:** Mitchell & Runciman — *Uniform Boilerplate and List
+Processing* (Uniplate),
+<https://ndmitchell.com/downloads/paper-uniform_boilerplate_and_list_processing-30_sep_2007.pdf>;
+Haskell `lens` `Control.Lens.Plated`,
+<https://hackage.haskell.org/package/lens/docs/Control-Lens-Plated.html>.
+
 ## Theme C — Collection walks
 
 ### `each` — the composable traversal

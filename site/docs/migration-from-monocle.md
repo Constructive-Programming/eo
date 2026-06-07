@@ -19,6 +19,7 @@ plus a note on where EO diverges.
 | `Setter[S, A](f => s => …)`                        | `Setter[S, S, A, A](f => s => …)`                   |
 | `Fold.fromFoldable[List, Int]`                     | `Fold[List, Int]` (with `cats.instances.list.given`)|
 | `Traversal.fromTraverse[List, Int]`                | `Traversal.each[List, Int]` (`Traversal.pEach[List, Int, Int]` for the polymorphic-write variant) |
+| `monocle.function.Plated[A]` + `transform` / `rewrite` / `universe` / `children` | `Plated[S]` — derive with `plate[S]` (from `dev.constructive.eo.generics`) or hand-write with `Plated.fromChildren`; same combinator names, plus `Plated.everywhere[S]` as a composable Setter (no Monocle equivalent) |
 | `lens.andThen(otherLens)`                          | `lens.andThen(otherLens)` — same                    |
 | `lens.andThen(optional)`                           | `lens.andThen(optional)` — cross-carrier `.andThen` lifts via `Composer[Tuple2, Affine]` |
 | `traversal.andThen(lens)`                          | `traversal = Traversal.each[…]; traversal.andThen(lens)` — auto-morph via `Composer[Tuple2, PowerSeries]` |
@@ -105,6 +106,19 @@ forces a full decode of the focused `A`. cats-eo's `JsonPrism`
 / `JsonTraversal` walk circe's `JsonObject` representation
 directly, avoiding the intermediate Codec round-trip at every
 level of the path. See [Circe integration](circe.md).
+
+### Plated is stack-safe and composes as an optic
+
+Monocle's `monocle.function.Plated` overflows the stack on deep
+trees — `transform` and `universe` `StackOverflowError` on a
+degenerate spine (see the [benchmarks](benchmarks.md)). cats-eo's
+`Plated` clears a 100k-deep spine: `transform` / `everywhere` run on a
+call-stack/heap-machine hybrid, the reads on a worklist, and `rewrite`
+trampolines through `cats.Eval` (so even a long re-fire chain is safe).
+cats-eo also adds `everywhere[S]`, a recursive rewrite
+exposed as a composable `Setter` — `everywhere.andThen(prism).modify(f)`
+applies an ordinary optic at every depth — which Monocle has no
+equivalent for. See the [cookbook recipe](cookbook.md).
 
 ## Discipline law instances
 

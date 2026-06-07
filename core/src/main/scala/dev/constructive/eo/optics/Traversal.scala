@@ -63,6 +63,31 @@ object Traversal:
               }
       }
 
+  /** Monomorphic self-traversal from an explicit immediate-children view — focuses the values of
+    * `S` that are themselves `S` (the immediate sub-terms), with `S` itself as the leftover
+    * skeleton. `children(s)` is the immediate children as a focus vector; `rebuild(s, vec)`
+    * reassembles `s` with that same number of children swapped in (same order). The two must agree
+    * on arity and order: `rebuild(s, children(s)) == s`.
+    *
+    * PSVec-native: `to` / `from` pass the `PSVec` straight through, so both the read path
+    * ([[Plated.children]] / `universe`, which read `to(s)._2`) and the write path
+    * ([[Plated.transform]] / `rewrite`, which traverse and rebuild through the carrier) avoid any
+    * `List` ↔ `PSVec` conversion. This is the carrier behind [[Plated]] — a recursive ADT's
+    * `plate`. Unlike [[each]] / [[pEach]] there is no container `T[_]`; the children of a node are
+    * gathered case-by-case, and the variable arity across cases (a binary node has two children, a
+    * leaf none) is exactly the `PSVec` shape.
+    *
+    * @group Constructors
+    */
+  def selfChildren[S](
+      children: S => PSVec[S],
+      rebuild: (S, PSVec[S]) => S,
+  ): Optic[S, S, S, S, MultiFocus[PSVec]] =
+    new Optic[S, S, S, S, MultiFocus[PSVec]]:
+      type X = S
+      val to: S => (S, PSVec[S]) = s => (s, children(s))
+      val from: ((S, PSVec[S])) => S = { case (s, vec) => rebuild(s, vec) }
+
   /** Traversal over two per-element getters with a `reverse` reassembly. Carrier is
     * `MultiFocus[Function1[Int, *]]` — the homogeneous-arity Tuple_N-shaped traversal encoded as an
     * `Int => A` lookup over the N getters. Lens / Prism / Optional inputs aren't bridged

@@ -379,6 +379,61 @@ shape — no behaviour change, just the rename. The default Ior
 surface is a new option: reach for it when you want to see the
 path-level diagnostic.
 
+## Recursive edits — `Plated[Json]`
+
+Sometimes the edit isn't at a fixed path but *everywhere*: redact
+every field named `ssn` at any depth, uppercase every string,
+round every number. `Plated[Json]` makes `Json` a recursive
+self-traversal — the immediate children of a node are an array's
+elements or an object's field values — so the
+[`Plated`](cookbook.md) combinators walk the whole document:
+
+```scala mdoc:silent
+import dev.constructive.eo.circe.given
+import dev.constructive.eo.optics.{Plated, Prism}
+import io.circe.Json
+```
+
+```scala mdoc
+val doc = Json.obj(
+  "name" -> Json.fromString("alice"),
+  "tags" -> Json.arr(Json.fromString("x"), Json.fromString("y")),
+)
+
+// Uppercase every string anywhere in the document, recursively.
+Plated
+  .transform[Json](j => j.asString.fold(j)(s => Json.fromString(s.toUpperCase)))(doc)
+  .noSpacesSortKeys
+
+// Every sub-node, self first.
+Plated.universe(doc).length
+```
+
+Better still, `Plated.everywhere[Json]` turns that whole-tree walk into
+a *composable optic*: build the focus once as an ordinary `Prism`, then
+`.andThen` it onto `everywhere` and the `.modify` runs at every depth —
+the same `.andThen` / `.modify` vocabulary the rest of this page uses
+for a single path, now reaching the entire document:
+
+```scala mdoc:silent
+// A Prism focusing any Json string leaf.
+val jsonString = Prism.optional[Json, String](_.asString, Json.fromString)
+
+// One optic, every depth: uppercase every string in the tree.
+val everyString = Plated.everywhere[Json].andThen(jsonString)
+```
+
+```scala mdoc
+everyString.modify(_.toUpperCase)(doc).noSpacesSortKeys
+```
+
+`transform` / `rewrite` / `universe` / `everywhere` are all stack-safe
+to any depth (`transform` / `everywhere` on a call-stack/heap-machine
+hybrid, `universe` on a worklist, `rewrite` trampolined through
+`cats.Eval` so even a long re-fire chain won't overflow), so a deep
+document is safe. See the [cookbook Plated recipe](cookbook.md) for the
+data-type side of the same API.
+
 ## When to reach for which
 
 | Task                                                  | Use                       |

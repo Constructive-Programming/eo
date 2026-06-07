@@ -356,3 +356,30 @@ class GenericsSpec extends Specification with ScalaCheck:
       rgGet4 && getRg4 && declOrder && d2 && fusedOk
     }
   }
+
+  // ---------- Plated derivation ----------
+
+  // covers: plate[S] expansion compiled in-module (so it runs under this module's
+  //   `-Xcheck-macros`), across the recursive parameterised enum path (Tree[Int])
+  //   and the product path (Person, no self-typed fields → empty children).
+  "derived plate[S]: recursive enum Tree[Int] + product Person" >> {
+    import dev.constructive.eo.optics.Plated
+
+    given Plated[Tree[Int]] = plate[Tree[Int]]
+    val t: Tree[Int] = Tree.Branch(Tree.Leaf(1), Tree.Branch(Tree.Leaf(2), Tree.Leaf(3)))
+    val bumpLeaf: Tree[Int] => Tree[Int] = {
+      case Tree.Leaf(v) => Tree.Leaf(v + 1)
+      case branch       => branch
+    }
+    val enumOk =
+      Plated.universe(t).length == 5 &&
+        Plated.children(t).length == 2 &&
+        Plated.transform(identity[Tree[Int]])(t) == t &&
+        Plated.transform(bumpLeaf)(t) ==
+        Tree.Branch(Tree.Leaf(2), Tree.Branch(Tree.Leaf(3), Tree.Leaf(4)))
+
+    given Plated[Person] = plate[Person]
+    val productOk = Plated.children(Person("a", 1)).isEmpty
+
+    enumOk && productOk
+  }

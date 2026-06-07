@@ -1,9 +1,10 @@
 package dev.constructive.eo
 
-import dev.constructive.eo.optics.Optic
+import dev.constructive.eo.optics.{Optic, Plated}
 
-/** Auto-derivation entry points for EO optics — Scala 3 quoted macros for Lens / Prism. Scaffolds
-  * on Mateusz Kubuszok's [hearth](https://github.com/MateuszKubuszok/hearth) macro-commons library.
+/** Auto-derivation entry points for EO optics — Scala 3 quoted macros for Lens / Prism / Plated.
+  * Scaffolds on Mateusz Kubuszok's [hearth](https://github.com/MateuszKubuszok/hearth)
+  * macro-commons library.
   */
 package object generics:
 
@@ -52,3 +53,23 @@ package object generics:
     */
   inline def prism[S, A <: S]: Optic[S, S, A, A, Either] =
     PrismMacro.derive[S, A]
+
+  /** Derive a [[dev.constructive.eo.optics.Plated]] for a recursive ADT — the immediate
+    * same-typed-children self-traversal that powers `transform` / `rewrite` / `children` /
+    * `universe`. Focuses every field whose type is exactly `S` across all cases; works on enums,
+    * sealed hierarchies, and recursive case classes.
+    *
+    * @group Constructors
+    *
+    * @example
+    *   {{{
+    * enum Expr:
+    *   case Var(name: String)
+    *   case App(f: Expr, x: Expr)
+    *   case Lam(bind: String, body: Expr)
+    * given Plated[Expr] = plate[Expr]
+    * Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(tree)
+    *   }}}
+    */
+  inline def plate[S]: Plated[S] =
+    PlateMacro.derive[S]

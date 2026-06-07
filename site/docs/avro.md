@@ -559,6 +559,26 @@ call-site budget — every prism / traversal class ships both.
 
 `In` = `IndexedRecord | Array[Byte] | String` everywhere.
 
+## Recursive edits — `Plated[IndexedRecord]`
+
+For edits that recurse through every nested record rather than
+sitting at a fixed path — redact a field in every sub-record,
+rewrite a value at any depth — `Plated[IndexedRecord]` (from
+`dev.constructive.eo.avro.given`) makes the record tree a recursive
+self-traversal. The [`Plated`](cookbook.md) combinators
+(`transform`, `rewrite`, `children`, `universe`) then walk it,
+stack-safely. The immediate children of a record are its
+directly-record-valued fields; records nested inside array / map /
+union fields are leftover skeleton in this version. This is the
+Avro mirror of [`Plated[Json]`](circe.md).
+
+`Plated.everywhere[IndexedRecord]` is the composable form: an ordinary
+`Setter` you can `.andThen` a Lens / Prism onto so a single `.modify`
+rewrites that focus at every depth — composing exactly as it does for
+[`Plated[Json]`](circe.md). See the circe page and the
+[cookbook recipe](cookbook.md) for the runnable `everywhere.andThen(...)`
+shape.
+
 ## When to reach for which
 
 | Task                                                       | Use                                                |
