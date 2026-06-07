@@ -1,7 +1,7 @@
 ---
 title: "feat: Benchmark-suite unification — one canonical schema, real-world coverage"
 type: feat
-status: active
+status: done
 date: 2026-06-06
 ---
 
@@ -273,7 +273,8 @@ non-degenerate case that bench was built to demonstrate.
     derived `generics.prism` (bare `Optic[…,Either]`) reads via `getOption` like
     any other optic. New extension in `Optic.scala` (`@targetName`-disambiguated),
     behaviour test in `OpticsBehaviorSpec`, CHANGELOG entry. Full `sbt test` green.
-- [ ] Phase 3 remainder: FoldBench real-world (`lines[*].price`) row
+- [x] Phase 3 remainder: FoldBench real-world (`lines[*].price`) row — `eoFoldPrices` /
+      `mFoldPrices` over the canonical `LineItem` list, paired EO vs Monocle.
 - [x] Phase 4: JMH preamble decision — **settled by probe.** A `@BenchDefaults`
       meta-annotation was tested empirically and does not work: JMH's generator
       doesn't resolve an annotation's own annotations through to the bench class,
@@ -283,6 +284,26 @@ non-degenerate case that bench was built to demonstrate.
       structurally required and kept deliberately (documented in `JmhDefaults`).
       The safe DRY — the run invocation — is centralised as the `bench` /
       `benchQuick` sbt aliases.
+- [x] **Fixture sprawl fully retired (problem #1 closed).** Every bench-private record
+      definition is gone; the canonical `Order` now drives every micro-bench whose shape it
+      can honestly express:
+      - The three `Order*` codec sets moved out of the bench companions into shared
+        `fixture/Domain{Circe,Jsoniter,Avro}` objects — one definition reused by
+        `OrderCirceBench`, `OrderJsoniterBench`, `OrderAvroBench`, `OpticBuildBench`, and the
+        eo-circe side of `JsoniterBench`.
+      - `LensBench` now benches `Order.id` (depth-1, closes the previously-unbenched scalar
+        focus) **and** `customer.address.street` (deep); `IsoBench` uses `Address`;
+        `TraversalBench` + `MultiFocusBench` use `Order.lines`; `JsoniterBench` is rebuilt on
+        `Order` (the `Payload/User/Profile` fixture is deleted, and its misleading
+        hit-as-miss circe row is dropped — the miss is now an honest eo-jsoniter-only datapoint).
+      - The carrier-stress shapes the canonical schema deliberately lacks — `ArraySeq` phones,
+        the `Company → Department → Employee` tree-of-trees, and the `Result` sum type — moved
+        from bench-private inner classes into a shared, documented `fixture/TraversalShapes.scala`
+        (each carries a scaladoc note on why it isn't `Order`).
+      - `Nested0..6` (depth sweep to 6, which `Order`'s fixed depth-3 can't express) stays in
+        `fixture/Nested.scala` as before. Whole suite compiles under `benchmarks/Jmh/compile`
+        and the migrated benches smoke-run clean (the `OrderJsoniterBench` scanner `require`
+        guards still pass after relocation).
 
 ### Early signal (size 64, `-i 1 -wi 1 -f 1`, smoke only — not publishable)
 

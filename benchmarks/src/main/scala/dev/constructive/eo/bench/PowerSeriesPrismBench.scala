@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 
 import cats.instances.arraySeq.given
 
+import dev.constructive.eo.bench.fixture.Result
 import dev.constructive.eo.data.MultiFocus.given
 
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a
@@ -33,8 +34,6 @@ import dev.constructive.eo.data.MultiFocus.given
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesPrismBench extends JmhDefaults:
-
-  import PowerSeriesPrismBench.*
 
   @Param(Array("8", "64", "512"))
   var size: Int = uninitialized
@@ -67,9 +66,3 @@ class PowerSeriesPrismBench extends JmhDefaults:
       case Result.Ok(v) => Result.Ok(v + 1)
       case other        => other
     }
-
-object PowerSeriesPrismBench:
-
-  enum Result:
-    case Ok(value: Int)
-    case Err(msg: String)

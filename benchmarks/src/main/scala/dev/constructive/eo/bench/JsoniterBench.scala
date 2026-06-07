@@ -1,57 +1,40 @@
 package dev.constructive.eo
 package bench
 
+import scala.compiletime.uninitialized
+
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
-import scala.language.implicitConversions
+import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
 
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import dev.constructive.eo.bench.fixture.*
+import dev.constructive.eo.data.MultiFocus.given
 
-import io.circe.{Codec, Json}
+import io.circe.Json
 import io.circe.parser.parse as circeParse
 
-import dev.constructive.eo.circe.{JsonPrism, codecPrism}
-import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
-import dev.constructive.eo.data.MultiFocus.given
-import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
-import dev.constructive.eo.optics.{Optic, Traversal}
-import dev.constructive.eo.optics.Optic.*
-
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
-
-/** Bench for `eo-jsoniter` vs `eo-circe` covering both read and write paths:
+/** `eo-jsoniter` vs `eo-circe` on the canonical [[Order]] — the cross-EO comparison the
+  * `Order*Bench` baselines don't cover (those pit one backend against native/naive/monocle).
   *
-  * **Read fixtures (phase 1 / 1.5):**
-  *   1. **Hit at depth 3, scalar (`Long`).** `$.payload.user.id` on a synthetic 1 KB JSON.
-  *      jsoniter's expected sweet spot — skip the AST, decode just the Long.
-  *   2. **Hit at depth 4, scalar (`String`).** `$.payload.user.profile.email`. Same shape one level
-  *      deeper to confirm the perf gap doesn't degrade with depth.
-  *   3. **Miss at depth 3.** `$.payload.user.absent`. Honest stress test: if the perf advantage
-  *      collapses when the path doesn't resolve (because both libraries have to walk most of the
-  *      document anyway), the perf story is more nuanced.
-  *   4. **`[*]` fold-sum over 10-element array.** `$.payload.items[*]`. Phase-1.5 traversal.
+  * eo-jsoniter walks the raw `Array[Byte]`; eo-circe parses the same bytes to an AST and drills it.
+  * Parsing is part of eo-circe's realistic workflow, so the `c*` rows always `circeParse(bytes)`
+  * first — the comparison is "byte-walk" vs "parse + AST-walk" on identical input.
   *
-  * **Write fixtures (phase 2):**
-  *   5. **`.replace` at depth 3, scalar (`Long`).** `$.payload.user.id` to a same-length value.
-  *      Measures the splice cost (encode + 3× memcpy) vs the eo-circe AST-modify-then-emit path.
-  *   6. **`.modify` at depth 3, transformation (`*10`).** Same focus; isolates the codec round-trip
-  *      cost (decode + transform + re-encode) on the jsoniter side.
+  * Foci, all on the shared schema + shared codecs ([[fixture.DomainJsoniter]] /
+  * [[fixture.DomainCirce]]):
+  *   - **read `$.id`** (depth-1 `Long`) and **read `$.customer.address.street`** (depth-3 `String`)
+  *     — two depths confirm the byte-walk's advantage doesn't degrade as the focus sinks.
+  *   - **fold `$.lines[*].price`** — array aggregation; a fold must visit every element either way,
+  *     so this is the case where the gap is narrowest.
+  *   - **miss `$.customer.absent`** — eo-jsoniter only. A typed circe codec can't drill a
+  *     non-existent field, so there's no honest circe peer; this row is the byte-walker's own
+  *     hit-vs-miss cost, not a cross-library comparison.
+  *   - **`.replace` / `.modify` `$.id`** — jsoniter splices the byte span; eo-circe modifies the
+  *     AST and re-emits via `noSpaces`.
   *
-  * Each pair compares:
-  *   - `j*` — eo-jsoniter on `Array[Byte]`.
-  *   - `c*` — eo-circe after `circeParse(new String(bytes, "UTF-8"))` to materialise the AST. The
-  *     circe side always starts from `Array[Byte]` to make the comparison fair: parse + drill (or
-  *     parse + modify + emit) is the realistic eo-circe workflow.
-  *
-  * Everything else is deliberately the same: same input bytes, same focus type, same Monoid / same
-  * write target.
-  *
-  * Run:
-  * {{{
-  *   sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 .*JsoniterBench.*"
-  * }}}
+  * `@Param size` grows the surrounding document so the parse cost (circe) climbs while the
+  * byte-walk (jsoniter) stays focus-local.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -61,145 +44,47 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 @Measurement(iterations = 5, time = 1)
 class JsoniterBench extends JmhDefaults:
 
-  import JsoniterBench.{*, given}
-  import cats.instances.int.given
-  import cats.instances.list.given
+  import DomainJsoniter.given
+  import cats.instances.double.given
   import cats.instances.long.given
   import cats.instances.string.given
 
-  private val bytes: Array[Byte] = sampleBytes
+  @Param(Array("8", "64", "512"))
+  var size: Int = uninitialized
 
-  // ---- jsoniter-scala-side optics --------------------------------------
+  var bytes: Array[Byte] = uninitialized
 
-  private val jIdLong: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    JsoniterPrism[Long]("$.payload.user.id")
+  @Setup(Level.Iteration)
+  def init(): Unit =
+    bytes = writeToArray(Domain.mkOrder(size))
 
-  private val jEmailString: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-    JsoniterPrism[String]("$.payload.user.profile.email")
+  private def json: Json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
 
-  private val jAbsentLong: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    JsoniterPrism[Long]("$.payload.user.absent")
+  // ---- read $.id (depth-1, Long) ------------------------------------
 
-  // ---- eo-circe-side optics --------------------------------------------
+  @Benchmark def jReadId: Long = DomainJsoniter.idPrism.foldMap(identity[Long])(bytes)
+  @Benchmark def cReadId: Long = DomainCirce.idPrism.foldMap(identity[Long])(json)
 
-  private val cIdLong: JsonPrism[Long] =
-    codecPrism[Payload].field(_.user).field(_.id)
+  // ---- read $.customer.address.street (depth-3, String) -------------
 
-  private val cEmailString: JsonPrism[String] =
-    codecPrism[Payload].field(_.user).field(_.profile).field(_.email)
+  @Benchmark def jReadStreet: String = DomainJsoniter.streetPrism.foldMap(identity[String])(bytes)
+  @Benchmark def cReadStreet: String = DomainCirce.streetPrism.foldMap(identity[String])(json)
 
-  // No "absent" eo-circe equivalent because the macro-derived codec
-  // wouldn't include a non-existent field; for the miss case we
-  // measure circe-parse + foldMap on a path that DOES exist but
-  // returns the same scalar — fair-ish comparison.
-  private val cIdLongForMiss: JsonPrism[Long] = cIdLong
+  // ---- fold $.lines[*].price ----------------------------------------
 
-  // ---- benchmarks: hit @ depth 3, Long ---------------------------------
+  @Benchmark def jSumPrices: Double =
+    DomainJsoniter.pricesTraversal.foldMap(identity[Double])(bytes)
 
-  @Benchmark def jHitDepth3Long: Long =
-    jIdLong.foldMap(identity[Long])(bytes)
+  @Benchmark def cSumPrices: Double = DomainCirce.pricesFold.foldMap(identity[Double])(json)
 
-  @Benchmark def cHitDepth3Long: Long =
-    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
-    cIdLong.foldMap(identity[Long])(json)
+  // ---- miss $.customer.absent (eo-jsoniter only — see scaladoc) -----
 
-  // ---- benchmarks: hit @ depth 4, String -------------------------------
+  @Benchmark def jMiss: Long = DomainJsoniter.absentPrism.foldMap(identity[Long])(bytes)
 
-  @Benchmark def jHitDepth4String: String =
-    jEmailString.foldMap(identity[String])(bytes)
+  // ---- .replace / .modify $.id --------------------------------------
 
-  @Benchmark def cHitDepth4String: String =
-    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
-    cEmailString.foldMap(identity[String])(json)
+  @Benchmark def jReplaceId: Array[Byte] = DomainJsoniter.idPrism.replace(99L)(bytes)
+  @Benchmark def cReplaceId: String = DomainCirce.idPrism.placeUnsafe(99L)(json).noSpaces
 
-  // ---- benchmarks: miss @ depth 3 --------------------------------------
-
-  @Benchmark def jMissDepth3: Long =
-    jAbsentLong.foldMap(identity[Long])(bytes)
-
-  @Benchmark def cMissDepth3: Long =
-    // The miss bench measures path-walk over an already-decoded AST.
-    // circe's path drill returns Monoid.empty when the field is missing;
-    // we approximate via the same hit path on the circe side
-    // (cIdLongForMiss) since deriving an "absent field" path through a
-    // typed codec isn't natural — this gives circe its best case for
-    // the miss comparison.
-    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
-    cIdLongForMiss.foldMap(identity[Long])(json)
-
-  // ---- benchmarks: fold over array of 10 Long elements ------------------
-  // Phase-1.5 traversal — sums `$.payload.items[*]`, ten elements,
-  // each a single-digit Long.
-
-  private val jItemsSum: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-    JsoniterTraversal[Long]("$.payload.items[*]")
-
-  // eo-circe peer: focus the items array via codecPrism, then traverse it
-  // with the existing Traversal.each over List. This is the realistic
-  // eo-circe shape for "fold over an array field".
-  private val cItemsSum =
-    codecPrism[Payload].field(_.items).andThen(Traversal.each[List, Int])
-
-  @Benchmark def jSumItems: Long =
-    jItemsSum.foldMap(identity[Long])(bytes)
-
-  @Benchmark def cSumItems: Int =
-    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
-    cItemsSum.foldMap(identity[Int])(json)
-
-  // ---- benchmarks: .replace at depth 3, Long ---------------------------
-  // Phase-2 splice — encode the new value, memcpy three slices into a fresh
-  // Array[Byte]. eo-circe peer modifies the AST and re-emits via printJson.
-
-  @Benchmark def jReplaceLong: Array[Byte] =
-    jIdLong.replace(99L)(bytes)
-
-  @Benchmark def cReplaceLong: String =
-    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
-    cIdLong.placeUnsafe(99L)(json).noSpaces
-
-  // ---- benchmarks: .modify at depth 3, Long ----------------------------
-  // Same shape but exercises the full codec round-trip on the jsoniter side
-  // (decode + transform + re-encode). The eo-circe side modifies in-AST.
-
-  @Benchmark def jModifyLong: Array[Byte] =
-    jIdLong.modify(_ * 10)(bytes)
-
-  @Benchmark def cModifyLong: String =
-    val json = circeParse(new String(bytes, "UTF-8")).getOrElse(Json.Null)
-    cIdLong.modifyUnsafe(_ * 10)(json).noSpaces
-
-object JsoniterBench:
-
-  // ---- circe codec fixture ---------------------------------------------
-  // eo-circe drills through `codecPrism[Payload].field(_.user).field(_.id)`,
-  // which needs a `Codec.AsObject` for every type along the path.
-
-  final case class Profile(email: String, age: Int)
-
-  object Profile:
-    given Codec.AsObject[Profile] = KindlingsCodecAsObject.derive
-
-  final case class User(id: Long, profile: Profile, name: String)
-
-  object User:
-    given Codec.AsObject[User] = KindlingsCodecAsObject.derive
-
-  final case class Payload(user: User, items: List[Int], tag: String)
-
-  object Payload:
-    given Codec.AsObject[Payload] = KindlingsCodecAsObject.derive
-
-  // ---- jsoniter codec fixture ------------------------------------------
-
-  given JsonValueCodec[Long] = JsonCodecMaker.make
-  given JsonValueCodec[String] = JsonCodecMaker.make
-
-  // ---- shared sample bytes ---------------------------------------------
-
-  /** Synthetic JSON document used by every bench fixture. ~250 bytes — large enough that the
-    * AST-vs-byte-walk gap is observable, small enough that GC doesn't dominate.
-    */
-  val sampleBytes: Array[Byte] =
-    s"""{"payload":{"user":{"id":42,"profile":{"email":"alice@example.com","age":30},"name":"Alice"},"items":[1,2,3,4,5,6,7,8,9,10],"tag":"hot"}}"""
-      .getBytes("UTF-8")
+  @Benchmark def jModifyId: Array[Byte] = DomainJsoniter.idPrism.modify(_ * 10)(bytes)
+  @Benchmark def cModifyId: String = DomainCirce.idPrism.modifyUnsafe(_ * 10)(json).noSpaces

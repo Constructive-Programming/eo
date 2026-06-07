@@ -33,18 +33,23 @@ import io.circe.syntax.*
 @Measurement(iterations = 5, time = 1)
 class OpticBuildBench extends JmhDefaults:
 
-  import OrderCirceBench.given
+  import DomainCirce.given
 
   private val json: Json = Domain.mkOrder(16).asJson
 
-  private val prebuilt: JsonPrism[String] =
-    codecPrism[Order].field(_.customer).field(_.address).field(_.street)
+  // `build` / `buildAndUse` construct the prism inline (that's what they measure);
+  // `reuseUse` runs through the shared pre-built `DomainCirce.streetPrism`.
+  private val prebuilt: JsonPrism[String] = DomainCirce.streetPrism
 
   @Benchmark def build: Any =
     codecPrism[Order].field(_.customer).field(_.address).field(_.street)
 
   @Benchmark def buildAndUse: Json =
-    codecPrism[Order].field(_.customer).field(_.address).field(_.street).modifyUnsafe(_.toUpperCase)(json)
+    codecPrism[Order]
+      .field(_.customer)
+      .field(_.address)
+      .field(_.street)
+      .modifyUnsafe(_.toUpperCase)(json)
 
   @Benchmark def reuseUse: Json =
     prebuilt.modifyUnsafe(_.toUpperCase)(json)

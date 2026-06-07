@@ -10,6 +10,7 @@ import java.util.concurrent.TimeUnit
 import cats.instances.arraySeq.given
 import cats.instances.list.given
 
+import dev.constructive.eo.bench.fixture.{Company, Department, Employee}
 import dev.constructive.eo.data.MultiFocus.given
 
 /** Nested-traversal PowerSeries bench — tree-of-trees shape.
@@ -41,8 +42,6 @@ import dev.constructive.eo.data.MultiFocus.given
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesNestedBench extends JmhDefaults:
-
-  import PowerSeriesNestedBench.*
 
   @Param(Array("4", "32", "256"))
   var size: Int = uninitialized
@@ -84,9 +83,3 @@ class PowerSeriesNestedBench extends JmhDefaults:
         .departments
         .map(d => d.copy(employees = d.employees.map(e => e.copy(active = !e.active))))
     )
-
-object PowerSeriesNestedBench:
-
-  case class Employee(id: Int, name: String, active: Boolean)
-  case class Department(name: String, employees: ArraySeq[Employee])
-  case class Company(name: String, departments: List[Department])

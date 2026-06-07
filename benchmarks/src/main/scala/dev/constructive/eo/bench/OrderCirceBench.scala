@@ -7,14 +7,12 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.circe.{JsonFailure, JsonPrism, codecPrism}
+import dev.constructive.eo.circe.JsonFailure
 
 import cats.data.{Chain, Ior}
 
-import io.circe.{Codec, Json}
+import io.circe.Json
 import io.circe.syntax.*
-
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 /** Canonical-schema circe bench (plan 009, Phase 1 proof-of-concept).
   *
@@ -47,7 +45,7 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 @Measurement(iterations = 5, time = 1)
 class OrderCirceBench extends JmhDefaults:
 
-  import OrderCirceBench.{*, given}
+  import DomainCirce.{namesTraversal, namesTraversalIor, streetPrism, given}
 
   @Param(Array("8", "64", "512"))
   var size: Int = uninitialized
@@ -163,28 +161,3 @@ class OrderCirceBench extends JmhDefaults:
   @Benchmark def monocleNames: Json =
     val o = json.as[Order].toOption.get
     DomainMonocle.names.modify(_.toUpperCase)(o).asJson
-
-object OrderCirceBench:
-
-  // ---- circe codecs for the canonical schema ------------------------
-
-  given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-  given Codec.AsObject[Customer] = KindlingsCodecAsObject.derive
-  given Codec.AsObject[LineItem] = KindlingsCodecAsObject.derive
-  given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
-
-  // ---- EO circe optics ----------------------------------------------
-
-  val streetPrism: JsonPrism[String] =
-    codecPrism[Order].field(_.customer).field(_.address).field(_.street)
-
-  // `lines[*].name` traversal — same proven selectDynamic chain as the
-  // legacy Basket bench. Pre-built into the `Json => …` function so the
-  // bench loop measures only the rewrite.
-  val namesTraversal: Json => Json =
-    codecPrism[Order].lines.each.name.modifyUnsafe(_.toUpperCase)
-
-  val namesTraversalIor: Json => Ior[Chain[JsonFailure], Json] =
-    codecPrism[Order].lines.each.name.modify(_.toUpperCase)
-
-  // Monocle peers live on the shared `DomainMonocle` fixture.

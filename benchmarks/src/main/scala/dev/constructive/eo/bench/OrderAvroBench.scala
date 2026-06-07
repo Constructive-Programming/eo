@@ -6,10 +6,8 @@ import scala.compiletime.uninitialized
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
-import dev.constructive.eo.avro.{AvroCodec, codecPrism}
 import dev.constructive.eo.bench.fixture.*
 
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.generic.IndexedRecord
 
 /** Canonical-schema avro bench (plan 009, Phase 1).
@@ -40,15 +38,10 @@ import org.apache.avro.generic.IndexedRecord
 @Measurement(iterations = 5, time = 1)
 class OrderAvroBench extends JmhDefaults:
 
-  import OrderAvroBench.given
+  import DomainAvro.{codec, namesTraversal, streetPrism}
 
   @Param(Array("8", "64", "512"))
   var size: Int = uninitialized
-
-  private val codec = summon[AvroCodec[Order]]
-
-  private val streetPrism = codecPrism[Order].field(_.customer).field(_.address).field(_.street)
-  private val namesTraversal = codecPrism[Order].lines.each.name
 
   var record: IndexedRecord = uninitialized
 
@@ -101,21 +94,3 @@ class OrderAvroBench extends JmhDefaults:
   @Benchmark def monocleModifyNames: IndexedRecord =
     val o = codec.decodeEither(record).toOption.get
     codec.encode(DomainMonocle.names.modify(_.toUpperCase)(o)).asInstanceOf[IndexedRecord]
-
-object OrderAvroBench:
-
-  given AvroEncoder[Address] = AvroEncoder.derived
-  given AvroDecoder[Address] = AvroDecoder.derived
-  given AvroSchemaFor[Address] = AvroSchemaFor.derived
-
-  given AvroEncoder[Customer] = AvroEncoder.derived
-  given AvroDecoder[Customer] = AvroDecoder.derived
-  given AvroSchemaFor[Customer] = AvroSchemaFor.derived
-
-  given AvroEncoder[LineItem] = AvroEncoder.derived
-  given AvroDecoder[LineItem] = AvroDecoder.derived
-  given AvroSchemaFor[LineItem] = AvroSchemaFor.derived
-
-  given AvroEncoder[Order] = AvroEncoder.derived
-  given AvroDecoder[Order] = AvroDecoder.derived
-  given AvroSchemaFor[Order] = AvroSchemaFor.derived

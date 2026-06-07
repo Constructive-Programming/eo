@@ -6,20 +6,10 @@ import scala.compiletime.uninitialized
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{
-  JsonReader,
-  JsonValueCodec,
-  JsonWriter,
-  readFromArray,
-  writeToArray,
-}
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray}
 
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
 import dev.constructive.eo.data.MultiFocus.given
-import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
-import dev.constructive.eo.optics.Optic
 
 /** Canonical-schema jsoniter bench (plan 009, Phase 1).
   *
@@ -53,7 +43,7 @@ import dev.constructive.eo.optics.Optic
 @Measurement(iterations = 5, time = 1)
 class OrderJsoniterBench extends JmhDefaults:
 
-  import OrderJsoniterBench.{pricesSumScanCodec, streetScanCodec, given}
+  import DomainJsoniter.{pricesSumScanCodec, pricesTraversal, streetPrism, streetScanCodec, given}
   import cats.instances.double.given
   import cats.instances.string.given
 
@@ -61,12 +51,6 @@ class OrderJsoniterBench extends JmhDefaults:
   var size: Int = uninitialized
 
   var bytes: Array[Byte] = uninitialized
-
-  private val eoStreetP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-    JsoniterPrism[String]("$.customer.address.street")
-
-  private val eoPricesT: Optic[Array[Byte], Array[Byte], Double, Double, MultiFocus[PSVec]] =
-    JsoniterTraversal[Double]("$.lines[*].price")
 
   @Setup(Level.Iteration)
   def init(): Unit =
@@ -95,7 +79,7 @@ class OrderJsoniterBench extends JmhDefaults:
   // ---- read scalar: $.customer.address.street -----------------------
 
   @Benchmark def eoReadStreet: String =
-    eoStreetP.foldMap(identity[String])(bytes)
+    streetPrism.foldMap(identity[String])(bytes)
 
   // The optimum native read: a hand-rolled JsonReader that walks to the focus
   // and `skip()`s every other field — the whole object is *not* materialised.
@@ -114,7 +98,7 @@ class OrderJsoniterBench extends JmhDefaults:
   // ---- write scalar: $.customer.address.street ----------------------
 
   @Benchmark def eoModifyStreet: Array[Byte] =
-    eoStreetP.modify(_.toUpperCase)(bytes)
+    streetPrism.modify(_.toUpperCase)(bytes)
 
   // Naive write: full decode → copy → re-encode. (A native partial-splice
   // write is what eo-jsoniter's `.modify` already does — there's no simpler
@@ -134,7 +118,7 @@ class OrderJsoniterBench extends JmhDefaults:
   // ---- fold array: $.lines[*].price ---------------------------------
 
   @Benchmark def eoSumPrices: Double =
-    eoPricesT.foldMap(identity[Double])(bytes)
+    pricesTraversal.foldMap(identity[Double])(bytes)
 
   // The optimum native fold: walk to `lines`, sum each element's `price`,
   // skip()ing every sibling field at both levels — the line objects are never
@@ -148,68 +132,3 @@ class OrderJsoniterBench extends JmhDefaults:
 
   @Benchmark def monocleSumPrices: Double =
     DomainMonocle.prices.getAll(readFromArray[Order](bytes)).sum
-
-object OrderJsoniterBench:
-
-  // Whole-document codec for the naive / monocle round-trip baselines.
-  given JsonValueCodec[Order] = JsonCodecMaker.make
-
-  // Leaf codecs the JsoniterPrism / JsoniterTraversal foci decode through.
-  given JsonValueCodec[String] = JsonCodecMaker.make
-
-  /** Read the value of `target` inside the current JSON object, skipping every other field, then
-    * return `inner` applied to the reader positioned at that value. Returns `default` if the object
-    * / field is absent.
-    */
-  private def field[A](in: JsonReader, target: String, default: A)(inner: JsonReader => A): A =
-    if in.isNextToken('{') then
-      var result = default
-      if !in.isNextToken('}') then
-        in.rollbackToken()
-        while
-          if in.readKeyAsString() == target then result = inner(in)
-          else in.skip()
-          in.isNextToken(',')
-        do ()
-      result
-    else
-      in.rollbackToken()
-      in.skip()
-      default
-
-  /** Hand-rolled scanner for `$.customer.address.street` — walks only the path and `skip()`s
-    * siblings, so the full `Order` is never materialised. A plain `val` (not `given`) so it doesn't
-    * collide with the derived `JsonValueCodec[String]`; passed explicitly to `readFromArray`.
-    */
-  val streetScanCodec: JsonValueCodec[String] = new JsonValueCodec[String]:
-    def nullValue: String = null
-    def encodeValue(x: String, out: JsonWriter): Unit = out.writeVal(x)
-    def decodeValue(in: JsonReader, default: String): String =
-      field(in, "customer", default) { in =>
-        field(in, "address", default) { in =>
-          field(in, "street", default)(_.readString(null))
-        }
-      }
-
-  /** Hand-rolled scanner for `$.lines[*].price` — walks to the `lines` array, sums each element's
-    * `price`, and `skip()`s every sibling at both levels. The line objects are never fully
-    * materialised.
-    */
-  val pricesSumScanCodec: JsonValueCodec[Double] = new JsonValueCodec[Double]:
-    def nullValue: Double = 0.0
-    def encodeValue(x: Double, out: JsonWriter): Unit = out.writeVal(x)
-    def decodeValue(in: JsonReader, default: Double): Double =
-      field(in, "lines", default) { in =>
-        var sum = 0.0
-        if in.isNextToken('[') then
-          if !in.isNextToken(']') then
-            in.rollbackToken()
-            while
-              sum += field(in, "price", 0.0)(_.readDouble())
-              in.isNextToken(',')
-            do ()
-        else in.rollbackToken()
-        sum
-      }
-
-  given JsonValueCodec[Double] = JsonCodecMaker.make

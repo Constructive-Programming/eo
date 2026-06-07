@@ -6,6 +6,7 @@ import scala.compiletime.uninitialized
 import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
+import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.optics.{
   Iso => EoIso,
   Lens => EoLens,
@@ -20,13 +21,14 @@ import cats.instances.list.given
 
 import monocle.{Iso => MIso, Lens => MLens, Prism => MPrism, Traversal => MTraversal}
 
-/** Shared sample data used across benchmarks. */
-final case class Person(age: Int, name: String)
-
-/** Lens.get / Lens.replace / Lens.modify
+/** Lens.get / Lens.replace / Lens.modify on the canonical [[Order]], paired EO vs Monocle.
   *
-  * Both Monocle's `Lens` and EO's `Optic[..., Tuple2]` implement the lens algebra; this benchmark
-  * compares the per-call overhead of each surface for the canonical `Person.age` case.
+  * Two foci on the one fixture:
+  *   - **shallow scalar** `order.id: Long` — the bare per-call lens-algebra overhead (the
+  *     surrounding `lines` list is shared by reference, so `replace`/`modify` is a single-record
+  *     copy).
+  *   - **depth-3 path** `customer.address.street: String` — the nested-copy cost both libraries pay
+  *     for a deep write (three records rebuilt, `lines` still shared).
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -36,22 +38,35 @@ final case class Person(age: Int, name: String)
 @Measurement(iterations = 5, time = 1)
 class LensBench extends JmhDefaults:
 
-  val person: Person = Person(30, "Alice")
+  val order: Order = Domain.mkOrder(8)
 
-  val eoAge =
-    EoLens[Person, Int](_.age, (p, a) => p.copy(age = a))
+  // ---- shallow: order.id --------------------------------------------
 
-  val mAge: MLens[Person, Int] =
-    MLens[Person, Int](_.age)(a => p => p.copy(age = a))
+  val eoId =
+    EoLens[Order, Long](_.id, (o, v) => o.copy(id = v))
 
-  @Benchmark def eoGet: Int = eoAge.get(person)
-  @Benchmark def mGet: Int = mAge.get(person)
+  val mId: MLens[Order, Long] =
+    MLens[Order, Long](_.id)(v => o => o.copy(id = v))
 
-  @Benchmark def eoReplace: Person = eoAge.replace(40)(person)
-  @Benchmark def mReplace: Person = mAge.replace(40)(person)
+  @Benchmark def eoGet: Long = eoId.get(order)
+  @Benchmark def mGet: Long = mId.get(order)
 
-  @Benchmark def eoModify: Person = eoAge.modify(_ + 1)(person)
-  @Benchmark def mModify: Person = mAge.modify(_ + 1)(person)
+  @Benchmark def eoReplace: Order = eoId.replace(99L)(order)
+  @Benchmark def mReplace: Order = mId.replace(99L)(order)
+
+  @Benchmark def eoModify: Order = eoId.modify(_ + 1)(order)
+  @Benchmark def mModify: Order = mId.modify(_ + 1)(order)
+
+  // ---- deep: customer.address.street (Monocle peer = DomainMonocle.street) ----
+
+  val eoStreet =
+    EoLens[Order, String](
+      _.customer.address.street,
+      (o, s) => o.copy(customer = o.customer.copy(address = o.customer.address.copy(street = s))),
+    )
+
+  @Benchmark def eoModifyDeep: Order = eoStreet.modify(_.toUpperCase)(order)
+  @Benchmark def mModifyDeep: Order = DomainMonocle.street.modify(_.toUpperCase)(order)
 
 /** Prism.getOption / Prism.reverseGet
   *
@@ -59,6 +74,10 @@ class LensBench extends JmhDefaults:
   *   - `optional`-style prism on `Option[Int]` (Some / None).
   *   - `Either[String, Int]` prism focusing the Right (Int) branch; this is a more natural Prism
   *     since the residual type differs from the focused type.
+  *
+  * These exercise the Prism algebra over the stdlib `Option`/`Either` carriers directly, so there's
+  * no domain fixture to share — the sum-type-over-a-domain-ADT story lives in
+  * [[PowerSeriesPrismBench]] and [[GenericsBench]].
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -109,11 +128,11 @@ class PrismBench extends JmhDefaults:
   @Benchmark def eoRightReverseGet: Either[String, Int] = eoRight.reverseGet(raw)
   @Benchmark def mRightReverseGet: Either[String, Int] = mRight.reverseGet(raw)
 
-/** Iso.get / Iso.reverseGet on `(Int, String) <-> Person(age, name)`.
+/** Iso.get / Iso.reverseGet on `Address <-> (String, String, String, String)`.
   *
-  * A product-to-product isomorphism is a more honest benchmark than a primitive conversion: every
-  * call allocates a new carrier on each side and exercises the same boxing behaviour a real Iso
-  * would.
+  * A product-to-product isomorphism over the canonical [[Address]] is a more honest benchmark than
+  * a primitive conversion: every call allocates a new carrier on each side and exercises the same
+  * boxing behaviour a real Iso would.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -123,31 +142,37 @@ class PrismBench extends JmhDefaults:
 @Measurement(iterations = 5, time = 1)
 class IsoBench extends JmhDefaults:
 
-  val tuple: (Int, String) = (30, "Alice")
-  val person: Person = Person(30, "Alice")
+  val address: Address = Domain.DefaultCustomer.address
+
+  val tuple: (String, String, String, String) =
+    (address.street, address.city, address.zip, address.country)
 
   // No explicit type annotation: let inference pick BijectionIso, the
   // concrete EO subclass that stores get / reverseGet directly and
   // skips the Accessor[Direct] / ReverseAccessor[Direct] dispatch.
   val eoIso =
-    EoIso[(Int, String), (Int, String), Person, Person](
-      t => Person(t._1, t._2),
-      p => (p.age, p.name),
+    EoIso[(String, String, String, String), (String, String, String, String), Address, Address](
+      t => Address(t._1, t._2, t._3, t._4),
+      a => (a.street, a.city, a.zip, a.country),
     )
 
-  val mIso: MIso[(Int, String), Person] =
-    MIso[(Int, String), Person](t => Person(t._1, t._2))(p => (p.age, p.name))
+  val mIso: MIso[(String, String, String, String), Address] =
+    MIso[(String, String, String, String), Address](t => Address(t._1, t._2, t._3, t._4))(a =>
+      (a.street, a.city, a.zip, a.country)
+    )
 
-  @Benchmark def eoGet: Person = eoIso.get(tuple)
-  @Benchmark def mGet: Person = mIso.get(tuple)
+  @Benchmark def eoGet: Address = eoIso.get(tuple)
+  @Benchmark def mGet: Address = mIso.get(tuple)
 
-  @Benchmark def eoReverseGet: (Int, String) = eoIso.reverseGet(person)
-  @Benchmark def mReverseGet: (Int, String) = mIso.reverseGet(person)
+  @Benchmark def eoReverseGet: (String, String, String, String) = eoIso.reverseGet(address)
+  @Benchmark def mReverseGet: (String, String, String, String) = mIso.reverseGet(address)
 
-/** Traversal.modify over a moderately sized List[Int].
+/** Traversal.modify over the canonical `Order.lines` (a `List[LineItem]`).
   *
   * The Monocle traversal walks the list with a Traverse[List]; the EO traversal walks via the
-  * MultiFocus[PSVec] carrier (Functor[PSVec].map after collecting into the focus vector).
+  * MultiFocus[PSVec] carrier (Functor[PSVec].map after collecting into the focus vector). Modify
+  * bumps every line's `qty` — a bare `each` over the canonical element type, so the row reads
+  * apples-to-apples against the integration benches' `lines[*]` traversals.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -160,17 +185,17 @@ class TraversalBench extends JmhDefaults:
   @Param(Array("8", "64", "512"))
   var size: Int = uninitialized
 
-  var xs: List[Int] = uninitialized
+  var lines: List[LineItem] = uninitialized
 
-  val eoEach: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
-    EoTraversal.each[List, Int]
+  val eoEach: Optic[List[LineItem], List[LineItem], LineItem, LineItem, MultiFocus[PSVec]] =
+    EoTraversal.each[List, LineItem]
 
-  val mEach: MTraversal[List[Int], Int] =
-    MTraversal.fromTraverse[List, Int]
+  val mEach: MTraversal[List[LineItem], LineItem] =
+    MTraversal.fromTraverse[List, LineItem]
 
   @Setup(Level.Iteration)
   def init(): Unit =
-    xs = List.tabulate(size)(identity)
+    lines = Domain.mkOrder(size).lines
 
-  @Benchmark def eoModify: List[Int] = eoEach.modify(_ + 1)(xs)
-  @Benchmark def mModify: List[Int] = mEach.modify(_ + 1)(xs)
+  @Benchmark def eoModify: List[LineItem] = eoEach.modify(li => li.copy(qty = li.qty + 1))(lines)
+  @Benchmark def mModify: List[LineItem] = mEach.modify(li => li.copy(qty = li.qty + 1))(lines)

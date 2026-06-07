@@ -9,6 +9,7 @@ import java.util.concurrent.TimeUnit
 
 import cats.instances.arraySeq.*
 
+import dev.constructive.eo.bench.fixture.{Person, Phone}
 import dev.constructive.eo.data.MultiFocus.given
 
 /** PowerSeries-backed Traversal over a nested focus, paired against a hand-written iterative
@@ -33,8 +34,6 @@ import dev.constructive.eo.data.MultiFocus.given
 @Warmup(iterations = 3, time = 1)
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesBench extends JmhDefaults:
-
-  import PowerSeriesBench.*
 
   @Param(Array("4", "32", "256", "1024"))
   var size: Int = uninitialized
@@ -63,9 +62,3 @@ class PowerSeriesBench extends JmhDefaults:
     person.copy(
       phones = person.phones.map(ph => ph.copy(isMobile = !ph.isMobile))
     )
-
-object PowerSeriesBench:
-
-  case class Phone(isMobile: Boolean, number: String)
-
-  case class Person(name: String, phones: ArraySeq[Phone])
