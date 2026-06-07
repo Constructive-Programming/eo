@@ -2,8 +2,8 @@ package dev.constructive.eo
 package laws
 package eo
 
-import _root_.dev.constructive.eo.data.Forgetful
-import _root_.dev.constructive.eo.data.Forgetful.given
+import _root_.dev.constructive.eo.data.Direct
+import _root_.dev.constructive.eo.data.Direct.given
 
 import optics.Optic
 import optics.Optic.*
@@ -13,7 +13,7 @@ import optics.Optic.*
 
 /** B1 — Iso `reverse` is involutive on both `get` and `reverseGet`. */
 trait ReverseInvolutionLaws[S, A]:
-  def iso: Optic[S, S, A, A, Forgetful]
+  def iso: Optic[S, S, A, A, Direct]
 
   def reverseInvolutionGet(s: S): Boolean =
     iso.reverse.reverse.get(s) == iso.get(s)
@@ -45,7 +45,7 @@ trait TransformLaws[S, A, X0]:
 
 /** H3 — Iso `put` is the curried `reverseGet ∘ pure`. */
 trait PutIsReverseGetLaws[S, A]:
-  def iso: Optic[S, S, A, A, Forgetful]
+  def iso: Optic[S, S, A, A, Direct]
 
   def putIsReverseGetCompose(a: A, f: A => A): Boolean =
     iso.put(f)(a) == iso.reverseGet(f(a))

@@ -94,7 +94,7 @@ class GetReplaceLens[S, T, A, B](
     )
 
   /** Fused `Lens.andThen(Iso)` — collapses the iso into the lens's shape; skips the
-    * `Composer[Forgetful, Tuple2]` hop.
+    * `Composer[Direct, Tuple2]` hop.
     */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(

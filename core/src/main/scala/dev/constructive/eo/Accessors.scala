@@ -2,7 +2,7 @@ package dev.constructive.eo
 package data
 
 /** Read the focus `A` out of a two-parameter carrier `F[X, A]`. Required by `Optic.get`;
-  * always-hitting carriers (`Tuple2` for Lens, `Forgetful` for Iso / Getter) supply one.
+  * always-hitting carriers (`Tuple2` for Lens, `Direct` for Iso / Getter) supply one.
   *
   * @tparam F
   *   the carrier

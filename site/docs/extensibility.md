@@ -233,16 +233,18 @@ because nothing downstream of it needs the integration.
 
 ## Measurable outcome
 
-Both domain optics deliver the expected constant factor over
-the decode / re-encode baseline —
-[`JsonPrismBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonPrismBench.scala)
-lands at ~2× across depths 1/2/3 and ~1× at the "wide"
-(28-field) shape where the naive decoder already touches
-every field;
-[`JsonTraversalBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsonTraversalBench.scala)
-holds ~2× across array sizes 8 / 64 / 512. See the
-[Benchmarks](benchmarks.md) page's JsonPrism and JsonTraversal
-sections for the full tables.
+The win over the decode / re-encode baseline is a *scaling* one, not a fixed
+factor. The
+[`OrderCirceBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderCirceBench.scala)
+suite measures a deep scalar edit as flat in document size, so the gap over the
+naive baseline grows from ~3× on a small record to ~160× on a large one;
+[`OrderAvroBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderAvroBench.scala)
+pushes the same read to ~6 800× because Avro's per-field decode is so much
+costlier. For array-wide *writes* the cursor walk has no structural edge over
+naive on JSON (both are O(elements)), though on Avro the costly per-element
+decode still hands EO a ~9× win. See the
+[Benchmarks](benchmarks.md) page for
+the full tables.
 
 ## When to reach for this pattern
 

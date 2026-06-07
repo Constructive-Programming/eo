@@ -90,7 +90,7 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
   // covers: compose iso.andThen(MultiFocus.tuple) with identity iso, compose
   // iso.andThen(MultiFocus.tuple) with non-trivial bijection. Exercises the absorbed
   // forgetful2grate via `forgetful2multifocusFunction1`.
-  "Composer[Forgetful, MultiFocus[Function1[Int, *]]]: identity iso and bijection compose cleanly" >> {
+  "Composer[Direct, MultiFocus[Function1[Int, *]]]: identity iso and bijection compose cleanly" >> {
     import optics.Iso
     val triple = MultiFocus.tuple[(Int, Int, Int), Int]
 

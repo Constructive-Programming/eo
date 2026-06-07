@@ -497,14 +497,14 @@ object MultiFocus:
   /** Iso → MultiFocus[F]. Requires `Applicative[F]` to broadcast the Iso's plain `A` focus into a
     * singleton `F[A]`.
     */
-  given forgetful2multifocus[F[_]: Applicative: Foldable]: Composer[Forgetful, MultiFocus[F]] with
+  given forgetful2multifocus[F[_]: Applicative: Foldable]: Composer[Direct, MultiFocus[F]] with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Forgetful]): Optic[S, T, A, B, MultiFocus[F]] =
+    def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Unit
         val to: S => (Unit, F[A]) = s => ((), Applicative[F].pure(o.to(s)))
         val from: ((Unit, F[B])) => T = {
-          case (_, fb) => o.from(pickSingletonOrThrow(fb, "Forgetful"))
+          case (_, fb) => o.from(pickSingletonOrThrow(fb, "Direct"))
         }
 
   /** Forget[F] ↪ MultiFocus[F]. */
@@ -809,10 +809,10 @@ object MultiFocus:
     * rebuild `_ => a`; the reverse reads the rebuild at any X0 (null sentinel — lead dropped per
     * fixedtraversal-fold-spike Q1).
     */
-  given forgetful2multifocusFunction1[X0]: Composer[Forgetful, MultiFocus[Function1[X0, *]]] with
+  given forgetful2multifocusFunction1[X0]: Composer[Direct, MultiFocus[Function1[X0, *]]] with
 
     def to[S, T, A, B](
-        o: Optic[S, T, A, B, Forgetful]
+        o: Optic[S, T, A, B, Direct]
     ): Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] =
       new Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]:
         type X = Unit

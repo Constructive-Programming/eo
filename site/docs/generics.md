@@ -1,8 +1,22 @@
 # Generics
 
-The `cats-eo-generics` module supplies two macros that eliminate
-the boilerplate usually written by hand for Lens / Prism
-derivation.
+Writing a `Lens` or `Prism` by hand is mechanical, repetitive work — a getter, a
+setter that rebuilds the whole case class around one changed field, a pattern
+match per sum-type branch. `cats-eo-generics` writes all of it for you. Two
+macros, `lens` and `prism`, inspect your case classes and enums at **compile
+time** and emit the optic directly: no runtime reflection, no derivation
+typeclass to summon, no per-field wiring to keep in sync as the type evolves.
+What they generate is the same `new S(...)` construction and pattern match you'd
+have typed yourself, so a derived optic runs as fast as a hand-written one (it
+matches Monocle's specialised classes — see the [benchmarks](benchmarks.md))
+while collapsing to a single readable line.
+
+And because each macro returns an ordinary `Optic` value, the payoff goes beyond
+saved keystrokes: derived optics **compose** — with each other, with your own
+domain functions, and with the serialization layer — so a data transformation,
+or an entire request handler, becomes one clean expression instead of a nest of
+`copy` calls. [Composing derived optics into
+pipelines](#composing-derived-optics-into-pipelines) builds that up.
 
 ```scala
 libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "@VERSION@"
@@ -21,8 +35,9 @@ import dev.constructive.eo.docs.{Address, Customer, NameAgePair, Person, Shape, 
 
 ## `lens[S](_.field)`
 
-Two-step partial application: `lens[Customer]` pins the source
-type, the second call picks the field:
+Point at a field and you get a `Lens` to it. It's a two-step call — `lens[Customer]`
+pins the source type, the second call picks the field — which keeps the field
+selector fully type-checked against `Customer`:
 
 ```scala mdoc:silent
 val nameL = lens[Customer](_.name)
@@ -140,6 +155,37 @@ rev.age
 rev.name
 ageNameIso.reverseGet(rev)
 ```
+
+## Composing derived optics into pipelines
+
+A derived optic is just a value of type `Optic[…]`, and that's what makes the
+generics module more than a typing shortcut. Three things compose with it for
+free:
+
+**Other optics.** `lens` and `prism` results `.andThen` each other — and every
+hand-written optic — across carriers, so you build a deep accessor out of small
+derived pieces rather than spelling the traversal by hand:
+`prism[Event, Event.Purchase].andThen(lens[Purchase](_.amount))`. The
+cross-carrier bridging is automatic; see
+[Concepts → Cross-family](concepts.md#cross-family-andthen-across-carriers).
+
+**Your own functions.** The focus is an ordinary value, so `.modify`,
+`.foldMap`, and friends take *your* domain functions directly — a pricing rule,
+a normaliser, a validation. You write the business logic; the optic does the
+"reach in, rebuild around it" plumbing. Chaining a few reads as a clean
+left-to-right pipeline instead of nested `copy` calls.
+
+**The wire.** Pair a derived optic with a serialization codec and the same
+`.get` / `.replace` / `.modify` vocabulary spans the gap between your domain
+types and their on-the-wire form: decode once, transform through optics,
+re-encode — or, with [eo-circe](circe.md) / [eo-avro](avro.md), edit the encoded
+form in place and never fully decode at all.
+
+Put together, that turns a request handler into a short pipeline. The
+**persist-and-stamp** recipe ([Cookbook → Theme H](cookbook.md)) is the
+canonical shape — decode a PUT body into a domain object, store it effectfully,
+stamp the database-assigned id back on with a derived id-lens, and re-encode the
+result: the whole handler reads as `decode → store → stamp → encode`.
 
 ## Compile-time diagnostics
 

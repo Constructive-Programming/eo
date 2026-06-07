@@ -3,8 +3,8 @@ package laws
 package eo
 
 import _root_.dev.constructive.eo.data.Affine.given
-import _root_.dev.constructive.eo.data.Forgetful.given
-import _root_.dev.constructive.eo.data.{Affine, Forgetful}
+import _root_.dev.constructive.eo.data.Direct.given
+import _root_.dev.constructive.eo.data.{Affine, Direct}
 
 import optics.Optic
 import optics.Optic.*
@@ -28,12 +28,12 @@ trait LensComposeLaws[S, A, B]:
 
 /** C3/C4 — Iso ∘ Iso composition laws. */
 trait IsoComposeLaws[S, A, B]:
-  def outer: Optic[S, S, A, A, Forgetful]
-  def inner: Optic[A, A, B, B, Forgetful]
+  def outer: Optic[S, S, A, A, Direct]
+  def inner: Optic[A, A, B, B, Direct]
 
-  // Both `Forgetful.assoc` and `Affine.assoc` go by the bare name `assoc`; this alias pins the
-  // Forgetful instance for this trait's `andThen` calls.
-  private given forgetfulAssoc[X, Y]: AssociativeFunctor[Forgetful, X, Y] = Forgetful.assoc
+  // Both `Direct.assoc` and `Affine.assoc` go by the bare name `assoc`; this alias pins the
+  // Direct instance for this trait's `andThen` calls.
+  private given forgetfulAssoc[X, Y]: AssociativeFunctor[Direct, X, Y] = Direct.assoc
 
   def composedGet(s: S): Boolean =
     outer.andThen(inner).get(s) == inner.get(outer.get(s))
@@ -69,7 +69,7 @@ trait OptionalComposeLaws[S, A, B]:
   val outer: Optic[S, S, A, A, Affine] { type X <: Tuple }
   val inner: Optic[A, A, B, B, Affine] { type X <: Tuple }
 
-  // Disambiguate `Affine.assoc` from the ambient `Forgetful.assoc` wildcard import.
+  // Disambiguate `Affine.assoc` from the ambient `Direct.assoc` wildcard import.
   private given affineAssoc[X <: Tuple, Y <: Tuple]: AssociativeFunctor[Affine, X, Y] = Affine.assoc
 
   private def getOpt[X, Y](

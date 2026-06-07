@@ -1,10 +1,10 @@
 package dev.constructive.eo
 package optics
 
-import data.Forgetful
+import data.Direct
 
-/** Constructor for `Iso` — a bijective single-focus optic, backed by `Forgetful`. An `Iso[S, A]`
-  * (short for `Optic[S, S, A, A, Forgetful]`) encodes a data-shape bijection. `Forgetful[X, A] = A`
+/** Constructor for `Iso` — a bijective single-focus optic, backed by `Direct`. An `Iso[S, A]`
+  * (short for `Optic[S, S, A, A, Direct]`) encodes a data-shape bijection. `Direct[X, A] = A`
   * carries no leftover, so every Iso operation reduces to plain function application.
   */
 object Iso:
@@ -27,14 +27,14 @@ object Iso:
     BijectionIso[S, T, A, B](f, g)
 
 /** Concrete Optic subclass for an isomorphism. Stores `get` / `reverseGet` directly so the hot path
-  * skips the `Accessor[Forgetful]` / `ReverseAccessor[Forgetful]` typeclass dispatches the generic
+  * skips the `Accessor[Direct]` / `ReverseAccessor[Direct]` typeclass dispatches the generic
   * extensions would perform — same storage shape as Monocle's `Iso`. Returned by [[Iso.apply]] so
   * hand-written isos pick up the fused path automatically.
   */
 final class BijectionIso[S, T, A, B](
     val get: S => A,
     val reverseGet: B => T,
-) extends Optic[S, T, A, B, Forgetful]:
+) extends Optic[S, T, A, B, Direct]:
   type X = Nothing
   val to: S => A = get
   val from: B => T = reverseGet

@@ -9,6 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Identity carrier renamed `Forgetful` → `Direct`.** The carrier behind `Iso`
+  and `Getter` (`type Direct[X, A] = A`) now reads as what it does — direct
+  function application, no leftover — rather than naming the category-theory
+  mechanism. The `Forgetful*` typeclasses (`ForgetfulFunctor`, `ForgetfulFold`,
+  `ForgetfulTraverse`, `ForgetfulApplicative`) keep their names, and the
+  scaladoc still notes `Direct` *is* the forgetful functor. Mechanical rename
+  for any external code: `Optic[…, Forgetful]` → `Optic[…, Direct]`,
+  `import …data.Forgetful.given` → `…data.Direct.given`. Pre-1.0 / no published
+  baseline (`tlMimaPreviousVersions` is empty), so no MiMa break.
+
+### Added
+
+- **`getOption` for `Either`-carrier optics.** Previously `getOption` was
+  defined only for the `Affine` carrier (`Optional` / `AffineFold`). A `Prism`
+  surfaced as the bare `Optic[S, T, A, B, Either]` — e.g. a derived
+  `generics.prism`, whose static type is the base `Optic`, not the concrete
+  `Prism` subclass — had no `getOption`. An `Either`-carrier overload now fills
+  that gap (`@targetName`-disambiguated; the concrete `Prism`'s own member still
+  wins at its static type), so a read on a derived prism reads through the same
+  `getOption` call as everything else.
+
+### Changed
+
 - **Internal carrier unification — `AlgLens[F]` + `Kaleidoscope` collapse
   into `MultiFocus[F]`.** The two pre-0.1.0 carriers had identical
   `(X, F[A])` value shapes and only differed in their encoding (parameter

@@ -15,5 +15,17 @@ package bench
   * The 6-annotation preamble lives directly on each subclass again. The trait stays as a marker so
   * `extends JmhDefaults` reads as documentation ("this is a JMH bench class with the project's
   * default config") and so a future "actually shareable" base method has somewhere to land.
+  *
+  * '''2026-06-07 — OQ1 (plan 009, Phase 4) settled by probe.''' The other escape hatch — a single
+  * `@BenchDefaults` meta-annotation carrying the six JMH annotations — was tested empirically (a
+  * throwaway `@BenchDefaults class MetaProbeBench`). It does '''not''' work, and fails worse than
+  * loudly: JMH's reflection generator does not resolve an annotation's own annotations through to
+  * the annotated class (a Scala `StaticAnnotation` isn't even classfile-retained), so it silently
+  * fell back to '''every default''' — all `@BenchmarkMode`s generated (Throughput at runtime, not
+  * `AverageTime`), seconds not nanos, default scope/forks — without erroring on the missing
+  * `@State`. Stripping the preamble to lean on the CLI would therefore produce silently wrong-mode
+  * numbers, not a failure. Conclusion: the per-class preamble is structurally required and is kept
+  * deliberately. The one duplication that '''is''' safe to remove — the run invocation itself —
+  * lives in the `bench` / `benchQuick` sbt aliases (see `build.sbt`).
   */
 trait JmhDefaults

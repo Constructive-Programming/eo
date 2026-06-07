@@ -9,8 +9,8 @@ import dev.constructive.eo.ForgetfulTraverse
   * Id[A]) == fa` because `Id[X] = X`.
   *
   * The full `ForgetfulTraverse` family in core has two flavours: `[_ <: Applicative]` (Affine,
-  * Forget[F], PowerSeries, Forgetful at Invariant) and `[_ <: Distributive]` (SetterF). We expose
-  * the `[Applicative]` flavour here because `Id`-identity is the widely applicable anchor law; the
+  * Forget[F], PowerSeries, Direct at Invariant) and `[_ <: Distributive]` (SetterF). We expose the
+  * `[Applicative]` flavour here because `Id`-identity is the widely applicable anchor law; the
   * Distributive variant collapses to a tautology at `Id`, so witnessing it adds no signal.
   *
   * The naturality and sequential-composition laws (the other two classical Traverse laws) are

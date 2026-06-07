@@ -222,7 +222,7 @@ object Affine:
             case h: Hit[X, B]  => o.from((h.snd, h.b))
 
   // Iso → Affine is handled by the low-priority `chainViaTuple2` fallback in
-  // `LowPriorityComposerInstances`. No direct `Composer[Forgetful, Affine]` is shipped.
+  // `LowPriorityComposerInstances`. No direct `Composer[Direct, Affine]` is shipped.
 
   /** Prism → Affine — reuses the `Either` decomposition for Affine's miss / hit branches.
     *

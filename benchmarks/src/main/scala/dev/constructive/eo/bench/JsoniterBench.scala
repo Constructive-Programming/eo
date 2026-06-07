@@ -26,8 +26,8 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
   * **Read fixtures (phase 1 / 1.5):**
   *   1. **Hit at depth 3, scalar (`Long`).** `$.payload.user.id` on a synthetic 1 KB JSON.
   *      jsoniter's expected sweet spot — skip the AST, decode just the Long.
-  *   2. **Hit at depth 4, scalar (`String`).** `$.payload.user.profile.email`. Same shape one
-  *      level deeper to confirm the perf gap doesn't degrade with depth.
+  *   2. **Hit at depth 4, scalar (`String`).** `$.payload.user.profile.email`. Same shape one level
+  *      deeper to confirm the perf gap doesn't degrade with depth.
   *   3. **Miss at depth 3.** `$.payload.user.absent`. Honest stress test: if the perf advantage
   *      collapses when the path doesn't resolve (because both libraries have to walk most of the
   *      document anyway), the perf story is more nuanced.
@@ -36,17 +36,17 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
   * **Write fixtures (phase 2):**
   *   5. **`.replace` at depth 3, scalar (`Long`).** `$.payload.user.id` to a same-length value.
   *      Measures the splice cost (encode + 3× memcpy) vs the eo-circe AST-modify-then-emit path.
-  *   6. **`.modify` at depth 3, transformation (`*10`).** Same focus; isolates the codec
-  *      round-trip cost (decode + transform + re-encode) on the jsoniter side.
+  *   6. **`.modify` at depth 3, transformation (`*10`).** Same focus; isolates the codec round-trip
+  *      cost (decode + transform + re-encode) on the jsoniter side.
   *
   * Each pair compares:
   *   - `j*` — eo-jsoniter on `Array[Byte]`.
-  *   - `c*` — eo-circe after `circeParse(new String(bytes, "UTF-8"))` to materialise the AST.
-  *      The circe side always starts from `Array[Byte]` to make the comparison fair: parse +
-  *      drill (or parse + modify + emit) is the realistic eo-circe workflow.
+  *   - `c*` — eo-circe after `circeParse(new String(bytes, "UTF-8"))` to materialise the AST. The
+  *     circe side always starts from `Array[Byte]` to make the comparison fair: parse + drill (or
+  *     parse + modify + emit) is the realistic eo-circe workflow.
   *
-  * Everything else is deliberately the same: same input bytes, same focus type, same Monoid /
-  * same write target.
+  * Everything else is deliberately the same: same input bytes, same focus type, same Monoid / same
+  * write target.
   *
   * Run:
   * {{{
@@ -176,20 +176,23 @@ object JsoniterBench:
   // which needs a `Codec.AsObject` for every type along the path.
 
   final case class Profile(email: String, age: Int)
+
   object Profile:
     given Codec.AsObject[Profile] = KindlingsCodecAsObject.derive
 
   final case class User(id: Long, profile: Profile, name: String)
+
   object User:
     given Codec.AsObject[User] = KindlingsCodecAsObject.derive
 
   final case class Payload(user: User, items: List[Int], tag: String)
+
   object Payload:
     given Codec.AsObject[Payload] = KindlingsCodecAsObject.derive
 
   // ---- jsoniter codec fixture ------------------------------------------
 
-  given JsonValueCodec[Long]   = JsonCodecMaker.make
+  given JsonValueCodec[Long] = JsonCodecMaker.make
   given JsonValueCodec[String] = JsonCodecMaker.make
 
   // ---- shared sample bytes ---------------------------------------------
@@ -198,4 +201,5 @@ object JsoniterBench:
     * AST-vs-byte-walk gap is observable, small enough that GC doesn't dominate.
     */
   val sampleBytes: Array[Byte] =
-    s"""{"payload":{"user":{"id":42,"profile":{"email":"alice@example.com","age":30},"name":"Alice"},"items":[1,2,3,4,5,6,7,8,9,10],"tag":"hot"}}""".getBytes("UTF-8")
+    s"""{"payload":{"user":{"id":42,"profile":{"email":"alice@example.com","age":30},"name":"Alice"},"items":[1,2,3,4,5,6,7,8,9,10],"tag":"hot"}}"""
+      .getBytes("UTF-8")

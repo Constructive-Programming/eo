@@ -1,5 +1,7 @@
 # Getting started
 
+Don't worry about an abstraction tax: cats-eo turns deep, awkward read/modify code into a readable one-liner *and* runs at hand-written speed — matching or beating Monocle on the single-optic hot paths ([benchmarks](benchmarks.md)).
+
 ## Install
 
 Add the module(s) you need to your `build.sbt`:

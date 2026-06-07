@@ -636,6 +636,7 @@ lazy val benchmarks: Project = project
   .enablePlugins(JmhPlugin)
   .dependsOn(
     LocalProject("core"),
+    LocalProject("generics"),
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
@@ -645,18 +646,23 @@ lazy val benchmarks: Project = project
     name := "cats-eo-benchmarks",
     publish / skip := true,
     libraryDependencies += monocle,
-    // circe-parser for the Json round-trip bench; kindlings for the
-    // Codec derivation used by the JsonPrism bench fixture.
+    // circe-parser for the Json round-trip benches; kindlings for the
+    // Codec derivation used by the OrderCirceBench / JsoniterBench fixtures.
     libraryDependencies += circeParser,
     libraryDependencies += kindlingsCirce,
-    // kindlings-avro-derivation for the AvroOpticsBench fixture
-    // codecs; cats-eo-avro itself is wired through the .dependsOn
-    // edge above so AvroPrism / codecPrism are on the bench
-    // classpath.
+    // kindlings-avro-derivation for the OrderAvroBench fixture codecs;
+    // cats-eo-avro itself is wired through the .dependsOn edge above so
+    // AvroPrism / codecPrism are on the bench classpath.
     libraryDependencies += kindlingsAvro,
-    // jsoniter-scala-macros for the JsoniterReadBench fixture's
-    // JsonValueCodec[A] derivations. Compile-scope here so the JMH
-    // class can `JsonCodecMaker.make` directly without a separate
+    // jsoniter-scala-macros for the OrderJsoniterBench / JsoniterBench
+    // fixtures' JsonValueCodec[A] derivations. Compile-scope here so the
+    // JMH class can `JsonCodecMaker.make` directly without a separate
     // codec module.
     libraryDependencies += jsoniterMacros,
   )
+
+// Single source of truth for the JMH invocation (the config that the per-class
+// annotations pin — see JmhDefaults' Phase-4 note for why that preamble can't be
+// DRY'd). Append a filter: `sbt "bench .*OrderAvroBench.*"`.
+addCommandAlias("bench", "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1")
+addCommandAlias("benchQuick", "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1")

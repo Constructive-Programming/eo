@@ -137,7 +137,7 @@ final class MendTearPrism[S, T, A, B](
     )
 
   /** Fused `Prism.andThen(Iso)` — collapses the iso into the prism. Skips
-    * `Composer[Forgetful, Either]`.
+    * `Composer[Direct, Either]`.
     */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): MendTearPrism[S, T, C, D] =
     fuseToMendTear(

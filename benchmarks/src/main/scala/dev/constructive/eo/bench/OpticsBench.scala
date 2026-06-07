@@ -128,7 +128,7 @@ class IsoBench extends JmhDefaults:
 
   // No explicit type annotation: let inference pick BijectionIso, the
   // concrete EO subclass that stores get / reverseGet directly and
-  // skips the Accessor[Forgetful] / ReverseAccessor[Forgetful] dispatch.
+  // skips the Accessor[Direct] / ReverseAccessor[Direct] dispatch.
   val eoIso =
     EoIso[(Int, String), (Int, String), Person, Person](
       t => Person(t._1, t._2),
