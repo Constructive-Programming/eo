@@ -12,12 +12,6 @@
 name: Benchmarks
 
 on:
-  # TEMPORARY (again): branch-scoped push trigger to capture the micro +
-  # PowerSeries tables on the same CI footing as the integration ones. The push
-  # run uses the fallback filter in the Run step (the micro/PowerSeries regex).
-  # REMOVE this `push:` block + restore the Order* fallback before merge.
-  push:
-    branches: [feat/benchmark-suite-unification]
   workflow_dispatch:
     inputs:
       filter:
@@ -73,7 +67,7 @@ jobs:
         # repo level — which the summary / upload steps below read.
         run: |
           sbt -batch -Dsbt.color=false \
-            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true -rf json -rff jmh-results.json ${{ inputs.filter || '(LensBench|PrismBench|IsoBench|OptionalBench|GetterBench|SetterBench|FoldBench|TraversalBench|PowerSeriesBench|PowerSeriesNestedBench|PowerSeriesPrismBench).*' }}"
+            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true -rf json -rff jmh-results.json ${{ inputs.filter || '(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*' }}"
 
       - name: Render summary
         if: always()

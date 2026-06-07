@@ -18,15 +18,14 @@ All figures are **average time per operation in nanoseconds (ns/op); lower is
 better.** Absolute numbers vary by hardware — the *ratios* are the durable
 signal.
 
-| Group | Source | Config |
-|---|---|---|
-| Integration | Reproducible CI workflow (`benchmarks.yml`, ubuntu-22.04 / temurin@21), error half-widths ≤ ~3 % | `-f 3 -wi 3 -i 5` |
-| Micro + PowerSeries | Hand-captured local snapshot (Linux x86-64, JDK 25), indicative | `-f 1 -wi 3 -i 5` |
+Every table on this page comes from the same reproducible **`benchmarks.yml` CI
+workflow** (ubuntu-22.04 / temurin@21, `-f 3 -wi 3 -i 5`, error half-widths
+≤ ~5 %, mostly ≤ 2 %), so the numbers are comparable across sections and anyone
+with Actions access can re-run them.
 
-> **JMH caveat.** Trustworthy numbers need a quiet machine, fork count ≥ 3, and
-> locked CPU frequency. The local-snapshot tables are indicative, not
-> publication-grade; the integration tables come from CI so anyone can re-run
-> them. See [Reproducing](#reproducing) and
+> **JMH caveat.** A shared CI runner still isn't a tuned, quiet desktop, so read
+> these as reproducible *directional* data — the shape and the ratios — not
+> sub-nanosecond truth. See [Reproducing](#reproducing) and
 > [`benchmarks/README.md`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md).
 
 ## Optic micro-benchmarks (vs Monocle)
@@ -38,32 +37,33 @@ just the two optic libraries head to head.
 
 | Operation | eo | Monocle | ratio |
 |---|--:|--:|--:|
-| `get`     | 0.45 | 0.52 | 1.16× |
-| `replace` | 1.18 | 1.29 | 1.09× |
-| `modify`  | 1.37 | 1.52 | 1.11× |
+| `get`     | 1.03 | 1.21 | 1.17× |
+| `replace` | 2.56 | 2.68 | 1.05× |
+| `modify`  | 2.97 | 2.94 | 0.99× |
 
-`GetReplaceLens` stores `get` / `enplace` as plain fields and specialises its
-fused `modify`, so the hot path is a two-function composition — no `(X, A)`
-tuple allocation.
+Effectively parity. `GetReplaceLens` stores `get` / `enplace` as plain fields
+and specialises its fused `modify`, so the hot path is a two-function
+composition — no `(X, A)` tuple allocation — matching Monocle's hand-written
+`case class Lens`.
 
 **Prism** (`Either` carrier) — `Option[Int]` plus an `Either[String, Int]`
 Right-prism:
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `getOption` Some | 0.42 | 0.46 |
-| `getOption` None | 0.42 | 0.47 |
-| `reverseGet`     | 1.06 | 1.10 |
-| Right `getOption` (Right) | 1.17 | 1.29 |
-| Right `getOption` (Left)  | 0.46 | 0.80 |
-| Right `reverseGet`        | 1.06 | 1.11 |
+| `getOption` Some | 0.93 | 1.06 |
+| `getOption` None | 0.93 | 1.06 |
+| `reverseGet`     | 2.33 | 2.40 |
+| Right `getOption` (Right) | 2.50 | 2.65 |
+| Right `getOption` (Left)  | 1.08 | 1.17 |
+| Right `reverseGet`        | 2.34 | 2.41 |
 
 **Iso** (`Direct` carrier) — `(Int, String) ↔ Person`:
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `get`        | 1.63 | 1.67 |
-| `reverseGet` | 1.22 | 1.25 |
+| `get`        | 3.23 | 3.19 |
+| `reverseGet` | 2.54 | 2.71 |
 
 `BijectionIso` stores both directions as plain fields — same shape and
 direct-call hot path as Monocle's `case class Iso`.
@@ -74,14 +74,16 @@ auto-lifts each hop):
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `modify_0` (Some)  |  15.11 | 12.52 |
-| `modify_0` (None)  |   0.72 |  0.65 |
-| `replace_0`        |   7.96 |  1.74 |
-| `modify_3`         |  79.02 | 33.45 |
-| `modify_6`         | 121.97 | 52.49 |
+| `modify_0` (Some)  |  26.92 | 23.05 |
+| `modify_0` (None)  |   1.51 |  0.99 |
+| `replace_0`        |   5.25 |  3.72 |
+| `modify_3`         |  55.68 | 66.72 |
+| `modify_6`         | 180.55 | 108.86 |
 
-Within ~2× across depths — EO pays `Affine`'s branching where Monocle has
-`Option`-specialised internals.
+Competitive across depths: the cross-carrier Lens→Optional chain actually
+*beats* Monocle's native composition at depth 3 (the `Morph[Tuple2, Affine]`
+lift fuses well), and trails ~1.7× at depth 6 where `Affine`'s per-hop branching
+adds up against Monocle's `Option`-specialised internals.
 
 **Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`.
 Neither family composes through `Optic.andThen` in EO today (see
@@ -90,28 +92,30 @@ Neither family composes through `Optic.andThen` in EO today (see
 
 | Depth | Getter eo | Getter Monocle | Setter eo | Setter Monocle |
 |---|--:|--:|--:|--:|
-| `_0` | 0.54 |  0.60 |  1.45 |  1.27 |
-| `_3` | 1.50 |  7.88 | 25.37 | 13.18 |
-| `_6` | 2.68 | 16.12 | 50.27 | 27.32 |
+| `_0` | 0.95 |  0.54 |  2.96 |  2.38 |
+| `_3` | 2.74 |  8.82 | 51.42 | 26.46 |
+| `_6` | 4.55 | 27.65 | 88.23 | 52.35 |
 
 EO resolves `.get` against each carrier's `Accessor` statically, so its composed
-read inlines to a direct call — hence the widening Getter win at depth. On write,
-the nested-`modify` shape costs EO ~2× Monocle's native `Setter.andThen`.
+read inlines to a direct call — hence the widening Getter win at depth (~6× by
+depth 6). On write, the nested-`modify` shape costs EO ~1.7× Monocle's native
+`Setter.andThen`.
 
 **Fold / Traversal** — `foldMap(identity)` and `each.modify(_ + 1)` over
 `List[Int]`, sweeping size:
 
 | Size | Fold eo | Fold Monocle | Traversal eo | Traversal Monocle | Traversal speedup |
 |---|--:|--:|--:|--:|--:|
-| 8   |    50.8 |    11.4 |    17.8 |    119.4 | 6.7× |
-| 64  |   458.4 |   165.1 |   145.7 |  1 352.5 | 9.3× |
-| 512 | 3 868.7 | 2 179.5 | 1 939.5 | 16 214.0 | 8.4× |
+| 8   |  109.4 |    21.9 |    87.5 |    216.6 | 2.5× |
+| 64  |  932.4 |   313.5 |   620.7 |  1 528.3 | 2.5× |
+| 512 | 8 007.9 | 4 728.1 | 5 218.6 | 34 875.0 | 6.7× |
 
 Monocle's `Fold` reduces to a direct `Foldable.foldMap`; EO's `Forget[F]` adds a
-per-element dispatch layer, so Monocle wins Fold. Traversal flips it: EO's
-`each` (carrier `MultiFocus[PSVec]`) collects element references into a flat
+per-element dispatch layer, so Monocle wins Fold (~1.7–5×). Traversal flips it:
+EO's `each` (carrier `MultiFocus[PSVec]`) collects element references into a flat
 focus vector and rebuilds via `Functor[PSVec].map`, beating Monocle's
-per-element `Applicative[Id]` wrapping ~7–9×.
+per-element `Applicative[Id]` wrapping — a gap that widens to ~6.7× by 512
+elements.
 
 ## Integration: edit without decoding
 
@@ -214,21 +218,21 @@ hand-written `copy` + `map` equivalent.
 
 | Chain (bench) | Size | eo | naive | ratio |
 |---|--:|--:|--:|--:|
-| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 66 | 13 | 5.1× |
-| | 32 | 275 | 80 | 3.4× |
-| | 256 | 1 890 | 726 | 2.6× |
-| | 1024 | 6 927 | 3 633 | 1.9× |
-| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 348 | 65 | 5.4× |
-| | 32 | 1 175 | 497 | 2.4× |
-| | 256 | 8 085 | 3 376 | 2.4× |
-| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 59 | 12 | 5.0× |
-| | 64 | 408 | 73 | 5.6× |
-| | 512 | 3 610 | 660 | 5.5× |
+| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 164 | 29 | 5.8× |
+| | 32 | 575 | 217 | 2.7× |
+| | 256 | 3 725 | 1 689 | 2.2× |
+| | 1024 | 15 838 | 5 854 | 2.7× |
+| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 727 | 138 | 5.3× |
+| | 32 | 2 371 | 744 | 3.2× |
+| | 256 | 16 628 | 5 170 | 3.2× |
+| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 137 | 26 | 5.3× |
+| | 64 | 766 | 161 | 4.8× |
+| | 512 | 6 916 | 1 291 | 5.4× |
 
-All three scale **linearly**; the ratio to naive tightens as size grows (fixed
-per-op setup amortises) — down to 1.9× on the dense Lens chain at 1024 elements.
-The sparse-Prism shape holds ~5.5× because the miss branch carries inherent
-per-element plumbing.
+All three scale **linearly**; the ratio to naive is largest on tiny inputs
+(fixed per-op setup dominates) and settles around 2–3× on the dense Lens and
+nested-tree chains as the element work amortises. The sparse-Prism shape holds
+~5× because the miss branch carries inherent per-element plumbing.
 
 Under the hood the carrier pairs an existential leftover with a flat `PSVec`
 focus vector (`Array[AnyRef]` + an `(offset, length)` window), and two internal
