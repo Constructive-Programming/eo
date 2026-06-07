@@ -25,6 +25,18 @@ sealed trait PSVec[+B]:
 
   inline def isEmpty: Boolean = length == 0
 
+  /** Materialise as a `List` — the read-side bridge for `Plated.children` / `universe` and the
+    * carriers (circe / avro) that reconstruct from an ordered sequence.
+    */
+  def toList: List[B] =
+    val b = List.newBuilder[B]
+    var i = 0
+    val n = length
+    while i < n do
+      b += apply(i)
+      i += 1
+    b.result()
+
   /** Materialise as a fresh `Array[AnyRef]`. `Slice` overrides with `System.arraycopy` (intrinsic)
     * so the common rebuild path in `Traversal.pEach`'s `from` is one memcpy.
     */
@@ -158,3 +170,19 @@ object PSVec:
       case 0 => Empty
       case 1 => new Single[B](arr(0).asInstanceOf[B])
       case _ => new Slice[B](arr, 0, arr.length)
+
+  /** Build a PSVec from any `Iterable` — one backing-array allocation, specialised at length 0 / 1.
+    * The bridge for `Plated` carriers whose children arrive as a `List` / `Vector` / circe object
+    * values rather than already as a focus vector.
+    */
+  def fromIterable[B](xs: Iterable[B]): PSVec[B] =
+    val n = xs.size
+    if n == 0 then Empty
+    else
+      val a = new Array[AnyRef](n)
+      val it = xs.iterator
+      var i = 0
+      while it.hasNext do
+        a(i) = it.next().asInstanceOf[AnyRef]
+        i += 1
+      unsafeWrap(a)

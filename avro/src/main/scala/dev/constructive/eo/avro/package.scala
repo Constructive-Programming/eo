@@ -4,6 +4,7 @@ import cats.Eq
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 
+import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
 
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
@@ -91,30 +92,30 @@ package object avro:
     * those is a future extension (mirrors the core `plate`'s exact-self-type rule).
     */
   given platedAvro: Plated[IndexedRecord] =
-    Plated.fromChildren(avroRecordChildren, avroRecordRebuild)
+    Plated.fromChildrenVec(avroRecordChildren, avroRecordRebuild)
 
-  private def avroRecordChildren(rec: IndexedRecord): List[IndexedRecord] =
+  private def avroRecordChildren(rec: IndexedRecord): PSVec[IndexedRecord] =
     val n = rec.getSchema.getFields.size
-    val b = List.newBuilder[IndexedRecord]
+    val buf = collection.mutable.ArrayBuffer.empty[IndexedRecord]
     var i = 0
     while i < n do
       rec.get(i) match
-        case child: IndexedRecord => b += child
+        case child: IndexedRecord => buf += child
         case _                    => ()
       i += 1
-    b.result()
+    PSVec.fromIterable(buf)
 
-  private def avroRecordRebuild(rec: IndexedRecord, cs: List[IndexedRecord]): IndexedRecord =
+  private def avroRecordRebuild(rec: IndexedRecord, vec: PSVec[IndexedRecord]): IndexedRecord =
     val schema = rec.getSchema
     val n = schema.getFields.size
     val copy = new GenericData.Record(schema)
     var i = 0
-    var rest = cs
+    var k = 0
     while i < n do
       rec.get(i) match
         case _: IndexedRecord =>
-          copy.put(i, rest.head)
-          rest = rest.tail
+          copy.put(i, vec(k))
+          k += 1
         case other =>
           copy.put(i, other)
       i += 1

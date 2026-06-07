@@ -2,7 +2,6 @@ package dev.constructive.eo
 package optics
 
 import cats.{Eval, Monad}
-import cats.instances.list.given // Monoid[List[S]] for children's foldMap
 import cats.syntax.flatMap.*
 
 import data.{MultiFocus, PSVec}
@@ -17,9 +16,13 @@ import data.MultiFocus.given // ForgetfulFunctor / Fold / Traverse for MultiFocu
   * **stack-safe**: the structural recursions trampoline through `cats.Eval` (or an explicit
   * worklist), so a degenerate 100k-deep tree is fine.
   *
-  * Get an instance by hand via [[Plated.fromChildren]], by deriving one with
-  * `dev.constructive.eo.generics.plate[S]`, or — when you have already built the self-traversal as
-  * an optic — by calling `.asPlated` on it (see the extension methods below).
+  * The children are carried as a `PSVec` (the `MultiFocus[PSVec]` carrier's focus vector), so the
+  * read path and the write path share one representation with no `List` round-trips — see
+  * [[childrenVec]].
+  *
+  * Get an instance by hand via [[Plated.fromChildren]] / [[Plated.fromChildrenVec]], by deriving
+  * one with `dev.constructive.eo.generics.plate[S]`, or — when you have already built the
+  * self-traversal as an optic — by calling `.asPlated` on it (see the extension methods below).
   *
   * @see
   *   [[Traversal.selfChildren]] for the underlying carrier.
@@ -28,18 +31,18 @@ trait Plated[S]:
   /** The immediate-children self-traversal. */
   def plate: Optic[S, S, S, S, MultiFocus[PSVec]]
 
-  /** Immediate children as a `List` — the read-side fast path behind [[Plated.children]] /
-    * [[Plated.universe]]. Defaults to a `foldMap` through [[plate]], but [[Plated.fromChildren]]
-    * (and therefore every `generics.plate[S]`-derived instance) overrides it with the raw children
-    * function, so the read path skips the `List → Array → PSVec → List` round-trip the optic's `to`
-    * / `foldMap` would otherwise pay per node.
+  /** Immediate children as a `PSVec` — the representation both the read path ([[Plated.children]] /
+    * [[Plated.universe]]) and the write path ([[Plated.transform]] / [[Plated.rewrite]], through
+    * the carrier) share. Defaults to reading the carrier directly (`plate.to(s)._2`);
+    * [[Plated.fromChildren]] / [[Plated.fromChildrenVec]] (hence every `generics.plate[S]`-derived
+    * instance) override it to return the children with no tuple allocation. Either way nothing is
+    * converted to a `List` and back — that round-trip was the read/write hot-path tax.
     */
-  def childrenList(s: S): List[S] =
-    plate.foldMap[List[S]](List(_))(s)
+  def childrenVec(s: S): PSVec[S] = plate.to(s)._2
 
 /** Combinators over [[Plated]] — recursion schemes faithful to `Control.Lens.Plated`, all
   * stack-safe. Each is offered both as a `using Plated[S]` method here and as an extension on any
-  * self-traversal optic you build directly (so `myPlate.transform(f)(s)` works without a
+  * self-traversal optic you build directly (so `myPlate.transformAll(f)(s)` works without a
   * typeclass).
   */
 object Plated:
@@ -47,20 +50,57 @@ object Plated:
   /** Summon the instance. */
   def apply[S](using p: Plated[S]): Plated[S] = p
 
-  /** Build a [[Plated]] from an explicit immediate-children view. `children(s)` lists the immediate
-    * sub-terms; `rebuild(s, cs)` reassembles `s` with that many children swapped in, same order.
+  /** Build a [[Plated]] from an explicit children focus-vector view — the PSVec-native primitive.
+    * `children(s)` is the immediate sub-terms as a `PSVec`; `rebuild(s, vec)` reassembles `s` with
+    * that many children swapped in, same order. This is what `generics.plate[S]` emits, and it pays
+    * zero `List` conversion on either the read or the write path.
     */
-  def fromChildren[S](children: S => List[S], rebuild: (S, List[S]) => S): Plated[S] =
+  def fromChildrenVec[S](children: S => PSVec[S], rebuild: (S, PSVec[S]) => S): Plated[S] =
     new Plated[S]:
       val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = Traversal.selfChildren(children, rebuild)
-      override def childrenList(s: S): List[S] = children(s)
+      override def childrenVec(s: S): PSVec[S] = children(s)
+
+  /** Build a [[Plated]] from a `List`-shaped children view — the ergonomic hand-writing entry point
+    * (`{ case Node(l, r) => List(l, r); … }`). Wraps the `List` into the PSVec-native
+    * [[fromChildrenVec]]; fine for hand-written plates, while the performance-critical derived
+    * instances avoid the wrap.
+    */
+  def fromChildren[S](children: S => List[S], rebuild: (S, List[S]) => S): Plated[S] =
+    fromChildrenVec(
+      s => PSVec.fromIterable(children(s)),
+      (s, vec) => rebuild(s, vec.toList),
+    )
 
   /** Bottom-up rewrite: rewrite every node's children first, then apply `f` to the node. The single
-    * pass each `lens` user reaches for. Stack-safe via an `Eval` trampoline.
+    * pass each `lens` user reaches for.
+    *
+    * Stack-safe *without* the per-node `Eval` allocation an `Eval`-trampolined recursion would pay:
+    * an explicit post-order stack machine walks the tree on a heap-allocated stack, reading
+    * children straight off the carrier (`to`) and rebuilding through it (`from`) on a `PSVec`. That
+    * keeps the deep-tree guarantee while running close to a hand-written recursive rebuild.
     */
-  def transform[S](f: S => S)(s: S)(using P: Plated[S]): S =
-    def go(x: S): Eval[S] = Eval.defer(P.plate.modifyA[Eval](go)(x)).map(f)
-    go(s).value
+  def transform[S](f: S => S)(root: S)(using P: Plated[S]): S =
+    val plate = P.plate
+    // One frame per node on the path to the cursor: the carrier leftover `x`, the children still to
+    // rewrite, and the rebuilt-children array filled in as each child completes.
+    final class Frame(val x: plate.X, val kids: PSVec[S], val out: Array[AnyRef], var i: Int)
+    val stack = new java.util.ArrayDeque[Frame]()
+    def push(s: S): Unit =
+      val (x, kids) = plate.to(s)
+      stack.push(new Frame(x, kids, new Array[AnyRef](kids.length), 0))
+    push(root)
+    var ret: S = root // overwritten before any read (only read once a child has completed)
+    while !stack.isEmpty do
+      val fr = stack.peek()
+      if fr.i > 0 then fr.out(fr.i - 1) = ret.asInstanceOf[AnyRef] // stash the child just finished
+      if fr.i < fr.kids.length then
+        val child = fr.kids(fr.i)
+        fr.i += 1
+        push(child)
+      else
+        ret = f(plate.from((fr.x, PSVec.unsafeWrap[S](fr.out))))
+        val _ = stack.pop()
+    ret
 
   /** Effectful bottom-up rewrite over any monad `G` — the engine [[transform]] and [[rewrite]] are
     * specialisations of. Stack-safe when `G` is a trampolining monad (`Eval`, `IO`).
@@ -78,19 +118,27 @@ object Plated:
     def go(x: S): Eval[S] = Eval.defer(P.plate.modifyA[Eval](go)(x)).flatMap(step)
     go(s).value
 
-  /** The immediate sub-terms of `s` (one level down). Routes through [[Plated.childrenList]], so a
-    * derived / `fromChildren` plate reads its children directly rather than through the optic.
+  /** The immediate sub-terms of `s` (one level down). Reads the plate's children vector directly.
     */
   def children[S](s: S)(using P: Plated[S]): List[S] =
-    P.childrenList(s)
+    P.childrenVec(s).toList
 
-  /** Every sub-term of `s`, `s` itself first, in pre-order. Stack-safe via an explicit worklist. */
+  /** Every sub-term of `s`, `s` itself first, in pre-order. Stack-safe via an explicit worklist;
+    * children are pushed straight off the `PSVec` (no per-node `List`).
+    */
   def universe[S](s: S)(using P: Plated[S]): List[S] =
     @annotation.tailrec
     def loop(stack: List[S], acc: List[S]): List[S] =
       stack match
         case Nil    => acc.reverse
-        case h :: t => loop(P.childrenList(h) ::: t, h :: acc)
+        case h :: t =>
+          val vec = P.childrenVec(h)
+          var pushed = t
+          var i = vec.length - 1
+          while i >= 0 do
+            pushed = vec(i) :: pushed
+            i -= 1
+          loop(pushed, h :: acc)
     loop(s :: Nil, Nil)
 
   /** The "both" surface: treat any self-traversal optic as a [[Plated]] and call the combinators on

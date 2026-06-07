@@ -114,6 +114,19 @@ object PlatedTrees:
     go(b)
     buf.toList
 
+  // Hand-written bottom-up rebuild — the visitor equivalent of `Plated.transform`. Children are
+  // rewritten first, then `f` is applied to the rebuilt node.
+  def visitTransformExpr(f: Expr => Expr)(e: Expr): Expr =
+    f(e match
+      case Expr.App(a, b)    => Expr.App(visitTransformExpr(f)(a), visitTransformExpr(f)(b))
+      case Expr.Lam(n, body) => Expr.Lam(n, visitTransformExpr(f)(body))
+      case v: Expr.Var       => v)
+
+  def visitTransformBin(f: Bin => Bin)(b: Bin): Bin =
+    f(b match
+      case Bin.Node(l, r) => Bin.Node(visitTransformBin(f)(l), visitTransformBin(f)(r))
+      case leaf: Bin.Leaf => leaf)
+
   def visitJson(j: Json): List[Json] =
     val buf = scala.collection.mutable.ListBuffer.empty[Json]
     def go(x: Json): Unit =

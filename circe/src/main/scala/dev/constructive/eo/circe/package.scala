@@ -2,6 +2,7 @@ package dev.constructive.eo
 
 import io.circe.{Decoder, Encoder, Json, JsonObject}
 
+import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
 
 /** Cross-representation optics bridging native Scala types and their circe-serialised form.
@@ -39,24 +40,27 @@ package object circe:
     * }}}
     */
   given platedJson: Plated[Json] =
-    Plated.fromChildren(immediateChildJson, rebuildJsonFromChildren)
+    Plated.fromChildrenVec(immediateChildJson, rebuildJsonFromChildren)
 
-  private def immediateChildJson(json: Json): List[Json] =
+  private val emptyJsonVec: PSVec[Json] = PSVec.empty[Json]
+
+  private def immediateChildJson(json: Json): PSVec[Json] =
     json.fold(
-      jsonNull = Nil,
-      jsonBoolean = _ => Nil,
-      jsonNumber = _ => Nil,
-      jsonString = _ => Nil,
-      jsonArray = _.toList,
-      jsonObject = _.values.toList,
+      jsonNull = emptyJsonVec,
+      jsonBoolean = _ => emptyJsonVec,
+      jsonNumber = _ => emptyJsonVec,
+      jsonString = _ => emptyJsonVec,
+      jsonArray = PSVec.fromIterable,
+      jsonObject = obj => PSVec.fromIterable(obj.values),
     )
 
-  private def rebuildJsonFromChildren(json: Json, cs: List[Json]): Json =
+  private def rebuildJsonFromChildren(json: Json, vec: PSVec[Json]): Json =
     json.fold(
       jsonNull = json,
       jsonBoolean = _ => json,
       jsonNumber = _ => json,
       jsonString = _ => json,
-      jsonArray = _ => Json.fromValues(cs),
-      jsonObject = obj => Json.fromJsonObject(JsonObject.fromIterable(obj.keys.zip(cs).toSeq)),
+      jsonArray = _ => Json.fromValues(vec.toList),
+      jsonObject =
+        obj => Json.fromJsonObject(JsonObject.fromIterable(obj.keys.zip(vec.toList).toSeq)),
     )

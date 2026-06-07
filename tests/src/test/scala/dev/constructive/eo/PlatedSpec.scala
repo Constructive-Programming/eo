@@ -5,7 +5,7 @@ import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
 import dev.constructive.eo.generics.plate
-import dev.constructive.eo.optics.{Plated, Traversal}
+import dev.constructive.eo.optics.Plated
 import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
 import laws.PlatedLaws
 import laws.discipline.PlatedTests
@@ -109,18 +109,20 @@ class PlatedSpec extends Specification with Discipline:
   // ----- Behaviour: stack safety via the hand-built selfChildren + extension API -----
 
   "transform / universe are stack-safe on a 100k-deep tree (hand-built plate)" >> {
-    // A self-traversal built directly from Traversal.selfChildren — no macro, exercises the
-    // core constructor and the `.transformAll` / `.universeOf` extension surface.
-    val binPlate = Traversal.selfChildren[Bin](
-      {
-        case Bin.Node(l, r) => List(l, r)
-        case Bin.Leaf(_)    => Nil
-      },
-      {
-        case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
-        case (leaf, _)                       => leaf
-      },
-    )
+    // A hand-built plate via the List-shaped `Plated.fromChildren` convenience — no macro,
+    // exercises the core constructor and the `.transformAll` / `.universeOf` extension surface.
+    val binPlate = Plated
+      .fromChildren[Bin](
+        {
+          case Bin.Node(l, r) => List(l, r)
+          case Bin.Leaf(_)    => Nil
+        },
+        {
+          case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
+          case (leaf, _)                       => leaf
+        },
+      )
+      .plate
 
     val n = 100000
     var deep: Bin = Bin.Leaf(0)

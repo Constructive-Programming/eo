@@ -3,6 +3,7 @@ package generics
 
 import scala.quoted.*
 
+import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
 
 /** Compile-time derivation of a [[dev.constructive.eo.optics.Plated]] for a recursive ADT `S`.
@@ -59,13 +60,13 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       enumView: Enum[S],
       sTpe: TypeRepr,
   ): Expr[Plated[S]] =
-    val childrenExpr: Expr[S => List[S]] =
+    val childrenExpr: Expr[S => PSVec[S]] =
       '{ (s: S) =>
         ${
           enumView
-            .matchOn[Id, List[S]]('{ s }) { matched =>
+            .matchOn[Id, PSVec[S]]('{ s }) { matched =>
               import matched.{Underlying as V, value as vExpr}
-              selfFieldReads[S, V](vExpr, sTpe)
+              selfFieldVec[S, V](vExpr, sTpe)
             }
             .getOrElse(
               report.errorAndAbort(s"plate[${Type.prettyPrint[S]}]: matchOn produced no cases.")
@@ -73,13 +74,13 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
         }
       }
 
-    val rebuildExpr: Expr[(S, List[S]) => S] =
-      '{ (s: S, cs: List[S]) =>
+    val rebuildExpr: Expr[(S, PSVec[S]) => S] =
+      '{ (s: S, vec: PSVec[S]) =>
         ${
           enumView
             .matchOn[Id, S]('{ s }) { matched =>
               import matched.{Underlying as V, value as vExpr}
-              reconstruct[S, V](vExpr, '{ cs }, sTpe)
+              reconstruct[S, V](vExpr, '{ vec }, sTpe)
             }
             .getOrElse(
               report.errorAndAbort(s"plate[${Type.prettyPrint[S]}]: matchOn produced no cases.")
@@ -87,7 +88,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
         }
       }
 
-    '{ Plated.fromChildren[S]($childrenExpr, $rebuildExpr) }
+    '{ Plated.fromChildrenVec[S]($childrenExpr, $rebuildExpr) }
 
   // ---- product / case-class path --------------------------------------------
 
@@ -95,13 +96,13 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       cc: CaseClass[S],
       sTpe: TypeRepr,
   ): Expr[Plated[S]] =
-    val childrenExpr: Expr[S => List[S]] =
-      '{ (s: S) => ${ selfFieldReads[S, S]('{ s }, sTpe) } }
+    val childrenExpr: Expr[S => PSVec[S]] =
+      '{ (s: S) => ${ selfFieldVec[S, S]('{ s }, sTpe) } }
 
-    val rebuildExpr: Expr[(S, List[S]) => S] =
-      '{ (s: S, cs: List[S]) => ${ reconstructProduct[S](cc, '{ s }, '{ cs }, sTpe) } }
+    val rebuildExpr: Expr[(S, PSVec[S]) => S] =
+      '{ (s: S, vec: PSVec[S]) => ${ reconstructProduct[S](cc, '{ s }, '{ vec }, sTpe) } }
 
-    '{ Plated.fromChildren[S]($childrenExpr, $rebuildExpr) }
+    '{ Plated.fromChildrenVec[S]($childrenExpr, $rebuildExpr) }
 
   // ---- shared codegen --------------------------------------------------------
 
@@ -110,21 +111,29 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
     val vTpe = TypeRepr.of[V]
     vTpe.typeSymbol.caseFields.filter(f => vTpe.memberType(f) =:= sTpe).map(_.name)
 
-  /** `List(<self field reads of `src`>)` in declaration order — `Expr[List[S]]`. */
-  private def selfFieldReads[S: Type, V: Type](
+  /** The self-typed field reads of `src` packed into a `PSVec`, declaration order —
+    * `Expr[PSVec[S]]`. Specialised at 0 / 1 children so leaves and unary nodes skip the
+    * backing-array allocation.
+    */
+  private def selfFieldVec[S: Type, V: Type](
       src: Expr[V],
       sTpe: TypeRepr,
-  ): Expr[List[S]] =
+  ): Expr[PSVec[S]] =
     val reads: List[Expr[S]] =
       selfFieldNames[V](sTpe).map(name => Select.unique(src.asTerm, name).asExprOf[S])
-    if reads.isEmpty then '{ List.empty[S] } else scala.quoted.Expr.ofList(reads)
+    reads match
+      case Nil      => '{ PSVec.empty[S] }
+      case r :: Nil => '{ PSVec.singleton[S]($r) }
+      case _        =>
+        val anyRefs: List[Expr[AnyRef]] = reads.map(r => '{ $r.asInstanceOf[AnyRef] })
+        '{ PSVec.unsafeWrap[S](scala.Array[AnyRef](${ Varargs(anyRefs) }*)) }
 
-  /** Reconstruct enum variant `V` (`<: S`) from `src` (its current value) and `cs` (the new
+  /** Reconstruct enum variant `V` (`<: S`) from `src` (its current value) and `vec` (the new
     * children, declaration order), upcast to `S`. Parameterless variants pass through.
     */
   private def reconstruct[S: Type, V: Type](
       src: Expr[V],
-      cs: Expr[List[S]],
+      vec: Expr[PSVec[S]],
       sTpe: TypeRepr,
   ): Expr[S] =
     // `V` is an enum child of `S` (so `V <: S` at runtime) but the macro carries no `<: S` bound,
@@ -132,25 +141,25 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
     CaseClass.parse[V].toEither match
       case Left(_)   => '{ ${ src }.asInstanceOf[S] } // parameterless case — nothing to rebuild
       case Right(cc) =>
-        val built: Expr[V] = reconstructFields[S, V](cc, src, cs, sTpe)
+        val built: Expr[V] = reconstructFields[S, V](cc, src, vec, sTpe)
         '{ ${ built }.asInstanceOf[S] }
 
   /** Product `S` reconstruction (single-case path) — already at type `S`, no upcast needed. */
   private def reconstructProduct[S: Type](
       cc: CaseClass[S],
       src: Expr[S],
-      cs: Expr[List[S]],
+      vec: Expr[PSVec[S]],
       sTpe: TypeRepr,
   ): Expr[S] =
-    reconstructFields[S, S](cc, src, cs, sTpe)
+    reconstructFields[S, S](cc, src, vec, sTpe)
 
   /** The constructor-threading core: route each declaration-order parameter to either the matching
-    * new child (`cs(i)`, by self-field index) or the preserved field read off `src`.
+    * new child (`vec(i)`, by self-field index) or the preserved field read off `src`.
     */
   private def reconstructFields[S: Type, V: Type](
       cc: CaseClass[V],
       src: Expr[V],
-      cs: Expr[List[S]],
+      vec: Expr[PSVec[S]],
       sTpe: TypeRepr,
   ): Expr[V] =
     val vTpe = TypeRepr.of[V]
@@ -161,9 +170,9 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
     val constructed: Id[Option[Expr[V]]] = cc.construct[Id] { (param: Parameter) =>
       val selfIdx = selfNames.indexOf(param.name)
       if selfIdx >= 0 then
-        // self-typed child: take it from the rebuilt children list at its declaration index.
+        // self-typed child: take it from the rebuilt children vector at its declaration index.
         val idxExpr = scala.quoted.Expr(selfIdx)
-        Existential[Expr, S]('{ ${ cs }(${ idxExpr }) }): Expr_??
+        Existential[Expr, S]('{ ${ vec }(${ idxExpr }) }): Expr_??
       else
         // skeleton field: preserve the original value read off `src`.
         val tpe = nameToType.getOrElse(

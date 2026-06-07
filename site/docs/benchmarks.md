@@ -242,44 +242,42 @@ write directly into pre-sized builders instead of allocating a per-element
 wrapper. The full mechanics and the −59 %…−67 % optimisation history are in the
 [composition notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#composition-notes).
 
-## Plated `universe` — recursion vs Monocle vs a hand visitor
+## Plated recursion — read (`universe`) + write (`transform`) vs Monocle vs a hand visitor
 
-`Plated.universe` enumerates every sub-term of a recursive structure.
-`PlatedUniverseBench` pits cats-eo against Monocle's
-`monocle.function.Plated.universe` and the hand-written recursive collector
-("visitor") you'd write without optics, over three subjects: a normal-depth
-`Expr` tree, a degenerate deep `Bin` spine, and a normal-depth circe `Json` tree
-(via the universal `Plated[Json]`).
+`PlatedBench` pits cats-eo's `Plated` against Monocle's `monocle.function.Plated`
+and the hand-written recursion ("visitor") you'd write without optics, over three
+subjects: a normal-depth `Expr` tree, a degenerate deep `Bin` spine, and a
+normal-depth circe `Json` tree (via the universal `Plated[Json]`). The `Plated`
+carrier is PSVec-native, so neither path converts to a `List` and back.
 
-| Subject (bench) | Size | eo | monocle | visitor |
-|---|--:|--:|--:|--:|
-| `Expr` balanced | 512 | 27 100 | 178 000 | 10 500 |
-| | 4096 | 213 000 | 2 234 000 | 70 500 |
-| `Json` balanced | 512 | 52 300 | 200 000 | 51 700 |
-| | 4096 | 474 000 | 2 314 000 | 148 000 |
-| `Bin` deep spine | 512 | 27 300 | **SO** | 14 500 |
-| | 4096 | 96 900 | **SO** | 124 600 |
+| Op | Subject | eo | monocle | visitor |
+|---|---|--:|--:|--:|
+| `universe` | `Expr` balanced | 27 000 | ~180 000 | 5 000 |
+| | `Json` balanced | 15 000 | ~200 000 | 20 000 |
+| | `Bin` deep spine | 20 000 | **SO** | 7 000 |
+| `transform` | `Expr` balanced | 18 000 | 28 000 | 5 000 |
+| | `Bin` deep spine | 50 000 | **SO** | 4 000 |
 
-(ns/op; indicative single-fork local numbers — the CI workflow produces the
-canonical figures.)
+(ns/op at n=512; indicative single-fork local numbers — Monocle's `universe`
+varies a lot run-to-run, and the CI workflow produces the canonical figures.)
 
-Two results:
+Three results:
 
-- **Monocle's `universe` is not stack-safe.** On the degenerate spine it
-  `StackOverflowError`s at depth ≳2048 (and, where it survives — depth 1024 —
-  runs ~700× slower than EO, its lazy-`#:::` append going quadratic). EO's
-  `Eval` trampoline clears the spine at every size here and at 100k in the
-  stack-safety test, so the deep row compares EO against the visitor only. On
-  the normal trees EO's `universe` is **~1.6–6× faster** than Monocle's.
-- **EO sits near the hand visitor.** The read path (`children` / `universe`)
-  reads a `fromChildren` / derived plate's children directly via
-  `Plated.childrenList`, skipping the optic's `List → Array → PSVec → List`
-  round-trip — which cut the deep subject ~80 % (133 µs → 27 µs at 512) and
-  brought the deep and JSON subjects to **~parity** with the bare recursive
-  visitor, the dense `Expr` tree to **~2.5×**. The residual `Expr` gap is the
-  per-node children `List` the `fromChildren` contract allocates, which a direct
-  visitor sidesteps (a zero-alloc `childrenForeach` callback would close it, at
-  the cost of another derivation path).
+- **Monocle's `Plated` is not stack-safe.** On the degenerate spine both
+  `universe` and `transform` `StackOverflowError` at depth ≳2048 (and `universe`,
+  where it survives at 1024, runs ~700× slower than EO — its lazy-`#:::` append
+  going quadratic). EO clears the spine at every size here and at 100k in the
+  stack-safety test, so the deep rows compare EO against the visitor only.
+- **`universe` beats Monocle by ~10× and rivals the visitor.** Reading children
+  straight off the PSVec carrier (no `List` round-trip, explicit worklist) puts
+  the JSON subject ahead of the bare visitor and `Expr` within ~5×.
+- **`transform` is now on par with Monocle and stack-safe.** Replacing the
+  per-node `Eval` trampoline with an explicit post-order stack machine (heap
+  stack, rebuild through the carrier on a PSVec) cut `Expr` ~96 % (407 µs → 18 µs
+  at 512) — *faster* than Monocle's non-stack-safe `transformOf` — and keeps the
+  deep-tree guarantee. The residual gap to the hand visitor is the one
+  `Frame` + children array the machine allocates per node, which direct
+  recursion sidesteps.
 
 ## Reproducing
 

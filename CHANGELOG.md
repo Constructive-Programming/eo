@@ -20,12 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   hierarchies, recursive case classes), or call the combinators directly on any
   self-traversal optic via the `.transformAll` / `.universeOf` extensions. New
   `Traversal.selfChildren` constructor builds the underlying `MultiFocus[PSVec]`
-  self-traversal from an explicit children view. The read path (`children` /
-  `universe`) goes through `Plated.childrenList`, which `fromChildren` (and every
-  derived plate) overrides to read children directly — skipping the optic's
-  `List → Array → PSVec → List` round-trip, which puts `universe` within ~parity
-  of a hand-written recursive visitor on deep and JSON trees (see the
-  [benchmarks](https://github.com/Constructive-Programming/eo/blob/main/site/docs/benchmarks.md)).
+  self-traversal from an explicit children view. The carrier is PSVec-native end
+  to end — `fromChildrenVec` / `generics.plate[S]` speak the `MultiFocus[PSVec]`
+  focus vector directly, with a `List`-shaped `fromChildren` kept as a
+  hand-writing convenience — so neither path pays a `List ↔ PSVec` round-trip.
+  `universe` reads children straight off the carrier (no `List` per node) and
+  `transform` walks an explicit post-order stack machine instead of an `Eval`
+  trampoline; both stay stack-safe (deep + 100k trees) while running close to a
+  hand-written recursive visitor and ahead of Monocle's `Plated` (which is not
+  stack-safe). See the
+  [benchmarks](https://github.com/Constructive-Programming/eo/blob/main/site/docs/benchmarks.md).
 - **Universal `Plated` instances for the JSON and Avro carriers.**
   `dev.constructive.eo.circe.platedJson` makes `io.circe.Json` a recursive
   self-traversal (children = an array's elements / an object's field values), so
