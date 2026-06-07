@@ -419,8 +419,6 @@ respectively.
 
 ## Further reading
 
-- [Optics → MultiFocus](optics.md#multifocus) — the introductory
-  treatment in the family taxonomy.
 - [Cookbook → Theme E (Algebraic / classifier)](cookbook.md) —
   the three end-to-end recipes that ground each absorbed
   sub-shape.
@@ -431,3 +429,15 @@ respectively.
   traits, and Composer instances; bottom-of-file comment carries
   the structural-rejection rationale for the directions
   `MultiFocus → Direct` and `MultiFocus → Forget[G]`.
+
+The sub-shapes `MultiFocus[F]` unifies have a deeper literature:
+
+- Chris Penner's articles on grates, Kaleidoscopes, and algebraic
+  lenses ([chrispenner.ca](https://chrispenner.ca/)) — the original
+  treatments of the families absorbed here.
+- [*Profunctor optics, a categorical update*](https://arxiv.org/abs/2001.07488)
+  (Clarke, Elkins, Gibbons, Loregian, Milewski, Pillmore, Román) —
+  the categorical account that places grates, traversals, and
+  algebraic optics in one framework.
+- [*Co-Presheaf Optics*](https://bartoszmilewski.com/2021/12/28/co-presheaf-optics/)
+  (Bartosz Milewski).
