@@ -39,5 +39,5 @@ trait AffineLaws[X, A]:
   def traverseIdentity(fa: Affine[X, A])(using
       FT: ForgetfulTraverse[Affine, Applicative]
   ): Boolean =
-    FT.traverse[X, A, A, Id](using Applicative[Id])(fa)(a => a: Id[A]) ==
+    FT.traverse[X, A, A, Id](fa, a => a: Id[A])(using Applicative[Id]) ==
       fa

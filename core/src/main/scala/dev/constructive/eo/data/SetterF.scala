@@ -45,10 +45,10 @@ object SetterF:
     */
   given traverse: ForgetfulTraverse[SetterF, Distributive] with
 
-    def traverse[X, B, C, G[_]](using
+    def traverse[X, B, C, G[_]](fa: SetterF[X, B], g: B => G[C])(using
         D: Distributive[G]
-    ): SetterF[X, B] => (B => G[C]) => G[SetterF[X, C]] =
-      s => g => D.tupleLeft(D.distribute(s.setter._2)(g), s.setter._1).map(SetterF(_))
+    ): G[SetterF[X, C]] =
+      D.tupleLeft(D.distribute(fa.setter._2)(g), fa.setter._1).map(SetterF(_))
 
   /** Shared skeleton for `Composer[F, SetterF]` instances. Every carrier materialises a coerced
     * Optic with the same `type X = (S, A)` shape and an identity `to` that seeds the SetterF; only

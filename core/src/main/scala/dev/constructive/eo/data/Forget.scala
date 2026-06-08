@@ -116,8 +116,8 @@ object Forget extends LowPriorityForgetInstances:
     */
   given forgetFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
 
-    def foldMap[X, A, M: cats.Monoid]: (A => M) => F[A] => M =
-      f => fa => Foldable[F].foldMap(fa)(f)
+    def foldMap[X, A, M: cats.Monoid](f: A => M, fa: F[A]): M =
+      Foldable[F].foldMap(fa)(f)
 
   /** `ForgetfulTraverse[Forget[F], Applicative]` — lifts `Traverse[F]` into the two-parameter
     * carrier shape. Core of `Fold` in its effectful form.
@@ -126,8 +126,8 @@ object Forget extends LowPriorityForgetInstances:
     */
   given forgetFTraverse[F[_]: Traverse]: ForgetfulTraverse[Forget[F], Applicative] with
 
-    def traverse[X, A, B, G[_]: Applicative]: F[A] => (A => G[B]) => G[F[B]] =
-      Traverse[F].traverse[G, A, B]
+    def traverse[X, A, B, G[_]: Applicative](fa: F[A], f: A => G[B]): G[F[B]] =
+      Traverse[F].traverse(fa)(f)
 
   /** Algebraic-lens composition for `F: Monad`. Push: `outer.to(s).flatMap(inner.to)`. Pull: the
     * inner's `from` collapses `F[D]` to `B`, re-lifted via `pure` for the outer's `F[B] => T`.

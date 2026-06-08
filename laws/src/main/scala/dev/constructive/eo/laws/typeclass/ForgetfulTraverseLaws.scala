@@ -22,4 +22,4 @@ trait ForgetfulTraverseLaws[F[_, _], X, A]:
   def traverseIdentity(fa: F[X, A])(using
       FT: ForgetfulTraverse[F, Applicative]
   ): Boolean =
-    FT.traverse[X, A, A, Id](using Applicative[Id])(fa)(a => a: Id[A]) == fa
+    FT.traverse[X, A, A, Id](fa, a => a: Id[A])(using Applicative[Id]) == fa

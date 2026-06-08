@@ -154,8 +154,8 @@ object Affine:
     */
   given traverse: ForgetfulTraverse[Affine, Applicative] with
 
-    def traverse[X, A, B, G[_]: Applicative]: Affine[X, A] => (A => G[B]) => G[Affine[X, B]] =
-      fa => f => fa.aTraverse(f)
+    def traverse[X, A, B, G[_]: Applicative](fa: Affine[X, A], f: A => G[B]): G[Affine[X, B]] =
+      fa.aTraverse(f)
 
   /** Composition functor for `Affine` carriers. `X` / `Y` are deliberately unbounded — Affine's
     * `Fst[X]` / `Snd[X]` match types stay inert when `X` is not a `Tuple`, which is sound for every

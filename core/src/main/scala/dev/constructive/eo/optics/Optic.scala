@@ -254,7 +254,7 @@ object Optic:
   )(using FT: ForgetfulTraverse[F, Functor])
 
     inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
-      s => FT.traverse(using G)(o.to(s))(f).map(o.from)
+      s => FT.traverse(o.to(s), f)(using G).map(o.from)
 
   /** Effectful modify over any `Applicative[G]`; unlike [[modifyF]] this variant also exposes
     * [[all]], which collects every visited focus via `Applicative[List]`.
@@ -266,10 +266,10 @@ object Optic:
   )(using FT: ForgetfulTraverse[F, Applicative])
 
     inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
-      s => FT.traverse(using G)(o.to(s))(f).map(o.from)
+      s => FT.traverse(o.to(s), f)(using G).map(o.from)
 
     inline def all(s: S): List[F[o.X, A]] =
-      FT.traverse(using Applicative[List])(o.to(s))(List(_))
+      FT.traverse(o.to(s), List(_))(using Applicative[List])
 
   /** `foldMap` over the focus — the primary consumption path for [[Fold]] and any other carrier
     * with a `ForgetfulFold[F]` instance. Combines every focus through `Monoid[M]`.
@@ -281,7 +281,7 @@ object Optic:
   )(using FF: ForgetfulFold[F])
 
     inline def foldMap[M: Monoid](f: A => M): S => M =
-      s => FF.foldMap(using Monoid[M])(f)(o.to(s))
+      s => FF.foldMap(f, o.to(s))
 
     /** First focus visible through the optic, if any. Available on any carrier admitting
       * `ForgetfulFold[F]` — `Forget[F]` (Fold), `MultiFocus[F]` (Traversal), `Affine` (Optional /

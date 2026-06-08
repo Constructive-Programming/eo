@@ -37,14 +37,12 @@ object Direct:
   /** Identity read; unlocks `.get` on Iso / Getter. @group Instances */
   given accessor: Accessor[Direct] with
 
-    def get[A]: [X] => Direct[X, A] => A =
-      [X] => (fa: Direct[X, A]) => fa
+    def get[X, A](fa: Direct[X, A]): A = fa
 
   /** Identity write; unlocks `.reverseGet` on Iso. @group Instances */
   given reverseAccessor: ReverseAccessor[Direct] with
 
-    def reverseGet[A]: [X] => A => Direct[X, A] =
-      [X] => (a: A) => a
+    def reverseGet[X, A](a: A): Direct[X, A] = a
 
   /** `pure[X, A] = a`; unlocks `.put` on Iso / Getter. @group Instances */
   given applicative: ForgetfulApplicative[Direct] with
@@ -61,8 +59,8 @@ object Direct:
     */
   given traverse: ForgetfulTraverse[Direct, Invariant] with
 
-    def traverse[X, A, B, G[_]: Invariant]: Direct[X, A] => (A => G[B]) => G[Direct[X, B]] =
-      fa => _(fa)
+    def traverse[X, A, B, G[_]: Invariant](fa: Direct[X, A], f: A => G[B]): G[Direct[X, B]] =
+      f(fa)
 
   /** Lets `Direct`-carrier optics compose; `Z = Nothing` since Direct has no leftover.
     *

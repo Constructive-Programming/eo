@@ -203,13 +203,13 @@ object MultiFocus:
 
   given mfFold[F[_]: Foldable]: ForgetfulFold[MultiFocus[F]] with
 
-    def foldMap[X, A, M: Monoid]: (A => M) => ((X, F[A])) => M =
-      f => xa => Foldable[F].foldMap(xa._2)(f)
+    def foldMap[X, A, M: Monoid](f: A => M, xa: (X, F[A])): M =
+      Foldable[F].foldMap(xa._2)(f)
 
   given mfTraverse[F[_]: Traverse]: ForgetfulTraverse[MultiFocus[F], Applicative] with
 
-    def traverse[X, A, B, G[_]: Applicative]: ((X, F[A])) => (A => G[B]) => G[(X, F[B])] =
-      xa => f => Applicative[G].map(Traverse[F].traverse(xa._2)(f))(fb => (xa._1, fb))
+    def traverse[X, A, B, G[_]: Applicative](xa: (X, F[A]), f: A => G[B]): G[(X, F[B])] =
+      Applicative[G].map(Traverse[F].traverse(xa._2)(f))(fb => (xa._1, fb))
 
   // Same-carrier composition — F-parametric, with `MultiFocusSingleton` fast-path on the inner.
 
