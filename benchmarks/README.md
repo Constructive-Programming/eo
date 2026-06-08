@@ -201,13 +201,11 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-All three PowerSeries benches scale **linearly** with traversed-collection size; the eo-to-naive ratios tighten as size grows (fixed per-op setup amortises).
+Both `eo` and the hand-written `naive` scale **linearly** in traversed-collection size — verified over the widened sweeps: per-element cost (`ns ÷ element`) flattens once the fixed per-op setup amortises, and a log-log fit gives slopes of **0.9–1.0** for every eo/naive series. The eo-to-naive overhead then settles:
 
-Current eo-to-naive ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries-traversal-with-downstream-composition) for full tables incl. the Monocle peer):
-
-- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 4.6× at N=4 → 2.7× at N=1024.
-- **`PowerSeriesNestedBench` (5-hop tree):** 5.0× at N=4 → 3.2× at N=256.
-- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.2–5.6× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
+- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** ~2.7× by N=4096 (4.6× at N=4); eo slope 0.91, naive 0.96.
+- **`PowerSeriesNestedBench` (5-hop tree):** ~3.0× by N=1024 (5.0× at N=4); eo slope 0.83, naive 0.91.
+- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.0–5.6× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost; eo slope 0.98, naive 0.97.
 
 Under the hood the hot paths use two private fast-path markers on the `MultiFocus[PSVec]` carrier. Prism/Optional morphs mix in `MultiFocusPSMaybeHit` (maybe-hit), whose `collectTo` writes directly into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders (`IntArrBuilder` / `ObjArrBuilder`) without per-element `Either`/`Option` wrappers. Lens morphs mix in the carrier-wide `MultiFocusSingleton` (always-hit), which additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
 

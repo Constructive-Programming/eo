@@ -287,24 +287,43 @@ with Monocle (`Lens.andThen(Traversal.fromTraverse).andThen(Lens)`,
 there too, so it's a fair peer. `Traversal.each` (carrier `MultiFocus[PSVec]`) is
 EO's vehicle for all three; a `@Setup` guard asserts the three paths agree.
 
-| Chain (bench) | Size | eo | naive | monocle | eo ÷ naive |
+| Chain (bench) | N | eo | naive | monocle | eo ÷ naive |
 |---|--:|--:|--:|--:|--:|
-| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 29 | 191 | 4.6× |
-| | 32 | 505 | 219 | 1 063 | 2.3× |
-| | 256 | 3 492 | 1 690 | 21 367 | 2.1× |
-| | 1024 | 15 784 | 5 820 | 58 237 | 2.7× |
-| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 724 | 145 | 1 326 | 5.0× |
-| | 32 | 2 365 | 755 | 4 420 | 3.1× |
-| | 256 | 16 655 | 5 244 | 93 715 | 3.2× |
-| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 134 | 26 | 279 | 5.2× |
-| | 64 | 748 | 161 | 1 853 | 4.6× |
-| | 512 | 7 179 | 1 292 | 31 386 | 5.6× |
+| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 29 | 194 | 4.6× |
+| | 16 | 293 | 111 | 541 | 2.6× |
+| | 64 | 903 | 427 | 2 060 | 2.1× |
+| | 256 | 3 498 | 1 687 | 21 532 | 2.1× |
+| | 1024 | 15 900 | 5 811 | 58 058 | 2.7× |
+| | 4096 | 62 386 | 23 131 | 185 078 | 2.7× |
+| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 728 | 145 | 1 088 | 5.0× |
+| | 16 | 1 425 | 414 | 2 382 | 3.4× |
+| | 64 | 4 437 | 1 479 | 8 889 | 3.0× |
+| | 256 | 16 392 | 5 261 | 92 646 | 3.1× |
+| | 1024 | 68 326 | 22 588 | 254 182 | 3.0× |
+| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 135 | 26 | 277 | 5.2× |
+| | 32 | 447 | 84 | 951 | 5.3× |
+| | 128 | 1 613 | 325 | 3 818 | 5.0× |
+| | 512 | 7 254 | 1 294 | 32 455 | 5.6× |
+| | 2048 | 29 246 | 5 590 | 97 415 | 5.2× |
 
-Against the hand-written `naive` baseline all three scale **linearly**: the
-`eo ÷ naive` overhead is largest on tiny inputs (fixed per-op setup dominates) and
-settles around 2–3× on the dense Lens and nested chains as element work amortises;
-the sparse-Prism shape holds ~5× because the miss branch carries inherent
-per-element plumbing.
+Both `eo` and the hand-written `naive` track **O(N)**. The test is per-element
+cost (`ns ÷ element`, traversing `N` leaves — `4N` for the nested tree): once the
+fixed per-op setup amortises past the smallest `N`, it flattens to a constant.
+
+| Chain | eo `ns ÷ element` (N small → large) | naive `ns ÷ element` | log-log slope (eo / naive) |
+|---|---|---|--:|
+| `Lens → each → Lens` | 33 → 18 → 14 → 14 → 16 → 15 | 7.2 → 6.9 → 6.7 → 6.6 → 5.7 → 5.7 | 0.91 / 0.96 |
+| 5-hop tree | 46 → 22 → 17 → 16 → 17 | 9.1 → 6.5 → 5.8 → 5.1 → 5.5 | 0.83 / 0.91 |
+| `each → Prism` | 17 → 14 → 13 → 14 → 14 | 3.2 → 2.6 → 2.5 → 2.5 → 2.7 | 0.98 / 0.97 |
+
+A least-squares fit on `log(time)` vs `log(N)` gives slopes of **0.9–1.0** for
+every eo and naive series (a slope of 1 is exact linearity; the dip below 1 is the
+small-`N` fixed cost, which makes the curve concave — i.e. it rules out
+*super*-linear growth, not linearity). Error bars are ≤3.4% on all eo/naive
+points, so the flattening is signal, not noise. The `eo ÷ naive` overhead settles
+at ~2–3× on the dense Lens and nested chains and ~5× on the sparse Prism (whose
+miss branch carries inherent per-element plumbing). `monocle` is shown for
+reference; its scaling on the shared runner is noisier and not characterised here.
 
 Under the hood the carrier pairs an existential leftover with a flat `PSVec`
 focus vector (`Array[AnyRef]` + an `(offset, length)` window), and two internal
