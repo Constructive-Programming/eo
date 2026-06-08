@@ -18,10 +18,14 @@ All figures are **average time per operation in nanoseconds (ns/op); lower is
 better.** Absolute numbers vary by hardware — the *ratios* are the durable
 signal.
 
-Every table on this page comes from the same reproducible **`benchmarks.yml` CI
-workflow** (ubuntu-22.04 / temurin@21, `-f 3 -wi 3 -i 5`, error half-widths
-≤ ~5 %, mostly ≤ 2 %), so the numbers are comparable across sections and anyone
-with Actions access can re-run them.
+Every table comes from the reproducible **`benchmarks.yml` CI workflow** (always
+the same environment — ubuntu-22.04 / temurin@21, `-f 3 -wi 3 -i 5`, error
+half-widths ≤ ~5 %, mostly ≤ 2 %), and anyone with Actions access can re-run it.
+The figures are gathered across **several runs** of that workflow, though — each
+table is refreshed when its bench changes, so a table is internally consistent
+(one run) but two tables may come from different run instances. Since each run is
+a fresh shared VM, treat *cross-table* absolute comparisons loosely; within a
+table, and for the ratios everywhere, the signal holds.
 
 > **JMH caveat.** A shared CI runner still isn't a tuned, quiet desktop, so read
 > these as reproducible *directional* data — the shape and the ratios — not
