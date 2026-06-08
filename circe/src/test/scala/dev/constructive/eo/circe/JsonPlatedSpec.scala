@@ -1,14 +1,13 @@
 package dev.constructive.eo
 package circe
 
+import dev.constructive.eo.laws.PlatedLaws
+import dev.constructive.eo.laws.discipline.PlatedTests
+import dev.constructive.eo.optics.Plated
 import io.circe.Json
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
-
-import dev.constructive.eo.laws.PlatedLaws
-import dev.constructive.eo.laws.discipline.PlatedTests
-import dev.constructive.eo.optics.Plated
 
 object JsonPlatedFixtures:
 

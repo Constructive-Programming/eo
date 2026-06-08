@@ -1,14 +1,16 @@
 package dev.constructive.eo
 
+import dev.constructive.eo.data.MultiFocus.given
+import dev.constructive.eo.generics.plate
+import dev.constructive.eo.optics.Optic.* // .andThen / .modify
+
+import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
+
+import dev.constructive.eo.optics.{Lens, Plated, Prism}
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-import dev.constructive.eo.data.MultiFocus.given
-import dev.constructive.eo.generics.plate
-import dev.constructive.eo.optics.{Lens, Plated, Prism}
-import dev.constructive.eo.optics.Optic.* // .andThen / .modify
-import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
 import laws.PlatedLaws
 import laws.discipline.PlatedTests
 

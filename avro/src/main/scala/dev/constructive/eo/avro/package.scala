@@ -1,11 +1,10 @@
 package dev.constructive.eo
 
 import cats.Eq
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
-
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
+import org.apache.avro.Schema
+import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
   *

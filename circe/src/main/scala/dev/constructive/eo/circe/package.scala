@@ -1,9 +1,8 @@
 package dev.constructive.eo
 
-import io.circe.{Decoder, Encoder, Json, JsonObject}
-
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
+import io.circe.{Decoder, Encoder, Json, JsonObject}
 
 /** Cross-representation optics bridging native Scala types and their circe-serialised form.
   *
