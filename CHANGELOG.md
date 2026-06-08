@@ -62,6 +62,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Optic composition is `inline` at the fused composers — deep chains no longer
+  hit the JIT's recursive-inline cap.** The same-carrier fused `andThen` on
+  `DirectGetter` / `GetReplaceLens` / `BijectionIso` / `SetterOptic` /
+  `MendTearPrism` / `PickMendPrism` / `Optional` is now `inline`. A plain `def`
+  compiled the composer's `s => inner.get(get(s))` lambda once, so a depth-N
+  runtime chain reused that single bytecode and HotSpot's C2 treated the cascade
+  as recursion — capping inlining at `MaxRecursiveInlineLevel` and leaving the deep
+  tail as virtual `Function1.apply`. `inline` splices a *distinct* lambda per
+  compose site (distinct synthetic methods per level), so the chain inlines fully
+  with no JVM flag — the effect Monocle gets from a fresh anonymous class per
+  compose. CI (`-f 3 -wi 3 -i 5`) at depth 6: Getter 27.2→11.8 ns, Setter 44→26 ns,
+  Optional `modify` 139→94 ns — EO now **1.3–2.3× faster** than the equivalent
+  Monocle composition (was 1.3–2.8× slower). Terminal mixed-carrier overloads
+  (`Lens→Optional` etc.) fire once per chain and stay plain `def`. Behaviour
+  identical; pre-1.0, no MiMa baseline.
+
 - **circe JSON array-write traversal now matches hand-written AST surgery.**
   `JsonWalk.walkPath` / `rebuildPath` (the per-element backbone of `JsonTraversal`
   writes) converted the immutable `path: Array[PathStep]` to a `Vector` /
@@ -80,9 +96,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   at compose time — the same fused-subclass shape as `Lens` / `Iso` / `Getter`.
   Previously two `Setter`s composed only through the generic
   `AssociativeFunctor[SetterF]`, which allocated a fresh `SetterF` per hop at
-  *modify* time. `SetterBench` (CI, `-f 3 -wi 3 -i 5`) goes from ~2.8× Monocle at
-  depth to parity: depth-3 368→168 B/op (21.2 vs 20.4 ns), depth-6 800→288 B/op
-  (44.1 vs 41.0 ns). Cross-carrier composition (`lens.andThen(setter)` via
+  *modify* time. `SetterBench` (CI, `-f 3 -wi 3 -i 5`) allocation goes from ~2.8×
+  Monocle at depth to parity: depth-3 368→168 B/op, depth-6 800→288 B/op (==
+  Monocle). The fused composer is also `inline` (see the composition entry above),
+  which removes the dispatch overhead too — net, Setter composition is now *faster*
+  than Monocle at depth (depth-6 26 vs 60 ns). Cross-carrier composition
+  (`lens.andThen(setter)` via
   `Morph[Tuple2, SetterF]`) still routes through `assocSetterF`. Pre-1.0, no MiMa
   baseline; `Setter.apply`'s return type widened from `Optic[…, SetterF]` to the
   subtype `SetterOptic[…]` (source-compatible).

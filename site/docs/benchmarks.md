@@ -82,46 +82,47 @@ auto-lifts each hop):
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `modify_0` (Some)  |  26.79 | 23.08 |
-| `modify_0` (None)  |   1.51 |  0.99 |
-| `replace_0`        |   5.19 |  3.67 |
-| `modify_3`         |  56.30 | 66.64 |
-| `modify_6`         | 176.41 | 107.96 |
-| `loyaltyId` (Some) |  31.06 | 20.33 |
-| `loyaltyId` (None) |   1.67 |  1.07 |
+| `modify_0` (Some)  | 26.60 | 22.24 |
+| `modify_0` (None)  |  1.58 |  0.95 |
+| `replace_0`        |  4.84 |  3.30 |
+| `modify_3`         | 46.83 | 71.61 |
+| `modify_6`         | 94.18 | 118.86 |
+| `loyaltyId` (Some) | 27.89 | 20.60 |
+| `loyaltyId` (None) |  1.71 |  1.10 |
 
-Competitive across depths: the cross-carrier Lens→Optional chain actually
-*beats* Monocle's native composition at depth 3 (the `Morph[Tuple2, Affine]`
-lift fuses well), and trails ~1.6× at depth 6 where `Affine`'s per-hop branching
-adds up against Monocle's `Option`-specialised internals. The `loyaltyId` rows
-are the canonical `customer.loyaltyId: Option[String]` focus (in memory — Avro
-omits it as a union), Some and None branches.
+EO **beats Monocle at composition depth** — `modify_3` ~1.5× and `modify_6` ~1.26×
+faster — after the fused `andThen` composers became `inline`: each compose site
+splices distinct lambdas, so a deep chain no longer reuses one shared
+`andThen$$anonfun$` bytecode and trips C2's recursive-inline cap (previously
+`modify_6` trailed ~1.6×). Monocle still edges the *single-hit leaf*
+(`modify_0` / `loyaltyId` Some) via its `Option`-specialised internals — EO's
+`Affine` leaf carries a touch more per-hit plumbing. The `loyaltyId` rows are the
+canonical `customer.loyaltyId: Option[String]` focus (in memory — Avro omits it
+as a union), Some and None branches.
 
 **Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`. Both
-families now compose through the ordinary `.andThen` (Getter via the fused
-`DirectGetter.andThen`; Setter via `SetterF`'s `AssociativeFunctor`), so every
-row builds a *composed* optic on both sides and dispatches through it once —
-apples-to-apples with Monocle's composed `Getter`/`Setter`.
+families compose through the fused **`inline` `andThen`** on their concrete
+subclasses (`DirectGetter` / `SetterOptic`), so every row builds a *composed*
+optic on both sides and dispatches through it once — apples-to-apples with
+Monocle's composed `Getter`/`Setter`.
 
 | Depth | Getter eo | Getter Monocle | Setter eo | Setter Monocle |
 |---|--:|--:|--:|--:|
-| `_0` |  0.73 |  0.41 |  1.86 |  1.86 |
-| `_3` | 12.16 |  6.84 | 21.23 | 20.41 |
-| `_6` | 27.23 | 21.18 | 44.14 | 41.05 |
+| `_0` |  0.93 |  0.49 |  2.24 |  2.24 |
+| `_3` |  5.36 |  8.18 | 11.58 | 26.11 |
+| `_6` | 11.82 | 25.90 | 26.10 | 60.05 |
 
-Near-parity at the leaf (`order.id`, the canonical scalar focus, reads at the
-same `_0` cost). **Setter now composes at parity** (`_3` 21.2 vs 20.4, `_6` 44.1
-vs 41.0, ~1.04–1.08×): `Setter.apply` returns a concrete `SetterOptic` whose fused
-`andThen` composes the writer functions directly (`modify(g) ==
-outer.modify(inner.modify(g))`), building the chain once at compose time — the
-same fused-subclass shape as `Lens` / `Iso` / `Getter`, bypassing the generic
-`AssociativeFunctor[SetterF]` and the per-hop `SetterF` allocation it incurred
-(depth-6 dropped 800→288 B/op, exactly Monocle's allocation). Getter still trails
-Monocle ~1.3–1.8× at depth because its composed optic is a chain of `s =>
-g2.get(g1.get(s))` closures that don't flatten as well — a remaining optimization
-target. *(Earlier docs showed EO winning ~6× at depth on Getter; that compared
-EO's hand-nested, inlined `.get` against Monocle's composed optic — not the same
-thing.)*
+EO **beats Monocle ~1.5–2.3× at composition depth** for both families. The lever
+is `inline` on the same-carrier `andThen`: each compose site splices a *distinct*
+lambda, so a depth-N chain becomes distinct synthetic methods per level. A plain
+`def` reuses one shared `andThen$$anonfun$` bytecode across the chain, which C2
+reads as recursion and caps (`MaxRecursiveInlineLevel`), leaving the deep tail as
+virtual `Function1.apply`; splicing distinct lambdas sidesteps that cap with no
+JVM flag (the effect Monocle gets from a fresh anonymous class per compose).
+Setter additionally sheds its per-hop `SetterF` allocation (the fused
+`SetterOptic` writes through `modifyFn` directly: depth-6 800→288 B/op). At the
+scalar leaf (`_0`, `order.id`) Monocle edges EO by a few tenths of a ns — the
+sub-nanosecond floor where its specialised case classes shave the last field load.
 
 **Fold / Traversal** — Fold `foldMap(identity)` over `List[Int]`; Traversal
 `each.modify` over the canonical `Order.lines` (bump each line's `qty`), sweeping
