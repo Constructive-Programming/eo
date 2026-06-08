@@ -67,7 +67,9 @@ private[circe] object JsonWalk:
     *
     * Manual index loop rather than a `foldLeftM` over `path.toVector`: this runs once per array
     * element on a Traversal write, so the per-call `Array → Vector` copy and the `Either`-monad
-    * fold machinery were pure churn. Behaviour is identical — first `Left` short-circuits.
+    * fold machinery were pure churn. Behaviour is identical — first `Left` short-circuits (the
+    * `failure` flag ends the loop; no `return`, per the `DisableSyntax` scalafix rule). The happy
+    * path allocates nothing extra; `Some(f)` is built only on the cold miss branch.
     */
   def walkPath(
       json: Json,
@@ -76,15 +78,18 @@ private[circe] object JsonWalk:
   ): Either[JsonFailure, State] =
     var cur: Json = json
     var parents: Vector[AnyRef] = Vector.empty
+    var failure: Option[JsonFailure] = None
     var i = 0
-    while i < path.length do
+    while failure.isEmpty && i < path.length do
       stepInto(path(i), cur, parents, policy) match
-        case Left(failure)        => return Left(failure)
+        case Left(f)              => failure = Some(f)
         case Right((c, parents2)) =>
           cur = c
           parents = parents2
       i += 1
-    Right((cur, parents))
+    failure match
+      case Some(f) => Left(f)
+      case None    => Right((cur, parents))
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't an array") needs to
