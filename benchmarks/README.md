@@ -142,8 +142,8 @@ The vocabulary is consistent across backends:
   *slower* than a full decode) vs direct `JsonObject` surgery (rebuild only the
   touched parents).
 - `monocle*` — decode to the case class, run a Monocle optic, re-encode. Monocle
-  has no byte/AST carrier, so it must pay the full round-trip — this is where
-  EO's structural-edit advantage shows.
+  has no byte/AST carrier, so it pays the same full round-trip as `naive*` — it's
+  a reference point alongside the hand-written baseline, not a separate story.
 
 | Bench class          | Foci | Baselines | Notes |
 |----------------------|------|-----------|-------|
