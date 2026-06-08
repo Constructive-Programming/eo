@@ -86,8 +86,16 @@ class GetReplaceLens[S, T, A, B](
     * `enplace`, skipping the generic `AssociativeFunctor[Tuple2]` round-trip. Scala's overload
     * resolution picks this when both sides are statically `GetReplaceLens`; for mixed-shape
     * composition the inherited generic `Optic.andThen` fires.
+    *
+    * `inline` so each compose site splices its own `get` / `enplace` lambdas (distinct synthetic
+    * methods per level). A plain `def` shares one `andThen$$anonfun$*` across a depth-N chain, so
+    * C2 reads the `.get` / `.enplace` cascade as recursion and caps inlining at
+    * `MaxRecursiveInlineLevel`, leaving the deep tail as virtual `Function1.apply` — the same
+    * same-bytecode trap fixed on [[DirectGetter.andThen]]. This is the recursive composer, so it's
+    * the one that matters for deep chains; the terminal mixed-carrier overloads below fire once and
+    * stay plain `def` to avoid duplicating their larger bodies.
     */
-  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
+  inline def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
       get = s => inner.get(get(s)),
       enplace = (s, d) => enplace(s, inner.enplace(get(s), d)),

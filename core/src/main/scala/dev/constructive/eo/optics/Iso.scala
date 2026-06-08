@@ -46,8 +46,11 @@ final class BijectionIso[S, T, A, B](
     val t = reverseGet(b)
     _ => t
 
-  /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. */
-  def andThen[C, D](inner: BijectionIso[A, B, C, D]): BijectionIso[S, T, C, D] =
+  /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. `inline` so each compose
+    * site splices distinct lambdas, keeping a deep `iso.andThen(iso)…` chain under C2's
+    * recursive-inline cap (see [[DirectGetter.andThen]] / [[GetReplaceLens.andThen]]).
+    */
+  inline def andThen[C, D](inner: BijectionIso[A, B, C, D]): BijectionIso[S, T, C, D] =
     new BijectionIso(
       get = s => inner.get(get(s)),
       reverseGet = d => reverseGet(inner.reverseGet(d)),
