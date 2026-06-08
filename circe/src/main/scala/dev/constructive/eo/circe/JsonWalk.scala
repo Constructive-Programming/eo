@@ -1,6 +1,5 @@
 package dev.constructive.eo.circe
 
-import cats.syntax.foldable.*
 import io.circe.{Json, JsonObject}
 
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
@@ -65,15 +64,27 @@ private[circe] object JsonWalk:
 
   /** Walk an entire `path` from `json`, accumulating parents at each step. Strict by default — pass
     * `OnMissingField.Lenient` to tolerate missing field-steps as `Json.Null` leaves.
+    *
+    * Manual index loop rather than a `foldLeftM` over `path.toVector`: this runs once per array
+    * element on a Traversal write, so the per-call `Array → Vector` copy and the `Either`-monad fold
+    * machinery were pure churn. Behaviour is identical — first `Left` short-circuits.
     */
   def walkPath(
       json: Json,
       path: Array[PathStep],
       policy: OnMissingField = OnMissingField.Strict,
   ): Either[JsonFailure, State] =
-    path.toVector.foldLeftM[[T] =>> Either[JsonFailure, T], State]((json, Vector.empty)) {
-      case ((cur, parents), step) => stepInto(step, cur, parents, policy)
-    }
+    var cur: Json = json
+    var parents: Vector[AnyRef] = Vector.empty
+    var i = 0
+    while i < path.length do
+      stepInto(path(i), cur, parents, policy) match
+        case Left(failure)       => return Left(failure)
+        case Right((c, parents2)) =>
+          cur = c
+          parents = parents2
+      i += 1
+    Right((cur, parents))
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't an array") needs to
@@ -82,16 +93,25 @@ private[circe] object JsonWalk:
   inline def terminalOf(path: Array[PathStep]): PathStep =
     if path.length == 0 then PathStep.Field("") else path(path.length - 1)
 
-  /** Rebuild a Json from the leaf back to the root, using the parents collected during a walk. */
+  /** Rebuild a Json from the leaf back to the root, using the parents collected during a walk.
+    *
+    * Manual reverse index loop rather than `parents.zip(path.toIndexedSeq).foldRight(...)`: like
+    * [[walkPath]] this runs per array element on a Traversal write, so the per-call `Array →
+    * IndexedSeq` copy, the `zip` pair allocation, and the `foldRight` machinery were pure churn.
+    * `parents` is the prefix of `path` collected during the walk (`parents.length <= path.length`),
+    * so index `i` lines up. Behaviour is identical.
+    */
   def rebuildPath(
       parents: Vector[AnyRef],
       path: Array[PathStep],
       newLeaf: Json,
   ): Json =
-    parents.zip(path.toIndexedSeq).foldRight(newLeaf) {
-      case ((parent, step), child) =>
-        rebuildStep(parent, step, child)
-    }
+    var child = newLeaf
+    var i = parents.length - 1
+    while i >= 0 do
+      child = rebuildStep(parents(i), path(i), child)
+      i -= 1
+    child
 
   /** Splice `child` into `parent` at `step`. The parent's runtime shape is determined by the step
     * kind: Field steps require a JsonObject; Index steps require a `Vector[Json]`.
