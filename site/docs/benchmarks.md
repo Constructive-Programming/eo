@@ -47,39 +47,39 @@ where present, is the two libraries head to head.
 
 | Operation | eo | Monocle | ratio |
 |---|--:|--:|--:|
-| `get` (`id`)          |  1.04 |  1.19 | 1.14× |
-| `replace` (`id`)      |  3.52 |  3.17 | 0.90× |
-| `modify` (`id`)       |  4.06 |  4.05 | 1.00× |
-| `modify` (deep `street`) | 38.93 | 32.84 | 0.84× |
+| `get` (`id`)          |  1.15 |  1.30 | 1.13× |
+| `replace` (`id`)      |  5.16 |  5.13 | 0.99× |
+| `modify` (`id`)       |  5.42 |  5.68 | 1.05× |
+| `modify` (deep `street`) | 36.68 | 31.70 | 0.86× |
 
 The cost over hand-written field access is essentially nil. `GetReplaceLens`
 stores `get` / `enplace` as plain fields and specialises its fused `modify`, so
 the hot path is a two-function composition — no `(X, A)` tuple allocation — and
 `get` lands within a few tenths of a ns of a bare `order.id`. Monocle sits in the
 same place. **Monocle is faster on the depth-3 `street` modify** (~1.2×): both
-rebuild the same three records, but EO routes that chain through its generic
-existential carrier, which carries a touch more per-hop plumbing than Monocle's
-purpose-built `case class Lens`. We pay that to keep one carrier across every
-optic family; depth-3 is where it first shows.
+rebuild the same three records through a fused composed optic (EO's `inline`
+`GetReplaceLens.andThen`, Monocle's composed `Lens`), and EO's per-hop
+`get`/`enplace` closure pair carries a touch more indirection than Monocle's
+purpose-built `case class Lens` — a small constant that first shows at depth 3.
 
 **Prism** (`Either` carrier) — `Option[Int]` plus an `Either[String, Int]`
 Right-prism:
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `getOption` Some | 0.93 | 1.06 |
-| `getOption` None | 0.93 | 1.06 |
-| `reverseGet`     | 2.33 | 2.40 |
-| Right `getOption` (Right) | 2.50 | 2.65 |
-| Right `getOption` (Left)  | 1.08 | 1.17 |
-| Right `reverseGet`        | 2.34 | 2.41 |
+| `getOption` Some | 1.01 | 1.15 |
+| `getOption` None | 1.01 | 1.15 |
+| `reverseGet`     | 2.64 | 2.69 |
+| Right `getOption` (Right) | 2.80 | 2.87 |
+| Right `getOption` (Left)  | 1.16 | 1.30 |
+| Right `reverseGet`        | 2.63 | 2.68 |
 
 **Iso** (`Direct` carrier) — `Address ↔ (String, String, String, String)`:
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `get`        | 3.78 | 3.99 |
-| `reverseGet` | 3.35 | 3.25 |
+| `get`        | 4.89 | 4.93 |
+| `reverseGet` | 4.29 | 4.40 |
 
 `BijectionIso` stores both directions as plain fields — same shape and
 direct-call hot path as Monocle's `case class Iso`. (`Direct` is now an `opaque
@@ -92,20 +92,20 @@ auto-lifts each hop):
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `modify_0` (Some)  | 26.60 | 22.24 |
-| `modify_0` (None)  |  1.58 |  0.95 |
-| `replace_0`        |  4.84 |  3.30 |
-| `modify_3`         | 46.83 | 71.61 |
-| `modify_6`         | 94.18 | 118.86 |
-| `loyaltyId` (Some) | 27.89 | 20.60 |
-| `loyaltyId` (None) |  1.71 |  1.10 |
+| `modify_0` (Some)  | 26.94 | 23.01 |
+| `modify_0` (None)  |  1.51 |  0.98 |
+| `replace_0`        |  5.19 |  3.67 |
+| `modify_3`         | 46.37 | 66.24 |
+| `modify_6`         | 92.10 | 113.55 |
+| `loyaltyId` (Some) | 31.38 | 20.56 |
+| `loyaltyId` (None) |  1.67 |  1.07 |
 
 At composition depth the per-hop cost stays low: `modify_3` and `modify_6` track
 the work of a hand-written nested `copy` with an `Option` match at the leaf, since
 the fused `andThen` composers are `inline` — each compose site splices distinct
 lambdas, so a deep chain doesn't reuse one shared `andThen$$anonfun$` bytecode and
 trip C2's recursive-inline cap (before that, `modify_6` was ~1.6× slower). Monocle
-lands a little behind here (`modify_3` ~1.5×, `modify_6` ~1.26×). **Monocle is
+lands a little behind here (`modify_3` ~1.4×, `modify_6` ~1.2×). **Monocle is
 faster at the single-hit leaf** (`modify_0` / `loyaltyId` Some) — its
 `Option`-specialised internals shave the per-hit cost EO's generic `Affine` leaf
 carries to stay uniform across families. The `loyaltyId` rows are the canonical
@@ -120,9 +120,9 @@ Monocle's composed `Getter`/`Setter`.
 
 | Depth | Getter eo | Getter Monocle | Setter eo | Setter Monocle |
 |---|--:|--:|--:|--:|
-| `_0` |  0.93 |  0.49 |  2.24 |  2.24 |
-| `_3` |  5.36 |  8.18 | 11.58 | 26.11 |
-| `_6` | 11.82 | 25.90 | 26.10 | 60.05 |
+| `_0` |  0.95 |  0.54 |  2.34 |  2.34 |
+| `_3` |  5.12 |  8.81 | 12.21 | 26.30 |
+| `_6` | 11.30 | 27.50 | 26.42 | 52.26 |
 
 At composition depth both families stay close to the hand-written baseline — a
 depth-N chain of `.get` calls, or a nested `copy` for the setter. The lever is
@@ -134,7 +134,7 @@ virtual `Function1.apply`; splicing distinct lambdas sidesteps that cap with no
 JVM flag. Setter additionally sheds its per-hop `SetterF` allocation (the fused
 `SetterOptic` writes through `modifyFn` directly: depth-6 800→288 B/op). Monocle
 gets the same un-capped inlining from a fresh anonymous class per compose, and
-trails here (~1.5–2.3× at `_3`/`_6`). **Monocle is faster at the scalar leaf**
+trails here (~1.7–2.4× at `_3`/`_6`). **Monocle is faster at the scalar leaf**
 (`_0`, `order.id`) by a few tenths of a ns — the sub-nanosecond floor where its
 specialised case classes shave the last field load and EO's generic carrier does
 not.
@@ -145,9 +145,9 @@ size:
 
 | Size | Fold eo | Fold Monocle | Traversal eo | Traversal Monocle | Traversal speedup |
 |---|--:|--:|--:|--:|--:|
-| 8   |    20.1 |    20.4 |   114.8 |    241.4 | 2.1× |
-| 64  |   325.0 |   307.1 | 1 035.5 |  1 778.4 | 1.7× |
-| 512 | 4 535.0 | 4 494.7 | 8 735.5 | 34 868.1 | 4.0× |
+| 8   |    20.1 |    20.4 |   122.4 |    364.0 | 3.0× |
+| 64  |   325.0 |   307.1 |   954.1 |  2 373.4 | 2.5× |
+| 512 | 4 535.0 | 4 494.7 | 8 153.8 | 38 221.2 | 4.7× |
 
 The hand-written reference is a bare `foldLeft` for the fold and an `xs.map` +
 `copy` for the traversal. **Fold is on par with Monocle** (0.98–1.06× across sizes)
@@ -167,7 +167,7 @@ it). The traversal is where the carriers genuinely diverge: EO's `each` (carrier
 `MultiFocus[PSVec]`) collects element references into a flat focus vector and
 rebuilds via `Functor[PSVec].map`, where Monocle wraps each element in
 `Applicative[Id]` — so EO tracks the hand-written `map` more closely and
-Monocle trails, widening to ~4× by 512 line items (each element pays a `LineItem`
+Monocle trails, widening to ~4.7× by 512 line items (each element pays a `LineItem`
 copy that dwarfs the carrier difference).
 
 ## Integration: edit without decoding
@@ -191,22 +191,23 @@ Scalar deep edit, `customer.address.street`:
 
 | size | eo (Unsafe) | eo (Ior) | hcursor | direct | naive | monocle | eo vs naive |
 |--:|--:|--:|--:|--:|--:|--:|--:|
-| 8   | 1 277 | 1 318 | 1 163 | 1 071 |   4 124 |   4 127 |   3.2× |
-| 64  | 1 283 | 1 334 | 1 170 | 1 067 |  25 695 |  24 506 |    20× |
-| 512 | 1 274 | 1 387 | 1 166 | 1 075 | 208 089 | 210 073 |   163× |
+| 8   | 1 050 | 1 059 | 1 080 | 1 013 |   3 748 |   3 769 |   3.6× |
+| 64  | 1 064 | 1 062 | 1 082 | 1 009 |  24 147 |  24 510 |    23× |
+| 512 | 1 058 | 1 059 | 1 068 | 1 015 | 220 535 | 212 179 |   208× |
 
-The edit is **flat** (~1.3 µs at any size); `naive` / `monocle` scale with the
+The edit is **flat** (~1.05 µs at any size); `naive` / `monocle` scale with the
 whole payload. `direct` `JsonObject` surgery is the fastest hand form (what
-`JsonPrism` mirrors); `hcursor` is competitive. The `Ior` surface costs ~40–110 ns
-(one allocation) over `*Unsafe`.
+`JsonPrism` mirrors); `hcursor` is competitive. On this scalar path the `Ior`
+surface is within noise of `*Unsafe` (≤~10 ns); the per-element `Ior` cost shows
+up only on the array traversal below.
 
 Array write-traversal, `lines[*].name`:
 
 | size | eo (Unsafe) | eo (Ior) | hcursor | direct | naive | monocle |
 |--:|--:|--:|--:|--:|--:|--:|
-| 8   |   4 195 |   4 222 |   4 040 |   4 009 |   3 955 |   4 344 |
-| 64  |  30 294 |  33 181 |  30 299 |  29 757 |  26 493 |  27 910 |
-| 512 | 249 409 | 270 847 | 247 216 | 245 600 | 222 527 | 251 872 |
+| 8   |   4 273 |   4 335 |   4 076 |   4 117 |   3 953 |   4 328 |
+| 64  |  30 927 |  32 828 |  29 733 |  29 729 |  26 514 |  26 713 |
+| 512 | 246 620 | 274 840 | 248 995 | 244 976 | 223 026 | 259 373 |
 
 Honest result: a whole-array rewrite is O(elements) for everyone, so the cursor
 walk has no *structural* edge — but EO's `JsonTraversal` now lands right on the
@@ -226,20 +227,20 @@ Scalar `customer.address.street` (`loyaltyId` is omitted — kindlings encodes
 
 | size | eo read | naive read | eo modify | naive modify | read speedup | modify speedup |
 |--:|--:|--:|--:|--:|--:|--:|
-| 8   | 35.5 |   4 995 | 139 |   6 361 |   141× |    46× |
-| 64  | 35.2 |  32 469 | 134 |  39 429 |   922× |   294× |
-| 512 | 36.1 | 244 717 | 137 | 315 918 | 6 780× | 2 310× |
+| 8   | 37.7 |   3 171 | 143 |   4 501 |    84× |    31× |
+| 64  | 37.8 |  18 905 | 145 |  25 774 |   500× |   178× |
+| 512 | 37.7 | 143 746 | 144 | 220 923 | 3 813× | 1 539× |
 
-The flat-vs-linear story at its extreme: a field read is **~35 ns regardless of
-record size**, a ~6 800× gap by 512 line items. Array write `lines[*].name`:
+The flat-vs-linear story at its extreme: a field read is **~38 ns regardless of
+record size**, a ~3 800× gap by 512 line items. Array write `lines[*].name`:
 
 | size | eo | naive | monocle | eo speedup |
 |--:|--:|--:|--:|--:|
-| 8   |    663 |   6 552 |   6 895 | 9.9× |
-| 64  |  4 758 |  40 987 |  42 613 | 8.6× |
-| 512 | 37 549 | 334 374 | 372 100 | 8.9× |
+| 8   |    669 |   4 676 |   5 020 | 7.0× |
+| 64  |  5 149 |  27 417 |  29 271 | 5.3× |
+| 512 | 40 177 | 228 882 | 265 722 | 5.7× |
 
-EO is ~9× faster than the hand-written decode-modify-encode *even on a full-array
+EO is ~5–7× faster than the hand-written decode-modify-encode *even on a full-array
 write* — Avro's per-element decode is costly enough that walking to the focused
 leaf and rebuilding one parent beats decoding every line item. (`monocle` here is
 that same round-trip, since Monocle has no `IndexedRecord` carrier.)
@@ -285,16 +286,16 @@ hand-written `copy` + `map` equivalent.
 
 | Chain (bench) | Size | eo | naive | ratio |
 |---|--:|--:|--:|--:|
-| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 152 | 26 | 5.8× |
-| | 32 | 504 | 203 | 2.5× |
-| | 256 | 3 409 | 1 616 | 2.1× |
-| | 1024 | 14 364 | 5 530 | 2.6× |
-| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 754 | 130 | 5.8× |
-| | 32 | 2 368 | 698 | 3.4× |
-| | 256 | 15 210 | 4 804 | 3.2× |
-| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 146 | 25 | 5.8× |
-| | 64 | 742 | 169 | 4.4× |
-| | 512 | 6 755 | 1 292 | 5.2× |
+| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 28 | 4.7× |
+| | 32 | 515 | 216 | 2.4× |
+| | 256 | 3 512 | 1 689 | 2.1× |
+| | 1024 | 15 345 | 5 791 | 2.6× |
+| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 706 | 139 | 5.1× |
+| | 32 | 2 404 | 736 | 3.3× |
+| | 256 | 16 252 | 5 157 | 3.2× |
+| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 135 | 26 | 5.2× |
+| | 64 | 750 | 161 | 4.7× |
+| | 512 | 7 174 | 1 282 | 5.6× |
 
 All three scale **linearly**; the ratio to naive is largest on tiny inputs
 (fixed per-op setup dominates) and settles around 2–3× on the dense Lens and
@@ -320,23 +321,23 @@ carrier is PSVec-native, so neither path converts to a `List` and back.
 
 | Op | Subject | eo | monocle | visitor |
 |---|---|--:|--:|--:|
-| `universe` | `Expr` balanced | 15 000 | 172 100 | 6 800 |
-| | `Json` balanced | 20 300 | 207 900 | 16 100 |
-| | `Bin` deep spine | 15 600 | **SO** | 6 900 |
-| `transform` | `Expr` balanced | 18 200 | 14 700 | 8 400 |
-| | `Bin` deep spine | 13 000 | **SO** | 4 100 |
+| `universe` | `Expr` balanced | 113 953 | 1 702 000 | 55 248 |
+| | `Json` balanced | 198 254 | 2 051 033 | 130 461 |
+| | `Bin` deep spine | 121 068 | **SO** | 60 927 |
+| `transform` | `Expr` balanced | 153 129 | 184 118 | 73 443 |
+| | `Bin` deep spine | 132 753 | **SO** | 44 744 |
 
-(ns/op at n=512, 3-fork; **indicative only** — this machine is noisy enough that
-sub-2× differences aren't significant. The CI workflow produces the canonical
-figures.)
+(ns/op at n=512, from the reproducible CI benchmarks workflow — 3-fork on the
+shared runner, so absolute numbers run higher than a quiet desktop; the ratios are
+the signal and sub-~1.5× differences aren't meaningful. **SO** = `StackOverflowError`.)
 
 Three results:
 
 - **`universe` rivals the hand-written visitor.** Reading children straight off
   the PSVec carrier (no `List` round-trip, explicit worklist) puts the JSON
-  subject ~on par with the bare visitor (~1.3×) and `Expr` within ~2× — close to
-  the recursion you'd write by hand, while staying composable through `.andThen`.
-  (Monocle is ~10–12× slower here, its lazy-`#:::` append going quadratic, and is
+  subject ~1.5× the bare visitor and `Expr` within ~2× — close to the recursion
+  you'd write by hand, while staying composable through `.andThen`.
+  (Monocle is ~10–15× slower here, its lazy-`#:::` append going quadratic, and is
   *not stack-safe*: both `universe` and `transform` `StackOverflowError` on the
   degenerate spine at depth ≳2048. EO clears the spine at every size here and at
   100k in the stack-safety test, so the deep rows compare EO against the visitor

@@ -198,9 +198,9 @@ All three PowerSeries benches scale **linearly** with traversed-collection size;
 
 Current ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries-traversal-with-downstream-composition) for full tables):
 
-- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 5.1× at N=4 → 1.9× at N=1024.
-- **`PowerSeriesNestedBench` (5-hop tree):** 5.4× at N=4 → 2.4× at N=256.
-- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.5× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
+- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 4.7× at N=4 → 2.6× at N=1024.
+- **`PowerSeriesNestedBench` (5-hop tree):** 5.1× at N=4 → 3.2× at N=256.
+- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.2–5.6× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
 
 Under the hood the hot paths use two private fast-path markers on the `MultiFocus[PSVec]` carrier. Prism/Optional morphs mix in `MultiFocusPSMaybeHit` (maybe-hit), whose `collectTo` writes directly into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders (`IntArrBuilder` / `ObjArrBuilder`) without per-element `Either`/`Option` wrappers. Lens morphs mix in the carrier-wide `MultiFocusSingleton` (always-hit), which additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
 
