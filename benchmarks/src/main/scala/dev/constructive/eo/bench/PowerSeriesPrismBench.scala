@@ -12,6 +12,8 @@ import cats.instances.arraySeq.given
 import dev.constructive.eo.bench.fixture.Result
 import dev.constructive.eo.data.MultiFocus.given
 
+import monocle.{Prism => MPrism, Traversal => MTraversal}
+
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a
   * Traversal.
   *
@@ -53,10 +55,27 @@ class PowerSeriesPrismBench extends JmhDefaults:
         )
       )
 
+  // Same chain in Monocle: Traversal.fromTraverse → Prism, composing to a Traversal.
+  private val mOkValues: MTraversal[ArraySeq[Result], Int] =
+    MTraversal
+      .fromTraverse[ArraySeq, Result]
+      .andThen(
+        MPrism[Result, Int] {
+          case Result.Ok(v)  => Some(v)
+          case _: Result.Err => None
+        }(Result.Ok(_))
+      )
+
   @Setup(Level.Iteration)
   def init(): Unit =
     results =
       ArraySeq.tabulate(size)(i => if i % 2 == 0 then Result.Ok(i) else Result.Err(s"err-$i"))
+    // Correctness guard: all three paths increment only the Ok cases identically.
+    val eoR = okValues.modify(_ + 1)(results)
+    require(
+      mOkValues.modify(_ + 1)(results) == eoR && naive_sparse == eoR,
+      "PowerSeriesPrismBench: monocle / naive disagree with eo",
+    )
 
   @Benchmark def eoModify_sparse: ArraySeq[Result] =
     okValues.modify(_ + 1)(results)
@@ -66,3 +85,6 @@ class PowerSeriesPrismBench extends JmhDefaults:
       case Result.Ok(v) => Result.Ok(v + 1)
       case other        => other
     }
+
+  @Benchmark def monocle_sparse: ArraySeq[Result] =
+    mOkValues.modify(_ + 1)(results)
