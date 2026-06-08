@@ -10,9 +10,9 @@ in three groups:
    one realistic `Order` document edited through circe / avro / jsoniter,
    measured against the decode-modify-encode you'd write by hand (and Monocle,
    which pays the same round-trip).
-3. **[EO-only: PowerSeries composition](#powerseries-traversal-with-downstream-composition)** —
-   multi-focus traversal chains, measured against the hand-written `copy` + `map`
-   equivalent.
+3. **[PowerSeries composition](#powerseries-traversal-with-downstream-composition)** —
+   composed multi-focus traversal chains, measured against the hand-written
+   `copy` + `map` and the equivalent Monocle composition.
 
 ## How these were measured
 
@@ -280,27 +280,39 @@ covers the carrier choice and splice mechanics.
 
 ## PowerSeries traversal with downstream composition
 
-EO-only — no Monocle equivalent. `Traversal.each` (carrier `MultiFocus[PSVec]`)
-is the composition vehicle for all three chain shapes; `naive` is the
-hand-written `copy` + `map` equivalent.
+Three composed-traversal chains. `naive` is the hand-written `copy` + `map`
+equivalent — the baseline that matters. `monocle` is the *same* composition built
+with Monocle (`Lens.andThen(Traversal.fromTraverse).andThen(Lens)`,
+`Traversal.andThen(Prism)`, nested traversals) — these compositions are first-class
+there too, so it's a fair peer. `Traversal.each` (carrier `MultiFocus[PSVec]`) is
+EO's vehicle for all three; a `@Setup` guard asserts the three paths agree.
 
-| Chain (bench) | Size | eo | naive | ratio |
-|---|--:|--:|--:|--:|
-| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 28 | 4.7× |
-| | 32 | 515 | 216 | 2.4× |
-| | 256 | 3 512 | 1 689 | 2.1× |
-| | 1024 | 15 345 | 5 791 | 2.6× |
-| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 706 | 139 | 5.1× |
-| | 32 | 2 404 | 736 | 3.3× |
-| | 256 | 16 252 | 5 157 | 3.2× |
-| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 135 | 26 | 5.2× |
-| | 64 | 750 | 161 | 4.7× |
-| | 512 | 7 174 | 1 282 | 5.6× |
+| Chain (bench) | Size | eo | naive | monocle | eo ÷ naive | monocle ÷ eo |
+|---|--:|--:|--:|--:|--:|--:|
+| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 29 | 191 | 4.6× | 1.4× |
+| | 32 | 505 | 219 | 1 063 | 2.3× | 2.1× |
+| | 256 | 3 492 | 1 690 | 21 367 | 2.1× | 6.1× |
+| | 1024 | 15 784 | 5 820 | 58 237 | 2.7× | 3.7× |
+| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 724 | 145 | 1 326 | 5.0× | 1.8× |
+| | 32 | 2 365 | 755 | 4 420 | 3.1× | 1.9× |
+| | 256 | 16 655 | 5 244 | 93 715 | 3.2× | 5.6× |
+| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 134 | 26 | 279 | 5.2× | 2.1× |
+| | 64 | 748 | 161 | 1 853 | 4.6× | 2.5× |
+| | 512 | 7 179 | 1 292 | 31 386 | 5.6× | 4.4× |
 
-All three scale **linearly**; the ratio to naive is largest on tiny inputs
-(fixed per-op setup dominates) and settles around 2–3× on the dense Lens and
-nested-tree chains as the element work amortises. The sparse-Prism shape holds
-~5× because the miss branch carries inherent per-element plumbing.
+Against the hand-written `naive` baseline all three scale **linearly**: the
+`eo ÷ naive` overhead is largest on tiny inputs (fixed per-op setup dominates) and
+settles around 2–3× on the dense Lens and nested chains as element work amortises;
+the sparse-Prism shape holds ~5× because the miss branch carries inherent
+per-element plumbing.
+
+Against Monocle's equivalent composition EO is **faster at every size**, and the
+lead *widens* as the collection grows (`monocle ÷ eo` rises from ~1.4–2× to
+~4–6×) — opposite to the naive gap, which tightens. Monocle's composed `Traversal`
+scales worse here: the dense Lens chain at 256 is 3 492 ns for EO vs 21 367 for
+Monocle, and the 5-hop tree is 16 655 vs 93 715. EO's flat `MultiFocus[PSVec]`
+focus vector rebuilds in one pass where Monocle threads each element through a
+composed applicative `modifyA`.
 
 Under the hood the carrier pairs an existential leftover with a flat `PSVec`
 focus vector (`Array[AnyRef]` + an `(offset, length)` window), and two internal
@@ -319,13 +331,13 @@ subjects: a normal-depth `Expr` tree, a degenerate deep `Bin` spine, and a
 normal-depth circe `Json` tree (via the universal `Plated[Json]`). The `Plated`
 carrier is PSVec-native, so neither path converts to a `List` and back.
 
-| Op | Subject | eo | monocle | visitor |
-|---|---|--:|--:|--:|
-| `universe` | `Expr` balanced | 113 953 | 1 702 000 | 55 248 |
-| | `Json` balanced | 198 254 | 2 051 033 | 130 461 |
-| | `Bin` deep spine | 121 068 | **SO** | 60 927 |
-| `transform` | `Expr` balanced | 153 129 | 184 118 | 73 443 |
-| | `Bin` deep spine | 132 753 | **SO** | 44 744 |
+| Op | Subject | eo | monocle | visitor | eo ÷ visitor |
+|---|---|--:|--:|--:|--:|
+| `universe` | `Expr` balanced | 113 953 | 1 702 000 | 55 248 | 2.1× |
+| | `Json` balanced | 198 254 | 2 051 033 | 130 461 | 1.5× |
+| | `Bin` deep spine | 121 068 | **SO** | 60 927 | 2.0× |
+| `transform` | `Expr` balanced | 153 129 | 184 118 | 73 443 | 2.1× |
+| | `Bin` deep spine | 132 753 | **SO** | 44 744 | 3.0× |
 
 (ns/op at n=512, from the reproducible CI benchmarks workflow — 3-fork on the
 shared runner, so absolute numbers run higher than a quiet desktop; the ratios are
