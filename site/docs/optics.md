@@ -67,8 +67,9 @@ selected by `F`. The full cell-by-cell composition matrix lives in
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic}
 import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.data.Direct.given    // Accessor[Direct] — powers .get on Iso / Getter
 import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
+// (Accessor[Direct] etc. now resolve via `object Direct`'s companion scope — `Direct`
+//  is an opaque type, so no `import Direct.given` is needed for `.get` on Iso / Getter.)
 ```
 
 Every page here shows optics constructed by hand. For the
@@ -310,10 +311,14 @@ val nameLen = Getter[Person, Int](_.name.length)
 nameLen.get(Person("Alice", 30))
 ```
 
-Getter → Getter doesn't compose via `Optic.andThen` today
-(Getter's `T = Unit` mismatches the outer `B` slot). For a
-deeper read, compose a Lens chain and call `.get` on the
-composed lens.
+Getter → Getter composes via the ordinary `.andThen` (the fused
+`DirectGetter.andThen`): `g1.andThen(g2).get(s)` reads
+`g2.get(g1.get(s))`.
+
+```scala mdoc
+val initial = Getter[Person, String](_.name).andThen(Getter[String, Char](_.head))
+initial.get(Person("Alice", 30))
+```
 
 ### Setter
 

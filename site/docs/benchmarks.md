@@ -33,18 +33,20 @@ with Actions access can re-run them.
 `eo` is the cats-eo method, `Monocle` the equivalent; `ratio` is `naive`-free —
 just the two optic libraries head to head.
 
-**Lens** (`Tuple2` carrier) — `Person.age`:
+**Lens** (`Tuple2` carrier) — shallow `order.id` and a depth-3 `customer.address.street`:
 
 | Operation | eo | Monocle | ratio |
 |---|--:|--:|--:|
-| `get`     | 1.03 | 1.21 | 1.17× |
-| `replace` | 2.56 | 2.68 | 1.05× |
-| `modify`  | 2.97 | 2.94 | 0.99× |
+| `get` (`id`)          |  1.04 |  1.19 | 1.14× |
+| `replace` (`id`)      |  3.52 |  3.17 | 0.90× |
+| `modify` (`id`)       |  4.06 |  4.05 | 1.00× |
+| `modify` (deep `street`) | 38.93 | 32.84 | 0.84× |
 
-Effectively parity. `GetReplaceLens` stores `get` / `enplace` as plain fields
-and specialises its fused `modify`, so the hot path is a two-function
-composition — no `(X, A)` tuple allocation — matching Monocle's hand-written
-`case class Lens`.
+Effectively parity on the shallow focus. `GetReplaceLens` stores `get` / `enplace`
+as plain fields and specialises its fused `modify`, so the hot path is a
+two-function composition — no `(X, A)` tuple allocation — matching Monocle's
+hand-written `case class Lens`. The depth-3 `street` modify rebuilds three records
+either way and trails Monocle by ~1.2×.
 
 **Prism** (`Either` carrier) — `Option[Int]` plus an `Either[String, Int]`
 Right-prism:
@@ -58,15 +60,17 @@ Right-prism:
 | Right `getOption` (Left)  | 1.08 | 1.17 |
 | Right `reverseGet`        | 2.34 | 2.41 |
 
-**Iso** (`Direct` carrier) — `(Int, String) ↔ Person`:
+**Iso** (`Direct` carrier) — `Address ↔ (String, String, String, String)`:
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `get`        | 3.23 | 3.19 |
-| `reverseGet` | 2.54 | 2.71 |
+| `get`        | 3.78 | 3.99 |
+| `reverseGet` | 3.35 | 3.25 |
 
 `BijectionIso` stores both directions as plain fields — same shape and
-direct-call hot path as Monocle's `case class Iso`.
+direct-call hot path as Monocle's `case class Iso`. (`Direct` is now an `opaque
+type`; the `wrap` / `unwrap` at the carrier boundary are `transparent inline`
+identities, so the hot path is unchanged.)
 
 **Optional** (`Affine` carrier) — leaf `Option[String]`, composed through a
 `Nested0..6` Lens chain via cross-carrier `.andThen` (the `Morph[Tuple2, Affine]`
@@ -74,48 +78,59 @@ auto-lifts each hop):
 
 | Operation | eo | Monocle |
 |---|--:|--:|
-| `modify_0` (Some)  |  26.92 | 23.05 |
+| `modify_0` (Some)  |  26.79 | 23.08 |
 | `modify_0` (None)  |   1.51 |  0.99 |
-| `replace_0`        |   5.25 |  3.72 |
-| `modify_3`         |  55.68 | 66.72 |
-| `modify_6`         | 180.55 | 108.86 |
+| `replace_0`        |   5.19 |  3.67 |
+| `modify_3`         |  56.30 | 66.64 |
+| `modify_6`         | 176.41 | 107.96 |
+| `loyaltyId` (Some) |  31.06 | 20.33 |
+| `loyaltyId` (None) |   1.67 |  1.07 |
 
 Competitive across depths: the cross-carrier Lens→Optional chain actually
 *beats* Monocle's native composition at depth 3 (the `Morph[Tuple2, Affine]`
-lift fuses well), and trails ~1.7× at depth 6 where `Affine`'s per-hop branching
-adds up against Monocle's `Option`-specialised internals.
+lift fuses well), and trails ~1.6× at depth 6 where `Affine`'s per-hop branching
+adds up against Monocle's `Option`-specialised internals. The `loyaltyId` rows
+are the canonical `customer.loyaltyId: Option[String]` focus (in memory — Avro
+omits it as a union), Some and None branches.
 
-**Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`.
-Neither family composes through `Optic.andThen` in EO today (see
-[Optics → Getter](optics.md#getter)), so the `_3` / `_6` EO numbers nest `.get`
-/ `.modify` calls by hand; Monocle composes natively.
+**Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`. Both
+families now compose through the ordinary `.andThen` (Getter via the fused
+`DirectGetter.andThen`; Setter via `SetterF`'s `AssociativeFunctor`), so every
+row builds a *composed* optic on both sides and dispatches through it once —
+apples-to-apples with Monocle's composed `Getter`/`Setter`.
 
 | Depth | Getter eo | Getter Monocle | Setter eo | Setter Monocle |
 |---|--:|--:|--:|--:|
-| `_0` | 0.95 |  0.54 |  2.96 |  2.38 |
-| `_3` | 2.74 |  8.82 | 51.42 | 26.46 |
-| `_6` | 4.55 | 27.65 | 88.23 | 52.35 |
+| `_0` |  0.95 |  0.53 |   2.93 |  2.33 |
+| `_3` | 15.68 |  8.83 |  73.63 | 26.42 |
+| `_6` | 35.13 | 27.42 | 134.13 | 52.51 |
 
-EO resolves `.get` against each carrier's `Accessor` statically, so its composed
-read inlines to a direct call — hence the widening Getter win at depth (~6× by
-depth 6). On write, the nested-`modify` shape costs EO ~1.7× Monocle's native
-`Setter.andThen`.
+Near-parity at the leaf (`order.id`, the canonical scalar focus, reads at the
+same `_0` cost). At depth EO trails Monocle — ~1.3–1.8× on Getter, ~2.5–2.8× on
+Setter — because EO's composed optic is a chain of `s => g2.get(g1.get(s))`
+closures (Getter) / nested `modify` (Setter), while Monocle's composition flattens
+better. *(Earlier docs showed EO winning ~6× at depth; that compared EO's
+hand-nested, inlined `.get` against Monocle's composed optic — not the same thing.
+Now that both compose, the closure-chain overhead is visible and is a future
+optimization target.)*
 
-**Fold / Traversal** — `foldMap(identity)` and `each.modify(_ + 1)` over
-`List[Int]`, sweeping size:
+**Fold / Traversal** — Fold `foldMap(identity)` over `List[Int]`; Traversal
+`each.modify` over the canonical `Order.lines` (bump each line's `qty`), sweeping
+size:
 
 | Size | Fold eo | Fold Monocle | Traversal eo | Traversal Monocle | Traversal speedup |
 |---|--:|--:|--:|--:|--:|
-| 8   |  109.4 |    21.9 |    87.5 |    216.6 | 2.5× |
-| 64  |  932.4 |   313.5 |   620.7 |  1 528.3 | 2.5× |
-| 512 | 8 007.9 | 4 728.1 | 5 218.6 | 34 875.0 | 6.7× |
+| 8   |  109.4 |    21.9 |   114.8 |    241.4 | 2.1× |
+| 64  |  932.4 |   313.5 | 1 035.5 |  1 778.4 | 1.7× |
+| 512 | 8 007.9 | 4 728.1 | 8 735.5 | 34 868.1 | 4.0× |
 
 Monocle's `Fold` reduces to a direct `Foldable.foldMap`; EO's `Forget[F]` adds a
 per-element dispatch layer, so Monocle wins Fold (~1.7–5×). Traversal flips it:
 EO's `each` (carrier `MultiFocus[PSVec]`) collects element references into a flat
 focus vector and rebuilds via `Functor[PSVec].map`, beating Monocle's
-per-element `Applicative[Id]` wrapping — a gap that widens to ~6.7× by 512
-elements.
+per-element `Applicative[Id]` wrapping — a gap that widens to ~4× by 512 line
+items (narrower than the old `List[Int]` sweep, since each element now pays a
+`LineItem` copy that dwarfs the carrier difference).
 
 ## Integration: edit without decoding
 
@@ -191,22 +206,29 @@ every sibling — the optimum a jsoniter expert writes, which eo automates.
 
 | metric | size | eo | native | naive | monocle | eo vs naive |
 |---|--:|--:|--:|--:|--:|--:|
-| `street` read   |   8 | 172 |    732 |   1 972 |   1 984 |  11.5× |
-| `street` read   |  64 | 172 |  3 662 |  11 959 |  11 758 |    70× |
-| `street` read   | 512 | 173 | 27 714 |  97 917 |  94 772 |   565× |
-| `street` modify | 512 | 5 801 | — | 175 728 | 177 531 | 30× |
-| `lines[*].price` fold | 512 | 79 243 | 62 597 | 101 733 | 410 561 | 1.3× |
+| `street` read   |   8 |   199 |    823 |   1 966 |   1 965 |  9.9× |
+| `street` read   |  64 |   199 |  4 037 |  12 431 |  12 467 |   62× |
+| `street` read   | 512 |   199 | 30 993 | 103 689 | 104 042 |  521× |
+| `street` modify | 512 | 3 098 |     — | 176 935 | 176 918 |   57× |
+| `lines[*].price` fold | 512 | 83 125 | 72 193 | 109 393 | 473 147 | 1.3× |
 
-The byte-walk read is **flat at ~172 ns**; even the hand-rolled `native` scan
-scales (it tokenises everything it passes), so eo beats it ~4×. The `modify`
-splice is O(bytes) so it grows mildly but stays ~30× under a re-encode. The
-**fold** must touch every element, so eo lands near `native` and only ~1.3×
-under `naive`.
+The byte-walk read is **flat at ~199 ns**; even the hand-rolled `native` scan
+scales (it tokenises everything it passes), so eo beats it ~4× at size 8 and
+pulls further ahead with size. The `modify` splice is O(bytes) so it grows mildly
+but stays ~57× under a re-encode. The **fold** must touch every element, so eo
+lands near `native` and only ~1.3× under `naive`.
 
-**eo-jsoniter vs eo-circe** (the `JsoniterBench` cross-EO comparison, ~250-byte
-fixture, CI): on one-shot reads — parse + drill — jsoniter beats circe **~8–16×**
-because circe pays `circeParse` every call; the gap narrows to ~2.4× on array
-folds where per-element work dominates. The
+**eo-jsoniter vs eo-circe** (the `JsoniterBench` cross-EO comparison, on the
+canonical `Order` swept over size 8/64/512, CI): eo-circe parses the whole
+document each call (`circeParse` then drill), so it is O(size); the eo-jsoniter
+byte-walk is flat. One-shot scalar read (`$.id`): jsoniter ~41 ns at *every* size
+vs circe 4 502 → 221 163 ns, a gap that grows from **~110× (size 8) to ~5 300×
+(512)** as the parse cost climbs. `.replace`/`.modify $.id`: jsoniter 97 → 2 778
+ns (O(bytes) splice) vs circe ~9 500 → 432 000 ns, **~95–155×**. The array
+`lines[*].price` fold narrows to **~4.7×** — both must visit every element. (A
+deliberately-absent `$.customer.absent` miss costs eo-jsoniter a flat ~182 ns;
+there is no honest circe peer, since a typed codec can't drill an absent field.)
+The
 [design spike](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-eo-jsoniter-spike.md)
 covers the carrier choice and splice mechanics.
 
