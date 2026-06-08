@@ -125,9 +125,11 @@ final class MendTearPrism[S, T, A, B](
     )
 
   /** Fused `Prism.andThen(Prism)` — composed tear + `mend = outer.mend ∘ inner.mend`, no nested
-    * Either wrappers. Picked when both sides are statically `MendTearPrism`.
+    * Either wrappers. Picked when both sides are statically `MendTearPrism`. `inline` so a deep
+    * prism chain splices distinct lambdas per level, under C2's recursive-inline cap (see
+    * [[DirectGetter.andThen]]).
     */
-  def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
+  inline def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
     fuseToMendTear(
       innerTear = a =>
         inner.tear(a) match
@@ -212,9 +214,11 @@ final class PickMendPrism[S, A, B](
   inline def reverseGet(b: B): S = mend(b)
 
   /** Fused `PickMend.andThen(PickMend)` — outer mono in focus; preserves the Option-fast-path shape
-    * rather than materialising an intermediate Either.
+    * rather than materialising an intermediate Either. `inline` so a deep fast-path prism chain
+    * splices distinct lambdas per level, under C2's recursive-inline cap (see
+    * [[DirectGetter.andThen]]).
     */
-  def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): PickMendPrism[S, C, D] =
+  inline def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): PickMendPrism[S, C, D] =
     new PickMendPrism(
       pick = s => pick(s).flatMap(inner.pick),
       mend = d => mend(ev(inner.mend(d))),

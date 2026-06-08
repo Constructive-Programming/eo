@@ -97,8 +97,11 @@ final class Optional[S, T, A, B](
           case Right(a) => reverseGet(s, innerWrite(a, d)),
     )
 
-  /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another. */
-  def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
+  /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another. `inline` so a
+    * deep `optional.andThen(optional)…` chain splices distinct lambdas per level, under C2's
+    * recursive-inline cap (see [[DirectGetter.andThen]]).
+    */
+  inline def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     fuseToOptional(
       innerHit = (s, a) =>
         inner.getOrModify(a) match

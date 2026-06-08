@@ -56,6 +56,9 @@ final class SetterOptic[S, T, A, B](val modifyFn: (A => B) => S => T)
     * + `asInstanceOf` threading. Scala's overload resolution picks this when both sides are
     * statically `SetterOptic`; mixed-carrier composition falls back to the inherited generic
     * `Optic.andThen`.
+    *
+    * `inline` so a deep `setter.andThen(setter)…` chain splices distinct writer lambdas per level,
+    * staying under C2's recursive-inline cap (see [[DirectGetter.andThen]]).
     */
-  def andThen[C, D](inner: SetterOptic[A, B, C, D]): SetterOptic[S, T, C, D] =
+  inline def andThen[C, D](inner: SetterOptic[A, B, C, D]): SetterOptic[S, T, C, D] =
     new SetterOptic(cd => modifyFn(inner.modifyFn(cd)))
