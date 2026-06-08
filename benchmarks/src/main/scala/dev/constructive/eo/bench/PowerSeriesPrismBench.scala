@@ -37,7 +37,7 @@ import monocle.{Prism => MPrism, Traversal => MTraversal}
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesPrismBench extends JmhDefaults:
 
-  @Param(Array("8", "64", "512"))
+  @Param(Array("8", "32", "128", "512", "2048"))
   var size: Int = uninitialized
 
   var results: ArraySeq[Result] = uninitialized

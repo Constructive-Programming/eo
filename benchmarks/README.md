@@ -111,9 +111,9 @@ EO JSON backends, where there is no Monocle analog.
 
 | Bench class              | Subject | Monocle peer |
 |--------------------------|---------|--------------------|
-| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/32/256/1024) | `MLens.andThen(MTraversal.fromTraverse).andThen(MLens)`. |
-| `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/32/256 × 4-dept fanout) | Monocle 5-hop `Lens→Traversal→Lens→Traversal→Lens`. |
-| `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/64/512) | Monocle `Traversal.andThen(Prism)`. |
+| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/16/64/256/1024/4096) | `MLens.andThen(MTraversal.fromTraverse).andThen(MLens)`. |
+| `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/16/64/256/1024 × 4-dept fanout) | Monocle 5-hop `Lens→Traversal→Lens→Traversal→Lens`. |
+| `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/32/128/512/2048) | Monocle `Traversal.andThen(Prism)`. |
 | `MultiFocusBench`        | `MultiFocus[List]` (`fromLensF`) vs `MultiFocus[PSVec]` (`Traversal.each`) on the same `Lens → List/each → Lens` chain (sweeps 4/32/256/1024) | None. The unified carrier that absorbed the v1 AlgLens/Kaleidoscope/Grate/PowerSeries families. |
 | `MultiFocusCollectBench` | `collectMap` (ZipList mean / `Const` sum), `collectList` (cartesian-singleton), and `MultiFocus.tuple` 3-/6-slot modifies | None. Carrier-level reduction / broadcast machinery. |
 | `JsoniterBench`         | Cross-EO: `eo-jsoniter` (byte-walk) vs `eo-circe` (AST) read/write at depths 3/4, miss path, `[*]` fold-sum, and `replace`/`modify` writes | None. The two EO JSON backends head-to-head on the same bytes. |

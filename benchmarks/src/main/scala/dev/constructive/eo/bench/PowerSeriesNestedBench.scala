@@ -34,7 +34,7 @@ import monocle.{Lens => MLens, Traversal => MTraversal}
   * parallel arrays and re-nest on the way out. A trie keeps the shape explicit and substitutes
   * leaves recursively.
   *
-  * Total elements traversed = `departmentCount × size` (4 × {4, 32, 256}). Inner `size` matches the
+  * Total elements traversed = `departmentCount × size` (4 × {4, 16, 64, 256, 1024}). Inner `size` matches the
   * flat-bench param so comparisons are direct.
   */
 @State(Scope.Benchmark)
@@ -45,7 +45,7 @@ import monocle.{Lens => MLens, Traversal => MTraversal}
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesNestedBench extends JmhDefaults:
 
-  @Param(Array("4", "32", "256"))
+  @Param(Array("4", "16", "64", "256", "1024"))
   var size: Int = uninitialized
 
   private val departmentCount = 4

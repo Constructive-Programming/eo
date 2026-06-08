@@ -37,7 +37,7 @@ import monocle.{Lens => MLens, Traversal => MTraversal}
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesBench extends JmhDefaults:
 
-  @Param(Array("4", "32", "256", "1024"))
+  @Param(Array("4", "16", "64", "256", "1024", "4096"))
   var size: Int = uninitialized
 
   var person: Person = uninitialized
