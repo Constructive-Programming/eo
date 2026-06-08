@@ -287,18 +287,18 @@ with Monocle (`Lens.andThen(Traversal.fromTraverse).andThen(Lens)`,
 there too, so it's a fair peer. `Traversal.each` (carrier `MultiFocus[PSVec]`) is
 EO's vehicle for all three; a `@Setup` guard asserts the three paths agree.
 
-| Chain (bench) | Size | eo | naive | monocle | eo ÷ naive | monocle ÷ eo |
-|---|--:|--:|--:|--:|--:|--:|
-| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 29 | 191 | 4.6× | 1.4× |
-| | 32 | 505 | 219 | 1 063 | 2.3× | 2.1× |
-| | 256 | 3 492 | 1 690 | 21 367 | 2.1× | 6.1× |
-| | 1024 | 15 784 | 5 820 | 58 237 | 2.7× | 3.7× |
-| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 724 | 145 | 1 326 | 5.0× | 1.8× |
-| | 32 | 2 365 | 755 | 4 420 | 3.1× | 1.9× |
-| | 256 | 16 655 | 5 244 | 93 715 | 3.2× | 5.6× |
-| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 134 | 26 | 279 | 5.2× | 2.1× |
-| | 64 | 748 | 161 | 1 853 | 4.6× | 2.5× |
-| | 512 | 7 179 | 1 292 | 31 386 | 5.6× | 4.4× |
+| Chain (bench) | Size | eo | naive | monocle | eo ÷ naive |
+|---|--:|--:|--:|--:|--:|
+| `Lens → each → Lens` (`PowerSeriesBench`) | 4 | 133 | 29 | 191 | 4.6× |
+| | 32 | 505 | 219 | 1 063 | 2.3× |
+| | 256 | 3 492 | 1 690 | 21 367 | 2.1× |
+| | 1024 | 15 784 | 5 820 | 58 237 | 2.7× |
+| 5-hop tree (`PowerSeriesNestedBench`) | 4 | 724 | 145 | 1 326 | 5.0× |
+| | 32 | 2 365 | 755 | 4 420 | 3.1× |
+| | 256 | 16 655 | 5 244 | 93 715 | 3.2× |
+| `each → Prism`, 50/50 hit (`PowerSeriesPrismBench`) | 8 | 134 | 26 | 279 | 5.2× |
+| | 64 | 748 | 161 | 1 853 | 4.6× |
+| | 512 | 7 179 | 1 292 | 31 386 | 5.6× |
 
 Against the hand-written `naive` baseline all three scale **linearly**: the
 `eo ÷ naive` overhead is largest on tiny inputs (fixed per-op setup dominates) and
