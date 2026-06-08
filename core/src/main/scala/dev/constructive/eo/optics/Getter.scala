@@ -43,9 +43,9 @@ final class DirectGetter[S, A](val get: S => A) extends Optic[S, Unit, A, Unit, 
     * `inline` so each composition call site splices its own copy of the `s => inner.get(get(s))`
     * lambda, yielding a *distinct* synthetic method per level. A plain `def` compiles the lambda
     * once (`andThen$$anonfun$1`), so a depth-N runtime chain reuses that one bytecode and C2 treats
-    * the `.get` cascade as recursion — capping inlining at `MaxRecursiveInlineLevel` and leaving the
-    * deep tail as virtual `Function1.apply`. Distinct per-level methods sidestep that cap with no
-    * JVM flag, the same way Monocle's per-compose anonymous classes do.
+    * the `.get` cascade as recursion — capping inlining at `MaxRecursiveInlineLevel` and leaving
+    * the deep tail as virtual `Function1.apply`. Distinct per-level methods sidestep that cap with
+    * no JVM flag, the same way Monocle's per-compose anonymous classes do.
     */
   inline def andThen[B](inner: DirectGetter[A, B]): DirectGetter[S, B] =
     new DirectGetter(s => inner.get(get(s)))

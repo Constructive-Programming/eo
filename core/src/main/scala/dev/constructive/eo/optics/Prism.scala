@@ -218,7 +218,9 @@ final class PickMendPrism[S, A, B](
     * splices distinct lambdas per level, under C2's recursive-inline cap (see
     * [[DirectGetter.andThen]]).
     */
-  inline def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): PickMendPrism[S, C, D] =
+  inline def andThen[C, D](
+      inner: PickMendPrism[A, C, D]
+  )(using ev: A =:= B): PickMendPrism[S, C, D] =
     new PickMendPrism(
       pick = s => pick(s).flatMap(inner.pick),
       mend = d => mend(ev(inner.mend(d))),

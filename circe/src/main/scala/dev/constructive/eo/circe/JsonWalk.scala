@@ -66,8 +66,8 @@ private[circe] object JsonWalk:
     * `OnMissingField.Lenient` to tolerate missing field-steps as `Json.Null` leaves.
     *
     * Manual index loop rather than a `foldLeftM` over `path.toVector`: this runs once per array
-    * element on a Traversal write, so the per-call `Array → Vector` copy and the `Either`-monad fold
-    * machinery were pure churn. Behaviour is identical — first `Left` short-circuits.
+    * element on a Traversal write, so the per-call `Array → Vector` copy and the `Either`-monad
+    * fold machinery were pure churn. Behaviour is identical — first `Left` short-circuits.
     */
   def walkPath(
       json: Json,
@@ -79,7 +79,7 @@ private[circe] object JsonWalk:
     var i = 0
     while i < path.length do
       stepInto(path(i), cur, parents, policy) match
-        case Left(failure)       => return Left(failure)
+        case Left(failure)        => return Left(failure)
         case Right((c, parents2)) =>
           cur = c
           parents = parents2
