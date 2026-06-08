@@ -201,15 +201,13 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-All three PowerSeries benches scale **linearly** with traversed-collection size; the eo-to-naive ratios tighten as size grows (fixed per-op setup amortises), while the eo-to-Monocle lead *widens* (Monocle's composed `Traversal` scales worse).
+All three PowerSeries benches scale **linearly** with traversed-collection size; the eo-to-naive ratios tighten as size grows (fixed per-op setup amortises).
 
 Current eo-to-naive ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries-traversal-with-downstream-composition) for full tables incl. the Monocle peer):
 
 - **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 4.6× at N=4 → 2.7× at N=1024.
 - **`PowerSeriesNestedBench` (5-hop tree):** 5.0× at N=4 → 3.2× at N=256.
 - **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.2–5.6× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
-
-Against the Monocle composition EO is faster at every size (`monocle ÷ eo` ~1.4–2× at small N, ~4–6× by the largest) — EO's flat `MultiFocus[PSVec]` rebuilds in one pass where Monocle threads each element through a composed applicative `modifyA`.
 
 Under the hood the hot paths use two private fast-path markers on the `MultiFocus[PSVec]` carrier. Prism/Optional morphs mix in `MultiFocusPSMaybeHit` (maybe-hit), whose `collectTo` writes directly into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders (`IntArrBuilder` / `ObjArrBuilder`) without per-element `Either`/`Option` wrappers. Lens morphs mix in the carrier-wide `MultiFocusSingleton` (always-hit), which additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
 

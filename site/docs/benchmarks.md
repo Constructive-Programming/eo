@@ -306,14 +306,6 @@ settles around 2–3× on the dense Lens and nested chains as element work amort
 the sparse-Prism shape holds ~5× because the miss branch carries inherent
 per-element plumbing.
 
-Against Monocle's equivalent composition EO is **faster at every size**, and the
-lead *widens* as the collection grows (`monocle ÷ eo` rises from ~1.4–2× to
-~4–6×) — opposite to the naive gap, which tightens. Monocle's composed `Traversal`
-scales worse here: the dense Lens chain at 256 is 3 492 ns for EO vs 21 367 for
-Monocle, and the 5-hop tree is 16 655 vs 93 715. EO's flat `MultiFocus[PSVec]`
-focus vector rebuilds in one pass where Monocle threads each element through a
-composed applicative `modifyA`.
-
 Under the hood the carrier pairs an existential leftover with a flat `PSVec`
 focus vector (`Array[AnyRef]` + an `(offset, length)` window), and two internal
 singleton markers (`MultiFocusSingleton` for always-hit Lens morphs,
