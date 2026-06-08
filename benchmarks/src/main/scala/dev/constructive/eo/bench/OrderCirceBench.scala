@@ -28,8 +28,8 @@ import io.circe.syntax.*
   *   - `direct*` — direct `JsonObject` surgery (rebuild only the touched parents, no cursor). The
   *     hand-written shape of what `JsonPrism` does, so it lands near `eo*`.
   *   - `monocle*` — decode to the case class, run a Monocle optic, re-encode. A general optics
-  *     library that has *no* AST carrier, so it must pay the full decode/encode round-trip — this
-  *     is where EO's structural-edit advantage shows.
+  *     library that has *no* AST carrier, so it pays the same full decode/encode round-trip as
+  *     `naive*` — a reference point alongside the hand-written baseline, not a separate story.
   *
   * Two foci:
   *   - **depth-3 scalar** `customer.address.street` — touched once. The `@Param size` makes the

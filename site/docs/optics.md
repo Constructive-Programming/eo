@@ -67,9 +67,10 @@ selected by `F`. The full cell-by-cell composition matrix lives in
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic}
 import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.data.Forget.given       // ForgetfulFunctor / Fold / Traverse for Forget[F] carriers
-// (Accessor[Direct] etc. now resolve via `object Direct`'s companion scope — `Direct`
-//  is an opaque type, so no `import Direct.given` is needed for `.get` on Iso / Getter.)
+// `Fold.apply` / `.select` now return the concrete `ForgetFold`, whose eager `foldMap`
+// member needs no `import Forget.given` — the carrier's `ForgetfulFold` is no longer summoned.
+// (Accessor[Direct] etc. resolve via `object Direct`'s companion scope — `Direct` is an
+//  opaque type, so no `import Direct.given` is needed for `.get` on Iso / Getter.)
 ```
 
 Every page here shows optics constructed by hand. For the

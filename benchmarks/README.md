@@ -100,13 +100,20 @@ Specifically — the numbers are only meaningful when:
 | `SetterBench`     | `Nested0.value: Int`      | Depths 0 / 3 / 6; see *Composition notes* |
 | `FoldBench`       | `Foldable[List]` + `Monoid[Int]` | `-P size=N` sweep |
 
-### EO-only (no direct Monocle equivalent)
+### Composition + EO-only carrier benches
 
-| Bench class              | Subject | Monocle equivalent |
+The three `PowerSeries*` benches are **Monocle-paired** (`eo` / `naive` / `monocle`):
+they compose Lens/Traversal/Prism, which Monocle does natively, so each ships a
+`monocle_*` peer built from the same chain (with a `@Setup` guard asserting the
+paths agree). The `MultiFocus*` / `JsoniterBench` rows below are genuinely EO-only
+— they probe carrier internals (`MultiFocus[PSVec]` reductions) or compare the two
+EO JSON backends, where there is no Monocle analog.
+
+| Bench class              | Subject | Monocle peer |
 |--------------------------|---------|--------------------|
-| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/32/256/1024) | None. The `MultiFocus[PSVec]` carrier is the mechanism behind EO's cross-optic composition. |
-| `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/32/256 × 4-dept fanout) | None. Stress-tests tree-of-traversals composition. |
-| `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/64/512) | None. Regression oracle for Prism miss-branch plumbing. |
+| `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/16/64/256/1024/4096) | `MLens.andThen(MTraversal.fromTraverse).andThen(MLens)`. |
+| `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/16/64/256/1024 × 4-dept fanout) | Monocle 5-hop `Lens→Traversal→Lens→Traversal→Lens`. |
+| `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/32/128/512/2048) | Monocle `Traversal.andThen(Prism)`. |
 | `MultiFocusBench`        | `MultiFocus[List]` (`fromLensF`) vs `MultiFocus[PSVec]` (`Traversal.each`) on the same `Lens → List/each → Lens` chain (sweeps 4/32/256/1024) | None. The unified carrier that absorbed the v1 AlgLens/Kaleidoscope/Grate/PowerSeries families. |
 | `MultiFocusCollectBench` | `collectMap` (ZipList mean / `Const` sum), `collectList` (cartesian-singleton), and `MultiFocus.tuple` 3-/6-slot modifies | None. Carrier-level reduction / broadcast machinery. |
 | `JsoniterBench`         | Cross-EO: `eo-jsoniter` (byte-walk) vs `eo-circe` (AST) read/write at depths 3/4, miss path, `[*]` fold-sum, and `replace`/`modify` writes | None. The two EO JSON backends head-to-head on the same bytes. |
@@ -142,8 +149,8 @@ The vocabulary is consistent across backends:
   *slower* than a full decode) vs direct `JsonObject` surgery (rebuild only the
   touched parents).
 - `monocle*` — decode to the case class, run a Monocle optic, re-encode. Monocle
-  has no byte/AST carrier, so it must pay the full round-trip — this is where
-  EO's structural-edit advantage shows.
+  has no byte/AST carrier, so it pays the same full round-trip as `naive*` — it's
+  a reference point alongside the hand-written baseline, not a separate story.
 
 | Bench class          | Foci | Baselines | Notes |
 |----------------------|------|-----------|-------|
@@ -194,13 +201,11 @@ The remaining Getter/Setter workarounds reflect what a user would actually write
 
 ## Interpreting PowerSeries numbers
 
-All three PowerSeries benches scale **linearly** with traversed-collection size; the eo-to-naive ratios tighten as size grows (fixed per-op setup amortises).
+Both `eo` and the hand-written `naive` scale **linearly** in traversed-collection size — verified over the widened sweeps: per-element cost (`ns ÷ element`) flattens once the fixed per-op setup amortises, and a log-log fit gives slopes of **0.9–1.0** for every eo/naive series. The eo-to-naive overhead then settles:
 
-Current ratios (see [benchmarks.md](../site/docs/benchmarks.md#powerseries-traversal-with-downstream-composition) for full tables):
-
-- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** 5.1× at N=4 → 1.9× at N=1024.
-- **`PowerSeriesNestedBench` (5-hop tree):** 5.4× at N=4 → 2.4× at N=256.
-- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.5× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost.
+- **`PowerSeriesBench` (dense `Lens → Traversal → Lens`):** ~2.7× by N=4096 (4.6× at N=4); eo slope 0.91, naive 0.96.
+- **`PowerSeriesNestedBench` (5-hop tree):** ~3.0× by N=1024 (5.0× at N=4); eo slope 0.83, naive 0.91.
+- **`PowerSeriesPrismBench` (Prism miss-branch):** ~5.0–5.6× across sizes — Prism miss plumbing (per-element Either-tag write + miss-branch `ys` slot) is the inherent cost; eo slope 0.98, naive 0.97.
 
 Under the hood the hot paths use two private fast-path markers on the `MultiFocus[PSVec]` carrier. Prism/Optional morphs mix in `MultiFocusPSMaybeHit` (maybe-hit), whose `collectTo` writes directly into pre-sized flat `Array[Int]` + `Array[AnyRef]` builders (`IntArrBuilder` / `ObjArrBuilder`) without per-element `Either`/`Option` wrappers. Lens morphs mix in the carrier-wide `MultiFocusSingleton` (always-hit), which additionally skips the length-tracking `Array[Int]`. `pEach.to` zero-copies `ArraySeq.ofRef` inputs into a `PSVec.Slice`, and `pEach.from` hands the result `Slice`'s backing array straight to `ArraySeq.unsafeWrapArray` via `unsafeShareableArray` when the Slice densely covers it.
 

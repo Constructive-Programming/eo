@@ -13,6 +13,8 @@ import cats.instances.list.given
 import dev.constructive.eo.bench.fixture.{Company, Department, Employee}
 import dev.constructive.eo.data.MultiFocus.given
 
+import monocle.{Lens => MLens, Traversal => MTraversal}
+
 /** Nested-traversal PowerSeries bench — tree-of-trees shape.
   *
   * Fixture: `Company(departments: List[Department(employees: ArraySeq[Employee])])`. Every
@@ -32,7 +34,7 @@ import dev.constructive.eo.data.MultiFocus.given
   * parallel arrays and re-nest on the way out. A trie keeps the shape explicit and substitutes
   * leaves recursively.
   *
-  * Total elements traversed = `departmentCount × size` (4 × {4, 32, 256}). Inner `size` matches the
+  * Total elements traversed = `departmentCount × size` (4 × {4, 16, 64, 256, 1024}). Inner `size` matches the
   * flat-bench param so comparisons are direct.
   */
 @State(Scope.Benchmark)
@@ -43,7 +45,7 @@ import dev.constructive.eo.data.MultiFocus.given
 @Measurement(iterations = 5, time = 1)
 class PowerSeriesNestedBench extends JmhDefaults:
 
-  @Param(Array("4", "32", "256"))
+  @Param(Array("4", "16", "64", "256", "1024"))
   var size: Int = uninitialized
 
   private val departmentCount = 4
@@ -62,6 +64,16 @@ class PowerSeriesNestedBench extends JmhDefaults:
       .andThen(EoTraversal.each[ArraySeq, Employee])
       .andThen(EoLens[Employee, Boolean](_.active, (e, b) => e.copy(active = b)))
 
+  // Same 5-hop chain in Monocle: Lens → Traversal → Lens → Traversal → Lens.
+  private val mCompanyAllActive: MTraversal[Company, Boolean] =
+    MLens[Company, List[Department]](_.departments)(ds => c => c.copy(departments = ds))
+      .andThen(MTraversal.fromTraverse[List, Department])
+      .andThen(
+        MLens[Department, ArraySeq[Employee]](_.employees)(es => d => d.copy(employees = es))
+      )
+      .andThen(MTraversal.fromTraverse[ArraySeq, Employee])
+      .andThen(MLens[Employee, Boolean](_.active)(b => e => e.copy(active = b)))
+
   @Setup(Level.Iteration)
   def init(): Unit =
     company = Company(
@@ -73,6 +85,12 @@ class PowerSeriesNestedBench extends JmhDefaults:
         )
       ),
     )
+    // Correctness guard: all three paths produce the same modified tree.
+    val eoR = companyAllActive.modify(!_)(company)
+    require(
+      mCompanyAllActive.modify(!_)(company) == eoR && naive_nested == eoR,
+      "PowerSeriesNestedBench: monocle / naive disagree with eo",
+    )
 
   @Benchmark def eoModify_nested: Company =
     companyAllActive.modify(!_)(company)
@@ -83,3 +101,6 @@ class PowerSeriesNestedBench extends JmhDefaults:
         .departments
         .map(d => d.copy(employees = d.employees.map(e => e.copy(active = !e.active))))
     )
+
+  @Benchmark def monocle_nested: Company =
+    mCompanyAllActive.modify(!_)(company)

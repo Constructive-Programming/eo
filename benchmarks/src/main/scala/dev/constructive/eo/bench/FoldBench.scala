@@ -7,7 +7,6 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.{Domain, LineItem}
-import dev.constructive.eo.data.Forget.given
 import dev.constructive.eo.optics.{Fold => EoFold}
 
 import cats.instances.double.given
