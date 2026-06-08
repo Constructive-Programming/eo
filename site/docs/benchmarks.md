@@ -175,14 +175,20 @@ Array write-traversal, `lines[*].name`:
 
 | size | eo (Unsafe) | eo (Ior) | hcursor | direct | naive | monocle |
 |--:|--:|--:|--:|--:|--:|--:|
-| 8   |   5 263 |   5 406 |   4 293 |   4 206 |   4 428 |   4 861 |
-| 64  |  37 618 |  40 899 |  30 336 |  31 371 |  27 353 |  29 413 |
-| 512 | 302 606 | 331 334 | 241 304 | 243 950 | 223 535 | 261 365 |
+| 8   |   4 195 |   4 222 |   4 040 |   4 009 |   3 955 |   4 344 |
+| 64  |  30 294 |  33 181 |  30 299 |  29 757 |  26 493 |  27 910 |
+| 512 | 249 409 | 270 847 | 247 216 | 245 600 | 222 527 | 251 872 |
 
 Honest result: a whole-array rewrite is O(elements) for everyone, so the cursor
-walk has no edge — EO is ~1.2–1.35× *slower* than naive here. Reach for JSON
-traversals for composition and diagnostics, not raw array throughput. (Avro
-below is the opposite, because its per-element decode is so costly.)
+walk has no *structural* edge — but EO's `JsonTraversal` now lands right on the
+hand-written cursor / AST forms (`eo` ≈ `hcursor` ≈ `direct`) and beats
+decode-modify-encode through Monocle, after the per-element path stopped
+re-allocating its walk state (`JsonWalk` uses flat index loops, not per-element
+`Array→Vector`/`zip`/`foldRight`). It still trails `naive` by ~1.1× at 512 —
+a bulk decode-map-encode is the most cache-friendly way to rewrite *every*
+element — so reach for JSON traversals for composition, diagnostics, and
+pinpoint edits, not raw whole-array throughput. (Avro below is the opposite,
+because its per-element decode is so costly.)
 
 ### avro — `AvroPrism` / `AvroTraversal` over `IndexedRecord`
 

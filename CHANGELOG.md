@@ -62,6 +62,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **circe JSON array-write traversal now matches hand-written AST surgery.**
+  `JsonWalk.walkPath` / `rebuildPath` (the per-element backbone of `JsonTraversal`
+  writes) converted the immutable `path: Array[PathStep]` to a `Vector` /
+  `IndexedSeq` and ran an `Either`-monad `foldLeftM` / `zip` + `foldRight` on every
+  call — i.e. once per array element. Rewritten as manual index loops
+  (behaviour-identical). `OrderCirceBench` `lines[*].name` write (CI, `-f 3 -wi 3
+  -i 5`) at 512 elements: 868→655 KB/op allocation (−25%, now 1.07× the hand-rolled
+  `direct` `JsonObject` surgery, was 1.42×) and 277→249 µs (now on par with the
+  `direct` / `hcursor` hand forms and faster than decode→Monocle→encode). Helps
+  every JSON optic op, not just traversals.
+
 - **`Setter` composition is now allocation-free per hop (fused `andThen`).**
   `Setter.apply` returns a concrete `SetterOptic` that stores its writer directly
   and overloads `andThen(SetterOptic)` to compose writers outright
