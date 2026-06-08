@@ -105,18 +105,23 @@ apples-to-apples with Monocle's composed `Getter`/`Setter`.
 
 | Depth | Getter eo | Getter Monocle | Setter eo | Setter Monocle |
 |---|--:|--:|--:|--:|
-| `_0` |  0.95 |  0.53 |   2.93 |  2.33 |
-| `_3` | 15.68 |  8.83 |  73.63 | 26.42 |
-| `_6` | 35.13 | 27.42 | 134.13 | 52.51 |
+| `_0` |  0.73 |  0.41 |  1.86 |  1.86 |
+| `_3` | 12.16 |  6.84 | 21.23 | 20.41 |
+| `_6` | 27.23 | 21.18 | 44.14 | 41.05 |
 
 Near-parity at the leaf (`order.id`, the canonical scalar focus, reads at the
-same `_0` cost). At depth EO trails Monocle — ~1.3–1.8× on Getter, ~2.5–2.8× on
-Setter — because EO's composed optic is a chain of `s => g2.get(g1.get(s))`
-closures (Getter) / nested `modify` (Setter), while Monocle's composition flattens
-better. *(Earlier docs showed EO winning ~6× at depth; that compared EO's
-hand-nested, inlined `.get` against Monocle's composed optic — not the same thing.
-Now that both compose, the closure-chain overhead is visible and is a future
-optimization target.)*
+same `_0` cost). **Setter now composes at parity** (`_3` 21.2 vs 20.4, `_6` 44.1
+vs 41.0, ~1.04–1.08×): `Setter.apply` returns a concrete `SetterOptic` whose fused
+`andThen` composes the writer functions directly (`modify(g) ==
+outer.modify(inner.modify(g))`), building the chain once at compose time — the
+same fused-subclass shape as `Lens` / `Iso` / `Getter`, bypassing the generic
+`AssociativeFunctor[SetterF]` and the per-hop `SetterF` allocation it incurred
+(depth-6 dropped 800→288 B/op, exactly Monocle's allocation). Getter still trails
+Monocle ~1.3–1.8× at depth because its composed optic is a chain of `s =>
+g2.get(g1.get(s))` closures that don't flatten as well — a remaining optimization
+target. *(Earlier docs showed EO winning ~6× at depth on Getter; that compared
+EO's hand-nested, inlined `.get` against Monocle's composed optic — not the same
+thing.)*
 
 **Fold / Traversal** — Fold `foldMap(identity)` over `List[Int]`; Traversal
 `each.modify` over the canonical `Order.lines` (bump each line's `qty`), sweeping

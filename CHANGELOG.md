@@ -62,6 +62,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`Setter` composition is now allocation-free per hop (fused `andThen`).**
+  `Setter.apply` returns a concrete `SetterOptic` that stores its writer directly
+  and overloads `andThen(SetterOptic)` to compose writers outright
+  (`s1.andThen(s2).modify(f) == s1.modify(s2.modify(f))`), building the chain once
+  at compose time — the same fused-subclass shape as `Lens` / `Iso` / `Getter`.
+  Previously two `Setter`s composed only through the generic
+  `AssociativeFunctor[SetterF]`, which allocated a fresh `SetterF` per hop at
+  *modify* time. `SetterBench` (CI, `-f 3 -wi 3 -i 5`) goes from ~2.8× Monocle at
+  depth to parity: depth-3 368→168 B/op (21.2 vs 20.4 ns), depth-6 800→288 B/op
+  (44.1 vs 41.0 ns). Cross-carrier composition (`lens.andThen(setter)` via
+  `Morph[Tuple2, SetterF]`) still routes through `assocSetterF`. Pre-1.0, no MiMa
+  baseline; `Setter.apply`'s return type widened from `Optic[…, SetterF]` to the
+  subtype `SetterOptic[…]` (source-compatible).
+
+- **Carrier typeclass methods take named parameters (were point-free / curried).**
+  `Accessor.get`, `ReverseAccessor.reverseGet`, `ForgetfulFold.foldMap`, and
+  `ForgetfulTraverse.traverse` were declared with zero value parameters, returning
+  a curried `Function1` / `PolyFunction` chain (e.g. `foldMap[X,A,M]: (A => M) =>
+  F[X,A] => M`). They now take their arguments directly (`foldMap[X,A,M](f, fa)`),
+  matching the already-flat `ForgetfulFunctor.map` and simplifying the dispatch
+  the JIT sees. Behaviour-identical and allocation-neutral (the intermediate
+  closures were already eliminated by `inline` + escape analysis); source-breaking
+  only for code that *implements* a custom carrier or calls these SPI methods
+  directly — update the overrides/calls to the named-parameter arity. Pre-1.0, no
+  MiMa baseline.
+
 - **`Direct` is now an `opaque type`, not a transparent alias.** `Direct[X, A]`
   was `type Direct[X, A] = A`, which the compiler dealiased to `A` during implicit
   search — so `object Direct`'s givens (`Accessor[Direct]`, `AssociativeFunctor
