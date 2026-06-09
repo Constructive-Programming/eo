@@ -210,6 +210,9 @@ lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.17.1"
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
+// droste — the recursion-scheme baseline for the schemes benchmarks (pattern
+// functor + Fix encoding). Benchmark-only; never a published dependency.
+lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
 lazy val hearth = Kubuszok %% "hearth" % "0.3.0"
 lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.1.0"
 lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.1.0"
@@ -668,6 +671,7 @@ lazy val benchmarks: Project = project
   .dependsOn(
     LocalProject("core"),
     LocalProject("generics"),
+    LocalProject("schemes"),
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
@@ -677,6 +681,8 @@ lazy val benchmarks: Project = project
     name := "cats-eo-benchmarks",
     publish / skip := true,
     libraryDependencies += monocle,
+    // droste — recursion-scheme baseline for SchemesBench.
+    libraryDependencies += drosteCore,
     // circe-parser for the Json round-trip benches; kindlings for the
     // Codec derivation used by the OrderCirceBench / JsoniterBench fixtures.
     libraryDependencies += circeParser,
