@@ -89,7 +89,7 @@ trait CheckAllHelpers extends Discipline:
   /** Runs `FoldTests` for an optic with a `ForgetfulFold` carrier `F`. */
   def checkAllFoldFor[S, A, F[_, _]](
       name: String,
-      foldOptic: Optic[S, Unit, A, A, F],
+      foldOptic: Optic[S, Unit, A, Unit, F],
   )(using Arbitrary[S], Cogen[A], ForgetfulFold[F]): Fragment =
     checkAll(
       name,

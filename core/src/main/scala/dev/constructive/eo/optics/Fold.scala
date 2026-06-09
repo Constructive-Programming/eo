@@ -47,9 +47,9 @@ object Fold:
 final class ForgetFold[S, F[_], A](
     val to: S => F[A]
 )(using FF: Foldable[F])
-    extends Optic[S, Unit, A, A, Forget[F]]:
+    extends Optic[S, Unit, A, Unit, Forget[F]]:
   type X = Nothing
-  val from: F[A] => Unit = _ => ()
+  val from: F[Unit] => Unit = _ => ()
 
   /** Eager `foldMap` — folds `s` straight through the captured `Foldable[F]`, returning `M` with no
     * intermediate `S => M` closure and no `ForgetfulFold` summon. Wins over the [[Optic.foldMap]]

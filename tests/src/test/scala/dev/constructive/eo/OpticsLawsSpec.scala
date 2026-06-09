@@ -179,13 +179,13 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Fold: Fold.apply over a Foldable + Fold.select ----------
 
-  val listFold: Optic[List[Int], Unit, Int, Int, data.Forget[List]] =
+  val listFold: Optic[List[Int], Unit, Int, Unit, data.Forget[List]] =
     Fold[List, Int]
 
   // covers: Fold over List[Int]
   checkAllFoldFor[List[Int], Int, data.Forget[List]]("Fold[List, Int]", listFold)
 
-  val optionFold: Optic[Option[Int], Unit, Int, Int, data.Forget[Option]] =
+  val optionFold: Optic[Option[Int], Unit, Int, Unit, data.Forget[Option]] =
     Fold[Option, Int]
 
   // covers: Fold over Option[Int]
@@ -193,7 +193,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- Fold.select: focuses on values matching a predicate ------
 
-  val evenSelectFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
+  val evenSelectFold: Optic[Int, Unit, Int, Unit, data.Forget[Option]] =
     Fold.select[Int](_ % 2 == 0)
 
   // covers: Fold.select over Int (Forget[Option] carrier)
@@ -203,7 +203,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   //   the always-false predicate's foldMap always returns Monoid.empty (zero for Int)
   "Fold.select: predicate-gated .to + always-false foldMap returns Monoid.empty" >> forAll {
     (n: Int) =>
-      val neverFold: Optic[Int, Unit, Int, Int, data.Forget[Option]] =
+      val neverFold: Optic[Int, Unit, Int, Unit, data.Forget[Option]] =
         Fold.select[Int](_ => false)
       val toOk = evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None)
       val neverOk = neverFold.foldMap[Int](identity)(n) == 0
