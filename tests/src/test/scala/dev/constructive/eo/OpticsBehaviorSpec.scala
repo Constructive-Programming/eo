@@ -247,7 +247,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   case class AdultPerson(age: Int)
 
-  val adultAge: Optic[AdultPerson, Unit, Int, Int, Affine] =
+  val adultAge: Optic[AdultPerson, Unit, Int, Unit, Affine] =
     Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
 
   val adultAgeAF: AffineFold[AdultPerson, Int] =
@@ -270,7 +270,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(evenSelectAF.foldMap(identity[Int])(3) === 0)
       .and(evenSelectAF.foldMap(identity[Int])(0) === 0)
 
-    val mfo: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
+    // AffineFold is honestly one-way (B = Unit), so modifyA visits the focus producing G[Unit].
+    val mfo: Int => Option[Unit] = n => Option.when(n > 0)(())
     val mAOk = (adultAge.modifyA[Option](mfo)(AdultPerson(20)) === Some(()))
       .and(adultAge.modifyA[Option](mfo)(AdultPerson(15)) === Some(()))
 
@@ -355,23 +356,24 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(composed.get(composed.reverseGet(8)) === 8) // round-trips
   }
 
-  // covers: cross is genuinely CROSS-CARRIER (not just same-carrier) — a Review (Direct, builds)
-  // crossed with an AffineFold (Affine, partial read) bridges via Morph[Direct, Affine], so the
-  // composite is a partial optic: .getOption, Some on hit / None on miss.
-  "Optic.cross: cross-carrier (Review[Direct] × AffineFold[Affine]) yields a partial getOption" >> {
+  // covers: crossMorphed is genuinely CROSS-CARRIER — a Review (Direct, builds) crossed with an
+  // AffineFold (Affine, partial read) bridges via Morph[Direct, Affine], so the composite is a
+  // partial optic: .getOption, Some on hit / None on miss.
+  "Optic.crossMorphed: cross-carrier (Review[Direct] × AffineFold[Affine]) yields a partial getOption" >> {
     val lengthR = Review[Int, String](_.length) // builds Int from String
     val bigOnly = AffineFold.select[Int](_ > 3) // keeps the focus only when > 3
-    val crossed = lengthR.cross(bigOnly) // Optic[String,Unit,Int,Int,Affine] — cross-carrier
+    val crossed =
+      lengthR.crossMorphed(bigOnly) // Optic[String,Unit,Int,Unit,Affine] — cross-carrier
     (crossed.getOption("hello") === Some(5)) // length 5 > 3
       .and(crossed.getOption("ab") === None) // length 2, filtered out
   }
 
-  // covers: read-many now falls out of plain `cross` — crossing a Review (Direct, builds) with a
-  // Fold (Forget) bridges via the Composer[Direct, Forget] (sound now that Fold is honestly
-  // one-way), so the composite is a Fold over everything built. .foldMap, no separate crossFold.
-  "Optic.cross: Review crossed with a Fold (cross-carrier) yields a read-many Fold" >> {
+  // covers: read-many falls out of crossMorphed — crossing a Review (Direct, builds) with a Fold
+  // (Forget) bridges via the Composer[Direct, Forget] (sound now that Fold is honestly one-way),
+  // so the composite is a Fold over everything built. .foldMap, no separate crossFold.
+  "Optic.crossMorphed: Review crossed with a Fold (cross-carrier) yields a read-many Fold" >> {
     val buildList = Review[List[Int], Int](n => (1 to n).toList) // reverseGet n => [1..n]
-    val sumAll = buildList.cross(Fold[List, Int]) // Optic[Int,Unit,Int,Unit,Forget[List]]
+    val sumAll = buildList.crossMorphed(Fold[List, Int]) // Optic[Int,Unit,Int,Unit,Forget[List]]
     (sumAll.foldMap[Int](identity)(3) === 6) // 1+2+3
       .and(sumAll.foldMap[Int](identity)(4) === 10) // 1+2+3+4
   }

@@ -1,5 +1,13 @@
 # Recursion schemes
 
+> **Status: exploratory.** This module is an early exploration of *what* recursion schemes as
+> optics should look like and *how* they should be shaped — the API is not yet stable. In
+> particular the engine threads children through `PSVec` (a `Array[AnyRef]`-backed vector): this is
+> very performant but **type-unsafe** — the per-node child results are erased to `AnyRef` and the
+> combiner indexes them positionally, so a coalgebra/algebra arity mismatch is a runtime error, not
+> a compile error. Ideas for recovering type safety without losing the stack-safe machine (a typed
+> pattern-functor layer? indexed vectors?) are very welcome.
+
 `cats-eo-schemes` expresses the recursion schemes **as optics**, so they compose with the rest
 of the optic algebra rather than living in a separate world:
 
@@ -116,8 +124,10 @@ refoldSum.get(2)
 intermediate structure is large; reach for `ana` / `cata` / `cross` when you want the
 intermediate `S`, or want to drop the schemes into a larger optic pipeline.
 
-Because `cross` is cross-carrier, crossing a builder with a **`Fold`** (not just a single-focus
-getter) reads *many* foci from what was built — read-many falls out of the same combinator:
+`cross` composes under a single carrier; its cross-carrier sibling `crossMorphed` (mirroring
+`andThen` vs `andThenMorphed`) bridges different carriers via `Morph`. Crossing a builder with a
+**`Fold`** (not just a single-focus getter) reads *many* foci from what was built — read-many falls
+out of `crossMorphed`:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Fold, Review}
@@ -126,7 +136,7 @@ import cats.instances.list.given
 
 // build a List[Int] from a seed, then fold every element
 val buildList = Review[List[Int], Int](n => (1 to n).toList)
-val sumBuilt = buildList.cross(Fold[List, Int])
+val sumBuilt = buildList.crossMorphed(Fold[List, Int])
 ```
 
 ```scala mdoc
