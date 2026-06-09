@@ -323,7 +323,16 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
 
 lazy val root: Project = project
   .in(file("."))
-  .aggregate(core, laws, tests, generics, circeIntegration, avroIntegration, jsoniterIntegration)
+  .aggregate(
+    core,
+    laws,
+    tests,
+    generics,
+    circeIntegration,
+    avroIntegration,
+    jsoniterIntegration,
+    schemes,
+  )
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-root",
@@ -379,6 +388,27 @@ lazy val tests: Project = project
     // typeclass boilerplate out of the way of the optics story.
     libraryDependencies += kindlingsCats % Test,
     libraryDependencies += kindlingsCirce % Test,
+  )
+
+// Recursion schemes as composable optics: `cata` (a Getter on Plated), `ana`
+// (a Review), and a FUSED `hylo` (Getter[Seed, A], no intermediate S), plus the
+// materializing `ana.cross(cata)` composition via core's `cross` combinator.
+// `core`-only main dependency; tests use generics' `plate[S]` and circe's
+// `platedJson`. See docs/plans/2026-06-09-001-feat-schemes-module-plan.md.
+lazy val schemes: Project = project
+  .in(file("schemes"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics") % Test,
+    LocalProject("circeIntegration") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-schemes",
+    libraryDependencies += cats,
+    libraryDependencies += discipline % Test,
+    libraryDependencies += scalacheck % Test,
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,
@@ -508,6 +538,7 @@ lazy val docs: Project = project
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
     LocalProject("laws"),
+    LocalProject("schemes"),
   )
   .settings(commonSettings *)
   .settings(
