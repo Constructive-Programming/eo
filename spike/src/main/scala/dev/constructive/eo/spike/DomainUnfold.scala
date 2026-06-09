@@ -5,19 +5,17 @@ import dev.constructive.eo.data.PSVec
 import higherkindness.droste.{scheme, Algebra, Coalgebra, Embed}
 import io.circe.Json
 
-/** Stage-0 gate (U0b): the SAME domain generation — unfold a numeric range
-  * `(lo, hi)` into a balanced binary tree rendered as circe `Json` (int leaves,
-  * 2-element arrays for branches) — written THREE ways, so the gate can compare
-  * call-site ceremony honestly.
+/** Stage-0 gate (U0b): the SAME domain generation — unfold a numeric range `(lo, hi)` into a
+  * balanced binary tree rendered as circe `Json` (int leaves, 2-element arrays for branches) —
+  * written THREE ways, so the gate can compare call-site ceremony honestly.
   *
-  *   1. [[hand]]   — plain recursion ("what a user writes today").
+  *   1. [[hand]] — plain recursion ("what a user writes today").
   *   2. [[droste]] — droste `scheme.ana` over a hand-defined pattern functor.
-  *   3. [[eo]]     — eo encoding-A: closure-carrying `ana`, full per-node closure
-  *                   spelled out at the call site (the sketch the gate measures;
-  *                   the real stack-safe engine is U1b).
+  *   3. [[eo]] — eo encoding-A: closure-carrying `ana`, full per-node closure spelled out at the
+  *      call site (the sketch the gate measures; the real stack-safe engine is U1b).
   *
-  * This is a generation example: there is no pre-existing `Json` to walk — the tree
-  * is built from a flat seed. See the plan's U0b / falsifiable-gate criterion.
+  * This is a generation example: there is no pre-existing `Json` to walk — the tree is built from a
+  * flat seed. See the plan's U0b / falsifiable-gate criterion.
   */
 object DomainUnfold:
 
@@ -40,11 +38,13 @@ object DomainUnfold:
     case Branch(left: A, right: A)
 
   given Functor[RangeF] with
+
     def map[A, B](fa: RangeF[A])(f: A => B): RangeF[B] = fa match
       case RangeF.Leaf(v)      => RangeF.Leaf(v)
       case RangeF.Branch(l, r) => RangeF.Branch(f(l), f(r))
 
   given Embed[RangeF, Json] with
+
     def algebra: Algebra[RangeF, Json] = Algebra {
       case RangeF.Leaf(v)      => Json.fromInt(v)
       case RangeF.Branch(l, r) => Json.arr(l, r)

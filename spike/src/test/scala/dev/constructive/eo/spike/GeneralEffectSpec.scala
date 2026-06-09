@@ -4,10 +4,10 @@ import cats.Eval
 import dev.constructive.eo.data.PSVec
 import org.specs2.mutable.Specification
 
-/** Closes the last gap vs droste: one generic `hyloM` threads an ARBITRARY lawful
-  * `Monad[M]` stack-safely (via the law-required stack-safe `tailRecM`), not just a special
-  * monad. Demonstrated for two unrelated monads — `Eval` and `Either` — both at depth 10⁶.
-  * (droste's `hyloM` is stack-safe only when `M` itself is; this is stack-safe for any `M`.)
+/** Closes the last gap vs droste: one generic `hyloM` threads an ARBITRARY lawful `Monad[M]`
+  * stack-safely (via the law-required stack-safe `tailRecM`), not just a special monad.
+  * Demonstrated for two unrelated monads — `Eval` and `Either` — both at depth 10⁶. (droste's
+  * `hyloM` is stack-safe only when `M` itself is; this is stack-safe for any `M`.)
   */
 class GeneralEffectSpec extends Specification:
 
@@ -39,10 +39,9 @@ class GeneralEffectSpec extends Specification:
   "generic hyloM agrees with the Either-specialised machine at shallow depth" >> {
     (0 to 50).forall { n =>
       val general = Schemes.hyloM(eitherSpine(blockAt = -1))(n)
-      val special = Schemes.hyloEither(
-        (m: Int) =>
-          if m <= 0 then Right((PSVec.empty[Int], (_: PSVec[Int]) => 0))
-          else Right((PSVec.singleton(m - 1), (ks: PSVec[Int]) => ks(0) + 1)),
+      val special = Schemes.hyloEither((m: Int) =>
+        if m <= 0 then Right((PSVec.empty[Int], (_: PSVec[Int]) => 0))
+        else Right((PSVec.singleton(m - 1), (ks: PSVec[Int]) => ks(0) + 1))
       )(n)
       general == special
     } must beTrue

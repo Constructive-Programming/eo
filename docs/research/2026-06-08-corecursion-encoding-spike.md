@@ -102,6 +102,28 @@ Crucially, **B is essentially droste**: a typed pattern functor + `Traverse` + t
 stronger stack-safety. **A is the *only* encoding that justifies eo generation existing
 separately from droste** — it is the pattern-functor-free, least-ceremony, eo-native primitive.
 
+## Schemes as eo optics — the connection that makes them *eo's*
+
+An interim version of the engine (`Schemes.hylo`/`ana`/`cata` as free functions) was a fair
+criticism: *less* general than droste **and** disconnected from eo — touching no `Optic`,
+`Plated`, or carrier. That is the worst of both worlds and abandons the only reason to put
+schemes in an optics library. Fixed by expressing the schemes **as optics** (`Optics.scala`,
+`OpticsSpec` 4 green):
+
+- **`cata` is a `Getter`** — a real `Optic[S, Unit, A, Unit, Direct]` — **driven by a
+  generics-derived `Plated[S]`** (`plate[Expr]`). It reads children through `Plated.childrenVec`
+  (so it generalises `Plated.transform` from `S=>S` to `S=>A`) and returns an eo optic.
+- **`ana` is a `Review`** — eo's reverse-construction optic, the established dual of `Getter`.
+- **They compose.** `outerGetter.andThen(cata(alg))` reads through an optic to a recursive
+  structure and folds it in one composed `Getter` (verified: `Wrapped --Getter--> Expr
+  --cata--> Double`). **droste's free-standing schemes cannot do this.**
+
+This reframes the droste comparison honestly: eo's generality is **compositional** (schemes
+join the whole optic algebra — `andThen` with lenses/prisms/folds), which is a *different
+axis* from droste's **pattern-functor** generality (the full zoo over any `Functor`). eo
+trades the latter for the former — and the former is the entire point of eo. So "lacks
+droste's generality" is true on the zoo axis and beside the point on the axis eo exists for.
+
 ## Verdict
 
 **If eo adds a generation surface, encoding A (closure) is primary; B is an optional

@@ -4,8 +4,8 @@ import dev.constructive.eo.data.PSVec
 import org.specs2.mutable.Specification
 
 /** Stage 1 (U1c): the win that justifies a scheme over a hand-written recursion — eo's
-  * synchronous-machine `hylo` completes a depth-10⁶ unfold (crossing well past any
-  * call-stack limit) where the naive recursion `StackOverflow`s.
+  * synchronous-machine `hylo` completes a depth-10⁶ unfold (crossing well past any call-stack
+  * limit) where the naive recursion `StackOverflow`s.
   */
 class StackSafetySpec extends Specification:
 
@@ -30,5 +30,7 @@ class StackSafetySpec extends Specification:
   }
 
   "both agree on a shallow depth (correctness of the machine)" >> {
-    (0 to 50).forall(n => Schemes.hylo(depthCoalg)(n) == Schemes.hyloNaive(depthCoalg)(n)) must beTrue
+    (0 to 50).forall(n =>
+      Schemes.hylo(depthCoalg)(n) == Schemes.hyloNaive(depthCoalg)(n)
+    ) must beTrue
   }

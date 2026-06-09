@@ -3,10 +3,10 @@ package dev.constructive.eo.spike
 import dev.constructive.eo.data.PSVec
 import org.specs2.mutable.Specification
 
-/** The ultimate proof: **stack-safe AND effectful together** (the full arbo shape). A
-  * depth-10⁶ unfold whose expansion is a fail-able effect (`Either`, arbo's `M`) completes
-  * via eo's heap machine where the naive effectful recursion overflows — and the effect
-  * (a deep `Left`) is threaded correctly, which requires reaching that depth stack-safely.
+/** The ultimate proof: **stack-safe AND effectful together** (the full arbo shape). A depth-10⁶
+  * unfold whose expansion is a fail-able effect (`Either`, arbo's `M`) completes via eo's heap
+  * machine where the naive effectful recursion overflows — and the effect (a deep `Left`) is
+  * threaded correctly, which requires reaching that depth stack-safely.
   */
 class EffectfulStackSafetySpec extends Specification:
 
@@ -37,7 +37,8 @@ class EffectfulStackSafetySpec extends Specification:
 
   "eo and naive agree at shallow depth, success and failure" >> {
     val ok = (0 to 50).forall(n =>
-      Schemes.hyloEither(spine(blockAt = -1))(n) == Schemes.hyloEitherNaive(spine(blockAt = -1))(n))
+      Schemes.hyloEither(spine(blockAt = -1))(n) == Schemes.hyloEitherNaive(spine(blockAt = -1))(n)
+    )
     val fail = Schemes.hyloEither(spine(blockAt = 10))(40) ==
       Schemes.hyloEitherNaive(spine(blockAt = 10))(40)
     (ok && fail) must beTrue

@@ -5,11 +5,11 @@ import org.specs2.mutable.Specification
 
 /** Stage 2: encoding B (typed descriptor) on the same effectful example as encoding A.
   *
-  * B uses a typed, named coalgebra/algebra over the `GameF` pattern functor — exactly
-  * arbo's `optionsCoalgebra` / `optionsAlgebra` shape — and (via the `Traverse`-adapter in
-  * `Schemes.hyloM_B`) desugars to the encoding-A machine, so it inherits A's stack-safety
-  * and monad-generality. The cost of B over A is purely defining `GameF` + its
-  * `Functor`/`Traverse` (reused here from `EffectfulDemo`); the payoff is the typed fold.
+  * B uses a typed, named coalgebra/algebra over the `GameF` pattern functor — exactly arbo's
+  * `optionsCoalgebra` / `optionsAlgebra` shape — and (via the `Traverse`-adapter in
+  * `Schemes.hyloM_B`) desugars to the encoding-A machine, so it inherits A's stack-safety and
+  * monad-generality. The cost of B over A is purely defining `GameF` + its `Functor`/`Traverse`
+  * (reused here from `EffectfulDemo`); the payoff is the typed fold.
   */
 class EncodingBSpec extends Specification:
 
@@ -42,10 +42,13 @@ class EncodingBSpec extends Specification:
   private def spineCoalgB(n: Int): Eth[GameF[Int]] =
     if n <= 0 then Right(GameF.Tip(0))
     else Right(GameF.Branch("", List(n - 1)))
+
   private val spineAlgB: GameF[Int] => Int =
     case GameF.Tip(s)        => s
     case GameF.Branch(_, ks) => ks.head + 1
 
   "encoding B is stack-safe at depth 10^6 (inherited from the encoding-A machine)" >> {
-    (Schemes.hyloM_B[Eth, GameF, Int, Int](spineCoalgB, spineAlgB)(1_000_000) == Right(1_000_000)) must beTrue
+    (Schemes.hyloM_B[Eth, GameF, Int, Int](spineCoalgB, spineAlgB)(1_000_000) == Right(
+      1_000_000
+    )) must beTrue
   }

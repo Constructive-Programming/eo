@@ -4,22 +4,22 @@ import cats.{Monad, Traverse}
 import cats.syntax.all.*
 import dev.constructive.eo.data.PSVec
 
-/** Stage 1 (U1a/U1b): stack-safe encoding-A schemes via an explicit `ArrayDeque`
-  * post-order machine — the plan's "one synchronous engine", mirroring
-  * `Plated.transformMachine` (core `Plated.scala:128-147`): every node is *pushed as a
-  * frame*, never recursed on the JVM call stack, so descent is heap-bounded for any
-  * coalgebra. No fixpoint axis ⇒ no `Eval` needed (the effectful variant — already shown
-  * in `EffectfulDemo` — threads its monad via a traverse; combining that with this heap
-  * machine for arbitrary `M` is the genuinely harder follow-on).
+/** Stage 1 (U1a/U1b): stack-safe encoding-A schemes via an explicit `ArrayDeque` post-order machine
+  * — the plan's "one synchronous engine", mirroring `Plated.transformMachine` (core
+  * `Plated.scala:128-147`): every node is *pushed as a frame*, never recursed on the JVM call
+  * stack, so descent is heap-bounded for any coalgebra. No fixpoint axis ⇒ no `Eval` needed (the
+  * effectful variant — already shown in `EffectfulDemo` — threads its monad via a traverse;
+  * combining that with this heap machine for arbitrary `M` is the genuinely harder follow-on).
   *
-  * This is the thing that justifies a scheme over a hand-written one-off: the naive
-  * recursion ([[hyloNaive]]) `StackOverflow`s on a deep spine; [[hylo]] does not.
+  * This is the thing that justifies a scheme over a hand-written one-off: the naive recursion
+  * ([[hyloNaive]]) `StackOverflow`s on a deep spine; [[hylo]] does not.
   */
 object Schemes:
 
-  /** Encoding-A coalgebra: a seed yields its child seeds plus a combiner from the folded
-    * child results. A leaf is `(PSVec.empty, _ => value)`. Node payload is available to the
-    * combiner via closure capture. */
+  /** Encoding-A coalgebra: a seed yields its child seeds plus a combiner from the folded child
+    * results. A leaf is `(PSVec.empty, _ => value)`. Node payload is available to the combiner via
+    * closure capture.
+    */
   type CoalgA[Seed, A] = Seed => (PSVec[Seed], PSVec[A] => A)
 
   /** Stack-safe fused hylo: `Seed => A`, building no persistent intermediate tree. */
@@ -69,11 +69,13 @@ object Schemes:
   // threads via `Eval` exactly as `Plated.rewrite` does — this concretises it for `Either`.)
 
   /** Effectful, fail-able coalgebra: a seed yields `Left(e)` (effect failure) or
-    * `Right((childSeeds, combine))`. */
+    * `Right((childSeeds, combine))`.
+    */
   type CoalgEither[E, Seed, A] = Seed => Either[E, (PSVec[Seed], PSVec[A] => A)]
 
-  /** Stack-safe effectful fused hylo: `Seed => Either[E, A]`. Heap stack; short-circuits on
-    * the first `Left`. Completes deep unfolds that [[hyloEitherNaive]] overflows on. */
+  /** Stack-safe effectful fused hylo: `Seed => Either[E, A]`. Heap stack; short-circuits on the
+    * first `Left`. Completes deep unfolds that [[hyloEitherNaive]] overflows on.
+    */
   def hyloEither[E, Seed, A](coalg: CoalgEither[E, Seed, A])(seed: Seed): Either[E, A] =
     final class Frame(
         val kids: PSVec[Seed],
@@ -86,7 +88,7 @@ object Schemes:
     // Some(e) aborts the whole machine with that failure.
     def enter(s: Seed): Option[E] =
       coalg(s) match
-        case Left(e) => Some(e)
+        case Left(e)                => Some(e)
         case Right((kids, combine)) =>
           if kids.isEmpty then
             ret = combine(PSVec.empty[A]).asInstanceOf[AnyRef]
@@ -96,7 +98,7 @@ object Schemes:
             None
     enter(seed) match
       case Some(e) => Left(e)
-      case None =>
+      case None    =>
         var aborted: Option[E] = None
         while aborted.isEmpty && !stack.isEmpty do
           val fr = stack.peek()
@@ -152,10 +154,11 @@ object Schemes:
             val _ = stack.pop()
       result.asInstanceOf[Either[Seed, A]]
     M.tailRecM(seed) { s =>
-      M.map(coalg(s)) { case (kids, combine) =>
-        if kids.isEmpty then ret = combine(PSVec.empty[A]).asInstanceOf[AnyRef]
-        else stack.push(new Frame(kids, new Array[AnyRef](kids.length), combine, 0))
-        advance()
+      M.map(coalg(s)) {
+        case (kids, combine) =>
+          if kids.isEmpty then ret = combine(PSVec.empty[A]).asInstanceOf[AnyRef]
+          else stack.push(new Frame(kids, new Array[AnyRef](kids.length), combine, 0))
+          advance()
       }
     }
 
@@ -193,7 +196,7 @@ object Schemes:
   /** Naive effectful recursion — overflows on a deep spine (the hand-written baseline). */
   def hyloEitherNaive[E, Seed, A](coalg: CoalgEither[E, Seed, A])(seed: Seed): Either[E, A] =
     coalg(seed) match
-      case Left(e) => Left(e)
+      case Left(e)                => Left(e)
       case Right((kids, combine)) =>
         if kids.isEmpty then Right(combine(PSVec.empty[A]))
         else
@@ -202,7 +205,7 @@ object Schemes:
             if i >= kids.length then Right(())
             else
               hyloEitherNaive(coalg)(kids(i)) match
-                case Left(e) => Left(e)
+                case Left(e)  => Left(e)
                 case Right(a) =>
                   out(i) = a.asInstanceOf[AnyRef]
                   loop(i + 1)
