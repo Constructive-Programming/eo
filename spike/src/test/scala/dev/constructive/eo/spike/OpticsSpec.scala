@@ -1,13 +1,14 @@
 package dev.constructive.eo.spike
 
-import dev.constructive.eo.data.PSVec
+import dev.constructive.eo.data.{Direct, PSVec}
 import dev.constructive.eo.generics.plate
-import dev.constructive.eo.optics.{DirectGetter, Getter, Plated}
+import dev.constructive.eo.optics.{DirectGetter, Getter, Optic, Plated}
 import dev.constructive.eo.spike.samples.Expr
 import org.specs2.mutable.Specification
 
-/** A non-recursive carrier holding an `Expr`, to demonstrate that `cata`-as-`Getter`
-  * composes onto an outer optic via `andThen` (top-level: no macro, but keeps it clean). */
+/** A non-recursive carrier holding an `Expr`, to demonstrate that `cata`-as-`Getter` composes onto
+  * an outer optic via `andThen` (top-level: no macro, but keeps it clean).
+  */
 final case class Wrapped(label: String, expr: Expr)
 
 /** Recursion schemes AS eo optics: cata is a composable `Getter` (driven by a generics-derived
@@ -39,13 +40,30 @@ class OpticsSpec extends Specification:
     (composed.get(Wrapped("x", expr)) == 7.0) must beTrue
   }
 
+  // seed n builds a right-nested Add of (n+1) ones, evaluating to n+1.
+  private val buildCoalg: Schemes.CoalgA[Int, Expr] = n =>
+    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(1.0))
+    else (PSVec.fromIterable(List(0, n - 1)), (ks: PSVec[Expr]) => Expr.Add(ks(0), ks(1)))
+
   "ana is a Review; cata ∘ ana evaluates a built structure (both as optics)" >> {
-    // seed n builds a right-nested Add of (n+1) ones, evaluating to n+1.
-    val buildCoalg: Schemes.CoalgA[Int, Expr] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(1.0))
-      else (PSVec.fromIterable(List(0, n - 1)), (ks: PSVec[Expr]) => Expr.Add(ks(0), ks(1)))
     val built: Expr = Optics.ana(buildCoalg).reverseGet(3)
     (Optics.cata(evalAlg).get(built) == 4.0) must beTrue
+  }
+
+  "ana's Review IS an eo Optic (ascribes to Optic; the build runs through optic `from`)" >> {
+    // Compile-time proof: ReviewOptic widens to Optic[Unit, Expr, Unit, Int, Direct].
+    val asOptic: Optic[Unit, Expr, Unit, Int, Direct] = Optics.ana(buildCoalg)
+    val _ = asOptic.to(()) // exercises the (vestigial) optic read side — the surface is real
+    // The optic's own `from` is the build direction (focus Int -> built Expr).
+    val built: Expr = Optics.ana(buildCoalg).from(Direct[Nothing, Int](3))
+    (Optics.cata(evalAlg).get(built) == 4.0) must beTrue
+  }
+
+  "Review composes via andThen, as an optic" >> {
+    // build Expr from a String by its length: Review[Expr,Int] ∘ Review[Int,String]
+    val lenRev: Optics.ReviewOptic[Int, String] = Optics.ReviewOptic(_.length)
+    val composed: Optics.ReviewOptic[Expr, String] = Optics.ana(buildCoalg).andThen(lenRev)
+    (Optics.cata(evalAlg).get(composed.reverseGet("abc")) == 4.0) must beTrue
   }
 
   "cata-as-Getter is stack-safe at depth 10^6 (Plated-driven machine)" >> {

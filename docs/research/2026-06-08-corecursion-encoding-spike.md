@@ -113,10 +113,20 @@ schemes in an optics library. Fixed by expressing the schemes **as optics** (`Op
 - **`cata` is a `Getter`** — a real `Optic[S, Unit, A, Unit, Direct]` — **driven by a
   generics-derived `Plated[S]`** (`plate[Expr]`). It reads children through `Plated.childrenVec`
   (so it generalises `Plated.transform` from `S=>S` to `S=>A`) and returns an eo optic.
-- **`ana` is a `Review`** — eo's reverse-construction optic, the established dual of `Getter`.
+- **`ana` is a `Review` that is itself an `Optic`** — `ReviewOptic[S, A] extends
+  Optic[Unit, S, Unit, A, Direct]`, the exact **mirror of `Getter`** (`Optic[S, Unit, A,
+  Unit, Direct]`): `Getter` has a real `to` (read `S=>A`) + vestigial `from`; `Review` has a
+  vestigial `to` (reads `Unit`) + a real `from` that *builds* `S` from focus `A`. Confirmed
+  empirically (`OpticsSpec`): it ascribes to `Optic[…]`, its `to`/`from` run, and it composes
+  via `andThen`. **Note:** eo's *core* `Review` is a bare case class that deliberately doesn't
+  extend `Optic` ("pure Review has no `to`") — but with source `Unit` its `to` is exactly as
+  vestigial as `Getter`'s `from`, so that is an inconsistency with `Getter`, not a necessity.
+  If generation graduates, core `Review` should be reworked to extend `Optic` (the mirror of
+  `DirectGetter`), unifying the read/build optic pair.
 - **They compose.** `outerGetter.andThen(cata(alg))` reads through an optic to a recursive
   structure and folds it in one composed `Getter` (verified: `Wrapped --Getter--> Expr
-  --cata--> Double`). **droste's free-standing schemes cannot do this.**
+  --cata--> Double`); and `ana(...).andThen(ReviewOptic(...))` composes builds the dual way.
+  **droste's free-standing schemes cannot do this.**
 
 This reframes the droste comparison honestly: eo's generality is **compositional** (schemes
 join the whole optic algebra — `andThen` with lenses/prisms/folds), which is a *different
