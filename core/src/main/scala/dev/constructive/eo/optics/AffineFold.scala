@@ -40,14 +40,7 @@ object AffineFold:
   def select[A](p: A => Boolean): AffineFold[A, A] =
     apply(a => Option(a).filter(p))
 
-  /** Drop the write path of an [[Optional]]. @group Constructors */
-  def fromOptional[S, T, A, B](o: Optional[S, T, A, B]): AffineFold[S, A] =
-    apply(s => o.getOrModify(s).toOption)
-
-  /** Drop the build path of any `Either`-carrier optic, retaining the `Right` branch as
-    * `Option[A]`.
-    *
-    * @group Constructors
-    */
-  def fromPrism[S, T, A, B](p: Optic[S, T, A, B, Either]): AffineFold[S, A] =
-    apply(s => p.to(s).toOption)
+  // No `fromOptional` / `fromPrism` weakening factories: a writable optic's read-only view is
+  // just `AffineFold(optic.getOption)` (`.getOption` is defined on both the Affine and Either
+  // carriers), and eo provides no analogous `Getter.fromLens` / `Fold.fromTraversal`, so a
+  // bespoke cross-optic conversion here would be an inconsistent one-off.

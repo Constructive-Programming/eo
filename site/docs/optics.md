@@ -496,15 +496,18 @@ evenAF.getOption(3)
 ```
 
 Narrow an existing `Optional` or `Prism` to its read-only
-projection via `AffineFold.fromOptional` / `AffineFold.fromPrism` —
-both return an `AffineFold[S, A]` that holds the matcher but
-discards the write / build path.
+projection with `AffineFold(optic.getOption)` — `.getOption` is
+defined on both the Affine and Either carriers, so this holds the
+matcher while discarding the write / build path. (There is no
+bespoke `fromOptional` / `fromPrism` factory: the conversion is a
+one-liner, and eo provides no `Getter.fromLens` /
+`Fold.fromTraversal` for the same reason.)
 
 **Composition note.** Direct `lens.andThen(af)` on an
 `AffineFold` does not type-check: the outer `B` slot doesn't
 align with the inner `T = Unit`. Build a full composed
 `Optional` through the Lens chain and narrow the result with
-`AffineFold.fromOptional`.
+`AffineFold(optional.getOption)`.
 
 ### Fold
 
