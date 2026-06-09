@@ -157,10 +157,10 @@ class SchemesFSpec extends Specification:
   // ----- stack-safety (R2): 10^6 deep -----
   //
   // cataF and hyloF descend a 10^6-deep spine; anaF additionally materializes an O(n) Bin. The
-  // Eval.defer trampoline moves the recursion off the JVM call stack onto the heap, so these
-  // complete without StackOverflowError where a naive recursion would overflow. Space is O(depth)
-  // but the Eval chain is allocation-heavy (several Eval nodes per layer) — a large constant the
-  // deferred JMH bench will quantify — so the module forks its tests with a generous heap (build.sbt).
+  // foldLayered machine (the same < 512-on-stack / heap-ArrayDeque hybrid as the PSVec schemes)
+  // moves the deep recursion off the JVM call stack onto the heap, so these complete without
+  // StackOverflowError where a naive recursion would overflow — in O(depth) space, no Eval chain,
+  // so they run in the default test heap (no fork needed, like #23's PSVec 10^6 cases).
 
   private val Deep = 1_000_000
 
