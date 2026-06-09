@@ -66,16 +66,17 @@ bodySum.get(Payload("p", doc))
 
 ## `ana` — an unfold that is a `Review`
 
-An `expand` maps a seed to its child seeds; a `build` reassembles a node from its built children.
-It returns a `Review`, so `.reverseGet` runs the unfold:
+A coalgebra maps a seed to its child seeds plus a builder for the node (the canonical anamorphism
+shape — children and assembly decided together). It returns a `Review`, so `.reverseGet` runs the
+unfold:
 
 ```scala mdoc:silent
 // seed n builds a right-nested pair tree of depth n, leaves = 1
 val buildTree =
-  Schemes.ana[Int, Json](
-    expand = n => if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1),
-    build = (n, ks) => if n <= 0 then Json.fromInt(1) else Json.arr(ks(0), ks(1)),
-  )
+  Schemes.ana[Int, Json] { n =>
+    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Json]) => Json.fromInt(1))
+    else (PSVec.of(0, n - 1), (ks: PSVec[Json]) => Json.arr(ks(0), ks(1)))
+  }
 ```
 
 ```scala mdoc

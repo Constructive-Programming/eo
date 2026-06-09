@@ -29,11 +29,13 @@ class SchemesSpec extends Specification:
   private val expandFib: Int => PSVec[Int] = n =>
     if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1)
 
-  // build a right-nested Add of (n+1) ones (materializing) → evaluates to n+1.
-  private val buildAdd: (Int, PSVec[Expr]) => Expr = (n, ks) =>
-    if n <= 0 then Expr.Lit(1.0) else Expr.Add(ks(0), ks(1))
+  // bundled coalgebra for ana: each seed's child seeds + how to assemble the Expr node.
+  // Builds a right-nested Add of (n+1) ones → evaluates to n+1.
+  private val buildExprCoalg: Schemes.Coalg[Int, Expr] = n =>
+    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(1.0))
+    else (PSVec.of(0, n - 1), (ks: PSVec[Expr]) => Expr.Add(ks(0), ks(1)))
 
-  // the same computation FUSED (folds to Double directly; no Expr built).
+  // the same computation FUSED (folds to Double directly; no Expr built) — hylo's split form.
   private val fusedFib: (Int, PSVec[Double]) => Double = (n, rs) =>
     if n <= 0 then 1.0 else rs(0) + rs(1)
 
@@ -56,21 +58,19 @@ class SchemesSpec extends Specification:
   }
 
   "ana is a Review that builds an Expr from a seed" >> {
-    val built: Expr = Schemes.ana(expandFib, buildAdd).reverseGet(3)
+    val built: Expr = Schemes.ana(buildExprCoalg).reverseGet(3)
     (Schemes.cata(eval).get(built) == 4.0) must beTrue
   }
 
   "ana.cross(cata) composes build->read (the materializing hylo) via core `cross`" >> {
     val refold =
-      Schemes
-        .ana(expandFib, buildAdd)
-        .cross(Schemes.cata(eval)) // Optic[Int,Unit,Double,Unit,Direct]
+      Schemes.ana(buildExprCoalg).cross(Schemes.cata(eval)) // Optic[Int,Unit,Double,Unit,Direct]
     (refold.get(3) == 4.0) must beTrue
   }
 
   "fused hylo folds a seed to a value (no intermediate Expr) and agrees with cata∘ana" >> {
     val h: DirectGetter[Int, Double] = Schemes.hylo(expandFib, fusedFib)
-    val viaCross = Schemes.ana(expandFib, buildAdd).cross(Schemes.cata(eval)).get(3)
+    val viaCross = Schemes.ana(buildExprCoalg).cross(Schemes.cata(eval)).get(3)
     (h.get(3) == 4.0) && (viaCross == 4.0) must beTrue
   }
 
@@ -121,11 +121,10 @@ class SchemesSpec extends Specification:
   }
 
   "ana builds a nested circe Json from a seed" >> {
-    val expandJson: Int => PSVec[Int] =
-      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
-    val buildJson: (Int, PSVec[Json]) => Json =
-      (n, ks) => if n <= 0 then Json.fromInt(0) else Json.arr(ks(0))
-    val built = Schemes.ana(expandJson, buildJson).reverseGet(2)
+    val buildJsonCoalg: Schemes.Coalg[Int, Json] = n =>
+      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Json]) => Json.fromInt(0))
+      else (PSVec.singleton(n - 1), (ks: PSVec[Json]) => Json.arr(ks(0)))
+    val built = Schemes.ana(buildJsonCoalg).reverseGet(2)
     (built == Json.arr(Json.arr(Json.fromInt(0)))) must beTrue
   }
 
@@ -152,11 +151,10 @@ class SchemesSpec extends Specification:
   }
 
   "ana's unfold loop is stack-safe (built S is O(depth) heap, not JVM stack)" >> {
-    val expandSpine: Int => PSVec[Int] =
-      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
-    val buildNeg: (Int, PSVec[Expr]) => Expr =
-      (n, ks) => if n <= 0 then Expr.Lit(0.0) else Expr.Neg(ks(0))
-    val deep: Expr = Schemes.ana(expandSpine, buildNeg).reverseGet(100_000)
+    val buildNegCoalg: Schemes.Coalg[Int, Expr] = n =>
+      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(0.0))
+      else (PSVec.singleton(n - 1), (ks: PSVec[Expr]) => Expr.Neg(ks(0)))
+    val deep: Expr = Schemes.ana(buildNegCoalg).reverseGet(100_000)
     val depth: (Expr, PSVec[Int]) => Int = (node, kids) =>
       node match
         case Expr.Lit(_) => 0
