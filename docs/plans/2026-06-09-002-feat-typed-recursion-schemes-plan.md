@@ -1,7 +1,7 @@
 ---
 title: "feat: Typed pattern-functor recursion schemes (cataF/anaF/hyloF)"
 type: feat
-status: active
+status: completed
 date: 2026-06-09
 origin: docs/brainstorms/2026-06-09-pattern-functor-carrier-requirements.md
 deepened: 2026-06-09
