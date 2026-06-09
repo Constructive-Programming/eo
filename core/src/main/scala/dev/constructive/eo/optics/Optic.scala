@@ -151,29 +151,40 @@ object Optic:
     private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
       cf.to(self)
 
-    /** Build-then-observe across the *build-output ⇄ read-input* seam, **preserving structure**.
-      * Flip `self` (it must be reversible — `Accessor[F]` *and* `ReverseAccessor[F]`, i.e. an `Iso`
-      * or `Review` over `Direct`) so it reads `T` from `B`, then `andThen` `that` — which may sit
-      * on a **different carrier** `G`, with a `Morph[F, G]` bridging the two. The result is the
-      * full `Optic[B, A, C, D, m.Out]`, *not* a collapsed getter: its read capability follows the
-      * composed carrier — `.get` for a total read (Getter/Iso/Lens `that`), `.getOption` through a
-      * Prism, `.foldMap` through a `Fold` — and `self`'s read focus `A` survives as the composite's
-      * write-back focus.
+    /** Build-then-observe across the *build-output ⇄ read-input* seam, **preserving structure**, on
+      * a **shared carrier** `F`. Flip `self` (it must be reversible — `Accessor[F]` *and*
+      * `ReverseAccessor[F]`, i.e. an `Iso` or `Review` over `Direct`) so it reads `T` from `B`,
+      * then `andThen` `that` under the same carrier. The result is the full `Optic[B, A, C, D, F]`,
+      * *not* a collapsed getter: its read capability follows the carrier (`.get` for `Direct`), and
+      * `self`'s read focus `A` survives as the composite's write-back focus.
       *
       * This is exactly `self.reverse.andThen(that)`. The motivating case is `ana.cross(cata)`: a
       * `Review` (the unfold) crossed with a getter on the built `S` (the fold) — a (materializing)
-      * hylomorphism whose `.get` reads the folded value. Crossing with a `Fold` instead
-      * (`ana.cross(Fold[…])`) yields a `Fold` over everything built — read-many falls out of the
-      * same combinator via the `Composer[Direct, Forget]` bridge.
+      * hylomorphism whose `.get` reads the folded value. When `that` sits on a *different* carrier
+      * (a Prism, a `Fold`, …), use [[crossMorphed]] instead.
       *
-      * Seam: `that`'s source is `self`'s `T` and `that`'s back-type is `self`'s `S` (so `that` must
-      * be read-only — `Getter`/`Fold` whose back-type is `Unit`, or aligned at `self`'s `S`).
-      * Reversibility excludes `Prism`-as-`self` (`Either` has no `Accessor`); build from a Prism by
-      * wrapping its `mend` in a `Review` first.
+      * Seam: `that`'s source is `self`'s `T` and its back-type is `self`'s `S`.
       *
       * @group Operations
       */
-    inline def cross[G[_, _], C, D](that: Optic[T, S, C, D, G])(using
+    inline def cross[C, D](that: Optic[T, S, C, D, F])(using
+        A: Accessor[F],
+        RA: ReverseAccessor[F],
+    ): Optic[B, A, C, D, F] =
+      val r = self.reverse
+      r.andThen(that)(using scala.compiletime.summonInline[AssociativeFunctor[F, r.X, that.X]])
+
+    /** Cross-carrier [[cross]] (mirrors `andThen` vs `andThenMorphed`) — when `that` sits on a
+      * *different* carrier `G`, a `Morph[F, G]` bridges the two before composing, so the result's
+      * read capability follows the *composed* carrier: `.getOption` through a Prism, `.foldMap`
+      * through a `Fold` (the latter via the `Composer[Direct, Forget]` bridge — read-many falls out
+      * of `crossMorphed`). Same seam and structure-preservation as [[cross]]. Reversibility still
+      * excludes `Prism`-as-`self` (`Either` has no `Accessor`); build from a Prism by wrapping its
+      * `mend` in a `Review` first.
+      *
+      * @group Operations
+      */
+    inline def crossMorphed[G[_, _], C, D](that: Optic[T, S, C, D, G])(using
         A: Accessor[F],
         RA: ReverseAccessor[F],
         m: Morph[F, G],

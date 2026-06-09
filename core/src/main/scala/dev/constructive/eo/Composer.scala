@@ -67,7 +67,7 @@ object Composer extends LowPriorityComposerInstances:
     *
     * @group Instances
     */
-  given forgetful2forget[F[_]](using F: cats.Applicative[F]): Composer[Direct, data.Forget[F]] with
+  given direct2forget[F[_]](using F: cats.Applicative[F]): Composer[Direct, data.Forget[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, data.Forget[F]] =
       new Optic[S, T, A, B, data.Forget[F]]:
