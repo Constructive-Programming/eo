@@ -158,22 +158,21 @@ but its *basic* schemes are stack-unsafe and don't compose as optics. The gap: a
   extract children, fold them under a trampoline, and rebuild the layer. `Functor[F]` alone forces
   naive recursion (droste's stack-unsafe basic path). `Traverse[F]` + `Eval` is the lawful
   stack-safe primitive. So the honest user obligation is `Traverse[F]` (which implies `Functor[F]`).
-  **Subtlety the tests must guard:** stack-safety holds only when `Traverse[F].traverse` sequences a
-  node's children through the supplied `Eval` `Applicative` **without on-stack recursion across the
-  spine** — true for cats-derived instances and bounded-fanout hand-written ones, but a naively
-  recursive hand-written `Traverse[F]` (or a non-`Eval`-lazy `foldRight`) can reintroduce stack
-  growth that a binary-spine depth test won't catch. Recommend users *derive* `Traverse[F]` where
-  possible; U4 adds a wide-and-deep shape to exercise the orthogonal failure mode.
-- **Driver mechanism: `Eval` trampoline first (primary), explicit typed heap machine as a deferred,
-  B/op-gated fallback.** This reconciles the apparent tension with #23's "no `Eval`" choice: #23 had
-  `Plated` hand it a *flat* `PSVec[S]` of children, making an explicit `ArrayDeque` machine natural
-  and `Eval` unnecessary. The typed path threads a *generic* `F`, where `Traverse[F] + Eval` (the
-  `Plated.rewrite` precedent, and droste's `hyloM` shape) is the clean stack-safe primitive.
-  Different child representation → different best tool; `Eval` here is principled, not a regression
-  of #23's reasoning. If U6's B/op measurement shows `Eval` misses droste-basic parity, the
-  fallback is an explicit typed heap machine (Foldable-extract into a buffer, fold, `Traverse`-rebuild
-  with an index) — more code, must not re-erase `F`'s children to `AnyRef`. This is a perf
-  optimization, **not** v1-blocking.
+  Because the deep recursion is driven by the array machine (below) and `Traverse[F]` is used only
+  *per layer* (bounded fanout), **any lawful `Traverse[F]` works** — stack-safety does not depend on
+  the user's `foldRight` being `Eval`-lazy.
+- **Driver mechanism: the explicit typed heap machine (`foldLayered`) — shipped, not `Eval`.**
+  *(Updated during implementation — see the resolved Open Question and `site/docs/benchmarks.md`.)*
+  v1 first shipped a `cats.Eval` trampoline (simplest), but U6's `-prof gc` showed it cost ~8–16×
+  droste basic (~316 B/node of `Eval` machinery). It was replaced with the pre-planned explicit
+  machine: the **same `< 512`-on-stack / heap-`ArrayDeque` hybrid as #23's `PSVec` engines**, but
+  keeping `F` typed at the algebra seam — `foldLeft` reads a node's children into a per-node array
+  (reused as the result accumulator, folded in place), the deep recursion runs on the machine, and
+  `map` rebuilds the typed `F[result]` for the algebra (leaf layers skip the rebuild via a phantom
+  recast). That cut allocation ~7× to **~1.1–2.2× droste basic** (hylo at parity), stack-safe to
+  10⁶ in the default heap (no `Eval`, no test fork). The residual `cata` gap is the inherent
+  native-`Bin`-vs-`Fix` cost (eo `project`s a layer per node; droste's `unfix` is free), the same
+  cost eo's `PSVec` `cata` pays.
 - **Everything in `cats-eo-schemes`, hand-written instances.** Per the chosen scope: no derive macro
   in v1, so `Project`/`Embed` type classes live in `schemes/` (not `core/`), no `generics` Compile
   dep, no module add, no CI regen. The derive macro (feasible — it generalizes `PlateMacro`) is a
@@ -204,13 +203,14 @@ but its *basic* schemes are stack-unsafe and don't compose as optics. The gap: a
 
 ### Resolved During Implementation
 
-- **Eval vs explicit heap machine (origin R2, B/op-gated): RESOLVED — Eval ships v1; heap machine is
-  a follow-up.** U6's `-prof gc` measurement (8 191-node tree, `site/docs/benchmarks.md`): the typed
-  `Eval` path is **~8–16× droste basic** B/op (`cata` 15.7×, `hylo` 7.9×, `ana` 8.2×; ~316 B/node of
-  `Eval` machinery) — it does **not** meet the parity bar. It ships as the correct / type-safe /
-  stack-safe v1 (allocation is the documented tradeoff; droste basic is neither stack-safe nor
-  optic-composable). Reaching parity needs the pre-planned explicit typed-heap-machine driver — now
-  a tracked follow-up, no longer a v1-conditional.
+- **Eval vs explicit heap machine (origin R2, B/op-gated): RESOLVED — the explicit heap machine
+  ships.** U6's `-prof gc` first showed the `Eval` trampoline at **~8–16× droste basic** B/op (~316
+  B/node of `Eval` machinery). Per the B/op gate, the driver was replaced with the pre-planned
+  explicit typed heap machine (`foldLayered` — the `< 512`-on-stack / heap-`ArrayDeque` hybrid, `F`
+  kept typed at the algebra seam). That cut allocation ~7× to **~1.1–2.2× droste basic** (`cata`
+  2.2×, `hylo` 1.1× = parity, `ana` 1.6×, now even beating eo's own `PSVec` `ana`) — typed,
+  stack-safe to 10⁶, no `Eval`, no test fork. No follow-up needed for parity. Table +
+  rationale: `site/docs/benchmarks.md`.
 - **Whether `Eval` reaches 10⁶ cleanly: RESOLVED — yes.** All three (`cataF`/`anaF`/`hyloF`) fold/
   build a 10⁶-deep spine without `StackOverflowError` (U4). `anaF` (the OOM frontier) needs ~1 GB at
   10⁶, so the module forks its tests with `-Xmx2g`.
