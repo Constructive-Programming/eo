@@ -3,16 +3,17 @@ package optics
 
 import data.Affine
 
-/** Read-only 0-or-1-focus optic — `Optic[S, Unit, A, A, Affine]`. `T = Unit` rules out `.modify` /
-  * `.replace`; the surface is `.getOption`, `.foldMap`, and effectful `.modifyA` / `.modifyF`
-  * (which produce `G[Unit]`). Composes with Lens / Prism via the same `Morph` bridges full Optional
-  * uses (they key off the carrier, not the `T` slot).
+/** Read-only 0-or-1-focus optic — `Optic[S, Unit, A, Unit, Affine]`. Both `T` and the write-focus
+  * `B` are `Unit` (honestly one-way, like `Getter` / `Fold`): there is no value to put back, so
+  * `.modify` / `.replace` don't apply. The surface is `.getOption` and `.foldMap`. Composes with
+  * Lens / Prism via the same `Morph` bridges full Optional uses (they key off the carrier, not the
+  * `T` slot).
   *
   * Specialised existential `X = (Unit, Unit)`: `Affine.Hit` stores `snd: Unit + b: A` — one
   * reference slot less than the `(S, A)` payload of a full Optional, since `from` throws its input
   * away anyway.
   */
-type AffineFold[S, A] = Optic[S, Unit, A, A, Affine]
+type AffineFold[S, A] = Optic[S, Unit, A, Unit, Affine]
 
 /** Constructors for [[AffineFold]]. */
 object AffineFold:
@@ -28,13 +29,13 @@ object AffineFold:
     *   }}}
     */
   def apply[S, A](matches: S => Option[A]): AffineFold[S, A] =
-    new Optic[S, Unit, A, A, Affine]:
+    new Optic[S, Unit, A, Unit, Affine]:
       type X = (Unit, Unit)
       val to: S => Affine[X, A] = s =>
         matches(s) match
           case Some(a) => new Affine.Hit[X, A]((), a)
           case None    => new Affine.Miss[X, A](())
-      val from: Affine[X, A] => Unit = _ => ()
+      val from: Affine[X, Unit] => Unit = _ => ()
 
   /** Filtering — hits only on inputs satisfying `p`. @group Constructors */
   def select[A](p: A => Boolean): AffineFold[A, A] =
