@@ -277,6 +277,34 @@ boilerplate; reach for `cataF`/`anaF`/`hyloF` when you want the algebra to be ty
 named constructors. Deriving `Project`/`Embed` from the `S`↔`F` correspondence is future work; today
 they are hand-written (as above).
 
+### Composing with lenses
+
+Because the schemes are `DirectGetter`s, they slot into a lens pipeline. Compose a **lens chain** to
+focus a recursive field buried in a record, then fold it with the scheme. Read-only optics compose
+`Getter`-to-`Getter`, so wrap the lens's read in a `Getter` (or just read at the leaf,
+`cataF(alg).get(lens.get(record))`) — the same composed lens still *writes* the field back:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Lens
+
+case class Inner(label: String, tree: Bin)
+case class Doc(id: Int, inner: Inner)
+
+val innerL = Lens[Doc, Inner](_.inner, (d, i) => d.copy(inner = i))
+val treeL  = Lens[Inner, Bin](_.tree, (i, t) => i.copy(tree = t))
+val deepTree = innerL.andThen(treeL) // Lens[Doc, Bin] — lens composition
+
+// wrap the composed lens's read in a Getter, then andThen the scheme → reusable Getter[Doc, Int]
+val docLeafSum = Getter[Doc, Bin](deepTree.get).andThen(sumLeavesF)
+
+val record = Doc(1, Inner("x", binTree))
+```
+
+```scala mdoc
+docLeafSum.get(record)                // focus Doc -> its tree, then fold to the leaf sum
+deepTree.replace(Bin.Leaf(0))(record) // the SAME composed lens writes the field back
+```
+
 The single peel/glue layer is also available on its own as `Schemes.fLayer[F, S]`, an
 `Optic[S, S, S, S, Forget[F]]` (`to = project`, `from = embed`) — the typed analogue of `Plated`'s
 `plate` for one layer. Given a `Foldable[F]` it reads a node's immediate foci via `.foldMap`. It is

@@ -48,13 +48,13 @@ class SchemesBench extends JmhDefaults:
   val fixTree: Fix[BinF] = balancedFix(Depth)
 
   // Prebuilt scheme optics / functions (construction not measured).
-  val eoCataG = Schemes.cata(eoSum) // DirectGetter[Bin, Int]
-  val eoHyloG = Schemes.hylo(eoExpand, eoHyloAlg) // DirectGetter[Int, Int]
+  val eoCataG = Schemes.cata(eoSum) // Getter[Bin, Int]
+  val eoHyloG = Schemes.hylo(eoExpand, eoHyloAlg) // Getter[Int, Int]
   val eoAnaR = Schemes.ana(eoAnaCoalg) // Review[Bin, Int]
 
   // typed pattern-functor path (Eval trampoline over Traverse[BinF])
-  val eoCataFG = Schemes.cataF(eoTypedSum) // DirectGetter[Bin, Int]
-  val eoHyloFG = Schemes.hyloF(eoTypedCoalg, eoTypedHyloAlg) // DirectGetter[Int, Int]
+  val eoCataFG = Schemes.cataF(eoTypedSum) // Getter[Bin, Int]
+  val eoHyloFG = Schemes.hyloF(eoTypedCoalg, eoTypedHyloAlg) // Getter[Int, Int]
   val eoAnaFR = Schemes.anaF[BinF, Int, Bin](eoTypedCoalg) // Review[Bin, Int]
 
   val drosteCataF: Fix[BinF] => Int = scheme.cata(drosteSum)
