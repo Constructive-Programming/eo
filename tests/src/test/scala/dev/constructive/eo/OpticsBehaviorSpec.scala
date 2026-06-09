@@ -28,7 +28,6 @@ import optics.Optic.*
 import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
 import data.Direct.given
 import data.Forget.given
-import data.Forget.andThen
 import data.Affine.given
 import data.MultiFocus.given
 import data.SetterF.given
@@ -162,10 +161,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   Fold.select keeps values matching the predicate (predicate-gated Forget[Option] carrier),
   //   Optional.foldMap returns the focus when matched, empty otherwise (Affine carrier hit/miss)
   "Fold.apply[List] / Fold.select / Optional.foldMap: predicate-gated + Monoid-empty on miss" >> {
-    val f: Optic[List[Int], Unit, Int, Int, Forget[List]] = Fold[List, Int]
+    val f: Optic[List[Int], Unit, Int, Unit, Forget[List]] = Fold[List, Int]
     val sumOk = forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
 
-    val evenFold: Optic[Int, Unit, Int, Int, Forget[Option]] = Fold.select[Int](_ % 2 == 0)
+    val evenFold: Optic[Int, Unit, Int, Unit, Forget[Option]] = Fold.select[Int](_ % 2 == 0)
     val selectOk = forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
 
     val evenFstOpt: Optic[(Int, Int), (Int, Int), Int, Int, Affine] =
@@ -248,7 +247,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   case class AdultPerson(age: Int)
 
-  val adultAge: Optic[AdultPerson, Unit, Int, Int, Affine] =
+  val adultAge: Optic[AdultPerson, Unit, Int, Unit, Affine] =
     Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
 
   val adultAgeAF: AffineFold[AdultPerson, Int] =
@@ -271,7 +270,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(evenSelectAF.foldMap(identity[Int])(3) === 0)
       .and(evenSelectAF.foldMap(identity[Int])(0) === 0)
 
-    val mfo: Int => Option[Int] = n => Option.when(n > 0)(n * 10)
+    // AffineFold is honestly one-way (B = Unit), so modifyA visits the focus producing G[Unit].
+    val mfo: Int => Option[Unit] = n => Option.when(n > 0)(())
     val mAOk = (adultAge.modifyA[Option](mfo)(AdultPerson(20)) === Some(()))
       .and(adultAge.modifyA[Option](mfo)(AdultPerson(15)) === Some(()))
 
@@ -330,6 +330,52 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val composeOk = composed.reverseGet("hello") === Some(5)
 
     applyOk.and(composeOk)
+  }
+
+  // covers: Optic.cross = self.reverse.andThen(that), structure-preserving. Review[Int,String]
+  // (builds Int from String) crossed with a getter on Int gives an Optic[String,Unit,Int,Unit];
+  // its `.get` reads getter.get(review.reverseGet(s)). This is the build->read seam `hylo` rides.
+  "Optic.cross: Review (build) crossed with Getter reads via the composite .get" >> {
+    val lengthR = Review[Int, String](_.length)
+    val plusOne = Getter[Int, Int](_ + 1)
+    val crossed = lengthR.cross(plusOne)
+    (crossed.get("abc") === 4).and(crossed.get("hello world") === 12)
+  }
+
+  // covers: cross preserves STRUCTURE — Iso x Iso stays an Iso, so the result has BOTH a forward
+  // .get AND a build .reverseGet (it does not collapse to a one-way getter). Iso's read focus A
+  // survives as the composite's write-back focus.
+  "Optic.cross: Iso crossed with Iso stays a full Iso (has .get and .reverseGet)" >> {
+    val iso1 = Iso[Int, Int, Int, Int](_ + 1, _ - 1) // reverseGet: b => b - 1
+    val iso2 = Iso[Int, Int, Int, Int](_ * 2, _ / 2) // get: a => a * 2
+    val composed =
+      iso1.cross(iso2) // Optic[Int, Int, Int, Int, Direct] = iso1.reverse.andThen(iso2)
+    (composed.get(3) === 4) // (3-1)*2
+      .and(composed.get(11) === 20) // (11-1)*2
+      .and(composed.reverseGet(8) === 5) // build survives: (8/2)+1
+      .and(composed.get(composed.reverseGet(8)) === 8) // round-trips
+  }
+
+  // covers: crossMorphed is genuinely CROSS-CARRIER — a Review (Direct, builds) crossed with an
+  // AffineFold (Affine, partial read) bridges via Morph[Direct, Affine], so the composite is a
+  // partial optic: .getOption, Some on hit / None on miss.
+  "Optic.crossMorphed: cross-carrier (Review[Direct] × AffineFold[Affine]) yields a partial getOption" >> {
+    val lengthR = Review[Int, String](_.length) // builds Int from String
+    val bigOnly = AffineFold.select[Int](_ > 3) // keeps the focus only when > 3
+    val crossed =
+      lengthR.crossMorphed(bigOnly) // Optic[String,Unit,Int,Unit,Affine] — cross-carrier
+    (crossed.getOption("hello") === Some(5)) // length 5 > 3
+      .and(crossed.getOption("ab") === None) // length 2, filtered out
+  }
+
+  // covers: read-many falls out of crossMorphed — crossing a Review (Direct, builds) with a Fold
+  // (Forget) bridges via the Composer[Direct, Forget] (sound now that Fold is honestly one-way),
+  // so the composite is a Fold over everything built. .foldMap, no separate crossFold.
+  "Optic.crossMorphed: Review crossed with a Fold (cross-carrier) yields a read-many Fold" >> {
+    val buildList = Review[List[Int], Int](n => (1 to n).toList) // reverseGet n => [1..n]
+    val sumAll = buildList.crossMorphed(Fold[List, Int]) // Optic[Int,Unit,Int,Unit,Forget[List]]
+    (sumAll.foldMap[Int](identity)(3) === 6) // 1+2+3
+      .and(sumAll.foldMap[Int](identity)(4) === 10) // 1+2+3+4
   }
 
   // ----- Forget[F] `.andThen` via assocForgetMonad ---------------------
@@ -596,86 +642,27 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     lensLensOk.and(lensPrismOk).and(lensOptOk)
   }
 
-  // ----- Cross-F Forget composition (gap #1) ---------------------------
+  // ----- same-F Fold composition via the trait andThen -----------------
   //
-  // `Forget[F].andThen(Forget[G])` for `F ≠ G` doesn't ship via Composer or
-  // AssociativeFunctor — both require same-F. Instead Forget.scala ships a
-  // `.andThen` extension that takes a user-supplied `F ~> G` natural
-  // transformation plus `FlatMap[G]`, lifts the outer's `F[A]` through the
-  // nat, and `flatMap`s with the inner. Result carrier is `Forget[G]`.
-
-  // covers: List ~> Option (headOption) — outer Fold[List] composed with
-  //   inner Fold[Option], composed.to picks the head and runs inner on it
-  //   (predicate hit vs miss);
-  //   Option ~> List (None → Nil, Some → singleton) — outer Fold[Option]
-  //   composed with inner Fold[List], composed.to fans the optional into
-  //   the inner's expansion (empty source → empty result; Some → list);
-  //   F = G case routes through trait `Optic.andThen` via assocForgetMonad
-  //   (the same-F path wins overload resolution; the cross-F extension fires
-  //   only when carriers differ at the type level)
-  "Cross-F Forget composition: forget.andThen(forget) under F ~> G + FlatMap[G]" >> {
-    import cats.~>
-
-    // outer: Int ↦ List(n-1, n, n+1)
-    val triplet: Optic[Int, Unit, Int, Int, Forget[List]] =
-      new Optic[Int, Unit, Int, Int, Forget[List]]:
+  // Now that Fold is honestly one-way (B = Unit), Fold × Fold composes through the ordinary trait
+  // `Optic.andThen` (the seam unifies at Unit/Unit, driven by assocForgetMonad's flatMap) — no
+  // bespoke Forget extension. covers: outer Fold[List] andThen inner Fold[List] flatMaps.
+  "Fold[List].andThen(Fold[List]) via trait andThen flatMaps the two folds" >> {
+    val triplet: Optic[Int, Unit, Int, Unit, Forget[List]] =
+      new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
         val to: Int => Forget[List][Unit, Int] = n => List(n - 1, n, n + 1)
-        val from: Forget[List][Unit, Int] => Unit = _ => ()
+        val from: Forget[List][Unit, Unit] => Unit = _ => ()
 
-    // inner: keep evens via Option
-    val evenOpt: Optic[Int, Unit, Int, Int, Forget[Option]] =
-      new Optic[Int, Unit, Int, Int, Forget[Option]]:
-        type X = Unit
-        val to: Int => Forget[Option][Unit, Int] = n => if n % 2 == 0 then Some(n) else None
-        val from: Forget[Option][Unit, Int] => Unit = _ => ()
-
-    // List ~> Option: headOption
-    given headK: cats.~>[List, Option] = new (List ~> Option):
-      def apply[T](fa: List[T]): Option[T] = fa.headOption
-
-    val composedHeadEven = triplet.andThen(evenOpt)
-    // composed.to(5) = headOption(List(4,5,6)).flatMap(evenOpt.to)
-    //                = Some(4).flatMap(...) = Some(4)
-    // composed.to(2) = Some(1).flatMap(...) = None  (1 is odd → None)
-    val headHitOk = composedHeadEven.to(5) === Some(4)
-    val headMissOk = composedHeadEven.to(2) === None
-
-    // Symmetric direction: Option ~> List
-    val maybe: Optic[Int, Unit, Int, Int, Forget[Option]] =
-      new Optic[Int, Unit, Int, Int, Forget[Option]]:
-        type X = Unit
-        val to: Int => Forget[Option][Unit, Int] = n => if n > 0 then Some(n) else None
-        val from: Forget[Option][Unit, Int] => Unit = _ => ()
-
-    val expand: Optic[Int, Unit, Int, Int, Forget[List]] =
-      new Optic[Int, Unit, Int, Int, Forget[List]]:
-        type X = Unit
-        val to: Int => Forget[List][Unit, Int] = n => List(n, n * 10)
-        val from: Forget[List][Unit, Int] => Unit = _ => ()
-
-    given liftK: cats.~>[Option, List] = new (Option ~> List):
-      def apply[T](fa: Option[T]): List[T] = fa.toList
-
-    val composedLift = maybe.andThen(expand)
-    val liftHitOk = composedLift.to(3) === List(3, 30)
-    val liftMissOk = composedLift.to(-1) === Nil
-
-    // F = G — routes through the cross-F extension under the identity nat
-    // when one is in scope; otherwise the trait `Optic.andThen` +
-    // assocForgetMonad path takes over. Both produce the same flatMap result.
-    import cats.arrow.FunctionK
-    given idListK: cats.~>[List, List] = FunctionK.id[List]
-    val triplet2: Optic[Int, Unit, Int, Int, Forget[List]] =
-      new Optic[Int, Unit, Int, Int, Forget[List]]:
+    val pair: Optic[Int, Unit, Int, Unit, Forget[List]] =
+      new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
         val to: Int => Forget[List][Unit, Int] = n => List(n, n + 1)
-        val from: Forget[List][Unit, Int] => Unit = _ => ()
-    val composedSame = triplet.andThen(triplet2)
-    // composed.to(5) = List(4,5,6).flatMap(n => List(n, n+1)) = List(4,5,5,6,6,7)
-    val sameOk = composedSame.to(5) === List(4, 5, 5, 6, 6, 7)
+        val from: Forget[List][Unit, Unit] => Unit = _ => ()
 
-    headHitOk.and(headMissOk).and(liftHitOk).and(liftMissOk).and(sameOk)
+    val composed = triplet.andThen(pair)
+    // to(5) = List(4,5,6).flatMap(n => List(n, n+1)) = List(4,5,5,6,6,7)
+    composed.to(5) === List(4, 5, 5, 6, 6, 7)
   }
 
   // ----- F[A]-focus factories -----------------------------------------

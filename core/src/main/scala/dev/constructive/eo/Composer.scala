@@ -33,7 +33,7 @@ object Composer extends LowPriorityComposerInstances:
     *
     * @group Instances
     */
-  given forgetful2tuple: Composer[Direct, Tuple2] with
+  given direct2tuple: Composer[Direct, Tuple2] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
@@ -46,7 +46,7 @@ object Composer extends LowPriorityComposerInstances:
     *
     * @group Instances
     */
-  given forgetful2either: Composer[Direct, Either] with
+  given direct2either: Composer[Direct, Either] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Either] =
       new Optic[S, T, A, B, Either]:
@@ -56,6 +56,24 @@ object Composer extends LowPriorityComposerInstances:
           e match
             case Right(b) => o.from(Direct(b))
             case Left(_)  => ???
+
+  /** Express a read-only Direct optic (a Getter) as a Fold — lift the single focus into `F` via
+    * `pure`. This is the `Composer[Direct, Forget[F]]` bridge
+    * [[dev.constructive.eo.laws.GetterLaws]] anticipated; it became sound once `Fold` was made
+    * honestly one-way (`B = Unit`), because the `from` is now genuinely unreachable: `Forget[F]`
+    * admits no `ReverseAccessor`, so the resulting fold's build side is never invoked (mirrors
+    * [[direct2either]]'s unreachable `Left`). Powers `Getter.andThen(Fold)` and `Optic.cross`
+    * against a `Fold`. Requires `Applicative[F]` for `pure`.
+    *
+    * @group Instances
+    */
+  given direct2forget[F[_]](using F: cats.Applicative[F]): Composer[Direct, data.Forget[F]] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, data.Forget[F]] =
+      new Optic[S, T, A, B, data.Forget[F]]:
+        type X = Nothing
+        val to: S => data.Forget[F][X, A] = s => F.pure(o.to(s).value)
+        val from: data.Forget[F][X, B] => T = _ => ???
 
 /** Low-priority `Composer` instances —
   * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]], a transitive derivation pinned

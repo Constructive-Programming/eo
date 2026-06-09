@@ -226,7 +226,7 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
       val laws =
         new ComposerPreservesGetLaws[Int, Int, Direct, Tuple2, Tuple2]:
           val optic = doubleIso
-          val fToG = Composer.forgetful2tuple
+          val fToG = Composer.direct2tuple
 
           val gToH = new Composer[Tuple2, Tuple2]:
 

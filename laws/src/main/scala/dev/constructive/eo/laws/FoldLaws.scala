@@ -23,7 +23,7 @@ import optics.Optic.*
   * that check should exercise it as a spec-level property test against the concrete constructor.
   */
 trait FoldLaws[S, A, F[_, _]]:
-  def fold: Optic[S, Unit, A, A, F]
+  def fold: Optic[S, Unit, A, Unit, F]
 
   /** `foldMap(const(mempty))(s) == mempty` for any source `s`. */
   def foldMapEmpty(s: S)(using ForgetfulFold[F]): Boolean =

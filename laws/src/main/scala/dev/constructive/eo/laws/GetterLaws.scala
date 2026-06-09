@@ -16,10 +16,11 @@ import optics.Optic.*
   * This rules out plumbing mistakes like swapping `_._1` / `_._2` or accidentally threading the
   * input through `identity`.
   *
-  * Compared to Monocle's `GetterLaws`, we drop the fold-consistency law
-  * (`getter.fold.getAll(s).headOption == Some(getter.get(s))`) because the `Composer[Direct,
-  * Forget[F]]` bridge does not exist in core — the morph path from Getter to Fold is not available
-  * at this version. Revisit when a new carrier adds that Composer.
+  * Compared to Monocle's `GetterLaws`, we omit the fold-consistency law
+  * (`getter.fold.getAll(s).headOption == Some(getter.get(s))`). The `Composer[Direct, Forget[F]]`
+  * bridge that this law needs now exists (added when `Fold` was made honestly one-way, `B = Unit`,
+  * which made that Composer's `from` reachably-unsound-free), so a Getter→Fold morph is available;
+  * the law is simply not yet restated here. Future work: add it via `getter`'s morph into a `Fold`.
   */
 trait GetterLaws[S, A]:
   def getter: Optic[S, Unit, A, Unit, Direct]
