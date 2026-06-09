@@ -40,6 +40,14 @@ trait Plated[S]:
     */
   def childrenVec(s: S): PSVec[S] = plate.to(s)._2
 
+  /** The immediate children as a **fresh `Array[AnyRef]` the caller may mutate in place**. The
+    * default copies (`childrenVec(s).toAnyRefArray`) so it is safe for any instance;
+    * [[Plated.fromChildrenVec]] overrides it to hand back the freshly-built backing array
+    * copy-free. The recursion-scheme `cata` engine folds each child's result into this array in
+    * place, reusing the one array instead of allocating a separate result accumulator per node.
+    */
+  def childrenArray(s: S): Array[AnyRef] = childrenVec(s).toAnyRefArray
+
   /** Reassemble `parent` with `children` swapped in (same arity / order) — the write-path
     * counterpart to [[childrenVec]]. Defaults to threading the carrier; [[Plated.fromChildren]] /
     * [[Plated.fromChildrenVec]] (hence every `generics.plate[S]`-derived instance) override it with
@@ -72,6 +80,11 @@ object Plated:
       val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
         Traversal.selfChildren(childrenFn, rebuildFn)
       override def childrenVec(s: S): PSVec[S] = childrenFn(s)
+      // `childrenFn` must return a *freshly-allocated* vector (every shipped instance does —
+      // `generics.plate` emits `unsafeWrap(new Array(...))`, circe / `fromChildren` go through
+      // `PSVec.fromIterable`, both fresh per call). `unsafeShareableArray` then hands back that
+      // backing array copy-free, and [[childrenArray]]'s contract lets the cata engine mutate it.
+      override def childrenArray(s: S): Array[AnyRef] = childrenFn(s).unsafeShareableArray
       override def rebuild(parent: S, kids: PSVec[S]): S = rebuildFn(parent, kids)
 
   /** Build a [[Plated]] from a `List`-shaped children view — the ergonomic hand-writing entry point

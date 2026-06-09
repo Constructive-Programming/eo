@@ -133,11 +133,57 @@ object Schemes:
 
     n0 => rec(n0, 0)
 
+  /** In-place fold engine for [[cata]]. `childrenOf` returns a **fresh, owned** `Array[AnyRef]` of
+    * the node's children (via `Plated.childrenArray`); the engine folds each child and **overwrites
+    * its slot with the result**, reusing that one array as the result accumulator instead of
+    * allocating a separate out-array per node — then wraps it once for `alg`. Same on-stack/heap
+    * hybrid and stack-safety as [[unfoldFold]]. Safe because `childrenArray`'s contract guarantees
+    * the array is freshly allocated and not aliased.
+    */
+  private def foldInPlace[S, A](childrenOf: S => Array[AnyRef], alg: (S, PSVec[A]) => A): S => A =
+
+    def heap(root: S): A =
+      final class Frame(val node: S, val arr: Array[AnyRef], var i: Int)
+      val stack = new java.util.ArrayDeque[Frame]()
+      var ret: AnyRef = null.asInstanceOf[AnyRef]
+      def enter(s: S): Unit =
+        val arr = childrenOf(s)
+        if arr.length == 0 then ret = alg(s, PSVec.empty[A]).asInstanceOf[AnyRef]
+        else stack.push(new Frame(s, arr, 0))
+      enter(root)
+      while !stack.isEmpty do
+        val fr = stack.peek()
+        if fr.i > 0 then fr.arr(fr.i - 1) = ret // overwrite the just-folded child's slot
+        if fr.i < fr.arr.length then
+          val child = fr.arr(fr.i).asInstanceOf[S]
+          fr.i += 1
+          enter(child)
+        else
+          ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr)).asInstanceOf[AnyRef]
+          val _ = stack.pop()
+      ret.asInstanceOf[A]
+
+    def rec(s: S, depth: Int): A =
+      if depth >= OnStackLimit then heap(s)
+      else
+        val arr = childrenOf(s)
+        val k = arr.length
+        if k == 0 then alg(s, PSVec.empty[A])
+        else
+          var i = 0
+          while i < k do
+            arr(i) = rec(arr(i).asInstanceOf[S], depth + 1).asInstanceOf[AnyRef]
+            i += 1
+          alg(s, PSVec.unsafeWrap[A](arr))
+
+    s0 => rec(s0, 0)
+
   /** Catamorphism as a composable `Getter`, driven by `Plated[S]`. The algebra sees the original
-    * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe.
+    * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe; folds child
+    * results in place (see [[foldInPlace]]) so it allocates one array per node, not two.
     */
   def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): DirectGetter[S, A] =
-    Getter[S, A](unfoldFold[S, A](P.childrenVec, alg))
+    Getter[S, A](foldInPlace[S, A](P.childrenArray, alg))
 
   /** Anamorphism as a `Review` (reverse-construction optic): a stack-safe unfold `Seed => S` driven
     * by a [[Coalg]]. Materializing — the built `S` is `O(nodes)`.
