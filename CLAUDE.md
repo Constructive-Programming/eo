@@ -20,11 +20,15 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `laws` | `laws/` | `cats-eo-laws` | Discipline-style law definitions (reusable by downstream projects) |
 | `tests` | `tests/` | — (not published) | Law-based and behavioural test suites |
 | `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |
+| `schemes` | `schemes/` | `cats-eo-schemes` | Recursion schemes (cata/ana/hylo) as composable optics |
+| `circe` | `circe/` | `cats-eo-circe` | `Plated[Json]` and circe optic integration |
+| `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration |
+| `jsoniter` | `jsoniter/` | `cats-eo-jsoniter` | jsoniter-scala optic integration |
 | `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
 
-The root project aggregates `core`, `laws`, `tests`, and `generics`.
-`sbt compile` and `sbt test` cover those four; benchmarks must be invoked
-explicitly (see below).
+The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
+`circe`, `avro`, and `jsoniter`. `sbt compile` and `sbt test` cover those;
+benchmarks must be invoked explicitly (see below).
 
 ## Toolchain
 
@@ -90,14 +94,15 @@ git push   --no-verify                # bypass pre-push if you need to
 coverage:
 
 ```sh
-sbt "clean; coverage; core/test; tests/test; circeIntegration/test; coverageReport; coverageAggregate"
+sbt "clean; coverage; core/test; tests/test; circeIntegration/test; schemes/test; coverageReport; coverageAggregate"
 # HTML + XML under <module>/target/scala-<ver>/scoverage-report/
 # Aggregate report at target/scala-<ver>/scoverage-report/
 ```
 
-The `circeIntegration/test` call is load-bearing — without it,
-`circe/*.scala` files are silently omitted from the scoverage report.
-`coverageAggregate` rolls the per-module reports into a single
+The `circeIntegration/test` and `schemes/test` calls are load-bearing —
+without them, `circe/*.scala` and `schemes/*.scala` (and the schemes-only
+exercise of core's `Optic.cross`) are silently omitted from the scoverage
+report. `coverageAggregate` rolls the per-module reports into a single
 cross-module view at the repo root.
 
 The report directory sits under `target/` and is `.gitignore`d.
