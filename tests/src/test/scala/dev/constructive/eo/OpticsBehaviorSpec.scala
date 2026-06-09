@@ -21,8 +21,6 @@ import optics.{
   Optic,
   Optional,
   Prism,
-  ReversedLens,
-  ReversedPrism,
   Review,
   Traversal,
 }
@@ -43,8 +41,9 @@ import data.SetterF.given
   * '''2026-04-25 consolidation.''' 61 → 22 named blocks. Pre-image had:
   *
   *   - 3 Lens factory specs (first/second/curried) collapsed into one.
-  *   - 4 Review specs collapsed into one (apply/compose/fromIso/fromPrism + ReversedLens alias).
-  *   - 5 AffineFold specs collapsed into one (apply/select/fromOptional/fromPrism/Lens-narrow).
+  *   - Review specs collapsed into one (apply + compose-as-Optic via andThen).
+  *   - 5 AffineFold specs collapsed into one (apply/select + read-only views via
+  *     `AffineFold(o.getOption)`).
   *   - 3 Lens-into-MultiFocus[List] specs (Tuple2/Either/Affine) collapsed via the same parametric
   *     hit/miss assertion shape.
   *   - 3 SetterF lift specs (Either/Affine/PowerSeries → SetterF) collapsed similarly.
@@ -260,9 +259,9 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   Optional.readOnly.modifyA lifts a hit-branch read under Applicative[Option];
   //   AffineFold.apply hits on Some and misses on None,
   //   AffineFold.select keeps values matching the predicate,
-  //   AffineFold.fromOptional drops the write path (Lens-composed Optional narrowed),
-  //   AffineFold.fromPrism drops the build path (String→Int prism),
-  //   AffineFold.fromOptional narrows a Lens-composed Optional (Wrapper.inner.age)
+  //   a writable optic's read-only view is `AffineFold(optic.getOption)` — for an Optional
+  //   (drops the write path), an Either-carrier Prism (drops the build path), and a
+  //   Lens-composed Optional (Wrapper.inner.age). No bespoke fromOptional/fromPrism needed.
   "Optional.readOnly + AffineFold: predicate-gated AdultPerson hit/miss across all factories" >> {
     val foldOk = (adultAge.foldMap(identity[Int])(AdultPerson(20)) === 20)
       .and(adultAge.foldMap(identity[Int])(AdultPerson(15)) === 0)
@@ -287,12 +286,12 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-    val afFromOpt = AffineFold.fromOptional(ageOpt)
+    val afFromOpt = AffineFold((p: AdultPerson) => ageOpt.getOption(p))
     val fromOptOk = (afFromOpt.getOption(AdultPerson(20)) === Some(20))
       .and(afFromOpt.getOption(AdultPerson(15)) === None)
 
     val intPrism = Prism.optional[String, Int](s => s.toIntOption, _.toString)
-    val afFromPrism = AffineFold.fromPrism(intPrism)
+    val afFromPrism = AffineFold((s: String) => intPrism.getOption(s))
     val fromPrismOk = (afFromPrism.getOption("42") === Some(42))
       .and(afFromPrism.getOption("nope") === None)
 
@@ -301,7 +300,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       getOrModify = w => Either.cond(w.inner.age >= 18, w.inner.age, w),
       reverseGet = { case (w, a) => w.copy(inner = AdultPerson(a)) },
     )
-    val chained = AffineFold.fromOptional(wrapAge)
+    val chained = AffineFold((w: Wrapper) => wrapAge.getOption(w))
     val chainOk = (chained.getOption(Wrapper(AdultPerson(20))) === Some(20))
       .and(chained.getOption(Wrapper(AdultPerson(15))) === None)
 
@@ -317,37 +316,20 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   // ----- Review behaviour ----------------------------------------------
 
-  // covers: Review.apply wraps an A => S build function, Reviews compose via
-  // direct function composition, Review.fromIso extracts the reverseGet side of a
-  // BijectionIso, Review.fromPrism extracts the mend side of a MendTearPrism,
-  // ReversedLens(iso) and ReversedPrism(prism) alias the Review factories
-  "Review: apply / compose / fromIso / fromPrism + ReversedLens/ReversedPrism aliases" >> {
+  // covers: Review.apply wraps an A => S build function; Review is a proper Optic
+  // (the mirror of Getter), so two Reviews compose via the fused `andThen`. (There are
+  // no cross-optic `fromIso`/`fromPrism` factories — an Iso/Prism already is a build
+  // direction; use `Review(iso.reverseGet)` / `Review(prism.mend)` directly.)
+  "Review: apply + compose (as an Optic, via andThen)" >> {
     val toSome = Review[Option[Int], Int](Some(_))
     val applyOk = (toSome.reverseGet(3) === Some(3)).and(toSome.reverseGet(-1) === Some(-1))
 
     val stringify = Review[Int, String](_.length)
-    val composed =
-      Review[Option[Int], String](s => toSome.reverseGet(stringify.reverseGet(s)))
+    // build String -> Int -> Option[Int] through the fused andThen.
+    val composed = toSome.andThen(stringify)
     val composeOk = composed.reverseGet("hello") === Some(5)
 
-    val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
-      BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
-    val fromIsoOk = Review.fromIso(doubleIsoConcrete).reverseGet(10) === 5
-
-    val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
-      tear = {
-        case Some(n) => Right(n)
-        case None    => Left(None)
-      },
-      mend = Some(_),
-    )
-    val fromPrismOk = Review.fromPrism(somePrism).reverseGet(42) === Some(42)
-
-    val rl = ReversedLens(doubleIsoConcrete)
-    val rp = ReversedPrism(somePrism)
-    val aliasOk = (rl.reverseGet(10) === 5).and(rp.reverseGet(7) === Some(7))
-
-    applyOk.and(composeOk).and(fromIsoOk).and(fromPrismOk).and(aliasOk)
+    applyOk.and(composeOk)
   }
 
   // ----- Forget[F] `.andThen` via assocForgetMonad ---------------------
