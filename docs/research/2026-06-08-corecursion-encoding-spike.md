@@ -1,7 +1,7 @@
 ---
 date: 2026-06-08
 topic: corecursion-encoding-spike
-status: complete
+status: complete — spike code removed (validated, not kept); conclusions retained; Review upgraded in core
 plan: docs/plans/2026-06-08-001-feat-recursion-schemes-generation-spike-plan.md
 verdict: BUILD (if pursued) — encoding-A (closure) primary; B is a thin opt-in typed layer over A
 real-world-reference: ~/workspace/crypto/arbo (production recursion-scheme usage)
@@ -120,9 +120,11 @@ schemes in an optics library. Fixed by expressing the schemes **as optics** (`Op
   empirically (`OpticsSpec`): it ascribes to `Optic[…]`, its `to`/`from` run, and it composes
   via `andThen`. **Note:** eo's *core* `Review` is a bare case class that deliberately doesn't
   extend `Optic` ("pure Review has no `to`") — but with source `Unit` its `to` is exactly as
-  vestigial as `Getter`'s `from`, so that is an inconsistency with `Getter`, not a necessity.
-  If generation graduates, core `Review` should be reworked to extend `Optic` (the mirror of
-  `DirectGetter`), unifying the read/build optic pair.
+  vestigial as `Getter`'s `from`, so that was an inconsistency with `Getter`, not a necessity.
+  **This has now been fixed in core:** `Review` is upgraded from a bare `case class` to a
+  `final class extends Optic[Unit, S, Unit, A, Direct]` (the mirror of `DirectGetter`), with a
+  fused `andThen` — unifying the read/build optic pair. It is the one piece of the spike that
+  graduated.
 - **They compose.** `outerGetter.andThen(cata(alg))` reads through an optic to a recursive
   structure and folds it in one composed `Getter` (verified: `Wrapped --Getter--> Expr
   --cata--> Double`); and `ana(...).andThen(ReviewOptic(...))` composes builds the dual way.
@@ -159,11 +161,44 @@ Stage-0's *value* was real (cheap, isolated, caught the droste co-compile questi
 verdict it produced was wrong because one axis — capability — was *asserted* ("eo is
 pure-only") rather than *tested*. The fix was ~40 lines of demonstrator. Test the claim.
 
+## Conclusions
+
+The spike achieved its purpose, so **its code was removed** (the `spike` sbt module, the
+droste dep, and all 28 specs) — it was throwaway validation, not a shipping artifact. What it
+proved is retained here, and the single durable code change it justified has graduated to core.
+
+**Graduated to core (this PR):**
+
+- `Review` upgraded from a bare `case class` to a proper `Optic` — `final class Review[S, A]
+  extends Optic[Unit, S, Unit, A, Direct]`, the mirror of `DirectGetter`, with a fused
+  `andThen`. This removes a real inconsistency in the existing optic surface (`Getter` was an
+  `Optic`; its reverse counterpart was not), independent of whether generation is ever added.
+
+**Validated, retained as conclusions (not shipped):**
+
+1. **eo can do generation, fully.** Encoding A (closure-carrying coalgebra, no pattern functor)
+   is effectful, fused, short-circuit, and stack-safe at depth 10⁶ for *any* lawful `Monad` via
+   the law-required `tailRecM` — a stronger stack-safety guarantee than droste's `hyloM`.
+2. **Schemes belong as optics.** `cata` is a `Getter` driven by `Plated[S]` (generalising
+   `Plated.transform` from `S=>S` to `S=>A`); `ana` is a `Review` (now a real optic); `hylo` is
+   literally `ana.andThen(cata)`, with the hylo law `hylo = cata . ana` holding (materializing
+   == fused). Composition with the wider optic algebra is eo's distinctive value and the only
+   reason to build generation in eo rather than depend on droste.
+3. **A vs B.** Encoding B (typed pattern-functor descriptor) desugars to A via a `Traverse`
+   adapter, so A is the primitive and B a thin opt-in typed layer. B ≈ droste; A is what
+   justifies eo-native generation.
+4. **Generality framing.** eo's generality is *compositional* (optic `andThen`), traded for
+   droste's *pattern-functor* (zoo) generality — the trade eo exists to make.
+
+**If generation is built later**, the path is: a stack-safe `tailRecM`-driven engine in `core`;
+`cata` as `Getter`-on-`Plated`, `ana` as `Review`, `hylo` as their `andThen`; encoding A
+primary, B optional; the fused (no-intermediate-`S`) hylo would want its own carrier rather
+than the materializing `Review`+`Getter` pair. No capability blocker remains — it is a
+product-appetite decision.
+
 ## Reproduction / references
 
-- `sbt spike/testOnly dev.constructive.eo.spike.EffectfulDemoSpec` — eo == droste == hand,
-  success and failure paths.
-- `sbt spike/testOnly dev.constructive.eo.spike.Stage0GateSpec` — pure three-way agreement.
-- `spike/.../EffectfulDemo.scala`, `spike/.../DomainUnfold.scala` — the implementations.
-- Real-world reference: `~/workspace/crypto/arbo` — `Calculator.selection` (`elgotM`),
-  `data/SellTree.scala`, `elgot/package.scala`.
+- The spike code (engine + 28 specs) lived under `spike/` and was removed after validation;
+  it is recoverable from this branch's git history (commits tagged `feat(spike): …`).
+- Real-world reference (still live): `~/workspace/crypto/arbo` — `Calculator.selection`
+  (`elgotM`), `data/SellTree.scala`, `elgot/package.scala`.
