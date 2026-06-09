@@ -151,6 +151,38 @@ object Optic:
     private[eo] def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
       cf.to(self)
 
+    /** Build-then-observe across the *build-output ⇄ read-input* seam, **preserving structure**.
+      * Flip `self` (it must be reversible — `Accessor[F]` *and* `ReverseAccessor[F]`, i.e. an `Iso`
+      * or `Review` over `Direct`) so it reads `T` from `B`, then `andThen` `that` — which may sit
+      * on a **different carrier** `G`, with a `Morph[F, G]` bridging the two. The result is the
+      * full `Optic[B, A, C, D, m.Out]`, *not* a collapsed getter: its read capability follows the
+      * composed carrier — `.get` for a total read (Getter/Iso/Lens `that`), `.getOption` through a
+      * Prism, `.foldMap` through a `Fold` — and `self`'s read focus `A` survives as the composite's
+      * write-back focus.
+      *
+      * This is exactly `self.reverse.andThen(that)`. The motivating case is `ana.cross(cata)`: a
+      * `Review` (the unfold) crossed with a getter on the built `S` (the fold) — a (materializing)
+      * hylomorphism whose `.get` reads the folded value. Crossing with a `Fold` instead
+      * (`ana.cross(Fold[…])`) yields a `Fold` over everything built — read-many falls out of the
+      * same combinator via the `Composer[Direct, Forget]` bridge.
+      *
+      * Seam: `that`'s source is `self`'s `T` and `that`'s back-type is `self`'s `S` (so `that` must
+      * be read-only — `Getter`/`Fold` whose back-type is `Unit`, or aligned at `self`'s `S`).
+      * Reversibility excludes `Prism`-as-`self` (`Either` has no `Accessor`); build from a Prism by
+      * wrapping its `mend` in a `Review` first.
+      *
+      * @group Operations
+      */
+    inline def cross[G[_, _], C, D](that: Optic[T, S, C, D, G])(using
+        A: Accessor[F],
+        RA: ReverseAccessor[F],
+        m: Morph[F, G],
+    ): Optic[B, A, C, D, m.Out] =
+      val r = self.reverse
+      val ms = m.morphSelf(r)
+      val mo = m.morphO(that)
+      ms.andThen(mo)(using scala.compiletime.summonInline[AssociativeFunctor[m.Out, ms.X, mo.X]])
+
   // Capability-gated extensions follow. The `(using …)` clause names the typeclass each extension
   // requires; carriers without that instance simply don't see the method.
 
