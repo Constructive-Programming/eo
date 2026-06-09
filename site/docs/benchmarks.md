@@ -442,36 +442,41 @@ machine closes that to ~2× droste (cata) / parity (hylo).
 `SchemesBench` folds/builds a perfect binary tree of `2^12` (8 191 nodes) four ways:
 **eo** (the `PSVec` Plated machine — `cata`/`ana`/`hylo` from `cats-eo-schemes`),
 **eoF** (the *typed* pattern-functor path — `cataF`/`anaF`/`hyloF` over `BinF` via a `Basis` +
-`Traverse[BinF]`, a `cats.Eval` trampoline), **droste** (`scheme.cata/ana/hylo` over `Fix[BinF]`),
-and **hand** (plain recursion). Allocation is the trustworthy signal here (`gc.alloc.rate.norm`,
-deterministic and box-independent — ns/op on the shared box is too noisy to compare).
+`Traverse[BinF]`), **droste** (`scheme.cata/ana/hylo` over `Fix[BinF]`), and **hand** (plain
+recursion). Allocation is the trustworthy signal here (`gc.alloc.rate.norm`, deterministic and
+box-independent — ns/op on the shared box is too noisy to compare).
 
-| Scheme | eo (PSVec) | eoF (typed `Eval`) | droste basic | hand | eoF ÷ droste |
+| Scheme | eo (PSVec) | eoF (typed) | droste basic | hand | eoF ÷ droste |
 |---|--:|--:|--:|--:|--:|
-| `cata` |   197 568 | 2 589 211 |   164 824 |     0.045 | 15.7× |
-| `hylo` |   295 849 | 2 589 213 |   328 641 |     0.153 |  7.9× |
-| `ana`  |   589 713 | 2 686 489 |   327 632 |   163 816 |  8.2× |
+| `cata` |   197 568 | 361 387 |   164 824 |     0.045 | 2.2× |
+| `hylo` |   295 849 | 361 386 |   328 641 |     0.153 | 1.1× |
+| `ana`  |   589 713 | 524 194 |   327 632 |   163 816 | 1.6× |
 
 (B/op at depth 12.)
 
-Two readings:
+Both the `PSVec` and typed paths run on the **same `< 512`-on-stack / heap-`ArrayDeque` hybrid** as
+`Plated.transform` — no `cats.Eval` trampoline. Two readings:
 
 - **The `PSVec` path is droste-competitive.** eo `cata` is ~1.2× droste, `hylo` *beats* droste
   (0.9×, the fused refold builds no intermediate tree), `ana` ~1.8×. The constant is carrier
   materialisation (one `PSVec` + `out` array per node), same as Plated above.
-- **The typed `Eval` path is ~8–16× droste basic** (and ~13× eo's own `PSVec` path): ~316 B/node of
-  `Eval` machinery — a `Defer` per child, a `FlatMap`+`Map` from `map2`, and the `.map(alg)` per
-  layer. This is inherent to the `cats.Eval` trampoline, not a bug. It is the price of being
-  **typed *and* stack-safe at once**: droste's *basic* schemes are neither stack-safe (naive
-  recursion) nor optic-composable, so the row is not apples-to-apples — eoF delivers guarantees
-  droste basic does not.
+- **The typed path is now ~1.1–2.2× droste basic** — `hylo` at parity, `ana` 1.6× (it even beats
+  eo's own `PSVec` `ana`), `cata` 2.2×. The typed driver walks the deep recursion with the array
+  machine and uses the user's `Traverse[F]` only *per layer* (bounded fanout: `foldLeft` to read a
+  node's children, `map` to rebuild the typed `F[result]` the algebra destructures); leaf nodes
+  skip the rebuild via a phantom recast. Earlier this path used a `cats.Eval` trampoline and cost
+  ~8–16× droste (~316 B/node of `Eval` machinery) — replacing it with the machine cut allocation
+  ~7×. The residual `cata` gap is **inherent, not waste**: eo folds a *native* `Bin`, so `project`
+  allocates a `BinF[Bin]` layer per node, where droste folds a `Fix[BinF]` and its `unfix` is free —
+  the same native-vs-`Fix` cost eo's `PSVec` `cata` pays (197 568). And eoF buys **type-safety +
+  stack-safety** that droste's *basic* schemes lack (naive recursion, not optic-composable), so the
+  comparison is not apples-to-apples.
 
-**Decision (U6):** the `Eval` driver does **not** meet allocation parity with droste basic, so it
-ships as the correct / type-safe / stack-safe v1 with allocation as a documented tradeoff. Reaching
-parity would require the pre-planned **explicit typed-heap-machine** driver (walk `F` through its
-`Foldable`/`Traverse` into a `PSVec`-style `ArrayDeque` engine, without re-erasing children to
-`AnyRef` at the algebra seam) — tracked as a follow-up. Until then, prefer the `PSVec` `cata`/`ana`/
-`hylo` when allocation matters, and `cataF`/`anaF`/`hyloF` when named-constructor type-safety does.
+**Decision (U6):** the typed driver is the `foldLayered` **heap machine** (the pre-planned
+explicit-machine option), *not* a trampoline — it reaches allocation parity-to-~2× with droste basic
+while staying typed and stack-safe to 10⁶ in the default heap. Reach for the `PSVec` `cata`/`ana`/
+`hylo` when you want zero boilerplate, and `cataF`/`anaF`/`hyloF` when you want named-constructor
+type-safety at near-droste allocation.
 
 ## Reproducing
 

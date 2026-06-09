@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package schemes
 
-import cats.{Eval, Traverse}
+import cats.Traverse
 
 import data.{Forget, PSVec}
 import optics.{Getter, Optic, Plated, Review, Unfold}
@@ -41,6 +41,11 @@ object Schemes:
     * `Plated.transformRecursionLimit`. Balanced trees (depth ~log n) never reach it.
     */
   final private val OnStackLimit = 512
+
+  /** Shared zero-length children array for leaf nodes — avoids a per-leaf empty-array allocation in
+    * the typed [[foldLayered]] machine.
+    */
+  private val EmptyAnyRefs: Array[AnyRef] = new Array[AnyRef](0)
 
   /** Engine for the *fold* schemes ([[cata]] / [[hylo]]). `expand` yields a node's children;
     * `combine` folds a node plus its already-folded children — re-supplied the node, so it needs no
@@ -221,17 +226,94 @@ object Schemes:
   // Typed pattern-functor path — the opt-in, type-safe complement to the PSVec schemes above.
   //
   // The user supplies a pattern functor `F[_]` + its `Traverse[F]`, and (for cata/ana)
-  // `Project[F, S]` / `Embed[F, S]`. Algebras then pattern-match `F`'s NAMED constructors
+  // `Project[F, S]` / `Embed[F, S]`. Algebras pattern-match `F`'s NAMED constructors
   // (`case BranchF(l, r) => l + r`) — no `PSVec[AnyRef]`, no positional indexing. See [[Basis]].
   //
-  // Stack-safety here comes from a `cats.Eval` trampoline over `Traverse[F]` (the `Plated.rewrite`
-  // precedent, and droste's stack-safe `hyloM` shape), NOT the `ArrayDeque` machine above: with a
-  // generic `F` the children are a typed `F[child]`, and `Traverse[F] + Eval.defer` is the lawful
-  // stack-safe primitive. Each recursive descent is guarded by `Eval.defer`, so forcing `.value`
-  // trampolines on the heap (O(depth) space) instead of growing the JVM call stack. The supplied
-  // `Traverse[F]` must sequence a node's children through the `Eval` applicative WITHOUT on-stack
-  // recursion (true for cats-derived and bounded-fanout instances) — prefer deriving it.
+  // These run on the SAME `< 512`-on-stack / heap-`ArrayDeque` hybrid as the PSVec schemes above
+  // (see [[foldLayered]]) — NOT a `cats.Eval` trampoline. The deep recursion is driven by the
+  // machine; the user's `Traverse[F]` is used only per *layer* (bounded fanout: `foldLeft` to read a
+  // node's children, `map` to rebuild the typed `F[result]` for the algebra), never across the
+  // spine. So stack-safety needs no `Eval`-lazy `foldRight` from the user — any lawful `Traverse[F]`
+  // works — and allocation is close to the PSVec path (one children/result array + the typed `F`
+  // layers per node), not the ~Eval-node-per-layer a trampoline would cost.
   // ===========================================================================================
+
+  /** Rebuild a typed `F[R]` from the original layer `fn: F[N]` and its children's results, stored
+    * positionally in `out` in `Foldable` order — which `Functor.map` matches for a lawful
+    * `Traverse`. Lets the schemes hand the algebra a typed `F[R]` (named constructors) rather than
+    * a positional vector.
+    */
+  private def rebuildLayer[F[_], N, R](fn: F[N], out: Array[AnyRef])(using F: Traverse[F]): F[R] =
+    if out.length == 0 then
+      fn.asInstanceOf[F[R]] // leaf: no N-slots, so F[N] is phantom-recast to F[R]
+    else
+      var i = -1
+      F.map(fn) { _ =>
+        i += 1
+        out(i).asInstanceOf[R]
+      }
+
+  /** Shared typed engine for the `F`-path schemes. `expand` peels a node into one typed layer of
+    * child nodes; the engine folds each child to an `R` (post-order), then calls `combine` with the
+    * node, its layer `F[N]`, and the children's results (positional, `Foldable` order). `combine`
+    * rebuilds the typed `F[R]` via [[rebuildLayer]] and applies the user's algebra / embed. Same
+    * `< 512`-on-stack / heap-`ArrayDeque` hybrid (and stack-safety) as [[unfoldFold]] /
+    * [[foldInPlace]]; the per-node child array is reused as the result accumulator (folded in
+    * place).
+    */
+  private def foldLayered[F[_], N, R](
+      expand: N => F[N],
+      combine: (N, F[N], Array[AnyRef]) => R,
+  )(using F: Traverse[F]): N => R =
+
+    def childrenArr(fn: F[N]): Array[AnyRef] =
+      val n = F.size(fn).toInt
+      if n == 0 then EmptyAnyRefs
+      else
+        val arr = new Array[AnyRef](n)
+        val _ = F.foldLeft(fn, 0) { (i, child) =>
+          arr(i) = child.asInstanceOf[AnyRef]
+          i + 1
+        }
+        arr
+
+    def heap(root: N): R =
+      final class Frame(val node: N, val layer: F[N], val arr: Array[AnyRef], var i: Int)
+      val stack = new java.util.ArrayDeque[Frame]()
+      var ret: AnyRef = null.asInstanceOf[AnyRef]
+      def enter(n: N): Unit =
+        val layer = expand(n)
+        val arr = childrenArr(layer)
+        if arr.length == 0 then ret = combine(n, layer, arr).asInstanceOf[AnyRef]
+        else stack.push(new Frame(n, layer, arr, 0))
+      enter(root)
+      while !stack.isEmpty do
+        val fr = stack.peek()
+        if fr.i > 0 then fr.arr(fr.i - 1) = ret // overwrite the just-folded child's slot
+        if fr.i < fr.arr.length then
+          val child = fr.arr(fr.i).asInstanceOf[N]
+          fr.i += 1
+          enter(child)
+        else
+          ret = combine(fr.node, fr.layer, fr.arr).asInstanceOf[AnyRef]
+          val _ = stack.pop()
+      ret.asInstanceOf[R]
+
+    def rec(n: N, depth: Int): R =
+      if depth >= OnStackLimit then heap(n)
+      else
+        val layer = expand(n)
+        val arr = childrenArr(layer)
+        val k = arr.length
+        if k == 0 then combine(n, layer, arr)
+        else
+          var i = 0
+          while i < k do
+            arr(i) = rec(arr(i).asInstanceOf[N], depth + 1).asInstanceOf[AnyRef]
+            i += 1
+          combine(n, layer, arr)
+
+    n => rec(n, 0)
 
   /** The single *layer* optic for a pattern functor `F`: `project`/`embed` worn as the existing
     * [[dev.constructive.eo.data.Forget]] carrier. `to = project: S => F[S]`, `from = embed: F[S] =>
@@ -253,51 +335,47 @@ object Schemes:
 
   /** Catamorphism over a typed pattern functor `F`, as a composable `Getter`. `alg` sees the
     * original node `S` (paramorphism-flavored) plus its already-folded children as a typed `F[A]`.
-    * Pure `F[A] => A` folds ignore the `S`. Stack-safe (`Eval` trampoline) to arbitrary depth in
-    * O(depth) heap. Requires `Project[F, S]` (to peel each layer) and `Traverse[F]` (to fold it).
-    *
-    * @note
-    *   Stack-safety requires a `Traverse[F]` that sequences children through the `Eval` applicative
-    *   without on-stack recursion (cats-derived and bounded-fanout hand-written instances qualify;
-    *   an `Eval`-based `foldRight` is the key) — see the section comment above.
+    * Pure `F[A] => A` folds ignore the `S`. Stack-safe to arbitrary depth (the [[foldLayered]]
+    * machine, not a trampoline). Requires `Project[F, S]` (to peel each layer) and `Traverse[F]`
+    * (any lawful instance — the machine, not the user's `foldRight`, provides stack-safety).
     */
   def cataF[F[_], S, A](
       alg: (S, F[A]) => A
   )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
-    def go(s: S): Eval[A] =
-      F.traverse(P.project(s))(child => Eval.defer(go(child))).map(folded => alg(s, folded))
-    Getter[S, A](s => go(s).value)
+    Getter[S, A](
+      foldLayered[F, S, A](P.project, (s, fs, out) => alg(s, rebuildLayer[F, S, A](fs, out)))
+    )
 
   /** Anamorphism over a typed pattern functor `F`, as a `Review`. The single fused coalgebra `Seed
     * => F[Seed]` yields one typed layer of child seeds; [[Embed]] assembles each layer into the
-    * built `S`. Materializing — the built `S` is O(nodes). Stack-safe (`Eval` trampoline), and
-    * because it also holds the materialized `S`, it is the heaviest of the three on heap. Requires
-    * `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output) to match
-    * [[hyloF]] and the `PSVec` [[ana]].
-    *
-    * @note Stack-safety requires an `Eval`-sequencing `Traverse[F]` (see the section comment above).
+    * built `S`. Materializing — the built `S` is O(nodes). Stack-safe (the [[foldLayered]] machine).
+    * Requires `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output)
+    * to match [[hyloF]] and the `PSVec` [[ana]].
     */
   def anaF[F[_], Seed, S](
       coalg: Seed => F[Seed]
   )(using F: Traverse[F], E: Embed[F, S]): Review[S, Seed] =
-    def go(seed: Seed): Eval[S] =
-      F.traverse(coalg(seed))(child => Eval.defer(go(child))).map(E.embed)
-    Review[S, Seed](seed => go(seed).value)
+    Review[S, Seed](
+      foldLayered[F, Seed, S](
+        coalg,
+        (_, fSeed, out) => E.embed(rebuildLayer[F, Seed, S](fSeed, out)),
+      )
+    )
 
   /** Hylomorphism over a typed pattern functor `F` — the **fused** refold `Seed => A`, building
     * **no intermediate `S`** (so it needs neither `Project` nor `Embed`, only `Traverse[F]`).
     * `coalg` unfolds a seed into one typed layer; `alg` folds the layer's results to `A` (the seed
-    * is supplied, paramorphism-flavored). Stack-safe (`Eval` trampoline). Equal to
+    * is supplied, paramorphism-flavored). Stack-safe (the [[foldLayered]] machine). Equal to
     * `anaF(coalg).cross(cataF(alg))` for a *pure* algebra (the hylo law); for a node-reading para
     * algebra the two agree only under the seed↔`embed(coalg(seed))` correspondence.
-    *
-    * @note
-    *   Stack-safety requires an `Eval`-sequencing `Traverse[F]` (see the section comment above).
     */
   def hyloF[F[_], Seed, A](
       coalg: Seed => F[Seed],
       alg: (Seed, F[A]) => A,
   )(using F: Traverse[F]): Getter[Seed, A] =
-    def go(seed: Seed): Eval[A] =
-      F.traverse(coalg(seed))(child => Eval.defer(go(child))).map(folded => alg(seed, folded))
-    Getter[Seed, A](seed => go(seed).value)
+    Getter[Seed, A](
+      foldLayered[F, Seed, A](
+        coalg,
+        (seed, fSeed, out) => alg(seed, rebuildLayer[F, Seed, A](fSeed, out)),
+      )
+    )

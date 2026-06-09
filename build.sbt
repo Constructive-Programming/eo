@@ -412,13 +412,6 @@ lazy val schemes: Project = project
     libraryDependencies += cats,
     libraryDependencies += discipline % Test,
     libraryDependencies += scalacheck % Test,
-    // Fork the tests into a fresh JVM with a generous heap. The typed schemes' `Eval` trampoline is
-    // O(depth) but allocation-heavy (several `Eval` nodes per layer), so the 10^6-deep stack-safety
-    // cases need ~1 GB; running them alongside #23's 10^6 cases in sbt's in-process heap OOMs.
-    // Forking isolates them and makes `sbt test` deterministic. (The deferred JMH bench quantifies
-    // the allocation; the explicit-heap-machine fallback would shrink it.)
-    Test / fork := true,
-    Test / javaOptions += "-Xmx2g",
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,

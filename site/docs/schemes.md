@@ -262,14 +262,17 @@ val countLeavesF: DirectGetter[Int, Int] =
 ```scala mdoc
 sumLeavesF.get(buildBin.reverseGet(3)) // 4 unit leaves
 countLeavesF.get(3)                    // same count, fused — no Bin materialised
-countLeavesF.get(1000000)              // stack-safe: an Eval trampoline, O(depth) heap
+countLeavesF.get(1000000)              // stack-safe: the heap machine, O(depth) heap
 ```
 
 Like their `PSVec` counterparts, `cataF`/`hyloF` are `DirectGetter`s and `anaF` is a `Review`, so
 they compose with the rest of the optic algebra via `andThen` and `cross` (the materializing
-`anaF(…).cross(cataF(…))` equals the fused `hyloF` for a pure algebra — the hylo law). They run on a
-`cats.Eval` trampoline over your `Traverse[F]`, stack-safe to depths a hand-written recursion would
-overflow. **Choosing a path:** reach for `cata`/`ana`/`hylo` (default) when you want zero
+`anaF(…).cross(cataF(…))` equals the fused `hyloF` for a pure algebra — the hylo law). They run on
+the **same `< 512`-on-stack / heap-`ArrayDeque` machine** as the `PSVec` schemes (no `cats.Eval`
+trampoline) — your `Traverse[F]` is used only per *layer* (any lawful instance works), so they are
+stack-safe to depths a hand-written recursion would overflow and allocate close to droste (see the
+[benchmarks](benchmarks.md)). **Choosing a path:** reach for `cata`/`ana`/`hylo` (default) when you
+want zero
 boilerplate; reach for `cataF`/`anaF`/`hyloF` when you want the algebra to be type-checked against
 named constructors. Deriving `Project`/`Embed` from the `S`↔`F` correspondence is future work; today
 they are hand-written (as above).
