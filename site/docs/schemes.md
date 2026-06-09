@@ -5,8 +5,10 @@
 > particular the engine threads children through `PSVec` (a `Array[AnyRef]`-backed vector): this is
 > very performant but **type-unsafe** — the per-node child results are erased to `AnyRef` and the
 > combiner indexes them positionally, so a coalgebra/algebra arity mismatch is a runtime error, not
-> a compile error. Ideas for recovering type safety without losing the stack-safe machine (a typed
-> pattern-functor layer? indexed vectors?) are very welcome.
+> a compile error. If you want **named-constructor type safety**, the opt-in typed pattern-functor
+> path at the bottom of this page (`cataF`/`anaF`/`hyloF`) gives it — at the cost of writing a
+> pattern functor `F` and its `Traverse`/`Project`/`Embed`. The two paths complement each other;
+> this `PSVec` path stays the zero-boilerplate default.
 
 `cats-eo-schemes` expresses the recursion schemes **as optics**, so they compose with the rest
 of the optic algebra rather than living in a separate world:
@@ -174,3 +176,106 @@ val sumBuilt = buildList.cross(Fold[List, Int])
 ```scala mdoc
 sumBuilt.foldMap[Int](identity)(4) // 1+2+3+4
 ```
+
+## Typed pattern-functor schemes — `cataF` / `anaF` / `hyloF`
+
+The schemes above thread children through `PSVec[AnyRef]`: fast, but the algebra indexes them
+positionally (`kids(0)`, `kids(1)`), so an arity slip is a runtime error. The **typed** path trades
+a little boilerplate for compile-time safety: you supply a *pattern functor* `F[_]` — your recursive
+type with its recursive positions replaced by a type parameter — and the algebra pattern-matches
+`F`'s **named constructors** instead.
+
+You write three things: the functor `F`, its `cats.Traverse`, and a `Basis` (`Project[F, S]` =
+`project: S => F[S]`, plus `Embed[F, S]` = `embed: F[S] => S`). Everything else is derived from those.
+
+```scala mdoc:silent
+import cats.{Applicative, Eval, Traverse}
+import dev.constructive.eo.schemes.Basis // `Schemes`, `DirectGetter`, `get` already imported above
+
+// A binary tree…
+enum Bin:
+  case Leaf(n: Int)
+  case Branch(l: Bin, r: Bin)
+
+// …and its pattern functor: recursion (`Bin`) becomes the parameter `A`.
+enum BinF[+A]:
+  case LeafF(n: Int)
+  case BranchF(l: A, r: A)
+
+given Traverse[BinF] with
+  def traverse[G[_]: Applicative, A, B](fa: BinF[A])(f: A => G[B]): G[BinF[B]] =
+    fa match
+      case BinF.LeafF(n)      => Applicative[G].pure(BinF.LeafF(n))
+      case BinF.BranchF(l, r) => Applicative[G].map2(f(l), f(r))(BinF.BranchF(_, _))
+  def foldLeft[A, B](fa: BinF[A], b: B)(f: (B, A) => B): B = fa match
+    case BinF.LeafF(_)      => b
+    case BinF.BranchF(l, r) => f(f(b, l), r)
+  def foldRight[A, B](fa: BinF[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] = fa match
+    case BinF.LeafF(_)      => lb
+    case BinF.BranchF(l, r) => f(l, Eval.defer(f(r, lb)))
+
+given Basis[BinF, Bin] = Basis(
+  { case Bin.Leaf(n) => BinF.LeafF(n); case Bin.Branch(l, r) => BinF.BranchF(l, r) },
+  { case BinF.LeafF(n) => Bin.Leaf(n); case BinF.BranchF(l, r) => Bin.Branch(l, r) },
+)
+
+val binTree: Bin = Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
+```
+
+`cataF` folds an `S` to an `A`. The algebra sees the node plus its already-folded children **as a
+typed `BinF[A]`** — `l` and `r` are `A`, by name, no positional indexing:
+
+```scala mdoc:silent
+val sumLeavesF: DirectGetter[Bin, Int] =
+  Schemes.cataF[BinF, Bin, Int] { (_, folded) =>
+    folded match
+      case BinF.LeafF(n)      => n
+      case BinF.BranchF(l, r) => l + r
+  }
+```
+
+```scala mdoc
+sumLeavesF.get(binTree)
+```
+
+`anaF` builds an `S` from a seed via a single fused coalgebra `Seed => F[Seed]`; `Embed` glues each
+layer. `hyloF` is the **fused** refold (`Seed => A`, no intermediate `Bin`) and needs only
+`Traverse[F]`:
+
+```scala mdoc:silent
+// build a right spine of (n+1) unit leaves
+val buildBin = Schemes.anaF[BinF, Int, Bin] { n =>
+  if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1)
+}
+
+// fused: count the leaves directly, building no Bin
+val countLeavesF: DirectGetter[Int, Int] =
+  Schemes.hyloF[BinF, Int, Int](
+    coalg = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1),
+    alg = (_, folded) =>
+      folded match
+        case BinF.LeafF(_)      => 1
+        case BinF.BranchF(l, r) => l + r,
+  )
+```
+
+```scala mdoc
+sumLeavesF.get(buildBin.reverseGet(3)) // 4 unit leaves
+countLeavesF.get(3)                    // same count, fused — no Bin materialised
+countLeavesF.get(1000000)              // stack-safe: an Eval trampoline, O(depth) heap
+```
+
+Like their `PSVec` counterparts, `cataF`/`hyloF` are `DirectGetter`s and `anaF` is a `Review`, so
+they compose with the rest of the optic algebra via `andThen` and `cross` (the materializing
+`anaF(…).cross(cataF(…))` equals the fused `hyloF` for a pure algebra — the hylo law). They run on a
+`cats.Eval` trampoline over your `Traverse[F]`, stack-safe to depths a hand-written recursion would
+overflow. **Choosing a path:** reach for `cata`/`ana`/`hylo` (default) when you want zero
+boilerplate; reach for `cataF`/`anaF`/`hyloF` when you want the algebra to be type-checked against
+named constructors. Deriving `Project`/`Embed` from the `S`↔`F` correspondence is future work; today
+they are hand-written (as above).
+
+The single peel/glue layer is also available on its own as `Schemes.fLayer[F, S]`, an
+`Optic[S, S, S, S, Forget[F]]` (`to = project`, `from = embed`) — the typed analogue of `Plated`'s
+`plate` for one layer. Given a `Foldable[F]` it reads a node's immediate foci via `.foldMap`. It is
+primarily the proof that a typed `F` is an optic carrier; the recursive schemes drive `project`/
+`embed` themselves rather than composing `fLayer`.

@@ -1,8 +1,10 @@
 package dev.constructive.eo
 package schemes
 
-import data.PSVec
-import optics.{Getter, Plated, Review, Unfold}
+import cats.{Eval, Traverse}
+
+import data.{Forget, PSVec}
+import optics.{Getter, Optic, Plated, Review, Unfold}
 
 /** Recursion schemes as composable optics, built on the core optic surface.
   *
@@ -214,3 +216,88 @@ object Schemes:
       alg: (Seed, PSVec[A]) => A,
   ): Getter[Seed, A] =
     Getter[Seed, A](unfoldFold(expand, alg))
+
+  // ===========================================================================================
+  // Typed pattern-functor path — the opt-in, type-safe complement to the PSVec schemes above.
+  //
+  // The user supplies a pattern functor `F[_]` + its `Traverse[F]`, and (for cata/ana)
+  // `Project[F, S]` / `Embed[F, S]`. Algebras then pattern-match `F`'s NAMED constructors
+  // (`case BranchF(l, r) => l + r`) — no `PSVec[AnyRef]`, no positional indexing. See [[Basis]].
+  //
+  // Stack-safety here comes from a `cats.Eval` trampoline over `Traverse[F]` (the `Plated.rewrite`
+  // precedent, and droste's stack-safe `hyloM` shape), NOT the `ArrayDeque` machine above: with a
+  // generic `F` the children are a typed `F[child]`, and `Traverse[F] + Eval.defer` is the lawful
+  // stack-safe primitive. Each recursive descent is guarded by `Eval.defer`, so forcing `.value`
+  // trampolines on the heap (O(depth) space) instead of growing the JVM call stack. The supplied
+  // `Traverse[F]` must sequence a node's children through the `Eval` applicative WITHOUT on-stack
+  // recursion (true for cats-derived and bounded-fanout instances) — prefer deriving it.
+  // ===========================================================================================
+
+  /** The single *layer* optic for a pattern functor `F`: `project`/`embed` worn as the existing
+    * [[dev.constructive.eo.data.Forget]] carrier. `to = project: S => F[S]`, `from = embed: F[S] =>
+    * S`, so it is a genuine `Optic[S, S, S, S, Forget[F]]` with **no change to the `Optic` trait**.
+    *
+    * It is a single-layer *peel/glue* (like `Plated`'s `plate`, but one layer, not the recursion).
+    * The recursive schemes below drive `to`/`from` themselves and return `Direct`-carried optics,
+    * so `fLayer` is mainly the concrete proof that a typed `F` is an optic carrier, plus an
+    * observational read: given `Foldable[F]` it reads its layer's foci via `.foldMap`. Note it does
+    * NOT compose as freely as `plate` (a `Traversal`): same-carrier `andThen` over `Forget[F]`
+    * needs `Monad[F]`, which most pattern functors are not — so `fLayer` is a one-layer lens on the
+    * structure, not a composable traversal.
+    */
+  def fLayer[F[_], S](using P: Project[F, S], E: Embed[F, S]): Optic[S, S, S, S, Forget[F]] =
+    new Optic[S, S, S, S, Forget[F]]:
+      type X = Any
+      val to: S => Forget[F][X, S] = s => P.project(s)
+      val from: Forget[F][X, S] => S = fs => E.embed(fs)
+
+  /** Catamorphism over a typed pattern functor `F`, as a composable `Getter`. `alg` sees the
+    * original node `S` (paramorphism-flavored) plus its already-folded children as a typed `F[A]`.
+    * Pure `F[A] => A` folds ignore the `S`. Stack-safe (`Eval` trampoline) to arbitrary depth in
+    * O(depth) heap. Requires `Project[F, S]` (to peel each layer) and `Traverse[F]` (to fold it).
+    *
+    * @note
+    *   Stack-safety requires a `Traverse[F]` that sequences children through the `Eval` applicative
+    *   without on-stack recursion (cats-derived and bounded-fanout hand-written instances qualify;
+    *   an `Eval`-based `foldRight` is the key) — see the section comment above.
+    */
+  def cataF[F[_], S, A](
+      alg: (S, F[A]) => A
+  )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
+    def go(s: S): Eval[A] =
+      F.traverse(P.project(s))(child => Eval.defer(go(child))).map(folded => alg(s, folded))
+    Getter[S, A](s => go(s).value)
+
+  /** Anamorphism over a typed pattern functor `F`, as a `Review`. The single fused coalgebra `Seed
+    * => F[Seed]` yields one typed layer of child seeds; [[Embed]] assembles each layer into the
+    * built `S`. Materializing — the built `S` is O(nodes). Stack-safe (`Eval` trampoline), and
+    * because it also holds the materialized `S`, it is the heaviest of the three on heap. Requires
+    * `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output) to match
+    * [[hyloF]] and the `PSVec` [[ana]].
+    *
+    * @note Stack-safety requires an `Eval`-sequencing `Traverse[F]` (see the section comment above).
+    */
+  def anaF[F[_], Seed, S](
+      coalg: Seed => F[Seed]
+  )(using F: Traverse[F], E: Embed[F, S]): Review[S, Seed] =
+    def go(seed: Seed): Eval[S] =
+      F.traverse(coalg(seed))(child => Eval.defer(go(child))).map(E.embed)
+    Review[S, Seed](seed => go(seed).value)
+
+  /** Hylomorphism over a typed pattern functor `F` — the **fused** refold `Seed => A`, building
+    * **no intermediate `S`** (so it needs neither `Project` nor `Embed`, only `Traverse[F]`).
+    * `coalg` unfolds a seed into one typed layer; `alg` folds the layer's results to `A` (the seed
+    * is supplied, paramorphism-flavored). Stack-safe (`Eval` trampoline). Equal to
+    * `anaF(coalg).cross(cataF(alg))` for a *pure* algebra (the hylo law); for a node-reading para
+    * algebra the two agree only under the seed↔`embed(coalg(seed))` correspondence.
+    *
+    * @note
+    *   Stack-safety requires an `Eval`-sequencing `Traverse[F]` (see the section comment above).
+    */
+  def hyloF[F[_], Seed, A](
+      coalg: Seed => F[Seed],
+      alg: (Seed, F[A]) => A,
+  )(using F: Traverse[F]): Getter[Seed, A] =
+    def go(seed: Seed): Eval[A] =
+      F.traverse(coalg(seed))(child => Eval.defer(go(child))).map(folded => alg(seed, folded))
+    Getter[Seed, A](seed => go(seed).value)
