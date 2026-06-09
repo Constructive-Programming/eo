@@ -202,11 +202,18 @@ but its *basic* schemes are stack-unsafe and don't compose as optics. The gap: a
   `alg: (Seed, F[A]) => A`), needing only `Traverse[F]`. `cataF` needs `Project[F, S]`; `anaF` needs
   `Embed[F, S]`.
 
-### Deferred to Implementation
+### Resolved During Implementation
 
-- **Eval vs explicit heap machine (origin R2, B/op-gated):** Ship the `Eval` driver; measure B/op vs
-  droste basic in U6; build the heap-machine fallback only if `Eval` misses parity. Decided on B/op,
-  not local ns.
+- **Eval vs explicit heap machine (origin R2, B/op-gated): RESOLVED — Eval ships v1; heap machine is
+  a follow-up.** U6's `-prof gc` measurement (8 191-node tree, `site/docs/benchmarks.md`): the typed
+  `Eval` path is **~8–16× droste basic** B/op (`cata` 15.7×, `hylo` 7.9×, `ana` 8.2×; ~316 B/node of
+  `Eval` machinery) — it does **not** meet the parity bar. It ships as the correct / type-safe /
+  stack-safe v1 (allocation is the documented tradeoff; droste basic is neither stack-safe nor
+  optic-composable). Reaching parity needs the pre-planned explicit typed-heap-machine driver — now
+  a tracked follow-up, no longer a v1-conditional.
+- **Whether `Eval` reaches 10⁶ cleanly: RESOLVED — yes.** All three (`cataF`/`anaF`/`hyloF`) fold/
+  build a 10⁶-deep spine without `StackOverflowError` (U4). `anaF` (the OOM frontier) needs ~1 GB at
+  10⁶, so the module forks its tests with `-Xmx2g`.
 - **Whether `Eval` reaches 10⁶ cleanly** (the *typed `Eval`* spike verified 10⁵; #23's distinct
   `PSVec` engine reached 10⁶; #23's own `ana` stack-safety test only goes to 100k). `anaF` is the
   least-proven path — it materializes an O(nodes) `S` *and* holds the `Eval` chain simultaneously, so
@@ -452,7 +459,11 @@ asserted (per `verify-stacksafety-claims`). A failure escalates to the deferred 
 **Verification:** `docs/mdoc` succeeds (the pre-commit gate), 0 errors; snippets render expected
 output.
 
-- [ ] **Unit 6: JMH benchmark — typed-F vs droste basic (optional / splittable)**
+- [x] **Unit 6: JMH benchmark — typed-F vs droste basic** ✅ done (in this PR)
+
+**Result:** eoF `cataF`/`hyloF`/`anaF` rows added to `SchemesBench`; `-prof gc` shows the `Eval`
+path at ~8–16× droste-basic B/op — misses parity, so the heap-machine driver is a tracked follow-up.
+See `site/docs/benchmarks.md` and the resolved Open Question above.
 
 **Goal:** Measure B/op against droste's basic schemes (the success-criterion bar) and decide the
 driver mechanism.
