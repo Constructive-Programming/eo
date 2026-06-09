@@ -33,7 +33,7 @@ object Composer extends LowPriorityComposerInstances:
     *
     * @group Instances
     */
-  given forgetful2tuple: Composer[Direct, Tuple2] with
+  given direct2tuple: Composer[Direct, Tuple2] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
@@ -46,7 +46,7 @@ object Composer extends LowPriorityComposerInstances:
     *
     * @group Instances
     */
-  given forgetful2either: Composer[Direct, Either] with
+  given direct2either: Composer[Direct, Either] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Either] =
       new Optic[S, T, A, B, Either]:
@@ -62,7 +62,7 @@ object Composer extends LowPriorityComposerInstances:
     * [[dev.constructive.eo.laws.GetterLaws]] anticipated; it became sound once `Fold` was made
     * honestly one-way (`B = Unit`), because the `from` is now genuinely unreachable: `Forget[F]`
     * admits no `ReverseAccessor`, so the resulting fold's build side is never invoked (mirrors
-    * [[forgetful2either]]'s unreachable `Left`). Powers `Getter.andThen(Fold)` and `Optic.cross`
+    * [[direct2either]]'s unreachable `Left`). Powers `Getter.andThen(Fold)` and `Optic.cross`
     * against a `Fold`. Requires `Applicative[F]` for `pure`.
     *
     * @group Instances

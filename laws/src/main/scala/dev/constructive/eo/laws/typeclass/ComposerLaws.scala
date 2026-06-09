@@ -18,10 +18,10 @@ trait ComposerPathIndependenceLaws[S, A]:
 
   // Spelled out explicitly to sidestep the `iso.morph[Affine]` ambiguity.
   private def viaTuple2: Optic[S, S, A, A, Affine] =
-    Affine.tuple2affine.to(Composer.forgetful2tuple.to(iso))
+    Affine.tuple2affine.to(Composer.direct2tuple.to(iso))
 
   private def viaEither: Optic[S, S, A, A, Affine] =
-    Affine.either2affine.to(Composer.forgetful2either.to(iso))
+    Affine.either2affine.to(Composer.direct2either.to(iso))
 
   def pathIndependence(s: S, f: A => A): Boolean =
     viaTuple2.modify(f)(s) == viaEither.modify(f)(s)
