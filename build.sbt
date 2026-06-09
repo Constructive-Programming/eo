@@ -236,6 +236,14 @@ lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.1"
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.9"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.9"
 
+// droste — established Scala recursion-schemes library. SPIKE-ONLY dependency
+// (never a published-artifact dep): the corecursion encoding spike measures eo's
+// ana/apo/hylo ergonomics against a droste-interop baseline. Pre-1.0 milestone;
+// transitively pins cats-core_3:2.6.1 + scala3-library_3:3.0.0, both evicted up to
+// the project's 2.13.0 / 3.8.3 on the spike classpath. See
+// docs/plans/2026-06-08-001-feat-recursion-schemes-generation-spike-plan.md.
+lazy val droste = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
+
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
   // from the current git tag (`tlBaseVersion` above gives the
@@ -659,6 +667,33 @@ lazy val benchmarks: Project = project
     // JMH class can `JsonCodecMaker.make` directly without a separate
     // codec module.
     libraryDependencies += jsoniterMacros,
+  )
+
+// Corecursion (generate) spike — ana/apo/hylo encoding experiment. Like
+// `benchmarks`, it stays OUT of the root aggregator: it is a throwaway
+// experiment to settle an API-encoding verdict, not a published module, and
+// must not be dragged into `sbt compile` / `sbt test`. Depends on core +
+// circeIntegration (for `platedJson`) + generics (Stage 3) + droste (interop
+// baseline). Behavioural / stack-safety specs live in its own Test config.
+// See docs/plans/2026-06-08-001-feat-recursion-schemes-generation-spike-plan.md.
+lazy val spike: Project = project
+  .in(file("spike"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("circeIntegration"),
+    LocalProject("generics"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-spike",
+    publish / skip := true,
+    libraryDependencies += droste,
+    libraryDependencies += circe,
+    libraryDependencies += circeParser,
+    libraryDependencies += discipline % Test,
+    libraryDependencies += scalacheck % Test,
   )
 
 // Single source of truth for the JMH invocation (the config that the per-class
