@@ -314,6 +314,30 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(chainOk)
   }
 
+  // covers: the Affine-carrier `.andThen(Getter)` bridge — composing a partial/read-write Optional
+  //   (or a read-only AffineFold) with a read-only Getter collapses to an AffineFold (partial read),
+  //   via getOption ∘ get. A read-write outer's B = A can't thread a Getter's Unit back-focus as a
+  //   writable optic, so the read-only downgrade is the sound (and only) result. Both the read-write
+  //   Optional outer and the read-only AffineFold outer route through the same overload.
+  "Affine.andThen(Getter): Optional / AffineFold composed with a Getter yields an AffineFold" >> {
+    val toStr = Getter[Int, String](_.toString)
+
+    val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
+      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+        getOrModify = p => Either.cond(p.age >= 18, p.age, p),
+        reverseGet = { case (_, a) => AdultPerson(a) },
+      )
+    val optThenG: AffineFold[AdultPerson, String] = ageOpt.andThen(toStr)
+    val optOk = (optThenG.getOption(AdultPerson(20)) === Some("20"))
+      .and(optThenG.getOption(AdultPerson(15)) === None)
+
+    val afThenG: AffineFold[AdultPerson, String] = adultAgeAF.andThen(toStr)
+    val afOk = (afThenG.getOption(AdultPerson(18)) === Some("18"))
+      .and(afThenG.getOption(AdultPerson(10)) === None)
+
+    optOk.and(afOk)
+  }
+
   // ----- Review behaviour ----------------------------------------------
 
   // covers: Review.apply wraps an A => S build function; Review is a proper Optic

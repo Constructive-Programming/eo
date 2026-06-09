@@ -188,6 +188,15 @@ summons `Composer[Tuple2, Affine]` under the hood and morphs
 the Lens into the Affine carrier. No explicit `.morph` required
 on your end.
 
+Composing the *other* way — an `Optional` (or `AffineFold`)
+`.andThen` a read-only `Getter` — yields an **`AffineFold`**: the
+read-only inner collapses the result to a partial *read*
+(`getOption` the focus, then read it through the getter). A
+`Getter`'s `Unit` back-focus can't thread through the Optional's
+writable `B`, so the read-only downgrade is the only sound result
+— "optionally focus `A`, then read `C`", the mirror of how a
+`Getter` chain composes `Getter`-to-`Getter`.
+
 ### AffineFold (read-only)
 
 The read-only projection of an Affine — a 0-or-1 focus with no

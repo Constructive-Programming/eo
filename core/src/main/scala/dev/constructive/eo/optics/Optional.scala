@@ -134,3 +134,14 @@ final class Optional[S, T, A, B](
       innerHit = (_, a) => Right(inner.get(a)),
       innerWrite = (_, d) => inner.reverseGet(d),
     )
+
+  /** Fused `Optional.andThen(Getter)` — a read-only inner collapses the partial optic to a partial
+    * *read*: `getOption` the focus, then read it through the getter. The result is an
+    * [[AffineFold]] (read-only `T = B = Unit`), because a `Getter`'s `Unit` back-focus cannot
+    * thread through the Optional's writable `B` — composing as a writable optic is impossible by
+    * construction, so the read-only downgrade is the sound result ("optionally focus `A`, then read
+    * `C`"). So `Optional[S, A].andThen(Getter[A, C]) = AffineFold[S, C]`. The mirror of how a
+    * `Getter` chain composes `Getter`-to-`Getter`.
+    */
+  def andThen[C](inner: DirectGetter[A, C]): AffineFold[S, C] =
+    AffineFold(s => getOrModify(s).toOption.map(inner.get))
