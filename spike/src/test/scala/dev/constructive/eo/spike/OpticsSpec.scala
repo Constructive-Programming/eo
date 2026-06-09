@@ -66,6 +66,29 @@ class OpticsSpec extends Specification:
     (Optics.cata(evalAlg).get(composed.reverseGet("abc")) == 4.0) must beTrue
   }
 
+  "ana.andThen(cata) IS hylo — Review.andThen(Getter) yields a Getter[Seed, A]" >> {
+    val hy: DirectGetter[Int, Double] = Optics.ana(buildCoalg).andThen(Optics.cata(evalAlg))
+    (hy.get(3) == 4.0) must beTrue
+  }
+
+  "materializing hylo (cata ∘ ana) equals the fused Schemes.hylo — the hylo law" >> {
+    val materializing: DirectGetter[Int, Double] =
+      Optics.hylo(Optics.ana(buildCoalg), Optics.cata(evalAlg))
+    // The same computation fused (no Expr built): build-and-eval in one coalgebra.
+    val fusedCoalg: Schemes.CoalgA[Int, Double] = n =>
+      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Double]) => 1.0)
+      else (PSVec.fromIterable(List(0, n - 1)), (ds: PSVec[Double]) => ds(0) + ds(1))
+    val viaOptics = materializing.get(3)
+    val viaFused = Schemes.hylo(fusedCoalg)(3)
+    (viaOptics == 4.0 && viaFused == 4.0 && viaOptics == viaFused) must beTrue
+  }
+
+  "the hylo Getter composes further into the optic pipeline" >> {
+    val hy: DirectGetter[Int, Double] = Optics.hylo(Optics.ana(buildCoalg), Optics.cata(evalAlg))
+    val toStr: DirectGetter[Int, String] = hy.andThen(Getter[Double, String](_.toString))
+    (toStr.get(3) == "4.0") must beTrue
+  }
+
   "cata-as-Getter is stack-safe at depth 10^6 (Plated-driven machine)" >> {
     var e: Expr = Expr.Lit(0.0)
     var i = 0

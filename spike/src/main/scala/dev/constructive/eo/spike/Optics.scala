@@ -68,9 +68,32 @@ object Optics:
     inline def andThen[B](inner: ReviewOptic[A, B]): ReviewOptic[S, B] =
       new ReviewOptic(b => reverseGet(inner.reverseGet(b)))
 
+    /** `Review.andThen(Getter)` — the two optics meet at the built type `S`: build `S` from the
+      * focus `A` (this `Review`), then read it (the `Getter[S, B]`). Yields a `Getter[A, B]` (read
+      * `B` from `A`). When the `Review` is an [[ana]] and the `Getter` a [[cata]], this composition
+      * is exactly a (materializing) **hylo** — `cata ∘ ana` as `Getter ∘ Review`.
+      */
+    inline def andThen[B](getter: DirectGetter[S, B]): DirectGetter[A, B] =
+      new DirectGetter(a => getter.get(reverseGet(a)))
+
   /** Anamorphism as a `ReviewOptic`: a stack-safe unfold `Seed => S`, returned as an eo optic (the
     * reverse-construction dual of [[cata]]'s `Getter`). The closure coalgebra carries its own node
     * builder (encoding A); the stack-safe machine is reused from `Schemes.hylo`.
     */
   def ana[Seed, S](coalg: Schemes.CoalgA[Seed, S]): ReviewOptic[S, Seed] =
     ReviewOptic(Schemes.hylo(coalg))
+
+  /** Hylomorphism as the **composition of the two optics**: `cata ∘ ana`, built as
+    * `Review.andThen(Getter)`. The `ana` `Review` builds `S` from a seed; the `cata` `Getter` folds
+    * `S` to `A`; their composite is a `Getter[Seed, A]`.
+    *
+    * This is the **materializing** hylo — the intermediate `S` is constructed, then folded — the
+    * textbook `hylo = cata . ana`. Contrast the **fused** `Schemes.hylo`, which never builds `S`.
+    * The two agree (the hylo law; checked in `OpticsSpec`). The result is itself a `Getter`, so the
+    * whole hylo composes further into the optic pipeline.
+    */
+  def hylo[Seed, S, A](
+      anaReview: ReviewOptic[S, Seed],
+      cataGetter: DirectGetter[S, A],
+  ): DirectGetter[Seed, A] =
+    anaReview.andThen(cataGetter)

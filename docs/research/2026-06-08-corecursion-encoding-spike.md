@@ -127,6 +127,12 @@ schemes in an optics library. Fixed by expressing the schemes **as optics** (`Op
   structure and folds it in one composed `Getter` (verified: `Wrapped --Getter--> Expr
   --cata--> Double`); and `ana(...).andThen(ReviewOptic(...))` composes builds the dual way.
   **droste's free-standing schemes cannot do this.**
+- **`hylo` is literally `ana.andThen(cata)`** — `Review.andThen(Getter)`, the two optics
+  meeting at the built type `S`, yielding a `Getter[Seed, A]`. This *materializing* hylo
+  (`cata ∘ ana`, builds the intermediate `S`) is verified equal to the *fused* `Schemes.hylo`
+  (no `S` built) — i.e. **the hylo law `hylo = cata . ana` holds**, and is expressed *as optic
+  composition*. The resulting hylo is itself a `Getter`, so it composes further into the
+  pipeline. This is the capstone of "schemes as optics": the refold is an `andThen`.
 
 This reframes the droste comparison honestly: eo's generality is **compositional** (schemes
 join the whole optic algebra — `andThen` with lenses/prisms/folds), which is a *different
