@@ -356,24 +356,24 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(composed.get(composed.reverseGet(8)) === 8) // round-trips
   }
 
-  // covers: crossMorphed is genuinely CROSS-CARRIER — a Review (Direct, builds) crossed with an
+  // covers: cross is genuinely CROSS-CARRIER — a Review (Direct, builds) crossed with an
   // AffineFold (Affine, partial read) bridges via Morph[Direct, Affine], so the composite is a
   // partial optic: .getOption, Some on hit / None on miss.
-  "Optic.crossMorphed: cross-carrier (Review[Direct] × AffineFold[Affine]) yields a partial getOption" >> {
+  "Optic.cross: cross-carrier (Review[Direct] × AffineFold[Affine]) yields a partial getOption" >> {
     val lengthR = Review[Int, String](_.length) // builds Int from String
     val bigOnly = AffineFold.select[Int](_ > 3) // keeps the focus only when > 3
     val crossed =
-      lengthR.crossMorphed(bigOnly) // Optic[String,Unit,Int,Unit,Affine] — cross-carrier
+      lengthR.cross(bigOnly) // Optic[String,Unit,Int,Unit,Affine] — cross-carrier
     (crossed.getOption("hello") === Some(5)) // length 5 > 3
       .and(crossed.getOption("ab") === None) // length 2, filtered out
   }
 
-  // covers: read-many falls out of crossMorphed — crossing a Review (Direct, builds) with a Fold
+  // covers: read-many falls out of cross — crossing a Review (Direct, builds) with a Fold
   // (Forget) bridges via the Composer[Direct, Forget] (sound now that Fold is honestly one-way),
   // so the composite is a Fold over everything built. .foldMap, no separate crossFold.
-  "Optic.crossMorphed: Review crossed with a Fold (cross-carrier) yields a read-many Fold" >> {
+  "Optic.cross: Review crossed with a Fold (cross-carrier) yields a read-many Fold" >> {
     val buildList = Review[List[Int], Int](n => (1 to n).toList) // reverseGet n => [1..n]
-    val sumAll = buildList.crossMorphed(Fold[List, Int]) // Optic[Int,Unit,Int,Unit,Forget[List]]
+    val sumAll = buildList.cross(Fold[List, Int]) // Optic[Int,Unit,Int,Unit,Forget[List]]
     (sumAll.foldMap[Int](identity)(3) === 6) // 1+2+3
       .and(sumAll.foldMap[Int](identity)(4) === 10) // 1+2+3+4
   }

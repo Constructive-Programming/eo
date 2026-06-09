@@ -125,10 +125,11 @@ refoldSum.get(2)
 intermediate structure is large; reach for `ana` / `cata` / `cross` when you want the
 intermediate `S`, or want to drop the schemes into a larger optic pipeline.
 
-`cross` composes under a single carrier; its cross-carrier sibling `crossMorphed` (mirroring
-`andThen` vs `andThenMorphed`) bridges different carriers via `Morph`. Crossing a builder with a
-**`Fold`** (not just a single-focus getter) reads *many* foci from what was built — read-many falls
-out of `crossMorphed`:
+`cross` is overloaded (like `andThen`): a trait-member overload composes under a single carrier,
+and a `Morph`-bridged overload (same name) composes *across* carriers — overload resolution picks
+the right one. So crossing a builder with a **`Fold`** (not just a single-focus getter) bridges
+`Direct → Forget` via `Morph` and reads *many* foci from what was built — read-many falls out of
+`cross`:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Fold, Review}
@@ -137,7 +138,7 @@ import cats.instances.list.given
 
 // build a List[Int] from a seed, then fold every element
 val buildList = Review[List[Int], Int](n => (1 to n).toList)
-val sumBuilt = buildList.crossMorphed(Fold[List, Int])
+val sumBuilt = buildList.cross(Fold[List, Int])
 ```
 
 ```scala mdoc
