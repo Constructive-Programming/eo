@@ -434,6 +434,83 @@ spine). Closing the last ~2–3× would mean fusing the recursion into the `plat
 macro — but that emits a *function*, not an `Optic`, which would break the
 `.andThen` composition `everywhere` relies on, so it's deliberately not done.
 
+<<<<<<< HEAD
+=======
+## Recursion schemes — cata / ana / hylo vs droste and hand-written
+
+`SchemesBench` measures cats-eo's typed recursion schemes against
+[droste](https://github.com/higherkindness/droste) and a hand-written fold/unfold
+over a fixed-size `Expr` tree (balanced binary tree, ~512 nodes). The typed
+schemes (`cataF` / `anaF` / `hyloF`) use the `ArrayDeque`-based heap machine
+that replaced the `Eval` trampoline — stack-safe to 10^6 nodes, no forking
+required.
+
+| Method | ns/op | B/op | vs droste (ns) | vs hand (ns) |
+|---|--:|--:|--:|--:|
+| `handCata` |  13 170 |       0 |      — |    1× |
+| `handHylo` |  11 358 |       0 |      — |    1× |
+| `handAna`  |  19 059 | 163 816 |      — |    1× |
+| `drosteCata` |  44 535 | 164 824 | 1× |  3.4× |
+| `drosteHylo` |  76 215 | 328 641 | 1× |  6.7× |
+| `drosteAna`  |  55 247 | 327 632 | 1× |  2.9× |
+| `eoCata` |  85 627 | 197 569 | 1.9× |  6.5× |
+| `eoHylo` |  85 523 | 295 849 | 1.1× |  7.5× |
+| `eoAna`  | 144 313 | 786 297 | 2.6× |  7.6× |
+
+Three results:
+
+- **`cata` / `hylo` are ~1.9× / ~1.1× droste in ns** and ~1.2× / ~0.9× in B/op.
+  The hylo gap has closed to noise; cata carries a small constant from the typed
+  `CoAlgebra[F[_], A]` dispatch that droste's `Gather`-based scheme avoids.
+- **`ana` is the weakest link** (~2.6× droste ns, ~2.4× B/op). The unfold leg
+  allocates a `Frame` per node to track the output position; this is the primary
+  allocation driver and the main gap to close.
+- **All three are ~6–8× behind hand-written** in ns; hand-written `cata` / `hylo`
+  are essentially alloc-free (0 B/op) because the JIT fuses the in-place fold —
+  no intermediate carrier representation, no `Frame`. The B/op gap is the
+  structural cost of keeping the scheme compositional (optic-native) rather than
+  fused into a single recursive function.
+
+The earlier memory note "eo schemes ~15–20× slower than droste/hand" was from a
+pre-optimisation spike on an untuned encoding; the current `ArrayDeque` heap
+machine closes that to ~2× droste (cata) / parity (hylo).
+
+## Recursion schemes — `cata` / `ana` / `hylo`: eo, typed eo, droste, hand
+
+`SchemesBench` folds/builds a perfect binary tree of `2^12` (8 191 nodes) four ways:
+**eo** (the `PSVec` Plated machine — `cata`/`ana`/`hylo` from `cats-eo-schemes`),
+**eoF** (the *typed* pattern-functor path — `cataF`/`anaF`/`hyloF` over `BinF` via a `Basis` +
+`Traverse[BinF]`, a `cats.Eval` trampoline), **droste** (`scheme.cata/ana/hylo` over `Fix[BinF]`),
+and **hand** (plain recursion). Allocation is the trustworthy signal here (`gc.alloc.rate.norm`,
+deterministic and box-independent — ns/op on the shared box is too noisy to compare).
+
+| Scheme | eo (PSVec) | eoF (typed `Eval`) | droste basic | hand | eoF ÷ droste |
+|---|--:|--:|--:|--:|--:|
+| `cata` |   197 568 | 2 589 211 |   164 824 |     0.045 | 15.7× |
+| `hylo` |   295 849 | 2 589 213 |   328 641 |     0.153 |  7.9× |
+| `ana`  |   589 713 | 2 686 489 |   327 632 |   163 816 |  8.2× |
+
+(B/op at depth 12.)
+
+Two readings:
+
+- **The `PSVec` path is droste-competitive.** eo `cata` is ~1.2× droste, `hylo` *beats* droste
+  (0.9×, the fused refold builds no intermediate tree), `ana` ~1.8×. The constant is carrier
+  materialisation (one `PSVec` + `out` array per node), same as Plated above.
+- **The typed `Eval` path is ~8–16× droste basic** (and ~13× eo's own `PSVec` path): ~316 B/node of
+  `Eval` machinery — a `Defer` per child, a `FlatMap`+`Map` from `map2`, and the `.map(alg)` per
+  layer. This is inherent to the `cats.Eval` trampoline, not a bug. It is the price of being
+  **typed *and* stack-safe at once**: droste's *basic* schemes are neither stack-safe (naive
+  recursion) nor optic-composable, so the row is not apples-to-apples — eoF delivers guarantees
+  droste basic does not.
+
+**Decision (U6):** the `Eval` driver does **not** meet allocation parity with droste basic, so it
+ships as the correct / type-safe / stack-safe v1 with allocation as a documented tradeoff. Reaching
+parity would require the pre-planned **explicit typed-heap-machine** driver (walk `F` through its
+`Foldable`/`Traverse` into a `PSVec`-style `ArrayDeque` engine, without re-erasing children to
+`AnyRef` at the algebra seam) — tracked as a follow-up. Until then, prefer the `PSVec` `cata`/`ana`/
+`hylo` when allocation matters, and `cataF`/`anaF`/`hyloF` when named-constructor type-safety does.
+
 ## Reproducing
 
 The integration tables are produced by the **Benchmarks** CI workflow
