@@ -326,8 +326,9 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val applyOk = (toSome.reverseGet(3) === Some(3)).and(toSome.reverseGet(-1) === Some(-1))
 
     val stringify = Review[Int, String](_.length)
-    val composed =
-      Review[Option[Int], String](s => toSome.reverseGet(stringify.reverseGet(s)))
+    // Review is now a proper Optic, so it composes through the fused `andThen`
+    // (build String -> Int -> Option[Int]) rather than hand-threading reverseGet.
+    val composed = toSome.andThen(stringify)
     val composeOk = composed.reverseGet("hello") === Some(5)
 
     val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
