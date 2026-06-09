@@ -8,7 +8,7 @@ import org.specs2.mutable.Specification
 
 import data.{Forget, PSVec}
 import data.Forget.given
-import optics.{Getter, Optic, Plated}
+import optics.{Getter, Lens, Optic, Plated}
 import optics.Optic.* // get, andThen, cross, foldMap
 
 import generics.plate
@@ -58,6 +58,29 @@ class SchemesFSpec extends Specification:
     val composed: Getter[(String, Bin), Int] =
       Getter[(String, Bin), Bin](_._2).andThen(Schemes.cataF(sumLeaves))
     (composed.get(("x", tree)) == 6) must beTrue
+  }
+
+  "a composed Lens focuses a recursive field; the scheme folds it; the lens still writes" >> {
+    final case class Inner(label: String, tree: Bin)
+    final case class Doc(id: Int, inner: Inner)
+
+    val innerL = Lens[Doc, Inner](_.inner, (d, i) => d.copy(inner = i))
+    val treeL = Lens[Inner, Bin](_.tree, (i, t) => i.copy(tree = t))
+    val deepTree = innerL.andThen(treeL) // Lens[Doc, Bin] — lens composition
+
+    val doc = Doc(1, Inner("x", tree)) // tree = leaf sum 6
+    // read: focus the recursive field with the composed lens, fold it with the scheme.
+    // (Schemes are read-only Getters, so we either read at the leaf — `cataF.get(lens.get(doc))` —
+    // or wrap the lens read in a Getter to build a reusable composed Getter[Doc, Int].)
+    val docLeafSum: Getter[Doc, Int] =
+      Getter[Doc, Bin](deepTree.get).andThen(Schemes.cataF(sumLeaves))
+
+    val pruned = deepTree.replace(Bin.Leaf(0))(doc) // write through the same composed lens
+
+    (Schemes.cataF(sumLeaves).get(deepTree.get(doc)) == 6)
+      .and(docLeafSum.get(doc) == 6)
+      .and(deepTree.get(pruned) == Bin.Leaf(0))
+      .and(pruned.inner.label == "x") // the rest of the record is untouched
   }
 
   // ----- anaF (typed build) -----
