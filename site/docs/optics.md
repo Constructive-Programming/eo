@@ -423,10 +423,11 @@ the `Plated` see [Generics → `plate[S]`](generics.md).
 ### Review
 
 A `Review[S, A]` is the build-only optic — it wraps an `A => S`
-construction function and has no read side. Unlike the other families,
-`Review` does **not** extend `Optic` (the Optic trait requires an
-observing `to` that a pure review has none of); it's a standalone type
-with its own composition.
+construction function. It is the exact **mirror of `Getter`**: where
+`Getter` is `Optic[S, Unit, A, Unit, Direct]` (a real read `to`, vestigial
+`from`), `Review` is `Optic[Unit, S, Unit, A, Direct]` — a vestigial `to`
+and a real `from` that *builds* `S` from the focus `A`. So it is a full
+`Optic` and composes through the fused `andThen`, just like `Getter`.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Review
@@ -438,51 +439,24 @@ val someIntR = Review[Option[Int], Int](Some(_))
 someIntR.reverseGet(42)
 ```
 
-Compose by composing the underlying `A => S` functions directly:
+Compose two Reviews with `andThen` (build `String → Int → Option[Int]`):
 
 ```scala mdoc:silent
 val lengthR = Review[Int, String](_.length)
-val someLen = Review[Option[Int], String](
-  s => someIntR.reverseGet(lengthR.reverseGet(s))
-)
+val someLen = someIntR.andThen(lengthR)
 ```
 
 ```scala mdoc
 someLen.reverseGet("hello")
 ```
 
-Two factory methods pull the natural build direction out of an
-Iso or a Prism — aliased as `ReversedLens` and `ReversedPrism`
-for users who expect to find those names next to the rest of
-the optics reference:
-
-```scala mdoc:silent
-import dev.constructive.eo.optics.{BijectionIso, MendTearPrism, ReversedLens, ReversedPrism}
-
-val doubleIso =
-  BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
-val revIso = ReversedLens(doubleIso)
-
-val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
-  tear = {
-    case Some(n) => Right(n)
-    case other   => Left(other)
-  },
-  mend = Some(_),
-)
-val revPrism = ReversedPrism(somePrism)
-```
-
-```scala mdoc
-revIso.reverseGet(5)
-revPrism.reverseGet(7)
-```
-
-**`ReversedLens` only accepts a bijective Lens** (an
-`BijectionIso`). A general Lens doesn't carry enough
-information to reconstruct its source from the focus alone —
-for that, construct a `Review` directly with your own
-`A => S`.
+There are no `fromIso` / `fromPrism` factories: an `Iso` or `Prism` already
+carries its build direction, so wrap it directly — `Review(iso.reverseGet)`
+or `Review(prism.mend)`. eo has no `Prism.fromIso` (and the like) for the same
+reason — a cross-optic conversion that merely re-exposes a sub-direction the
+source already has would be redundant. (A general, non-bijective `Lens` can't
+reconstruct its source from the focus alone, so there is deliberately no
+`Lens`→`Review` path; build a `Review` with your own `A => S`.)
 
 ### AffineFold
 

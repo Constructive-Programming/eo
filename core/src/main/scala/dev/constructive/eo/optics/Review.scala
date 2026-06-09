@@ -14,8 +14,10 @@ import data.Direct
   * necessity.) A Review composes with another Review through the fused `andThen` just as `Getter`s
   * do, and slots into the `Direct`-carrier optic surface.
   *
-  * [[Review.fromIso]] / [[Review.fromPrism]] (with [[ReversedLens]] / [[ReversedPrism]] aliases)
-  * pull the build direction out of an Iso / Prism.
+  * To get the build direction out of an `Iso` or `Prism`, wrap its reverse directly —
+  * `Review(iso.reverseGet)` / `Review(prism.mend)` — rather than via a bespoke factory: an
+  * `Iso`/`Prism` already *is* a build direction, so cross-optic `from*` constructors would be
+  * redundant (eo has no `Prism.fromIso` etc. for the same reason).
   */
 final class Review[S, A](val reverseGet: A => S) extends Optic[Unit, S, Unit, A, Direct]:
   type X = Nothing
@@ -39,26 +41,3 @@ object Review:
     * @group Constructors
     */
   def apply[S, A](reverseGet: A => S): Review[S, A] = new Review(reverseGet)
-
-  /** Build direction from a [[BijectionIso]]. @group Constructors */
-  def fromIso[S, A](iso: BijectionIso[S, S, A, A]): Review[S, A] =
-    Review(iso.reverseGet)
-
-  /** Build direction from a [[MendTearPrism]] (drops the partial read). @group Constructors */
-  def fromPrism[S, A](prism: MendTearPrism[S, S, A, A]): Review[S, A] =
-    Review(prism.mend)
-
-/** Alias for [[Review.fromIso]] — Haskell-`optics`-package naming. Unlike Haskell's `ReversedLens`,
-  * cats-eo's takes a [[BijectionIso]] because a non-bijective Lens can't reconstruct its source
-  * from the focus alone.
-  */
-object ReversedLens:
-
-  def apply[S, A](iso: BijectionIso[S, S, A, A]): Review[S, A] =
-    Review.fromIso(iso)
-
-/** Alias for [[Review.fromPrism]] — Haskell-`optics`-package naming. */
-object ReversedPrism:
-
-  def apply[S, A](prism: MendTearPrism[S, S, A, A]): Review[S, A] =
-    Review.fromPrism(prism)

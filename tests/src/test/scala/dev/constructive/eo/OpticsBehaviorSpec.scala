@@ -21,8 +21,6 @@ import optics.{
   Optic,
   Optional,
   Prism,
-  ReversedLens,
-  ReversedPrism,
   Review,
   Traversal,
 }
@@ -43,7 +41,7 @@ import data.SetterF.given
   * '''2026-04-25 consolidation.''' 61 → 22 named blocks. Pre-image had:
   *
   *   - 3 Lens factory specs (first/second/curried) collapsed into one.
-  *   - 4 Review specs collapsed into one (apply/compose/fromIso/fromPrism + ReversedLens alias).
+  *   - Review specs collapsed into one (apply + compose-as-Optic via andThen).
   *   - 5 AffineFold specs collapsed into one (apply/select/fromOptional/fromPrism/Lens-narrow).
   *   - 3 Lens-into-MultiFocus[List] specs (Tuple2/Either/Affine) collapsed via the same parametric
   *     hit/miss assertion shape.
@@ -317,38 +315,20 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   // ----- Review behaviour ----------------------------------------------
 
-  // covers: Review.apply wraps an A => S build function, Reviews compose via
-  // direct function composition, Review.fromIso extracts the reverseGet side of a
-  // BijectionIso, Review.fromPrism extracts the mend side of a MendTearPrism,
-  // ReversedLens(iso) and ReversedPrism(prism) alias the Review factories
-  "Review: apply / compose / fromIso / fromPrism + ReversedLens/ReversedPrism aliases" >> {
+  // covers: Review.apply wraps an A => S build function; Review is a proper Optic
+  // (the mirror of Getter), so two Reviews compose via the fused `andThen`. (There are
+  // no cross-optic `fromIso`/`fromPrism` factories — an Iso/Prism already is a build
+  // direction; use `Review(iso.reverseGet)` / `Review(prism.mend)` directly.)
+  "Review: apply + compose (as an Optic, via andThen)" >> {
     val toSome = Review[Option[Int], Int](Some(_))
     val applyOk = (toSome.reverseGet(3) === Some(3)).and(toSome.reverseGet(-1) === Some(-1))
 
     val stringify = Review[Int, String](_.length)
-    // Review is now a proper Optic, so it composes through the fused `andThen`
-    // (build String -> Int -> Option[Int]) rather than hand-threading reverseGet.
+    // build String -> Int -> Option[Int] through the fused andThen.
     val composed = toSome.andThen(stringify)
     val composeOk = composed.reverseGet("hello") === Some(5)
 
-    val doubleIsoConcrete: BijectionIso[Int, Int, Int, Int] =
-      BijectionIso[Int, Int, Int, Int](_ * 2, _ / 2)
-    val fromIsoOk = Review.fromIso(doubleIsoConcrete).reverseGet(10) === 5
-
-    val somePrism = new MendTearPrism[Option[Int], Option[Int], Int, Int](
-      tear = {
-        case Some(n) => Right(n)
-        case None    => Left(None)
-      },
-      mend = Some(_),
-    )
-    val fromPrismOk = Review.fromPrism(somePrism).reverseGet(42) === Some(42)
-
-    val rl = ReversedLens(doubleIsoConcrete)
-    val rp = ReversedPrism(somePrism)
-    val aliasOk = (rl.reverseGet(10) === 5).and(rp.reverseGet(7) === Some(7))
-
-    applyOk.and(composeOk).and(fromIsoOk).and(fromPrismOk).and(aliasOk)
+    applyOk.and(composeOk)
   }
 
   // ----- Forget[F] `.andThen` via assocForgetMonad ---------------------
