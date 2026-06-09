@@ -66,16 +66,16 @@ bodySum.get(Payload("p", doc))
 
 ## `ana` — an unfold that is a `Review`
 
-A coalgebra maps a seed to its child seeds plus a builder for the node. It returns a `Review`,
-so `.reverseGet` runs the unfold:
+An `expand` maps a seed to its child seeds; a `build` reassembles a node from its built children.
+It returns a `Review`, so `.reverseGet` runs the unfold:
 
 ```scala mdoc:silent
 // seed n builds a right-nested pair tree of depth n, leaves = 1
 val buildTree =
-  Schemes.ana[Int, Json] { n =>
-    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Json]) => Json.fromInt(1))
-    else (PSVec.fromIterable(List(0, n - 1)), (ks: PSVec[Json]) => Json.arr(ks(0), ks(1)))
-  }
+  Schemes.ana[Int, Json](
+    expand = n => if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1),
+    build = (n, ks) => if n <= 0 then Json.fromInt(1) else Json.arr(ks(0), ks(1)),
+  )
 ```
 
 ```scala mdoc
@@ -84,16 +84,16 @@ buildTree.reverseGet(2)
 
 ## `hylo` — the fused refold
 
-`hylo` unfolds and folds in one pass, **never building the intermediate structure**. The
-coalgebra folds the children's results directly:
+`hylo` unfolds and folds in one pass, **never building the intermediate structure**. The same
+`expand` drives the unfold; `alg` folds the children's results directly:
 
 ```scala mdoc:silent
 // fused: count the leaves of that same tree, with no Json ever constructed
 val countLeaves: DirectGetter[Int, Int] =
-  Schemes.hylo[Int, Int] { n =>
-    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Int]) => 1)
-    else (PSVec.fromIterable(List(0, n - 1)), (rs: PSVec[Int]) => rs.toList.sum)
-  }
+  Schemes.hylo[Int, Int](
+    expand = n => if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1),
+    alg = (n, rs) => if n <= 0 then 1 else rs.toList.sum,
+  )
 ```
 
 ```scala mdoc

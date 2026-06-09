@@ -43,8 +43,8 @@ class SchemesBench extends JmhDefaults:
 
   // Prebuilt scheme optics / functions (construction not measured).
   val eoCataG = Schemes.cata(eoSum) // DirectGetter[Bin, Int]
-  val eoHyloG = Schemes.hylo(eoBuildSum) // DirectGetter[Int, Int]
-  val eoAnaR = Schemes.ana(eoBuildBin) // Review[Bin, Int]
+  val eoHyloG = Schemes.hylo(eoExpand, eoHyloAlg) // DirectGetter[Int, Int]
+  val eoAnaR = Schemes.ana(eoExpand, eoAnaBuild) // Review[Bin, Int]
 
   val drosteCataF: Fix[BinF] => Int = scheme.cata(drosteSum)
   val drosteHyloF: Int => Int = scheme.hylo(drosteSum, drosteBuild)

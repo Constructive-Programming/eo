@@ -12,53 +12,51 @@ import optics.{DirectGetter, Getter, Plated, Review}
   *   - [[hylo]] is a **fused** `DirectGetter[Seed, A]` — refold with **no intermediate `S`** built.
   *
   * Because they produce core optic types, they compose with the rest of the optic algebra:
-  * `someLens.andThen(cata(alg))`, and the materializing `ana(c).cross(cata(a))` (via the core
+  * `someLens.andThen(cata(alg))`, and the materializing `ana(…).cross(cata(…))` (via the core
   * `Optic.cross` combinator) — the latter equal to `hylo` on the same computation (the hylo law).
   *
-  * All three reduce to a single stack-safe post-order machine ([[unfoldFold]]): every node is
-  * pushed as a heap frame, never recursed on the JVM call stack, so it is stack-safe for any
-  * (terminating) input. `cata` fits the same machine by capturing the node `S` in its per-node
-  * combiner closure. No `Eval` (no fixpoint axis). (A `< 512` on-stack fast path, as in
-  * `Plated.transformMachine`, is a possible perf follow-up; v1 is pure heap-stack.)
+  * All three are two halves of one shape — an `expand: N => PSVec[N]` (the children/seeds) and a
+  * `combine: (N, PSVec[R]) => R` (the fold, which sees the original node, paramorphism-flavored).
+  * `cata` takes `expand` from `Plated`; `ana`/`hylo` take it explicitly. They all run on a single
+  * stack-safe engine ([[unfoldFold]]): a `< 512`-deep on-stack fast path (no heap frames) that
+  * falls back, per deep subtree, to a heap `ArrayDeque` machine — the same hybrid as
+  * `Plated.transform`. So shallow trees pay no frame allocation, and arbitrarily deep ones stay
+  * stack-safe.
   */
 object Schemes:
 
-  /** Closure-carrying coalgebra (encoding A): a node yields its child seeds plus a combiner from
-    * the folded child results. A leaf is `(PSVec.empty, _ => value)`. The node's own payload is
-    * available to the combiner via closure capture.
-    *
-    * The combiner is handed a `PSVec[R]` of exactly the same length as the child-seed vector, in
-    * the same order; it is the combiner's responsibility to index it consistently with that arity
-    * (a combiner that reads `kids(1)` of a 1-element vector throws `IndexOutOfBounds`; one that
-    * ignores `kids(2)` of a 3-element vector silently drops that already-folded subtree).
+  /** Depth at which [[unfoldFold]]'s on-stack recursion hands a subtree to the heap machine —
+    * mirrors `Plated.transformRecursionLimit`. Balanced trees (depth ~log n) never reach it.
     */
-  type Coalg[N, R] = N => (PSVec[N], PSVec[R] => R)
+  final private val OnStackLimit = 512
 
-  /** The single stack-safe post-order engine: expand a node to (children, combiner), recurse on
-    * children (heap-stacked), then combine the folded results. Stack-safe for any *terminating*
-    * `step`; output is `O(nodes)` only if the combiner builds a structure (it does for [[ana]], not
-    * for [[hylo]]).
+  /** The single stack-safe post-order engine. `expand` yields a node's children; `combine` folds a
+    * node plus its already-folded children to `R`. Recurses on the JVM stack while shallow (no
+    * per-node `Frame`/`ArrayDeque`), switching any subtree deeper than [[OnStackLimit]] to a heap
+    * machine — so it is stack-safe for any *terminating* `expand`.
     *
-    * Termination is the caller's contract: because the recursion lives on the heap (an `ArrayDeque`
-    * of frames) rather than the JVM call stack, a non-terminating coalgebra exhausts the heap
-    * (`OutOfMemoryError`, process-fatal) rather than overflowing the stack (`StackOverflowError`,
-    * thread-local) — the price of stack-safety for the terminating case.
+    * Termination is the caller's contract: past the on-stack limit the recursion lives on the heap,
+    * so a non-terminating `expand` exhausts the heap (`OutOfMemoryError`) rather than overflowing
+    * the stack — the price of stack-safety for the terminating case.
+    *
+    * `combine` is handed a `PSVec[R]` the same length and order as `expand`'s child vector; it is
+    * the caller's responsibility to index it consistently with that arity (reading `kids(1)` of a
+    * 1-element vector throws `IndexOutOfBounds`; ignoring `kids(2)` of a 3-element one silently
+    * drops that already-folded subtree).
     */
-  private def unfoldFold[N, R](step: Coalg[N, R]): N => R =
-    n0 =>
-      final class Frame(
-          val kids: PSVec[N],
-          val out: Array[AnyRef],
-          val combine: PSVec[R] => R,
-          var i: Int,
-      )
+  private def unfoldFold[N, R](expand: N => PSVec[N], combine: (N, PSVec[R]) => R): N => R =
+
+    // Heap fallback for subtrees deeper than the on-stack limit: an explicit post-order machine,
+    // the node carried in the frame so `combine` needs no per-node closure.
+    def heap(root: N): R =
+      final class Frame(val node: N, val kids: PSVec[N], val out: Array[AnyRef], var i: Int)
       val stack = new java.util.ArrayDeque[Frame]()
       var ret: AnyRef = null.asInstanceOf[AnyRef]
       def enter(n: N): Unit =
-        val (kids, combine) = step(n)
-        if kids.isEmpty then ret = combine(PSVec.empty[R]).asInstanceOf[AnyRef]
-        else stack.push(new Frame(kids, new Array[AnyRef](kids.length), combine, 0))
-      enter(n0)
+        val kids = expand(n)
+        if kids.isEmpty then ret = combine(n, PSVec.empty[R]).asInstanceOf[AnyRef]
+        else stack.push(new Frame(n, kids, new Array[AnyRef](kids.length), 0))
+      enter(root)
       while !stack.isEmpty do
         val fr = stack.peek()
         if fr.i > 0 then fr.out(fr.i - 1) = ret
@@ -67,26 +65,46 @@ object Schemes:
           fr.i += 1
           enter(child)
         else
-          ret = fr.combine(PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
+          ret = combine(fr.node, PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
           val _ = stack.pop()
       ret.asInstanceOf[R]
+
+    // On-stack fast path: no Frame, no ArrayDeque — just recursion bounded by OnStackLimit.
+    def rec(n: N, depth: Int): R =
+      val kids = expand(n)
+      val k = kids.length
+      if k == 0 then combine(n, PSVec.empty[R])
+      else if depth >= OnStackLimit then heap(n)
+      else
+        val out = new Array[AnyRef](k)
+        var i = 0
+        while i < k do
+          out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
+          i += 1
+        combine(n, PSVec.unsafeWrap[R](out))
+
+    n0 => rec(n0, 0)
 
   /** Catamorphism as a composable `Getter`, driven by `Plated[S]`. The algebra sees the original
     * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe.
     */
   def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): DirectGetter[S, A] =
-    Getter[S, A](unfoldFold[S, A](s => (P.childrenVec(s), rs => alg(s, rs))))
+    Getter[S, A](unfoldFold[S, A](P.childrenVec, alg))
 
   /** Anamorphism as a `Review` (reverse-construction optic): a stack-safe unfold `Seed => S`.
-    * Materializing — the built `S` is `O(nodes)`; the unfold loop itself is heap-stacked.
+    * `expand` yields each seed's child seeds; `build` reassembles a node from its built children.
+    * Materializing — the built `S` is `O(nodes)`.
     */
-  def ana[Seed, S](coalg: Coalg[Seed, S]): Review[S, Seed] =
-    Review[S, Seed](unfoldFold(coalg))
+  def ana[Seed, S](expand: Seed => PSVec[Seed], build: (Seed, PSVec[S]) => S): Review[S, Seed] =
+    Review[S, Seed](unfoldFold(expand, build))
 
-  /** Hylomorphism — the **fused** refold `Seed => A`, building **no intermediate `S`**: the
-    * coalgebra expands seeds and the combiner folds to `A` in one post-order pass. Returned as a
-    * `Getter[Seed, A]` so it composes further. Equal to `ana(c).cross(cata(a))` on the same
-    * computation (the hylo law), but without materializing the structure.
+  /** Hylomorphism — the **fused** refold `Seed => A`, building **no intermediate `S`**: `expand`
+    * unfolds seeds and `alg` folds to `A` in one post-order pass. Returned as a `Getter[Seed, A]`
+    * so it composes further. Equal to `ana(expand, build).cross(cata(alg))` on the same computation
+    * (the hylo law), but without materializing the structure.
     */
-  def hylo[Seed, A](coalg: Coalg[Seed, A]): DirectGetter[Seed, A] =
-    Getter[Seed, A](unfoldFold(coalg))
+  def hylo[Seed, A](
+      expand: Seed => PSVec[Seed],
+      alg: (Seed, PSVec[A]) => A,
+  ): DirectGetter[Seed, A] =
+    Getter[Seed, A](unfoldFold(expand, alg))

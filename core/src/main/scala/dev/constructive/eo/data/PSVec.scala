@@ -161,6 +161,16 @@ object PSVec:
   /** Single-element vector, stored inline (no backing array). */
   def singleton[B](b: B): PSVec[B] = new Single(b)
 
+  /** Two-element vector — builds the backing array directly, no `List` / `Iterable` intermediate.
+    * The common arity for binary-tree children (recursion-scheme coalgebras, `Node(l, r)`), where
+    * `PSVec.of(l, r)` replaces the wasteful `fromIterable(List(l, r))`.
+    */
+  def of[B](b0: B, b1: B): PSVec[B] =
+    val a = new Array[AnyRef](2)
+    a(0) = b0.asInstanceOf[AnyRef]
+    a(1) = b1.asInstanceOf[AnyRef]
+    new Slice[B](a, 0, 2)
+
   /** Wrap an `Array[AnyRef]` verbatim as a PSVec. Shares ownership with the caller. Returns the
     * most specialised variant for the array's length so callers need not special-case empty /
     * singleton themselves.

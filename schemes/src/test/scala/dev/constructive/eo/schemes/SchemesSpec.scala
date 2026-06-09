@@ -16,7 +16,7 @@ class SchemesSpec extends Specification:
 
   private given Plated[Expr] = plate[Expr]
 
-  // ----- algebras / coalgebras -----
+  // ----- algebras / expansions -----
 
   private val eval: (Expr, PSVec[Double]) => Double = (node, kids) =>
     node match
@@ -25,15 +25,17 @@ class SchemesSpec extends Specification:
       case Expr.Add(_, _) => kids(0) + kids(1)
       case Expr.Mul(_, _) => kids(0) * kids(1)
 
-  // seed n builds a right-nested Add of (n+1) ones → evaluates to n+1.
-  private val buildExpr: Schemes.Coalg[Int, Expr] = n =>
-    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(1.0))
-    else (PSVec.fromIterable(List(0, n - 1)), (ks: PSVec[Expr]) => Expr.Add(ks(0), ks(1)))
+  // seed n expands to two child seeds (0, n-1) — a right-nested binary spine; n<=0 is a leaf.
+  private val expandFib: Int => PSVec[Int] = n =>
+    if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1)
+
+  // build a right-nested Add of (n+1) ones (materializing) → evaluates to n+1.
+  private val buildAdd: (Int, PSVec[Expr]) => Expr = (n, ks) =>
+    if n <= 0 then Expr.Lit(1.0) else Expr.Add(ks(0), ks(1))
 
   // the same computation FUSED (folds to Double directly; no Expr built).
-  private val fusedFib: Schemes.Coalg[Int, Double] = n =>
-    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Double]) => 1.0)
-    else (PSVec.fromIterable(List(0, n - 1)), (rs: PSVec[Double]) => rs(0) + rs(1))
+  private val fusedFib: (Int, PSVec[Double]) => Double = (n, rs) =>
+    if n <= 0 then 1.0 else rs(0) + rs(1)
 
   private val expr: Expr = Expr.Add(Expr.Lit(1.0), Expr.Mul(Expr.Lit(2.0), Expr.Lit(3.0)))
 
@@ -54,29 +56,31 @@ class SchemesSpec extends Specification:
   }
 
   "ana is a Review that builds an Expr from a seed" >> {
-    val built: Expr = Schemes.ana(buildExpr).reverseGet(3)
+    val built: Expr = Schemes.ana(expandFib, buildAdd).reverseGet(3)
     (Schemes.cata(eval).get(built) == 4.0) must beTrue
   }
 
   "ana.cross(cata) composes build->read (the materializing hylo) via core `cross`" >> {
     val refold =
-      Schemes.ana(buildExpr).cross(Schemes.cata(eval)) // Optic[Int,Unit,Double,Unit,Direct]
+      Schemes
+        .ana(expandFib, buildAdd)
+        .cross(Schemes.cata(eval)) // Optic[Int,Unit,Double,Unit,Direct]
     (refold.get(3) == 4.0) must beTrue
   }
 
   "fused hylo folds a seed to a value (no intermediate Expr) and agrees with cata∘ana" >> {
-    val h: DirectGetter[Int, Double] = Schemes.hylo(fusedFib)
-    val viaCross = Schemes.ana(buildExpr).cross(Schemes.cata(eval)).get(3)
+    val h: DirectGetter[Int, Double] = Schemes.hylo(expandFib, fusedFib)
+    val viaCross = Schemes.ana(expandFib, buildAdd).cross(Schemes.cata(eval)).get(3)
     (h.get(3) == 4.0) && (viaCross == 4.0) must beTrue
   }
 
   "the fused hylo Getter composes further into the pipeline" >> {
     val toStr: DirectGetter[Int, String] =
-      Schemes.hylo(fusedFib).andThen(Getter[Double, String](_.toString))
+      Schemes.hylo(expandFib, fusedFib).andThen(Getter[Double, String](_.toString))
     (toStr.get(3) == "4.0") must beTrue
   }
 
-  // The combiner indexes children positionally (kids(0) = left, kids(1) = right), so the engine's
+  // The combine indexes children positionally (kids(0) = left, kids(1) = right), so the engine's
   // post-order out-array fill MUST preserve child order. Every other algebra here is commutative
   // (Add/Mul/sum), which would not catch a transposed-children regression — this one is not.
   "cata preserves left-to-right child order (non-commutative algebra)" >> {
@@ -92,18 +96,15 @@ class SchemesSpec extends Specification:
     ((Schemes.cata(sub).get(minus) == 7.0) && (Schemes.cata(sub).get(div) == 3.0)) must beTrue
   }
 
-  // All sample ADT nodes are arity <= 2; this exercises the n-ary (width 3) coalgebra path through
-  // the engine's per-node out-array, with positional weights that expose any mis-ordering.
+  // All sample ADT nodes are arity <= 2; this exercises the n-ary (width 3) expand path through the
+  // engine's per-node out-array, with positional weights that expose any mis-ordering.
   "fused hylo folds a WIDE node (3 child seeds), order-sensitive combine" >> {
-    val wide: Schemes.Coalg[Int, Int] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Int]) => 1)
-      else
-        (
-          PSVec.fromIterable(List(0, 0, 0)),
-          (rs: PSVec[Int]) => rs(0) + 10 * rs(1) + 100 * rs(2),
-        )
+    val expandWide: Int => PSVec[Int] =
+      n => if n <= 0 then PSVec.empty[Int] else PSVec.fromIterable(List(0, 0, 0))
+    val combineWide: (Int, PSVec[Int]) => Int =
+      (n, rs) => if n <= 0 then 1 else rs(0) + 10 * rs(1) + 100 * rs(2)
     // n=1 → three leaves (each 1) → 1 + 10 + 100 = 111
-    (Schemes.hylo(wide).get(1) == 111) must beTrue
+    (Schemes.hylo(expandWide, combineWide).get(1) == 111) must beTrue
   }
 
   // ----- circe Plated[Json] (real downstream target) -----
@@ -120,10 +121,11 @@ class SchemesSpec extends Specification:
   }
 
   "ana builds a nested circe Json from a seed" >> {
-    val buildJson: Schemes.Coalg[Int, Json] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Json]) => Json.fromInt(0))
-      else (PSVec.fromIterable(List(n - 1)), (ks: PSVec[Json]) => Json.arr(ks(0)))
-    val built = Schemes.ana(buildJson).reverseGet(2)
+    val expandJson: Int => PSVec[Int] =
+      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
+    val buildJson: (Int, PSVec[Json]) => Json =
+      (n, ks) => if n <= 0 then Json.fromInt(0) else Json.arr(ks(0))
+    val built = Schemes.ana(expandJson, buildJson).reverseGet(2)
     (built == Json.arr(Json.arr(Json.fromInt(0)))) must beTrue
   }
 
@@ -143,17 +145,18 @@ class SchemesSpec extends Specification:
   }
 
   "fused hylo is stack-safe at depth 10^6 (no intermediate S built)" >> {
-    val spine: Schemes.Coalg[Int, Int] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Int]) => 0)
-      else (PSVec.singleton(n - 1), (rs: PSVec[Int]) => rs(0) + 1)
-    (Schemes.hylo(spine).get(1_000_000) == 1_000_000) must beTrue
+    val expandSpine: Int => PSVec[Int] =
+      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
+    val depthAlg: (Int, PSVec[Int]) => Int = (n, rs) => if n <= 0 then 0 else rs(0) + 1
+    (Schemes.hylo(expandSpine, depthAlg).get(1_000_000) == 1_000_000) must beTrue
   }
 
   "ana's unfold loop is stack-safe (built S is O(depth) heap, not JVM stack)" >> {
-    val spine: Schemes.Coalg[Int, Expr] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(0.0))
-      else (PSVec.singleton(n - 1), (ks: PSVec[Expr]) => Expr.Neg(ks(0)))
-    val deep: Expr = Schemes.ana(spine).reverseGet(100_000)
+    val expandSpine: Int => PSVec[Int] =
+      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
+    val buildNeg: (Int, PSVec[Expr]) => Expr =
+      (n, ks) => if n <= 0 then Expr.Lit(0.0) else Expr.Neg(ks(0))
+    val deep: Expr = Schemes.ana(expandSpine, buildNeg).reverseGet(100_000)
     val depth: (Expr, PSVec[Int]) => Int = (node, kids) =>
       node match
         case Expr.Lit(_) => 0

@@ -7,7 +7,6 @@ import higherkindness.droste.data.Fix
 import higherkindness.droste.{Algebra, Coalgebra}
 
 import dev.constructive.eo.data.PSVec
-import dev.constructive.eo.schemes.Schemes
 
 /** Pattern functor for the native [[Bin]] tree (`Leaf(Int)` / `Node(Bin, Bin)`).
   *
@@ -47,15 +46,17 @@ object SchemesFixtures:
       case Bin.Leaf(v)    => v
       case Bin.Node(_, _) => kids(0) + kids(1)
 
-  /** Fused hylo coalgebra — folds to `Int` directly, never building a `Bin`. */
-  val eoBuildSum: Schemes.Coalg[Int, Int] = d =>
-    if d <= 0 then (PSVec.empty[Int], (_: PSVec[Int]) => 1)
-    else (PSVec.fromIterable(List(d - 1, d - 1)), (rs: PSVec[Int]) => rs(0) + rs(1))
+  /** Seed expansion shared by eo's hylo/ana: depth `d` ⇒ two child seeds `(d-1, d-1)`; leaf at
+    * `d <= 0`. `PSVec.of` builds the 2-vector directly (no `List` intermediate). */
+  val eoExpand: Int => PSVec[Int] = d =>
+    if d <= 0 then PSVec.empty[Int] else PSVec.of(d - 1, d - 1)
 
-  /** ana coalgebra — builds a native `Bin`. */
-  val eoBuildBin: Schemes.Coalg[Int, Bin] = d =>
-    if d <= 0 then (PSVec.empty[Int], (_: PSVec[Bin]) => Bin.Leaf(1))
-    else (PSVec.fromIterable(List(d - 1, d - 1)), (ks: PSVec[Bin]) => Bin.Node(ks(0), ks(1)))
+  /** Fused hylo algebra — folds to `Int` directly, never building a `Bin`. */
+  val eoHyloAlg: (Int, PSVec[Int]) => Int = (d, rs) => if d <= 0 then 1 else rs(0) + rs(1)
+
+  /** ana build — reassembles a native `Bin` from its built children. */
+  val eoAnaBuild: (Int, PSVec[Bin]) => Bin = (d, ks) =>
+    if d <= 0 then Bin.Leaf(1) else Bin.Node(ks(0), ks(1))
 
   // ----- hand-wired recursion (the baseline you'd write without either lib) --
 
