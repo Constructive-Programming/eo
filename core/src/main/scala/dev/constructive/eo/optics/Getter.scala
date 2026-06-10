@@ -30,13 +30,6 @@ final class Getter[S, A](val get: S => A) extends Optic[S, Unit, A, Unit, Direct
   inline def andThen[B](inner: Getter[A, B]): Getter[S, B] =
     new Getter(s => inner.get(get(s)))
 
-  /** Fused `Getter.andThen(AffineFold)` — total read then partial read = partial. The concrete
-    * read-only-triple join cell; being the most specific overload, it resolves the otherwise
-    * ambiguous `getter ∘ affinefold` (broad-member vs inherited trait-member) outright.
-    */
-  inline def andThen[C](inner: PickFold[A, C]): PickFold[S, C] =
-    new PickFold(s => inner.pick(get(s)))
-
   /** Read-only outer ∘ ANY inner — a `Getter` only reads, so the inner's write side is irrelevant
     * and the composite is the read-only join via [[ReadCompose]] (`Getter` when the inner reads
     * totally, `PickFold` when partially, `ForgetFold` when it has many foci). This member covers

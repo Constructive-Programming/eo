@@ -45,12 +45,6 @@ final class PickFold[S, A](val pick: S => Option[A]) extends Optic[S, Unit, A, U
   inline def andThen[C](inner: PickFold[A, C]): PickFold[S, C] =
     new PickFold(s => pick(s).flatMap(inner.pick))
 
-  /** Fused `AffineFold.andThen(Getter)` — `map`s the read over the pick; the concrete fast path of
-    * the generic `andThenAffineFold` collapse.
-    */
-  inline def andThen[C](inner: Getter[A, C]): PickFold[S, C] =
-    new PickFold(s => pick(s).map(inner.get))
-
   /** Read-only outer ∘ ANY inner — a `PickFold` only reads (partially), so the inner's write side
     * is irrelevant and the composite is the read-only join via [[ReadCompose]] (`PickFold` unless
     * the inner has many foci, then `ForgetFold`). Covers the writable inners (`affineFold ∘ lens /

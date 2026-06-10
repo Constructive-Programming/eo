@@ -193,19 +193,12 @@ object Optic:
   )(using accessor: Accessor[F])
     inline def get(s: S): A = accessor.get(self.to(s))
 
-    inline def andThen[C](o: Getter[A, C]): Getter[S, C] =
-      Getter(s => o.get(get(s)))
-
     inline def readOnly: Getter[S, A] =
       Getter(get)
 
   extension [S, T, A, B, F[_, _]](
       self: Optic[S, T, A, B, F]
-  )(using A: PartialAccessor[F])
-    inline def getOption(s: S): Option[A] = A.getOption(self.to(s))
-
-    inline def andThen[C](o: Getter[A, C]): PickFold[S, C] =
-      PickFold(s => getOption(s).map(o.get))
+  )(using A: PartialAccessor[F]) inline def getOption(s: S): Option[A] = A.getOption(self.to(s))
 
   /** Build the "no context" reverse — takes a fresh `B` and produces the corresponding `T`.
     * Available when the carrier has a `ReverseAccessor[F]` instance (today: `Either` and `Direct`).

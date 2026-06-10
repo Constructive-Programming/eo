@@ -178,9 +178,6 @@ final class MendTearPrism[S, T, A, B](
       innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
-  inline def andThen[C](inner: Getter[A, C]): PickFold[S, C] =
-    PickFold(s => getOption(s).map(inner.get))
-
 /** Concrete Optic subclass for the `Option`-shaped Prism (`Prism.optional` / `Prism.pOptional`).
   * Stores `pick` and `mend` directly; the fused extensions pattern-match on `Option` so the hot
   * path never builds the intermediate `Either[S, A]` the generic `MendTearPrism` would.
@@ -249,6 +246,3 @@ final class PickMendPrism[S, A, B](
       pick = s => pick(s).map(inner.get),
       mend = d => mend(inner.reverseGet(d)),
     )
-
-  inline def andThen[C](inner: Getter[A, C]): PickFold[S, C] =
-    PickFold(s => pick(s).map(inner.get))

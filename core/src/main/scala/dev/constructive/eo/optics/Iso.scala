@@ -73,14 +73,6 @@ final class BijectionIso[S, T, A, B](
       mend = d => reverseGet(inner.mend(d)),
     )
 
-  /** Fused `Iso.andThen(Getter)` — read collapse on the hot path: composes the `get`s directly into
-    * a concrete [[Getter]], skipping the `ReadCompose` dispatch the trait's read-only-inner
-    * overload performs. `inline` so each compose site splices a distinct lambda (see
-    * [[Getter.andThen]]).
-    */
-  inline def andThen[C](inner: Getter[A, C]): Getter[S, C] =
-    Getter(s => inner.get(get(s)))
-
   /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(
