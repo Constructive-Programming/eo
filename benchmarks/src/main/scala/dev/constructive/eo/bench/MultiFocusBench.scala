@@ -10,7 +10,6 @@ import cats.instances.list.*
 
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.data.MultiFocus
-import dev.constructive.eo.data.MultiFocus.given
 
 /** `MultiFocus[List]` (via `fromLensF`) vs `MultiFocus[PSVec]` (via `Traversal.each[List, _]`) on
   * the same `Lens[Order, List[LineItem]] → inner → Lens[LineItem, Int]` chain over the canonical

@@ -9,7 +9,6 @@ import java.util.concurrent.TimeUnit
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
 
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.MultiFocus.given
 
 import io.circe.Json
 import io.circe.parser.parse as circeParse

@@ -3,7 +3,6 @@ package laws
 
 import _root_.dev.constructive.eo.data.MultiFocus
 import _root_.dev.constructive.eo.data.MultiFocus.collectMap
-import _root_.dev.constructive.eo.data.MultiFocus.given
 import cats.Functor
 
 import optics.Optic

@@ -9,7 +9,6 @@ import java.util.concurrent.TimeUnit
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray}
 
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.MultiFocus.given
 
 /** Canonical-schema jsoniter bench (plan 009, Phase 1).
   *

@@ -74,7 +74,7 @@ object Composer extends LowPriorityComposerInstances:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, data.Forget[F]] =
       new Optic[S, T, A, B, data.Forget[F]]:
         type X = Nothing
-        def to(s: S): data.Forget[F][X, A] = data.ForgetK(F.pure(o.to(s).value))
+        def to(s: S): data.Forget[F][X, A] = data.Forget(F.pure(o.to(s).value))
         def from(u: data.Forget[F][X, B]): T = ???
 
 /** Low-priority `Composer` instances —

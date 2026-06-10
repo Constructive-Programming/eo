@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package data
 
-import cats.Applicative
+import cats.{Applicative, Monoid}
 
 import optics.Optic
 
@@ -145,6 +145,17 @@ object Affine:
     def map[X, A, B](fa: Affine[X, A], f: A => B): Affine[X, B] = fa match
       case m: Miss[X, A] => new Miss[X, B](m.fst)
       case h: Hit[X, A]  => new Hit[X, B](h.snd, f(h.b))
+
+  /** `ForgetfulFold[Affine]` — miss empty, hit runs `f` on the focus. Carrier-owned (like [[map]] /
+    * [[traverse]]), so it resolves through Affine's companion with no import.
+    *
+    * @group Instances
+    */
+  given fold: ForgetfulFold[Affine] with
+
+    def foldMap[X, A, M: Monoid](f: A => M, fa: Affine[X, A]): M = fa match
+      case _: Miss[X, A] => Monoid[M].empty
+      case h: Hit[X, A]  => f(h.b)
 
   /** `ForgetfulTraverse[Affine, Applicative]` — lifts a focus-level `A => G[B]` into an
     * `Affine[X, A] => G[Affine[X, B]]`. Unlocks `.modifyA` / `.all` / `.modifyF` on Affine- carrier

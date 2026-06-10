@@ -15,7 +15,6 @@ import dev.constructive.eo.optics.{
   Traversal => EoTraversal,
 }
 import dev.constructive.eo.data.{MultiFocus, PSVec}
-import dev.constructive.eo.data.MultiFocus.given
 
 import cats.instances.list.given
 

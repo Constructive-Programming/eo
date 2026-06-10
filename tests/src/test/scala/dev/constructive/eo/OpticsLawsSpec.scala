@@ -6,11 +6,7 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, ForgetK, Direct, MultiFocus, MultiFocusK, PSVec, SetterF}
-import data.Affine.given
-import data.Forget.given
-import data.MultiFocus.given
-import data.SetterF.given
+import data.{Affine, Forget, Direct, MultiFocus, PSVec, SetterF}
 import laws.{AffineFoldLaws, GetterLaws, IsoLaws, LensLaws, OptionalLaws, PrismLaws, SetterLaws}
 import laws.discipline.{
   AffineFoldTests,
@@ -268,7 +264,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         arr(0) = a0.asInstanceOf[AnyRef]
         arr(1) = a1.asInstanceOf[AnyRef]
         arr(2) = a2.asInstanceOf[AnyRef]
-        MultiFocusK.wrap((x, x), PSVec.unsafeWrap[Int](arr))
+        MultiFocus((x, x), PSVec.unsafeWrap[Int](arr))
     )
 
   // ----- MultiFocus[Function1[Int, *]] carrier laws ----------------
@@ -361,7 +357,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // exercises Direct.scala's traverse2 and bifunctor paths that pure Direct
   // fixtures don't land.
   private given arbForgetListUnitInt: Arbitrary[Forget[List][Unit, Int]] =
-    Arbitrary(Arbitrary.arbitrary[List[Int]].map(ForgetK(_)))
+    Arbitrary(Arbitrary.arbitrary[List[Int]].map(Forget(_)))
 
   checkAllForgetfulFunctorFor[Forget[List], Unit, Int](
     "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]"
@@ -387,7 +383,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // classifier shapes. Custom Arbitraries below mix empty / singleton / multi-element
   // payloads so `ForgetfulTraverse`'s sequencing law sees non-trivial cardinalities (the
   // Scalacheck defaults skew to short lists and under-sample the empty edge).
-  import data.MultiFocus.given
   import cats.data.Chain
 
   // Weighted generator aimed at the cardinality edges most likely to break carrier-level laws:
@@ -407,7 +402,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   private given arbMultiFocusListIntInt: Arbitrary[MultiFocus[List][Int, Int]] =
     Arbitrary(
-      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(MultiFocusK.wrap(x, _)))
+      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(MultiFocus(x, _)))
     )
 
   private given arbMultiFocusOptionIntInt: Arbitrary[MultiFocus[Option][Int, Int]] =
@@ -418,21 +413,21 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
           Gen.const(Option.empty[Int]),
           Arbitrary.arbitrary[Int].map(Option(_)),
         )
-      yield MultiFocusK.wrap(x, o)
+      yield MultiFocus(x, o)
     )
 
   private given arbMultiFocusVectorIntInt: Arbitrary[MultiFocus[Vector][Int, Int]] =
     Arbitrary(
       Arbitrary
         .arbitrary[Int]
-        .flatMap(x => weightedListOf[Int].map(xs => MultiFocusK.wrap(x, xs.toVector)))
+        .flatMap(x => weightedListOf[Int].map(xs => MultiFocus(x, xs.toVector)))
     )
 
   private given arbMultiFocusChainIntInt: Arbitrary[MultiFocus[Chain][Int, Int]] =
     Arbitrary(
       Arbitrary
         .arbitrary[Int]
-        .flatMap(x => weightedListOf[Int].map(xs => MultiFocusK.wrap(x, Chain.fromSeq(xs))))
+        .flatMap(x => weightedListOf[Int].map(xs => MultiFocus(x, Chain.fromSeq(xs))))
     )
 
   // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[List]
@@ -485,7 +480,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     forAll { (a: Int, f: Int => Int, n: Int) =>
       val putOk = intDouble.put(f)(a) == intDouble.reverseGet(f(a))
       val pureOk = ap.pure[Unit, Int](n).value == List(n)
-      val mapOk = ap.map[Unit, Int, Int](ForgetK(List(n)), _ + 1).value == List(n + 1)
+      val mapOk = ap.map[Unit, Int, Int](Forget(List(n)), _ + 1).value == List(n + 1)
       putOk && pureOk && mapOk
     }
   }

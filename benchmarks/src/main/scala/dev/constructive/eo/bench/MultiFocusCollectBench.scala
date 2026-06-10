@@ -7,7 +7,6 @@ import java.util.concurrent.TimeUnit
 import cats.data.{Const, ZipList}
 
 import dev.constructive.eo.data.MultiFocus
-import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 import dev.constructive.eo.optics.Optic
 

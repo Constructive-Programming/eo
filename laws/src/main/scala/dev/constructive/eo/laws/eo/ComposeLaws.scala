@@ -2,8 +2,6 @@ package dev.constructive.eo
 package laws
 package eo
 
-import _root_.dev.constructive.eo.data.Affine.given
-import _root_.dev.constructive.eo.data.Direct.given
 import _root_.dev.constructive.eo.data.{Affine, Direct}
 
 import optics.Optic

@@ -10,7 +10,6 @@ import java.util.concurrent.TimeUnit
 import cats.instances.arraySeq.*
 
 import dev.constructive.eo.bench.fixture.{Person, Phone}
-import dev.constructive.eo.data.MultiFocus.given
 
 import monocle.{Lens => MLens, Traversal => MTraversal}
 

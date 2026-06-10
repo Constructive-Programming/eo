@@ -8,10 +8,6 @@ import org.specs2.mutable.Specification
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
 import data.{Affine, Direct, MultiFocus, PSVec, SetterF}
-import data.Direct.given
-import data.Affine.given
-import data.MultiFocus.given
-import data.SetterF.given
 import laws.eo.{
   IsoComposeLaws,
   LensComposeLaws,

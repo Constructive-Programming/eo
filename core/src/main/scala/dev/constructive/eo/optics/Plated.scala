@@ -4,7 +4,6 @@ package optics
 import cats.Eval
 
 import data.{MultiFocus, PSVec, SetterF}
-import data.MultiFocus.given // ForgetfulFunctor / Fold / Traverse for MultiFocus[PSVec]
 
 /** A self-similar structure: a value of `S` whose immediate sub-terms are themselves `S`. The
   * single member [[plate]] is a `Traversal[S, S]` focusing those immediate children — the cats-eo
@@ -58,7 +57,7 @@ trait Plated[S]:
     */
   def rebuild(parent: S, children: PSVec[S]): S =
     val p = plate // bind once so `p.X` is a single stable existential across `to` / `from`
-    p.from(data.MultiFocusK.wrap(p.to(parent).context, children))
+    p.from(MultiFocus(p.to(parent).context, children))
 
 /** Combinators over [[Plated]] — recursion schemes faithful to `Control.Lens.Plated`, all
   * stack-safe. Each is offered both as a `using Plated[S]` method here and as an extension on any

@@ -3,7 +3,6 @@ package bench
 package fixture
 
 import dev.constructive.eo.circe.{JsonFailure, JsonPrism, codecPrism}
-import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.optics.{Lens => EoLens, Traversal => EoTraversal}
 
 import cats.data.{Chain, Ior}

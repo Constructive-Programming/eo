@@ -9,7 +9,6 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
 import data.MultiFocus
-import data.MultiFocus.given
 import data.MultiFocus.at
 import optics.Optic
 import optics.Optic.*

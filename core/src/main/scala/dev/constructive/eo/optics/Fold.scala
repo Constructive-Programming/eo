@@ -3,7 +3,7 @@ package optics
 
 import cats.instances.option.given
 import cats.{Foldable, Monoid}
-import dev.constructive.eo.data.{Forget, ForgetK}
+import dev.constructive.eo.data.Forget
 
 /** Constructors for `Fold` — read-only multi-focus optic, backed by `Forget[F]` (`Forget[F][X, A] =
   * F[A]`). `T = Unit` rules out the write path; `.foldMap` is the consumption surface.
@@ -49,7 +49,7 @@ final class ForgetFold[S, F[_], A](
 )(using FF: Foldable[F])
     extends Optic[S, Unit, A, Unit, Forget[F]]:
   type X = Nothing
-  def to(s: S): Forget[F][X, A] = ForgetK(read(s))
+  def to(s: S): Forget[F][X, A] = Forget(read(s))
   def from(u: Forget[F][X, Unit]): Unit = ()
 
   /** Eager `foldMap` — folds `s` straight through the captured `Foldable[F]`, returning `M` with no

@@ -2,7 +2,6 @@ package dev.constructive.eo
 package laws
 
 import _root_.dev.constructive.eo.data.SetterF
-import _root_.dev.constructive.eo.data.SetterF.given
 
 import optics.Optic
 import optics.Optic.*

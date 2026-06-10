@@ -3,7 +3,6 @@ package laws
 package eo
 
 import _root_.dev.constructive.eo.data.Direct
-import _root_.dev.constructive.eo.data.Direct.given
 
 import optics.Optic
 import optics.Optic.*

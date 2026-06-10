@@ -1,6 +1,5 @@
 package dev.constructive.eo
 
-import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.generics.plate
 import dev.constructive.eo.optics.Optic.* // .andThen / .modify
 

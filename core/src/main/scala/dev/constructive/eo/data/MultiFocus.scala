@@ -132,12 +132,8 @@ private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
 
 object MultiFocusK:
 
-  /** Wrap a leftover + focus vector into the `MultiFocus[F]` carrier. Identity at runtime (the
-    * opaque type erases to the pair); needed only so construction sites outside this file satisfy
-    * the `MultiFocus[F][X, A]` type.
-    */
-  transparent inline def wrap[F[_], X, A](x: X, fa: F[A]): MultiFocusK[F, X, A] = (x, fa)
-
+  // Construct via the façade `MultiFocus(x, fa)` (an `apply` on the public object below); these
+  // are the unwrap boundary. Both are identity at runtime (the opaque erases to the pair).
   extension [F[_], X, A](self: MultiFocusK[F, X, A])
     /** The structural leftover. Identity at runtime. */
     transparent inline def context: X = self._1
@@ -822,3 +818,5 @@ object MultiFocusK:
   */
 object MultiFocus:
   export MultiFocusK.{given, *}
+
+  transparent inline def apply[F[_], X, A](x: X, fa: F[A]): MultiFocusK[F, X, A] = (x, fa)

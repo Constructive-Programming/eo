@@ -26,22 +26,7 @@ import optics.{
   Traversal,
 }
 import optics.Optic.*
-import data.{
-  Affine,
-  Forget,
-  ForgetK,
-  Direct,
-  MultiFocus,
-  MultiFocusK,
-  MultiFocusSingleton,
-  PSVec,
-  SetterF,
-}
-import data.Direct.given
-import data.Forget.given
-import data.Affine.given
-import data.MultiFocus.given
-import data.SetterF.given
+import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
   * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,
@@ -77,7 +62,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   ): Optic[Int, Int, Int, Int, Forget[F]] =
     new Optic[Int, Int, Int, Int, Forget[F]]:
       type X = Unit
-      def to(s: Int): Forget[F][X, Int] = ForgetK(toF(s))
+      def to(s: Int): Forget[F][X, Int] = Forget(toF(s))
       def from(b: Forget[F][X, Int]): Int = fromF(b.value)
 
   // ----- Basic-factory smoke tests -------------------------------------
@@ -474,8 +459,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val sameOk = (sameCarrier.to(5).value === Some(51))
       .and(sameCarrier.to(-2).value === None)
       .and(sameCarrier.to(200).value === None)
-      .and(sameCarrier.from(ForgetK(Some(7))) === 1016)
-      .and(sameCarrier.from(ForgetK(None)) === 998)
+      .and(sameCarrier.from(Forget(Some(7))) === 1016)
+      .and(sameCarrier.from(Forget(None)) === 998)
 
     val pureForget = forgetOpt[Option](
       n => Option.when(n > 0)(n * 10),
@@ -488,7 +473,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       new Optic[Int, Int, Int, Int, MultiFocus[Option]]:
         type X = String
         def to(n: Int): MultiFocus[Option][X, Int] =
-          MultiFocusK.wrap(s"tag-$n", Option.when(n < 1000)(n + 1))
+          MultiFocus(s"tag-$n", Option.when(n < 1000)(n + 1))
         def from(pair: MultiFocus[Option][X, Int]): Int =
           pair.foci.fold(pair.context.length)(_ * 100 + pair.context.length)
     val composed = lifted.andThen(inner2)
@@ -723,13 +708,13 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val triplet: Optic[Int, Unit, Int, Unit, Forget[List]] =
       new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
-        def to(n: Int): Forget[List][Unit, Int] = ForgetK(List(n - 1, n, n + 1))
+        def to(n: Int): Forget[List][Unit, Int] = Forget(List(n - 1, n, n + 1))
         def from(u: Forget[List][Unit, Unit]): Unit = ()
 
     val pair: Optic[Int, Unit, Int, Unit, Forget[List]] =
       new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
-        def to(n: Int): Forget[List][Unit, Int] = ForgetK(List(n, n + 1))
+        def to(n: Int): Forget[List][Unit, Int] = Forget(List(n, n + 1))
         def from(u: Forget[List][Unit, Unit]): Unit = ()
 
     val composed = triplet.andThen(pair)

@@ -18,7 +18,6 @@ import optics.{Optic, Traversal}
 import optics.Optic.*
 import generics.lens
 import data.{MultiFocus, PSVec}
-import data.MultiFocus.given
 
 /** Motivating example for cats-eo — the "why this library exists" showcase.
   *

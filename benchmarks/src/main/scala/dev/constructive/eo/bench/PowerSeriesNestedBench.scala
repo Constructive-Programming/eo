@@ -11,7 +11,6 @@ import cats.instances.arraySeq.given
 import cats.instances.list.given
 
 import dev.constructive.eo.bench.fixture.{Company, Department, Employee}
-import dev.constructive.eo.data.MultiFocus.given
 
 import monocle.{Lens => MLens, Traversal => MTraversal}
 

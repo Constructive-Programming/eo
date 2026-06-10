@@ -10,7 +10,6 @@ import java.util.concurrent.TimeUnit
 import cats.instances.arraySeq.given
 
 import dev.constructive.eo.bench.fixture.Result
-import dev.constructive.eo.data.MultiFocus.given
 
 import monocle.{Prism => MPrism, Traversal => MTraversal}
 

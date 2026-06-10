@@ -5,7 +5,6 @@ import scala.language.implicitConversions
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.Affine
-import dev.constructive.eo.data.Affine.given
 import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
 import org.specs2.mutable.Specification

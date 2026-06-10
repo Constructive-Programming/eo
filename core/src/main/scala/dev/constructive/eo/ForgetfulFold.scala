@@ -2,8 +2,6 @@ package dev.constructive.eo
 
 import cats.Monoid
 
-import data.Affine
-
 /** `foldMap` over the focus of `F[_, _]`. Miss / absent contributes `Monoid.empty`; hit runs `f`
   * and folds.
   *
@@ -28,10 +26,6 @@ object ForgetfulFold:
     def foldMap[X, A, M: Monoid](f: A => M, ea: Either[X, A]): M =
       ea.fold(_ => Monoid[M].empty, f)
 
-  /** `Affine` — miss empty, hit runs `f` on the focus. @group Instances */
-  given affineFFold: ForgetfulFold[Affine] with
-
-    def foldMap[X, A, M: Monoid](f: A => M, fa: Affine[X, A]): M =
-      fa match
-        case _: Affine.Miss[X, A] => Monoid[M].empty
-        case h: Affine.Hit[X, A]  => f(h.b)
+  // `ForgetfulFold[Affine]` is NOT here — it is carrier-owned (`Affine.fold`), matching
+  // Direct / SetterF / MultiFocus / Forget. Only the stdlib carriers (Tuple2, Either) live in this
+  // companion, since their own companions can't be extended.

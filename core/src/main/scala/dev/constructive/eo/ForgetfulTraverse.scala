@@ -5,8 +5,6 @@ import cats.syntax.either.*
 import cats.syntax.functor.*
 import cats.{Applicative, Functor}
 
-import data.Affine
-
 /** Traverse the focus of `F[_, _]` under an effectful `A => G[B]`. Parameterised by the applicative
   * constraint `C[_[_]]` — `Applicative` for carriers with miss branches, `Functor` for Tuple2,
   * `Distributive` for SetterF.
@@ -47,8 +45,7 @@ object ForgetfulTraverse:
         a => f(a).map(_.asRight[X]),
       )
 
-  /** `Affine` — miss via `pure`, hit through `f`. @group Instances */
-  given affineFTraverse: ForgetfulTraverse[Affine, Applicative] with
-
-    def traverse[X, A, B, G[_]: Applicative](fa: Affine[X, A], f: A => G[B]): G[Affine[X, B]] =
-      fa.aTraverse(f)
+  // `ForgetfulTraverse[Affine]` is NOT here — it is carrier-owned (`Affine.traverse`), matching
+  // Direct / SetterF / MultiFocus / Forget. Only the stdlib carriers (Tuple2, Either) live in this
+  // companion, since their own companions can't be extended. A duplicate here would shadow-tie the
+  // carrier-side instance and force every call site to disambiguate via `import data.Affine.given`.

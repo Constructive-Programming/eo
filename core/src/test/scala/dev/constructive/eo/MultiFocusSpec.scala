@@ -11,7 +11,6 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
 import data.{Direct, MultiFocus, SetterF}
-import data.MultiFocus.given
 import data.MultiFocus.{collectList, collectMap}
 import optics.*
 import optics.Optic.*
