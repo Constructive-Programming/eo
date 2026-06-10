@@ -10,7 +10,7 @@ import dev.constructive.eo.bench.fixture.*
   *
   * EO `Getter`s are `Optic[S, Unit, A, Unit, Direct]` — both the leftover `T` and the back-focus
   * `B` are `Unit`, so they compose through the ordinary `andThen` (the fused
-  * `DirectGetter.andThen`), just like `Iso` / `Lens`. The depth-3 / depth-6 rows therefore build a
+  * `Getter.andThen`), just like `Iso` / `Lens`. The depth-3 / depth-6 rows therefore build a
   * *composed* `Getter` on both sides (EO's `g3.andThen(g2)…` vs Monocle's `mG3.andThen(mG2)…`) and
   * dispatch through it once — an apples-to-apples comparison, not EO's hand-nested `get` chain
   * against Monocle's composed reader.

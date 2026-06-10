@@ -1,17 +1,7 @@
 package dev.constructive.eo
 package data
 
-import cats.{
-  Alternative,
-  Applicative,
-  Eval,
-  Foldable,
-  Functor,
-  Monoid,
-  MonoidK,
-  Representable,
-  Traverse,
-}
+import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
 import optics.Optic
 
@@ -39,7 +29,19 @@ import optics.Optic
   *   - Same-carrier `.andThen` needs `Traverse[F] + MultiFocusFromList[F]`.
   *   - `fromPrismF` / `fromOptionalF` need `MonoidK[F]`.
   */
-type MultiFocus[F[_]] = [X, A] =>> (X, F[A])
+// The uncurried [[MultiFocusK]] is `opaque` for the same reason [[Direct]] is: a transparent
+// alias dealiases to a bare pair lambda with no companion in implicit scope, so every instance
+// below (`mfAssoc*`, the `Composer` bridges, …) was invisible without
+// `import data.MultiFocus.given`. With the opaque anchor inside, dealiasing
+// `MultiFocus[F][X, A]` stops at `MultiFocusK[F, X, A]`, whose companion (where the instances
+// live) *is* an implicit-scope anchor — no import needed. (`MultiFocus` itself must stay a plain
+// alias: an opaque type cannot have the curried `[F[_]] => [X, A] =>> …` shape.) Within this file
+// the opaque is transparent; outside, [[MultiFocusK.wrap]] / [[MultiFocusK.context]] /
+// [[MultiFocusK.foci]] are the (runtime-identity) boundary.
+opaque type MultiFocusK[F[_], X, A] = (X, F[A])
+
+/** Curried carrier view of [[MultiFocusK]] — the `F[_, _]` shape `Optic` expects. */
+type MultiFocus[F[_]] = [X, A] =>> MultiFocusK[F, X, A]
 
 /** Singleton-classifier fast-path. Lets `mfAssoc` skip the `F.pure` wrap and the
   * `pickSingletonOrThrow` pull when the inner is known to produce singletons (sole shipped user:
@@ -128,87 +130,44 @@ private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
 
   def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T
 
-object MultiFocus:
+object MultiFocusK:
 
-  // PSVec cats instances — kept in this companion so callers picking up
-  // `import data.MultiFocus.given` get them transitively alongside `mfFunctor` / etc.
+  /** Wrap a leftover + focus vector into the `MultiFocus[F]` carrier. Identity at runtime (the
+    * opaque type erases to the pair); needed only so construction sites outside this file satisfy
+    * the `MultiFocus[F][X, A]` type.
+    */
+  transparent inline def wrap[F[_], X, A](x: X, fa: F[A]): MultiFocusK[F, X, A] = (x, fa)
 
-  given pSVecFunctor: Functor[PSVec] with
+  extension [F[_], X, A](self: MultiFocusK[F, X, A])
+    /** The structural leftover. Identity at runtime. */
+    transparent inline def context: X = self._1
 
-    def map[A, B](fa: PSVec[A])(f: A => B): PSVec[B] =
-      val n = fa.length
-      if n == 0 then PSVec.empty[B]
-      else
-        val arr = new Array[AnyRef](n)
-        var i = 0
-        while i < n do
-          arr(i) = f(fa(i)).asInstanceOf[AnyRef]
-          i += 1
-        PSVec.unsafeWrap[B](arr)
-
-  given pSVecFoldable: Foldable[PSVec] with
-
-    def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
-      var acc = b
-      val n = fa.length
-      var i = 0
-      while i < n do
-        acc = f(acc, fa(i))
-        i += 1
-      acc
-
-    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
-        f: (A, Eval[B]) => Eval[B]
-    ): Eval[B] =
-      val n = fa.length
-      def loop(i: Int): Eval[B] =
-        if i >= n then lb
-        else f(fa(i), Eval.defer(loop(i + 1)))
-      Eval.defer(loop(0))
-
-    override def size[A](fa: PSVec[A]): Long = fa.length.toLong
-
-  given pSVecTraverse: Traverse[PSVec] with
-
-    def traverse[G[_]: Applicative, A, B](fa: PSVec[A])(f: A => G[B]): G[PSVec[B]] =
-      val G = Applicative[G]
-      val n = fa.length
-      if n == 0 then G.pure(PSVec.empty[B])
-      else
-        var acc: G[Array[AnyRef]] = G.pure(new Array[AnyRef](n))
-        var i = 0
-        while i < n do
-          val idx = i
-          val gb = f(fa(idx))
-          acc = G.map2(acc, gb) { (a, b) =>
-            a(idx) = b.asInstanceOf[AnyRef]
-            a
-          }
-          i += 1
-        G.map(acc)(arr => PSVec.unsafeWrap[B](arr))
-
-    def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
-      pSVecFoldable.foldLeft(fa, b)(f)
-
-    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
-        f: (A, Eval[B]) => Eval[B]
-    ): Eval[B] = pSVecFoldable.foldRight(fa, lb)(f)
+    /** The focus vector. Identity at runtime. */
+    transparent inline def foci: F[A] = self._2
 
   // Capability instances — Functor / Foldable / Traverse over the F[A] half.
 
+  // NOTE: member signatures below are spelled `MultiFocus[F][X, A]`, not `(X, F[A])`. The two are
+  // equal inside this file (the opaque is transparent here), but a `given … with` instance is
+  // typed by its anonymous class, so the *written* member signatures are what inline extensions
+  // (`Optic.modify` / `.modifyA` / `.foldMap`, …) splice against at call sites — where only the
+  // opaque spelling typechecks.
   given mfFunctor[F[_]: Functor]: ForgetfulFunctor[MultiFocus[F]] with
 
-    def map[X, A, B](xa: (X, F[A]), f: A => B): (X, F[B]) =
+    def map[X, A, B](xa: MultiFocus[F][X, A], f: A => B): MultiFocus[F][X, B] =
       (xa._1, Functor[F].map(xa._2)(f))
 
   given mfFold[F[_]: Foldable]: ForgetfulFold[MultiFocus[F]] with
 
-    def foldMap[X, A, M: Monoid](f: A => M, xa: (X, F[A])): M =
+    def foldMap[X, A, M: Monoid](f: A => M, xa: MultiFocus[F][X, A]): M =
       Foldable[F].foldMap(xa._2)(f)
 
   given mfTraverse[F[_]: Traverse]: ForgetfulTraverse[MultiFocus[F], Applicative] with
 
-    def traverse[X, A, B, G[_]: Applicative](xa: (X, F[A]), f: A => G[B]): G[(X, F[B])] =
+    def traverse[X, A, B, G[_]: Applicative](
+        xa: MultiFocus[F][X, A],
+        f: A => G[B],
+    ): G[MultiFocus[F][X, B]] =
       Applicative[G].map(Traverse[F].traverse(xa._2)(f))(fb => (xa._1, fb))
 
   // Same-carrier composition — F-parametric, with `MultiFocusSingleton` fast-path on the inner.
@@ -221,7 +180,7 @@ object MultiFocus:
         s: S,
         outer: Optic[S, T, A, B, MultiFocus[F]] { type X = Xo },
         inner: Optic[A, B, C, D, MultiFocus[F]] { type X = Xi },
-    ): ((Xo, F[(Xi, Int)]), F[C]) =
+    ): MultiFocus[F][Z, C] =
       val Tr = Traverse[F]
       val FL = summon[MultiFocusFromList[F]]
       val (xo, fa) = outer.to(s)
@@ -250,7 +209,7 @@ object MultiFocus:
           ((xo, fxiSize), fc)
 
     def composeFrom[S, T, A, B, C, D](
-        xd: ((Xo, F[(Xi, Int)]), F[D]),
+        xd: MultiFocus[F][Z, D],
         inner: Optic[A, B, C, D, MultiFocus[F]] { type X = Xi },
         outer: Optic[S, T, A, B, MultiFocus[F]] { type X = Xo },
     ): T =
@@ -303,7 +262,7 @@ object MultiFocus:
         s: S,
         outer: Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] { type X = Xo },
         inner: Optic[A, B, C, D, MultiFocus[Function1[X0, *]]] { type X = Xi },
-    ): ((Xo, Xi), X0 => C) =
+    ): MultiFocus[Function1[X0, *]][Z, C] =
       val (_, kO) = outer.to(s)
       // Null sentinel works because `.modify` doesn't observe the focus value (spike Q1).
       val a: A = kO(null.asInstanceOf[X0])
@@ -311,7 +270,7 @@ object MultiFocus:
       ((null.asInstanceOf[Xo], null.asInstanceOf[Xi]), kI)
 
     def composeFrom[S, T, A, B, C, D](
-        xd: ((Xo, Xi), X0 => D),
+        xd: MultiFocus[Function1[X0, *]][Z, D],
         inner: Optic[A, B, C, D, MultiFocus[Function1[X0, *]]] { type X = Xi },
         outer: Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] { type X = Xo },
     ): T =
@@ -332,7 +291,7 @@ object MultiFocus:
         s: S,
         outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
         inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
-    ): (Z, PSVec[C]) =
+    ): MultiFocus[PSVec][Z, C] =
       val (xo, va) = outer.to(s)
       val n = va.length
       val ysBuf = new ObjArrBuilder(n)
@@ -393,7 +352,7 @@ object MultiFocus:
             (sndZ, flatBuf.freezeAsPSVec[C])
 
     def composeFrom[S, T, A, B, C, D](
-        xd: (Z, PSVec[D]),
+        xd: MultiFocus[PSVec][Z, D],
         inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
         outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
     ): T =
@@ -535,8 +494,8 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Forget[F]]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Unit
-        def to(s: S): (Unit, F[A]) = ((), o.to(s))
-        def from(pair: (Unit, F[B])): T = o.from(pair._2)
+        def to(s: S): (Unit, F[A]) = ((), o.to(s).value)
+        def from(pair: (Unit, F[B])): T = o.from(ForgetK(pair._2))
 
   /** MultiFocus[F] ↪ Forget[F] — read-only escape: discard the structural leftover, keep the
     * focused `F[A]`. Closes the top-5 plan's gap #2 by giving users an explicit carrier morph
@@ -562,8 +521,8 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, Forget[F]] =
       new Optic[S, T, A, B, Forget[F]]:
         type X = Unit
-        def to(s: S): F[A] = o.to(s)._2
-        def from(fb: F[B]): T =
+        def to(s: S): ForgetK[F, X, A] = ForgetK(o.to(s)._2)
+        def from(fb: ForgetK[F, X, B]): T =
           // Reachable only when `T = Unit` (Forget-carrier optics have T = Unit by construction).
           // The cast surfaces a ClassCastException if a user's MultiFocus optic has T ≠ Unit AND
           // they explicitly routed through this Composer — defensive only.
@@ -856,3 +815,10 @@ object MultiFocus:
             opt.from(m.widenB[F[B]])
           case (h: Affine.Hit[opt.X, Unit] @unchecked, fb) =>
             opt.from(new Affine.Hit[opt.X, F[B]](h.snd, fb))
+
+/** API façade under the carrier's public name. The instances live in [[MultiFocusK]] (the opaque
+  * anchor's companion, where implicit scope finds them); this re-export keeps `MultiFocus.apply` /
+  * `MultiFocus.fromLensF` call-shapes and legacy `import data.MultiFocus.given` working.
+  */
+object MultiFocus:
+  export MultiFocusK.{given, *}

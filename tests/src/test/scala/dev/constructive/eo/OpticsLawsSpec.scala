@@ -6,7 +6,7 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Direct, MultiFocus, PSVec, SetterF}
+import data.{Affine, Forget, ForgetK, Direct, MultiFocus, MultiFocusK, PSVec, SetterF}
 import data.Affine.given
 import data.Forget.given
 import data.MultiFocus.given
@@ -205,7 +205,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     (n: Int) =>
       val neverFold: Optic[Int, Unit, Int, Unit, data.Forget[Option]] =
         Fold.select[Int](_ => false)
-      val toOk = evenSelectFold.to(n) == (if n % 2 == 0 then Some(n) else None)
+      val toOk = evenSelectFold.to(n).value == (if n % 2 == 0 then Some(n) else None)
       val neverOk = neverFold.foldMap[Int](identity)(n) == 0
       toOk && neverOk
   }
@@ -256,7 +256,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // identical (the X leftover and the PSVec[A] focus vector); only the
   // top-level carrier name changed.
 
-  private given arbMultiFocusPSVec: Arbitrary[((Int, Int), PSVec[Int])] =
+  private given arbMultiFocusPSVec: Arbitrary[MultiFocus[PSVec][(Int, Int), Int]] =
     Arbitrary(
       for
         x <- Arbitrary.arbitrary[Int]
@@ -268,7 +268,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         arr(0) = a0.asInstanceOf[AnyRef]
         arr(1) = a1.asInstanceOf[AnyRef]
         arr(2) = a2.asInstanceOf[AnyRef]
-        ((x, x), PSVec.unsafeWrap[Int](arr))
+        MultiFocusK.wrap((x, x), PSVec.unsafeWrap[Int](arr))
     )
 
   // ----- MultiFocus[Function1[Int, *]] carrier laws ----------------
@@ -360,6 +360,9 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // covers: ForgetfulFunctor + ForgetfulTraverse over Forget[List] —
   // exercises Direct.scala's traverse2 and bifunctor paths that pure Direct
   // fixtures don't land.
+  private given arbForgetListUnitInt: Arbitrary[Forget[List][Unit, Int]] =
+    Arbitrary(Arbitrary.arbitrary[List[Int]].map(ForgetK(_)))
+
   checkAllForgetfulFunctorFor[Forget[List], Unit, Int](
     "ForgetfulFunctor[Forget[List]] on Forget[List][Unit, Int]"
   )
@@ -403,7 +406,9 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     )
 
   private given arbMultiFocusListIntInt: Arbitrary[MultiFocus[List][Int, Int]] =
-    Arbitrary(Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map((x, _))))
+    Arbitrary(
+      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(MultiFocusK.wrap(x, _)))
+    )
 
   private given arbMultiFocusOptionIntInt: Arbitrary[MultiFocus[Option][Int, Int]] =
     Arbitrary(
@@ -413,17 +418,21 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
           Gen.const(Option.empty[Int]),
           Arbitrary.arbitrary[Int].map(Option(_)),
         )
-      yield (x, o)
+      yield MultiFocusK.wrap(x, o)
     )
 
   private given arbMultiFocusVectorIntInt: Arbitrary[MultiFocus[Vector][Int, Int]] =
     Arbitrary(
-      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, xs.toVector)))
+      Arbitrary
+        .arbitrary[Int]
+        .flatMap(x => weightedListOf[Int].map(xs => MultiFocusK.wrap(x, xs.toVector)))
     )
 
   private given arbMultiFocusChainIntInt: Arbitrary[MultiFocus[Chain][Int, Int]] =
     Arbitrary(
-      Arbitrary.arbitrary[Int].flatMap(x => weightedListOf[Int].map(xs => (x, Chain.fromSeq(xs))))
+      Arbitrary
+        .arbitrary[Int]
+        .flatMap(x => weightedListOf[Int].map(xs => MultiFocusK.wrap(x, Chain.fromSeq(xs))))
     )
 
   // covers: ForgetfulFunctor + ForgetfulTraverse over MultiFocus[List]
@@ -475,8 +484,8 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     val ap = summon[ForgetfulApplicative[data.Forget[List]]]
     forAll { (a: Int, f: Int => Int, n: Int) =>
       val putOk = intDouble.put(f)(a) == intDouble.reverseGet(f(a))
-      val pureOk = ap.pure[Unit, Int](n) == List(n)
-      val mapOk = ap.map[Unit, Int, Int](List(n), _ + 1) == List(n + 1)
+      val pureOk = ap.pure[Unit, Int](n).value == List(n)
+      val mapOk = ap.map[Unit, Int, Int](ForgetK(List(n)), _ + 1).value == List(n + 1)
       putOk && pureOk && mapOk
     }
   }

@@ -15,5 +15,5 @@ class FoldSpec extends Specification with ScalaCheck:
 
   "Fold.select keeps matching values and drops the rest" >> {
     val evenFold = Fold.select[Int](_ % 2 == 0)
-    forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
+    forAll((n: Int) => evenFold.to(n).value == (if n % 2 == 0 then Some(n) else None))
   }

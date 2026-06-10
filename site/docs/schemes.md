@@ -24,7 +24,7 @@ circe `Plated[Json]` from `cats-eo-circe` as a concrete recursive `S`.
 ```scala mdoc:silent
 import dev.constructive.eo.schemes.Schemes
 import dev.constructive.eo.data.PSVec
-import dev.constructive.eo.optics.{Getter, DirectGetter}
+import dev.constructive.eo.optics.Getter
 import dev.constructive.eo.optics.Optic.*   // get, andThen, cross
 import dev.constructive.eo.circe.platedJson  // given Plated[Json]
 import io.circe.Json
@@ -36,7 +36,7 @@ The algebra sees each node plus its already-folded children. Here, sum every num
 in a JSON document:
 
 ```scala mdoc:silent
-val sumNumbers: DirectGetter[Json, Int] =
+val sumNumbers: Getter[Json, Int] =
   Schemes.cata[Json, Int]((node, folded) =>
     node.asNumber.flatMap(_.toInt).getOrElse(0) + folded.toList.sum
   )
@@ -56,7 +56,7 @@ Because `cata` is a `Getter`, it composes onto any optic that ends in the recurs
 
 ```scala mdoc:silent
 final case class Payload(label: String, body: Json)
-val bodySum: DirectGetter[Payload, Int] =
+val bodySum: Getter[Payload, Int] =
   Getter[Payload, Json](_.body).andThen(sumNumbers)
 ```
 
@@ -90,7 +90,7 @@ buildTree.reverseGet(2)
 
 ```scala mdoc:silent
 // fused: count the leaves of that same tree, with no Json ever constructed
-val countLeaves: DirectGetter[Int, Int] =
+val countLeaves: Getter[Int, Int] =
   Schemes.hylo[Int, Int](
     expand = n => if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1),
     alg = (n, rs) => if n <= 0 then 1 else rs.toList.sum,

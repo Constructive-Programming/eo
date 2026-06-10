@@ -1,7 +1,7 @@
 package dev.constructive.eo.jsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, JsonValueCodec}
-import dev.constructive.eo.data.{MultiFocus, PSVec}
+import dev.constructive.eo.data.{MultiFocus, MultiFocusK, PSVec}
 import dev.constructive.eo.optics.Optic
 
 /** Read-only Traversal over JSON byte buffers. Resolves a wildcard-bearing JSONPath against
@@ -67,10 +67,10 @@ object JsoniterTraversal:
     new Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]:
       type X = (Array[Byte], List[JsonPathScanner.Span])
 
-      def to(bytes: Array[Byte]): (X, PSVec[A]) =
+      def to(bytes: Array[Byte]): MultiFocus[PSVec][X, A] =
         val spans = JsonPathScanner.findAll(bytes, steps)
         val n = spans.length
-        if n == 0 then ((bytes, spans), PSVec.empty[A])
+        if n == 0 then MultiFocusK.wrap((bytes, spans), PSVec.empty[A])
         else
           // Single Array[AnyRef] allocation; tight-pack only on partial decode failure.
           val arr = new Array[AnyRef](n)
@@ -89,6 +89,6 @@ object JsoniterTraversal:
               val tight = new Array[AnyRef](written)
               System.arraycopy(arr, 0, tight, 0, written)
               PSVec.unsafeWrap[A](tight)
-          ((bytes, spans), psv)
+          MultiFocusK.wrap((bytes, spans), psv)
 
-      def from(pair: (X, PSVec[A])): Array[Byte] = pair._1._1
+      def from(pair: MultiFocus[PSVec][X, A]): Array[Byte] = pair.context._1

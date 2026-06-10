@@ -5,7 +5,7 @@ import io.circe.Json
 import org.specs2.mutable.Specification
 
 import data.PSVec
-import optics.{DirectGetter, Getter, Plated}
+import optics.{Getter, Plated}
 import optics.Optic.* // cross, andThen, get
 
 import generics.plate
@@ -42,7 +42,7 @@ class SchemesSpec extends Specification:
   private val expr: Expr = Expr.Add(Expr.Lit(1.0), Expr.Mul(Expr.Lit(2.0), Expr.Lit(3.0)))
 
   "cata is a Getter that folds an Expr to a value" >> {
-    val evalG: DirectGetter[Expr, Double] = Schemes.cata(eval)
+    val evalG: Getter[Expr, Double] = Schemes.cata(eval)
     (evalG.get(expr) == 7.0) must beTrue
   }
 
@@ -52,7 +52,7 @@ class SchemesSpec extends Specification:
   }
 
   "cata-as-Getter composes onto an outer Getter via andThen" >> {
-    val composed: DirectGetter[Wrapped, Double] =
+    val composed: Getter[Wrapped, Double] =
       Getter[Wrapped, Expr](_.expr).andThen(Schemes.cata(eval))
     (composed.get(Wrapped("x", expr)) == 7.0) must beTrue
   }
@@ -69,13 +69,13 @@ class SchemesSpec extends Specification:
   }
 
   "fused hylo folds a seed to a value (no intermediate Expr) and agrees with cata∘ana" >> {
-    val h: DirectGetter[Int, Double] = Schemes.hylo(expandFib, fusedFib)
+    val h: Getter[Int, Double] = Schemes.hylo(expandFib, fusedFib)
     val viaCross = Schemes.ana(buildExprCoalg).cross(Schemes.cata(eval)).get(3)
     (h.get(3) == 4.0) && (viaCross == 4.0) must beTrue
   }
 
   "the fused hylo Getter composes further into the pipeline" >> {
-    val toStr: DirectGetter[Int, String] =
+    val toStr: Getter[Int, String] =
       Schemes.hylo(expandFib, fusedFib).andThen(Getter[Double, String](_.toString))
     (toStr.get(3) == "4.0") must beTrue
   }

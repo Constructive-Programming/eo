@@ -16,10 +16,19 @@ import optics.Optic
   * ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape carrier" whose optic-level
   * capabilities scale with the typeclasses `F` itself admits.
   */
-// `[X, A] =>> F[A]` — the `X` is phantom, so `Forget` is its own transparent carrier (it does *not*
-// route through the now-opaque `Direct`; all the Fold / Forget machinery treats `Forget[F][X, A]`
-// as a plain `F[A]` and relies on that transparency).
-type Forget[F[_]] = [X, A] =>> F[A]
+// `[X, A] =>> F[A]` — the `X` is phantom. The uncurried [[ForgetK]] is `opaque` for the same
+// reason [[Direct]] is: a transparent alias dealiases to a bare type lambda, which has no
+// companion in implicit scope, so `ForgetfulFold[Forget[F]]`, `AssociativeFunctor[Forget[F], …]`,
+// etc. were invisible without an explicit `import data.Forget.given`. With the opaque anchor
+// inside, dealiasing `Forget[F][X, A]` stops at `ForgetK[F, X, A]`, whose companion (where the
+// instances live) *is* an implicit-scope anchor — no import needed. (`Forget` itself must stay a
+// plain alias: an opaque type cannot have the curried `[F[_]] => [X, A] =>> …` shape.) Within this
+// file the opaque is transparent; outside, [[ForgetK.apply]] / [[ForgetK.value]] are the
+// (runtime-identity) boundary.
+opaque type ForgetK[F[_], X, A] = F[A]
+
+/** Curried carrier view of [[ForgetK]] — the `F[_, _]` shape `Optic` expects. */
+type Forget[F[_]] = [X, A] =>> ForgetK[F, X, A]
 
 /** Capability ladder for [[Forget]]. Each typeclass on `F` unlocks a matching optic operation:
   *
@@ -37,7 +46,16 @@ type Forget[F[_]] = [X, A] =>> F[A]
   * injects trivially into it via `Composer[Forget[F], MultiFocus[F]]`. Direct-targeting instances
   * live in [[Direct]].
   */
-object Forget extends LowPriorityForgetInstances:
+object ForgetK extends LowPriorityForgetInstances:
+
+  /** Wrap an `F[A]` into the `Forget[F]` carrier. Identity at runtime (the opaque type erases to
+    * `F[A]`); needed only so construction sites outside this file satisfy the `Forget[F][X, A]`
+    * type.
+    */
+  transparent inline def apply[F[_], X, A](fa: F[A]): ForgetK[F, X, A] = fa
+
+  /** Unwrap the carried `F[A]`. Identity at runtime. */
+  extension [F[_], X, A](self: ForgetK[F, X, A]) transparent inline def value: F[A] = self
 
   /** Strategy for "redistribute the inner `from` across the F-context" on the pull side. The Monad
     * form ignores the `F[D]` and lifts a single `inner.from(xd)` via `pure`; the Comonad form
@@ -98,7 +116,7 @@ object Forget extends LowPriorityForgetInstances:
     * @group Instances
     */
   given forgetFFunctor[F[_]](using F: Functor[F]): ForgetfulFunctor[Forget[F]] with
-    def map[X, A, B](fa: F[A], f: A => B): F[B] = F.map(fa)(f)
+    def map[X, A, B](fa: Forget[F][X, A], f: A => B): Forget[F][X, B] = F.map(fa)(f)
 
   /** `ForgetfulApplicative[Forget[F]]` via any `Applicative[F]`. Unlocks `Optic.put` on
     * Forget-carrier optics.
@@ -106,8 +124,8 @@ object Forget extends LowPriorityForgetInstances:
     * @group Instances
     */
   given forgetFApplicative[F[_]: Applicative]: ForgetfulApplicative[Forget[F]] with
-    def map[X, A, B](fa: F[A], f: A => B): F[B] = Applicative[F].map(fa)(f)
-    def pure[X, A](a: A): F[A] = Applicative[F].pure(a)
+    def map[X, A, B](fa: Forget[F][X, A], f: A => B): Forget[F][X, B] = Applicative[F].map(fa)(f)
+    def pure[X, A](a: A): Forget[F][X, A] = Applicative[F].pure(a)
 
   /** `ForgetfulFold[Forget[F]]` — delegates to the underlying `Foldable[F]`. Powers
     * `Fold.apply[F, A]`.
@@ -116,7 +134,7 @@ object Forget extends LowPriorityForgetInstances:
     */
   given forgetFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
 
-    def foldMap[X, A, M: cats.Monoid](f: A => M, fa: F[A]): M =
+    def foldMap[X, A, M: cats.Monoid](f: A => M, fa: Forget[F][X, A]): M =
       Foldable[F].foldMap(fa)(f)
 
   /** `ForgetfulTraverse[Forget[F], Applicative]` — lifts `Traverse[F]` into the two-parameter
@@ -126,7 +144,10 @@ object Forget extends LowPriorityForgetInstances:
     */
   given forgetFTraverse[F[_]: Traverse]: ForgetfulTraverse[Forget[F], Applicative] with
 
-    def traverse[X, A, B, G[_]: Applicative](fa: F[A], f: A => G[B]): G[F[B]] =
+    def traverse[X, A, B, G[_]: Applicative](
+        fa: Forget[F][X, A],
+        f: A => G[B],
+    ): G[Forget[F][X, B]] =
       Traverse[F].traverse(fa)(f)
 
   /** Algebraic-lens composition for `F: Monad`. Push: `outer.to(s).flatMap(inner.to)`. Pull: the
@@ -143,6 +164,13 @@ object Forget extends LowPriorityForgetInstances:
   * algebraic-lens composition in the main object). Kept at lower priority so Monad wins when both
   * apply.
   */
+/** API façade under the carrier's public name. The instances live in [[ForgetK]] (the opaque
+  * anchor's companion, where implicit scope finds them); this re-export keeps `Forget.assocFor`
+  * call-shapes and legacy `import data.Forget.given` working.
+  */
+object Forget:
+  export ForgetK.{given, *}
+
 trait LowPriorityForgetInstances:
 
   /** Comonad-pull composition for `F: FlatMap + Comonad`. Composes via `coflatMap` on `from`.
@@ -150,8 +178,8 @@ trait LowPriorityForgetInstances:
     * @group Instances
     */
   given assocForgetComonad[F[_]: FlatMap: Comonad, Xo, Xi]: AssociativeFunctor[Forget[F], Xo, Xi] =
-    Forget.assocFor[F, Xo, Xi](
-      new Forget.ForgetPull[F]:
+    ForgetK.assocFor[F, Xo, Xi](
+      new ForgetK.ForgetPull[F]:
 
         def redistribute[D, B](xd: F[D])(fromInner: F[D] => B): F[B] =
           xd.coflatMap(fromInner)

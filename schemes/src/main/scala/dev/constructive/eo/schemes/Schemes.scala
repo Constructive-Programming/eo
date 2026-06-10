@@ -2,14 +2,14 @@ package dev.constructive.eo
 package schemes
 
 import data.PSVec
-import optics.{DirectGetter, Getter, Plated, Review}
+import optics.{Getter, Plated, Review}
 
 /** Recursion schemes as composable optics, built on the core optic surface.
   *
-  *   - [[cata]] is a `DirectGetter[S, A]` driven by `Plated[S]` — the structural fold, generalising
+  *   - [[cata]] is a `Getter[S, A]` driven by `Plated[S]` — the structural fold, generalising
   *     `Plated.transform` from `S => S` to `S => A`.
   *   - [[ana]] is a `Review[S, Seed]` — the unfold (build `S` from a seed), taking a [[Coalg]].
-  *   - [[hylo]] is a **fused** `DirectGetter[Seed, A]` — refold with **no intermediate `S`** built.
+  *   - [[hylo]] is a **fused** `Getter[Seed, A]` — refold with **no intermediate `S`** built.
   *
   * Because they produce core optic types, they compose with the rest of the optic algebra:
   * `someLens.andThen(cata(alg))`, and the materializing `ana(…).cross(cata(…))` (via the core
@@ -182,7 +182,7 @@ object Schemes:
     * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe; folds child
     * results in place (see [[foldInPlace]]) so it allocates one array per node, not two.
     */
-  def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): DirectGetter[S, A] =
+  def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): Getter[S, A] =
     Getter[S, A](foldInPlace[S, A](P.childrenArray, alg))
 
   /** Anamorphism as a `Review` (reverse-construction optic): a stack-safe unfold `Seed => S` driven
@@ -199,5 +199,5 @@ object Schemes:
   def hylo[Seed, A](
       expand: Seed => PSVec[Seed],
       alg: (Seed, PSVec[A]) => A,
-  ): DirectGetter[Seed, A] =
+  ): Getter[Seed, A] =
     Getter[Seed, A](unfoldFold(expand, alg))

@@ -136,6 +136,14 @@ class GetReplaceLens[S, T, A, B](
       reverseGet = (s, d) => enplace(s, ev(inner.mend(d))),
     )
 
+  /** Fused `Lens.andThen(Getter)` — read collapse on the hot path: composes the `get`s directly
+    * into a concrete [[Getter]], skipping the `ReadCompose` dispatch the trait's read-only-inner
+    * overload performs. `inline` so each compose site splices a distinct lambda (see
+    * [[Getter.andThen]]).
+    */
+  inline def andThen[C](inner: Getter[A, C]): Getter[S, C] =
+    Getter(s => inner.get(get(s)))
+
   /** Fused `Lens.andThen(Optional)` — outer always hits, inner may miss. Result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(

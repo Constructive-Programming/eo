@@ -38,7 +38,7 @@ trait Plated[S]:
     * instance) override it to return the children with no tuple allocation. Either way nothing is
     * converted to a `List` and back — that round-trip was the read/write hot-path tax.
     */
-  def childrenVec(s: S): PSVec[S] = plate.to(s)._2
+  def childrenVec(s: S): PSVec[S] = plate.to(s).foci
 
   /** The immediate children as a **fresh `Array[AnyRef]` the caller may mutate in place**. The
     * default copies (`childrenVec(s).toAnyRefArray`) so it is safe for any instance;
@@ -58,7 +58,7 @@ trait Plated[S]:
     */
   def rebuild(parent: S, children: PSVec[S]): S =
     val p = plate // bind once so `p.X` is a single stable existential across `to` / `from`
-    p.from((p.to(parent)._1, children))
+    p.from(data.MultiFocusK.wrap(p.to(parent).context, children))
 
 /** Combinators over [[Plated]] — recursion schemes faithful to `Control.Lens.Plated`, all
   * stack-safe. Each is offered both as a `using Plated[S]` method here and as an extension on any

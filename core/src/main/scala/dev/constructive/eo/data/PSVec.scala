@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package data
 
+import cats.{Applicative, Eval, Foldable, Functor, Traverse}
+
 /** Lightweight array-backed focus vector underlying `MultiFocus[PSVec]`. Three variants so empty
   * and singleton focus vectors don't pay a backing-array allocation:
   *
@@ -92,6 +94,72 @@ sealed trait PSVec[+B]:
   * aggregate `PSVec` supertype level.
   */
 object PSVec:
+
+  // Cats instances — live here (the PSVec companion) because implicit scope for
+  // `Functor[PSVec]` / `Foldable[PSVec]` / `Traverse[PSVec]` anchors on PSVec's own
+  // companion, NOT on MultiFocusK's (where these were once parked behind
+  // `import data.MultiFocus.given`).
+
+  given pSVecFunctor: Functor[PSVec] with
+
+    def map[A, B](fa: PSVec[A])(f: A => B): PSVec[B] =
+      val n = fa.length
+      if n == 0 then PSVec.empty[B]
+      else
+        val arr = new Array[AnyRef](n)
+        var i = 0
+        while i < n do
+          arr(i) = f(fa(i)).asInstanceOf[AnyRef]
+          i += 1
+        PSVec.unsafeWrap[B](arr)
+
+  given pSVecFoldable: Foldable[PSVec] with
+
+    def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
+      var acc = b
+      val n = fa.length
+      var i = 0
+      while i < n do
+        acc = f(acc, fa(i))
+        i += 1
+      acc
+
+    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
+        f: (A, Eval[B]) => Eval[B]
+    ): Eval[B] =
+      val n = fa.length
+      def loop(i: Int): Eval[B] =
+        if i >= n then lb
+        else f(fa(i), Eval.defer(loop(i + 1)))
+      Eval.defer(loop(0))
+
+    override def size[A](fa: PSVec[A]): Long = fa.length.toLong
+
+  given pSVecTraverse: Traverse[PSVec] with
+
+    def traverse[G[_]: Applicative, A, B](fa: PSVec[A])(f: A => G[B]): G[PSVec[B]] =
+      val G = Applicative[G]
+      val n = fa.length
+      if n == 0 then G.pure(PSVec.empty[B])
+      else
+        var acc: G[Array[AnyRef]] = G.pure(new Array[AnyRef](n))
+        var i = 0
+        while i < n do
+          val idx = i
+          val gb = f(fa(idx))
+          acc = G.map2(acc, gb) { (a, b) =>
+            a(idx) = b.asInstanceOf[AnyRef]
+            a
+          }
+          i += 1
+        G.map(acc)(arr => PSVec.unsafeWrap[B](arr))
+
+    def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
+      pSVecFoldable.foldLeft(fa, b)(f)
+
+    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
+        f: (A, Eval[B]) => Eval[B]
+    ): Eval[B] = pSVecFoldable.foldRight(fa, lb)(f)
 
   /** Zero-element shared singleton; Prism / Affine miss branches allocate nothing. */
   case object Empty extends PSVec[Nothing]:

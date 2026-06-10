@@ -18,10 +18,10 @@ type AffineFold[S, A] = Optic[S, Unit, A, Unit, Affine]
 /** Concrete Optic subclass for [[AffineFold]] — a `final class` storing `pick` directly, NOT a
   * shared anonymous wrapper: a single anon class would host one `pick.apply` bytecode site for
   * every AffineFold instance, the megamorphic-dispatch trap PrintInlining exposed on the
-  * abstract-class [[DirectGetter]] (the JIT profiles that one site over all instances' lambdas and
-  * gives up inlining). Same storage shape as [[PickMendPrism]] (`pick`) and [[ForgetFold]]
-  * (`read`). Returned by [[AffineFold.apply]] / [[AffineFold.select]] so hand-written affine folds
-  * pick up the fused members automatically.
+  * abstract-class [[Getter]] (the JIT profiles that one site over all instances' lambdas and gives
+  * up inlining). Same storage shape as [[PickMendPrism]] (`pick`) and [[ForgetFold]] (`read`).
+  * Returned by [[AffineFold.apply]] / [[AffineFold.select]] so hand-written affine folds pick up
+  * the fused members automatically.
   */
 final class PickFold[S, A](val pick: S => Option[A]) extends Optic[S, Unit, A, Unit, Affine]:
   type X = (Unit, Unit)
@@ -40,7 +40,7 @@ final class PickFold[S, A](val pick: S => Option[A]) extends Optic[S, Unit, A, U
 
   /** Fused `AffineFold.andThen(AffineFold)` — `flatMap`s the picks; no `Affine` wrappers, no
     * `Morph`. `inline` so each compose site splices its own lambda (per-site monomorphic dispatch —
-    * see [[DirectGetter.andThen]]).
+    * see [[Getter.andThen]]).
     */
   inline def andThen[C](inner: PickFold[A, C]): PickFold[S, C] =
     new PickFold(s => pick(s).flatMap(inner.pick))
@@ -48,8 +48,28 @@ final class PickFold[S, A](val pick: S => Option[A]) extends Optic[S, Unit, A, U
   /** Fused `AffineFold.andThen(Getter)` — `map`s the read over the pick; the concrete fast path of
     * the generic `andThenAffineFold` collapse.
     */
-  inline def andThen[C](inner: DirectGetter[A, C]): PickFold[S, C] =
+  inline def andThen[C](inner: Getter[A, C]): PickFold[S, C] =
     new PickFold(s => pick(s).map(inner.get))
+
+  /** Read-only outer ∘ ANY inner — a `PickFold` only reads (partially), so the inner's write side
+    * is irrelevant and the composite is the read-only join via [[ReadCompose]] (`PickFold` unless
+    * the inner has many foci, then `ForgetFold`). Covers the writable inners (`affineFold ∘ lens /
+    * prism / optional / traversal`); the fused `andThen(Getter)` / `andThen(PickFold)` members
+    * above stay as the more-specific fast paths.
+    */
+  @annotation.targetName("andThenReadAny")
+  def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using
+      rc: ReadCompose[Affine, FI]
+  ): rc.Out[S, C] =
+    rc.compose(this, inner)
+
+  /** Override of the trait's read-only-inner overload, re-homed here so it shares an owner with
+    * `andThenReadAny` above — see [[Getter]]'s twin override for the ambiguity rationale.
+    */
+  override def andThen[C, IB, G[_, _]](inner: Optic[A, Unit, C, IB, G])(using
+      rc: ReadCompose[Affine, G]
+  ): rc.Out[S, C] =
+    rc.compose(this, inner)
 
 /** Constructors for [[AffineFold]]. */
 object AffineFold:

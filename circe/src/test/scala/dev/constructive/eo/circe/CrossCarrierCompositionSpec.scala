@@ -182,7 +182,7 @@ class CrossCarrierCompositionSpec extends Specification:
   // counts correctly).
   "(6) JsonPrism → MultiFocus[List]: Composer summons + chain compiles" >> {
     import cats.instances.list.given // Alternative[List] + Foldable[List]
-    import dev.constructive.eo.data.MultiFocus
+    import dev.constructive.eo.data.{MultiFocus, MultiFocusK}
     import dev.constructive.eo.data.MultiFocus.given // mfFunctor + either2multifocus
     import dev.constructive.eo.Composer
 
@@ -195,8 +195,8 @@ class CrossCarrierCompositionSpec extends Specification:
     val tagsMF: Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]] =
       new Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]]:
         type X = Unit
-        def to(xs: List[Int]): (Unit, List[List[Int]]) = ((), List(xs))
-        def from(pair: (Unit, List[List[Int]])): List[Int] = pair._2.head
+        def to(xs: List[Int]): MultiFocus[List][X, List[Int]] = MultiFocusK.wrap((), List(xs))
+        def from(pair: MultiFocus[List][X, List[Int]]): List[Int] = pair.foci.head
 
     // The cross-carrier .andThen resolves through `either2multifocus[List]`.
     val chain: Optic[Json, Json, List[Int], List[Int], MultiFocus[List]] =

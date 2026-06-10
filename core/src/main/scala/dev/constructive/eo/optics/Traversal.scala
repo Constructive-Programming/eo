@@ -5,7 +5,7 @@ import scala.collection.immutable.ArraySeq
 
 import cats.Traverse
 
-import data.{MultiFocus, ObjArrBuilder, PSVec}
+import data.{MultiFocus, MultiFocusK, ObjArrBuilder, PSVec}
 
 /** Constructors for `Traversal`. [[each]] / [[pEach]] use the `MultiFocus[PSVec]` carrier; the
   * [[two]] / [[three]] / [[four]] fixed-arity variants ride `MultiFocus[Function1[Int, *]]` over a
@@ -35,19 +35,22 @@ object Traversal:
     new Optic[T[A], T[B], A, B, MultiFocus[PSVec]]:
       type X = T[A]
 
-      def to(ta: T[A]): (T[A], PSVec[A]) =
+      def to(ta: T[A]): MultiFocus[PSVec][X, A] =
         ta match
           case refArr: ArraySeq.ofRef[?] =>
             // ArraySeq.ofRef.unsafeArray is already an Array[AnyRef]; aliasing is safe because
             // ArraySeq is immutable and Functor[PSVec].map allocates fresh output.
-            (ta, PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]]))
+            MultiFocusK.wrap(
+              ta,
+              PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]]),
+            )
           case _ =>
             val buf = new ObjArrBuilder()
             Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-            (ta, buf.freezeAsPSVec[A])
+            MultiFocusK.wrap(ta, buf.freezeAsPSVec[A])
 
-      def from(pair: (T[A], PSVec[B])): T[B] =
-        val (xo, vec) = pair
+      def from(pair: MultiFocus[PSVec][X, B]): T[B] =
+        val (xo, vec) = (pair.context, pair.foci)
         xo match
           case _: ArraySeq[?] =>
             // `unsafeShareableArray` returns the Slice's backing array when it densely covers
@@ -84,8 +87,8 @@ object Traversal:
   ): Optic[S, S, S, S, MultiFocus[PSVec]] =
     new Optic[S, S, S, S, MultiFocus[PSVec]]:
       type X = S
-      def to(s: S): (S, PSVec[S]) = (s, children(s))
-      def from(pair: (S, PSVec[S])): S = rebuild(pair._1, pair._2)
+      def to(s: S): MultiFocus[PSVec][X, S] = MultiFocusK.wrap(s, children(s))
+      def from(pair: MultiFocus[PSVec][X, S]): S = rebuild(pair.context, pair.foci)
 
   /** Traversal over two per-element getters with a `reverse` reassembly. Carrier is
     * `MultiFocus[Function1[Int, *]]` — the homogeneous-arity Tuple_N-shaped traversal encoded as an
@@ -102,14 +105,14 @@ object Traversal:
     new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
 
-      def to(s: S): (Unit, Int => A) =
+      def to(s: S): MultiFocus[Function1[Int, *]][X, A] =
         val read: Int => A = (i: Int) =>
           i match
             case 0 => a(s)
             case 1 => b(s)
-        ((), read)
+        MultiFocusK.wrap((), read)
 
-      def from(pair: (Unit, Int => B)): T = reverse(pair._2(0), pair._2(1))
+      def from(pair: MultiFocus[Function1[Int, *]][X, B]): T = reverse(pair.foci(0), pair.foci(1))
 
   /** Fixed-arity-3 — see [[two]]. @group Constructors */
   def three[S, T, A, B](
@@ -121,15 +124,16 @@ object Traversal:
     new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
 
-      def to(s: S): (Unit, Int => A) =
+      def to(s: S): MultiFocus[Function1[Int, *]][X, A] =
         val read: Int => A = (i: Int) =>
           i match
             case 0 => a(s)
             case 1 => b(s)
             case 2 => c(s)
-        ((), read)
+        MultiFocusK.wrap((), read)
 
-      def from(pair: (Unit, Int => B)): T = reverse(pair._2(0), pair._2(1), pair._2(2))
+      def from(pair: MultiFocus[Function1[Int, *]][X, B]): T =
+        reverse(pair.foci(0), pair.foci(1), pair.foci(2))
 
   /** Fixed-arity-4 — see [[two]]. @group Constructors */
   def four[S, T, A, B](
@@ -142,14 +146,14 @@ object Traversal:
     new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
 
-      def to(s: S): (Unit, Int => A) =
+      def to(s: S): MultiFocus[Function1[Int, *]][X, A] =
         val read: Int => A = (i: Int) =>
           i match
             case 0 => a(s)
             case 1 => b(s)
             case 2 => c(s)
             case 3 => d(s)
-        ((), read)
+        MultiFocusK.wrap((), read)
 
-      def from(pair: (Unit, Int => B)): T =
-        reverse(pair._2(0), pair._2(1), pair._2(2), pair._2(3))
+      def from(pair: MultiFocus[Function1[Int, *]][X, B]): T =
+        reverse(pair.foci(0), pair.foci(1), pair.foci(2), pair.foci(3))

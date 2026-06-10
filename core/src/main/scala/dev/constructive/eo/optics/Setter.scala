@@ -27,17 +27,16 @@ object Setter:
     * bumpAll.modify(_ + 1)(cfg)
     *   }}}
     */
-  def apply[S, T, A, B](modify: (A => B) => S => T): SetterOptic[S, T, A, B] =
-    new SetterOptic(modify)
+  def apply[S, T, A, B](modify: (A => B) => S => T): Setter[S, T, A, B] =
+    new Setter(modify)
 
 /** Concrete Optic subclass for a write-only setter. Stores the writer `modifyFn` directly (so the
   * hot path skips the `SetterF` carrier round-trip the generic extension performs) and carries a
   * fused `andThen` for setter∘setter composition — the same shape as [[GetReplaceLens]] /
-  * [[DirectGetter]]. Returned by [[Setter.apply]] so hand-written setters pick up the fused path
+  * [[Getter]]. Returned by [[Setter.apply]] so hand-written setters pick up the fused path
   * automatically.
   */
-final class SetterOptic[S, T, A, B](val modifyFn: (A => B) => S => T)
-    extends Optic[S, T, A, B, SetterF]:
+final class Setter[S, T, A, B](val modifyFn: (A => B) => S => T) extends Optic[S, T, A, B, SetterF]:
   type X = (S, A)
 
   def to(s: S): SetterF[X, A] = SetterF(s, identity[A])
@@ -58,7 +57,7 @@ final class SetterOptic[S, T, A, B](val modifyFn: (A => B) => S => T)
     * `Optic.andThen`.
     *
     * `inline` so a deep `setter.andThen(setter)…` chain splices distinct writer lambdas per level,
-    * staying under C2's recursive-inline cap (see [[DirectGetter.andThen]]).
+    * staying under C2's recursive-inline cap (see [[Getter.andThen]]).
     */
-  inline def andThen[C, D](inner: SetterOptic[A, B, C, D]): SetterOptic[S, T, C, D] =
-    new SetterOptic(cd => modifyFn(inner.modifyFn(cd)))
+  inline def andThen[C, D](inner: Setter[A, B, C, D]): Setter[S, T, C, D] =
+    new Setter(cd => modifyFn(inner.modifyFn(cd)))

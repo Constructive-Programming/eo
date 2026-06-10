@@ -78,7 +78,7 @@ class PowerSeriesSpec extends Specification with ScalaCheck:
 
     val lens = Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
     val morphd = lens.morph[MultiFocus[PSVec]]
-    val sizeOk = forAll { (p: (Int, String)) => morphd.to(p)._2.length == 1 }
+    val sizeOk = forAll { (p: (Int, String)) => morphd.to(p).foci.length == 1 }
     val morphIdOk = forAll { (p: (Int, String)) => morphd.modify(identity[Int])(p) == p }
     val agreeOk =
       forAll { (p: (Int, String), f: Int => Int) => morphd.modify(f)(p) == lens.modify(f)(p) }

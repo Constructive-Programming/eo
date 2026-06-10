@@ -44,6 +44,16 @@ object Direct:
 
     def reverseGet[X, A](a: A): Direct[X, A] = a
 
+  /** Single-focus fold — applies `f` to the one focus. Unlocks `.foldMap` on Direct-carrier optics
+    * and lets `ReadCompose`'s many-fold tier pair a Direct side with a multi-focus side (`getter ∘
+    * traversal`, `traversal ∘ getter`, …).
+    *
+    * @group Instances
+    */
+  given fold: ForgetfulFold[Direct] with
+
+    def foldMap[X, A, M: cats.Monoid](f: A => M, fa: Direct[X, A]): M = f(fa)
+
   /** `pure[X, A] = a`; unlocks `.put` on Iso / Getter. @group Instances */
   given applicative: ForgetfulApplicative[Direct] with
 

@@ -23,11 +23,20 @@ import optics.{
   Prism,
   Review,
   Setter,
-  SetterOptic,
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
+import data.{
+  Affine,
+  Forget,
+  ForgetK,
+  Direct,
+  MultiFocus,
+  MultiFocusK,
+  MultiFocusSingleton,
+  PSVec,
+  SetterF,
+}
 import data.Direct.given
 import data.Forget.given
 import data.Affine.given
@@ -68,8 +77,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   ): Optic[Int, Int, Int, Int, Forget[F]] =
     new Optic[Int, Int, Int, Int, Forget[F]]:
       type X = Unit
-      def to(s: Int): F[Int] = toF(s)
-      def from(b: F[Int]): Int = fromF(b)
+      def to(s: Int): Forget[F][X, Int] = ForgetK(toF(s))
+      def from(b: Forget[F][X, Int]): Int = fromF(b.value)
 
   // ----- Basic-factory smoke tests -------------------------------------
   //
@@ -167,7 +176,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val sumOk = forAll((xs: List[Int]) => f.foldMap(identity[Int])(xs) == xs.sum)
 
     val evenFold: Optic[Int, Unit, Int, Unit, Forget[Option]] = Fold.select[Int](_ % 2 == 0)
-    val selectOk = forAll((n: Int) => evenFold.to(n) == (if n % 2 == 0 then Some(n) else None))
+    val selectOk =
+      forAll((n: Int) => evenFold.to(n).value == (if n % 2 == 0 then Some(n) else None))
 
     val evenFstOpt: Optic[(Int, Int), (Int, Int), Int, Int, Affine] =
       Optional[(Int, Int), (Int, Int), Int, Int, Tuple2](
@@ -328,11 +338,11 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     // total readers -> Getter
     val fstLens = Lens[(Int, String), Int](_._1, (t, n) => (n, t._2))
-    val lensThen: Optic[(Int, String), Unit, String, Unit, Direct] = fstLens.andThen(toStr)
+    val lensThen: Getter[(Int, String), String] = fstLens.andThen(toStr)
     val lensOk = lensThen.get((7, "x")) === "7"
 
     val idIso = Iso[Int, Int, Int, Int](identity, identity)
-    val isoThen: Optic[Int, Unit, String, Unit, Direct] = idIso.andThen(toStr)
+    val isoThen: Getter[Int, String] = idIso.andThen(toStr)
     val isoOk = isoThen.get(9) === "9"
 
     // partial readers -> AffineFold
@@ -356,7 +366,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     // write-side dual: any writable optic .andThen(Setter) -> Setter
     val plusSetter = Setter[Int, Int, Int, Int](f => n => f(n))
-    val lensThenSet: SetterOptic[(Int, String), (Int, String), Int, Int] =
+    val lensThenSet: Setter[(Int, String), (Int, String), Int, Int] =
       fstLens.andThen(plusSetter)
     val setLensOk = lensThenSet.modify(_ + 1)((7, "x")) === ((8, "x"))
 
@@ -461,11 +471,11 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       _.fold(-1)(_ + 1),
     )
     val sameCarrier = outer.andThen(inner)
-    val sameOk = (sameCarrier.to(5) === Some(51))
-      .and(sameCarrier.to(-2) === None)
-      .and(sameCarrier.to(200) === None)
-      .and(sameCarrier.from(Some(7)) === 1016)
-      .and(sameCarrier.from(None) === 998)
+    val sameOk = (sameCarrier.to(5).value === Some(51))
+      .and(sameCarrier.to(-2).value === None)
+      .and(sameCarrier.to(200).value === None)
+      .and(sameCarrier.from(ForgetK(Some(7))) === 1016)
+      .and(sameCarrier.from(ForgetK(None)) === 998)
 
     val pureForget = forgetOpt[Option](
       n => Option.when(n > 0)(n * 10),
@@ -477,10 +487,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val inner2: Optic[Int, Int, Int, Int, MultiFocus[Option]] =
       new Optic[Int, Int, Int, Int, MultiFocus[Option]]:
         type X = String
-        def to(n: Int): (String, Option[Int]) = (s"tag-$n", Option.when(n < 1000)(n + 1))
-        def from(pair: (String, Option[Int])): Int =
-          val (tag, fb) = pair
-          fb.fold(tag.length)(_ * 100 + tag.length)
+        def to(n: Int): MultiFocus[Option][X, Int] =
+          MultiFocusK.wrap(s"tag-$n", Option.when(n < 1000)(n + 1))
+        def from(pair: MultiFocus[Option][X, Int]): Int =
+          pair.foci.fold(pair.context.length)(_ * 100 + pair.context.length)
     val composed = lifted.andThen(inner2)
     val composedOk =
       (composed.modify(identity)(5) === 5113).and(composed.modify(identity)(-2) === -1)
@@ -713,13 +723,13 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val triplet: Optic[Int, Unit, Int, Unit, Forget[List]] =
       new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
-        def to(n: Int): Forget[List][Unit, Int] = List(n - 1, n, n + 1)
+        def to(n: Int): Forget[List][Unit, Int] = ForgetK(List(n - 1, n, n + 1))
         def from(u: Forget[List][Unit, Unit]): Unit = ()
 
     val pair: Optic[Int, Unit, Int, Unit, Forget[List]] =
       new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
-        def to(n: Int): Forget[List][Unit, Int] = List(n, n + 1)
+        def to(n: Int): Forget[List][Unit, Int] = ForgetK(List(n, n + 1))
         def from(u: Forget[List][Unit, Unit]): Unit = ()
 
     val composed = triplet.andThen(pair)

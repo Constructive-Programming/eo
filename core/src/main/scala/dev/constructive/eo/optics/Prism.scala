@@ -127,7 +127,7 @@ final class MendTearPrism[S, T, A, B](
   /** Fused `Prism.andThen(Prism)` — composed tear + `mend = outer.mend ∘ inner.mend`, no nested
     * Either wrappers. Picked when both sides are statically `MendTearPrism`. `inline` so a deep
     * prism chain splices distinct lambdas per level, under C2's recursive-inline cap (see
-    * [[DirectGetter.andThen]]).
+    * [[Getter.andThen]]).
     */
   inline def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
     fuseToMendTear(
@@ -178,6 +178,9 @@ final class MendTearPrism[S, T, A, B](
       innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
+  inline def andThen[C](inner: Getter[A, C]): PickFold[S, C] =
+    PickFold(s => getOption(s).map(inner.get))
+
 /** Concrete Optic subclass for the `Option`-shaped Prism (`Prism.optional` / `Prism.pOptional`).
   * Stores `pick` and `mend` directly; the fused extensions pattern-match on `Option` so the hot
   * path never builds the intermediate `Either[S, A]` the generic `MendTearPrism` would.
@@ -215,8 +218,7 @@ final class PickMendPrism[S, A, B](
 
   /** Fused `PickMend.andThen(PickMend)` — outer mono in focus; preserves the Option-fast-path shape
     * rather than materialising an intermediate Either. `inline` so a deep fast-path prism chain
-    * splices distinct lambdas per level, under C2's recursive-inline cap (see
-    * [[DirectGetter.andThen]]).
+    * splices distinct lambdas per level, under C2's recursive-inline cap (see [[Getter.andThen]]).
     */
   inline def andThen[C, D](
       inner: PickMendPrism[A, C, D]
@@ -247,3 +249,6 @@ final class PickMendPrism[S, A, B](
       pick = s => pick(s).map(inner.get),
       mend = d => mend(inner.reverseGet(d)),
     )
+
+  inline def andThen[C](inner: Getter[A, C]): PickFold[S, C] =
+    PickFold(s => pick(s).map(inner.get))
