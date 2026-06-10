@@ -5,6 +5,8 @@
 # Skills are checked-in agent guidance — track them across the .claude/
 # blanket ignore for per-user worktree / scheduling state.
 !.claude/skills/
+# Compound-engineering tooling scratch (ce-review summaries, etc.)
+.context/
 .envrc
 .envrc.local
 .idea/
