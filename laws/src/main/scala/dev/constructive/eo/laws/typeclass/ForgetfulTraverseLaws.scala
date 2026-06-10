@@ -1,7 +1,7 @@
 package dev.constructive.eo.laws.typeclass
 
 import cats.{Applicative, Id}
-import dev.constructive.eo.ForgetfulTraverse
+import dev.constructive.eo.forgetful.ForgetfulTraverse
 
 /** Law equations for any `ForgetfulTraverse[F, Applicative]` — the identity law stated at `Id`:
   *

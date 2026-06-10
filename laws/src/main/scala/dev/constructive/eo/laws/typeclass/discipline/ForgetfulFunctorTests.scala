@@ -1,6 +1,6 @@
 package dev.constructive.eo.laws.typeclass.discipline
 
-import dev.constructive.eo.ForgetfulFunctor
+import dev.constructive.eo.forgetful.ForgetfulFunctor
 import dev.constructive.eo.laws.typeclass.ForgetfulFunctorLaws
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen}

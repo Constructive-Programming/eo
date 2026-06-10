@@ -2,6 +2,7 @@ package dev.constructive.eo
 package laws
 package discipline
 
+import dev.constructive.eo.forgetful.*
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws

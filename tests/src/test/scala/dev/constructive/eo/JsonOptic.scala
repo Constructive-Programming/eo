@@ -1,5 +1,6 @@
 package dev.constructive.eo
 
+import dev.constructive.eo.forgetful.*
 import io.circe.{Codec, Decoder, HCursor, Json}
 
 import optics.Optic

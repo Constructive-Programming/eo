@@ -3,6 +3,9 @@ package data
 
 import cats.Invariant
 
+import accessor.*
+import forgetful.*
+import compose.*
 import optics.Optic
 
 /** Identity carrier: `Direct[X, A] = A` (opaque). `X` is phantom. Used by `Iso` and `Getter` where

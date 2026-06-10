@@ -1,4 +1,5 @@
 package dev.constructive.eo
+package forgetful
 
 /** Functor over the second parameter of `F[_, _]`. Uncurried for allocation-free hot paths.
   *

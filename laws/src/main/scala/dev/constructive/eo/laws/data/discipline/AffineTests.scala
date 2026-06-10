@@ -2,8 +2,8 @@ package dev.constructive.eo.laws.data.discipline
 
 import cats.Applicative
 import dev.constructive.eo.data.Affine
+import dev.constructive.eo.forgetful.{ForgetfulFunctor, ForgetfulTraverse}
 import dev.constructive.eo.laws.data.AffineLaws
-import dev.constructive.eo.{ForgetfulFunctor, ForgetfulTraverse}
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws

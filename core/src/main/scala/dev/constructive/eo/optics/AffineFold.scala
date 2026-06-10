@@ -1,6 +1,7 @@
 package dev.constructive.eo
 package optics
 
+import compose.*
 import data.Affine
 
 /** Read-only 0-or-1-focus optic — `Optic[S, Unit, A, Unit, Affine]`. Both `T` and the write-focus

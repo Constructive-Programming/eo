@@ -3,6 +3,8 @@ package laws
 package eo
 package discipline
 
+import dev.constructive.eo.accessor.*
+import dev.constructive.eo.forgetful.*
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
@@ -29,8 +31,8 @@ abstract class MorphTests[S, A, F[_, _], G[_, _]] extends Laws:
 
   def morphPreservesGet(using
       Arbitrary[S],
-      _root_.dev.constructive.eo.data.Accessor[F],
-      _root_.dev.constructive.eo.data.Accessor[G],
+      _root_.dev.constructive.eo.accessor.Accessor[F],
+      _root_.dev.constructive.eo.accessor.Accessor[G],
   ): RuleSet =
     new SimpleRuleSet(
       "Morph preserves get",

@@ -1,4 +1,5 @@
 package dev.constructive.eo
+package forgetful
 
 /** Adds `pure` to [[ForgetfulFunctor]]. Needed by `Optic.put`, which builds the carrier from
   * scratch ignoring the source. The `Forget[F]` instance lives in [[data.Forget]].

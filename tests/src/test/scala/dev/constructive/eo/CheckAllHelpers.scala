@@ -1,6 +1,8 @@
 package dev.constructive.eo
 
 import cats.{Applicative, Functor}
+import dev.constructive.eo.accessor.*
+import dev.constructive.eo.forgetful.*
 import org.scalacheck.{Arbitrary, Cogen}
 import org.specs2.mutable.SpecificationLike
 import org.specs2.specification.core.Fragment
@@ -142,8 +144,8 @@ trait CheckAllHelpers extends Discipline:
       morphedOptic: Optic[S, S, A, A, G],
   )(using
       Arbitrary[S],
-      data.Accessor[F],
-      data.Accessor[G],
+      accessor.Accessor[F],
+      accessor.Accessor[G],
   ): Fragment =
     checkAll(
       name,

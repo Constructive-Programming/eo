@@ -1,8 +1,10 @@
 package dev.constructive.eo
+package compose
 
 import cats.Monoid
 
-import data.{Accessor, PartialAccessor}
+import forgetful.ForgetfulFold
+import accessor.{Accessor, PartialAccessor}
 import optics.{ForgetFold, Getter, Optic, PickFold}
 
 /** Read-side composition across the read/write seam — the join that `AssociativeFunctor` (which

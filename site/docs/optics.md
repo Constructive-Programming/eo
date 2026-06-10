@@ -366,7 +366,7 @@ writes into it) and `setter.andThen(setter)` work — `SetterF` ships an
 `Optic.andThen` resolution picks it up transparently.
 
 ```scala mdoc:silent
-import dev.constructive.eo.Composer
+import dev.constructive.eo.compose.Composer
 import dev.constructive.eo.data.SetterF
 import dev.constructive.eo.data.SetterF.given
 

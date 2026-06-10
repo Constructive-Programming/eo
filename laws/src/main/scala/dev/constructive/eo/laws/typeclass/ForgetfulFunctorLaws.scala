@@ -1,6 +1,6 @@
 package dev.constructive.eo.laws.typeclass
 
-import dev.constructive.eo.ForgetfulFunctor
+import dev.constructive.eo.forgetful.ForgetfulFunctor
 
 /** Law equations for any `ForgetfulFunctor[F]` instance — the usual two functor laws, stated in
   * carrier-carrier form:

@@ -5,6 +5,8 @@ import scala.language.implicitConversions
 import cats.instances.int.given
 import cats.instances.list.given
 import cats.instances.option.given
+import dev.constructive.eo.compose.*
+import dev.constructive.eo.forgetful.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification

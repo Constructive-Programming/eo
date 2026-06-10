@@ -3,6 +3,8 @@ package data
 
 import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
+import forgetful.*
+import compose.*
 import optics.Optic
 
 /** Unified pair carrier for the `AlgLens`, `Kaleidoscope`, and `Grate` optic families —

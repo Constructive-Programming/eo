@@ -4,6 +4,7 @@ import scala.language.implicitConversions
 
 import cats.Representable
 import cats.instances.function.given
+import dev.constructive.eo.compose.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification

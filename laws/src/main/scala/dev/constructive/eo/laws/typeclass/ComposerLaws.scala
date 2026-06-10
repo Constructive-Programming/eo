@@ -3,6 +3,8 @@ package laws
 package typeclass
 
 import _root_.dev.constructive.eo.data.{Affine, Direct}
+import dev.constructive.eo.accessor.*
+import dev.constructive.eo.compose.*
 
 import optics.Optic
 import optics.Optic.*
@@ -31,8 +33,8 @@ trait ComposerPreservesGetLaws[S, A, F[_, _], G[_, _], H[_, _]]:
   def fToG: Composer[F, G]
   def gToH: Composer[G, H]
 
-  given accessorF: _root_.dev.constructive.eo.data.Accessor[F]
-  given accessorH: _root_.dev.constructive.eo.data.Accessor[H]
+  given accessorF: _root_.dev.constructive.eo.accessor.Accessor[F]
+  given accessorH: _root_.dev.constructive.eo.accessor.Accessor[H]
 
   def preservesGet(s: S): Boolean =
     gToH.to(fToG.to(optic)).get(s) == optic.get(s)

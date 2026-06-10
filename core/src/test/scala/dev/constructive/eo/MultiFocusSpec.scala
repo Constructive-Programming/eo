@@ -6,6 +6,7 @@ import cats.data.Chain
 import cats.instances.list.given
 import cats.instances.option.given
 import cats.instances.vector.given
+import dev.constructive.eo.compose.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification

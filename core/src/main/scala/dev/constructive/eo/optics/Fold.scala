@@ -5,6 +5,8 @@ import cats.instances.option.given
 import cats.{Foldable, Monoid}
 import dev.constructive.eo.data.Forget
 
+import compose.*
+
 /** Constructors for `Fold` — read-only multi-focus optic, backed by `Forget[F]` (`Forget[F][X, A] =
   * F[A]`). `T = Unit` rules out the write path; `.foldMap` is the consumption surface.
   * `Fold.select(p)` narrows to a one-element `Option` stream.

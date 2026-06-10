@@ -7,7 +7,9 @@ import cats.arrow.Profunctor
 import cats.syntax.functor.*
 import cats.{Applicative, Functor, Monoid}
 
-import data.*
+import accessor.*
+import forgetful.*
+import compose.*
 
 /** Existential encoding of a profunctor optic — the single trait behind every optic family in
   * `cats-eo`. The optic is a pair of functions `(S => F[X, A], F[X, B] => T)` over a carrier

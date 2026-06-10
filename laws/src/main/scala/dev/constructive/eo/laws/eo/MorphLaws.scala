@@ -2,6 +2,9 @@ package dev.constructive.eo
 package laws
 package eo
 
+import dev.constructive.eo.accessor.*
+import dev.constructive.eo.forgetful.*
+
 import optics.Optic
 
 /** Laws that pin down `Optic.morph` — EO's carrier-coercion extension.
@@ -29,7 +32,7 @@ trait MorphLaws[S, A, F[_, _], G[_, _]]:
 
   /** A2 — morph preserves get (when both carriers have `Accessor`). */
   def morphPreservesGet(s: S)(using
-      _root_.dev.constructive.eo.data.Accessor[F],
-      _root_.dev.constructive.eo.data.Accessor[G],
+      _root_.dev.constructive.eo.accessor.Accessor[F],
+      _root_.dev.constructive.eo.accessor.Accessor[G],
   ): Boolean =
     morphed.get(s) == optic.get(s)

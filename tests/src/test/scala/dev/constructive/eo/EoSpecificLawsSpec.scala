@@ -1,6 +1,8 @@
 package dev.constructive.eo
 
 import cats.instances.list.given
+import dev.constructive.eo.accessor.*
+import dev.constructive.eo.compose.*
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop.forAll
 import org.specs2.mutable.Specification
@@ -230,11 +232,11 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
                 o: Optic[S, T, A, B, Tuple2]
             ): Optic[S, T, A, B, Tuple2] = o
 
-          given accessorF: data.Accessor[Direct] =
+          given accessorF: accessor.Accessor[Direct] =
             Direct.accessor
 
-          given accessorH: data.Accessor[Tuple2] =
-            data.Accessor.tupleAccessor
+          given accessorH: accessor.Accessor[Tuple2] =
+            accessor.Accessor.tupleAccessor
     .composerPreservesGet,
   )
 

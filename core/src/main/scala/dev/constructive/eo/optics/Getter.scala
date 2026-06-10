@@ -1,6 +1,7 @@
 package dev.constructive.eo
 package optics
 
+import compose.*
 import data.Direct
 
 /** Concrete Optic subclass for a read-only getter. A `final class` storing `get` directly — NOT an

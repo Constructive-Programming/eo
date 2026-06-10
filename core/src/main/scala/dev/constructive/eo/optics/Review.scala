@@ -1,7 +1,8 @@
 package dev.constructive.eo
 package optics
 
-import data.{Direct, ReverseAccessor}
+import accessor.ReverseAccessor
+import data.Direct
 
 /** Reverse-only counterpart to [[Getter]] — wraps `reverseGet: A => S` and is the exact **mirror of
   * [[Getter]]**. `Getter` is `Optic[S, Unit, A, Unit, Direct]` (a real `to` reading `S => A`,

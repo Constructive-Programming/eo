@@ -4,6 +4,7 @@ package eo
 
 import cats.data.Const
 import cats.{Applicative, Id}
+import dev.constructive.eo.forgetful.*
 
 import optics.Optic
 import optics.Optic.*

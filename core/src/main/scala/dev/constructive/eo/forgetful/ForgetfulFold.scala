@@ -1,4 +1,5 @@
 package dev.constructive.eo
+package forgetful
 
 import cats.Monoid
 

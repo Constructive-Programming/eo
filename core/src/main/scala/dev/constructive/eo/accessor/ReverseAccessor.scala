@@ -1,5 +1,5 @@
 package dev.constructive.eo
-package data
+package accessor
 
 /** Dual of [[Accessor]] — build a fresh `F[X, A]` from an `A`. Required by `Optic.reverseGet`.
   *

@@ -6,6 +6,8 @@ import cats.syntax.flatMap.*
 import cats.syntax.functor.*
 import cats.{Applicative, Bifunctor, Comonad, FlatMap, Foldable, Functor, Monad, Traverse}
 
+import forgetful.*
+import compose.*
 import optics.Optic
 
 /** Adapt a `F[_]` container to the two-parameter carrier shape by wrapping it under the phantom

@@ -246,7 +246,7 @@ specialised by `F`:
 ### Outbound — `SetterF` and a read-only `Forget[F]` escape
 
 ```scala mdoc:silent
-import dev.constructive.eo.Composer
+import dev.constructive.eo.compose.Composer
 import dev.constructive.eo.data.SetterF
 
 val setter = summon[Composer[MultiFocus[List], SetterF]].to(listMF)

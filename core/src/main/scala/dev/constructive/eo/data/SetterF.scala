@@ -5,6 +5,9 @@ import cats.Distributive
 import cats.instances.function.*
 import cats.syntax.functor.*
 
+import forgetful.*
+import compose.*
+
 /** Carrier for the `Setter` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B`.
   *
   * Same-carrier composition (`setter.andThen(setter)`) ships via [[SetterF.assocSetterF]] —

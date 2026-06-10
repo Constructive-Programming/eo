@@ -1,5 +1,7 @@
 package dev.constructive.eo
-package data
+package accessor
+
+import data.Affine
 
 trait PartialAccessor[F[_, _]]:
 

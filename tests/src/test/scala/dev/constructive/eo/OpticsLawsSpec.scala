@@ -1,6 +1,9 @@
 package dev.constructive.eo
 
 import cats.instances.list.given
+import dev.constructive.eo.accessor.*
+import dev.constructive.eo.compose.*
+import dev.constructive.eo.forgetful.*
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
@@ -473,7 +476,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   "ForgetfulApplicative: Optic.put on Direct + forgetFApplicative[List].pure / .map" >> {
     import Optic.*
     given ForgetfulApplicative[Direct] = Direct.applicative
-    given data.ReverseAccessor[Direct] = Direct.reverseAccessor
+    given accessor.ReverseAccessor[Direct] = Direct.reverseAccessor
     val intDouble: Optic[Int, Int, Int, Int, Direct] =
       optics.Iso[Int, Int, Int, Int](_ * 2, _ / 2)
     val ap = summon[ForgetfulApplicative[data.Forget[List]]]

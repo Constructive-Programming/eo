@@ -183,7 +183,7 @@ class CrossCarrierCompositionSpec extends Specification:
   "(6) JsonPrism → MultiFocus[List]: Composer summons + chain compiles" >> {
     import cats.instances.list.given // Alternative[List] + Foldable[List]
     import dev.constructive.eo.data.MultiFocus
-    import dev.constructive.eo.Composer
+    import dev.constructive.eo.compose.Composer
 
     // Type-level: the Composer summons cleanly under List's Alternative+Foldable.
     val composerOk = summon[Composer[Either, MultiFocus[List]]] != null

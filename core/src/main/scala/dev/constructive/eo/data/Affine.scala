@@ -3,6 +3,8 @@ package data
 
 import cats.{Applicative, Monoid}
 
+import forgetful.*
+import compose.*
 import optics.Optic
 
 /** Extract the first element type of a `Tuple2`. Stays as an unreduced match type when `T` is not a

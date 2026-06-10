@@ -2,6 +2,8 @@ package dev.constructive.eo
 package laws
 package eo
 
+import dev.constructive.eo.forgetful.*
+
 import optics.Optic
 import optics.Optic.*
 

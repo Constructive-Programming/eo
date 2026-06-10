@@ -2,6 +2,7 @@ package dev.constructive.eo
 package laws
 
 import cats.Monoid
+import dev.constructive.eo.forgetful.*
 
 import optics.Optic
 import optics.Optic.*
