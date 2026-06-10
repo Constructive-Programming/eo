@@ -36,8 +36,8 @@ final class BijectionIso[S, T, A, B](
     val reverseGet: B => T,
 ) extends Optic[S, T, A, B, Direct]:
   type X = Nothing
-  val to: S => Direct[X, A] = s => Direct(get(s))
-  val from: Direct[X, B] => T = d => reverseGet(d.value)
+  def to(s: S): Direct[X, A] = Direct(get(s))
+  def from(d: Direct[X, B]): T = reverseGet(d.value)
 
   inline def modify(f: A => B): S => T =
     s => reverseGet(f(get(s)))

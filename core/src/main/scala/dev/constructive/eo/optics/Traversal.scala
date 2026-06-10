@@ -35,7 +35,7 @@ object Traversal:
     new Optic[T[A], T[B], A, B, MultiFocus[PSVec]]:
       type X = T[A]
 
-      val to: T[A] => (T[A], PSVec[A]) = ta =>
+      def to(ta: T[A]): (T[A], PSVec[A]) =
         ta match
           case refArr: ArraySeq.ofRef[?] =>
             // ArraySeq.ofRef.unsafeArray is already an Array[AnyRef]; aliasing is safe because
@@ -46,22 +46,21 @@ object Traversal:
             Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
             (ta, buf.freezeAsPSVec[A])
 
-      val from: ((T[A], PSVec[B])) => T[B] = {
-        case (xo, vec) =>
-          xo match
-            case _: ArraySeq[?] =>
-              // `unsafeShareableArray` returns the Slice's backing array when it densely covers
-              // it (always true post-`composeFrom`); ArraySeq.unsafeWrapArray forbids mutation,
-              // so aliasing is safe end-to-end. Fallback PSVec shapes copy via toAnyRefArray.
-              ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
-            case _ =>
-              var idx = 0
-              Traverse[T].map(xo) { _ =>
-                val b = vec(idx)
-                idx += 1
-                b
-              }
-      }
+      def from(pair: (T[A], PSVec[B])): T[B] =
+        val (xo, vec) = pair
+        xo match
+          case _: ArraySeq[?] =>
+            // `unsafeShareableArray` returns the Slice's backing array when it densely covers
+            // it (always true post-`composeFrom`); ArraySeq.unsafeWrapArray forbids mutation,
+            // so aliasing is safe end-to-end. Fallback PSVec shapes copy via toAnyRefArray.
+            ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
+          case _ =>
+            var idx = 0
+            Traverse[T].map(xo) { _ =>
+              val b = vec(idx)
+              idx += 1
+              b
+            }
 
   /** Monomorphic self-traversal from an explicit immediate-children view — focuses the values of
     * `S` that are themselves `S` (the immediate sub-terms), with `S` itself as the leftover
@@ -85,8 +84,8 @@ object Traversal:
   ): Optic[S, S, S, S, MultiFocus[PSVec]] =
     new Optic[S, S, S, S, MultiFocus[PSVec]]:
       type X = S
-      val to: S => (S, PSVec[S]) = s => (s, children(s))
-      val from: ((S, PSVec[S])) => S = { case (s, vec) => rebuild(s, vec) }
+      def to(s: S): (S, PSVec[S]) = (s, children(s))
+      def from(pair: (S, PSVec[S])): S = rebuild(pair._1, pair._2)
 
   /** Traversal over two per-element getters with a `reverse` reassembly. Carrier is
     * `MultiFocus[Function1[Int, *]]` — the homogeneous-arity Tuple_N-shaped traversal encoded as an
@@ -103,16 +102,14 @@ object Traversal:
     new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
 
-      val to: S => (Unit, Int => A) = s =>
+      def to(s: S): (Unit, Int => A) =
         val read: Int => A = (i: Int) =>
           i match
             case 0 => a(s)
             case 1 => b(s)
         ((), read)
 
-      val from: ((Unit, Int => B)) => T = {
-        case (_, k) => reverse(k(0), k(1))
-      }
+      def from(pair: (Unit, Int => B)): T = reverse(pair._2(0), pair._2(1))
 
   /** Fixed-arity-3 — see [[two]]. @group Constructors */
   def three[S, T, A, B](
@@ -124,7 +121,7 @@ object Traversal:
     new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
 
-      val to: S => (Unit, Int => A) = s =>
+      def to(s: S): (Unit, Int => A) =
         val read: Int => A = (i: Int) =>
           i match
             case 0 => a(s)
@@ -132,9 +129,7 @@ object Traversal:
             case 2 => c(s)
         ((), read)
 
-      val from: ((Unit, Int => B)) => T = {
-        case (_, k) => reverse(k(0), k(1), k(2))
-      }
+      def from(pair: (Unit, Int => B)): T = reverse(pair._2(0), pair._2(1), pair._2(2))
 
   /** Fixed-arity-4 — see [[two]]. @group Constructors */
   def four[S, T, A, B](
@@ -147,7 +142,7 @@ object Traversal:
     new Optic[S, T, A, B, MultiFocus[Function1[Int, *]]]:
       type X = Unit
 
-      val to: S => (Unit, Int => A) = s =>
+      def to(s: S): (Unit, Int => A) =
         val read: Int => A = (i: Int) =>
           i match
             case 0 => a(s)
@@ -156,6 +151,5 @@ object Traversal:
             case 3 => d(s)
         ((), read)
 
-      val from: ((Unit, Int => B)) => T = {
-        case (_, k) => reverse(k(0), k(1), k(2), k(3))
-      }
+      def from(pair: (Unit, Int => B)): T =
+        reverse(pair._2(0), pair._2(1), pair._2(2), pair._2(3))

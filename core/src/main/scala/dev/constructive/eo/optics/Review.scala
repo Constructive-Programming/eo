@@ -14,6 +14,9 @@ import data.Direct
   * necessity.) A Review composes with another Review through the fused `andThen` just as `Getter`s
   * do, and slots into the `Direct`-carrier optic surface.
   *
+  * A `final class` storing `reverseGet` directly — NOT an abstract class with an abstract member —
+  * for the same composed-dispatch reason documented on [[DirectGetter]].
+  *
   * To get the build direction out of an `Iso` or `Prism`, wrap its reverse directly —
   * `Review(iso.reverseGet)` / `Review(prism.mend)` — rather than via a bespoke factory: an
   * `Iso`/`Prism` already *is* a build direction, so cross-optic `from*` constructors would be
@@ -21,8 +24,9 @@ import data.Direct
   */
 final class Review[S, A](val reverseGet: A => S) extends Optic[Unit, S, Unit, A, Direct]:
   type X = Nothing
-  val to: Unit => Direct[X, Unit] = _ => Direct(())
-  val from: Direct[X, A] => S = d => reverseGet(d.value)
+
+  def to(u: Unit): Direct[X, Unit] = Direct(u)
+  def from(d: Direct[X, A]): S = reverseGet(d.value)
 
   /** Fused `Review.andThen(Review)` — the build-direction mirror of [[DirectGetter.andThen]].
     * `this` builds `S` from `A`, `inner` builds `A` from `B`, so the composite builds `S` from `B`

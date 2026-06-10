@@ -38,8 +38,8 @@ object Composer extends LowPriorityComposerInstances:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Tuple2] =
       new Optic[S, T, A, B, Tuple2]:
         type X = Unit
-        val to: S => (X, A) = s => ((), o.to(s).value)
-        val from: ((X, B)) => T = pair => o.from(Direct(pair._2))
+        def to(s: S): (X, A) = ((), o.to(s).value)
+        def from(pair: (X, B)): T = o.from(Direct(pair._2))
 
   /** Express an Iso (or Getter) as a Prism — always takes the `Right` branch; `Nothing` in the
     * `Left` slot so the miss branch is uninhabited.
@@ -51,8 +51,8 @@ object Composer extends LowPriorityComposerInstances:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Either] =
       new Optic[S, T, A, B, Either]:
         type X = Nothing
-        val to: S => Either[X, A] = s => Right(o.to(s).value)
-        val from: Either[X, B] => T = e =>
+        def to(s: S): Either[X, A] = Right(o.to(s).value)
+        def from(e: Either[X, B]): T =
           e match
             case Right(b) => o.from(Direct(b))
             case Left(_)  => ???
@@ -72,8 +72,8 @@ object Composer extends LowPriorityComposerInstances:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, data.Forget[F]] =
       new Optic[S, T, A, B, data.Forget[F]]:
         type X = Nothing
-        val to: S => data.Forget[F][X, A] = s => F.pure(o.to(s).value)
-        val from: data.Forget[F][X, B] => T = _ => ???
+        def to(s: S): data.Forget[F][X, A] = F.pure(o.to(s).value)
+        def from(u: data.Forget[F][X, B]): T = ???
 
 /** Low-priority `Composer` instances —
   * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]], a transitive derivation pinned

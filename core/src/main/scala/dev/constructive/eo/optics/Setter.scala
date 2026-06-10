@@ -40,9 +40,9 @@ final class SetterOptic[S, T, A, B](val modifyFn: (A => B) => S => T)
     extends Optic[S, T, A, B, SetterF]:
   type X = (S, A)
 
-  val to: S => SetterF[X, A] = s => SetterF(s, identity[A])
+  def to(s: S): SetterF[X, A] = SetterF(s, identity[A])
 
-  val from: SetterF[X, B] => T = s => modifyFn(s.setter._2)(s.setter._1)
+  def from(s: SetterF[X, B]): T = modifyFn(s.setter._2)(s.setter._1)
 
   /** Fused `.modify` — applies the stored writer directly, bypassing the `SetterF` carrier. */
   inline def modify(f: A => B): S => T = modifyFn(f)

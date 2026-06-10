@@ -42,12 +42,12 @@ trait Optic[S, T, A, B, F[_, _]]:
   /** Push the source `S` into the carrier, extracting the focus `A` and packing the leftover `X`.
     * Paired with [[from]] to reconstruct `T`.
     */
-  def to: S => F[X, A]
+  def to(s: S): F[X, A]
 
   /** Close the carrier: given a modified focus `B` (and the leftover `X` already inside the `F`),
     * reassemble the result `T`.
     */
-  def from: F[X, B] => T
+  def from(b: F[X, B]): T
 
   /** Compose with another optic under the shared carrier `F`. Requires `AssociativeFunctor[F]`.
     * Cross-carrier composition (Lens → Optional, Lens → Traversal, …) goes through the
@@ -68,8 +68,8 @@ trait Optic[S, T, A, B, F[_, _]]:
     val innerRef = o.asInstanceOf[Optic[A, B, C, D, F] { type X = o.X }]
     new Optic:
       type X = af.Z
-      val to: S => F[X, C] = s => af.composeTo(s, outerRef, innerRef)
-      val from: F[X, D] => T = xd => af.composeFrom(xd, innerRef, outerRef)
+      def to(s: S): F[X, C] = af.composeTo(s, outerRef, innerRef)
+      def from(xd: F[X, D]): T = af.composeFrom(xd, innerRef, outerRef)
 
   /** Build-then-observe across the *build-output ⇄ read-input* seam, **preserving structure**, on a
     * **shared carrier** `F`. Flip `self` (it must be reversible — `Accessor[F]` *and*
@@ -114,8 +114,8 @@ object Optic:
     )(f: R => S)(g: T => U): Optic[R, U, A, B, F] =
       new Optic[R, U, A, B, F]:
         type X = o.X
-        val to: R => F[X, A] = r => o.to(f(r))
-        val from: F[X, B] => U = fxb => g(o.from(fxb))
+        def to(r: R): F[X, A] = o.to(f(r))
+        def from(fxb: F[X, B]): U = g(o.from(fxb))
 
   /** Profunctor over `(B, A)` — `dimap` on the inner focus pair. Requires a `ForgetfulFunctor[F]`
     * so the carrier can map its focus in place.
@@ -131,8 +131,8 @@ object Optic:
     )(f: D => B)(g: A => C): Optic[S, T, C, D, F] =
       new Optic[S, T, C, D, F]:
         type X = o.X
-        val to: S => F[X, C] = s => F.map(o.to(s), g)
-        val from: F[X, D] => T = d => o.from(F.map(d, f))
+        def to(s: S): F[X, C] = F.map(o.to(s), g)
+        def from(xd: F[X, D]): T = o.from(F.map(xd, f))
 
   /** The identity optic — `S` is its own focus and modification has no effect. Carrier is
     * [[data.Direct]] (no leftover).
@@ -142,8 +142,8 @@ object Optic:
   def id[A]: Optic[A, A, A, A, Direct] =
     new Optic[A, A, A, A, Direct]:
       type X = Nothing
-      val to: A => Direct[X, A] = a => Direct(a)
-      val from: Direct[X, A] => A = _.value
+      def to(a: A): Direct[X, A] = Direct(a)
+      def from(da: Direct[X, A]): A = da.value
 
   /** Cross-carrier `.andThen` — picks the direction via a summoned [[Morph]] when the two optics'
     * carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), cats-eo ships
@@ -169,6 +169,82 @@ object Optic:
       morphedSelf.andThen(morphedO)(using
         summonInline[AssociativeFunctor[m.Out, morphedSelf.X, morphedO.X]]
       )
+
+    /** Compose with a read-only [[Getter]] → the **read-only collapse** of this optic, for a
+      * **total reader** (`Accessor[F]` — `Iso`/`Getter` on `Direct`, `Lens` on `Tuple2`). A
+      * `Getter`'s back-focus is `Unit`, so it can never thread through a writable `B` as a writable
+      * optic; the only sound result is read-only, and that is exactly what's wanted ("focus `A`,
+      * then read `C`"): read `self` through the accessor, then `o.get` — a [[DirectGetter]].
+      * Partial readers take the `andThenAffineFold` overload below; together they give
+      * `lens.andThen(getter) = Getter`, `optional/prism.andThen(getter) = AffineFold` — the
+      * read-side dual of the `andThen(Setter)` write-side collapse. Routed through the carrier's
+      * capability, not per-class fused overloads.
+      *
+      * @group Operations
+      */
+    @annotation.targetName("andThenReadOnly")
+    inline def andThen[C](o: DirectGetter[A, C])(using af: Accessor[F]): DirectGetter[S, C] =
+      Getter[S, C](s => o.get(af.get(self.to(s))))
+
+    /** Compose with a read-only [[Getter]] → the **read-only collapse** of this optic, for a
+      * **partial reader** (no `Accessor[F]` — `Optional`/[[AffineFold]] on `Affine`, `Prism` on
+      * `Either`). Takes the [[readOnly]] projection (write side forgotten, so the `Unit` seam lines
+      * up against the getter's `T = Unit`) and composes through `Morph[F, Direct]` pinned to the
+      * `Affine` carrier (`rightToLeft` for `Affine` itself, `bothViaAffine` for `Either`) — an
+      * [[AffineFold]]. The `NotGiven[Accessor[F]]` guard keeps total readers on the
+      * `andThenReadOnly` overload above, unambiguously.
+      *
+      * @group Operations
+      */
+    @annotation.targetName("andThenAffineFold")
+    inline def andThen[C](o: DirectGetter[A, C])(using
+        ng: scala.util.NotGiven[Accessor[F]],
+        m: Morph[F, Direct] { type Out[X, Y] = Affine[X, Y] },
+    ): AffineFold[S, C] =
+      val ms = m.morphSelf(self.readOnly)
+      val mo = m.morphO(o)
+      ms.andThen(mo)(using summonInline[AssociativeFunctor[Affine, ms.X, mo.X]])
+
+    /** Compose with a write-only [[Setter]] → a concrete [[SetterOptic]] (the **write-side dual**
+      * of `andThen(Getter)`). A `Setter`'s read side is trivial, so the composite is write-only: it
+      * modifies `this` optic's focus through the inner setter. Routed through `Morph[F, SetterF]`
+      * (every writable carrier ships a `Composer[·, SetterF]`), then re-wrapped as a `SetterOptic`
+      * so the concrete fused `.modify` surface is preserved. So `lens.andThen(setter)` /
+      * `optional.andThen(setter)` / `prism.andThen(setter)` are all `Setter`s.
+      *
+      * @group Operations
+      */
+    @annotation.targetName("andThenSetter")
+    inline def andThen[C, D](o: SetterOptic[A, B, C, D])(using
+        m: Morph[F, SetterF] { type Out[X, Y] = SetterF[X, Y] }
+    ): SetterOptic[S, T, C, D] =
+      val ms = m.morphSelf(self)
+      val mo = m.morphO(o)
+      val composed = ms.andThen(mo)(using summonInline[AssociativeFunctor[SetterF, ms.X, mo.X]])
+      Setter[S, T, C, D](f => composed.modify(f))
+
+    /** Compose with a build-only [[Review]] → a [[Review]] (the build-direction collapse). A
+      * `Review`'s source/read is trivial (`Unit`), so the composite is build-only: build the inner
+      * focus, then rebuild `T` through `self`. Requires `this` to be reversible
+      * (`ReverseAccessor[F]`).
+      *
+      * @group Operations
+      */
+    @annotation.targetName("andThenReview")
+    def andThen[C](o: Optic[Unit, B, Unit, C, F])(using RA: ReverseAccessor[F]): Review[T, C] =
+      Review[T, C](c => self.from(RA.reverseGet(o.from(RA.reverseGet(c)))))
+
+    /** The **read-only projection** of this optic — same `to`, write side forgotten (`T = B =
+      * Unit`). Sound for every carrier (`from` ignores its input); this is the seam adapter the
+      * partial-reader `andThen(Getter)` collapse composes through.
+      *
+      * @group Operations
+      */
+    def readOnly: Optic[S, Unit, A, Unit, F] =
+      new Optic[S, Unit, A, Unit, F]:
+        type X = self.X
+        def to(s: S): F[X, A] = self.to(s)
+        def from(b: F[X, Unit]): Unit = ()
 
     /** Cross-carrier [[cross]] (mirrors `andThen` vs `andThenMorphed`) — when `that` sits on a
       * *different* carrier `G`, a `Morph[F, G]` bridges the two before composing, so the result's
@@ -232,8 +308,8 @@ object Optic:
     def reverse: Optic[B, A, T, S, F] =
       new Optic[B, A, T, S, F]:
         type X = o.X
-        val to: B => F[X, T] = (b: B) => RA.reverseGet(o.from(RA.reverseGet(b)))
-        val from: F[X, S] => A = (fs: F[X, S]) => A.get(o.to(A.get(fs)))
+        def to(b: B): F[X, T] = RA.reverseGet(o.from(RA.reverseGet(b)))
+        def from(fs: F[X, S]): A = A.get(o.to(A.get(fs)))
 
   /** Modify (`A => B`) or replace (by constant `B`) the focus in-place. Available for every carrier
     * with a `ForgetfulFunctor[F]` instance — i.e. every current optic family.

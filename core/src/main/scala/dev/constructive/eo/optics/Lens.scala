@@ -74,8 +74,8 @@ class GetReplaceLens[S, T, A, B](
     val enplace: (S, B) => T,
 ) extends Optic[S, T, A, B, Tuple2]:
   type X = S
-  val to: S => (S, A) = s => (s, get(s))
-  val from: ((S, B)) => T = pair => enplace(pair._1, pair._2)
+  def to(s: S): (S, A) = (s, get(s))
+  def from(pair: (S, B)): T = enplace(pair._1, pair._2)
 
   inline def replace: B => S => T = b => s => enplace(s, b)
 
@@ -155,11 +155,12 @@ class GetReplaceLens[S, T, A, B](
   */
 class SplitCombineLens[S, T, A, B, XA](
     val get: S => A,
-    val to: S => (XA, A),
+    val split: S => (XA, A),
     val combine: (XA, B) => T,
 ) extends Optic[S, T, A, B, Tuple2]:
   type X = XA
-  val from: ((XA, B)) => T = pair => combine(pair._1, pair._2)
+  def to(s: S): (XA, A) = split(s)
+  def from(pair: (XA, B)): T = combine(pair._1, pair._2)
 
   inline def modify(f: A => B): S => T =
     s =>
@@ -178,9 +179,9 @@ class SplitCombineLens[S, T, A, B, XA](
   */
 final class SimpleLens[S, A, XA](
     get: S => A,
-    to: S => (XA, A),
+    split: S => (XA, A),
     combine: (XA, A) => S,
-) extends SplitCombineLens[S, S, A, A, XA](get, to, combine):
+) extends SplitCombineLens[S, S, A, A, XA](get, split, combine):
 
   inline def place(a: A): S => S =
     s =>
@@ -199,7 +200,7 @@ final class SimpleLens[S, A, XA](
   */
 object SimpleLens:
 
-  /** `to` already has the shape `S => (X, A)` the generic mutation extensions require. */
+  /** `split` already has the shape `S => (X, A)` the generic mutation extensions require. */
   given transformEvidence[S, A, XA](using
       o: SimpleLens[S, A, XA]
-  ): (S => (o.X, A)) = o.to
+  ): (S => (o.X, A)) = o.split

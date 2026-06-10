@@ -67,7 +67,7 @@ object JsoniterTraversal:
     new Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]:
       type X = (Array[Byte], List[JsonPathScanner.Span])
 
-      val to: Array[Byte] => (X, PSVec[A]) = bytes =>
+      def to(bytes: Array[Byte]): (X, PSVec[A]) =
         val spans = JsonPathScanner.findAll(bytes, steps)
         val n = spans.length
         if n == 0 then ((bytes, spans), PSVec.empty[A])
@@ -91,4 +91,4 @@ object JsoniterTraversal:
               PSVec.unsafeWrap[A](tight)
           ((bytes, spans), psv)
 
-      val from: ((X, PSVec[A])) => Array[Byte] = pair => pair._1._1
+      def from(pair: (X, PSVec[A])): Array[Byte] = pair._1._1

@@ -212,11 +212,11 @@ object Affine:
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, Affine] =
       new Optic[S, T, A, B, Affine]:
         type X = (T, o.X)
-        val to: S => Affine[X, A] = s =>
+        def to(s: S): Affine[X, A] =
           val (xo, a) = o.to(s)
           new Hit[X, A](xo, a)
 
-        val from: Affine[X, B] => T = a =>
+        def from(a: Affine[X, B]): T =
           a match
             case m: Miss[X, B] => m.fst
             case h: Hit[X, B]  => o.from((h.snd, h.b))
@@ -234,11 +234,11 @@ object Affine:
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, Affine] =
       new Optic[S, T, A, B, Affine]:
         type X = (o.X, S)
-        val to: S => Affine[X, A] = s =>
+        def to(s: S): Affine[X, A] =
           o.to(s) match
             case Right(a) => new Hit[X, A](s, a)
             case Left(x)  => new Miss[X, A](x)
-        val from: Affine[X, B] => T = xb =>
+        def from(xb: Affine[X, B]): T =
           xb match
             case m: Miss[X, B] => o.from(Left(m.fst))
             case h: Hit[X, B]  => o.from(Right(h.b))

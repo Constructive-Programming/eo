@@ -514,8 +514,8 @@ object MultiFocus:
   def apply[F[_], A]: Optic[F[A], F[A], A, A, MultiFocus[F]] =
     new Optic[F[A], F[A], A, A, MultiFocus[F]]:
       type X = F[A]
-      val to: F[A] => (F[A], F[A]) = (fa: F[A]) => (fa, fa)
-      val from: ((F[A], F[A])) => F[A] = { case (_, fb) => fb }
+      def to(fa: F[A]): (F[A], F[A]) = (fa, fa)
+      def from(pair: (F[A], F[A])): F[A] = pair._2
 
   /** Iso → MultiFocus[F]. Requires `Applicative[F]` to broadcast the Iso's plain `A` focus into a
     * singleton `F[A]`.
@@ -525,10 +525,9 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Unit
-        val to: S => (Unit, F[A]) = s => ((), Applicative[F].pure(o.to(s).value))
-        val from: ((Unit, F[B])) => T = {
-          case (_, fb) => o.from(Direct(pickSingletonOrThrow(fb, "Direct")))
-        }
+        def to(s: S): (Unit, F[A]) = ((), Applicative[F].pure(o.to(s).value))
+        def from(pair: (Unit, F[B])): T =
+          o.from(Direct(pickSingletonOrThrow(pair._2, "Direct")))
 
   /** Forget[F] ↪ MultiFocus[F]. */
   given forget2multifocus[F[_]]: Composer[Forget[F], MultiFocus[F]] with
@@ -536,8 +535,8 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Forget[F]]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Unit
-        val to: S => (Unit, F[A]) = s => ((), o.to(s))
-        val from: ((Unit, F[B])) => T = { case (_, fb) => o.from(fb) }
+        def to(s: S): (Unit, F[A]) = ((), o.to(s))
+        def from(pair: (Unit, F[B])): T = o.from(pair._2)
 
   /** MultiFocus[F] ↪ Forget[F] — read-only escape: discard the structural leftover, keep the
     * focused `F[A]`. Closes the top-5 plan's gap #2 by giving users an explicit carrier morph
@@ -563,8 +562,8 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, Forget[F]] =
       new Optic[S, T, A, B, Forget[F]]:
         type X = Unit
-        val to: S => F[A] = s => o.to(s)._2
-        val from: F[B] => T = _ =>
+        def to(s: S): F[A] = o.to(s)._2
+        def from(fb: F[B]): T =
           // Reachable only when `T = Unit` (Forget-carrier optics have T = Unit by construction).
           // The cast surfaces a ClassCastException if a user's MultiFocus optic has T ≠ Unit AND
           // they explicitly routed through this Composer — defensive only.
@@ -578,13 +577,11 @@ object MultiFocus:
         type X = o.X
         def singletonTo(s: S): (o.X, A) = o.to(s)
         def singletonFrom(x: o.X, b: B): T = o.from((x, b))
-        val to: S => (X, F[A]) = s =>
+        def to(s: S): (X, F[A]) =
           val (x, a) = o.to(s)
           (x, Applicative[F].pure(a))
-        val from: ((X, F[B])) => T = {
-          case (x, fb) =>
-            o.from((x, pickSingletonOrThrow(fb, "Tuple2")))
-        }
+        def from(pair: (X, F[B])): T =
+          o.from((pair._1, pickSingletonOrThrow(pair._2, "Tuple2")))
 
   /** Prism → MultiFocus[F]. */
   given either2multifocus[F[_]: Alternative: Foldable]: Composer[Either, MultiFocus[F]] with
@@ -592,14 +589,14 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Either[o.X, Unit]
-        val to: S => (X, F[A]) = s =>
+        def to(s: S): (X, F[A]) =
           o.to(s) match
             case Right(a) => (Right(()), Applicative[F].pure(a))
             case Left(x)  => (Left(x), Alternative[F].empty[A])
-        val from: ((X, F[B])) => T = {
-          case (Left(xMiss), _) => o.from(Left(xMiss))
-          case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
-        }
+        def from(pair: (X, F[B])): T =
+          pair match
+            case (Left(xMiss), _) => o.from(Left(xMiss))
+            case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
 
   /** Optional → MultiFocus[F]. */
   given affine2multifocus[F[_]: Alternative: Foldable]: Composer[Affine, MultiFocus[F]] with
@@ -607,18 +604,18 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
         type X = Either[Fst[o.X], Snd[o.X]]
-        val to: S => (X, F[A]) = s =>
+        def to(s: S): (X, F[A]) =
           o.to(s) match
             case h: Affine.Hit[o.X, A] =>
               (Right(h.snd), Applicative[F].pure(h.b))
             case m: Affine.Miss[o.X, A] =>
               (Left(m.fst), Alternative[F].empty[A])
-        val from: ((X, F[B])) => T = {
-          case (Left(fstX), _) =>
-            o.from(new Affine.Miss[o.X, B](fstX))
-          case (Right(sndX), fb) =>
-            o.from(new Affine.Hit[o.X, B](sndX, pickSingletonOrThrow(fb, "Affine")))
-        }
+        def from(pair: (X, F[B])): T =
+          pair match
+            case (Left(fstX), _) =>
+              o.from(new Affine.Miss[o.X, B](fstX))
+            case (Right(sndX), fb) =>
+              o.from(new Affine.Hit[o.X, B](sndX, pickSingletonOrThrow(fb, "Affine")))
 
   // PSVec-specialised Composer instances. PSVec admits neither Applicative nor Alternative
   // naturally; these use `PSVec.singleton` / `PSVec.empty` directly. The Tuple2 bridge specialises
@@ -638,19 +635,17 @@ object MultiFocus:
           val lens = glr.asInstanceOf[optics.GetReplaceLens[S, T, A, B]]
           new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusSingleton[S, T, A, B, S]:
             type X = S
-            val to: S => (S, PSVec[A]) = s => (s, PSVec.singleton[A](lens.get(s)))
-            val from: ((S, PSVec[B])) => T = { case (s, vs) => lens.enplace(s, vs.head) }
+            def to(s: S): (S, PSVec[A]) = (s, PSVec.singleton[A](lens.get(s)))
+            def from(pair: (S, PSVec[B])): T = lens.enplace(pair._1, pair._2.head)
             def singletonTo(s: S): (S, A) = (s, lens.get(s))
             def singletonFrom(x: S, b: B): T = lens.enplace(x, b)
         case _ =>
           new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusSingleton[S, T, A, B, o.X]:
             type X = o.X
-            val to: S => (o.X, PSVec[A]) = s =>
+            def to(s: S): (o.X, PSVec[A]) =
               val (xo, a) = o.to(s)
               (xo, PSVec.singleton[A](a))
-            val from: ((o.X, PSVec[B])) => T = {
-              case (xo, vs) => o.from((xo, vs.head))
-            }
+            def from(pair: (o.X, PSVec[B])): T = o.from((pair._1, pair._2.head))
             def singletonTo(s: S): (o.X, A) = o.to(s)
             def singletonFrom(x: o.X, b: B): T = o.from((x, b))
 
@@ -664,14 +659,14 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
         type X = Option[o.X]
-        val to: S => (Option[o.X], PSVec[A]) = s =>
+        def to(s: S): (Option[o.X], PSVec[A]) =
           o.to(s) match
             case Left(x)  => (Some(x), PSVec.empty[A])
             case Right(a) => (None, PSVec.singleton[A](a))
-        val from: ((Option[o.X], PSVec[B])) => T = {
-          case (Some(x), _) => o.from(Left(x))
-          case (None, vs)   => o.from(Right(vs.head))
-        }
+        def from(pair: (Option[o.X], PSVec[B])): T =
+          pair match
+            case (Some(x), _) => o.from(Left(x))
+            case (None, vs)   => o.from(Right(vs.head))
 
         def collectTo(
             s: S,
@@ -700,14 +695,14 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
         type X = Either[Fst[o.X], Snd[o.X]]
-        val to: S => (X, PSVec[A]) = s =>
+        def to(s: S): (X, PSVec[A]) =
           o.to(s) match
             case m: Affine.Miss[o.X, A] => (Left(m.fst), PSVec.empty[A])
             case h: Affine.Hit[o.X, A]  => (Right(h.snd), PSVec.singleton[A](h.b))
-        val from: ((X, PSVec[B])) => T = {
-          case (Left(fx), _)   => o.from(new Affine.Miss[o.X, B](fx))
-          case (Right(sx), vs) => o.from(new Affine.Hit[o.X, B](sx, vs.head))
-        }
+        def from(pair: (X, PSVec[B])): T =
+          pair match
+            case (Left(fx), _)   => o.from(new Affine.Miss[o.X, B](fx))
+            case (Right(sx), vs) => o.from(new Affine.Hit[o.X, B](sx, vs.head))
 
         def collectTo(
             s: S,
@@ -734,8 +729,8 @@ object MultiFocus:
     def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, SetterF] =
       new Optic[S, T, A, B, SetterF]:
         type X = (S, A)
-        val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
-        val from: SetterF[X, B] => T = sfxb =>
+        def to(s: S): SetterF[X, A] = SetterF((s, identity[A]))
+        def from(sfxb: SetterF[X, B]): T =
           val (s, f) = sfxb.setter
           val (x, fa) = o.to(s)
           o.from((x, Functor[F].map(fa)(f)))
@@ -747,22 +742,22 @@ object MultiFocus:
   ): Optic[S, T, A, B, MultiFocus[F]] =
     new Optic[S, T, A, B, MultiFocus[F]]:
       type X = lens.X
-      val to: S => (X, F[A]) = lens.to
-      val from: ((X, F[B])) => T = lens.from
+      def to(s: S): (X, F[A]) = lens.to(s)
+      def from(pair: (X, F[B])): T = lens.from(pair)
 
   def fromPrismF[F[_]: MonoidK, S, T, A, B](
       prism: Optic[S, T, F[A], F[B], Either]
   ): Optic[S, T, A, B, MultiFocus[F]] =
     new Optic[S, T, A, B, MultiFocus[F]]:
       type X = Either[prism.X, Unit]
-      val to: S => (X, F[A]) = s =>
+      def to(s: S): (X, F[A]) =
         prism.to(s) match
           case Right(fa) => (Right(()), fa)
           case Left(x)   => (Left(x), MonoidK[F].empty[A])
-      val from: ((X, F[B])) => T = {
-        case (Left(xMiss), _) => prism.from(Left(xMiss))
-        case (Right(_), fb)   => prism.from(Right(fb))
-      }
+      def from(pair: (X, F[B])): T =
+        pair match
+          case (Left(xMiss), _) => prism.from(Left(xMiss))
+          case (Right(_), fb)   => prism.from(Right(fb))
 
   // Function1-shaped MultiFocus factories (the Grate-absorbed surface).
 
@@ -777,8 +772,8 @@ object MultiFocus:
   ): Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
     new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]:
       type X = Unit
-      val to: F[A] => (Unit, F.Representation => A) = fa => ((), F.index(fa))
-      val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+      def to(fa: F[A]): (Unit, F.Representation => A) = ((), F.index(fa))
+      def from(pair: (Unit, F.Representation => A)): F[A] = F.tabulate(pair._2)
 
   /** Representable-indexed variant with explicit representative index. The `repr0` argument is
     * unused at runtime (rebuild operates pointwise via `F.tabulate`); preserved for API parity and
@@ -790,8 +785,8 @@ object MultiFocus:
     val _ = repr0
     new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]:
       type X = Unit
-      val to: F[A] => (Unit, F.Representation => A) = fa => ((), F.index(fa))
-      val from: ((Unit, F.Representation => A)) => F[A] = { case (_, k) => F.tabulate(k) }
+      def to(fa: F[A]): (Unit, F.Representation => A) = ((), F.index(fa))
+      def from(pair: (Unit, F.Representation => A)): F[A] = F.tabulate(pair._2)
 
   /** Polymorphic homogeneous-tuple Function1-shaped factory. `to(t) = ((), i => t._i)`,
     * `from((_, k))` materialises via `Tuple.fromArray(Array.tabulate(size)(i => k(i)))`.
@@ -811,18 +806,17 @@ object MultiFocus:
     val size = sz.value
     new Optic[T, T, A, A, MultiFocus[Function1[Int, *]]]:
       type X = Unit
-      val to: T => (Unit, Int => A) = t =>
+      def to(t: T): (Unit, Int => A) =
         val read: Int => A = (i: Int) => t.productElement(i).asInstanceOf[A]
         ((), read)
-      val from: ((Unit, Int => A)) => T = {
-        case (_, k) =>
-          val arr = new Array[Object](size)
-          var i = 0
-          while i < size do
-            arr(i) = k(i).asInstanceOf[Object]
-            i += 1
-          Tuple.fromArray(arr).asInstanceOf[T]
-      }
+      def from(pair: (Unit, Int => A)): T =
+        val k = pair._2
+        val arr = new Array[Object](size)
+        var i = 0
+        while i < size do
+          arr(i) = k(i).asInstanceOf[Object]
+          i += 1
+        Tuple.fromArray(arr).asInstanceOf[T]
 
   // ------------------------------------------------------------------
   // Iso → Function1-shaped MultiFocus bridge — absorbs v1 `forgetful2grate`.
@@ -839,27 +833,26 @@ object MultiFocus:
     ): Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] =
       new Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]:
         type X = Unit
-        val to: S => (Unit, X0 => A) = s =>
+        def to(s: S): (Unit, X0 => A) =
           val a = o.to(s).value
           ((), (_: X0) => a)
-        val from: ((Unit, X0 => B)) => T = {
-          case (_, k) => o.from(Direct(k(null.asInstanceOf[X0])))
-        }
+        def from(pair: (Unit, X0 => B)): T =
+          o.from(Direct(pair._2(null.asInstanceOf[X0])))
 
   def fromOptionalF[F[_]: MonoidK, S, T, A, B](
       opt: Optic[S, T, F[A], F[B], Affine]
   ): Optic[S, T, A, B, MultiFocus[F]] =
     new Optic[S, T, A, B, MultiFocus[F]]:
       type X = Affine[opt.X, Unit]
-      val to: S => (X, F[A]) = s =>
+      def to(s: S): (X, F[A]) =
         opt.to(s) match
           case m: Affine.Miss[opt.X, F[A]] @unchecked =>
             (m.widenB[Unit], MonoidK[F].empty[A])
           case h: Affine.Hit[opt.X, F[A]] @unchecked =>
             (new Affine.Hit[opt.X, Unit](h.snd, ()), h.b)
-      val from: ((X, F[B])) => T = {
-        case (m: Affine.Miss[opt.X, Unit] @unchecked, _) =>
-          opt.from(m.widenB[F[B]])
-        case (h: Affine.Hit[opt.X, Unit] @unchecked, fb) =>
-          opt.from(new Affine.Hit[opt.X, F[B]](h.snd, fb))
-      }
+      def from(pair: (X, F[B])): T =
+        pair match
+          case (m: Affine.Miss[opt.X, Unit] @unchecked, _) =>
+            opt.from(m.widenB[F[B]])
+          case (h: Affine.Hit[opt.X, Unit] @unchecked, fb) =>
+            opt.from(new Affine.Hit[opt.X, F[B]](h.snd, fb))

@@ -59,7 +59,7 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Abstract Optic members ---------------------------------------
 
-  def to: IndexedRecord => Either[(AvroFailure, IndexedRecord), A] = record =>
+  def to(record: IndexedRecord): Either[(AvroFailure, IndexedRecord), A] =
     focus.navigateRaw(record) match
       case Left(failure) => Left((failure, record))
       case Right(any)    =>
@@ -68,10 +68,10 @@ final class AvroPrism[A] private[avro] (
           case Left(t)  =>
             Left((AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t), record))
 
-  def from: Either[(AvroFailure, IndexedRecord), A] => IndexedRecord = {
-    case Left((_, record)) => record
-    case Right(a)          => reverseGet(a)
-  }
+  def from(e: Either[(AvroFailure, IndexedRecord), A]): IndexedRecord =
+    e match
+      case Left((_, record)) => record
+      case Right(a)          => reverseGet(a)
 
   // ---- Read surface --------------------------------------------------
 

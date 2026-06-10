@@ -59,9 +59,9 @@ object SetterF:
   ): optics.Optic[S, T, A, B, SetterF] =
     new optics.Optic[S, T, A, B, SetterF]:
       type X = (S, A)
-      val to: S => SetterF[X, A] = s => SetterF((s, identity[A]))
+      def to(s: S): SetterF[X, A] = SetterF((s, identity[A]))
 
-      val from: SetterF[X, B] => T = sfxb =>
+      def from(sfxb: SetterF[X, B]): T =
         val (s, f) = sfxb.setter
         applyWrite(s, f)
 

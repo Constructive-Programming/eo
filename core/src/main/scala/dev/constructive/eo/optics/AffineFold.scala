@@ -31,11 +31,11 @@ object AffineFold:
   def apply[S, A](matches: S => Option[A]): AffineFold[S, A] =
     new Optic[S, Unit, A, Unit, Affine]:
       type X = (Unit, Unit)
-      val to: S => Affine[X, A] = s =>
+      def to(s: S): Affine[X, A] =
         matches(s) match
           case Some(a) => new Affine.Hit[X, A]((), a)
           case None    => new Affine.Miss[X, A](())
-      val from: Affine[X, Unit] => Unit = _ => ()
+      def from(a: Affine[X, Unit]): Unit = ()
 
   /** Filtering — hits only on inputs satisfying `p`. @group Constructors */
   def select[A](p: A => Boolean): AffineFold[A, A] =

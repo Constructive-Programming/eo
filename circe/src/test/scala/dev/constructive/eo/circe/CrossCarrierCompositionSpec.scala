@@ -195,8 +195,8 @@ class CrossCarrierCompositionSpec extends Specification:
     val tagsMF: Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]] =
       new Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]]:
         type X = Unit
-        val to: List[Int] => (Unit, List[List[Int]]) = xs => ((), List(xs))
-        val from: ((Unit, List[List[Int]])) => List[Int] = { case (_, xss) => xss.head }
+        def to(xs: List[Int]): (Unit, List[List[Int]]) = ((), List(xs))
+        def from(pair: (Unit, List[List[Int]])): List[Int] = pair._2.head
 
     // The cross-carrier .andThen resolves through `either2multifocus[List]`.
     val chain: Optic[Json, Json, List[Int], List[Int], MultiFocus[List]] =

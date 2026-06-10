@@ -7,6 +7,7 @@ import dev.constructive.eo.optics.{
   Getter => EoGetter,
   Lens => EoLens,
   Optional => EoOptional,
+  Review => EoReview,
   Setter => EoSetter,
 }
 
@@ -150,3 +151,20 @@ object NestedOptics:
 
   val mSet6: MSetter[Nested6, Int] =
     mS6.andThen(mS5).andThen(mS4).andThen(mS3).andThen(mS2).andThen(mS1).andThen(mSetValue)
+
+  // ---- Per-level EO Reviews (Direct carrier, BUILD direction) -----
+  //
+  // The mirror of the Getters: a Review[Nested(k), Nested(k-1)] builds the
+  // parent node from a child (`reverseGet`), and the leaf Review[Nested0, Int]
+  // builds a populated leaf from an Int. Composed via the fused
+  // `Review.andThen(Review)`, the depth-3 / depth-6 chains build a whole
+  // Nested(k) from a single Int. Monocle ships no Review peer, so ReviewBench
+  // compares against a hand-written builder (the floor) instead.
+
+  val eoRValue = EoReview[Nested0, Int](i => Nested0(i, None, Nil))
+  val eoR1 = EoReview[Nested1, Nested0](Nested1(_))
+  val eoR2 = EoReview[Nested2, Nested1](Nested2(_))
+  val eoR3 = EoReview[Nested3, Nested2](Nested3(_))
+  val eoR4 = EoReview[Nested4, Nested3](Nested4(_))
+  val eoR5 = EoReview[Nested5, Nested4](Nested5(_))
+  val eoR6 = EoReview[Nested6, Nested5](Nested6(_))

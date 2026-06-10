@@ -70,7 +70,18 @@ object JsoniterPrism:
     new Optic[Array[Byte], Array[Byte], A, A, Affine]:
       type X = (Array[Byte], (Array[Byte], Int, Int))
 
-      val to: Array[Byte] => Affine[X, A] = bytes =>
+      // `to` / `from` are 1-call forwarders; the large bodies live in private
+      // methods so the abstract-`def` entry stays a few bytes and inlines into
+      // every caller without blowing its C2 inlining budget — PrintInlining
+      // showed the direct 103/175-byte bodies failing with "callee is too
+      // large" at hot use sites, where the old `val to` encoding's 12-byte
+      // Function1 bridges inlined everywhere (the big body compiled
+      // separately). The forwarders recreate that shape under the `def`
+      // encoding: `to (6 bytes) inline` at every site.
+      def to(bytes: Array[Byte]): Affine[X, A] = scan(bytes)
+      def from(aff: Affine[X, A]): Array[Byte] = splice(aff)
+
+      private def scan(bytes: Array[Byte]): Affine[X, A] =
         val span = JsonPathScanner.find(bytes, steps)
         if !span.isHit then new Affine.Miss[X, A](bytes)
         else
@@ -79,7 +90,7 @@ object JsoniterPrism:
             new Affine.Hit[X, A]((bytes, span.start, span.end), a)
           catch case _: Throwable => new Affine.Miss[X, A](bytes)
 
-      val from: Affine[X, A] => Array[Byte] = aff =>
+      private def splice(aff: Affine[X, A]): Array[Byte] =
         aff match
           case h: Affine.Hit[X, A] =>
             // Phase-2 splice. h.snd carries (src, start, end). The user's `.modify` /

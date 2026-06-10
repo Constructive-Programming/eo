@@ -46,16 +46,16 @@ final class JsonPrism[A] private[circe] (
 
   // ---- Abstract Optic members ---------------------------------------
 
-  def to: Json => Either[(DecodingFailure, HCursor), A] = json =>
+  def to(json: Json): Either[(DecodingFailure, HCursor), A] =
     val c = focus.navigateCursor(json)
     focus.decodeFromCursor(c) match
       case Right(a) => Right(a)
       case Left(df) => Left((df, json.hcursor))
 
-  def from: Either[(DecodingFailure, HCursor), A] => Json = {
-    case Left((_, hc)) => hc.top.getOrElse(hc.value)
-    case Right(a)      => focus.encoder(a)
-  }
+  def from(e: Either[(DecodingFailure, HCursor), A]): Json =
+    e match
+      case Left((_, hc)) => hc.top.getOrElse(hc.value)
+      case Right(a)      => focus.encoder(a)
 
   // ---- Read surface (single-focus specific) -------------------------
 

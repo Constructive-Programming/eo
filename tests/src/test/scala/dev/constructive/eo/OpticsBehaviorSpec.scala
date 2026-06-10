@@ -22,6 +22,8 @@ import optics.{
   Optional,
   Prism,
   Review,
+  Setter,
+  SetterOptic,
   Traversal,
 }
 import optics.Optic.*
@@ -66,8 +68,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   ): Optic[Int, Int, Int, Int, Forget[F]] =
     new Optic[Int, Int, Int, Int, Forget[F]]:
       type X = Unit
-      val to = toF
-      val from = fromF
+      def to(s: Int): F[Int] = toF(s)
+      def from(b: F[Int]): Int = fromF(b)
 
   // ----- Basic-factory smoke tests -------------------------------------
   //
@@ -314,28 +316,65 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(chainOk)
   }
 
-  // covers: the Affine-carrier `.andThen(Getter)` bridge — composing a partial/read-write Optional
-  //   (or a read-only AffineFold) with a read-only Getter collapses to an AffineFold (partial read),
-  //   via getOption ∘ get. A read-write outer's B = A can't thread a Getter's Unit back-focus as a
-  //   writable optic, so the read-only downgrade is the sound (and only) result. Both the read-write
-  //   Optional outer and the read-only AffineFold outer route through the same overload.
-  "Affine.andThen(Getter): Optional / AffineFold composed with a Getter yields an AffineFold" >> {
+  // covers: the GENERAL read-only collapse — composing ANY optic with a read-only Getter projects
+  //   it to its read-only counterpart (write side forgotten, T = B = Unit), routed through the
+  //   Accessor / Morph machinery (not per-class fused overloads): a total reader (Lens / Iso,
+  //   `Accessor[F]`) yields a Getter; a partial one (Optional / AffineFold / Prism) composes its
+  //   `readOnly` projection through Morph-to-Affine and yields an AffineFold. Plus the write-side
+  //   dual: any writable optic .andThen(Setter) morphs through `Composer[·, SetterF]` and stays a
+  //   Setter. Not Affine-only and not per-class — one rule per side.
+  "any optic .andThen(Getter) projects to read-only (Getter / AffineFold); .andThen(Setter) stays a Setter" >> {
     val toStr = Getter[Int, String](_.toString)
 
+    // total readers -> Getter
+    val fstLens = Lens[(Int, String), Int](_._1, (t, n) => (n, t._2))
+    val lensThen: Optic[(Int, String), Unit, String, Unit, Direct] = fstLens.andThen(toStr)
+    val lensOk = lensThen.get((7, "x")) === "7"
+
+    val idIso = Iso[Int, Int, Int, Int](identity, identity)
+    val isoThen: Optic[Int, Unit, String, Unit, Direct] = idIso.andThen(toStr)
+    val isoOk = isoThen.get(9) === "9"
+
+    // partial readers -> AffineFold
     val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
       Optional[AdultPerson, AdultPerson, Int, Int, Affine](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-    val optThenG: AffineFold[AdultPerson, String] = ageOpt.andThen(toStr)
-    val optOk = (optThenG.getOption(AdultPerson(20)) === Some("20"))
-      .and(optThenG.getOption(AdultPerson(15)) === None)
+    val optThen: AffineFold[AdultPerson, String] = ageOpt.andThen(toStr)
+    val optOk = (optThen.getOption(AdultPerson(20)) === Some("20"))
+      .and(optThen.getOption(AdultPerson(15)) === None)
 
-    val afThenG: AffineFold[AdultPerson, String] = adultAgeAF.andThen(toStr)
-    val afOk = (afThenG.getOption(AdultPerson(18)) === Some("18"))
-      .and(afThenG.getOption(AdultPerson(10)) === None)
+    val afThen: AffineFold[AdultPerson, String] = adultAgeAF.andThen(toStr)
+    val afOk = (afThen.getOption(AdultPerson(18)) === Some("18"))
+      .and(afThen.getOption(AdultPerson(10)) === None)
 
-    optOk.and(afOk)
+    val intP = Prism.optional[String, Int](s => s.toIntOption, _.toString)
+    val prismThen: AffineFold[String, String] = intP.andThen(toStr)
+    val prismOk =
+      (prismThen.getOption("42") === Some("42")).and(prismThen.getOption("nope") === None)
+
+    // write-side dual: any writable optic .andThen(Setter) -> Setter
+    val plusSetter = Setter[Int, Int, Int, Int](f => n => f(n))
+    val lensThenSet: SetterOptic[(Int, String), (Int, String), Int, Int] =
+      fstLens.andThen(plusSetter)
+    val setLensOk = lensThenSet.modify(_ + 1)((7, "x")) === ((8, "x"))
+
+    val ageOptW = Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+      getOrModify = p => Either.cond(p.age >= 18, p.age, p),
+      reverseGet = { case (_, a) => AdultPerson(a) },
+    )
+    val optThenSet = ageOptW.andThen(plusSetter)
+    val setOptOk = (optThenSet.modify(_ + 1)(AdultPerson(20)) === AdultPerson(21))
+      .and(optThenSet.modify(_ + 1)(AdultPerson(15)) === AdultPerson(15)) // miss: unchanged
+
+    lensOk
+      .and(isoOk)
+      .and(optOk)
+      .and(afOk)
+      .and(prismOk)
+      .and(setLensOk)
+      .and(setOptOk)
   }
 
   // ----- Review behaviour ----------------------------------------------
@@ -438,11 +477,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val inner2: Optic[Int, Int, Int, Int, MultiFocus[Option]] =
       new Optic[Int, Int, Int, Int, MultiFocus[Option]]:
         type X = String
-        val to: Int => (String, Option[Int]) = n => (s"tag-$n", Option.when(n < 1000)(n + 1))
-        val from: ((String, Option[Int])) => Int = {
-          case (tag, fb) =>
-            fb.fold(tag.length)(_ * 100 + tag.length)
-        }
+        def to(n: Int): (String, Option[Int]) = (s"tag-$n", Option.when(n < 1000)(n + 1))
+        def from(pair: (String, Option[Int])): Int =
+          val (tag, fb) = pair
+          fb.fold(tag.length)(_ * 100 + tag.length)
     val composed = lifted.andThen(inner2)
     val composedOk =
       (composed.modify(identity)(5) === 5113).and(composed.modify(identity)(-2) === -1)
@@ -675,14 +713,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val triplet: Optic[Int, Unit, Int, Unit, Forget[List]] =
       new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
-        val to: Int => Forget[List][Unit, Int] = n => List(n - 1, n, n + 1)
-        val from: Forget[List][Unit, Unit] => Unit = _ => ()
+        def to(n: Int): Forget[List][Unit, Int] = List(n - 1, n, n + 1)
+        def from(u: Forget[List][Unit, Unit]): Unit = ()
 
     val pair: Optic[Int, Unit, Int, Unit, Forget[List]] =
       new Optic[Int, Unit, Int, Unit, Forget[List]]:
         type X = Unit
-        val to: Int => Forget[List][Unit, Int] = n => List(n, n + 1)
-        val from: Forget[List][Unit, Unit] => Unit = _ => ()
+        def to(n: Int): Forget[List][Unit, Int] = List(n, n + 1)
+        def from(u: Forget[List][Unit, Unit]): Unit = ()
 
     val composed = triplet.andThen(pair)
     // to(5) = List(4,5,6).flatMap(n => List(n, n+1)) = List(4,5,5,6,6,7)

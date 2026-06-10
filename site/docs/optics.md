@@ -188,14 +188,25 @@ summons `Composer[Tuple2, Affine]` under the hood and morphs
 the Lens into the Affine carrier. No explicit `.morph` required
 on your end.
 
-Composing the *other* way — an `Optional` (or `AffineFold`)
-`.andThen` a read-only `Getter` — yields an **`AffineFold`**: the
-read-only inner collapses the result to a partial *read*
-(`getOption` the focus, then read it through the getter). A
-`Getter`'s `Unit` back-focus can't thread through the Optional's
-writable `B`, so the read-only downgrade is the only sound result
-— "optionally focus `A`, then read `C`", the mirror of how a
-`Getter` chain composes `Getter`-to-`Getter`.
+**Read-only / write-only collapse.** Composing *any* optic with a
+read-only `Getter` projects it to its **read-only counterpart**:
+the `Getter`'s `Unit` back-focus can't thread through a writable
+`B`, so the write side is forgotten (`T = B = Unit`). A `ReadOnly[F]`
+carrier projection picks the result — a total reader (`Lens` / `Iso`)
+yields a `Getter`, a partial one (`Optional` / `Prism`) an
+`AffineFold`:
+
+```scala
+lens.andThen(getter)      // Getter
+optional.andThen(getter)  // AffineFold  (partial read)
+prism.andThen(getter)     // AffineFold
+```
+
+Dually, composing with a write-only `Setter` collapses the *read*
+side and yields a `Setter` (`lens.andThen(setter)`,
+`optional.andThen(setter)`, …) — it modifies the focus through the
+inner setter. One rule per side, across the whole algebra, rather
+than a per-family special case.
 
 ### AffineFold (read-only)
 
