@@ -96,9 +96,10 @@ trait Optic[S, T, A, B, F[_, _]]:
 
 /** Companion for [[Optic]]. Hosts the profunctor instances and the capability-gated extension
   * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`, `.reverseGet`,
-  * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen`, `.morph`, `.headOption`,
-  * `.length`, `.exists`. Adding a new carrier means supplying the typeclass instances of the
-  * operations it should support.
+  * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen` (carrier-morphing plus the
+  * read-only / AffineFold / Setter / Review collapses), `.readOnly`, `.cross`, `.morph`,
+  * `.headOption`, `.length`, `.exists`. Adding a new carrier means supplying the typeclass
+  * instances of the operations it should support.
   */
 object Optic:
 
@@ -135,15 +136,13 @@ object Optic:
         def from(xd: F[X, D]): T = o.from(F.map(xd, f))
 
   /** The identity optic — `S` is its own focus and modification has no effect. Carrier is
-    * [[data.Direct]] (no leftover).
+    * [[data.Direct]] (no leftover). Returns the concrete [[BijectionIso]] (not an anonymous
+    * `Optic`) so `id.andThen(x)` picks up the fused compose members like any other Iso.
     *
     * @group Constructors
     */
-  def id[A]: Optic[A, A, A, A, Direct] =
-    new Optic[A, A, A, A, Direct]:
-      type X = Nothing
-      def to(a: A): Direct[X, A] = Direct(a)
-      def from(da: Direct[X, A]): A = da.value
+  def id[A]: BijectionIso[A, A, A, A] =
+    Iso[A, A, A, A](identity, identity)
 
   /** Cross-carrier `.andThen` — picks the direction via a summoned [[Morph]] when the two optics'
     * carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), cats-eo ships
@@ -238,9 +237,15 @@ object Optic:
       * Unit`). Sound for every carrier (`from` ignores its input); this is the seam adapter the
       * partial-reader `andThen(Getter)` collapse composes through.
       *
+      * `inline` so each call site splices its own anonymous class (E197 is the point, not a smell):
+      * a single shared wrapper class would host one `self.to` dispatch site profiled over every
+      * projected optic — the megamorphic trap PrintInlining exposed on the abstract-class
+      * `DirectGetter`. Per-site splicing keeps each projection's `to` monomorphic.
+      *
       * @group Operations
       */
-    def readOnly: Optic[S, Unit, A, Unit, F] =
+    @annotation.nowarn("id=E197")
+    inline def readOnly: Optic[S, Unit, A, Unit, F] =
       new Optic[S, Unit, A, Unit, F]:
         type X = self.X
         def to(s: S): F[X, A] = self.to(s)

@@ -74,13 +74,13 @@ final class MendTearPrism[S, T, A, B](
       case Right(b) => mend(b)
       case Left(t)  => t
 
-  inline def modify[X](f: A => B): S => T =
+  inline def modify(f: A => B): S => T =
     s =>
       tear(s) match
         case Right(a) => mend(f(a))
         case Left(t)  => t
 
-  inline def replace[X](b: B): S => T =
+  inline def replace(b: B): S => T =
     s =>
       tear(s) match
         case Right(_) => mend(b)
@@ -198,13 +198,13 @@ final class PickMendPrism[S, A, B](
       case Right(b) => mend(b)
       case Left(s)  => s
 
-  inline def modify[X](f: A => B): S => S =
+  inline def modify(f: A => B): S => S =
     s =>
       pick(s) match
         case Some(a) => mend(f(a))
         case None    => s
 
-  inline def replace[X](b: B): S => S =
+  inline def replace(b: B): S => S =
     s =>
       pick(s) match
         case Some(_) => mend(b)

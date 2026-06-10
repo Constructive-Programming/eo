@@ -55,7 +55,9 @@ object Composer extends LowPriorityComposerInstances:
         def from(e: Either[X, B]): T =
           e match
             case Right(b) => o.from(Direct(b))
-            case Left(_)  => ???
+            // `X = Nothing` makes `Left` uninhabited; returning the `Nothing` value (which
+            // conforms to `T`) keeps the match total and compiler-verified — no `???` needed.
+            case Left(x) => x
 
   /** Express a read-only Direct optic (a Getter) as a Fold — lift the single focus into `F` via
     * `pure`. This is the `Composer[Direct, Forget[F]]` bridge
