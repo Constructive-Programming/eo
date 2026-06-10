@@ -43,6 +43,16 @@ final class Review[T, B](val reverseGet: B => T) extends Optic[Unit, T, Unit, B,
   ): Review[T, D] =
     Review(d => reverseGet(inner.reverseGet(d)))
 
+  /** Fused `Review.andThen(Unfold)` — post-process the assembled whole. `inner` assembles `B` from
+    * a layer `F[D]`; `this` builds `T` from that `B`, so the composite is an [[Unfold]] assembling
+    * `T` from `F[D]` (`reverseGet ∘ inner.embed`). No constraint on `F` — the seam threads a single
+    * `B`, never an `F`-layer, so pattern-functor algebras compose freely. A member (not an
+    * extension) so it out-prioritises the `Morph`-summoning generic `andThen`, which would route
+    * the same call through `Composer[Direct, Forget[F]]`'s singleton-pick.
+    */
+  inline def andThen[F[_], D](inner: Unfold[B, D, F]): Unfold[T, D, F] =
+    inner.into(reverseGet)
+
 /** Constructors for [[Review]]. */
 object Review:
 

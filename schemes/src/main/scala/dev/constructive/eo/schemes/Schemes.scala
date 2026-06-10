@@ -2,7 +2,7 @@ package dev.constructive.eo
 package schemes
 
 import data.PSVec
-import optics.{Getter, Plated, Review}
+import optics.{Getter, Plated, Review, Unfold}
 
 /** Recursion schemes as composable optics, built on the core optic surface.
   *
@@ -184,6 +184,19 @@ object Schemes:
     */
   def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): Getter[S, A] =
     Getter[S, A](foldInPlace[S, A](P.childrenArray, alg))
+
+  /** Catamorphism from a build-only optic citizen: a *pure* algebra `PSVec[A] => A` carried as an
+    * [[dev.constructive.eo.optics.Unfold]], so an algebra built by optic composition
+    * (`review.andThen(unfold)`, `unfold.andThen(review)`) drops straight into the fold engine.
+    *
+    * Note the honesty limit of the untyped path: a `PSVec` layer is node-blind, so a pure
+    * `PSVec[A] => A` can express only constructor-independent folds (`size`, child counts, …) —
+    * `eval`-style algebras need the para-flavored `(S, PSVec[A]) => A` overload above. The typed
+    * pattern-functor path is where a pure `F[A] => A` algebra is fully expressive, because `F`'s
+    * constructors carry what `PSVec` erases.
+    */
+  def cata[S, A](alg: Unfold[A, A, PSVec])(using Plated[S]): Getter[S, A] =
+    cata[S, A]((_, kids) => alg.embed(kids))
 
   /** Anamorphism as a `Review` (reverse-construction optic): a stack-safe unfold `Seed => S` driven
     * by a [[Coalg]]. Materializing — the built `S` is `O(nodes)`.

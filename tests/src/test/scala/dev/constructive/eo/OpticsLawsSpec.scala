@@ -8,9 +8,30 @@ import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
-import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
+import optics.{
+  AffineFold,
+  Fold,
+  Getter,
+  Iso,
+  Lens,
+  Optic,
+  Optional,
+  Prism,
+  Setter,
+  Traversal,
+  Unfold,
+}
 import data.{Affine, Forget, Direct, MultiFocus, PSVec, SetterF}
-import laws.{AffineFoldLaws, GetterLaws, IsoLaws, LensLaws, OptionalLaws, PrismLaws, SetterLaws}
+import laws.{
+  AffineFoldLaws,
+  GetterLaws,
+  IsoLaws,
+  LensLaws,
+  OptionalLaws,
+  PrismLaws,
+  SetterLaws,
+  UnfoldLaws,
+}
 import laws.discipline.{
   AffineFoldTests,
   GetterTests,
@@ -19,6 +40,7 @@ import laws.discipline.{
   OptionalTests,
   PrismTests,
   SetterTests,
+  UnfoldTests,
 }
 import laws.data.{AffineLaws, SetterFLaws}
 import laws.data.discipline.{AffineTests, SetterFTests}
@@ -35,6 +57,18 @@ private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] 
         s <- Arbitrary.arbitrary[String]
         b <- Arbitrary.arbitrary[Boolean]
       yield Affine.ofRight[(Int, String), Boolean]((s, b)),
+    )
+  )
+
+// Arbitrary[BinF[Int]] — equal-weight leaf / branch layers of the UnfoldSpec pattern functor.
+private given arbBinFInt: Arbitrary[BinF[Int]] =
+  Arbitrary(
+    Gen.oneOf(
+      Arbitrary.arbitrary[Int].map(BinF.LeafF(_)),
+      for
+        l <- Arbitrary.arbitrary[Int]
+        r <- Arbitrary.arbitrary[Int]
+      yield BinF.BranchF(l, r),
     )
   )
 
@@ -208,6 +242,38 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       val neverOk = neverFold.foldMap[Int](identity)(n) == 0
       toOk && neverOk
   }
+
+  // ----- Unfold: build-only/many — Applicative carrier + pattern functor -----
+
+  val sumUnfold: Unfold[Int, Int, List] = Unfold((xs: List[Int]) => xs.sum)
+
+  // covers: Unfold.apply over List (Applicative carrier — full RuleSet incl. the vestigial law)
+  checkAll(
+    "Unfold[Int, Int, List] — sum",
+    new UnfoldTests[Int, Int, List]:
+      val laws = new UnfoldLaws[Int, Int, List]:
+        val unfold = sumUnfold
+        val reference = (xs: List[Int]) => xs.sum
+    .unfoldApplicative,
+  )
+
+  val evalUnfold: Unfold[Int, Int, BinF] = Unfold.algebra[Int, Int, BinF] {
+    case BinF.LeafF(n)      => n
+    case BinF.BranchF(l, r) => l + r
+  }
+
+  // covers: Unfold.algebra over a pattern functor (Functor-only RuleSet — no Applicative[BinF])
+  checkAll(
+    "Unfold[Int, Int, BinF] — pattern-functor algebra",
+    new UnfoldTests[Int, Int, BinF]:
+      val laws = new UnfoldLaws[Int, Int, BinF]:
+        val unfold = evalUnfold
+        val reference = (fb: BinF[Int]) =>
+          fb match
+            case BinF.LeafF(n)      => n
+            case BinF.BranchF(l, r) => l + r
+    .unfold,
+  )
 
   // ----- AffineFold: partial projection + filtering select -------
 

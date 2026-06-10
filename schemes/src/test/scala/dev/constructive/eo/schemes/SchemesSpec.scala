@@ -5,7 +5,7 @@ import io.circe.Json
 import org.specs2.mutable.Specification
 
 import data.PSVec
-import optics.{Getter, Plated}
+import optics.{Getter, Plated, Review, Unfold}
 import optics.Optic.* // cross, andThen, get
 
 import generics.plate
@@ -49,6 +49,19 @@ class SchemesSpec extends Specification:
   "cata folds to a result type other than S (A != S)" >> {
     val size: (Expr, PSVec[Int]) => Int = (_, kids) => 1 + kids.toList.sum
     (Schemes.cata(size).get(expr) == 5) must beTrue // Add, Lit, Mul, Lit, Lit
+  }
+
+  "cata consumes a pure algebra carried as an Unfold citizen (incl. one built by composition)" >> {
+    val sizeAlg: Unfold[Int, Int, PSVec] =
+      Unfold.algebra[Int, Int, PSVec](kids => 1 + kids.toList.sum)
+    (Schemes.cata[Expr, Int](sizeAlg).get(expr) == 5) must beTrue
+
+    // an algebra assembled by optic composition: Review post-processes each layer's result,
+    // so the engine consumes `2 * max(sum(kids), 1)` without that lambda being written anywhere
+    val doubled: Unfold[Int, Int, PSVec] =
+      Review[Int, Int](_ * 2).andThen(Unfold.algebra[Int, Int, PSVec](_.toList.sum.max(1)))
+    // Lit leaf: 2*max(0,1) = 2; Neg node: 2*max(2,1) = 4
+    (Schemes.cata[Expr, Int](doubled).get(Expr.Neg(Expr.Lit(1.0))) == 4) must beTrue
   }
 
   "cata-as-Getter composes onto an outer Getter via andThen" >> {

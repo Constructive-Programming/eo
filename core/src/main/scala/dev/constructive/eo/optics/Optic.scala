@@ -215,6 +215,15 @@ object Optic:
     inline def andThen[D](o: Review[B, D]): Review[T, D] =
       Review(d => reverseGet(o.reverseGet(d)))
 
+    /** ANY reversible outer ∘ build-only-many inner — the inner [[Unfold]] assembles the focus `B`
+      * from a layer `F[D]`, and this optic's build half re-homes it to `T`, so the composite is an
+      * `Unfold[T, D, F]` (`reverseGet ∘ embed`). The many-rung mirror of the `andThen(Review)`
+      * overload above; fires for Iso / Prism outers (`Review` outers resolve to the fused
+      * [[Review.andThen]] member first).
+      */
+    inline def andThen[G[_], D](o: Unfold[B, D, G]): Unfold[T, D, G] =
+      o.into(b => reverseGet(b))
+
     inline def writeOnly: Review[T, B] =
       Review(reverseGet)
 

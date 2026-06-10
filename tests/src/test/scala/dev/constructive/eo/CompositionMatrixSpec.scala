@@ -66,6 +66,8 @@ object MatrixFixtures:
   val i_fold = Fold[List, Int]
   val i_setter = Setter[Box[Int], Box[Int], Int, Int](f => b => Box(f(b.a)))
   val i_review = Review[Box[Int], Int](Box(_))
+  val o_unfold = Unfold((xs: List[Box[Int]]) => Box(Box(xs.map(_.a).sum)))
+  val i_unfold = Unfold((xs: List[Int]) => Box(xs.sum))
 
 class CompositionMatrixSpec extends Specification:
   import MatrixFixtures.*
@@ -125,6 +127,10 @@ class CompositionMatrixSpec extends Specification:
       typeChecks("o_iso.andThen(i_review)") must beTrue // resolves with no expected type
       typeChecks("val r: Review[Box[Box[Int]], Int] = o_iso.andThen(i_review)") must beTrue
     }
+    "iso ∘ unfold → Unfold" >> {
+      typeChecks("o_iso.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_iso.andThen(i_unfold)") must beTrue
+    }
   }
 
   "lens (outer) composition row" >> {
@@ -180,6 +186,9 @@ class CompositionMatrixSpec extends Specification:
     }
     "lens ∘ review must not compile" >> {
       typeChecks("o_lens.andThen(i_review)") must beFalse
+    }
+    "lens ∘ unfold must not compile" >> {
+      typeChecks("o_lens.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -238,6 +247,10 @@ class CompositionMatrixSpec extends Specification:
       typeChecks("o_prism.andThen(i_review)") must beTrue // resolves with no expected type
       typeChecks("val r: Review[Box[Box[Int]], Int] = o_prism.andThen(i_review)") must beTrue
     }
+    "prism ∘ unfold → Unfold" >> {
+      typeChecks("o_prism.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_prism.andThen(i_unfold)") must beTrue
+    }
   }
 
   "optional (outer) composition row" >> {
@@ -293,6 +306,9 @@ class CompositionMatrixSpec extends Specification:
     }
     "optional ∘ review must not compile" >> {
       typeChecks("o_optional.andThen(i_review)") must beFalse
+    }
+    "optional ∘ unfold must not compile" >> {
+      typeChecks("o_optional.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -354,6 +370,9 @@ class CompositionMatrixSpec extends Specification:
     "trav ∘ review must not compile" >> {
       typeChecks("o_trav.andThen(i_review)") must beFalse
     }
+    "trav ∘ unfold must not compile" >> {
+      typeChecks("o_trav.andThen(i_unfold)") must beFalse
+    }
   }
 
   "getter (outer) composition row" >> {
@@ -399,6 +418,9 @@ class CompositionMatrixSpec extends Specification:
     "getter ∘ review must not compile" >> {
       typeChecks("o_getter.andThen(i_review)") must beFalse
     }
+    "getter ∘ unfold must not compile" >> {
+      typeChecks("o_getter.andThen(i_unfold)") must beFalse
+    }
   }
 
   "affold (outer) composition row" >> {
@@ -443,6 +465,9 @@ class CompositionMatrixSpec extends Specification:
     }
     "affold ∘ review must not compile" >> {
       typeChecks("o_affold.andThen(i_review)") must beFalse
+    }
+    "affold ∘ unfold must not compile" >> {
+      typeChecks("o_affold.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -501,6 +526,9 @@ class CompositionMatrixSpec extends Specification:
     "fold ∘ review must not compile" >> {
       typeChecks("o_fold.andThen(i_review)") must beFalse
     }
+    "fold ∘ unfold must not compile" >> {
+      typeChecks("o_fold.andThen(i_unfold)") must beFalse
+    }
   }
 
   "setter (outer) composition row" >> {
@@ -552,6 +580,9 @@ class CompositionMatrixSpec extends Specification:
     "setter ∘ review must not compile" >> {
       typeChecks("o_setter.andThen(i_review)") must beFalse
     }
+    "setter ∘ unfold must not compile" >> {
+      typeChecks("o_setter.andThen(i_unfold)") must beFalse
+    }
   }
 
   "review (outer) composition row" >> {
@@ -587,5 +618,55 @@ class CompositionMatrixSpec extends Specification:
     "review ∘ review → Review" >> {
       typeChecks("o_review.andThen(i_review)") must beTrue // resolves with no expected type
       typeChecks("val r: Review[Box[Box[Int]], Int] = o_review.andThen(i_review)") must beTrue
+    }
+    "review ∘ unfold → Unfold" >> {
+      typeChecks("o_review.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks(
+        "val r: Unfold[Box[Box[Int]], Int, List] = o_review.andThen(i_unfold)"
+      ) must beTrue
+    }
+  }
+
+  "unfold (outer) composition row" >> {
+    "unfold ∘ iso → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_iso)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_iso)") must beTrue
+    }
+    "unfold ∘ lens must not compile" >> {
+      typeChecks("o_unfold.andThen(i_lens)") must beFalse
+    }
+    "unfold ∘ prism → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_prism)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_prism)") must beTrue
+    }
+    "unfold ∘ optional must not compile" >> {
+      typeChecks("o_unfold.andThen(i_optional)") must beFalse
+    }
+    "unfold ∘ trav must not compile" >> {
+      typeChecks("o_unfold.andThen(i_trav)") must beFalse
+    }
+    "unfold ∘ getter must not compile" >> {
+      typeChecks("o_unfold.andThen(i_getter)") must beFalse
+    }
+    "unfold ∘ affold must not compile" >> {
+      typeChecks("o_unfold.andThen(i_affold)") must beFalse
+    }
+    "unfold ∘ fold must not compile" >> {
+      typeChecks("o_unfold.andThen(i_fold)") must beFalse
+    }
+    "unfold ∘ setter must not compile" >> {
+      typeChecks("o_unfold.andThen(i_setter)") must beFalse
+    }
+    "unfold ∘ review → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_review)") must beTrue // resolves with no expected type
+      typeChecks(
+        "val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_review)"
+      ) must beTrue
+    }
+    "unfold ∘ unfold → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks(
+        "val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_unfold)"
+      ) must beTrue
     }
   }

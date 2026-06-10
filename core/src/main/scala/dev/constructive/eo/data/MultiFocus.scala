@@ -240,7 +240,7 @@ object MultiFocusK:
     }
     arr
 
-  private def pickSingletonOrThrow[F[_]: Foldable, B](fb: F[B], carrier: String): B =
+  private[eo] def pickSingletonOrThrow[F[_]: Foldable, B](fb: F[B], carrier: String): B =
     val sz = Foldable[F].size(fb)
     if sz == 1 then Foldable[F].reduceLeftToOption(fb)(identity[B])((_, b) => b).get
     else
