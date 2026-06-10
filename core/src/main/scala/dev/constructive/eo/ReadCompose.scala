@@ -22,21 +22,21 @@ import optics.{ForgetFold, Getter, Optic, PickFold}
   * [[optics.PickFold]] / [[optics.ForgetFold]]. Instances live in this companion, so they are in
   * implicit scope for every carrier pair with no import.
   *
-  * @tparam FO
+  * @tparam F
   *   outer optic's carrier
-  * @tparam FI
+  * @tparam G
   *   inner optic's carrier
   */
-trait ReadCompose[FO[_, _], FI[_, _]]:
+trait ReadCompose[F[_, _], G[_, _]]:
   /** Concrete read-only optic family the composite lands in — `Getter`, `PickFold`, or
     * `ForgetFold[*, List, *]`; concrete so collapsed chains keep collapsing through the fused
     * members.
     */
   type Out[_, _]
 
-  def compose[S, OT, A, OB, IT, C, IB](
-      outer: Optic[S, OT, A, OB, FO],
-      inner: Optic[A, IT, C, IB, FI],
+  def compose[S, T, A, B, V, C, D](
+      outer: Optic[S, T, A, B, F],
+      inner: Optic[A, V, C, D, G],
   ): Out[S, C]
 
 /** Typeclass instances for [[ReadCompose]] — the read-arity lattice. The four total/partial cells
@@ -47,54 +47,54 @@ trait ReadCompose[FO[_, _], FI[_, _]]:
 object ReadCompose extends LowPriorityReadCompose:
 
   /** total ∘ total → [[optics.Getter]]. @group Instances */
-  given totalTotal[FO[_, _], FI[_, _]](using
-      AO: Accessor[FO],
-      AI: Accessor[FI],
-  ): ReadCompose[FO, FI] with
+  given totalTotal[F[_, _], G[_, _]](using
+      AO: Accessor[F],
+      AI: Accessor[G],
+  ): ReadCompose[F, G] with
     type Out[S, C] = Getter[S, C]
 
-    def compose[S, OT, A, OB, IT, C, IB](
-        outer: Optic[S, OT, A, OB, FO],
-        inner: Optic[A, IT, C, IB, FI],
+    def compose[S, T, A, B, V, C, D](
+        outer: Optic[S, T, A, B, F],
+        inner: Optic[A, V, C, D, G],
     ): Getter[S, C] =
       Getter(s => AI.get(inner.to(AO.get(outer.to(s)))))
 
   /** total ∘ partial → [[optics.PickFold]]. @group Instances */
-  given totalPartial[FO[_, _], FI[_, _]](using
-      AO: Accessor[FO],
-      PI: PartialAccessor[FI],
-  ): ReadCompose[FO, FI] with
+  given totalPartial[F[_, _], G[_, _]](using
+      AO: Accessor[F],
+      PI: PartialAccessor[G],
+  ): ReadCompose[F, G] with
     type Out[S, C] = PickFold[S, C]
 
-    def compose[S, OT, A, OB, IT, C, IB](
-        outer: Optic[S, OT, A, OB, FO],
-        inner: Optic[A, IT, C, IB, FI],
+    def compose[S, T, A, B, V, C, D](
+        outer: Optic[S, T, A, B, F],
+        inner: Optic[A, V, C, D, G],
     ): PickFold[S, C] =
       PickFold(s => PI.getOption(inner.to(AO.get(outer.to(s)))))
 
   /** partial ∘ total → [[optics.PickFold]]. @group Instances */
-  given partialTotal[FO[_, _], FI[_, _]](using
-      PO: PartialAccessor[FO],
-      AI: Accessor[FI],
-  ): ReadCompose[FO, FI] with
+  given partialTotal[F[_, _], G[_, _]](using
+      PO: PartialAccessor[F],
+      AI: Accessor[G],
+  ): ReadCompose[F, G] with
     type Out[S, C] = PickFold[S, C]
 
-    def compose[S, OT, A, OB, IT, C, IB](
-        outer: Optic[S, OT, A, OB, FO],
-        inner: Optic[A, IT, C, IB, FI],
+    def compose[S, T, A, B, V, C, D](
+        outer: Optic[S, T, A, B, F],
+        inner: Optic[A, V, C, D, G],
     ): PickFold[S, C] =
       PickFold(s => PO.getOption(outer.to(s)).map(a => AI.get(inner.to(a))))
 
   /** partial ∘ partial → [[optics.PickFold]]. @group Instances */
-  given partialPartial[FO[_, _], FI[_, _]](using
-      PO: PartialAccessor[FO],
-      PI: PartialAccessor[FI],
-  ): ReadCompose[FO, FI] with
+  given partialPartial[F[_, _], G[_, _]](using
+      PO: PartialAccessor[F],
+      PI: PartialAccessor[G],
+  ): ReadCompose[F, G] with
     type Out[S, C] = PickFold[S, C]
 
-    def compose[S, OT, A, OB, IT, C, IB](
-        outer: Optic[S, OT, A, OB, FO],
-        inner: Optic[A, IT, C, IB, FI],
+    def compose[S, T, A, B, V, C, D](
+        outer: Optic[S, T, A, B, F],
+        inner: Optic[A, V, C, D, G],
     ): PickFold[S, C] =
       PickFold(s => PO.getOption(outer.to(s)).flatMap(a => PI.getOption(inner.to(a))))
 
@@ -107,19 +107,19 @@ trait LowPriorityReadCompose:
     *
     * @group Instances
     */
-  given foldFold[FO[_, _], FI[_, _]](using
-      FOF: ForgetfulFold[FO],
-      FIF: ForgetfulFold[FI],
-  ): ReadCompose[FO, FI] with
+  given foldFold[F[_, _], G[_, _]](using
+      FF: ForgetfulFold[F],
+      FG: ForgetfulFold[G],
+  ): ReadCompose[F, G] with
     type Out[S, C] = ForgetFold[S, List, C]
 
-    def compose[S, OT, A, OB, IT, C, IB](
-        outer: Optic[S, OT, A, OB, FO],
-        inner: Optic[A, IT, C, IB, FI],
+    def compose[S, T, A, B, V, C, D](
+        outer: Optic[S, T, A, B, F],
+        inner: Optic[A, V, C, D, G],
     ): ForgetFold[S, List, C] =
       new ForgetFold[S, List, C](s =>
-        FOF.foldMap(
-          (a: A) => FIF.foldMap((c: C) => c :: Nil, inner.to(a))(using Monoid[List[C]]),
+        FF.foldMap(
+          (a: A) => FG.foldMap((c: C) => c :: Nil, inner.to(a))(using Monoid[List[C]]),
           outer.to(s),
         )(using Monoid[List[C]])
       )
