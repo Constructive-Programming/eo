@@ -30,6 +30,10 @@ on:
         description: "Warmup iterations (-wi)"
         required: false
         default: "3"
+      prof:
+        description: "JMH profiler (-prof), e.g. 'gc' for allocation B/op; blank = none"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -65,9 +69,12 @@ jobs:
         # NB: under sbt, JMH's working dir is the `benchmarks/` subproject, so
         # `-rff jmh-results.json` writes to `benchmarks/jmh-results.json` at the
         # repo level — which the summary / upload steps below read.
+        # `inputs.prof` adds a JMH profiler (e.g. `-prof gc` for allocation
+        # B/op — the metric that survives a noisy shared runner). Blank emits
+        # nothing, so the default / push path is unchanged.
         run: |
           sbt -batch -Dsbt.color=false \
-            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true -rf json -rff jmh-results.json ${{ inputs.filter || '(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*' }}"
+            "benchmarks/Jmh/run -i ${{ inputs.iterations || '5' }} -wi ${{ inputs.warmups || '3' }} -f ${{ inputs.forks || '3' }} -t 1 -foe true ${{ inputs.prof != '' && format('-prof {0}', inputs.prof) || '' }} -rf json -rff jmh-results.json ${{ inputs.filter || '(OrderCirceBench|OrderJsoniterBench|OrderAvroBench).*' }}"
 
       - name: Render summary
         if: always()
