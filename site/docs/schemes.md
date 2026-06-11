@@ -190,7 +190,7 @@ You write three things: the functor `F`, its `cats.Traverse`, and a `Basis` (`Pr
 
 ```scala mdoc:silent
 import cats.{Applicative, Eval, Traverse}
-import dev.constructive.eo.schemes.Basis // `Schemes`, `Getter`, `get` already imported above
+import dev.constructive.eo.schemes.{Basis, CataF} // `Schemes`, `Getter`, `get` already imported above
 
 // A binary tree…
 enum Bin:
@@ -226,7 +226,7 @@ val binTree: Bin = Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
 typed `BinF[A]`** — `l` and `r` are `A`, by name, no positional indexing:
 
 ```scala mdoc:silent
-val sumLeavesF: Getter[Bin, Int] =
+val sumLeavesF: CataF[BinF, Bin, Int] =
   Schemes.cataF[BinF, Bin, Int] { (_, folded) =>
     folded match
       case BinF.LeafF(n)      => n
@@ -295,7 +295,7 @@ val treeL  = Lens[Inner, Bin](_.tree, (i, t) => i.copy(tree = t))
 val deepTree = innerL.andThen(treeL) // Lens[Doc, Bin] — lens composition
 
 // wrap the composed lens's read in a Getter, then andThen the scheme → reusable Getter[Doc, Int]
-val docLeafSum = Getter[Doc, Bin](deepTree.get).andThen(sumLeavesF)
+val docLeafSum = Getter[Doc, Bin](deepTree.get).andThen(sumLeavesF.asGetter)
 
 val record = Doc(1, Inner("x", binTree))
 ```

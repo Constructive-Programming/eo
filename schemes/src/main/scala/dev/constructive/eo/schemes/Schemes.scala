@@ -418,8 +418,8 @@ object Schemes:
     */
   def cataF[F[_], S, A](
       alg: (S, F[A]) => A
-  )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
-    cataF[F, S, A, A](Decor.cata[F, A])(alg)
+  )(using F: Traverse[F], P: Project[F, S]): CataF[F, S, A] =
+    new CataF[F, S, A](cataF[F, S, A, A](Decor.cata[F, A])(alg).get, alg)
 
   /** Generalized (decorated) catamorphism — the gcata of the typed path, with the decoration
     * supplied as a [[DecorGather]] optic value. Interior nodes apply `gather ∘ galg` (the
@@ -485,8 +485,24 @@ object Schemes:
 
   def anaF[F[_], Seed, S](
       coalg: Seed => F[Seed]
-  )(using F: Traverse[F], E: Embed[F, S]): Review[S, Seed] =
-    anaF[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg)
+  )(using F: Traverse[F], E: Embed[F, S]): AnaF[F, Seed, S] =
+    new AnaF[F, Seed, S](anaF[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg).reverseGet, coalg)
+
+  /** Single-pass paired machine backing the fused `AnaF.cross(CataF)`: each node is built once (the
+    * algebra is node-supplied — construction is semantically required), folded immediately, and
+    * released as the fold ascends. No full-tree retention, no second traversal.
+    */
+  private[schemes] def fusedPairedFold[F[_], Seed, S, A](
+      coalg: Seed => F[Seed],
+      alg: (S, F[A]) => A,
+  )(using F: Traverse[F], E: Embed[F, S]): Seed => (S, A) =
+    foldLayered[F, Seed, (S, A)](
+      coalg,
+      (_, fSeed, out) =>
+        val pairs = rebuildLayer[F, Seed, (S, A)](fSeed, out)
+        val s = E.embed(F.map(pairs)(_._1))
+        (s, alg(s, F.map(pairs)(_._2))),
+    )
 
   /** Apomorphism over a typed pattern functor `F` — per child slot the coalgebra answers
     * `Right(seed)` (keep unfolding) or `Left(s)` (an **already-finished subtree**). Native O(1)
