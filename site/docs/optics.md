@@ -8,113 +8,47 @@ Scaladoc.
 
 Every family is a specialisation of the same `Optic[S, T, A, B, F]`
 trait, differing only in the carrier `F[_, _]` — and the family space
-is genuinely **three-axis**:
+is **three-axis**:
 
-- **focus arity** — how many foci the read side can produce:
-  exactly one, 0-or-1, or many;
-- **from side** — what the `from` half does: a *contextual write*
-  (needs the leftover `X` to rebuild — Lens-like), a *total build*
-  (needs no context — Iso/Review-like), or nothing;
-- **read side** — present or absent.
+- **read cardinality** — how many foci the read side produces:
+  1, 0-or-1, or N. This is the axis `ReadCompose` joins along.
+- **write cardinality** — how many foci the write/build side
+  consumes: 1, 0-or-1, or N. Its join (a `WriteCompose` mirroring
+  `ReadCompose`) and its 0-or-1 column — *fallible* writes and builds
+  — are not shipped yet: they are the territory of the
+  failure-typed-build (**BiAffine**) plan.
+- **capability** — which sides exist at all: read-only (top layer),
+  read-write (middle), write/build-only (bottom).
 
-![The three-axis optic family taxonomy: focus arity × from side × read side](static/optic-taxonomy-3d.svg)
-
-The geometry carries real information:
-
-- **Lens vs Iso** (and Optional vs Prism) differ *only* on the
-  from-side axis — write-with-context vs total build. That distinction
-  is also why the write-only family is named `Modify`, not "Setter":
-  it lives in the *write* column, with the build column belonging to
-  Review and Unfold.
-- The **read-only rail** (Getter → AffineFold → Fold) and the
-  **build-only rail** (Review → Unfold) run parallel along the arity
-  axis — `Fold` and `Unfold` are mirror images on the same
-  `Forget[F]` carrier.
-- The **(0-or-1, build, no-read) cell collapses into Review**: a
-  Prism's `mend` is total, so a "partial Review" is just Review.
-- The **(many, read, total-build) cell is uninhabited**: nothing
-  total-builds from many foci while also reading them — recursive
-  structures get there with *contextual* rebuilds instead (`Plated`'s
-  `plate` keeps the structural skeleton, so it sits in the Traversal
-  cell).
-- **Modify spans the arity axis**: `(A => B) => S => T` never
-  observes how many foci the function is applied at, so it is the
-  carrier-agnostic write-only bottom of the whole family space.
-
-### Composition joins
-
-Composition is easier to read in two dimensions: an edge `A → B`
-means *every `A` is a `B`*, so composing two optics lands on their
-**join** — the lowest node both reach by following edges down.
-`Iso.andThen(Lens) = Lens`; `Lens.andThen(Prism)` lands on the
-`Affine` carrier; a read-only chain lands on the read-only rail.
-
-```mermaid
-flowchart TD
-  subgraph bidir["Bi-directional — read and write"]
-    Iso --> Lens
-    Iso --> Prism
-    Lens --> Affine
-    Prism --> Affine
-    Affine --> MultiFocus["MultiFocus[F]"]
-    Iso --> MultiFocus
-  end
-
-  subgraph readonly["Read-only"]
-    Getter --> AffineFold
-    AffineFold --> Fold
-  end
-
-  subgraph buildonly["Build-only"]
-    Review --> Unfold["Unfold[F]"]
-  end
-
-  Modify["Modify — write-only"]
-
-  Iso --> Getter
-  Lens --> Getter
-  Prism --> AffineFold
-  Affine --> AffineFold
-  MultiFocus --> Fold
-  MultiFocus --> Modify
-  Iso --> Review
-  Prism --> Review
-
-  click Iso "#iso"
-  click Lens "#lens"
-  click Prism "#prism"
-  click Affine "#affine"
-  click MultiFocus "#multifocus"
-  click Getter "#getter"
-  click Modify "#modify"
-  click Review "#review"
-  click Unfold "#unfold"
-  click AffineFold "#affinefold"
-  click Fold "#fold"
-```
+![The three-axis optic family taxonomy: read cardinality × write cardinality × capability](static/optic-taxonomy-3d.svg)
 
 How to read it:
 
-- **Same-family compose** stays in that family: `Lens ∘ Lens = Lens`,
-  `Prism ∘ Prism = Prism`, `Iso ∘ Iso = Iso`.
-- **Cross-family compose** walks down from each input to where they
-  meet: `Lens ∘ Prism` → `Affine`; `Iso ∘ Modify` → `Modify`.
-- **The bi-directional spine** (Iso, Lens, Prism, Affine, MultiFocus)
-  carries both a read and a write side. **One-way optics** keep only
-  one: the read-only rung (Getter → AffineFold → Fold, ordered by how
-  many foci a read can produce: exactly one, 0-or-1, many), the
-  build-only rung (Review → Unfold, one focus vs. an `F`-layer of
-  parts), and write-only Modify.
-- Composing **into a read-only inner** (or from a read-only outer)
-  drops every write side and lands on the read-only rung at the join
-  of the two read strengths — `lens ∘ getter` → Getter,
-  `prism ∘ getter` → AffineFold, `traversal ∘ getter` → Fold.
-- Composing **through the build side** keeps only build halves:
-  reversible outers (Iso / Prism / Review — anything whose carrier has
-  a `ReverseAccessor`) compose into Review and Unfold;
-  `review ∘ unfold` and `unfold ∘ review` land on Unfold.
-- Composing with a write-only Modify collapses the read side:
-  `lens ∘ modify` → Modify.
+- The **top layer** is read-only — no write side, so it collapses to
+  the read axis: Getter (1), AffineFold (0-or-1), Fold (N). Any chain
+  that touches a read-only optic projects **up** onto this layer,
+  landing at the join of the read cardinalities — `lens ∘ getter` →
+  Getter, `prism ∘ getter` → AffineFold, `traversal ∘ getter` → Fold.
+  That join is exactly what `ReadCompose` computes.
+- The **middle layer** pairs the two axes. `Iso · Lens` sit at (1, 1)
+  (total vs contextual rebuild of the same shape), `Prism · Optional`
+  at (0-or-1, 1), `Traversal` at (N, N). The off-diagonal cells (∅)
+  have no shipped carrier.
+- The **bottom layer** is write/build-only — no read side, so it
+  collapses to the write axis: Review builds 1, Unfold builds from N
+  (`embed: F[B] => T` — Fold's mirror on the same `Forget[F]`
+  carrier). Build-side composition projects **down** onto this layer
+  (`iso ∘ review` → Review, `review ∘ unfold` → Unfold). `Modify`
+  spans the axis: `(A => B) => S => T` never observes how many foci
+  the function lands on, so it is the cardinality-agnostic write-only
+  bottom — `lens ∘ modify` → Modify is the corresponding downward
+  projection.
+- The **tan cells are planned, not missing by accident**: write
+  cardinality 0-or-1 means a write/build that can miss or reject —
+  smart-constructor writes, per-element encode failures. Those cells,
+  the `WriteCompose` join, and carriers for the remaining ∅ cells are
+  scoped to the failure-typed-build spike
+  ([`docs/brainstorms/2026-06-10-failure-typed-build-biaffine.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/brainstorms/2026-06-10-failure-typed-build-biaffine.md)).
 
 `Affine` is the carrier shared by `Optional` (read and write) and
 `AffineFold` (read-only). `MultiFocus[F]` is the multi-focus carrier;
