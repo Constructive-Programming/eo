@@ -342,9 +342,36 @@ object Schemes:
   def cataF[F[_], S, A](
       alg: (S, F[A]) => A
   )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
-    Getter[S, A](
-      foldLayered[F, S, A](P.project, (s, fs, out) => alg(s, rebuildLayer[F, S, A](fs, out)))
-    )
+    cataF[F, S, A, A](Decor.cata[F, A])(alg)
+
+  /** Generalized (decorated) catamorphism — the gcata of the typed path, with the decoration
+    * supplied as a [[DecorGather]] optic value. Interior nodes apply `gather ∘ galg` (the
+    * decoration's `from` consuming `Step(layer, result)`); the **root applies `galg` alone**
+    * (droste's `gcata` shape). The named zoo members are instances: `cataF(alg)` routes here with
+    * [[Decor.cata]] (recognised by identity — the direct, decoration-free engine path), `histoF`
+    * with [[Decor.histo]]; user-written decorations (zygo, dyna, …) run the generic route, which
+    * pays one decoration dispatch + `Step` per node.
+    */
+  def cataF[F[_], S, W, A](
+      decor: DecorGather[F, W, A]
+  )(galg: (S, F[W]) => A)(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
+    if decor.asInstanceOf[AnyRef] eq Decor.cata[F, A] then
+      // W =:= A by construction of the singleton — the direct engine path, no decoration cost.
+      val alg = galg.asInstanceOf[(S, F[A]) => A]
+      Getter[S, A](
+        foldLayered[F, S, A](P.project, (s, fs, out) => alg(s, rebuildLayer[F, S, A](fs, out)))
+      )
+    else
+      val toW: S => W = foldLayered[F, S, W](
+        P.project,
+        (s, fs, out) =>
+          val fw = rebuildLayer[F, S, W](fs, out)
+          decor.from(new data.BiAffine.Step[(Unit, F[W]), A](fw, galg(s, fw))),
+      )
+      Getter[S, A] { s =>
+        val layer = P.project(s)
+        galg(s, F.map(layer)(toW))
+      }
 
   /** Anamorphism over a typed pattern functor `F`, as a `Review`. The single fused coalgebra `Seed
     * => F[Seed]` yields one typed layer of child seeds; [[Embed]] assembles each layer into the
@@ -355,12 +382,35 @@ object Schemes:
   def anaF[F[_], Seed, S](
       coalg: Seed => F[Seed]
   )(using F: Traverse[F], E: Embed[F, S]): Review[S, Seed] =
-    Review[S, Seed](
-      foldLayered[F, Seed, S](
-        coalg,
-        (_, fSeed, out) => E.embed(rebuildLayer[F, Seed, S](fSeed, out)),
+    anaF[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg)
+
+  /** Generalized (decorated) anamorphism — the gana of the typed path, with the decoration supplied
+    * as a [[DecorScatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
+    * `Step(_, seed)` calls `gcoalg`, `Done(layer)` unrolls the prebuilt layer with **no coalgebra
+    * call**. The root seed enters through the decoration's pointed unit (`from` on the Step arm —
+    * gana's `pure`). `anaF(coalg)` routes here with [[Decor.ana]] (identity-recognised direct
+    * path); `futuF` with [[Decor.futu]]; `Decor.apo` runs the generic distApo route — the O(1)
+    * graft belongs to the native `apoF` engine.
+    */
+  def anaF[F[_], A, W, S](
+      decor: DecorScatter[F, W, A]
+  )(gcoalg: A => F[W])(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
+    if decor.asInstanceOf[AnyRef] eq Decor.ana[F, A] then
+      // W =:= A by construction of the singleton — the direct engine path.
+      val coalg = gcoalg.asInstanceOf[A => F[A]]
+      Review[S, A](
+        foldLayered[F, A, S](coalg, (_, fSeed, out) => E.embed(rebuildLayer[F, A, S](fSeed, out)))
       )
-    )
+    else
+      val expand: W => F[W] = w =>
+        decor.to(w) match
+          case st: data.BiAffine.Step[(F[W], Unit), A] => gcoalg(st.b)
+          case dn: data.BiAffine.Done[(F[W], Unit), A] => dn.fst
+      val build: W => S = foldLayered[F, W, S](
+        expand,
+        (_, fw, out) => E.embed(rebuildLayer[F, W, S](fw, out)),
+      )
+      Review[S, A](a => build(decor.from(new data.BiAffine.Step[(F[W], Unit), A]((), a))))
 
   /** Hylomorphism over a typed pattern functor `F` — the **fused** refold `Seed => A`, building
     * **no intermediate `S`** (so it needs neither `Project` nor `Embed`, only `Traverse[F]`).
