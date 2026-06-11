@@ -110,7 +110,7 @@ Monocle's `monocle-circe` module only provides a
 forces a full decode of the focused `A`. cats-eo's `JsonPrism`
 / `JsonTraversal` walk circe's `JsonObject` representation
 directly, avoiding the intermediate Codec round-trip at every
-level of the path. See [Circe integration](circe.md).
+level of the path. See [Circe integration](integrations/circe.md).
 
 ### Plated is stack-safe and composes as an optic
 

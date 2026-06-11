@@ -43,7 +43,7 @@ on the hot path:
 
 Numbers from the
 [`JsoniterBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/JsoniterBench.scala)
-suite — see [benchmarks → JsoniterBench](benchmarks.md) for the full
+suite — see [benchmarks → JsoniterBench](../benchmarks.md) for the full
 table with confidence intervals and caveats. The traversal speedup
 narrows because per-element decode + array allocation accumulates;
 larger arrays push it back up. Writes don't degrade vs reads on the

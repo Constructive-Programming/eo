@@ -21,8 +21,8 @@ encoded.
 The Lens / Prism / Traversal vocabulary you'd normally use for
 in-memory case-class trees is the same vocabulary that lights up
 when one side of the structure is a JSON byte stream
-([eo-jsoniter](jsoniter.md)) or an Apache Avro record on the wire
-([eo-avro](avro.md)) or a circe `Json` AST ([eo-circe](circe.md)).
+([eo-jsoniter](integrations/jsoniter.md)) or an Apache Avro record on the wire
+([eo-avro](integrations/avro.md)) or a circe `Json` AST ([eo-circe](integrations/circe.md)).
 You get to specify one side of the mirror — the focus, the
 operation, the path — and let the carrier implement the other.
 On one side: the bytestream, the wire, the buffered representation.
@@ -70,12 +70,12 @@ types alike.
   composability profile.
 - [Generics](generics.md) — the `lens[S](_.field)` and
   `prism[S, A]` macros, backed by Hearth.
-- [Circe integration](circe.md) — `JsonPrism` / `JsonTraversal`,
+- [Circe integration](integrations/circe.md) — `JsonPrism` / `JsonTraversal`,
   cursor-backed navigation into circe `Json` with no full decode.
-- [Avro integration](avro.md) — `AvroPrism` / `AvroTraversal`,
+- [Avro integration](integrations/avro.md) — `AvroPrism` / `AvroTraversal`,
   cursor-backed navigation into Apache Avro `IndexedRecord` with no
   full decode; binary + JSON wire-format input dual.
-- [Jsoniter integration](jsoniter.md) — `JsoniterPrism` /
+- [Jsoniter integration](integrations/jsoniter.md) — `JsoniterPrism` /
   `JsoniterTraversal`, byte-cursor navigation directly into
   `Array[Byte]` JSON via jsoniter-scala codecs. Read at
   ~50 ns/op (16× eo-circe), write via splice at ~100 ns/op (14×

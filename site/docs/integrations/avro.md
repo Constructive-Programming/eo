@@ -34,7 +34,7 @@ representation, modifying only the focused leaf and rebuilding
 the parents on the way up. The
 [`OrderAvroBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderAvroBench.scala)
 suite documents the speedup against the kindlings-avro-derivation
-codec round-trip — see the [benchmarks page](benchmarks.md) for the
+codec round-trip — see the [benchmarks page](../benchmarks.md) for the
 full table.
 
 The codec backend is
@@ -565,7 +565,7 @@ For edits that recurse through every nested record rather than
 sitting at a fixed path — redact a field in every sub-record,
 rewrite a value at any depth — `Plated[IndexedRecord]` (from
 `dev.constructive.eo.avro.given`) makes the record tree a recursive
-self-traversal. The [`Plated`](cookbook.md) combinators
+self-traversal. The [`Plated`](../cookbook.md) combinators
 (`transform`, `rewrite`, `children`, `universe`) then walk it,
 stack-safely. The immediate children of a record are its
 directly-record-valued fields; records nested inside array / map /
@@ -576,7 +576,7 @@ Avro mirror of [`Plated[Json]`](circe.md).
 `Modify` you can `.andThen` a Lens / Prism onto so a single `.modify`
 rewrites that focus at every depth — composing exactly as it does for
 [`Plated[Json]`](circe.md). See the circe page and the
-[cookbook recipe](cookbook.md) for the runnable `everywhere.andThen(...)`
+[cookbook recipe](../cookbook.md) for the runnable `everywhere.andThen(...)`
 shape.
 
 ## When to reach for which
@@ -594,7 +594,7 @@ shape.
 | Parse + edit Avro JSON wire payloads                       | `AvroPrism.modify(...)` on `String`                |
 
 For the Kafka end-to-end recipe (read bytes, modify, re-emit),
-see the [Cookbook → Kafka payload edit](cookbook.md#kafka-payload-edit).
+see the [Cookbook → Kafka payload edit](../cookbook.md#kafka-payload-edit).
 For the full failure-mode matrix and the per-case behaviour
 specs, see
 [`AvroPrismSpec`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/test/scala/dev/constructive/eo/avro/AvroPrismSpec.scala)

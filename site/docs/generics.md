@@ -178,7 +178,7 @@ left-to-right pipeline instead of nested `copy` calls.
 **The wire.** Pair a derived optic with a serialization codec and the same
 `.get` / `.replace` / `.modify` vocabulary spans the gap between your domain
 types and their on-the-wire form: decode once, transform through optics,
-re-encode — or, with [eo-circe](circe.md) / [eo-avro](avro.md), edit the encoded
+re-encode — or, with [eo-circe](integrations/circe.md) / [eo-avro](integrations/avro.md), edit the encoded
 form in place and never fully decode at all.
 
 Put together, that turns a request handler into a short pipeline. The

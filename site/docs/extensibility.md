@@ -276,7 +276,7 @@ the full tables.
 
 - [Concepts](concepts.md) — what a carrier is and which
   typeclasses unlock which operations.
-- [Circe integration](circe.md) — how to *use* the
+- [Circe integration](integrations/circe.md) — how to *use* the
   JsonPrism / JsonTraversal optics described here as a design
   case study.
 - [Benchmarks](benchmarks.md) — measured numbers for both
