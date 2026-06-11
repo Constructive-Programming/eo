@@ -82,18 +82,26 @@ Review, Unfold, Modify, MultiFocus).
 
 ## Where eo differs at the call site
 
-### Cross-family composition: `.andThen` auto-morphs
+### Bring your own optic
 
-Monocle gets cross-family composition from its inheritance
-hierarchy: every optic *is* a weaker optic, so `andThen` meets at
-the common ancestor — an elegant design. cats-eo's families don't
-share a subtyping hierarchy; instead `Optic.andThen` is
-carrier-aware: same-carrier composition goes through
-`AssociativeFunctor[F, X, Y]`, and cross-carrier composition routes
-through a summoned `Morph[F, G]` (which picks up a `Composer[F, G]`
-or `Composer[G, F]`) to lift both sides under a shared carrier. The
-upshot at the call site is the same one you're used to — one
-`.andThen`, whether the two optics share a carrier or not:
+Both libraries give you one `.andThen` across families, so that is
+not the difference. Monocle composes through its inheritance
+hierarchy: every optic *is* a weaker optic, so composition meets at
+the common ancestor — an elegant design, and it works because the
+hierarchy is closed and known up front. cats-eo chose not to have an
+extension hierarchy at all, and *that* is what changes in practice:
+composition is driven by typeclass instances over the **carrier**
+(`AssociativeFunctor[F, X, Y]` for a shared carrier, a summoned
+`Morph[F, G]` / `Composer[F, G]` across carriers), not by where a
+family sits in a subtype tree.
+
+The payoff is for optics that come from *outside* the shipped
+families. A custom optic needs no blessed place in any hierarchy:
+implement the `Optic` trait, put the carrier instances in scope, and
+it composes with everything reachable through the bridges — bring
+your own optic. [Extensibility](extensibility.md) walks through
+shipping a domain-tuned optic end to end. The same machinery is what
+makes the stock families compose:
 
 ```scala mdoc:silent
 import dev.constructive.eo.data.Affine
@@ -116,20 +124,39 @@ val appConfig =
 val appTimeout = appConfig.andThen(timeoutOpt)
 ```
 
-The payoff: composition is carrier-level (one `Composer` per pair of
-carriers), not family-level. Adding a new optic family means
-supplying carrier instances; the cross-family bridges come for free.
+Composition is carrier-level (one `Composer` per pair of carriers),
+not family-level — so a new family, yours or ours, supplies carrier
+instances and inherits the cross-family bridges for free.
 
-### Read-only and write-only chains collapse
+### The one-way side, built out in both directions
 
-A chain that touches a read-only optic anywhere collapses to the
-read-only family at the join of the read strengths
-(`lens.andThen(getter)` → Getter, `prism.andThen(getter)` →
-AffineFold, `traversal.andThen(getter)` → Fold), and a chain into a
-write-only `Modify` collapses the read side (`lens.andThen(modify)`
-→ Modify). `getter.andThen(modify)` is void by design — there is
-nothing to write through. The
-[composition matrix](optics.md#composition-matrix) pins every pair.
+Read-only collapse is common ground, not a difference: compose a
+chain that touches a Getter and both libraries land you on the
+read-only join — Monocle through its hierarchy, cats-eo through
+`ReadCompose` (`lens.andThen(getter)` → Getter,
+`prism.andThen(getter)` → AffineFold, `traversal.andThen(getter)` →
+Fold). Where cats-eo invests further is the **write side and
+beyond**:
+
+- The build/write-only direction is fully populated — `Modify`
+  (write-only), `Review` and `Unfold` (build-only, one focus and
+  many) are standalone, composable citizens, with a *fallible* tier
+  (writes and builds that can reject, with accumulating failures)
+  planned next. The [composition matrix](optics.md#composition-matrix)
+  pins how every pair behaves, including the cells that are void by
+  design (`getter.andThen(modify)` — nothing to write through).
+- A preliminary integration with **recursion schemes**: cats-eo is
+  attempting to present recursion schemes as optics *themselves* —
+  `cata` is a Getter, `ana` a Review, `hylo` a fused Getter — so that
+  genuinely complex algorithms over trees and recursive data
+  structures sit in the same pipeline as ordinary getters and
+  modifiers, and the whole thing remains **one optic from start to
+  finish**. The direction this is heading: an HTTP server that
+  receives a JSON request, writes to a PostgreSQL database, and logs
+  to an Avro-encoded Kafka topic — expressed as a single composed
+  optic.
+
+That ambition is why the family roster below is as large as it is.
 
 ### A larger family space
 
