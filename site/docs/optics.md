@@ -53,10 +53,10 @@ How to read it:
   layer it is a **full plane**, not a rail: a write-only optic's
   `from` is real (only its `to` is vestigial), so both axes still
   apply, and each family sits **directly below the read-write cells
-  whose build half it is**. Review below Iso (total focus, total
-  source) — and below Prism the cell is *≡ Review* again, because a
-  `mend` is total; Unfold below Traversal's total flank (multiple
-  focus: `embed: F[B] => T`, Fold's mirror on the same `Forget[F]`
+  whose build half it is**. Review spans the cells below *both* Iso
+  and Prism — a `mend` is total, so the two share one build half;
+  Unfold below Traversal's total flank (multiple focus:
+  `embed: F[B] => T`, Fold's mirror on the same `Forget[F]`
   carrier); `Modify` is the whole contextual row — it *is* the
   contextual write half of Lens / Optional / `each`, never observing
   the focus shape it lands on; fallible build is the planned fallible

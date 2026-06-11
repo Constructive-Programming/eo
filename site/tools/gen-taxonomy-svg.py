@@ -126,10 +126,8 @@ parts.append(label(2, 2, MID, 'fallible each', 'planned', cls='plan-t'))
 
 # ---------- BOTTOM layer: write/build-only — a FULL plane (from is real, to is vestigial) ----------
 # Each cell sits directly below the read-write cell(s) whose build half it is.
-parts.append(tile(0, 0, BOT, 'bo'))
-parts.append(label(0, 0, BOT, 'Review', None))
-parts.append(tile(1, 0, BOT, 'empty', dash=True))
-parts.append(label(1, 0, BOT, '≡ Review', "a Prism's mend is total", cls='ghost-t'))
+parts.append(tile(0, 0, BOT, 'bo', uspan=2))
+parts.append(label(0, 0, BOT, 'Review', "Iso's and Prism's build half — mend is total", uspan=2))
 parts.append(tile(2, 0, BOT, 'bo'))
 parts.append(label(2, 0, BOT, 'Unfold', None))
 parts.append(tile(0, 1, BOT, 'mod', uspan=3))

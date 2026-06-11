@@ -67,11 +67,9 @@
 <polygon class="plan" points="578.0,480.0 675.0,536.0 772.0,480.0 675.0,424.0" stroke-dasharray="6 5"/>
 <text class="plan-t" x="675.0" y="473.0">fallible each</text>
 <text class="sub" x="675.0" y="493.0">planned</text>
-<polygon class="bo" points="190.0,780.0 287.0,836.0 384.0,780.0 287.0,724.0"/>
-<text class="fam" x="287.0" y="785.0">Review</text>
-<polygon class="empty" points="287.0,836.0 384.0,892.0 481.0,836.0 384.0,780.0" stroke-dasharray="6 5"/>
-<text class="ghost-t" x="384.0" y="829.0">≡ Review</text>
-<text class="sub" x="384.0" y="849.0">a Prism's mend is total</text>
+<polygon class="bo" points="190.0,780.0 384.0,892.0 481.0,836.0 287.0,724.0"/>
+<text class="fam" x="335.5" y="801.0">Review</text>
+<text class="sub" x="335.5" y="821.0">Iso's and Prism's build half — mend is total</text>
 <polygon class="bo" points="384.0,892.0 481.0,948.0 578.0,892.0 481.0,836.0"/>
 <text class="fam" x="481.0" y="897.0">Unfold</text>
 <polygon class="mod" points="287.0,724.0 578.0,892.0 675.0,836.0 384.0,668.0"/>
