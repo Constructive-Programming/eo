@@ -128,3 +128,64 @@ object SchemesFixtures:
   def balancedFix(d: Int): Fix[BinF] =
     if d <= 0 then Fix(BinF.LeafF(1))
     else Fix(BinF.NodeF(balancedFix(d - 1), balancedFix(d - 1)))
+
+  // ----- zoo fixtures (para / apo / histo / futu — eo vs droste) -------------
+
+  import higherkindness.droste.{CVAlgebra, CVCoalgebra, RAlgebra, RCoalgebra}
+  import higherkindness.droste.data.{Attr => DAttr, Coattr => DCoattr}
+  import dev.constructive.eo.schemes.{Attr => EoAttr, Coattr => EoCoattr, DecorGather}
+  import dev.constructive.eo.data.BiAffine
+  import dev.constructive.eo.optics.Optic
+
+  // para: the same leaf-sum with subterms IGNORED — measures pure decoration
+  // overhead (eo pairs subterms from the walked nodes; droste re-embeds each).
+  val eoParaAlg: (Bin, BinF[(Bin, Int)]) => Int = (_, fa) =>
+    fa match
+      case BinF.LeafF(v)              => v
+      case BinF.NodeF((_, l), (_, r)) => l + r
+
+  val drosteParaAlg: RAlgebra[Fix[BinF], BinF, Int] = RAlgebra {
+    case BinF.LeafF(v)              => v
+    case BinF.NodeF((_, l), (_, r)) => l + r
+  }
+
+  // apo, never grafting: the build-side decoration overhead row.
+  val eoApoCoalg: Int => BinF[Either[Bin, Int]] = d =>
+    if d <= 0 then BinF.LeafF(1) else BinF.NodeF(Right(d - 1), Right(d - 1))
+
+  val drosteApoCoalg: RCoalgebra[Fix[BinF], BinF, Int] = RCoalgebra { d =>
+    if d <= 0 then BinF.LeafF(1) else BinF.NodeF(Right(d - 1), Right(d - 1))
+  }
+
+  // histo, heads only: the course-of-value bookkeeping cost.
+  val eoHistoAlg: (Bin, BinF[EoAttr[BinF, Int]]) => Int = (_, fa) =>
+    fa match
+      case BinF.LeafF(v)    => v
+      case BinF.NodeF(l, r) => l.head + r.head
+
+  val drosteHistoAlg: CVAlgebra[BinF, Int] = CVAlgebra {
+    case BinF.LeafF(v)    => v
+    case BinF.NodeF(l, r) => DAttr.un(l)._1 + DAttr.un(r)._1
+  }
+
+  // futu, single layer per step: the free-wrapper cost.
+  val eoFutuCoalg: Int => BinF[EoCoattr[BinF, Int]] = d =>
+    if d <= 0 then BinF.LeafF(1)
+    else BinF.NodeF(EoCoattr.Pure(d - 1), EoCoattr.Pure(d - 1))
+
+  val drosteFutuCoalg: CVCoalgebra[BinF, Int] = CVCoalgebra { d =>
+    if d <= 0 then BinF.LeafF(1)
+    else BinF.NodeF(DCoattr.pure(d - 1), DCoattr.pure(d - 1))
+  }
+
+  // generic decoration route: a USER-WRITTEN id gather (not the Decor.cata
+  // singleton, so the driver cannot take the identity fast path) — D4's
+  // dispatch-cost honesty number.
+  val userIdGather: DecorGather[BinF, Int, Int] =
+    new Optic[Unit, Int, Unit, Int, BiAffine]:
+      type X = (Unit, BinF[Int])
+      def to(u: Unit): BiAffine[X, Unit] =
+        throw new UnsupportedOperationException("vestigial")
+      def from(xb: BiAffine[X, Int]): Int = xb match
+        case s: BiAffine.Step[X, Int] => s.b
+        case _: BiAffine.Done[X, Int] => throw new UnsupportedOperationException("fold-side")
