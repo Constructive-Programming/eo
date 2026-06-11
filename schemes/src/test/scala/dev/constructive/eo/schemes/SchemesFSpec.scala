@@ -37,7 +37,7 @@ class SchemesFSpec extends Specification:
   // ----- cataF (typed fold) -----
 
   "cataF folds a Bin to a value through F's named constructors" >> {
-    val sumG: Getter[Bin, Int] = Schemes.cataF(sumLeaves)
+    val sumG: CataF[BinF, Bin, Int] = Schemes.cataF(sumLeaves)
     (sumG.get(tree) == 6) must beTrue
   }
 
