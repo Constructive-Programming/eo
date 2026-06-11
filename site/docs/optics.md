@@ -42,15 +42,20 @@ How to read it:
   (`MultiFocus[Function1]`, `Traversal.{two,three,four}`) rebuilds
   *totally* via `tabulate`, while `each` (`MultiFocus[PSVec]`)
   rebuilds *contextually*, keeping the structural skeleton.
-- The **bottom layer** is write/build-only — no read side — and rails
-  along the focus axis in parallel with the top layer: Review consumes
-  a total focus, Unfold a multiple one (`embed: F[B] => T` — Fold's
-  mirror on the same `Forget[F]` carrier). Build-side composition
-  projects **down** onto this layer (`iso ∘ review` → Review,
-  `review ∘ unfold` → Unfold). `Modify` spans the axis:
-  `(A => B) => S => T` never observes the focus shape it lands on, so
-  it is the focus-agnostic write-only bottom — `lens ∘ modify` →
-  Modify is the corresponding downward projection.
+- The **bottom layer** is write/build-only — but unlike the top
+  layer it is a **full plane**, not a rail: a write-only optic's
+  `from` is real (only its `to` is vestigial), so both axes still
+  apply, and each family sits **directly below the read-write cells
+  whose build half it is**. Review below Iso (total focus, total
+  source) — and below Prism the cell is *≡ Review* again, because a
+  `mend` is total; Unfold below Traversal's total flank (multiple
+  focus: `embed: F[B] => T`, Fold's mirror on the same `Forget[F]`
+  carrier); `Modify` is the whole contextual row — it *is* the
+  contextual write half of Lens / Optional / `each`, never observing
+  the focus shape it lands on; fallible build is the planned fallible
+  row. Build-side composition projects **down** onto this layer
+  (`iso ∘ review` → Review, `review ∘ unfold` → Unfold,
+  `lens ∘ modify` → Modify).
 - The **tan cells are planned, not missing by accident** — they are
   the fallible-source row: *fallible write* (a smart-constructor
   replace that can reject), **BiAffine** (fallible in both focus and

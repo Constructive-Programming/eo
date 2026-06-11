@@ -119,16 +119,18 @@ parts.append(label(1, 2, MID, 'BiAffine', 'planned', cls='plan-t'))
 parts.append(tile(2, 2, MID, 'plan', dash=True))
 parts.append(label(2, 2, MID, 'fallible each', 'planned', cls='plan-t'))
 
-# ---------- BOTTOM layer: write/build-only (rail along u, mirroring the top rail) ----------
-JB = 1.0  # rail sits on the middle v-row
-for i, (name, cls, sub) in enumerate([('Review', 'bo', None),
-                                      ('fallible build', 'plan', 'planned'),
-                                      ('Unfold', 'bo', None)]):
-    parts.append(tile(i, JB, BOT, cls, dash=(cls == 'plan')))
-    parts.append(label(i, JB, BOT, name, sub, cls=('plan-t' if cls == 'plan' else 'fam')))
-# Modify: write-only and focus-agnostic — a bar spanning the focus axis, in front of the rail
-parts.append(tile(0, JB - 1.3, BOT, 'mod', uspan=3))
-parts.append(label(0, JB - 1.3, BOT, 'Modify', 'focus-agnostic', uspan=3))
+# ---------- BOTTOM layer: write/build-only — a FULL plane (from is real, to is vestigial) ----------
+# Each cell sits directly below the read-write cell(s) whose build half it is.
+parts.append(tile(0, 0, BOT, 'bo'))
+parts.append(label(0, 0, BOT, 'Review', None))
+parts.append(tile(1, 0, BOT, 'empty', dash=True))
+parts.append(label(1, 0, BOT, '≡ Review', "a Prism's mend is total", cls='ghost-t'))
+parts.append(tile(2, 0, BOT, 'bo'))
+parts.append(label(2, 0, BOT, 'Unfold', None))
+parts.append(tile(0, 1, BOT, 'mod', uspan=3))
+parts.append(label(0, 1, BOT, 'Modify', 'the contextual write half — focus-agnostic', uspan=3))
+parts.append(tile(0, 2, BOT, 'plan', dash=True, uspan=3))
+parts.append(label(0, 2, BOT, 'fallible build', 'planned', cls='plan-t', uspan=3))
 
 # ---------- axis arrows + labels ----------
 def arrow(x0, y0, x1, y1):
@@ -160,9 +162,9 @@ parts.append(f'<text class="tick" x="{rx:.1f}" y="{ry0 - 24:.1f}">read-only (top
 parts.append(f'<text class="tick" x="{rx:.1f}" y="{ry1 + 22:.1f}">write-only (bottom)</text>')
 
 # layer captions on the right
-for dy, name, sub in [(TOP, 'read-only', 'no write side — collapses to the read axis'),
+for dy, name, sub in [(TOP, 'read-only', 'no from at all — collapses to the focus axis'),
                       (MID, 'read-write', None),
-                      (BOT, 'write / build only', 'no read side — collapses to the write axis')]:
+                      (BOT, 'write / build only', 'the from halves of the layer above')]:
     cx, cy = pt(3.3, 1.6, dy)
     parts.append(f'<text class="layer" x="{cx:.1f}" y="{cy + 5:.1f}" text-anchor="start">{name}</text>')
     if sub:

@@ -66,16 +66,19 @@
 <polygon class="plan" points="578.0,480.0 675.0,536.0 772.0,480.0 675.0,424.0" stroke-dasharray="6 5"/>
 <text class="plan-t" x="675.0" y="473.0">fallible each</text>
 <text class="sub" x="675.0" y="493.0">planned</text>
-<polygon class="bo" points="287.0,724.0 384.0,780.0 481.0,724.0 384.0,668.0"/>
-<text class="fam" x="384.0" y="729.0">Review</text>
-<polygon class="plan" points="384.0,780.0 481.0,836.0 578.0,780.0 481.0,724.0" stroke-dasharray="6 5"/>
-<text class="plan-t" x="481.0" y="773.0">fallible build</text>
-<text class="sub" x="481.0" y="793.0">planned</text>
-<polygon class="bo" points="481.0,836.0 578.0,892.0 675.0,836.0 578.0,780.0"/>
-<text class="fam" x="578.0" y="841.0">Unfold</text>
-<polygon class="mod" points="160.9,796.8 451.9,964.8 548.9,908.8 257.9,740.8"/>
-<text class="fam" x="354.9" y="845.8">Modify</text>
-<text class="sub" x="354.9" y="865.8">focus-agnostic</text>
+<polygon class="bo" points="190.0,780.0 287.0,836.0 384.0,780.0 287.0,724.0"/>
+<text class="fam" x="287.0" y="785.0">Review</text>
+<polygon class="empty" points="287.0,836.0 384.0,892.0 481.0,836.0 384.0,780.0" stroke-dasharray="6 5"/>
+<text class="ghost-t" x="384.0" y="829.0">≡ Review</text>
+<text class="sub" x="384.0" y="849.0">a Prism's mend is total</text>
+<polygon class="bo" points="384.0,892.0 481.0,948.0 578.0,892.0 481.0,836.0"/>
+<text class="fam" x="481.0" y="897.0">Unfold</text>
+<polygon class="mod" points="287.0,724.0 578.0,892.0 675.0,836.0 384.0,668.0"/>
+<text class="fam" x="481.0" y="773.0">Modify</text>
+<text class="sub" x="481.0" y="793.0">the contextual write half — focus-agnostic</text>
+<polygon class="plan" points="384.0,668.0 675.0,836.0 772.0,780.0 481.0,612.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="578.0" y="717.0">fallible build</text>
+<text class="sub" x="578.0" y="737.0">planned</text>
 <line class="arrow" x1="151.2" y1="502.4" x2="447.0" y2="673.2"/><polygon class="ahead" points="447.0,673.2 438.1,672.3 441.7,665.9"/>
 <text class="axis" x="285.1" y="609.8" transform="rotate(30 285.1 609.8)">focus nature (ReadCompose):  total  →  fallible  →  multiple</text>
 <line class="arrow" x1="151.2" y1="457.6" x2="447.0" y2="286.8"/><polygon class="ahead" points="447.0,286.8 441.7,294.1 438.1,287.7"/>
@@ -85,8 +88,8 @@
 <text class="tick" x="70.0" y="196.0">read-only (top)</text>
 <text class="tick" x="70.0" y="822.0">write-only (bottom)</text>
 <text class="layer" x="665.3" y="280.2" text-anchor="start">read-only</text>
-<text class="tick" x="665.3" y="299.2" text-anchor="start">no write side — collapses to the read axis</text>
+<text class="tick" x="665.3" y="299.2" text-anchor="start">no from at all — collapses to the focus axis</text>
 <text class="layer" x="665.3" y="580.2" text-anchor="start">read-write</text>
 <text class="layer" x="665.3" y="880.2" text-anchor="start">write / build only</text>
-<text class="tick" x="665.3" y="899.2" text-anchor="start">no read side — collapses to the write axis</text>
+<text class="tick" x="665.3" y="899.2" text-anchor="start">the from halves of the layer above</text>
 </svg>
