@@ -8,8 +8,6 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-import optics.Optic.* // get, cross
-
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 
 /** Law/coherence checks for the typed pattern-functor schemes.
