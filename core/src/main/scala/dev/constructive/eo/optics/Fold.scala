@@ -9,7 +9,8 @@ import compose.*
 
 /** Constructors for `Fold` — read-only multi-focus optic, backed by `Forget[F]` (`Forget[F][X, A] =
   * F[A]`). `T = Unit` rules out the write path; `.foldMap` is the consumption surface.
-  * `Fold.select(p)` narrows to a one-element `Option` stream.
+  * `Fold.select(p)` narrows to a one-element `Option` stream. The build-only dual on the same
+  * carrier — assemble a `T` *from* an `F`-layer — is [[Unfold]].
   *
   * Both constructors return the concrete [[ForgetFold]] subclass so a hand-written Fold picks up
   * its eager, carrier-free `foldMap` member (see [[ForgetFold.foldMap]]).

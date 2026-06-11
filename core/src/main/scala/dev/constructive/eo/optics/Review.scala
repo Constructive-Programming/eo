@@ -22,6 +22,9 @@ import data.Direct
   * `Review(iso.reverseGet)` / `Review(prism.mend)` — rather than via a bespoke factory: an
   * `Iso`/`Prism` already *is* a build direction, so cross-optic `from*` constructors would be
   * redundant (eo has no `Prism.fromIso` etc. for the same reason).
+  *
+  * Review builds from ONE focus; its many-rung sibling is [[Unfold]] (assemble a `T` from an
+  * `F`-layer of parts), reachable by composition through the fused `andThen(Unfold)` below.
   */
 final class Review[T, B](val reverseGet: B => T) extends Optic[Unit, T, Unit, B, Direct]:
   type X = Nothing

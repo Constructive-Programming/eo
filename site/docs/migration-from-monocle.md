@@ -17,6 +17,7 @@ plus a note on where EO diverges.
 | *(no standalone equivalent — Monocle reaches for `Optional.getOption`)* | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold(optic.getOption)` for a read-only view of an Optional/Prism — read-only 0-or-1 focus, `T = Unit` forbids `.modify` |
 | *(no direct equivalent — algebraic lenses + Kaleidoscopes are not in Monocle)* | `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` — classifier-shaped optic over `F[A]` focus, plus `.collectMap` / `.collectList` aggregation universals; see [Optics → MultiFocus](optics.md#multifocus) |
 | `Setter[S, A](f => s => …)`                        | `Setter[S, S, A, A](f => s => …)`                   |
+| *(no equivalent — build-only optics are not standalone citizens in Monocle)* | `Review[S, A](build)` (build-only, one focus) and `Unfold[T, B, F]` (build-only, many: `embed: F[B] => T` — recursion-scheme algebras, aggregation); see [Optics → Review](optics.md#review) / [Unfold](optics.md#unfold) |
 | `Fold.fromFoldable[List, Int]`                     | `Fold[List, Int]` (with `cats.instances.list.given`)|
 | `Traversal.fromTraverse[List, Int]`                | `Traversal.each[List, Int]` (`Traversal.pEach[List, Int, Int]` for the polymorphic-write variant) |
 | `monocle.function.Plated[A]` + `transform` / `rewrite` / `universe` / `children` | `Plated[S]` — derive with `plate[S]` (from `dev.constructive.eo.generics`) or hand-write with `Plated.fromChildren`; same combinator names, plus `Plated.everywhere[S]` as a composable Setter (no Monocle equivalent) |
@@ -79,13 +80,17 @@ pair of carriers), not family-level (one `andThen` per pair of
 optics). Adding a new optic family means supplying carrier
 instances; the cross-family bridges come for free.
 
-### Getter / Setter don't compose via `.andThen`
+### Getter / Setter compose by collapse, not by carrier
 
-Getter's `T = Unit` and Setter's `SetterF` carrier have no
-`AssociativeFunctor` instance. Compose a Lens chain (Tuple2
-carrier) and reach for `.get` / `.modify` at the leaf
-instead. See [Optics → Getter](optics.md#getter) for the
-workaround.
+Getter's `T = Unit` and Setter's `SetterF` carrier share no
+`AssociativeFunctor` instance — instead, a chain that touches a
+read-only optic anywhere collapses to the read-only join
+(`lens.andThen(getter)` → Getter, `prism.andThen(getter)` →
+AffineFold, `traversal.andThen(getter)` → Fold), and a chain into
+a Setter collapses the read side (`lens.andThen(setter)` →
+Setter). `getter.andThen(setter)` itself is void by design — there
+is nothing to write through. See the
+[composition matrix](optics.md#composition-matrix) for every pair.
 
 ### Traversal carrier
 

@@ -58,12 +58,12 @@ this optic have?"
 
 | Carrier         | Shape                                          | Family                 |
 |-----------------|------------------------------------------------|------------------------|
-| `Direct`        | `A` — identity; no leftover (forgetful functor) | `Iso`, `Getter`       |
+| `Direct`        | `A` — identity; no leftover (forgetful functor) | `Iso`, `Getter`, `Review` |
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `MultiFocus[F]` | `(X, F[A])` — pair leftover with an `F`-wrapped focus vector | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each`; `Function1[Int, *]` ⇒ `Traversal.{two,three,four}` and `MultiFocus.tuple` / `representable`); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
-| `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`                 |
+| `Forget[F]`     | `F[A]` — an `F`-layer with no leftover         | `Fold` (read-only, `F: Foldable`), `Unfold` (build-only, `embed: F[B] => T`) |
 | `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
 
 What a carrier supports is *exactly* what its typeclass
@@ -197,13 +197,14 @@ flowchart LR
   Direct --> Tuple2
   Direct --> Either
   Direct --> MFocus["MultiFocus[F]"]
+  Direct --> ForgetF["Forget[F]"]
   Tuple2 --> Affine
   Tuple2 --> SetterF
   Tuple2 --> MFocus
   Either --> Affine
   Either --> MFocus
   Affine --> MFocus
-  ForgetF["Forget[F]"] --> MFocus
+  ForgetF --> MFocus
   MFocus --> SetterF
   MFocus -.->|read-only, T=Unit| ForgetF
   Direct -.->|chainViaTuple2| Affine
@@ -213,10 +214,13 @@ flowchart LR
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
 ```
 
-`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) and one
-restricted inbound (`MultiFocus[F] → Forget[F]`, the `T = Unit`
-read-only escape); chains otherwise reach it via `Fold` at
-construction time.
+`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) and two
+inbound: `Direct → Forget[F]` (`direct2forget`, for
+`F: Applicative: Foldable` — `pure` lifts the read side, a
+singleton pick closes the build side, which `Unfold` chains
+exercise) and the restricted `MultiFocus[F] → Forget[F]`
+(the `T = Unit` read-only escape). Chains otherwise reach it via
+`Fold` / `Unfold` at construction time.
 `MultiFocus[F]` covers five v1 carriers (`AlgLens[F]`,
 `Kaleidoscope`, `Grate`, `PowerSeries`, `FixedTraversal[N]`) post-
 fold; sub-shapes are selected by the choice of `F` (e.g.

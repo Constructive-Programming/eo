@@ -25,15 +25,25 @@ flowchart TD
     Iso --> MultiFocus
   end
 
-  subgraph single["Single direction"]
-    Getter["Getter — read-only"]
-    Setter["Setter — write-only"]
-    Review["Review — build-only"]
+  subgraph readonly["Read-only"]
+    Getter --> AffineFold
+    AffineFold --> Fold
   end
+
+  subgraph buildonly["Build-only"]
+    Review --> Unfold["Unfold[F]"]
+  end
+
+  Setter["Setter — write-only"]
 
   Iso --> Getter
   Lens --> Getter
+  Prism --> AffineFold
+  Affine --> AffineFold
+  MultiFocus --> Fold
   MultiFocus --> Setter
+  Iso --> Review
+  Prism --> Review
 
   click Iso "#iso"
   click Lens "#lens"
@@ -43,6 +53,9 @@ flowchart TD
   click Getter "#getter"
   click Setter "#setter"
   click Review "#review"
+  click Unfold "#unfold"
+  click AffineFold "#affinefold"
+  click Fold "#fold"
 ```
 
 How to read it:
@@ -52,17 +65,73 @@ How to read it:
 - **Cross-family compose** walks down from each input to where they
   meet: `Lens ∘ Prism` → `Affine`; `Iso ∘ Setter` → `Setter`.
 - **The bi-directional spine** (Iso, Lens, Prism, Affine, MultiFocus)
-  carries both a read and a write side. **Single-direction optics**
-  keep only one: Getter reads, Setter writes, Review builds.
-- Composing a bi-directional optic into Getter or Setter drops the
-  other side — the result is single-direction.
+  carries both a read and a write side. **One-way optics** keep only
+  one: the read-only rung (Getter → AffineFold → Fold, ordered by how
+  many foci a read can produce: exactly one, 0-or-1, many), the
+  build-only rung (Review → Unfold, one focus vs. an `F`-layer of
+  parts), and write-only Setter.
+- Composing **into a read-only inner** (or from a read-only outer)
+  drops every write side and lands on the read-only rung at the join
+  of the two read strengths — `lens ∘ getter` → Getter,
+  `prism ∘ getter` → AffineFold, `traversal ∘ getter` → Fold.
+- Composing **through the build side** keeps only build halves:
+  reversible outers (Iso / Prism / Review — anything whose carrier has
+  a `ReverseAccessor`) compose into Review and Unfold;
+  `review ∘ unfold` and `unfold ∘ review` land on Unfold.
+- Composing with a write-only Setter collapses the read side:
+  `lens ∘ setter` → Setter.
 
 `Affine` is the carrier shared by `Optional` (read and write) and
 `AffineFold` (read-only). `MultiFocus[F]` is the multi-focus carrier;
 its sub-shapes (PowerSeries, Grate, Kaleidoscope, `AlgLens[F]`) are
-selected by `F`. The full cell-by-cell composition matrix lives in
-[`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md)
-— the lattice above is its geometric view.
+selected by `F`. `Forget[F]` is the one-way many carrier shared by
+`Fold` (read-only) and `Unfold` (build-only).
+
+### Composition matrix
+
+The full 11-family grid. Every cell is pinned by
+[`CompositionMatrixSpec`](https://github.com/Constructive-Programming/eo/blob/main/tests/src/test/scala/dev/constructive/eo/CompositionMatrixSpec.scala):
+an inhabited cell composes via plain `.andThen` with **no expected-type
+ascription and no `given` imports**, landing at the family shown; ∅
+cells do not compile, **by design** (writing through a read-only optic,
+reading through a build-only one, building through a write-incapable
+one). 87 of 121 cells compose; 34 are void.
+
+| outer ∘ inner | Iso | Lens | Prism | Optional | Traversal | Getter | AffineFold | Fold | Setter | Review | Unfold |
+|---------------|-----|------|-------|----------|-----------|--------|------------|------|--------|--------|--------|
+| **Iso**       | Iso | Lens | Prism | Optional | Traversal | Getter | AffineFold | Fold | Setter | Review | Unfold |
+| **Lens**      | Lens | Lens | Optional | Optional | Traversal | Getter | AffineFold | Fold | Setter | ∅ | ∅ |
+| **Prism**     | Prism | Optional | Prism | Optional | Traversal | AffineFold | AffineFold | Fold | Setter | Review | Unfold |
+| **Optional**  | Optional | Optional | Optional | Optional | Traversal | AffineFold | AffineFold | Fold | Setter | ∅ | ∅ |
+| **Traversal** | Traversal | Traversal | Traversal | Traversal | Traversal | Fold | Fold | Fold | Setter | ∅ | ∅ |
+| **Getter**    | Getter | Getter | AffineFold | AffineFold | Fold | Getter | AffineFold | Fold | ∅ | ∅ | ∅ |
+| **AffineFold**| AffineFold | AffineFold | AffineFold | AffineFold | Fold | AffineFold | AffineFold | Fold | ∅ | ∅ | ∅ |
+| **Fold**      | Fold | Fold | Fold | Fold | Fold | Fold | Fold | Fold | ∅ | ∅ | ∅ |
+| **Setter**    | Setter | Setter | Setter | Setter | Setter | ∅ | ∅ | ∅ | Setter | ∅ | ∅ |
+| **Review**    | Review | ∅ | Review | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ | Review | Unfold |
+| **Unfold**    | Unfold | ∅ | Unfold | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ | Unfold | Unfold |
+
+The structure of the voids is the taxonomy speaking:
+
+- The **Setter column/row corner**: a Setter exposes no focus to read
+  and no value to build with, so only write-capable pairs survive.
+- The **Review / Unfold columns** are void for every outer that cannot
+  build totally (Lens, Optional, Traversal — their write-back needs a
+  leftover the build-only inner never produces; Getter / AffineFold /
+  Fold — their back-focus is honestly `Unit`, so there is nothing to
+  build *with*). Only the reversible outers (Iso, Prism, Review,
+  Unfold) reach them.
+- The **Review / Unfold rows** mirror the columns: a build-only outer
+  exposes no readable focus, so only build halves (Iso / Prism via
+  `ReverseAccessor`, Review, Unfold) compose in.
+
+Four mechanisms produce the inhabited cells, all resolved at compile
+time: same-carrier `AssociativeFunctor`, cross-carrier
+`Morph`/`Composer` bridges, the `ReadCompose` read-collapse (any pair
+with a read-only side), and the `ReverseAccessor`-gated build-collapse
+(the Review / Unfold cells). See
+[Concepts → Composition lattice](concepts.md#composition-lattice) for
+the carrier-level bridge graph.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic}
@@ -191,16 +260,22 @@ on your end.
 **Read-only / write-only collapse.** Composing *any* optic with a
 read-only `Getter` projects it to its **read-only counterpart**:
 the `Getter`'s `Unit` back-focus can't thread through a writable
-`B`, so the write side is forgotten (`T = B = Unit`). A `ReadOnly[F]`
-carrier projection picks the result — a total reader (`Lens` / `Iso`)
-yields a `Getter`, a partial one (`Optional` / `Prism`) an
-`AffineFold`:
+`B`, so the write side is forgotten (`T = B = Unit`). The
+`ReadCompose[F, G]` join picks the result from the two read
+strengths — total ∘ total yields a `Getter`, any partial side an
+`AffineFold`, any many-focus side a `Fold`:
 
 ```scala
-lens.andThen(getter)      // Getter
-optional.andThen(getter)  // AffineFold  (partial read)
-prism.andThen(getter)     // AffineFold
+lens.andThen(getter)       // Getter
+optional.andThen(getter)   // AffineFold  (partial read)
+prism.andThen(getter)      // AffineFold
+traversal.andThen(getter)  // Fold        (many reads)
 ```
+
+The same join fires with the read-only optic on the *outside*
+(`getter.andThen(lens)` → Getter, `fold.andThen(prism)` → Fold), so
+a chain that touches a read-only optic anywhere collapses to the
+read-only rung at the join of all its read strengths.
 
 Dually, composing with a write-only `Setter` collapses the *read*
 side and yields a `Setter` (`lens.andThen(setter)`,
@@ -333,7 +408,7 @@ nameLen.get(Person("Alice", 30))
 ```
 
 Getter → Getter composes via the ordinary `.andThen` (the fused
-`DirectGetter.andThen`): `g1.andThen(g2).get(s)` reads
+`Getter.andThen`): `g1.andThen(g2).get(s)` reads
 `g2.get(g1.get(s))`.
 
 ```scala mdoc
@@ -472,19 +547,113 @@ someLen.reverseGet("hello")
 
 There are no `fromIso` / `fromPrism` factories: an `Iso` or `Prism` already
 carries its build direction, so wrap it directly — `Review(iso.reverseGet)`
-or `Review(prism.mend)`. eo has no `Prism.fromIso` (and the like) for the same
-reason — a cross-optic conversion that merely re-exposes a sub-direction the
-source already has would be redundant. (A general, non-bijective `Lens` can't
-reconstruct its source from the focus alone, so there is deliberately no
-`Lens`→`Review` path; build a `Review` with your own `A => S`.)
+or `Review(prism.mend)` — or just compose: `iso.andThen(review)` and
+`prism.andThen(review)` land a `Review` via the build-collapse. eo has no
+`Prism.fromIso` (and the like) for the same reason — a cross-optic conversion
+that merely re-exposes a sub-direction the source already has would be
+redundant. (A general, non-bijective `Lens` can't reconstruct its source from
+the focus alone, so there is deliberately no `Lens`→`Review` path; build a
+`Review` with your own `A => S`.)
+
+Review builds one `S` from one focus. For the many-focus build — assemble
+one whole from an `F`-layer of parts — see [Unfold](#unfold), Review's
+mirror on the many rung.
+
+### Unfold
+
+An `Unfold[T, B, F]` is the build-only **many** optic — the mirror of
+[`Fold`](#fold) exactly as `Review` mirrors `Getter`. It wraps the one
+real map
+
+```
+embed :  F[B] => T        // many → one
+```
+
+"assemble one `T` from a layer of parts `F[B]`" — the **algebra** of a
+recursion scheme, and the aggregation arrow ("build an order total from
+its line items"). Carrier: `Forget[F]` with `S = A = Unit`, the same
+carrier as `Fold` with the opposite side vestigial.
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Unfold
+
+val total = Unfold((xs: List[BigDecimal]) => xs.sum)
+```
+
+```scala mdoc
+total.embed(List(BigDecimal(9.99), BigDecimal(5.00)))
+```
+
+Two constructors, because the vestigial read side is not free the way
+`Getter`'s vestigial write side is (`Unit` discards for free; producing
+an `F[Unit]` needs `pure`):
+
+- `Unfold.apply` — for `Applicative` carriers (`List`, `Option`,
+  `Vector`, …). The vestigial `to` is honestly `pure(())`.
+- `Unfold.algebra` — constraint-free, for **pattern functors**, which
+  admit `Functor` / `Traverse` but no `Applicative` (`pure` cannot pick
+  a constructor). Only the build surface is available; forcing a
+  read-side operation fails loudly.
+
+```scala mdoc:silent
+import cats.Functor
+
+enum ExprF[+A]:
+  case NumF(n: Int)
+  case AddF(l: A, r: A)
+
+given Functor[ExprF] with
+  def map[A, B](fa: ExprF[A])(f: A => B): ExprF[B] = fa match
+    case ExprF.NumF(n)    => ExprF.NumF(n)
+    case ExprF.AddF(l, r) => ExprF.AddF(f(l), f(r))
+
+// the evaluation algebra of a recursion scheme, carried as an optic
+val evalAlg = Unfold.algebra[Int, Int, ExprF] {
+  case ExprF.NumF(n)    => n
+  case ExprF.AddF(l, r) => l + r
+}
+```
+
+```scala mdoc
+evalAlg.embed(ExprF.AddF(2, 3))
+```
+
+Unfold composes along the build rung in both directions — and because
+the seams thread plain values (never an `F`-layer), pattern-functor
+algebras compose with no extra constraints:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Review
+
+// post-process the assembled whole: Review ∘ Unfold = Unfold
+val render = Review[String, Int](n => s"= $n").andThen(evalAlg)
+
+// pre-process each part: Unfold ∘ Review = Unfold (Functor[F] only)
+val fromStrings = evalAlg.andThen(Review[Int, String](_.toInt))
+```
+
+```scala mdoc
+render.embed(ExprF.AddF(20, 22))
+fromStrings.embed(ExprF.AddF("2", "3"))
+```
+
+Iso and Prism build halves also compose in (`iso.andThen(unfold)`,
+`unfold.andThen(prism)` — the prism *mends* each part); see the
+[composition matrix](#composition-matrix) for the full row and column.
+An algebra assembled this way drops straight into the recursion-scheme
+fold engine — `Schemes.cata` accepts a pure `Unfold[A, A, PSVec]`
+algebra; see [Recursion schemes](schemes.md).
 
 ### AffineFold
 
 An `AffineFold[S, A]` is the read-only 0-or-1 focus shape: a
 partial projection with no write-back path. Type alias for
-`Optic[S, Unit, A, A, Affine]` — the `T = Unit` slot statically
-rules out `.modify` / `.replace`, so the only operations are
-`.getOption`, `.foldMap`, and `.modifyA` (effectful read).
+`Optic[S, Unit, A, Unit, Affine]` — both `T` and the back-focus
+`B` are pinned to `Unit`, which statically rules out `.modify` /
+`.replace` and leaves `.getOption`, `.foldMap`, and `.modifyA`
+(effectful read) as the surface. (Constructors return the concrete
+`PickFold` subclass, whose fused `andThen` keeps composed read-only
+chains concrete.)
 
 Use this when the source has no natural write-back
 (`headOption` on a List, predicate-gated filters), or as an
@@ -523,11 +692,12 @@ bespoke `fromOptional` / `fromPrism` factory: the conversion is a
 one-liner, and eo provides no `Getter.fromLens` /
 `Fold.fromTraversal` for the same reason.)
 
-**Composition note.** Direct `lens.andThen(af)` on an
-`AffineFold` does not type-check: the outer `B` slot doesn't
-align with the inner `T = Unit`. Build a full composed
-`Optional` through the Lens chain and narrow the result with
-`AffineFold(optional.getOption)`.
+**Composition note.** `lens.andThen(affineFold)` composes
+directly — the read-only-inner `andThen` overload routes it
+through `ReadCompose`, landing an `AffineFold` (see the
+[composition matrix](#composition-matrix)). The same holds with
+the AffineFold on the outside: `affineFold.andThen(lens)` →
+AffineFold.
 
 ### Fold
 
@@ -557,6 +727,10 @@ positive.foldMap(identity[Int])(3)
 positive.foldMap(identity[Int])(-3)
 ```
 
+`Fold` tears an `F`-layer down to a summary; its exact dual —
+assembling a `T` *from* an `F`-layer — is [Unfold](#unfold), which
+rides the same `Forget[F]` carrier with the opposite side vestigial.
+
 ## Composition limits
 
 A few categories of pair are either intentionally **not** bridged or
@@ -571,37 +745,25 @@ directly. If your outer *does* focus on an `F[A]` (e.g.
 `fromPrismF` / `fromOptionalF` factories to lift into `MultiFocus[F]`
 and chain there.
 
-**`Traversal.each` × `Fold[F]` / `MultiFocus[F]`** — `MultiFocus[PSVec]`
+**`Traversal.each` × `MultiFocus[G]` read-write** — `MultiFocus[PSVec]`
 (the `Traversal.each` carrier) cannot widen into another `MultiFocus[G]`'s
-per-candidate cardinality model without a synthetic count. The
-idiomatic workaround pushes the inner under the traversal:
-`traversal.modify(a => inner.replace(b)(a))(s)` for a `MultiFocus`
-inner; `traversal.foldMap(f)(s)` (the read-only escape on any
-`MultiFocus[F]`-carrier optic) when you only need the fold side.
+per-candidate cardinality model without a synthetic count, so the full
+read-*write* pairing across different multi-focus carriers doesn't
+bridge. The **read side is not limited**: `traversal.andThen(fold)` and
+`traversal.andThen(otherReadOnly)` collapse via `ReadCompose` to a
+`Fold` (see the [composition matrix](#composition-matrix)). For a
+read-write inner, push it under the traversal instead:
+`traversal.modify(a => inner.replace(b)(a))(s)`.
 
-**Cross-F `Fold[F].andThen(Fold[G])`** — `Composer[Forget[F], Forget[G]]`
-doesn't ship (Composer's signature has no slot for a per-call natural
-transformation, and the carrier-generic `Optic.andThen` requires the
-same `F`). Instead, `Forget.scala` ships a Forget-specific `.andThen`
-extension that takes a user-supplied `cats.~>[F, G]` plus
-`FlatMap[G]` and produces a `Forget[G]`-carrier optic:
-
-```scala
-import cats.~>
-val outer: Optic[Source, Unit, A, A, Forget[List]]   = ...
-val inner: Optic[A, Unit, B, B, Forget[Option]]      = ...
-given listHead: List ~> Option = new (List ~> Option):
-  def apply[T](xs: List[T]): Option[T] = xs.headOption
-val composed: Optic[Source, Unit, B, B, Forget[Option]] =
-  outer.andThen(inner)
-```
-
-The user picks the meaning by choosing the nat (e.g. `List ~> Option`
-via `headOption`, `Option ~> List` via `toList`, `List ~> LazyList`
-for streaming). Result carrier is `Forget[G]` — downstream composition
-continues in `G`'s typeclass landscape. Restricted to `T = Unit`
-(the Fold case) since cross-F composition has no natural way to
-thread `from` for general `T`.
+**Cross-F `Fold[F].andThen(Fold[G])`** — there is no
+`Composer[Forget[F], Forget[G]]` (Composer's signature has no slot for
+a per-call natural transformation). The read-collapse covers the
+composition anyway: any fold ∘ fold pair lands a List-backed `Fold`
+via `ReadCompose`'s many-fold join, and the *same-F* pair takes the
+fused `ForgetFold.andThen` fast path (`read(s).flatMap(inner.read)`,
+requires `FlatMap[F]`). If you need the result in a specific `G`
+(e.g. streaming via `LazyList`), apply your own `F ~> G` to the fold's
+output rather than composing carriers.
 
 **`SetterF` outbound** — Setter is a write-side terminal: there is no
 outbound `Composer[SetterF, _]`, so a chain that reaches Setter cannot
@@ -617,5 +779,11 @@ MF[Function1[Int, *]]`, `MF[Function1[Int, *]] ↪ SetterF`, and
 same-carrier `.andThen` via `mfAssocFunction1`. Lens / Prism / Optional
 do NOT bridge in (Function1 lacks `Foldable` / `Alternative`).
 
-The full taxonomy with cell-by-cell rationale lives in
-[`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md).
+The authoritative cell-by-cell record is
+[`CompositionMatrixSpec`](https://github.com/Constructive-Programming/eo/blob/main/tests/src/test/scala/dev/constructive/eo/CompositionMatrixSpec.scala)
+— every inhabited and void cell of the
+[composition matrix](#composition-matrix) above is asserted there via
+`compiletime.testing.typeChecks`, so a regression in any cell turns the
+build red. (The historical derivation lives in
+[`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md),
+which predates the `ReadCompose` collapse and the `Unfold` family.)

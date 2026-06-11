@@ -62,7 +62,8 @@ types alike.
 - [Concepts](concepts.md) — what an Optic *is*, what a carrier is,
   and how `Composer` bridges family boundaries.
 - [Optics reference](optics.md) — one section per family, with
-  runnable examples.
+  runnable examples and the compiler-pinned 11-family
+  [composition matrix](optics.md#composition-matrix).
 - [MultiFocus](multifocus.md) — the unified successor of five v1
   carriers (`AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
   `FixedTraversal[N]`); typeclass-gated capability matrix and

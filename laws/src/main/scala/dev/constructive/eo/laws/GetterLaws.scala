@@ -17,9 +17,10 @@ import optics.Optic.*
   *
   * Compared to Monocle's `GetterLaws`, we omit the fold-consistency law
   * (`getter.fold.getAll(s).headOption == Some(getter.get(s))`). The `Composer[Direct, Forget[F]]`
-  * bridge that this law needs now exists (added when `Fold` was made honestly one-way, `B = Unit`,
-  * which made that Composer's `from` reachably-unsound-free), so a Getter→Fold morph is available;
-  * the law is simply not yet restated here. Future work: add it via `getter`'s morph into a `Fold`.
+  * bridge that this law needs now exists (and since [[dev.constructive.eo.optics.Unfold]] gave
+  * `Forget[F]` a build-only citizen, its `from` is a sound singleton-pick rather than a
+  * documented-unreachable hole), so a Getter→Fold morph is available; the law is simply not yet
+  * restated here. Future work: add it via `getter`'s morph into a `Fold`.
   */
 trait GetterLaws[S, A]:
   def getter: Optic[S, Unit, A, Unit, Direct]

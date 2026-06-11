@@ -114,7 +114,7 @@ Some and None branches.
 
 **Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`. Both
 families compose through the fused **`inline` `andThen`** on their concrete
-subclasses (`DirectGetter` / `SetterOptic`), so every row builds a *composed*
+subclasses (`Getter` / `SetterOptic`), so every row builds a *composed*
 optic on both sides and dispatches through it once — apples-to-apples with
 Monocle's composed `Getter`/`Setter`.
 

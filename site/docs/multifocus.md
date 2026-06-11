@@ -371,8 +371,10 @@ on the worktree branch that landed it:
   the user can write today that pre-fold were all U.
   See [`docs/research/2026-04-29-fixedtraversal-fold-spike.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-fixedtraversal-fold-spike.md).
 
-The composition gap analysis tracks the matrix collapse cell by
-cell:
+The current, compiler-pinned composition matrix (11 families, 121
+cells) lives in
+[Optics → Composition matrix](optics.md#composition-matrix); the
+historical gap analysis that tracked the fold cell by cell is
 [`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md).
 The pre-spike analysis of `MultiFocus[List]` vs PowerSeries on the
 traversal-shape common case (1.5–2.6× slower, hence both carriers

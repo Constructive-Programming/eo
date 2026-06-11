@@ -91,8 +91,8 @@ class GetReplaceLens[S, T, A, B](
     * methods per level). A plain `def` shares one `andThen$$anonfun$*` across a depth-N chain, so
     * C2 reads the `.get` / `.enplace` cascade as recursion and caps inlining at
     * `MaxRecursiveInlineLevel`, leaving the deep tail as virtual `Function1.apply` — the same
-    * same-bytecode trap fixed on [[DirectGetter.andThen]]. This is the recursive composer, so it's
-    * the one that matters for deep chains; the terminal mixed-carrier overloads below fire once and
+    * same-bytecode trap fixed on [[Getter.andThen]]. This is the recursive composer, so it's the
+    * one that matters for deep chains; the terminal mixed-carrier overloads below fire once and
     * stay plain `def` to avoid duplicating their larger bodies.
     */
   inline def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =

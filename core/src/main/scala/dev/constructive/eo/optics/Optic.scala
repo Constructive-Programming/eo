@@ -116,7 +116,7 @@ trait Optic[S, T, A, B, F[_, _]]:
 /** Companion for [[Optic]]. Hosts the profunctor instances and the capability-gated extension
   * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`, `.reverseGet`,
   * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen` (carrier-morphing plus the
-  * read-only / AffineFold / Setter / Review collapses), `.readOnly`, `.cross`, `.morph`,
+  * read-only / AffineFold / Setter / Review / Unfold collapses), `.readOnly`, `.cross`, `.morph`,
   * `.headOption`, `.length`, `.exists`. Adding a new carrier means supplying the typeclass
   * instances of the operations it should support.
   */
