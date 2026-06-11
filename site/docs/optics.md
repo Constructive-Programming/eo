@@ -7,12 +7,47 @@ Scaladoc.
 ## Family taxonomy
 
 Every family is a specialisation of the same `Optic[S, T, A, B, F]`
-trait, differing only in the carrier `F[_, _]`. The diagram is a
-composition lattice: an edge `A → B` means *every `A` is a `B`*, so
-composing two optics lands on their **join** — the lowest node both
-reach by following edges down. `Iso.andThen(Lens) = Lens`;
-`Lens.andThen(Prism)` lands on the `Affine` carrier; a read-only chain
-lands in the single-direction group.
+trait, differing only in the carrier `F[_, _]` — and the family space
+is genuinely **three-axis**:
+
+- **focus arity** — how many foci the read side can produce:
+  exactly one, 0-or-1, or many;
+- **from side** — what the `from` half does: a *contextual write*
+  (needs the leftover `X` to rebuild — Lens-like), a *total build*
+  (needs no context — Iso/Review-like), or nothing;
+- **read side** — present or absent.
+
+![The three-axis optic family taxonomy: focus arity × from side × read side](static/optic-taxonomy-3d.svg)
+
+The geometry carries real information:
+
+- **Lens vs Iso** (and Optional vs Prism) differ *only* on the
+  from-side axis — write-with-context vs total build. That distinction
+  is also why the write-only family is named `Modify`, not "Setter":
+  it lives in the *write* column, with the build column belonging to
+  Review and Unfold.
+- The **read-only rail** (Getter → AffineFold → Fold) and the
+  **build-only rail** (Review → Unfold) run parallel along the arity
+  axis — `Fold` and `Unfold` are mirror images on the same
+  `Forget[F]` carrier.
+- The **(0-or-1, build, no-read) cell collapses into Review**: a
+  Prism's `mend` is total, so a "partial Review" is just Review.
+- The **(many, read, total-build) cell is uninhabited**: nothing
+  total-builds from many foci while also reading them — recursive
+  structures get there with *contextual* rebuilds instead (`Plated`'s
+  `plate` keeps the structural skeleton, so it sits in the Traversal
+  cell).
+- **Modify spans the arity axis**: `(A => B) => S => T` never
+  observes how many foci the function is applied at, so it is the
+  carrier-agnostic write-only bottom of the whole family space.
+
+### Composition joins
+
+Composition is easier to read in two dimensions: an edge `A → B`
+means *every `A` is a `B`*, so composing two optics lands on their
+**join** — the lowest node both reach by following edges down.
+`Iso.andThen(Lens) = Lens`; `Lens.andThen(Prism)` lands on the
+`Affine` carrier; a read-only chain lands on the read-only rail.
 
 ```mermaid
 flowchart TD
