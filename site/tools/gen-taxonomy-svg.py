@@ -8,10 +8,13 @@ Axes:
   vertical (layers): capability     — read-only (top), read-write (middle),
                                       write/build-only (bottom)
 
-One-way layers collapse to the focus axis (read-only has no `from`; write-only
-rails by the focus shape its build consumes), so both rails run parallel along u.
-The middle layer is the FULL focus x source grid — every cell is shipped or
-scoped to the failure-typed-build (BiAffine) plan; no accidental holes.
+All three layers are full planes. Read-only families pin B = Unit (terminal,
+not Nothing), so their vestigial `from` is vacuously satisfied at every source
+nature — each spans the source axis as a bar (the dual of Modify spanning the
+focus axis). Write-only families keep a real `from`, so each sits directly
+below the read-write cell(s) whose build half it is. The middle layer is the
+FULL focus x source grid — every cell is shipped or scoped to the
+failure-typed-build (BiAffine) plan; no accidental holes.
 """
 import math, os
 
@@ -92,11 +95,13 @@ for (i, j) in [(0, 0), (3, 3)]:
     x1, y1 = pt(i, j, BOT)
     parts.append(f'<line class="drop" x1="{x0:.1f}" y1="{y0:.1f}" x2="{x1:.1f}" y2="{y1:.1f}"/>')
 
-# ---------- TOP layer: read-only (rail along u; no write side, v collapses) ----------
-JR = 1.0  # rail sits on the middle v-row so it hovers over the grid's centre
+# ---------- TOP layer: read-only — bars spanning the source axis ----------
+# B = Unit (terminal, not Nothing): the vestigial `from` is vacuously satisfied at
+# every source nature, so each read-only family holds the whole source axis — the
+# dual of Modify spanning the focus axis below.
 for i, name in enumerate(['Getter', 'AffineFold', 'Fold']):
-    parts.append(tile(i, JR, TOP, 'ro'))
-    parts.append(label(i, JR, TOP, name))
+    parts.append(tile(i, 0, TOP, 'ro', vspan=3))
+    parts.append(label(i, 0, TOP, name, 'B = Unit' if i == 1 else None, vspan=3))
 
 # ---------- MIDDLE layer: read-write (full grid: u = focus nature, v = source nature) ----------
 # u index: 0 → total, 1 → fallible, 2 → multiple
@@ -162,7 +167,7 @@ parts.append(f'<text class="tick" x="{rx:.1f}" y="{ry0 - 24:.1f}">read-only (top
 parts.append(f'<text class="tick" x="{rx:.1f}" y="{ry1 + 22:.1f}">write-only (bottom)</text>')
 
 # layer captions on the right
-for dy, name, sub in [(TOP, 'read-only', 'no from at all — collapses to the focus axis'),
+for dy, name, sub in [(TOP, 'read-only', 'B = Unit: from is vacuous — each family spans the source axis'),
                       (MID, 'read-write', None),
                       (BOT, 'write / build only', 'the from halves of the layer above')]:
     cx, cy = pt(3.3, 1.6, dy)

@@ -39,11 +39,12 @@
 </style>
 <line class="drop" x1="190.0" y1="180.0" x2="190.0" y2="780.0"/>
 <line class="drop" x1="772.0" y1="180.0" x2="772.0" y2="780.0"/>
-<polygon class="ro" points="287.0,124.0 384.0,180.0 481.0,124.0 384.0,68.0"/>
+<polygon class="ro" points="190.0,180.0 287.0,236.0 578.0,68.0 481.0,12.0"/>
 <text class="fam" x="384.0" y="129.0">Getter</text>
-<polygon class="ro" points="384.0,180.0 481.0,236.0 578.0,180.0 481.0,124.0"/>
-<text class="fam" x="481.0" y="185.0">AffineFold</text>
-<polygon class="ro" points="481.0,236.0 578.0,292.0 675.0,236.0 578.0,180.0"/>
+<polygon class="ro" points="287.0,236.0 384.0,292.0 675.0,124.0 578.0,68.0"/>
+<text class="fam" x="481.0" y="173.0">AffineFold</text>
+<text class="sub" x="481.0" y="193.0">B = Unit</text>
+<polygon class="ro" points="384.0,292.0 481.0,348.0 772.0,180.0 675.0,124.0"/>
 <text class="fam" x="578.0" y="241.0">Fold</text>
 <polygon class="rw" points="190.0,480.0 287.0,536.0 384.0,480.0 287.0,424.0"/>
 <text class="fam" x="287.0" y="485.0">Iso</text>
@@ -88,7 +89,7 @@
 <text class="tick" x="70.0" y="196.0">read-only (top)</text>
 <text class="tick" x="70.0" y="822.0">write-only (bottom)</text>
 <text class="layer" x="665.3" y="280.2" text-anchor="start">read-only</text>
-<text class="tick" x="665.3" y="299.2" text-anchor="start">no from at all — collapses to the focus axis</text>
+<text class="tick" x="665.3" y="299.2" text-anchor="start">B = Unit: from is vacuous — each family spans the source axis</text>
 <text class="layer" x="665.3" y="580.2" text-anchor="start">read-write</text>
 <text class="layer" x="665.3" y="880.2" text-anchor="start">write / build only</text>
 <text class="tick" x="665.3" y="899.2" text-anchor="start">the from halves of the layer above</text>

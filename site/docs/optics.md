@@ -26,12 +26,19 @@ is **three-axis**:
 
 How to read it:
 
-- The **top layer** is read-only — no `from`, so it collapses to the
-  focus axis: Getter (total), AffineFold (fallible), Fold (multiple).
-  Any chain that touches a read-only optic projects **up** onto this
-  layer, landing at the join of the focus natures — `lens ∘ getter` →
-  Getter, `prism ∘ getter` → AffineFold, `traversal ∘ getter` → Fold.
-  That join is exactly what `ReadCompose` computes.
+- The **top layer** is read-only: Getter (total), AffineFold
+  (fallible), Fold (multiple), each drawn as a bar **spanning the
+  whole source axis**. That span is honest, not decorative: read-only
+  optics pin their write side to `Unit` — the *terminal* type, not
+  the bottom type `Nothing` — and a function into `Unit` exists
+  uniformly for every input, so the vestigial `from` is vacuously
+  satisfied at *every* source nature. (Had `B` been `Nothing`, no
+  `from` could exist at all.) It is the exact dual of `Modify`
+  spanning the focus axis below. Any chain that touches a read-only
+  optic projects **up** onto this layer, landing at the join of the
+  focus natures — `lens ∘ getter` → Getter, `prism ∘ getter` →
+  AffineFold, `traversal ∘ getter` → Fold. That join is exactly what
+  `ReadCompose` computes.
 - The **middle layer** is the full grid, and with these axes it is
   *completely inhabited* — every cell is shipped or planned, no
   accidental holes. Iso is total in both focus and source; Lens reads
