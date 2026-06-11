@@ -301,7 +301,7 @@ case-class tree, no re-encode, no decoder for the siblings you
 never read. One vignette in three acts: edit a deep leaf, edit
 every element of a nested array, then see *why* an edit was a
 silent no-op. The [Ior failure-flow
-diagram](circe.md#failure-flow) covers the full decision tree.
+diagram](integrations/circe.md#failure-flow) covers the full decision tree.
 
 #### Act 1 — edit one leaf deep in a JSON tree (no decode)
 
@@ -886,7 +886,7 @@ see also [Generics → Composing into pipelines](generics.md#composing-derived-o
 The next three recipes cover the observability story for the
 JSON cursor optics: partial-success walks, parse errors surfaced
 through the same chain, and how to classify the failures by
-case. The [Ior failure-flow diagram](circe.md#failure-flow) has
+case. The [Ior failure-flow diagram](integrations/circe.md#failure-flow) has
 the full decision tree.
 
 ### Partial-success array walk — `Ior.Both`
@@ -1092,7 +1092,7 @@ the kindlings-derived schema entirely.
 **Source:** cats-eo internal (`AvroPrism`'s triple-input
 surface, Unit 10). Background framing on the streaming /
 Kafka use case lives in the
-[Avro integration intro](avro.md#why-this-exists).
+[Avro integration intro](integrations/avro.md#why-this-exists).
 
 ## Further reading
 
@@ -1105,11 +1105,11 @@ Kafka use case lives in the
   [family taxonomy](optics.md#family-taxonomy) diagram.
 - [Generics](generics.md) — macro-derived `lens[S](...)` and
   `prism[S, A]`.
-- [Circe integration](circe.md) — cursor-backed JSON optics;
-  [failure flow](circe.md#failure-flow) for the Ior decision
+- [Circe integration](integrations/circe.md) — cursor-backed JSON optics;
+  [failure flow](integrations/circe.md#failure-flow) for the Ior decision
   tree.
-- [Avro integration](avro.md) — cursor-backed Avro optics;
-  [failure flow](avro.md#failure-flow) for the schema-driven
+- [Avro integration](integrations/avro.md) — cursor-backed Avro optics;
+  [failure flow](integrations/avro.md#failure-flow) for the schema-driven
   Ior decision tree.
 - [Migrating from Monocle](migration-from-monocle.md) —
   side-by-side translation guide.

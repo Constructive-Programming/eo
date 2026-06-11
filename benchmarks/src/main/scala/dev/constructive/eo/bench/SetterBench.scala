@@ -6,12 +6,12 @@ import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
 
-/** `Setter.modify` at the leaf plus deep composition, paired EO vs Monocle.
+/** `Modify.modify` (eo's write-only family, named `Setter` in Monocle) at the leaf plus deep composition, paired EO vs Monocle.
   *
-  * EO's `Setter` carrier `SetterF` has both a `ForgetfulFunctor[SetterF]` (powers `.modify`) and an
-  * `AssociativeFunctor[SetterF]` (`assocSetterF`), so two Setters compose through the ordinary
+  * EO's `Modify` carrier `ModifyF` has both a `ForgetfulFunctor[ModifyF]` (powers `.modify`) and an
+  * `AssociativeFunctor[ModifyF]` (`assocModifyF`), so two Modify optics compose through the ordinary
   * `andThen` — `s1.andThen(s2).modify(f) == s1.modify(s2.modify(f))`. The depth-3 / depth-6 rows
-  * build a *composed* `Setter` on both sides (EO's `s3.andThen(s2)…` vs Monocle's
+  * build a *composed* write-only optic on both sides (EO's `s3.andThen(s2)…` vs Monocle's
   * `mS3.andThen(mS2)…`) and dispatch through it once, rather than hand-nesting `modify` on the EO
   * side.
   */
@@ -47,7 +47,7 @@ class SetterBench extends JmhDefaults:
 
   // ---- Nested depth sweep (composition, which Order can't express) --
 
-  // Both sides build a composed Setter and dispatch through it once.
+  // Both sides build a composed write-only optic and dispatch through it once.
   private val eoSet3 = eoS3.andThen(eoS2).andThen(eoS1).andThen(eoSetValue)
 
   private val eoSet6 =

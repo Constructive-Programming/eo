@@ -27,6 +27,6 @@ package object bench:
     Getter => EoGetter,
     Lens => EoLens,
     Prism => EoPrism,
-    Setter => EoSetter,
+    Modify => EoModify,
     Traversal => EoTraversal,
   }

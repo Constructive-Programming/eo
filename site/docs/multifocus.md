@@ -196,7 +196,7 @@ the choice without cluttering the discipline surface.
 
 `MultiFocus[F]` has shipped inbound bridges from every classical
 read-write family (conditional on `F`'s typeclass set) and two
-outbound bridges: `→ SetterF` (write) and a restricted `→ Forget[F]`
+outbound bridges: `→ ModifyF` (write) and a restricted `→ Forget[F]`
 read-only escape (`multifocus2forget`, available only when
 `T = Unit`). The remaining outbound directions are **structurally
 rejected** rather than absent — see
@@ -243,29 +243,29 @@ specialised by `F`:
   `MultiFocusPSMaybeHit` (Prism / Optional inners skip the
   per-element wrapper allocation).
 
-### Outbound — `SetterF` and a read-only `Forget[F]` escape
+### Outbound — `ModifyF` and a read-only `Forget[F]` escape
 
 ```scala mdoc:silent
 import dev.constructive.eo.compose.Composer
-import dev.constructive.eo.data.SetterF
+import dev.constructive.eo.data.ModifyF
 
-val setter = summon[Composer[MultiFocus[List], SetterF]].to(listMF)
+val modify = summon[Composer[MultiFocus[List], ModifyF]].to(listMF)
 ```
 
 ```scala mdoc
-setter.modify(_ * 2)(List(1, 2, 3))
+modify.modify(_ * 2)(List(1, 2, 3))
 ```
 
-`multifocus2setter[F: Functor]` — closes the U → N gap for both
-the prior `kaleidoscope2setter` and the latent never-shipped
-`alg2setter`. Like every other `Composer[X, SetterF]`, this does NOT
-enable `multiFocus.andThen(setter)` directly: cross-carrier `.andThen`
-goes through `AssociativeFunctor[F]` on a single carrier, and SetterF
+`multifocus2modify[F: Functor]` — closes the U → N gap for both
+the prior v1 `kaleidoscope2setter` and the latent never-shipped
+`alg2setter`. Like every other `Composer[X, ModifyF]`, this does NOT
+enable `multiFocus.andThen(modify)` directly: cross-carrier `.andThen`
+goes through `AssociativeFunctor[F]` on a single carrier, and ModifyF
 deliberately doesn't ship one (the deferred-modify semantic doesn't
 fit `composeTo` / `composeFrom`). The morph value lives at the morph
-site, not at the chain site. Same-carrier `setter.andThen(setter)`
-*does* work — see the [Setter section](optics.md#setter) for the
-`AssociativeFunctor[SetterF]` instance shipped in `SetterF.scala`.
+site, not at the chain site. Same-carrier `modify.andThen(modify)`
+*does* work — see the [Modify section](optics.md#modify) for the
+`AssociativeFunctor[ModifyF]` instance shipped in `ModifyF.scala`.
 
 The second outbound bridge, `multifocus2forget[F]`, expresses a
 `MultiFocus[F]`-carrier optic as a read-only `Forget[F]` — discard the
@@ -366,13 +366,15 @@ on the worktree branch that landed it:
   See [`docs/research/2026-04-29-powerseries-fold-spike.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-powerseries-fold-spike.md).
 - **FixedTraversal `[N]` fold** — `Traversal.{two,three,four}` rerouted
   through `MultiFocus[Function1[Int, *]]`; the FT-shape gains the
-  inbound `Iso ↪`, outbound `↪ SetterF`, and same-carrier
+  inbound `Iso ↪`, outbound `↪ ModifyF`, and same-carrier
   `.andThen` from the unified MF carrier — three new compositions
   the user can write today that pre-fold were all U.
   See [`docs/research/2026-04-29-fixedtraversal-fold-spike.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-29-fixedtraversal-fold-spike.md).
 
-The composition gap analysis tracks the matrix collapse cell by
-cell:
+The current, compiler-pinned composition matrix (11 families, 121
+cells) lives in
+[Optics → Composition matrix](optics.md#composition-matrix); the
+historical gap analysis that tracked the fold cell by cell is
 [`docs/research/2026-04-23-composition-gap-analysis.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-23-composition-gap-analysis.md).
 The pre-spike analysis of `MultiFocus[List]` vs PowerSeries on the
 traversal-shape common case (1.5–2.6× slower, hence both carriers

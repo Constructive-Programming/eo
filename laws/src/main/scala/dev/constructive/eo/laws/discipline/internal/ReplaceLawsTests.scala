@@ -6,7 +6,7 @@ package internal
 import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
-/** Internal parent `RuleSet` for the modify-tier law families — `Setter`, `Lens`, and `Traversal`.
+/** Internal parent `RuleSet` for the modify-tier law families — `Modify`, `Lens`, and `Traversal`.
   * Each of those law sets shares the four "modify-tier" props (modify identity, compose modify,
   * replace idempotent, consistent replace-modify); the leaf Tests classes pass a parent built here
   * to their `RuleSet.parents` and only have to spell out the props that are unique to themselves.
@@ -15,12 +15,12 @@ import org.typelevel.discipline.Laws
   * single inheritance hop. Discipline aggregates parent props automatically, so the user-facing
   * prop names ("modify identity", "compose modify", …) and check predicates are unchanged.
   *
-  * Visibility: `private[discipline]`. The leaf Tests classes (`SetterTests`, `LensTests`,
+  * Visibility: `private[discipline]`. The leaf Tests classes (`ModifyTests`, `LensTests`,
   * `TraversalTests`) are the only intended consumers — downstream users wire to those.
   */
 abstract private[discipline] class ReplaceLawsTests[S, A] extends Laws:
 
-  /** Per-family law projection — `SetterLaws`, `LensLaws`, and `TraversalLaws` all expose the four
+  /** Per-family law projection — `ModifyLaws`, `LensLaws`, and `TraversalLaws` all expose the four
     * modify-tier methods this parent depends on. We keep the projection structural-free with
     * explicit function values so the parent doesn't need to know which leaf trait it sees.
     */

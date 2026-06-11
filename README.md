@@ -60,7 +60,7 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   a read-only `Optional`; partial projection without a write side.
 - [`Getter`](https://eo.constructive.dev/optics.html#getter) — a
   read-only one-focus projection.
-- [`Setter`](https://eo.constructive.dev/optics.html#setter) — a
+- [`Modify`](https://eo.constructive.dev/optics.html#modify) — a
   write-only optic; modify without observing.
 - [`Fold`](https://eo.constructive.dev/optics.html#fold) — N foci
   summarised through a `Monoid`.
@@ -76,24 +76,27 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   whole structure.
 - [`Review`](https://eo.constructive.dev/optics.html#review) — the
   reverse-only half of a `Prism`; build, never observe.
-- [`JsonPrism`](https://eo.constructive.dev/circe.html#jsonprism) —
+- [`Unfold`](https://eo.constructive.dev/optics.html#unfold) — the
+  build-only many optic (`embed: F[B] => T`); assemble one whole from
+  an `F`-layer of parts — the algebra of a recursion scheme.
+- [`JsonPrism`](https://eo.constructive.dev/integrations/circe.html#jsonprism) —
   cursor-backed JSON optic with observable-by-default `Ior` failures.
-- [`JsonFieldsPrism`](https://eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
+- [`JsonFieldsPrism`](https://eo.constructive.dev/integrations/circe.html#multi-field-focus----fields-_a-_b) —
   multi-field flavour of `JsonPrism`.
-- [`JsonTraversal`](https://eo.constructive.dev/circe.html#jsontraversal-each) —
+- [`JsonTraversal`](https://eo.constructive.dev/integrations/circe.html#jsontraversal-each) —
   `.each` traversal across JSON arrays.
-- [`JsonFieldsTraversal`](https://eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —
+- [`JsonFieldsTraversal`](https://eo.constructive.dev/integrations/circe.html#multi-field-focus----fields-_a-_b) —
   multi-field flavour of `JsonTraversal`.
-- [`AvroPrism`](https://eo.constructive.dev/avro.html) —
+- [`AvroPrism`](https://eo.constructive.dev/integrations/avro.html) —
   schema-aware Avro optic over `IndexedRecord`, with the same `Ior`
   failure surface as `JsonPrism` plus a `.union[Branch]` macro for
   Avro union types. Triple input — parsed record, binary wire bytes,
   or Avro JSON.
-- [`AvroFieldsPrism`](https://eo.constructive.dev/avro.html) — multi-
+- [`AvroFieldsPrism`](https://eo.constructive.dev/integrations/avro.html) — multi-
   field flavour of `AvroPrism`.
-- [`AvroTraversal`](https://eo.constructive.dev/avro.html) — `.each`
+- [`AvroTraversal`](https://eo.constructive.dev/integrations/avro.html) — `.each`
   traversal across Avro arrays.
-- [`AvroFieldsTraversal`](https://eo.constructive.dev/avro.html) —
+- [`AvroFieldsTraversal`](https://eo.constructive.dev/integrations/avro.html) —
   multi-field flavour of `AvroTraversal`.
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
@@ -104,8 +107,8 @@ for cats typeclasses.
 
 - Getting started: <https://eo.constructive.dev/getting-started.html>
 - Macro-derived optics (`generics`): <https://eo.constructive.dev/generics.html>
-- circe integration: <https://eo.constructive.dev/circe.html>
-- Avro integration: <https://eo.constructive.dev/avro.html>
+- circe integration: <https://eo.constructive.dev/integrations/circe.html>
+- Avro integration: <https://eo.constructive.dev/integrations/avro.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
 - Composition gap analysis (research):
   [`docs/research/2026-04-23-composition-gap-analysis.md`](./docs/research/2026-04-23-composition-gap-analysis.md)

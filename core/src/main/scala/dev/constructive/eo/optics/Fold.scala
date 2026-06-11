@@ -9,7 +9,8 @@ import compose.*
 
 /** Constructors for `Fold` — read-only multi-focus optic, backed by `Forget[F]` (`Forget[F][X, A] =
   * F[A]`). `T = Unit` rules out the write path; `.foldMap` is the consumption surface.
-  * `Fold.select(p)` narrows to a one-element `Option` stream.
+  * `Fold.select(p)` narrows to a one-element `Option` stream. The build-only dual on the same
+  * carrier — assemble a `T` *from* an `F`-layer — is [[Unfold]].
   *
   * Both constructors return the concrete [[ForgetFold]] subclass so a hand-written Fold picks up
   * its eager, carrier-free `foldMap` member (see [[ForgetFold.foldMap]]).
@@ -38,8 +39,7 @@ object Fold:
   * `Foldable[F]` directly. This lets the terminal [[foldMap]] fold the focus eagerly through the
   * captured `Foldable[F]`, skipping both the per-call `ForgetfulFold[Forget[F]]` summon and the
   * intermediate `S => M` closure the generic `Optic.foldMap` extension builds — the same
-  * specialisation `GetReplaceLens` / `SetterOptic` / `MultiFocusSingleton` apply to their hot
-  * paths.
+  * specialisation `GetReplaceLens` / `Modify` / `MultiFocusSingleton` apply to their hot paths.
   *
   * Returned by every `Fold.*` constructor so hand-written folds pick up the fast path
   * automatically. A *composed* Fold (the result of `.andThen`) surfaces as the erased

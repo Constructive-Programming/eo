@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1006 1053" font-size="14" role="img" aria-label="The three-axis optic family taxonomy: read cardinality by write cardinality by capability layer">
+<style>
+  text { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         text-anchor: middle; fill: #23272e; }
+  .fam   { font-size: 16.5px; font-weight: 600; }
+  .ghost-t { font-size: 13.5px; font-weight: 600; fill: #8585c5; }
+  .sub   { font-size: 11px; fill: #5b6068; }
+  .axis  { font-size: 13px; font-weight: 600; fill: #3b3b8c; }
+  .tick  { font-size: 11.5px; fill: #5b6068; font-style: italic; }
+  .layer { font-size: 14px; font-weight: 700; fill: #3b3b8c; }
+  .ro    { fill: #f2f2fa; stroke: #8585c5; stroke-width: 1.6; }
+  .rw    { fill: #dcdcf2; stroke: #3b3b8c; stroke-width: 1.6; }
+  .bo    { fill: #e3ecf6; stroke: #5e5eb8; stroke-width: 1.6; }
+  .mod   { fill: #ebebee; stroke: #6a6f78; stroke-width: 1.6; }
+  .plan  { fill: #faf3e8; stroke: #b8893a; stroke-width: 1.3; }
+  .plan-t { font-size: 12.5px; font-weight: 600; fill: #a3742a; }
+  .empty { fill: none; stroke: #b9bdd8; stroke-width: 1; }
+  .empty-t { font-size: 13px; fill: #b9bdd8; }
+  .drop  { stroke: #8585c5; stroke-width: 1; stroke-dasharray: 3 5; fill: none; }
+  .arrow { stroke: #3b3b8c; stroke-width: 1.6; fill: none; }
+  .ahead { fill: #3b3b8c; stroke: none; }
+  @media (prefers-color-scheme: dark) {
+    text   { fill: #e6edf3; }
+    .sub, .tick { fill: #9aa4b2; }
+    .axis, .layer { fill: #a3a3e6; }
+    .ghost-t { fill: #7878d6; }
+    .ro    { fill: #2b2b3a; stroke: #7878d6; }
+    .rw    { fill: #34344f; stroke: #7878d6; }
+    .bo    { fill: #2d3a4a; stroke: #a3a3e6; }
+    .mod   { fill: #30343a; stroke: #8b93a1; }
+    .plan  { fill: #3a3326; stroke: #c89a4a; }
+    .plan-t { fill: #d8ae62; }
+    .empty { stroke: #4a4f66; }
+    .empty-t { fill: #4a4f66; }
+    .drop  { stroke: #7878d6; }
+    .arrow { stroke: #a3a3e6; }
+    .ahead { fill: #a3a3e6; }
+  }
+</style>
+<line class="drop" x1="190.0" y1="180.0" x2="190.0" y2="780.0"/>
+<line class="drop" x1="772.0" y1="180.0" x2="772.0" y2="780.0"/>
+<polygon class="ro" points="190.0,180.0 287.0,236.0 578.0,68.0 481.0,12.0"/>
+<text class="fam" x="384.0" y="129.0">Getter</text>
+<polygon class="ro" points="287.0,236.0 384.0,292.0 675.0,124.0 578.0,68.0"/>
+<text class="fam" x="481.0" y="173.0">AffineFold</text>
+<text class="sub" x="481.0" y="193.0">B = Unit</text>
+<polygon class="ro" points="384.0,292.0 481.0,348.0 772.0,180.0 675.0,124.0"/>
+<text class="fam" x="578.0" y="241.0">Fold</text>
+<polygon class="rw" points="190.0,480.0 287.0,536.0 384.0,480.0 287.0,424.0"/>
+<text class="fam" x="287.0" y="485.0">Iso</text>
+<polygon class="rw" points="287.0,424.0 384.0,480.0 481.0,424.0 384.0,368.0"/>
+<text class="fam" x="384.0" y="429.0">Lens</text>
+<polygon class="rw" points="287.0,536.0 384.0,592.0 481.0,536.0 384.0,480.0"/>
+<text class="fam" x="384.0" y="541.0">Prism</text>
+<polygon class="rw" points="384.0,480.0 481.0,536.0 578.0,480.0 481.0,424.0"/>
+<text class="fam" x="481.0" y="473.0">Optional</text>
+<text class="sub" x="481.0" y="493.0">Affine carrier</text>
+<polygon class="rw" points="384.0,592.0 481.0,648.0 675.0,536.0 578.0,480.0"/>
+<text class="fam" x="529.5" y="557.0">Traversal</text>
+<text class="sub" x="529.5" y="577.0">fixed/Grate: total · each: contextual</text>
+<polygon class="plan" points="384.0,368.0 481.0,424.0 578.0,368.0 481.0,312.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="481.0" y="361.0">fallible write</text>
+<text class="sub" x="481.0" y="381.0">planned</text>
+<polygon class="plan" points="481.0,424.0 578.0,480.0 675.0,424.0 578.0,368.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="578.0" y="417.0">BiAffine</text>
+<text class="sub" x="578.0" y="437.0">planned</text>
+<polygon class="plan" points="578.0,480.0 675.0,536.0 772.0,480.0 675.0,424.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="675.0" y="473.0">fallible each</text>
+<text class="sub" x="675.0" y="493.0">planned</text>
+<polygon class="bo" points="190.0,780.0 384.0,892.0 481.0,836.0 287.0,724.0"/>
+<text class="fam" x="335.5" y="801.0">Review</text>
+<text class="sub" x="335.5" y="821.0">Iso's and Prism's build half — mend is total</text>
+<polygon class="bo" points="384.0,892.0 481.0,948.0 578.0,892.0 481.0,836.0"/>
+<text class="fam" x="481.0" y="897.0">Unfold</text>
+<polygon class="mod" points="287.0,724.0 578.0,892.0 675.0,836.0 384.0,668.0"/>
+<text class="fam" x="481.0" y="773.0">Modify</text>
+<text class="sub" x="481.0" y="793.0">the contextual write half — focus-agnostic</text>
+<polygon class="plan" points="384.0,668.0 675.0,836.0 772.0,780.0 481.0,612.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="578.0" y="717.0">fallible build</text>
+<text class="sub" x="578.0" y="737.0">planned</text>
+<line class="arrow" x1="151.2" y1="502.4" x2="447.0" y2="673.2"/><polygon class="ahead" points="447.0,673.2 438.1,672.3 441.7,665.9"/>
+<text class="axis" x="285.1" y="609.8" transform="rotate(30 285.1 609.8)">focus nature (ReadCompose):  total  →  fallible  →  multiple</text>
+<line class="arrow" x1="151.2" y1="457.6" x2="447.0" y2="286.8"/><polygon class="ahead" points="447.0,286.8 441.7,294.1 438.1,287.7"/>
+<text class="axis" x="287.1" y="346.2" transform="rotate(-30 287.1 346.2)">source nature:  total  →  contextual  →  fallible (WriteCompose — planned)</text>
+<line class="arrow" x1="70.0" y1="220.0" x2="70.0" y2="800.0"/><polygon class="ahead" points="70.0,800.0 66.3,791.8 73.7,791.8"/>
+<text class="layer" x="70.0" y="178.0">capability</text>
+<text class="tick" x="70.0" y="196.0">read-only (top)</text>
+<text class="tick" x="70.0" y="822.0">write-only (bottom)</text>
+<text class="layer" x="665.3" y="280.2" text-anchor="start">read-only</text>
+<text class="tick" x="665.3" y="299.2" text-anchor="start">B = Unit: from is vacuous — each family spans the source axis</text>
+<text class="layer" x="665.3" y="580.2" text-anchor="start">read-write</text>
+<text class="layer" x="665.3" y="880.2" text-anchor="start">write / build only</text>
+<text class="tick" x="665.3" y="899.2" text-anchor="start">the from halves of the layer above</text>
+</svg>

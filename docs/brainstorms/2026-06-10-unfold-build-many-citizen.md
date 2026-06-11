@@ -1,7 +1,7 @@
 ---
 date: 2026-06-10
 topic: unfold-build-many-citizen
-spike: open
+spike: resolved (2026-06-11, branch spike/unfold-build-many-citizen — see Findings at bottom)
 ---
 
 # `Unfold` — inhabiting the build-only / many cell
@@ -117,3 +117,70 @@ fused final-class. Rewrite `Schemes.cata` to build `plateFold.cross(unfold)` and
 the current `DirectGetter` result (behaviour + the typed-schemes B/op machine numbers). Success
 criterion: `cata`/`hylo` expressed as composition, and `direct2forget`'s `from` either becomes sound
 or its unreachability is provable from `Unfold`'s laws.
+
+## Findings (spike executed 2026-06-11, branch `spike/unfold-build-many-citizen`)
+
+Implemented: `core/optics/Unfold.scala`, fused member on `Review`, sound `direct2forget`,
+`Schemes.cata(Unfold)` overload, `UnfoldSpec` + `SchemesSpec` addition. Follow-up pass (same
+branch): `UnfoldLaws` + `UnfoldTests` discipline rulesets in `cats-eo-laws` (registered in
+`OpticsLawsSpec` for both an Applicative carrier and a pattern functor), and the composition
+matrix extended to the 11-family grid (121 cells) — the `Unfold` row/column exactly mirrors
+`Review`'s reversibility pattern (`iso`/`prism`/`review`/`unfold` compose; everything else is
+void by design). Two generalizing compositions were added for that symmetry:
+`Unfold.andThen(any reversible inner)` (`ReverseAccessor[G]` + `Functor[F]`) and the
+`reversible outer ∘ Unfold` extension in `Optic` (the many-rung mirror of `andThen(Review)`).
+Full root aggregate green.
+
+- **Q1 — CONFIRMED.** `Unfold[T, B, F] = Optic[Unit, T, Unit, B, Forget[F]]` with the real map
+  `embed: F[B] => T`, `X = Nothing`. Final class storing `embed`, per the encoding findings.
+
+- **Q2 — sharper than anticipated, and decisive.** The prime consumers (pattern functors: `BinF`,
+  `RoseF`, …) admit `Functor`/`Traverse` but **no `Applicative`** — `pure` cannot pick a
+  constructor. Requiring `Applicative[F]` for the vestigial `to` would have excluded the
+  recursion-scheme motivation entirely. Resolution: **two factories**. `Unfold.apply`
+  (`F: Applicative`, honest `to = pure(())`; read-side ops degrade to the singleton layer) and
+  `Unfold.algebra` (constraint-free; `to` throws `UnsupportedOperationException` — the honest
+  mirror of `direct2forget`'s formerly-unreachable `from`, and it fails *loudly*, tested).
+
+- **Q3 (ladder).** `embed` itself: no constraint. `unfold.andThen(review)` (pre-process each
+  part): `Functor[F]` — pattern functors compose freely. `review.andThen(unfold)` (post-process
+  the whole): **no constraint** (the seam threads a single `B`, never an `F`-layer).
+  `unfold.andThen(unfold)`: `Applicative[F]` (the same algebraic-lens `pure` re-lift as
+  `assocForgetMonad`). `Foldable` is never needed by `Unfold` itself.
+
+- **Q4 (carrier).** `Forget[F]` suffices: `embed` needs no structural leftover. No seam exercised
+  in the spike wanted `MultiFocus[F]`; revisit only if a future consumer needs the skeleton to
+  survive *alongside* the build (Plated keeps both halves for exactly that reason).
+
+- **Q5 (composition).** Fused final-class members shipped: `andThen(Review)` /
+  `andThen(Unfold)` / the generalized `andThenBuildAny` on `Unfold`, plus `Review.andThen(Unfold)`
+  and the reversible-outer extension in `Optic`. The non-fused generic path also works: a
+  morph-routed `Forget[F]` chain composes via `assocForgetMonad` for `Monad[F]` — and its build
+  side **executes** `direct2forget.from`.
+
+- **Q6 — core.** It closes a core hole and its fused member lives on `Review` (core). Schemes
+  consumes it.
+
+- **`direct2forget`'s `???` is now a sound branch** (motivation #1 — confirmed). `Unfold` made it
+  reachable (`UnfoldSpec` proves execution via `BijectionIso[Unit,·].andThen(unfold)`). The pick
+  is total on every reachable path because the only `F[B]` ever fed to a lifted Direct optic's
+  `from` is `ForgetPull.monadicPull`'s `pure(b)`; hand-routed cardinality ≠ 1 throws like the
+  other `pickSingletonOrThrow` bridges. Cost: the Composer gained a `Foldable[F]` constraint —
+  the composition matrix (100 cells) is unaffected.
+
+- **`cata = plateFold.cross(unfold)` — REFUTED as literally stated** (motivation #2 — corrected).
+  It is a type error: `cross` needs a shared carrier or `Accessor`+`ReverseAccessor` on
+  `MultiFocus[PSVec]`, which rightly don't exist; conceptually `cata` is a *fixpoint* of the
+  layer optic, not a 2-optic composition. What **is** true and shipped: the algebra becomes a
+  citizen the engine consumes (`Schemes.cata(sizeAlg: Unfold[A, A, PSVec])`), and algebras can be
+  *assembled by optic composition* before being consumed (`Review(_*2).andThen(Unfold.algebra(…))`
+  — tested). Honesty limit: an untyped `PSVec` layer is node-blind, so pure `PSVec`-algebras only
+  express constructor-independent folds; the para overload stays primary. The typed path is where
+  pure algebras are fully expressive: **PR #24's `Embed[F, S]` IS `Unfold[S, S, F]`** — unifying
+  them (anaF taking an `Unfold`, cataF's pure overload being one) is the natural follow-up once
+  #24 lands.
+
+- **Deferred.** Laws (candidates: `(rev ∘ u).embed = rev.reverseGet ∘ u.embed`;
+  `(u ∘ rev).embed = u.embed ∘ map(rev.reverseGet)`; singleton degradation
+  `modify(f)(()) = embed(pure(f(())))` for Applicative `F`). CompositionMatrixSpec extension to
+  the now-11-family matrix (DONE — see above). The `Embed ≅ Unfold` unification (blocked on #24).

@@ -240,7 +240,7 @@ object MultiFocusK:
     }
     arr
 
-  private def pickSingletonOrThrow[F[_]: Foldable, B](fb: F[B], carrier: String): B =
+  private[eo] def pickSingletonOrThrow[F[_]: Foldable, B](fb: F[B], carrier: String): B =
     val sz = Foldable[F].size(fb)
     if sz == 1 then Foldable[F].reduceLeftToOption(fb)(identity[B])((_, b) => b).get
     else
@@ -680,15 +680,15 @@ object MultiFocusK:
           if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
           else o.from(new Affine.Hit[o.X, B](y.asInstanceOf[Snd[o.X]], vys(pos)))
 
-  /** MultiFocus[F] → SetterF. Uniform Setter widening for any `Functor[F]`. */
-  given multifocus2setter[F[_]: Functor]: Composer[MultiFocus[F], SetterF] with
+  /** MultiFocus[F] → ModifyF. Uniform Modify widening for any `Functor[F]`. */
+  given multifocus2modify[F[_]: Functor]: Composer[MultiFocus[F], ModifyF] with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, SetterF] =
-      new Optic[S, T, A, B, SetterF]:
+    def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, ModifyF] =
+      new Optic[S, T, A, B, ModifyF]:
         type X = (S, A)
-        def to(s: S): SetterF[X, A] = SetterF((s, identity[A]))
-        def from(sfxb: SetterF[X, B]): T =
-          val (s, f) = sfxb.setter
+        def to(s: S): ModifyF[X, A] = ModifyF((s, identity[A]))
+        def from(sfxb: ModifyF[X, B]): T =
+          val (s, f) = sfxb.modifier
           val (x, fa) = o.to(s)
           o.from((x, Functor[F].map(fa)(f)))
 

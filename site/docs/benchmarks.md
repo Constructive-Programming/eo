@@ -112,9 +112,9 @@ carries to stay uniform across families. The `loyaltyId` rows are the canonical
 `customer.loyaltyId: Option[String]` focus (in memory — Avro omits it as a union),
 Some and None branches.
 
-**Getter / Setter** (`Direct` / `SetterF`) — depth-0/3/6 over `Nested`. Both
+**Getter / Modify** (`Direct` / `ModifyF`) — depth-0/3/6 over `Nested`. Both
 families compose through the fused **`inline` `andThen`** on their concrete
-subclasses (`DirectGetter` / `SetterOptic`), so every row builds a *composed*
+subclasses (`Getter` / `Modify`), so every row builds a *composed*
 optic on both sides and dispatches through it once — apples-to-apples with
 Monocle's composed `Getter`/`Setter`.
 
@@ -125,14 +125,14 @@ Monocle's composed `Getter`/`Setter`.
 | `_6` | 11.30 | 27.50 | 26.42 | 52.26 |
 
 At composition depth both families stay close to the hand-written baseline — a
-depth-N chain of `.get` calls, or a nested `copy` for the setter. The lever is
+depth-N chain of `.get` calls, or a nested `copy` for the modifier. The lever is
 `inline` on the same-carrier `andThen`: each compose site splices a *distinct*
 lambda, so a depth-N chain becomes distinct synthetic methods per level. A plain
 `def` reuses one shared `andThen$$anonfun$` bytecode across the chain, which C2
 reads as recursion and caps (`MaxRecursiveInlineLevel`), leaving the deep tail as
 virtual `Function1.apply`; splicing distinct lambdas sidesteps that cap with no
-JVM flag. Setter additionally sheds its per-hop `SetterF` allocation (the fused
-`SetterOptic` writes through `modifyFn` directly: depth-6 800→288 B/op). Monocle
+JVM flag. Modify (benchmarked as `SetterBench`; Monocle's family is still `Setter`) additionally sheds its per-hop `ModifyF` allocation (the fused
+`Modify` writes through `modifyFn` directly: depth-6 800→288 B/op). Monocle
 gets the same un-capped inlining from a fresh anonymous class per compose, and
 trails here (~1.7–2.4× at `_3`/`_6`). **Monocle is faster at the scalar leaf**
 (`_0`, `order.id`) by a few tenths of a ns — the sub-nanosecond floor where its

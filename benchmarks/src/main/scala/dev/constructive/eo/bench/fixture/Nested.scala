@@ -9,7 +9,7 @@ package fixture
   * stress case.
   *
   * Each leaf (`Nested0`) carries three kinds of focus:
-  *   - `value: Int` — drives Lens / Getter / Setter.
+  *   - `value: Int` — drives Lens / Getter / Modify.
   *   - `flag: Option[String]` — drives Optional (the conditional branch is exactly the `None` side
   *     of the `Option`).
   *   - `items: List[Int]` — drives Fold over a `Foldable` carrier.

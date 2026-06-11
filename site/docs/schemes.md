@@ -64,6 +64,36 @@ val bodySum: Getter[Payload, Int] =
 bodySum.get(Payload("p", doc))
 ```
 
+### The algebra as an optic — `cata(Unfold)`
+
+The *input* of a fold is itself a citizen of the optic algebra: a pure algebra
+`PSVec[A] => A` is an [`Unfold[A, A, PSVec]`](optics.md#unfold) — the build-only/many
+optic — and `cata` accepts it directly. The payoff is that algebras can be **assembled
+by optic composition** (`Review ∘ Unfold` post-processes each layer's result,
+`Unfold ∘ Review` pre-processes each part) before the engine consumes them:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.{Review, Unfold}
+
+// node-blind algebra (counts nodes) carried as a build-only optic …
+val sizeAlg = Unfold.algebra[Int, Int, PSVec](kids => 1 + kids.toList.sum)
+
+// … and a per-layer post-processing step composed in front of it
+val weighted = Review[Int, Int](_ * 2).andThen(sizeAlg)
+
+val docSize: Getter[Json, Int] = Schemes.cata[Json, Int](sizeAlg)
+```
+
+```scala mdoc
+docSize.get(doc)
+```
+
+One honesty note: a `PSVec` layer is **node-blind** — the children arrive positionally
+with the constructor erased — so a pure `PSVec`-algebra can only express
+constructor-independent folds (sizes, counts, child aggregations). Folds that dispatch
+on the node (like `sumNumbers` above) use the para-flavored `(S, PSVec[A]) => A`
+overload, which stays the primary form on this untyped path.
+
 ## `ana` — an unfold that is a `Review`
 
 A coalgebra maps a seed to its child seeds plus a builder for the node (the canonical anamorphism

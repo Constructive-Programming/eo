@@ -9,7 +9,7 @@ package fixture
   * schema — the precondition for apples-to-apples cross-backend numbers.
   *
   * Foci the schema unlocks:
-  *   - `order.id: Long` — depth-1 scalar (Lens / Getter / Setter; jsoniter `$.id`).
+  *   - `order.id: Long` — depth-1 scalar (Lens / Getter / Modify; jsoniter `$.id`).
   *   - `customer.address.street: String` — depth-3 product path (deep Lens / JsonPrism).
   *   - `customer.loyaltyId: Option[String]` — Optional / AffineFold focus.
   *   - `lines[*].name: String` — array Traversal (`$.lines[*].name`).

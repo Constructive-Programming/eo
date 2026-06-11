@@ -9,7 +9,7 @@ trait Optic[S, T, A, B, F[_, _]]:
   def from: F[X, B] => T
 ```
 
-Every family — Lens, Prism, Iso, Optional, Setter, Getter, Fold,
+Every family — Lens, Prism, Iso, Optional, Modify, Getter, Fold,
 Traversal — is a specialisation of this shape differing only in
 the **carrier** `F[_, _]`. Composition crosses families by
 morphing from one carrier to another rather than hand-rolling
@@ -58,13 +58,13 @@ this optic have?"
 
 | Carrier         | Shape                                          | Family                 |
 |-----------------|------------------------------------------------|------------------------|
-| `Direct`        | `A` — identity; no leftover (forgetful functor) | `Iso`, `Getter`       |
+| `Direct`        | `A` — identity; no leftover (forgetful functor) | `Iso`, `Getter`, `Review` |
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `MultiFocus[F]` | `(X, F[A])` — pair leftover with an `F`-wrapped focus vector | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each`; `Function1[Int, *]` ⇒ `Traversal.{two,three,four}` and `MultiFocus.tuple` / `representable`); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
-| `Forget[F]`     | `F[A]` — a `Foldable`/`Traverse` container     | `Fold`                 |
-| `SetterF`       | `(Fst[X], Snd[X] => A)`                        | `Setter`               |
+| `Forget[F]`     | `F[A]` — an `F`-layer with no leftover         | `Fold` (read-only, `F: Foldable`), `Unfold` (build-only, `embed: F[B] => T`) |
+| `ModifyF`       | `(Fst[X], Snd[X] => A)`                        | `Modify`               |
 
 What a carrier supports is *exactly* what its typeclass
 instances provide:
@@ -86,13 +86,15 @@ a new carrier means supplying the typeclass instances the
 operations it wants to support need — not rewriting `Optic` or
 the existing families.
 
-Two **standalone** types — `Review` and the circe-specific
-`JsonTraversal` — deliberately sit *outside* the Optic trait.
-Both would have to invent an artificial `to` to satisfy the
-trait contract (`Review` has no read; `JsonTraversal` has no
-need for `AssociativeFunctor`), and [extending as little as you
-need](extensibility.md) is cheaper than fabricating trait
-members you won't use.
+One **standalone** type — the circe-specific `JsonTraversal` —
+deliberately sits *outside* the Optic trait: it has no need for
+`AssociativeFunctor`, and [extending as little as you
+need](extensibility.md) is cheaper than fabricating trait members
+you won't use. (`Review` once sat outside too, on the grounds that
+"a pure builder has no `to`" — but with source `Unit` the read side
+is exactly as vestigial as `Getter`'s write side, so it was folded
+in as a full `Optic`; `Unfold` followed the same pattern on the
+many rung.)
 
 ## Composition
 
@@ -155,7 +157,7 @@ val mainStreet = wrappedMaybe.andThen(mainOnly)
 
 `Composer[Tuple2, Affine]` is one of the stdlib instances;
 [`dev.constructive.eo.data.Affine`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html)
-ships it. Other bridges: `Tuple2 → SetterF`, `Tuple2 →
+ships it. Other bridges: `Tuple2 → ModifyF`, `Tuple2 →
 MultiFocus[F]`, `Either → Affine`, `Either → MultiFocus[F]`,
 `Affine → MultiFocus[F]`, `Direct → Tuple2`, `Direct →
 Either`, `Direct → MultiFocus[F]`.
@@ -185,9 +187,9 @@ ergonomics of one carrier, extended across all of them.
 
 Every edge below is a shipping `Composer[F, G]` given; solid
 arrows are tier-1 atomic bridges, dashed arrows are tier-2
-transitive derivations via `Composer.chainViaTuple2`. `SetterF`
+transitive derivations via `Composer.chainViaTuple2`. `ModifyF`
 is the only true sink — no outbound `Composer`. `MultiFocus[F]`
-is near-terminal: its only outbound bridges are `→ SetterF`
+is near-terminal: its only outbound bridges are `→ ModifyF`
 (write) and a restricted `→ Forget[F]` read-only escape
 (`multifocus2forget`, available only when `T = Unit`) — so
 chains effectively land there last.
@@ -197,26 +199,30 @@ flowchart LR
   Direct --> Tuple2
   Direct --> Either
   Direct --> MFocus["MultiFocus[F]"]
+  Direct --> ForgetF["Forget[F]"]
   Tuple2 --> Affine
-  Tuple2 --> SetterF
+  Tuple2 --> ModifyF
   Tuple2 --> MFocus
   Either --> Affine
   Either --> MFocus
   Affine --> MFocus
-  ForgetF["Forget[F]"] --> MFocus
-  MFocus --> SetterF
+  ForgetF --> MFocus
+  MFocus --> ModifyF
   MFocus -.->|read-only, T=Unit| ForgetF
   Direct -.->|chainViaTuple2| Affine
-  Direct -.->|chainViaTuple2| SetterF
+  Direct -.->|chainViaTuple2| ModifyF
   Direct -.->|chainViaTuple2| MFocus
-  SetterF:::sink
+  ModifyF:::sink
   classDef sink stroke-dasharray: 0,stroke-width:2px,fill:#eef
 ```
 
-`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) and one
-restricted inbound (`MultiFocus[F] → Forget[F]`, the `T = Unit`
-read-only escape); chains otherwise reach it via `Fold` at
-construction time.
+`Forget[F]` has one outbound bridge (`→ MultiFocus[F]`) and two
+inbound: `Direct → Forget[F]` (`direct2forget`, for
+`F: Applicative: Foldable` — `pure` lifts the read side, a
+singleton pick closes the build side, which `Unfold` chains
+exercise) and the restricted `MultiFocus[F] → Forget[F]`
+(the `T = Unit` read-only escape). Chains otherwise reach it via
+`Fold` / `Unfold` at construction time.
 `MultiFocus[F]` covers five v1 carriers (`AlgLens[F]`,
 `Kaleidoscope`, `Grate`, `PowerSeries`, `FixedTraversal[N]`) post-
 fold; sub-shapes are selected by the choice of `F` (e.g.

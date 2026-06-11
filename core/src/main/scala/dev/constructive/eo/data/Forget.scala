@@ -14,7 +14,8 @@ import optics.Optic
   * `X`. Equivalent to the classic Haskell `newtype Forget r a b = Forget (a -> r)` construction but
   * applied to a type constructor `F`: `Forget[F][X, A] = F[A]`, ignoring `X` completely.
   *
-  * Used by [[dev.constructive.eo.optics.Fold]] and the multi-focus family
+  * Used by [[dev.constructive.eo.optics.Fold]] (read-only), its build-only dual
+  * [[dev.constructive.eo.optics.Unfold]], and the multi-focus family
   * ([[dev.constructive.eo.data.MultiFocus]]) as a uniform "F-shape carrier" whose optic-level
   * capabilities scale with the typeclasses `F` itself admits.
   */

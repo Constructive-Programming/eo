@@ -22,6 +22,9 @@ import data.Direct
   * `Review(iso.reverseGet)` / `Review(prism.mend)` — rather than via a bespoke factory: an
   * `Iso`/`Prism` already *is* a build direction, so cross-optic `from*` constructors would be
   * redundant (eo has no `Prism.fromIso` etc. for the same reason).
+  *
+  * Review builds from ONE focus; its many-rung sibling is [[Unfold]] (assemble a `T` from an
+  * `F`-layer of parts), reachable by composition through the fused `andThen(Unfold)` below.
   */
 final class Review[T, B](val reverseGet: B => T) extends Optic[Unit, T, Unit, B, Direct]:
   type X = Nothing
@@ -42,6 +45,16 @@ final class Review[T, B](val reverseGet: B => T) extends Optic[Unit, T, Unit, B,
       ReverseAccessor[G]
   ): Review[T, D] =
     Review(d => reverseGet(inner.reverseGet(d)))
+
+  /** Fused `Review.andThen(Unfold)` — post-process the assembled whole. `inner` assembles `B` from
+    * a layer `F[D]`; `this` builds `T` from that `B`, so the composite is an [[Unfold]] assembling
+    * `T` from `F[D]` (`reverseGet ∘ inner.embed`). No constraint on `F` — the seam threads a single
+    * `B`, never an `F`-layer, so pattern-functor algebras compose freely. A member (not an
+    * extension) so it out-prioritises the `Morph`-summoning generic `andThen`, which would route
+    * the same call through `Composer[Direct, Forget[F]]`'s singleton-pick.
+    */
+  inline def andThen[F[_], D](inner: Unfold[B, D, F]): Unfold[T, D, F] =
+    inner.into(reverseGet)
 
 /** Constructors for [[Review]]. */
 object Review:

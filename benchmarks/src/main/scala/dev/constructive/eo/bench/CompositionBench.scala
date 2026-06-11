@@ -31,7 +31,7 @@ class CompositionBench extends JmhDefaults:
 
   import NestedOptics.{d3, d6, eoFlag, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, leaf}
 
-  // Leaf Lens on Nested0.value (NestedOptics ships a Getter / Setter for it,
+  // Leaf Lens on Nested0.value (NestedOptics ships a Getter / Modify for it,
   // but composition needs a full Lens).
   private val leafValue =
     EoLens[Nested0, Int](_.value, (n, v) => n.copy(value = v))

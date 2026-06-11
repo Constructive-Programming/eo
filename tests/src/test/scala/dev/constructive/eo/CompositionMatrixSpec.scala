@@ -20,7 +20,7 @@ import scala.compiletime.testing.typeChecks
 import org.specs2.mutable.Specification
 
 import optics.*
-import data.{Affine, Direct, Forget, MultiFocus, PSVec, SetterF}
+import data.{Affine, Direct, Forget, MultiFocus, PSVec, ModifyF}
 
 object MatrixFixtures:
   case class Box[A](a: A)
@@ -49,10 +49,10 @@ object MatrixFixtures:
   val o_affoldL = AffineFold[Box[List[Int]], List[Int]](b => Some(b.a))
   val o_fold = Fold[List, Box[Int]]
   val o_foldL = Fold[List, List[Int]]
-  val o_setter = Setter[Box[Box[Int]], Box[Box[Int]], Box[Int], Box[Int]](f => b => Box(f(b.a)))
+  val o_modify = Modify[Box[Box[Int]], Box[Box[Int]], Box[Int], Box[Int]](f => b => Box(f(b.a)))
 
-  val o_setterL =
-    Setter[Box[List[Int]], Box[List[Int]], List[Int], List[Int]](f => b => Box(f(b.a)))
+  val o_modifyL =
+    Modify[Box[List[Int]], Box[List[Int]], List[Int], List[Int]](f => b => Box(f(b.a)))
 
   val o_review = Review[Box[Box[Int]], Box[Int]](Box(_))
   val o_reviewL = Review[Box[List[Int]], List[Int]](Box(_))
@@ -64,8 +64,10 @@ object MatrixFixtures:
   val i_getter = Getter[Box[Int], Int](_.a)
   val i_affold = AffineFold[Box[Int], Int](b => Some(b.a))
   val i_fold = Fold[List, Int]
-  val i_setter = Setter[Box[Int], Box[Int], Int, Int](f => b => Box(f(b.a)))
+  val i_modify = Modify[Box[Int], Box[Int], Int, Int](f => b => Box(f(b.a)))
   val i_review = Review[Box[Int], Int](Box(_))
+  val o_unfold = Unfold((xs: List[Box[Int]]) => Box(Box(xs.map(_.a).sum)))
+  val i_unfold = Unfold((xs: List[Int]) => Box(xs.sum))
 
 class CompositionMatrixSpec extends Specification:
   import MatrixFixtures.*
@@ -115,15 +117,19 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[List[Int]], Unit, Int, Unit, Forget[List]] = o_isoL.andThen(i_fold)"
       ) must beTrue
     }
-    "iso ∘ setter → Optic" >> {
-      typeChecks("o_iso.andThen(i_setter)") must beTrue // resolves with no expected type
+    "iso ∘ modify → Optic" >> {
+      typeChecks("o_iso.andThen(i_modify)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_iso.andThen(i_setter)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_iso.andThen(i_modify)"
       ) must beTrue
     }
     "iso ∘ review → Review" >> {
       typeChecks("o_iso.andThen(i_review)") must beTrue // resolves with no expected type
       typeChecks("val r: Review[Box[Box[Int]], Int] = o_iso.andThen(i_review)") must beTrue
+    }
+    "iso ∘ unfold → Unfold" >> {
+      typeChecks("o_iso.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_iso.andThen(i_unfold)") must beTrue
     }
   }
 
@@ -172,14 +178,17 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[List[Int]], Unit, Int, Unit, Forget[List]] = o_lensL.andThen(i_fold)"
       ) must beTrue
     }
-    "lens ∘ setter → Optic" >> {
-      typeChecks("o_lens.andThen(i_setter)") must beTrue // resolves with no expected type
+    "lens ∘ modify → Optic" >> {
+      typeChecks("o_lens.andThen(i_modify)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_lens.andThen(i_setter)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_lens.andThen(i_modify)"
       ) must beTrue
     }
     "lens ∘ review must not compile" >> {
       typeChecks("o_lens.andThen(i_review)") must beFalse
+    }
+    "lens ∘ unfold must not compile" >> {
+      typeChecks("o_lens.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -228,15 +237,19 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[List[Int]], Unit, Int, Unit, Forget[List]] = o_prismL.andThen(i_fold)"
       ) must beTrue
     }
-    "prism ∘ setter → Optic" >> {
-      typeChecks("o_prism.andThen(i_setter)") must beTrue // resolves with no expected type
+    "prism ∘ modify → Optic" >> {
+      typeChecks("o_prism.andThen(i_modify)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_prism.andThen(i_setter)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_prism.andThen(i_modify)"
       ) must beTrue
     }
     "prism ∘ review → Review" >> {
       typeChecks("o_prism.andThen(i_review)") must beTrue // resolves with no expected type
       typeChecks("val r: Review[Box[Box[Int]], Int] = o_prism.andThen(i_review)") must beTrue
+    }
+    "prism ∘ unfold → Unfold" >> {
+      typeChecks("o_prism.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_prism.andThen(i_unfold)") must beTrue
     }
   }
 
@@ -285,14 +298,17 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[List[Int]], Unit, Int, Unit, Forget[List]] = o_optionalL.andThen(i_fold)"
       ) must beTrue
     }
-    "optional ∘ setter → Optic" >> {
-      typeChecks("o_optional.andThen(i_setter)") must beTrue // resolves with no expected type
+    "optional ∘ modify → Optic" >> {
+      typeChecks("o_optional.andThen(i_modify)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_optional.andThen(i_setter)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_optional.andThen(i_modify)"
       ) must beTrue
     }
     "optional ∘ review must not compile" >> {
       typeChecks("o_optional.andThen(i_review)") must beFalse
+    }
+    "optional ∘ unfold must not compile" >> {
+      typeChecks("o_optional.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -345,14 +361,17 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[List[List[Int]], Unit, Int, Unit, Forget[List]] = o_travL.andThen(i_fold)"
       ) must beTrue
     }
-    "trav ∘ setter → Optic" >> {
-      typeChecks("o_trav.andThen(i_setter)") must beTrue // resolves with no expected type
+    "trav ∘ modify → Optic" >> {
+      typeChecks("o_trav.andThen(i_modify)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[List[Box[Int]], List[Box[Int]], Int, Int, SetterF] = o_trav.andThen(i_setter)"
+        "val r: Optic[List[Box[Int]], List[Box[Int]], Int, Int, ModifyF] = o_trav.andThen(i_modify)"
       ) must beTrue
     }
     "trav ∘ review must not compile" >> {
       typeChecks("o_trav.andThen(i_review)") must beFalse
+    }
+    "trav ∘ unfold must not compile" >> {
+      typeChecks("o_trav.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -393,11 +412,14 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[List[Int]], Unit, Int, Unit, Forget[List]] = o_getterL.andThen(i_fold)"
       ) must beTrue
     }
-    "getter ∘ setter must not compile" >> {
-      typeChecks("o_getter.andThen(i_setter)") must beFalse
+    "getter ∘ modify must not compile" >> {
+      typeChecks("o_getter.andThen(i_modify)") must beFalse
     }
     "getter ∘ review must not compile" >> {
       typeChecks("o_getter.andThen(i_review)") must beFalse
+    }
+    "getter ∘ unfold must not compile" >> {
+      typeChecks("o_getter.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -438,11 +460,14 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[List[Int]], Unit, Int, Unit, Forget[List]] = o_affoldL.andThen(i_fold)"
       ) must beTrue
     }
-    "affold ∘ setter must not compile" >> {
-      typeChecks("o_affold.andThen(i_setter)") must beFalse
+    "affold ∘ modify must not compile" >> {
+      typeChecks("o_affold.andThen(i_modify)") must beFalse
     }
     "affold ∘ review must not compile" >> {
       typeChecks("o_affold.andThen(i_review)") must beFalse
+    }
+    "affold ∘ unfold must not compile" >> {
+      typeChecks("o_affold.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -495,62 +520,68 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[List[List[Int]], Unit, Int, Unit, Forget[List]] = o_foldL.andThen(i_fold)"
       ) must beTrue
     }
-    "fold ∘ setter must not compile" >> {
-      typeChecks("o_fold.andThen(i_setter)") must beFalse
+    "fold ∘ modify must not compile" >> {
+      typeChecks("o_fold.andThen(i_modify)") must beFalse
     }
     "fold ∘ review must not compile" >> {
       typeChecks("o_fold.andThen(i_review)") must beFalse
     }
+    "fold ∘ unfold must not compile" >> {
+      typeChecks("o_fold.andThen(i_unfold)") must beFalse
+    }
   }
 
-  "setter (outer) composition row" >> {
-    "setter ∘ iso → Optic" >> {
-      typeChecks("o_setter.andThen(i_iso)") must beTrue // resolves with no expected type
+  "modify (outer) composition row" >> {
+    "modify ∘ iso → Optic" >> {
+      typeChecks("o_modify.andThen(i_iso)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_setter.andThen(i_iso)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_modify.andThen(i_iso)"
       ) must beTrue
     }
-    "setter ∘ lens → Optic" >> {
-      typeChecks("o_setter.andThen(i_lens)") must beTrue // resolves with no expected type
+    "modify ∘ lens → Optic" >> {
+      typeChecks("o_modify.andThen(i_lens)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_setter.andThen(i_lens)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_modify.andThen(i_lens)"
       ) must beTrue
     }
-    "setter ∘ prism → Optic" >> {
-      typeChecks("o_setter.andThen(i_prism)") must beTrue // resolves with no expected type
+    "modify ∘ prism → Optic" >> {
+      typeChecks("o_modify.andThen(i_prism)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_setter.andThen(i_prism)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_modify.andThen(i_prism)"
       ) must beTrue
     }
-    "setter ∘ optional → Optic" >> {
-      typeChecks("o_setter.andThen(i_optional)") must beTrue // resolves with no expected type
+    "modify ∘ optional → Optic" >> {
+      typeChecks("o_modify.andThen(i_optional)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_setter.andThen(i_optional)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_modify.andThen(i_optional)"
       ) must beTrue
     }
-    "setter ∘ trav → Optic" >> {
-      typeChecks("o_setterL.andThen(i_trav)") must beTrue // resolves with no expected type
+    "modify ∘ trav → Optic" >> {
+      typeChecks("o_modifyL.andThen(i_trav)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[List[Int]], Box[List[Int]], Int, Int, SetterF] = o_setterL.andThen(i_trav)"
+        "val r: Optic[Box[List[Int]], Box[List[Int]], Int, Int, ModifyF] = o_modifyL.andThen(i_trav)"
       ) must beTrue
     }
-    "setter ∘ getter must not compile" >> {
-      typeChecks("o_setter.andThen(i_getter)") must beFalse
+    "modify ∘ getter must not compile" >> {
+      typeChecks("o_modify.andThen(i_getter)") must beFalse
     }
-    "setter ∘ affold must not compile" >> {
-      typeChecks("o_setter.andThen(i_affold)") must beFalse
+    "modify ∘ affold must not compile" >> {
+      typeChecks("o_modify.andThen(i_affold)") must beFalse
     }
-    "setter ∘ fold must not compile" >> {
-      typeChecks("o_setterL.andThen(i_fold)") must beFalse
+    "modify ∘ fold must not compile" >> {
+      typeChecks("o_modifyL.andThen(i_fold)") must beFalse
     }
-    "setter ∘ setter → Optic" >> {
-      typeChecks("o_setter.andThen(i_setter)") must beTrue // resolves with no expected type
+    "modify ∘ modify → Optic" >> {
+      typeChecks("o_modify.andThen(i_modify)") must beTrue // resolves with no expected type
       typeChecks(
-        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, SetterF] = o_setter.andThen(i_setter)"
+        "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, ModifyF] = o_modify.andThen(i_modify)"
       ) must beTrue
     }
-    "setter ∘ review must not compile" >> {
-      typeChecks("o_setter.andThen(i_review)") must beFalse
+    "modify ∘ review must not compile" >> {
+      typeChecks("o_modify.andThen(i_review)") must beFalse
+    }
+    "modify ∘ unfold must not compile" >> {
+      typeChecks("o_modify.andThen(i_unfold)") must beFalse
     }
   }
 
@@ -581,11 +612,61 @@ class CompositionMatrixSpec extends Specification:
     "review ∘ fold must not compile" >> {
       typeChecks("o_reviewL.andThen(i_fold)") must beFalse
     }
-    "review ∘ setter must not compile" >> {
-      typeChecks("o_review.andThen(i_setter)") must beFalse
+    "review ∘ modify must not compile" >> {
+      typeChecks("o_review.andThen(i_modify)") must beFalse
     }
     "review ∘ review → Review" >> {
       typeChecks("o_review.andThen(i_review)") must beTrue // resolves with no expected type
       typeChecks("val r: Review[Box[Box[Int]], Int] = o_review.andThen(i_review)") must beTrue
+    }
+    "review ∘ unfold → Unfold" >> {
+      typeChecks("o_review.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks(
+        "val r: Unfold[Box[Box[Int]], Int, List] = o_review.andThen(i_unfold)"
+      ) must beTrue
+    }
+  }
+
+  "unfold (outer) composition row" >> {
+    "unfold ∘ iso → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_iso)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_iso)") must beTrue
+    }
+    "unfold ∘ lens must not compile" >> {
+      typeChecks("o_unfold.andThen(i_lens)") must beFalse
+    }
+    "unfold ∘ prism → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_prism)") must beTrue // resolves with no expected type
+      typeChecks("val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_prism)") must beTrue
+    }
+    "unfold ∘ optional must not compile" >> {
+      typeChecks("o_unfold.andThen(i_optional)") must beFalse
+    }
+    "unfold ∘ trav must not compile" >> {
+      typeChecks("o_unfold.andThen(i_trav)") must beFalse
+    }
+    "unfold ∘ getter must not compile" >> {
+      typeChecks("o_unfold.andThen(i_getter)") must beFalse
+    }
+    "unfold ∘ affold must not compile" >> {
+      typeChecks("o_unfold.andThen(i_affold)") must beFalse
+    }
+    "unfold ∘ fold must not compile" >> {
+      typeChecks("o_unfold.andThen(i_fold)") must beFalse
+    }
+    "unfold ∘ modify must not compile" >> {
+      typeChecks("o_unfold.andThen(i_modify)") must beFalse
+    }
+    "unfold ∘ review → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_review)") must beTrue // resolves with no expected type
+      typeChecks(
+        "val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_review)"
+      ) must beTrue
+    }
+    "unfold ∘ unfold → Unfold" >> {
+      typeChecks("o_unfold.andThen(i_unfold)") must beTrue // resolves with no expected type
+      typeChecks(
+        "val r: Unfold[Box[Box[Int]], Int, List] = o_unfold.andThen(i_unfold)"
+      ) must beTrue
     }
   }

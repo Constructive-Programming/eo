@@ -5,7 +5,7 @@ import optics.Optic
 
 /** Bridge between carriers — reshape an `F`-carrier optic into a `G`-carrier optic. Used by
   * `Optic.morph`; the mechanism by which optic families cross boundaries (Lens → Optional, Lens →
-  * Setter, Iso → Lens, …).
+  * Modify, Iso → Lens, …).
   *
   * @tparam F
   *   source carrier
@@ -60,23 +60,33 @@ object Composer extends LowPriorityComposerInstances:
             // conforms to `T`) keeps the match total and compiler-verified — no `???` needed.
             case Left(x) => x
 
-  /** Express a read-only Direct optic (a Getter) as a Fold — lift the single focus into `F` via
-    * `pure`. This is the `Composer[Direct, Forget[F]]` bridge
-    * [[dev.constructive.eo.laws.GetterLaws]] anticipated; it became sound once `Fold` was made
-    * honestly one-way (`B = Unit`), because the `from` is now genuinely unreachable: `Forget[F]`
-    * admits no `ReverseAccessor`, so the resulting fold's build side is never invoked (mirrors
-    * [[direct2either]]'s unreachable `Left`). Powers `Getter.andThen(Fold)` and `Optic.cross`
-    * against a `Fold`. Requires `Applicative[F]` for `pure`.
+  /** Express a Direct optic (a Getter, Review, or Iso) as a `Forget[F]`-carrier optic — lift the
+    * single focus into `F` via `pure` on the read side, and pick the single `B` back out of the
+    * `F[B]` on the build side. This is the `Composer[Direct, Forget[F]]` bridge
+    * [[dev.constructive.eo.laws.GetterLaws]] anticipated. Powers `Getter.andThen(Fold)`,
+    * `Optic.cross` against a `Fold`, and — since [[optics.Unfold]] gave `Forget[F]` a genuine
+    * build-only citizen — the build side of `review.andThen(unfold)` chains.
+    *
+    * The `from` was a documented-unreachable `???` while `Forget[F]` had no build-capable
+    * inhabitant; `Unfold` made it reachable (via `assocForgetMonad.composeFrom` on a `Monad[F]`
+    * chain). The singleton pick is sound on every reachable path: the only `F[B]` ever fed to a
+    * lifted Direct optic's `from` is `ForgetPull.monadicPull`'s `pure(b)`. A hand-routed call with
+    * cardinality ≠ 1 throws, mirroring the other `pickSingletonOrThrow` bridges. Requires
+    * `Applicative[F]` for `pure` and `Foldable[F]` for the pick.
     *
     * @group Instances
     */
-  given direct2forget[F[_]](using F: cats.Applicative[F]): Composer[Direct, data.Forget[F]] with
+  given direct2forget[F[_]](using
+      F: cats.Applicative[F],
+      FF: cats.Foldable[F],
+  ): Composer[Direct, data.Forget[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, data.Forget[F]] =
       new Optic[S, T, A, B, data.Forget[F]]:
         type X = Nothing
         def to(s: S): data.Forget[F][X, A] = data.Forget(F.pure(o.to(s).value))
-        def from(u: data.Forget[F][X, B]): T = ???
+        def from(fb: data.Forget[F][X, B]): T =
+          o.from(Direct(data.MultiFocusK.pickSingletonOrThrow[F, B](fb.value, "Direct")))
 
 /** Low-priority `Composer` instances —
   * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]], a transitive derivation pinned
@@ -88,7 +98,7 @@ trait LowPriorityComposerInstances:
 
   /** Transitive derivation via `Tuple2` as the intermediate carrier: given `F → Tuple2` and
     * `Tuple2 → G`, derive `F → G`. Fires cleanly for Direct-origin chains to any target with a
-    * `Composer[Tuple2, _]` direct (Affine / SetterF / MultiFocus[F] / MultiFocus[PSVec]).
+    * `Composer[Tuple2, _]` direct (Affine / ModifyF / MultiFocus[F] / MultiFocus[PSVec]).
     *
     * @group Instances
     */

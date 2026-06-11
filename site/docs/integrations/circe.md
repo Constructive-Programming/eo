@@ -34,7 +34,7 @@ the whole payload — so the gap grows from ~3× on a tiny record to ~160× on a
 large one. For a write that touches *every* element of an array, though, both
 sides are O(elements) and the cursor walk has no edge (it is in fact slightly
 slower) — reach for the traversal there for composition and diagnostics, not
-raw throughput. See the [benchmarks page](benchmarks.md)
+raw throughput. See the [benchmarks page](../benchmarks.md)
 for the full tables.
 
 ## JsonPrism
@@ -386,7 +386,7 @@ every field named `ssn` at any depth, uppercase every string,
 round every number. `Plated[Json]` makes `Json` a recursive
 self-traversal — the immediate children of a node are an array's
 elements or an object's field values — so the
-[`Plated`](cookbook.md) combinators walk the whole document:
+[`Plated`](../cookbook.md) combinators walk the whole document:
 
 ```scala mdoc:silent
 import dev.constructive.eo.circe.given
@@ -431,7 +431,7 @@ everyString.modify(_.toUpperCase)(doc).noSpacesSortKeys
 to any depth (`transform` / `everywhere` on a call-stack/heap-machine
 hybrid, `universe` on a worklist, `rewrite` trampolined through
 `cats.Eval` so even a long re-fire chain won't overflow), so a deep
-document is safe. See the [cookbook Plated recipe](cookbook.md) for the
+document is safe. See the [cookbook Plated recipe](../cookbook.md) for the
 data-type side of the same API.
 
 ## When to reach for which

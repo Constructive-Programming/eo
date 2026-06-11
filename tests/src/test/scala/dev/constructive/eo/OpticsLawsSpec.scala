@@ -8,9 +8,30 @@ import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 
-import optics.{AffineFold, Fold, Getter, Iso, Lens, Optic, Optional, Prism, Setter, Traversal}
-import data.{Affine, Forget, Direct, MultiFocus, PSVec, SetterF}
-import laws.{AffineFoldLaws, GetterLaws, IsoLaws, LensLaws, OptionalLaws, PrismLaws, SetterLaws}
+import optics.{
+  AffineFold,
+  Fold,
+  Getter,
+  Iso,
+  Lens,
+  Optic,
+  Optional,
+  Prism,
+  Modify,
+  Traversal,
+  Unfold,
+}
+import data.{Affine, Forget, Direct, MultiFocus, PSVec, ModifyF}
+import laws.{
+  AffineFoldLaws,
+  GetterLaws,
+  IsoLaws,
+  LensLaws,
+  OptionalLaws,
+  PrismLaws,
+  ModifyLaws,
+  UnfoldLaws,
+}
 import laws.discipline.{
   AffineFoldTests,
   GetterTests,
@@ -18,10 +39,11 @@ import laws.discipline.{
   LensTests,
   OptionalTests,
   PrismTests,
-  SetterTests,
+  ModifyTests,
+  UnfoldTests,
 }
-import laws.data.{AffineLaws, SetterFLaws}
-import laws.data.discipline.{AffineTests, SetterFTests}
+import laws.data.{AffineLaws, ModifyFLaws}
+import laws.data.discipline.{AffineTests, ModifyFTests}
 import laws.typeclass.AssociativeFunctorLaws
 import laws.typeclass.discipline.AssociativeFunctorTests
 
@@ -35,6 +57,18 @@ private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] 
         s <- Arbitrary.arbitrary[String]
         b <- Arbitrary.arbitrary[Boolean]
       yield Affine.ofRight[(Int, String), Boolean]((s, b)),
+    )
+  )
+
+// Arbitrary[BinF[Int]] — equal-weight leaf / branch layers of the UnfoldSpec pattern functor.
+private given arbBinFInt: Arbitrary[BinF[Int]] =
+  Arbitrary(
+    Gen.oneOf(
+      Arbitrary.arbitrary[Int].map(BinF.LeafF(_)),
+      for
+        l <- Arbitrary.arbitrary[Int]
+        r <- Arbitrary.arbitrary[Int]
+      yield BinF.BranchF(l, r),
     )
   )
 
@@ -129,17 +163,17 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .optional,
   )
 
-  // ----- Setter: maps `f` over both sides of a pair --------------
+  // ----- Modify: maps `f` over both sides of a pair --------------
 
-  val pairSetter: Optic[(Int, Int), (Int, Int), Int, Int, data.SetterF] =
-    Setter[(Int, Int), (Int, Int), Int, Int](f => { case (a, b) => (f(a), f(b)) })
+  val pairModify: Optic[(Int, Int), (Int, Int), Int, Int, data.ModifyF] =
+    Modify[(Int, Int), (Int, Int), Int, Int](f => { case (a, b) => (f(a), f(b)) })
 
   checkAll(
-    "Setter[(Int,Int), Int] — both pair components",
-    new SetterTests[(Int, Int), Int]:
-      val laws = new SetterLaws[(Int, Int), Int]:
-        val setter = pairSetter
-    .setter,
+    "Modify[(Int,Int), Int] — both pair components",
+    new ModifyTests[(Int, Int), Int]:
+      val laws = new ModifyLaws[(Int, Int), Int]:
+        val modify = pairModify
+    .modify,
   )
 
   // ----- Traversal.each on List[Int] ------------------------------
@@ -209,6 +243,38 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       toOk && neverOk
   }
 
+  // ----- Unfold: build-only/many — Applicative carrier + pattern functor -----
+
+  val sumUnfold: Unfold[Int, Int, List] = Unfold((xs: List[Int]) => xs.sum)
+
+  // covers: Unfold.apply over List (Applicative carrier — full RuleSet incl. the vestigial law)
+  checkAll(
+    "Unfold[Int, Int, List] — sum",
+    new UnfoldTests[Int, Int, List]:
+      val laws = new UnfoldLaws[Int, Int, List]:
+        val unfold = sumUnfold
+        val reference = (xs: List[Int]) => xs.sum
+    .unfoldApplicative,
+  )
+
+  val evalUnfold: Unfold[Int, Int, BinF] = Unfold.algebra[Int, Int, BinF] {
+    case BinF.LeafF(n)      => n
+    case BinF.BranchF(l, r) => l + r
+  }
+
+  // covers: Unfold.algebra over a pattern functor (Functor-only RuleSet — no Applicative[BinF])
+  checkAll(
+    "Unfold[Int, Int, BinF] — pattern-functor algebra",
+    new UnfoldTests[Int, Int, BinF]:
+      val laws = new UnfoldLaws[Int, Int, BinF]:
+        val unfold = evalUnfold
+        val reference = (fb: BinF[Int]) =>
+          fb match
+            case BinF.LeafF(n)      => n
+            case BinF.BranchF(l, r) => l + r
+    .unfold,
+  )
+
   // ----- AffineFold: partial projection + filtering select -------
 
   val adultAgeAF: AffineFold[(Int, String), Int] =
@@ -241,13 +307,13 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .affine,
   )
 
-  // ----- SetterF carrier laws -------------------------------------
+  // ----- ModifyF carrier laws -------------------------------------
 
   checkAll(
-    "SetterF[(Int, String), Boolean]",
-    new SetterFTests[(Int, String), Boolean]:
-      val laws = new SetterFLaws[(Int, String), Boolean] {}
-    .setterF,
+    "ModifyF[(Int, String), Boolean]",
+    new ModifyFTests[(Int, String), Boolean]:
+      val laws = new ModifyFLaws[(Int, String), Boolean] {}
+    .modifyF,
   )
 
   // ----- MultiFocus[PSVec] carrier carrier laws -------------------
@@ -279,7 +345,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   //
   // No carrier-level discipline block is added for `MultiFocus[Function1[Int, *]]`
   // because structural `==` on functions is reference equality — exactly the
-  // problem SetterF had. The functor laws are instead witnessed extensionally by
+  // problem ModifyF had. The functor laws are instead witnessed extensionally by
   // `MultiFocusFunction1Spec` (G1/G2 on `MultiFocus.tuple`, the same carrier) and
   // by `EoSpecificLawsSpec`'s "Traversal.two / three modifies …" forAll blocks.
 
@@ -375,10 +441,10 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   )
 
   // Use a custom extensional equality check inside the law — structural
-  // `==` on SetterF compares closures by identity which is too strict.
+  // `==` on ModifyF compares closures by identity which is too strict.
   // We sample the builder at a fixed Snd input to witness identity /
   // composition. The shared ForgetfulFunctorLaws uses `==`, so we wire
-  // the SetterF-specific laws directly (from dev.constructive.eo.laws.data) rather than
+  // the ModifyF-specific laws directly (from dev.constructive.eo.laws.data) rather than
   // the carrier-generic ones.
 
   // MultiFocus[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the

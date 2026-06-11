@@ -15,7 +15,7 @@ trait Optic[S, T, A, B, F[_, _]]:
   def from: F[X, B] => T
 ```
 
-Every built-in family — Lens, Prism, Iso, Optional, Setter,
+Every built-in family — Lens, Prism, Iso, Optional, Modify,
 Traversal, Fold — is a concrete subclass that differs only in
 which carrier `F[_, _]` it picks. The operations (`.get`,
 `.modify`, `.modifyA`, `.foldMap`, `.andThen`, …) are
@@ -276,7 +276,7 @@ the full tables.
 
 - [Concepts](concepts.md) — what a carrier is and which
   typeclasses unlock which operations.
-- [Circe integration](circe.md) — how to *use* the
+- [Circe integration](integrations/circe.md) — how to *use* the
   JsonPrism / JsonTraversal optics described here as a design
   case study.
 - [Benchmarks](benchmarks.md) — measured numbers for both

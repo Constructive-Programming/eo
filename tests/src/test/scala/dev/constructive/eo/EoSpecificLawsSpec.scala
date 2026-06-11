@@ -9,7 +9,7 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, Direct, MultiFocus, PSVec, SetterF}
+import data.{Affine, Direct, MultiFocus, PSVec, ModifyF}
 import laws.eo.{
   IsoComposeLaws,
   LensComposeLaws,
@@ -54,11 +54,11 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
   // =============== A1/I1 — morph preserves modify ==================
 
-  // covers: Morph from Tuple2 → SetterF on a Lens
-  checkAllMorphPreservesModifyFor[(Int, String), Int, Tuple2, SetterF](
-    "Lens.morph[SetterF] preserves modify (I1)",
+  // covers: Morph from Tuple2 → ModifyF on a Lens
+  checkAllMorphPreservesModifyFor[(Int, String), Int, Tuple2, ModifyF](
+    "Lens.morph[ModifyF] preserves modify (I1)",
     firstLens,
-    firstLens.morph[SetterF],
+    firstLens.morph[ModifyF],
   )
 
   // covers: Morph from Tuple2 → Affine on a Lens
@@ -75,36 +75,36 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     doubleIso.morph[Tuple2],
   )
 
-  // covers: Morph from MultiFocus[Function1[Int, *]] → SetterF on a tuple-shaped MultiFocus
-  // (the absorbed Grate). The `multifocus2setter` Composer widens any MultiFocus-carrier optic to
-  // the Setter API. The MorphLaws.A1 check pins down that the lifted SetterF's `.modify(f)(s)`
+  // covers: Morph from MultiFocus[Function1[Int, *]] → ModifyF on a tuple-shaped MultiFocus
+  // (the absorbed Grate). The `multifocus2modify` Composer widens any MultiFocus-carrier optic to
+  // the Modify API. The MorphLaws.A1 check pins down that the lifted ModifyF's `.modify(f)(s)`
   // produces the same `T` as the original MultiFocus's `.modify(f)(s)` — the whole structural
   // soundness of the bridge in one law.
   val tuple2MultiFocusFnForMorph
       : Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
     MultiFocus.tuple[(Int, Int), Int]
 
-  checkAllMorphPreservesModifyFor[(Int, Int), Int, MultiFocus[Function1[Int, *]], SetterF](
-    "MultiFocus.tuple[(Int,Int)].morph[SetterF] preserves modify (I1)",
+  checkAllMorphPreservesModifyFor[(Int, Int), Int, MultiFocus[Function1[Int, *]], ModifyF](
+    "MultiFocus.tuple[(Int,Int)].morph[ModifyF] preserves modify (I1)",
     tuple2MultiFocusFnForMorph,
-    tuple2MultiFocusFnForMorph.morph[SetterF],
+    tuple2MultiFocusFnForMorph.morph[ModifyF],
   )
 
-  // covers: Morph from MultiFocus[List] → SetterF on a List-shaped MultiFocus.
+  // covers: Morph from MultiFocus[List] → ModifyF on a List-shaped MultiFocus.
   //
-  // The `Composer[MultiFocus[F], SetterF]` (`multifocus2setter`, MultiFocus.scala) widens any
-  // MultiFocus-carrier optic to the Setter API. The MorphLaws.A1 check pins down that the lifted
-  // SetterF's `.modify(f)(s)` produces the same `T` as the original MultiFocus's `.modify(f)(s)`
+  // The `Composer[MultiFocus[F], ModifyF]` (`multifocus2modify`, MultiFocus.scala) widens any
+  // MultiFocus-carrier optic to the Modify API. The MorphLaws.A1 check pins down that the lifted
+  // ModifyF's `.modify(f)(s)` produces the same `T` as the original MultiFocus's `.modify(f)(s)`
   // via `mfFunctor` — the whole structural soundness of the bridge in one law. List is the
   // canonical multi-focus instance; the law covers the path `o.to(s) → mfFunctor.map(_, f) →
   // o.from(_)` end-to-end.
   val listMultiFocusForMorph: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
     MultiFocus.apply[List, Int]
 
-  checkAllMorphPreservesModifyFor[List[Int], Int, MultiFocus[List], SetterF](
-    "MultiFocus.apply[List,Int].morph[SetterF] preserves modify (I1)",
+  checkAllMorphPreservesModifyFor[List[Int], Int, MultiFocus[List], ModifyF](
+    "MultiFocus.apply[List,Int].morph[ModifyF] preserves modify (I1)",
     listMultiFocusForMorph,
-    listMultiFocusForMorph.morph[SetterF],
+    listMultiFocusForMorph.morph[ModifyF],
   )
 
   // =============== B1 — Iso reverse involution =====================
