@@ -14,6 +14,9 @@ import schemes.samples.{Bin, BinF}
   */
 class SchemesZooSpec extends Specification:
 
+  // Deep (10^6 / 200k) examples: run one-at-a-time to bound peak heap (shared test JVM).
+  sequential
+
   private val tree: Bin =
     Bin.Branch(Bin.Branch(Bin.Leaf(1), Bin.Leaf(2)), Bin.Branch(Bin.Leaf(3), Bin.Leaf(4)))
 
