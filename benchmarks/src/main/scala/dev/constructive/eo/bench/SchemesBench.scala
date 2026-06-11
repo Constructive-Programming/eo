@@ -78,3 +78,62 @@ class SchemesBench extends JmhDefaults:
   @Benchmark def eoAnaF: Bin = eoAnaFR.reverseGet(Depth)
   @Benchmark def drosteAna: Fix[BinF] = drosteAnaF(Depth)
   @Benchmark def handAna: Bin = handBuild(Depth)
+
+  // ----- the zoo: para / apo / histo / futu (eo native routes vs droste.zoo) --
+
+  val eoParaG = Schemes.paraF[BinF, Bin, Int](eoParaAlg)
+  val drosteParaFn: Fix[BinF] => Int = scheme.zoo.para(drosteParaAlg)
+  val eoApoR = Schemes.apoF[BinF, Int, Bin](eoApoCoalg)
+  val drosteApoFn: Int => Fix[BinF] = scheme.zoo.apo(drosteApoCoalg)
+  val eoHistoG = Schemes.histoF[BinF, Bin, Int](eoHistoAlg)
+  val drosteHistoFn: Fix[BinF] => Int = scheme.zoo.histo(drosteHistoAlg)
+  val eoFutuR = Schemes.futuF[BinF, Int, Bin](eoFutuCoalg)
+  val drosteFutuFn: Int => Fix[BinF] = scheme.zoo.futu(drosteFutuCoalg)
+
+  @Benchmark def eoPara: Int = eoParaG.get(eoTree)
+  @Benchmark def drostePara: Int = drosteParaFn(fixTree)
+  @Benchmark def eoApo: Bin = eoApoR.reverseGet(Depth)
+  @Benchmark def drosteApo: Fix[BinF] = drosteApoFn(Depth)
+  @Benchmark def eoHisto: Int = eoHistoG.get(eoTree)
+  @Benchmark def drosteHisto: Int = drosteHistoFn(fixTree)
+  @Benchmark def eoFutu: Bin = eoFutuR.reverseGet(Depth)
+  @Benchmark def drosteFutu: Fix[BinF] = drosteFutuFn(Depth)
+
+  // ----- apo with ONE BIG GRAFT. VERIFIED (the D6 check): droste's zoo.apo
+  // ALSO grafts O(1) here — its R is the fixed point, so Left(fix) embeds by
+  // reference. The honest claim is therefore PARITY on the native routes (both
+  // ~ns-flat regardless of graft size), with eo adding the law-shaped eq
+  // guarantee; the O(graft) re-walk contrast applies to the GENERIC distApo
+  // route (Decor.apo), not to droste.zoo.apo.
+
+  val eoApoGraftR = Schemes.apoF[BinF, Int, Bin] { d =>
+    if d == 0 then BinF.NodeF(Left(eoTree), Right(-1)) else BinF.LeafF(1)
+  }
+  val drosteApoGraftFn: Int => Fix[BinF] = scheme.zoo.apo(
+    higherkindness.droste.RCoalgebra { (d: Int) =>
+      if d == 0 then BinF.NodeF(Left(fixTree), Right(-1)) else BinF.LeafF(1)
+    }
+  )
+
+  @Benchmark def eoApoGraft: Bin = eoApoGraftR.reverseGet(0)
+  @Benchmark def drosteApoGraft: Fix[BinF] = drosteApoGraftFn(0)
+
+  // ----- fused cross vs materialized composition (the fusion law's alloc pin) --
+
+  val eoCrossFusedG = Schemes.anaF[BinF, Int, Bin](eoTypedCoalg).cross(Schemes.cataF(eoTypedSum))
+
+  @Benchmark def eoCrossFused: Int = eoCrossFusedG.get(Depth)
+  @Benchmark def eoCrossMaterialized: Int = eoCataFG.get(eoAnaFR.reverseGet(Depth))
+
+  // ----- generic decoration route (user-written Decor, no identity fast path) --
+
+  val eoCataGenericG = Schemes.cataF[BinF, Bin, Int, Int](userIdGather)(eoTypedSum)
+
+  @Benchmark def eoCataGenericRoute: Int = eoCataGenericG.get(eoTree)
+
+  // ----- the M path at Id: the tailRecM-lifted machine's per-event floor ------
+
+  val eoHyloFMRunner =
+    Schemes.hyloFM[cats.Id, BinF, Int, Int](d => eoTypedCoalg(d), (s, fa) => eoTypedHyloAlg(s, fa))
+
+  @Benchmark def eoHyloM: Int = eoHyloFMRunner.run(Depth)
