@@ -190,7 +190,7 @@ You write three things: the functor `F`, its `cats.Traverse`, and a `Basis` (`Pr
 
 ```scala mdoc:silent
 import cats.{Applicative, Eval, Traverse}
-import dev.constructive.eo.schemes.Basis // `Schemes`, `DirectGetter`, `get` already imported above
+import dev.constructive.eo.schemes.Basis // `Schemes`, `Getter`, `get` already imported above
 
 // A binary tree…
 enum Bin:
@@ -226,7 +226,7 @@ val binTree: Bin = Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
 typed `BinF[A]`** — `l` and `r` are `A`, by name, no positional indexing:
 
 ```scala mdoc:silent
-val sumLeavesF: DirectGetter[Bin, Int] =
+val sumLeavesF: Getter[Bin, Int] =
   Schemes.cataF[BinF, Bin, Int] { (_, folded) =>
     folded match
       case BinF.LeafF(n)      => n
@@ -249,7 +249,7 @@ val buildBin = Schemes.anaF[BinF, Int, Bin] { n =>
 }
 
 // fused: count the leaves directly, building no Bin
-val countLeavesF: DirectGetter[Int, Int] =
+val countLeavesF: Getter[Int, Int] =
   Schemes.hyloF[BinF, Int, Int](
     coalg = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1),
     alg = (_, folded) =>
@@ -265,7 +265,7 @@ countLeavesF.get(3)                    // same count, fused — no Bin materiali
 countLeavesF.get(1000000)              // stack-safe: the heap machine, O(depth) heap
 ```
 
-Like their `PSVec` counterparts, `cataF`/`hyloF` are `DirectGetter`s and `anaF` is a `Review`, so
+Like their `PSVec` counterparts, `cataF`/`hyloF` are `Getter`s and `anaF` is a `Review`, so
 they compose with the rest of the optic algebra via `andThen` and `cross` (the materializing
 `anaF(…).cross(cataF(…))` equals the fused `hyloF` for a pure algebra — the hylo law). They run on
 the **same `< 512`-on-stack / heap-`ArrayDeque` machine** as the `PSVec` schemes (no `cats.Eval`
@@ -279,7 +279,7 @@ they are hand-written (as above).
 
 ### Composing with lenses
 
-Because the schemes are `DirectGetter`s, they slot into a lens pipeline. Compose a **lens chain** to
+Because the schemes are `Getter`s, they slot into a lens pipeline. Compose a **lens chain** to
 focus a recursive field buried in a record, then fold it with the scheme. Read-only optics compose
 `Getter`-to-`Getter`, so wrap the lens's read in a `Getter` (or just read at the leaf,
 `cataF(alg).get(lens.get(record))`) — the same composed lens still *writes* the field back:
