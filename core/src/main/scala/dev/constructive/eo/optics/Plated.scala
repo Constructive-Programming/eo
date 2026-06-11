@@ -3,7 +3,7 @@ package optics
 
 import cats.Eval
 
-import data.{MultiFocus, PSVec, SetterF}
+import data.{MultiFocus, PSVec, ModifyF}
 
 /** A self-similar structure: a value of `S` whose immediate sub-terms are themselves `S`. The
   * single member [[plate]] is a `Traversal[S, S]` focusing those immediate children — the cats-eo
@@ -167,13 +167,13 @@ object Plated:
     * everywhere[Expr].andThen(varPrism).andThen(nameLens).modify(_.toUpperCase)(tree)
     * }}}
     *
-    * It is a write-side optic (a [[Setter]] whose `modify` is the recursive [[transform]]); it
-    * composes as the *outer* of `.andThen` with any inner optic that bridges into `SetterF` (Lens /
+    * It is a write-side optic (a [[Modify]] whose `modify` is the recursive [[transform]]); it
+    * composes as the *outer* of `.andThen` with any inner optic that bridges into `ModifyF` (Lens /
     * Prism / Optional / …), and the composite is `transform(inner.modify(_))` by the optic
     * composition law. For the read side — every sub-term as a list — use [[universe]].
     */
-  def everywhere[S](using P: Plated[S]): Optic[S, S, S, S, SetterF] =
-    Setter[S, S, S, S](g => s => transform(g)(s))
+  def everywhere[S](using P: Plated[S]): Optic[S, S, S, S, ModifyF] =
+    Modify[S, S, S, S](g => s => transform(g)(s))
 
   /** Apply the rule everywhere, bottom-up, and keep re-firing on each rewritten sub-term until the
     * rule returns `None` at every node — Haskell `lens`'s `rewrite`. The caller owns termination (a

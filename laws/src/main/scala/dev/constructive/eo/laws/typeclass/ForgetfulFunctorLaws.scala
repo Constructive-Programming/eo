@@ -7,13 +7,13 @@ import dev.constructive.eo.forgetful.ForgetfulFunctor
   *
   * * `map(id) == id` * `map(g) ∘ map(f) == map(f andThen g)`
   *
-  * Holds for every carrier EO uses: `Tuple2`, `Either`, `Affine`, `SetterF`, `Direct`, `Forget[F]`,
+  * Holds for every carrier EO uses: `Tuple2`, `Either`, `Affine`, `ModifyF`, `Direct`, `Forget[F]`,
   * `MultiFocus[F]`. The law trait is parameterised so downstream adding a new carrier can witness
   * its `ForgetfulFunctor` instance here.
   *
-  * Equality is structural — if the carrier wraps a function (as `SetterF` does),
+  * Equality is structural — if the carrier wraps a function (as `ModifyF` does),
   * discipline-checking this law requires an extensional comparison. See
-  * [[dev.constructive.eo.laws.data.SetterFLaws]] for that carrier-specific phrasing.
+  * [[dev.constructive.eo.laws.data.ModifyFLaws]] for that carrier-specific phrasing.
   */
 trait ForgetfulFunctorLaws[F[_, _], X, A]:
 

@@ -8,7 +8,7 @@ import dev.constructive.eo.optics.{
   Lens => EoLens,
   Optional => EoOptional,
   Review => EoReview,
-  Setter => EoSetter,
+  Modify => EoModify,
 }
 
 import monocle.{Getter => MGetter, Lens => MLens, Optional => MOptional, Setter => MSetter}
@@ -111,17 +111,17 @@ object NestedOptics:
   val mGet6 =
     mG6.andThen(mG5).andThen(mG4).andThen(mG3).andThen(mG2).andThen(mG1).andThen(mGetValue)
 
-  // ---- Per-level EO Setters (SetterF carrier) ---------------------
+  // ---- Per-level EO Modify optics (ModifyF carrier) ---------------
 
   val eoSetValue =
-    EoSetter[Nested0, Nested0, Int, Int](f => n0 => n0.copy(value = f(n0.value)))
+    EoModify[Nested0, Nested0, Int, Int](f => n0 => n0.copy(value = f(n0.value)))
 
-  val eoS1 = EoSetter[Nested1, Nested1, Nested0, Nested0](f => x => x.copy(n = f(x.n)))
-  val eoS2 = EoSetter[Nested2, Nested2, Nested1, Nested1](f => x => x.copy(n = f(x.n)))
-  val eoS3 = EoSetter[Nested3, Nested3, Nested2, Nested2](f => x => x.copy(n = f(x.n)))
-  val eoS4 = EoSetter[Nested4, Nested4, Nested3, Nested3](f => x => x.copy(n = f(x.n)))
-  val eoS5 = EoSetter[Nested5, Nested5, Nested4, Nested4](f => x => x.copy(n = f(x.n)))
-  val eoS6 = EoSetter[Nested6, Nested6, Nested5, Nested5](f => x => x.copy(n = f(x.n)))
+  val eoS1 = EoModify[Nested1, Nested1, Nested0, Nested0](f => x => x.copy(n = f(x.n)))
+  val eoS2 = EoModify[Nested2, Nested2, Nested1, Nested1](f => x => x.copy(n = f(x.n)))
+  val eoS3 = EoModify[Nested3, Nested3, Nested2, Nested2](f => x => x.copy(n = f(x.n)))
+  val eoS4 = EoModify[Nested4, Nested4, Nested3, Nested3](f => x => x.copy(n = f(x.n)))
+  val eoS5 = EoModify[Nested5, Nested5, Nested4, Nested4](f => x => x.copy(n = f(x.n)))
+  val eoS6 = EoModify[Nested6, Nested6, Nested5, Nested5](f => x => x.copy(n = f(x.n)))
 
   // ---- Per-level Monocle Setters + composed set-3/set-6 -----------
 

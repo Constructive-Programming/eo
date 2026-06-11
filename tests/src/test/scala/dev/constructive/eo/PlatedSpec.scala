@@ -124,7 +124,7 @@ class PlatedSpec extends Specification with Discipline:
 
   // ----- The headline: a recursive `everywhere` optic that composes with Prism + Lens -----
 
-  "everywhere (Setter modify = transform) composes with a Prism + Lens to rewrite ALL variables" >> {
+  "everywhere (Modify modify = transform) composes with a Prism + Lens to rewrite ALL variables" >> {
     val varP = Prism[Expr, Expr.Var](
       {
         case v: Expr.Var => Right(v)

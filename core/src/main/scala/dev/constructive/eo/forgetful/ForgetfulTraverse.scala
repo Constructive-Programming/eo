@@ -8,7 +8,7 @@ import cats.{Applicative, Functor}
 
 /** Traverse the focus of `F[_, _]` under an effectful `A => G[B]`. Parameterised by the applicative
   * constraint `C[_[_]]` — `Applicative` for carriers with miss branches, `Functor` for Tuple2,
-  * `Distributive` for SetterF.
+  * `Distributive` for ModifyF.
   *
   * @tparam F
   *   the carrier
@@ -47,6 +47,6 @@ object ForgetfulTraverse:
       )
 
   // `ForgetfulTraverse[Affine]` is NOT here — it is carrier-owned (`Affine.traverse`), matching
-  // Direct / SetterF / MultiFocus / Forget. Only the stdlib carriers (Tuple2, Either) live in this
+  // Direct / ModifyF / MultiFocus / Forget. Only the stdlib carriers (Tuple2, Either) live in this
   // companion, since their own companions can't be extended. A duplicate here would shadow-tie the
   // carrier-side instance and force every call site to disambiguate via `import data.Affine.given`.

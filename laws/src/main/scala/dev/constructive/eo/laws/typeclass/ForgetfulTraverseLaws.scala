@@ -9,7 +9,7 @@ import dev.constructive.eo.forgetful.ForgetfulTraverse
   * Id[A]) == fa` because `Id[X] = X`.
   *
   * The full `ForgetfulTraverse` family in core has two flavours: `[_ <: Applicative]` (Affine,
-  * Forget[F], PowerSeries, Direct at Invariant) and `[_ <: Distributive]` (SetterF). We expose the
+  * Forget[F], PowerSeries, Direct at Invariant) and `[_ <: Distributive]` (ModifyF). We expose the
   * `[Applicative]` flavour here because `Id`-identity is the widely applicable anchor law; the
   * Distributive variant collapses to a tautology at `Id`, so witnessing it adds no signal.
   *

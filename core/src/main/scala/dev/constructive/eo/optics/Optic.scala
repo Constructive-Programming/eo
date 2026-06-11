@@ -30,7 +30,7 @@ import compose.*
   *   two-argument carrier; capabilities scale with the typeclasses `F` admits.
   *
   * @see
-  *   [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Setter]], [[Traversal]], [[Getter]], [[Fold]]
+  *   [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Modify]], [[Traversal]], [[Getter]], [[Fold]]
   */
 trait Optic[S, T, A, B, F[_, _]]:
   self =>
@@ -116,7 +116,7 @@ trait Optic[S, T, A, B, F[_, _]]:
 /** Companion for [[Optic]]. Hosts the profunctor instances and the capability-gated extension
   * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`, `.reverseGet`,
   * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen` (carrier-morphing plus the
-  * read-only / AffineFold / Setter / Review / Unfold collapses), `.readOnly`, `.cross`, `.morph`,
+  * read-only / AffineFold / Modify / Review / Unfold collapses), `.readOnly`, `.cross`, `.morph`,
   * `.headOption`, `.length`, `.exists`. Adding a new carrier means supplying the typeclass
   * instances of the operations it should support.
   */
@@ -263,8 +263,8 @@ object Optic:
     inline def replace(b: B): S => T =
       s => self.from(FF.map(self.to(s), _ => b))
 
-    inline def andThen[C, D](o: Setter[A, B, C, D]): Setter[S, T, C, D] =
-      Setter(f => modify(o.modify(f)))
+    inline def andThen[C, D](o: Modify[A, B, C, D]): Modify[S, T, C, D] =
+      Modify(f => modify(o.modify(f)))
 
   /** Overwrite a `T`-shaped value at the focus — available when the carrier can witness `T => F[X,
     * B]` (e.g. `Direct`, where `F[X, B] = B`). [[transfer]] lifts a `C => B` into this same shape

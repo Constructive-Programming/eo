@@ -283,9 +283,9 @@ over a recursive ADT. It focuses every field whose type is exactly
 types stay as leftover skeleton.
 
 The derived instance also backs `Plated.everywhere[S]` — a composable
-`Setter` that lifts any downstream optic to *every* depth, so
+`Modify` that lifts any downstream optic to *every* depth, so
 `everywhere[S].andThen(prism).modify(f)` rewrites that focus across the
-whole tree. See [Optics → Setter](optics.md#setter) and the
+whole tree. See [Optics → Modify](optics.md#modify) and the
 [Cookbook recipe](cookbook.md).
 
 ```scala

@@ -28,5 +28,5 @@ object ForgetfulFold:
       ea.fold(_ => Monoid[M].empty, f)
 
   // `ForgetfulFold[Affine]` is NOT here — it is carrier-owned (`Affine.fold`), matching
-  // Direct / SetterF / MultiFocus / Forget. Only the stdlib carriers (Tuple2, Either) live in this
+  // Direct / ModifyF / MultiFocus / Forget. Only the stdlib carriers (Tuple2, Either) live in this
   // companion, since their own companions can't be extended.

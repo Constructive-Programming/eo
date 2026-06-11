@@ -11,7 +11,7 @@ import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-import data.{Direct, MultiFocus, SetterF}
+import data.{Direct, MultiFocus, ModifyF}
 import data.MultiFocus.{collectList, collectMap}
 import optics.*
 import optics.Optic.*
@@ -23,7 +23,7 @@ private case class Person(name: String, phones: List[Phone])
 /** Spike-scope spec for the unified `MultiFocus[F]` carrier — pins down the load-bearing slice the
   * spike claims to deliver: `.modify` (Functor[F]), `.modifyA` (Traverse[F]), same-carrier
   * `.andThen` (Lens → MultiFocus → Lens with singleton fast-path), the Iso bridge
-  * (`forgetful2multifocus`), and the SetterF widening (`multifocus2setter`). Plus the .collect
+  * (`forgetful2multifocus`), and the ModifyF widening (`multifocus2modify`). Plus the .collect
   * universal in its two derivations.
   */
 class MultiFocusSpec extends Specification with ScalaCheck:
@@ -92,15 +92,15 @@ class MultiFocusSpec extends Specification with ScalaCheck:
     modList && modOpt && modVec && modChain && modA
   }
 
-  // ----- Composer bridges: Direct → MultiFocus[List] + MultiFocus[List] → SetterF ----
+  // ----- Composer bridges: Direct → MultiFocus[List] + MultiFocus[List] → ModifyF ----
   //
   // 2026-04-29 consolidation: 2 same-shape composer-bridge tests → 1 composite.
 
   // covers: Composer[Direct, MultiFocus[List]] (forgetful2multifocus) round-trips an
   //   Iso's .modify through the bridge — 5 → 6 (forward) → 12 (×2) → 11 (back);
-  //   Composer[MultiFocus[F], SetterF] (multifocus2setter) widens MultiFocus[List]'s
-  //   element-wise modify to SetterF and preserves the modify byte-for-byte
-  "Composer bridges: Direct → MultiFocus[List] (Iso round-trip) + MultiFocus[List] → SetterF" >> {
+  //   Composer[MultiFocus[F], ModifyF] (multifocus2modify) widens MultiFocus[List]'s
+  //   element-wise modify to ModifyF and preserves the modify byte-for-byte
+  "Composer bridges: Direct → MultiFocus[List] (Iso round-trip) + MultiFocus[List] → ModifyF" >> {
     val iso: Optic[Int, Int, Int, Int, Direct] =
       Iso[Int, Int, Int, Int](_ + 1, (b: Int) => b - 1)
     val asMF: Optic[Int, Int, Int, Int, MultiFocus[List]] =
@@ -109,9 +109,9 @@ class MultiFocusSpec extends Specification with ScalaCheck:
 
     val k: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
       MultiFocus.apply[List, Int]
-    val asSetter: Optic[List[Int], List[Int], Int, Int, SetterF] =
-      summon[Composer[MultiFocus[List], SetterF]].to(k)
-    val setterOk = asSetter.modify(_ * 10)(List(1, 2, 3)) == List(10, 20, 30)
+    val asModify: Optic[List[Int], List[Int], Int, Int, ModifyF] =
+      summon[Composer[MultiFocus[List], ModifyF]].to(k)
+    val modifyOk = asModify.modify(_ * 10)(List(1, 2, 3)) == List(10, 20, 30)
 
-    isoOk && setterOk
+    isoOk && modifyOk
   }

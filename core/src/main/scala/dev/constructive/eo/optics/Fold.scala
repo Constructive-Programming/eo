@@ -39,8 +39,7 @@ object Fold:
   * `Foldable[F]` directly. This lets the terminal [[foldMap]] fold the focus eagerly through the
   * captured `Foldable[F]`, skipping both the per-call `ForgetfulFold[Forget[F]]` summon and the
   * intermediate `S => M` closure the generic `Optic.foldMap` extension builds — the same
-  * specialisation `GetReplaceLens` / `SetterOptic` / `MultiFocusSingleton` apply to their hot
-  * paths.
+  * specialisation `GetReplaceLens` / `Modify` / `MultiFocusSingleton` apply to their hot paths.
   *
   * Returned by every `Fold.*` constructor so hand-written folds pick up the fast path
   * automatically. A *composed* Fold (the result of `.andThen`) surfaces as the erased

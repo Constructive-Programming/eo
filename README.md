@@ -60,7 +60,7 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   a read-only `Optional`; partial projection without a write side.
 - [`Getter`](https://eo.constructive.dev/optics.html#getter) — a
   read-only one-focus projection.
-- [`Setter`](https://eo.constructive.dev/optics.html#setter) — a
+- [`Modify`](https://eo.constructive.dev/optics.html#modify) — a
   write-only optic; modify without observing.
 - [`Fold`](https://eo.constructive.dev/optics.html#fold) — N foci
   summarised through a `Monoid`.
@@ -76,6 +76,9 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   whole structure.
 - [`Review`](https://eo.constructive.dev/optics.html#review) — the
   reverse-only half of a `Prism`; build, never observe.
+- [`Unfold`](https://eo.constructive.dev/optics.html#unfold) — the
+  build-only many optic (`embed: F[B] => T`); assemble one whole from
+  an `F`-layer of parts — the algebra of a recursion scheme.
 - [`JsonPrism`](https://eo.constructive.dev/circe.html#jsonprism) —
   cursor-backed JSON optic with observable-by-default `Ior` failures.
 - [`JsonFieldsPrism`](https://eo.constructive.dev/circe.html#multi-field-focus----fields-_a-_b) —

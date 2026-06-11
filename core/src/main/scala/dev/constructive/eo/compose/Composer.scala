@@ -5,7 +5,7 @@ import optics.Optic
 
 /** Bridge between carriers — reshape an `F`-carrier optic into a `G`-carrier optic. Used by
   * `Optic.morph`; the mechanism by which optic families cross boundaries (Lens → Optional, Lens →
-  * Setter, Iso → Lens, …).
+  * Modify, Iso → Lens, …).
   *
   * @tparam F
   *   source carrier
@@ -98,7 +98,7 @@ trait LowPriorityComposerInstances:
 
   /** Transitive derivation via `Tuple2` as the intermediate carrier: given `F → Tuple2` and
     * `Tuple2 → G`, derive `F → G`. Fires cleanly for Direct-origin chains to any target with a
-    * `Composer[Tuple2, _]` direct (Affine / SetterF / MultiFocus[F] / MultiFocus[PSVec]).
+    * `Composer[Tuple2, _]` direct (Affine / ModifyF / MultiFocus[F] / MultiFocus[PSVec]).
     *
     * @group Instances
     */

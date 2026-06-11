@@ -15,7 +15,7 @@ trait Optic[S, T, A, B, F[_, _]]:
   def from: F[X, B] => T
 ```
 
-Every built-in family — Lens, Prism, Iso, Optional, Setter,
+Every built-in family — Lens, Prism, Iso, Optional, Modify,
 Traversal, Fold — is a concrete subclass that differs only in
 which carrier `F[_, _]` it picks. The operations (`.get`,
 `.modify`, `.modifyA`, `.foldMap`, `.andThen`, …) are

@@ -1,26 +1,26 @@
 package dev.constructive.eo.laws.data.discipline
 
-import dev.constructive.eo.data.{Fst, SetterF, Snd}
+import dev.constructive.eo.data.{Fst, ModifyF, Snd}
 import dev.constructive.eo.forgetful.ForgetfulFunctor
-import dev.constructive.eo.laws.data.SetterFLaws
+import dev.constructive.eo.laws.data.ModifyFLaws
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
-/** Discipline `RuleSet` for [[SetterFLaws]]. */
-abstract class SetterFTests[X, A] extends Laws:
-  def laws: SetterFLaws[X, A]
+/** Discipline `RuleSet` for [[ModifyFLaws]]. */
+abstract class ModifyFTests[X, A] extends Laws:
+  def laws: ModifyFLaws[X, A]
 
-  def setterF(using
+  def modifyF(using
       Arbitrary[Fst[X]],
       Arbitrary[Snd[X]],
       Cogen[Snd[X]],
       Arbitrary[A],
       Cogen[A],
-      ForgetfulFunctor[SetterF],
+      ForgetfulFunctor[ModifyF],
   ): RuleSet =
     new SimpleRuleSet(
-      "SetterF",
+      "ModifyF",
       "functor identity (extensional)" ->
         forAll((fst: Fst[X], fn: Snd[X] => A, x: Snd[X]) => laws.functorIdentity(fst, fn, x)),
       "functor composition (extensional)" ->

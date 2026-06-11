@@ -7,7 +7,7 @@ import dev.constructive.eo.optics.{
   AffineFold,
   Getter => EoGetter,
   Optional => EoOptional,
-  Setter => EoSetter,
+  Modify => EoModify,
 }
 
 import monocle.{Getter => MGetter, Optional => MOptional, Setter => MSetter}
@@ -17,7 +17,7 @@ import monocle.{Getter => MGetter, Optional => MOptional, Setter => MSetter}
   * `OptionalBench`, `AffineFoldBench`).
   *
   * These cover the two canonical foci the integration benches couldn't reach in their own carrier:
-  *   - `order.id: Long` — the advertised Getter / Setter scalar (`$.id`).
+  *   - `order.id: Long` — the advertised Getter / Modify scalar (`$.id`).
   *   - `customer.loyaltyId: Option[String]` — the advertised Optional / AffineFold focus. Avro
   *     omits it (kindlings encodes `Option` as a union, not a transparent field — plan 009 caveat),
   *     but in memory it is exactly an `Optional`/`AffineFold`, so it lives here, not on a synthetic
@@ -41,9 +41,9 @@ object DomainOptics:
   val eoGetId = EoGetter[Order, Long](_.id)
   val mGetId: MGetter[Order, Long] = MGetter[Order, Long](_.id)
 
-  // ---- Setter on order.id -------------------------------------------
+  // ---- Modify on order.id -------------------------------------------
 
-  val eoSetId = EoSetter[Order, Order, Long, Long](f => o => o.copy(id = f(o.id)))
+  val eoSetId = EoModify[Order, Order, Long, Long](f => o => o.copy(id = f(o.id)))
   val mSetId: MSetter[Order, Long] = MSetter[Order, Long](f => o => o.copy(id = f(o.id)))
 
   // ---- Optional / AffineFold on customer.loyaltyId ------------------

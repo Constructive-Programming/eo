@@ -24,11 +24,11 @@ import optics.{
   Optional,
   Prism,
   Review,
-  Setter,
+  Modify,
   Traversal,
 }
 import optics.Optic.*
-import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, SetterF}
+import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, ModifyF}
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
   * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,
@@ -43,7 +43,7 @@ import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, Set
   *     `AffineFold(o.getOption)`).
   *   - 3 Lens-into-MultiFocus[List] specs (Tuple2/Either/Affine) collapsed via the same parametric
   *     hit/miss assertion shape.
-  *   - 3 SetterF lift specs (Either/Affine/PowerSeries → SetterF) collapsed similarly.
+  *   - 3 ModifyF lift specs (Either/Affine/PowerSeries → ModifyF) collapsed similarly.
   *   - 3 mfFold cardinality specs collapsed.
   *   - 4 Optional.fused-andThen specs (Optional/GetReplaceLens/MendTearPrism/BijectionIso)
   *     collapsed via parametric hit/miss assertion.
@@ -52,8 +52,8 @@ import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, Set
   *
   * '''2026-04-28 MultiFocus migration.''' Every reference to the deleted `AlgLens[F]` and
   * `Kaleidoscope` carriers is rewritten to `MultiFocus[F]`. The `AlgLensSingleton` tag is renamed
-  * to `MultiFocusSingleton`. The Kaleidoscope-list `morph[SetterF]` block is now exercised on
-  * `MultiFocus[List]` and `MultiFocus[ZipList]` via `multifocus2setter`.
+  * to `MultiFocusSingleton`. The Kaleidoscope-list `morph[ModifyF]` block is now exercised on
+  * `MultiFocus[List]` and `MultiFocus[ZipList]` via `multifocus2modify`.
   */
 class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
@@ -318,9 +318,9 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   Accessor / Morph machinery (not per-class fused overloads): a total reader (Lens / Iso,
   //   `Accessor[F]`) yields a Getter; a partial one (Optional / AffineFold / Prism) composes its
   //   `readOnly` projection through Morph-to-Affine and yields an AffineFold. Plus the write-side
-  //   dual: any writable optic .andThen(Setter) morphs through `Composer[·, SetterF]` and stays a
-  //   Setter. Not Affine-only and not per-class — one rule per side.
-  "any optic .andThen(Getter) projects to read-only (Getter / AffineFold); .andThen(Setter) stays a Setter" >> {
+  //   dual: any writable optic .andThen(Modify) morphs through `Composer[·, ModifyF]` and stays a
+  //   Modify. Not Affine-only and not per-class — one rule per side.
+  "any optic .andThen(Getter) projects to read-only (Getter / AffineFold); .andThen(Modify) stays a Modify" >> {
     val toStr = Getter[Int, String](_.toString)
 
     // total readers -> Getter
@@ -351,17 +351,17 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val prismOk =
       (prismThen.getOption("42") === Some("42")).and(prismThen.getOption("nope") === None)
 
-    // write-side dual: any writable optic .andThen(Setter) -> Setter
-    val plusSetter = Setter[Int, Int, Int, Int](f => n => f(n))
-    val lensThenSet: Setter[(Int, String), (Int, String), Int, Int] =
-      fstLens.andThen(plusSetter)
+    // write-side dual: any writable optic .andThen(Modify) -> Modify
+    val plusModify = Modify[Int, Int, Int, Int](f => n => f(n))
+    val lensThenSet: Modify[(Int, String), (Int, String), Int, Int] =
+      fstLens.andThen(plusModify)
     val setLensOk = lensThenSet.modify(_ + 1)((7, "x")) === ((8, "x"))
 
     val ageOptW = Optional[AdultPerson, AdultPerson, Int, Int, Affine](
       getOrModify = p => Either.cond(p.age >= 18, p.age, p),
       reverseGet = { case (_, a) => AdultPerson(a) },
     )
-    val optThenSet = ageOptW.andThen(plusSetter)
+    val optThenSet = ageOptW.andThen(plusModify)
     val setOptOk = (optThenSet.modify(_ + 1)(AdultPerson(20)) === AdultPerson(21))
       .and(optThenSet.modify(_ + 1)(AdultPerson(15)) === AdultPerson(15)) // miss: unchanged
 
@@ -485,27 +485,27 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     sameOk.and(liftedOk).and(composedOk)
   }
 
-  // ----- Lens / Prism / Optional → MultiFocus[List] / SetterF cross-carrier ----------------
+  // ----- Lens / Prism / Optional → MultiFocus[List] / ModifyF cross-carrier ----------------
   //
   // 2026-04-29 consolidation: dropped a standalone case class `AdultOptCarrier` (was unused).
 
   case class AdultOptCarrier(p: AdultPerson)
 
-  // ----- Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → SetterF
+  // ----- Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → ModifyF
   //
-  // 2026-04-29 consolidation: 2 SetterF-themed blocks → 1 composite. Both witness the
-  // canonical "lift into SetterF + .modify byte-for-byte agrees with the source carrier".
+  // 2026-04-29 consolidation: 2 ModifyF-themed blocks → 1 composite. Both witness the
+  // canonical "lift into ModifyF + .modify byte-for-byte agrees with the source carrier".
 
   // covers: Lens(Tuple2) lifts into MultiFocus[List] preserving .modify semantics,
   //   Either Prism lifts into MultiFocus[List] preserves hit/miss,
   //   Affine Optional lifts into MultiFocus[List] preserves hit/miss,
   //   Optional.andThen(Forget[List]→MultiFocus[List]) classifier composes via affine2multifocus;
-  //   Either Prism lifts into SetterF and preserves hit/miss,
-  //   Affine Optional lifts into SetterF and preserves hit/miss,
-  //   PowerSeries (MultiFocus[PSVec]) Traversal lifts into SetterF and applies f to every focus,
-  //   MultiFocus.tuple lifts into SetterF and rebroadcasts via per-slot rebuild,
+  //   Either Prism lifts into ModifyF and preserves hit/miss,
+  //   Affine Optional lifts into ModifyF and preserves hit/miss,
+  //   PowerSeries (MultiFocus[PSVec]) Traversal lifts into ModifyF and applies f to every focus,
+  //   MultiFocus.tuple lifts into ModifyF and rebroadcasts via per-slot rebuild,
   //   MultiFocus.representable over Representable[Function1[Boolean, *]] lifts identically
-  "Lens/Prism/Optional → MultiFocus[List] + → SetterF: cross-carrier lifts (one composite block)" >> {
+  "Lens/Prism/Optional → MultiFocus[List] + → ModifyF: cross-carrier lifts (one composite block)" >> {
     // ---- → MultiFocus[List] half (absorbed standalone test) ----
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
@@ -540,31 +540,31 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val composedMFOk =
       (composedMF.modify(_ + 1)(3) === 11).and(composedMF.modify(_ + 1)(-1) === -1)
 
-    // ---- → SetterF half ----
+    // ---- → ModifyF half ----
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
-    val eitherLifted: Optic[Int, Int, Int, Int, data.SetterF] =
-      summon[Composer[Either, data.SetterF]].to(evenP)
+    val eitherLifted: Optic[Int, Int, Int, Int, data.ModifyF] =
+      summon[Composer[Either, data.ModifyF]].to(evenP)
     val eitherOk =
       (eitherLifted.modify(_ + 10)(4) === 14).and(eitherLifted.modify(_ + 10)(5) === 5)
 
-    val affineLifted: Optic[AdultPerson, AdultPerson, Int, Int, data.SetterF] =
-      summon[Composer[Affine, data.SetterF]].to(adultOpt)
+    val affineLifted: Optic[AdultPerson, AdultPerson, Int, Int, data.ModifyF] =
+      summon[Composer[Affine, data.ModifyF]].to(adultOpt)
     val affineOk = (affineLifted.modify(_ + 1)(AdultPerson(25)) === AdultPerson(26))
       .and(affineLifted.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
     val each: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
       Traversal.each[List, Int]
-    val psLifted: Optic[List[Int], List[Int], Int, Int, data.SetterF] =
-      summon[Composer[MultiFocus[PSVec], data.SetterF]].to(each)
+    val psLifted: Optic[List[Int], List[Int], Int, Int, data.ModifyF] =
+      summon[Composer[MultiFocus[PSVec], data.ModifyF]].to(each)
     val psOk =
       (psLifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30))
         .and(psLifted.modify(_ * 10)(Nil) === Nil)
 
     val tupleMF: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
       MultiFocus.tuple[(Int, Int, Int), Int]
-    val tupleLifted: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, data.SetterF] =
-      summon[Composer[MultiFocus[Function1[Int, *]], data.SetterF]].to(tupleMF)
+    val tupleLifted: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, data.ModifyF] =
+      summon[Composer[MultiFocus[Function1[Int, *]], data.ModifyF]].to(tupleMF)
     val tupleOk =
       (tupleLifted.modify(_ + 1)((10, 20, 30)) === ((11, 21, 31)))
         .and(tupleLifted.modify(_ * 2)((1, 2, 3)) === ((2, 4, 6)))
@@ -573,8 +573,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     import cats.instances.function.given
     val fnMF: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
       MultiFocus.representable[[a] =>> Boolean => a, Int]
-    val fnLifted: Optic[Boolean => Int, Boolean => Int, Int, Int, data.SetterF] =
-      summon[Composer[MultiFocus[Function1[Boolean, *]], data.SetterF]].to(fnMF)
+    val fnLifted: Optic[Boolean => Int, Boolean => Int, Int, Int, data.ModifyF] =
+      summon[Composer[MultiFocus[Function1[Boolean, *]], data.ModifyF]].to(fnMF)
     val srcFn: Boolean => Int = b => if b then 100 else 200
     val modified: Boolean => Int = fnLifted.modify(_ + 1)(srcFn)
     val fnOk = (modified(true) === 101).and(modified(false) === 201)
@@ -590,9 +590,9 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(fnOk)
   }
 
-  // ----- MultiFocus[F] lifted into SetterF + Foldable-aggregated escape ----------------
+  // ----- MultiFocus[F] lifted into ModifyF + Foldable-aggregated escape ----------------
   //
-  // 2026-04-29 consolidation: 2 MultiFocus[F]→SetterF / read-only-escape blocks → 1.
+  // 2026-04-29 consolidation: 2 MultiFocus[F]→ModifyF / read-only-escape blocks → 1.
 
   // covers: MultiFocus[F] read-only escape via .foldMap (sum / count / empty) — the gap-#2
   //   closure shipped two ways: (a) extension methods (.foldMap / .headOption / .length / .exists)
@@ -600,8 +600,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   Forget[F]]` — the explicit carrier morph, defensive about the bidirectional pair with
   //   `forget2multifocus` (works when the user routes via `summon[Composer[..]].to(o)` rather
   //   than `.andThen` to avoid the Morph-resolution ambiguity).
-  //   Plus: MultiFocus.apply[List] / MultiFocus.apply[ZipList] → SetterF element-wise modify.
-  "MultiFocus[F] read-only escape (foldMap, → Forget[F]) + List/ZipList → SetterF" >> {
+  //   Plus: MultiFocus.apply[List] / MultiFocus.apply[ZipList] → ModifyF element-wise modify.
+  "MultiFocus[F] read-only escape (foldMap, → Forget[F]) + List/ZipList → ModifyF" >> {
     val listMF: Optic[List[Int], List[Int], Int, Int, MultiFocus[List]] =
       MultiFocus.apply[List, Int]
 
@@ -614,8 +614,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       summon[Composer[MultiFocus[List], Forget[List]]].to(listMF)
     val foldReadOk = asFold.to(List(7, 8, 9)) === List(7, 8, 9)
 
-    val listLifted: Optic[List[Int], List[Int], Int, Int, SetterF] =
-      summon[Composer[MultiFocus[List], SetterF]].to(listMF)
+    val listLifted: Optic[List[Int], List[Int], Int, Int, ModifyF] =
+      summon[Composer[MultiFocus[List], ModifyF]].to(listMF)
     val listOk =
       (listLifted.modify(_ + 1)(List(1, 2, 3)) === List(2, 3, 4))
         .and(listLifted.modify(_ * 10)(Nil) === Nil)
@@ -624,8 +624,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     import cats.data.ZipList
     val zipMF: Optic[ZipList[Int], ZipList[Int], Int, Int, MultiFocus[ZipList]] =
       MultiFocus.apply[ZipList, Int]
-    val zipLifted: Optic[ZipList[Int], ZipList[Int], Int, Int, SetterF] =
-      summon[Composer[MultiFocus[ZipList], SetterF]].to(zipMF)
+    val zipLifted: Optic[ZipList[Int], ZipList[Int], Int, Int, ModifyF] =
+      summon[Composer[MultiFocus[ZipList], ModifyF]].to(zipMF)
     val zipOk =
       (zipLifted.modify(_ * 10)(ZipList(List(1, 2, 3))).value === List(10, 20, 30))
         .and(zipLifted.modify(_ + 1)(ZipList(Nil)).value === List.empty[Int])
@@ -633,21 +633,21 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     sumOk.and(sizeOk).and(emptyOk).and(foldReadOk).and(listOk).and(zipOk)
   }
 
-  // ----- SetterF same-carrier composition (gap #4) ---------------------
+  // ----- ModifyF same-carrier composition (gap #4) ---------------------
   //
-  // SetterF can't ship `AssociativeFunctor[SetterF]` because the deferred-modify
-  // semantic doesn't fit composeTo/composeFrom. Instead, `SetterF.scala` ships
-  // a SetterF-specific `.andThen` extension that composes via direct function
+  // ModifyF can't ship `AssociativeFunctor[ModifyF]` because the deferred-modify
+  // semantic doesn't fit composeTo/composeFrom. Instead, `ModifyF.scala` ships
+  // a ModifyF-specific `.andThen` extension that composes via direct function
   // composition. Scala 3 picks the more-specific extension over the carrier-
-  // generic `Optic.andThen[F[_, _]]` whenever both sides are concretely SetterF.
+  // generic `Optic.andThen[F[_, _]]` whenever both sides are concretely ModifyF.
 
-  // covers: Lens lifted to SetterF .andThen Lens lifted to SetterF — composed
+  // covers: Lens lifted to ModifyF .andThen Lens lifted to ModifyF — composed
   //   .modify agrees with sequential modify through both;
-  //   Lens-into-SetterF .andThen Prism-into-SetterF — composed hit modifies
+  //   Lens-into-ModifyF .andThen Prism-into-ModifyF — composed hit modifies
   //   the inner focus; composed miss leaves the source unchanged;
-  //   Lens-into-SetterF .andThen Optional-into-SetterF — same hit/miss shape
+  //   Lens-into-ModifyF .andThen Optional-into-ModifyF — same hit/miss shape
   //   under the Affine carrier
-  "SetterF same-carrier composition: setter.andThen(setter)" >> {
+  "ModifyF same-carrier composition: modify.andThen(modify)" >> {
     case class Inner(value: Int)
     case class Outer(inner: Inner, tag: String)
 
@@ -656,12 +656,12 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val innerLens: Optic[Inner, Inner, Int, Int, Tuple2] =
       Lens[Inner, Int](_.value, (s, v) => s.copy(value = v))
 
-    val outerSf: Optic[Outer, Outer, Inner, Inner, SetterF] =
-      summon[Composer[Tuple2, SetterF]].to(outerLens)
-    val innerSf: Optic[Inner, Inner, Int, Int, SetterF] =
-      summon[Composer[Tuple2, SetterF]].to(innerLens)
+    val outerSf: Optic[Outer, Outer, Inner, Inner, ModifyF] =
+      summon[Composer[Tuple2, ModifyF]].to(outerLens)
+    val innerSf: Optic[Inner, Inner, Int, Int, ModifyF] =
+      summon[Composer[Tuple2, ModifyF]].to(innerLens)
 
-    val composed: Optic[Outer, Outer, Int, Int, SetterF] = outerSf.andThen(innerSf)
+    val composed: Optic[Outer, Outer, Int, Int, ModifyF] = outerSf.andThen(innerSf)
 
     val src = Outer(Inner(10), "tag")
     val lensLensOk =
@@ -671,10 +671,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     val evenP: Optic[Int, Int, Int, Int, Either] =
       Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
-    val evenSf: Optic[Int, Int, Int, Int, SetterF] =
-      summon[Composer[Either, SetterF]].to(evenP)
+    val evenSf: Optic[Int, Int, Int, Int, ModifyF] =
+      summon[Composer[Either, ModifyF]].to(evenP)
 
-    val outerThenEven: Optic[Outer, Outer, Int, Int, SetterF] =
+    val outerThenEven: Optic[Outer, Outer, Int, Int, ModifyF] =
       outerSf.andThen(innerSf).andThen(evenSf)
     val lensPrismHit = outerThenEven.modify(_ + 100)(Outer(Inner(4), "x"))
     val lensPrismMiss = outerThenEven.modify(_ + 100)(Outer(Inner(5), "x"))
@@ -687,10 +687,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         getOrModify = n => Either.cond(n > 0, n, n),
         reverseGet = { case (_, n) => n },
       )
-    val posSf: Optic[Int, Int, Int, Int, SetterF] =
-      summon[Composer[Affine, SetterF]].to(posOpt)
+    val posSf: Optic[Int, Int, Int, Int, ModifyF] =
+      summon[Composer[Affine, ModifyF]].to(posOpt)
 
-    val outerThenPos: Optic[Outer, Outer, Int, Int, SetterF] =
+    val outerThenPos: Optic[Outer, Outer, Int, Int, ModifyF] =
       outerSf.andThen(innerSf).andThen(posSf)
     val lensOptHit = outerThenPos.modify(_ * 10)(Outer(Inner(3), "y"))
     val lensOptMiss = outerThenPos.modify(_ * 10)(Outer(Inner(-3), "y"))

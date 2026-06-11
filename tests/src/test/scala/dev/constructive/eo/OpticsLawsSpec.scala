@@ -17,11 +17,11 @@ import optics.{
   Optic,
   Optional,
   Prism,
-  Setter,
+  Modify,
   Traversal,
   Unfold,
 }
-import data.{Affine, Forget, Direct, MultiFocus, PSVec, SetterF}
+import data.{Affine, Forget, Direct, MultiFocus, PSVec, ModifyF}
 import laws.{
   AffineFoldLaws,
   GetterLaws,
@@ -29,7 +29,7 @@ import laws.{
   LensLaws,
   OptionalLaws,
   PrismLaws,
-  SetterLaws,
+  ModifyLaws,
   UnfoldLaws,
 }
 import laws.discipline.{
@@ -39,11 +39,11 @@ import laws.discipline.{
   LensTests,
   OptionalTests,
   PrismTests,
-  SetterTests,
+  ModifyTests,
   UnfoldTests,
 }
-import laws.data.{AffineLaws, SetterFLaws}
-import laws.data.discipline.{AffineTests, SetterFTests}
+import laws.data.{AffineLaws, ModifyFLaws}
+import laws.data.discipline.{AffineTests, ModifyFTests}
 import laws.typeclass.AssociativeFunctorLaws
 import laws.typeclass.discipline.AssociativeFunctorTests
 
@@ -163,17 +163,17 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .optional,
   )
 
-  // ----- Setter: maps `f` over both sides of a pair --------------
+  // ----- Modify: maps `f` over both sides of a pair --------------
 
-  val pairSetter: Optic[(Int, Int), (Int, Int), Int, Int, data.SetterF] =
-    Setter[(Int, Int), (Int, Int), Int, Int](f => { case (a, b) => (f(a), f(b)) })
+  val pairModify: Optic[(Int, Int), (Int, Int), Int, Int, data.ModifyF] =
+    Modify[(Int, Int), (Int, Int), Int, Int](f => { case (a, b) => (f(a), f(b)) })
 
   checkAll(
-    "Setter[(Int,Int), Int] — both pair components",
-    new SetterTests[(Int, Int), Int]:
-      val laws = new SetterLaws[(Int, Int), Int]:
-        val setter = pairSetter
-    .setter,
+    "Modify[(Int,Int), Int] — both pair components",
+    new ModifyTests[(Int, Int), Int]:
+      val laws = new ModifyLaws[(Int, Int), Int]:
+        val modify = pairModify
+    .modify,
   )
 
   // ----- Traversal.each on List[Int] ------------------------------
@@ -307,13 +307,13 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .affine,
   )
 
-  // ----- SetterF carrier laws -------------------------------------
+  // ----- ModifyF carrier laws -------------------------------------
 
   checkAll(
-    "SetterF[(Int, String), Boolean]",
-    new SetterFTests[(Int, String), Boolean]:
-      val laws = new SetterFLaws[(Int, String), Boolean] {}
-    .setterF,
+    "ModifyF[(Int, String), Boolean]",
+    new ModifyFTests[(Int, String), Boolean]:
+      val laws = new ModifyFLaws[(Int, String), Boolean] {}
+    .modifyF,
   )
 
   // ----- MultiFocus[PSVec] carrier carrier laws -------------------
@@ -345,7 +345,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   //
   // No carrier-level discipline block is added for `MultiFocus[Function1[Int, *]]`
   // because structural `==` on functions is reference equality — exactly the
-  // problem SetterF had. The functor laws are instead witnessed extensionally by
+  // problem ModifyF had. The functor laws are instead witnessed extensionally by
   // `MultiFocusFunction1Spec` (G1/G2 on `MultiFocus.tuple`, the same carrier) and
   // by `EoSpecificLawsSpec`'s "Traversal.two / three modifies …" forAll blocks.
 
@@ -441,10 +441,10 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   )
 
   // Use a custom extensional equality check inside the law — structural
-  // `==` on SetterF compares closures by identity which is too strict.
+  // `==` on ModifyF compares closures by identity which is too strict.
   // We sample the builder at a fixed Snd input to witness identity /
   // composition. The shared ForgetfulFunctorLaws uses `==`, so we wire
-  // the SetterF-specific laws directly (from dev.constructive.eo.laws.data) rather than
+  // the ModifyF-specific laws directly (from dev.constructive.eo.laws.data) rather than
   // the carrier-generic ones.
 
   // MultiFocus[F] carrier-level laws for F in {List, Option, Vector, Chain} — pins down the

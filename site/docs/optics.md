@@ -34,14 +34,14 @@ flowchart TD
     Review --> Unfold["Unfold[F]"]
   end
 
-  Setter["Setter — write-only"]
+  Modify["Modify — write-only"]
 
   Iso --> Getter
   Lens --> Getter
   Prism --> AffineFold
   Affine --> AffineFold
   MultiFocus --> Fold
-  MultiFocus --> Setter
+  MultiFocus --> Modify
   Iso --> Review
   Prism --> Review
 
@@ -51,7 +51,7 @@ flowchart TD
   click Affine "#affine"
   click MultiFocus "#multifocus"
   click Getter "#getter"
-  click Setter "#setter"
+  click Modify "#modify"
   click Review "#review"
   click Unfold "#unfold"
   click AffineFold "#affinefold"
@@ -63,13 +63,13 @@ How to read it:
 - **Same-family compose** stays in that family: `Lens ∘ Lens = Lens`,
   `Prism ∘ Prism = Prism`, `Iso ∘ Iso = Iso`.
 - **Cross-family compose** walks down from each input to where they
-  meet: `Lens ∘ Prism` → `Affine`; `Iso ∘ Setter` → `Setter`.
+  meet: `Lens ∘ Prism` → `Affine`; `Iso ∘ Modify` → `Modify`.
 - **The bi-directional spine** (Iso, Lens, Prism, Affine, MultiFocus)
   carries both a read and a write side. **One-way optics** keep only
   one: the read-only rung (Getter → AffineFold → Fold, ordered by how
   many foci a read can produce: exactly one, 0-or-1, many), the
   build-only rung (Review → Unfold, one focus vs. an `F`-layer of
-  parts), and write-only Setter.
+  parts), and write-only Modify.
 - Composing **into a read-only inner** (or from a read-only outer)
   drops every write side and lands on the read-only rung at the join
   of the two read strengths — `lens ∘ getter` → Getter,
@@ -78,8 +78,8 @@ How to read it:
   reversible outers (Iso / Prism / Review — anything whose carrier has
   a `ReverseAccessor`) compose into Review and Unfold;
   `review ∘ unfold` and `unfold ∘ review` land on Unfold.
-- Composing with a write-only Setter collapses the read side:
-  `lens ∘ setter` → Setter.
+- Composing with a write-only Modify collapses the read side:
+  `lens ∘ modify` → Modify.
 
 `Affine` is the carrier shared by `Optional` (read and write) and
 `AffineFold` (read-only). `MultiFocus[F]` is the multi-focus carrier;
@@ -97,23 +97,23 @@ cells do not compile, **by design** (writing through a read-only optic,
 reading through a build-only one, building through a write-incapable
 one). 87 of 121 cells compose; 34 are void.
 
-| outer ∘ inner | Iso | Lens | Prism | Optional | Traversal | Getter | AffineFold | Fold | Setter | Review | Unfold |
+| outer ∘ inner | Iso | Lens | Prism | Optional | Traversal | Getter | AffineFold | Fold | Modify | Review | Unfold |
 |---------------|-----|------|-------|----------|-----------|--------|------------|------|--------|--------|--------|
-| **Iso**       | Iso | Lens | Prism | Optional | Traversal | Getter | AffineFold | Fold | Setter | Review | Unfold |
-| **Lens**      | Lens | Lens | Optional | Optional | Traversal | Getter | AffineFold | Fold | Setter | ∅ | ∅ |
-| **Prism**     | Prism | Optional | Prism | Optional | Traversal | AffineFold | AffineFold | Fold | Setter | Review | Unfold |
-| **Optional**  | Optional | Optional | Optional | Optional | Traversal | AffineFold | AffineFold | Fold | Setter | ∅ | ∅ |
-| **Traversal** | Traversal | Traversal | Traversal | Traversal | Traversal | Fold | Fold | Fold | Setter | ∅ | ∅ |
+| **Iso**       | Iso | Lens | Prism | Optional | Traversal | Getter | AffineFold | Fold | Modify | Review | Unfold |
+| **Lens**      | Lens | Lens | Optional | Optional | Traversal | Getter | AffineFold | Fold | Modify | ∅ | ∅ |
+| **Prism**     | Prism | Optional | Prism | Optional | Traversal | AffineFold | AffineFold | Fold | Modify | Review | Unfold |
+| **Optional**  | Optional | Optional | Optional | Optional | Traversal | AffineFold | AffineFold | Fold | Modify | ∅ | ∅ |
+| **Traversal** | Traversal | Traversal | Traversal | Traversal | Traversal | Fold | Fold | Fold | Modify | ∅ | ∅ |
 | **Getter**    | Getter | Getter | AffineFold | AffineFold | Fold | Getter | AffineFold | Fold | ∅ | ∅ | ∅ |
 | **AffineFold**| AffineFold | AffineFold | AffineFold | AffineFold | Fold | AffineFold | AffineFold | Fold | ∅ | ∅ | ∅ |
 | **Fold**      | Fold | Fold | Fold | Fold | Fold | Fold | Fold | Fold | ∅ | ∅ | ∅ |
-| **Setter**    | Setter | Setter | Setter | Setter | Setter | ∅ | ∅ | ∅ | Setter | ∅ | ∅ |
+| **Modify**    | Modify | Modify | Modify | Modify | Modify | ∅ | ∅ | ∅ | Modify | ∅ | ∅ |
 | **Review**    | Review | ∅ | Review | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ | Review | Unfold |
 | **Unfold**    | Unfold | ∅ | Unfold | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ | Unfold | Unfold |
 
 The structure of the voids is the taxonomy speaking:
 
-- The **Setter column/row corner**: a Setter exposes no focus to read
+- The **Modify column/row corner**: a Modify exposes no focus to read
   and no value to build with, so only write-capable pairs survive.
 - The **Review / Unfold columns** are void for every outer that cannot
   build totally (Lens, Optional, Traversal — their write-back needs a
@@ -184,7 +184,7 @@ ageL.modify(_ + 1)(alice)
 ```
 
 Composes via `.andThen` with other Lenses and — transparently,
-with no extra syntax — with `Optional` / `Setter` / `Traversal`
+with no extra syntax — with `Optional` / `Modify` / `Traversal`
 optics too. The cross-carrier variant of `.andThen` summons a
 `Composer[F, G]` or `Composer[G, F]` to bring both sides under
 a common carrier.
@@ -277,10 +277,10 @@ The same join fires with the read-only optic on the *outside*
 a chain that touches a read-only optic anywhere collapses to the
 read-only rung at the join of all its read strengths.
 
-Dually, composing with a write-only `Setter` collapses the *read*
-side and yields a `Setter` (`lens.andThen(setter)`,
-`optional.andThen(setter)`, …) — it modifies the focus through the
-inner setter. One rule per side, across the whole algebra, rather
+Dually, composing with a write-only `Modify` collapses the *read*
+side and yields a `Modify` (`lens.andThen(modify)`,
+`optional.andThen(modify)`, …) — it modifies the focus through the
+inner modifier. One rule per side, across the whole algebra, rather
 than a per-family special case.
 
 ### AffineFold (read-only)
@@ -322,7 +322,7 @@ sweep sizes 4 / 32 / 256 / 1024).
 / `everywhere` — rides this same `MultiFocus[PSVec]` carrier via
 `Traversal.selfChildren`; it's a typeclass over the carrier, not a new
 family node. See [Generics → `plate[S]`](generics.md), the
-[Cookbook](cookbook.md), and the [Setter section](#setter) for
+[Cookbook](cookbook.md), and the [Modify section](#modify) for
 `everywhere`.
 
 ```scala mdoc:silent
@@ -416,42 +416,42 @@ val initial = Getter[Person, String](_.name).andThen(Getter[String, Char](_.head
 initial.get(Person("Alice", 30))
 ```
 
-### Setter
+### Modify
 
-A `Setter[S, A]` can modify but not read — a write-only focus
+A `Modify[S, A]` can modify but not read — a write-only focus
 for cases where the focus value isn't observable to the caller.
-Carrier: `SetterF`.
+Carrier: `ModifyF`.
 
 ```scala mdoc:silent
-import dev.constructive.eo.optics.Setter
+import dev.constructive.eo.optics.Modify
 
-case class SetterConfig(values: Map[String, Int])
-val bumpAll = Setter[SetterConfig, SetterConfig, Int, Int] { f => cfg =>
+case class ModifyConfig(values: Map[String, Int])
+val bumpAll = Modify[ModifyConfig, ModifyConfig, Int, Int] { f => cfg =>
   cfg.copy(values = cfg.values.view.mapValues(f).toMap)
 }
 ```
 
 ```scala mdoc
-bumpAll.modify(_ + 1)(SetterConfig(Map("a" -> 1, "b" -> 2)))
+bumpAll.modify(_ + 1)(ModifyConfig(Map("a" -> 1, "b" -> 2)))
 ```
 
-Both `lens.andThen(setter)` (a Lens to a focus, then a Setter that
-writes into it) and `setter.andThen(setter)` work — `SetterF` ships an
-`AssociativeFunctor[SetterF, Xo, Xi]` instance, so the standard
+Both `lens.andThen(modify)` (a Lens to a focus, then a Modify that
+writes into it) and `modify.andThen(modify)` work — `ModifyF` ships an
+`AssociativeFunctor[ModifyF, Xo, Xi]` instance, so the standard
 `Optic.andThen` resolution picks it up transparently.
 
 ```scala mdoc:silent
 import dev.constructive.eo.compose.Composer
-import dev.constructive.eo.data.SetterF
-import dev.constructive.eo.data.SetterF.given
+import dev.constructive.eo.data.ModifyF
+import dev.constructive.eo.data.ModifyF.given
 
 final case class Box(value: Int)
 final case class Holder(box: Box, tag: String)
 
-val outer = summon[Composer[Tuple2, SetterF]].to(
+val outer = summon[Composer[Tuple2, ModifyF]].to(
   Lens[Holder, Box](_.box, (s, b) => s.copy(box = b))
 )
-val inner = summon[Composer[Tuple2, SetterF]].to(
+val inner = summon[Composer[Tuple2, ModifyF]].to(
   Lens[Box, Int](_.value, (s, v) => s.copy(value = v))
 )
 val composed = outer.andThen(inner)
@@ -461,16 +461,16 @@ val composed = outer.andThen(inner)
 composed.modify(_ + 1)(Holder(Box(10), "tag"))
 ```
 
-Setter is a write-side terminal: there is no `Composer[SetterF, _]`
-outbound, so to *escape* a SetterF chain into a Forget / MultiFocus /
-Lens you have to restructure with the Setter on the inside.
+Modify is a write-side terminal: there is no `Composer[ModifyF, _]`
+outbound, so to *escape* a ModifyF chain into a Forget / MultiFocus /
+Lens you have to restructure with the Modify on the inside.
 
-#### `everywhere` — a Setter that reaches every depth
+#### `everywhere` — a Modify that reaches every depth
 
-`Plated.everywhere[S]` is a `Setter` over a recursive type whose
+`Plated.everywhere[S]` is a `Modify` over a recursive type whose
 `.modify` is the bottom-up recursive `transform` (see
 [Generics → `plate[S]`](generics.md)).
-Because it's an ordinary Setter, the same `.andThen` you'd use to reach
+Because it's an ordinary Modify, the same `.andThen` you'd use to reach
 *one* focus now applies that focus at **every** node of the tree — the
 "specify once, run everywhere" payoff. Give the type a `Plated`
 (by hand here; `plate[S]` from eo-generics derives it):
@@ -493,8 +493,8 @@ given Plated[Tree] = Plated.fromChildren(
   },
 )
 
-// A Setter that writes the Int in a Leaf; everywhere lifts it to all depths.
-val leafN = Setter[Tree, Tree, Int, Int] { f =>
+// A Modify that writes the Int in a Leaf; everywhere lifts it to all depths.
+val leafN = Modify[Tree, Tree, Int, Int] { f =>
   {
     case Tree.Leaf(n) => Tree.Leaf(f(n))
     case other        => other
@@ -509,7 +509,7 @@ everyLeaf.modify(_ + 1)(Tree.Branch(Tree.Leaf(1), Tree.Branch(Tree.Leaf(2), Tree
 ```
 
 `everywhere` composes outward with any inner optic that bridges into
-`SetterF` (Lens / Prism / Optional / Setter), and the `.modify` runs
+`ModifyF` (Lens / Prism / Optional / Modify), and the `.modify` runs
 bottom-up, stack-safe to any depth. For the read side (every sub-term
 as a list) use `Plated.universe`; for the full worked Prism-composition
 recipe see the [Cookbook](cookbook.md), and for the macro that derives
@@ -765,17 +765,17 @@ requires `FlatMap[F]`). If you need the result in a specific `G`
 (e.g. streaming via `LazyList`), apply your own `F ~> G` to the fold's
 output rather than composing carriers.
 
-**`SetterF` outbound** — Setter is a write-side terminal: there is no
-outbound `Composer[SetterF, _]`, so a chain that reaches Setter cannot
+**`ModifyF` outbound** — Modify is a write-side terminal: there is no
+outbound `Composer[ModifyF, _]`, so a chain that reaches Modify cannot
 widen back into a Forget / MultiFocus / Lens. Same-carrier
-`setter.andThen(setter)` *does* work — `SetterF.assocSetterF` ships
-`AssociativeFunctor[SetterF, Xo, Xi]` with `Z = (Fst[Xo], Snd[Xi])`,
+`modify.andThen(modify)` *does* work — `ModifyF.assocModifyF` ships
+`AssociativeFunctor[ModifyF, Xo, Xi]` with `Z = (Fst[Xo], Snd[Xi])`,
 so the standard `Optic.andThen` resolves transparently.
 
 **Fixed-arity traversal (`Traversal.two` / `.three` / `.four`)** —
 these factories produce `MultiFocus[Function1[Int, *]]`-carrier optics,
 so they inherit the Grate sub-shape's composability: `Iso ↪
-MF[Function1[Int, *]]`, `MF[Function1[Int, *]] ↪ SetterF`, and
+MF[Function1[Int, *]]`, `MF[Function1[Int, *]] ↪ ModifyF`, and
 same-carrier `.andThen` via `mfAssocFunction1`. Lens / Prism / Optional
 do NOT bridge in (Function1 lacks `Foldable` / `Alternative`).
 
