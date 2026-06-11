@@ -3,7 +3,7 @@ package schemes
 
 import cats.Traverse
 
-import data.{Forget, PSVec}
+import data.{Forget, ForgetK, PSVec}
 import optics.{Getter, Optic, Plated, Review, Unfold}
 
 /** Recursion schemes as composable optics, built on the core optic surface.
@@ -330,8 +330,8 @@ object Schemes:
   def fLayer[F[_], S](using P: Project[F, S], E: Embed[F, S]): Optic[S, S, S, S, Forget[F]] =
     new Optic[S, S, S, S, Forget[F]]:
       type X = Any
-      val to: S => Forget[F][X, S] = s => P.project(s)
-      val from: Forget[F][X, S] => S = fs => E.embed(fs)
+      def to(s: S): Forget[F][X, S] = ForgetK(P.project(s))
+      def from(fs: Forget[F][X, S]): S = E.embed(fs.value)
 
   /** Catamorphism over a typed pattern functor `F`, as a composable `Getter`. `alg` sees the
     * original node `S` (paramorphism-flavored) plus its already-folded children as a typed `F[A]`.
