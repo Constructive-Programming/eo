@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package schemes
 
-import cats.Traverse
+import cats.{Monad, Traverse}
 
 import data.{Forget, ForgetK, PSVec}
 import optics.{Getter, Optic, Plated, Review, Unfold}
@@ -391,6 +391,141 @@ object Schemes:
               combine(layer, arr)
 
     n => rec(n, 0)
+
+  // ===========================================================================================
+  // The M-generic path — the foldLayered state machine LIFTED into a Monad[M] (no M = Id
+  // special-case: that is what makes the fast-path agreement laws a real cross-architecture
+  // pin). State = the explicit frame deque, threaded through Monad[M].tailRecM, one iteration
+  // per node event (each paying tailRecM's per-step Either — the structural B/op floor vs the
+  // pure machine). NOT droste's hyloM (flatMap-recursive: O(depth) call stack on a strict M).
+  // Stack-safety reduces to the lawfulness of M's tailRecM — per-M and tested (Id/Eval to 10^6).
+  //
+  // Supported Ms are SINGLE-PASS and LINEAR: the machine's state is mutable, so a branching /
+  // replaying M (List, retrying or streaming effects) shares it across branches and corrupts
+  // the fold — the documented contract, exercised by the boundary test in SchemesFMSpec.
+  //
+  // The expand is Or-SHAPED (N => M[Either[R, F[N]]]) per the elgot-seam gate
+  // (docs/brainstorms/2026-06-12-elgot-seam-sketch.md): v1 drivers always pass Right; the
+  // elgot/apoFM follow-up supplies Left answers with no re-architecture.
+  // ===========================================================================================
+
+  /** The lifted machine. One `M`-action per `tailRecM` iteration: `Down(n)` runs `expandOr`, exits
+    * run `combine`; the mutable frame deque lives outside the loop (linear-M contract).
+    */
+  private def foldLayeredM[M[_], F[_], N, R](
+      expandOr: N => M[Either[R, F[N]]],
+      combine: (N, F[N], Array[AnyRef]) => M[R],
+  )(using M: Monad[M], F: Traverse[F]): N => M[R] =
+
+    def childrenArr(fn: F[N]): Array[AnyRef] =
+      val n = F.size(fn).toInt
+      if n == 0 then EmptyAnyRefs
+      else
+        val arr = new Array[AnyRef](n)
+        val _ = F.foldLeft(fn, 0) { (i, child) =>
+          arr(i) = child.asInstanceOf[AnyRef]
+          i + 1
+        }
+        arr
+
+    final class Frame(val node: N, val layer: F[N], val arr: Array[AnyRef], var i: Int)
+
+    n0 =>
+      val stack = new java.util.ArrayDeque[Frame]()
+      var ret: AnyRef = null.asInstanceOf[AnyRef]
+      // Op: Right(n) = descend into n; Left(()) = ascend (consume ret against the top frame).
+      M.tailRecM[Either[Unit, N], R](Right(n0)) {
+        case Right(n) =>
+          M.map(expandOr(n)) {
+            case Left(r) => // graft/short-circuit arm (unused by v1 drivers)
+              ret = r.asInstanceOf[AnyRef]
+              Left(Left(()))
+            case Right(layer) =>
+              val arr = childrenArr(layer)
+              if arr.length == 0 then
+                // leaf: combine is the next event — model as a frame with no children left
+                stack.push(new Frame(n, layer, arr, 0))
+                Left(Left(()))
+              else
+                stack.push(new Frame(n, layer, arr, 0))
+                Left(Right(arr(0).asInstanceOf[N]))
+          }
+        case Left(()) =>
+          if stack.isEmpty then M.pure(Right(ret.asInstanceOf[R]))
+          else
+            val fr = stack.peek()
+            if fr.arr.length == 0 || fr.i >= fr.arr.length then
+              // all children folded (or leaf): one combine event, then keep ascending
+              M.map(combine(fr.node, fr.layer, fr.arr)) { r =>
+                val _ = stack.pop()
+                ret = r.asInstanceOf[AnyRef]
+                Left(Left(()))
+              }
+            else
+              fr.arr(fr.i) = ret // store the just-folded child's result
+              fr.i += 1
+              if fr.i < fr.arr.length then M.pure(Left(Right(fr.arr(fr.i).asInstanceOf[N])))
+              else M.pure(Left(Left(()))) // last child stored: next event is this frame's combine
+      }
+
+  /** Effectful catamorphism — the algebra runs in `M` (`(S, F[A]) => M[A]`); the layer peel stays
+    * the pure `Project`. Returns the `Forget[M]`-carried [[CataFM]] citizen; consume via `.run`.
+    */
+  def cataFM[M[_], F[_], S, A](
+      algM: (S, F[A]) => M[A]
+  )(using M: Monad[M], F: Traverse[F], P: Project[F, S]): CataFM[M, F, S, A] =
+    new CataFM[M, F, S, A](
+      foldLayeredM[M, F, S, A](
+        s => M.pure(Right(P.project(s))),
+        (s, fs, out) => algM(s, rebuildLayer[F, S, A](fs, out)),
+      ),
+      algM,
+    )
+
+  /** Effectful anamorphism — the coalgebra (the layer producer) runs in `M` (`Seed => M[F[Seed]]`,
+    * the arbo `GetSellOptions` shape: fetching children is effectful). Returns the [[AnaFM]]
+    * citizen; consume via `.run`, fuse via `.andThen(cataFM(...))`.
+    */
+  def anaFM[M[_], F[_], Seed, S](
+      coalgM: Seed => M[F[Seed]]
+  )(using M: Monad[M], F: Traverse[F], E: Embed[F, S]): AnaFM[M, F, Seed, S] =
+    new AnaFM[M, F, Seed, S](
+      foldLayeredM[M, F, Seed, S](
+        seed => M.map(coalgM(seed))(Right(_)),
+        (_, fSeed, out) => M.pure(E.embed(rebuildLayer[F, Seed, S](fSeed, out))),
+      ),
+      coalgM,
+    )
+
+  /** Effectful hylomorphism — the always-fused M spelling (what the D6 `eoHyloM` bench row runs):
+    * `Seed => M[A]` with **no intermediate `S`**, seed-typed algebra.
+    */
+  def hyloFM[M[_], F[_], Seed, A](
+      coalgM: Seed => M[F[Seed]],
+      algM: (Seed, F[A]) => M[A],
+  )(using M: Monad[M], F: Traverse[F]): FoldFM[M, Seed, A] =
+    new FoldFM[M, Seed, A](
+      foldLayeredM[M, F, Seed, A](
+        seed => M.map(coalgM(seed))(Right(_)),
+        (seed, fSeed, out) => algM(seed, rebuildLayer[F, Seed, A](fSeed, out)),
+      )
+    )
+
+  /** Single-pass paired machine in `M` backing the fused `AnaFM.andThen(CataFM)` — the M mirror of
+    * [[fusedPairedFold]]: each node built once, folded immediately, no `M[S]` whole-structure
+    * materialization.
+    */
+  private[schemes] def fusedPairedFoldM[M[_], F[_], Seed, S, A](
+      coalgM: Seed => M[F[Seed]],
+      algM: (S, F[A]) => M[A],
+  )(using M: Monad[M], F: Traverse[F], E: Embed[F, S]): Seed => M[(S, A)] =
+    foldLayeredM[M, F, Seed, (S, A)](
+      seed => M.map(coalgM(seed))(Right(_)),
+      (_, fSeed, out) =>
+        val pairs = rebuildLayer[F, Seed, (S, A)](fSeed, out)
+        val s = E.embed(F.map(pairs)(_._1))
+        M.map(algM(s, F.map(pairs)(_._2)))(a => (s, a)),
+    )
 
   /** The single *layer* optic for a pattern functor `F`: `project`/`embed` worn as the existing
     * [[dev.constructive.eo.data.Forget]] carrier. `to = project: S => F[S]`, `from = embed: F[S] =>
