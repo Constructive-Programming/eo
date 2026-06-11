@@ -2,15 +2,16 @@
 """Generate the isometric 3-axis optic-family taxonomy SVG for site/docs/optics.md.
 
 Axes:
-  u (lower-right)  : READ cardinality   — 1, 0-or-1, N        (the ReadCompose join lattice)
-  v (upper-right)  : WRITE cardinality  — 1, 0-or-1, N        (a future WriteCompose; see the
-                                                               failure-typed-build / BiAffine plan)
-  vertical (layers): capability         — read-only (top), read-write (middle),
-                                          write/build-only (bottom)
+  u (lower-right)  : FOCUS nature   — total, fallible, multiple   (the ReadCompose join lattice)
+  v (upper-right)  : SOURCE nature  — total, contextual, fallible (fallible = WriteCompose /
+                                                                   BiAffine plan)
+  vertical (layers): capability     — read-only (top), read-write (middle),
+                                      write/build-only (bottom)
 
-Read-only families have no write side, so the top layer is a rail along u;
-write-only families have no read side, so the bottom layer is a rail along v
-(plus the cardinality-agnostic Modify bar). The middle layer is the full grid.
+One-way layers collapse to the focus axis (read-only has no `from`; write-only
+rails by the focus shape its build consumes), so both rails run parallel along u.
+The middle layer is the FULL focus x source grid — every cell is shipped or
+scoped to the failure-typed-build (BiAffine) plan; no accidental holes.
 """
 import math, os
 
@@ -97,35 +98,37 @@ for i, name in enumerate(['Getter', 'AffineFold', 'Fold']):
     parts.append(tile(i, JR, TOP, 'ro'))
     parts.append(label(i, JR, TOP, name))
 
-# ---------- MIDDLE layer: read-write (full grid: u = read card, v = write card) ----------
-# v index: 0 → write 1, 1 → write 0-or-1, 2 → write N
+# ---------- MIDDLE layer: read-write (full grid: u = focus nature, v = source nature) ----------
+# u index: 0 → total, 1 → fallible, 2 → multiple
+# v index: 0 → total, 1 → contextual, 2 → fallible
 parts.append(tile(0, 0, MID, 'rw'))
-parts.append(label(0, 0, MID, 'Iso · Lens', 'total · contextual'))
+parts.append(label(0, 0, MID, 'Iso', None))
+parts.append(tile(0, 1, MID, 'rw'))
+parts.append(label(0, 1, MID, 'Lens', None))
 parts.append(tile(1, 0, MID, 'rw'))
-parts.append(label(1, 0, MID, 'Prism · Optional', 'total · contextual'))
-parts.append(tile(2, 0, MID, 'empty', dash=True))
-parts.append(label(2, 0, MID, '∅', cls='empty-t'))
-# fallible-write column (write cardinality 0-or-1) — BiAffine territory
-parts.append(tile(0, 1, MID, 'plan', dash=True, uspan=3))
-parts.append(label(0, 1, MID, 'fallible write', 'BiAffine — planned', cls='plan-t', uspan=3))
-parts.append(tile(0, 2, MID, 'empty', dash=True))
-parts.append(label(0, 2, MID, '∅', cls='empty-t'))
-parts.append(tile(1, 2, MID, 'empty', dash=True))
-parts.append(label(1, 2, MID, '∅', cls='empty-t'))
-parts.append(tile(2, 2, MID, 'rw'))
-parts.append(label(2, 2, MID, 'Traversal', None))
+parts.append(label(1, 0, MID, 'Prism', None))
+parts.append(tile(1, 1, MID, 'rw'))
+parts.append(label(1, 1, MID, 'Optional', 'Affine carrier'))
+parts.append(tile(2, 0, MID, 'rw', vspan=2))
+parts.append(label(2, 0, MID, 'Traversal', 'fixed/Grate: total · each: contextual', vspan=2))
+# fallible-source row — the failure-typed-build (BiAffine) plan
+parts.append(tile(0, 2, MID, 'plan', dash=True))
+parts.append(label(0, 2, MID, 'fallible write', 'planned', cls='plan-t'))
+parts.append(tile(1, 2, MID, 'plan', dash=True))
+parts.append(label(1, 2, MID, 'BiAffine', 'planned', cls='plan-t'))
+parts.append(tile(2, 2, MID, 'plan', dash=True))
+parts.append(label(2, 2, MID, 'fallible each', 'planned', cls='plan-t'))
 
-# ---------- BOTTOM layer: write/build-only (rail along v; no read side, u collapses) ----------
-IR = 1.0  # rail sits on the middle u-row
-parts.append(tile(IR, 0, BOT, 'bo'))
-parts.append(label(IR, 0, BOT, 'Review', None))
-parts.append(tile(IR, 1, BOT, 'plan', dash=True))
-parts.append(label(IR, 1, BOT, 'fallible build', 'BiAffine — planned', cls='plan-t'))
-parts.append(tile(IR, 2, BOT, 'bo'))
-parts.append(label(IR, 2, BOT, 'Unfold', None))
-# Modify: write-only and cardinality-agnostic — a bar spanning the write axis
-parts.append(tile(IR - 1.3, -0.25, BOT, 'mod', vspan=3))
-parts.append(label(IR - 1.3, -0.25, BOT, 'Modify', 'cardinality-agnostic', vspan=3))
+# ---------- BOTTOM layer: write/build-only (rail along u, mirroring the top rail) ----------
+JB = 1.0  # rail sits on the middle v-row
+for i, (name, cls, sub) in enumerate([('Review', 'bo', None),
+                                      ('fallible build', 'plan', 'planned'),
+                                      ('Unfold', 'bo', None)]):
+    parts.append(tile(i, JB, BOT, cls, dash=(cls == 'plan')))
+    parts.append(label(i, JB, BOT, name, sub, cls=('plan-t' if cls == 'plan' else 'fam')))
+# Modify: write-only and focus-agnostic — a bar spanning the focus axis, in front of the rail
+parts.append(tile(0, JB - 1.3, BOT, 'mod', uspan=3))
+parts.append(label(0, JB - 1.3, BOT, 'Modify', 'focus-agnostic', uspan=3))
 
 # ---------- axis arrows + labels ----------
 def arrow(x0, y0, x1, y1):
@@ -140,13 +143,13 @@ def arrow(x0, y0, x1, y1):
 a0, a1 = pt(0, -0.4, MID), pt(3.05, -0.4, MID)
 parts.append(arrow(*a0, *a1))
 am = ((a0[0] + a1[0]) / 2, (a0[1] + a1[1]) / 2)
-parts.append(f'<text class="axis" x="{am[0] - 14:.1f}" y="{am[1] + 22:.1f}" transform="rotate(30 {am[0] - 14:.1f} {am[1] + 22:.1f})">read cardinality (ReadCompose):  1  →  0-or-1  →  N</text>')
+parts.append(f'<text class="axis" x="{am[0] - 14:.1f}" y="{am[1] + 22:.1f}" transform="rotate(30 {am[0] - 14:.1f} {am[1] + 22:.1f})">focus nature (ReadCompose):  total  →  fallible  →  multiple</text>')
 
 # write-cardinality axis (v), upper-left of the middle grid
 b0, b1 = pt(-0.4, 0, MID), pt(-0.4, 3.05, MID)
 parts.append(arrow(*b0, *b1))
 bm = ((b0[0] + b1[0]) / 2, (b0[1] + b1[1]) / 2)
-parts.append(f'<text class="axis" x="{bm[0] - 12:.1f}" y="{bm[1] - 26:.1f}" transform="rotate(-30 {bm[0] - 12:.1f} {bm[1] - 26:.1f})">write cardinality (WriteCompose — planned):  1  →  0-or-1  →  N</text>')
+parts.append(f'<text class="axis" x="{bm[0] - 12:.1f}" y="{bm[1] - 26:.1f}" transform="rotate(-30 {bm[0] - 12:.1f} {bm[1] - 26:.1f})">source nature:  total  →  contextual  →  fallible (WriteCompose — planned)</text>')
 
 # capability axis: vertical, far left
 rx = MX - 120

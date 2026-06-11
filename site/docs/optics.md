@@ -10,44 +10,54 @@ Every family is a specialisation of the same `Optic[S, T, A, B, F]`
 trait, differing only in the carrier `F[_, _]` — and the family space
 is **three-axis**:
 
-- **read cardinality** — how many foci the read side produces:
-  1, 0-or-1, or N. This is the axis `ReadCompose` joins along.
-- **write cardinality** — how many foci the write/build side
-  consumes: 1, 0-or-1, or N. Its join (a `WriteCompose` mirroring
-  `ReadCompose`) and its 0-or-1 column — *fallible* writes and builds
-  — are not shipped yet: they are the territory of the
+- **focus nature** — how `to` lands the focus: *total* (always
+  there), *fallible* (may miss), or *multiple* (an `F`-layer of
+  foci). This is exactly the lattice `ReadCompose` joins along.
+- **source nature** — what `from` needs to rebuild the source:
+  *total* (no context — a bijection or a `mend`), *contextual*
+  (carries the leftover `X`), or *fallible* (the rebuild itself can
+  reject). The fallible row — and a `WriteCompose` join mirroring
+  `ReadCompose` — is not shipped yet: it is the territory of the
   failure-typed-build (**BiAffine**) plan.
 - **capability** — which sides exist at all: read-only (top layer),
   read-write (middle), write/build-only (bottom).
 
-![The three-axis optic family taxonomy: read cardinality × write cardinality × capability](static/optic-taxonomy-3d.svg)
+![The three-axis optic family taxonomy: focus nature × source nature × capability](static/optic-taxonomy-3d.svg)
 
 How to read it:
 
-- The **top layer** is read-only — no write side, so it collapses to
-  the read axis: Getter (1), AffineFold (0-or-1), Fold (N). Any chain
-  that touches a read-only optic projects **up** onto this layer,
-  landing at the join of the read cardinalities — `lens ∘ getter` →
+- The **top layer** is read-only — no `from`, so it collapses to the
+  focus axis: Getter (total), AffineFold (fallible), Fold (multiple).
+  Any chain that touches a read-only optic projects **up** onto this
+  layer, landing at the join of the focus natures — `lens ∘ getter` →
   Getter, `prism ∘ getter` → AffineFold, `traversal ∘ getter` → Fold.
   That join is exactly what `ReadCompose` computes.
-- The **middle layer** pairs the two axes. `Iso · Lens` sit at (1, 1)
-  (total vs contextual rebuild of the same shape), `Prism · Optional`
-  at (0-or-1, 1), `Traversal` at (N, N). The off-diagonal cells (∅)
-  have no shipped carrier.
-- The **bottom layer** is write/build-only — no read side, so it
-  collapses to the write axis: Review builds 1, Unfold builds from N
-  (`embed: F[B] => T` — Fold's mirror on the same `Forget[F]`
-  carrier). Build-side composition projects **down** onto this layer
-  (`iso ∘ review` → Review, `review ∘ unfold` → Unfold). `Modify`
-  spans the axis: `(A => B) => S => T` never observes how many foci
-  the function lands on, so it is the cardinality-agnostic write-only
-  bottom — `lens ∘ modify` → Modify is the corresponding downward
-  projection.
-- The **tan cells are planned, not missing by accident**: write
-  cardinality 0-or-1 means a write/build that can miss or reject —
-  smart-constructor writes, per-element encode failures. Those cells,
-  the `WriteCompose` join, and carriers for the remaining ∅ cells are
-  scoped to the failure-typed-build spike
+- The **middle layer** is the full grid, and with these axes it is
+  *completely inhabited* — every cell is shipped or planned, no
+  accidental holes. Iso is total in both focus and source; Lens reads
+  totally but rebuilds contextually; Prism reads fallibly but mends
+  totally; Optional is fallible-focus, contextual-source (the
+  `Affine` carrier). Traversal spans **both** source natures at
+  multiple focus: the fixed-shape/Grate flavour
+  (`MultiFocus[Function1]`, `Traversal.{two,three,four}`) rebuilds
+  *totally* via `tabulate`, while `each` (`MultiFocus[PSVec]`)
+  rebuilds *contextually*, keeping the structural skeleton.
+- The **bottom layer** is write/build-only — no read side — and rails
+  along the focus axis in parallel with the top layer: Review consumes
+  a total focus, Unfold a multiple one (`embed: F[B] => T` — Fold's
+  mirror on the same `Forget[F]` carrier). Build-side composition
+  projects **down** onto this layer (`iso ∘ review` → Review,
+  `review ∘ unfold` → Unfold). `Modify` spans the axis:
+  `(A => B) => S => T` never observes the focus shape it lands on, so
+  it is the focus-agnostic write-only bottom — `lens ∘ modify` →
+  Modify is the corresponding downward projection.
+- The **tan cells are planned, not missing by accident** — they are
+  the fallible-source row: *fallible write* (a smart-constructor
+  replace that can reject), **BiAffine** (fallible in both focus and
+  source), and *fallible each* (per-element write failures, the shape
+  the Avro integration already runs on read). Together with the
+  `WriteCompose` join they are scoped to the failure-typed-build
+  spike
   ([`docs/brainstorms/2026-06-10-failure-typed-build-biaffine.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/brainstorms/2026-06-10-failure-typed-build-biaffine.md)).
 
 `Affine` is the carrier shared by `Optional` (read and write) and

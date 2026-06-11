@@ -46,36 +46,40 @@
 <polygon class="ro" points="481.0,236.0 578.0,292.0 675.0,236.0 578.0,180.0"/>
 <text class="fam" x="578.0" y="241.0">Fold</text>
 <polygon class="rw" points="190.0,480.0 287.0,536.0 384.0,480.0 287.0,424.0"/>
-<text class="fam" x="287.0" y="473.0">Iso · Lens</text>
-<text class="sub" x="287.0" y="493.0">total · contextual</text>
+<text class="fam" x="287.0" y="485.0">Iso</text>
+<polygon class="rw" points="287.0,424.0 384.0,480.0 481.0,424.0 384.0,368.0"/>
+<text class="fam" x="384.0" y="429.0">Lens</text>
 <polygon class="rw" points="287.0,536.0 384.0,592.0 481.0,536.0 384.0,480.0"/>
-<text class="fam" x="384.0" y="529.0">Prism · Optional</text>
-<text class="sub" x="384.0" y="549.0">total · contextual</text>
-<polygon class="empty" points="384.0,592.0 481.0,648.0 578.0,592.0 481.0,536.0" stroke-dasharray="6 5"/>
-<text class="empty-t" x="481.0" y="597.0">∅</text>
-<polygon class="plan" points="287.0,424.0 578.0,592.0 675.0,536.0 384.0,368.0" stroke-dasharray="6 5"/>
-<text class="plan-t" x="481.0" y="473.0">fallible write</text>
-<text class="sub" x="481.0" y="493.0">BiAffine — planned</text>
-<polygon class="empty" points="384.0,368.0 481.0,424.0 578.0,368.0 481.0,312.0" stroke-dasharray="6 5"/>
-<text class="empty-t" x="481.0" y="373.0">∅</text>
-<polygon class="empty" points="481.0,424.0 578.0,480.0 675.0,424.0 578.0,368.0" stroke-dasharray="6 5"/>
-<text class="empty-t" x="578.0" y="429.0">∅</text>
-<polygon class="rw" points="578.0,480.0 675.0,536.0 772.0,480.0 675.0,424.0"/>
-<text class="fam" x="675.0" y="485.0">Traversal</text>
-<polygon class="bo" points="287.0,836.0 384.0,892.0 481.0,836.0 384.0,780.0"/>
-<text class="fam" x="384.0" y="841.0">Review</text>
+<text class="fam" x="384.0" y="541.0">Prism</text>
+<polygon class="rw" points="384.0,480.0 481.0,536.0 578.0,480.0 481.0,424.0"/>
+<text class="fam" x="481.0" y="473.0">Optional</text>
+<text class="sub" x="481.0" y="493.0">Affine carrier</text>
+<polygon class="rw" points="384.0,592.0 481.0,648.0 675.0,536.0 578.0,480.0"/>
+<text class="fam" x="529.5" y="557.0">Traversal</text>
+<text class="sub" x="529.5" y="577.0">fixed/Grate: total · each: contextual</text>
+<polygon class="plan" points="384.0,368.0 481.0,424.0 578.0,368.0 481.0,312.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="481.0" y="361.0">fallible write</text>
+<text class="sub" x="481.0" y="381.0">planned</text>
+<polygon class="plan" points="481.0,424.0 578.0,480.0 675.0,424.0 578.0,368.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="578.0" y="417.0">BiAffine</text>
+<text class="sub" x="578.0" y="437.0">planned</text>
+<polygon class="plan" points="578.0,480.0 675.0,536.0 772.0,480.0 675.0,424.0" stroke-dasharray="6 5"/>
+<text class="plan-t" x="675.0" y="473.0">fallible each</text>
+<text class="sub" x="675.0" y="493.0">planned</text>
+<polygon class="bo" points="287.0,724.0 384.0,780.0 481.0,724.0 384.0,668.0"/>
+<text class="fam" x="384.0" y="729.0">Review</text>
 <polygon class="plan" points="384.0,780.0 481.0,836.0 578.0,780.0 481.0,724.0" stroke-dasharray="6 5"/>
 <text class="plan-t" x="481.0" y="773.0">fallible build</text>
-<text class="sub" x="481.0" y="793.0">BiAffine — planned</text>
-<polygon class="bo" points="481.0,724.0 578.0,780.0 675.0,724.0 578.0,668.0"/>
-<text class="fam" x="578.0" y="729.0">Unfold</text>
-<polygon class="mod" points="136.7,777.2 233.6,833.2 524.6,665.2 427.6,609.2"/>
-<text class="fam" x="330.6" y="714.2">Modify</text>
-<text class="sub" x="330.6" y="734.2">cardinality-agnostic</text>
+<text class="sub" x="481.0" y="793.0">planned</text>
+<polygon class="bo" points="481.0,836.0 578.0,892.0 675.0,836.0 578.0,780.0"/>
+<text class="fam" x="578.0" y="841.0">Unfold</text>
+<polygon class="mod" points="160.9,796.8 451.9,964.8 548.9,908.8 257.9,740.8"/>
+<text class="fam" x="354.9" y="845.8">Modify</text>
+<text class="sub" x="354.9" y="865.8">focus-agnostic</text>
 <line class="arrow" x1="151.2" y1="502.4" x2="447.0" y2="673.2"/><polygon class="ahead" points="447.0,673.2 438.1,672.3 441.7,665.9"/>
-<text class="axis" x="285.1" y="609.8" transform="rotate(30 285.1 609.8)">read cardinality (ReadCompose):  1  →  0-or-1  →  N</text>
+<text class="axis" x="285.1" y="609.8" transform="rotate(30 285.1 609.8)">focus nature (ReadCompose):  total  →  fallible  →  multiple</text>
 <line class="arrow" x1="151.2" y1="457.6" x2="447.0" y2="286.8"/><polygon class="ahead" points="447.0,286.8 441.7,294.1 438.1,287.7"/>
-<text class="axis" x="287.1" y="346.2" transform="rotate(-30 287.1 346.2)">write cardinality (WriteCompose — planned):  1  →  0-or-1  →  N</text>
+<text class="axis" x="287.1" y="346.2" transform="rotate(-30 287.1 346.2)">source nature:  total  →  contextual  →  fallible (WriteCompose — planned)</text>
 <line class="arrow" x1="70.0" y1="220.0" x2="70.0" y2="800.0"/><polygon class="ahead" points="70.0,800.0 66.3,791.8 73.7,791.8"/>
 <text class="layer" x="70.0" y="178.0">capability</text>
 <text class="tick" x="70.0" y="196.0">read-only (top)</text>
