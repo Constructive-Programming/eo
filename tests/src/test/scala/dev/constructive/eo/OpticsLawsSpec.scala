@@ -24,7 +24,7 @@ import optics.{
   Traversal,
   Unfold
 }
-import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
+import data.{Affine, BiAffine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 import laws.{
   AffineFoldLaws,
   GetterLaws,
@@ -45,8 +45,8 @@ import laws.discipline.{
   PrismTests,
   UnfoldTests
 }
-import laws.data.{AffineLaws, ModifyFLaws}
-import laws.data.discipline.{AffineTests, ModifyFTests}
+import laws.data.{AffineLaws, BiAffineLaws, ModifyFLaws}
+import laws.data.discipline.{AffineTests, BiAffineTests, ModifyFTests}
 import laws.typeclass.AssociativeFunctorLaws
 import laws.typeclass.discipline.AssociativeFunctorTests
 
@@ -60,6 +60,19 @@ private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] 
         s <- Arbitrary.arbitrary[String]
         b <- Arbitrary.arbitrary[Boolean]
       yield new Affine.Hit[(Int, String), Boolean](s, b),
+    )
+  )
+
+// Arbitrary[BiAffine[(Int, String), Boolean]] — picks between the finished
+// Done arm and the keep-going Step arm with equal weight.
+private given arbBiAffineIntStringBool: Arbitrary[BiAffine[(Int, String), Boolean]] =
+  Arbitrary(
+    Gen.oneOf(
+      Arbitrary.arbitrary[Int].map(BiAffine.ofDone[(Int, String), Boolean]),
+      for
+        s <- Arbitrary.arbitrary[String]
+        b <- Arbitrary.arbitrary[Boolean]
+      yield BiAffine.ofStep[(Int, String), Boolean](s, b),
     )
   )
 
@@ -308,6 +321,17 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     new AffineTests[(Int, String), Boolean]:
       val laws = new AffineLaws[(Int, String), Boolean] {}
     .affine,
+  )
+
+  // ----- BiAffine carrier laws ------------------------------------
+  // The decoration carrier of the recursion-scheme zoo: instance laws
+  // plus the graft-channel coherences (Done is final / focus-free).
+
+  checkAll(
+    "BiAffine[(Int, String), Boolean]",
+    new BiAffineTests[(Int, String), Boolean]:
+      val laws = new BiAffineLaws[(Int, String), Boolean] {}
+    .biAffine,
   )
 
   // ----- ModifyF carrier laws -------------------------------------
