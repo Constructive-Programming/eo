@@ -1,7 +1,7 @@
 ---
 title: "feat: BiAffine carrier + the typed recursion-scheme zoo as optics (para/apo/histo/futu, M-generic driver)"
 type: feat
-status: draft
+status: implemented (CI bench numbers + code review pending)
 date: 2026-06-11
 origin: docs/brainstorms/2026-06-08-recursion-schemes-in-eo-requirements.md
 grows: PR #24 (feat/typed-recursion-schemes)
