@@ -253,6 +253,21 @@ object Schemes:
         out(i).asInstanceOf[R]
       }
 
+  /** [[rebuildLayer]]'s paramorphic sibling: pair each original child `N` with its folded result
+    * from `out` (positional, `Foldable` order). The subterms come from the layer the machine
+    * already holds — no re-`embed`.
+    */
+  private def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[AnyRef])(using
+      F: Traverse[F]
+  ): F[(N, R)] =
+    if out.length == 0 then fn.asInstanceOf[F[(N, R)]] // leaf: no N-slots, phantom-recast
+    else
+      var i = -1
+      F.map(fn) { n =>
+        i += 1
+        (n, out(i).asInstanceOf[R])
+      }
+
   /** Shared typed engine for the `F`-path schemes. `expand` peels a node into one typed layer of
     * child nodes; the engine folds each child to an `R` (post-order), then calls `combine` with the
     * node, its layer `F[N]`, and the children's results (positional, `Foldable` order). `combine`
@@ -312,6 +327,68 @@ object Schemes:
             arr(i) = rec(arr(i).asInstanceOf[N], depth + 1).asInstanceOf[AnyRef]
             i += 1
           combine(n, layer, arr)
+
+    n => rec(n, 0)
+
+  /** [[foldLayered]]'s graft-aware sibling — the apomorphism engine. `expandOr` answers each node
+    * event with `Left(r)` (an **already-finished result**: placed into its slot directly — O(1), no
+    * recursion, no projection) or `Right(layer)` (keep going). Same `< 512`-on-stack /
+    * heap-`ArrayDeque` hybrid and stack-safety as [[foldLayered]].
+    */
+  private def foldLayeredOr[F[_], N, R](
+      expandOr: N => Either[R, F[N]],
+      combine: (F[N], Array[AnyRef]) => R,
+  )(using F: Traverse[F]): N => R =
+
+    def childrenArr(fn: F[N]): Array[AnyRef] =
+      val n = F.size(fn).toInt
+      if n == 0 then EmptyAnyRefs
+      else
+        val arr = new Array[AnyRef](n)
+        val _ = F.foldLeft(fn, 0) { (i, child) =>
+          arr(i) = child.asInstanceOf[AnyRef]
+          i + 1
+        }
+        arr
+
+    def heap(root: N): R =
+      final class Frame(val layer: F[N], val arr: Array[AnyRef], var i: Int)
+      val stack = new java.util.ArrayDeque[Frame]()
+      var ret: AnyRef = null.asInstanceOf[AnyRef]
+      def enter(n: N): Unit = expandOr(n) match
+        case Left(r)      => ret = r.asInstanceOf[AnyRef] // graft: finished, by reference
+        case Right(layer) =>
+          val arr = childrenArr(layer)
+          if arr.length == 0 then ret = combine(layer, arr).asInstanceOf[AnyRef]
+          else stack.push(new Frame(layer, arr, 0))
+      enter(root)
+      while !stack.isEmpty do
+        val fr = stack.peek()
+        if fr.i > 0 then fr.arr(fr.i - 1) = ret
+        if fr.i < fr.arr.length then
+          val child = fr.arr(fr.i).asInstanceOf[N]
+          fr.i += 1
+          enter(child)
+        else
+          ret = combine(fr.layer, fr.arr).asInstanceOf[AnyRef]
+          val _ = stack.pop()
+      ret.asInstanceOf[R]
+
+    def rec(n: N, depth: Int): R =
+      if depth >= OnStackLimit then heap(n)
+      else
+        expandOr(n) match
+          case Left(r)      => r // graft: finished, by reference
+          case Right(layer) =>
+            val arr = childrenArr(layer)
+            val k = arr.length
+            if k == 0 then combine(layer, arr)
+            else
+              var i = 0
+              while i < k do
+                arr(i) = rec(arr(i).asInstanceOf[N], depth + 1).asInstanceOf[AnyRef]
+                i += 1
+              combine(layer, arr)
 
     n => rec(n, 0)
 
@@ -379,10 +456,64 @@ object Schemes:
     * Requires `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output)
     * to match [[hyloF]] and the `PSVec` [[ana]].
     */
+  /** Paramorphism over a typed pattern functor `F` — each child slot pairs the **original subterm**
+    * with its folded result. Native route: the machine already walks real `S` nodes and keeps each
+    * frame's projected layer, so subterms are paired positionally — no per-node re-`embed`
+    * (droste's `Gather.para` must reconstruct the subterm it threw away). Stack-safe (the
+    * [[foldLayered]] machine).
+    */
+  def paraF[F[_], S, A](
+      alg: (S, F[(S, A)]) => A
+  )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
+    Getter[S, A](
+      foldLayered[F, S, A](
+        P.project,
+        (s, fs, out) => alg(s, rebuildLayerPaired[F, S, A](fs, out)),
+      )
+    )
+
+  /** Histomorphism over a typed pattern functor `F` — the algebra sees each child's **full
+    * decorated history** ([[Attr]]: result + that child's own decorated layer). Definitional: the
+    * generic decorated fold at [[Decor.histo]], whose gather is the `Attr` constructor.
+    *
+    * Space honesty: course-of-value recursion retains O(n) `Attr` cells by nature.
+    */
+  def histoF[F[_], S, A](
+      alg: (S, F[Attr[F, A]]) => A
+  )(using Traverse[F], Project[F, S]): Getter[S, A] =
+    cataF[F, S, Attr[F, A], A](Decor.histo[F, A])(alg)
+
   def anaF[F[_], Seed, S](
       coalg: Seed => F[Seed]
   )(using F: Traverse[F], E: Embed[F, S]): Review[S, Seed] =
     anaF[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg)
+
+  /** Apomorphism over a typed pattern functor `F` — per child slot the coalgebra answers
+    * `Right(seed)` (keep unfolding) or `Left(s)` (an **already-finished subtree**). Native O(1)
+    * graft: `Left` subtrees are prefilled into their result slots **by reference** — never
+    * recursed, never projected ([[foldLayeredOr]]). Contrast droste's scatter-apo, which re-walks
+    * grafts through `project` (O(graft) per graft — the route [[Decor.apo]] documents). Stack-safe.
+    */
+  def apoF[F[_], A, S](
+      coalg: A => F[Either[S, A]]
+  )(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
+    val run = foldLayeredOr[F, Either[S, A], S](
+      {
+        case Left(s)  => Left(s)
+        case Right(a) => Right(coalg(a))
+      },
+      (fw, out) => E.embed(rebuildLayer[F, Either[S, A], S](fw, out)),
+    )
+    Review[S, A](a => run(Right(a)))
+
+  /** Futumorphism over a typed pattern functor `F` — the coalgebra may emit **multiple layers per
+    * step** ([[Coattr]]: `Pure` keeps unfolding, `Roll` is a prebuilt layer unrolled with no
+    * coalgebra call). Definitional: the generic decorated unfold at [[Decor.futu]].
+    */
+  def futuF[F[_], A, S](
+      coalg: A => F[Coattr[F, A]]
+  )(using Traverse[F], Embed[F, S]): Review[S, A] =
+    anaF[F, A, Coattr[F, A], S](Decor.futu[F, A])(coalg)
 
   /** Generalized (decorated) anamorphism — the gana of the typed path, with the decoration supplied
     * as a [[DecorScatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
