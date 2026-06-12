@@ -56,42 +56,37 @@ object Schemes:
   def cata[F[_], S, A](
       alg: (S, F[A]) => A
   )(using F: Traverse[F], P: Project[F, S]): Cata[F, S, A] =
-    new Cata[F, S, A](cata[F, S, A, A](Gather.cata[F, A])(alg).get, alg)
+    new Cata[F, S, A](
+      Machines.foldLayered[F, S, A](
+        P.project,
+        (s, fs, out) => alg(s, Machines.rebuildLayer[F, S, A](fs, out)),
+      ),
+      alg,
+    )
 
   /** Generalized (decorated) catamorphism — the gcata of the typed path, with the decoration
-    * supplied as a [[Gather]] optic value. Interior nodes apply `gather ∘ galg` (the decoration's
-    * `from` consuming `Step(layer, result)`); the **root applies `galg` alone** (droste's `gcata`
-    * shape). The named zoo members are instances: `cata(alg)` routes here with [[Gather.cata]]
-    * (recognised by identity — the direct, decoration-free engine path), `histo` with
-    * [[Gather.histo]]; user-written decorations (zygo, dyna, …) run the generic route, which pays
-    * one decoration dispatch + `Step` per node.
+    * supplied as a [[Gather]] optic value. Interior nodes apply `gather ∘ galg`; the **root applies
+    * `galg` alone** (droste's `gcata` shape). The driver calls [[Gather.gather]] directly — fully
+    * typed, no per-node carrier wrappers and no dispatch: the undecorated fold has its own overload
+    * above (the fast path), and `cata(Gather.cata)(galg)` is law-pinned equal to it. `histo` is the
+    * [[Gather.histo]] instance; user-written decorations (zygo, dyna, …) plug in the same way.
     *
     * (type-param order: `[F, S, W, A]` — compare [[ana]] `[F, A, W, S]`, which mirrors these in
     * input-before-output order: `A` is the input seed there, `S` the built output.)
     */
   def cata[F[_], S, W, A](
-      decor: Gather[F, W, A]
+      gather: Gather[F, W, A]
   )(galg: (S, F[W]) => A)(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
-    if decor.asInstanceOf[AnyRef] eq Gather.cata[F, A] then
-      // W =:= A by construction of the singleton — the direct engine path, no decoration cost.
-      val alg = galg.asInstanceOf[(S, F[A]) => A]
-      Getter[S, A](
-        Machines.foldLayered[F, S, A](
-          P.project,
-          (s, fs, out) => alg(s, Machines.rebuildLayer[F, S, A](fs, out)),
-        )
-      )
-    else
-      val toW: S => W = Machines.foldLayered[F, S, W](
-        P.project,
-        (s, fs, out) =>
-          val fw = Machines.rebuildLayer[F, S, W](fs, out)
-          decor.from(new data.BiAffine.Step[(Unit, F[W]), A](fw, galg(s, fw))),
-      )
-      Getter[S, A] { s =>
-        val layer = P.project(s)
-        galg(s, F.map(layer)(toW))
-      }
+    val toW: S => W = Machines.foldLayered[F, S, W](
+      P.project,
+      (s, fs, out) =>
+        val fw = Machines.rebuildLayer[F, S, W](fs, out)
+        gather.gather(fw, galg(s, fw)),
+    )
+    Getter[S, A] { s =>
+      val layer = P.project(s)
+      galg(s, F.map(layer)(toW))
+    }
 
   /** Paramorphism over a typed pattern functor `F` — each child slot pairs the **original subterm**
     * with its folded result. Native route: the machine already walks real `S` nodes and keeps each
@@ -140,7 +135,13 @@ object Schemes:
   def ana[F[_], Seed, S](
       coalg: Seed => F[Seed]
   )(using F: Traverse[F], E: Embed[F, S]): Ana[F, Seed, S] =
-    new Ana[F, Seed, S](ana[F, Seed, Seed, S](Scatter.ana[F, Seed])(coalg).reverseGet, coalg)
+    new Ana[F, Seed, S](
+      Machines.foldLayered[F, Seed, S](
+        coalg,
+        (_, fSeed, out) => E.embed(Machines.rebuildLayer[F, Seed, S](fSeed, out)),
+      ),
+      coalg,
+    )
 
   /** Apomorphism over a typed pattern functor `F` — per child slot the coalgebra answers
     * `Right(seed)` (keep unfolding) or `Left(s)` (an **already-finished subtree**). Native O(1)
@@ -183,40 +184,28 @@ object Schemes:
     Review[S, A](a => build(Coattr.Pure(a)))
 
   /** Generalized (decorated) anamorphism — the gana of the typed path, with the decoration supplied
-    * as a [[Scatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
-    * `Step(_, seed)` calls `gcoalg`, `Done(layer)` unrolls the prebuilt layer with **no coalgebra
-    * call**. The root seed enters through the decoration's pointed unit (`from` on the Step arm —
-    * gana's `pure`). `ana(coalg)` routes here with [[Scatter.ana]] (identity-recognised direct
-    * path); `futu` with [[Scatter.futu]]. (apo has no shipped Scatter value — distApo is inferior
-    * by construction; the O(1) graft belongs to the native `apo` engine.
-    *
-    * For user-written [[Scatter]] values, `Done.fst` MUST carry `F[W]` at runtime — the engine
-    * unrolls it directly as the next layer.
+    * as a [[Scatter]] optic value. Each `W` slot is scattered ([[Scatter.scatter]], called directly
+    * — fully typed, no per-node carrier wrappers and no dispatch: the undecorated unfold has its
+    * own overload above, and `ana(Scatter.ana)(gcoalg)` is law-pinned equal to it): `Right(seed)`
+    * calls `gcoalg`, `Left(layer)` unrolls the prebuilt layer with **no coalgebra call**. The root
+    * seed enters through the decoration's pointed unit ([[Scatter.unit]] — gana's `pure`). `futu`
+    * is the [[Scatter.futu]] instance. (apo has no shipped Scatter value — distApo is inferior by
+    * construction; the O(1) graft belongs to the native `apo` engine.)
     *
     * (type-param order: compare [[cata]] `[F, S, W, A]` — the fold mirror swaps `Seed`/`A`.)
     */
   def ana[F[_], A, W, S](
-      decor: Scatter[F, W, A]
+      scatter: Scatter[F, W, A]
   )(gcoalg: A => F[W])(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
-    if decor.asInstanceOf[AnyRef] eq Scatter.ana[F, A] then
-      // W =:= A by construction of the singleton — the direct engine path.
-      val coalg = gcoalg.asInstanceOf[A => F[A]]
-      Review[S, A](
-        Machines.foldLayered[F, A, S](
-          coalg,
-          (_, fSeed, out) => E.embed(Machines.rebuildLayer[F, A, S](fSeed, out)),
-        )
-      )
-    else
-      val expand: W => F[W] = w =>
-        decor.to(w) match
-          case st: data.BiAffine.Step[(F[W], Unit), A] => gcoalg(st.b)
-          case dn: data.BiAffine.Done[(F[W], Unit), A] => dn.fst
-      val build: W => S = Machines.foldLayered[F, W, S](
-        expand,
-        (_, fw, out) => E.embed(Machines.rebuildLayer[F, W, S](fw, out)),
-      )
-      Review[S, A](a => build(decor.from(new data.BiAffine.Step[(F[W], Unit), A]((), a))))
+    val expand: W => F[W] = w =>
+      scatter.scatter(w) match
+        case Right(a)    => gcoalg(a)
+        case Left(layer) => layer
+    val build: W => S = Machines.foldLayered[F, W, S](
+      expand,
+      (_, fw, out) => E.embed(Machines.rebuildLayer[F, W, S](fw, out)),
+    )
+    Review[S, A](a => build(scatter.unit(a)))
 
   /** Hylomorphism over a typed pattern functor `F` — the **fused** refold `Seed => A`, building
     * **no intermediate `S`** (so it needs neither `Project` nor `Embed`, only `Traverse[F]`).
