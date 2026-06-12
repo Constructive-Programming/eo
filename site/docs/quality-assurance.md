@@ -73,7 +73,7 @@ its statement coverage looks healthy. Packages with no branch statements show
 | `dev.constructive.eo.avro` | 979/1430 | 68.5% | 214/355 | 60.3% | 0.88 |
 | `dev.constructive.eo.circe` | 665/846 | 78.6% | 128/174 | 73.6% | 0.94 |
 | `dev.constructive.eo.compose` | 90/118 | 76.3% | 7/8 | 87.5% | 1.15 |
-| `dev.constructive.eo.data` | 951/1139 | 83.5% | 141/172 | 82.0% | 0.98 |
+| `dev.constructive.eo.data` | 998/1139 | 87.6% | 153/172 | 89.0% | 1.02 |
 | `dev.constructive.eo.forgetful` | 24/28 | 85.7% | — | — | — |
 | `dev.constructive.eo.generics` | 397/472 | 84.1% | 66/79 | 83.5% | 0.99 |
 | `dev.constructive.eo.jsoniter` | 436/583 | 74.8% | 109/170 | 64.1% | 0.86 |
@@ -149,15 +149,7 @@ The high-signal rows are therefore `core` and `laws` (via the borrowed suite),
 run time by the suite stryker runs.
 
 <!-- BEGIN GENERATED: mutation -->
-| Module | Killed | Timeout | Survived | No&nbsp;cov | Compile&nbsp;err | Score (total) | Score (covered) | Notes |
-|---|--:|--:|--:|--:|--:|--:|--:|---|
-| `core` | 153 | 2 | 28 | 17 | 3 | 77.5% | 84.7% | Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`. |
-| `laws` | 82 | 1 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
-| `generics` | 0 | 0 | 0 | 58 | 0 | 0.0% | — | Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover. |
-| `schemes` | 58 | 0 | 18 | 0 | 5 | 76.3% | 76.3% |  |
-| `circe` | 33 | 1 | 5 | 15 | 0 | 63.0% | 87.2% |  |
-| `avro` | — | — | — | — | — | — | — | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
-| `jsoniter` | — | — | — | — | — | — | — | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |
+> _No stryker4s reports found. Run `sbt mutationAll`, then re-run `site/tools/gen-qa-report.py`._
 <!-- END GENERATED: mutation -->
 
 ## Regenerating these numbers
