@@ -149,7 +149,15 @@ The high-signal rows are therefore `core` and `laws` (via the borrowed suite),
 run time by the suite stryker runs.
 
 <!-- BEGIN GENERATED: mutation -->
-> _No stryker4s reports found. Run `sbt mutationAll`, then re-run `site/tools/gen-qa-report.py`._
+| Module | Killed | Timeout | Survived | No&nbsp;cov | Compile&nbsp;err | Score (total) | Score (covered) | Notes |
+|---|--:|--:|--:|--:|--:|--:|--:|---|
+| `core` | 169 | 4 | 23 | 4 | 3 | 86.5% | 88.3% | Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`. |
+| `laws` | 83 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
+| `generics` | 0 | 0 | 0 | 58 | 0 | 0.0% | — | Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover. |
+| `schemes` | 58 | 0 | 18 | 0 | 5 | 76.3% | 76.3% |  |
+| `circe` | 36 | 0 | 3 | 15 | 0 | 66.7% | 92.3% |  |
+| `avro` | — | — | — | — | — | — | — | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
+| `jsoniter` | — | — | — | — | — | — | — | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |
 <!-- END GENERATED: mutation -->
 
 ## Regenerating these numbers

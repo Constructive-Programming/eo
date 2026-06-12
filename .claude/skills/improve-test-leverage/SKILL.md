@@ -448,11 +448,16 @@ clean attribution requires never batching two candidates into one eval.
      in `do_not_retry` WITH the measured outcome (e.g. "predicted 9, measured
      0 — generator never exceeds OnStackLimit"). A failed measurement is
      information; keep it.
-5. **Checkpoint** every 3 accepted iterations (and at loop end):
-   `sbt coverageAll` → refresh `new_branches_covered` (per-iteration mutation
-   runs are the fast proxy; NoCoverage→Killed flips co-move with branch
-   coverage, but only the aggregate is the truth), then
-   `python3 site/tools/gen-qa-report.py` so the QA page tracks the loop.
+5. **Checkpoint** every 3 accepted iterations (and at loop end). ORDER IS
+   LOAD-BEARING: `coverageAll` begins with `clean`, which DELETES every
+   `stryker4s-report` directory — run the coverage refresh FIRST, then re-run
+   mutation for the loop's touched modules, then
+   `python3 site/tools/gen-qa-report.py`. Regenerating the page after a
+   coverage run without re-running mutation writes "no report" rows over the
+   mutation table. (Two trusted sources per metric: the scoverage aggregate
+   XML's `All done` line is the truth for coverage — per-module log lines
+   are not; per-iteration mutation runs are the fast proxy for branch flips,
+   but only the aggregate is the truth.)
 
 ### Stop criteria (whichever fires first)
 
