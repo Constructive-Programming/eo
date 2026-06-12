@@ -21,6 +21,10 @@ import optics.Optic
   * effects) would share that state across branches and corrupt the fold. See the linear-M boundary
   * test in `SchemesFMSpec`. A persistent-state variant is deferred until a real consumer needs one.
   *
+  * Re-forcing the same `M[A]` value returned by [[FoldFM.run]] is safe — each force allocates its
+  * own fresh mutable state (the frame deque is allocated inside the `M`, not before it). Concurrent
+  * forcing of a single `M[A]` value remains unsupported; each `run(s)` call is independent.
+  *
   * Widening hazard (the M-path mirror of `AnaF.cross`'s): a widened `AnaFM` still typechecks
   * through the generic trait `andThen` via `assocForgetMonad` — extensionally equal but
   * MATERIALIZING (`M[S]` built, then folded). `Schemes.hyloFM` stays the always-fused M spelling;
@@ -30,7 +34,7 @@ import optics.Optic
 /** Generic effectful-fold citizen: `run: S => M[A]`. What `hyloFM` and the fused
   * `AnaFM.andThen(CataFM)` return.
   */
-class FoldFM[M[_], S, A] private[schemes] (val run: S => M[A])
+sealed class FoldFM[M[_], S, A] private[schemes] (val run: S => M[A])
     extends Optic[S, Unit, A, Unit, Forget[M]]:
   type X = Nothing
 

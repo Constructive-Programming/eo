@@ -37,18 +37,23 @@ class SchemesZooSpec extends Specification:
   }
 
   "paraF sees the original subterm at every child slot" >> {
-    // The algebra checks each paired subterm re-folds to the paired result.
+    // Algebra returns (sum, ok): sum is the cataF sum of the subtree; ok checks the PAIRED
+    // subterm re-folds to the PAIRED result — a non-tautological cross-check.
     val coherent = Schemes
-      .paraF[BinF, Bin, Boolean] { (_, layer) =>
+      .paraF[BinF, Bin, (Int, Boolean)] { (_, layer) =>
         layer match
-          case BinF.LeafF(_)                      => true
-          case BinF.BranchF((ls, lOk), (rs, rOk)) =>
-            lOk && rOk &&
-            Schemes.cataF(sumAlg).get(ls) == Schemes.cataF(sumAlg).get(ls) &&
-            Schemes.cataF(sumAlg).get(rs) == Schemes.cataF(sumAlg).get(rs)
+          case BinF.LeafF(n)                                      => (n, true)
+          case BinF.BranchF((ls, (lSum, lOk)), (rs, (rSum, rOk))) =>
+            (
+              lSum + rSum,
+              lOk && rOk &&
+                Schemes.cataF(sumAlg).get(ls) == lSum &&
+                Schemes.cataF(sumAlg).get(rs) == rSum,
+            )
       }
       .get(tree)
-    coherent === true
+    // tree = Branch(Branch(Leaf(1), Leaf(2)), Branch(Leaf(3), Leaf(4))); leaf sum = 1+2+3+4 = 10
+    coherent === (10, true)
   }
 
   "never-grafting apoF == anaF" >> {
@@ -91,6 +96,29 @@ class SchemesZooSpec extends Specification:
     val graftSlot = built match
       case Bin.Branch(g, _) => g
       case other            => other
+    (graftSlot.asInstanceOf[AnyRef] eq grafted.asInstanceOf[AnyRef]) === true
+  }
+
+  "apoF grafts by reference on the HEAP path too (depth > OnStackLimit=512)" >> {
+    val grafted: Bin = Bin.Branch(Bin.Leaf(77), Bin.Leaf(88))
+    // Descend a spine to depth 600 (past the on-stack limit of 512), then graft once.
+    val GraftDepth = 600
+    def coalg(n: Int): BinF[Either[Bin, Int]] =
+      if n <= 0 then BinF.LeafF(0)
+      else if n == 1 then BinF.BranchF(Left(grafted), Right(0))
+      else BinF.BranchF(Right(n - 1), Left(Bin.Leaf(0)))
+    val built = Schemes.apoF[BinF, Int, Bin](coalg).reverseGet(GraftDepth)
+    // Navigate left spine to find the graft slot (iterative — safe at any depth)
+    var cursor: Bin = built
+    var steps = GraftDepth - 1
+    while steps > 0 do
+      cursor = cursor match
+        case Bin.Branch(l, _) => l
+        case leaf             => leaf
+      steps -= 1
+    val graftSlot = cursor match
+      case Bin.Branch(left, _) => left
+      case other               => other
     (graftSlot.asInstanceOf[AnyRef] eq grafted.asInstanceOf[AnyRef]) === true
   }
 

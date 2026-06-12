@@ -30,6 +30,11 @@ class BiAffineSpec extends Specification:
         case d: Done[X, Int] => d.fst
         case s: Step[X, Int] => s.b
 
+  "Done.widenB is allocation-free (reference-equal result)" in {
+    val d = new Done[TX, Int](5)
+    (d.widenB[String].asInstanceOf[AnyRef] eq d.asInstanceOf[AnyRef]) === true
+  }
+
   "a full BiAffine citizen" should {
 
     "treat Done as final: from(Done(w)) == w" in {
