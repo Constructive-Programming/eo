@@ -1,23 +1,22 @@
 ---
 name: test-prune
-description: Alias for improve-test-leverage biased to CONSOLIDATE moves — shrink test LOC while holding every kill. Replaces example clusters with laws/properties, deletes tests that restate laws, merges redundant properties.
-model: sonnet
+description: Alias for improve-test-leverage running ONLY the consolidation pipeline — shrink test count and LOC while holding every kill. Replaces example clusters with properties, deletes tests that restate laws, merges redundant properties.
+model: opus
 ---
 
 # test-prune — alias
 
-This is an alias for the `improve-test-leverage` skill. Read and follow
-`.claude/skills/improve-test-leverage/SKILL.md` in full, with this mode
-bias pre-set:
+Alias for `improve-test-leverage`. Run phases 1, 6 and 8 of
+`.claude/skills/improve-test-leverage/` (reports → **consolidate** → report):
+pure reduction. The whole point is phase 6
+(`phases/consolidate.md`) — N examples to one property, properties to
+ruleset registrations, deletion of law-restating tests — with its
+zero-kill-regression eval. Acceptance: `net_test_lines_added < 0` and
+`suite_test_count` strictly reduced, kills held (measured, not assumed).
+Law candidates that surface during folding are queued for phase 7's user
+gate.
 
-- **Candidate moves**: CONSOLIDATE only (step 9's rules — no test may
-  restate what a law already says; >1 example on one code path becomes
-  one property; merge same-operation properties). The accept criterion
-  is the consolidation one: `net_test_lines_added < 0` with **zero kill
-  regression**, measured by re-running the affected mutation targets —
-  never assumed.
-- No new artifacts; no CLASSIFY-OUT.
-- Arguments after `/test-prune` are passed through unchanged.
+Arguments pass through (module focus narrows the inventory).
 
-Announce as: "Using improve-test-leverage (test-prune alias) — shrinking
-test LOC at held kill capacity."
+Announce as: "Using improve-test-leverage (test-prune alias) — pure
+reduction."
