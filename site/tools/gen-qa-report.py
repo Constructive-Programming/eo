@@ -69,7 +69,10 @@ def splice(page: str, marker: str, body: str) -> str:
     pat = re.compile(re.escape(begin) + r".*?" + re.escape(end), re.DOTALL)
     if not pat.search(page):
         raise SystemExit(f"marker pair for '{marker}' not found in {PAGE}")
-    return pat.sub(f"{begin}\n{body}\n{end}", page)
+    # The blank lines are load-bearing: Laika only recognises the pipe table
+    # as a table if it starts its own block — glued to the marker line it
+    # parses as paragraph continuation text.
+    return pat.sub(f"{begin}\n\n{body}\n\n{end}", page)
 
 
 # --------------------------------------------------------------------------

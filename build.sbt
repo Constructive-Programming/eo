@@ -698,6 +698,12 @@ lazy val docs: Project = project
     // (under `static/`) without putting them through mdoc, which
     // only knows how to process Markdown.
     Laika / sourceDirectories += baseDirectory.value / "laika-static",
+    // Pass raw HTML through to the output instead of escaping it to
+    // visible text. quality-assurance.md needs this twice over: its
+    // `<!-- BEGIN/END GENERATED -->` splice markers must stay invisible,
+    // and the `&nbsp;` entities in the generated table headers must reach
+    // the browser as entities.
+    laikaConfig ~= (_.withRawContent),
     // kindlingsCirce is only in `circeIntegration`'s Test scope, so
     // docs examples that want circe Codec derivation need it
     // surfaced here as a Compile-scope dep.

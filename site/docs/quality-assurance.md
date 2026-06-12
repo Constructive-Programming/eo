@@ -40,6 +40,7 @@ which is the single source of truth — if a cell starts needing an import or an
 ascription, that spec goes red.
 
 <!-- BEGIN GENERATED: matrix -->
+
 | outer ∘ inner | iso | lens | prism | optional | trav | getter | affold | fold | modify | review | unfold |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | **iso** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
@@ -55,6 +56,7 @@ ascription, that spec goes red.
 | **unfold** | ✓ | ✗ | ✓ | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
 
 *✓ composes import-free at the strength shown in the [optic taxonomy](optics.md); ✗ does not compile (void by design — building through a read-only optic, reading through a write-only one, etc.). 87 composing / 34 void cells, pinned by `CompositionMatrixSpec`.*
+
 <!-- END GENERATED: matrix -->
 
 ## Coverage
@@ -67,6 +69,7 @@ its statement coverage looks healthy. Packages with no branch statements show
 `—`.
 
 <!-- BEGIN GENERATED: coverage -->
+
 | Package | Statements | Stmt&nbsp;% | Branches | Branch&nbsp;% | BC/SC |
 |---|--:|--:|--:|--:|--:|
 | `dev.constructive.eo.accessor` | 8/8 | 100.0% | — | — | — |
@@ -88,6 +91,7 @@ its statement coverage looks healthy. Packages with no branch statements show
 | `dev.constructive.eo.laws.typeclass.discipline` | 36/36 | 100.0% | — | — | — |
 | `dev.constructive.eo.optics` | 404/483 | 83.6% | 46/52 | 88.5% | 1.06 |
 | `dev.constructive.eo.schemes` | 187/187 | 100.0% | 35/35 | 100.0% | 1.00 |
+
 <!-- END GENERATED: coverage -->
 
 ## Mutation testing
@@ -149,6 +153,7 @@ The high-signal rows are therefore `core` and `laws` (via the borrowed suite),
 run time by the suite stryker runs.
 
 <!-- BEGIN GENERATED: mutation -->
+
 | Module | Killed | Timeout | Survived | No&nbsp;cov | Compile&nbsp;err | Score (total) | Score (covered) | Notes |
 |---|--:|--:|--:|--:|--:|--:|--:|---|
 | `core` | 169 | 4 | 23 | 4 | 3 | 86.5% | 88.3% | Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`. |
@@ -159,6 +164,7 @@ run time by the suite stryker runs.
 | `circe` | 37 | 0 | 2 | 15 | 0 | 68.5% | 94.9% |  |
 | `avro` | — | — | — | — | — | — | — | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
 | `jsoniter` | — | — | — | — | — | — | — | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |
+
 <!-- END GENERATED: mutation -->
 
 ## Regenerating these numbers
