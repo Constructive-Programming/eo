@@ -241,3 +241,26 @@ class PlatedSpec extends Specification with Discipline:
 
     descentOk && refireOk
   }
+
+  "transform rewrites the FULL depth of a spine that crosses the machine handoff" >> {
+    // covers: Plated.transformMachine internals (enter's leaf check at line 146, the
+    // drain loop at line 149). The 100k stack-safety test above reaches the machine but
+    // only asserts shallow shape, so a machine that returns its subtree UNCHANGED
+    // (drain loop skipped) survived. This pins the deepest leaf and the spine length
+    // after a transform that crosses transformRecursionLimit (512).
+    val depth = 1500
+    var deep: Bin = Bin.Leaf(0)
+    var i = 0
+    while i < depth do
+      deep = Bin.Node(deep, Bin.Leaf(1))
+      i += 1
+    val bump: Bin => Bin = { case Bin.Leaf(k) => Bin.Leaf(k + 1); case n => n }
+    val bumped = Plated.transform(bump)(deep)(using PlatedFixtures.platedBin)
+    def leftmost(b: Bin, d: Int): (Int, Int) = b match
+      case Bin.Node(l, _) => leftmost(l, d + 1)
+      case Bin.Leaf(k)    => (d, k)
+    val topRight = bumped match
+      case Bin.Node(_, Bin.Leaf(k)) => k
+      case _                        => -1
+    (leftmost(bumped, 0), topRight) must beEqualTo(((depth, 1), 2))
+  }
