@@ -37,7 +37,8 @@ You write three things: the functor `F`, its `cats.Traverse`, and a `Basis` (`Pr
 
 ```scala mdoc:silent
 import cats.{Applicative, Eval, Traverse}
-import dev.constructive.eo.schemes.{Basis, Cata} // `Schemes`, `Getter`, `get` already imported above
+import dev.constructive.eo.schemes.Basis
+import dev.constructive.eo.schemes.zoo.Cata
 
 // A binary tree…
 enum Bin:
@@ -211,7 +212,7 @@ plus that child's own decorated layer — course-of-value recursion; note it inh
 O(n) `Attr` cells):
 
 ```scala mdoc:silent
-import dev.constructive.eo.schemes.{Attr, Coattr}
+import dev.constructive.eo.schemes.zoo.{Attr, Coattr}
 
 // add each branch's grandchildren-through-history to its result
 val withGrand = Schemes.histo[BinF, Bin, Int] { (_, layer) =>
@@ -265,7 +266,7 @@ consults a helper fold alongside each child's result — is a user-written gathe
 by the same `cata(decor)(galg)` driver as the named members:
 
 ```scala mdoc:silent
-import dev.constructive.eo.schemes.Gather
+import dev.constructive.eo.schemes.zoo.Gather
 import dev.constructive.eo.data.BiAffine
 import dev.constructive.eo.optics.Optic
 

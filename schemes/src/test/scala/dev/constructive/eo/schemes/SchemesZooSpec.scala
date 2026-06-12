@@ -4,6 +4,7 @@ package schemes
 import org.specs2.mutable.Specification
 
 import schemes.samples.{Bin, BinF}
+import zoo.*
 
 /** Behaviour + law spec for the named zoo (`para` / `apo` / `histo` / `futu`):
   *
