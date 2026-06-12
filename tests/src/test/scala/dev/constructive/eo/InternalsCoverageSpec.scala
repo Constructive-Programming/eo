@@ -191,3 +191,22 @@ class InternalsCoverageSpec extends Specification:
     MultiFocusK.pickSingletonOrThrow[List, Int](List.empty[Int], "test") must
       throwAn[IllegalStateException]
   }
+
+  // covers: the dead contract corners mutation testing flagged NoCoverage —
+  //   Affine.Miss/Hit equals false-arms (Affine.scala:92/:107): cross-variant comparison,
+  //   Hit.hashCode null guard (:109): hashing a null focus must be total,
+  //   PSVec equals false-arm (PSVec.scala:71): comparison against a non-PSVec,
+  //   Foldable[PSVec].foldRight (:132): the Eval loop's boundary and accumulation.
+  "dead contract corners: cross-variant equality, null hashing, foldRight" >> {
+    val miss = new Affine.Miss[(Int, String), Int](1)
+    val hit = new Affine.Hit[(Int, String), Int]("s", 1)
+    val crossOk = !miss.equals(hit) && !hit.equals(miss) && !miss.equals("x")
+    val nullHit = new Affine.Hit[(Int, String), String]("s", null)
+    val nullHashOk = nullHit.hashCode == nullHit.hashCode
+    val vec = PSVec.fromIterable(List(1, 2, 3))
+    val notAVecOk = !vec.equals("not a vector")
+    val folded = cats.Foldable[PSVec]
+      .foldRight(vec, cats.Eval.now(List.empty[Int]))((a, eb) => eb.map(a :: _))
+      .value
+    (crossOk, nullHashOk, notAVecOk, folded) must beEqualTo((true, true, true, List(1, 2, 3)))
+  }
