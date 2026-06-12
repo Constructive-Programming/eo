@@ -379,10 +379,16 @@ suite_kill_density = total_detected_mutants / total_test_LOC   (must rise monoto
     | awk '/^\+/{a++} /^-/{r++} END{print a-r}'
   ```
 
-  Consolidation makes this negative — that's the point.
+  File scaffolding (package/imports/class declaration) of a NEW spec file is
+  excluded — it is fixed infrastructure that would otherwise quantize small
+  artifacts (the first example in a file pays ~7 lines the second doesn't).
+  Measure the example bodies. Consolidation makes this negative — that's the
+  point.
 
-Mutants are keyed by `(file, line, mutatorName, replacement)` — report ids are
-NOT stable across runs.
+Mutants are keyed by `(file, line, COLUMN, mutatorName, replacement)` — report
+ids are not stable across runs, and two mutants on one line can share mutator
+and replacement (e.g. `<` → `>` on both halves of a bounds check), so the
+column is load-bearing in the key.
 
 ### State
 
