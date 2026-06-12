@@ -165,12 +165,12 @@ The decorated schemes are **one sum/product symmetry**, and eo ships it as a voc
 
 | scheme | decoration | shape | `Decor` value |
 |---|---|---|---|
-| cata / ana | none | — | `Decor.cata` / `Decor.ana` |
-| **para** | child slots carry the original subterms | product | `Decor.para` |
-| **apo** | child slots may graft a finished subtree | sum | `Decor.apo` |
-| **histo** | full decorated history per child (`Attr`) | iterated product | `Decor.histo` |
-| **futu** | multiple layers per step (`Coattr`) | iterated sum | `Decor.futu` |
-| zygo / dyna / … | user-written `Decor` values | — | (yours — example below) |
+| cata / ana | none | — | `Gather.cata` / `Scatter.ana` |
+| **para** | child slots carry the original subterms | product | (native only) |
+| **apo** | child slots may graft a finished subtree | sum | (native only) |
+| **histo** | full decorated history per child (`Attr`) | iterated product | `Gather.histo` |
+| **futu** | multiple layers per step (`Coattr`) | iterated sum | `Scatter.futu` |
+| zygo / dyna / … | user-written `Gather`/`Scatter` values | — | (yours — example below) |
 
 `para` pairs each child slot with its **original subterm** — taken from the nodes the machine
 already walks, with no per-node re-`embed`:
@@ -258,18 +258,18 @@ fusedLeafSum.get(6)
 
 ### Write your own decoration: zygo as a `Decor` value
 
-The generality that droste exposes as `gcata`/`gana` lives here as the **public `Decor` family**:
+The generality that droste exposes as `gcata`/`gana` lives here as the **public `Gather`/`Scatter` decoration optics**:
 a decoration is an optic over the `BiAffine` carrier (fold side: `from` = *gather*; unfold side:
 `to` = *scatter*, `from` on `Step` = the seed-injecting unit). A zygomorphism — the algebra
 consults a helper fold alongside each child's result — is a user-written gather value, consumed
 by the same `cata(decor)(galg)` driver as the named members:
 
 ```scala mdoc:silent
-import dev.constructive.eo.schemes.DecorGather
+import dev.constructive.eo.schemes.Gather
 import dev.constructive.eo.data.BiAffine
 import dev.constructive.eo.optics.Optic
 
-def zygo[B](helper: BinF[B] => B): DecorGather[BinF, (B, Int), Int] =
+def zygo[B](helper: BinF[B] => B): Gather[BinF, (B, Int), Int] =
   new Optic[Unit, (B, Int), Unit, Int, BiAffine]:
     type X = (Unit, BinF[(B, Int)])
     def to(u: Unit): BiAffine[X, Unit] =
@@ -323,7 +323,7 @@ countedLeafSum.run(6).run(0).value // (service calls, leaf sum) — one fused pa
 
 ### The BiAffine carrier
 
-`Decor`'s carrier is new in core: **`BiAffine`** — `Affine`'s data shape worn on the *build*
+The decoration optics' carrier is new in core: **`BiAffine`** — `Affine`'s data shape worn on the *build*
 seam. `Step(context, focus)` keeps going; `Done(payload)` means "this slot is already finished —
 do not call the coalgebra" (apo grafts a finished subtree, futu unrolls a prebuilt layer). Its
 laws are the graft-finality and round-trip equations in `cats-eo-laws`. Composition here is

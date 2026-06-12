@@ -9,7 +9,7 @@ import schemes.samples.BinF
   * structural equality over a real pattern functor. The zoo members that consume them (`histo` /
   * `futu`) carry the behavioural coverage.
   */
-class DecorSpec extends Specification:
+class DecorationsSpec extends Specification:
 
   // A decorated branch: results 1 and 3 at the leaves, 4 at the root.
   private val decorated: Attr[BinF, Int] =
