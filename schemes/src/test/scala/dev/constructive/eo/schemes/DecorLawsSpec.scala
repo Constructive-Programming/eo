@@ -157,3 +157,29 @@ class DecorLawsSpec extends Specification:
       .reverseGet(3)
     built === Bin.Branch(Bin.Leaf(3), Bin.Branch(Bin.Leaf(2), Bin.Leaf(1)))
   }
+
+  // ----- native routes == generic decoration routes (the perf-win pins) --------
+
+  "native histoF == the generic route at Decor.histo" >> {
+    val alg: (Bin, BinF[Attr[BinF, Int]]) => Int = (s, layer) =>
+      sumAlg(
+        s,
+        BinF
+          .traverse
+          .map(layer)(a =>
+            a.head + a.tail.match {
+              case BinF.LeafF(_) => 0; case BinF.BranchF(l, r) => l.head + r.head
+            }
+          ),
+      )
+    Schemes.histoF[BinF, Bin, Int](alg).get(tree) ===
+      Schemes.cataF[BinF, Bin, Attr[BinF, Int], Int](Decor.histo[BinF, Int])(alg).get(tree)
+  }
+
+  "native futuF == the generic route at Decor.futu" >> {
+    def coalg(n: Int): BinF[Coattr[BinF, Int]] =
+      if n <= 1 then BinF.LeafF(1)
+      else BinF.BranchF(Coattr.Roll(BinF.LeafF(n)), Coattr.Pure(n - 1))
+    Schemes.futuF[BinF, Int, Bin](coalg).reverseGet(4) ===
+      Schemes.anaF[BinF, Int, Coattr[BinF, Int], Bin](Decor.futu[BinF, Int])(coalg).reverseGet(4)
+  }

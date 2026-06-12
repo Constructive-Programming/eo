@@ -47,6 +47,11 @@ object Schemes:
     */
   private val EmptyAnyRefs: Array[AnyRef] = new Array[AnyRef](0)
 
+  /** Sentinel op for [[foldLayeredM]]'s loop state — "ascend": consume `ret` against the top frame.
+    * Anything else on the loop is the node to descend into.
+    */
+  private object AscendToken
+
   /** Engine for the *fold* schemes ([[cata]] / [[hylo]]). `expand` yields a node's children;
     * `combine` folds a node plus its already-folded children — re-supplied the node, so it needs no
     * per-node closure. Stack-safe for any *terminating* `expand` (past the on-stack limit the
@@ -433,39 +438,44 @@ object Schemes:
     n0 =>
       val stack = new java.util.ArrayDeque[Frame]()
       var ret: AnyRef = null.asInstanceOf[AnyRef]
-      // Op: Right(n) = descend into n; Left(()) = ascend (consume ret against the top frame).
-      M.tailRecM[Either[Unit, N], R](Right(n0)) {
-        case Right(n) =>
-          M.map(expandOr(n)) {
+      // Op encoding (allocation-lean — CI 2026-06-12: per-event Either allocation
+      // dominated the M path's 1.6M B/op): the loop state is a bare AnyRef — the
+      // AscendToken sentinel means "consume ret against the top frame", anything else
+      // is the node to descend into. One Left per descend (vs nested Left(Right(n)));
+      // the ascend step is the hoisted constant.
+      val ascend: Either[AnyRef, R] = Left(AscendToken)
+      M.tailRecM[AnyRef, R](n0.asInstanceOf[AnyRef]) { op =>
+        if op.asInstanceOf[AnyRef] ne AscendToken then
+          val n = op.asInstanceOf[N]
+          M.flatMap(expandOr(n)) {
             case Left(r) => // graft/short-circuit arm (unused by v1 drivers)
               ret = r.asInstanceOf[AnyRef]
-              Left(Left(()))
+              M.pure(ascend)
             case Right(layer) =>
               val arr = childrenArr(layer)
               if arr.length == 0 then
-                // leaf: combine is the next event — model as a frame with no children left
-                stack.push(new Frame(n, layer, arr, 0))
-                Left(Left(()))
+                // leaf: combine INLINE (a constant second bind — no frame, no extra event)
+                M.map(combine(n, layer, arr)) { r =>
+                  ret = r.asInstanceOf[AnyRef]
+                  ascend
+                }
               else
                 stack.push(new Frame(n, layer, arr, 0))
-                Left(Right(arr(0).asInstanceOf[N]))
+                M.pure(Left(arr(0)))
           }
-        case Left(()) =>
-          if stack.isEmpty then M.pure(Right(ret.asInstanceOf[R]))
+        else if stack.isEmpty then M.pure(Right(ret.asInstanceOf[R]))
+        else
+          val fr = stack.peek()
+          fr.arr(fr.i) = ret // store the just-folded child's result
+          fr.i += 1
+          if fr.i < fr.arr.length then M.pure(Left(fr.arr(fr.i)))
           else
-            val fr = stack.peek()
-            if fr.arr.length == 0 || fr.i >= fr.arr.length then
-              // all children folded (or leaf): one combine event, then keep ascending
-              M.map(combine(fr.node, fr.layer, fr.arr)) { r =>
-                val _ = stack.pop()
-                ret = r.asInstanceOf[AnyRef]
-                Left(Left(()))
-              }
-            else
-              fr.arr(fr.i) = ret // store the just-folded child's result
-              fr.i += 1
-              if fr.i < fr.arr.length then M.pure(Left(Right(fr.arr(fr.i).asInstanceOf[N])))
-              else M.pure(Left(Left(()))) // last child stored: next event is this frame's combine
+            // last child stored: combine NOW (merged — no intermediate pure event)
+            M.map(combine(fr.node, fr.layer, fr.arr)) { r =>
+              val _ = stack.pop()
+              ret = r.asInstanceOf[AnyRef]
+              ascend
+            }
       }
 
   /** Effectful catamorphism — the algebra runs in `M` (`(S, F[A]) => M[A]`); the layer peel stays
@@ -608,15 +618,26 @@ object Schemes:
     )
 
   /** Histomorphism over a typed pattern functor `F` — the algebra sees each child's **full
-    * decorated history** ([[Attr]]: result + that child's own decorated layer). Definitional: the
-    * generic decorated fold at [[Decor.histo]], whose gather is the `Attr` constructor.
+    * decorated history** ([[Attr]]: result + that child's own decorated layer).
+    *
+    * Native route: the combine builds the `Attr` directly, the root projects its head — one less
+    * dispatch than the generic [[Decor.histo]] route (whose `Step` is EA-elided: B/op identical;
+    * law-pinned equal in `DecorLawsSpec`). The remaining gap to droste's histo (558k vs 361k B/op
+    * on the 8k-node fixture) is the stack-safe machine's per-node child array — droste's zoo
+    * recursion is stack-UNSAFE plain recursion; the ~24 B/node is the price of the guarantee.
     *
     * Space honesty: course-of-value recursion retains O(n) `Attr` cells by nature.
     */
   def histoF[F[_], S, A](
       alg: (S, F[Attr[F, A]]) => A
-  )(using Traverse[F], Project[F, S]): Getter[S, A] =
-    cataF[F, S, Attr[F, A], A](Decor.histo[F, A])(alg)
+  )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
+    val toAttr: S => Attr[F, A] = foldLayered[F, S, Attr[F, A]](
+      P.project,
+      (s, fs, out) =>
+        val layer = rebuildLayer[F, S, Attr[F, A]](fs, out)
+        Attr(alg(s, layer), layer),
+    )
+    Getter[S, A](s => toAttr(s).head)
 
   def anaF[F[_], Seed, S](
       coalg: Seed => F[Seed]
@@ -634,9 +655,27 @@ object Schemes:
     foldLayered[F, Seed, (S, A)](
       coalg,
       (_, fSeed, out) =>
-        val pairs = rebuildLayer[F, Seed, (S, A)](fSeed, out)
-        val s = E.embed(F.map(pairs)(_._1))
-        (s, alg(s, F.map(pairs)(_._2))),
+        // Build F[S] and F[A] straight from the out-array — no F[(S, A)] intermediate
+        // (CI 2026-06-12: that third F-alloc per node put the fused cross ABOVE the
+        // materializing composition in B/op, 1049k vs 886k).
+        val fS =
+          if out.length == 0 then fSeed.asInstanceOf[F[S]]
+          else
+            var i = -1
+            F.map(fSeed) { _ =>
+              i += 1
+              out(i).asInstanceOf[(S, A)]._1
+            }
+        val fA =
+          if out.length == 0 then fSeed.asInstanceOf[F[A]]
+          else
+            var i = -1
+            F.map(fSeed) { _ =>
+              i += 1
+              out(i).asInstanceOf[(S, A)]._2
+            }
+        val s = E.embed(fS)
+        (s, alg(s, fA)),
     )
 
   /** Apomorphism over a typed pattern functor `F` — per child slot the coalgebra answers
@@ -659,12 +698,24 @@ object Schemes:
 
   /** Futumorphism over a typed pattern functor `F` — the coalgebra may emit **multiple layers per
     * step** ([[Coattr]]: `Pure` keeps unfolding, `Roll` is a prebuilt layer unrolled with no
-    * coalgebra call). Definitional: the generic decorated unfold at [[Decor.futu]].
+    * coalgebra call).
+    *
+    * Native route: the expand matches `Coattr` directly — one less dispatch than the generic
+    * [[Decor.futu]] route (whose per-slot `Step` is EA-elided: B/op identical; law-pinned equal in
+    * `DecorLawsSpec`). The gap to droste's futu (655k vs 459k B/op) is the stack-safe machine's
+    * per-node child array — droste's zoo recursion is stack-unsafe.
     */
   def futuF[F[_], A, S](
       coalg: A => F[Coattr[F, A]]
-  )(using Traverse[F], Embed[F, S]): Review[S, A] =
-    anaF[F, A, Coattr[F, A], S](Decor.futu[F, A])(coalg)
+  )(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
+    val expand: Coattr[F, A] => F[Coattr[F, A]] =
+      case Coattr.Pure(a)     => coalg(a)
+      case Coattr.Roll(layer) => layer
+    val build = foldLayered[F, Coattr[F, A], S](
+      expand,
+      (_, fw, out) => E.embed(rebuildLayer[F, Coattr[F, A], S](fw, out)),
+    )
+    Review[S, A](a => build(Coattr.Pure(a)))
 
   /** Generalized (decorated) anamorphism — the gana of the typed path, with the decoration supplied
     * as a [[DecorScatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
