@@ -183,3 +183,37 @@ class DecorLawsSpec extends Specification:
     Schemes.futuF[BinF, Int, Bin](coalg).reverseGet(4) ===
       Schemes.anaF[BinF, Int, Coattr[BinF, Int], Bin](Decor.futu[BinF, Int])(coalg).reverseGet(4)
   }
+
+  // ----- generic-route end-to-end pins --------------------------------------
+
+  "native paraF == the generic route at Decor.para" >> {
+    // Algebra that uses BOTH the paired subterm and the result:
+    // for a branch, sum child results and add 1 for each child subterm that is a Leaf.
+    // tree = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
+    //   Leaf(1) → 1; Leaf(2) → 2
+    //   Branch(Leaf(1), Leaf(2)) → 1+2 + 1 (Leaf(1)) + 1 (Leaf(2)) = 5
+    //   Leaf(3) → 3
+    //   Branch(Branch(L1,L2), Leaf(3)) → 5+3 + 0 (left is Branch) + 1 (Leaf(3)) = 9
+    val alg: (Bin, BinF[(Bin, Int)]) => Int = (_, layer) =>
+      layer match
+        case BinF.LeafF(n)                    => n
+        case BinF.BranchF((ls, la), (rs, ra)) =>
+          la + ra + (if ls.isInstanceOf[Bin.Leaf] then 1 else 0) +
+            (if rs.isInstanceOf[Bin.Leaf] then 1 else 0)
+    Schemes.paraF[BinF, Bin, Int](alg).get(tree) ===
+      Schemes.cataF[BinF, Bin, (Bin, Int), Int](Decor.para[BinF, Bin, Int])(alg).get(tree)
+  }
+
+  "native apoF == the generic route at Decor.apo (distApo)" >> {
+    // Coalg with one graft: at n <= 0 emit a leaf; otherwise graft Bin.Leaf(n) as left child.
+    // The native apoF places the graft by reference; the generic route (distApo via project)
+    // rebuilds it — structural equality (==) holds, reference identity (eq) only for native.
+    def coalg(n: Int): BinF[Either[Bin, Int]] =
+      if n <= 0 then BinF.LeafF(0)
+      else BinF.BranchF(Left(Bin.Leaf(n)), Right(n - 1))
+    val nativeResult = Schemes.apoF[BinF, Int, Bin](coalg).reverseGet(2)
+    val genericResult =
+      Schemes.anaF[BinF, Int, Either[Bin, Int], Bin](Decor.apo[BinF, Bin, Int])(coalg).reverseGet(2)
+    // Both produce the same tree by value; use == not eq (generic route REBUILDS the graft).
+    nativeResult === genericResult
+  }

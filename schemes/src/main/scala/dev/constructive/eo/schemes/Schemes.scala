@@ -47,6 +47,25 @@ object Schemes:
     */
   private val EmptyAnyRefs: Array[AnyRef] = new Array[AnyRef](0)
 
+  /** Collect the children of typed layer `fn` into a flat `Array[AnyRef]`, single-pass via
+    * `ObjArrBuilder`. Returns [[EmptyAnyRefs]] for leaf layers (zero children) to avoid a per-leaf
+    * empty-array allocation. Used by [[foldLayered]], [[foldLayeredOr]], and [[foldLayeredM]] — one
+    * definition replaces the three identical nested `def childrenArr` that previously lived inside
+    * each engine.
+    *
+    * Leaf layers are a common case in typed pattern functors (every `LeafF`-like constructor
+    * carries no recursive slots), so the shared `EmptyAnyRefs` guard pays for itself.
+    */
+  private def childrenArr[F[_], N](fn: F[N])(using F: Traverse[F]): Array[AnyRef] =
+    val n = F.size(fn).toInt
+    if n == 0 then EmptyAnyRefs
+    else
+      val b = new data.ObjArrBuilder(n)
+      val _ = F.foldLeft(fn, ()) { (_, child) =>
+        b.unsafeAppend(child.asInstanceOf[AnyRef])
+      }
+      b.freezeArr
+
   /** Sentinel op for [[foldLayeredM]]'s loop state — "ascend": consume `ret` against the top frame.
     * Anything else on the loop is the node to descend into.
     */
@@ -286,17 +305,6 @@ object Schemes:
       combine: (N, F[N], Array[AnyRef]) => R,
   )(using F: Traverse[F]): N => R =
 
-    def childrenArr(fn: F[N]): Array[AnyRef] =
-      val n = F.size(fn).toInt
-      if n == 0 then EmptyAnyRefs
-      else
-        val arr = new Array[AnyRef](n)
-        val _ = F.foldLeft(fn, 0) { (i, child) =>
-          arr(i) = child.asInstanceOf[AnyRef]
-          i + 1
-        }
-        arr
-
     def heap(root: N): R =
       final class Frame(val node: N, val layer: F[N], val arr: Array[AnyRef], var i: Int)
       val stack = new java.util.ArrayDeque[Frame]()
@@ -344,17 +352,6 @@ object Schemes:
       expandOr: N => Either[R, F[N]],
       combine: (F[N], Array[AnyRef]) => R,
   )(using F: Traverse[F]): N => R =
-
-    def childrenArr(fn: F[N]): Array[AnyRef] =
-      val n = F.size(fn).toInt
-      if n == 0 then EmptyAnyRefs
-      else
-        val arr = new Array[AnyRef](n)
-        val _ = F.foldLeft(fn, 0) { (i, child) =>
-          arr(i) = child.asInstanceOf[AnyRef]
-          i + 1
-        }
-        arr
 
     def heap(root: N): R =
       final class Frame(val layer: F[N], val arr: Array[AnyRef], var i: Int)
@@ -408,6 +405,9 @@ object Schemes:
   // Supported Ms are SINGLE-PASS and LINEAR: the machine's state is mutable, so a branching /
   // replaying M (List, retrying or streaming effects) shares it across branches and corrupts
   // the fold — the documented contract, exercised by the boundary test in SchemesFMSpec.
+  // M must also be SEQUENTIALLY evaluated — each map/flatMap callback completes before the next
+  // tailRecM step (true of Id/Eval/State/IO); async/concurrent step evaluation is unsupported
+  // even for lawful Monads.
   //
   // The expand is Or-SHAPED (N => M[Either[R, F[N]]]) per the elgot-seam gate
   // (docs/brainstorms/2026-06-12-elgot-seam-sketch.md): v1 drivers always pass Right; the
@@ -415,67 +415,60 @@ object Schemes:
   // ===========================================================================================
 
   /** The lifted machine. One `M`-action per `tailRecM` iteration: `Down(n)` runs `expandOr`, exits
-    * run `combine`; the mutable frame deque lives outside the loop (linear-M contract).
+    * run `combine`; the mutable frame deque is allocated per-force (inside the `M`) so re-forcing
+    * the same `M[R]` value allocates fresh state. Concurrent forcing of a single `M[R]` value
+    * remains unsupported (mutable state, linear-M contract); each `run(s)` call is independent.
     */
   private def foldLayeredM[M[_], F[_], N, R](
       expandOr: N => M[Either[R, F[N]]],
       combine: (N, F[N], Array[AnyRef]) => M[R],
   )(using M: Monad[M], F: Traverse[F]): N => M[R] =
 
-    def childrenArr(fn: F[N]): Array[AnyRef] =
-      val n = F.size(fn).toInt
-      if n == 0 then EmptyAnyRefs
-      else
-        val arr = new Array[AnyRef](n)
-        val _ = F.foldLeft(fn, 0) { (i, child) =>
-          arr(i) = child.asInstanceOf[AnyRef]
-          i + 1
-        }
-        arr
-
     final class Frame(val node: N, val layer: F[N], val arr: Array[AnyRef], var i: Int)
 
     n0 =>
-      val stack = new java.util.ArrayDeque[Frame]()
-      var ret: AnyRef = null.asInstanceOf[AnyRef]
-      // Op encoding (allocation-lean — CI 2026-06-12: per-event Either allocation
-      // dominated the M path's 1.6M B/op): the loop state is a bare AnyRef — the
-      // AscendToken sentinel means "consume ret against the top frame", anything else
-      // is the node to descend into. One Left per descend (vs nested Left(Right(n)));
-      // the ascend step is the hoisted constant.
-      val ascend: Either[AnyRef, R] = Left(AscendToken)
-      M.tailRecM[AnyRef, R](n0.asInstanceOf[AnyRef]) { op =>
-        if op.asInstanceOf[AnyRef] ne AscendToken then
-          val n = op.asInstanceOf[N]
-          M.flatMap(expandOr(n)) {
-            case Left(r) => // graft/short-circuit arm (unused by v1 drivers)
-              ret = r.asInstanceOf[AnyRef]
-              M.pure(ascend)
-            case Right(layer) =>
-              val arr = childrenArr(layer)
-              if arr.length == 0 then
-                // leaf: combine INLINE (a constant second bind — no frame, no extra event)
-                M.map(combine(n, layer, arr)) { r =>
-                  ret = r.asInstanceOf[AnyRef]
-                  ascend
-                }
-              else
-                stack.push(new Frame(n, layer, arr, 0))
-                M.pure(Left(arr(0)))
-          }
-        else if stack.isEmpty then M.pure(Right(ret.asInstanceOf[R]))
-        else
-          val fr = stack.peek()
-          fr.arr(fr.i) = ret // store the just-folded child's result
-          fr.i += 1
-          if fr.i < fr.arr.length then M.pure(Left(fr.arr(fr.i)))
-          else
-            // last child stored: combine NOW (merged — no intermediate pure event)
-            M.map(combine(fr.node, fr.layer, fr.arr)) { r =>
-              val _ = stack.pop()
-              ret = r.asInstanceOf[AnyRef]
-              ascend
+      M.flatMap(M.unit) { _ =>
+        val stack = new java.util.ArrayDeque[Frame]()
+        var ret: AnyRef = null.asInstanceOf[AnyRef]
+        // Op encoding (allocation-lean — CI 2026-06-12: per-event Either allocation
+        // dominated the M path's 1.6M B/op): the loop state is a bare AnyRef — the
+        // AscendToken sentinel means "consume ret against the top frame", anything else
+        // is the node to descend into. One Left per descend (vs nested Left(Right(n)));
+        // the ascend step is the hoisted constant.
+        val ascend: Either[AnyRef, R] = Left(AscendToken)
+        M.tailRecM[AnyRef, R](n0.asInstanceOf[AnyRef]) { op =>
+          if op.asInstanceOf[AnyRef] ne AscendToken then
+            val n = op.asInstanceOf[N]
+            M.flatMap(expandOr(n)) {
+              case Left(r) => // graft/short-circuit arm (unused by v1 drivers)
+                ret = r.asInstanceOf[AnyRef]
+                M.pure(ascend)
+              case Right(layer) =>
+                val arr = childrenArr(layer)(using F)
+                if arr.length == 0 then
+                  // leaf: combine INLINE (a constant second bind — no frame, no extra event)
+                  M.map(combine(n, layer, arr)) { r =>
+                    ret = r.asInstanceOf[AnyRef]
+                    ascend
+                  }
+                else
+                  stack.push(new Frame(n, layer, arr, 0))
+                  M.pure(Left(arr(0)))
             }
+          else if stack.isEmpty then M.pure(Right(ret.asInstanceOf[R]))
+          else
+            val fr = stack.peek()
+            fr.arr(fr.i) = ret // store the just-folded child's result
+            fr.i += 1
+            if fr.i < fr.arr.length then M.pure(Left(fr.arr(fr.i)))
+            else
+              // last child stored: combine NOW (merged — no intermediate pure event)
+              M.map(combine(fr.node, fr.layer, fr.arr)) { r =>
+                val _ = stack.pop()
+                ret = r.asInstanceOf[AnyRef]
+                ascend
+              }
+        }
       }
 
   /** Effectful catamorphism — the algebra runs in `M` (`(S, F[A]) => M[A]`); the layer peel stays
@@ -523,7 +516,10 @@ object Schemes:
 
   /** Single-pass paired machine in `M` backing the fused `AnaFM.andThen(CataFM)` — the M mirror of
     * [[fusedPairedFold]]: each node built once, folded immediately, no `M[S]` whole-structure
-    * materialization.
+    * materialization. Mirrors the pure version exactly: `F[S]` and `F[A]` are built straight from
+    * the out-array with two `F.map(fSeed)` passes and `var i = -1` counters, avoiding the
+    * `F[(S,A)]` intermediate. Leaf layers are phantom-recast (valid because pattern-functor leaves
+    * have no recursive slots by definition).
     */
   private[schemes] def fusedPairedFoldM[M[_], F[_], Seed, S, A](
       coalgM: Seed => M[F[Seed]],
@@ -532,9 +528,25 @@ object Schemes:
     foldLayeredM[M, F, Seed, (S, A)](
       seed => M.map(coalgM(seed))(Right(_)),
       (_, fSeed, out) =>
-        val pairs = rebuildLayer[F, Seed, (S, A)](fSeed, out)
-        val s = E.embed(F.map(pairs)(_._1))
-        M.map(algM(s, F.map(pairs)(_._2)))(a => (s, a)),
+        // Build F[S] and F[A] straight from the out-array — no F[(S,A)] intermediate.
+        val fS =
+          if out.length == 0 then fSeed.asInstanceOf[F[S]]
+          else
+            var i = -1
+            F.map(fSeed) { _ =>
+              i += 1
+              out(i).asInstanceOf[(S, A)]._1
+            }
+        val fA =
+          if out.length == 0 then fSeed.asInstanceOf[F[A]]
+          else
+            var i = -1
+            F.map(fSeed) { _ =>
+              i += 1
+              out(i).asInstanceOf[(S, A)]._2
+            }
+        val s = E.embed(fS)
+        M.map(algM(s, fA))(a => (s, a)),
     )
 
   /** The single *layer* optic for a pattern functor `F`: `project`/`embed` worn as the existing
@@ -573,6 +585,9 @@ object Schemes:
     * [[Decor.cata]] (recognised by identity — the direct, decoration-free engine path), `histoF`
     * with [[Decor.histo]]; user-written decorations (zygo, dyna, …) run the generic route, which
     * pays one decoration dispatch + `Step` per node.
+    *
+    * (type-param order: `[F, S, W, A]` — compare [[anaF]] `[F, A, W, S]`, which mirrors these in
+    * input-before-output order: `A` is the input seed there, `S` the built output.)
     */
   def cataF[F[_], S, W, A](
       decor: DecorGather[F, W, A]
@@ -595,12 +610,6 @@ object Schemes:
         galg(s, F.map(layer)(toW))
       }
 
-  /** Anamorphism over a typed pattern functor `F`, as a `Review`. The single fused coalgebra `Seed
-    * => F[Seed]` yields one typed layer of child seeds; [[Embed]] assembles each layer into the
-    * built `S`. Materializing — the built `S` is O(nodes). Stack-safe (the [[foldLayered]] machine).
-    * Requires `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output)
-    * to match [[hyloF]] and the `PSVec` [[ana]].
-    */
   /** Paramorphism over a typed pattern functor `F` — each child slot pairs the **original subterm**
     * with its folded result. Native route: the machine already walks real `S` nodes and keeps each
     * frame's projected layer, so subterms are paired positionally — no per-node re-`embed`
@@ -639,6 +648,12 @@ object Schemes:
     )
     Getter[S, A](s => toAttr(s).head)
 
+  /** Anamorphism over a typed pattern functor `F`, as a `Review`. The single fused coalgebra `Seed
+    * => F[Seed]` yields one typed layer of child seeds; [[Embed]] assembles each layer into the
+    * built `S`. Materializing — the built `S` is O(nodes). Stack-safe (the [[foldLayered]] machine).
+    * Requires `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output)
+    * to match [[hyloF]] and the `PSVec` [[ana]].
+    */
   def anaF[F[_], Seed, S](
       coalg: Seed => F[Seed]
   )(using F: Traverse[F], E: Embed[F, S]): AnaF[F, Seed, S] =
@@ -646,7 +661,8 @@ object Schemes:
 
   /** Single-pass paired machine backing the fused `AnaF.cross(CataF)`: each node is built once (the
     * algebra is node-supplied — construction is semantically required), folded immediately, and
-    * released as the fold ascends. No full-tree retention, no second traversal.
+    * released as the fold ascends. No full-tree retention, no second traversal. Leaf layers are
+    * phantom-recast (valid because pattern-functor leaves have no recursive slots by definition).
     */
   private[schemes] def fusedPairedFold[F[_], Seed, S, A](
       coalg: Seed => F[Seed],
@@ -724,6 +740,11 @@ object Schemes:
     * gana's `pure`). `anaF(coalg)` routes here with [[Decor.ana]] (identity-recognised direct
     * path); `futuF` with [[Decor.futu]]; `Decor.apo` runs the generic distApo route — the O(1)
     * graft belongs to the native `apoF` engine.
+    *
+    * For user-written [[DecorScatter]] values, `Done.fst` MUST carry `F[W]` at runtime — the engine
+    * unrolls it directly as the next layer.
+    *
+    * (type-param order: compare [[cataF]] `[F, S, W, A]` — the fold mirror swaps `Seed`/`A`.)
     */
   def anaF[F[_], A, W, S](
       decor: DecorScatter[F, W, A]
