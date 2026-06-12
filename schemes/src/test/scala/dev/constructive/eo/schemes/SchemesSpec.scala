@@ -13,15 +13,15 @@ import optics.Optic.* // get, andThen, cross, foldMap
 
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 
-/** Behaviour spec for the typed pattern-functor schemes (`cataF` / `anaF` / `hyloF`) and `fLayer`.
-  * Companion law/coherence checks live in `SchemesFLawsSpec`.
+/** Behaviour spec for the typed pattern-functor schemes (`cata` / `ana` / `hylo`) and `fLayer`.
+  * Companion law/coherence checks live in `SchemesLawsSpec`.
   *
   * Type-safety note (R3): every `gather`/`alg`/`coalg` below pattern-matches `BinF`'s *named*
   * constructors (`case BinF.BranchF(l, r) => l + r`), with `l`/`r` typed `A` — there is no
   * `kids(0)`/`AnyRef` positional path, so a child-arity mismatch is a compile error, not a runtime
   * `IndexOutOfBounds`.
   */
-class SchemesFSpec extends Specification:
+class SchemesSpec extends Specification:
 
   // A small mixed tree: Branch(Leaf 1, Branch(Leaf 2, Leaf 3)) — leaf sum 6, 3 leaves, depth 2.
   private val tree: Bin =
@@ -33,14 +33,14 @@ class SchemesFSpec extends Specification:
       case BinF.LeafF(n)      => n
       case BinF.BranchF(l, r) => l + r
 
-  // ----- cataF (typed fold) -----
+  // ----- cata (typed fold) -----
 
-  "cataF folds a Bin to a value through F's named constructors" >> {
-    val sumG: CataF[BinF, Bin, Int] = Schemes.cataF(sumLeaves)
+  "cata folds a Bin to a value through F's named constructors" >> {
+    val sumG: Cata[BinF, Bin, Int] = Schemes.cata(sumLeaves)
     (sumG.get(tree) == 6) must beTrue
   }
 
-  "cataF is paramorphism-flavored: gather can read the original node S" >> {
+  "cata is paramorphism-flavored: gather can read the original node S" >> {
     // count Branch nodes by reading the node argument, not the folded children
     val branchCount: (Bin, BinF[Int]) => Int = (node, fa) =>
       val here = node match
@@ -50,12 +50,12 @@ class SchemesFSpec extends Specification:
         case BinF.LeafF(_)      => 0
         case BinF.BranchF(l, r) => l + r
       here + below
-    (Schemes.cataF(branchCount).get(tree) == 2) must beTrue
+    (Schemes.cata(branchCount).get(tree) == 2) must beTrue
   }
 
-  "cataF-as-Getter composes onto an outer Getter via andThen" >> {
+  "cata-as-Getter composes onto an outer Getter via andThen" >> {
     val composed: Getter[(String, Bin), Int] =
-      Getter[(String, Bin), Bin](_._2).andThen(Schemes.cataF(sumLeaves))
+      Getter[(String, Bin), Bin](_._2).andThen(Schemes.cata(sumLeaves))
     (composed.get(("x", tree)) == 6) must beTrue
   }
 
@@ -69,29 +69,29 @@ class SchemesFSpec extends Specification:
 
     val doc = Doc(1, Inner("x", tree)) // tree = leaf sum 6
     // read: focus the recursive field with the composed lens, fold it with the scheme.
-    // (Schemes are read-only Getters, so we either read at the leaf — `cataF.get(lens.get(doc))` —
+    // (Schemes are read-only Getters, so we either read at the leaf — `cata.get(lens.get(doc))` —
     // or wrap the lens read in a Getter to build a reusable composed Getter[Doc, Int].)
     val docLeafSum: Getter[Doc, Int] =
-      Getter[Doc, Bin](deepTree.get).andThen(Schemes.cataF(sumLeaves))
+      Getter[Doc, Bin](deepTree.get).andThen(Schemes.cata(sumLeaves))
 
     val pruned = deepTree.replace(Bin.Leaf(0))(doc) // write through the same composed lens
 
-    (Schemes.cataF(sumLeaves).get(deepTree.get(doc)) == 6)
+    (Schemes.cata(sumLeaves).get(deepTree.get(doc)) == 6)
       .and(docLeafSum.get(doc) == 6)
       .and(deepTree.get(pruned) == Bin.Leaf(0))
       .and(pruned.inner.label == "x") // the rest of the record is untouched
   }
 
-  // ----- anaF (typed build) -----
+  // ----- ana (typed build) -----
 
-  "anaF builds a Bin from a seed, then cataF reads it back" >> {
+  "ana builds a Bin from a seed, then cata reads it back" >> {
     // seed n: a left spine of n Branches ending in Leaf(1); right child always Leaf(0).
     val spine: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(n - 1, -1)
-    val built: Bin = Schemes.anaF[BinF, Int, Bin](spine).reverseGet(3)
+    val built: Bin = Schemes.ana[BinF, Int, Bin](spine).reverseGet(3)
     // seed 3 -> Branch(Branch(Branch(Leaf 1, Leaf 1), Leaf 1), Leaf 1): 4 leaves of 1, depth 3
-    (Schemes.cataF(sumLeaves).get(built) == 4).and(
+    (Schemes.cata(sumLeaves).get(built) == 4).and(
       Schemes
-        .cataF[BinF, Bin, Int]((_, fa) =>
+        .cata[BinF, Bin, Int]((_, fa) =>
           fa match
             case BinF.LeafF(_)      => 0
             case BinF.BranchF(l, _) => 1 + l
@@ -100,41 +100,41 @@ class SchemesFSpec extends Specification:
     )
   }
 
-  "anaF.cross(cataF) is the materializing hylo (builds the Bin, then folds)" >> {
+  "ana.cross(cata) is the materializing hylo (builds the Bin, then folds)" >> {
     val spine: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(n - 1, -1)
-    val refold = Schemes.anaF[BinF, Int, Bin](spine).cross(Schemes.cataF(sumLeaves))
+    val refold = Schemes.ana[BinF, Int, Bin](spine).cross(Schemes.cata(sumLeaves))
     (refold.get(3) == 4) must beTrue
   }
 
-  // ----- hyloF (fused refold, no intermediate Bin) -----
+  // ----- hylo (fused refold, no intermediate Bin) -----
 
-  "hyloF fuses unfold+fold with no intermediate Bin built" >> {
+  "hylo fuses unfold+fold with no intermediate Bin built" >> {
     val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1)
     val leafCount: (Int, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 1
         case BinF.BranchF(l, r) => l + r
     // seed 3 -> a right spine of 4 leaves
-    (Schemes.hyloF(coalg, leafCount).get(3) == 4) must beTrue
+    (Schemes.hylo(coalg, leafCount).get(3) == 4) must beTrue
   }
 
-  "hyloF composes further into the pipeline" >> {
+  "hylo composes further into the pipeline" >> {
     val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1)
     val leafCount: (Int, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 1
         case BinF.BranchF(l, r) => l + r
     val toStr: Getter[Int, String] =
-      Schemes.hyloF(coalg, leafCount).andThen(Getter[Int, String](_.toString))
+      Schemes.hylo(coalg, leafCount).andThen(Getter[Int, String](_.toString))
     (toStr.get(3) == "4") must beTrue
   }
 
   // ----- edge cases -----
 
-  "cataF / hyloF handle a single leaf (no recursive positions)" >> {
-    (Schemes.cataF(sumLeaves).get(Bin.Leaf(7)) == 7).and(
+  "cata / hylo handle a single leaf (no recursive positions)" >> {
+    (Schemes.cata(sumLeaves).get(Bin.Leaf(7)) == 7).and(
       Schemes
-        .hyloF[BinF, Int, Int](
+        .hylo[BinF, Int, Int](
           n => BinF.LeafF(n),
           (_, fa) =>
             fa match
@@ -145,8 +145,8 @@ class SchemesFSpec extends Specification:
     )
   }
 
-  "cataF handles a one-level Branch(Leaf, Leaf)" >> {
-    (Schemes.cataF(sumLeaves).get(Bin.Branch(Bin.Leaf(4), Bin.Leaf(5))) == 9) must beTrue
+  "cata handles a one-level Branch(Leaf, Leaf)" >> {
+    (Schemes.cata(sumLeaves).get(Bin.Branch(Bin.Leaf(4), Bin.Leaf(5))) == 9) must beTrue
   }
 
   // ----- fLayer: the single-layer Forget[F] optic (R1) -----
@@ -166,7 +166,7 @@ class SchemesFSpec extends Specification:
 
   // ----- stack-safety (R2): 10^6 deep -----
   //
-  // cataF and hyloF descend a 10^6-deep spine; anaF additionally materializes an O(n) Bin. The
+  // cata and hylo descend a 10^6-deep spine; ana additionally materializes an O(n) Bin. The
   // foldLayered machine (the same < 512-on-stack / heap-ArrayDeque hybrid as the PSVec schemes)
   // moves the deep recursion off the JVM call stack onto the heap, so these complete without
   // StackOverflowError where a naive recursion would overflow — in O(depth) space, no Eval chain,
@@ -174,7 +174,7 @@ class SchemesFSpec extends Specification:
 
   private val Deep = 1_000_000
 
-  "cataF is stack/space-safe folding a 10^6-deep Bin spine" >> {
+  "cata is stack/space-safe folding a 10^6-deep Bin spine" >> {
     var b: Bin = Bin.Leaf(0)
     var i = 0
     while i < Deep do
@@ -184,31 +184,31 @@ class SchemesFSpec extends Specification:
       fa match
         case BinF.LeafF(_)      => 0
         case BinF.BranchF(l, r) => 1 + math.max(l, r)
-    (Schemes.cataF(depth).get(b) == Deep) must beTrue
+    (Schemes.cata(depth).get(b) == Deep) must beTrue
   }
 
-  "hyloF is stack/space-safe at depth 10^6 (no intermediate Bin)" >> {
+  "hylo is stack/space-safe at depth 10^6 (no intermediate Bin)" >> {
     val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(n - 1, -1)
     val depth: (Int, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 0
         case BinF.BranchF(l, r) => 1 + math.max(l, r)
-    (Schemes.hyloF(coalg, depth).get(Deep) == Deep) must beTrue
+    (Schemes.hylo(coalg, depth).get(Deep) == Deep) must beTrue
   }
 
-  "anaF is stack/space-safe building a 10^6-deep Bin (the OOM frontier)" >> {
+  "ana is stack/space-safe building a 10^6-deep Bin (the OOM frontier)" >> {
     val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(n - 1, -1)
-    val deep: Bin = Schemes.anaF[BinF, Int, Bin](coalg).reverseGet(Deep)
+    val deep: Bin = Schemes.ana[BinF, Int, Bin](coalg).reverseGet(Deep)
     val depth: (Bin, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 0
         case BinF.BranchF(l, r) => 1 + math.max(l, r)
-    (Schemes.cataF(depth).get(deep) == Deep) must beTrue
+    (Schemes.cata(depth).get(deep) == Deep) must beTrue
   }
 
   // ----- wide-and-deep: exercise the Traverse[F] sequencing path a binary spine misses -----
 
-  "cataF/hyloF stay safe on a wide-AND-deep RoseF (high fanout + deep)" >> {
+  "cata/hylo stay safe on a wide-AND-deep RoseF (high fanout + deep)" >> {
     val DeepRose = 100_000
     val Width = 8
     // each level: one deep child (d-1) + Width leaf children (-1 -> empty RoseF)
@@ -218,19 +218,19 @@ class SchemesFSpec extends Specification:
     val countNodes: (Int, RoseF[Int]) => Int = (_, fr) => 1 + fr.kids.sum
     // nodes = (DeepRose+1) spine nodes + DeepRose*Width leaves
     val expected = (DeepRose + 1) + DeepRose * Width
-    (Schemes.hyloF(coalg, countNodes).get(DeepRose) == expected) must beTrue
+    (Schemes.hylo(coalg, countNodes).get(DeepRose) == expected) must beTrue
   }
 
-  // anaF + cataF over the N-ary RoseF (the hyloF case above never builds/folds a real Rose, so
+  // ana + cata over the N-ary RoseF (the hylo case above never builds/folds a real Rose, so
   // this is the only test exercising the Traverse[RoseF]+Eval sequencing for those two schemes).
-  "anaF builds and cataF folds a wide-AND-deep Rose (N-ary Project/Embed)" >> {
+  "ana builds and cata folds a wide-AND-deep Rose (N-ary Project/Embed)" >> {
     val DeepRose = 20_000
     val Width = 4
     val coalg: Int => RoseF[Int] = d =>
       if d <= 0 then RoseF(0, Nil)
       else RoseF(d, (d - 1) :: List.fill(Width)(-1))
     val countNodes: (Rose, RoseF[Int]) => Int = (_, fr) => 1 + fr.kids.sum
-    val built: Rose = Schemes.anaF[RoseF, Int, Rose](coalg).reverseGet(DeepRose)
+    val built: Rose = Schemes.ana[RoseF, Int, Rose](coalg).reverseGet(DeepRose)
     val expected = (DeepRose + 1) + DeepRose * Width
-    (Schemes.cataF(countNodes).get(built) == expected) must beTrue
+    (Schemes.cata(countNodes).get(built) == expected) must beTrue
   }
