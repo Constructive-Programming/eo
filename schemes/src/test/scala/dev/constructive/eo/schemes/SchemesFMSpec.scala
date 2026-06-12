@@ -106,6 +106,57 @@ class SchemesFMSpec extends Specification:
     (results != List(1, 2)) must beTrue
   }
 
+  // ----- propagation of short-circuiting effects --------------------------------
+
+  "cataFM[Option] propagates a mid-fold None" >> {
+    // Algebra returns None for the inner branch (the Branch(Leaf(1), Leaf(2)) node) only.
+    val algM: (Bin, BinF[Int]) => Option[Int] = (s, fa) =>
+      s match
+        case Bin.Branch(Bin.Leaf(1), Bin.Leaf(2)) => None // force failure at this node
+        case _                                    => Some(sumAlg(s, fa))
+    Schemes.cataFM[Option, BinF, Bin, Int](algM).run(tree) === None
+  }
+
+  "anaFM[Option] propagates a mid-unfold None" >> {
+    // Coalg returns None at seed 3 — forces failure mid-build.
+    val coalgM: Int => Option[BinF[Int]] = n => if n == 3 then None else Some(expand(n))
+    Schemes.anaFM[Option, BinF, Int, Bin](coalgM).run(6) === None
+  }
+
+  // ----- re-forcing the same Eval result is safe (Fix 1 regression guard) ------
+
+  "re-forcing the same Eval result is safe (fresh state per force)" >> {
+    val m = Schemes
+      .hyloFM[Eval, BinF, Int, Int](
+        n => Eval.now(expand(n)),
+        (s, fa) => Eval.now(sumAlgSeed(s, fa)),
+      )
+      .run(6)
+    val expected = Schemes.hyloF[BinF, Int, Int](expand, sumAlgSeed).get(6)
+    (m.value === expected).and(m.value === expected)
+  }
+
+  "exception-interrupted force then re-force computes correctly (fresh state per force)" >> {
+    // On the first invocation of the 3-node specific interior seed, throw via a one-shot flag.
+    var thrown = false
+    val algM: (Int, BinF[Int]) => Eval[Int] = (seed, fa) =>
+      if seed == 3 && !thrown then
+        thrown = true
+        Eval.later(throw new RuntimeException("deliberate first-force failure"))
+      else Eval.now(sumAlgSeed(seed, fa))
+    val m = Schemes
+      .hyloFM[Eval, BinF, Int, Int](n => Eval.now(expand(n)), algM)
+      .run(6)
+    // First force: throws
+    val firstThrew =
+      try { val _ = m.value; false }
+      catch
+        case _: RuntimeException => true
+    // Second force: flag already set, should succeed with correct answer
+    val expected = Schemes.hyloF[BinF, Int, Int](expand, sumAlgSeed).get(6)
+    firstThrew.and(m.value === expected)
+  }
+
   // ----- the arbo-shaped acceptance example -------------------------------------
 
   "arbo-shaped: effectful children (counted fetches), built and folded in one fused pass" >> {

@@ -53,7 +53,7 @@ object BiAffine:
       case other: Done[?, ?] => fst == other.fst
       case _                 => false
 
-    override def hashCode(): Int = fst.hashCode
+    override def hashCode(): Int = if fst.asInstanceOf[AnyRef] == null then 0 else fst.hashCode
 
     /** Re-type this `Done[A, B]` as `Done[A, B2]` without allocating a new instance. Safe because
       * `Done` stores only `fst: Fst[A]` — the `B` parameter is phantom at the runtime shape.
@@ -68,7 +68,9 @@ object BiAffine:
       case other: Step[?, ?] => snd == other.snd && b == other.b
       case _                 => false
 
-    override def hashCode(): Int = snd.hashCode * 31 + (if b == null then 0 else b.hashCode)
+    override def hashCode(): Int =
+      (if snd.asInstanceOf[AnyRef] == null then 0 else snd.hashCode) * 31 +
+        (if b.asInstanceOf[AnyRef] == null then 0 else b.hashCode)
 
   /** Finished-arm constructor.
     *
