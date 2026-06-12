@@ -17,10 +17,6 @@ Everything runs on one stack-safe, post-order machine family (heap-stacked past 
 512, not JVM-call-stacked) — safe to depths a hand-written recursion would overflow,
 tested at 10⁶.
 
-> An earlier `PSVec`-based untyped path (`cata`/`ana`/`hylo` driven by `Plated`) was
-> removed once the typed path subsumed it: the erased positional indexing it required
-> made algebra arity slips a runtime error, which is exactly what the typed path fixes.
-
 ```scala mdoc:silent
 import dev.constructive.eo.schemes.Schemes
 import dev.constructive.eo.optics.Getter
@@ -267,19 +263,11 @@ by the same `cata(decor)(galg)` driver as the named members:
 
 ```scala mdoc:silent
 import dev.constructive.eo.schemes.zoo.Gather
-import dev.constructive.eo.data.BiAffine
-import dev.constructive.eo.optics.Optic
 
 def zygo[B](helper: BinF[B] => B): Gather[BinF, (B, Int), Int] =
-  new Optic[Unit, (B, Int), Unit, Int, BiAffine]:
-    type X = (Unit, BinF[(B, Int)])
-    def to(u: Unit): BiAffine[X, Unit] =
-      throw new UnsupportedOperationException("gather-only")
-    def from(xb: BiAffine[X, Int]): (B, Int) = xb match
-      case s: BiAffine.Step[X, Int] =>
-        (helper(summon[Traverse[BinF]].map(s.snd)(_._1)), s.b)
-      case _: BiAffine.Done[X, Int] =>
-        throw new UnsupportedOperationException("fold-side")
+  new Gather[BinF, (B, Int), Int]:
+    def gather(layer: BinF[(B, Int)], a: Int): (B, Int) =
+      (helper(summon[Traverse[BinF]].map(layer)(_._1)), a)
 
 val leafCount: BinF[Int] => Int =
   { case BinF.LeafF(_) => 1; case BinF.BranchF(l, r) => l + r }
@@ -331,3 +319,9 @@ laws are the graft-finality and round-trip equations in `cats-eo-laws`. Composit
 scoped to the shipped seams — the fused `cross`, the M-path `andThen`, and the generic drivers;
 BiAffine's full composition-matrix row is follow-up work, as are the elgot/coelgot decorations
 (the answer-level short-circuit, which the M machine's internals are already shaped for).
+
+---
+
+> An earlier `PSVec`-based untyped path (`cata`/`ana`/`hylo` driven by `Plated`) was
+> removed once the typed path subsumed it: the erased positional indexing it required
+> made algebra arity slips a runtime error, which is exactly what the typed path fixes.

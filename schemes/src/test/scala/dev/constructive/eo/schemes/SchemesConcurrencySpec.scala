@@ -40,11 +40,13 @@ class SchemesConcurrencySpec extends Specification:
 
   // Prebuilt shared optics (shared across all tasks — the thread-safety claim under test).
   private val sharedCata = Schemes.cata(sumAlg)
+
   private val sharedPara = Schemes.para[BinF, Bin, Int] { (_, layer) =>
     layer match
       case BinF.LeafF(n)                => n
       case BinF.BranchF((_, l), (_, r)) => l + r
   }
+
   private val sharedHisto = Schemes.histo[BinF, Bin, Int] { (_, layer) =>
     layer match
       case BinF.LeafF(n)      => n
@@ -64,13 +66,16 @@ class SchemesConcurrencySpec extends Specification:
         // (b) hylo from a per-task seed — independent fold, no shared state
         val seed = taskId % 5 // seeds 0–4
         val hyloResult = Schemes
-          .hylo[BinF, Int, Int](expand, (_, fa) =>
-            fa match
-              case BinF.LeafF(n)      => n
-              case BinF.BranchF(l, r) => l + r
+          .hylo[BinF, Int, Int](
+            expand,
+            (_, fa) =>
+              fa match
+                case BinF.LeafF(n)      => n
+                case BinF.BranchF(l, r) => l + r,
           )
           .get(seed)
-        val expectedHylo = Schemes.cata(sumAlg).get(Schemes.ana[BinF, Int, Bin](expand).reverseGet(seed))
+        val expectedHylo =
+          Schemes.cata(sumAlg).get(Schemes.ana[BinF, Int, Bin](expand).reverseGet(seed))
         val hyloOk = hyloResult == expectedHylo
 
         // (c) ana builds a per-task Bin from a per-task seed, cata folds it back
