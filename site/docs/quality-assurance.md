@@ -155,6 +155,7 @@ run time by the suite stryker runs.
 | `laws` | 83 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
 | `generics` | 0 | 0 | 0 | 58 | 0 | 0.0% | — | Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover. |
 | `schemes` | 58 | 0 | 18 | 0 | 5 | 76.3% | 76.3% |  |
+| `schemes-laws` | 1 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Recursion-scheme laws (hylo fusion so far; more expected). Like `laws`, mutating it probes whether the law spec notices a corrupted law. |
 | `circe` | 37 | 0 | 2 | 15 | 0 | 68.5% | 94.9% |  |
 | `avro` | — | — | — | — | — | — | — | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
 | `jsoniter` | — | — | — | — | — | — | — | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |

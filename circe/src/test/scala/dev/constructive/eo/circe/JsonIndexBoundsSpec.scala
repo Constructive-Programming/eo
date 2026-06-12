@@ -6,10 +6,10 @@ import cats.data.Ior
 import io.circe.syntax.*
 import org.specs2.mutable.Specification
 
-/** Index-bounds discrimination for the array walk: the existing specs exercise
-  * out-of-range-high on a 1-element array and index 0 on non-arrays, but never a SUCCESSFUL walk
-  * at indices 0 and >0 of one array, nor a negative index — so operator mutants on the
-  * `idx < 0 || idx >= arr.length` check survived.
+/** Index-bounds discrimination for the array walk: the existing specs exercise out-of-range-high on
+  * a 1-element array and index 0 on non-arrays, but never a SUCCESSFUL walk at indices 0 and >0 of
+  * one array, nor a negative index — so operator mutants on the `idx < 0 || idx >= arr.length`
+  * check survived.
   */
 class JsonIndexBoundsSpec extends Specification:
 

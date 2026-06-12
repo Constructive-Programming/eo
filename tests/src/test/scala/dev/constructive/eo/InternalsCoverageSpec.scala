@@ -205,7 +205,8 @@ class InternalsCoverageSpec extends Specification:
     val nullHashOk = nullHit.hashCode == nullHit.hashCode
     val vec = PSVec.fromIterable(List(1, 2, 3))
     val notAVecOk = !vec.equals("not a vector")
-    val folded = cats.Foldable[PSVec]
+    val folded = cats
+      .Foldable[PSVec]
       .foldRight(vec, cats.Eval.now(List.empty[Int]))((a, eb) => eb.map(a :: _))
       .value
     (crossOk, nullHashOk, notAVecOk, folded) must beEqualTo((true, true, true, List(1, 2, 3)))

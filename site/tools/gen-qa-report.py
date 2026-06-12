@@ -55,6 +55,7 @@ MUTATION_MODULES = [
     ("laws", "laws", "Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose."),
     ("generics", "generics", "Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover."),
     ("schemes", "schemes", ""),
+    ("schemes-laws", "schemes-laws", "Recursion-scheme laws (hylo fusion so far; more expected). Like `laws`, mutating it probes whether the law spec notices a corrupted law."),
     ("circe", "circe", ""),
     ("avro", "avro", "Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`)."),
     ("jsoniter", "jsoniter", "Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place."),
@@ -180,6 +181,7 @@ def latest_report(module_dir: str) -> str:
 # circe/avro/jsoniter sbt ids map to these on-disk directories.
 MODULE_DIR = {
     "core": "core", "laws": "laws", "generics": "generics", "schemes": "schemes",
+    "schemes-laws": "schemes-laws",
     "circe": "circe", "avro": "avro", "jsoniter": "jsoniter",
 }
 
