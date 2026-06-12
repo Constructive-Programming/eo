@@ -93,7 +93,7 @@ class SchemesBench extends JmhDefaults:
   // reference. The honest claim is therefore PARITY on the native routes (both
   // ~ns-flat regardless of graft size), with eo adding the law-shaped eq
   // guarantee; the O(graft) re-walk contrast applies to the GENERIC distApo
-  // route (Decor.apo), not to droste.zoo.apo.
+  // route (distApo, a law fixture only), not to droste.zoo.apo.
 
   val eoApoGraftR = Schemes.apo[BinF, Int, Bin] { d =>
     if d == 0 then BinF.NodeF(Left(eoTree), Right(-1)) else BinF.LeafF(1)

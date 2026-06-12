@@ -13,7 +13,7 @@ import data.{Fst, Snd}
   * arm.
   *
   * The payload *meaning* of `done` is pinned per optic value via the existential `X` (`Fst[X]`),
-  * not by this capability — see the `Decor` family in `cats-eo-schemes`.
+  * not by this capability — see the `Gather`/`Scatter` decoration optics in `cats-eo-schemes`.
   *
   * @tparam F
   *   the carrier
