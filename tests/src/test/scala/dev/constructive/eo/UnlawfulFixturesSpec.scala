@@ -12,11 +12,11 @@ import laws.data.ModifyFLaws
   *
   * Discipline registrations can only witness that lawful instances pass; they can never witness
   * that a law *discriminates*. A law-weakening mutation (a guard short-circuited to `false`, an
-  * `&&` flipped to `||`) leaves every lawful instance passing, so the whole borrowed suite is
-  * blind to it — mutation testing surfaced exactly three such survivors in `cats-eo-laws`. Each
-  * fixture below is minimally unlawful: it violates precisely the clause the mutant weakens, so
-  * the law method must return `false` here, and any weakening of that clause flips the result to
-  * `true` and fails this spec.
+  * `&&` flipped to `||`) leaves every lawful instance passing, so the whole borrowed suite is blind
+  * to it — mutation testing surfaced exactly three such survivors in `cats-eo-laws`. Each fixture
+  * below is minimally unlawful: it violates precisely the clause the mutant weakens, so the law
+  * method must return `false` here, and any weakening of that clause flips the result to `true` and
+  * fails this spec.
   *
   * See site/docs/quality-assurance.md ("Mutation testing" caveats) for the full story.
   */

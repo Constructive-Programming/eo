@@ -7,16 +7,15 @@ import org.specs2.mutable.Specification
 import optics.Traversal
 import data.PSVec
 
-/** Capacity-boundary and contract checks for the PSVec/builder machinery, driven through the
-  * public composed-traversal surface.
+/** Capacity-boundary and contract checks for the PSVec/builder machinery, driven through the public
+  * composed-traversal surface.
   *
   * The grow-on-demand builders (`ObjArrBuilder`, `IntArrBuilder`) start at capacity 16 and the
   * default generators rarely cross that line through the slice-append path, so the grow-guard
   * conditionals survived mutation testing: a corrupted guard only crashes
-  * (ArrayIndexOutOfBoundsException) once a single flatten step exceeds the remaining capacity.
-  * The generators here straddle the boundary on purpose — inner lists up to 48 elements force
-  * `appendAllFromPSVec`'s bulk-grow, outer lists up to 24 force the per-element counts builder
-  * past 16.
+  * (ArrayIndexOutOfBoundsException) once a single flatten step exceeds the remaining capacity. The
+  * generators here straddle the boundary on purpose — inner lists up to 48 elements force
+  * `appendAllFromPSVec`'s bulk-grow, outer lists up to 24 force the per-element counts builder past 16.
   */
 class PSVecBoundarySpec extends Specification with ScalaCheck:
 
@@ -60,6 +59,33 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
     val longer = PSVec.fromIterable(List(1, 2, 3))
     (shorter == longer) must beFalse
     (longer == shorter) must beFalse
+  }
+
+  "PSVec equality discriminates same-length different-content vectors" >> {
+    // covers: PSVec.equals elementwise while-loop (line 67) — loop-skipping mutants
+    // (condition → false / i > length) accept ANY same-length pair; the length guard
+    // above never fires for these.
+    val a = PSVec.fromIterable(List(1, 2, 3))
+    val b = PSVec.fromIterable(List(1, 9, 3))
+    (a == b) must beFalse
+  }
+
+  "unequal PSVecs of equal length hash differently (pinned witness)" >> {
+    // covers: PSVec.hashCode while-loop (line 76) and null-guard `true` (line 78) —
+    // loop-skipping mutants collapse every hash to 1, the always-null guard to a
+    // length-only hash. The hashCode CONTRACT doesn't promise inequality; this
+    // deterministic witness pair hashes apart under the real polynomial hash, so it is
+    // a canary for hash-collapse, not a contract claim.
+    val a = PSVec.fromIterable(List(1, 2))
+    val b = PSVec.fromIterable(List(3, 4))
+    (a.hashCode == b.hashCode) must beFalse
+  }
+
+  "hashing a null-bearing PSVec is total" >> {
+    // covers: PSVec.hashCode null guard (line 78) — a flipped or dropped guard NPEs on
+    // null elements.
+    val withNull = PSVec.fromIterable(List("a", null, "b"))
+    withNull.hashCode must beEqualTo(withNull.hashCode)
   }
 
   "structurally equal PSVecs hash equally (and hashing terminates)" >> {
