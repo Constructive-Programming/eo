@@ -6,8 +6,7 @@ import cats.{Applicative, Eval, Traverse}
 import higherkindness.droste.data.Fix
 import higherkindness.droste.{Algebra, Coalgebra}
 
-import dev.constructive.eo.data.PSVec
-import dev.constructive.eo.schemes.{Basis, Schemes}
+import dev.constructive.eo.schemes.Basis
 
 /** Pattern functor for the native [[Bin]] tree (`Leaf(Int)` / `Node(Bin, Bin)`).
   *
@@ -69,26 +68,6 @@ object SchemesFixtures:
   val drosteBuild: Coalgebra[BinF, Int] = Coalgebra { d =>
     if d <= 0 then BinF.LeafF(1) else BinF.NodeF(d - 1, d - 1)
   }
-
-  // ----- eo algebra / coalgebra (over native Bin via Plated) -----------------
-
-  val eoSum: (Bin, PSVec[Int]) => Int = (node, kids) =>
-    node match
-      case Bin.Leaf(v)    => v
-      case Bin.Node(_, _) => kids(0) + kids(1)
-
-  /** Seed expansion shared by eo's hylo/ana: depth `d` ⇒ two child seeds `(d-1, d-1)`; leaf at
-    * `d <= 0`. `PSVec.of` builds the 2-vector directly (no `List` intermediate). */
-  val eoExpand: Int => PSVec[Int] = d =>
-    if d <= 0 then PSVec.empty[Int] else PSVec.of(d - 1, d - 1)
-
-  /** Fused hylo algebra — folds to `Int` directly, never building a `Bin`. */
-  val eoHyloAlg: (Int, PSVec[Int]) => Int = (d, rs) => if d <= 0 then 1 else rs(0) + rs(1)
-
-  /** ana coalgebra (bundled) — each seed's child seeds + how to assemble a native `Bin`. */
-  val eoAnaCoalg: Schemes.Coalg[Int, Bin] = d =>
-    if d <= 0 then (PSVec.empty[Int], (_: PSVec[Bin]) => Bin.Leaf(1))
-    else (PSVec.of(d - 1, d - 1), (ks: PSVec[Bin]) => Bin.Node(ks(0), ks(1)))
 
   // ----- eo TYPED algebras (over the pattern functor BinF via Basis/Traverse) ----------------
 
