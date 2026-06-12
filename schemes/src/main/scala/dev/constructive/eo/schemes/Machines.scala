@@ -10,34 +10,33 @@ import cats.{Monad, Traverse}
   * ==Shape==
   *
   * Every engine is the same two-phase walk — '''descend''' (peel a layer, push a [[Frame]] per
-  * interior node onto an immutable `List` stack) and '''bubble''' (store a finished child's result
-  * into the top frame's slot, then resume at the next sibling or combine the completed frame) —
-  * expressed as ONE `@tailrec` loop whose state is the [[Ascend]] sentinel encoding shared with
+  * interior node onto the frame stack) and '''bubble''' (store a finished child's result into the
+  * top frame's slot, then resume at the next sibling or combine the completed frame) — expressed as
+  * ONE `@tailrec` loop whose state is the [[Ascend]] sentinel encoding shared with
   * [[foldLayeredM]]'s `tailRecM` loop (two mutually-recursive phase functions would grow the JVM
-  * stack on their cross-calls; a single self-tail-recursive loop compiles to a jump).
+  * stack on their cross-calls; a single self-tail-recursive loop compiles to a jump). The pure
+  * machines share their walk ([[heapWalk]]); the `M` machine is the same walk threaded through
+  * `tailRecM`.
   *
-  * Mutation is confined to the per-node result buffer (an `Array[AnyRef]`, reused in place as the
-  * accumulator) and the frame's slot index — both owned by exactly one walk. Below [[OnStackLimit]]
-  * the engines use plain tree recursion instead (the natural functional expression of a fold, and
-  * the allocation-free hot path); only deep subtrees pay for frames.
-  *
-  * [[foldLayered]] and [[foldLayeredOr]] stay separate rather than unifying on the Or-shape: the
-  * plain engine's descend is `Either`-free, which keeps the hot cata/hylo path at its pinned
-  * allocation profile (CI: 361k B/op on the 8k-node fixture).
+  * Slot buffers are union-typed ([[Slot]] = `N | R`): a cell starts life as the child node and is
+  * overwritten in place by that child's result, so stores are cast-free and each phase narrows its
+  * reads at one documented point. Below [[OnStackLimit]] the engines use plain tree recursion
+  * instead (the natural functional expression of a fold, and the allocation-free hot path); only
+  * deep subtrees pay for frames.
   *
   * ==Thread-safety model==
   *
-  * Every machine allocates its mutable state (the frame stack, the per-node child/result arrays)
-  * '''per invocation''' — and, for the `M` path, per '''force''', inside `M.flatMap(M.unit)` so
-  * that re-forcing the same `M[R]` value allocates fresh state on each evaluation. No mutable state
-  * is shared across invocations or forces.
+  * Every machine allocates its mutable state (the frame stack, the per-node slot buffers) '''per
+  * invocation''' — and, for the `M` path, per '''force''', inside `M.flatMap(M.unit)` so that
+  * re-forcing the same `M[R]` value allocates fresh state on each evaluation. No mutable state is
+  * shared across invocations or forces.
   *
   * The only shared values are immutable sentinels:
   *
-  *   - [[NoChildren]]: a zero-length `Array[AnyRef]`, shared by all leaf layers (see its own
-  *     scaladoc for the immutability argument).
-  *   - [[Ascend]]: a stable identity object used as the "ascend" marker in [[foldLayeredM]]'s loop.
-  *     It is never written and carries no mutable state.
+  *   - [[NoChildren]]: a zero-length slot buffer, shared by all leaf layers (see its own scaladoc
+  *     for the immutability argument).
+  *   - [[Ascend]] / [[NoResult]]: stable identity objects marking the loop's bubble states. Never
+  *     written, no mutable state.
   *
   * Concurrent invocations of recursion schemes in a single JVM process are therefore safe — each
   * call owns its own heap region and neither reads nor writes the shared sentinels' contents.
@@ -53,61 +52,80 @@ private[schemes] object Machines:
     */
   final val OnStackLimit = 512
 
-  /** The shared "this layer has no children" sentinel.
-    *
-    * '''What it is:''' a single `Array[AnyRef]` of length 0, allocated once and returned by
-    * [[childrenArr]] for every leaf layer (`LeafF`-like constructors with no recursive slots).
-    *
-    * '''Who uses it:''' every engine, via [[childrenArr]] — leaf layers are the most common case in
-    * typed pattern functors, so the shared sentinel avoids a per-leaf empty-array allocation.
-    *
-    * '''Why it is thread-safe:''' the array has length 0 and no element is ever written into it —
-    * every store in the engines targets `arr(i)` for `i < arr.length`. An immutable zero-length
-    * array is safe to share across any number of concurrent walks.
+  /** One child/result buffer cell: starts life as the child node `N`, overwritten in place by that
+    * child's folded result `R`. The walk's index discipline decides which half is live — cells
+    * below a frame's `next` hold results, cells at and above it still hold children — so stores are
+    * cast-free (`N <: Slot` and `R <: Slot`) and each phase narrows its reads at one point.
     */
-  private[schemes] val NoChildren: Array[AnyRef] = new Array[AnyRef](0)
+  private[schemes] type Slot[N, R] = N | R
 
-  /** Collect the children of typed layer `fn` into a flat `Array[AnyRef]`, single-pass via
-    * `ObjArrBuilder`; [[NoChildren]] for leaf layers.
-    */
-  private[schemes] def childrenArr[F[_], N](fn: F[N])(using F: Traverse[F]): Array[AnyRef] =
-    val n = F.size(fn).toInt
-    if n == 0 then NoChildren
-    else
-      val b = new data.ObjArrBuilder(n)
-      val _ = F.foldLeft(fn, ()) { (_, child) =>
-        b.unsafeAppend(child.asInstanceOf[AnyRef])
-      }
-      b.freezeArr
-
-  /** Sentinel op for [[foldLayeredM]]'s loop state — "ascend": consume the pending result against
-    * the top frame. Anything else on the loop is the node to descend into.
-    */
+  /** "Bubble" loop-state marker: consume the pending result against the top frame. */
   private[schemes] object Ascend
 
-  /** Placeholder for the `pending` slot while descending (no result is in flight). Never read —
-    * `pending` is consumed only on the [[Ascend]] arm, which is reached only after a real result
+  /** Loop op state: the node to descend into, or [[Ascend]]. */
+  private[schemes] type Op[N] = N | Ascend.type
+
+  /** Placeholder for the pending-result state while descending (no result is in flight). Never read
+    * — `pending` is consumed only on the [[Ascend]] arm, which is reached only after a real result
     * was threaded in.
     */
-  private val NoResult: AnyRef = new AnyRef
+  private[schemes] object NoResult
 
-  /** One suspended interior node: its layer, the child/result buffer (children overwritten in place
-    * by their results), and the index of the next slot awaiting a result.
+  /** The pending-result loop state: a result bubbling up, or [[NoResult]] while descending. */
+  private[schemes] type Pending[R] = R | NoResult.type
+
+  /** The shared "this layer has no children" sentinel.
+    *
+    * '''What it is:''' a single zero-length slot buffer, allocated once and returned by
+    * [[childrenSlots]] for every leaf layer (`LeafF`-like constructors with no recursive slots).
+    *
+    * '''Who uses it:''' every engine, via [[childrenSlots]] — leaf layers are the most common case
+    * in typed pattern functors, so the shared sentinel avoids a per-leaf empty-array allocation.
+    *
+    * '''Why it is thread-safe:''' the array has length 0 and no element is ever written into it —
+    * every store in the engines targets `slots(i)` for `i < slots.length`. An immutable zero-length
+    * array is safe to share across any number of concurrent walks.
     */
-  final private class Frame[F[_], N](
+  private val NoChildren: Array[AnyRef] = new Array[AnyRef](0)
+
+  /** Collect the children of typed layer `fn` into a flat slot buffer, single-pass via
+    * `ObjArrBuilder`; [[NoChildren]] for leaf layers. (`Array[Slot[N, R]]` erases to
+    * `Array[AnyRef]` — the recast here is the buffer's single allocation-site cast; every
+    * subsequent store is union-typed.)
+    */
+  private[schemes] def childrenSlots[F[_], N, R](fn: F[N])(using
+      F: Traverse[F]
+  ): Array[Slot[N, R]] =
+    val n = F.size(fn).toInt
+    val raw =
+      if n == 0 then NoChildren
+      else
+        val b = new data.ObjArrBuilder(n)
+        val _ = F.foldLeft(fn, ()) { (_, child) =>
+          b.unsafeAppend(child.asInstanceOf[AnyRef])
+        }
+        b.freezeArr
+    raw.asInstanceOf[Array[Slot[N, R]]]
+
+  /** One suspended interior node: its layer, the child/result slot buffer, and the index of the
+    * next slot awaiting a result (slots below `next` hold results, slots at and above it still hold
+    * children).
+    */
+  final private class Frame[F[_], N, R](
       val node: N,
       val layer: F[N],
-      val arr: Array[AnyRef],
-      var i: Int,
+      val slots: Array[Slot[N, R]],
+      var next: Int,
   )
 
   /** Rebuild a typed `F[R]` from the original layer `fn: F[N]` and its children's results, stored
     * positionally in `out` in `Foldable` order — which `Functor.map` matches for a lawful
     * `Traverse`. Lets the schemes hand the algebra a typed `F[R]` (named constructors) rather than
     * a positional vector. Leaf layers are phantom-recast (valid because pattern-functor leaves have
-    * no recursive slots by definition).
+    * no recursive slots by definition); non-leaf reads narrow the slot union (every cell holds an
+    * `R` by the time a layer is rebuilt).
     */
-  private[schemes] def rebuildLayer[F[_], N, R](fn: F[N], out: Array[AnyRef])(using
+  private[schemes] def rebuildLayer[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
   ): F[R] =
     if out.length == 0 then fn.asInstanceOf[F[R]]
@@ -122,7 +140,7 @@ private[schemes] object Machines:
     * from `out` (positional, `Foldable` order). The subterms come from the layer the machine
     * already holds — no re-`embed`.
     */
-  private[schemes] def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[AnyRef])(using
+  private[schemes] def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
   ): F[(N, R)] =
     if out.length == 0 then fn.asInstanceOf[F[(N, R)]]
@@ -133,106 +151,100 @@ private[schemes] object Machines:
         (n, out(i).asInstanceOf[R])
       }
 
+  /** The descend/bubble heap walk shared by [[foldLayered]] and [[foldLayeredOr]] (previously two
+    * near-identical loops). `expandOr`'s `Left` arm is the graft/short-circuit channel —
+    * [[foldLayered]] instantiates it with a constant `Right`. This walk runs only past
+    * [[OnStackLimit]] — the cold path (the hot on-stack recursion stays specialized in each
+    * engine), so the step parameters are ordinary functions; nothing here is hot enough for
+    * inlining to matter.
+    *
+    * The loop body delegates to two `transparent inline` phase helpers; their `loop` calls are in
+    * tail position after inlining, so `@tailrec` still verifies.
+    */
+  private def heapWalk[F[_], N, R](
+      root: N,
+      expandOr: N => Either[R, F[N]],
+      combine: (N, F[N], Array[Slot[N, R]]) => R,
+  )(using F: Traverse[F]): R =
+    @tailrec def loop(op: Op[N], pending: Pending[R], stack: List[Frame[F, N, R]]): R =
+
+      transparent inline def descend(n: N): R = expandOr(n) match
+        case Left(finished) => loop(Ascend, finished, stack) // graft: finished, by reference
+        case Right(layer)   =>
+          val slots = childrenSlots[F, N, R](layer)
+          if slots.length == 0 then loop(Ascend, combine(n, layer, slots), stack)
+          else loop(slots(0).asInstanceOf[N], NoResult, new Frame(n, layer, slots, 0) :: stack)
+
+      transparent inline def bubble: R = stack match
+        case Nil        => pending.asInstanceOf[R] // the walk's final result
+        case fr :: rest =>
+          fr.slots(fr.next) = pending.asInstanceOf[R] // overwrite the just-folded child's slot
+          fr.next += 1
+          if fr.next < fr.slots.length then loop(fr.slots(fr.next).asInstanceOf[N], NoResult, stack)
+          else loop(Ascend, combine(fr.node, fr.layer, fr.slots), rest)
+
+      op match
+        case Ascend => bubble
+        case n      => descend(n.asInstanceOf[N]) // the op union's other inhabitant is the node
+
+    loop(root, NoResult, Nil)
+
   /** Shared typed engine for the `F`-path schemes. `expand` peels a node into one typed layer of
     * child nodes; the engine folds each child to an `R` (post-order), then calls `combine` with the
     * node, its layer `F[N]`, and the children's results (positional, `Foldable` order).
-    * `< [[OnStackLimit]]` deep: plain tree recursion; past it, the descend/bubble heap walk (see
-    * the object scaladoc). Stack-safe for any *terminating* `expand` (a non-terminating one
-    * exhausts the heap — `OutOfMemoryError` — rather than the stack).
+    * `< [[OnStackLimit]]` deep: plain tree recursion; past it, the shared [[heapWalk]]. Stack-safe
+    * for any *terminating* `expand` (a non-terminating one exhausts the heap — `OutOfMemoryError` —
+    * rather than the stack).
     */
   private[schemes] def foldLayered[F[_], N, R](
       expand: N => F[N],
-      combine: (N, F[N], Array[AnyRef]) => R,
+      combine: (N, F[N], Array[Slot[N, R]]) => R,
   )(using F: Traverse[F]): N => R =
 
-    def heap(root: N): R =
-      // One tail-recursive loop over both phases, [[Ascend]]-sentinel encoded like
-      // [[foldLayeredM]] (mutually-recursive descend/bubble functions would grow the JVM
-      // stack on their cross-calls): `op` is either the node to descend into or [[Ascend]],
-      // in which case `pending` carries the result to store against the top frame.
-      @tailrec def loop(op: AnyRef, pending: AnyRef, stack: List[Frame[F, N]]): R =
-        if op ne Ascend then
-          val n = op.asInstanceOf[N]
-          val layer = expand(n)
-          val arr = childrenArr(layer)
-          if arr.length == 0 then loop(Ascend, combine(n, layer, arr).asInstanceOf[AnyRef], stack)
-          else loop(arr(0), NoResult, new Frame(n, layer, arr, 0) :: stack)
-        else
-          stack match
-            case Nil        => pending.asInstanceOf[R]
-            case fr :: rest =>
-              fr.arr(fr.i) = pending // overwrite the just-folded child's slot
-              fr.i += 1
-              if fr.i < fr.arr.length then loop(fr.arr(fr.i), NoResult, stack)
-              else loop(Ascend, combine(fr.node, fr.layer, fr.arr).asInstanceOf[AnyRef], rest)
-
-      loop(root.asInstanceOf[AnyRef], NoResult, Nil)
-
     def rec(n: N, depth: Int): R =
-      if depth >= OnStackLimit then heap(n)
+      if depth >= OnStackLimit then heapWalk(n, m => Right(expand(m)), combine)
       else
         val layer = expand(n)
-        val arr = childrenArr(layer)
+        val slots = childrenSlots[F, N, R](layer)
         var i = 0
-        while i < arr.length do
-          arr(i) = rec(arr(i).asInstanceOf[N], depth + 1).asInstanceOf[AnyRef]
+        while i < slots.length do
+          slots(i) = rec(slots(i).asInstanceOf[N], depth + 1)
           i += 1
-        combine(n, layer, arr)
+        combine(n, layer, slots)
 
     n => rec(n, 0)
 
   /** [[foldLayered]]'s graft-aware sibling — the apomorphism engine. `expandOr` answers each node
     * event with `Left(r)` (an **already-finished result**: placed into its slot directly — O(1), no
-    * recursion, no projection) or `Right(layer)` (keep going). Same on-stack / descend-bubble
-    * hybrid and stack-safety as [[foldLayered]].
+    * recursion, no projection) or `Right(layer)` (keep going). Same on-stack / [[heapWalk]] hybrid
+    * and stack-safety as [[foldLayered]].
     */
   private[schemes] def foldLayeredOr[F[_], N, R](
       expandOr: N => Either[R, F[N]],
-      combine: (F[N], Array[AnyRef]) => R,
+      combine: (F[N], Array[Slot[N, R]]) => R,
   )(using F: Traverse[F]): N => R =
 
-    def heap(root: N): R =
-      // Same single-loop sentinel encoding as [[foldLayered]]'s heap walk; the graft arm
-      // (`Left`) feeds `pending` directly — finished, by reference.
-      @tailrec def loop(op: AnyRef, pending: AnyRef, stack: List[Frame[F, N]]): R =
-        if op ne Ascend then
-          expandOr(op.asInstanceOf[N]) match
-            case Left(r)      => loop(Ascend, r.asInstanceOf[AnyRef], stack)
-            case Right(layer) =>
-              val arr = childrenArr(layer)
-              if arr.length == 0 then loop(Ascend, combine(layer, arr).asInstanceOf[AnyRef], stack)
-              else loop(arr(0), NoResult, new Frame(null.asInstanceOf[N], layer, arr, 0) :: stack)
-        else
-          stack match
-            case Nil        => pending.asInstanceOf[R]
-            case fr :: rest =>
-              fr.arr(fr.i) = pending
-              fr.i += 1
-              if fr.i < fr.arr.length then loop(fr.arr(fr.i), NoResult, stack)
-              else loop(Ascend, combine(fr.layer, fr.arr).asInstanceOf[AnyRef], rest)
-
-      loop(root.asInstanceOf[AnyRef], NoResult, Nil)
-
     def rec(n: N, depth: Int): R =
-      if depth >= OnStackLimit then heap(n)
+      if depth >= OnStackLimit then
+        heapWalk(n, expandOr, (_, layer, slots) => combine(layer, slots))
       else
         expandOr(n) match
           case Left(r)      => r // graft: finished, by reference
           case Right(layer) =>
-            val arr = childrenArr(layer)
+            val slots = childrenSlots[F, N, R](layer)
             var i = 0
-            while i < arr.length do
-              arr(i) = rec(arr(i).asInstanceOf[N], depth + 1).asInstanceOf[AnyRef]
+            while i < slots.length do
+              slots(i) = rec(slots(i).asInstanceOf[N], depth + 1)
               i += 1
-            combine(layer, arr)
+            combine(layer, slots)
 
     n => rec(n, 0)
 
   // ===========================================================================================
-  // The M-generic path — the foldLayered walk LIFTED into a Monad[M] (no M = Id special-case:
-  // that is what makes the fast-path agreement laws a real cross-architecture pin). One
-  // M-action per node event, threaded through Monad[M].tailRecM (each step paying tailRecM's
-  // per-event Either — the structural B/op floor vs the pure machine). NOT droste's hyloM
+  // The M-generic path — the heapWalk LIFTED into a Monad[M] (no M = Id special-case: that is
+  // what makes the fast-path agreement laws a real cross-architecture pin). One M-action per
+  // node event, threaded through Monad[M].tailRecM (each step paying tailRecM's per-event
+  // Either — the structural B/op floor vs the pure machine). NOT droste's hyloM
   // (flatMap-recursive: O(depth) call stack on a strict M). Stack-safety reduces to the
   // lawfulness of M's tailRecM — per-M and tested (Id/Eval to 10^6).
   //
@@ -255,55 +267,56 @@ private[schemes] object Machines:
     * value is not (see the object scaladoc).
     *
     * Loop-state encoding (allocation-lean — CI 2026-06-12: per-event `Either` nesting dominated the
-    * M path's B/op): the state is a bare `AnyRef` — [[Ascend]] means "bubble", anything else is the
-    * node to descend into; the ascend transition is a hoisted constant.
+    * M path's B/op): the state is an [[Op]] — [[Ascend]] means "bubble", anything else is the node
+    * to descend into; the ascend transition is a hoisted constant. The frame stack is an
+    * `ArrayDeque`, not a `List`: this machine has no on-stack phase, so it frames EVERY interior
+    * node — deque slot reuse is CI-visible (List conses cost ~+98k B/op on eoHyloM).
     */
   private[schemes] def foldLayeredM[M[_], F[_], N, R](
       expandOr: N => M[Either[R, F[N]]],
-      combine: (N, F[N], Array[AnyRef]) => M[R],
+      combine: (N, F[N], Array[Slot[N, R]]) => M[R],
   )(using M: Monad[M], F: Traverse[F]): N => M[R] =
     n0 =>
       M.flatMap(M.unit) { _ =>
-        // ArrayDeque, not List: the M machine has no on-stack phase, so it frames EVERY
-        // interior node — the deque reuses its slots across pushes (zero steady-state
-        // allocation), where cons cells would cost one per node (CI-visible on eoHyloM).
-        val stack = new java.util.ArrayDeque[Frame[F, N]]()
-        var pending: AnyRef = null.asInstanceOf[AnyRef]
-        val ascend: Either[AnyRef, R] = Left(Ascend)
+        val stack = new java.util.ArrayDeque[Frame[F, N, R]]()
+        var pending: Pending[R] = NoResult
+        val ascend: Either[Op[N], R] = Left(Ascend)
 
-        inline def bubbled(r: AnyRef): Either[AnyRef, R] =
+        inline def bubbled(r: R): Either[Op[N], R] =
           pending = r
           ascend
 
-        def onDescend(n: N): M[Either[AnyRef, R]] =
+        def onDescend(n: N): M[Either[Op[N], R]] =
           M.flatMap(expandOr(n)) {
-            case Left(r) => M.pure(bubbled(r.asInstanceOf[AnyRef])) // graft / short-circuit arm
-            case Right(layer) =>
-              val arr = childrenArr(layer)
-              if arr.length == 0 then
+            case Left(finished) => M.pure(bubbled(finished)) // graft / short-circuit arm
+            case Right(layer)   =>
+              val slots = childrenSlots[F, N, R](layer)
+              if slots.length == 0 then
                 // leaf: combine inline — no frame, no extra loop event
-                M.map(combine(n, layer, arr))(r => bubbled(r.asInstanceOf[AnyRef]))
+                M.map(combine(n, layer, slots))(bubbled)
               else
-                stack.push(new Frame(n, layer, arr, 0))
-                M.pure(Left(arr(0)))
+                stack.push(new Frame(n, layer, slots, 0))
+                M.pure(Left(slots(0).asInstanceOf[N]))
           }
 
-        def onAscend(): M[Either[AnyRef, R]] =
+        def onAscend(): M[Either[Op[N], R]] =
           val fr = stack.peek()
           if fr == null then M.pure(Right(pending.asInstanceOf[R]))
           else
-            fr.arr(fr.i) = pending // store the just-folded child's result
-            fr.i += 1
-            if fr.i < fr.arr.length then M.pure(Left(fr.arr(fr.i)))
+            fr.slots(fr.next) = pending.asInstanceOf[R] // store the just-folded child's result
+            fr.next += 1
+            if fr.next < fr.slots.length then M.pure(Left(fr.slots(fr.next).asInstanceOf[N]))
             else
               // last child stored: combine now — no intermediate pure event
-              M.map(combine(fr.node, fr.layer, fr.arr)) { r =>
+              M.map(combine(fr.node, fr.layer, fr.slots)) { r =>
                 val _ = stack.pop()
-                bubbled(r.asInstanceOf[AnyRef])
+                bubbled(r)
               }
 
-        M.tailRecM[AnyRef, R](n0.asInstanceOf[AnyRef]) { op =>
-          if op ne Ascend then onDescend(op.asInstanceOf[N]) else onAscend()
+        M.tailRecM[Op[N], R](n0) { op =>
+          op match
+            case Ascend => onAscend()
+            case n      => onDescend(n.asInstanceOf[N])
         }
       }
 
@@ -318,8 +331,8 @@ private[schemes] object Machines:
     foldLayeredM[M, F, Seed, (S, A)](
       seed => M.map(coalgM(seed))(Right(_)),
       (_, fSeed, out) =>
-        val s = E.embed(splitLayer[F, Seed, S](fSeed, out, p => p._1.asInstanceOf[S]))
-        M.map(algM(s, splitLayer[F, Seed, A](fSeed, out, p => p._2.asInstanceOf[A])))(a => (s, a)),
+        val s = E.embed(splitLayer[F, Seed, (S, A), S](fSeed, out, _._1))
+        M.map(algM(s, splitLayer[F, Seed, (S, A), A](fSeed, out, _._2)))(a => (s, a)),
     )
 
   /** The single-pass paired machine backing the fused `Ana.cross(Cata)`: each node is built once
@@ -333,25 +346,26 @@ private[schemes] object Machines:
     foldLayered[F, Seed, (S, A)](
       coalg,
       (_, fSeed, out) =>
-        val s = E.embed(splitLayer[F, Seed, S](fSeed, out, p => p._1.asInstanceOf[S]))
-        (s, alg(s, splitLayer[F, Seed, A](fSeed, out, p => p._2.asInstanceOf[A]))),
+        val s = E.embed(splitLayer[F, Seed, (S, A), S](fSeed, out, _._1))
+        (s, alg(s, splitLayer[F, Seed, (S, A), A](fSeed, out, _._2))),
     )
 
-  /** Project one half of an `(S, A)`-pair out-array straight into a typed layer — the fused
+  /** Project one half of a pair-resulted slot buffer straight into a typed layer — the fused
     * machines build `F[S]` and `F[A]` with two of these instead of one `F[(S, A)]` intermediate (CI
     * 2026-06-12: that third F-alloc per node put the fused cross ABOVE the materializing
     * composition in B/op, 1049k vs 886k). Leaf layers are phantom-recast (valid because
-    * pattern-functor leaves have no recursive slots by definition).
+    * pattern-functor leaves have no recursive slots by definition); non-leaf reads narrow the slot
+    * union to the pair `P` (every cell holds a result by combine time).
     */
-  private inline def splitLayer[F[_], N, T](
+  private inline def splitLayer[F[_], N, P, T](
       fn: F[N],
-      out: Array[AnyRef],
-      inline half: ((Any, Any)) => T,
+      out: Array[Slot[N, P]],
+      inline half: P => T,
   )(using F: Traverse[F]): F[T] =
     if out.length == 0 then fn.asInstanceOf[F[T]]
     else
       var i = -1
       F.map(fn) { _ =>
         i += 1
-        half(out(i).asInstanceOf[(Any, Any)])
+        half(out(i).asInstanceOf[P])
       }

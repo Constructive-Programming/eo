@@ -40,11 +40,15 @@ object Schemes:
     * needs `Monad[F]`, which most pattern functors are not — so `fLayer` is a one-layer lens on the
     * structure, not a composable traversal.
     */
-  def fLayer[F[_], S](using P: Project[F, S], E: Embed[F, S]): Optic[S, S, S, S, Forget[F]] =
-    new Optic[S, S, S, S, Forget[F]]:
-      type X = Any
-      def to(s: S): Forget[F][X, S] = ForgetK(P.project(s))
-      def from(fs: Forget[F][X, S]): S = E.embed(fs.value)
+  def fLayer[F[_], S](using Project[F, S], Embed[F, S]): Optic[S, S, S, S, Forget[F]] =
+    new FLayer[F, S]
+
+  /** The named class behind [[fLayer]] — the single-layer peel/glue optic. */
+  final private class FLayer[F[_], S](using P: Project[F, S], E: Embed[F, S])
+      extends Optic[S, S, S, S, Forget[F]]:
+    type X = Any
+    def to(s: S): Forget[F][X, S] = ForgetK(P.project(s))
+    def from(fs: Forget[F][X, S]): S = E.embed(fs.value)
 
   /** Catamorphism over a typed pattern functor `F`, as a composable `Getter`. `alg` sees the
     * original node `S` (paramorphism-flavored) plus its already-folded children as a typed `F[A]`.
