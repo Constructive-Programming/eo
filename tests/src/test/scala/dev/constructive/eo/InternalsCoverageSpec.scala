@@ -2,7 +2,7 @@ package dev.constructive.eo
 
 import org.specs2.mutable.Specification
 
-import data.{Affine, IntArrBuilder, MultiFocusK, ObjArrBuilder, PSVec}
+import data.{Affine, IntArrBuilder, MultiFocusFromList, MultiFocusK, ObjArrBuilder, PSVec}
 
 /** Direct coverage for internal machinery that shipped without user-facing specs.
   *
@@ -209,4 +209,20 @@ class InternalsCoverageSpec extends Specification:
       .foldRight(vec, cats.Eval.now(List.empty[Int]))((a, eb) => eb.map(a :: _))
       .value
     (crossOk, nullHashOk, notAVecOk, folded) must beEqualTo((true, true, true, List(1, 2, 3)))
+  }
+
+  // covers: the remaining cold paths —
+  //   PSVec base toAnyRefArray (PSVec.scala:49): only Empty reaches it (Single/Slice
+  //   override); boundary mutants make the vacuous loop call the throwing Empty.apply(0);
+  //   MultiFocusFromList.forPSVec.fromList loop (MultiFocus.scala:106): a skipped loop
+  //   wraps a null-filled array;
+  //   Affine.Hit.hashCode null-guard `true` (Affine.scala:109): collapses to a
+  //   snd-only hash — pinned-witness canary, not a contract claim.
+  "cold paths: Empty.toAnyRefArray, fromList loop, Hit hash discrimination" >> {
+    val emptyArrOk = PSVec.empty[Int].toAnyRefArray.length == 0
+    val viaFromList = MultiFocusFromList.forPSVec.fromList(List(1, 2, 3))
+    val fromListOk = viaFromList == PSVec.fromIterable(List(1, 2, 3))
+    val h1 = new Affine.Hit[(Int, String), Int]("s", 1).hashCode
+    val h2 = new Affine.Hit[(Int, String), Int]("s", 2).hashCode
+    (emptyArrOk, fromListOk, h1 == h2) must beEqualTo((true, true, false))
   }
