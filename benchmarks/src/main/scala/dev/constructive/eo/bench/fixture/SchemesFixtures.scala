@@ -112,7 +112,7 @@ object SchemesFixtures:
 
   import higherkindness.droste.{CVAlgebra, CVCoalgebra, RAlgebra, RCoalgebra}
   import higherkindness.droste.data.{Attr => DAttr, Coattr => DCoattr}
-  import dev.constructive.eo.schemes.{Attr => EoAttr, Coattr => EoCoattr, DecorGather}
+  import dev.constructive.eo.schemes.{Attr => EoAttr, Coattr => EoCoattr, Gather}
   import dev.constructive.eo.data.BiAffine
   import dev.constructive.eo.optics.Optic
 
@@ -157,10 +157,10 @@ object SchemesFixtures:
     else BinF.NodeF(DCoattr.pure(d - 1), DCoattr.pure(d - 1))
   }
 
-  // generic decoration route: a USER-WRITTEN id gather (not the Decor.cata
+  // generic decoration route: a USER-WRITTEN id gather (not the Gather.cata
   // singleton, so the driver cannot take the identity fast path) — D4's
   // dispatch-cost honesty number.
-  val userIdGather: DecorGather[BinF, Int, Int] =
+  val userIdGather: Gather[BinF, Int, Int] =
     new Optic[Unit, Int, Unit, Int, BiAffine]:
       type X = (Unit, BinF[Int])
       def to(u: Unit): BiAffine[X, Unit] =

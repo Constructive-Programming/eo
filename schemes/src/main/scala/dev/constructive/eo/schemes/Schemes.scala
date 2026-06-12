@@ -15,9 +15,9 @@ import optics.{Getter, Optic, Review}
   *     retention).
   *   - The zoo: [[para]] (subterms paired from the walked nodes), [[apo]] (O(1) graft), [[histo]] /
   *     [[futu]] (course-of-value / multi-layer, via [[Attr]] / [[Coattr]]). Decorated generically
-  *     through the [[Decor]] optic family (gather/scatter over the `BiAffine` carrier) —
-  *     zygo/dyna/chrono are user-written [[DecorGather]] / [[DecorScatter]] values fed to the
-  *     generic [[cata]] / [[ana]] overloads.
+  *     through the [[Gather]]/[[Scatter]] decoration optics (over the `BiAffine` carrier) —
+  *     zygo/dyna/chrono are user-written [[Gather]] / [[Scatter]] values fed to the generic
+  *     [[cata]] / [[ana]] overloads.
   *   - The M-generic drivers [[cataM]] / [[anaM]] / [[hyloM]] run the same machine lifted through
   *     `Monad[M].tailRecM` (effectful layers, single-pass linear Ms).
   *
@@ -391,23 +391,23 @@ object Schemes:
   def cata[F[_], S, A](
       alg: (S, F[A]) => A
   )(using F: Traverse[F], P: Project[F, S]): Cata[F, S, A] =
-    new Cata[F, S, A](cata[F, S, A, A](Decor.cata[F, A])(alg).get, alg)
+    new Cata[F, S, A](cata[F, S, A, A](Gather.cata[F, A])(alg).get, alg)
 
   /** Generalized (decorated) catamorphism — the gcata of the typed path, with the decoration
-    * supplied as a [[DecorGather]] optic value. Interior nodes apply `gather ∘ galg` (the
-    * decoration's `from` consuming `Step(layer, result)`); the **root applies `galg` alone**
-    * (droste's `gcata` shape). The named zoo members are instances: `cata(alg)` routes here with
-    * [[Decor.cata]] (recognised by identity — the direct, decoration-free engine path), `histo`
-    * with [[Decor.histo]]; user-written decorations (zygo, dyna, …) run the generic route, which
-    * pays one decoration dispatch + `Step` per node.
+    * supplied as a [[Gather]] optic value. Interior nodes apply `gather ∘ galg` (the decoration's
+    * `from` consuming `Step(layer, result)`); the **root applies `galg` alone** (droste's `gcata`
+    * shape). The named zoo members are instances: `cata(alg)` routes here with [[Gather.cata]]
+    * (recognised by identity — the direct, decoration-free engine path), `histo` with
+    * [[Gather.histo]]; user-written decorations (zygo, dyna, …) run the generic route, which pays
+    * one decoration dispatch + `Step` per node.
     *
     * (type-param order: `[F, S, W, A]` — compare [[ana]] `[F, A, W, S]`, which mirrors these in
     * input-before-output order: `A` is the input seed there, `S` the built output.)
     */
   def cata[F[_], S, W, A](
-      decor: DecorGather[F, W, A]
+      decor: Gather[F, W, A]
   )(galg: (S, F[W]) => A)(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
-    if decor.asInstanceOf[AnyRef] eq Decor.cata[F, A] then
+    if decor.asInstanceOf[AnyRef] eq Gather.cata[F, A] then
       // W =:= A by construction of the singleton — the direct engine path, no decoration cost.
       val alg = galg.asInstanceOf[(S, F[A]) => A]
       Getter[S, A](
@@ -445,7 +445,7 @@ object Schemes:
     * decorated history** ([[Attr]]: result + that child's own decorated layer).
     *
     * Native route: the combine builds the `Attr` directly, the root projects its head — one less
-    * dispatch than the generic [[Decor.histo]] route (whose `Step` is EA-elided: B/op identical;
+    * dispatch than the generic [[Gather.histo]] route (whose `Step` is EA-elided: B/op identical;
     * law-pinned equal in `DecorLawsSpec`). The remaining gap to droste's histo (558k vs 361k B/op
     * on the 8k-node fixture) is the stack-safe machine's per-node child array — droste's zoo
     * recursion is stack-UNSAFE plain recursion; the ~24 B/node is the price of the guarantee.
@@ -472,7 +472,7 @@ object Schemes:
   def ana[F[_], Seed, S](
       coalg: Seed => F[Seed]
   )(using F: Traverse[F], E: Embed[F, S]): Ana[F, Seed, S] =
-    new Ana[F, Seed, S](ana[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg).reverseGet, coalg)
+    new Ana[F, Seed, S](ana[F, Seed, Seed, S](Scatter.ana[F, Seed])(coalg).reverseGet, coalg)
 
   /** Single-pass paired machine backing the fused `Ana.cross(Cata)`: each node is built once (the
     * algebra is node-supplied — construction is semantically required), folded immediately, and
@@ -513,7 +513,8 @@ object Schemes:
     * `Right(seed)` (keep unfolding) or `Left(s)` (an **already-finished subtree**). Native O(1)
     * graft: `Left` subtrees are prefilled into their result slots **by reference** — never
     * recursed, never projected ([[foldLayeredOr]]). Contrast droste's scatter-apo, which re-walks
-    * grafts through `project` (O(graft) per graft — the route [[Decor.apo]] documents). Stack-safe.
+    * grafts through `project` (O(graft) per graft — the distApo route, kept only as a law fixture
+    * in the test suite). Stack-safe.
     */
   def apo[F[_], A, S](
       coalg: A => F[Either[S, A]]
@@ -532,8 +533,8 @@ object Schemes:
     * coalgebra call).
     *
     * Native route: the expand matches `Coattr` directly — one less dispatch than the generic
-    * [[Decor.futu]] route (whose per-slot `Step` is EA-elided: B/op identical; law-pinned equal in
-    * `DecorLawsSpec`). The gap to droste's futu (655k vs 459k B/op) is the stack-safe machine's
+    * [[Scatter.futu]] route (whose per-slot `Step` is EA-elided: B/op identical; law-pinned equal
+    * in `DecorLawsSpec`). The gap to droste's futu (655k vs 459k B/op) is the stack-safe machine's
     * per-node child array — droste's zoo recursion is stack-unsafe.
     */
   def futu[F[_], A, S](
@@ -549,22 +550,22 @@ object Schemes:
     Review[S, A](a => build(Coattr.Pure(a)))
 
   /** Generalized (decorated) anamorphism — the gana of the typed path, with the decoration supplied
-    * as a [[DecorScatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
+    * as a [[Scatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
     * `Step(_, seed)` calls `gcoalg`, `Done(layer)` unrolls the prebuilt layer with **no coalgebra
     * call**. The root seed enters through the decoration's pointed unit (`from` on the Step arm —
-    * gana's `pure`). `ana(coalg)` routes here with [[Decor.ana]] (identity-recognised direct path);
-    * `futu` with [[Decor.futu]]; `Decor.apo` runs the generic distApo route — the O(1) graft
-    * belongs to the native `apo` engine.
+    * gana's `pure`). `ana(coalg)` routes here with [[Scatter.ana]] (identity-recognised direct
+    * path); `futu` with [[Scatter.futu]]. (apo has no shipped Scatter value — distApo is inferior
+    * by construction; the O(1) graft belongs to the native `apo` engine.
     *
-    * For user-written [[DecorScatter]] values, `Done.fst` MUST carry `F[W]` at runtime — the engine
+    * For user-written [[Scatter]] values, `Done.fst` MUST carry `F[W]` at runtime — the engine
     * unrolls it directly as the next layer.
     *
     * (type-param order: compare [[cata]] `[F, S, W, A]` — the fold mirror swaps `Seed`/`A`.)
     */
   def ana[F[_], A, W, S](
-      decor: DecorScatter[F, W, A]
+      decor: Scatter[F, W, A]
   )(gcoalg: A => F[W])(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
-    if decor.asInstanceOf[AnyRef] eq Decor.ana[F, A] then
+    if decor.asInstanceOf[AnyRef] eq Scatter.ana[F, A] then
       // W =:= A by construction of the singleton — the direct engine path.
       val coalg = gcoalg.asInstanceOf[A => F[A]]
       Review[S, A](
