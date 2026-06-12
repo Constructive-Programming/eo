@@ -152,7 +152,7 @@ run time by the suite stryker runs.
 | Module | Killed | Timeout | Survived | No&nbsp;cov | Compile&nbsp;err | Score (total) | Score (covered) | Notes |
 |---|--:|--:|--:|--:|--:|--:|--:|---|
 | `core` | 153 | 2 | 28 | 17 | 3 | 77.5% | 84.7% | Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`. |
-| `laws` | 82 | 1 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite. Survivors are law-weakening mutations — see prose. |
+| `laws` | 82 | 1 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
 | `generics` | 0 | 0 | 0 | 58 | 0 | 0.0% | — | Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover. |
 | `schemes` | 58 | 0 | 18 | 0 | 5 | 76.3% | 76.3% |  |
 | `circe` | 33 | 1 | 5 | 15 | 0 | 63.0% | 87.2% |  |

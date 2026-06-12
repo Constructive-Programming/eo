@@ -52,7 +52,7 @@ FAMILIES = [
 # appears, its numbers take over and the note still annotates the row.
 MUTATION_MODULES = [
     ("core", "core", "Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`."),
-    ("laws", "laws", "Borrowed `tests/` suite. Survivors are law-weakening mutations — see prose."),
+    ("laws", "laws", "Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose."),
     ("generics", "generics", "Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover."),
     ("schemes", "schemes", ""),
     ("circe", "circe", ""),
