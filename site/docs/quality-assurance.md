@@ -71,7 +71,7 @@ its statement coverage looks healthy. Packages with no branch statements show
 |---|--:|--:|--:|--:|--:|
 | `dev.constructive.eo.accessor` | 8/8 | 100.0% | — | — | — |
 | `dev.constructive.eo.avro` | 979/1430 | 68.5% | 214/355 | 60.3% | 0.88 |
-| `dev.constructive.eo.circe` | 665/846 | 78.6% | 128/174 | 73.6% | 0.94 |
+| `dev.constructive.eo.circe` | 668/846 | 79.0% | 128/174 | 73.6% | 0.93 |
 | `dev.constructive.eo.compose` | 90/118 | 76.3% | 7/8 | 87.5% | 1.15 |
 | `dev.constructive.eo.data` | 998/1139 | 87.6% | 153/172 | 89.0% | 1.02 |
 | `dev.constructive.eo.forgetful` | 24/28 | 85.7% | — | — | — |
@@ -155,7 +155,7 @@ run time by the suite stryker runs.
 | `laws` | 83 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
 | `generics` | 0 | 0 | 0 | 58 | 0 | 0.0% | — | Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover. |
 | `schemes` | 58 | 0 | 18 | 0 | 5 | 76.3% | 76.3% |  |
-| `circe` | 36 | 0 | 3 | 15 | 0 | 66.7% | 92.3% |  |
+| `circe` | 37 | 0 | 2 | 15 | 0 | 68.5% | 94.9% |  |
 | `avro` | — | — | — | — | — | — | — | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
 | `jsoniter` | — | — | — | — | — | — | — | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |
 <!-- END GENERATED: mutation -->
