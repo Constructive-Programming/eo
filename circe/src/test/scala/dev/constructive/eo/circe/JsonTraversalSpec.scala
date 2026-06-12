@@ -57,8 +57,10 @@ class JsonTraversalSpec extends JsonSpecBase:
   // covers: empty array — modify returns Ior.Right(input) (no elements to iterate, Chain.empty),
   //   missing prefix — default modify surfaces Ior.Left(PathMissing(items)),
   //   missing prefix — getAll surfaces Ior.Left,
-  //   missing prefix — modifyUnsafe returns input unchanged
-  "JsonTraversal empty / missing prefix: Ior.Right(input) on empty + PathMissing on missing" >> {
+  //   missing prefix — modifyUnsafe returns input unchanged,
+  //   non-array prefix — default modify surfaces Ior.Left(NotAnArray(Field("items"))),
+  //   the step in NotAnArray names the last prefix step (terminalOf contract)
+  "JsonTraversal empty / missing / non-array prefix: expected Ior results + terminal step names" >> {
     val emptyBasket = Basket("Alice", Vector.empty)
     val emptyJson = emptyBasket.asJson
     val emptyOk =
@@ -74,7 +76,17 @@ class JsonTraversalSpec extends JsonSpecBase:
     val gaOk = codecPrism[Basket].items.each.name.getAll(stump).isLeft === true
     val unsafeOk = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) === stump
 
-    emptyOk.and(mOk).and(gaOk).and(unsafeOk)
+    // covers: circe/JsonWalk.scala:99 — terminalOf must return the last step of the prefix
+    // (not the empty sentinel Field("")) when the prefix is non-empty.
+    val wrongShape =
+      Json.obj("owner" -> Json.fromString("Alice"), "items" -> Json.fromString("oops"))
+    val naResult = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(wrongShape)
+    val naOk = naResult match
+      case Ior.Left(chain) =>
+        chain.headOption.get === JsonFailure.NotAnArray(PathStep.Field("items"))
+      case _ => ko(s"expected Ior.Left for non-array prefix, got $naResult")
+
+    emptyOk.and(mOk).and(gaOk).and(unsafeOk).and(naOk)
   }
 
   // covers: single per-element failure — Ior.Both with chain-of-one NotAnObject + partial output,
