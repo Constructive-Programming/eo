@@ -2,7 +2,7 @@ package dev.constructive.eo
 
 import org.specs2.mutable.Specification
 
-import data.{IntArrBuilder, ObjArrBuilder, PSVec}
+import data.{Affine, IntArrBuilder, MultiFocusK, ObjArrBuilder, PSVec}
 
 /** Direct coverage for internal machinery that shipped without user-facing specs.
   *
@@ -169,4 +169,25 @@ class InternalsCoverageSpec extends Specification:
     val partialOk = (out.length === 1).and(out(0) === "x")
 
     exactOk.and(growOk).and(partialOk)
+  }
+
+  // covers: Affine.Hit.equals conjunction (Affine.scala:106) — equal snd with different b
+  // must discriminate; an `||`-weakened equals would accept it.
+  "Affine.Hit equality discriminates on each component independently" >> {
+    val base = new Affine.Hit[(Int, String), Int]("s", 1)
+    val sameSndDiffB = new Affine.Hit[(Int, String), Int]("s", 2)
+    val diffSndSameB = new Affine.Hit[(Int, String), Int]("t", 1)
+    (base == sameSndDiffB) must beFalse
+    (base == diffSndSameB) must beFalse
+  }
+
+  // covers: MultiFocusK.pickSingletonOrThrow cardinality guard (MultiFocus.scala:245) —
+  // weakened to `true` it silently returns the LAST element of a multi-focus instead of
+  // raising the Composer cardinality error.
+  "pickSingletonOrThrow returns the singleton and throws on any other cardinality" >> {
+    MultiFocusK.pickSingletonOrThrow[List, Int](List(7), "test") must beEqualTo(7)
+    MultiFocusK.pickSingletonOrThrow[List, Int](List(1, 2), "test") must
+      throwAn[IllegalStateException]
+    MultiFocusK.pickSingletonOrThrow[List, Int](List.empty[Int], "test") must
+      throwAn[IllegalStateException]
   }
