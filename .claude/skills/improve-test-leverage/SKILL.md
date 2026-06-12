@@ -327,7 +327,7 @@ Present before/after:
 | Mutation score (covered)  | 73.6%  | 80.1% | +6.5%  |
 | Surviving mutants         | 53     | 31    | -22    |
 | Statement coverage (pkg)  | 81.9%  | 84.2% | +2.3%  |
-| Test LINES added          | —      | 38    | 22 kills / 38 lines |
+| Test code lines added (scalafmt-normalized, comment-free)          | —      | 38    | 22 kills / 38 lines |
 
 ### Artifacts added (kills per line is the headline)
 1. checkAll PSVec MultiFocus @ biased sizes — 9 mutants, 4 lines
@@ -364,8 +364,22 @@ suite_kill_density = total_detected_mutants / total_test_LOC   (must rise monoto
   and laws at once — count both).
 - `new_branches_covered` — `<statement branch="true">` elements flipping to
   `invocation-count > 0` in the scoverage aggregate.
-- `net_test_lines_added` — net added lines under `*/src/test/**.scala` from
-  `git diff --numstat` (consolidation makes this negative — that's the point).
+- `net_test_lines_added` — net added **code** lines under
+  `*/src/test/**.scala`: count **after formatting** (`sbt scalafmtAll`) and
+  **exclude comments and blank lines**. scalafmt is the arbiter of what "a
+  line of code" is — the two normalizations close both gaming vectors
+  (raw-numstat counting punishes documentation: a `// covers:` comment must
+  never make an artifact look worse; pre-format counting rewards cramming
+  statements onto one line). Format first, then:
+
+  ```sh
+  git diff -- '*/src/test/*.scala' \
+    | grep -E '^[+-][^+-]' \
+    | grep -vE '^[+-]\s*(//|\*|/\*\*|\*/|$)' \
+    | awk '/^\+/{a++} /^-/{r++} END{print a-r}'
+  ```
+
+  Consolidation makes this negative — that's the point.
 
 Mutants are keyed by `(file, line, mutatorName, replacement)` — report ids are
 NOT stable across runs.
@@ -415,7 +429,9 @@ clean attribution requires never batching two candidates into one eval.
    - re-run stryker for **every module the candidate claims kills in**
      (borrow sets for core/laws — see step 1);
    - diff the new `report.json` against state by mutant key → `measured_kills`;
-   - `git diff --numstat -- '*/src/test/*'` → `net_test_lines_added`.
+   - run `sbt scalafmtAll` on the touched test files, then count
+     `net_test_lines_added` with the comment/blank-excluding diff from the
+     Objective section (scalafmt-normalized code lines, never raw numstat).
 4. **Accept or revert**:
    - **Accept** if `measured_kills ≥ 1` and `lines/kill ≤ 8`, or
      `net_test_lines_added < 0` with zero kill regression (consolidation).
