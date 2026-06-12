@@ -6,6 +6,7 @@ import cats.{Eval, Id}
 import org.specs2.mutable.Specification
 
 import schemes.samples.{Bin, BinF}
+import zoo.*
 
 /** The M-generic path (`cataM` / `anaM` / `hyloM`, the tailRecM-lifted machine):
   *

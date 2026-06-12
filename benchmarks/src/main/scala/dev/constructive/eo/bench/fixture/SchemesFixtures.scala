@@ -112,7 +112,7 @@ object SchemesFixtures:
 
   import higherkindness.droste.{CVAlgebra, CVCoalgebra, RAlgebra, RCoalgebra}
   import higherkindness.droste.data.{Attr => DAttr, Coattr => DCoattr}
-  import dev.constructive.eo.schemes.{Attr => EoAttr, Coattr => EoCoattr, Gather}
+  import dev.constructive.eo.schemes.zoo.{Attr => EoAttr, Coattr => EoCoattr, Gather}
   import dev.constructive.eo.data.BiAffine
   import dev.constructive.eo.optics.Optic
 

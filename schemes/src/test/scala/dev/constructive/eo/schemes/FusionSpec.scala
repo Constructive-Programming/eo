@@ -17,6 +17,9 @@ import schemes.samples.{Bin, BinF}
   */
 class FusionSpec extends Specification:
 
+  // Deep examples: one-at-a-time to bound peak heap (shared test JVM).
+  sequential
+
   private def expand(n: Int): BinF[Int] =
     if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
 

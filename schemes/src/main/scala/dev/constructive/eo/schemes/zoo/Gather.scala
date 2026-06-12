@@ -1,47 +1,6 @@
 package dev.constructive.eo
 package schemes
-
-/** Decoration data for the typed recursion-scheme zoo (histo / futu) — hand-rolled, droste-style,
-  * rather than cats-free: no `Eval` suspension fields (the `foldLayered` machine never suspends),
-  * no dependency, shapes tuned to the engine.
-  *
-  * Space honesty: a histomorphism decorates **every** node with its full sub-result history, so a
-  * fold over n nodes retains O(n) [[Attr]] cells until the algebra releases them. That is inherent
-  * to course-of-value recursion, not an engine artifact.
-  */
-
-/** Cofree-without-laziness: a fold result (`head`) decorating one layer of already-decorated
-  * children (`tail`). The histomorphism's algebra sees `F[Attr[F, A]]` — each child's result *plus*
-  * that child's entire decorated history.
-  *
-  * @tparam F
-  *   the pattern functor
-  * @tparam A
-  *   the fold result decorating each node
-  */
-final case class Attr[F[_], A](head: A, tail: F[Attr[F, A]])
-
-object Attr:
-
-  /** Discard the history, keep the top result — `histo`'s final projection. */
-  def forget[F[_], A](attr: Attr[F, A]): A = attr.head
-
-/** Free-without-suspension: a futumorphism's coalgebra answers each slot with either a seed still
-  * to expand ([[Coattr.Pure]]) or an already-known layer to unroll without consulting the coalgebra
-  * again ([[Coattr.Roll]]) — the multi-layer-per-step channel.
-  *
-  * @tparam F
-  *   the pattern functor
-  * @tparam A
-  *   the seed type
-  */
-enum Coattr[F[_], A]:
-
-  /** A seed — the engine calls the coalgebra on it. */
-  case Pure(a: A)
-
-  /** A prebuilt layer — unrolled directly, no coalgebra call for this layer. */
-  case Roll(layer: F[Coattr[F, A]])
+package zoo
 
 // ===========================================================================================
 // Gather / Scatter — the decoration optics, over the BiAffine carrier.
@@ -75,11 +34,6 @@ enum Coattr[F[_], A]:
 /** Fold-side decoration optic: gather-only (build-only member). `from` = gather. */
 type Gather[F[_], W, A] =
   optics.Optic[Unit, W, Unit, A, data.BiAffine] { type X = (Unit, F[W]) }
-
-/** Unfold-side decoration optic: scatter (`to`, an affine match) + pointed unit (`from` on Step).
-  */
-type Scatter[F[_], W, A] =
-  optics.Optic[W, W, A, A, data.BiAffine] { type X = (F[W], Unit) }
 
 /** Named fold-side decoration values. */
 object Gather:
@@ -127,47 +81,3 @@ object Gather:
     */
   def histo[F[_], A]: Gather[F, Attr[F, A], A] =
     histoAny.asInstanceOf[Gather[F, Attr[F, A], A]]
-
-/** Named unfold-side decoration values. */
-object Scatter:
-  import data.BiAffine
-  import data.BiAffine.{Done, Step}
-  import optics.Optic
-
-  private def scatterSideDone(name: String): Nothing =
-    throw new UnsupportedOperationException(
-      s"Scatter.$name: the pointed unit (from) is inhabited on the Step arm only"
-    )
-
-  private def mkAna[F[_], A]: Scatter[F, A, A] =
-    new Optic[A, A, A, A, BiAffine]:
-      type X = (F[A], Unit)
-      def to(w: A): BiAffine[X, A] = new Step[X, A]((), w)
-      def from(xb: BiAffine[X, A]): A = xb match
-        case s: Step[X, A] => s.b
-        case _: Done[X, A] => scatterSideDone("ana")
-
-  private val anaAny: AnyRef = mkAna[[x] =>> Any, Any]
-
-  /** The undecorated unfold — every slot is a seed; the unit is the identity. Identity-stable
-    * singleton (the generic driver takes the direct route on it).
-    */
-  def ana[F[_], A]: Scatter[F, A, A] = anaAny.asInstanceOf[Scatter[F, A, A]]
-
-  private def mkFutu[F[_], A]: Scatter[F, Coattr[F, A], A] =
-    new Optic[Coattr[F, A], Coattr[F, A], A, A, BiAffine]:
-      type X = (F[Coattr[F, A]], Unit)
-      def to(w: Coattr[F, A]): BiAffine[X, A] = w match
-        case Coattr.Pure(a)     => new Step[X, A]((), a)
-        case Coattr.Roll(layer) => new Done[X, A](layer)
-      def from(xb: BiAffine[X, A]): Coattr[F, A] = xb match
-        case s: Step[X, A] => Coattr.Pure(s.b)
-        case _: Done[X, A] => scatterSideDone("futu")
-
-  private val futuAny: AnyRef = mkFutu[[x] =>> Any, Any]
-
-  /** Futumorphism decoration — `Pure(seed)` calls the coalgebra, `Roll(layer)` unrolls the prebuilt
-    * layer without a call; the unit is `Coattr.Pure`.
-    */
-  def futu[F[_], A]: Scatter[F, Coattr[F, A], A] =
-    futuAny.asInstanceOf[Scatter[F, Coattr[F, A], A]]
