@@ -64,6 +64,18 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
     List("scalafixAll --check"),
     name = Some("Check scalafix"),
   ),
+  // Compile ALL test sources before any test RUNS: on the shared 2-vCPU runner,
+  // sbt otherwise interleaves one module's test execution with another module's
+  // test compilation, and the Kindlings/hearth derivation macros (hardcoded 2s
+  // MIO budget per derive in kindlings 0.1.x — no -Xmacro-settings override
+  // exists) lose that CPU-contention dice roll: observed as roving
+  // `Macro 'KindlingsEncoder.deriveAsObject' timed out` failures at a different
+  // derive site each run. Compiling first gives macro expansion the whole CPU;
+  // the subsequent `test` step then recompiles nothing.
+  WorkflowStep.Sbt(
+    List("Test/compile"),
+    name = Some("Compile tests (macro expansion before test-run contention)"),
+  ),
 )
 
 // -------------------------------------------------------------------
