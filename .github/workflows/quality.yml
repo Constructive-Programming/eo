@@ -1,0 +1,142 @@
+# Quality report: cross-module coverage (scoverage) + mutation testing
+# (stryker4s), with the site/docs/quality-assurance.md tables regenerated from
+# the live reports.
+#
+# Deliberately hand-written and OUTSIDE the sbt-github-actions-generated
+# `ci.yml` (which must not be edited by hand). This is heavy — a full
+# instrumented test sweep plus per-mutant test runs across every runtime-logic
+# module — so it never runs on the push / PR critical path. It fires on release
+# tags (`v*`) so each release ships a fresh quality snapshot, and on demand via
+# `workflow_dispatch`.
+#
+# Outputs are uploaded as artifacts (HTML reports + the regenerated markdown);
+# committing the markdown back to the page is intentionally left to a human
+# (bot-commits-on-a-tag are awkward) — download the artifact and commit it, or
+# run `sbt coverageAll mutationAll && python3 site/tools/gen-qa-report.py`
+# locally before tagging.
+name: Quality
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  report:
+    name: Coverage + mutation
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      # Generous heap: the `set tlFatalWarnings := false` reapply baked into the
+      # aliases re-evaluates the Laika docs settings, which OOMs on a small heap.
+      SBT_OPTS: "-Xmx6g -Xss8m -Dsbt.color=false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Setup Java (temurin@21)
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+
+      - name: Coverage (scoverage aggregate)
+        run: sbt -batch coverageAll
+
+      - name: Mutation testing (stryker4s)
+        # Per-module via `project <m>; stryker` (see build.sbt / plugins.sbt).
+        # Run each module in its own sbt invocation rather than the `mutationAll`
+        # alias: a module whose stryker run fails (e.g. a sandbox setup error)
+        # must NOT abort the remaining modules or the regenerate step. A low
+        # score never fails the build either (strykerThresholdsBreak = 0) — this
+        # step is the report, not a gate, so it always succeeds.
+        run: |
+          # core and laws borrow the `tests` module's compiled suite (task-level,
+          # no project cycle) so their mutants are scored by the behavioural
+          # suite that actually guards them — see the mutationAll alias in
+          # build.sbt. StringLiteral mutants are excluded for every module via
+          # ThisBuild/strykerExcludedMutations (error-message / label noise).
+          echo "::group::stryker core (with borrowed tests/ suite)"
+          sbt -batch "set ThisBuild/tlFatalWarnings := false" \
+            'set LocalProject("core")/Test/definedTests ++= (LocalProject("tests")/Test/definedTests).value' \
+            'set LocalProject("core")/Test/fullClasspath ++= (LocalProject("tests")/Test/fullClasspath).value' \
+            "project core" stryker \
+            || echo "::warning title=stryker::mutation run failed for core (see log / quality-assurance.md notes)"
+          echo "::endgroup::"
+          echo "::group::stryker laws (with borrowed tests/ suite)"
+          sbt -batch "set ThisBuild/tlFatalWarnings := false" \
+            'set LocalProject("laws")/Test/definedTests ++= (LocalProject("tests")/Test/definedTests).value' \
+            'set LocalProject("laws")/Test/fullClasspath ++= (LocalProject("tests")/Test/fullClasspath).value' \
+            "project laws" stryker \
+            || echo "::warning title=stryker::mutation run failed for laws (see log / quality-assurance.md notes)"
+          echo "::endgroup::"
+          for p in generics schemes circeIntegration avroIntegration jsoniterIntegration; do
+            echo "::group::stryker $p"
+            sbt -batch "set ThisBuild/tlFatalWarnings := false" "project $p" stryker \
+              || echo "::warning title=stryker::mutation run failed for $p (see log / quality-assurance.md notes)"
+            echo "::endgroup::"
+          done
+
+      - name: Regenerate quality-assurance.md tables
+        run: python3 site/tools/gen-qa-report.py
+
+      - name: Render summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          page = pathlib.Path("site/docs/quality-assurance.md")
+          out = os.environ["GITHUB_STEP_SUMMARY"]
+          with open(out, "a") as f:
+              f.write("# Quality report\n\n")
+              if not page.exists():
+                  f.write("quality-assurance.md not found.\n")
+                  raise SystemExit(0)
+              txt = page.read_text(encoding="utf-8")
+              for marker, title in [("coverage", "Coverage"), ("mutation", "Mutation testing")]:
+                  m = re.search(
+                      rf"<!-- BEGIN GENERATED: {marker} -->(.*?)<!-- END GENERATED: {marker} -->",
+                      txt, re.DOTALL,
+                  )
+                  f.write(f"## {title}\n\n{m.group(1).strip() if m else '(not generated)'}\n\n")
+          PY
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: scoverage-report
+          path: "**/scoverage-report/**"
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload mutation reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: stryker4s-reports
+          path: "**/stryker4s-report/**"
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload regenerated QA page
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: quality-assurance-md
+          path: site/docs/quality-assurance.md
+          retention-days: 30
+          if-no-files-found: warn

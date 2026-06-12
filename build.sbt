@@ -136,6 +136,37 @@ ThisBuild / unusedCodeConfig ~= { c =>
 }
 
 // -------------------------------------------------------------------
+// Mutation testing (sbt-stryker4s). The plugin auto-derives the Scala
+// dialect from `scalaVersion` (3.x → scalameta `Scala3`) and resolves
+// each sub-project's base-dir / mutate globs from its own `Compile`
+// sources, so `project <m>; stryker` mutates that module and runs its
+// OWN `Test / test` — no per-module config files needed. We only pin
+// the cross-cutting knobs here on ThisBuild (the plugin leaves these
+// unset by default, so ThisBuild values are inherited by every module):
+//
+//   - reporters: console for the live log, html + json for the report
+//     artifacts the release workflow uploads and gen-qa-report.py reads.
+//   - thresholds/break = 0: stryker is a REPORT, never a CI gate. A low
+//     mutation score must not fail the build (most of cats-eo is
+//     type-level; see site/docs/quality-assurance.md for why).
+//   - StringLiteral mutants excluded everywhere: in this codebase string
+//     literals are error messages, vestigial-arm labels, and discipline
+//     rule-set names — nothing a suite asserts on, so they survive as
+//     pure noise (laws: 99 of 101 unfiltered survivors were name labels).
+//     The trade-off (losing kills on semantically-meaningful strings) is
+//     acceptable here because behaviour-bearing strings don't exist on
+//     the main-source hot paths.
+//
+// Run with fatal warnings relaxed (`set ThisBuild/tlFatalWarnings :=
+// false`) since instrumented/mutated sources can trip `-Wunused` under
+// the always-on `-Werror` above. The `mutationAll` alias and the
+// `quality.yml` release workflow both do this.
+// -------------------------------------------------------------------
+ThisBuild / strykerReporters := Seq("console", "html", "json")
+ThisBuild / strykerThresholdsBreak := 0
+ThisBuild / strykerExcludedMutations := Seq("StringLiteral")
+
+// -------------------------------------------------------------------
 // Bump hardcoded GitHub Action versions that sbt-typelevel 0.8.6
 // pins to older releases:
 //
@@ -828,3 +859,64 @@ lazy val benchmarks: Project = project
 // DRY'd). Append a filter: `sbt "bench .*OrderAvroBench.*"`.
 addCommandAlias("bench", "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1")
 addCommandAlias("benchQuick", "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1")
+
+// -------------------------------------------------------------------
+// Quality-assurance sweeps (scoverage + stryker4s). Both feed the
+// numbers on site/docs/quality-assurance.md via site/tools/gen-qa-report.py
+// and run at release time in .github/workflows/quality.yml. Both relax
+// the always-on `-Werror` (tlFatalWarnings) first: scoverage- and
+// stryker-instrumented sources can surface `-Wunused` warnings that
+// would otherwise abort the run. Give sbt a generous heap when running
+// these — `SBT_OPTS="-Xmx6g" sbt coverageAll` — the `set` reapply
+// re-evaluates the Laika docs settings, which OOMs on a small heap.
+// -------------------------------------------------------------------
+
+// Full cross-module statement/branch coverage. Root `test` exercises
+// every aggregated module's suite, so `coverageAggregate` rolls up a
+// complete per-package view.
+addCommandAlias(
+  "coverageAll",
+  "set ThisBuild/tlFatalWarnings := false; clean; coverage; test; coverageReport; coverageAggregate",
+)
+
+// Mutation testing across the published modules (tests/benchmarks/docs
+// aren't published). Uses the `project <m>; stryker` form, NOT
+// `<m>/stryker`: see the plugins.sbt note — the module-scoped task reads
+// `loadedTestFrameworks` from the empty root project and marks every
+// mutant NoCoverage.
+//
+// The `set` lines borrow the `tests` module's compiled suite into core's
+// and laws' Test scopes so their mutants get killed by the behavioural
+// suite that actually guards them (core alone has 3 smoke specs → a
+// dishonest 3% score, borrowed ~63%/74% covered; laws has no in-module
+// suite at all, borrowed ~97%). This is TASK-level borrowing:
+// `core.dependsOn(tests % Test)` would be a project cycle (tests →
+// laws/generics → core), but cross-project task references are legal. It
+// works because stryker compiles all mutants into the sandbox classes
+// behind runtime switches (binary-compatible), so tests' specs —
+// compiled against the unmutated modules — still exercise the mutated
+// bytecode at run time. Scoped to this alias on purpose: a permanent
+// setting would make root `sbt test` run the tests suite twice.
+//
+// Mutating laws is the "who tests the tests" probe: a killed mutant
+// means the discipline suites notice a corrupted law; a survivor
+// pinpoints a law whose discriminating power nothing exercises (the
+// known survivors are law-WEAKENING mutations — guard→false, &&→|| —
+// killable only by negative fixtures, i.e. deliberately unlawful
+// instances pinned to fail).
+addCommandAlias(
+  "mutationAll",
+  "set ThisBuild/tlFatalWarnings := false; " +
+    "set LocalProject(\"core\")/Test/definedTests ++= (LocalProject(\"tests\")/Test/definedTests).value; " +
+    "set LocalProject(\"core\")/Test/fullClasspath ++= (LocalProject(\"tests\")/Test/fullClasspath).value; " +
+    "set LocalProject(\"laws\")/Test/definedTests ++= (LocalProject(\"tests\")/Test/definedTests).value; " +
+    "set LocalProject(\"laws\")/Test/fullClasspath ++= (LocalProject(\"tests\")/Test/fullClasspath).value; " +
+    "project core; stryker; " +
+    "project laws; stryker; " +
+    "project generics; stryker; " +
+    "project schemes; stryker; " +
+    "project circeIntegration; stryker; " +
+    "project avroIntegration; stryker; " +
+    "project jsoniterIntegration; stryker; " +
+    "project root",
+)

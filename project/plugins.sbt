@@ -1,6 +1,22 @@
 addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.4.4")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 
+// `sbt-stryker4s` drives mutation testing. Mutation testing was
+// previously evaluated and dropped because cats-eo was almost entirely
+// type-level (a whole-project run found a single mutable runtime
+// expression). The `schemes` module's runtime machinery and core's
+// opaque-carrier dispatch changed that, so it's back — run on demand /
+// at release rather than as a per-PR gate (see `mutationAll` in
+// build.sbt and site/docs/quality-assurance.md).
+// Stryker runs each module's OWN `Test / test` against that module's
+// mutants. NB: invoke it as `project <module>; stryker`, NOT
+// `<module>/stryker` — the module-scoped task form resolves
+// `loadedTestFrameworks` from the aggregating root project (which has no
+// test deps), so every mutant comes back NoCoverage; switching the
+// current project first makes specs2 visible. 0.20.x auto-derives the
+// Scala 3 dialect from scalaVersion.
+addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "0.20.3")
+
 // Format check gate for CI (`sbt scalafmtCheckAll scalafmtSbtCheck`
 // in the workflow). The project ships a `.scalafmt.conf` pinned to
 // 3.x; sbt-scalafmt honours that pin automatically.
