@@ -52,22 +52,35 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
     }
   }
 
-  "PSVec equality discriminates prefix-equal vectors of different lengths" >> {
-    // covers: PSVec.equals length guard (line 67) — `!=` weakened to `>` or dropped
-    // accepts a shorter prefix-equal vector.
-    val shorter = PSVec.fromIterable(List(1, 2))
-    val longer = PSVec.fromIterable(List(1, 2, 3))
-    (shorter == longer) must beFalse
-    (longer == shorter) must beFalse
-  }
+  // Scenario categories: identical lists; one truncated (prefix-equal, different length);
+  // one element changed (same length, different content — replacement drawn outside the
+  // base range so it always differs).
+  private val eqPair: Gen[(List[Int], List[Int])] =
+    val base = Gen.choose(1, 8).flatMap(n => Gen.listOfN(n, Gen.choose(-10, 10)))
+    base.flatMap { xs =>
+      Gen.oneOf(
+        Gen.const((xs, xs)),
+        Gen.const((xs, xs.init)),
+        Gen
+          .choose(0, xs.length - 1)
+          .flatMap(i => Gen.choose(11, 20).map(v => (xs, xs.updated(i, v)))),
+      )
+    }
 
-  "PSVec equality discriminates same-length different-content vectors" >> {
-    // covers: PSVec.equals elementwise while-loop (line 67) — loop-skipping mutants
-    // (condition → false / i > length) accept ANY same-length pair; the length guard
-    // above never fires for these.
-    val a = PSVec.fromIterable(List(1, 2, 3))
-    val b = PSVec.fromIterable(List(1, 9, 3))
-    (a == b) must beFalse
+  "PSVec equality agrees with List equality (both directions); equal vectors hash equally" >> {
+    // covers: PSVec.equals length guard (line 63) — dropped guard accepts a prefix-equal
+    // shorter vector; elementwise while-loop (line 67) — loop-skipping mutants accept any
+    // same-length pair; hashCode while-loop (lines 76-78) equal-hash side. The second
+    // comparand is built through Slice.slice (offset ≠ 0) so cross-variant equality and
+    // the slice read path stay exercised; categories from `eqPair` straddle all three
+    // discrimination axes.
+    Prop.forAll(eqPair) { (xs, ys) =>
+      val a = PSVec.fromIterable(xs)
+      val b = PSVec.fromIterable(-99 :: ys).slice(1, ys.length + 1)
+      val eqOk = ((a == b) == (xs == ys)) && ((b == a) == (ys == xs))
+      val hashOk = a != b || a.hashCode == b.hashCode
+      eqOk && hashOk
+    }
   }
 
   "unequal PSVecs of equal length hash differently (pinned witness)" >> {
@@ -86,15 +99,4 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
     // null elements.
     val withNull = PSVec.fromIterable(List("a", null, "b"))
     withNull.hashCode must beEqualTo(withNull.hashCode)
-  }
-
-  "structurally equal PSVecs hash equally (and hashing terminates)" >> {
-    // covers: PSVec.hashCode loop condition (line 78) — the `true` mutant loops forever,
-    // so merely hashing a non-empty vector detects it (timeout). Equal-hash asserted on
-    // vectors built through different constructors so the contract is exercised, not an
-    // implementation echo.
-    val viaIterable = PSVec.fromIterable(List(1, 2, 3))
-    val viaSlice = PSVec.fromIterable(List(0, 1, 2, 3, 4)).slice(1, 4)
-    (viaIterable == viaSlice) must beTrue
-    viaIterable.hashCode must beEqualTo(viaSlice.hashCode)
   }
