@@ -4,9 +4,8 @@ import cats.{Applicative, Eval, Traverse}
 import dev.constructive.eo.schemes.Basis
 
 /** Sample recursive ADTs paired with their **pattern functors** for the typed recursion-scheme
-  * specs ([[dev.constructive.eo.schemes.Schemes.cataF]] / `anaF` / `hyloF`). Top-level — NOT nested
-  * in a spec class — to mirror the other samples and stay clear of the generics outer-accessor
-  * rule.
+  * specs ([[dev.constructive.eo.schemes.Schemes.cata]] / `ana` / `hylo`). Top-level — NOT nested in
+  * a spec class — to mirror the other samples and stay clear of the generics outer-accessor rule.
   *
   * Each pattern functor carries its `Traverse` and a `Basis` (`Project` + `Embed`) in its
   * companion, so the schemes resolve them with no extra import — exactly the shape a real user

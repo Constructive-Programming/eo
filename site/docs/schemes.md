@@ -7,11 +7,11 @@ constructors** (compile-time arity safety, no positional indexing):
 
 | Scheme | Optic | Direction |
 |--------|-------|-----------|
-| `cataF` | `CataF` (Getter-shaped) | fold an existing `S` to an `A` |
-| `anaF`  | `AnaF` (Review-shaped) | build an `S` from a seed |
-| `hyloF` | `Getter[Seed, A]` (**fused** — no intermediate `S`) | unfold-and-fold in one pass |
-| `paraF` / `apoF` / `histoF` / `futuF` | the zoo (below) | decorated folds / unfolds |
-| `cataFM` / `anaFM` / `hyloFM` | `Forget[M]`-carried | effectful steps in a `Monad[M]` |
+| `cata` | `Cata` (Getter-shaped) | fold an existing `S` to an `A` |
+| `ana`  | `Ana` (Review-shaped) | build an `S` from a seed |
+| `hylo` | `Getter[Seed, A]` (**fused** — no intermediate `S`) | unfold-and-fold in one pass |
+| `para` / `apo` / `histo` / `futu` | the zoo (below) | decorated folds / unfolds |
+| `cataM` / `anaM` / `hyloM` | `Forget[M]`-carried | effectful steps in a `Monad[M]` |
 
 Everything runs on one stack-safe, post-order machine family (heap-stacked past depth
 512, not JVM-call-stacked) — safe to depths a hand-written recursion would overflow,
@@ -26,7 +26,7 @@ import dev.constructive.eo.schemes.Schemes
 import dev.constructive.eo.optics.Getter
 ```
 
-## The pattern-functor setup — `cataF` / `anaF` / `hyloF`
+## The pattern-functor setup — `cata` / `ana` / `hylo`
 
 You supply a *pattern functor* `F[_]` — your recursive type with its recursive positions
 replaced by a type parameter — and the algebra pattern-matches `F`'s **named
@@ -37,7 +37,7 @@ You write three things: the functor `F`, its `cats.Traverse`, and a `Basis` (`Pr
 
 ```scala mdoc:silent
 import cats.{Applicative, Eval, Traverse}
-import dev.constructive.eo.schemes.{Basis, CataF} // `Schemes`, `Getter`, `get` already imported above
+import dev.constructive.eo.schemes.{Basis, Cata} // `Schemes`, `Getter`, `get` already imported above
 
 // A binary tree…
 enum Bin:
@@ -69,12 +69,12 @@ given Basis[BinF, Bin] = Basis(
 val binTree: Bin = Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
 ```
 
-`cataF` folds an `S` to an `A`. The algebra sees the node plus its already-folded children **as a
+`cata` folds an `S` to an `A`. The algebra sees the node plus its already-folded children **as a
 typed `BinF[A]`** — `l` and `r` are `A`, by name, no positional indexing:
 
 ```scala mdoc:silent
-val sumLeavesF: CataF[BinF, Bin, Int] =
-  Schemes.cataF[BinF, Bin, Int] { (_, folded) =>
+val sumLeavesF: Cata[BinF, Bin, Int] =
+  Schemes.cata[BinF, Bin, Int] { (_, folded) =>
     folded match
       case BinF.LeafF(n)      => n
       case BinF.BranchF(l, r) => l + r
@@ -85,19 +85,19 @@ val sumLeavesF: CataF[BinF, Bin, Int] =
 sumLeavesF.get(binTree)
 ```
 
-`anaF` builds an `S` from a seed via a single fused coalgebra `Seed => F[Seed]`; `Embed` glues each
-layer. `hyloF` is the **fused** refold (`Seed => A`, no intermediate `Bin`) and needs only
+`ana` builds an `S` from a seed via a single fused coalgebra `Seed => F[Seed]`; `Embed` glues each
+layer. `hylo` is the **fused** refold (`Seed => A`, no intermediate `Bin`) and needs only
 `Traverse[F]`:
 
 ```scala mdoc:silent
 // build a right spine of (n+1) unit leaves
-val buildBin = Schemes.anaF[BinF, Int, Bin] { n =>
+val buildBin = Schemes.ana[BinF, Int, Bin] { n =>
   if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1)
 }
 
 // fused: count the leaves directly, building no Bin
 val countLeavesF: Getter[Int, Int] =
-  Schemes.hyloF[BinF, Int, Int](
+  Schemes.hylo[BinF, Int, Int](
     coalg = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1),
     alg = (_, folded) =>
       folded match
@@ -112,15 +112,15 @@ countLeavesF.get(3)                    // same count, fused — no Bin materiali
 countLeavesF.get(1000000)              // stack-safe: the heap machine, O(depth) heap
 ```
 
-`cataF`/`hyloF` are Getter-shaped and `anaF` is Review-shaped, so
+`cata`/`hylo` are Getter-shaped and `ana` is Review-shaped, so
 they compose with the rest of the optic algebra via `andThen` and `cross` (the materializing
-`anaF(…).cross(cataF(…))` equals the fused `hyloF` for a pure algebra — the hylo law). They run on
+`ana(…).cross(cata(…))` equals the fused `hylo` for a pure algebra — the hylo law). They run on
 a **`< 512`-on-stack / heap-`ArrayDeque` machine** (no `cats.Eval`
 trampoline) — your `Traverse[F]` is used only per *layer* (any lawful instance works), so they are
 stack-safe to depths a hand-written recursion would overflow and allocate close to droste (see the
 [benchmarks](benchmarks.md)). **Choosing a path:** reach for `cata`/`ana`/`hylo` (default) when you
 want zero
-boilerplate; reach for `cataF`/`anaF`/`hyloF` when you want the algebra to be type-checked against
+boilerplate; reach for `cata`/`ana`/`hylo` when you want the algebra to be type-checked against
 named constructors. Deriving `Project`/`Embed` from the `S`↔`F` correspondence is future work; today
 they are hand-written (as above).
 
@@ -129,7 +129,7 @@ they are hand-written (as above).
 Because the schemes are `Getter`s, they slot into a lens pipeline. Compose a **lens chain** to
 focus a recursive field buried in a record, then fold it with the scheme. Read-only optics compose
 `Getter`-to-`Getter`, so wrap the lens's read in a `Getter` (or just read at the leaf,
-`cataF(alg).get(lens.get(record))`) — the same composed lens still *writes* the field back:
+`cata(alg).get(lens.get(record))`) — the same composed lens still *writes* the field back:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Lens
@@ -172,12 +172,12 @@ The decorated schemes are **one sum/product symmetry**, and eo ships it as a voc
 | **futu** | multiple layers per step (`Coattr`) | iterated sum | `Decor.futu` |
 | zygo / dyna / … | user-written `Decor` values | — | (yours — example below) |
 
-`paraF` pairs each child slot with its **original subterm** — taken from the nodes the machine
+`para` pairs each child slot with its **original subterm** — taken from the nodes the machine
 already walks, with no per-node re-`embed`:
 
 ```scala mdoc:silent
 // count branches whose left child is a leaf — needs the subterm, not just the result
-val leftLeafBranches = Schemes.paraF[BinF, Bin, Int] { (_, layer) =>
+val leftLeafBranches = Schemes.para[BinF, Bin, Int] { (_, layer) =>
   layer match
     case BinF.LeafF(_) => 0
     case BinF.BranchF((ls, l), (_, r)) =>
@@ -189,14 +189,14 @@ val leftLeafBranches = Schemes.paraF[BinF, Bin, Int] { (_, layer) =>
 leftLeafBranches.get(binTree)
 ```
 
-`apoF` lets the coalgebra answer any slot with an **already-finished subtree** — grafted into the
+`apo` lets the coalgebra answer any slot with an **already-finished subtree** — grafted into the
 result **by reference**, never recursed, never projected (the law suite pins this with an `eq`
 check, so the O(1) claim survives any benchmark noise):
 
 ```scala mdoc:silent
 val cached: Bin = binTree // an expensive subtree you already have
 
-val patched = Schemes.apoF[BinF, Int, Bin] { n =>
+val patched = Schemes.apo[BinF, Int, Bin] { n =>
   if n <= 1 then BinF.LeafF(9)
   else BinF.BranchF(Left(cached), Right(n - 1)) // graft left, keep unfolding right
 }
@@ -206,7 +206,7 @@ val patched = Schemes.apoF[BinF, Int, Bin] { n =>
 patched.reverseGet(2)
 ```
 
-`histoF` gives the algebra each child's **entire decorated history** (`Attr[F, A]`: the result
+`histo` gives the algebra each child's **entire decorated history** (`Attr[F, A]`: the result
 plus that child's own decorated layer — course-of-value recursion; note it inherently retains
 O(n) `Attr` cells):
 
@@ -214,7 +214,7 @@ O(n) `Attr` cells):
 import dev.constructive.eo.schemes.{Attr, Coattr}
 
 // add each branch's grandchildren-through-history to its result
-val withGrand = Schemes.histoF[BinF, Bin, Int] { (_, layer) =>
+val withGrand = Schemes.histo[BinF, Bin, Int] { (_, layer) =>
   layer match
     case BinF.LeafF(n) => n
     case BinF.BranchF(l, r) =>
@@ -225,11 +225,11 @@ val withGrand = Schemes.histoF[BinF, Bin, Int] { (_, layer) =>
 }
 ```
 
-`futuF` lets the coalgebra emit **several layers per step** (`Coattr.Roll` layers are unrolled
+`futu` lets the coalgebra emit **several layers per step** (`Coattr.Roll` layers are unrolled
 with no further coalgebra calls):
 
 ```scala mdoc:silent
-val twoAtATime = Schemes.futuF[BinF, Int, Bin] { n =>
+val twoAtATime = Schemes.futu[BinF, Int, Bin] { n =>
   if n <= 1 then BinF.LeafF(1)
   else BinF.BranchF(Coattr.Roll(BinF.LeafF(n)), Coattr.Pure(n - 1))
 }
@@ -237,11 +237,11 @@ val twoAtATime = Schemes.futuF[BinF, Int, Bin] { n =>
 
 ### Fusion is composition: `cross`
 
-`anaF`/`cataF` return concrete citizens (`AnaF`/`CataF`) carrying their (co)algebras, so the
+`ana`/`cata` return concrete citizens (`Ana`/`Cata`) carrying their (co)algebras, so the
 build-output→read-input composition — the seam core's `Optic.cross` names — **fuses**: one
 single-pass machine, each node built once and folded immediately, no full-tree retention and no
-second traversal. (`hyloF` remains the zero-`S` spelling for seed-typed algebras; binding an
-`AnaF` to a wider type falls back to the generic, materializing `cross` — extensionally equal.)
+second traversal. (`hylo` remains the zero-`S` spelling for seed-typed algebras; binding an
+`Ana` to a wider type falls back to the generic, materializing `cross` — extensionally equal.)
 
 ```scala mdoc:silent
 val zooExpand: Int => BinF[Int] = n =>
@@ -249,7 +249,7 @@ val zooExpand: Int => BinF[Int] = n =>
 val zooSum: (Bin, BinF[Int]) => Int = (_, fa) =>
   fa match { case BinF.LeafF(n) => n; case BinF.BranchF(l, r) => l + r }
 
-val fusedLeafSum = Schemes.anaF[BinF, Int, Bin](zooExpand).cross(Schemes.cataF(zooSum))
+val fusedLeafSum = Schemes.ana[BinF, Int, Bin](zooExpand).cross(Schemes.cata(zooSum))
 ```
 
 ```scala mdoc
@@ -262,7 +262,7 @@ The generality that droste exposes as `gcata`/`gana` lives here as the **public 
 a decoration is an optic over the `BiAffine` carrier (fold side: `from` = *gather*; unfold side:
 `to` = *scatter*, `from` on `Step` = the seed-injecting unit). A zygomorphism — the algebra
 consults a helper fold alongside each child's result — is a user-written gather value, consumed
-by the same `cataF(decor)(galg)` driver as the named members:
+by the same `cata(decor)(galg)` driver as the named members:
 
 ```scala mdoc:silent
 import dev.constructive.eo.schemes.DecorGather
@@ -284,7 +284,7 @@ val leafCount: BinF[Int] => Int =
   { case BinF.LeafF(_) => 1; case BinF.BranchF(l, r) => l + r }
 
 // sum, with the helper count available at every branch
-val sumWithCount = Schemes.cataF[BinF, Bin, (Int, Int), Int](zygo(leafCount)) { (_, layer) =>
+val sumWithCount = Schemes.cata[BinF, Bin, (Int, Int), Int](zygo(leafCount)) { (_, layer) =>
   layer match
     case BinF.LeafF(n)                  => n
     case BinF.BranchF((_, l), (cr, r)) => l + r + 0 * cr // helper in scope per child
@@ -294,14 +294,14 @@ val sumWithCount = Schemes.cataF[BinF, Bin, (Int, Int), Int](zygo(leafCount)) { 
 User-written values run the generic decoration route (one decoration dispatch + `Step` per
 node); the named values dispatch to native engine routes.
 
-### Effectful steps: `cataFM` / `anaFM` / `hyloFM`
+### Effectful steps: `cataM` / `anaM` / `hyloM`
 
 When producing a layer is itself effectful — fetching a node's children from a service, the
 `arbo` Calculator shape — the M-generic drivers run the same machine **lifted through
 `Monad[M].tailRecM`** (one `M`-action per node event; stack-safety rides on M's `tailRecM`;
 supported Ms are single-pass and *linear* — a branching/replaying `M` like `List` is documented
 unsupported). Results are `Forget[M]`-carried citizens consumed via `.run`, and
-`AnaFM.andThen(CataFM)` fuses (there `andThen` genuinely is the focus seam):
+`AnaM.andThen(CataM)` fuses (there `andThen` genuinely is the focus seam):
 
 ```scala mdoc:silent
 import cats.data.State
@@ -313,8 +313,8 @@ def fetchLayer(n: Int): Counted[BinF[Int]] =
 
 val countedLeafSum =
   Schemes
-    .anaFM[Counted, BinF, Int, Bin](fetchLayer)
-    .andThen(Schemes.cataFM[Counted, BinF, Bin, Int]((s, fa) => State.pure(zooSum(s, fa))))
+    .anaM[Counted, BinF, Int, Bin](fetchLayer)
+    .andThen(Schemes.cataM[Counted, BinF, Bin, Int]((s, fa) => State.pure(zooSum(s, fa))))
 ```
 
 ```scala mdoc

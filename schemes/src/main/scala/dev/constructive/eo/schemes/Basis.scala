@@ -2,8 +2,8 @@ package dev.constructive.eo
 package schemes
 
 /** The user-supplied bridge between a recursive type `S` and one *layer* of its **pattern functor**
-  * `F[_]`, for the typed recursion-scheme path ([[Schemes.cataF]] / [[Schemes.anaF]] /
-  * [[Schemes.hyloF]]).
+  * `F[_]`, for the typed recursion-scheme path ([[Schemes.cata]] / [[Schemes.ana]] /
+  * [[Schemes.hylo]]).
   *
   * A pattern functor replaces `S`'s recursive positions with a type parameter:
   * {{{
