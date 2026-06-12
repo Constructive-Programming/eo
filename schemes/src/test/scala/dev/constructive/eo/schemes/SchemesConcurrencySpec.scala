@@ -14,7 +14,7 @@ import zoo.*
 /** Concurrency spec for the typed recursion-scheme engines.
   *
   * Motivation: [[Machines]] documents a thread-safety model — every machine allocates its own
-  * mutable state per invocation, and the only shared values ([[Machines.EmptyAnyRefs]],
+  * mutable state per invocation, and the only shared values ([[Machines.NoChildren]],
   * [[Machines.AscendToken]]) are immutable by construction. These tests exercise that claim with N
   * concurrent tasks racing on shared prebuilt fixtures.
   *
