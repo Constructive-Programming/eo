@@ -6,12 +6,11 @@ import scala.language.implicitConversions
 import cats.instances.int.given
 import org.specs2.mutable.Specification
 
-import data.{Forget, PSVec}
+import data.Forget
 import data.Forget.given
-import optics.{Getter, Lens, Optic, Plated}
+import optics.{Getter, Lens, Optic}
 import optics.Optic.* // get, andThen, cross, foldMap
 
-import generics.plate
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 
 /** Behaviour spec for the typed pattern-functor schemes (`cataF` / `anaF` / `hyloF`) and `fLayer`.
@@ -148,18 +147,6 @@ class SchemesFSpec extends Specification:
 
   "cataF handles a one-level Branch(Leaf, Leaf)" >> {
     (Schemes.cataF(sumLeaves).get(Bin.Branch(Bin.Leaf(4), Bin.Leaf(5))) == 9) must beTrue
-  }
-
-  // ----- cross-path equivalence to the #23 PSVec cata -----
-
-  "cataF agrees with the #23 Plated-driven cata on the same computation" >> {
-    given Plated[Bin] = plate[Bin]
-    val psvecSum: (Bin, PSVec[Int]) => Int = (node, kids) =>
-      node match
-        case Bin.Leaf(n)      => n
-        case Bin.Branch(_, _) => kids.toList.sum
-    (Schemes.cata(psvecSum).get(tree) == Schemes.cataF(sumLeaves).get(tree))
-      .and(Schemes.cataF(sumLeaves).get(tree) == 6)
   }
 
   // ----- fLayer: the single-layer Forget[F] optic (R1) -----

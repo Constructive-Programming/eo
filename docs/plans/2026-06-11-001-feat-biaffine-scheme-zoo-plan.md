@@ -79,7 +79,7 @@ with laws.
    and the `Decor` optic family are the *foundation*, since the zoo's surface is
    built from them.
 3. **Zoo scope v1** — para + apo + histo + futu, as named `Decor` values.
-4. **Engine** — typed pattern-functor path only; untyped `Plated`/`PSVec` unchanged.
+4. **Engine** — typed pattern-functor path only. ~~Untyped `Plated`/`PSVec` unchanged~~ **(superseded 2026-06-12, user decision post-review: the untyped `cata`/`ana`/`hylo` were REMOVED — the typed path subsumes them; core `Plated` itself is untouched).**
 5. **Decorations** — hand-rolled `Attr`/`Coattr` (droste's model, no cats-free dep).
 6. **paraF is explicit** — a named member, not a documentation note.
 7. ~~Public free-range `gcataF`/`ganaF`~~ **(v2) dropped.** The generality lives in
