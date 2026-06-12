@@ -14,13 +14,13 @@ import schemes.samples.{Bin, BinF, Rose, RoseF}
   *
   *   - '''Project/Embed coherence''' — the hand-written `S`↔`F` correspondence is not
   *     compiler-checked, so its two round-trip laws are property-tested here.
-  *   - '''Hylo law (pure flavor)''' — `hyloF == anaF.cross(cataF)` holds *generically* only when
-  *     the algebra ignores its node argument (a pure `F[A] => A` fold). Tested via `forAll`.
-  *   - '''Hylo law (para flavor)''' — for a node-reading algebra, `hyloF` threads the *seed* while
-  *     the materializing `cataF` threads the rebuilt `S`, so the two coincide only under the
+  *   - '''Hylo law (pure flavor)''' — `hylo == ana.cross(cata)` holds *generically* only when the
+  *     algebra ignores its node argument (a pure `F[A] => A` fold). Tested via `forAll`.
+  *   - '''Hylo law (para flavor)''' — for a node-reading algebra, `hylo` threads the *seed* while
+  *     the materializing `cata` threads the rebuilt `S`, so the two coincide only under the
   *     seed↔`embed(coalg(seed))` correspondence. Verified at specific points, NOT via `forAll`.
   */
-class SchemesFLawsSpec extends Specification with ScalaCheck:
+class SchemesLawsSpec extends Specification with ScalaCheck:
 
   // bounded-depth Bin generator (keeps trees small for the property runs)
   private def genBin(depth: Int): Gen[Bin] =
@@ -95,13 +95,13 @@ class SchemesFLawsSpec extends Specification with ScalaCheck:
     case BinF.BranchF(l, r) => l + r
   }
 
-  "hyloF == anaF.cross(cataF) for a PURE algebra (the hylo law)" >> {
+  "hylo == ana.cross(cata) for a PURE algebra (the hylo law)" >> {
     forAll(Gen.choose(0, 12)) { (seed: Int) =>
-      val fused = Schemes.hyloF[BinF, Int, Int](coalg, (_, fa) => pureSum(fa)).get(seed)
+      val fused = Schemes.hylo[BinF, Int, Int](coalg, (_, fa) => pureSum(fa)).get(seed)
       val materializing =
         Schemes
-          .anaF[BinF, Int, Bin](coalg)
-          .cross(Schemes.cataF[BinF, Bin, Int]((_, fa) => pureSum(fa)))
+          .ana[BinF, Int, Bin](coalg)
+          .cross(Schemes.cata[BinF, Bin, Int]((_, fa) => pureSum(fa)))
           .get(seed)
       fused == materializing
     }
@@ -109,16 +109,16 @@ class SchemesFLawsSpec extends Specification with ScalaCheck:
 
   // ----- hylo law, para flavor (point tests, not forAll) -----
   //
-  // A node-reading algebra: hyloF sees the Int seed at each layer; the materializing path sees the
+  // A node-reading algebra: hylo sees the Int seed at each layer; the materializing path sees the
   // rebuilt Bin. They are NOT equal in general — verified here only that fused matches itself and a
   // hand-computed value, documenting why forAll does not apply.
 
-  "para-flavored hyloF computes the expected value at specific seeds" >> {
+  "para-flavored hylo computes the expected value at specific seeds" >> {
     // alg reads neither node meaningfully here but is typed para; leaf-count over the spine
     val leafCount: (Int, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 1
         case BinF.BranchF(l, r) => l + r
-    val h = Schemes.hyloF(coalg, leafCount)
+    val h = Schemes.hylo(coalg, leafCount)
     (h.get(0) == 1).and(h.get(3) == 4).and(h.get(7) == 8)
   }

@@ -6,8 +6,8 @@ import org.specs2.mutable.Specification
 import schemes.samples.BinF
 
 /** Unit checks for the decoration data ([[Attr]] / [[Coattr]]) — construction, projection, and
-  * structural equality over a real pattern functor. The zoo members that consume them (`histoF` /
-  * `futuF`) carry the behavioural coverage.
+  * structural equality over a real pattern functor. The zoo members that consume them (`histo` /
+  * `futu`) carry the behavioural coverage.
   */
 class DecorSpec extends Specification:
 

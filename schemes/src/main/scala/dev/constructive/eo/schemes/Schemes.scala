@@ -10,16 +10,16 @@ import optics.{Getter, Optic, Review}
   * `Traverse[F]`) and the [[Basis]] (`Project`/`Embed`) correspondence to the recursive type `S` —
   * algebras pattern-match `F`'s *named constructors*, no positional indexing.
   *
-  *   - [[cataF]] folds (`CataF`, Getter-shaped); [[anaF]] builds (`AnaF`, Review-shaped); [[hyloF]]
-  *     is the **fused** zero-`S` refold. `anaF(c).cross(cataF(a))` fuses (single pass, no full-tree
+  *   - [[cata]] folds (`Cata`, Getter-shaped); [[ana]] builds (`Ana`, Review-shaped); [[hylo]] is
+  *     the **fused** zero-`S` refold. `ana(c).cross(cata(a))` fuses (single pass, no full-tree
   *     retention).
-  *   - The zoo: [[paraF]] (subterms paired from the walked nodes), [[apoF]] (O(1) graft),
-  *     [[histoF]] / [[futuF]] (course-of-value / multi-layer, via [[Attr]] / [[Coattr]]). Decorated
-  *     generically through the [[Decor]] optic family (gather/scatter over the `BiAffine` carrier)
-  *     — zygo/dyna/chrono are user-written [[DecorGather]] / [[DecorScatter]] values fed to the
-  *     generic [[cataF]] / [[anaF]] overloads.
-  *   - The M-generic drivers [[cataFM]] / [[anaFM]] / [[hyloFM]] run the same machine lifted
-  *     through `Monad[M].tailRecM` (effectful layers, single-pass linear Ms).
+  *   - The zoo: [[para]] (subterms paired from the walked nodes), [[apo]] (O(1) graft), [[histo]] /
+  *     [[futu]] (course-of-value / multi-layer, via [[Attr]] / [[Coattr]]). Decorated generically
+  *     through the [[Decor]] optic family (gather/scatter over the `BiAffine` carrier) —
+  *     zygo/dyna/chrono are user-written [[DecorGather]] / [[DecorScatter]] values fed to the
+  *     generic [[cata]] / [[ana]] overloads.
+  *   - The M-generic drivers [[cataM]] / [[anaM]] / [[hyloM]] run the same machine lifted through
+  *     `Monad[M].tailRecM` (effectful layers, single-pass linear Ms).
   *
   * All drivers run on one stack-safe engine family: a `< 512`-deep on-stack fast path falling back
   * per deep subtree to a heap `ArrayDeque` machine ([[foldLayered]] and siblings) — stack-safe to
@@ -219,14 +219,14 @@ object Schemes:
   //
   // Supported Ms are SINGLE-PASS and LINEAR: the machine's state is mutable, so a branching /
   // replaying M (List, retrying or streaming effects) shares it across branches and corrupts
-  // the fold — the documented contract, exercised by the boundary test in SchemesFMSpec.
+  // the fold — the documented contract, exercised by the boundary test in SchemesMSpec.
   // M must also be SEQUENTIALLY evaluated — each map/flatMap callback completes before the next
   // tailRecM step (true of Id/Eval/State/IO); async/concurrent step evaluation is unsupported
   // even for lawful Monads.
   //
   // The expand is Or-SHAPED (N => M[Either[R, F[N]]]) per the elgot-seam gate
   // (docs/brainstorms/2026-06-12-elgot-seam-sketch.md): v1 drivers always pass Right; the
-  // elgot/apoFM follow-up supplies Left answers with no re-architecture.
+  // elgot/apoM follow-up supplies Left answers with no re-architecture.
   // ===========================================================================================
 
   /** The lifted machine. One `M`-action per `tailRecM` iteration: `Down(n)` runs `expandOr`, exits
@@ -287,12 +287,12 @@ object Schemes:
       }
 
   /** Effectful catamorphism — the algebra runs in `M` (`(S, F[A]) => M[A]`); the layer peel stays
-    * the pure `Project`. Returns the `Forget[M]`-carried [[CataFM]] citizen; consume via `.run`.
+    * the pure `Project`. Returns the `Forget[M]`-carried [[CataM]] citizen; consume via `.run`.
     */
-  def cataFM[M[_], F[_], S, A](
+  def cataM[M[_], F[_], S, A](
       algM: (S, F[A]) => M[A]
-  )(using M: Monad[M], F: Traverse[F], P: Project[F, S]): CataFM[M, F, S, A] =
-    new CataFM[M, F, S, A](
+  )(using M: Monad[M], F: Traverse[F], P: Project[F, S]): CataM[M, F, S, A] =
+    new CataM[M, F, S, A](
       foldLayeredM[M, F, S, A](
         s => M.pure(Right(P.project(s))),
         (s, fs, out) => algM(s, rebuildLayer[F, S, A](fs, out)),
@@ -301,13 +301,13 @@ object Schemes:
     )
 
   /** Effectful anamorphism — the coalgebra (the layer producer) runs in `M` (`Seed => M[F[Seed]]`,
-    * the arbo `GetSellOptions` shape: fetching children is effectful). Returns the [[AnaFM]]
-    * citizen; consume via `.run`, fuse via `.andThen(cataFM(...))`.
+    * the arbo `GetSellOptions` shape: fetching children is effectful). Returns the [[AnaM]]
+    * citizen; consume via `.run`, fuse via `.andThen(cataM(...))`.
     */
-  def anaFM[M[_], F[_], Seed, S](
+  def anaM[M[_], F[_], Seed, S](
       coalgM: Seed => M[F[Seed]]
-  )(using M: Monad[M], F: Traverse[F], E: Embed[F, S]): AnaFM[M, F, Seed, S] =
-    new AnaFM[M, F, Seed, S](
+  )(using M: Monad[M], F: Traverse[F], E: Embed[F, S]): AnaM[M, F, Seed, S] =
+    new AnaM[M, F, Seed, S](
       foldLayeredM[M, F, Seed, S](
         seed => M.map(coalgM(seed))(Right(_)),
         (_, fSeed, out) => M.pure(E.embed(rebuildLayer[F, Seed, S](fSeed, out))),
@@ -318,18 +318,18 @@ object Schemes:
   /** Effectful hylomorphism — the always-fused M spelling (what the D6 `eoHyloM` bench row runs):
     * `Seed => M[A]` with **no intermediate `S`**, seed-typed algebra.
     */
-  def hyloFM[M[_], F[_], Seed, A](
+  def hyloM[M[_], F[_], Seed, A](
       coalgM: Seed => M[F[Seed]],
       algM: (Seed, F[A]) => M[A],
-  )(using M: Monad[M], F: Traverse[F]): FoldFM[M, Seed, A] =
-    new FoldFM[M, Seed, A](
+  )(using M: Monad[M], F: Traverse[F]): FoldM[M, Seed, A] =
+    new FoldM[M, Seed, A](
       foldLayeredM[M, F, Seed, A](
         seed => M.map(coalgM(seed))(Right(_)),
         (seed, fSeed, out) => algM(seed, rebuildLayer[F, Seed, A](fSeed, out)),
       )
     )
 
-  /** Single-pass paired machine in `M` backing the fused `AnaFM.andThen(CataFM)` — the M mirror of
+  /** Single-pass paired machine in `M` backing the fused `AnaM.andThen(CataM)` — the M mirror of
     * [[fusedPairedFold]]: each node built once, folded immediately, no `M[S]` whole-structure
     * materialization. Mirrors the pure version exactly: `F[S]` and `F[A]` are built straight from
     * the out-array with two `F.map(fSeed)` passes and `var i = -1` counters, avoiding the
@@ -388,23 +388,23 @@ object Schemes:
     * machine, not a trampoline). Requires `Project[F, S]` (to peel each layer) and `Traverse[F]`
     * (any lawful instance — the machine, not the user's `foldRight`, provides stack-safety).
     */
-  def cataF[F[_], S, A](
+  def cata[F[_], S, A](
       alg: (S, F[A]) => A
-  )(using F: Traverse[F], P: Project[F, S]): CataF[F, S, A] =
-    new CataF[F, S, A](cataF[F, S, A, A](Decor.cata[F, A])(alg).get, alg)
+  )(using F: Traverse[F], P: Project[F, S]): Cata[F, S, A] =
+    new Cata[F, S, A](cata[F, S, A, A](Decor.cata[F, A])(alg).get, alg)
 
   /** Generalized (decorated) catamorphism — the gcata of the typed path, with the decoration
     * supplied as a [[DecorGather]] optic value. Interior nodes apply `gather ∘ galg` (the
     * decoration's `from` consuming `Step(layer, result)`); the **root applies `galg` alone**
-    * (droste's `gcata` shape). The named zoo members are instances: `cataF(alg)` routes here with
-    * [[Decor.cata]] (recognised by identity — the direct, decoration-free engine path), `histoF`
+    * (droste's `gcata` shape). The named zoo members are instances: `cata(alg)` routes here with
+    * [[Decor.cata]] (recognised by identity — the direct, decoration-free engine path), `histo`
     * with [[Decor.histo]]; user-written decorations (zygo, dyna, …) run the generic route, which
     * pays one decoration dispatch + `Step` per node.
     *
-    * (type-param order: `[F, S, W, A]` — compare [[anaF]] `[F, A, W, S]`, which mirrors these in
+    * (type-param order: `[F, S, W, A]` — compare [[ana]] `[F, A, W, S]`, which mirrors these in
     * input-before-output order: `A` is the input seed there, `S` the built output.)
     */
-  def cataF[F[_], S, W, A](
+  def cata[F[_], S, W, A](
       decor: DecorGather[F, W, A]
   )(galg: (S, F[W]) => A)(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
     if decor.asInstanceOf[AnyRef] eq Decor.cata[F, A] then
@@ -431,7 +431,7 @@ object Schemes:
     * (droste's `Gather.para` must reconstruct the subterm it threw away). Stack-safe (the
     * [[foldLayered]] machine).
     */
-  def paraF[F[_], S, A](
+  def para[F[_], S, A](
       alg: (S, F[(S, A)]) => A
   )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
     Getter[S, A](
@@ -452,7 +452,7 @@ object Schemes:
     *
     * Space honesty: course-of-value recursion retains O(n) `Attr` cells by nature.
     */
-  def histoF[F[_], S, A](
+  def histo[F[_], S, A](
       alg: (S, F[Attr[F, A]]) => A
   )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
     val toAttr: S => Attr[F, A] = foldLayered[F, S, Attr[F, A]](
@@ -467,14 +467,14 @@ object Schemes:
     * => F[Seed]` yields one typed layer of child seeds; [[Embed]] assembles each layer into the
     * built `S`. Materializing — the built `S` is O(nodes). Stack-safe (the [[foldLayered]] machine).
     * Requires `Embed[F, S]` and `Traverse[F]`. Type params are `[F, Seed, S]` (input before output)
-    * to match [[hyloF]] and the `PSVec` [[ana]].
+    * to match [[hylo]] and the `PSVec` [[ana]].
     */
-  def anaF[F[_], Seed, S](
+  def ana[F[_], Seed, S](
       coalg: Seed => F[Seed]
-  )(using F: Traverse[F], E: Embed[F, S]): AnaF[F, Seed, S] =
-    new AnaF[F, Seed, S](anaF[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg).reverseGet, coalg)
+  )(using F: Traverse[F], E: Embed[F, S]): Ana[F, Seed, S] =
+    new Ana[F, Seed, S](ana[F, Seed, Seed, S](Decor.ana[F, Seed])(coalg).reverseGet, coalg)
 
-  /** Single-pass paired machine backing the fused `AnaF.cross(CataF)`: each node is built once (the
+  /** Single-pass paired machine backing the fused `Ana.cross(Cata)`: each node is built once (the
     * algebra is node-supplied — construction is semantically required), folded immediately, and
     * released as the fold ascends. No full-tree retention, no second traversal. Leaf layers are
     * phantom-recast (valid because pattern-functor leaves have no recursive slots by definition).
@@ -515,7 +515,7 @@ object Schemes:
     * recursed, never projected ([[foldLayeredOr]]). Contrast droste's scatter-apo, which re-walks
     * grafts through `project` (O(graft) per graft — the route [[Decor.apo]] documents). Stack-safe.
     */
-  def apoF[F[_], A, S](
+  def apo[F[_], A, S](
       coalg: A => F[Either[S, A]]
   )(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
     val run = foldLayeredOr[F, Either[S, A], S](
@@ -536,7 +536,7 @@ object Schemes:
     * `DecorLawsSpec`). The gap to droste's futu (655k vs 459k B/op) is the stack-safe machine's
     * per-node child array — droste's zoo recursion is stack-unsafe.
     */
-  def futuF[F[_], A, S](
+  def futu[F[_], A, S](
       coalg: A => F[Coattr[F, A]]
   )(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
     val expand: Coattr[F, A] => F[Coattr[F, A]] =
@@ -552,16 +552,16 @@ object Schemes:
     * as a [[DecorScatter]] optic value. Each `W` slot is scattered (the decoration's `to`):
     * `Step(_, seed)` calls `gcoalg`, `Done(layer)` unrolls the prebuilt layer with **no coalgebra
     * call**. The root seed enters through the decoration's pointed unit (`from` on the Step arm —
-    * gana's `pure`). `anaF(coalg)` routes here with [[Decor.ana]] (identity-recognised direct
-    * path); `futuF` with [[Decor.futu]]; `Decor.apo` runs the generic distApo route — the O(1)
-    * graft belongs to the native `apoF` engine.
+    * gana's `pure`). `ana(coalg)` routes here with [[Decor.ana]] (identity-recognised direct path);
+    * `futu` with [[Decor.futu]]; `Decor.apo` runs the generic distApo route — the O(1) graft
+    * belongs to the native `apo` engine.
     *
     * For user-written [[DecorScatter]] values, `Done.fst` MUST carry `F[W]` at runtime — the engine
     * unrolls it directly as the next layer.
     *
-    * (type-param order: compare [[cataF]] `[F, S, W, A]` — the fold mirror swaps `Seed`/`A`.)
+    * (type-param order: compare [[cata]] `[F, S, W, A]` — the fold mirror swaps `Seed`/`A`.)
     */
-  def anaF[F[_], A, W, S](
+  def ana[F[_], A, W, S](
       decor: DecorScatter[F, W, A]
   )(gcoalg: A => F[W])(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
     if decor.asInstanceOf[AnyRef] eq Decor.ana[F, A] then
@@ -585,10 +585,10 @@ object Schemes:
     * **no intermediate `S`** (so it needs neither `Project` nor `Embed`, only `Traverse[F]`).
     * `coalg` unfolds a seed into one typed layer; `alg` folds the layer's results to `A` (the seed
     * is supplied, paramorphism-flavored). Stack-safe (the [[foldLayered]] machine). Equal to
-    * `anaF(coalg).cross(cataF(alg))` for a *pure* algebra (the hylo law); for a node-reading para
+    * `ana(coalg).cross(cata(alg))` for a *pure* algebra (the hylo law); for a node-reading para
     * algebra the two agree only under the seed↔`embed(coalg(seed))` correspondence.
     */
-  def hyloF[F[_], Seed, A](
+  def hylo[F[_], Seed, A](
       coalg: Seed => F[Seed],
       alg: (Seed, F[A]) => A,
   )(using F: Traverse[F]): Getter[Seed, A] =

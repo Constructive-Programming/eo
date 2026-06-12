@@ -402,7 +402,7 @@ macro — but that emits a *function*, not an `Optic`, which would break the
 
 ## Recursion schemes — the typed path vs droste and hand-written
 
-`SchemesBench` measures the typed recursion schemes (`cataF` / `anaF` / `hyloF` and the
+`SchemesBench` measures the typed recursion schemes (`cata` / `ana` / `hylo` and the
 zoo — the `foldLayered` `ArrayDeque` machine, stack-safe to 10⁶ nodes) against
 [droste](https://github.com/higherkindness/droste) and hand-written recursion over a
 perfect binary `Bin` tree (8 191 nodes). An earlier untyped `PSVec` path was **removed**
@@ -419,9 +419,9 @@ runner):
 | `drosteCata` | 164 824 | 1× |
 | `drosteHylo` | 328 641 | 1× |
 | `drosteAna`  | 327 632 | 1× |
-| `eoCataF` | 361 385 | 2.2× |
+| `eoCata` | 361 385 | 2.2× |
 | `eoHyloF` | 361 385 | 1.1× |
-| `eoAnaF`  | 524 193 | 1.6× |
+| `eoAna`  | 524 193 | 1.6× |
 
 The residual constant vs droste is the stack-safety machinery (per-node child array +
 frames past depth 512) — droste's basic schemes are stack-*unsafe* naive recursion, and
@@ -431,7 +431,7 @@ numbers follow.
 ### The zoo — para / apo / histo / futu, grafting, fusion, and the M path
 
 The same `SchemesBench` workload (depth-12 perfect binary tree, 8 191 nodes) through the
-decorated schemes — eo's typed zoo (`paraF` / `apoF` / `histoF` / `futuF`) against
+decorated schemes — eo's typed zoo (`para` / `apo` / `histo` / `futu`) against
 `droste.scheme.zoo` — plus the routes that pin the driver's design decisions: the generic
 decoration route, the monadic machine at `cats.Id`, and fused-vs-materialised `cross`.
 As above, B/op is the trustworthy column; ns/op is directional.
@@ -448,7 +448,7 @@ As above, B/op is the trustworthy column; ns/op is directional.
 | `drosteHisto` | 103 420 |   448 705 | 1× |
 | `eoFutu`      | 188 749 |   655 249 | 1.43× |
 | `drosteFutu`  |  93 458 |   458 689 | 1× |
-| `eoCataF`             | 172 428 | 361 385 | 2.19× |
+| `eoCata`             | 172 428 | 361 385 | 2.19× |
 | `eoCataGenericRoute`  | 162 279 | 362 313 | 2.20× |
 | `drosteCata`          |  56 542 | 164 824 | 1× |
 | `eoHyloF` | 180 767 | 361 385 | — |
@@ -459,7 +459,7 @@ As above, B/op is the trustworthy column; ns/op is directional.
 Six results:
 
 - **`para` / `apo` halve droste's allocation.** eo decorates on the same array machine as
-  `cataF`/`anaF`, pairing subterms off the already-walked nodes; droste's zoo re-embeds each
+  `cata`/`ana`, pairing subterms off the already-walked nodes; droste's zoo re-embeds each
   subterm (para) and re-allocates the `Either` spine (apo), landing at ~2× eo's B/op
   (1 114 890 vs 557 945; 1 146 674 vs 655 249). The ns column agrees directionally
   (~1.5× in eo's favour on both).
@@ -472,17 +472,17 @@ Six results:
 - **The generic decoration route costs nothing.** A user-written identity gather — which skips
   the driver's identity fast path — lands at 362 313 B/op vs the fast path's 361 385: escape
   analysis elides the per-node decoration wrapper, so writing your own `Decor` route is
-  alloc-free over `cataF`.
+  alloc-free over `cata`.
 - **`histo` / `futu` trail droste by ~1.2–1.4× B/op — the price of stack-safety.** The remaining
   gap is the stack-safe machine's per-node child array; droste's zoo recursion is naive
   call-stack recursion (stack-*unsafe*), so it pays no machine bookkeeping — and overflows on
   the deep inputs eo's machine clears.
 - **`eoHyloM` is the tailRecM per-event floor.** The monadic machine at `cats.Id` costs
-  929 472 B/op vs 361 385 for `hyloF` (~2.6×) — that delta is the `tailRecM` step-event
+  929 472 B/op vs 361 385 for `hylo` (~2.6×) — that delta is the `tailRecM` step-event
   wrapping, the price of arbitrary-monad algebras. This run includes the M-machine
   optimisation: the previous run (27384569800) had `eoHyloM` at 1 606 586 B/op, a **−42%**
   improvement.
-- **Fused `cross` beats materialising on both axes.** Composing `anaF` into `cataF` via
+- **Fused `cross` beats materialising on both axes.** Composing `ana` into `cata` via
   `cross` fuses into one pass — 239 393 ns / 820 066 B/op vs 375 824 ns / 885 579 B/op for
   build-the-tree-then-fold (~1.6× faster, no intermediate tree). The fused path also dropped
   **−22%** from the previous run's 1 049 417 B/op with the same optimisation commit.

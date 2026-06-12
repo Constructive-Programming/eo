@@ -9,7 +9,7 @@ import optics.Optic
 import schemes.samples.{Bin, BinF}
 
 /** Decoration laws — the per-value equations of the [[Decor]] vocabulary, plus the
-  * behaviour-identity of the re-derived `cataF`/`anaF` (the identity fast path must agree with the
+  * behaviour-identity of the re-derived `cata`/`ana` (the identity fast path must agree with the
   * generic decoration route, proven by running a *fresh* user-written id decoration through the
   * generic route and comparing).
   */
@@ -125,25 +125,25 @@ class DecorLawsSpec extends Specification:
         case s: Step[X, Int] => s.b
         case _: Done[X, Int] => throw new UnsupportedOperationException("unit on Step only")
 
-  "the generic decoration route agrees with the identity fast path on cataF" >> {
-    Schemes.cataF[BinF, Bin, Int, Int](freshIdGather)(sumAlg).get(tree) ===
-      Schemes.cataF[BinF, Bin, Int](sumAlg).get(tree)
+  "the generic decoration route agrees with the identity fast path on cata" >> {
+    Schemes.cata[BinF, Bin, Int, Int](freshIdGather)(sumAlg).get(tree) ===
+      Schemes.cata[BinF, Bin, Int](sumAlg).get(tree)
   }
 
-  "the generic decoration route agrees with the identity fast path on anaF" >> {
+  "the generic decoration route agrees with the identity fast path on ana" >> {
     def expand(n: Int): BinF[Int] =
       if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
-    Schemes.anaF[BinF, Int, Int, Bin](freshIdScatter)(expand).reverseGet(5) ===
-      Schemes.anaF[BinF, Int, Bin](expand).reverseGet(5)
+    Schemes.ana[BinF, Int, Int, Bin](freshIdScatter)(expand).reverseGet(5) ===
+      Schemes.ana[BinF, Int, Bin](expand).reverseGet(5)
   }
 
   "histo through Decor.histo: heads-only course-of-value == cata" >> {
     val viaHisto = Schemes
-      .cataF[BinF, Bin, Attr[BinF, Int], Int](Decor.histo[BinF, Int]) { (s, layer) =>
+      .cata[BinF, Bin, Attr[BinF, Int], Int](Decor.histo[BinF, Int]) { (s, layer) =>
         sumAlg(s, BinF.traverse.map(layer)(_.head))
       }
       .get(tree)
-    viaHisto === Schemes.cataF[BinF, Bin, Int](sumAlg).get(tree)
+    viaHisto === Schemes.cata[BinF, Bin, Int](sumAlg).get(tree)
   }
 
   "futu through Decor.futu: a two-layer-per-step coalgebra builds the right tree" >> {
@@ -153,14 +153,14 @@ class DecorLawsSpec extends Specification:
       if n <= 1 then BinF.LeafF(1)
       else BinF.BranchF(Coattr.Roll(BinF.LeafF(n)), Coattr.Pure(n - 1))
     val built = Schemes
-      .anaF[BinF, Int, Coattr[BinF, Int], Bin](Decor.futu[BinF, Int])(coalg)
+      .ana[BinF, Int, Coattr[BinF, Int], Bin](Decor.futu[BinF, Int])(coalg)
       .reverseGet(3)
     built === Bin.Branch(Bin.Leaf(3), Bin.Branch(Bin.Leaf(2), Bin.Leaf(1)))
   }
 
   // ----- native routes == generic decoration routes (the perf-win pins) --------
 
-  "native histoF == the generic route at Decor.histo" >> {
+  "native histo == the generic route at Decor.histo" >> {
     val alg: (Bin, BinF[Attr[BinF, Int]]) => Int = (s, layer) =>
       sumAlg(
         s,
@@ -172,21 +172,21 @@ class DecorLawsSpec extends Specification:
             }
           ),
       )
-    Schemes.histoF[BinF, Bin, Int](alg).get(tree) ===
-      Schemes.cataF[BinF, Bin, Attr[BinF, Int], Int](Decor.histo[BinF, Int])(alg).get(tree)
+    Schemes.histo[BinF, Bin, Int](alg).get(tree) ===
+      Schemes.cata[BinF, Bin, Attr[BinF, Int], Int](Decor.histo[BinF, Int])(alg).get(tree)
   }
 
-  "native futuF == the generic route at Decor.futu" >> {
+  "native futu == the generic route at Decor.futu" >> {
     def coalg(n: Int): BinF[Coattr[BinF, Int]] =
       if n <= 1 then BinF.LeafF(1)
       else BinF.BranchF(Coattr.Roll(BinF.LeafF(n)), Coattr.Pure(n - 1))
-    Schemes.futuF[BinF, Int, Bin](coalg).reverseGet(4) ===
-      Schemes.anaF[BinF, Int, Coattr[BinF, Int], Bin](Decor.futu[BinF, Int])(coalg).reverseGet(4)
+    Schemes.futu[BinF, Int, Bin](coalg).reverseGet(4) ===
+      Schemes.ana[BinF, Int, Coattr[BinF, Int], Bin](Decor.futu[BinF, Int])(coalg).reverseGet(4)
   }
 
   // ----- generic-route end-to-end pins --------------------------------------
 
-  "native paraF == the generic route at Decor.para" >> {
+  "native para == the generic route at Decor.para" >> {
     // Algebra that uses BOTH the paired subterm and the result:
     // for a branch, sum child results and add 1 for each child subterm that is a Leaf.
     // tree = Branch(Branch(Leaf(1), Leaf(2)), Leaf(3))
@@ -200,20 +200,20 @@ class DecorLawsSpec extends Specification:
         case BinF.BranchF((ls, la), (rs, ra)) =>
           la + ra + (if ls.isInstanceOf[Bin.Leaf] then 1 else 0) +
             (if rs.isInstanceOf[Bin.Leaf] then 1 else 0)
-    Schemes.paraF[BinF, Bin, Int](alg).get(tree) ===
-      Schemes.cataF[BinF, Bin, (Bin, Int), Int](Decor.para[BinF, Bin, Int])(alg).get(tree)
+    Schemes.para[BinF, Bin, Int](alg).get(tree) ===
+      Schemes.cata[BinF, Bin, (Bin, Int), Int](Decor.para[BinF, Bin, Int])(alg).get(tree)
   }
 
-  "native apoF == the generic route at Decor.apo (distApo)" >> {
+  "native apo == the generic route at Decor.apo (distApo)" >> {
     // Coalg with one graft: at n <= 0 emit a leaf; otherwise graft Bin.Leaf(n) as left child.
-    // The native apoF places the graft by reference; the generic route (distApo via project)
+    // The native apo places the graft by reference; the generic route (distApo via project)
     // rebuilds it — structural equality (==) holds, reference identity (eq) only for native.
     def coalg(n: Int): BinF[Either[Bin, Int]] =
       if n <= 0 then BinF.LeafF(0)
       else BinF.BranchF(Left(Bin.Leaf(n)), Right(n - 1))
-    val nativeResult = Schemes.apoF[BinF, Int, Bin](coalg).reverseGet(2)
+    val nativeResult = Schemes.apo[BinF, Int, Bin](coalg).reverseGet(2)
     val genericResult =
-      Schemes.anaF[BinF, Int, Either[Bin, Int], Bin](Decor.apo[BinF, Bin, Int])(coalg).reverseGet(2)
+      Schemes.ana[BinF, Int, Either[Bin, Int], Bin](Decor.apo[BinF, Bin, Int])(coalg).reverseGet(2)
     // Both produce the same tree by value; use == not eq (generic route REBUILDS the graft).
     nativeResult === genericResult
   }

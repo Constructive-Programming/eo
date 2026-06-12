@@ -67,9 +67,9 @@ enum Coattr[F[_], A]:
 //
 // NOTE (generic vs native routes): `Decor.apo`'s generic scatter unrolls a grafted subtree
 // through `Project` (droste's distApo — O(graft)). The O(1) graft is the privilege of the
-// NATIVE `apoF` engine, which prefills result slots from apo's `Done` directly and never
+// NATIVE `apo` engine, which prefills result slots from apo's `Done` directly and never
 // consults this value. Likewise `Decor.para`'s generic gather re-embeds the subterm it pairs
-// (droste's Gather.para); the native `paraF` pairs subterms from the walked nodes instead.
+// (droste's Gather.para); the native `para` pairs subterms from the walked nodes instead.
 // ===========================================================================================
 
 /** Fold-side decoration: gather-only (build-only member). `from` = gather. */
@@ -123,7 +123,7 @@ object Decor:
   /** Paramorphism decoration: each child slot pairs the original subterm with its result.
     *
     * Generic-route honesty: this gather *re-embeds* the subterm from the layer (droste's
-    * `Gather.para`) — the native `paraF` avoids that by pairing subterms from the nodes the machine
+    * `Gather.para`) — the native `para` avoids that by pairing subterms from the nodes the machine
     * already walks.
     */
   def para[F[_]: Functor, S, A](using E: Embed[F, S]): DecorGather[F, (S, A), A] =
@@ -169,7 +169,7 @@ object Decor:
 
   /** Apomorphism decoration, generic route: `Right(seed)` keeps unfolding, `Left(s)` answers with
     * the grafted subtree's projected layer — distApo, O(graft) through `Project`. The O(1) graft is
-    * the native `apoF` engine's privilege; it never consults this value.
+    * the native `apo` engine's privilege; it never consults this value.
     */
   def apo[F[_]: Functor, S, A](using P: Project[F, S]): DecorScatter[F, Either[S, A], A] =
     new Optic[Either[S, A], Either[S, A], A, A, BiAffine]:
