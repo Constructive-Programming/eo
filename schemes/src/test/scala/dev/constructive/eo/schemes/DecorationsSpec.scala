@@ -4,6 +4,7 @@ package schemes
 import org.specs2.mutable.Specification
 
 import schemes.samples.BinF
+import zoo.*
 
 /** Unit checks for the decoration data ([[Attr]] / [[Coattr]]) — construction, projection, and
   * structural equality over a real pattern functor. The zoo members that consume them (`histo` /

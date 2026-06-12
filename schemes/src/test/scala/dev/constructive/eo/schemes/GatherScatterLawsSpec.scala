@@ -7,6 +7,7 @@ import data.BiAffine
 import data.BiAffine.{Done, Step}
 import optics.Optic
 import schemes.samples.{Bin, BinF}
+import zoo.*
 
 /** Decoration laws — the per-value equations of the [[Gather]]/[[Scatter]] vocabulary, plus the
   * behaviour-identity of the re-derived `cata`/`ana` (the identity fast path must agree with the

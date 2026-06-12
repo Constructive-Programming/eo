@@ -1,41 +1,16 @@
 package dev.constructive.eo
 package schemes
+package zoo
 
 import cats.Traverse
 
 import data.Direct
 import optics.{Getter, Optic}
 
-/** Concrete scheme citizens — `cata`/`ana` return these instead of bare `Getter`/`Review` so
-  * composition can **fuse**: the classes carry their (co)algebra and instances as data, and the
-  * fused `cross` overload below resolves on the concrete types.
+/** Unfold-scheme citizen: Review-shaped, carrying the coalgebra + instances for fusion.
   *
-  * They extend the open `Optic` trait directly (`Getter`/`Review` are `final` in core — the
-  * perf-pinned encoding stays untouched): full generic composition via the trait members, plus
-  * `.get` / `.reverseGet` as stored fields, the use-site-friendly shape.
-  *
-  * Widening hazard, documented: binding an `Ana` to a wider type (`Review`-shaped `Optic`) loses
-  * the fused `cross` overload — the generic trait `cross` still typechecks and is extensionally
-  * equal, but materializes the full intermediate structure. `Schemes.hylo(coalg, alg)` stays the
-  * always-fused spelling.
+  * See [[Cata]] for the general citizen contract (widening hazard, encoding rationale).
   */
-
-/** Fold-scheme citizen: Getter-shaped, carrying the node-supplied algebra for fusion. */
-final class Cata[F[_], S, A] private[schemes] (
-    val get: S => A,
-    private[schemes] val alg: (S, F[A]) => A,
-) extends Optic[S, Unit, A, Unit, Direct]:
-  type X = Nothing
-
-  def to(s: S): Direct[X, A] = Direct(get(s))
-  def from(d: Direct[X, Unit]): Unit = ()
-
-  /** View as a plain [[Getter]] — re-enters Getter's fused composition fast paths (and resolves the
-    * read-compose overload tie an unascribed `getter.andThen(cata(...))` can hit).
-    */
-  def asGetter: Getter[S, A] = Getter(get)
-
-/** Unfold-scheme citizen: Review-shaped, carrying the coalgebra + instances for fusion. */
 final class Ana[F[_], Seed, S] private[schemes] (
     val reverseGet: Seed => S,
     private[schemes] val coalg: Seed => F[Seed],
@@ -65,5 +40,5 @@ final class Ana[F[_], Seed, S] private[schemes] (
     * to the generic, materializing route — extensionally equal, allocation-different.
     */
   def cross[A](inner: Cata[F, S, A]): Getter[Seed, A] =
-    val machine: Seed => (S, A) = Schemes.fusedPairedFold(coalg, inner.alg)(using F, E)
+    val machine: Seed => (S, A) = Machines.fusedPairedFold(coalg, inner.alg)(using F, E)
     Getter[Seed, A](seed => machine(seed)._2)

@@ -12,6 +12,7 @@ import optics.{Getter, Lens, Optic}
 import optics.Optic.* // get, andThen, cross, foldMap
 
 import schemes.samples.{Bin, BinF, Rose, RoseF}
+import zoo.*
 
 /** Behaviour spec for the typed pattern-functor schemes (`cata` / `ana` / `hylo`) and `fLayer`.
   * Companion law/coherence checks live in `SchemesLawsSpec`.
@@ -22,6 +23,9 @@ import schemes.samples.{Bin, BinF, Rose, RoseF}
   * `IndexOutOfBounds`.
   */
 class SchemesSpec extends Specification:
+
+  // Deep examples: one-at-a-time to bound peak heap (shared test JVM).
+  sequential
 
   // A small mixed tree: Branch(Leaf 1, Branch(Leaf 2, Leaf 3)) — leaf sum 6, 3 leaves, depth 2.
   private val tree: Bin =
