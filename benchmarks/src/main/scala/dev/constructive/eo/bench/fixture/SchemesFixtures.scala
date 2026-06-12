@@ -113,8 +113,6 @@ object SchemesFixtures:
   import higherkindness.droste.{CVAlgebra, CVCoalgebra, RAlgebra, RCoalgebra}
   import higherkindness.droste.data.{Attr => DAttr, Coattr => DCoattr}
   import dev.constructive.eo.schemes.zoo.{Attr => EoAttr, Coattr => EoCoattr, Gather}
-  import dev.constructive.eo.data.BiAffine
-  import dev.constructive.eo.optics.Optic
 
   // para: the same leaf-sum with subterms IGNORED — measures pure decoration
   // overhead (eo pairs subterms from the walked nodes; droste re-embeds each).
@@ -161,10 +159,5 @@ object SchemesFixtures:
   // singleton, so the driver cannot take the identity fast path) — D4's
   // dispatch-cost honesty number.
   val userIdGather: Gather[BinF, Int, Int] =
-    new Optic[Unit, Int, Unit, Int, BiAffine]:
-      type X = (Unit, BinF[Int])
-      def to(u: Unit): BiAffine[X, Unit] =
-        throw new UnsupportedOperationException("vestigial")
-      def from(xb: BiAffine[X, Int]): Int = xb match
-        case s: BiAffine.Step[X, Int] => s.b
-        case _: BiAffine.Done[X, Int] => throw new UnsupportedOperationException("fold-side")
+    new Gather[BinF, Int, Int]:
+      def gather(layer: BinF[Int], a: Int): Int = a

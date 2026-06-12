@@ -15,8 +15,8 @@ import optics.{Getter, Optic}
   * perf-pinned encoding stays untouched): full generic composition via the trait members, plus
   * `.get` / `.reverseGet` as stored fields, the use-site-friendly shape.
   *
-  * Widening hazard, documented: binding a `Cata` (or `Ana`) to a wider type loses the fused
-  * `cross` overload — the generic trait `cross` still typechecks and is extensionally equal, but
+  * Widening hazard, documented: binding a `Cata` (or `Ana`) to a wider type loses the fused `cross`
+  * overload — the generic trait `cross` still typechecks and is extensionally equal, but
   * materializes the full intermediate structure. `Schemes.hylo(coalg, alg)` stays the always-fused
   * spelling.
   */

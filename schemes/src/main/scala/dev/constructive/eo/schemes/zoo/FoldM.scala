@@ -33,11 +33,10 @@ import optics.Optic
   * on [[AnaM]] requires the concrete types.
   *
   * `FoldM` is `open` (not `sealed`) so that [[CataM]] and [[AnaM]] — which live in the `zoo`
-  * subpackage — can extend it. Users may also wrap their own `S => M[A]` as a `FoldM` citizen;
-  * the constructor is public.
+  * subpackage — can extend it. Users may also wrap their own `S => M[A]` as a `FoldM` citizen; the
+  * constructor is public.
   */
-class FoldM[M[_], S, A](val run: S => M[A])
-    extends Optic[S, Unit, A, Unit, Forget[M]]:
+class FoldM[M[_], S, A](val run: S => M[A]) extends Optic[S, Unit, A, Unit, Forget[M]]:
   type X = Nothing
 
   def to(s: S): Forget[M][X, A] = ForgetK(run(s))

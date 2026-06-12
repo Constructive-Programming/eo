@@ -3,16 +3,14 @@ package schemes
 
 import org.specs2.mutable.Specification
 
-import data.BiAffine
 import data.BiAffine.{Done, Step}
-import optics.Optic
 import schemes.samples.{Bin, BinF}
 import zoo.*
 
 /** Decoration laws — the per-value equations of the [[Gather]]/[[Scatter]] vocabulary, plus the
-  * behaviour-identity of the re-derived `cata`/`ana` (the identity fast path must agree with the
-  * generic decoration route, proven by running a *fresh* user-written id decoration through the
-  * generic route and comparing).
+  * agreement of the direct `cata`/`ana` overloads with the generic decoration route at the identity
+  * decorations ([[Gather.cata]] / [[Scatter.ana]]) — there is no dispatch between the two: the
+  * direct overloads ARE the fast path, these laws pin the semantic equality.
   */
 class GatherScatterLawsSpec extends Specification:
 
@@ -30,25 +28,18 @@ class GatherScatterLawsSpec extends Specification:
   // live HERE, pinning the native Schemes.para / Schemes.apo engines.
 
   private def paraGather[F[_]: cats.Functor, S, A](using E: Embed[F, S]): Gather[F, (S, A), A] =
-    new Optic[Unit, (S, A), Unit, A, BiAffine]:
-      type X = (Unit, F[(S, A)])
-      def to(u: Unit): BiAffine[X, Unit] =
-        throw new UnsupportedOperationException("gather-only")
-      def from(xb: BiAffine[X, A]): (S, A) = xb match
-        case s: Step[X, A] => (E.embed(cats.Functor[F].map(s.snd)(_._1)), s.b)
-        case _: Done[X, A] => throw new UnsupportedOperationException("fold-side Done")
+    new Gather[F, (S, A), A]:
+      def gather(layer: F[(S, A)], a: A): (S, A) =
+        (E.embed(cats.Functor[F].map(layer)(_._1)), a)
 
   private def apoScatter[F[_]: cats.Functor, S, A](using
       P: Project[F, S]
   ): Scatter[F, Either[S, A], A] =
-    new Optic[Either[S, A], Either[S, A], A, A, BiAffine]:
-      type X = (F[Either[S, A]], Unit)
-      def to(w: Either[S, A]): BiAffine[X, A] = w match
-        case Right(a) => new Step[X, A]((), a)
-        case Left(s)  => new Done[X, A](cats.Functor[F].map(P.project(s))(Left(_)))
-      def from(xb: BiAffine[X, A]): Either[S, A] = xb match
-        case s: Step[X, A] => Right(s.b)
-        case _: Done[X, A] => throw new UnsupportedOperationException("unit on Step only")
+    new Scatter[F, Either[S, A], A]:
+      def scatter(w: Either[S, A]): Either[F[Either[S, A]], A] = w match
+        case Right(a) => Right(a)
+        case Left(s)  => Left(cats.Functor[F].map(P.project(s))(Left(_)))
+      def unit(a: A): Either[S, A] = Right(a)
 
   // ----- gather-side equations ----------------------------------------------
 
@@ -77,11 +68,6 @@ class GatherScatterLawsSpec extends Specification:
       .from(
         new Step[(Unit, BinF[Int]), Int](BinF.BranchF(1, 2), 9)
       ) === 9
-  }
-
-  "Gather.cata is identity-stable across instantiations (the fast-path dispatch key)" >> {
-    (Gather.cata[BinF, Int].asInstanceOf[AnyRef] eq
-      Gather.cata[[x] =>> Option[x], String].asInstanceOf[AnyRef]) === true
   }
 
   "Gather.cata's vestigial read side throws" >> {
@@ -133,33 +119,15 @@ class GatherScatterLawsSpec extends Specification:
 
   // ----- re-derivation behaviour identity ------------------------------------
 
-  // A FRESH user-written id gather — structurally Gather.cata but a distinct value,
-  // so the generic driver cannot take the identity fast path.
-  private val freshIdGather: Gather[BinF, Int, Int] =
-    new Optic[Unit, Int, Unit, Int, BiAffine]:
-      type X = (Unit, BinF[Int])
-      def to(u: Unit): BiAffine[X, Unit] = throw new UnsupportedOperationException("vestigial")
-      def from(xb: BiAffine[X, Int]): Int = xb match
-        case s: Step[X, Int] => s.b
-        case _: Done[X, Int] => throw new UnsupportedOperationException("fold-side Done")
-
-  private val freshIdScatter: Scatter[BinF, Int, Int] =
-    new Optic[Int, Int, Int, Int, BiAffine]:
-      type X = (BinF[Int], Unit)
-      def to(w: Int): BiAffine[X, Int] = new Step[X, Int]((), w)
-      def from(xb: BiAffine[X, Int]): Int = xb match
-        case s: Step[X, Int] => s.b
-        case _: Done[X, Int] => throw new UnsupportedOperationException("unit on Step only")
-
-  "the generic decoration route agrees with the identity fast path on cata" >> {
-    Schemes.cata[BinF, Bin, Int, Int](freshIdGather)(sumAlg).get(tree) ===
+  "the generic decoration route agrees with the direct overload on cata" >> {
+    Schemes.cata[BinF, Bin, Int, Int](Gather.cata[BinF, Int])(sumAlg).get(tree) ===
       Schemes.cata[BinF, Bin, Int](sumAlg).get(tree)
   }
 
-  "the generic decoration route agrees with the identity fast path on ana" >> {
+  "the generic decoration route agrees with the direct overload on ana" >> {
     def expand(n: Int): BinF[Int] =
       if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
-    Schemes.ana[BinF, Int, Int, Bin](freshIdScatter)(expand).reverseGet(5) ===
+    Schemes.ana[BinF, Int, Int, Bin](Scatter.ana[BinF, Int])(expand).reverseGet(5) ===
       Schemes.ana[BinF, Int, Bin](expand).reverseGet(5)
   }
 
