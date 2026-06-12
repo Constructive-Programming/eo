@@ -31,6 +31,12 @@ Two structural facts drive everything:
 **Announce at start:** "I'm using the improve-test-leverage skill to analyze
 and improve the test suite's kill capacity."
 
+**Aliases:** `/test-upgrade` (ADD moves only, highest tier first),
+`/test-fix` (gap-closing: candidates ranked by measured Survived /
+NoCoverage clusters), `/test-prune` (CONSOLIDATE only: shrink LOC at
+held kills). Each is a thin skill that delegates here with the move bias
+pre-set; arguments pass through.
+
 **Two modes:**
 
 - **Guided (default)** — the 10-step workflow below: one planned batch,
