@@ -409,7 +409,7 @@ perfect binary `Bin` tree (8 191 nodes). An earlier untyped `PSVec` path was **r
 once the typed path subsumed it (its erased positional indexing made algebra arity slips
 a runtime error — the exact thing the typed path fixes).
 
-Core rows (run 27398242244, 2026-06-12; B/op is the trustworthy metric on the shared
+Core rows (runs 27398242244 + 27445302118, 2026-06-12/13 — every eo row byte-identical across the two except the optimised `eoHyloM`; B/op is the trustworthy metric on the shared
 runner):
 
 | Method | B/op | vs droste (B/op) |
@@ -452,7 +452,7 @@ As above, B/op is the trustworthy column; ns/op is directional.
 | `eoCataGenericRoute`  | 162 279 | 362 313 | 2.20× |
 | `drosteCata`          |  56 542 | 164 824 | 1× |
 | `eoHyloF` | 180 767 | 361 385 | — |
-| `eoHyloM` | 343 202 | 929 472 | — |
+| `eoHyloM` | 303 295 | 820 298 | — |
 | `eoCrossFused`        | 239 393 | 820 066 | — |
 | `eoCrossMaterialized` | 375 824 | 885 579 | — |
 
@@ -478,10 +478,11 @@ Six results:
   call-stack recursion (stack-*unsafe*), so it pays no machine bookkeeping — and overflows on
   the deep inputs eo's machine clears.
 - **`eoHyloM` is the tailRecM per-event floor.** The monadic machine at `cats.Id` costs
-  929 472 B/op vs 361 385 for `hylo` (~2.6×) — that delta is the `tailRecM` step-event
-  wrapping, the price of arbitrary-monad algebras. This run includes the M-machine
-  optimisation: the previous run (27384569800) had `eoHyloM` at 1 606 586 B/op, a **−42%**
-  improvement.
+  820 298 B/op vs 361 385 for `hylo` (~2.3×) — that delta is the `tailRecM` step-event
+  wrapping, the price of arbitrary-monad algebras. Two optimisation rounds got here:
+  1 606 586 → 929 472 (leaf-inline combine + merged events + sentinel op encoding) →
+  820 298 B/op (run 27445302118, 2026-06-13: typed `bubbled` continuation replacing the
+  per-leaf casting closure) — a cumulative **−49%**.
 - **Fused `cross` beats materialising on both axes.** Composing `ana` into `cata` via
   `cross` fuses into one pass — 239 393 ns / 820 066 B/op vs 375 824 ns / 885 579 B/op for
   build-the-tree-then-fold (~1.6× faster, no intermediate tree). The fused path also dropped
