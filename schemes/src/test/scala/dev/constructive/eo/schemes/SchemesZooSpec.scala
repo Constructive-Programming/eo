@@ -62,8 +62,8 @@ class SchemesZooSpec extends Specification:
       if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
     val viaApo = Schemes
       .apo[BinF, Int, Bin](n => BinF.traverse.map(expand(n))(Right(_)))
-      .reverseGet(6)
-    viaApo === Schemes.ana[BinF, Int, Bin](expand).reverseGet(6)
+      .get(6)
+    viaApo === Schemes.ana[BinF, Int, Bin](expand).get(6)
   }
 
   "heads-only histo == cata" >> {
@@ -80,8 +80,8 @@ class SchemesZooSpec extends Specification:
       if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
     val viaFutu = Schemes
       .futu[BinF, Int, Bin](n => BinF.traverse.map(expand(n))(Coattr.Pure(_)))
-      .reverseGet(6)
-    viaFutu === Schemes.ana[BinF, Int, Bin](expand).reverseGet(6)
+      .get(6)
+    viaFutu === Schemes.ana[BinF, Int, Bin](expand).get(6)
   }
 
   // ----- the graft law (O(1), by reference) ----------------------------------
@@ -93,7 +93,7 @@ class SchemesZooSpec extends Specification:
       if n <= 0 then BinF.LeafF(7)
       else if n == 1 then BinF.BranchF(Left(grafted), Right(0))
       else BinF.BranchF(Right(n - 1), Right(n - 1))
-    val built = Schemes.apo[BinF, Int, Bin](coalg).reverseGet(1)
+    val built = Schemes.apo[BinF, Int, Bin](coalg).get(1)
     val graftSlot = built match
       case Bin.Branch(g, _) => g
       case other            => other
@@ -108,7 +108,7 @@ class SchemesZooSpec extends Specification:
       if n <= 0 then BinF.LeafF(0)
       else if n == 1 then BinF.BranchF(Left(grafted), Right(0))
       else BinF.BranchF(Right(n - 1), Left(Bin.Leaf(0)))
-    val built = Schemes.apo[BinF, Int, Bin](coalg).reverseGet(GraftDepth)
+    val built = Schemes.apo[BinF, Int, Bin](coalg).get(GraftDepth)
     // Navigate left spine to find the graft slot (iterative — safe at any depth)
     var cursor: Bin = built
     var steps = GraftDepth - 1
@@ -165,7 +165,7 @@ class SchemesZooSpec extends Specification:
   "apo is stack/space-safe building a 10^6-deep Bin" >> {
     def coalg(n: Int): BinF[Either[Bin, Int]] =
       if n <= 0 then BinF.LeafF(0) else BinF.BranchF(Right(n - 1), Left(Bin.Leaf(0)))
-    val built = Schemes.apo[BinF, Int, Bin](coalg).reverseGet(Deep)
+    val built = Schemes.apo[BinF, Int, Bin](coalg).get(Deep)
     val depth: (Bin, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 0
@@ -187,7 +187,7 @@ class SchemesZooSpec extends Specification:
       if n <= 0 then BinF.LeafF(0)
       else if n % 2 == 0 then BinF.BranchF(Coattr.Roll(BinF.LeafF(0)), Coattr.Pure(n - 1))
       else BinF.BranchF(Coattr.Pure(n - 1), Coattr.Roll(BinF.LeafF(0)))
-    val built = Schemes.futu[BinF, Int, Bin](coalg).reverseGet(Deep)
+    val built = Schemes.futu[BinF, Int, Bin](coalg).get(Deep)
     val size: (Bin, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 1

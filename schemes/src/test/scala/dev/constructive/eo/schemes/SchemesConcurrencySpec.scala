@@ -75,11 +75,11 @@ class SchemesConcurrencySpec extends Specification:
           )
           .get(seed)
         val expectedHylo =
-          Schemes.cata(sumAlg).get(Schemes.ana[BinF, Int, Bin](expand).reverseGet(seed))
+          Schemes.cata(sumAlg).get(Schemes.ana[BinF, Int, Bin](expand).get(seed))
         val hyloOk = hyloResult == expectedHylo
 
         // (c) ana builds a per-task Bin from a per-task seed, cata folds it back
-        val built: Bin = Schemes.ana[BinF, Int, Bin](expand).reverseGet(seed)
+        val built: Bin = Schemes.ana[BinF, Int, Bin](expand).get(seed)
         val anaOk = Schemes.cata(sumAlg).get(built) == expectedHylo
 
         // (d) para on the shared tree ignoring subterms == cata
@@ -92,7 +92,7 @@ class SchemesConcurrencySpec extends Specification:
         val futuCoalg: Int => BinF[Coattr[BinF, Int]] = n =>
           if n <= 1 then BinF.LeafF(1)
           else BinF.BranchF(Coattr.Pure(n / 2), Coattr.Pure(n - n / 2))
-        val futuBuilt: Bin = Schemes.futu[BinF, Int, Bin](futuCoalg).reverseGet(seed)
+        val futuBuilt: Bin = Schemes.futu[BinF, Int, Bin](futuCoalg).get(seed)
         val futuOk = Schemes.cata(sumAlg).get(futuBuilt) == expectedHylo
 
         // (g) cataM[Eval].run forced per task

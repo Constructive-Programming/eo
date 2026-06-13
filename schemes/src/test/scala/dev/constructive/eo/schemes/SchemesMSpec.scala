@@ -12,8 +12,8 @@ import zoo.*
   *
   *   - Fast-path agreement laws — `M = Id` on the lifted machine == the pure citizens on the hybrid
   *     machine (a real cross-architecture pin: there is NO Id special-case).
-  *   - The fused `AnaM.andThen(CataM)` == the run-then-run composition (extensional), resolved to
-  *     the concrete member (ascription pin).
+  *   - The materialising `anaM.andThen(cataM)` == the run-then-run composition (extensional),
+  *     resolved to the concrete `FoldM` member (Kleisli `flatMap`); `hyloM` is the fused spelling.
   *   - Stack-safety on `Eval` (200k spine; safety rides on M's `tailRecM` — tested, not asserted).
   *   - The linear-M boundary: `List` (a branching M) is documented UNSUPPORTED — the machine's
   *     mutable state is shared across branches; this test pins that the result is NOT the branching
@@ -49,9 +49,9 @@ class SchemesMSpec extends Specification:
       Schemes.cata(sumAlg).get(tree)
   }
 
-  "anaM[Id].run == ana.reverseGet" >> {
+  "anaM[Id].run == ana.get" >> {
     Schemes.anaM[Id, BinF, Int, Bin](n => expand(n)).run(6) ===
-      Schemes.ana[BinF, Int, Bin](expand).reverseGet(6)
+      Schemes.ana[BinF, Int, Bin](expand).get(6)
   }
 
   "hyloM[Id].run == hylo.get" >> {
@@ -61,10 +61,10 @@ class SchemesMSpec extends Specification:
 
   // ----- fusion ---------------------------------------------------------------
 
-  "AnaM.andThen(CataM) resolves to the fused member (ascription pin) and == run∘run" >> {
+  "anaM.andThen(cataM) resolves to the concrete materialising member and == run∘run" >> {
     val anaM = Schemes.anaM[Id, BinF, Int, Bin](n => expand(n))
     val cataM = Schemes.cataM[Id, BinF, Bin, Int]((s, fa) => sumAlg(s, fa))
-    val fused: FoldM[Id, Int, Int] = anaM.andThen(cataM) // generic andThen returns a bare Optic
+    val fused: FoldM[Id, Int, Int] = anaM.andThen(cataM) // concrete FoldM.andThen (Kleisli)
     List(1, 2, 3, 5, 8, 13).map(fused.run) ===
       List(1, 2, 3, 5, 8, 13).map(seed => cataM.run(anaM.run(seed)))
   }

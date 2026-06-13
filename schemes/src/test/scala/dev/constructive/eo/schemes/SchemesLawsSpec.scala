@@ -14,7 +14,7 @@ import schemes.samples.{Bin, BinF, Rose, RoseF}
   *
   *   - '''Project/Embed coherence''' — the hand-written `S`↔`F` correspondence is not
   *     compiler-checked, so its two round-trip laws are property-tested here.
-  *   - '''Hylo law (pure flavor)''' — `hylo == ana.cross(cata)` holds *generically* only when the
+  *   - '''Hylo law (pure flavor)''' — `hylo == ana.andThen(cata)` holds *generically* only when the
   *     algebra ignores its node argument (a pure `F[A] => A` fold). Tested via `forAll`.
   *   - '''Hylo law (para flavor)''' — for a node-reading algebra, `hylo` threads the *seed* while
   *     the materializing `cata` threads the rebuilt `S`, so the two coincide only under the
@@ -95,13 +95,13 @@ class SchemesLawsSpec extends Specification with ScalaCheck:
     case BinF.BranchF(l, r) => l + r
   }
 
-  "hylo == ana.cross(cata) for a PURE algebra (the hylo law)" >> {
+  "hylo == ana.andThen(cata) for a PURE algebra (the hylo law)" >> {
     forAll(Gen.choose(0, 12)) { (seed: Int) =>
       val fused = Schemes.hylo[BinF, Int, Int](coalg, (_, fa) => pureSum(fa)).get(seed)
       val materializing =
         Schemes
           .ana[BinF, Int, Bin](coalg)
-          .cross(Schemes.cata[BinF, Bin, Int]((_, fa) => pureSum(fa)))
+          .andThen(Schemes.cata[BinF, Bin, Int]((_, fa) => pureSum(fa)))
           .get(seed)
       fused == materializing
     }
