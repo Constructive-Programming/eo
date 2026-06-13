@@ -420,7 +420,7 @@ runner):
 | `drosteHylo` | 328 641 | 1× |
 | `drosteAna`  | 327 632 | 1× |
 | `eoCata` | 361 385 | 2.2× |
-| `eoHyloF` | 361 385 | 1.1× |
+| `eoHylo` | 361 385 | 1.1× |
 | `eoAna`  | 524 193 | 1.6× |
 
 The residual constant vs droste is the stack-safety machinery (per-node child array +
@@ -433,7 +433,7 @@ numbers follow.
 The same `SchemesBench` workload (depth-12 perfect binary tree, 8 191 nodes) through the
 decorated schemes — eo's typed zoo (`para` / `apo` / `histo` / `futu`) against
 `droste.scheme.zoo` — plus the routes that pin the driver's design decisions: the generic
-decoration route, the monadic machine at `cats.Id`, and fused-vs-materialised `cross`.
+decoration route, the monadic machine at `cats.Id`, and the materialising `cross` vs fused `hylo`.
 As above, B/op is the trustworthy column; ns/op is directional.
 
 | Method | ns/op | B/op | B/op vs droste |
@@ -451,10 +451,10 @@ As above, B/op is the trustworthy column; ns/op is directional.
 | `eoCata`             | 172 428 | 361 385 | 2.19× |
 | `eoCataGenericRoute`  | 162 279 | 362 313 | 2.20× |
 | `drosteCata`          |  56 542 | 164 824 | 1× |
-| `eoHyloF` | 180 767 | 361 385 | — |
+| `eoHylo` | 180 767 | 361 385 | — |
 | `eoHyloM` | 303 295 | 820 298 | — |
-| `eoCrossFused`        | 239 393 | 820 066 | — |
-| `eoCrossMaterialized` | 375 824 | 885 579 | — |
+| `eoRefoldCross`  | — | 885 577 | — |
+| `eoRefoldManual` | 375 824 | 885 579 | — |
 
 Six results:
 
@@ -471,7 +471,7 @@ Six results:
   `distApo`-style decoration routes, not to droste's native `zoo.apo`.
 - **The generic decoration route costs nothing.** A user-written identity gather — which skips
   the driver's identity fast path — lands at 362 313 B/op vs the fast path's 361 385: escape
-  analysis elides the per-node decoration wrapper, so writing your own `Decor` route is
+  analysis elides the per-node decoration wrapper, so writing your own `Gather`/`Scatter` route is
   alloc-free over `cata`.
 - **`histo` / `futu` trail droste by ~1.2–1.4× B/op — the price of stack-safety.** The remaining
   gap is the stack-safe machine's per-node child array; droste's zoo recursion is naive
@@ -483,10 +483,13 @@ Six results:
   1 606 586 → 929 472 (leaf-inline combine + merged events + sentinel op encoding) →
   820 298 B/op (run 27445302118, 2026-06-13: typed `bubbled` continuation replacing the
   per-leaf casting closure) — a cumulative **−49%**.
-- **Fused `cross` beats materialising on both axes.** Composing `ana` into `cata` via
-  `cross` fuses into one pass — 239 393 ns / 820 066 B/op vs 375 824 ns / 885 579 B/op for
-  build-the-tree-then-fold (~1.6× faster, no intermediate tree). The fused path also dropped
-  **−22%** from the previous run's 1 049 417 B/op with the same optimisation commit.
+- **`ana.cross(cata)` materialises; `hylo` is the fusion.** `ana` is a build-only `Review` and
+  `cata` a read-only `Getter` (duals over `Direct`); their `cross` is the build⇄read seam, which
+  builds the whole `Bin` then folds it — `eoRefoldCross` (885 577 B/op) is byte-identical to the
+  hand-written `eoRefoldManual` `cata.get(ana.reverseGet(…))` (885 579). The fused, no-intermediate
+  spelling is `hylo` (361 385 B/op, ~2.4× less). Recovering hylo cost *through* `cross` needs the
+  optic to carry its (co)algebra — see the `proto` spike (X-indexed `Scheme` carrier), where a
+  node-blind `cata` makes `ana.cross(cata)` fuse back to 361 386 B/op.
 
 ## Reproducing
 

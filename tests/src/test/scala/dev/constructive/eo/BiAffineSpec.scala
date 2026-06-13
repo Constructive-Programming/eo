@@ -7,8 +7,8 @@ import data.BiAffine.{Done, Step}
 import optics.Optic
 
 /** Behaviour checks for the [[BiAffine]] carrier worn by an optic — the graft-finality equations a
-  * full `Decor` citizen must satisfy, stated against a toy citizen here (the named `Decor` values
-  * in `cats-eo-schemes` state them per value).
+  * full `Gather`/`Scatter` citizen must satisfy, stated against a toy citizen here (the named
+  * `Gather`/`Scatter` values in `cats-eo-schemes` state them per value).
   *
   * The toy citizen pins the existential the way every concrete decoration does: `X = (W, F[W])`
   * with `Fst[X] = W` (the `Done` payload is a finished result) and `Snd[X] = F[W]` (the one-F-layer

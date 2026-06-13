@@ -6,10 +6,10 @@ import cats.{Applicative, Monoid}
 import accessor.{Graft, PartialAccessor}
 import forgetful.*
 
-/** Carrier for the decoration (`Decor`) family of the recursion-scheme zoo — [[Affine]]'s data
-  * shape worn on the *build* seam. Where `Affine.Miss` means "the read found no focus",
-  * [[BiAffine.Done]] means "**this slot is already finished** — the engine must not call the
-  * coalgebra for it". Its payload's meaning is pinned per optic value via the existential `A`
+/** Carrier for the decoration (`Gather`/`Scatter`) family of the recursion-scheme zoo —
+  * [[Affine]]'s data shape worn on the *build* seam. Where `Affine.Miss` means "the read found no
+  * focus", [[BiAffine.Done]] means "**this slot is already finished** — the engine must not call
+  * the coalgebra for it". Its payload's meaning is pinned per optic value via the existential `A`
   * (`Fst[A]`): an apomorphism's `Done` carries a finished subtree (prefill the slot, O(1) graft); a
   * futumorphism's `Done` carries a prebuilt layer (unroll it, still no coalgebra call).
   * [[BiAffine.Step]] is the keep-going arm: focus `b` alongside a one-F-layer leftover context
