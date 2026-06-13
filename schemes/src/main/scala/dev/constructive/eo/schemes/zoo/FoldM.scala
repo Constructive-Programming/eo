@@ -28,10 +28,11 @@ import optics.Optic
   * own fresh mutable state (the frame deque is allocated inside the `M`, not before it). Concurrent
   * forcing of a single `M[A]` value remains unsupported; each `run(s)` call is independent.
   *
-  * Composition: `anaM.andThen(cataM)` composes two `Forget[M]` citizens at the focus seam (via
-  * `assocForgetMonad`) into the materialising effectful hylo (`M[S]` built, then folded);
-  * `Schemes.hyloM` is the fused one-pass spelling (no `M[S]`). This mirrors the pure side exactly,
-  * where `ana.andThen(cata)` is the materialising hylo and `Schemes.hylo` the fused one.
+  * Composition: `anaM.andThen(cataM)` Kleisli-chains two `FoldM`s (`M.flatMap`) into the
+  * materialising effectful hylo (`M[S]` built, then folded); `Schemes.hyloM` is the fused one-pass
+  * spelling (no `M[S]`). NB the M rung composes via `andThen` (both `cataM` and `anaM` are Kleisli
+  * arrows `_ => M[_]` — see [[Schemes.anaM]] on why the effect collapses the read/build duality),
+  * whereas the pure rung composes a `Review` (`ana`) into a `Getter` (`cata`) via `cross`.
   *
   * `FoldM` is a concrete, public citizen: `cataM` / `anaM` / `hyloM` all return it, and users may
   * wrap their own `S => M[A]` as one.

@@ -49,9 +49,9 @@ class SchemesMSpec extends Specification:
       Schemes.cata(sumAlg).get(tree)
   }
 
-  "anaM[Id].run == ana.get" >> {
+  "anaM[Id].run == ana.reverseGet" >> {
     Schemes.anaM[Id, BinF, Int, Bin](n => expand(n)).run(6) ===
-      Schemes.ana[BinF, Int, Bin](expand).get(6)
+      Schemes.ana[BinF, Int, Bin](expand).reverseGet(6)
   }
 
   "hyloM[Id].run == hylo.get" >> {

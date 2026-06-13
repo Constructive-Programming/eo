@@ -47,7 +47,7 @@ class SchemesBench extends JmhDefaults:
   // typed pattern-functor path (Eval trampoline over Traverse[BinF])
   val eoCataG = Schemes.cata(eoTypedSum) // Getter[Bin, Int]
   val eoHyloG = Schemes.hylo(eoTypedCoalg, eoTypedHyloAlg) // Getter[Int, Int]
-  val eoAnaG = Schemes.ana[BinF, Int, Bin](eoTypedCoalg) // Getter[Int, Bin]
+  val eoAnaR = Schemes.ana[BinF, Int, Bin](eoTypedCoalg) // Review[Bin, Int]
 
   val drosteCataF: Fix[BinF] => Int = scheme.cata(drosteSum)
   val drosteHyloF: Int => Int = scheme.hylo(drosteSum, drosteBuild)
@@ -64,7 +64,7 @@ class SchemesBench extends JmhDefaults:
   @Benchmark def handHylo: Int = SchemesFixtures.handHylo(Depth)
 
   // ----- ana: build the tree from a seed (materializing) ---------------------
-  @Benchmark def eoAna: Bin = eoAnaG.get(Depth)
+  @Benchmark def eoAna: Bin = eoAnaR.reverseGet(Depth)
   @Benchmark def drosteAna: Fix[BinF] = drosteAnaF(Depth)
   @Benchmark def handAna: Bin = handBuild(Depth)
 
@@ -72,20 +72,20 @@ class SchemesBench extends JmhDefaults:
 
   val eoParaG = Schemes.para[BinF, Bin, Int](eoParaAlg)
   val drosteParaFn: Fix[BinF] => Int = scheme.zoo.para(drosteParaAlg)
-  val eoApoG = Schemes.apo[BinF, Int, Bin](eoApoCoalg)
+  val eoApoR = Schemes.apo[BinF, Int, Bin](eoApoCoalg)
   val drosteApoFn: Int => Fix[BinF] = scheme.zoo.apo(drosteApoCoalg)
   val eoHistoG = Schemes.histo[BinF, Bin, Int](eoHistoAlg)
   val drosteHistoFn: Fix[BinF] => Int = scheme.zoo.histo(drosteHistoAlg)
-  val eoFutuG = Schemes.futu[BinF, Int, Bin](eoFutuCoalg)
+  val eoFutuR = Schemes.futu[BinF, Int, Bin](eoFutuCoalg)
   val drosteFutuFn: Int => Fix[BinF] = scheme.zoo.futu(drosteFutuCoalg)
 
   @Benchmark def eoPara: Int = eoParaG.get(eoTree)
   @Benchmark def drostePara: Int = drosteParaFn(fixTree)
-  @Benchmark def eoApo: Bin = eoApoG.get(Depth)
+  @Benchmark def eoApo: Bin = eoApoR.reverseGet(Depth)
   @Benchmark def drosteApo: Fix[BinF] = drosteApoFn(Depth)
   @Benchmark def eoHisto: Int = eoHistoG.get(eoTree)
   @Benchmark def drosteHisto: Int = drosteHistoFn(fixTree)
-  @Benchmark def eoFutu: Bin = eoFutuG.get(Depth)
+  @Benchmark def eoFutu: Bin = eoFutuR.reverseGet(Depth)
   @Benchmark def drosteFutu: Fix[BinF] = drosteFutuFn(Depth)
 
   // ----- apo with ONE BIG GRAFT. VERIFIED (the D6 check): droste's zoo.apo
@@ -95,7 +95,7 @@ class SchemesBench extends JmhDefaults:
   // guarantee; the O(graft) re-walk contrast applies to the GENERIC distApo
   // route (distApo, a law fixture only), not to droste.zoo.apo.
 
-  val eoApoGraftG = Schemes.apo[BinF, Int, Bin] { d =>
+  val eoApoGraftR = Schemes.apo[BinF, Int, Bin] { d =>
     if d == 0 then BinF.NodeF(Left(eoTree), Right(-1)) else BinF.LeafF(1)
   }
 
@@ -107,18 +107,18 @@ class SchemesBench extends JmhDefaults:
       }
     )
 
-  @Benchmark def eoApoGraft: Bin = eoApoGraftG.get(0)
+  @Benchmark def eoApoGraft: Bin = eoApoGraftR.reverseGet(0)
   @Benchmark def drosteApoGraft: Fix[BinF] = drosteApoGraftFn(0)
 
-  // ----- materializing refold: andThen-spelling vs manual (both build the Bin) --
-  // Post directional-flip, `ana.andThen(cata)` IS the materializing hylo (builds the
-  // Bin, then folds) — the two spellings should allocate identically. The *fused*
+  // ----- materializing refold: cross-spelling vs manual (both build the Bin) --
+  // `ana.cross(cata)` is the build⇄read seam — the materialising hylo (builds the
+  // Bin, then folds), so the two spellings allocate identically. The *fused*
   // (no-intermediate-Bin) contrast is `eoHylo` above (~half the B/op).
 
-  val eoRefoldAndThenG = Schemes.ana[BinF, Int, Bin](eoTypedCoalg).andThen(Schemes.cata(eoTypedSum))
+  val eoRefoldCrossG = Schemes.ana[BinF, Int, Bin](eoTypedCoalg).cross(Schemes.cata(eoTypedSum))
 
-  @Benchmark def eoRefoldAndThen: Int = eoRefoldAndThenG.get(Depth)
-  @Benchmark def eoRefoldManual: Int = eoCataG.get(eoAnaG.get(Depth))
+  @Benchmark def eoRefoldCross: Int = eoRefoldCrossG.get(Depth)
+  @Benchmark def eoRefoldManual: Int = eoCataG.get(eoAnaR.reverseGet(Depth))
 
   // ----- generic decoration route (user-written Gather, no identity fast path) --
 
