@@ -8,7 +8,7 @@ constructors** (compile-time arity safety, no positional indexing):
 | Scheme | Optic | Direction |
 |--------|-------|-----------|
 | `cata` | `Getter[S, A]` | fold an existing `S` to an `A` |
-| `ana`  | `Getter[Seed, S]` | build an `S` from a seed |
+| `ana`  | `Review[S, Seed]` | build an `S` from a seed |
 | `hylo` | `Getter[Seed, A]` (**fused** — no intermediate `S`) | unfold-and-fold in one pass |
 | `para` / `apo` / `histo` / `futu` | the zoo (below) | decorated folds / unfolds |
 | `cataM` / `anaM` / `hyloM` | `Forget[M]`-carried | effectful steps in a `Monad[M]` |
@@ -103,14 +103,15 @@ val countLeavesF: Getter[Int, Int] =
 ```
 
 ```scala mdoc
-sumLeavesF.get(buildBin.get(3))        // 4 unit leaves
+sumLeavesF.get(buildBin.reverseGet(3)) // 4 unit leaves
 countLeavesF.get(3)                    // same count, fused — no Bin materialised
 countLeavesF.get(1000000)              // stack-safe: the heap machine, O(depth) heap
 ```
 
-`cata`, `ana`, and `hylo` are all **forward `Getter`s** (`ana` builds, reading `Seed => S`), so
-they compose with the rest of the optic algebra via `andThen` (the materializing
-`ana(…).andThen(cata(…))` equals the fused `hylo` for a pure algebra — the hylo law). They run on
+`cata` and `hylo` are **`Getter`s** (forward reads) and `ana` is a **`Review`** (its build-only
+dual), so they compose with the rest of the optic algebra: `cata`/`hylo` via `andThen`, and the
+build⇄read refold via `ana.cross(cata)` (the materializing `ana(…).cross(cata(…))` equals the fused
+`hylo` for a pure algebra — the hylo law). They run on
 a **`< 512`-on-stack / heap-`ArrayDeque` machine** (no `cats.Eval`
 trampoline) — your `Traverse[F]` is used only per *layer* (any lawful instance works), so they are
 stack-safe to depths a hand-written recursion would overflow and allocate close to droste (see the
@@ -199,7 +200,7 @@ val patched = Schemes.apo[BinF, Int, Bin] { n =>
 ```
 
 ```scala mdoc
-patched.get(2)
+patched.reverseGet(2)
 ```
 
 `histo` gives the algebra each child's **entire decorated history** (`Attr[F, A]`: the result
@@ -231,13 +232,15 @@ val twoAtATime = Schemes.futu[BinF, Int, Bin] { n =>
 }
 ```
 
-### Composition and fusion: `andThen` vs `hylo`
+### Composition and fusion: `cross` vs `hylo`
 
-Because `ana` and `cata` are both forward `Getter`s, the unfold-then-fold refold is just their
-`andThen` at the focus seam — no `cross`, no clone classes. `ana(…).andThen(cata(…))` is the
-**materialising** hylo: it builds the whole `S`, then folds it. `Schemes.hylo` is the **fused**
-spelling — one single-pass machine, each node built once and folded immediately, no intermediate
-`S` and no second traversal. The two agree for a pure algebra (the hylo law).
+`ana` is a build-only `Review` and `cata` a read-only `Getter` — duals over `Direct`. The
+unfold-then-fold refold is their `cross` at the build-output⇄read-input seam (exactly what
+`Optic.cross` documents: "the motivating case is `ana.cross(cata)`"), yielding a forward read.
+`ana(…).cross(cata(…))` is the **materializing** hylo: it builds the whole `S`, then folds it.
+`Schemes.hylo` is the **fused** spelling — one single-pass machine, each node built once and folded
+immediately, no intermediate `S` and no second traversal. The two agree for a pure algebra (the
+hylo law).
 
 ```scala mdoc:silent
 val zooExpand: Int => BinF[Int] = n =>
@@ -245,7 +248,7 @@ val zooExpand: Int => BinF[Int] = n =>
 val zooSum: (Bin, BinF[Int]) => Int = (_, fa) =>
   fa match { case BinF.LeafF(n) => n; case BinF.BranchF(l, r) => l + r }
 
-val fusedLeafSum = Schemes.ana[BinF, Int, Bin](zooExpand).andThen(Schemes.cata(zooSum))
+val fusedLeafSum = Schemes.ana[BinF, Int, Bin](zooExpand).cross(Schemes.cata(zooSum))
 ```
 
 ```scala mdoc
@@ -290,7 +293,9 @@ When producing a layer is itself effectful — fetching a node's children from a
 supported Ms are single-pass and *linear* — a branching/replaying `M` like `List` is documented
 unsupported). Results are `Forget[M]`-carried `FoldM` citizens consumed via `.run`;
 `anaM.andThen(cataM)` is the materialising effectful hylo (Kleisli `flatMap` — `M[S]` built, then
-folded), mirroring the pure side, with `Schemes.hyloM` the fused one-pass spelling:
+folded), with `Schemes.hyloM` the fused one-pass spelling. (On the M rung the effect only fits the
+Kleisli read slot, so both `cataM` and `anaM` are `FoldM`s composed by `andThen` — the pure rung's
+`Review`/`Getter` `cross` duality collapses into Kleisli arrows here.)
 
 ```scala mdoc:silent
 import cats.data.State
@@ -316,7 +321,7 @@ The decoration optics' carrier is new in core: **`BiAffine`** — `Affine`'s dat
 seam. `Step(context, focus)` keeps going; `Done(payload)` means "this slot is already finished —
 do not call the coalgebra" (apo grafts a finished subtree, futu unrolls a prebuilt layer). Its
 laws are the graft-finality and round-trip equations in `cats-eo-laws`. Composition here is
-scoped to the shipped seams — the `Getter.andThen` refold (pure) and `FoldM.andThen` (M-path),
+scoped to the shipped seams — the `ana.cross(cata)` refold (pure) and `FoldM.andThen` (M-path),
 plus the fused `hylo`/`hyloM` drivers;
 BiAffine's full composition-matrix row is follow-up work, as are the elgot/coelgot decorations
 (the answer-level short-circuit, which the M machine's internals are already shaped for).
