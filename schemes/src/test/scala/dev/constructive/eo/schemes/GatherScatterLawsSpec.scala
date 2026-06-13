@@ -127,8 +127,8 @@ class GatherScatterLawsSpec extends Specification:
   "the generic decoration route agrees with the direct overload on ana" >> {
     def expand(n: Int): BinF[Int] =
       if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
-    Schemes.ana[BinF, Int, Int, Bin](Scatter.ana[BinF, Int])(expand).reverseGet(5) ===
-      Schemes.ana[BinF, Int, Bin](expand).reverseGet(5)
+    Schemes.ana[BinF, Int, Int, Bin](Scatter.ana[BinF, Int])(expand).get(5) ===
+      Schemes.ana[BinF, Int, Bin](expand).get(5)
   }
 
   "histo through Gather.histo: heads-only course-of-value == cata" >> {
@@ -148,7 +148,7 @@ class GatherScatterLawsSpec extends Specification:
       else BinF.BranchF(Coattr.Roll(BinF.LeafF(n)), Coattr.Pure(n - 1))
     val built = Schemes
       .ana[BinF, Int, Coattr[BinF, Int], Bin](Scatter.futu[BinF, Int])(coalg)
-      .reverseGet(3)
+      .get(3)
     built === Bin.Branch(Bin.Leaf(3), Bin.Branch(Bin.Leaf(2), Bin.Leaf(1)))
   }
 
@@ -174,8 +174,8 @@ class GatherScatterLawsSpec extends Specification:
     def coalg(n: Int): BinF[Coattr[BinF, Int]] =
       if n <= 1 then BinF.LeafF(1)
       else BinF.BranchF(Coattr.Roll(BinF.LeafF(n)), Coattr.Pure(n - 1))
-    Schemes.futu[BinF, Int, Bin](coalg).reverseGet(4) ===
-      Schemes.ana[BinF, Int, Coattr[BinF, Int], Bin](Scatter.futu[BinF, Int])(coalg).reverseGet(4)
+    Schemes.futu[BinF, Int, Bin](coalg).get(4) ===
+      Schemes.ana[BinF, Int, Coattr[BinF, Int], Bin](Scatter.futu[BinF, Int])(coalg).get(4)
   }
 
   // ----- generic-route end-to-end pins --------------------------------------
@@ -205,9 +205,9 @@ class GatherScatterLawsSpec extends Specification:
     def coalg(n: Int): BinF[Either[Bin, Int]] =
       if n <= 0 then BinF.LeafF(0)
       else BinF.BranchF(Left(Bin.Leaf(n)), Right(n - 1))
-    val nativeResult = Schemes.apo[BinF, Int, Bin](coalg).reverseGet(2)
+    val nativeResult = Schemes.apo[BinF, Int, Bin](coalg).get(2)
     val genericResult =
-      Schemes.ana[BinF, Int, Either[Bin, Int], Bin](apoScatter[BinF, Bin, Int])(coalg).reverseGet(2)
+      Schemes.ana[BinF, Int, Either[Bin, Int], Bin](apoScatter[BinF, Bin, Int])(coalg).get(2)
     // Both produce the same tree by value; use == not eq (generic route REBUILDS the graft).
     nativeResult === genericResult
   }

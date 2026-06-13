@@ -37,6 +37,19 @@ apo, histo, futu — built on three structural commitments (v2):
    seam genuinely is focus→source (`Forget[M]` Kleisli). `hyloF` remains as the name
    for the fused result (and the always-fused spelling), not a third independent
    driver.
+
+   > **Superseded (2026-06-13, directional flip).** The `.cross` framing above was
+   > a directional inconsistency: pure `ana` shipped as a *backward* `Review[S, Seed]`
+   > while its effectful twin `anaM` was a *forward* `FoldM[Seed, S]`. `.cross` was
+   > only needed to undo that backwardness. Resolution: pure `ana`/`apo`/`futu` are now
+   > **forward `Getter[Seed, S]`** (mirroring `anaM`), so the materialising refold is
+   > plain `ana.andThen(cata) : Getter[Seed, A]` via the core fused `Getter.andThen` —
+   > no `cross`, no `Cata`/`Ana`/`CataM`/`AnaM` clone classes (deleted). `Schemes.hylo`
+   > stays the fused (no-intermediate-`S`) spelling. Note the flip makes `ana.andThen(cata)`
+   > genuinely *materialising* (885k B/op, == manual `cata.get(ana.get())`); the old
+   > fused-pairs `.cross` member (820k) is gone, but the real fusion win lives in `hylo`
+   > (361k, unchanged). The M path mirrors this: `anaM.andThen(cataM)` is a concrete
+   > `FoldM.andThen` (Kleisli `flatMap`, materialising); `hyloM` is the fused spelling.
 3. **The driver is M-generic.** Computational steps evolve in a `Monad[M]` (the arbo
    `Calculator` shape: fetching children is effectful, `GetSellOptions[M, O]`).
    Effectful schemes return **`Forget[M]`-carried citizens** (`Seed => M[B]` is a
