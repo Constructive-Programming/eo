@@ -9,7 +9,7 @@ import org.specs2.mutable.Specification
 import data.Forget
 import data.Forget.given
 import optics.{Getter, Lens, Optic}
-import optics.Optic.* // get, andThen, foldMap
+import optics.Optic.* // get, andThen, cross, reverseGet, foldMap
 
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 
@@ -90,7 +90,7 @@ class SchemesSpec extends Specification:
   "ana builds a Bin from a seed, then cata reads it back" >> {
     // seed n: a left spine of n Branches ending in Leaf(1); right child always Leaf(0).
     val spine: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(n - 1, -1)
-    val built: Bin = Schemes.ana[BinF, Int, Bin](spine).get(3)
+    val built: Bin = Schemes.ana[BinF, Int, Bin](spine).reverseGet(3)
     // seed 3 -> Branch(Branch(Branch(Leaf 1, Leaf 1), Leaf 1), Leaf 1): 4 leaves of 1, depth 3
     (Schemes.cata(sumLeaves).get(built) == 4).and(
       Schemes
@@ -103,9 +103,9 @@ class SchemesSpec extends Specification:
     )
   }
 
-  "ana.andThen(cata) is the materializing hylo (builds the Bin, then folds)" >> {
+  "ana.cross(cata) is the materializing hylo (builds the Bin, then folds)" >> {
     val spine: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(n - 1, -1)
-    val refold = Schemes.ana[BinF, Int, Bin](spine).andThen(Schemes.cata(sumLeaves))
+    val refold = Schemes.ana[BinF, Int, Bin](spine).cross(Schemes.cata(sumLeaves))
     (refold.get(3) == 4) must beTrue
   }
 
@@ -201,7 +201,7 @@ class SchemesSpec extends Specification:
 
   "ana is stack/space-safe building a 10^6-deep Bin (the OOM frontier)" >> {
     val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(n - 1, -1)
-    val deep: Bin = Schemes.ana[BinF, Int, Bin](coalg).get(Deep)
+    val deep: Bin = Schemes.ana[BinF, Int, Bin](coalg).reverseGet(Deep)
     val depth: (Bin, BinF[Int]) => Int = (_, fa) =>
       fa match
         case BinF.LeafF(_)      => 0
@@ -233,7 +233,7 @@ class SchemesSpec extends Specification:
       if d <= 0 then RoseF(0, Nil)
       else RoseF(d, (d - 1) :: List.fill(Width)(-1))
     val countNodes: (Rose, RoseF[Int]) => Int = (_, fr) => 1 + fr.kids.sum
-    val built: Rose = Schemes.ana[RoseF, Int, Rose](coalg).get(DeepRose)
+    val built: Rose = Schemes.ana[RoseF, Int, Rose](coalg).reverseGet(DeepRose)
     val expected = (DeepRose + 1) + DeepRose * Width
     (Schemes.cata(countNodes).get(built) == expected) must beTrue
   }

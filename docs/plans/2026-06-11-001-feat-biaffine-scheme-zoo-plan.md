@@ -38,18 +38,21 @@ apo, histo, futu — built on three structural commitments (v2):
    for the fused result (and the always-fused spelling), not a third independent
    driver.
 
-   > **Superseded (2026-06-13, directional flip).** The `.cross` framing above was
-   > a directional inconsistency: pure `ana` shipped as a *backward* `Review[S, Seed]`
-   > while its effectful twin `anaM` was a *forward* `FoldM[Seed, S]`. `.cross` was
-   > only needed to undo that backwardness. Resolution: pure `ana`/`apo`/`futu` are now
-   > **forward `Getter[Seed, S]`** (mirroring `anaM`), so the materialising refold is
-   > plain `ana.andThen(cata) : Getter[Seed, A]` via the core fused `Getter.andThen` —
-   > no `cross`, no `Cata`/`Ana`/`CataM`/`AnaM` clone classes (deleted). `Schemes.hylo`
-   > stays the fused (no-intermediate-`S`) spelling. Note the flip makes `ana.andThen(cata)`
-   > genuinely *materialising* (885k B/op, == manual `cata.get(ana.get())`); the old
-   > fused-pairs `.cross` member (820k) is gone, but the real fusion win lives in `hylo`
-   > (361k, unchanged). The M path mirrors this: `anaM.andThen(cataM)` is a concrete
-   > `FoldM.andThen` (Kleisli `flatMap`, materialising); `hyloM` is the fused spelling.
+   > **Refined (2026-06-13).** The `.cross` framing here is *correct* and stays — the
+   > smell to fix was the `Cata`/`Ana`/`CataM`/`AnaM` *clone classes* (with `asGetter`/
+   > `asReview`), not the directions. Resolution: `cata` returns the real core
+   > `Getter[S, A]` and `ana`/`apo`/`futu` the real core `Review[S, Seed]` (the
+   > Getter↔Review duality — "if cata is a Getter, ana is a Review"); the clone classes
+   > are deleted. The materialising refold is `ana.cross(cata) : Getter[Seed, A]` (the
+   > build⇄read seam `Optic.cross` names); `Schemes.hylo` stays the fused
+   > (no-intermediate-`S`) spelling. Empirical (`-prof gc`): `ana.cross(cata)` 885k B/op
+   > == manual `cata.get(ana.reverseGet())` 885k; fused `hylo` 361k (unchanged). M rung:
+   > the effect only fits `Forget[M]`'s Kleisli *read* slot, so both `cataM` and `anaM`
+   > are `FoldM`s (`Seed => M[S]` is a Kleisli arrow that is *semantically* a build) —
+   > the read/build duality collapses, composition is `anaM.andThen(cataM)` (concrete
+   > `FoldM.andThen`, Kleisli `flatMap`), not `cross`. A short-lived earlier attempt to
+   > make pure `ana` a *forward Getter* (to dodge `cross`) was reverted — it broke the
+   > duality.
 3. **The driver is M-generic.** Computational steps evolve in a `Monad[M]` (the arbo
    `Calculator` shape: fetching children is effectful, `GetSellOptions[M, O]`).
    Effectful schemes return **`Forget[M]`-carried citizens** (`Seed => M[B]` is a
