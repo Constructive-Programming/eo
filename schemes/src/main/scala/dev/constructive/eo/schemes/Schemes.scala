@@ -4,16 +4,17 @@ package schemes
 import cats.{Monad, Traverse}
 
 import data.{Forget, ForgetK}
-import optics.{Getter, Optic, Review}
+import optics.{Getter, Optic}
 import zoo.*
 
 /** Typed recursion schemes as composable optics, over a user-supplied **pattern functor** `F[_]` (+
   * `Traverse[F]`) and the [[Basis]] (`Project`/`Embed`) correspondence to the recursive type `S` —
   * algebras pattern-match `F`'s *named constructors*, no positional indexing.
   *
-  *   - [[cata]] folds (`Cata`, Getter-shaped); [[ana]] builds (`Ana`, Review-shaped); [[hylo]] is
-  *     the **fused** zero-`S` refold. `ana(c).cross(cata(a))` fuses (single pass, no full-tree
-  *     retention).
+  *   - [[cata]] folds (`Getter[S, A]`); [[ana]] unfolds (`Getter[Seed, S]` — forward, mirroring
+  *     [[anaM]]'s `FoldM[Seed, S]`); both are plain `Getter`s, so `ana.andThen(cata) : Getter[Seed,
+  *     A]` is the materialising hylo via the core fused `Getter.andThen`. [[hylo]] is the **fused**
+  *     zero-`S` refold (builds no intermediate `S`); `ana.andThen(cata) == hylo` is the hylo law.
   *   - The zoo: [[para]] (subterms paired from the walked nodes), [[apo]] (O(1) graft), [[histo]] /
   *     [[futu]] (course-of-value / multi-layer, via [[Attr]] / [[Coattr]]). Decorated generically
   *     through the [[Gather]]/[[Scatter]] decoration optics (over the `BiAffine` carrier) —
@@ -59,13 +60,12 @@ object Schemes:
     */
   def cata[F[_], S, A](
       alg: (S, F[A]) => A
-  )(using F: Traverse[F], P: Project[F, S]): Cata[F, S, A] =
-    new Cata[F, S, A](
+  )(using F: Traverse[F], P: Project[F, S]): Getter[S, A] =
+    Getter[S, A](
       Machines.foldLayered[F, S, A](
         P.project,
         (s, fs, out) => alg(s, Machines.rebuildLayer[F, S, A](fs, out)),
-      ),
-      alg,
+      )
     )
 
   /** Generalized (decorated) catamorphism — the gcata of the typed path, with the decoration
@@ -138,13 +138,12 @@ object Schemes:
     */
   def ana[F[_], Seed, S](
       coalg: Seed => F[Seed]
-  )(using F: Traverse[F], E: Embed[F, S]): Ana[F, Seed, S] =
-    new Ana[F, Seed, S](
+  )(using F: Traverse[F], E: Embed[F, S]): Getter[Seed, S] =
+    Getter[Seed, S](
       Machines.foldLayered[F, Seed, S](
         coalg,
         (_, fSeed, out) => E.embed(Machines.rebuildLayer[F, Seed, S](fSeed, out)),
-      ),
-      coalg,
+      )
     )
 
   /** Apomorphism over a typed pattern functor `F` — per child slot the coalgebra answers
@@ -156,7 +155,7 @@ object Schemes:
     */
   def apo[F[_], A, S](
       coalg: A => F[Either[S, A]]
-  )(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
+  )(using F: Traverse[F], E: Embed[F, S]): Getter[A, S] =
     val run = Machines.foldLayeredOr[F, Either[S, A], S](
       {
         case Left(s)  => Left(s)
@@ -164,7 +163,7 @@ object Schemes:
       },
       (fw, out) => E.embed(Machines.rebuildLayer[F, Either[S, A], S](fw, out)),
     )
-    Review[S, A](a => run(Right(a)))
+    Getter[A, S](a => run(Right(a)))
 
   /** Futumorphism over a typed pattern functor `F` — the coalgebra may emit **multiple layers per
     * step** ([[Coattr]]: `Pure` keeps unfolding, `Roll` is a prebuilt layer unrolled with no
@@ -177,7 +176,7 @@ object Schemes:
     */
   def futu[F[_], A, S](
       coalg: A => F[Coattr[F, A]]
-  )(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
+  )(using F: Traverse[F], E: Embed[F, S]): Getter[A, S] =
     val expand: Coattr[F, A] => F[Coattr[F, A]] =
       case Coattr.Pure(a)     => coalg(a)
       case Coattr.Roll(layer) => layer
@@ -185,7 +184,7 @@ object Schemes:
       expand,
       (_, fw, out) => E.embed(Machines.rebuildLayer[F, Coattr[F, A], S](fw, out)),
     )
-    Review[S, A](a => build(Coattr.Pure(a)))
+    Getter[A, S](a => build(Coattr.Pure(a)))
 
   /** Generalized (decorated) anamorphism — the gana of the typed path, with the decoration supplied
     * as a [[Scatter]] optic value. Each `W` slot is scattered ([[Scatter.scatter]], called directly
@@ -200,7 +199,7 @@ object Schemes:
     */
   def ana[F[_], A, W, S](
       scatter: Scatter[F, W, A]
-  )(gcoalg: A => F[W])(using F: Traverse[F], E: Embed[F, S]): Review[S, A] =
+  )(gcoalg: A => F[W])(using F: Traverse[F], E: Embed[F, S]): Getter[A, S] =
     val expand: W => F[W] = w =>
       scatter.scatter(w) match
         case Right(a)    => gcoalg(a)
@@ -209,14 +208,15 @@ object Schemes:
       expand,
       (_, fw, out) => E.embed(Machines.rebuildLayer[F, W, S](fw, out)),
     )
-    Review[S, A](a => build(scatter.unit(a)))
+    Getter[A, S](a => build(scatter.unit(a)))
 
   /** Hylomorphism over a typed pattern functor `F` — the **fused** refold `Seed => A`, building
     * **no intermediate `S`** (so it needs neither `Project` nor `Embed`, only `Traverse[F]`).
     * `coalg` unfolds a seed into one typed layer; `alg` folds the layer's results to `A` (the seed
     * is supplied, paramorphism-flavored). Stack-safe (the [[Machines.foldLayered]] machine). Equal
-    * to `ana(coalg).cross(cata(alg))` for a *pure* algebra (the hylo law); for a node-reading para
-    * algebra the two agree only under the seed↔`embed(coalg(seed))` correspondence.
+    * to the materialising `ana(coalg).andThen(cata(alg))` for a *pure* algebra (the hylo law) —
+    * `hylo` fuses it into one pass with no intermediate `S`; for a node-reading para algebra the
+    * two agree only under the seed↔`embed(coalg(seed))` correspondence.
     */
   def hylo[F[_], Seed, A](
       coalg: Seed => F[Seed],
@@ -230,32 +230,31 @@ object Schemes:
     )
 
   /** Effectful catamorphism — the algebra runs in `M` (`(S, F[A]) => M[A]`); the layer peel stays
-    * the pure `Project`. Returns the `Forget[M]`-carried [[CataM]] citizen; consume via `.run`.
+    * the pure `Project`. Returns the `Forget[M]`-carried [[zoo.FoldM]] citizen; consume via `.run`.
     */
   def cataM[M[_], F[_], S, A](
       algM: (S, F[A]) => M[A]
-  )(using M: Monad[M], F: Traverse[F], P: Project[F, S]): CataM[M, F, S, A] =
-    new CataM[M, F, S, A](
+  )(using M: Monad[M], F: Traverse[F], P: Project[F, S]): FoldM[M, S, A] =
+    new FoldM[M, S, A](
       Machines.foldLayeredM[M, F, S, A](
         s => M.pure(Right(P.project(s))),
         (s, fs, out) => algM(s, Machines.rebuildLayer[F, S, A](fs, out)),
-      ),
-      algM,
+      )
     )
 
   /** Effectful anamorphism — the coalgebra (the layer producer) runs in `M` (`Seed => M[F[Seed]]`,
-    * the arbo `GetSellOptions` shape: fetching children is effectful). Returns the [[AnaM]]
-    * citizen; consume via `.run`, fuse via `.andThen(cataM(...))`.
+    * the arbo `GetSellOptions` shape: fetching children is effectful). Returns the [[zoo.FoldM]]
+    * citizen; consume via `.run`; `anaM.andThen(cataM)` is the materialising effectful hylo,
+    * `hyloM` the fused one.
     */
   def anaM[M[_], F[_], Seed, S](
       coalgM: Seed => M[F[Seed]]
-  )(using M: Monad[M], F: Traverse[F], E: Embed[F, S]): AnaM[M, F, Seed, S] =
-    new AnaM[M, F, Seed, S](
+  )(using M: Monad[M], F: Traverse[F], E: Embed[F, S]): FoldM[M, Seed, S] =
+    new FoldM[M, Seed, S](
       Machines.foldLayeredM[M, F, Seed, S](
         seed => M.map(coalgM(seed))(Right(_)),
         (_, fSeed, out) => M.pure(E.embed(Machines.rebuildLayer[F, Seed, S](fSeed, out))),
-      ),
-      coalgM,
+      )
     )
 
   /** Effectful hylomorphism — the always-fused M spelling (what the D6 `eoHyloM` bench row runs):

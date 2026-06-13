@@ -2,11 +2,12 @@ package dev.constructive.eo
 package schemes
 package zoo
 
+import cats.Monad
+
 import data.{Forget, ForgetK}
 import optics.Optic
 
-/** Generic effectful-fold citizen: `run: S => M[A]`. What `hyloM` and the fused
-  * `AnaM.andThen(CataM)` return.
+/** Generic effectful-fold citizen: `run: S => M[A]`. What `cataM` / `anaM` / `hyloM` return.
   *
   * Effectful scheme citizens — the M-generic drivers' return types. Computational steps evolve in a
   * `Monad[M]` (the arbo `Calculator` shape: fetching a node's children is effectful), and the
@@ -27,17 +28,26 @@ import optics.Optic
   * own fresh mutable state (the frame deque is allocated inside the `M`, not before it). Concurrent
   * forcing of a single `M[A]` value remains unsupported; each `run(s)` call is independent.
   *
-  * Widening hazard (the M-path mirror of `Ana.cross`'s): a widened `AnaM` still typechecks through
-  * the generic trait `andThen` via `assocForgetMonad` — extensionally equal but MATERIALIZING
-  * (`M[S]` built, then folded). `Schemes.hyloM` stays the always-fused M spelling; the fused member
-  * on [[AnaM]] requires the concrete types.
+  * Composition: `anaM.andThen(cataM)` composes two `Forget[M]` citizens at the focus seam (via
+  * `assocForgetMonad`) into the materialising effectful hylo (`M[S]` built, then folded);
+  * `Schemes.hyloM` is the fused one-pass spelling (no `M[S]`). This mirrors the pure side exactly,
+  * where `ana.andThen(cata)` is the materialising hylo and `Schemes.hylo` the fused one.
   *
-  * `FoldM` is `open` (not `sealed`) so that [[CataM]] and [[AnaM]] — which live in the `zoo`
-  * subpackage — can extend it. Users may also wrap their own `S => M[A]` as a `FoldM` citizen; the
-  * constructor is public.
+  * `FoldM` is a concrete, public citizen: `cataM` / `anaM` / `hyloM` all return it, and users may
+  * wrap their own `S => M[A]` as one.
   */
 class FoldM[M[_], S, A](val run: S => M[A]) extends Optic[S, Unit, A, Unit, Forget[M]]:
   type X = Nothing
 
   def to(s: S): Forget[M][X, A] = ForgetK(run(s))
   def from(d: Forget[M][X, Unit]): Unit = ()
+
+  /** The focus-seam composition of two effectful reads — the **materialising** effectful hylo:
+    * `run` this `FoldM` fully to `M[A]`, then Kleisli-chain into `inner` (`M.flatMap`). A concrete
+    * same-type member (mirroring the pure `Getter.andThen`), so it is strictly more specific than
+    * the generic `Optic.andThen` overloads — `anaM.andThen(cataM)` resolves here and stays a
+    * `FoldM`, no ascription needed. Requires `Monad[M]` (the effect's bind); `Schemes.hyloM` is the
+    * fused one-pass spelling that builds no intermediate `M[A]`.
+    */
+  def andThen[C](inner: FoldM[M, A, C])(using M: Monad[M]): FoldM[M, S, C] =
+    new FoldM[M, S, C](s => M.flatMap(run(s))(inner.run))
