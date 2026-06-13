@@ -44,7 +44,7 @@ object SchemesFixtures:
         case BinF.NodeF(l, r) => f(l, Eval.defer(f(r, lb)))
 
   /** `Basis[BinF, Bin]` — the `Project`/`Embed` correspondence between the native `Bin` and its
-    * pattern functor, for the typed `cataF`/`anaF` benches.
+    * pattern functor, for the typed `cata`/`ana` benches.
     */
   given binBasis: Basis[BinF, Bin] = Basis(
     {
