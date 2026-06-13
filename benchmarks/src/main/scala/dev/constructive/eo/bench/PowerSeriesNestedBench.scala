@@ -33,8 +33,8 @@ import monocle.{Lens => MLens, Traversal => MTraversal}
   * parallel arrays and re-nest on the way out. A trie keeps the shape explicit and substitutes
   * leaves recursively.
   *
-  * Total elements traversed = `departmentCount × size` (4 × {4, 16, 64, 256, 1024}). Inner `size` matches the
-  * flat-bench param so comparisons are direct.
+  * Total elements traversed = `departmentCount × size` (4 × {4, 16, 64, 256, 1024}). Inner `size`
+  * matches the flat-bench param so comparisons are direct.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
