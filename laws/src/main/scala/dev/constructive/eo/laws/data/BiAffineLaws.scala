@@ -15,7 +15,7 @@ import dev.constructive.eo.forgetful.{ForgetfulFold, ForgetfulFunctor, Forgetful
   *   - Graft-channel laws: the `Done` arm is *final* — invisible to the focus (`getOption` empty,
   *     `foldMap` empty) and inert under `map` — while `Step` carries the focus. These are the
   *     carrier-shaped halves of D1's "Done is final"; the per-value `graft(Done(t)) == t` equation
-  *     is stated against concrete `Decor` citizens (which pin `Fst[X]`), not here.
+  *     is stated against concrete `Gather`/`Scatter` citizens (which pin `Fst[X]`), not here.
   *
   * The `AssociativeFunctor[BiAffine]` coherence laws are deliberately absent — the carrier ships
   * without its composition-matrix row (follow-up PR), so there is no `andThen` for them to govern.

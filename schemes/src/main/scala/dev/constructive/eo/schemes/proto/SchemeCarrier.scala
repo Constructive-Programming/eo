@@ -47,9 +47,9 @@ object Scheme:
   given ReverseAccessor[Scheme] with
     def reverseGet[X, A](a: A): Scheme[X, A] = a
 
-/** Pure catamorphism — a node-BLIND fold `alg: F[A] => A`. `X = Nothing`: it retains nothing of
-  * the structure, so `ana.cross(this)` is sound to fuse. Read-only (`.get` via `Accessor[Scheme]`,
-  * no `asGetter`).
+/** Pure catamorphism — a node-BLIND fold `alg: F[A] => A`. `X = Nothing`: it retains nothing of the
+  * structure, so `ana.cross(this)` is sound to fuse. Read-only (`.get` via `Accessor[Scheme]`, no
+  * `asGetter`).
   */
 final class SchemeCata[F[_], S, A](private[proto] val alg: F[A] => A)(using
     private[proto] val F: Traverse[F],
@@ -131,6 +131,7 @@ final class SchemeAna[F[_], Seed, S](private[proto] val coalg: Seed => F[Seed])(
 
 /** Prototype constructors mirroring `Schemes.{cata, para, ana}` but on the `Scheme` carrier. */
 object Proto:
+
   def cata[F[_], S, A](alg: F[A] => A)(using Traverse[F], Project[F, S]): SchemeCata[F, S, A] =
     new SchemeCata[F, S, A](alg)
 
