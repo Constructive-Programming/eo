@@ -74,6 +74,39 @@ private[schemes] object Machines:
   /** The pending-result loop state: a result bubbling up, or [[NoResult]] while descending. */
   private[schemes] type Pending[R] = R | NoResult.type
 
+  // === The engine's only unchecked narrowings ================================================
+  // Abstract type params `N` / `R` have NO runtime type test — `case n: N` is rejected under
+  // -Werror ("the type test for N cannot be checked at runtime"), and Scala 3 does not subtract
+  // a matched singleton from a union binder (`N | Ascend.type` minus `Ascend.type` is not `N`).
+  // So narrowing a Slot / Op / Pending to its live half is necessarily an `asInstanceOf`. Every
+  // such cast lives HERE, `inline` (zero overhead — same bytecode as the bare cast) and named by
+  // the walk invariant it relies on, instead of scattered through the loop bodies. These five are
+  // the engine's complete unchecked-narrowing surface; the two remaining casts (the builder
+  // widening + the array-erasure reinterpret in `childrenSlots`) are always-safe boundary casts,
+  // not narrowings.
+
+  /** A slot still holding its child node — the walk reads this only at indices `>= frame.next`
+    * (slots below `next` already hold results), or for a freshly-built layer's slot 0.
+    */
+  private inline def childAt[N, R](slot: Slot[N, R]): N = slot.asInstanceOf[N]
+
+  /** A slot holding a fold result — the walk reads this only at indices `< frame.next`. */
+  private inline def resultAt[N, R](slot: Slot[N, R]): R = slot.asInstanceOf[R]
+
+  /** The descend target carried by the loop op — read only on the non-[[Ascend]] arm. */
+  private inline def nodeOf[N](op: Op[N]): N = op.asInstanceOf[N]
+
+  /** The pending result — read only on the [[Ascend]] arm, reached only after a real result was
+    * threaded in (so `pending` is never [[NoResult]] here).
+    */
+  private inline def forced[R](pending: Pending[R]): R = pending.asInstanceOf[R]
+
+  /** Phantom-recast an empty leaf layer `F[A]` to `F[B]` — valid because a pattern-functor leaf has
+    * no recursive slots, so no `A` is ever read as a `B`. Avoids the `F.map` reallocation a leaf
+    * would otherwise pay (the leaf is the most common node; this is allocation-pinned).
+    */
+  private inline def leafRecast[F[_], A, B](fn: F[A]): F[B] = fn.asInstanceOf[F[B]]
+
   /** The shared "this layer has no children" sentinel.
     *
     * '''What it is:''' a single zero-length slot buffer, allocated once and returned by
@@ -128,12 +161,12 @@ private[schemes] object Machines:
   private[schemes] def rebuildLayer[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
   ): F[R] =
-    if out.length == 0 then fn.asInstanceOf[F[R]]
+    if out.length == 0 then leafRecast(fn)
     else
       var i = -1
       F.map(fn) { _ =>
         i += 1
-        out(i).asInstanceOf[R]
+        resultAt(out(i))
       }
 
   /** [[rebuildLayer]]'s paramorphic sibling: pair each original child `N` with its folded result
@@ -143,12 +176,12 @@ private[schemes] object Machines:
   private[schemes] def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
   ): F[(N, R)] =
-    if out.length == 0 then fn.asInstanceOf[F[(N, R)]]
+    if out.length == 0 then leafRecast(fn)
     else
       var i = -1
       F.map(fn) { n =>
         i += 1
-        (n, out(i).asInstanceOf[R])
+        (n, resultAt(out(i)))
       }
 
   /** The descend/bubble heap walk shared by [[foldLayered]] and [[foldLayeredOr]] (previously two
@@ -173,19 +206,19 @@ private[schemes] object Machines:
         case Right(layer)   =>
           val slots = childrenSlots[F, N, R](layer)
           if slots.length == 0 then loop(Ascend, combine(n, layer, slots), stack)
-          else loop(slots(0).asInstanceOf[N], NoResult, new Frame(n, layer, slots, 0) :: stack)
+          else loop(childAt(slots(0)), NoResult, new Frame(n, layer, slots, 0) :: stack)
 
       transparent inline def bubble: R = stack match
-        case Nil        => pending.asInstanceOf[R] // the walk's final result
+        case Nil        => forced(pending) // the walk's final result
         case fr :: rest =>
-          fr.slots(fr.next) = pending.asInstanceOf[R] // overwrite the just-folded child's slot
+          fr.slots(fr.next) = forced(pending) // overwrite the just-folded child's slot
           fr.next += 1
-          if fr.next < fr.slots.length then loop(fr.slots(fr.next).asInstanceOf[N], NoResult, stack)
+          if fr.next < fr.slots.length then loop(childAt(fr.slots(fr.next)), NoResult, stack)
           else loop(Ascend, combine(fr.node, fr.layer, fr.slots), rest)
 
       op match
         case Ascend => bubble
-        case n      => descend(n.asInstanceOf[N]) // the op union's other inhabitant is the node
+        case n      => descend(nodeOf(n)) // the op union's other inhabitant is the node
 
     loop(root, NoResult, Nil)
 
@@ -208,7 +241,7 @@ private[schemes] object Machines:
         val slots = childrenSlots[F, N, R](layer)
         var i = 0
         while i < slots.length do
-          slots(i) = rec(slots(i).asInstanceOf[N], depth + 1)
+          slots(i) = rec(childAt(slots(i)), depth + 1)
           i += 1
         combine(n, layer, slots)
 
@@ -234,7 +267,7 @@ private[schemes] object Machines:
             val slots = childrenSlots[F, N, R](layer)
             var i = 0
             while i < slots.length do
-              slots(i) = rec(slots(i).asInstanceOf[N], depth + 1)
+              slots(i) = rec(childAt(slots(i)), depth + 1)
               i += 1
             combine(layer, slots)
 
@@ -296,16 +329,16 @@ private[schemes] object Machines:
                 M.map(combine(n, layer, slots))(bubbled)
               else
                 stack.push(new Frame(n, layer, slots, 0))
-                M.pure(Left(slots(0).asInstanceOf[N]))
+                M.pure(Left(childAt(slots(0))))
           }
 
         def onAscend(): M[Either[Op[N], R]] =
           val fr = stack.peek()
-          if fr == null then M.pure(Right(pending.asInstanceOf[R]))
+          if fr == null then M.pure(Right(forced(pending)))
           else
-            fr.slots(fr.next) = pending.asInstanceOf[R] // store the just-folded child's result
+            fr.slots(fr.next) = forced(pending) // store the just-folded child's result
             fr.next += 1
-            if fr.next < fr.slots.length then M.pure(Left(fr.slots(fr.next).asInstanceOf[N]))
+            if fr.next < fr.slots.length then M.pure(Left(childAt(fr.slots(fr.next))))
             else
               // last child stored: combine now — no intermediate pure event
               M.map(combine(fr.node, fr.layer, fr.slots)) { r =>
@@ -316,7 +349,7 @@ private[schemes] object Machines:
         M.tailRecM[Op[N], R](n0) { op =>
           op match
             case Ascend => onAscend()
-            case n      => onDescend(n.asInstanceOf[N])
+            case n      => onDescend(nodeOf(n))
         }
       }
 
@@ -362,10 +395,10 @@ private[schemes] object Machines:
       out: Array[Slot[N, P]],
       inline half: P => T,
   )(using F: Traverse[F]): F[T] =
-    if out.length == 0 then fn.asInstanceOf[F[T]]
+    if out.length == 0 then leafRecast(fn)
     else
       var i = -1
       F.map(fn) { _ =>
         i += 1
-        half(out(i).asInstanceOf[P])
+        half(resultAt(out(i)))
       }
