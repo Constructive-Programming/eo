@@ -77,7 +77,8 @@ object SchemesFixtures:
       case BinF.LeafF(v)    => v
       case BinF.NodeF(l, r) => l + r
 
-  /** Typed coalgebra (the single fused `Seed => F[Seed]` shape) — builds the perfect binary tree. */
+  /** Typed coalgebra (the single fused `Seed => F[Seed]` shape) — builds the perfect binary tree.
+    */
   val eoTypedCoalg: Int => BinF[Int] = d =>
     if d <= 0 then BinF.LeafF(1) else BinF.NodeF(d - 1, d - 1)
 
