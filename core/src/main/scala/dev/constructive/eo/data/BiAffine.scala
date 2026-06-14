@@ -21,10 +21,11 @@ import optics.Optic
   * concrete `Tuple2` (so `Fst[A]` / `Snd[A]` reduce); carried through an `Optic[…, BiAffine]`
   * existential, `A` is abstract and the match types stay inert.
   *
-  * Same-carrier composition is shipped as [[BiAffine.assoc]] — the build-side mirror of
-  * [[Affine.assoc]] (`Done` ↔ `Miss`, `Step` ↔ `Hit`), so `biaffine.andThen(biaffine)` type-checks
-  * and runs (`Done`/`Step` coherence across `andThen`). The cross-carrier `Composer` bridges into
-  * `BiAffine` remain follow-up, alongside the recursion-scheme citizens that would consume them.
+  * The composition-matrix row is shipped: [[BiAffine.assoc]] (same-carrier `andThen`, the
+  * build-side mirror of [[Affine.assoc]] — `Done` ↔ `Miss`, `Step` ↔ `Hit`) plus the cross-carrier
+  * bridges [[BiAffine.tuple2biaffine]] (Lens → BiAffine) and [[BiAffine.either2biaffine]] (Prism →
+  * BiAffine), mirroring `Affine`'s. So `biaffine.andThen(biaffine)` and
+  * `lens`/`prism`-into-`BiAffine` compositions all resolve.
   *
   * @tparam A
   *   existential leftover tuple
@@ -181,3 +182,43 @@ object BiAffine:
         val pair = s.snd.asInstanceOf[(Snd[Xo], Snd[Xi])]
         val b: B = inner.from(new Step[Xi, D](pair._2, s.b))
         outer.from(new Step[Xo, B](pair._1, b))
+
+  /** Lens → BiAffine — the build-side mirror of [[Affine.tuple2affine]]. A `Tuple2` optic has no
+    * finished arm, so it lifts to an always-`Step` (the `Done` arm is reached only when a
+    * downstream composition finishes, carrying the rebuilt `T`). Lets a Lens compose with a
+    * `BiAffine`-carried decoration (e.g. `lens.andThen(apoScatter)`).
+    *
+    * @group Instances
+    */
+  given tuple2biaffine: Composer[Tuple2, BiAffine] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, BiAffine] =
+      new Optic[S, T, A, B, BiAffine]:
+        type X = (T, o.X)
+        def to(s: S): BiAffine[X, A] =
+          val (xo, a) = o.to(s)
+          new Step[X, A](xo, a)
+        def from(b: BiAffine[X, B]): T =
+          b match
+            case d: Done[X, B] => d.fst
+            case s: Step[X, B] => o.from((s.snd, s.b))
+
+  /** Prism → BiAffine — the build-side mirror of [[Affine.either2affine]]. The `Either`
+    * decomposition maps straight onto `Done` (the `Left` / no-build arm) and `Step` (the `Right` /
+    * keep-going arm). Lets a Prism compose with a `BiAffine`-carried decoration.
+    *
+    * @group Instances
+    */
+  given either2biaffine: Composer[Either, BiAffine] with
+
+    def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, BiAffine] =
+      new Optic[S, T, A, B, BiAffine]:
+        type X = (o.X, S)
+        def to(s: S): BiAffine[X, A] =
+          o.to(s) match
+            case Right(a) => new Step[X, A](s, a)
+            case Left(x)  => new Done[X, A](x)
+        def from(xb: BiAffine[X, B]): T =
+          xb match
+            case d: Done[X, B] => o.from(Left(d.fst))
+            case s: Step[X, B] => o.from(Right(s.b))
