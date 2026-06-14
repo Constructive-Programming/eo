@@ -2,6 +2,8 @@ package dev.constructive.eo
 package schemes
 package zoo
 
+import cats.Monad
+
 /** Cofree-without-laziness: a fold result (`head`) decorating one layer of already-decorated
   * children (`tail`). The histomorphism's algebra sees `F[Attr[F, A]]` — each child's result *plus*
   * that child's entire decorated history.
@@ -24,3 +26,11 @@ object Attr:
     */
   def decorate[F[_], N, A](alg: F[Attr[F, A]] => A): (N, F[Attr[F, A]]) => Attr[F, A] =
     (_, layer) => Attr(alg(layer), layer)
+
+  /** The effectful cofree-decorating combine shared by `histoM` / `chronoM` — the M-lifted
+    * [[decorate]]: run the effectful algebra on the rebuilt layer, tag the result onto it.
+    */
+  def decorateM[M[_], F[_], N, A](alg: F[Attr[F, A]] => M[A])(using
+      M: Monad[M]
+  ): (N, F[Attr[F, A]]) => M[Attr[F, A]] =
+    (_, layer) => M.map(alg(layer))(a => Attr(a, layer))

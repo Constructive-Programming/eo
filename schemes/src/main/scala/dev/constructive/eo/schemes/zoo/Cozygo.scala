@@ -29,7 +29,7 @@ final class Cozygo[F[_], A, B, S](
     val expand: Either[B, A] => F[Either[B, A]] =
       case Left(b)  => F.map(aux(b))(Left(_))
       case Right(a) => coalg(a)
-    val run = Machines.foldLayered[F, Either[B, A], S](expand, (_, fr) => E.embed(fr))
+    val run = Machines.buildLayered[F, Either[B, A], S](expand)
     a => run(Right(a))
 
   protected def write(a: A): S = build(a)

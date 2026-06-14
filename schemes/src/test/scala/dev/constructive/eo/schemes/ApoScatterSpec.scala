@@ -15,7 +15,8 @@ import schemes.samples.{Bin, BinF}
   * composable `BiAffine`-carried scatter optic (`Left → Done`, the O(1) graft; `Right → Step`, keep
   * unfolding), and apo's engine constructs + consumes that decision through it. Pins the scatter's
   * `Done`/`Step` semantics, that it composes via `BiAffine.assoc`, and that the scheme still builds
-  * (graft intact) after the re-carriering. */
+  * (graft intact) after the re-carriering.
+  */
 class ApoScatterSpec extends Specification:
 
   private val sc = Schemes.apoScatter[Bin, Int]

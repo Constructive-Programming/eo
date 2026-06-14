@@ -16,7 +16,7 @@ final class Ana[F[_], Seed, S](private[zoo] val coalg: Seed => F[Seed])(using
   type X = S
 
   private[zoo] val build: Seed => S =
-    Machines.foldLayered[F, Seed, S](coalg, (_, fr) => E.embed(fr))
+    Machines.buildLayered[F, Seed, S](coalg)
 
   protected def write(seed: Seed): S = build(seed)
 

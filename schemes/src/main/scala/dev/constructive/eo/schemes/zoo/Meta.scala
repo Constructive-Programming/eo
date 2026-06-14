@@ -35,5 +35,5 @@ object Meta:
       E: Embed[G, T],
   ): Meta[S, A, T] =
     val fold: S => A = Machines.foldLayered[F, S, A](P.project, (_, fr) => alg(fr))
-    val unfold: A => T = Machines.foldLayered[G, A, T](coalg, (_, gr) => E.embed(gr))
+    val unfold: A => T = Machines.buildLayered[G, A, T](coalg)
     new Meta[S, A, T](fold.andThen(unfold))
