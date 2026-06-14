@@ -17,3 +17,10 @@ object Attr:
 
   /** Discard the history, keep the top result — `histo`'s final projection. */
   def forget[F[_], A](attr: Attr[F, A]): A = attr.head
+
+  /** The cofree-decorating combine shared by `histo` / `dyna` / `chrono` / `metaChrono`: tag each
+    * rebuilt layer `F[Attr[F, A]]` with its algebra result, yielding the node's `Attr` (head =
+    * result, tail = the decorated layer). The node argument is unused — the algebra is node-blind.
+    */
+  def decorate[F[_], N, A](alg: F[Attr[F, A]] => A): (N, F[Attr[F, A]]) => Attr[F, A] =
+    (_, layer) => Attr(alg(layer), layer)

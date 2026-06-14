@@ -4,25 +4,19 @@ package zoo
 
 import cats.Traverse
 
-import data.Direct
-import optics.Optic
-
-/** Hylomorphism citizen — the **fused** refold worn as an optic over
-  * [[dev.constructive.eo.data.Direct]] with `X = Nothing`. `Getter`-shaped (`Optic[Seed, Unit, A,
-  * Unit, Direct]`), consumed via `.get`. Built by [[Ana.cross]] or [[Hylo.apply]]; carries only the
-  * fused `refold`, no tree. Not a primitive — it *is* `ana.cross(cata)`.
+/** Hylomorphism citizen — the **fused** refold ([[ReadScheme]]) with `X = Nothing`. Built by
+  * [[Ana.cross]] or [[Hylo.apply]]; carries only the fused `refold`, no tree. Not a primitive — it
+  * *is* `ana.cross(cata)`.
   *
   * The fused-refold family ([[Hylo]] / [[Chrono]] / [[Dyna]] / [[Codyna]] / [[Elgot]] /
-  * [[Coelgot]]) share this runtime shape — a `refold: Seed => A` with a vestigial build side, so
+  * [[Coelgot]]) share this shape — a `refold: Seed => A` with a vestigial build side, so
   * `X = Nothing` for all of them honestly. They are **nominally distinct** named types (one per
   * construction), not different existential indices: fusion is exactly the act of discarding the
   * intermediate index.
   */
-final class Hylo[Seed, A] private[zoo] (private[zoo] val refold: Seed => A)
-    extends Optic[Seed, Unit, A, Unit, Direct]:
+final class Hylo[Seed, A] private[zoo] (private val refold: Seed => A) extends ReadScheme[Seed, A]:
   type X = Nothing
-  def to(s: Seed): Direct[X, A] = Direct(refold(s))
-  def from(b: Direct[X, Unit]): Unit = ()
+  protected def read(s: Seed): A = refold(s)
 
 object Hylo:
 
