@@ -49,3 +49,29 @@ class BiAffineSpec extends Specification:
       List(-1, -100).map(w => toy.from(toy.to(w))) === List(-1, -100)
     }
   }
+
+  "BiAffine.assoc — the composition-matrix row" should {
+
+    // A second citizen whose Done fires on an *even* focus, so toy.andThen(innerToy) reaches all
+    // three composed arms: outer Done (w<0), Step∘Step (w≥0 odd), Step∘Done (w≥0 even).
+    val innerToy: Optic[Int, Int, Int, Int, BiAffine] { type X = TX } =
+      new Optic[Int, Int, Int, Int, BiAffine]:
+        type X = TX
+        def to(w: Int): BiAffine[X, Int] =
+          if w % 2 == 0 then new Done[X, Int](w) else new Step[X, Int](List(w), w)
+        def from(xb: BiAffine[X, Int]): Int = xb match
+          case d: Done[X, Int] => d.fst
+          case s: Step[X, Int] => s.b
+
+    val composed = toy.andThen(innerToy)
+
+    "biaffine.andThen(biaffine) type-checks and round-trips across all three arms" in {
+      // w<0 → outer Done; w≥0 odd → Step∘Step; w≥0 even → Step∘Done.
+      List(-5, 1, 3, 4, 16, 17).map(w => composed.from(composed.to(w))) ===
+        List(-5, 1, 3, 4, 16, 17)
+    }
+
+    "outer Done short-circuits the composition (Left arm of Z)" in {
+      composed.from(composed.to(-9)) === -9
+    }
+  }
