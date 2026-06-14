@@ -66,7 +66,7 @@ class ZooTowersSpec extends Specification:
       case Bin.Leaf(_)      => 1
       case Bin.Branch(l, r) => 1 + countNodes(l) + countNodes(r)
     val alg: BinF[(Bin, Int)] => Int =
-      case BinF.LeafF(n)                          => n
+      case BinF.LeafF(n)                         => n
       case BinF.BranchF((lSub, lRes), (_, rRes)) => lRes + rRes + countNodes(lSub)
     val viaZygo = Schemes.zygo[BinF, Bin, Int, Bin](BinF.basis.embed)(alg).get(tree)
     viaZygo === Schemes.para[BinF, Bin, Int](alg).get(tree)
@@ -74,7 +74,7 @@ class ZooTowersSpec extends Specification:
 
   "zygo reads its auxiliary result: leaf-sum plus each branch's left-subtree size" >> {
     val alg: BinF[(Int, Int)] => Int =
-      case BinF.LeafF(n)                            => n
+      case BinF.LeafF(n)                          => n
       case BinF.BranchF((sizeL, resL), (_, resR)) => resL + resR + sizeL
     // inner branches: 1+2+1=4 and 3+4+1=8; root: 4+8+sizeL(3) = 15.
     Schemes.zygo[BinF, Bin, Int, Int](sizeAux)(alg).get(tree) === 15
@@ -83,7 +83,7 @@ class ZooTowersSpec extends Specification:
   "zygo is stack-safe folding a 10^6-deep spine" >> {
     val deep = deepSpine(1_000_000)
     val depthMain: BinF[(Int, Int)] => Int =
-      case BinF.LeafF(_)                  => 0
+      case BinF.LeafF(_)                => 0
       case BinF.BranchF((_, l), (_, r)) => 1 + math.max(l, r)
     Schemes.zygo[BinF, Bin, Int, Int](sizeAux)(depthMain).get(deep) === 1_000_000
   }
@@ -93,19 +93,19 @@ class ZooTowersSpec extends Specification:
   "A-blind mutu degenerates to zygo (modulo the tuple flip)" >> {
     // mutu with algB ignoring the A half == zygo(algB-as-aux)(algA).
     val algB: BinF[(Int, Int)] => Int = // = sizeAux on the B half
-      case BinF.LeafF(_)                          => 1
+      case BinF.LeafF(_)                  => 1
       case BinF.BranchF((_, b1), (_, b2)) => 1 + b1 + b2
     val algA: BinF[(Int, Int)] => Int =
-      case BinF.LeafF(n)                            => n
+      case BinF.LeafF(n)                   => n
       case BinF.BranchF((a1, b1), (a2, _)) => a1 + a2 + b1
     val viaMutu = Schemes.mutu[BinF, Bin, Int, Int](algA, algB).get(tree)
     val viaZygo = Schemes
       .zygo[BinF, Bin, Int, Int](sizeAux) {
-        case BinF.LeafF(n)                            => n
+        case BinF.LeafF(n)                          => n
         case BinF.BranchF((sizeL, resL), (_, resR)) => resL + resR + sizeL
       }
       .get(tree)
-    viaMutu === viaZygo and (viaMutu === 15)
+    (viaMutu === viaZygo).and(viaMutu === 15)
   }
 
   "mutu is genuinely mutual: each algebra reads the other's half" >> {
@@ -114,7 +114,7 @@ class ZooTowersSpec extends Specification:
       case BinF.LeafF(_)                  => 1
       case BinF.BranchF((_, b1), (_, b2)) => 1 + b1 + b2
     val signed: BinF[(Int, Int)] => Int =
-      case BinF.LeafF(n)                  => n
+      case BinF.LeafF(n)                   => n
       case BinF.BranchF((a1, b1), (a2, _)) =>
         if (b1 % 2 == 0) a2 - a1 else a1 + a2
     // inner branches have count 3 (odd): 1+2=3 and 3+4=7; root left-count 3 (odd): 3+7 = 10.

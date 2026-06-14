@@ -5,9 +5,9 @@ package zoo
 import cats.{~>, Traverse}
 
 /** Postpromorphism citizen — an unfold that applies a **natural transformation `η : F ~> F` after
-  * each step** ([[BuildScheme]]). The build-side mirror of [[Prepro]]: the
-  * coalgebra `coalg: A => F[A]` is exactly [[Ana]]'s (so `X = S`, the structure it threads), but
-  * each emitted subtree is hoisted through `η` once per level it sits below the root.
+  * each step** ([[BuildScheme]]). The build-side mirror of [[Prepro]]: the coalgebra
+  * `coalg: A => F[A]` is exactly [[Ana]]'s (so `X = S`, the structure it threads), but each emitted
+  * subtree is hoisted through `η` once per level it sits below the root.
   *
   * Like [[Prepro]], this is the layer-transforming axis, not an index refinement: `apo`/`futu`
   * refine the residual `X`; `postpro` keeps `ana`'s index and decorates the *layer optic* on the

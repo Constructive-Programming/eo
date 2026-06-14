@@ -5,8 +5,8 @@ package zoo
 import cats.Traverse
 
 /** Cozygomorphism citizen (the generalised apomorphism, *g-apo*) — the **build-side dual of
-  * [[Zygo]]** ([[BuildScheme]]) with **`X = Either[B, A]`**: each child slot is either `Left(b)` — a
-  * seed handed to the **auxiliary coalgebra** — or `Right(a)` — a seed for the main one.
+  * [[Zygo]]** ([[BuildScheme]]) with **`X = Either[B, A]`**: each child slot is either `Left(b)` —
+  * a seed handed to the **auxiliary coalgebra** — or `Right(a)` — a seed for the main one.
   *
   * `aux: B => F[B]` is a self-contained unfold (a plain [[Ana]] over `B`); once a slot goes
   * `Left(b)` it stays in `B`-land. `coalg: A => F[Either[B, A]]` is the main unfold, choosing per
