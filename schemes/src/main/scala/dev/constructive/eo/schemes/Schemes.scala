@@ -5,7 +5,7 @@ import cats.Traverse
 
 import data.{Forget, ForgetK}
 import optics.Optic
-import zoo.{Ana, Attr, Cata, Coattr, Futu, Histo, Hylo, Meta}
+import zoo.{Ana, Apo, Attr, Cata, Coattr, Futu, Histo, Hylo, Meta, Para}
 
 /** Typed recursion schemes as composable optics, over a user-supplied **pattern functor** `F[_]` (+
   * `Traverse[F]`) and the [[Basis]] (`Project`/`Embed`) correspondence to the recursive type `S`.
@@ -18,11 +18,16 @@ import zoo.{Ana, Attr, Cata, Coattr, Futu, Histo, Hylo, Meta}
   * | scheme    | `X`                             | index                                         |
   * |:----------|:--------------------------------|:----------------------------------------------|
   * | [[cata]]  | `Nothing`                       | the forgetful (trivial) fold                  |
+  * | [[para]]  | `F[(S, A)]`                     | the **store-comonad** complement (subterms)   |
   * | [[histo]] | [[zoo.Attr]] = `νX. A × F[X]`   | the **cofree comonad** (course-of-value fold) |
   * | [[ana]]   | `S`                             | the materialising unfold                      |
+  * | [[apo]]   | `Either[S, A]`                  | the **Prism** residual (graft, build-side)    |
   * | [[futu]]  | [[zoo.Coattr]] = `μX. A + F[X]` | the **free monad** (multi-layer unfold)       |
   *
-  * `histo` refines `cata`'s index up the comonad tower; `futu` refines `ana`'s up the monad tower.
+  * `para`/`histo` refine `cata`'s index up the comonad tower; `apo`/`futu` refine `ana`'s up the
+  * monad tower. (`para`'s existential is the writable-Lens complement — get-put holds
+  * definitionally, put-get only under algebra-coherence, so the lawful writable put is a scoped
+  * follow-up.)
   *
   * ==hylo is the fusion, not a primitive — and meta is the honest non-fusion==
   *
@@ -36,15 +41,17 @@ import zoo.{Ana, Attr, Cata, Coattr, Futu, Histo, Hylo, Meta}
   * and it **cannot fuse**: fold and unfold range over *different* functors, so the neck value is
   * genuinely materialised (the [[zoo.Meta]] existential is `X = A`, not `Nothing`). The 2×2 the two
   * seams complete — refold vs metamorphism × trivial vs universal index — is [[hylo]] / [[meta]] /
-  * [[chrono]] / [[metaChrono]].
+  * [[chrono]] / [[metaChrono]]; the quadrant's diagonals are [[dyna]] (`ana.cross(histo)`) and
+  * [[codyna]] (`futu.cross(cata)`). [[elgot]] / [[coelgot]] are the short-circuit / seed-reading
+  * refold variants (both fuse, driven by [[Machines.foldLayeredOr]] / the seed-passing combine).
   *
   * All schemes run on one stack-safe engine ([[Machines.foldLayered]]): a `< 512`-deep on-stack
   * fast path falling back per deep subtree to a heap `ArrayDeque` machine — stack-safe to 10⁶,
   * tested.
   *
-  * The citizen classes live in [[zoo]] ([[zoo.Cata]] / [[zoo.Ana]] / [[zoo.Hylo]] / [[zoo.Histo]] /
-  * [[zoo.Futu]] / [[zoo.Meta]]); this object is the user-facing constructor surface plus
-  * [[fLayer]].
+  * The citizen classes live in [[zoo]] ([[zoo.Cata]] / [[zoo.Para]] / [[zoo.Histo]] / [[zoo.Ana]] /
+  * [[zoo.Apo]] / [[zoo.Futu]] / [[zoo.Hylo]] / [[zoo.Meta]]); this object is the user-facing
+  * constructor surface plus [[fLayer]].
   */
 object Schemes:
 
@@ -82,6 +89,15 @@ object Schemes:
   def histo[F[_], S, A](alg: F[Attr[F, A]] => A)(using Traverse[F], Project[F, S]): Histo[F, S, A] =
     new Histo[F, S, A](alg)
 
+  /** Paramorphism — a fold retaining the original subterms, `alg: F[(S, A)] => A`, worn as a
+    * [[zoo.Para]] (`X = F[(S, A)]`). Each child slot pairs its original subterm with its folded
+    * result, so the algebra can read the subtree itself, not just its summary. Consumed via `.get`.
+    * Ignoring the `S` half degenerates to [[cata]]. Stack-safe. (See [[zoo.Para]] on why the
+    * existential is the store-comonad complement but the writable `Lens` put is conditional.)
+    */
+  def para[F[_], S, A](alg: F[(S, A)] => A)(using Traverse[F], Project[F, S]): Para[F, S, A] =
+    new Para[F, S, A](alg)
+
   /** Anamorphism — an unfold `coalg: Seed => F[Seed]`, worn as an [[zoo.Ana]] (`X = S`). Each step
     * yields one typed layer of child seeds; [[Embed]] glues each layer into the built `S`.
     * Materialising — the built `S` is O(nodes). Consumed via `.reverseGet`. Compose onto a fold
@@ -97,6 +113,14 @@ object Schemes:
     */
   def futu[F[_], A, S](coalg: A => F[Coattr[F, A]])(using Traverse[F], Embed[F, S]): Futu[F, A, S] =
     new Futu[F, A, S](coalg)
+
+  /** Apomorphism — an unfold that may graft a finished subtree, `coalg: A => F[Either[S, A]]`, worn
+    * as an [[zoo.Apo]] (`X = Either[S, A]`). `Left(s)` grafts a built `S` by reference (O(1), never
+    * re-walked); `Right(a)` keeps unfolding. The build-side dual of [[para]]. Consumed via
+    * `.reverseGet`. All-`Right` degenerates to [[ana]]. Stack-safe.
+    */
+  def apo[F[_], A, S](coalg: A => F[Either[S, A]])(using Traverse[F], Embed[F, S]): Apo[F, A, S] =
+    new Apo[F, A, S](coalg)
 
   /** Hylomorphism — the **fused** refold `Seed => A`, building **no intermediate `S`** (so it needs
     * neither `Project` nor `Embed`, only `Traverse[F]`). Definitionally
@@ -182,3 +206,54 @@ object Schemes:
       val run = Machines.foldLayered[G, Coattr[G, A], T](expand, (_, gr) => E.embed(gr))
       a => run(Coattr.Pure(a))
     new Meta[S, A, T](fold.andThen(unfold))
+
+  /** Dynamorphism — the **fused** plain-unfold → course-of-value-fold refold `A => B`, the
+    * quadrant-diagonal between [[hylo]] (plain→plain) and [[chrono]] (free→cofree). `coalg` unfolds
+    * one layer; the fold sees each node's full decorated history ([[zoo.Attr]], the cofree memo).
+    * Definitionally `ana(coalg).cross(histo(alg))`. Fuses — `Traverse[F]` only, the [[zoo.Attr]] is
+    * threaded internally with no intermediate `S`. Heads-only `alg` degenerates to [[hylo]].
+    * Stack-safe; retains O(n) `Attr` cells.
+    */
+  def dyna[F[_], A, B](coalg: A => F[A], alg: F[Attr[F, B]] => B)(using
+      F: Traverse[F]
+  ): Hylo[A, B] =
+    val build: A => Attr[F, B] =
+      Machines.foldLayered[F, A, Attr[F, B]](coalg, (_, layer) => Attr(alg(layer), layer))
+    new Hylo[A, B](a => Attr.forget(build(a)))
+
+  /** The **fused** multi-layer-unfold → node-blind-fold refold `A => B` — the mirror of [[dyna]],
+    * opposite diagonal of the refold quadrant. `coalg` may emit several layers per step
+    * ([[zoo.Coattr]], the free monad); the fold is a plain `cata`. Definitionally
+    * `futu(coalg).cross(cata(alg))`. Fuses — `Traverse[F]` only, no intermediate `S`. All-`Pure`
+    * `coalg` degenerates to [[hylo]]. Stack-safe. (`codyna` is a descriptive name — the
+    * free-unfold/plain-fold refold has no standard one in the literature.)
+    */
+  def codyna[F[_], A, B](coalg: A => F[Coattr[F, A]], alg: F[B] => B)(using
+      F: Traverse[F]
+  ): Hylo[A, B] =
+    val expand: Coattr[F, A] => F[Coattr[F, A]] =
+      case Coattr.Pure(a)     => coalg(a)
+      case Coattr.Roll(layer) => layer
+    val run = Machines.foldLayered[F, Coattr[F, A], B](expand, (_, fr) => alg(fr))
+    new Hylo[A, B](a => run(Coattr.Pure(a)))
+
+  /** Elgot algorithm — a [[hylo]] whose **unfold may short-circuit**: `coalg: A => Either[B, F[A]]`
+    * answers `Left(b)` (the seed resolves directly to an answer, stop) or `Right(layer)` (keep
+    * unfolding); `alg: F[B] => B` folds the rest. Fused refold `A => B` (`Traverse[F]` only, no
+    * intermediate `S`), driven by the short-circuit-aware [[Machines.foldLayeredOr]]. An
+    * all-`Right` `coalg` degenerates to [[hylo]]. Stack-safe.
+    */
+  def elgot[F[_], A, B](coalg: A => Either[B, F[A]], alg: F[B] => B)(using
+      Traverse[F]
+  ): Hylo[A, B] =
+    new Hylo[A, B](Machines.foldLayeredOr[F, A, B](coalg, fr => alg(fr)))
+
+  /** Co-Elgot algorithm — a [[hylo]] whose **fold may read the seed**: `coalg: A => F[A]` unfolds,
+    * `alg: (A, F[B]) => B` folds with the originating seed in hand (the build-side analogue of
+    * [[para]]'s subterm retention, but on the fused refold). Fused `A => B` (`Traverse[F]` only).
+    * Ignoring the seed argument degenerates to [[hylo]]. Stack-safe.
+    */
+  def coelgot[F[_], A, B](coalg: A => F[A], alg: (A, F[B]) => B)(using
+      Traverse[F]
+  ): Hylo[A, B] =
+    new Hylo[A, B](Machines.foldLayered[F, A, B](coalg, (a, fr) => alg(a, fr)))

@@ -46,3 +46,13 @@ final class Futu[F[_], A, S](private[zoo] val coalg: A => F[Coattr[F, A]])(using
     */
   def cross[B](histo: Histo[F, S, B]): Hylo[A, B] =
     Schemes.chrono[F, A, B](coalg, histo.alg)(using F)
+
+  /** The fused mirror-of-dyna seam: multi-layer unfold ∘ node-blind fold ([[Cata]]). The
+    * refold-quadrant diagonal opposite [[Ana.cross]]'s `dyna`: a free-monad `futu` unfold whose
+    * fold is a plain `cata`. Fuses — the [[Coattr]] free layers are threaded internally, no
+    * intermediate `S`. Delegates to [[Schemes.codyna]] (`Traverse[F]` only; the `Cata`'s `Project`
+    * goes unused). (`codyna` is a descriptive name; the free-unfold/plain-fold refold has no
+    * standard one.)
+    */
+  def cross[B](cata: Cata[F, S, B]): Hylo[A, B] =
+    Schemes.codyna[F, A, B](coalg, cata.alg)(using F)
