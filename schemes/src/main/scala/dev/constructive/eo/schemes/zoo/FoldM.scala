@@ -3,8 +3,8 @@ package schemes
 package zoo
 
 /** Monadic-fold citizen — the **effectful** read schemes ([[ReadScheme]] at focus `M[A]`): a fold
-  * whose algebra returns `M[A]` and whose effects are sequenced through the structure in
-  * `Foldable` order. Reads `S => M[A]` (`.get` yields `M[A]`).
+  * whose algebra returns `M[A]` and whose effects are sequenced through the structure in `Foldable`
+  * order. Reads `S => M[A]` (`.get` yields `M[A]`).
   *
   * One class carries the whole read-side `M`-zoo — [[Schemes.cataM]] / [[Schemes.paraM]] /
   * [[Schemes.histoM]] and the fused [[Schemes.hyloM]] / [[Schemes.chronoM]] — exactly as the pure
@@ -29,9 +29,9 @@ final class FoldM[S, A, M[_], XI] private[zoo] (run: S => M[A]) extends ReadSche
 
 object FoldM:
 
-  /** Wrap an already-wired effectful fold `S => M[A]`. The engine plumbing lives in the
-    * [[Schemes]] `*M` factories (each picks the combine and pins `XI`); this just dresses the
-    * resulting function as the optic citizen.
+  /** Wrap an already-wired effectful fold `S => M[A]`. The engine plumbing lives in the [[Schemes]]
+    * `*M` factories (each picks the combine and pins `XI`); this just dresses the resulting
+    * function as the optic citizen.
     */
   private[schemes] def apply[S, A, M[_], XI](run: S => M[A]): FoldM[S, A, M, XI] =
     new FoldM[S, A, M, XI](run)

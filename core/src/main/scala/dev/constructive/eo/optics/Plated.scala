@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.Eval
+import cats.{Eval, Traverse}
 
 import data.{MultiFocus, PSVec, ModifyF}
 
@@ -96,6 +96,20 @@ object Plated:
       s => PSVec.fromIterable(children(s)),
       (s, vec) => rebuild(s, vec.toList),
     )
+
+  /** Derive a [[Plated]] from a pattern-functor [[Basis]] — the bridge from the typed
+    * recursion-scheme world (`schemes` module) into core's `Plated` recursion combinators
+    * ([[transform]] / [[rewrite]] / [[children]] / [[universe]]) and the `MultiFocus[PSVec]`
+    * carrier. The immediate children are `project`'s recursive slots; `rebuild` is `embed` with the
+    * new children threaded back through `F.map`.
+    *
+    * A scheme's single layer is exactly this self-traversal; `Plated` is its non-recursive face.
+    * Use it to register the instance: `given Plated[Bin] = Plated.fromBasis[BinF, Bin]` (`F` cannot
+    * be inferred from `S` alone, so name it). The children vector is freshly allocated per call, so
+    * the copy-free [[fromChildrenVec]] contract holds.
+    */
+  def fromBasis[F[_], S](using Traverse[F], Project[F, S], Embed[F, S]): Plated[S] =
+    fromChildrenVec(Basis.childrenVec[F, S](_), Basis.rebuild[F, S](_, _))
 
   /** Largest call-stack recursion depth [[transform]] takes before handing a subtree to the heap
     * machine. Tree *depth*, not node count — a balanced tree of a billion nodes is ~30 deep, so it

@@ -7,10 +7,10 @@ package zoo
   * construction. Builds `B => M[S]` (`.reverseGet` yields `M[S]`).
   *
   * The build-side mirror of [[FoldM]]: one class carries the whole `M`-unfold zoo —
-  * [[Schemes.anaM]] / [[Schemes.apoM]] / [[Schemes.futuM]] — differing only by the expand handed
-  * to the shared engine. The residual index rides the phantom `XI` (`anaM` is `BuildM[…, S]`,
-  * `apoM` is `BuildM[…, Either[S, A]]`, `futuM` is `BuildM[…, Coattr[F, A]]`), preserving the
-  * monad-tower index the same way [[FoldM]] preserves the comonad-tower one.
+  * [[Schemes.anaM]] / [[Schemes.apoM]] / [[Schemes.futuM]] — differing only by the expand handed to
+  * the shared engine. The residual index rides the phantom `XI` (`anaM` is `BuildM[…, S]`, `apoM`
+  * is `BuildM[…, Either[S, A]]`, `futuM` is `BuildM[…, Coattr[F, A]]`), preserving the monad-tower
+  * index the same way [[FoldM]] preserves the comonad-tower one.
   *
   * Runs on [[Machines.foldLayeredM]] under the same single-pass / linear / sequential `M` contract
   * as [[FoldM]].
