@@ -4,33 +4,24 @@ package zoo
 
 import cats.Traverse
 
-import data.Direct
-import optics.Optic
-
-/** Futumorphism citizen — a multi-layer unfold worn as an optic over
-  * [[dev.constructive.eo.data.Direct]] with **`X = Coattr[F, A]`**, the free monad `μX. A + F[X]`.
-  * The build-side mirror of [[Histo]]. `coalg: A => F[Coattr[F, A]]` answers each slot with
-  * [[Coattr.Pure]] (keep unfolding) or [[Coattr.Roll]] (a prebuilt layer, no coalgebra call), so
-  * one step may emit several layers. `Review`-shaped (`Optic[Unit, S, Unit, A, Direct]`), consumed
-  * via `.reverseGet`; the root seed enters as `Coattr.Pure`. An all-`Pure` coalgebra degenerates to
-  * [[Ana]]. Carries `coalg` so [[cross]] can fuse with [[Histo]] (→ [[Chrono]]) or [[Cata]] (→
-  * [[Codyna]]). Stack-safe.
+/** Futumorphism citizen — a multi-layer unfold ([[BuildScheme]]) with **`X = Coattr[F, A]`**, the
+  * free monad `μX. A + F[X]`. The build-side mirror of [[Histo]]. `coalg: A => F[Coattr[F, A]]`
+  * answers each slot with [[Coattr.Pure]] (keep unfolding) or [[Coattr.Roll]] (a prebuilt layer, no
+  * coalgebra call), so one step may emit several layers; the root seed enters as `Coattr.Pure`. An
+  * all-`Pure` coalgebra degenerates to [[Ana]]. Carries `coalg` so [[cross]] can fuse with
+  * [[Histo]] (→ [[Chrono]]) or [[Cata]] (→ [[Codyna]]). Stack-safe.
   */
 final class Futu[F[_], A, S](private[zoo] val coalg: A => F[Coattr[F, A]])(using
     F: Traverse[F],
     E: Embed[F, S],
-) extends Optic[Unit, S, Unit, A, Direct]:
+) extends BuildScheme[S, A]:
   type X = Coattr[F, A]
 
   private[zoo] val build: A => S =
-    val expand: Coattr[F, A] => F[Coattr[F, A]] =
-      case Coattr.Pure(a)     => coalg(a)
-      case Coattr.Roll(layer) => layer
-    val run = Machines.foldLayered[F, Coattr[F, A], S](expand, (_, fr) => E.embed(fr))
+    val run = Machines.foldLayered[F, Coattr[F, A], S](Coattr.expand(coalg), (_, fr) => E.embed(fr))
     a => run(Coattr.Pure(a))
 
-  def to(u: Unit): Direct[X, Unit] = Direct(())
-  def from(b: Direct[X, A]): S = build(Direct.value(b))
+  protected def write(a: A): S = build(a)
 
   /** The fused **chrono** seam: futu ∘ [[Histo]] — [[Hylo]] at the universal indices. The build
     * threads the free monad ([[Coattr]]), the fold the cofree comonad ([[Attr]]); fused, no

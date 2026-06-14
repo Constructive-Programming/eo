@@ -169,21 +169,6 @@ private[schemes] object Machines:
         resultAt(out(i))
       }
 
-  /** [[rebuildLayer]]'s paramorphic sibling: pair each original child `N` with its folded result
-    * from `out` (positional, `Foldable` order). The subterms come from the layer the machine
-    * already holds — no re-`embed`.
-    */
-  private[schemes] def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
-      F: Traverse[F]
-  ): F[(N, R)] =
-    if out.length == 0 then leafRecast(fn)
-    else
-      var i = -1
-      F.map(fn) { n =>
-        i += 1
-        (n, resultAt(out(i)))
-      }
-
   /** The descend/bubble heap walk shared by [[foldLayered]] and [[foldLayeredOr]] (previously two
     * near-identical loops). `expandOr`'s `Left` arm is the graft/short-circuit channel —
     * [[foldLayered]] instantiates it with a constant `Right`. This walk runs only past

@@ -4,14 +4,10 @@ package zoo
 
 import cats.Traverse
 
-import data.Direct
-import optics.Optic
-
-/** Metamorphism citizen — a **fold-then-unfold** worn as an optic over
-  * [[dev.constructive.eo.data.Direct]], reading `S => T` (`Getter`-shaped, `.get`). The
-  * fold-direction dual of [[Hylo]]: where `hylo` is the fused unfold-then-fold (`X = Nothing`,
-  * deforests), `meta` is the fold-then-unfold whose existential **`X = A` is the neck** — the
-  * intermediate value the fold produces and the unfold consumes.
+/** Metamorphism citizen — a **fold-then-unfold** read `S => T` ([[ReadScheme]]). The fold-direction
+  * dual of [[Hylo]]: where `hylo` is the fused unfold-then-fold (`X = Nothing`, deforests), `meta`
+  * is the fold-then-unfold whose existential **`X = A` is the neck** — the intermediate value the
+  * fold produces and the unfold consumes.
   *
   * That non-trivial `X` is the honest statement that `meta` **cannot fuse**: it folds a functor `F`
   * down to `A`, then unfolds a *different* `G` back up; with `F ≠ G` there is no `project ∘ embed`
@@ -21,11 +17,9 @@ import optics.Optic
   * @tparam A
   *   the neck — the retained intermediate value type (the optic's existential `X`)
   */
-final class Meta[S, A, T] private[zoo] (private[zoo] val run: S => T)
-    extends Optic[S, Unit, T, Unit, Direct]:
+final class Meta[S, A, T] private[zoo] (private val run: S => T) extends ReadScheme[S, T]:
   type X = A
-  def to(s: S): Direct[X, T] = Direct(run(s))
-  def from(b: Direct[X, Unit]): Unit = ()
+  protected def read(s: S): T = run(s)
 
 object Meta:
 
