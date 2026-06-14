@@ -197,7 +197,7 @@ private[schemes] object Machines:
   private def heapWalk[F[_], N, R](
       root: N,
       expandOr: N => Either[R, F[N]],
-      combine: (N, F[N], Array[Slot[N, R]]) => R,
+      combine: (N, F[R]) => R,
   )(using F: Traverse[F]): R =
     @tailrec def loop(op: Op[N], pending: Pending[R], stack: List[Frame[F, N, R]]): R =
 
@@ -205,7 +205,7 @@ private[schemes] object Machines:
         case Left(finished) => loop(Ascend, finished, stack) // graft: finished, by reference
         case Right(layer)   =>
           val slots = childrenSlots[F, N, R](layer)
-          if slots.length == 0 then loop(Ascend, combine(n, layer, slots), stack)
+          if slots.length == 0 then loop(Ascend, combine(n, rebuildLayer(layer, slots)), stack)
           else loop(childAt(slots(0)), NoResult, new Frame(n, layer, slots, 0) :: stack)
 
       transparent inline def bubble: R = stack match
@@ -214,7 +214,7 @@ private[schemes] object Machines:
           fr.slots(fr.next) = forced(pending) // overwrite the just-folded child's slot
           fr.next += 1
           if fr.next < fr.slots.length then loop(childAt(fr.slots(fr.next)), NoResult, stack)
-          else loop(Ascend, combine(fr.node, fr.layer, fr.slots), rest)
+          else loop(Ascend, combine(fr.node, rebuildLayer(fr.layer, fr.slots)), rest)
 
       op match
         case Ascend => bubble
@@ -223,15 +223,15 @@ private[schemes] object Machines:
     loop(root, NoResult, Nil)
 
   /** Shared typed engine for the `F`-path schemes. `expand` peels a node into one typed layer of
-    * child nodes; the engine folds each child to an `R` (post-order), then calls `combine` with the
-    * node, its layer `F[N]`, and the children's results (positional, `Foldable` order).
-    * `< [[OnStackLimit]]` deep: plain tree recursion; past it, the shared [[heapWalk]]. Stack-safe
-    * for any *terminating* `expand` (a non-terminating one exhausts the heap — `OutOfMemoryError` —
-    * rather than the stack).
+    * child nodes; the engine folds each child to an `R` (post-order), rebuilds the layer's results
+    * into a typed `F[R]` (named constructors — the raw `Slot` buffer never leaves the engine), then
+    * calls `combine` with the node and that `F[R]`. `< [[OnStackLimit]]` deep: plain tree
+    * recursion; past it, the shared [[heapWalk]]. Stack-safe for any *terminating* `expand` (a
+    * non-terminating one exhausts the heap — `OutOfMemoryError` — rather than the stack).
     */
   private[schemes] def foldLayered[F[_], N, R](
       expand: N => F[N],
-      combine: (N, F[N], Array[Slot[N, R]]) => R,
+      combine: (N, F[R]) => R,
   )(using F: Traverse[F]): N => R =
 
     def rec(n: N, depth: Int): R =
@@ -243,7 +243,7 @@ private[schemes] object Machines:
         while i < slots.length do
           slots(i) = rec(childAt(slots(i)), depth + 1)
           i += 1
-        combine(n, layer, slots)
+        combine(n, rebuildLayer(layer, slots))
 
     n => rec(n, 0)
 
@@ -254,12 +254,11 @@ private[schemes] object Machines:
     */
   private[schemes] def foldLayeredOr[F[_], N, R](
       expandOr: N => Either[R, F[N]],
-      combine: (F[N], Array[Slot[N, R]]) => R,
+      combine: F[R] => R,
   )(using F: Traverse[F]): N => R =
 
     def rec(n: N, depth: Int): R =
-      if depth >= OnStackLimit then
-        heapWalk(n, expandOr, (_, layer, slots) => combine(layer, slots))
+      if depth >= OnStackLimit then heapWalk(n, expandOr, (_, fr) => combine(fr))
       else
         expandOr(n) match
           case Left(r)      => r // graft: finished, by reference
@@ -269,7 +268,7 @@ private[schemes] object Machines:
             while i < slots.length do
               slots(i) = rec(childAt(slots(i)), depth + 1)
               i += 1
-            combine(layer, slots)
+            combine(rebuildLayer(layer, slots))
 
     n => rec(n, 0)
 
@@ -307,7 +306,7 @@ private[schemes] object Machines:
     */
   private[schemes] def foldLayeredM[M[_], F[_], N, R](
       expandOr: N => M[Either[R, F[N]]],
-      combine: (N, F[N], Array[Slot[N, R]]) => M[R],
+      combine: (N, F[R]) => M[R],
   )(using M: Monad[M], F: Traverse[F]): N => M[R] =
     n0 =>
       M.flatMap(M.unit) { _ =>
@@ -326,7 +325,7 @@ private[schemes] object Machines:
               val slots = childrenSlots[F, N, R](layer)
               if slots.length == 0 then
                 // leaf: combine inline — no frame, no extra loop event
-                M.map(combine(n, layer, slots))(bubbled)
+                M.map(combine(n, rebuildLayer(layer, slots)))(bubbled)
               else
                 stack.push(new Frame(n, layer, slots, 0))
                 M.pure(Left(childAt(slots(0))))
@@ -341,7 +340,7 @@ private[schemes] object Machines:
             if fr.next < fr.slots.length then M.pure(Left(childAt(fr.slots(fr.next))))
             else
               // last child stored: combine now — no intermediate pure event
-              M.map(combine(fr.node, fr.layer, fr.slots)) { r =>
+              M.map(combine(fr.node, rebuildLayer(fr.layer, fr.slots))) { r =>
                 val _ = stack.pop()
                 bubbled(r)
               }
