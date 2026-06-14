@@ -18,7 +18,7 @@ final class Ana[F[_], Seed, S](private[zoo] val coalg: Seed => F[Seed])(using
 ) extends Optic[Unit, S, Unit, Seed, Scheme]:
   type X = S
 
-  private val build: Seed => S =
+  private[zoo] val build: Seed => S =
     Machines.foldLayered[F, Seed, S](coalg, (_, fr) => E.embed(fr))
 
   def to(u: Unit): Scheme[X, Unit] = Scheme(())

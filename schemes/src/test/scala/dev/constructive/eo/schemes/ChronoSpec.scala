@@ -29,11 +29,13 @@ class ChronoSpec extends Specification:
   final private class CountingBasis extends Basis[BinF, Bin]:
     var projects = 0
     var embeds = 0
+
     def project(s: Bin): BinF[Bin] =
       projects += 1
       s match
         case Bin.Leaf(n)      => BinF.LeafF(n)
         case Bin.Branch(l, r) => BinF.BranchF(l, r)
+
     def embed(fs: BinF[Bin]): Bin =
       embeds += 1
       fs match
