@@ -4,12 +4,14 @@ package zoo
 
 import cats.Traverse
 
+import data.Direct
 import optics.Optic
 
 /** Apomorphism citizen — an unfold that may **short-circuit with a finished subtree**, worn as an
-  * optic over [[Scheme]] with **`X = Either[S, A]`** (the residual): each child slot is either
-  * `Left(s)` — an already-built `S`, grafted in directly — or `Right(a)` — a seed to keep unfolding.
-  * `Review`-shaped (`Optic[Unit, S, Unit, A, Scheme]`), consumed via `.reverseGet`.
+  * optic over [[dev.constructive.eo.data.Direct]] with **`X = Either[S, A]`** (the residual): each
+  * child slot is either `Left(s)` — an already-built `S`, grafted in directly — or `Right(a)` — a
+  * seed to keep unfolding. `Review`-shaped (`Optic[Unit, S, Unit, A, Direct]`), consumed via
+  * `.reverseGet`.
   *
   * `coalg: A => F[Either[S, A]]` is the build-side dual of [[Para]]'s read-side subterm retention:
   * where para *reads* original subterms, apo *writes* finished ones. The `Either` residual is the
@@ -22,7 +24,7 @@ import optics.Optic
 final class Apo[F[_], A, S](private[zoo] val coalg: A => F[Either[S, A]])(using
     F: Traverse[F],
     E: Embed[F, S],
-) extends Optic[Unit, S, Unit, A, Scheme]:
+) extends Optic[Unit, S, Unit, A, Direct]:
   type X = Either[S, A]
 
   private val build: A => S =
@@ -35,5 +37,5 @@ final class Apo[F[_], A, S](private[zoo] val coalg: A => F[Either[S, A]])(using
     )
     a => run(Right(a))
 
-  def to(u: Unit): Scheme[X, Unit] = Scheme(())
-  def from(b: Scheme[X, A]): S = build(Scheme.value(b))
+  def to(u: Unit): Direct[X, Unit] = Direct(())
+  def from(b: Direct[X, A]): S = build(Direct.value(b))
