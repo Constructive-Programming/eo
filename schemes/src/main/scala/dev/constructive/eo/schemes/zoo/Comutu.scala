@@ -25,7 +25,7 @@ final class Comutu[F[_], A, B, S](
     val expand: Either[A, B] => F[Either[A, B]] =
       case Left(a)  => coalgA(a)
       case Right(b) => coalgB(b)
-    val run = Machines.foldLayered[F, Either[A, B], S](expand, (_, fr) => E.embed(fr))
+    val run = Machines.buildLayered[F, Either[A, B], S](expand)
     a => run(Left(a))
 
   protected def write(a: A): S = build(a)

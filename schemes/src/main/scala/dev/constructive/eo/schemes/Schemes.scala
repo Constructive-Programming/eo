@@ -274,10 +274,27 @@ object Schemes:
   // ===== Monadic schemes (effects sequenced through the recursion) ===========================
   // The `*M` family lifts the zoo into a `Monad[M]` via the single [[Machines.foldLayeredM]]
   // engine. NOT a parallel class hierarchy: all read-side variants are [[zoo.FoldM]], all
-  // build-side ones [[zoo.BuildM]] (the index rides each citizen's phantom `XI`), and the pure
-  // layer decorations ([[zoo.Attr.decorate]] / [[zoo.Coattr.expand]] / the para zip / the apo
-  // residual) compose with `M` for free. `M` must be single-pass / linear / sequential (`Id`,
+  // build-side ones [[zoo.BuildM]] (the index rides each citizen's phantom `XI`). The layer
+  // adapters mirror the pure side's — [[liftProject]] / [[liftCoalg]] / [[embedM]] lift the
+  // `project` / `coalg` / `embed` wiring into the engine's `Or`-shape, and [[zoo.Coattr.expandM]] /
+  // [[zoo.Attr.decorateM]] are the M-twins of `Coattr.expand` / `Attr.decorate` — so each `*M`
+  // factory reads as terse as its pure twin. `M` must be single-pass / linear / sequential (`Id`,
   // `Eval`, `State`, `IO`); a branching/replaying `M` corrupts the engine's mutable walk state.
+
+  // The fold-side expand: lift a pure `project` into the engine's `N => M[Either[R, F[N]]]`
+  // (always `Right` — a fold never grafts; `R` is phantom).
+  private def liftProject[M[_], F[_], S, R](project: S => F[S])(using
+      M: Monad[M]
+  ): S => M[Either[R, F[S]]] = s => M.pure(Right(project(s)))
+
+  // The build-side expand: lift an effectful `coalg` the same way (always `Right`; `R` phantom).
+  private def liftCoalg[M[_], F[_], A, R](coalg: A => M[F[A]])(using
+      M: Monad[M]
+  ): A => M[Either[R, F[A]]] = a => M.map(coalg(a))(Right(_))
+
+  // The build-side combine: glue a rebuilt layer back with `Embed`, lifted into `M`.
+  private def embedM[M[_], F[_], S, N](using M: Monad[M], E: Embed[F, S]): (N, F[S]) => M[S] =
+    (_, fr) => M.pure(E.embed(fr))
 
   /** Monadic catamorphism — a node-blind fold `alg: F[A] => M[A]` ([[zoo.FoldM]], `X = Nothing`).
     * `.get` yields `M[A]`. At `M = Id` it is exactly [[cata]].
@@ -287,7 +304,7 @@ object Schemes:
       F: Traverse[F],
       P: Project[F, S],
   ): FoldM[S, A, M, Nothing] =
-    FoldM(Machines.foldLayeredM[M, F, S, A](s => M.pure(Right(P.project(s))), (_, fr) => alg(fr)))
+    FoldM(Machines.foldLayeredM[M, F, S, A](liftProject(P.project), (_, fr) => alg(fr)))
 
   /** Monadic paramorphism — a subterm-retaining effectful fold `alg: F[(S, A)] => M[A]`
     * ([[zoo.FoldM]], `X = F[(S, A)]`). `.get` yields `M[A]`.
@@ -299,7 +316,7 @@ object Schemes:
   ): FoldM[S, A, M, F[(S, A)]] =
     FoldM(
       Machines.foldLayeredM[M, F, S, A](
-        s => M.pure(Right(P.project(s))),
+        liftProject(P.project),
         (s, fa) =>
           val it = F.toList(fa).iterator
           alg(F.map(P.project(s))(sub => (sub, it.next()))),
@@ -314,10 +331,8 @@ object Schemes:
       F: Traverse[F],
       P: Project[F, S],
   ): FoldM[S, A, M, Attr[F, A]] =
-    val toAttr = Machines.foldLayeredM[M, F, S, Attr[F, A]](
-      s => M.pure(Right(P.project(s))),
-      (_, layer) => M.map(alg(layer))(a => Attr(a, layer)),
-    )
+    val toAttr =
+      Machines.foldLayeredM[M, F, S, Attr[F, A]](liftProject(P.project), Attr.decorateM(alg))
     FoldM(s => M.map(toAttr(s))(Attr.forget))
 
   /** Monadic anamorphism — an effectful unfold `coalg: Seed => M[F[Seed]]` ([[zoo.BuildM]], `X =
@@ -328,12 +343,7 @@ object Schemes:
       F: Traverse[F],
       E: Embed[F, S],
   ): BuildM[S, Seed, M, S] =
-    BuildM(
-      Machines.foldLayeredM[M, F, Seed, S](
-        seed => M.map(coalg(seed))(Right(_)),
-        (_, fr) => M.pure(E.embed(fr)),
-      )
-    )
+    BuildM(Machines.foldLayeredM[M, F, Seed, S](liftCoalg(coalg), embedM))
 
   /** Monadic apomorphism — an effectful grafting unfold `coalg: A => M[F[Either[S, A]]]`
     * ([[zoo.BuildM]], `X = Either[S, A]`). `Left(s)` grafts a finished subtree by reference (O(1),
@@ -349,7 +359,7 @@ object Schemes:
         case Left(s)  => M.pure(Left(s))
         case Right(a) => M.map(coalg(a))(Right(_))
       },
-      (_, fr) => M.pure(E.embed(fr)),
+      embedM,
     )
     BuildM(a => run(Right(a)))
 
@@ -362,13 +372,7 @@ object Schemes:
       F: Traverse[F],
       E: Embed[F, S],
   ): BuildM[S, A, M, Coattr[F, A]] =
-    val run = Machines.foldLayeredM[M, F, Coattr[F, A], S](
-      {
-        case Coattr.Pure(a)     => M.map(coalg(a))(Right(_))
-        case Coattr.Roll(layer) => M.pure(Right(layer))
-      },
-      (_, fr) => M.pure(E.embed(fr)),
-    )
+    val run = Machines.foldLayeredM[M, F, Coattr[F, A], S](Coattr.expandM(coalg), embedM)
     BuildM(a => run(Coattr.Pure(a)))
 
   /** Monadic hylomorphism — the fused effectful refold `Seed => M[A]` ([[zoo.FoldM]], `X =
@@ -378,9 +382,7 @@ object Schemes:
       M: Monad[M],
       F: Traverse[F],
   ): FoldM[Seed, A, M, Nothing] =
-    FoldM(
-      Machines.foldLayeredM[M, F, Seed, A](seed => M.map(coalg(seed))(Right(_)), (_, fr) => alg(fr))
-    )
+    FoldM(Machines.foldLayeredM[M, F, Seed, A](liftCoalg(coalg), (_, fr) => alg(fr)))
 
   /** Monadic chronomorphism — the fused effectful free-unfold → cofree-fold `A => M[B]`
     * ([[zoo.FoldM]], `X = Nothing`), [[hyloM]] at the universal indices. `Traverse[F]` only.
@@ -389,13 +391,11 @@ object Schemes:
       coalg: A => M[F[Coattr[F, A]]],
       alg: F[Attr[F, B]] => M[B],
   )(using M: Monad[M], F: Traverse[F]): FoldM[A, B, M, Nothing] =
-    val build = Machines.foldLayeredM[M, F, Coattr[F, A], Attr[F, B]](
-      {
-        case Coattr.Pure(a)     => M.map(coalg(a))(Right(_))
-        case Coattr.Roll(layer) => M.pure(Right(layer))
-      },
-      (_, layer) => M.map(alg(layer))(b => Attr(b, layer)),
-    )
+    val build =
+      Machines.foldLayeredM[M, F, Coattr[F, A], Attr[F, B]](
+        Coattr.expandM(coalg),
+        Attr.decorateM(alg),
+      )
     FoldM(a => M.map(build(Coattr.Pure(a)))(Attr.forget))
 
   // ===== Writable scheme — the paramorphism as a Lens ========================================
