@@ -34,3 +34,12 @@ final class Ana[F[_], Seed, S](private[zoo] val coalg: Seed => F[Seed])(using
     */
   def cross[B](cata: Cata[F, S, B]): Hylo[Seed, B] =
     new Hylo[Seed, B](Machines.foldLayered[F, Seed, B](coalg, (_, fr) => cata.alg(fr))(using F))
+
+  /** The fused **dynamorphism** seam: plain unfold ∘ course-of-value fold ([[Histo]]). The
+    * refold-quadrant diagonal between [[cross]]'s `hylo` (plain→plain) and [[Futu.cross]]'s
+    * `chrono` (free→cofree): a plain `ana` unfold whose fold sees each node's full decorated
+    * history. Fuses — the [[Attr]] cofree memo is threaded internally, no intermediate `S`.
+    * Delegates to [[Schemes.dyna]] (`Traverse[F]` only; the `Histo`'s `Project` goes unused).
+    */
+  def cross[B](histo: Histo[F, S, B]): Hylo[Seed, B] =
+    Schemes.dyna[F, Seed, B](coalg, histo.alg)(using F)
