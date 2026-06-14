@@ -62,15 +62,15 @@ class SchemesMSpec extends Specification:
     val alg: BinF[Int] => Option[Int] =
       case BinF.LeafF(n)      => if n < 0 then None else Some(n)
       case BinF.BranchF(l, r) => Some(l + r)
-    Schemes.cataM[Option, BinF, Bin, Int](alg).get(tree) === Some(10) and
-      (Schemes.cataM[Option, BinF, Bin, Int](alg).get(withNeg) === None)
+    (Schemes.cataM[Option, BinF, Bin, Int](alg).get(tree) === Some(10))
+      .and(Schemes.cataM[Option, BinF, Bin, Int](alg).get(withNeg) === None)
   }
 
   // ----- paraM / histoM (the comonad-tower indices, M-lifted) -----
 
   "paraM at M = Id reproduces para" >> {
     val alg: BinF[(Bin, Int)] => Int =
-      case BinF.LeafF(n)                  => n
+      case BinF.LeafF(n)                => n
       case BinF.BranchF((_, l), (_, r)) => l + r
     val viaM: Id[Int] = Schemes.paraM[Id, BinF, Bin, Int](alg).get(tree)
     viaM === Schemes.para[BinF, Bin, Int](alg).get(tree)
@@ -97,9 +97,9 @@ class SchemesMSpec extends Specification:
   "anaM threads Option, short-circuiting the whole build when a seed aborts" >> {
     val coalg: Int => Option[BinF[Int]] =
       n => if n < 0 then None else Some(anaCoalg(n))
-    Schemes.anaM[Option, BinF, Int, Bin](coalg).reverseGet(6) ===
-      Some(Schemes.ana[BinF, Int, Bin](anaCoalg).reverseGet(6)) and
-      (Schemes.anaM[Option, BinF, Int, Bin](_ => None).reverseGet(6) === None)
+    (Schemes.anaM[Option, BinF, Int, Bin](coalg).reverseGet(6) ===
+      Some(Schemes.ana[BinF, Int, Bin](anaCoalg).reverseGet(6)))
+      .and(Schemes.anaM[Option, BinF, Int, Bin](_ => None).reverseGet(6) === None)
   }
 
   "apoM at M = Id reproduces apo (Left grafts a finished subtree)" >> {
@@ -130,7 +130,7 @@ class SchemesMSpec extends Specification:
     val algOpt: BinF[Int] => Option[Int] =
       case BinF.LeafF(n)      => if n < 0 then None else Some(n)
       case BinF.BranchF(l, r) => Some(l + r)
-    idOk and (Schemes.hyloM[Option, BinF, Int, Int](coalgOpt, algOpt).get(6) must beSome)
+    idOk.and(Schemes.hyloM[Option, BinF, Int, Int](coalgOpt, algOpt).get(6) must beSome)
   }
 
   "chronoM at M = Id reproduces chrono" >> {
