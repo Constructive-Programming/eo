@@ -4,12 +4,14 @@ package zoo
 
 import cats.Traverse
 
+import data.Direct
 import optics.Optic
 
-/** Catamorphism citizen — a **node-blind** fold worn as an optic over [[Scheme]] with
-  * `X = Nothing`, the forgetful (trivial) resolution of the recursion index. `Getter`-shaped
-  * (`Optic[S, Unit, A, Unit, Scheme]`): the read `to` runs the fold; the build side is vestigial.
-  * Carries `alg` so [[Ana.cross]] can rebuild the fused [[Hylo]] machine.
+/** Catamorphism citizen — a **node-blind** fold worn as an optic over
+  * [[dev.constructive.eo.data.Direct]] with `X = Nothing`, the forgetful (trivial) resolution of
+  * the recursion index. `Getter`-shaped (`Optic[S, Unit, A, Unit, Direct]`): the read `to` runs the
+  * fold; the build side is vestigial. Carries `alg` so [[Ana.cross]] can rebuild the fused [[Hylo]]
+  * machine.
   *
   * `alg: F[A] => A` sees only the already-folded children (named constructors), never the source
   * node — that blindness (`X = Nothing`) is the soundness condition that licenses fusion. Refining
@@ -19,14 +21,14 @@ import optics.Optic
 final class Cata[F[_], S, A](private[zoo] val alg: F[A] => A)(using
     F: Traverse[F],
     P: Project[F, S],
-) extends Optic[S, Unit, A, Unit, Scheme]:
+) extends Optic[S, Unit, A, Unit, Direct]:
   type X = Nothing
 
   private[zoo] val run: S => A =
     Machines.foldLayered[F, S, A](P.project, (_, fr) => alg(fr))
 
-  def to(s: S): Scheme[X, A] = Scheme(run(s))
-  def from(b: Scheme[X, Unit]): Unit = ()
+  def to(s: S): Direct[X, A] = Direct(run(s))
+  def from(b: Direct[X, Unit]): Unit = ()
 
   /** Metamorphism — the fold→unfold seam, **dual to [[Ana.cross]]**'s unfold→fold. Fold `this` to
     * the neck value `A`, then unfold it with `ana` into a fresh `G`-recursive `T`. The result

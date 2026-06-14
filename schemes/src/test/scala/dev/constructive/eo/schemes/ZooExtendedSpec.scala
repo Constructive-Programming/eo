@@ -7,7 +7,7 @@ import org.specs2.mutable.Specification
 
 import optics.Optic.* // get, reverseGet
 
-import schemes.samples.{Bin, BinF}
+import schemes.samples.{Bin, BinF, Rose, RoseF}
 import schemes.zoo.{Attr, Coattr}
 
 /** The extended zoo: the subterm-retaining fold ([[Schemes.para]]) and its build-side dual
@@ -37,7 +37,7 @@ class ZooExtendedSpec extends Specification:
   "para reads original subterms: count Branch nodes that have a Leaf immediate child" >> {
     // Needs the subterm S, not just the folded A — a cata cannot see a child's *shape* here.
     val leafParents: BinF[(Bin, Int)] => Int =
-      case BinF.LeafF(_)                  => 0
+      case BinF.LeafF(_)                    => 0
       case BinF.BranchF((ls, lr), (rs, rr)) =>
         (if isLeaf(ls) then 1 else 0) + (if isLeaf(rs) then 1 else 0) + lr + rr
     // root has a Leaf left child (+1); inner Branch has two Leaf children (+2) → 3.
@@ -65,7 +65,8 @@ class ZooExtendedSpec extends Specification:
 
   "apo degenerates to ana when every slot is Right" >> {
     val plain: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(n - 1, -1)
-    val viaApo = Schemes.apo[BinF, Int, Bin](n => BinF.traverse.map(plain(n))(Right(_))).reverseGet(3)
+    val viaApo =
+      Schemes.apo[BinF, Int, Bin](n => BinF.traverse.map(plain(n))(Right(_))).reverseGet(3)
     viaApo === Schemes.ana[BinF, Int, Bin](plain).reverseGet(3)
   }
 
@@ -131,7 +132,8 @@ class ZooExtendedSpec extends Specification:
       n => BinF.traverse.map(plain(n))(Coattr.Pure(_))
     val seeds = List(1, 2, 3, 5)
     val viaCtor = Schemes.codyna[BinF, Int, Int](futuCoalg, sumLeaves)
-    val viaSeam = Schemes.futu[BinF, Int, Bin](futuCoalg).cross(Schemes.cata[BinF, Bin, Int](sumLeaves))
+    val viaSeam =
+      Schemes.futu[BinF, Int, Bin](futuCoalg).cross(Schemes.cata[BinF, Bin, Int](sumLeaves))
     val viaHylo = Schemes.hylo[BinF, Int, Int](plain, sumLeaves)
     (seeds.map(viaCtor.get) === seeds.map(viaSeam.get))
       .and(seeds.map(viaCtor.get) === seeds.map(viaHylo.get))
@@ -141,18 +143,62 @@ class ZooExtendedSpec extends Specification:
 
   "para and apo are stack/space-safe at depth 10^6" >> {
     val Deep = 1_000_000
-    var b: Bin = Bin.Leaf(0)
-    var i = 0
-    while i < Deep do
-      b = Bin.Branch(b, Bin.Leaf(0))
-      i += 1
-    // para: depth, reading only the result half (subterm ignored) — still walks the full spine.
-    val paraDepth: BinF[(Bin, Int)] => Int =
-      case BinF.LeafF(_)                  => 0
-      case BinF.BranchF((_, l), (_, r))   => 1 + math.max(l, r)
-    val apoCoalg: Int => BinF[Either[Bin, Int]] =
-      n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(Right(n - 1), Right(-1))
-    val deep: Bin = Schemes.apo[BinF, Int, Bin](apoCoalg).reverseGet(Deep)
-    (Schemes.para[BinF, Bin, Int](paraDepth).get(b) == Deep)
-      .and(Schemes.cata[BinF, Bin, Int](sumLeaves).get(deep) == 0) // all leaves are 0
+    // Scope each million-node tree in its own block so the first is collectable before the second
+    // is built — bounds peak heap in the shared test JVM (otherwise both live at once).
+    val paraOk =
+      var b: Bin = Bin.Leaf(0)
+      var i = 0
+      while i < Deep do
+        b = Bin.Branch(b, Bin.Leaf(0))
+        i += 1
+      // para depth, reading only the result half (subterm ignored) — still walks the full spine.
+      val paraDepth: BinF[(Bin, Int)] => Int =
+        case BinF.LeafF(_)                => 0
+        case BinF.BranchF((_, l), (_, r)) => 1 + math.max(l, r)
+      Schemes.para[BinF, Bin, Int](paraDepth).get(b) == Deep
+    val cataOk =
+      val apoCoalg: Int => BinF[Either[Bin, Int]] =
+        n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(Right(n - 1), Right(-1))
+      val deep: Bin = Schemes.apo[BinF, Int, Bin](apoCoalg).reverseGet(Deep)
+      Schemes.cata[BinF, Bin, Int](sumLeaves).get(deep) == 0 // all leaves are 0
+    (paraOk must beTrue).and(cataOk must beTrue)
+  }
+
+  // ----- review gaps: deep (>512) apo graft, and wide/variadic-functor para zip-alignment -----
+
+  "apo grafts by reference even past the on-stack limit (heapWalk Left arm)" >> {
+    val Deep =
+      5_000 // well past OnStackLimit (512): exercises the heapWalk graft, not just on-stack
+    val grafted: Bin = Bin.Branch(Bin.Leaf(98), Bin.Leaf(99))
+    // a left spine of `Deep` Branches; the deepest left child is the finished graft.
+    def coalg(n: Int): BinF[Either[Bin, Int]] =
+      if n <= 0 then BinF.BranchF(Left(grafted), Right(-1))
+      else BinF.BranchF(Right(n - 1), Right(-1))
+    // -1 → a leaf terminator
+    def coalg2(n: Int): BinF[Either[Bin, Int]] =
+      if n < 0 then BinF.LeafF(0) else coalg(n)
+    val built = Schemes.apo[BinF, Int, Bin](coalg2).reverseGet(Deep)
+    // walk down the left spine to the graft slot
+    var cur = built
+    var found: Bin = built
+    var steps = 0
+    while steps <= Deep do
+      cur match
+        case Bin.Branch(l, _) => found = l; cur = l; steps += 1
+        case _                => steps = Deep + 1
+    // the graft is reached by reference, never rebuilt
+    (found.asInstanceOf[AnyRef] eq grafted.asInstanceOf[AnyRef]) === true
+  }
+
+  "para's subterm zip stays aligned on a wide/variadic RoseF (map-order == fold-order)" >> {
+    // RoseF is N-ary (List of kids), so map-order vs fold-order alignment is genuinely exercised —
+    // unlike the fixed binary BinF. para must pair each kid's ORIGINAL subterm with its result.
+    val rose: Rose = Rose(0, List(Rose(1, Nil), Rose(2, List(Rose(3, Nil))), Rose(4, Nil)))
+    // For each node: sum of (label of each kid's original subterm) + recursive results.
+    // Reading the kid SUBTERM's label (not the folded result) is what needs the (S, A) pairing.
+    val alg: RoseF[(Rose, Int)] => Int =
+      fr => fr.kids.map { case (subterm, childResult) => subterm.label + childResult }.sum
+    // node 1: no kids → 0; node 3: 0; node 2: kid 3 → 3 + 0 = 3; node 4: 0;
+    // root 0: kids 1,2,4 → (1 + 0) + (2 + 3) + (4 + 0) = 1 + 5 + 4 = 10
+    Schemes.para[RoseF, Rose, Int](alg).get(rose) === 10
   }

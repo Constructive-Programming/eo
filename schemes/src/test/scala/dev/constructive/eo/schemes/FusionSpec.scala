@@ -14,8 +14,8 @@ import schemes.samples.{Bin, BinF}
   *
   * `ana` is a build (`Review`-shaped, `X = S`) and `cata` a node-blind fold (`Getter`-shaped, `X =
   * Nothing`); the build⇄read seam between them is `ana.cross(cata)` (definitionally
-  * `ana.reverse.andThen(cata)`). Over the [[Scheme]] carrier — which keeps the `coalg`/`alg` alive
-  * — that compose **fuses**:
+  * `ana.reverse.andThen(cata)`). Because the citizens keep their `coalg`/`alg` alive, that compose
+  * **fuses**:
   *
   *   - it equals the materialising `cata.get ∘ ana.reverseGet` (the hylo law), and
   *   - it equals [[Schemes.hylo]], and
