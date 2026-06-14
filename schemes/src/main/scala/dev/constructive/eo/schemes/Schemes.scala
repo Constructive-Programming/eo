@@ -4,7 +4,8 @@ package schemes
 import cats.{~>, Monad, Traverse}
 
 import data.MultiFocus
-import optics.Optic
+import optics.{GetReplaceLens, Lens, Optic}
+import optics.Optic.get
 import zoo.*
 
 /** Typed recursion schemes as composable optics, over a user-supplied **pattern functor** `F[_]` (+
@@ -388,3 +389,31 @@ object Schemes:
       (_, layer) => M.map(alg(layer))(b => Attr(b, layer)),
     )
     FoldM(a => M.map(build(Coattr.Pure(a)))(Attr.forget))
+
+  // ===== Writable scheme — the paramorphism as a Lens ========================================
+
+  /** The paramorphism promoted from a Getter to a **Lens** — [[para]] is the read (`get`), this
+    * adds the write (`enplace`), yielding a core [[dev.constructive.eo.optics.GetReplaceLens]] that
+    * composes with hand-written / derived Lenses on the fused `Tuple2` path.
+    *
+    * '''Why `enplace` is a parameter, not derived.''' `para` is *unconditionally* a Getter, but a
+    * fold result is not in general a recoverable component of `S`. The automatic put the
+    * store-comonad story suggests — re-embed the retained subterms (`X = F[(S, A)]`) — makes
+    * **get-put** hold definitionally yet leaves **put-get** conditional on the algebra having a
+    * coherent inverse. Rather than ship a `Lens` that is only conditionally lawful, the coherent
+    * put-direction is supplied by the caller; `get` / `enplace` then obey the ordinary Lens laws.
+    * (The fully-automatic, read-only decorated optic — each child paired with its fold result,
+    * `X = F[(S, A)]`, the store comonad over subterms — is the natural enrichment of [[fLayer]] and
+    * a follow-up; it stays read-only because the decoration cannot be lawfully written.)
+    *
+    * @param alg
+    *   the subterm-retaining fold `F[(S, A)] => A` — the `get`, a genuine paramorphism.
+    * @param enplace
+    *   the coherent put: rebuild an `S` whose `get` is the new focus.
+    */
+  def paraLens[F[_], S, A](alg: F[(S, A)] => A)(enplace: (S, A) => S)(using
+      Traverse[F],
+      Project[F, S],
+  ): GetReplaceLens[S, S, A, A] =
+    val fold = para(alg)
+    Lens(fold.get(_), enplace)
