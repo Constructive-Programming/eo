@@ -4,27 +4,21 @@ package zoo
 
 import cats.Traverse
 
-import data.Direct
-import optics.Optic
-
-/** Anamorphism citizen — an unfold worn as an optic over [[dev.constructive.eo.data.Direct]] with
-  * `X = S` (the structure it threads). `Review`-shaped (`Optic[Unit, S, Unit, Seed, Direct]`): the
-  * build `from` runs the unfold; the read side is vestigial. Carries `coalg` so [[cross]] can fuse
-  * with a node-blind [[Cata]] (→ [[Hylo]]) or a course-of-value [[Histo]] (→ [[Dyna]]). Refining
-  * `X` upward to [[Coattr]] = `μX. Seed + F[X]` (the free monad) gives the multi-layer unfold
-  * (futumorphism — see [[Futu]]).
+/** Anamorphism citizen — an unfold ([[BuildScheme]]) with `X = S` (the structure it threads).
+  * Carries `coalg` so [[cross]] can fuse with a node-blind [[Cata]] (→ [[Hylo]]) or a
+  * course-of-value [[Histo]] (→ [[Dyna]]). Refining `X` upward to [[Coattr]] = `μX. Seed + F[X]`
+  * (the free monad) gives the multi-layer unfold (futumorphism — [[Futu]]).
   */
 final class Ana[F[_], Seed, S](private[zoo] val coalg: Seed => F[Seed])(using
     F: Traverse[F],
     E: Embed[F, S],
-) extends Optic[Unit, S, Unit, Seed, Direct]:
+) extends BuildScheme[S, Seed]:
   type X = S
 
   private[zoo] val build: Seed => S =
     Machines.foldLayered[F, Seed, S](coalg, (_, fr) => E.embed(fr))
 
-  def to(u: Unit): Direct[X, Unit] = Direct(())
-  def from(b: Direct[X, Seed]): S = build(Direct.value(b))
+  protected def write(seed: Seed): S = build(seed)
 
   /** The fused **hylo** seam: ana ∘ a node-blind [[Cata]]. Because the fold retains nothing (`X =
     * Nothing`), deforestation is sound — the one-pass machine is rebuilt from `coalg` + `cata.alg`,
