@@ -3,7 +3,7 @@ package schemes
 
 import cats.{~>, Monad, Traverse}
 
-import data.{Forget, ForgetK}
+import data.MultiFocus
 import optics.Optic
 import zoo.*
 
@@ -68,23 +68,30 @@ import zoo.*
   */
 object Schemes:
 
-  /** The single *layer* optic for a pattern functor `F`: `project`/`embed` worn as the existing
-    * [[dev.constructive.eo.data.Forget]] carrier. `to = project: S => F[S]`, `from = embed: F[S] =>
-    * S`, so it is a genuine `Optic[S, S, S, S, Forget[F]]` with **no change to the `Optic` trait**
-    * — the concrete proof that a typed `F` is an optic carrier, and an observational read (given
-    * `Foldable[F]`) of a layer's immediate foci via `.foldMap`. It is a single-layer peel/glue
-    * (like `Plated`'s `plate`, but one layer, not the recursion); the schemes drive `to`/`from`
-    * themselves.
+  /** The single *layer* optic for a pattern functor `F`: `project`/`embed` worn as core's
+    * [[dev.constructive.eo.data.MultiFocus]] carrier — `MultiFocus[F][X, A] = (X, F[A])`, the
+    * Traversal/AlgLens/Grate carrier. `to(s) = ((), project(s))` and `from((_, fs)) = embed(fs)`,
+    * so it is a genuine `Optic[S, S, S, S, MultiFocus[F]]`: a **typed single-layer self-traversal**
+    * whose foci are the node's immediate children `F[S]`.
+    *
+    * Because it now rides the same carrier as [[dev.constructive.eo.optics.Plated.plate]] and
+    * [[dev.constructive.eo.optics.Traversal.each]], it composes with the rest of core: read the
+    * immediate foci via `.foldMap` (`Foldable[F]`), rewrite them via `.modify` / `.replace`
+    * (`Functor[F]`), or effect over them via `.modifyA` / `.all` (`Traverse[F]`) — the read+write
+    * upgrade over the former read-only `Forget[F]` spelling. It is one layer, not the recursion;
+    * the `Plated.fromBasis` derivation is its recursive face, and the schemes drive `to`/`from`
+    * themselves. `X = Unit`: the `F`-shape (constructor + arity) rides inside the foci `F[S]`, so
+    * `embed` needs no extra leftover.
     */
-  def fLayer[F[_], S](using Project[F, S], Embed[F, S]): Optic[S, S, S, S, Forget[F]] =
+  def fLayer[F[_], S](using Project[F, S], Embed[F, S]): Optic[S, S, S, S, MultiFocus[F]] =
     new FLayer[F, S]
 
-  /** The named class behind [[fLayer]] — the single-layer peel/glue optic. */
+  /** The named class behind [[fLayer]] — the single-layer peel/glue self-traversal. */
   final private class FLayer[F[_], S](using P: Project[F, S], E: Embed[F, S])
-      extends Optic[S, S, S, S, Forget[F]]:
-    type X = Any
-    def to(s: S): Forget[F][X, S] = ForgetK(P.project(s))
-    def from(fs: Forget[F][X, S]): S = E.embed(fs.value)
+      extends Optic[S, S, S, S, MultiFocus[F]]:
+    type X = Unit
+    def to(s: S): MultiFocus[F][X, S] = MultiFocus((), P.project(s))
+    def from(pair: MultiFocus[F][X, S]): S = E.embed(pair.foci)
 
   // ===== Folds ===============================================================================
 
