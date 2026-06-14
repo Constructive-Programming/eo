@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package schemes
 
-import cats.Traverse
+import cats.{~>, Traverse}
 
 import data.{Forget, ForgetK}
 import optics.Optic
@@ -16,19 +16,31 @@ import zoo.*
   * existential `X` is the *index* of the recursion — what the scheme retains — and **the (co)free
   * (co)monads are the universal indices**:
   *
-  * | scheme    | `X`                             | index                                         |
-  * |:----------|:--------------------------------|:----------------------------------------------|
-  * | [[cata]]  | `Nothing`                       | the forgetful (trivial) fold                  |
-  * | [[para]]  | `F[(S, A)]`                     | the **store-comonad** complement (subterms)   |
-  * | [[histo]] | [[zoo.Attr]] = `νX. A × F[X]`   | the **cofree comonad** (course-of-value fold) |
-  * | [[ana]]   | `S`                             | the materialising unfold                      |
-  * | [[apo]]   | `Either[S, A]`                  | the **Prism** residual (graft, build-side)    |
-  * | [[futu]]  | [[zoo.Coattr]] = `μX. A + F[X]` | the **free monad** (multi-layer unfold)       |
+  * | scheme     | `X`                             | index                                         |
+  * |:-----------|:--------------------------------|:----------------------------------------------|
+  * | [[cata]]   | `Nothing`                       | the forgetful (trivial) fold                  |
+  * | [[zygo]]   | `F[(B, A)]`                     | store comonad over an auxiliary carrier `B`   |
+  * | [[para]]   | `F[(S, A)]`                     | the **store-comonad** complement (subterms)   |
+  * | [[histo]]  | [[zoo.Attr]] = `νX. A × F[X]`   | the **cofree comonad** (course-of-value fold) |
+  * | [[ana]]    | `S`                             | the materialising unfold                      |
+  * | [[cozygo]] | `Either[B, A]`                  | *g-apo* residual over an auxiliary coalgebra  |
+  * | [[apo]]    | `Either[S, A]`                  | the **Prism** residual (graft, build-side)    |
+  * | [[futu]]   | [[zoo.Coattr]] = `μX. A + F[X]` | the **free monad** (multi-layer unfold)       |
   *
   * `para`/`histo` refine `cata`'s index up the comonad tower; `apo`/`futu` refine `ana`'s up the
   * monad tower. (`para`'s existential is the writable-Lens complement — get-put holds
   * definitionally, put-get only under algebra-coherence, so the lawful writable put is a scoped
   * follow-up.)
+  *
+  * The towers also have an *auxiliary* rung between the trivial and store/prism indices: [[zygo]]
+  * (`X = F[(B, A)]`, the store comonad over an arbitrary carrier `B` — `para` is `zygo` at `B = S`)
+  * and its mutual-recursion generalisation [[mutu]] (`X = F[(A, B)]`), with build-side duals
+  * [[cozygo]] (`X = Either[B, A]`, *g-apo*) and [[comutu]] (`X = Either[A, B]`).
+  *
+  * Orthogonal to both towers is the **natural-transformation axis** — [[prepro]] / [[postpro]] keep
+  * the trivial index (`cata`/`ana`-shaped) and instead pre/post-compose the layer optic
+  * ([[fLayer]]) with an accumulating `η : F ~> F`, so a node at depth `k` is transformed `k` times
+  * (`O(n · depth)`; `η = id` recovers `cata`/`ana`).
   *
   * ==hylo is the fusion, not a primitive — and meta is the honest non-fusion==
   *
@@ -92,6 +104,26 @@ object Schemes:
   def histo[F[_], S, A](alg: F[Attr[F, A]] => A)(using Traverse[F], Project[F, S]): Histo[F, S, A] =
     new Histo[F, S, A](alg)
 
+  /** Zygomorphism — a fold with an **auxiliary algebra** `aux: F[B] => B` feeding the main `alg:
+    * F[(B, A)] => A` ([[zoo.Zygo]], `X = F[(B, A)]`). The comonad-tower rung between [[cata]] and
+    * [[para]]: `para` is `zygo` at `B = S`, `aux = embed`; ignoring the `B` half degenerates to
+    * [[cata]]. `.get`.
+    */
+  def zygo[F[_], S, A, B](aux: F[B] => B)(alg: F[(B, A)] => A)(using
+      Traverse[F],
+      Project[F, S],
+  ): Zygo[F, S, A, B] = new Zygo[F, S, A, B](aux, alg)
+
+  /** Mutumorphism — a fold by **mutual recursion**: two algebras `F[(A, B)] => A` /
+    * `F[(A, B)] => B` compute a pair per node, returning the `A` half ([[zoo.Mutu]],
+    * `X = F[(A, B)]`). Generalises [[zygo]] (whose `aux` is an `algB` blind to the `A` half).
+    * `.get`.
+    */
+  def mutu[F[_], S, A, B](algA: F[(A, B)] => A, algB: F[(A, B)] => B)(using
+      Traverse[F],
+      Project[F, S],
+  ): Mutu[F, S, A, B] = new Mutu[F, S, A, B](algA, algB)
+
   // ===== Unfolds =============================================================================
 
   /** Anamorphism — an unfold `coalg: Seed => F[Seed]` ([[zoo.Ana]], `X = S`). `.reverseGet`. */
@@ -110,6 +142,26 @@ object Schemes:
     */
   def futu[F[_], A, S](coalg: A => F[Coattr[F, A]])(using Traverse[F], Embed[F, S]): Futu[F, A, S] =
     new Futu[F, A, S](coalg)
+
+  /** Cozygomorphism (g-apomorphism) — the build-side dual of [[zygo]]: an **auxiliary coalgebra**
+    * `aux: B => F[B]` alongside the main `coalg: A => F[Either[B, A]]` ([[zoo.Cozygo]], `X =
+    * Either[B, A]`). `Left(b)` keeps unfolding through `aux`; all-`Right` degenerates to [[ana]].
+    * `.reverseGet`.
+    */
+  def cozygo[F[_], A, B, S](aux: B => F[B])(coalg: A => F[Either[B, A]])(using
+      Traverse[F],
+      Embed[F, S],
+  ): Cozygo[F, A, B, S] = new Cozygo[F, A, B, S](aux, coalg)
+
+  /** Comutumorphism — the build-side dual of [[mutu]]: two mutually co-recursive coalgebras
+    * `A => F[Either[A, B]]` / `B => F[Either[A, B]]`, entered at an `A` ([[zoo.Comutu]], `X =
+    * Either[A, B]`). Generalises [[cozygo]]; degenerates to [[ana]] when one coalgebra suffices.
+    * `.reverseGet`.
+    */
+  def comutu[F[_], A, B, S](coalgA: A => F[Either[A, B]], coalgB: B => F[Either[A, B]])(using
+      Traverse[F],
+      Embed[F, S],
+  ): Comutu[F, A, B, S] = new Comutu[F, A, B, S](coalgA, coalgB)
 
   // ===== Refolds (fused — Traverse[F] only, no intermediate S) ===============================
 
@@ -178,3 +230,27 @@ object Schemes:
       coalg: A => G[Coattr[G, A]],
   )(using Traverse[F], Project[F, S], Traverse[G], Embed[G, T]): MetaChrono[S, A, T] =
     MetaChrono(algebra, coalg)
+
+  // ===== Layer-transforming schemes (the natural-transformation axis) ========================
+  // Orthogonal to the (co)monad index towers: these keep the trivial index and instead pre/post-
+  // compose the layer optic (fLayer) with an accumulating natural transformation η : F ~> F.
+
+  /** Prepromorphism — a [[cata]]-shaped fold (`alg: F[A] => A`, `X = Nothing`) that applies a
+    * natural transformation **`η : F ~> F` before recursing**, so a node at depth `k` sees `η`
+    * applied `k` times ([[zoo.Prepro]]). `η = id` degenerates to [[cata]]. `.get`. `O(n · depth)`.
+    */
+  def prepro[F[_], S, A](eta: F ~> F)(alg: F[A] => A)(using
+      Traverse[F],
+      Project[F, S],
+      Embed[F, S],
+  ): Prepro[F, S, A] = new Prepro[F, S, A](eta, alg)
+
+  /** Postpromorphism — the build-side mirror of [[prepro]]: an [[ana]]-shaped unfold (`coalg: A =>
+    * F[A]`, `X = S`) that applies **`η : F ~> F` after each step** ([[zoo.Postpro]]). `η = id`
+    * degenerates to [[ana]]. `.reverseGet`. `O(n · depth)`.
+    */
+  def postpro[F[_], A, S](eta: F ~> F)(coalg: A => F[A])(using
+      Traverse[F],
+      Project[F, S],
+      Embed[F, S],
+  ): Postpro[F, A, S] = new Postpro[F, A, S](eta, coalg)

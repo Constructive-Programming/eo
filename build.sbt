@@ -424,6 +424,17 @@ lazy val schemes: Project = project
     libraryDependencies += cats,
     libraryDependencies += discipline % Test,
     libraryDependencies += scalacheck % Test,
+    // The schemes suites assert stack-safety by folding/building 10^6-deep
+    // spines. Each engine takes a bounded on-stack prefix (`OnStackLimit`
+    // = 512 native frames) before handing deep subtrees to the heap walk,
+    // so 512 `rec` frames are live at once — fine on a main-sized stack,
+    // but specs2's *parallel* pool threads default to a much smaller stack,
+    // and several such tests running concurrently overflow it. Fork a test
+    // JVM with a generous per-thread stack so the parallel runner's threads
+    // can hold the on-stack prefix; this keeps the realistic 10^6 tests
+    // (rather than shrinking them) and preserves parallel execution.
+    Test / fork := true,
+    Test / javaOptions += "-Xss8m",
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,
