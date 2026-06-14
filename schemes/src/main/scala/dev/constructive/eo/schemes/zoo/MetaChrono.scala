@@ -33,7 +33,6 @@ object MetaChrono:
       val toAttr = Machines.foldLayered[F, S, Attr[F, A]](P.project, Attr.decorate(algebra))
       s => Attr.forget(toAttr(s))
     val unfold: A => T =
-      val run =
-        Machines.foldLayered[G, Coattr[G, A], T](Coattr.expand(coalg), (_, gr) => E.embed(gr))
+      val run = Machines.buildLayered[G, Coattr[G, A], T](Coattr.expand(coalg))
       a => run(Coattr.Pure(a))
     new MetaChrono[S, A, T](fold.andThen(unfold))

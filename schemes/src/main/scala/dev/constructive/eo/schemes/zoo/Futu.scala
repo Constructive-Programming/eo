@@ -18,7 +18,7 @@ final class Futu[F[_], A, S](private[zoo] val coalg: A => F[Coattr[F, A]])(using
   type X = Coattr[F, A]
 
   private[zoo] val build: A => S =
-    val run = Machines.foldLayered[F, Coattr[F, A], S](Coattr.expand(coalg), (_, fr) => E.embed(fr))
+    val run = Machines.buildLayered[F, Coattr[F, A], S](Coattr.expand(coalg))
     a => run(Coattr.Pure(a))
 
   protected def write(a: A): S = build(a)

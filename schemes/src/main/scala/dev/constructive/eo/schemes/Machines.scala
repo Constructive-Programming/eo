@@ -232,6 +232,16 @@ private[schemes] object Machines:
 
     n => rec(n, 0)
 
+  /** The unfold driver — [[foldLayered]] with the combine fixed to `Embed`, the shape every
+    * non-grafting unfold shares (`ana` / `futu` / `cozygo` / `comutu`, and the unfold half of the
+    * metamorphisms): peel each seed with `expand`, glue each rebuilt layer back with `embed`.
+    */
+  private[schemes] def buildLayered[F[_], N, S](expand: N => F[N])(using
+      F: Traverse[F],
+      E: Embed[F, S],
+  ): N => S =
+    foldLayered[F, N, S](expand, (_, fr) => E.embed(fr))
+
   /** [[foldLayered]]'s graft-aware sibling — the apomorphism engine. `expandOr` answers each node
     * event with `Left(r)` (an **already-finished result**: placed into its slot directly — O(1), no
     * recursion, no projection) or `Right(layer)` (keep going). Same on-stack / [[heapWalk]] hybrid
