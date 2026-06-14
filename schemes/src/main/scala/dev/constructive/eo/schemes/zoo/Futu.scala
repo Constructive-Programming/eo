@@ -25,7 +25,7 @@ final class Futu[F[_], A, S](private[zoo] val coalg: A => F[Coattr[F, A]])(using
 ) extends Optic[Unit, S, Unit, A, Scheme]:
   type X = Coattr[F, A]
 
-  private val build: A => S =
+  private[zoo] val build: A => S =
     val expand: Coattr[F, A] => F[Coattr[F, A]] =
       case Coattr.Pure(a)     => coalg(a)
       case Coattr.Roll(layer) => layer
@@ -36,9 +36,10 @@ final class Futu[F[_], A, S](private[zoo] val coalg: A => F[Coattr[F, A]])(using
   def from(b: Scheme[X, A]): S = build(Scheme.value(b))
 
   /** The fused chrono seam: futu ∘ histo — **hylo at the universal indices**. The build threads the
-    * free monad ([[Coattr]]), the fold the cofree comonad ([[Attr]]); fused, the intermediate `S` is
-    * never built (mirrors [[Ana.cross]] for the trivial indices). Delegates to [[Schemes.chrono]],
-    * which needs only `Traverse[F]` — the `Embed`/`Project` carried by `this`/`histo` go unused.
+    * free monad ([[Coattr]]), the fold the cofree comonad ([[Attr]]); fused, the intermediate `S`
+    * is never built (mirrors [[Ana.cross]] for the trivial indices). Delegates to
+    * [[Schemes.chrono]], which needs only `Traverse[F]` — the `Embed`/`Project` carried by
+    * `this`/`histo` go unused.
     *
     * A member (not the generic `Optic.cross`, which would `reverse.andThen` and materialise) so the
     * fused chrono wins overload resolution.
