@@ -10,8 +10,8 @@ import optics.Optic.* // get, reverseGet
 import schemes.samples.{Bin, BinF}
 import schemes.zoo.{Attr, Coattr}
 
-/** Behaviour + degeneration spec for the universal-index schemes: [[Schemes.histo]] (`X = Attr`, the
-  * cofree comonad) and [[Schemes.futu]] (`X = Coattr`, the free monad).
+/** Behaviour + degeneration spec for the universal-index schemes: [[Schemes.histo]] (`X = Attr`,
+  * the cofree comonad) and [[Schemes.futu]] (`X = Coattr`, the free monad).
   *
   *   - Degeneration: each collapses to its trivial-index dual when its decoration is unused —
   *     heads-only `histo == cata`, all-`Pure` `futu == ana`.
@@ -77,7 +77,8 @@ class ZooSpec extends Specification:
   // ----- futu (X = Coattr[F, A], free) -----
 
   "single-layer (all-Pure) futu degenerates to ana" >> {
-    val expand: Int => BinF[Int] = n => if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
+    val expand: Int => BinF[Int] =
+      n => if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
     val viaFutu = Schemes
       .futu[BinF, Int, Bin](n => BinF.traverse.map(expand(n))(Coattr.Pure(_)))
       .reverseGet(6)
