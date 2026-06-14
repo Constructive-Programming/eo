@@ -5,9 +5,9 @@ import scala.language.implicitConversions
 
 import org.specs2.mutable.Specification
 
-import data.Forget
+import data.MultiFocus
 import optics.{Getter, Optic}
-import optics.Optic.* // get, readOnly, reverseGet, foldMap, andThen
+import optics.Optic.* // get, readOnly, reverseGet, foldMap, modify, andThen
 
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 
@@ -89,10 +89,10 @@ class SchemesSpec extends Specification:
     (toStr.get(3) == "4") must beTrue
   }
 
-  // ----- fLayer: the single-layer Forget[F] optic -----
+  // ----- fLayer: the single-layer MultiFocus[F] self-traversal -----
 
-  "fLayer is a usable Optic[S,S,S,S,Forget[F]]: to/from round-trip one layer" >> {
-    val layer: Optic[Bin, Bin, Bin, Bin, Forget[BinF]] = Schemes.fLayer[BinF, Bin]
+  "fLayer is a usable Optic[S,S,S,S,MultiFocus[F]]: to/from round-trip one layer" >> {
+    val layer: Optic[Bin, Bin, Bin, Bin, MultiFocus[BinF]] = Schemes.fLayer[BinF, Bin]
     val b = Bin.Branch(Bin.Leaf(1), Bin.Leaf(2))
     (layer.from(layer.to(b)) == b) must beTrue
   }
@@ -101,6 +101,13 @@ class SchemesSpec extends Specification:
     val layer = Schemes.fLayer[BinF, Bin]
     (layer.foldMap[Int](_ => 1)(Bin.Branch(Bin.Leaf(1), Bin.Leaf(2))) == 2)
       .and(layer.foldMap[Int](_ => 1)(Bin.Leaf(9)) == 0) // a leaf has no recursive foci
+  }
+
+  "fLayer WRITES now: modify rewrites the immediate children (the MultiFocus upgrade)" >> {
+    val layer = Schemes.fLayer[BinF, Bin]
+    val b = Bin.Branch(Bin.Leaf(1), Bin.Leaf(2))
+    // one-layer rewrite: replace each immediate child, leaving the layer's shape intact.
+    layer.modify(_ => Bin.Leaf(0))(b) === Bin.Branch(Bin.Leaf(0), Bin.Leaf(0))
   }
 
   // ----- stack-safety: 10^6 deep -----

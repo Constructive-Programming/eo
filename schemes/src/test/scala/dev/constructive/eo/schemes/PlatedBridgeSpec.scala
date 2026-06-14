@@ -9,7 +9,8 @@ import schemes.samples.{Bin, BinF}
 /** The Step-1 bridge: a typed pattern-functor [[Basis]] (the schemes' `S`↔`F` correspondence) feeds
   * core's [[optics.Plated.fromBasis]], so the same `Basis[BinF, Bin]` that drives `cata`/`ana` also
   * drives core's `Plated` recursion combinators (`children` / `universe` / `transform`). One
-  * correspondence, both worlds. */
+  * correspondence, both worlds.
+  */
 class PlatedBridgeSpec extends Specification:
 
   // The bridge: derive the core Plated straight from the schemes' Basis.
@@ -55,5 +56,5 @@ class PlatedBridgeSpec extends Specification:
         case BinF.BranchF(l, r) => l + r
       }
       .get(tree)
-    viaPlated === viaCata and (viaPlated === 6)
+    (viaPlated === viaCata).and(viaPlated === 6)
   }
