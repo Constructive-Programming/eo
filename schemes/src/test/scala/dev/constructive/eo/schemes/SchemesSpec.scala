@@ -54,9 +54,9 @@ class SchemesSpec extends Specification:
       beTrue
   }
 
-  "cata-as-read composes onto an outer Getter via andThen (.readOnly bridges the carrier)" >> {
+  "cata-as-read composes onto an outer Getter via andThen (Direct carrier, no bridge)" >> {
     val composed: Getter[(String, Bin), Int] =
-      Getter[(String, Bin), Bin](_._2).andThen(Schemes.cata[BinF, Bin, Int](sumLeaves).readOnly)
+      Getter[(String, Bin), Bin](_._2).andThen(Schemes.cata[BinF, Bin, Int](sumLeaves))
     (composed.get(("x", tree)) == 6) must beTrue
   }
 
