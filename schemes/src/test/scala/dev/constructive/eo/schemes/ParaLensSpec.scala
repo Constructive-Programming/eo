@@ -13,8 +13,8 @@ import schemes.samples.{Bin, BinF}
 final case class Box(t: Bin)
 
 /** Step 3: [[Schemes.paraLens]] — the paramorphism promoted to a writable [[Lens]]. `get` is a
-  * subterm-retaining fold; `enplace` is the caller-supplied coherent put. The point of the spike:
-  * a recursion scheme that is a genuine, lawful Lens, composing with core's Lenses.
+  * subterm-retaining fold; `enplace` is the caller-supplied coherent put. The point of the spike: a
+  * recursion scheme that is a genuine, lawful Lens, composing with core's Lenses.
   *
   * The fixture is the "leftmost leaf" lens: `get` folds down the left spine (a paramorphism that
   * keeps only the left child's result), `enplace` rewrites that same leaf. A coherent pair, so the
@@ -60,6 +60,6 @@ class ParaLensSpec extends Specification:
   "composes with a core Lens on the fused Tuple2 path: Box → leftmost leaf" >> {
     val boxRoot = Lens[Box, Bin](_.t, (b, t) => b.copy(t = t))
     val composed = boxRoot.andThen(leftmost) // a Lens[Box, Int] focusing the leftmost leaf
-    composed.get(Box(tree)) === 1 and
-      (composed.replace(7)(Box(tree)) === Box(setLeftmost(tree, 7)))
+    (composed.get(Box(tree)) === 1)
+      .and(composed.replace(7)(Box(tree)) === Box(setLeftmost(tree, 7)))
   }

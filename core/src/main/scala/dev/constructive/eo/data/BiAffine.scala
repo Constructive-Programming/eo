@@ -4,7 +4,9 @@ package data
 import cats.{Applicative, Monoid}
 
 import accessor.{Graft, PartialAccessor}
+import compose.*
 import forgetful.*
+import optics.Optic
 
 /** Carrier for the decoration (`Gather`/`Scatter`) family of the recursion-scheme zoo —
   * [[Affine]]'s data shape worn on the *build* seam. Where `Affine.Miss` means "the read found no
@@ -19,9 +21,10 @@ import forgetful.*
   * concrete `Tuple2` (so `Fst[A]` / `Snd[A]` reduce); carried through an `Optic[…, BiAffine]`
   * existential, `A` is abstract and the match types stay inert.
   *
-  * The composition-matrix row (`AssociativeFunctor[BiAffine]`, `Composer` bridges) is deliberately
-  * NOT shipped here — it is follow-up work; the laws that need it (`Done`/`Step` coherence across
-  * `andThen`) live with it.
+  * Same-carrier composition is shipped as [[BiAffine.assoc]] — the build-side mirror of
+  * [[Affine.assoc]] (`Done` ↔ `Miss`, `Step` ↔ `Hit`), so `biaffine.andThen(biaffine)` type-checks
+  * and runs (`Done`/`Step` coherence across `andThen`). The cross-carrier `Composer` bridges into
+  * `BiAffine` remain follow-up, alongside the recursion-scheme citizens that would consume them.
   *
   * @tparam A
   *   existential leftover tuple
@@ -131,3 +134,50 @@ object BiAffine:
   given graft: Graft[BiAffine] with
     def done[X, B](fst: Fst[X]): BiAffine[X, B] = new Done[X, B](fst)
     def step[X, B](snd: Snd[X], b: B): BiAffine[X, B] = new Step[X, B](snd, b)
+
+  /** Composition functor for `BiAffine` carriers — the build-side mirror of [[Affine.assoc]]
+    * (`Done` ↔ `Miss`, `Step` ↔ `Hit`), so the generic `Optic.andThen` resolves for
+    * `BiAffine`-carried optics. `Z` is identical to Affine's: the outer/inner leftovers nested
+    * through the `Done`/`Step` arms. `Done` short-circuits (an outer finished slot ends the
+    * composition); `Step` threads the focus through `inner` and recombines the one-layer contexts.
+    *
+    * `Xo` / `Xi` are deliberately unbounded — `BiAffine`'s `Fst` / `Snd` match types stay inert
+    * when the existential is not a `Tuple`, sound for every concrete optic (each concrete `X` is a
+    * `Tuple2`), exactly as on [[Affine.assoc]].
+    *
+    * @group Instances
+    */
+  given assoc[Xo, Xi]: AssociativeFunctor[BiAffine, Xo, Xi] with
+    type Z = (Either[Fst[Xo], (Snd[Xo], Fst[Xi])], (Snd[Xo], Snd[Xi]))
+
+    def composeTo[S, T, A, B, C, D](
+        s: S,
+        outer: Optic[S, T, A, B, BiAffine] { type X = Xo },
+        inner: Optic[A, B, C, D, BiAffine] { type X = Xi },
+    ): BiAffine[Z, C] = outer.to(s) match
+      case od: Done[Xo, A] =>
+        new Done[Z, C](Left(od.fst))
+      case os: Step[Xo, A] =>
+        inner.to(os.b) match
+          case id: Done[Xi, C] =>
+            new Done[Z, C](Right((os.snd, id.fst)))
+          case is: Step[Xi, C] =>
+            new Step[Z, C]((os.snd, is.snd), is.b)
+
+    def composeFrom[S, T, A, B, C, D](
+        xd: BiAffine[Z, D],
+        inner: Optic[A, B, C, D, BiAffine] { type X = Xi },
+        outer: Optic[S, T, A, B, BiAffine] { type X = Xo },
+    ): T = xd match
+      case d: Done[Z, D] =>
+        // Fst[Z] = Either[Fst[Xo], (Snd[Xo], Fst[Xi])] — the match-type reduction can't be
+        // proven at the trait level, so we cast (as on Affine.assoc).
+        d.fst.asInstanceOf[Either[Fst[Xo], (Snd[Xo], Fst[Xi])]] match
+          case Left(y)         => outer.from(new Done[Xo, B](y))
+          case Right((x1, y0)) =>
+            val b: B = inner.from(new Done[Xi, D](y0))
+            outer.from(new Step[Xo, B](x1, b))
+      case s: Step[Z, D] =>
+        val pair = s.snd.asInstanceOf[(Snd[Xo], Snd[Xi])]
+        val b: B = inner.from(new Step[Xi, D](pair._2, s.b))
+        outer.from(new Step[Xo, B](pair._1, b))
