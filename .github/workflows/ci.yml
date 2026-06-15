@@ -73,6 +73,9 @@ jobs:
       - name: Check scalafix
         run: sbt '++ ${{ matrix.scala }}' 'scalafixAll --check'
 
+      - name: Compile tests (macro expansion before test-run contention)
+        run: sbt '++ ${{ matrix.scala }}' Test/compile
+
       - name: Check that workflows are up to date
         run: sbt githubWorkflowCheck
 

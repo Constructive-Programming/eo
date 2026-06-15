@@ -6,14 +6,15 @@ import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
 
-/** `Modify.modify` (eo's write-only family, named `Setter` in Monocle) at the leaf plus deep composition, paired EO vs Monocle.
+/** `Modify.modify` (eo's write-only family, named `Setter` in Monocle) at the leaf plus deep
+  * composition, paired EO vs Monocle.
   *
   * EO's `Modify` carrier `ModifyF` has both a `ForgetfulFunctor[ModifyF]` (powers `.modify`) and an
-  * `AssociativeFunctor[ModifyF]` (`assocModifyF`), so two Modify optics compose through the ordinary
-  * `andThen` — `s1.andThen(s2).modify(f) == s1.modify(s2.modify(f))`. The depth-3 / depth-6 rows
-  * build a *composed* write-only optic on both sides (EO's `s3.andThen(s2)…` vs Monocle's
-  * `mS3.andThen(mS2)…`) and dispatch through it once, rather than hand-nesting `modify` on the EO
-  * side.
+  * `AssociativeFunctor[ModifyF]` (`assocModifyF`), so two Modify optics compose through the
+  * ordinary `andThen` — `s1.andThen(s2).modify(f) == s1.modify(s2.modify(f))`. The depth-3 /
+  * depth-6 rows build a *composed* write-only optic on both sides (EO's `s3.andThen(s2)…` vs
+  * Monocle's `mS3.andThen(mS2)…`) and dispatch through it once, rather than hand-nesting `modify`
+  * on the EO side.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))

@@ -9,14 +9,16 @@ import higherkindness.droste.scheme
 
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.bench.fixture.SchemesFixtures.given
-import dev.constructive.eo.bench.fixture.PlatedTrees.eoBin // given Plated[Bin]
 import dev.constructive.eo.schemes.Schemes
 
-/** Recursion schemes — `cata` / `ana` / `hylo` — three ways, on the same workload:
+/** Recursion schemes — `cata` / `ana` / `hylo` — four ways, on the same workload:
   *
-  *   - **eo** — schemes as optics over the *native* `Bin` (`cata` driven by `Plated[Bin]`, `ana` a
-  *     `Review`, fused `hylo` a `Getter`), all on one stack-safe heap machine.
-  *   - **droste** — the pattern-functor + `Fix[BinF]` encoding (`scheme.cata/ana/hylo`).
+  *   - **eoF** — the typed pattern-functor path (`cata`/`ana`/`hylo` over `BinF` via a `Basis` +
+  *     `Traverse[BinF]`) on the stack-safe `foldLayered` heap machine. (The untyped `PSVec` path
+  *     was removed once the typed path subsumed it.)
+  *   - **droste** — the pattern-functor + `Fix[BinF]` encoding (`scheme.cata/ana/hylo`). NB
+  *     droste's *basic* schemes are stack-*unsafe* (naive recursion); `eoF` delivers the
+  *     stack-safety they lack, so the comparison is not apples-to-apples.
   *   - **hand** — plain recursion on `Bin`, the baseline you'd write without either library.
   *
   * Workload is a perfect binary tree of `2^Depth` `Leaf(1)`s (Depth = 12 ⇒ 4096 leaves, 8191
@@ -42,9 +44,10 @@ class SchemesBench extends JmhDefaults:
   val fixTree: Fix[BinF] = balancedFix(Depth)
 
   // Prebuilt scheme optics / functions (construction not measured).
-  val eoCataG = Schemes.cata(eoSum) // DirectGetter[Bin, Int]
-  val eoHyloG = Schemes.hylo(eoExpand, eoHyloAlg) // DirectGetter[Int, Int]
-  val eoAnaR = Schemes.ana(eoAnaCoalg) // Review[Bin, Int]
+  // typed pattern-functor path (Eval trampoline over Traverse[BinF])
+  val eoCataG = Schemes.cata(eoTypedSum) // Getter[Bin, Int]
+  val eoHyloG = Schemes.hylo(eoTypedCoalg, eoTypedHyloAlg) // Getter[Int, Int]
+  val eoAnaR = Schemes.ana[BinF, Int, Bin](eoTypedCoalg) // Review[Bin, Int]
 
   val drosteCataF: Fix[BinF] => Int = scheme.cata(drosteSum)
   val drosteHyloF: Int => Int = scheme.hylo(drosteSum, drosteBuild)
@@ -64,3 +67,68 @@ class SchemesBench extends JmhDefaults:
   @Benchmark def eoAna: Bin = eoAnaR.reverseGet(Depth)
   @Benchmark def drosteAna: Fix[BinF] = drosteAnaF(Depth)
   @Benchmark def handAna: Bin = handBuild(Depth)
+
+  // ----- the zoo: para / apo / histo / futu (eo native routes vs droste.zoo) --
+
+  val eoParaG = Schemes.para[BinF, Bin, Int](eoParaAlg)
+  val drosteParaFn: Fix[BinF] => Int = scheme.zoo.para(drosteParaAlg)
+  val eoApoR = Schemes.apo[BinF, Int, Bin](eoApoCoalg)
+  val drosteApoFn: Int => Fix[BinF] = scheme.zoo.apo(drosteApoCoalg)
+  val eoHistoG = Schemes.histo[BinF, Bin, Int](eoHistoAlg)
+  val drosteHistoFn: Fix[BinF] => Int = scheme.zoo.histo(drosteHistoAlg)
+  val eoFutuR = Schemes.futu[BinF, Int, Bin](eoFutuCoalg)
+  val drosteFutuFn: Int => Fix[BinF] = scheme.zoo.futu(drosteFutuCoalg)
+
+  @Benchmark def eoPara: Int = eoParaG.get(eoTree)
+  @Benchmark def drostePara: Int = drosteParaFn(fixTree)
+  @Benchmark def eoApo: Bin = eoApoR.reverseGet(Depth)
+  @Benchmark def drosteApo: Fix[BinF] = drosteApoFn(Depth)
+  @Benchmark def eoHisto: Int = eoHistoG.get(eoTree)
+  @Benchmark def drosteHisto: Int = drosteHistoFn(fixTree)
+  @Benchmark def eoFutu: Bin = eoFutuR.reverseGet(Depth)
+  @Benchmark def drosteFutu: Fix[BinF] = drosteFutuFn(Depth)
+
+  // ----- apo with ONE BIG GRAFT. VERIFIED (the D6 check): droste's zoo.apo
+  // ALSO grafts O(1) here — its R is the fixed point, so Left(fix) embeds by
+  // reference. The honest claim is therefore PARITY on the native routes (both
+  // ~ns-flat regardless of graft size), with eo adding the law-shaped eq
+  // guarantee; the O(graft) re-walk contrast applies to the GENERIC distApo
+  // route (distApo, a law fixture only), not to droste.zoo.apo.
+
+  val eoApoGraftR = Schemes.apo[BinF, Int, Bin] { d =>
+    if d == 0 then BinF.NodeF(Left(eoTree), Right(-1)) else BinF.LeafF(1)
+  }
+
+  val drosteApoGraftFn: Int => Fix[BinF] = scheme
+    .zoo
+    .apo(
+      higherkindness.droste.RCoalgebra { (d: Int) =>
+        if d == 0 then BinF.NodeF(Left(fixTree), Right(-1)) else BinF.LeafF(1)
+      }
+    )
+
+  @Benchmark def eoApoGraft: Bin = eoApoGraftR.reverseGet(0)
+  @Benchmark def drosteApoGraft: Fix[BinF] = drosteApoGraftFn(0)
+
+  // ----- materializing refold: cross-spelling vs manual (both build the Bin) --
+  // `ana.cross(cata)` is the build⇄read seam — the materialising hylo (builds the
+  // Bin, then folds), so the two spellings allocate identically. The *fused*
+  // (no-intermediate-Bin) contrast is `eoHylo` above (~half the B/op).
+
+  val eoRefoldCrossG = Schemes.ana[BinF, Int, Bin](eoTypedCoalg).cross(Schemes.cata(eoTypedSum))
+
+  @Benchmark def eoRefoldCross: Int = eoRefoldCrossG.get(Depth)
+  @Benchmark def eoRefoldManual: Int = eoCataG.get(eoAnaR.reverseGet(Depth))
+
+  // ----- generic decoration route (user-written Gather, no identity fast path) --
+
+  val eoCataGenericG = Schemes.cata[BinF, Bin, Int, Int](userIdGather)(eoTypedSum)
+
+  @Benchmark def eoCataGenericRoute: Int = eoCataGenericG.get(eoTree)
+
+  // ----- the M path at Id: the tailRecM-lifted machine's per-event floor ------
+
+  val eoHyloMRunner =
+    Schemes.hyloM[cats.Id, BinF, Int, Int](d => eoTypedCoalg(d), (s, fa) => eoTypedHyloAlg(s, fa))
+
+  @Benchmark def eoHyloM: Int = eoHyloMRunner.run(Depth)

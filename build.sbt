@@ -64,6 +64,18 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
     List("scalafixAll --check"),
     name = Some("Check scalafix"),
   ),
+  // Compile ALL test sources before any test RUNS: on the shared 2-vCPU runner,
+  // sbt otherwise interleaves one module's test execution with another module's
+  // test compilation, and the Kindlings/hearth derivation macros (hardcoded 2s
+  // MIO budget per derive in kindlings 0.1.x — no -Xmacro-settings override
+  // exists) lose that CPU-contention dice roll: observed as roving
+  // `Macro 'KindlingsEncoder.deriveAsObject' timed out` failures at a different
+  // derive site each run. Compiling first gives macro expansion the whole CPU;
+  // the subsequent `test` step then recompiles nothing.
+  WorkflowStep.Sbt(
+    List("Test/compile"),
+    name = Some("Compile tests (macro expansion before test-run contention)"),
+  ),
 )
 
 // -------------------------------------------------------------------
@@ -412,6 +424,17 @@ lazy val schemes: Project = project
     libraryDependencies += cats,
     libraryDependencies += discipline % Test,
     libraryDependencies += scalacheck % Test,
+    // The schemes suites assert stack-safety by folding/building 10^6-deep
+    // spines. Each engine takes a bounded on-stack prefix (`OnStackLimit`
+    // = 512 native frames) before handing deep subtrees to the heap walk,
+    // so 512 `rec` frames are live at once — fine on a main-sized stack,
+    // but specs2's *parallel* pool threads default to a much smaller stack,
+    // and several such tests running concurrently overflow it. Fork a test
+    // JVM with a generous per-thread stack so the parallel runner's threads
+    // can hold the on-stack prefix; this keeps the realistic 10^6 tests
+    // (rather than shrinking them) and preserves parallel execution.
+    Test / fork := true,
+    Test / javaOptions += "-Xss8m",
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,

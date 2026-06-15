@@ -1,176 +1,162 @@
 package dev.constructive.eo
 package schemes
 
-import io.circe.Json
+import scala.language.implicitConversions
+
 import org.specs2.mutable.Specification
 
-import data.PSVec
-import optics.{Getter, Plated, Review, Unfold}
-import optics.Optic.* // cross, andThen, get
+import data.MultiFocus
+import optics.{Getter, Optic}
+import optics.Optic.* // get, readOnly, reverseGet, foldMap, modify, andThen
 
-import generics.plate
-import circe.platedJson
-import schemes.samples.{Expr, Wrapped}
+import schemes.samples.{Bin, BinF, Rose, RoseF}
 
+/** Behaviour spec for the node-blind recursion-scheme spine (`cata` / `ana` / `hylo`) and `fLayer`.
+  *
+  * Type-safety note: every `alg`/`coalg` pattern-matches `F`'s *named* constructors (`case
+  * BinF.BranchF(l, r) => l + r`), with `l`/`r` typed `A` — there is no `kids(0)`/`AnyRef`
+  * positional path, so a child-arity mismatch is a compile error, not a runtime `IndexOutOfBounds`.
+  *
+  * `cata` is **node-blind** here (`alg: F[A] => A`): the algebra never sees the source node, only
+  * its folded children. A node-reading fold is a paramorphism — a follow-up scheme, not one of the
+  * three.
+  */
 class SchemesSpec extends Specification:
 
-  private given Plated[Expr] = plate[Expr]
+  // Deep examples: one-at-a-time to bound peak heap (shared test JVM).
+  sequential
 
-  // ----- algebras / expansions -----
+  // A small mixed tree: Branch(Leaf 1, Branch(Leaf 2, Leaf 3)) — leaf sum 6, 3 leaves, depth 2.
+  private val tree: Bin =
+    Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
 
-  private val eval: (Expr, PSVec[Double]) => Double = (node, kids) =>
-    node match
-      case Expr.Lit(v)    => v
-      case Expr.Neg(_)    => -kids(0)
-      case Expr.Add(_, _) => kids(0) + kids(1)
-      case Expr.Mul(_, _) => kids(0) * kids(1)
+  // node-blind leaf-sum algebra (sees only the folded children, never the Bin)
+  private val sumLeaves: BinF[Int] => Int =
+    case BinF.LeafF(n)      => n
+    case BinF.BranchF(l, r) => l + r
 
-  // seed n expands to two child seeds (0, n-1) — a right-nested binary spine; n<=0 is a leaf.
-  private val expandFib: Int => PSVec[Int] = n =>
-    if n <= 0 then PSVec.empty[Int] else PSVec.of(0, n - 1)
+  private val depthAlg: BinF[Int] => Int =
+    case BinF.LeafF(_)      => 0
+    case BinF.BranchF(l, r) => 1 + math.max(l, r)
 
-  // bundled coalgebra for ana: each seed's child seeds + how to assemble the Expr node.
-  // Builds a right-nested Add of (n+1) ones → evaluates to n+1.
-  private val buildExprCoalg: Schemes.Coalg[Int, Expr] = n =>
-    if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(1.0))
-    else (PSVec.of(0, n - 1), (ks: PSVec[Expr]) => Expr.Add(ks(0), ks(1)))
+  // ----- cata (typed node-blind fold) -----
 
-  // the same computation FUSED (folds to Double directly; no Expr built) — hylo's split form.
-  private val fusedFib: (Int, PSVec[Double]) => Double = (n, rs) =>
-    if n <= 0 then 1.0 else rs(0) + rs(1)
-
-  private val expr: Expr = Expr.Add(Expr.Lit(1.0), Expr.Mul(Expr.Lit(2.0), Expr.Lit(3.0)))
-
-  "cata is a Getter that folds an Expr to a value" >> {
-    val evalG: Getter[Expr, Double] = Schemes.cata(eval)
-    (evalG.get(expr) == 7.0) must beTrue
+  "cata folds a Bin to a value through F's named constructors" >> {
+    (Schemes.cata[BinF, Bin, Int](sumLeaves).get(tree) == 6) must beTrue
   }
 
-  "cata folds to a result type other than S (A != S)" >> {
-    val size: (Expr, PSVec[Int]) => Int = (_, kids) => 1 + kids.toList.sum
-    (Schemes.cata(size).get(expr) == 5) must beTrue // Add, Lit, Mul, Lit, Lit
+  "cata handles a single leaf (no recursive positions)" >> {
+    (Schemes.cata[BinF, Bin, Int](sumLeaves).get(Bin.Leaf(7)) == 7) must beTrue
   }
 
-  "cata consumes a pure algebra carried as an Unfold citizen (incl. one built by composition)" >> {
-    val sizeAlg: Unfold[Int, Int, PSVec] =
-      Unfold.algebra[Int, Int, PSVec](kids => 1 + kids.toList.sum)
-    (Schemes.cata[Expr, Int](sizeAlg).get(expr) == 5) must beTrue
-
-    // an algebra assembled by optic composition: Review post-processes each layer's result,
-    // so the engine consumes `2 * max(sum(kids), 1)` without that lambda being written anywhere
-    val doubled: Unfold[Int, Int, PSVec] =
-      Review[Int, Int](_ * 2).andThen(Unfold.algebra[Int, Int, PSVec](_.toList.sum.max(1)))
-    // Lit leaf: 2*max(0,1) = 2; Neg node: 2*max(2,1) = 4
-    (Schemes.cata[Expr, Int](doubled).get(Expr.Neg(Expr.Lit(1.0))) == 4) must beTrue
+  "cata handles a one-level Branch(Leaf, Leaf)" >> {
+    (Schemes.cata[BinF, Bin, Int](sumLeaves).get(Bin.Branch(Bin.Leaf(4), Bin.Leaf(5))) == 9) must
+      beTrue
   }
 
-  "cata-as-Getter composes onto an outer Getter via andThen" >> {
-    val composed: Getter[Wrapped, Double] =
-      Getter[Wrapped, Expr](_.expr).andThen(Schemes.cata(eval))
-    (composed.get(Wrapped("x", expr)) == 7.0) must beTrue
+  "cata-as-read composes onto an outer Getter via andThen (Direct carrier, no bridge)" >> {
+    val composed: Getter[(String, Bin), Int] =
+      Getter[(String, Bin), Bin](_._2).andThen(Schemes.cata[BinF, Bin, Int](sumLeaves))
+    (composed.get(("x", tree)) == 6) must beTrue
   }
 
-  "ana is a Review that builds an Expr from a seed" >> {
-    val built: Expr = Schemes.ana(buildExprCoalg).reverseGet(3)
-    (Schemes.cata(eval).get(built) == 4.0) must beTrue
+  // ----- ana (typed build) -----
+
+  "ana builds a Bin from a seed, then cata reads it back" >> {
+    // seed n: a left spine of n Branches ending in Leaf(1); right child always Leaf(0).
+    val spine: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(n - 1, -1)
+    val built: Bin = Schemes.ana[BinF, Int, Bin](spine).reverseGet(3)
+    // seed 3 -> 4 leaves of weight 1 → sum 4, depth 3
+    (Schemes.cata[BinF, Bin, Int](sumLeaves).get(built) == 4)
+      .and(Schemes.cata[BinF, Bin, Int](depthAlg).get(built) == 3)
   }
 
-  "ana.cross(cata) composes build->read (the materializing hylo) via core `cross`" >> {
-    val refold =
-      Schemes.ana(buildExprCoalg).cross(Schemes.cata(eval)) // Optic[Int,Unit,Double,Unit,Direct]
-    (refold.get(3) == 4.0) must beTrue
+  // ----- hylo (fused refold, no intermediate Bin) -----
+
+  "hylo fuses unfold+fold with no intermediate Bin built" >> {
+    val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1)
+    // seed 3 -> a right spine of 4 leaves
+    (Schemes.hylo[BinF, Int, Int](coalg, sumLeaves).get(3) == 4) must beTrue
   }
 
-  "fused hylo folds a seed to a value (no intermediate Expr) and agrees with cata∘ana" >> {
-    val h: Getter[Int, Double] = Schemes.hylo(expandFib, fusedFib)
-    val viaCross = Schemes.ana(buildExprCoalg).cross(Schemes.cata(eval)).get(3)
-    (h.get(3) == 4.0) && (viaCross == 4.0) must beTrue
-  }
-
-  "the fused hylo Getter composes further into the pipeline" >> {
+  "hylo composes further into the pipeline" >> {
+    val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1)
     val toStr: Getter[Int, String] =
-      Schemes.hylo(expandFib, fusedFib).andThen(Getter[Double, String](_.toString))
-    (toStr.get(3) == "4.0") must beTrue
+      Schemes
+        .hylo[BinF, Int, Int](coalg, sumLeaves)
+        .readOnly
+        .andThen(Getter[Int, String](_.toString))
+    (toStr.get(3) == "4") must beTrue
   }
 
-  // The combine indexes children positionally (kids(0) = left, kids(1) = right), so the engine's
-  // post-order out-array fill MUST preserve child order. Every other algebra here is commutative
-  // (Add/Mul/sum), which would not catch a transposed-children regression — this one is not.
-  "cata preserves left-to-right child order (non-commutative algebra)" >> {
-    // reinterpret Add as subtraction, Mul as division — both order-sensitive.
-    val sub: (Expr, PSVec[Double]) => Double = (node, kids) =>
-      node match
-        case Expr.Lit(v)    => v
-        case Expr.Neg(_)    => -kids(0)
-        case Expr.Add(_, _) => kids(0) - kids(1)
-        case Expr.Mul(_, _) => kids(0) / kids(1)
-    val minus = Expr.Add(Expr.Lit(10.0), Expr.Lit(3.0)) // 10 - 3 = 7, NOT 3 - 10 = -7
-    val div = Expr.Mul(Expr.Lit(12.0), Expr.Lit(4.0)) // 12 / 4 = 3, NOT 4 / 12
-    ((Schemes.cata(sub).get(minus) == 7.0) && (Schemes.cata(sub).get(div) == 3.0)) must beTrue
+  // ----- fLayer: the single-layer MultiFocus[F] self-traversal -----
+
+  "fLayer is a usable Optic[S,S,S,S,MultiFocus[F]]: to/from round-trip one layer" >> {
+    val layer: Optic[Bin, Bin, Bin, Bin, MultiFocus[BinF]] = Schemes.fLayer[BinF, Bin]
+    val b = Bin.Branch(Bin.Leaf(1), Bin.Leaf(2))
+    (layer.from(layer.to(b)) == b) must beTrue
   }
 
-  // All sample ADT nodes are arity <= 2; this exercises the n-ary (width 3) expand path through the
-  // engine's per-node out-array, with positional weights that expose any mis-ordering.
-  "fused hylo folds a WIDE node (3 child seeds), order-sensitive combine" >> {
-    val expandWide: Int => PSVec[Int] =
-      n => if n <= 0 then PSVec.empty[Int] else PSVec.fromIterable(List(0, 0, 0))
-    val combineWide: (Int, PSVec[Int]) => Int =
-      (n, rs) => if n <= 0 then 1 else rs(0) + 10 * rs(1) + 100 * rs(2)
-    // n=1 → three leaves (each 1) → 1 + 10 + 100 = 111
-    (Schemes.hylo(expandWide, combineWide).get(1) == 111) must beTrue
+  "fLayer reads its layer's immediate foci via foldMap (Foldable[BinF])" >> {
+    val layer = Schemes.fLayer[BinF, Bin]
+    (layer.foldMap[Int](_ => 1)(Bin.Branch(Bin.Leaf(1), Bin.Leaf(2))) == 2)
+      .and(layer.foldMap[Int](_ => 1)(Bin.Leaf(9)) == 0) // a leaf has no recursive foci
   }
 
-  // ----- circe Plated[Json] (real downstream target) -----
-
-  "cata works over circe's Plated[Json] (sum every number in a document)" >> {
-    val sumNumbers: (Json, PSVec[Int]) => Int =
-      (j, kids) => j.asNumber.flatMap(_.toInt).getOrElse(0) + kids.toList.sum
-    val doc = Json.obj(
-      "a" -> Json.fromInt(1),
-      "b" -> Json.arr(Json.fromInt(2), Json.fromInt(3)),
-      "c" -> Json.fromString("ignored"),
-    )
-    (Schemes.cata(sumNumbers).get(doc) == 6) must beTrue
+  "fLayer WRITES now: modify rewrites the immediate children (the MultiFocus upgrade)" >> {
+    val layer = Schemes.fLayer[BinF, Bin]
+    val b = Bin.Branch(Bin.Leaf(1), Bin.Leaf(2))
+    // one-layer rewrite: replace each immediate child, leaving the layer's shape intact.
+    layer.modify(_ => Bin.Leaf(0))(b) === Bin.Branch(Bin.Leaf(0), Bin.Leaf(0))
   }
 
-  "ana builds a nested circe Json from a seed" >> {
-    val buildJsonCoalg: Schemes.Coalg[Int, Json] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Json]) => Json.fromInt(0))
-      else (PSVec.singleton(n - 1), (ks: PSVec[Json]) => Json.arr(ks(0)))
-    val built = Schemes.ana(buildJsonCoalg).reverseGet(2)
-    (built == Json.arr(Json.arr(Json.fromInt(0)))) must beTrue
-  }
+  // ----- stack-safety: 10^6 deep -----
+  //
+  // The foldLayered machine (the < 512-on-stack / heap-ArrayDeque hybrid) moves the deep recursion
+  // off the JVM call stack, so these complete without StackOverflowError where naive recursion
+  // overflows — in O(depth) space (no Eval chain), so they run in the default test heap.
 
-  // ----- stack-safety (the win over a hand-written one-off) -----
+  private val Deep = 1_000_000
 
-  "cata is stack-safe over a depth-10^6 Neg spine" >> {
-    var e: Expr = Expr.Lit(0.0)
+  "cata is stack/space-safe folding a 10^6-deep Bin spine" >> {
+    var b: Bin = Bin.Leaf(0)
     var i = 0
-    while i < 1_000_000 do
-      e = Expr.Neg(e)
+    while i < Deep do
+      b = Bin.Branch(b, Bin.Leaf(0))
       i += 1
-    val depth: (Expr, PSVec[Int]) => Int = (node, kids) =>
-      node match
-        case Expr.Lit(_) => 0
-        case _           => kids(0) + 1
-    (Schemes.cata(depth).get(e) == 1_000_000) must beTrue
+    (Schemes.cata[BinF, Bin, Int](depthAlg).get(b) == Deep) must beTrue
   }
 
-  "fused hylo is stack-safe at depth 10^6 (no intermediate S built)" >> {
-    val expandSpine: Int => PSVec[Int] =
-      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
-    val depthAlg: (Int, PSVec[Int]) => Int = (n, rs) => if n <= 0 then 0 else rs(0) + 1
-    (Schemes.hylo(expandSpine, depthAlg).get(1_000_000) == 1_000_000) must beTrue
+  "hylo is stack/space-safe at depth 10^6 (no intermediate Bin)" >> {
+    val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(n - 1, -1)
+    (Schemes.hylo[BinF, Int, Int](coalg, depthAlg).get(Deep) == Deep) must beTrue
   }
 
-  "ana's unfold loop is stack-safe (built S is O(depth) heap, not JVM stack)" >> {
-    val buildNegCoalg: Schemes.Coalg[Int, Expr] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(0.0))
-      else (PSVec.singleton(n - 1), (ks: PSVec[Expr]) => Expr.Neg(ks(0)))
-    val deep: Expr = Schemes.ana(buildNegCoalg).reverseGet(100_000)
-    val depth: (Expr, PSVec[Int]) => Int = (node, kids) =>
-      node match
-        case Expr.Lit(_) => 0
-        case _           => kids(0) + 1
-    (Schemes.cata(depth).get(deep) == 100_000) must beTrue
+  "ana is stack/space-safe building a 10^6-deep Bin (the OOM frontier)" >> {
+    val coalg: Int => BinF[Int] = n => if n <= 0 then BinF.LeafF(0) else BinF.BranchF(n - 1, -1)
+    val deep: Bin = Schemes.ana[BinF, Int, Bin](coalg).reverseGet(Deep)
+    (Schemes.cata[BinF, Bin, Int](depthAlg).get(deep) == Deep) must beTrue
+  }
+
+  // ----- wide-and-deep: exercise the Traverse[F] sequencing a binary spine misses -----
+
+  "hylo stays safe on a wide-AND-deep RoseF (high fanout + deep)" >> {
+    val DeepRose = 100_000
+    val Width = 8
+    val coalg: Int => RoseF[Int] =
+      d => if d <= 0 then RoseF(0, Nil) else RoseF(d, (d - 1) :: List.fill(Width)(-1))
+    val countNodes: RoseF[Int] => Int = fr => 1 + fr.kids.sum
+    val expected = (DeepRose + 1) + DeepRose * Width
+    (Schemes.hylo[RoseF, Int, Int](coalg, countNodes).get(DeepRose) == expected) must beTrue
+  }
+
+  "ana builds and cata folds a wide-AND-deep Rose (N-ary Project/Embed)" >> {
+    val DeepRose = 20_000
+    val Width = 4
+    val coalg: Int => RoseF[Int] =
+      d => if d <= 0 then RoseF(0, Nil) else RoseF(d, (d - 1) :: List.fill(Width)(-1))
+    val countNodes: RoseF[Int] => Int = fr => 1 + fr.kids.sum
+    val built: Rose = Schemes.ana[RoseF, Int, Rose](coalg).reverseGet(DeepRose)
+    val expected = (DeepRose + 1) + DeepRose * Width
+    (Schemes.cata[RoseF, Rose, Int](countNodes).get(built) == expected) must beTrue
   }

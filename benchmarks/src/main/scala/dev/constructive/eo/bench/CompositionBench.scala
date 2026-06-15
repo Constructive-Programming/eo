@@ -12,8 +12,8 @@ import dev.constructive.eo.bench.fixture.*
   *   - **build** — constructing a depth-N composed optic from its hops (`a.andThen(b).andThen…`).
   *     The result is returned so JMH consumes it; this isolates the per-`andThen` allocation +
   *     `Composer` dispatch cost.
-  *   - **reuse** — `.modify` through a pre-built depth-N optic (the steady-state cost once the optic
-  *     is a constant).
+  *   - **reuse** — `.modify` through a pre-built depth-N optic (the steady-state cost once the
+  *     optic is a constant).
   *
   * Two carrier shapes:
   *   - **same-carrier** `Lens.andThen(Lens)` (`Tuple2`), depths 3 and 6.
@@ -38,8 +38,10 @@ class CompositionBench extends JmhDefaults:
 
   // Pre-built composed optics for the reuse axis.
   private val lens3 = eoN3.andThen(eoN2).andThen(eoN1).andThen(leafValue)
+
   private val lens6 =
     eoN6.andThen(eoN5).andThen(eoN4).andThen(eoN3).andThen(eoN2).andThen(eoN1).andThen(leafValue)
+
   private val opt3 = eoN3.andThen(eoN2).andThen(eoN1).andThen(eoFlag)
 
   // ---- same-carrier Lens.andThen(Lens) (Tuple2) ---------------------
