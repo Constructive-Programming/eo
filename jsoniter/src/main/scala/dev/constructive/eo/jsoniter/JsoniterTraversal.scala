@@ -79,36 +79,10 @@ object JsoniterTraversal:
 
       def to(bytes: Array[Byte]): MultiFocus[PSVec][X, A] =
         val spans = JsonPathScanner.findAll(bytes, steps)
-        val n = spans.length
-        if n == 0 then MultiFocus((bytes, spans), PSVec.empty[A])
+        if spans.isEmpty then MultiFocus((bytes, spans), PSVec.empty[A])
         else
-          // Single Array[AnyRef] allocation; tight-pack only on partial decode failure. A span
-          // whose decode throws is dropped together with its slot so spans↔foci stay 1:1 for
-          // the write side.
-          val arr = new Array[AnyRef](n)
-          val keptSpans = List.newBuilder[JsonPathScanner.Span]
-          val it = spans.iterator
-          @tailrec def loop(written: Int): Int =
-            if it.hasNext then
-              val span = it.next()
-              val next =
-                try
-                  arr(written) =
-                    readFromSubArray[A](bytes, span.start, span.end).asInstanceOf[AnyRef]
-                  keptSpans += span
-                  written + 1
-                catch case scala.util.control.NonFatal(_) => written
-              loop(next)
-            else written
-          val written = loop(0)
-          val psv: PSVec[A] =
-            if written == n then PSVec.unsafeWrap[A](arr)
-            else if written == 0 then PSVec.empty[A]
-            else
-              val tight = new Array[AnyRef](written)
-              System.arraycopy(arr, 0, tight, 0, written)
-              PSVec.unsafeWrap[A](tight)
-          MultiFocus((bytes, keptSpans.result()), psv)
+          val (keptSpans, psv) = decodeSpans[A](bytes, spans)
+          MultiFocus((bytes, keptSpans), psv)
 
       def from(pair: MultiFocus[PSVec][X, A]): Array[Byte] =
         val (bytes, spans) = pair.context
@@ -124,6 +98,40 @@ object JsoniterTraversal:
             i += 1
           }
           spliceAll(bytes, reps.result())
+
+  /** Decode every span via the codec into a single `Array[AnyRef]`, tight-packing only on partial
+    * decode failure. A span whose decode throws is dropped together with its slot so spans↔foci
+    * stay 1:1 for the write side. Returns the kept spans paired with the packed foci. `spans` must
+    * be non-empty.
+    */
+  private def decodeSpans[A](
+      bytes: Array[Byte],
+      spans: List[JsonPathScanner.Span],
+  )(using codec: JsonValueCodec[A]): (List[JsonPathScanner.Span], PSVec[A]) =
+    val n = spans.length
+    val arr = new Array[AnyRef](n)
+    val keptSpans = List.newBuilder[JsonPathScanner.Span]
+    val it = spans.iterator
+    @tailrec def loop(written: Int): Int =
+      if it.hasNext then
+        val span = it.next()
+        val next =
+          try
+            arr(written) = readFromSubArray[A](bytes, span.start, span.end).asInstanceOf[AnyRef]
+            keptSpans += span
+            written + 1
+          catch case scala.util.control.NonFatal(_) => written
+        loop(next)
+      else written
+    val written = loop(0)
+    val psv: PSVec[A] =
+      if written == n then PSVec.unsafeWrap[A](arr)
+      else if written == 0 then PSVec.empty[A]
+      else
+        val tight = new Array[AnyRef](written)
+        System.arraycopy(arr, 0, tight, 0, written)
+        PSVec.unsafeWrap[A](tight)
+    (keptSpans.result(), psv)
 
   /** One-pass multi-span splice: `replacements` are (span, encodedValue) pairs sorted by span start
     * (document order, guaranteed by [[JsonPathScanner.findAll]]) and non-overlapping.
