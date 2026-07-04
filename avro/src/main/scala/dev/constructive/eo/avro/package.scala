@@ -36,11 +36,10 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   * of `Json`, [[AvroCodec]] plays the role of `(io.circe.Encoder[A], io.circe.Decoder[A])`, and
   * `AvroFailure` plays the role of `JsonFailure`.
   *
-  * '''Carrier deviation from eo-circe (deliberate).''' `AvroRecordPrism` is `Affine`-carried (a
-  * lawful Optional whose composed / upcast writes preserve siblings). `eo-circe`'s `JsonPrism` is
-  * still `Either`-carried and has the same latent reconstruct-standalone footgun on a drilled
-  * composed write; aligning circe is tracked separately. Do not assume the two record faces share a
-  * carrier.
+  * '''Carrier note.''' Both `AvroRecordPrism` and `eo-circe`'s `JsonPrism` are `Affine`-carried —
+  * lawful Optionals whose composed / upcast writes preserve siblings. A drilled focus is an
+  * Optional, so the carrier widens to `Affine` (via the Composer on composition) rather than
+  * pretending to be a `Prism`; the two record faces stay in step.
   *
   * '''Gap-1 (per the eo-avro plan).''' [[PathStep]] is duplicated, not shared with eo-circe — the
   * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. The

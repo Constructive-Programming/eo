@@ -3,15 +3,24 @@ package dev.constructive.eo.circe
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
-import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
+import io.circe.{Decoder, Encoder, Json}
 
-/** Specialised Prism from [[io.circe.Json]] to native `A`.
+/** Specialised optic from [[io.circe.Json]] to native `A`.
   *
   * {{{
-  *   JsonPrism[A] <: Optic[Json, Json, A, A, Either]
-  *   type X = (DecodingFailure, HCursor)
+  *   JsonPrism[A] <: Optic[Json, Json, A, A, Affine]
+  *   type X = (Json, A => Json)  // Fst = source (miss); Snd = single-walk writer
   * }}}
+  *
+  * '''An Optional, not a Prism.''' A drilled focus lives INSIDE a document, so rebuilding needs the
+  * siblings — which a `Prism`'s `from(reverseGet)` cannot see (it gets the focus alone). Carrying
+  * the source on the `Affine` seam fixes that at the carrier level: `to` captures a writer over the
+  * walk it already did, and `from(Hit)` applies it — so `.modify` / `.replace` preserve siblings
+  * whether called directly, upcast to `Optic[…, Affine]`, or composed via `andThen`. Only the root
+  * full-cover prism is also a lawful Prism, and [[reverseGet]] stays for it. Mirrors
+  * `dev.constructive.eo.avro.AvroRecordPrism`.
   *
   * Two call-surface tiers:
   *   - Default Ior-bearing: `modify` / `get` etc. accumulate `Chain[JsonFailure]`; partial success
@@ -23,11 +32,12 @@ import io.circe.{Decoder, DecodingFailure, Encoder, HCursor, Json}
   */
 final class JsonPrism[A] private[circe] (
     private[circe] val focus: JsonFocus[A]
-) extends Optic[Json, Json, A, A, Either],
+) extends Optic[Json, Json, A, A, Affine],
       JsonOpticOps[A],
       Dynamic:
 
-  type X = (DecodingFailure, HCursor)
+  // Fst[X] = source json (Miss pass-through); Snd[X] = the single-walk writer captured by `to`.
+  type X = (Json, A => Json)
 
   /** The focus's storage path (`path` for a Leaf focus, `parentPath` for a Fields focus). */
   private[circe] def path: Array[PathStep] = focus match
@@ -46,22 +56,25 @@ final class JsonPrism[A] private[circe] (
 
   // ---- Abstract Optic members ---------------------------------------
 
-  def to(json: Json): Either[(DecodingFailure, HCursor), A] =
-    val c = focus.navigateCursor(json)
-    focus.decodeFromCursor(c) match
-      case Right(a) => Right(a)
-      case Left(df) => Left((df, json.hcursor))
+  def to(json: Json): Affine[X, A] =
+    focus.navigateForWrite(json) match
+      case Left(_)            => new Affine.Miss[X, A](json)
+      case Right((a, writer)) => new Affine.Hit[X, A](writer, a)
 
-  def from(e: Either[(DecodingFailure, HCursor), A]): Json =
-    e match
-      case Left((_, hc)) => hc.top.getOrElse(hc.value)
-      case Right(a)      => focus.encoder(a)
+  def from(aff: Affine[X, A]): Json =
+    aff match
+      case m: Affine.Miss[X, A] => m.fst
+      case h: Affine.Hit[X, A]  => h.snd(h.b)
 
   // ---- Read surface (single-focus specific) -------------------------
 
   def get(input: Json | String): Ior[Chain[JsonFailure], A] =
     JsonFailure.parseInputIor(input).flatMap(focus.readIor)
 
+  /** Encode `a` standalone. Lawful only for the ROOT full-cover prism (a real `Prism.reverseGet`);
+    * on a drilled prism it cannot restore siblings, which is why the Optic seam carries the source
+    * instead of calling this. Kept for root full-cover users and the reverseGet round-trip laws.
+    */
   inline def reverseGet(a: A): Json = focus.encoder(a)
 
   inline def getOptionUnsafe(input: Json | String): Option[A] =

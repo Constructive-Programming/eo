@@ -3,6 +3,7 @@ package dev.constructive.eo.circe
 import scala.language.implicitConversions
 
 import cats.data.Ior
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
@@ -34,7 +35,7 @@ class CrossCarrierCompositionSpec extends Specification:
   "(1)+(2)+(3) lens → JsonFieldsPrism + AffineFold + multi-field .fields: cross-carrier + diagnostics" >> {
     // ---- (1) plain Lens → JsonFieldsPrism → AffineFold ----
     val box = Lens[Box, Json](_.payload, (b, j) => b.copy(payload = j))
-    val personFields: Optic[Json, Json, NameAge, NameAge, Either] =
+    val personFields: Optic[Json, Json, NameAge, NameAge, Affine] =
       codecPrism[Person].fields(_.name, _.age)
     val adultName: AffineFold[NameAge, String] =
       AffineFold(nt => Option.when(nt.age >= 18)(nt.name))
@@ -52,7 +53,7 @@ class CrossCarrierCompositionSpec extends Specification:
 
     // ---- (2) single-field ----
     val outer2 = Lens[Envelope, Json](_.payload, (e, j) => e.copy(payload = j))
-    val inner2: Optic[Json, Json, String, String, Either] = codecPrism[Person].field(_.name)
+    val inner2: Optic[Json, Json, String, String, Affine] = codecPrism[Person].field(_.name)
     val chain2 = outer2.andThen(inner2)
 
     val validEnv = Envelope("env", Person("Alice", 30, Address("Main St", 1)).asJson)
@@ -68,7 +69,7 @@ class CrossCarrierCompositionSpec extends Specification:
 
     // ---- (3) multi-field ----
     val outerGen: Optic[Envelope, Envelope, Json, Json, Tuple2] = lens[Envelope](_.payload)
-    val inner3: Optic[Json, Json, NameAge, NameAge, Either] =
+    val inner3: Optic[Json, Json, NameAge, NameAge, Affine] =
       codecPrism[Person].fields(_.name, _.age)
     val chain3: Optic[Envelope, Envelope, NameAge, NameAge, dev.constructive.eo.data.Affine] =
       outerGen.andThen(inner3)
@@ -188,7 +189,7 @@ class CrossCarrierCompositionSpec extends Specification:
     // Type-level: the Composer summons cleanly under List's Alternative+Foldable.
     val composerOk = summon[Composer[Either, MultiFocus[List]]] != null
 
-    val tagsPrism: Optic[Json, Json, List[Int], List[Int], Either] =
+    val tagsPrism: Optic[Json, Json, List[Int], List[Int], Affine] =
       codecPrism[Tagged].field(_.tags)
     // The MultiFocus-side identity-shape on List[Int].
     val tagsMF: Optic[List[Int], List[Int], List[Int], List[Int], MultiFocus[List]] =

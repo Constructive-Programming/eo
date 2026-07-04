@@ -52,11 +52,19 @@ sealed abstract private[circe] class JsonFocus[A]:
   def placeImpl(json: Json, a: A): Json
   def readImpl(json: Json): Option[A]
 
-  /** Build the ACursor for the abstract `to` method. */
+  /** Build the ACursor for read-side navigation. */
   def navigateCursor(json: Json): ACursor
 
   /** Decode an `A` from the navigated `ACursor`. */
   def decodeFromCursor(c: ACursor): Either[DecodingFailure, A] = c.as[A](using decoder)
+
+  /** Navigate + decode the focus in ONE walk, and capture a writer that places a new focus back
+    * into the SOURCE json (preserving siblings) — backs [[JsonPrism]]'s `Affine` `to`/`from` seam
+    * so a generic/composed `.modify` rebuilds around the original document rather than
+    * reconstructing the focus standalone. `Left` on navigate/decode failure. Mirrors
+    * `dev.constructive.eo.avro.AvroFocus.navigateForWrite`.
+    */
+  def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)]
 
 private[circe] object JsonFocus:
 
@@ -80,6 +88,22 @@ private[circe] object JsonFocus:
           case PathStep.Index(idx)  => c.downN(idx)
         i += 1
       c
+
+    def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
+      if path.length == 0 then
+        decoder.decodeJson(json) match
+          case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
+          case Right(a) =>
+            // Root full-cover: the writer IS the old reverseGet (encode standalone).
+            Right((a, (b: A) => encoder(b)))
+      else
+        JsonWalk.walkPath(json, path) match
+          case Left(failure)         => Left(failure)
+          case Right((cur, parents)) =>
+            decoder.decodeJson(cur) match
+              case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
+              case Right(a) =>
+                Right((a, (b: A) => JsonWalk.rebuildPath(parents, path, encoder(b))))
 
     def modifyImpl(json: Json, f: A => A): Json =
       JsonWalk.walkPath(json, path) match
@@ -189,6 +213,20 @@ private[circe] object JsonFocus:
 
     private def rebuild(newParent: JsonObject, parents: Vector[AnyRef]): Json =
       JsonWalk.rebuildPath(parents, parentPath, Json.fromJsonObject(newParent))
+
+    def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
+      walkParent(json) match
+        case Left(failure)         => Left(failure)
+        case Right((obj, parents)) =>
+          readFields(obj) match
+            case Left(chain) =>
+              Left(chain.headOption.getOrElse(JsonFailure.PathMissing(terminalStep)))
+            case Right(sub) =>
+              Json.fromJsonObject(sub).as[A](using decoder) match
+                case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
+                case Right(a) =>
+                  // Writer overlays the NT fields BY NAME onto the resolved parent object.
+                  Right((a, (b: A) => rebuild(writeFields(obj, b), parents)))
 
     def modifyImpl(json: Json, f: A => A): Json =
       walkParent(json) match
