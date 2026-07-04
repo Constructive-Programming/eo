@@ -3,6 +3,7 @@
 #
 # Covered:
 #   * scalafmtCheckAll   — formatting matches .scalafmt.conf across all modules
+#   * benchmarks/scalafmtCheck — ditto for benchmarks/ (outside the root aggregate)
 #   * scalafixAll --check — scalafix rules in .scalafix.conf are clean
 #   * docs/mdoc          — every `scala mdoc` fence in site/docs/*.md compiles
 #   * docs/laikaSite     — internal cross-references resolve, Laika renders
@@ -21,5 +22,5 @@ else
   exit 0
 fi
 
-echo "[pre-commit] running scalafmtCheckAll + scalafixAll --check + docs/mdoc + docs/laikaSite ..."
-sbt -no-colors 'scalafmtCheckAll; scalafixAll --check; docs/mdoc; docs/laikaSite'
+echo "[pre-commit] running scalafmtCheckAll + benchmarks/scalafmtCheck + scalafixAll --check + docs/mdoc + docs/laikaSite ..."
+sbt -no-colors 'scalafmtCheckAll; benchmarks/scalafmtCheck; benchmarks/Test/scalafmtCheck; scalafixAll --check; docs/mdoc; docs/laikaSite'
