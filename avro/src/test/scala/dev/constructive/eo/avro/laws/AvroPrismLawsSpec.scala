@@ -2,10 +2,9 @@ package dev.constructive.eo.avro
 package laws
 
 import cats.data.Ior
-import dev.constructive.eo.laws.OptionalLaws
-import dev.constructive.eo.laws.discipline.OptionalTests
+import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests}
+import dev.constructive.eo.laws.{OptionalLaws, SeamLaws}
 import dev.constructive.eo.optics.Optic
-import dev.constructive.eo.optics.Optic.*
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.scalacheck.Prop.forAll
@@ -72,7 +71,7 @@ import org.typelevel.discipline.specs2.mutable.Discipline
   */
 class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
 
-  import AvroSpecFixtures.{Person, Transaction, personRecord, personSchema, transactionRecord}
+  import AvroSpecFixtures.{Person, Transaction, personRecord, transactionRecord}
   import AvroPrismLawsSpec.*
   import AvroPrismLawsSpec.given
 
@@ -120,36 +119,24 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
       otherWay && oneWay
   }
 
-  // NEW coverage the old Either carrier never had: the DRILLED prism's OPTIC seam (generic
-  // extension `.modify`/`.replace`, the exact path an upcast/compose write takes) is a lawful
-  // Optional — sibling-preserving, structurally. This is the seam the re-carrier fixed.
-  "drilled record prism via the generic Optic seam: Optional laws hold (sibling-preserving)" >> forAll {
-    (p: AvroSpecFixtures.Person, newName: String, newName2: String) =>
-      val record = personRecord(p)
-      // Upcast to the bare Optic to force the GENERIC extension (not the shadowing member).
-      val nameL
-          : Optic[IndexedRecord, IndexedRecord, String, String, dev.constructive.eo.data.Affine] =
-        codecPrism[AvroSpecFixtures.Person].field(_.name).record
+  // The regression that would have caught the sibling-drop FIRST — the shared [[SeamLaws]] run on
+  // a DRILLED optic through the generic `.modify` / `.replace` seam. The old `Either` carrier's
+  // `from(Right) = reverseGet` fails `seam modify identity` / `seam replace overwrite` here
+  // (drops `age`); the full-cover-only OptionalTests above could never reach it. Uses the
+  // structural record Eq because `IndexedRecord` `==` is schema-instance-sensitive, and a
+  // Person-record Arbitrary so the `.field(_.name)` walk actually Hits (a Pair record would Miss
+  // and the law would pass vacuously).
+  private val arbPersonRecord: Arbitrary[IndexedRecord] =
+    Arbitrary(arbPerson.arbitrary.map(personRecord))
 
-      // modify-identity: whole record structurally unchanged (siblings intact).
-      val modIdOk = recordsEqual(nameL.modify(identity[String])(record), record)
-      // put-get: read back what we replaced.
-      val putGetOk = codecPrism[AvroSpecFixtures.Person]
-        .field(_.name)
-        .record
-        .getOptionUnsafe(nameL.replace(newName)(record))
-        .contains(newName)
-      // put-put: last write wins, structurally.
-      val putPutOk = recordsEqual(
-        nameL.replace(newName2)(nameL.replace(newName)(record)),
-        nameL.replace(newName2)(record),
-      )
-      // sibling survival: age untouched after a name replace.
-      val siblingOk =
-        nameL.replace(newName)(record).get(personSchema.getField("age").pos) == p.age
-
-      modIdOk && putGetOk && putPutOk && siblingOk
-  }
+  checkAll(
+    "AvroRecordPrism drilled seam — codecPrism[Person].field(_.name).record",
+    new SeamTests[IndexedRecord, String]:
+      val laws: SeamLaws[IndexedRecord, String] = new SeamLaws[IndexedRecord, String]:
+        val optic = codecPrism[Person].field(_.name).record
+        val eqv = recordsEqual
+    .seam(using arbPersonRecord, summon[Arbitrary[String]], summon[Cogen[String]]),
+  )
 
   // ---- forAll properties on the default Ior surface ---------------
   //

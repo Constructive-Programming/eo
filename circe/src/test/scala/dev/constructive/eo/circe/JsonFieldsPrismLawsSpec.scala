@@ -2,10 +2,9 @@ package dev.constructive.eo.circe
 
 import cats.data.Ior
 import dev.constructive.eo.data.Affine
-import dev.constructive.eo.laws.OptionalLaws
-import dev.constructive.eo.laws.discipline.OptionalTests
+import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests}
+import dev.constructive.eo.laws.{OptionalLaws, SeamLaws}
 import dev.constructive.eo.optics.Optic
-import dev.constructive.eo.optics.Optic.*
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
@@ -68,31 +67,22 @@ class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCh
       otherWay && oneWay
   }
 
-  // NEW coverage the old Either carrier never had: the DRILLED prism's OPTIC seam (generic
-  // extension `.modify`/`.replace`, the exact path an upcast/compose write takes) is a lawful
-  // Optional — sibling-preserving. This is the seam the re-carrier fixed.
-  "drilled prism via the generic Optic seam: Optional laws hold (siblings preserved)" >> forAll {
-    (p: Person, newName: String, newName2: String) =>
-      val json = p.asJson
-      // Upcast to the bare Optic to force the GENERIC extension (not the shadowing member).
-      val nameL: Optic[Json, Json, String, String, Affine] = codecPrism[Person].field(_.name)
+  // The regression that would have caught the sibling-drop FIRST — the shared [[SeamLaws]] run on
+  // a DRILLED optic through the generic `.modify` / `.replace` seam. The old `Either` carrier's
+  // `from(Right) = encoder` fails `seam modify identity` / `seam replace overwrite` here (drops
+  // age + address); the full-cover-only laws above could never reach it. `Json` `==` is
+  // structural, so plain equality works; a Person-JSON Arbitrary so `.field(_.name)` actually
+  // Hits (a Pair JSON would Miss and the law would pass vacuously).
+  private val arbPersonJson: Arbitrary[Json] = Arbitrary(arbPerson.arbitrary.map(_.asJson))
 
-      val modIdOk = nameL.modify(identity[String])(json) == json
-      val putGetOk =
-        codecPrism[Person]
-          .field(_.name)
-          .getOptionUnsafe(nameL.replace(newName)(json))
-          .contains(
-            newName
-          )
-      val putPutOk =
-        nameL.replace(newName2)(nameL.replace(newName)(json)) == nameL.replace(newName2)(json)
-      // sibling survival: age + address untouched after a name replace.
-      val out = nameL.replace(newName)(json)
-      val siblingOk = out.hcursor.downField("age").as[Int] == json.hcursor.downField("age").as[Int]
-
-      modIdOk && putGetOk && putPutOk && siblingOk
-  }
+  checkAll(
+    "JsonPrism drilled seam — codecPrism[Person].field(_.name)",
+    new SeamTests[Json, String]:
+      val laws: SeamLaws[Json, String] = new SeamLaws[Json, String]:
+        val optic = codecPrism[Person].field(_.name)
+        val eqv = (a: Json, b: Json) => a == b
+    .seam(using arbPersonJson, summon[Arbitrary[String]], summon[Cogen[String]]),
+  )
 
   // ---- forAll properties on the default Ior surface ---------------
   //
