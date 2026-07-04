@@ -1,5 +1,6 @@
 package dev.constructive.eo.avro
 
+import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
 import org.apache.avro.generic.{GenericData, IndexedRecord}
@@ -109,16 +110,17 @@ private[avro] object AvroWalk:
           else
             val b = Vector.newBuilder[AnyRef]
             b.sizeHint(walked.parentsLen)
-            var i = 0
-            while i < walked.parentsLen do
-              b += walked.parents(i)
-              i += 1
+            @tailrec def loop(i: Int): Unit =
+              if i < walked.parentsLen then
+                b += walked.parents(i)
+                loop(i + 1)
+            loop(0)
             b.result()
         Right((walked.cur, parentsVec))
 
-  /** Hot-path walk — array-indexed `while` loop. Failure short-circuit uses an in-loop sentinel
-    * (`failure: AvroFailure | Null`) rather than `return` (scalafix `DisableSyntax.return`).
-    * UnionBranch failures resolve the full schema-declared alternative list inline.
+  /** Hot-path walk — array-indexed `@tailrec` loop threading `(i, parentsLen, cur)`. Failure
+    * short-circuits by returning `Left` in place (no sentinel, no `return`). UnionBranch failures
+    * resolve the full schema-declared alternative list inline.
     */
   def walkPathArr(
       record: IndexedRecord,
@@ -129,78 +131,80 @@ private[avro] object AvroWalk:
     if len == 0 then Right(new WalkRes(record, EmptyParents, 0))
     else
       val parents = new Array[AnyRef](len)
-      var parentsLen = 0
-      var cur: Any = record
-      var failure: AvroFailure | Null = null
-      var i = 0
-      while i < len && failure == null do
-        val step = path(i)
-        step match
-          case PathStep.Field(name) =>
-            cur match
-              case rec: IndexedRecord =>
-                val schema = rec.getSchema
-                val field = schema.getField(name)
-                if field == null then
-                  policy match
-                    case OnMissingField.Strict =>
-                      failure = AvroFailure.PathMissing(step)
-                    case OnMissingField.Lenient =>
-                      parents(parentsLen) = rec
-                      parentsLen += 1
-                      cur = null
-                else
-                  parents(parentsLen) = rec
-                  parentsLen += 1
-                  cur = rec.get(field.pos)
-              case map: java.util.Map[?, ?] =>
-                val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
-                val direct = asMap.get(name)
-                val viaUtf8 =
-                  if direct == null then asMap.get(new org.apache.avro.util.Utf8(name)) else direct
-                if viaUtf8 == null then
-                  policy match
-                    case OnMissingField.Strict =>
-                      failure = AvroFailure.PathMissing(step)
-                    case OnMissingField.Lenient =>
-                      parents(parentsLen) = map.asInstanceOf[AnyRef]
-                      parentsLen += 1
-                      cur = null
-                else
-                  parents(parentsLen) = map.asInstanceOf[AnyRef]
-                  parentsLen += 1
-                  cur = viaUtf8
-              case _ =>
-                failure = AvroFailure.NotARecord(step)
+      @tailrec def loop(i: Int, parentsLen: Int, cur: Any): Either[AvroFailure, WalkRes] =
+        if i >= len then Right(new WalkRes(cur, parents, parentsLen))
+        else
+          val step = path(i)
+          step match
+            case PathStep.Field(name) =>
+              cur match
+                case rec: IndexedRecord =>
+                  val schema = rec.getSchema
+                  val field = schema.getField(name)
+                  if field == null then
+                    policy match
+                      case OnMissingField.Strict =>
+                        Left(AvroFailure.PathMissing(step))
+                      case OnMissingField.Lenient =>
+                        parents(parentsLen) = rec
+                        loop(i + 1, parentsLen + 1, null)
+                  else
+                    parents(parentsLen) = rec
+                    loop(i + 1, parentsLen + 1, rec.get(field.pos))
+                case map: java.util.Map[?, ?] =>
+                  val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
+                  val direct = asMap.get(name)
+                  val viaUtf8 =
+                    if direct == null then asMap.get(new org.apache.avro.util.Utf8(name))
+                    else direct
+                  if viaUtf8 == null then
+                    policy match
+                      case OnMissingField.Strict =>
+                        Left(AvroFailure.PathMissing(step))
+                      case OnMissingField.Lenient =>
+                        parents(parentsLen) = map.asInstanceOf[AnyRef]
+                        loop(i + 1, parentsLen + 1, null)
+                  else
+                    parents(parentsLen) = map.asInstanceOf[AnyRef]
+                    loop(i + 1, parentsLen + 1, viaUtf8)
+                case _ =>
+                  Left(AvroFailure.NotARecord(step))
 
-          case PathStep.Index(idx) =>
-            cur match
-              case lst: java.util.List[?] =>
-                val size = lst.size
-                if idx < 0 || idx >= size then failure = AvroFailure.IndexOutOfRange(step, size)
-                else
-                  parents(parentsLen) = lst.asInstanceOf[AnyRef]
-                  parentsLen += 1
-                  cur = lst.get(idx)
-              case _ =>
-                failure = AvroFailure.NotAnArray(step)
+            case PathStep.Index(idx) =>
+              cur match
+                case lst: java.util.List[?] =>
+                  val size = lst.size
+                  if idx < 0 || idx >= size then Left(AvroFailure.IndexOutOfRange(step, size))
+                  else
+                    parents(parentsLen) = lst.asInstanceOf[AnyRef]
+                    loop(i + 1, parentsLen + 1, lst.get(idx))
+                case _ =>
+                  Left(AvroFailure.NotAnArray(step))
 
-          case PathStep.UnionBranch(branchName) =>
-            cur match
-              case null =>
-                if branchName == "null" then ()
-                else
-                  failure = AvroFailure
-                    .UnionResolutionFailed(unionBranchesAtArr(path, i, parents, parentsLen), step)
-              case other =>
-                val actualName = unionBranchName(other)
-                if actualName == branchName then ()
-                else
-                  failure = AvroFailure
-                    .UnionResolutionFailed(unionBranchesAtArr(path, i, parents, parentsLen), step)
-        i += 1
-      if failure == null then Right(new WalkRes(cur, parents, parentsLen))
-      else Left(failure)
+            case PathStep.UnionBranch(branchName) =>
+              cur match
+                case null =>
+                  if branchName == "null" then loop(i + 1, parentsLen, null)
+                  else
+                    Left(
+                      AvroFailure
+                        .UnionResolutionFailed(
+                          unionBranchesAtArr(path, i, parents, parentsLen),
+                          step,
+                        )
+                    )
+                case other =>
+                  val actualName = unionBranchName(other)
+                  if actualName == branchName then loop(i + 1, parentsLen, cur)
+                  else
+                    Left(
+                      AvroFailure
+                        .UnionResolutionFailed(
+                          unionBranchesAtArr(path, i, parents, parentsLen),
+                          step,
+                        )
+                    )
+      loop(0, 0, record)
 
   private val EmptyParents: Array[AnyRef] = new Array[AnyRef](0)
 
@@ -215,28 +219,26 @@ private[avro] object AvroWalk:
       parents: Array[AnyRef],
       parentsLen: Int,
   ): List[String] =
-    var pIdx = parentsLen - 1
-    var j = unionStepIdx - 1
-    var result: List[String] | Null = null
-    while j >= 0 && result == null do
-      path(j) match
-        case PathStep.Field(name) =>
-          if pIdx >= 0 then
-            parents(pIdx) match
-              case rec: IndexedRecord =>
-                val f = rec.getSchema.getField(name)
-                if f != null && f.schema.getType == org.apache.avro.Schema.Type.UNION then
-                  result = f.schema.getTypes.asScala.map(_.getFullName).toList
-                else result = Nil
-              case _ => result = Nil
-          else result = Nil
-        case PathStep.UnionBranch(_) =>
-          // doesn't decrement pIdx (UnionBranch steps don't push parents)
-          ()
-        case _ =>
-          pIdx -= 1
-      j -= 1
-    if result == null then Nil else result
+    @tailrec def loop(j: Int, pIdx: Int): List[String] =
+      if j < 0 then Nil
+      else
+        path(j) match
+          case PathStep.Field(name) =>
+            if pIdx >= 0 then
+              parents(pIdx) match
+                case rec: IndexedRecord =>
+                  val f = rec.getSchema.getField(name)
+                  if f != null && f.schema.getType == org.apache.avro.Schema.Type.UNION then
+                    f.schema.getTypes.asScala.map(_.getFullName).toList
+                  else Nil
+                case _ => Nil
+            else Nil
+          case PathStep.UnionBranch(_) =>
+            // doesn't decrement pIdx (UnionBranch steps don't push parents)
+            loop(j - 1, pIdx)
+          case _ =>
+            loop(j - 1, pIdx - 1)
+    loop(unionStepIdx - 1, parentsLen - 1)
 
   /** Terminal step of `path` (sentinel `PathStep.Field("")` when empty). Used by non-step-shaped
     * failures.
@@ -253,12 +255,10 @@ private[avro] object AvroWalk:
       path: Array[PathStep],
       newLeaf: Any,
   ): Any =
-    var i = parents.length - 1
-    var child: Any = newLeaf
-    while i >= 0 do
-      child = rebuildStep(parents(i), path(i), child)
-      i -= 1
-    child
+    @tailrec def loop(i: Int, child: Any): Any =
+      if i < 0 then child
+      else loop(i - 1, rebuildStep(parents(i), path(i), child))
+    loop(parents.length - 1, newLeaf)
 
   /** Hot-path rebuild — folds parents backwards. UnionBranch steps that didn't push parents are
     * skipped (matches the legacy `parents.zip(path).foldRight` shape).
@@ -269,12 +269,10 @@ private[avro] object AvroWalk:
       path: Array[PathStep],
       newLeaf: Any,
   ): Any =
-    var i = parentsLen - 1
-    var child: Any = newLeaf
-    while i >= 0 do
-      child = rebuildStep(parents(i), path(i), child)
-      i -= 1
-    child
+    @tailrec def loop(i: Int, child: Any): Any =
+      if i < 0 then child
+      else loop(i - 1, rebuildStep(parents(i), path(i), child))
+    loop(parentsLen - 1, newLeaf)
 
   /** Splice `child` into `parent` at `step`. Dispatch:
     *   - `Field` on `IndexedRecord` — fresh record with `put` at the matching slot.
@@ -297,11 +295,12 @@ private[avro] object AvroWalk:
             val fields = schema.getFields
             val n = fields.size
             val targetPos = schema.getField(name).pos
-            var i = 0
-            while i < n do
-              if i == targetPos then fresh.put(i, child.asInstanceOf[AnyRef])
-              else fresh.put(i, rec.get(i))
-              i += 1
+            @tailrec def loop(i: Int): Unit =
+              if i < n then
+                if i == targetPos then fresh.put(i, child.asInstanceOf[AnyRef])
+                else fresh.put(i, rec.get(i))
+                loop(i + 1)
+            loop(0)
             fresh
           case map: java.util.Map[?, ?] =>
             val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
@@ -324,11 +323,12 @@ private[avro] object AvroWalk:
             val fresh: java.util.List[Any] =
               if schema != null then new GenericData.Array[Any](asList.size, schema)
               else new java.util.ArrayList[Any](asList.size)
-            var i = 0
-            while i < asList.size do
-              if i == idx then fresh.add(child)
-              else fresh.add(asList.get(i))
-              i += 1
+            @tailrec def loop(i: Int): Unit =
+              if i < asList.size then
+                if i == idx then fresh.add(child)
+                else fresh.add(asList.get(i))
+                loop(i + 1)
+            loop(0)
             fresh
           case other =>
             sys.error(s"AvroWalk.rebuildStep: cannot Index-splice into $other (step=$step)")
@@ -348,13 +348,14 @@ private[avro] object AvroWalk:
     val fresh = new GenericData.Record(schema)
     val fields = schema.getFields
     val n = fields.size
-    var i = 0
-    while i < n do
-      val fname = fields.get(i).name
-      updates.get(fname) match
-        case Some(v) => fresh.put(i, v.asInstanceOf[AnyRef])
-        case None    => fresh.put(i, parent.get(i))
-      i += 1
+    @tailrec def loop(i: Int): Unit =
+      if i < n then
+        val fname = fields.get(i).name
+        updates.get(fname) match
+          case Some(v) => fresh.put(i, v.asInstanceOf[AnyRef])
+          case None    => fresh.put(i, parent.get(i))
+        loop(i + 1)
+    loop(0)
     fresh
 
   /** Union-branch name for a runtime value. Schema-driven where possible; falls back to the raw

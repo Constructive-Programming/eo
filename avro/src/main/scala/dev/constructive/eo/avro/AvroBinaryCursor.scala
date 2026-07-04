@@ -1,5 +1,6 @@
 package dev.constructive.eo.avro
 
+import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import java.io.{ByteArrayOutputStream, InputStream}
@@ -137,34 +138,36 @@ private[avro] object AvroBinaryCursor:
     val in = new CountingInputStream(bytes, arr.valueStart)
     val d = DecoderFactory.get().directBinaryDecoder(in, null)
     val elements = Vector.newBuilder[ElementSpan]
-    var canonical = true
-    var count = d.readLong()
-    while count != 0L do
-      var n = count
-      if n < 0L then
+    @tailrec def block(count: Long, canonical: Boolean): Boolean =
+      if count == 0L then canonical
+      else
         // -Long.MinValue == Long.MinValue: negating leaves it negative, the item loop would be
         // skipped, and the walk would confidently misparse element data as block framing.
-        if n == Long.MinValue then
+        val negative = count < 0L
+        if negative && count == Long.MinValue then
           throw new java.io.IOException("array block count Long.MinValue is not a valid framing")
-        n = -n
-        d.readLong(): Unit // block byte-size — goes stale across a size-changing splice
-        canonical = false
-      var i = 0L
-      while i < n do
-        val elemStart = in.position
-        skipValue(elemSchema, d)
-        // Per-element focus walk on a fresh cursor positioned at the element. Failures keep the
-        // element (its bytes must survive a re-frame) but mark it focus-less.
-        val focus = locateFrom(
-          bytes,
-          elemSchema,
-          suffix,
-          strictTerminalUnion = true,
-          startPos = elemStart,
-        ).toOption
-        elements += ElementSpan(elemStart, in.position, focus)
-        i += 1
-      count = d.readLong()
+        val n = if negative then -count else count
+        if negative then
+          d.readLong(): Unit // block byte-size — goes stale across a size-changing splice
+        val canon = canonical && !negative
+        @tailrec def items(i: Long): Unit =
+          if i < n then
+            val elemStart = in.position
+            skipValue(elemSchema, d)
+            // Per-element focus walk on a fresh cursor positioned at the element. Failures keep the
+            // element (its bytes must survive a re-frame) but mark it focus-less.
+            val focus = locateFrom(
+              bytes,
+              elemSchema,
+              suffix,
+              strictTerminalUnion = true,
+              startPos = elemStart,
+            ).toOption
+            elements += ElementSpan(elemStart, in.position, focus)
+            items(i + 1)
+        items(0L)
+        block(d.readLong(), canon)
+    val canonical = block(d.readLong(), true)
     ElementSpans(arr, elements.result(), canonical)
 
   /** Zigzag-varint encoding of `n` (Avro `long` wire form) — the block count emitted by
@@ -335,54 +338,66 @@ private[avro] object AvroBinaryCursor:
   ): Either[AvroFailure, BinarySpan] =
     val in = new CountingInputStream(bytes, startPos)
     val d = DecoderFactory.get().directBinaryDecoder(in, null)
-    var schema = rootSchema
-    var failure: AvroFailure | Null = null
     // Populated iff the terminal step is a UnionBranch (index bytes already consumed).
-    var unionSpan: BinarySpan | Null = null
-    var i = 0
-    while i < path.length && failure == null do
-      path(i) match
-        case step @ PathStep.Field(name) =>
-          if schema.getType != Schema.Type.RECORD then failure = AvroFailure.NotARecord(step)
-          else
-            val field = schema.getField(name)
-            if field == null then failure = AvroFailure.PathMissing(step)
+    @tailrec def loop(
+        i: Int,
+        schema: Schema,
+        unionSpan: BinarySpan | Null,
+    ): (AvroFailure | Null, Schema, BinarySpan | Null) =
+      if i >= path.length then (null, schema, unionSpan)
+      else
+        path(i) match
+          case step @ PathStep.Field(name) =>
+            if schema.getType != Schema.Type.RECORD then
+              (AvroFailure.NotARecord(step), schema, unionSpan)
             else
-              val fields = schema.getFields
-              var j = 0
-              while j < field.pos do
-                skipValue(fields.get(j).schema, d)
-                j += 1
-              schema = field.schema
+              val field = schema.getField(name)
+              if field == null then (AvroFailure.PathMissing(step), schema, unionSpan)
+              else
+                val fields = schema.getFields
+                @tailrec def skip(j: Int): Unit =
+                  if j < field.pos then
+                    skipValue(fields.get(j).schema, d)
+                    skip(j + 1)
+                skip(0)
+                loop(i + 1, field.schema, unionSpan)
 
-        case step @ PathStep.UnionBranch(branchName) =>
-          if schema.getType != Schema.Type.UNION then
-            failure = AvroFailure.UnionResolutionFailed(declaredBranches(schema), step)
-          else
-            val requested = branchOrdinalOf(schema, branchName)
-            if requested < 0 then
-              failure = AvroFailure.UnionResolutionFailed(declaredBranches(schema), step)
+          case step @ PathStep.UnionBranch(branchName) =>
+            if schema.getType != Schema.Type.UNION then
+              (AvroFailure.UnionResolutionFailed(declaredBranches(schema), step), schema, unionSpan)
             else
-              val isTerminal = i == path.length - 1
-              val indexStart = in.position
-              val runtime = d.readIndex()
-              val runtimeSchema = schema.getTypes.get(runtime)
-              if runtime != requested && (strictTerminalUnion || !isTerminal) then
-                failure = AvroFailure.UnionResolutionFailed(declaredBranches(schema), step)
-              else if isTerminal then
-                unionSpan = BinarySpan(
-                  fieldStart = indexStart,
-                  valueStart = in.position,
-                  end = 0, // patched below once the branch value is skipped
-                  valueSchema = schema.getTypes.get(requested),
-                  branchOrdinal = Some(requested),
+              val requested = branchOrdinalOf(schema, branchName)
+              if requested < 0 then
+                (
+                  AvroFailure.UnionResolutionFailed(declaredBranches(schema), step),
+                  schema,
+                  unionSpan,
                 )
-                schema = runtimeSchema
-              else schema = runtimeSchema
+              else
+                val isTerminal = i == path.length - 1
+                val indexStart = in.position
+                val runtime = d.readIndex()
+                val runtimeSchema = schema.getTypes.get(runtime)
+                if runtime != requested && (strictTerminalUnion || !isTerminal) then
+                  (
+                    AvroFailure.UnionResolutionFailed(declaredBranches(schema), step),
+                    schema,
+                    unionSpan,
+                  )
+                else if isTerminal then
+                  val span = BinarySpan(
+                    fieldStart = indexStart,
+                    valueStart = in.position,
+                    end = 0, // patched below once the branch value is skipped
+                    valueSchema = schema.getTypes.get(requested),
+                    branchOrdinal = Some(requested),
+                  )
+                  loop(i + 1, runtimeSchema, span)
+                else loop(i + 1, runtimeSchema, unionSpan)
 
-        case step @ PathStep.Index(_) =>
-          failure = AvroFailure.UnsupportedSpanStep(step)
-      i += 1
+          case step @ PathStep.Index(_) =>
+            (AvroFailure.UnsupportedSpanStep(step), schema, unionSpan)
+    val (failure, schema, unionSpan) = loop(0, rootSchema, null)
     if failure != null then Left(failure)
     else
       unionSpan match
@@ -417,29 +432,34 @@ private[avro] object AvroBinaryCursor:
       case Schema.Type.RECORD  =>
         val fields = schema.getFields
         val n = fields.size
-        var i = 0
-        while i < n do
-          skipValue(fields.get(i).schema, d)
-          i += 1
+        @tailrec def loop(i: Int): Unit =
+          if i < n then
+            skipValue(fields.get(i).schema, d)
+            loop(i + 1)
+        loop(0)
       case Schema.Type.ARRAY =>
         val elem = schema.getElementType
-        var l = d.skipArray()
-        while l > 0 do
-          var i = 0L
-          while i < l do
-            skipValue(elem, d)
-            i += 1
-          l = d.skipArray()
+        @tailrec def block(l: Long): Unit =
+          if l > 0 then
+            @tailrec def items(i: Long): Unit =
+              if i < l then
+                skipValue(elem, d)
+                items(i + 1)
+            items(0L)
+            block(d.skipArray())
+        block(d.skipArray())
       case Schema.Type.MAP =>
         val value = schema.getValueType
-        var l = d.skipMap()
-        while l > 0 do
-          var i = 0L
-          while i < l do
-            d.skipString()
-            skipValue(value, d)
-            i += 1
-          l = d.skipMap()
+        @tailrec def block(l: Long): Unit =
+          if l > 0 then
+            @tailrec def items(i: Long): Unit =
+              if i < l then
+                d.skipString()
+                skipValue(value, d)
+                items(i + 1)
+            items(0L)
+            block(d.skipMap())
+        block(d.skipMap())
 
   /** Ordinal of the union alternative whose full name is `branchName`, or -1. Matches the naming
     * convention of [[PathStep.UnionBranch]] (schema full names — `"long"` for primitives,
@@ -448,12 +468,11 @@ private[avro] object AvroBinaryCursor:
   private def branchOrdinalOf(union: Schema, branchName: String): Int =
     val types = union.getTypes
     val n = types.size
-    var i = 0
-    var found = -1
-    while i < n && found < 0 do
-      if types.get(i).getFullName == branchName then found = i
-      i += 1
-    found
+    @tailrec def loop(i: Int): Int =
+      if i >= n then -1
+      else if types.get(i).getFullName == branchName then i
+      else loop(i + 1)
+    loop(0)
 
   /** Declared alternative names of a union schema (empty for non-unions) — the diagnostic payload
     * of [[AvroFailure.UnionResolutionFailed]].

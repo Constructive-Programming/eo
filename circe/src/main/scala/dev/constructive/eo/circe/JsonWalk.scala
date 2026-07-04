@@ -1,5 +1,7 @@
 package dev.constructive.eo.circe
 
+import scala.annotation.tailrec
+
 import io.circe.{Json, JsonObject}
 
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
@@ -76,20 +78,17 @@ private[circe] object JsonWalk:
       path: Array[PathStep],
       policy: OnMissingField = OnMissingField.Strict,
   ): Either[JsonFailure, State] =
-    var cur: Json = json
-    var parents: Vector[AnyRef] = Vector.empty
-    var failure: Option[JsonFailure] = None
-    var i = 0
-    while failure.isEmpty && i < path.length do
-      stepInto(path(i), cur, parents, policy) match
-        case Left(f)              => failure = Some(f)
-        case Right((c, parents2)) =>
-          cur = c
-          parents = parents2
-      i += 1
-    failure match
-      case Some(f) => Left(f)
-      case None    => Right((cur, parents))
+    @tailrec def loop(
+        cur: Json,
+        parents: Vector[AnyRef],
+        i: Int,
+    ): Either[JsonFailure, State] =
+      if i < path.length then
+        stepInto(path(i), cur, parents, policy) match
+          case Left(f)              => Left(f)
+          case Right((c, parents2)) => loop(c, parents2, i + 1)
+      else Right((cur, parents))
+    loop(json, Vector.empty, 0)
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't an array") needs to
@@ -111,12 +110,10 @@ private[circe] object JsonWalk:
       path: Array[PathStep],
       newLeaf: Json,
   ): Json =
-    var child = newLeaf
-    var i = parents.length - 1
-    while i >= 0 do
-      child = rebuildStep(parents(i), path(i), child)
-      i -= 1
-    child
+    @tailrec def loop(child: Json, i: Int): Json =
+      if i >= 0 then loop(rebuildStep(parents(i), path(i), child), i - 1)
+      else child
+    loop(newLeaf, parents.length - 1)
 
   /** Splice `child` into `parent` at `step`. The parent's runtime shape is determined by the step
     * kind: Field steps require a JsonObject; Index steps require a `Vector[Json]`.

@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import scala.annotation.tailrec
+
 import dev.constructive.eo.generics.plate
 import dev.constructive.eo.optics.Optic.* // .andThen / .modify
 
@@ -175,11 +177,9 @@ class PlatedSpec extends Specification with Discipline:
       .plate
 
     val n = 100000
-    var deep: Bin = Bin.Leaf(0)
-    var i = 0
-    while i < n do
-      deep = Bin.Node(deep, Bin.Leaf(i))
-      i += 1
+    @tailrec def spine(deep: Bin, i: Int): Bin =
+      if i < n then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
+    val deep = spine(Bin.Leaf(0), 0)
 
     // Increment every leaf; must not blow the stack.
     val bumped = binPlate.transformAll {
@@ -222,11 +222,9 @@ class PlatedSpec extends Specification with Discipline:
     // Axis 1 — deep descent: a 100k-deep spine, folding Node(Leaf, Leaf) at every node up to a
     // single Leaf. Each fire re-processes only a shallow result, so this stresses the descent.
     val n = 100000
-    var deep: Bin = Bin.Leaf(0)
-    var i = 1
-    while i <= n do
-      deep = Bin.Node(deep, Bin.Leaf(i))
-      i += 1
+    @tailrec def spine(deep: Bin, i: Int): Bin =
+      if i <= n then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
+    val deep = spine(Bin.Leaf(0), 1)
     val foldAdjacent: Bin => Option[Bin] = {
       case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
       case _                                  => None

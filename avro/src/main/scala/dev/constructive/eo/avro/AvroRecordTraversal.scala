@@ -1,5 +1,7 @@
 package dev.constructive.eo.avro
 
+import scala.annotation.tailrec
+
 import cats.data.{Chain, Ior}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
@@ -74,10 +76,11 @@ final class AvroRecordTraversal[A] private[avro] (
   private def toVector(lst: java.util.List[?]): Vector[Any] =
     val b = Vector.newBuilder[Any]
     b.sizeHint(lst.size)
-    var i = 0
-    while i < lst.size do
-      b += lst.get(i)
-      i += 1
+    @tailrec def loop(i: Int): Unit =
+      if i < lst.size then
+        b += lst.get(i)
+        loop(i + 1)
+    loop(0)
     b.result()
 
   // ---- *Unsafe surface — delegates to focus.modifyImpl etc. --------

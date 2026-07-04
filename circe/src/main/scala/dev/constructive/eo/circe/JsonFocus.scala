@@ -1,5 +1,7 @@
 package dev.constructive.eo.circe
 
+import scala.annotation.tailrec
+
 import cats.data.{Chain, Ior}
 import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
 
@@ -80,14 +82,14 @@ private[circe] object JsonFocus:
     protected def terminalStep: PathStep = JsonWalk.terminalOf(path)
 
     def navigateCursor(json: Json): ACursor =
-      var c: ACursor = json.hcursor
-      var i = 0
-      while i < path.length do
-        c = path(i) match
-          case PathStep.Field(name) => c.downField(name)
-          case PathStep.Index(idx)  => c.downN(idx)
-        i += 1
-      c
+      @tailrec def loop(c: ACursor, i: Int): ACursor =
+        if i < path.length then
+          val c2 = path(i) match
+            case PathStep.Field(name) => c.downField(name)
+            case PathStep.Index(idx)  => c.downN(idx)
+          loop(c2, i + 1)
+        else c
+      loop(json.hcursor, 0)
 
     def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
       if path.length == 0 then

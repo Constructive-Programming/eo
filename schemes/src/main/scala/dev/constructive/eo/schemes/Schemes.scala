@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package schemes
 
+import scala.annotation.tailrec
+
 import data.PSVec
 import optics.{Getter, Plated, Review, Unfold}
 
@@ -57,17 +59,20 @@ object Schemes:
         if kids.isEmpty then ret = combine(n, PSVec.empty[R]).asInstanceOf[AnyRef]
         else stack.push(new Frame(n, kids, new Array[AnyRef](kids.length), 0))
       enter(root)
-      while !stack.isEmpty do
-        val fr = stack.peek()
-        if fr.i > 0 then fr.out(fr.i - 1) = ret
-        if fr.i < fr.kids.length then
-          val child = fr.kids(fr.i)
-          fr.i += 1
-          enter(child)
+      @tailrec def loop(): R =
+        if stack.isEmpty then ret.asInstanceOf[R]
         else
-          ret = combine(fr.node, PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
-          val _ = stack.pop()
-      ret.asInstanceOf[R]
+          val fr = stack.peek()
+          if fr.i > 0 then fr.out(fr.i - 1) = ret
+          if fr.i < fr.kids.length then
+            val child = fr.kids(fr.i)
+            fr.i += 1
+            enter(child)
+          else
+            ret = combine(fr.node, PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
+            val _ = stack.pop()
+          loop()
+      loop()
 
     def rec(n: N, depth: Int): R =
       if depth >= OnStackLimit then heap(n)
@@ -77,10 +82,11 @@ object Schemes:
         if k == 0 then combine(n, PSVec.empty[R])
         else
           val out = new Array[AnyRef](k)
-          var i = 0
-          while i < k do
-            out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
-            i += 1
+          @tailrec def loop(i: Int): Unit =
+            if i < k then
+              out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
+              loop(i + 1)
+          loop(0)
           combine(n, PSVec.unsafeWrap[R](out))
 
     n0 => rec(n0, 0)
@@ -105,17 +111,20 @@ object Schemes:
         if kids.isEmpty then ret = combine(PSVec.empty[R]).asInstanceOf[AnyRef]
         else stack.push(new Frame(combine, kids, new Array[AnyRef](kids.length), 0))
       enter(root)
-      while !stack.isEmpty do
-        val fr = stack.peek()
-        if fr.i > 0 then fr.out(fr.i - 1) = ret
-        if fr.i < fr.kids.length then
-          val child = fr.kids(fr.i)
-          fr.i += 1
-          enter(child)
+      @tailrec def loop(): R =
+        if stack.isEmpty then ret.asInstanceOf[R]
         else
-          ret = fr.combine(PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
-          val _ = stack.pop()
-      ret.asInstanceOf[R]
+          val fr = stack.peek()
+          if fr.i > 0 then fr.out(fr.i - 1) = ret
+          if fr.i < fr.kids.length then
+            val child = fr.kids(fr.i)
+            fr.i += 1
+            enter(child)
+          else
+            ret = fr.combine(PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
+            val _ = stack.pop()
+          loop()
+      loop()
 
     def rec(n: N, depth: Int): R =
       if depth >= OnStackLimit then heap(n)
@@ -125,10 +134,11 @@ object Schemes:
         if k == 0 then combine(PSVec.empty[R])
         else
           val out = new Array[AnyRef](k)
-          var i = 0
-          while i < k do
-            out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
-            i += 1
+          @tailrec def loop(i: Int): Unit =
+            if i < k then
+              out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
+              loop(i + 1)
+          loop(0)
           combine(PSVec.unsafeWrap[R](out))
 
     n0 => rec(n0, 0)
@@ -151,17 +161,20 @@ object Schemes:
         if arr.length == 0 then ret = alg(s, PSVec.empty[A]).asInstanceOf[AnyRef]
         else stack.push(new Frame(s, arr, 0))
       enter(root)
-      while !stack.isEmpty do
-        val fr = stack.peek()
-        if fr.i > 0 then fr.arr(fr.i - 1) = ret // overwrite the just-folded child's slot
-        if fr.i < fr.arr.length then
-          val child = fr.arr(fr.i).asInstanceOf[S]
-          fr.i += 1
-          enter(child)
+      @tailrec def loop(): A =
+        if stack.isEmpty then ret.asInstanceOf[A]
         else
-          ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr)).asInstanceOf[AnyRef]
-          val _ = stack.pop()
-      ret.asInstanceOf[A]
+          val fr = stack.peek()
+          if fr.i > 0 then fr.arr(fr.i - 1) = ret // overwrite the just-folded child's slot
+          if fr.i < fr.arr.length then
+            val child = fr.arr(fr.i).asInstanceOf[S]
+            fr.i += 1
+            enter(child)
+          else
+            ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr)).asInstanceOf[AnyRef]
+            val _ = stack.pop()
+          loop()
+      loop()
 
     def rec(s: S, depth: Int): A =
       if depth >= OnStackLimit then heap(s)
@@ -170,10 +183,11 @@ object Schemes:
         val k = arr.length
         if k == 0 then alg(s, PSVec.empty[A])
         else
-          var i = 0
-          while i < k do
-            arr(i) = rec(arr(i).asInstanceOf[S], depth + 1).asInstanceOf[AnyRef]
-            i += 1
+          @tailrec def loop(i: Int): Unit =
+            if i < k then
+              arr(i) = rec(arr(i).asInstanceOf[S], depth + 1).asInstanceOf[AnyRef]
+              loop(i + 1)
+          loop(0)
           alg(s, PSVec.unsafeWrap[A](arr))
 
     s0 => rec(s0, 0)

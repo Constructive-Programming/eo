@@ -1,5 +1,7 @@
 package dev.constructive.eo.jsoniter
 
+import scala.annotation.tailrec
+
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, writeToArray, JsonValueCodec}
 import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.optics.Optic
@@ -85,15 +87,20 @@ object JsoniterTraversal:
           // the write side.
           val arr = new Array[AnyRef](n)
           val keptSpans = List.newBuilder[JsonPathScanner.Span]
-          var written = 0
           val it = spans.iterator
-          while it.hasNext do
-            val span = it.next()
-            try
-              arr(written) = readFromSubArray[A](bytes, span.start, span.end).asInstanceOf[AnyRef]
-              written += 1
-              keptSpans += span
-            catch case scala.util.control.NonFatal(_) => ()
+          @tailrec def loop(written: Int): Int =
+            if it.hasNext then
+              val span = it.next()
+              val next =
+                try
+                  arr(written) =
+                    readFromSubArray[A](bytes, span.start, span.end).asInstanceOf[AnyRef]
+                  keptSpans += span
+                  written + 1
+                catch case scala.util.control.NonFatal(_) => written
+              loop(next)
+            else written
+          val written = loop(0)
           val psv: PSVec[A] =
             if written == n then PSVec.unsafeWrap[A](arr)
             else if written == 0 then PSVec.empty[A]

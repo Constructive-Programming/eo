@@ -1,5 +1,6 @@
 package dev.constructive.eo.avro
 
+import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import cats.data.{Chain, Ior}
@@ -291,17 +292,20 @@ private[avro] object AvroFocus:
     private def readFields(parent: IndexedRecord): Either[Chain[AvroFailure], IndexedRecord] =
       val parentSchema = parent.getSchema
       val sub = new GenericData.Record(ntSchema)
-      var chain = Chain.empty[AvroFailure]
-      var i = 0
-      while i < fieldNames.length do
-        val name = fieldNames(i)
-        val parentField = parentSchema.getField(name)
-        if parentField == null then chain = chain :+ AvroFailure.PathMissing(PathStep.Field(name))
+      @tailrec def loop(i: Int, chain: Chain[AvroFailure]): Chain[AvroFailure] =
+        if i >= fieldNames.length then chain
         else
-          // ntField is non-null for any selector the macro accepted.
-          val ntField = ntSchema.getField(name)
-          sub.put(ntField.pos, parent.get(parentField.pos))
-        i += 1
+          val name = fieldNames(i)
+          val parentField = parentSchema.getField(name)
+          val next =
+            if parentField == null then chain :+ AvroFailure.PathMissing(PathStep.Field(name))
+            else
+              // ntField is non-null for any selector the macro accepted.
+              val ntField = ntSchema.getField(name)
+              sub.put(ntField.pos, parent.get(parentField.pos))
+              chain
+          loop(i + 1, next)
+      val chain = loop(0, Chain.empty[AvroFailure])
       if chain.isEmpty then Right(sub) else Left(chain)
 
     /** Project selected fields out of `parent` for transform-shape ops; missing → `null`.
@@ -310,14 +314,15 @@ private[avro] object AvroFocus:
     private def buildSubRecord(parent: IndexedRecord): IndexedRecord =
       val parentSchema = parent.getSchema
       val sub = new GenericData.Record(ntSchema)
-      var i = 0
-      while i < fieldNames.length do
-        val name = fieldNames(i)
-        val parentField = parentSchema.getField(name)
-        val ntField = ntSchema.getField(name)
-        val value: Any = if parentField == null then null else parent.get(parentField.pos)
-        if ntField != null then sub.put(ntField.pos, value)
-        i += 1
+      @tailrec def loop(i: Int): Unit =
+        if i < fieldNames.length then
+          val name = fieldNames(i)
+          val parentField = parentSchema.getField(name)
+          val ntField = ntSchema.getField(name)
+          val value: Any = if parentField == null then null else parent.get(parentField.pos)
+          if ntField != null then sub.put(ntField.pos, value)
+          loop(i + 1)
+      loop(0)
       sub
 
     /** Overlay the encoder's output for `a` onto `parent`; encoders that omit a selected field

@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import scala.annotation.tailrec
+
 import cats.Eq
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
@@ -105,28 +107,31 @@ package object avro:
   private def avroRecordChildren(rec: IndexedRecord): PSVec[IndexedRecord] =
     val n = rec.getSchema.getFields.size
     val buf = collection.mutable.ArrayBuffer.empty[IndexedRecord]
-    var i = 0
-    while i < n do
-      rec.get(i) match
-        case child: IndexedRecord => buf += child
-        case _                    => ()
-      i += 1
+    @tailrec def loop(i: Int): Unit =
+      if i < n then
+        rec.get(i) match
+          case child: IndexedRecord => buf += child
+          case _                    => ()
+        loop(i + 1)
+    loop(0)
     PSVec.fromIterable(buf)
 
   private def avroRecordRebuild(rec: IndexedRecord, vec: PSVec[IndexedRecord]): IndexedRecord =
     val schema = rec.getSchema
     val n = schema.getFields.size
     val copy = new GenericData.Record(schema)
-    var i = 0
-    var k = 0
-    while i < n do
-      rec.get(i) match
-        case _: IndexedRecord =>
-          copy.put(i, vec(k))
-          k += 1
-        case other =>
-          copy.put(i, other)
-      i += 1
+    @tailrec def loop(i: Int, k: Int): Unit =
+      if i < n then
+        val nextK =
+          rec.get(i) match
+            case _: IndexedRecord =>
+              copy.put(i, vec(k))
+              k + 1
+            case other =>
+              copy.put(i, other)
+              k
+        loop(i + 1, nextK)
+    loop(0, 0)
     copy
 
 end avro
