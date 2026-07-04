@@ -70,6 +70,33 @@ object AvroPrismMacro:
   def unionImpl[A: Type, B: Type](
       parent: Expr[AvroPrism[A]]
   )(using q: Quotes): Expr[Any] =
+    val codecB = validateUnionBranch[A, B]("AvroPrism")
+    // Branch name resolved at runtime off the codec schema (robust against kindlings naming).
+    '{
+      val branchName: String = $codecB.schema.getFullName
+      $parent.widenPathUnion[B](branchName)(using $codecB)
+    }
+
+  /** Traversal counterpart to [[unionImpl]] — narrows the per-element focus to one union branch by
+    * appending a [[PathStep.UnionBranch]] to the suffix. Same validation as the prism path.
+    */
+  def unionTraversalImpl[A: Type, B: Type](
+      parent: Expr[AvroTraversal[A]]
+  )(using q: Quotes): Expr[Any] =
+    val codecB = validateUnionBranch[A, B]("AvroTraversal")
+    '{
+      val branchName: String = $codecB.schema.getFullName
+      $parent.widenSuffixUnion[B](branchName)(using $codecB)
+    }
+
+  /** Shared `.union[Branch]` validation for the prism and traversal paths. Confirms the parent
+    * focus `A` is a union-shaped type (`Option[T]`, sealed trait, or Scala 3 `enum`) with `B` as a
+    * valid alternative, rejects Scala 3 untagged unions, and summons `AvroCodec[B]`. `label` names
+    * the caller in diagnostics (`"AvroPrism"` / `"AvroTraversal"`).
+    */
+  private def validateUnionBranch[A: Type, B: Type](
+      label: String
+  )(using q: Quotes): Expr[AvroCodec[B]] =
     import quotes.reflect.*
 
     val aTpe = TypeRepr.of[A].dealias
@@ -79,7 +106,7 @@ object AvroPrismMacro:
     aTpe match
       case OrType(_, _) =>
         report.errorAndAbort(
-          s"AvroPrism.union[${Type.show[B]}]: parent focus ${Type
+          s"$label.union[${Type.show[B]}]: parent focus ${Type
               .show[A]} is a Scala 3 untagged union type; kindlings-avro-derivation does not"
             + " support these. Use a sealed trait, Scala 3 `enum`, or `Option[T]` instead."
         )
@@ -96,7 +123,7 @@ object AvroPrismMacro:
       case Some(elem) =>
         if !(bTpe =:= elem) then
           report.errorAndAbort(
-            s"AvroPrism.union[${Type.show[B]}]: parent focus is Option[${elem.show}];"
+            s"$label.union[${Type.show[B]}]: parent focus is Option[${elem.show}];"
               + s" the only valid branch is ${elem.show} (got ${Type.show[B]})."
           )
       case None =>
@@ -106,7 +133,7 @@ object AvroPrismMacro:
         val isEnum = aSym.flags.is(Flags.Enum)
         if !isSealed && !isEnum then
           report.errorAndAbort(
-            s"AvroPrism.union[${Type.show[B]}]: parent focus ${Type.show[A]} is not a union-shaped"
+            s"$label.union[${Type.show[B]}]: parent focus ${Type.show[A]} is not a union-shaped"
               + " type. Expected: a sealed trait, a Scala 3 `enum`, or `Option[T]`. Scala 3 untagged"
               + " union types (`A | B`) are not supported by kindlings."
           )
@@ -114,7 +141,7 @@ object AvroPrismMacro:
         val children: List[Symbol] = aSym.children
         if children.isEmpty then
           report.errorAndAbort(
-            s"AvroPrism.union[${Type.show[B]}]: ${Type.show[A]} has no direct children;"
+            s"$label.union[${Type.show[B]}]: ${Type.show[A]} has no direct children;"
               + " cannot resolve a union alternative."
           )
 
@@ -123,20 +150,15 @@ object AvroPrismMacro:
         if !matched then
           val knownNames = children.map(_.name).mkString(", ")
           report.errorAndAbort(
-            s"AvroPrism.union[${Type.show[B]}]: ${Type.show[B]} is not a known alternative"
+            s"$label.union[${Type.show[B]}]: ${Type.show[B]} is not a known alternative"
               + s" of ${Type.show[A]}. Known alternatives: $knownNames."
           )
 
-    val codecB = summonCodec[B](
-      s"AvroPrism.union[${Type.show[B]}]: no given AvroCodec[${Type.show[B]}] in scope."
+    summonCodec[B](
+      s"$label.union[${Type.show[B]}]: no given AvroCodec[${Type.show[B]}] in scope."
         + s" Derive one via `given AvroCodec[${Type.show[B]}] = AvroCodec.derived` (which"
         + " auto-summons kindlings' AvroEncoder / AvroDecoder / AvroSchemaFor)."
     )
-    // Branch name resolved at runtime off the codec schema (robust against kindlings naming).
-    '{
-      val branchName: String = $codecB.schema.getFullName
-      $parent.widenPathUnion[B](branchName)(using $codecB)
-    }
 
   /** `.each` — emits `toTraversal[B]` over `A`'s element type. */
   def eachImpl[A: Type](

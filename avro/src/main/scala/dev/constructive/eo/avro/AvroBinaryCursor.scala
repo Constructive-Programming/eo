@@ -201,10 +201,9 @@ private[avro] object AvroBinaryCursor:
           enc match
             case Some(newBytes) =>
               out.write(bytes, e.start, f.fieldStart - e.start)
-              // Defensive mirror of spliceAll's index re-synthesis: element foci come only from
-              // field/at/fields suffixes (never a UnionBranch step, since AvroTraversal has no
-              // .union), so branchOrdinal is always None here today. Kept so a future per-element
-              // .union extension is correct by construction rather than a fresh bug.
+              // Re-synthesise the requested union branch index when the element focus is a
+              // `.each.union[B]` branch (branchOrdinal = Some) — mirrors spliceAll. For a leaf /
+              // fields element focus branchOrdinal is None and this is a no-op.
               f.branchOrdinal.foreach { o =>
                 val idx = zigZagInt(o)
                 out.write(idx, 0, idx.length)

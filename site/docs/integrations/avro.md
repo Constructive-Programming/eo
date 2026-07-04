@@ -158,8 +158,12 @@ walker accumulates `IndexOutOfRange` / `NotAnArray` /
 
 `.each` splits the path at the current array focus and returns
 an `AvroTraversal` that walks every element. Further `.field` /
-`.at` / selectable-sugar calls on the traversal extend the
-per-element suffix. Like the prism, the traversal is byte-carried
+`.at` / `.union[Branch]` / `.fields(...)` / selectable-sugar
+calls on the traversal extend the per-element suffix — the same
+drill surface as the prism, applied per element (e.g.
+`entries.each.union[Cash]` narrows every element to its `Cash`
+branch, folding the ones that are `Cash` and leaving the rest).
+Like the prism, the traversal is byte-carried
 by default — `.foldMap` / `.modify` operate on `Array[Byte]`
 directly, splicing every element's focus in one pass — and `.record`
 flips to the record-carried Ior surface:

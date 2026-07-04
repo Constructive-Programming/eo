@@ -171,22 +171,52 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     byteOk.and(recOk)
   }
 
-  // covers: reframe of an array whose ELEMENTS are unions (List[Payment]) on blocked framing —
-  //   each element's opaque index+value bytes are decoded/re-encoded whole via the branch codec
-  //   and rebuilt into a canonical block. (Per-element `.union[B]` narrowing is not an
-  //   AvroTraversal extension, so the element-level branch-index re-synthesis in reframeArray is
-  //   unreachable via the public API and stays as a defensive mirror of spliceAll.)
-  "byte-face .each on a union-element array under blocked framing: reframe applies per element" >> {
+  // covers: per-element .each.union[Branch] — narrows every element to one union alternative,
+  //   folding the elements that ARE that branch and leaving the others untouched. Exercises the
+  //   element-level branch-index re-synthesis in reframeArray under blocked framing (canonical
+  //   framing goes through spliceAll's index re-synth, already covered by graft tests).
+  "byte-face .each.union[Branch] on blocked framing: per-element branch focus reframes" >> {
     val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
     val blocked = toBlockedBinary(ledgerRecord(ledger), ledgerSchema)
-    val T = codecPrism[Ledger].field(_.entries).each
-    val out = T.modify {
-      case Cash(a) => Cash(a + 1L)
-      case Card(n) => Card(n.reverse)
-    }(blocked)
-    codecPrism[Ledger].getOption(out) === Some(
-      Ledger("ann", List(Cash(101L), Card("1114"), Cash(251L)))
+    val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
+
+    // Read: only the Cash-branch elements fold in, in order.
+    val readOk = cashT.foldMap(List(_))(blocked) === List(Cash(100L), Cash(250L))
+    // Write: Cash elements bumped, the Card element rides through untouched.
+    val out = cashT.modify(c => Cash(c.amount + 1L))(blocked)
+    val writeOk = codecPrism[Ledger].getOption(out) === Some(
+      Ledger("ann", List(Cash(101L), Card("4111"), Cash(251L)))
     )
+    readOk.and(writeOk)
+  }
+
+  // covers: .each.union[Branch] on canonical framing too — the spliceAll index re-synth path for
+  //   per-element union foci
+  "byte-face .each.union[Branch] on canonical framing: per-element branch focus splices" >> {
+    val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
+    val bytes = toBinary(ledgerRecord(ledger), ledgerSchema)
+    val out = codecPrism[Ledger]
+      .field(_.entries)
+      .each
+      .union[Cash]
+      .modify(c => Cash(c.amount * 2))(
+        bytes
+      )
+    codecPrism[Ledger].getOption(out) === Some(
+      Ledger("ann", List(Cash(200L), Card("4111"), Cash(500L)))
+    )
+  }
+
+  // covers: .each.union[Branch] on the RECORD face — the same per-element branch narrowing
+  //   through the parsed walk (Ior surface), Cash elements modified, Card untouched
+  ".each.union[Branch] record face: per-element branch modify, non-branch elements ride through" >> {
+    val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
+    val rec = ledgerRecord(ledger)
+    val T = codecPrism[Ledger].field(_.entries).each.union[Cash].record
+    T.modifyUnsafe(c => Cash(c.amount + 5L))(rec) match
+      case out: IndexedRecord =>
+        codecPrism[Ledger].getOption(toBinary(out.asInstanceOf[GenericRecord], ledgerSchema)) ===
+          Some(Ledger("ann", List(Cash(105L), Card("4111"), Cash(255L))))
   }
 
   // covers: Long.MinValue block count (negates to itself) is a structured parse failure, not a

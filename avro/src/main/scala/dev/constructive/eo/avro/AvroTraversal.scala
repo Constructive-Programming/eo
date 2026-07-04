@@ -35,8 +35,8 @@ import org.apache.avro.Schema
   *
   * The record-carried face — the Ior-bearing `modify` / `getAll` / `place` / `transfer` surface
   * over `IndexedRecord | Array[Byte] | String` input — lives behind ONE factory: [[record]]
-  * ([[AvroRecordTraversal]]). Drilling (`.field` / `.at` / `.fields` / Dynamic selection) stays
-  * here, the single mechanism; drill first, flip last.
+  * ([[AvroRecordTraversal]]). Drilling (`.field` / `.at` / `.union[Branch]` / `.fields` / Dynamic
+  * selection) stays here, the single mechanism; drill first, flip last.
   *
   * The Fields-vs-Leaf split lives entirely inside `focus` (per [[AvroFocus]]); the compatibility
   * alias [[AvroFieldsTraversal]] points back here.
@@ -152,6 +152,12 @@ final class AvroTraversal[A] private[avro] (
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
     widenSuffixStep[B](PathStep.Index(i))
 
+  /** Extend the per-element suffix by a union-branch step. Used by `.union[Branch]`. */
+  private[avro] def widenSuffixUnion[B](
+      branchName: String
+  )(using codecB: AvroCodec[B]): AvroTraversal[B] =
+    widenSuffixStep[B](PathStep.UnionBranch(branchName))
+
   private def widenSuffixStep[B](
       step: PathStep
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
@@ -190,6 +196,12 @@ object AvroTraversal:
 
     transparent inline def at(i: Int): Any =
       ${ AvroPrismMacro.atTraversalImpl[A]('t, 'i) }
+
+  /** `.union[Branch]` — narrow the per-element focus to one union alternative. */
+  extension [A](t: AvroTraversal[A])
+
+    transparent inline def union[Branch]: Any =
+      ${ AvroPrismMacro.unionTraversalImpl[A, Branch]('t) }
 
   /** `.fields(_.a, _.b, ...)` — focus a NamedTuple per element. */
   extension [A](t: AvroTraversal[A])
