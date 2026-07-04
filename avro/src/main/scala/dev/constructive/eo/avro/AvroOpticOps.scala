@@ -85,6 +85,57 @@ private[avro] trait AvroOpticOps[A]:
   ): (IndexedRecord | Array[Byte] | String) => C => Ior[Chain[AvroFailure], IndexedRecord] =
     input => c => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, f(c)))
 
+  // ---- Bytes-out surface ---------------------------------------------
+  //
+  // Same optics, but the carrier stays Array[Byte] on BOTH ends: parse (binary) → per-record hook
+  // → re-encode under the root schema. Phase 1 of the zero-copy plan — the modify path still
+  // parses to IndexedRecord internally; only the output side skips the caller-side encode dance.
+
+  /** Bytes-in / bytes-out counterpart to [[modify]]: parse `bytes` as Avro binary under the root
+    * schema, apply `f` at the focus, and re-encode. Parse failures surface as
+    * [[AvroFailure.BinaryParseFailed]], walk / decode failures as in [[modify]], and re-encode
+    * failures as [[AvroFailure.BinaryEncodeFailed]]. Partial success (`Ior.Both`) carries the
+    * re-encoding of whatever record the modify hook preserved — byte-identical to the input for a
+    * conformant writer's payload, since Avro binary encoding is deterministic.
+    */
+  def modifyBytes(bytes: Array[Byte])(f: A => A): Ior[Chain[AvroFailure], Array[Byte]] =
+    AvroFailure
+      .parseInputIor(bytes, rootSchema)
+      .flatMap(r => modifyIor(r, f))
+      .flatMap(encodeBinaryIor)
+
+  /** Silent counterpart to [[modifyBytes]] — input bytes pass through unchanged on any parse / walk
+    * / decode / encode failure.
+    */
+  def modifyBytesUnsafe(bytes: Array[Byte])(f: A => A): Array[Byte] =
+    AvroFailure
+      .encodeBinary(modifyImpl(AvroFailure.parseInputUnsafe(bytes, rootSchema), f), rootSchema)
+      .getOrElse(bytes)
+
+  /** Bytes-in / bytes-out counterpart to [[place]]: parse, replace the focused value with `a`,
+    * re-encode. Same failure surface as [[modifyBytes]].
+    */
+  def placeBytes(bytes: Array[Byte], a: A): Ior[Chain[AvroFailure], Array[Byte]] =
+    AvroFailure
+      .parseInputIor(bytes, rootSchema)
+      .flatMap(r => placeIor(r, a))
+      .flatMap(encodeBinaryIor)
+
+  /** Silent counterpart to [[placeBytes]] — input bytes pass through unchanged on any failure. */
+  def placeBytesUnsafe(bytes: Array[Byte], a: A): Array[Byte] =
+    AvroFailure
+      .encodeBinary(placeImpl(AvroFailure.parseInputUnsafe(bytes, rootSchema), a), rootSchema)
+      .getOrElse(bytes)
+
+  /** Re-encode step shared by the Ior-bearing bytes-out surface — lifts
+    * [[AvroFailure.encodeBinary]]'s `Either` into the Ior channel as
+    * [[AvroFailure.BinaryEncodeFailed]].
+    */
+  private def encodeBinaryIor(record: IndexedRecord): Ior[Chain[AvroFailure], Array[Byte]] =
+    AvroFailure.encodeBinary(record, rootSchema) match
+      case Right(bs) => Ior.Right(bs)
+      case Left(t)   => Ior.Left(Chain.one(AvroFailure.BinaryEncodeFailed(t)))
+
   // ---- *Unsafe (silent) escape hatches -------------------------------
 
   /** Silent counterpart to [[modify]] — input pass-through on any failure. */

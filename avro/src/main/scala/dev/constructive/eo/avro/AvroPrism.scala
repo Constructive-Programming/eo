@@ -128,6 +128,100 @@ final class AvroPrism[A] private[avro] (
   override protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
     focus.placeImpl(record, a)
 
+  // ---- Byte-span surface (slice / graft) -----------------------------
+  //
+  // Locates the focused field's encoded byte span directly in the binary payload (no
+  // IndexedRecord materialised — see AvroBinaryCursor) so the encoded fragment can be hashed,
+  // passed around, and spliced into another payload without a decode/re-encode round-trip.
+
+  /** Slice the focused field's encoded value bytes out of a binary payload.
+    *
+    * The returned [[AvroFragment]] carries the value bytes (union branch index STRIPPED when the
+    * prism focuses a union branch), the resolved field / branch schema, and the branch ordinal. The
+    * runtime branch must match the prism's focused branch — a payload sitting on a different branch
+    * surfaces [[AvroFailure.UnionResolutionFailed]].
+    *
+    * Array-index steps are unsupported ([[AvroFailure.UnsupportedSpanStep]]); for a `.fields(...)`
+    * prism the span addressed is the PARENT record enclosing the selected fields (the selected
+    * fields themselves are not contiguous).
+    */
+  def sliceBytes(bytes: Array[Byte]): Ior[Chain[AvroFailure], AvroFragment] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
+      case Left(failure) => Ior.Left(Chain.one(failure))
+      case Right(span)   =>
+        Ior.Right(
+          AvroFragment(
+            java.util.Arrays.copyOfRange(bytes, span.valueStart, span.end),
+            span.valueSchema,
+            span.branchOrdinal,
+          )
+        )
+
+  /** Silent counterpart to [[sliceBytes]] — `None` on any failure. */
+  def sliceBytesUnsafe(bytes: Array[Byte]): Option[AvroFragment] =
+    AvroBinaryCursor
+      .locate(bytes, rootSchemaCached, path, strictTerminalUnion = true)
+      .toOption
+      .map(span =>
+        AvroFragment(
+          java.util.Arrays.copyOfRange(bytes, span.valueStart, span.end),
+          span.valueSchema,
+          span.branchOrdinal,
+        )
+      )
+
+  /** Graft an encoded fragment into a binary payload at the focused field — splice bytes in place
+    * of the field's current encoding, decode-free: prefix copy + (when the prism focuses a union
+    * branch: the zigzag-encoded index of the prism's focused branch, re-synthesised from the path —
+    * the payload's current branch is discarded, so grafting can SWITCH branches) + the fragment
+    * bytes + suffix copy.
+    *
+    * '''NO SCHEMA VALIDATION.''' The fragment bytes are spliced verbatim — this method does NOT
+    * check that `fragment` is a valid encoding of the focused field's schema. A fragment encoded
+    * under a different (or drifted) schema produces a payload that is silently corrupt until
+    * something decodes it. The caller owns schema-fingerprint checks (compare the writer schema /
+    * Confluent schema id of the fragment's source against the receiving field's schema) BEFORE
+    * grafting.
+    */
+  def graftBytes(
+      bytes: Array[Byte],
+      fragment: Array[Byte],
+  ): Ior[Chain[AvroFailure], Array[Byte]] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
+      case Left(failure) => Ior.Left(Chain.one(failure))
+      case Right(span)   => Ior.Right(splice(bytes, span, fragment))
+
+  /** Silent counterpart to [[graftBytes]] — input bytes pass through unchanged on any failure. Same
+    * NO-SCHEMA-VALIDATION caveat as [[graftBytes]].
+    */
+  def graftBytesUnsafe(bytes: Array[Byte], fragment: Array[Byte]): Array[Byte] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
+      case Left(_)     => bytes
+      case Right(span) => splice(bytes, span, fragment)
+
+  /** Assemble prefix + (synthesised branch index) + fragment + suffix. */
+  private def splice(
+      bytes: Array[Byte],
+      span: AvroBinaryCursor.BinarySpan,
+      fragment: Array[Byte],
+  ): Array[Byte] =
+    val index = span.branchOrdinal match
+      case Some(ordinal) => AvroBinaryCursor.zigZagInt(ordinal)
+      case None          => Array.emptyByteArray
+    val suffixLen = bytes.length - span.end
+    val out = new Array[Byte](span.fieldStart + index.length + fragment.length + suffixLen)
+    System.arraycopy(bytes, 0, out, 0, span.fieldStart)
+    System.arraycopy(index, 0, out, span.fieldStart, index.length)
+    System.arraycopy(fragment, 0, out, span.fieldStart + index.length, fragment.length)
+    System.arraycopy(
+      bytes,
+      span.end,
+      out,
+      span.fieldStart + index.length + fragment.length,
+      suffixLen,
+    )
+    out
+
   // ---- Path widening (used by macro extensions) ---------------------
 
   /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. */

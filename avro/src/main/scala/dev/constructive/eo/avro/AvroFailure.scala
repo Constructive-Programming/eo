@@ -4,10 +4,15 @@ import scala.util.control.NonFatal
 
 import cats.Eq
 import cats.data.{Chain, Ior}
-import java.io.ByteArrayInputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
-import org.apache.avro.io.DecoderFactory
+import org.apache.avro.generic.{
+  GenericDatumReader,
+  GenericDatumWriter,
+  GenericRecord,
+  IndexedRecord,
+}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 /** Structured failure surfaced by the default Ior-bearing surface of [[AvroPrism]].
   *
@@ -70,6 +75,29 @@ enum AvroFailure:
     */
   case BadEnumSymbol(symbol: String, valid: List[String], step: PathStep)
 
+  /** Modified / placed record didn't re-encode as Avro binary under the prism's root schema.
+    * Surfaced only by the bytes-out surface (`modifyBytes` / `placeBytes`) — the encode mirror of
+    * [[BinaryParseFailed]]. The wrapped [[Throwable]] is whatever apache-avro's
+    * `GenericDatumWriter` threw — typically a `NullPointerException` for a `null` in a non-nullable
+    * slot or an `AvroTypeException` / `ClassCastException` for a runtime value that doesn't line up
+    * with the schema.
+    */
+  case BinaryEncodeFailed(cause: Throwable)
+
+  /** The byte-offset locator ([[AvroBinaryCursor]]) reached a [[PathStep]] kind it cannot resolve
+    * to a byte span — currently [[PathStep.Index]]: array elements sit inside length-prefixed
+    * blocks, so a single element's span is not graftable without rewriting the block framing.
+    * Surfaced only by `sliceBytes` / `graftBytes`; the decode-based surfaces (`get` / `modify` /
+    * `at`) keep supporting Index steps.
+    */
+  case UnsupportedSpanStep(step: PathStep)
+
+  /** Input bytes are not a Confluent-framed payload — shorter than the 5-byte header, or the magic
+    * byte isn't `0x00`. Surfaced only by [[ConfluentWire.strip]]; `reason` names the specific check
+    * that refused.
+    */
+  case NotConfluentFramed(reason: String)
+
   /** Human-readable diagnostic. Kept separate from `toString` so the default enum representation
     * remains useful for structural inspection / pattern-matching-in-tests.
     */
@@ -85,6 +113,9 @@ enum AvroFailure:
       s"union resolution failed at $s (branches: ${b.mkString(", ")})"
     case BadEnumSymbol(sym, valid, s) =>
       s"bad enum symbol '$sym' at $s (valid: ${valid.mkString(", ")})"
+    case BinaryEncodeFailed(c)  => s"record didn't encode as Avro binary: ${c.getMessage}"
+    case UnsupportedSpanStep(s) => s"byte-span location unsupported at $s"
+    case NotConfluentFramed(r)  => s"not a Confluent-framed payload: $r"
 
 object AvroFailure:
 
@@ -176,6 +207,29 @@ object AvroFailure:
       val reader = new GenericDatumReader[GenericRecord](schema)
       val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
       Right(reader.read(null, decoder))
+    catch case NonFatal(t) => Left(t)
+
+  /** Encode mirror of [[decodeBinary]] — serialise a parsed [[IndexedRecord]] back to its Avro
+    * binary wire form under the supplied schema, via apache-avro's `GenericDatumWriter` +
+    * `EncoderFactory.binaryEncoder`. Backs the bytes-out surface on [[AvroOpticOps]] (`modifyBytes`
+    * / `placeBytes`); write failures surface as [[AvroFailure.BinaryEncodeFailed]] at those call
+    * sites.
+    *
+    * Avro's binary encoding is deterministic for a given (record, schema) pair, so
+    * `encodeBinary(decodeBinary(bytes)) == bytes` byte-for-byte for any payload produced by a
+    * conformant writer — the property the graft/passthrough tests lean on.
+    */
+  private[avro] def encodeBinary(
+      record: IndexedRecord,
+      schema: Schema,
+  ): Either[Throwable, Array[Byte]] =
+    try
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[IndexedRecord](schema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      writer.write(record, encoder)
+      encoder.flush()
+      Right(out.toByteArray)
     catch case NonFatal(t) => Left(t)
 
   /** Use apache-avro's `JsonDecoder` to parse the Avro JSON wire format. Same boundary semantics as
