@@ -36,7 +36,7 @@ object DomainAvro:
   val codec: AvroCodec[Order] = summon[AvroCodec[Order]]
 
   /** depth-3 scalar `customer.address.street`. */
-  val streetPrism = codecPrism[Order].field(_.customer).field(_.address).field(_.street)
+  val streetPrism = codecPrism[Order].field(_.customer).field(_.address).field(_.street).record
 
   /** array write traversal `lines[*].name`. */
   val namesTraversal = codecPrism[Order].lines.each.name

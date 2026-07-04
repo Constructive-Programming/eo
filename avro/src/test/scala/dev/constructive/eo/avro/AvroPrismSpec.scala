@@ -9,8 +9,8 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Behaviour spec for [[AvroPrism]] — the cursor-backed Prism from `IndexedRecord` to a native
-  * type, with field-drilling sugar.
+/** Behaviour spec for [[AvroPrism]]'s record face ([[AvroRecordPrism]], via `.record`) — the
+  * cursor-backed Prism from `IndexedRecord` to a native type, with field-drilling sugar.
   *
   * Mirrors the post-consolidation `JsonPrismSpec`: one block per macro shape, default ↔ Unsafe
   * parity invariant. ScalaCheck `forAll` over a `Person` generator hits both surfaces with one
@@ -42,15 +42,17 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       val record = personRecord(p)
       val expected = personRecord(p.copy(name = p.name.toUpperCase))
       val unsafe = codecPrism[Person]
+        .record
         .modifyUnsafe((q: Person) => q.copy(name = q.name.toUpperCase))(record)
       val default = codecPrism[Person]
+        .record
         .modify((q: Person) => q.copy(name = q.name.toUpperCase))(record)
 
       val parity = default match
         case Ior.Right(out) => recordsEqual(out, unsafe)
         case _              => false
       val correctness = recordsEqual(unsafe, expected)
-      val getOk = codecPrism[Person].get(record) match
+      val getOk = codecPrism[Person].record.get(record) match
         case Ior.Right(p2) => p2 == p
         case _             => false
 
@@ -78,7 +80,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
         "name" -> "Alice",
         "age" -> "thirty",
       )
-      val pPrism = codecPrism[Person](personSchema)
+      val pPrism = codecPrism[Person](personSchema).record
       val violGetOk = pPrism.get(viol) match
         case Ior.Left(chain) => chain.headOption.exists(_.isInstanceOf[AvroFailure.DecodeFailed])
         case _               => false
@@ -102,7 +104,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
   //   getOptionUnsafe on missing-path returns None
   "field(_.name): happy modify (parity) + sibling preservation + missing-path PathMissing" >> forAll {
     (p: Person) =>
-      val nameL = codecPrism[Person].field(_.name)
+      val nameL = codecPrism[Person].field(_.name).record
       val record = personRecord(p)
       val mFn: String => String = _ + "-x"
       val expected = personRecord(p.copy(name = p.name + "-x"))
@@ -134,7 +136,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
         )
         org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
       val partial = buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30))
-      val nameLfix = codecPrism[Person](personSchema).field(_.name)
+      val nameLfix = codecPrism[Person](personSchema).field(_.name).record
 
       val missGetOk = nameLfix.get(partial) match
         case Ior.Left(chain) =>
@@ -152,8 +154,8 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       // ---- selectDynamic sugar parity (absorbed standalone test) ----
       // covers: codecPrism[Person].name behaves identically to .field(_.name),
       //   getOptionUnsafe through sugar, placeUnsafe / place(default) / transfer surfaces
-      val sugared = codecPrism[Person].name
-      val explicit = codecPrism[Person].field(_.name)
+      val sugared = codecPrism[Person].name.record
+      val explicit = codecPrism[Person].field(_.name).record
       val sugarFn: String => String = _.toUpperCase
       val sugarParityModify = recordsEqual(
         sugared.modifyUnsafe(sugarFn)(record),
@@ -191,7 +193,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
   "Binary + JSON dual-input surfaces: parse + modify, bad input surfaces *ParseFailed" >> {
     val p = Person("Alice", 30)
     val record = personRecord(p)
-    val nameL = codecPrism[Person].field(_.name)
+    val nameL = codecPrism[Person].field(_.name).record
 
     val goodBytes = toBinary(record, personSchema)
     val badBytes: Array[Byte] = Array(0.toByte)

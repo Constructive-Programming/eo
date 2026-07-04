@@ -6,7 +6,8 @@ import java.io.InputStream
 import org.apache.avro.Schema
 import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory}
 
-/** Internal byte-offset locator for the slice/graft surface on [[AvroPrism]].
+/** Internal byte-offset locator behind [[AvroPrism]]'s byte-carried optic (`to`/`from`) and its
+  * slice/graft surface.
   *
   * Given the binary encoding of a record under `rootSchema`, [[locate]] resolves an optic path to
   * the byte span `[fieldStart, end)` of the focused field's encoded value — WITHOUT materialising
@@ -19,9 +20,8 @@ import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory}
   * `graftBytes` lives here — [[PathStep.Field]] descent through records and
   * [[PathStep.UnionBranch]] resolution. [[PathStep.Index]] is deliberately unsupported (array
   * elements sit inside length-prefixed blocks whose framing a graft would have to rewrite) and
-  * surfaces as [[AvroFailure.UnsupportedSpanStep]]. A full byte-native read surface (no
-  * `IndexedRecord` at all) is a later project; the read/modify path keeps parsing to
-  * `IndexedRecord`.
+  * surfaces as [[AvroFailure.UnsupportedSpanStep]] — the byte optic Misses on such paths; the
+  * record face (`.record`) keeps supporting Index steps through the parsed walk.
   *
   * Every failure is structured ([[AvroFailure]]), never thrown: truncated / malformed bytes arrive
   * as [[AvroFailure.BinaryParseFailed]], schema misses as [[AvroFailure.PathMissing]] /

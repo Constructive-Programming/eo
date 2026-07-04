@@ -31,7 +31,6 @@ class AvroFailureSpec extends Specification:
   //   JsonParseFailed constructible w/ "Avro JSON" tag + wrapped cause message,
   //   UnionResolutionFailed constructible w/ "union resolution" + alternatives in message,
   //   BadEnumSymbol constructible w/ invalid symbol + valid-set listing in message,
-  //   BinaryEncodeFailed constructible w/ "encode" tag + wrapped cause message,
   //   UnsupportedSpanStep constructible w/ "byte-span" tag + step identifier,
   //   NotConfluentFramed constructible w/ "Confluent" tag + reason text
   "AvroFailure: every case constructible + message contains its diagnostic anchors" >> {
@@ -74,10 +73,6 @@ class AvroFailureSpec extends Specification:
       AvroFailure.BadEnumSymbol("MAGENTA", List("RED", "GREEN", "BLUE"), PathStep.Field("color"))
     val beOk = (be.message must contain("MAGENTA")).and(be.message must contain("RED"))
 
-    val eCause = new RuntimeException("null of string in field name")
-    val ef: AvroFailure = AvroFailure.BinaryEncodeFailed(eCause)
-    val efOk = (ef.message must contain("encode")).and(ef.message must contain(eCause.getMessage))
-
     val us: AvroFailure = AvroFailure.UnsupportedSpanStep(PathStep.Index(2))
     val usOk = (us.message must contain("byte-span")).and(us.message must contain("Index(2)"))
 
@@ -93,7 +88,6 @@ class AvroFailureSpec extends Specification:
       .and(jfOk)
       .and(urOk)
       .and(beOk)
-      .and(efOk)
       .and(usOk)
       .and(cfOk)
   }

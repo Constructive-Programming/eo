@@ -23,14 +23,18 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   *
   *   val personPrism: AvroPrism[Person]   = codecPrism[Person]
   *   val namePrism:   AvroPrism[String]   = personPrism.field(_.name)
-  *   namePrism.modify(_.toUpperCase)(record)
-  *   // → the same IndexedRecord, with `name` upper-cased — no Person
-  *   //   ever materialised at intermediate steps.
+  *   namePrism.modify(_.toUpperCase)(payloadBytes)
+  *   // → the same Array[Byte] payload, with `name` upper-cased in
+  *   //   place — no Person (and no IndexedRecord) ever materialised.
+  *   namePrism.record.modify(_.toUpperCase)(record)
+  *   // → the IndexedRecord-carried face, with Ior diagnostics.
   * }}}
   *
-  * Mirrors `dev.constructive.eo.circe`'s architecture decisions on `Json` for the Avro carrier:
-  * `IndexedRecord` plays the role of `Json`, [[AvroCodec]] plays the role of
-  * `(io.circe.Encoder[A], io.circe.Decoder[A])`, and `AvroFailure` plays the role of `JsonFailure`.
+  * The default carrier is the binary wire form itself (`Array[Byte]`, mirroring
+  * `dev.constructive.eo.jsoniter.JsoniterPrism`); the record-carried face behind `.record` mirrors
+  * `dev.constructive.eo.circe`'s architecture decisions on `Json`: `IndexedRecord` plays the role
+  * of `Json`, [[AvroCodec]] plays the role of `(io.circe.Encoder[A], io.circe.Decoder[A])`, and
+  * `AvroFailure` plays the role of `JsonFailure`.
   *
   * '''Gap-1 (per the eo-avro plan).''' [[PathStep]] is duplicated, not shared with eo-circe — the
   * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. The

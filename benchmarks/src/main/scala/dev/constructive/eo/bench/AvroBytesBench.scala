@@ -7,6 +7,7 @@ import org.openjdk.jmh.annotations.*
 import java.util.concurrent.TimeUnit
 
 import dev.constructive.eo.bench.fixture.*
+import dev.constructive.eo.optics.Optic.*
 
 /** Bytes-in/bytes-out avro bench (zero-copy plan, Phase 1) over CONVERSION-SHAPED fixtures — a
   * 7-field envelope with a mid-record union payload and an 18-field record with nested sub-records
@@ -16,9 +17,9 @@ import dev.constructive.eo.bench.fixture.*
   *
   *   - `naive*` — full codec round-trip: bytes → `GenericRecord` → kindlings case class, access /
   *     `copy`, re-encode. What a conventional consumer/producer pair does today.
-  *   - `eo*` — eo-avro record-rebuild: `AvroPrism.getOptionUnsafe(bytes)` for reads (parse +
-  *     partial walk, no native materialisation of unrelated fields), `modifyBytesUnsafe` for writes
-  *     (parse → focused rebuild → re-encode).
+  *   - `eo*` — the eo-avro byte-carried optic (the AvroPrism default): `.getOption(bytes)` for
+  *     reads (offset walk + slice decode, no record materialised), `.modify` for writes (offset
+  *     walk + re-encode focus + 3-arraycopy splice).
   *   - `pruned*` (read only) — stock apache-avro projection: `GenericDatumReader` with a PRUNED
   *     reader schema carrying only the focused field, so schema resolution skips the rest. The
   *     no-new-library baseline.
@@ -65,7 +66,7 @@ class AvroBytesBench extends JmhDefaults:
     decodeEnvelope(envelopeBytes).partnerId
 
   @Benchmark def eoReadPartner: Option[String] =
-    partnerPrism.getOptionUnsafe(envelopeBytes)
+    partnerPrism.getOption(envelopeBytes)
 
   @Benchmark def prunedReadPartner: AnyRef =
     toRecord(envelopeBytes, envelopeSchema, prunedPartnerSchema).get("partnerId")
@@ -77,7 +78,7 @@ class AvroBytesBench extends JmhDefaults:
     encodeEnvelope(e.copy(partnerId = e.partnerId.toUpperCase))
 
   @Benchmark def eoModifyPartner: Array[Byte] =
-    partnerPrism.modifyBytesUnsafe(envelopeBytes)(_.toUpperCase)
+    partnerPrism.modify(_.toUpperCase)(envelopeBytes)
 
   // ---- wide record: read country (field 11 of 18) --------------------
 
@@ -85,7 +86,7 @@ class AvroBytesBench extends JmhDefaults:
     decodeWide(wideBytes).country
 
   @Benchmark def eoReadCountry: Option[String] =
-    countryPrism.getOptionUnsafe(wideBytes)
+    countryPrism.getOption(wideBytes)
 
   @Benchmark def prunedReadCountry: AnyRef =
     toRecord(wideBytes, wideSchema, prunedCountrySchema).get("country")
@@ -97,7 +98,7 @@ class AvroBytesBench extends JmhDefaults:
     encodeWide(w.copy(country = w.country.toUpperCase))
 
   @Benchmark def eoModifyCountry: Array[Byte] =
-    countryPrism.modifyBytesUnsafe(wideBytes)(_.toUpperCase)
+    countryPrism.modify(_.toUpperCase)(wideBytes)
 
   // ---- graft: splice the payload fragment into the output envelope ---
 

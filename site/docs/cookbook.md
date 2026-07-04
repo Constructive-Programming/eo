@@ -1005,17 +1005,18 @@ service boundaries.
 **Why:** a Kafka consumer gets an `Array[Byte]` payload, needs to
 change one field, and re-emits binary on the producer side — on a
 hot path where decoding the whole record into a case-class tree per
-message is pure overhead. The `AvroPrism` triple-input surface
-takes the `Array[Byte]` directly, parses it through apache-avro's
-`BinaryDecoder` under a cached reader schema, and threads the modify
-back through without ever materialising the full tree:
+message is pure overhead. `AvroPrism` IS a byte-carried optic
+(`Optic[Array[Byte], Array[Byte], A, A, Affine]`): it locates the
+focused field's byte span under a cached reader schema, decodes
+only that slice, and writes by splicing the re-encoded focus back
+into the payload — no `IndexedRecord` materialised on either side:
 
 ```scala mdoc:silent
 import dev.constructive.eo.avro as eoavro
 import dev.constructive.eo.avro.AvroCodec
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
-import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, IndexedRecord}
+import org.apache.avro.generic.{GenericDatumWriter, GenericRecord}
 import org.apache.avro.io.EncoderFactory
 
 case class OrderEvent(orderId: String, customer: String, total: Double)
@@ -1042,44 +1043,32 @@ val sampleBytes: Array[Byte] =
 // `codecPrism` from the circe one imported earlier in this page
 // by qualifying through the `eoavro` alias.
 val upperCustomer = eoavro.codecPrism[OrderEvent].customer
-
-// Re-serialise the modified IndexedRecord back to binary for the
-// producer side. In a real consumer this lives in your sink.
-def toBinary(rec: IndexedRecord): Array[Byte] =
-  val out = new ByteArrayOutputStream()
-  val encoder = EncoderFactory.get().binaryEncoder(out, null)
-  val writer = new GenericDatumWriter[GenericRecord](rec.getSchema)
-  writer.write(rec.asInstanceOf[GenericRecord], encoder)
-  encoder.flush()
-  out.toByteArray
 ```
 
 ```scala mdoc
-// Kafka hot path: bytes in → modify in place → bytes out.
+// Kafka hot path: bytes in → splice in place → bytes out. No
+// re-serialisation step — the prism's write side IS the emit path.
 val outBytes: Array[Byte] =
-  toBinary(upperCustomer.modifyUnsafe(_.toUpperCase)(sampleBytes))
+  upperCustomer.modify(_.toUpperCase)(sampleBytes)
 
 // Round-trip witness — decode the output to confirm the customer
 // field changed and the rest is preserved.
-val outRec = upperCustomer
-  .modifyUnsafe(_.toUpperCase)(sampleBytes)
-  .asInstanceOf[GenericRecord]
-(outRec.get("customer").toString,
- outRec.get("orderId").toString,
- outRec.get("total"))
+(upperCustomer.getOption(outBytes),
+ eoavro.codecPrism[OrderEvent].getOption(outBytes))
 ```
 
-`modifyUnsafe` is the silent-pass-through variant — bad bytes,
-missing fields, or decode mismatches leave the input bytes
-unmodified rather than allocating an `Ior` chain. That matches
-the Kafka consumer budget: at-least-once delivery already
-implies the consumer must be tolerant of malformed payloads at
-the offset commit boundary, and the per-record allocation cost
-of `Ior` is a tax on the happy path. When you DO want the
-diagnostic — for a dead-letter queue, say — the default
-`.modify(...)` call returns
-`Ior[Chain[AvroFailure], IndexedRecord]` for the exact same
-fixture; route on the `Ior.Both` / `Ior.Left` shape from there.
+`.modify` on the byte optic is silent-pass-through — bad bytes,
+missing fields, or decode mismatches leave the input payload
+untouched (an `Affine` Miss) rather than allocating an `Ior`
+chain. That matches the Kafka consumer budget: at-least-once
+delivery already implies the consumer must be tolerant of
+malformed payloads at the offset commit boundary, and the
+per-record allocation cost of `Ior` is a tax on the happy path.
+When you DO want the diagnostic — for a dead-letter queue, say —
+flip to the record-carried face:
+`upperCustomer.record.modify(...)` accepts the same bytes and
+returns `Ior[Chain[AvroFailure], IndexedRecord]`; route on the
+`Ior.Both` / `Ior.Left` shape from there.
 
 The cached reader schema is the load-bearing piece: a single
 `codecPrism[OrderEvent]` value pins the schema once, and the
@@ -1089,8 +1078,8 @@ runtime, use the explicit-schema overload —
 `AvroPrism.codecPrism[OrderEvent](runtimeSchema)` — to bypass
 the kindlings-derived schema entirely.
 
-**Source:** cats-eo internal (`AvroPrism`'s triple-input
-surface, Unit 10). Background framing on the streaming /
+**Source:** cats-eo internal (`AvroPrism`'s byte-carried
+default surface). Background framing on the streaming /
 Kafka use case lives in the
 [Avro integration intro](integrations/avro.md#why-this-exists).
 
