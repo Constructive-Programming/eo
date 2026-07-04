@@ -4,7 +4,7 @@ import scala.util.control.NonFatal
 
 import java.io.{ByteArrayOutputStream, InputStream}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, IndexedRecord}
 import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory, EncoderFactory}
 
 /** Internal byte-offset locator behind [[AvroPrism]]'s byte-carried optic (`to`/`from`) and its
@@ -92,19 +92,27 @@ private[avro] object AvroBinaryCursor:
     try locateUncaught(bytes, schema, path, strictTerminalUnion, startPos)
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
 
+  /** One array element's boundaries plus its focused sub-span. `focus = None` when the suffix walk
+    * refused this element (path miss, branch mismatch, index step) — or, later, when the slice
+    * decode refused: the traversal demotes those so spans and foci stay 1:1.
+    */
+  final case class ElementSpan(start: Int, end: Int, focus: Option[BinarySpan])
+
   /** The focused byte spans of an array-terminal walk — the traversal counterpart of [[locate]].
     *
     * Resolves `prefix` to an array-typed field, walks the array's block framing, and resolves
-    * `suffix` inside EVERY element. Elements whose suffix walk refuses (path miss, union-branch
-    * mismatch, index step, decode boundary) are silently dropped from the span set — the traversal
-    * semantic "fold the focuses that exist"; whole-walk failures (bad prefix, non-array terminal,
-    * truncated bytes) surface as `Left`.
+    * `suffix` inside EVERY element. Whole-walk failures (bad prefix, non-array terminal, truncated
+    * bytes) surface as `Left`.
     *
-    * `writable = false` flags payloads whose array used the negative-count (byte-sized) block
-    * framing: splicing size-changing values would leave the recorded block byte-size stale, so
-    * writers must pass through unchanged.
+    * `canonicalFraming = false` flags payloads whose array used the negative-count (byte-sized)
+    * block framing: in-place splices would leave the recorded block byte-sizes stale, so write
+    * paths must go through [[reframeArray]] instead of [[spliceAll]].
     */
-  final case class ElementSpans(spans: Vector[BinarySpan], writable: Boolean)
+  final case class ElementSpans(
+      array: BinarySpan,
+      elements: Vector[ElementSpan],
+      canonicalFraming: Boolean,
+  )
 
   def locateElements(
       bytes: Array[Byte],
@@ -128,26 +136,83 @@ private[avro] object AvroBinaryCursor:
     val elemSchema = arr.valueSchema.getElementType
     val in = new CountingInputStream(bytes, arr.valueStart)
     val d = DecoderFactory.get().directBinaryDecoder(in, null)
-    val spans = Vector.newBuilder[BinarySpan]
-    var writable = true
+    val elements = Vector.newBuilder[ElementSpan]
+    var canonical = true
     var count = d.readLong()
     while count != 0L do
       var n = count
       if n < 0L then
+        // -Long.MinValue == Long.MinValue: negating leaves it negative, the item loop would be
+        // skipped, and the walk would confidently misparse element data as block framing.
+        if n == Long.MinValue then
+          throw new java.io.IOException("array block count Long.MinValue is not a valid framing")
         n = -n
         d.readLong(): Unit // block byte-size — goes stale across a size-changing splice
-        writable = false
+        canonical = false
       var i = 0L
       while i < n do
         val elemStart = in.position
         skipValue(elemSchema, d)
-        // Per-element focus walk on a fresh cursor positioned at the element. Failures drop the
-        // element from the focus set; the block walk above already advanced past it.
-        locateFrom(bytes, elemSchema, suffix, strictTerminalUnion = true, startPos = elemStart)
-          .foreach(spans += _)
+        // Per-element focus walk on a fresh cursor positioned at the element. Failures keep the
+        // element (its bytes must survive a re-frame) but mark it focus-less.
+        val focus = locateFrom(
+          bytes,
+          elemSchema,
+          suffix,
+          strictTerminalUnion = true,
+          startPos = elemStart,
+        ).toOption
+        elements += ElementSpan(elemStart, in.position, focus)
         i += 1
       count = d.readLong()
-    ElementSpans(spans.result(), writable)
+    ElementSpans(arr, elements.result(), canonical)
+
+  /** Zigzag-varint encoding of `n` (Avro `long` wire form) — the block count emitted by
+    * [[reframeArray]].
+    */
+  def zigZagLong(n: Long): Array[Byte] =
+    val buf = new Array[Byte](10)
+    val len = BinaryData.encodeLong(n, buf, 0)
+    if len == 10 then buf else java.util.Arrays.copyOf(buf, len)
+
+  /** Rebuild the whole array region with CANONICAL framing (one positive-count block + zero
+    * terminator), applying per-element focus replacements — the write path for payloads whose
+    * original framing carried block byte-sizes that an in-place splice would falsify.
+    *
+    * `encodedFoci` aligns 1:1, in order, with the elements whose `focus` is defined; `None` entries
+    * (encode failures) keep that element's original bytes.
+    */
+  def reframeArray(
+      bytes: Array[Byte],
+      plan: ElementSpans,
+      encodedFoci: Vector[Option[Array[Byte]]],
+  ): Array[Byte] =
+    val out = new ByteArrayOutputStream(bytes.length + 16)
+    out.write(bytes, 0, plan.array.valueStart)
+    if plan.elements.nonEmpty then
+      val countBytes = zigZagLong(plan.elements.length.toLong)
+      out.write(countBytes, 0, countBytes.length)
+    var k = 0
+    plan.elements.foreach { e =>
+      e.focus match
+        case Some(f) =>
+          val enc = encodedFoci(k)
+          k += 1
+          enc match
+            case Some(newBytes) =>
+              out.write(bytes, e.start, f.fieldStart - e.start)
+              f.branchOrdinal.foreach { o =>
+                val idx = zigZagInt(o)
+                out.write(idx, 0, idx.length)
+              }
+              out.write(newBytes, 0, newBytes.length)
+              out.write(bytes, f.end, e.end - f.end)
+            case None => out.write(bytes, e.start, e.end - e.start)
+        case None => out.write(bytes, e.start, e.end - e.start)
+    }
+    out.write(0) // zero-count block terminator
+    out.write(bytes, plan.array.end, bytes.length - plan.array.end)
+    out.toByteArray
 
   /** Decode the value slice addressed by `span` through `codec` — GenericDatumReader under the
     * span's resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
@@ -167,7 +232,8 @@ private[avro] object AvroBinaryCursor:
     catch case NonFatal(t) => Left(t)
 
   /** Encode `a` under the span's resolved schema — the codec's A→Any side, then a
-    * GenericDatumWriter. Mirror of [[decodeSlice]]; shared by the prism and traversal write paths.
+    * GenericDatumWriter. Mirror of [[decodeSlice]]; shared by the prism and traversal write paths
+    * for LEAF focuses (the codec's runtime shape matches the span schema exactly).
     */
   def encodeValue[A](
       a: A,
@@ -179,6 +245,34 @@ private[avro] object AvroBinaryCursor:
       val writer = new GenericDatumWriter[Any](span.valueSchema)
       val encoder = EncoderFactory.get().binaryEncoder(out, null)
       writer.write(codec.encode(a), encoder)
+      encoder.flush()
+      Right(out.toByteArray)
+    catch case NonFatal(t) => Left(t)
+
+  /** Encode step for FIELDS focuses — a `.fields(...)` span addresses the PARENT record, and the
+    * NamedTuple's runtime record (selected fields, selector order) must NOT be written under the
+    * parent schema: avro's `GenericDatumWriter` fetches datum fields by POSITION, so a partial
+    * cover blows past the NT arity and a reordered same-typed full cover silently swaps values.
+    * Instead: decode the parent slice, overlay the NT fields BY NAME (the same
+    * [[AvroFocus.Fields.writeFields]] overlay the record face uses), and re-encode the parent.
+    */
+  def encodeFieldsOverlay[A](
+      bytes: Array[Byte],
+      span: BinarySpan,
+      fields: AvroFocus.Fields[A],
+      a: A,
+  ): Either[Throwable, Array[Byte]] =
+    try
+      val reader = new GenericDatumReader[Any](span.valueSchema)
+      val decoder = DecoderFactory
+        .get()
+        .binaryDecoder(bytes, span.valueStart, span.end - span.valueStart, null)
+      val parent = reader.read(null, decoder).asInstanceOf[IndexedRecord]
+      val updated = fields.writeFields(parent, a)
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[Any](span.valueSchema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      writer.write(updated, encoder)
       encoder.flush()
       Right(out.toByteArray)
     catch case NonFatal(t) => Left(t)

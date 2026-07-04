@@ -63,7 +63,7 @@ class AvroJsonBridgeBench extends JmhDefaults:
   var envelopeBytes: Array[Byte] = uninitialized
   var wideBytes: Array[Byte] = uninitialized
 
-  @Setup(Level.Iteration)
+  @Setup(Level.Trial)
   def init(): Unit =
     envelopeBytes = encodeEnvelope(inputEnvelope)
     wideBytes = encodeWide(wideConversion)

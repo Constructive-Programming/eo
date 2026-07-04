@@ -176,7 +176,10 @@ Empty arrays and missing prefixes leave the record unchanged on
 the silent surface; on the record face's default Ior surface,
 prefix-walk failures land in `Ior.Left` (nothing to iterate) and
 per-element skips accumulate one `AvroFailure` per refused element
-into `Ior.Both(chain, partialRecord)`.
+into `Ior.Both(chain, partialRecord)`. Payloads whose arrays use
+the byte-sized (negative-count) block framing are readable as-is
+and RE-FRAMED on write: the array region is rebuilt as one
+canonical positive-count block with the splices applied.
 
 ## Multi-field focus — `.fields(_.a, _.b)`
 
@@ -514,6 +517,30 @@ there's no meaningful "input unchanged" semantic for bytes that
 aren't Avro, and the whole point of `*Unsafe` is to drop failure
 detail. Callers who need parse diagnostics stay on the default
 Ior-bearing surface.
+
+## Schema discipline — the byte walk trusts the reader schema absolutely
+
+The byte-carried optics perform **no writer/reader schema
+resolution**: `locate` consumes bytes purely by the prism's cached
+reader schema. Three consequences to respect in a pipeline:
+
+- a payload written under a **structurally different** schema
+  Misses — reads are `None`, writes pass the input through
+  unchanged, silently;
+- a **same-typed field reorder** between writer and reader is
+  undetectable from the bytes: the walk reads the *wrong field*
+  with full confidence (this is why the requirement is absolute,
+  not "usually fine");
+- Confluent-framed payloads must be `ConfluentWire.strip`ped
+  before the walk — the 5-byte header parses as plausible varints.
+
+Mixed-schema topics therefore need a resolving decode per payload
+(the record face with the correct writer schema), not the byte
+walk. The laws also hold **up to canonical re-encoding** of the
+focused slice: `.modify` re-encodes the focus, so spec-legal but
+non-canonical encodings (byte-sized array blocks, non-minimal
+varints) come back canonicalised — byte-for-byte identity is
+guaranteed only for payloads from conformant writers.
 
 ## Schema sourcing — runtime vs. derived
 

@@ -267,7 +267,7 @@ private[avro] object AvroFocus:
     /** Overlay the encoder's output for `a` onto `parent`; encoders that omit a selected field
       * leave the parent's entry untouched.
       */
-    private def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
+    private[avro] def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
       codec.encode(a) match
         case encoded: IndexedRecord =>
           val updates: Map[String, Any] =

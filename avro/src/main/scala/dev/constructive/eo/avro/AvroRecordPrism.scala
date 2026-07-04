@@ -26,6 +26,15 @@ import org.apache.avro.generic.IndexedRecord
   * Drilling (`.field` / `.fields` / `.union` / `.at` / `.each` / Dynamic selection) lives on
   * [[AvroPrism]] alone — drill there, then flip with `.record` at the end. One drilling mechanism,
   * two carriers.
+  *
+  * '''Write-composition caveat (normative).''' The Either carrier's `from(Right(a))` has no record
+  * to rebuild around, so it reconstructs the focus STANDALONE via [[reverseGet]] — lawful only for
+  * the root full-cover prism (the case the discipline suite pins). For a DRILLED prism this cannot
+  * restore siblings: a composite built with `andThen` writes through this arm and replaces the
+  * whole focus position with the standalone reconstruction. Direct calls are safe — the member
+  * surface (`modify` / `place` / `replace` / `*Unsafe`) shadows the generic extensions with
+  * sibling-preserving record walks. Compose drilled record optics for READS; write through the
+  * member surface or the byte face.
   */
 final class AvroRecordPrism[A] private[avro] (
     private[avro] val focus: AvroFocus[A],

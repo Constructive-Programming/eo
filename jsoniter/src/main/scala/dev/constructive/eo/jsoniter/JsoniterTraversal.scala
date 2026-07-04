@@ -30,7 +30,9 @@ import dev.constructive.eo.optics.Optic
   * automatically via `mfFold[PSVec]`, `mfFunctor[PSVec]`, `mfAssocPSVec`, etc. — `.foldMap`,
   * `.modify`, `.headOption`, `.length`, `.exists`, `.modifyA`, same-carrier `.andThen` all work
   * without anything new shipping in this module. Mirrors `dev.constructive.eo.avro.AvroTraversal`'s
-  * byte-carried write semantics.
+  * byte-carried write semantics. `JsoniterPrism`'s '''Laws & preconditions''' apply verbatim: laws
+  * hold up to canonical re-encoding of the focused slices, and writes need decodable current
+  * focuses.
   *
   * @group Optics
   */
@@ -91,7 +93,7 @@ object JsoniterTraversal:
               arr(written) = readFromSubArray[A](bytes, span.start, span.end).asInstanceOf[AnyRef]
               written += 1
               keptSpans += span
-            catch case _: Throwable => ()
+            catch case scala.util.control.NonFatal(_) => ()
           val psv: PSVec[A] =
             if written == n then PSVec.unsafeWrap[A](arr)
             else if written == 0 then PSVec.empty[A]
@@ -111,7 +113,7 @@ object JsoniterTraversal:
           var i = 0
           spans.foreach { span =>
             try reps += ((span, writeToArray(foci(i))(using codec)))
-            catch case _: Throwable => ()
+            catch case scala.util.control.NonFatal(_) => ()
             i += 1
           }
           spliceAll(bytes, reps.result())

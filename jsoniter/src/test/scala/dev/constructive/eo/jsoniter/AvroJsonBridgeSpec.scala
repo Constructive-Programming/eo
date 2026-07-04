@@ -29,6 +29,12 @@ import org.specs2.mutable.Specification
   *   - '''Statically''': no `JsonValueCodec` for any full JSON document exists anywhere in this
   *     spec — only branch codecs. A full JSON-side object CANNOT be constructed because its codec
   *     was never derived.
+  *
+  * Precision note: "constructed" here means the TYPED root value (`Envelope`) and the whole-
+  * document JSON object. A record-SHAPED branch (like `Click`) is materialised as that branch's own
+  * generic record during its slice decode — the claim is that nothing root-sized ever is, which for
+  * the `.field`-drilled paths exercised here also holds at the generic-record level (the byte walk
+  * skips, it never parses the root).
   */
 class AvroJsonBridgeSpec extends Specification:
 

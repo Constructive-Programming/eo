@@ -120,7 +120,13 @@ class CrossCarrierCompositionSpec extends Specification:
     val out: Envelope = chain3.modify(f)(validEnv3)
     val outName = out.payload.asInstanceOf[GenericData.Record].get("name").toString
     val outAge = out.payload.asInstanceOf[GenericData.Record].get("age").asInstanceOf[Int]
-    val modOk = (outName === "ALICE").and(outAge === 31)
+    // NOTE the composite's write goes through the Either carrier's from(Right(_)) = reverseGet,
+    // which reconstructs the focus STANDALONE — the payload comes back under the NamedTuple's
+    // schema, not Person's (AvroRecordPrism's documented write-composition caveat). Full-cover
+    // here, so no data is lost; the schema swap is asserted explicitly so this spec never
+    // silently masks the reconstruct-standalone semantics.
+    val schemaSwapOk = out.payload.getSchema.getName === "NamedTuple"
+    val modOk = (outName === "ALICE").and(outAge === 31).and(schemaSwapOk)
 
     val p = Person("Alice", 30)
     val concrete = codecPrism[Person].fields(_.name, _.age).record

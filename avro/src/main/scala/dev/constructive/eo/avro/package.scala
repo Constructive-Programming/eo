@@ -25,7 +25,7 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   *   val namePrism:   AvroPrism[String]   = personPrism.field(_.name)
   *   namePrism.modify(_.toUpperCase)(payloadBytes)
   *   // → the same Array[Byte] payload, with `name` upper-cased in
-  *   //   place — no Person (and no IndexedRecord) ever materialised.
+  *   //   place — no Person (nor any root record) ever materialised.
   *   namePrism.record.modify(_.toUpperCase)(record)
   *   // → the IndexedRecord-carried face, with Ior diagnostics.
   * }}}

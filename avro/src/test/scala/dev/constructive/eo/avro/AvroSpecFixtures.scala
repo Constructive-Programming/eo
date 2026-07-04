@@ -25,6 +25,17 @@ object AvroSpecFixtures:
 
   // ---- ADTs ----------------------------------------------------------
 
+  /** Two SAME-typed fields — the fixture that catches positional/by-name write confusion (a
+    * positional write of a reordered full-cover NamedTuple silently swaps these).
+    */
+  case class FullName(first: String, last: String)
+
+  object FullName:
+
+    given AvroEncoder[FullName] = AvroEncoder.derived
+    given AvroDecoder[FullName] = AvroDecoder.derived
+    given AvroSchemaFor[FullName] = AvroSchemaFor.derived
+
   /** Two-field case class — minimal product type for the prism specs. */
   case class Person(name: String, age: Int)
 
