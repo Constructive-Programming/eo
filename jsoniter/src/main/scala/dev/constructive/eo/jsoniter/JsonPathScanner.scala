@@ -2,6 +2,13 @@ package dev.constructive.eo.jsoniter
 
 import scala.annotation.tailrec
 
+// This scanner is the project's one sanctioned `return` exception (see `.scalafix.conf`
+// `noReturns`). Each method is a hot bytecode-level scan whose guard checks read far better as
+// flat early `return`s than as the deep if/else pyramids a return-free rewrite forces. The loops
+// are `@tailrec` (the project bans `while`); the early `return`s are the non-recursive miss / hit
+// exits, and the sole recursive self-call in each stays in tail position.
+// scalafix:off DisableSyntax.return
+
 /** Hand-rolled JSON byte scanner. Resolves a [[PathStep]] list against an `Array[Byte]` JSON
   * document and returns the byte span `[start, end)` of the resolved value, or `-1` for the start
   * if the path doesn't match.
@@ -130,19 +137,15 @@ object JsonPathScanner:
       rest: List[PathStep],
       buf: scala.collection.mutable.ListBuffer[Span],
   ): Unit =
-    if pos < bytes.length then
-      walkAll(bytes, pos, rest, buf)
-      val p1 = skipValue(bytes, pos)
-      if p1 < 0 then ()
-      else
-        val p2 = skipWs(bytes, p1)
-        if p2 >= bytes.length then ()
-        else
-          bytes(p2) match
-            case ',' => walkAllArrayElementsLoop(bytes, skipWs(bytes, p2 + 1), rest, buf)
-            case ']' => ()
-            case _   => ()
-    else ()
+    if pos >= bytes.length then return
+    walkAll(bytes, pos, rest, buf)
+    val p1 = skipValue(bytes, pos)
+    if p1 < 0 then return
+    val p2 = skipWs(bytes, p1)
+    if p2 >= bytes.length then return
+    bytes(p2) match
+      case ',' => walkAllArrayElementsLoop(bytes, skipWs(bytes, p2 + 1), rest, buf)
+      case _   => () // ']' or malformed
 
   // ----- object field lookup -------------------------------------------
 
@@ -158,35 +161,23 @@ object JsonPathScanner:
     * match, else skip the value and advance past the following comma (stopping at `}` or end).
     */
   @tailrec private def findFieldValueLoop(bytes: Array[Byte], pos: Int, target: String): Int =
-    if pos < bytes.length then
-      // Read key
-      val kpos = skipWs(bytes, pos)
-      if kpos >= bytes.length || bytes(kpos) != '"' then -1
-      else
-        val keyEnd = skipString(bytes, kpos)
-        if keyEnd < 0 then -1
-        else
-          val matches = stringEqualsAscii(bytes, kpos + 1, keyEnd - 1, target)
-
-          // Skip to ':'
-          val cpos = skipWs(bytes, keyEnd)
-          if cpos >= bytes.length || bytes(cpos) != ':' then -1
-          else
-            val vpos = skipWs(bytes, cpos + 1)
-            if matches then vpos
-            else
-              // Skip value, then comma / close
-              val ap = skipValue(bytes, vpos)
-              if ap < 0 then -1
-              else
-                val bp = skipWs(bytes, ap)
-                if bp >= bytes.length then -1
-                else
-                  bytes(bp) match
-                    case ',' => findFieldValueLoop(bytes, skipWs(bytes, bp + 1), target)
-                    case '}' => -1
-                    case _   => -1
-    else -1
+    if pos >= bytes.length then return -1
+    val kpos = skipWs(bytes, pos) // key
+    if kpos >= bytes.length || bytes(kpos) != '"' then return -1
+    val keyEnd = skipString(bytes, kpos)
+    if keyEnd < 0 then return -1
+    val matches = stringEqualsAscii(bytes, kpos + 1, keyEnd - 1, target)
+    val cpos = skipWs(bytes, keyEnd) // ':'
+    if cpos >= bytes.length || bytes(cpos) != ':' then return -1
+    val vpos = skipWs(bytes, cpos + 1)
+    if matches then return vpos
+    val ap = skipValue(bytes, vpos) // skip value, then comma / close
+    if ap < 0 then return -1
+    val bp = skipWs(bytes, ap)
+    if bp >= bytes.length then return -1
+    bytes(bp) match
+      case ',' => findFieldValueLoop(bytes, skipWs(bytes, bp + 1), target)
+      case _   => -1 // '}' or malformed
 
   /** Compare a JSON-encoded string slice (without surrounding quotes — `[from, until)` covers the
     * inner bytes) against an ASCII target. Returns true on byte-for-byte match.
@@ -230,20 +221,15 @@ object JsonPathScanner:
       idx: Int,
       targetIdx: Int,
   ): Int =
-    if pos < bytes.length then
-      if idx == targetIdx then pos
-      else
-        val p1 = skipValue(bytes, pos)
-        if p1 < 0 then -1
-        else
-          val p2 = skipWs(bytes, p1)
-          if p2 >= bytes.length then -1
-          else
-            bytes(p2) match
-              case ',' => findArrayElementLoop(bytes, skipWs(bytes, p2 + 1), idx + 1, targetIdx)
-              case ']' => -1
-              case _   => -1
-    else -1
+    if pos >= bytes.length then return -1
+    if idx == targetIdx then return pos
+    val p1 = skipValue(bytes, pos)
+    if p1 < 0 then return -1
+    val p2 = skipWs(bytes, p1)
+    if p2 >= bytes.length then return -1
+    bytes(p2) match
+      case ',' => findArrayElementLoop(bytes, skipWs(bytes, p2 + 1), idx + 1, targetIdx)
+      case _   => -1 // ']' or malformed
 
   // ----- value-skip dispatch -------------------------------------------
 
@@ -269,27 +255,21 @@ object JsonPathScanner:
     * position just past the closing `}`, or -1 on malformed input.
     */
   @tailrec private def skipObjectLoop(bytes: Array[Byte], pos: Int): Int =
-    if pos < bytes.length then
-      val kpos = skipWs(bytes, pos)
-      if kpos >= bytes.length || bytes(kpos) != '"' then -1
-      else
-        val keyEnd = skipString(bytes, kpos)
-        if keyEnd < 0 then -1
-        else
-          val cpos = skipWs(bytes, keyEnd)
-          if cpos >= bytes.length || bytes(cpos) != ':' then -1
-          else
-            val vpos = skipValue(bytes, cpos + 1)
-            if vpos < 0 then -1
-            else
-              val np = skipWs(bytes, vpos)
-              if np >= bytes.length then -1
-              else
-                bytes(np) match
-                  case ',' => skipObjectLoop(bytes, np + 1)
-                  case '}' => np + 1
-                  case _   => -1
-    else -1
+    if pos >= bytes.length then return -1
+    val kpos = skipWs(bytes, pos)
+    if kpos >= bytes.length || bytes(kpos) != '"' then return -1
+    val keyEnd = skipString(bytes, kpos)
+    if keyEnd < 0 then return -1
+    val cpos = skipWs(bytes, keyEnd)
+    if cpos >= bytes.length || bytes(cpos) != ':' then return -1
+    val vpos = skipValue(bytes, cpos + 1)
+    if vpos < 0 then return -1
+    val np = skipWs(bytes, vpos)
+    if np >= bytes.length then return -1
+    bytes(np) match
+      case ',' => skipObjectLoop(bytes, np + 1)
+      case '}' => np + 1
+      case _   => -1
 
   private def skipArray(bytes: Array[Byte], pos0: Int): Int =
     @tailrec def loop(pos: Int): Int =
