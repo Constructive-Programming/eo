@@ -106,12 +106,11 @@ private[circe] object JsonFocus:
                 Right((a, (b: A) => JsonWalk.rebuildPath(parents, path, encoder(b))))
 
     def modifyImpl(json: Json, f: A => A): Json =
-      JsonWalk.walkPath(json, path) match
-        case Left(_)               => json
-        case Right((cur, parents)) =>
-          decoder.decodeJson(cur) match
-            case Left(_)  => json
-            case Right(a) => JsonWalk.rebuildPath(parents, path, encoder(f(a)))
+      // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
+      // the silent modify can't drift from it. The captured writer re-encodes and rebuilds.
+      navigateForWrite(json) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => json
 
     def transformImpl(json: Json, f: Json => Json): Json =
       JsonWalk.walkPath(json, path) match
@@ -229,15 +228,12 @@ private[circe] object JsonFocus:
                   Right((a, (b: A) => rebuild(writeFields(obj, b), parents)))
 
     def modifyImpl(json: Json, f: A => A): Json =
-      walkParent(json) match
-        case Left(_)               => json
-        case Right((obj, parents)) =>
-          readFields(obj)
-            .flatMap(sub =>
-              Json.fromJsonObject(sub).as[A](using decoder).left.map(_ => Chain.empty)
-            )
-            .map(a => rebuild(writeFields(obj, f(a)), parents))
-            .getOrElse(json)
+      // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays
+      // separate — it must surface readFields' accumulated PathMissing Chain, which
+      // navigateForWrite collapses to a single failure.
+      navigateForWrite(json) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => json
 
     def transformImpl(json: Json, f: Json => Json): Json =
       walkParent(json) match

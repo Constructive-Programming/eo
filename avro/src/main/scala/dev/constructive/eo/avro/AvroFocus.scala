@@ -138,18 +138,12 @@ private[avro] object AvroFocus:
                 Right((a, writer))
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      AvroWalk.walkPathArr(record, path) match
-        case Left(_)       => record
-        case Right(walked) =>
-          codec.decodeEither(walked.cur) match
-            case Left(_)  => record
-            case Right(a) =>
-              try
-                val encoded = codec.encode(f(a))
-                AvroWalk
-                  .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
-                  .asInstanceOf[IndexedRecord]
-              catch case NonFatal(_) => record
+      // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
+      // the silent modify can't drift from it. The captured writer already re-encodes, rebuilds,
+      // and falls back to `record` on a NonFatal encode/rebuild failure.
+      navigateForWrite(record) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => record
 
     def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
       AvroWalk.walkPathArr(record, path) match
@@ -377,17 +371,12 @@ private[avro] object AvroFocus:
         .asInstanceOf[IndexedRecord]
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      walkParent(record) match
-        case Left(_)                 => record
-        case Right((parent, walked)) =>
-          readFields(parent) match
-            case Left(_)    => record
-            case Right(sub) =>
-              codec.decodeEither(sub) match
-                case Left(_)  => record
-                case Right(a) =>
-                  try rebuild(writeFields(parent, f(a)), walked)
-                  catch case NonFatal(_) => record
+      // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays
+      // separate — it must surface readFields' accumulated PathMissing Chain, which
+      // navigateForWrite collapses to a single failure.
+      navigateForWrite(record) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => record
 
     def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
       walkParent(record) match
