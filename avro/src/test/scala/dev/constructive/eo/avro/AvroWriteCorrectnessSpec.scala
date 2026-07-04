@@ -2,7 +2,9 @@ package dev.constructive.eo.avro
 
 import scala.language.implicitConversions
 
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic.*
+import dev.constructive.eo.optics.{Lens, Optic}
 import java.io.ByteArrayOutputStream
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, IndexedRecord}
 import org.apache.avro.io.EncoderFactory
@@ -10,6 +12,11 @@ import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
+
+/** Outer wrapper for the compose-through-a-lens regression — top-level so the hand-built
+  * [[dev.constructive.eo.optics.Lens]] `.copy` works without an outer accessor.
+  */
+final private case class Box(rec: IndexedRecord)
 
 /** Write-side correctness of the byte faces — born from the 2026-07-04 category-theory / wire
   * format expert review. Every example here started RED against the reviewed code:
@@ -104,6 +111,40 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     val out = codecPrism[Person].field(_.name).record.replace("Bob")(rec)
     (out.get(personSchema.getField("name").pos).toString === "Bob")
       .and(out.get(personSchema.getField("age").pos).asInstanceOf[Int] === 30)
+  }
+
+  // covers: the UPCAST-then-write footgun the Affine re-carrier eliminated — a drilled record
+  //   prism, bound to the bare Optic[…, Affine] (which selects the GENERIC extension, not the
+  //   shadowing member) and separately COMPOSED via lens.andThen, writes through from(Hit) and
+  //   preserves the uncovered sibling. A ≥3-field record (Order: name, price, qty) so a
+  //   single-field drill leaves a genuinely uncovered sibling; the old Either from(Right) dropped
+  //   it. Both the plain composite carrier (Affine) and schema (Order) survive.
+  "drilled record prism upcast/composed to Optic[…, Affine]: write preserves uncovered siblings" >> {
+    val order = Order("tea", 2.5, 3)
+    val rec = orderRecord(order)
+
+    // Upcast forces the generic extension (the footgun path), not the concrete member.
+    val nameL: Optic[IndexedRecord, IndexedRecord, String, String, Affine] =
+      codecPrism[Order].field(_.name).record
+    val viaUpcast = nameL.replace("MATE")(rec)
+    val upcastOk = (viaUpcast.getSchema.getName === "Order")
+      .and(
+        codecPrism[Order].getOption(
+          toBinary(viaUpcast.asInstanceOf[GenericRecord], orderSchema)
+        ) ===
+          Some(Order("MATE", 2.5, 3))
+      )
+
+    // Compose through a lens: the composite's from threads the source so the inner rebuild keeps
+    // price + qty.
+    val box = Lens[Box, IndexedRecord](_.rec, (b, r) => b.copy(rec = r))
+    val chain = box.andThen(codecPrism[Order].field(_.price).record)
+    val outBox = chain.modify(_ + 10.0)(Box(rec))
+    val composeOk =
+      codecPrism[Order].getOption(toBinary(outBox.rec.asInstanceOf[GenericRecord], orderSchema)) ===
+        Some(Order("tea", 12.5, 3))
+
+    upcastOk.and(composeOk)
   }
 
   // ---- F6: negative-count (blocked) array framing ----------------------

@@ -31,10 +31,16 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   * }}}
   *
   * The default carrier is the binary wire form itself (`Array[Byte]`, mirroring
-  * `dev.constructive.eo.jsoniter.JsoniterPrism`); the record-carried face behind `.record` mirrors
+  * `dev.constructive.eo.jsoniter.JsoniterPrism`); the record-carried face behind `.record` follows
   * `dev.constructive.eo.circe`'s architecture decisions on `Json`: `IndexedRecord` plays the role
   * of `Json`, [[AvroCodec]] plays the role of `(io.circe.Encoder[A], io.circe.Decoder[A])`, and
   * `AvroFailure` plays the role of `JsonFailure`.
+  *
+  * '''Carrier deviation from eo-circe (deliberate).''' `AvroRecordPrism` is `Affine`-carried (a
+  * lawful Optional whose composed / upcast writes preserve siblings). `eo-circe`'s `JsonPrism` is
+  * still `Either`-carried and has the same latent reconstruct-standalone footgun on a drilled
+  * composed write; aligning circe is tracked separately. Do not assume the two record faces share a
+  * carrier.
   *
   * '''Gap-1 (per the eo-avro plan).''' [[PathStep]] is duplicated, not shared with eo-circe — the
   * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. The

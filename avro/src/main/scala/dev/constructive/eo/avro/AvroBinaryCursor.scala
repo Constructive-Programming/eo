@@ -217,8 +217,22 @@ private[avro] object AvroBinaryCursor:
     out.write(bytes, plan.array.end, bytes.length - plan.array.end)
     out.toByteArray
 
-  /** Decode the value slice addressed by `span` through `codec` — GenericDatumReader under the
-    * span's resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
+  /** Read one datum of `schema` from `bytes[from, from+len)` via a bounded GenericDatumReader. */
+  private def readDatum(schema: Schema, bytes: Array[Byte], from: Int, len: Int): Any =
+    val reader = new GenericDatumReader[Any](schema)
+    reader.read(null, DecoderFactory.get().binaryDecoder(bytes, from, len, null))
+
+  /** Encode `datum` under `schema` to its binary wire form via a GenericDatumWriter. */
+  private def writeDatum(schema: Schema, datum: Any): Array[Byte] =
+    val out = new ByteArrayOutputStream()
+    val writer = new GenericDatumWriter[Any](schema)
+    val encoder = EncoderFactory.get().binaryEncoder(out, null)
+    writer.write(datum, encoder)
+    encoder.flush()
+    out.toByteArray
+
+  /** Decode the value slice addressed by `span` through `codec` — [[readDatum]] under the span's
+    * resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
     * [[AvroTraversal]]'s per-element reads.
     */
   def decodeSlice[A](
@@ -227,29 +241,21 @@ private[avro] object AvroBinaryCursor:
       codec: AvroCodec[A],
   ): Either[Throwable, A] =
     try
-      val reader = new GenericDatumReader[Any](span.valueSchema)
-      val decoder = DecoderFactory
-        .get()
-        .binaryDecoder(bytes, span.valueStart, span.end - span.valueStart, null)
-      codec.decodeEither(reader.read(null, decoder))
+      codec.decodeEither(
+        readDatum(span.valueSchema, bytes, span.valueStart, span.end - span.valueStart)
+      )
     catch case NonFatal(t) => Left(t)
 
-  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then a
-    * GenericDatumWriter. Mirror of [[decodeSlice]]; shared by the prism and traversal write paths
-    * for LEAF focuses (the codec's runtime shape matches the span schema exactly).
+  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then [[writeDatum]].
+    * Mirror of [[decodeSlice]]; shared by the prism and traversal write paths for LEAF focuses (the
+    * codec's runtime shape matches the span schema exactly).
     */
   def encodeValue[A](
       a: A,
       span: BinarySpan,
       codec: AvroCodec[A],
   ): Either[Throwable, Array[Byte]] =
-    try
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[Any](span.valueSchema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      writer.write(codec.encode(a), encoder)
-      encoder.flush()
-      Right(out.toByteArray)
+    try Right(writeDatum(span.valueSchema, codec.encode(a)))
     catch case NonFatal(t) => Left(t)
 
   /** Encode step for FIELDS focuses — a `.fields(...)` span addresses the PARENT record, and the
@@ -266,18 +272,9 @@ private[avro] object AvroBinaryCursor:
       a: A,
   ): Either[Throwable, Array[Byte]] =
     try
-      val reader = new GenericDatumReader[Any](span.valueSchema)
-      val decoder = DecoderFactory
-        .get()
-        .binaryDecoder(bytes, span.valueStart, span.end - span.valueStart, null)
-      val parent = reader.read(null, decoder).asInstanceOf[IndexedRecord]
-      val updated = fields.writeFields(parent, a)
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[Any](span.valueSchema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      writer.write(updated, encoder)
-      encoder.flush()
-      Right(out.toByteArray)
+      val parent = readDatum(span.valueSchema, bytes, span.valueStart, span.end - span.valueStart)
+        .asInstanceOf[IndexedRecord]
+      Right(writeDatum(span.valueSchema, fields.writeFields(parent, a)))
     catch case NonFatal(t) => Left(t)
 
   /** Zigzag-varint encoding of `n` (Avro `int` wire form) — used by graft to synthesise a union

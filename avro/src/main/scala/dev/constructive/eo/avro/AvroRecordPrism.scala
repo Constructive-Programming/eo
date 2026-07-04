@@ -1,6 +1,7 @@
 package dev.constructive.eo.avro
 
 import cats.data.{Chain, Ior}
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
@@ -9,12 +10,19 @@ import org.apache.avro.generic.IndexedRecord
   * through [[AvroPrism.record]], never constructed directly:
   *
   * {{{
-  *   AvroRecordPrism[A] <: Optic[IndexedRecord, IndexedRecord, A, A, Either]
-  *   type X = (AvroFailure, IndexedRecord)
+  *   AvroRecordPrism[A] <: Optic[IndexedRecord, IndexedRecord, A, A, Affine]
+  *   type X = (IndexedRecord, A => IndexedRecord)  // Fst = source (miss); Snd = single-walk writer
   * }}}
   *
-  * Mirrors `dev.constructive.eo.circe.JsonPrism` for the parsed-record carrier. Two call-surface
-  * tiers (via [[AvroOpticOps]]):
+  * '''An Optional, not a Prism.''' A drilled record focus lives INSIDE a record, so rebuilding the
+  * record needs the siblings — which a `Prism`'s `from(reverseGet)` cannot see (it gets the focus
+  * alone). Carrying the source on the `Affine` seam fixes that at the carrier level: `to` captures
+  * a writer over the walk it already did, and `from(Hit)` applies it — so `.modify` / `.replace`
+  * preserve siblings whether called directly, upcast to `Optic[…, Affine]`, or composed via
+  * `andThen` (the composite threads the writer end-to-end). Same carrier and law story as the byte
+  * face; only the root full-cover prism is also a lawful Prism, and [[reverseGet]] stays for it.
+  *
+  * Two call-surface tiers (via [[AvroOpticOps]]):
   *
   *   - Default Ior-bearing: `modify` / `get` etc. accumulate `Chain[AvroFailure]` on failure;
   *     partial success surfaces as `Ior.Both(chain, inputRecord)`.
@@ -26,50 +34,29 @@ import org.apache.avro.generic.IndexedRecord
   * Drilling (`.field` / `.fields` / `.union` / `.at` / `.each` / Dynamic selection) lives on
   * [[AvroPrism]] alone — drill there, then flip with `.record` at the end. One drilling mechanism,
   * two carriers.
-  *
-  * '''Write-composition caveat (normative).''' The Either carrier's `from(Right(a))` has no record
-  * to rebuild around, so it reconstructs the focus STANDALONE via [[reverseGet]] — lawful only for
-  * the root full-cover prism (the case the discipline suite pins). For a DRILLED prism this cannot
-  * restore siblings: a composite built with `andThen` writes through this arm and replaces the
-  * whole focus position with the standalone reconstruction. Direct calls are safe — the member
-  * surface (`modify` / `place` / `replace` / `*Unsafe`) shadows the generic extensions with
-  * sibling-preserving record walks. Compose drilled record optics for READS; write through the
-  * member surface or the byte face.
-  *
-  * Corollary: the member shadowing is by STATIC type. Upcasting a drilled record prism to
-  * `Optic[IndexedRecord, IndexedRecord, A, A, Either]` (or binding it to that ascription) and then
-  * calling `.replace` / `.modify` re-selects the generic extension — the same sibling-dropping
-  * `from(Right(_))` path. Don't upcast a drilled record prism and then write.
   */
 final class AvroRecordPrism[A] private[avro] (
     private[avro] val focus: AvroFocus[A],
     private[avro] val rootSchemaCached: Schema,
-) extends Optic[IndexedRecord, IndexedRecord, A, A, Either],
+) extends Optic[IndexedRecord, IndexedRecord, A, A, Affine],
       AvroOpticOps[A]:
 
-  type X = (AvroFailure, IndexedRecord)
+  // Fst[X] = source record (Miss pass-through); Snd[X] = the single-walk writer captured by `to`.
+  type X = (IndexedRecord, A => IndexedRecord)
 
   override protected def rootSchema: Schema = rootSchemaCached
 
-  private def path: Array[PathStep] = focus match
-    case l: AvroFocus.Leaf[A]   => l.path
-    case f: AvroFocus.Fields[A] => f.parentPath
-
   // ---- Abstract Optic members ---------------------------------------
 
-  def to(record: IndexedRecord): Either[(AvroFailure, IndexedRecord), A] =
-    focus.navigateRaw(record) match
-      case Left(failure) => Left((failure, record))
-      case Right(any)    =>
-        focus.decodeFrom(any) match
-          case Right(a) => Right(a)
-          case Left(t)  =>
-            Left((AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t), record))
+  def to(record: IndexedRecord): Affine[X, A] =
+    focus.navigateForWrite(record) match
+      case Left(_)            => new Affine.Miss[X, A](record)
+      case Right((a, writer)) => new Affine.Hit[X, A](writer, a)
 
-  def from(e: Either[(AvroFailure, IndexedRecord), A]): IndexedRecord =
-    e match
-      case Left((_, record)) => record
-      case Right(a)          => reverseGet(a)
+  def from(aff: Affine[X, A]): IndexedRecord =
+    aff match
+      case m: Affine.Miss[X, A] => m.fst
+      case h: Affine.Hit[X, A]  => h.snd(h.b)
 
   // ---- Read surface --------------------------------------------------
 
@@ -80,7 +67,10 @@ final class AvroRecordPrism[A] private[avro] (
     AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
 
   /** Encode `a` standalone, returning the codec's [[IndexedRecord]] payload (or a synthesised empty
-    * record when the encoded value isn't record-shaped). Counterpart to `JsonPrism.reverseGet`.
+    * record when the encoded value isn't record-shaped). Lawful only for the ROOT full-cover prism
+    * (a real `Prism.reverseGet`); on a drilled prism it cannot restore siblings, which is exactly
+    * why the Optic seam carries the source instead of calling this. Kept for root full-cover users
+    * and the reverseGet round-trip law checks.
     */
   def reverseGet(a: A): IndexedRecord =
     focus.codec.encode(a) match
