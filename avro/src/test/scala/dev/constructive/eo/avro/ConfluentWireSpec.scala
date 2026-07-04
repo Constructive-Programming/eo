@@ -47,19 +47,28 @@ class ConfluentWireSpec extends Specification with ScalaCheck:
     val emptyOk = ConfluentWire.strip(Array.emptyByteArray) match
       case Left(AvroFailure.NotConfluentFramed(reason)) => reason must contain("0 bytes")
       case other                                        =>
-        org.specs2.execute.Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
 
     val shortOk = ConfluentWire.strip(Array[Byte](0, 0, 0, 1)) match
       case Left(AvroFailure.NotConfluentFramed(reason)) => reason must contain("4 bytes")
       case other                                        =>
-        org.specs2.execute.Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
 
     val badMagic = ConfluentWire.attach(7, Array[Byte](1, 2, 3))
     badMagic(0) = 0x2a
     val magicOk = ConfluentWire.strip(badMagic) match
       case Left(AvroFailure.NotConfluentFramed(reason)) => reason must contain("0x2a")
       case other                                        =>
-        org.specs2.execute.Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
 
     val headerOnlyOk = ConfluentWire.strip(ConfluentWire.attach(42, Array.emptyByteArray)) match
       case Right(f) => (f.schemaId === 42).and(f.body.length === 0)

@@ -18,18 +18,18 @@ object ConfluentWire:
   /** Header length: 1 magic byte + 4 big-endian schema-id bytes. */
   val HeaderLength: Int = 5
 
-  /** Registry hook — resolve a Confluent schema id to its [[Schema]]. Purely an alias so
-    * signatures that need resolution stay registry-agnostic; this module never calls it.
+  /** Registry hook — resolve a Confluent schema id to its [[Schema]]. Purely an alias so signatures
+    * that need resolution stay registry-agnostic; this module never calls it.
     */
   type SchemaById = Int => Schema
 
   /** A stripped Confluent frame: the schema id and the Avro binary body.
     *
-    * `body` is a COPY of the payload bytes, not a zero-copy offset view: `Array[Byte]` cannot
-    * carry an offset, and every downstream consumer in this module ([[AvroPrism]]'s dual-input
-    * surface, `sliceBytes` / `graftBytes`) takes whole arrays. The copy is one `arraycopy` of
-    * `length - 5` bytes — noise next to any decode that follows. A true offset view is a concern
-    * for the deferred byte-native optic surface.
+    * `body` is a COPY of the payload bytes, not a zero-copy offset view: `Array[Byte]` cannot carry
+    * an offset, and every downstream consumer in this module ([[AvroPrism]]'s dual-input surface,
+    * `sliceBytes` / `graftBytes`) takes whole arrays. The copy is one `arraycopy` of `length - 5`
+    * bytes — noise next to any decode that follows. A true offset view is a concern for the
+    * deferred byte-native optic surface.
     */
   final case class Framed(schemaId: Int, body: Array[Byte])
 

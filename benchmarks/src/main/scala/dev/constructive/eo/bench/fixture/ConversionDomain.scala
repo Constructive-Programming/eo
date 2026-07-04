@@ -7,7 +7,12 @@ import dev.constructive.eo.avro.{AvroCodec, AvroPrism, codecPrism}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord, IndexedRecord}
+import org.apache.avro.generic.{
+  GenericDatumReader,
+  GenericDatumWriter,
+  GenericRecord,
+  IndexedRecord,
+}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 /** Conversion-pipeline-shaped fixtures for `AvroBytesBench` — deliberately NOT toy records.
@@ -116,8 +121,8 @@ object ConversionDomain:
   val envelopeSchema: Schema = envelopeCodec.schema
   val wideSchema: Schema = wideCodec.schema
 
-  /** Suffix scalar AFTER the mid-record union — the read/modify focus on the envelope, so the
-    * byte cursor has to skip the union payload to reach it.
+  /** Suffix scalar AFTER the mid-record union — the read/modify focus on the envelope, so the byte
+    * cursor has to skip the union payload to reach it.
     */
   val partnerPrism: AvroPrism[String] = codecPrism[TrackEnvelope].field(_.partnerId)
 
@@ -187,9 +192,9 @@ object ConversionDomain:
       note = "post-click purchase, 30d window",
     )
 
-  /** Stock-avro projection baseline: a PRUNED reader schema carrying only the focused field.
-    * Schema resolution skips every writer field absent from the reader — the "no new library"
-    * way to read one field without materialising the rest.
+  /** Stock-avro projection baseline: a PRUNED reader schema carrying only the focused field. Schema
+    * resolution skips every writer field absent from the reader — the "no new library" way to read
+    * one field without materialising the rest.
     */
   def prunedSchemaOf(full: Schema, fieldName: String): Schema =
     val source = full.getField(fieldName)

@@ -2,9 +2,9 @@ package dev.constructive.eo.avro
 
 import org.apache.avro.Schema
 
-/** An encoded byte fragment sliced out of a binary Avro payload by
-  * [[AvroPrism.sliceBytes]] — the value bytes of one focused field, ready to be hashed, shipped
-  * around, or grafted into another payload via [[AvroPrism.graftBytes]].
+/** An encoded byte fragment sliced out of a binary Avro payload by [[AvroPrism.sliceBytes]] — the
+  * value bytes of one focused field, ready to be hashed, shipped around, or grafted into another
+  * payload via [[AvroPrism.graftBytes]].
   *
   * When the slicing prism focused a union branch (`.union[Branch]`), the branch-index bytes are
   * STRIPPED: `bytes` carries the branch value only, `schema` is the branch schema, and

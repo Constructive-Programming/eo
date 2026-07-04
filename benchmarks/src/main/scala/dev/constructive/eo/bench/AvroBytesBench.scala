@@ -9,26 +9,26 @@ import java.util.concurrent.TimeUnit
 import dev.constructive.eo.bench.fixture.*
 
 /** Bytes-in/bytes-out avro bench (zero-copy plan, Phase 1) over CONVERSION-SHAPED fixtures — a
-  * 7-field envelope with a mid-record union payload and an 18-field record with nested
-  * sub-records (see [[ConversionDomain]]).
+  * 7-field envelope with a mid-record union payload and an 18-field record with nested sub-records
+  * (see [[ConversionDomain]]).
   *
   * Three strategies per single-field READ, two per single-field MODIFY:
   *
-  *   - `naive*` — full codec round-trip: bytes → `GenericRecord` → kindlings case class,
-  *     access / `copy`, re-encode. What a conventional consumer/producer pair does today.
+  *   - `naive*` — full codec round-trip: bytes → `GenericRecord` → kindlings case class, access /
+  *     `copy`, re-encode. What a conventional consumer/producer pair does today.
   *   - `eo*` — eo-avro record-rebuild: `AvroPrism.getOptionUnsafe(bytes)` for reads (parse +
-  *     partial walk, no native materialisation of unrelated fields), `modifyBytesUnsafe` for
-  *     writes (parse → focused rebuild → re-encode).
+  *     partial walk, no native materialisation of unrelated fields), `modifyBytesUnsafe` for writes
+  *     (parse → focused rebuild → re-encode).
   *   - `pruned*` (read only) — stock apache-avro projection: `GenericDatumReader` with a PRUNED
   *     reader schema carrying only the focused field, so schema resolution skips the rest. The
   *     no-new-library baseline.
   *
   * Plus the GRAFT trio: splicing a pre-sliced payload fragment into the output envelope's bytes
-  * ([[dev.constructive.eo.avro.AvroPrism.graftBytes]] — no decode at all) vs the decode +
-  * re-encode passthrough, with the slice+graft pipeline in between.
+  * ([[dev.constructive.eo.avro.AvroPrism.graftBytes]] — no decode at all) vs the decode + re-encode
+  * passthrough, with the slice+graft pipeline in between.
   *
-  * Allocation pressure is half the story for the graft path — run with the GC profiler to see
-  * B/op alongside ns/op:
+  * Allocation pressure is half the story for the graft path — run with the GC profiler to see B/op
+  * alongside ns/op:
   *
   * {{{
   *   sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 -prof gc .*AvroBytesBench.*"
@@ -109,8 +109,8 @@ class AvroBytesBench extends JmhDefaults:
     val out = decodeEnvelope(outputBytes)
     encodeEnvelope(out.copy(payload = in.payload))
 
-  /** Pre-sliced fragment, graft only — the steady-state hot path when the fragment is sliced
-    * once and grafted into many outputs (or carried between services).
+  /** Pre-sliced fragment, graft only — the steady-state hot path when the fragment is sliced once
+    * and grafted into many outputs (or carried between services).
     */
   @Benchmark def eoGraftPayload: Array[Byte] =
     clickPrism.graftBytesUnsafe(outputBytes, clickFragment)
