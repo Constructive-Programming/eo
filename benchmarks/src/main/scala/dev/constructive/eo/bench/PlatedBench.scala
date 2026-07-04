@@ -17,22 +17,23 @@ import dev.constructive.eo.optics.Plated as EoPlated
 /** `Plated` recursion — the read side (`universe`, enumerate every sub-term) and the write side
   * (`transform`, bottom-up rebuild) — measured three ways:
   *
-  *   - `eo*`      — cats-eo `Plated.universe` / `Plated.transform` (PSVec-native carrier, stack-safe
-  *                  via an explicit post-order stack machine / worklist on the heap).
-  *   - `m*`       — Monocle `monocle.function.Plated.universe` / `.transform` over a hand-written
-  *                  `Plated` instance.
+  *   - `eo*` — cats-eo `Plated.universe` / `Plated.transform` (PSVec-native carrier, stack-safe via
+  *     an explicit post-order stack machine / worklist on the heap).
+  *   - `m*` — Monocle `monocle.function.Plated.universe` / `.transform` over a hand-written
+  *     `Plated` instance.
   *   - `visitor*` — the hand-rolled recursive collector / rebuild you'd write without optics.
   *
   * Subjects (all sized by `n`, so a row reads across at equal node counts):
   *
-  *   - `*Expr`  — a balanced `App` tree (normal depth ~log n) — the cookbook expression-tree shape.
-  *   - `*Deep`  — a left-leaning `Bin` spine of depth `n` (the degenerate deep tree; this is where
-  *                the trampolined recursion earns its keep).
-  *   - `*Json`  — a balanced `io.circe.Json` array tree (normal depth) via the universal
-  *                `Plated[Json]`.
+  *   - `*Expr` — a balanced `App` tree (normal depth ~log n) — the cookbook expression-tree shape.
+  *   - `*Deep` — a left-leaning `Bin` spine of depth `n` (the degenerate deep tree; this is where
+  *     the trampolined recursion earns its keep).
+  *   - `*Json` — a balanced `io.circe.Json` array tree (normal depth) via the universal
+  *     `Plated[Json]`.
   *
-  * `universe*` methods return the sub-term count, forcing the full enumeration (Monocle's `universe`
-  * is a lazy `LazyList`, so `.size` materialises it). `transform*` methods rebuild every node.
+  * `universe*` methods return the sub-term count, forcing the full enumeration (Monocle's
+  * `universe` is a lazy `LazyList`, so `.size` materialises it). `transform*` methods rebuild every
+  * node.
   *
   * '''No `*Deep` for Monocle.''' Monocle's `universe` / `transform` are not stack-safe: on the
   * degenerate spine they `StackOverflowError` at depth ≳ 2048 (and, where `universe` does survive —
@@ -61,6 +62,7 @@ class PlatedBench extends JmhDefaults:
     case Expr.Var(name) => Expr.Var(name.toUpperCase)
     case other          => other
   }
+
   val bumpLeaf: Bin => Bin = {
     case Bin.Leaf(v) => Bin.Leaf(v + 1)
     case node        => node

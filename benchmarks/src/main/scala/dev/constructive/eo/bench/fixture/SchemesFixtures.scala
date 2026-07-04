@@ -23,6 +23,7 @@ enum BinF[+A]:
 object SchemesFixtures:
 
   given binFunctor: Functor[BinF] with
+
     def map[A, B](fa: BinF[A])(f: A => B): BinF[B] =
       fa match
         case BinF.LeafF(v)    => BinF.LeafF(v)
@@ -48,9 +49,9 @@ object SchemesFixtures:
       case Bin.Node(_, _) => kids(0) + kids(1)
 
   /** Seed expansion shared by eo's hylo/ana: depth `d` ⇒ two child seeds `(d-1, d-1)`; leaf at
-    * `d <= 0`. `PSVec.of` builds the 2-vector directly (no `List` intermediate). */
-  val eoExpand: Int => PSVec[Int] = d =>
-    if d <= 0 then PSVec.empty[Int] else PSVec.of(d - 1, d - 1)
+    * `d <= 0`. `PSVec.of` builds the 2-vector directly (no `List` intermediate).
+    */
+  val eoExpand: Int => PSVec[Int] = d => if d <= 0 then PSVec.empty[Int] else PSVec.of(d - 1, d - 1)
 
   /** Fused hylo algebra — folds to `Int` directly, never building a `Bin`. */
   val eoHyloAlg: (Int, PSVec[Int]) => Int = (d, rs) => if d <= 0 then 1 else rs(0) + rs(1)
