@@ -13,8 +13,8 @@ import org.specs2.mutable.Specification
   *   - length-changing encodings (longer and shorter) shift the following spans correctly
   *   - `.modify(identity)` is byte-equivalent for canonical encodings
   *   - empty / missing arrays pass the input through by reference
-  *   - elements whose decode refuses are dropped from the focus set and stay byte-untouched,
-  *     while the decodable elements around them still splice (span↔foci alignment)
+  *   - elements whose decode refuses are dropped from the focus set and stay byte-untouched, while
+  *     the decodable elements around them still splice (span↔foci alignment)
   *   - nested wildcard paths (`\$.outer[*].inner`) write each element's sub-field
   *
   * `.modify` lights up via `mfFunctor[PSVec]` — the splice lives in the optic's `from`.

@@ -1083,6 +1083,72 @@ default surface). Background framing on the streaming /
 Kafka use case lives in the
 [Avro integration intro](integrations/avro.md#why-this-exists).
 
+### Cross-format bridge — Avro bytes ⇄ JSON bytes
+
+**Why:** the consumer reads Avro off a topic and must emit JSON
+to a partner API — or receives JSON and must re-emit Avro. The
+conventional bridge decodes the whole record into a case class,
+builds a whole output value, and encodes it all. With a byte
+optic on each side of the seam, only the moved branch is ever
+decoded and re-encoded: the full object is **never constructed**
+on either format. (`AvroJsonBridgeSpec` proves this with a
+counting root codec — both bridge directions run with zero root
+decodes and zero root encodes; `AvroJsonBridgeBench` puts B/op
+numbers on it.)
+
+```scala mdoc:silent
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import dev.constructive.eo.jsoniter.JsoniterPrism
+
+given JsonValueCodec[String] = JsonCodecMaker.make
+
+// One byte optic per format, same focus type. Drilled once,
+// reused for every message.
+val customerAvro = eoavro.codecPrism[OrderEvent].customer
+val customerJson = JsoniterPrism[String]("$.customer")
+
+// The JSON side's output skeleton. Placeholders must be VALID
+// encodings of the branch type — the splice write decodes the
+// current focus before replacing it.
+val receiptTemplate: Array[Byte] =
+  """{"kind":"receipt","customer":"","status":"ok"}""".getBytes("UTF-8")
+```
+
+```scala mdoc
+// Avro → JSON: slice the branch off the Avro wire form, splice
+// it into the JSON template. No OrderEvent, no receipt object.
+val receipt = customerAvro.getOption(sampleBytes) match
+  case Some(c) => customerJson.replace(c)(receiptTemplate)
+  case None    => receiptTemplate
+new String(receipt, "UTF-8")
+```
+
+```scala mdoc
+// JSON → Avro: read the branch from JSON bytes, splice it into
+// existing Avro wire bytes. Same guarantee, reversed.
+val inbound: Array[Byte] =
+  """{"kind":"receipt","customer":"carol","status":"ok"}""".getBytes("UTF-8")
+val updatedAvro = customerJson.getOption(inbound) match
+  case Some(c) => customerAvro.replace(c)(sampleBytes)
+  case None    => sampleBytes
+
+// Witness (this read DOES construct the object — the bridge
+// above never did): the branch moved, the siblings survived.
+eoavro.codecPrism[OrderEvent].getOption(updatedAvro)
+```
+
+Cost model worth knowing: each `.replace` locates the span,
+decodes the *current* focus (the `Affine` write carries it),
+re-encodes the new one, and allocates one output buffer. Moving
+one branch this way is far cheaper than materialising a wide
+object — but for many branches per message, or fragment moves
+between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
+(no decode at all).
+
+**Source:** `AvroJsonBridgeSpec` (jsoniter module) and
+`AvroJsonBridgeBench` (benchmarks) in cats-eo.
+
 ## Further reading
 
 - [Concepts](concepts.md) — the theory behind the unified Optic
