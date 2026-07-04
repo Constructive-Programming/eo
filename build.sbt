@@ -498,20 +498,21 @@ lazy val avroIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
-// Read-only spike: byte-cursor JSON optics over `Array[Byte]`, backed
-// by jsoniter-scala. Reuses the existing `Affine` carrier — the optic
+// Byte-cursor JSON optics over `Array[Byte]`, backed by
+// jsoniter-scala. Reuses the existing `Affine` carrier — the optic
 // shape `Optic[Array[Byte], Array[Byte], A, A, Affine]` keeps the
 // source bytes in the structural leftover (Hit's `snd` carries
-// `(bytes, span)`, Miss's `fst` carries `bytes` for pass-through), so
-// future read-write phase 2 can splice into the same structure without
-// a carrier change. No runtime AST allocation: the path scanner walks
-// raw bytes and the focus is decoded via `JsonValueCodec[A]` only when
-// the user reads it.
+// `(bytes, span)`, Miss's `fst` carries `bytes` for pass-through) and
+// writes splice into the recorded spans. No runtime AST allocation:
+// the path scanner walks raw bytes and the focus is decoded via
+// `JsonValueCodec[A]` only when the user reads it. avroIntegration is
+// Test-scoped for the cross-format Avro-bytes → JSON-bytes bridge spec.
 lazy val jsoniterIntegration: Project = project
   .in(file("jsoniter"))
   .dependsOn(
     LocalProject("core"),
     LocalProject("laws") % Test,
+    LocalProject("avroIntegration") % Test,
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
