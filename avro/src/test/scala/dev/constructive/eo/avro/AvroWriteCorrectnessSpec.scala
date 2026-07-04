@@ -16,23 +16,23 @@ import org.specs2.mutable.Specification
   *
   *   - `.fields` byte writes encoded the NamedTuple under the PARENT schema through avro's
   *     positional `GenericDatumWriter`: partial covers silently no-opped (writer indexed past the
-  *     NT arity → swallowed exception → pass-through) and reordered same-typed full covers
-  *     silently SWAPPED field values. Fixed by the by-name overlay (decode parent slice → overlay
-  *     NT fields by name, mirroring the record face's `writeFields` → re-encode parent).
+  *     NT arity → swallowed exception → pass-through) and reordered same-typed full covers silently
+  *     SWAPPED field values. Fixed by the by-name overlay (decode parent slice → overlay NT fields
+  *     by name, mirroring the record face's `writeFields` → re-encode parent).
   *   - `.record.replace` (the generic Either-carrier extension) routed through
   *     `from(Right(a)) = reverseGet(a)`, reconstructing the focus STANDALONE — a drilled prism
   *     returned an empty null-filled record. Fixed by the sibling-preserving member `replace`.
-  *   - negative-count (byte-sized) array block framing made traversal writes silently pass
-  *     through while reads succeeded. Fixed by re-framing: the write rebuilds the array region
-  *     canonically (single positive-count block) with the focus splices applied.
-  *   - an adversarial `Long.MinValue` block count negated to itself and produced a confident
-  *     empty element walk on corrupt bytes. Fixed by rejecting it as `BinaryParseFailed`.
+  *   - negative-count (byte-sized) array block framing made traversal writes silently pass through
+  *     while reads succeeded. Fixed by re-framing: the write rebuilds the array region canonically
+  *     (single positive-count block) with the focus splices applied.
+  *   - an adversarial `Long.MinValue` block count negated to itself and produced a confident empty
+  *     element walk on corrupt bytes. Fixed by rejecting it as `BinaryParseFailed`.
   *
   * Plus the Optional-law property block for the byte prism (hand-rolled: the discipline
   * `OptionalTests` compare `S` with `==`, which is reference equality on `Array[Byte]`), and the
   * schema-discipline pins: the byte walk trusts the prism's reader schema absolutely, so payloads
-  * written under a DIFFERENT schema Miss (or, for same-typed reorders, read the wrong field) —
-  * the documented exact-writer-schema requirement.
+  * written under a DIFFERENT schema Miss (or, for same-typed reorders, read the wrong field) — the
+  * documented exact-writer-schema requirement.
   */
 class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
 
@@ -53,6 +53,11 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
   given AvroEncoder[NamePrice] = AvroEncoder.derived
   given AvroDecoder[NamePrice] = AvroDecoder.derived
   given AvroSchemaFor[NamePrice] = AvroSchemaFor.derived
+
+  type UserDomain = NamedTuple.NamedTuple[("user", "domain"), (String, String)]
+  given AvroEncoder[UserDomain] = AvroEncoder.derived
+  given AvroDecoder[UserDomain] = AvroDecoder.derived
+  given AvroSchemaFor[UserDomain] = AvroSchemaFor.derived
 
   private def encodeVia[A](a: A)(using codec: AvroCodec[A]): Array[Byte] =
     toBinary(codec.encode(a).asInstanceOf[GenericRecord], codec.schema)
@@ -132,6 +137,58 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     framingOk.and(readOk).and(writeOk)
   }
 
+  // ---- Post-re-review combination axes (reframe × overlay × union) -----
+
+  // covers: .each.fields on a NON-canonical array — the reframe path AND the by-name field
+  //   overlay together (each individually pinned above; this exercises the combination)
+  "byte-face .each.fields on blocked framing: reframe + overlay both apply" >> {
+    val basket = Basket("ann", List(Order("tea", 2.5, 1), Order("mate", 4.0, 2)))
+    val blocked = toBlockedBinary(basketRecord(basket), basketSchema)
+    val T = codecPrism[Basket].items.each.fields(_.name, _.price)
+    val out = T.modify(nt => (name = nt.name.toUpperCase, price = nt.price + 1.0))(blocked)
+    codecPrism[Basket].getOption(out) === Some(
+      Basket("ann", List(Order("TEA", 3.5, 1), Order("MATE", 5.0, 2)))
+    )
+  }
+
+  // covers: Fields focus UNDER a .union step — the union index re-synthesis (from branchOrdinal)
+  //   and the by-name parent overlay interacting on both faces
+  "byte-face .union[Branch].fields: index re-synthesis + overlay, siblings survive" >> {
+    val dir = Directory("d-1", Email("alice", "example.com"))
+    val bytes = toBinary(directoryRecord(dir), directorySchema)
+    val L = codecPrism[Directory].field(_.contact).union[Email].fields(_.user, _.domain)
+    val out = L.modify(nt => (user = nt.user.toUpperCase, domain = nt.domain))(bytes)
+    val byteOk = codecPrism[Directory].getOption(out) ===
+      Some(Directory("d-1", Email("ALICE", "example.com")))
+    // The record face over the same drilled path agrees.
+    val recOk = codecPrism[Directory]
+      .field(_.contact)
+      .union[Email]
+      .fields(_.user, _.domain)
+      .record
+      .getOptionUnsafe(out)
+      .contains((user = "ALICE", domain = "example.com"))
+    byteOk.and(recOk)
+  }
+
+  // covers: reframe of an array whose ELEMENTS are unions (List[Payment]) on blocked framing —
+  //   each element's opaque index+value bytes are decoded/re-encoded whole via the branch codec
+  //   and rebuilt into a canonical block. (Per-element `.union[B]` narrowing is not an
+  //   AvroTraversal extension, so the element-level branch-index re-synthesis in reframeArray is
+  //   unreachable via the public API and stays as a defensive mirror of spliceAll.)
+  "byte-face .each on a union-element array under blocked framing: reframe applies per element" >> {
+    val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
+    val blocked = toBlockedBinary(ledgerRecord(ledger), ledgerSchema)
+    val T = codecPrism[Ledger].field(_.entries).each
+    val out = T.modify {
+      case Cash(a) => Cash(a + 1L)
+      case Card(n) => Card(n.reverse)
+    }(blocked)
+    codecPrism[Ledger].getOption(out) === Some(
+      Ledger("ann", List(Cash(101L), Card("1114"), Cash(251L)))
+    )
+  }
+
   // covers: Long.MinValue block count (negates to itself) is a structured parse failure, not a
   //   confident empty element walk
   "array block count Long.MinValue surfaces BinaryParseFailed" >> {
@@ -174,14 +231,20 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
 
       val getPut = java.util.Arrays.equals(ageL.modify(identity[Int])(s), s)
       val putGet = ageL.getOption(ageL.replace(x)(s)).contains(x)
-      val putPut = java.util.Arrays.equals(
-        ageL.replace(y)(ageL.replace(x)(s)),
-        ageL.replace(y)(s),
-      )
-      val composeModify = java.util.Arrays.equals(
-        ageL.modify((_: Int) + y)(ageL.modify((_: Int) + x)(s)),
-        ageL.modify((v: Int) => v + x + y)(s),
-      )
+      val putPut = java
+        .util
+        .Arrays
+        .equals(
+          ageL.replace(y)(ageL.replace(x)(s)),
+          ageL.replace(y)(s),
+        )
+      val composeModify = java
+        .util
+        .Arrays
+        .equals(
+          ageL.modify((_: Int) + y)(ageL.modify((_: Int) + x)(s)),
+          ageL.modify((v: Int) => v + x + y)(s),
+        )
       getPut && putGet && putPut && composeModify
   }
 
@@ -210,7 +273,8 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
         null,
       )
     )
-    val v1Schema = org.apache.avro.Schema.createRecord("PersonV1", null, "eo.avro.test", false, fields)
+    val v1Schema =
+      org.apache.avro.Schema.createRecord("PersonV1", null, "eo.avro.test", false, fields)
     val v1Bytes = toBinary(
       buildRecord(v1Schema)("extra" -> java.lang.Long.valueOf(Long.MaxValue), "name" -> "Alice"),
       v1Schema,
@@ -243,7 +307,8 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
         null,
       )
     )
-    val reordered = org.apache.avro.Schema.createRecord("FullName", null, "eo.avro.test", false, fields)
+    val reordered =
+      org.apache.avro.Schema.createRecord("FullName", null, "eo.avro.test", false, fields)
     val bytes = toBinary(buildRecord(reordered)("last" -> "Doe", "first" -> "John"), reordered)
 
     codecPrism[FullName].field(_.first).getOption(bytes) === Some("Doe")

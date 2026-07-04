@@ -35,6 +35,11 @@ import org.apache.avro.generic.IndexedRecord
   * surface (`modify` / `place` / `replace` / `*Unsafe`) shadows the generic extensions with
   * sibling-preserving record walks. Compose drilled record optics for READS; write through the
   * member surface or the byte face.
+  *
+  * Corollary: the member shadowing is by STATIC type. Upcasting a drilled record prism to
+  * `Optic[IndexedRecord, IndexedRecord, A, A, Either]` (or binding it to that ascription) and then
+  * calling `.replace` / `.modify` re-selects the generic extension — the same sibling-dropping
+  * `from(Right(_))` path. Don't upcast a drilled record prism and then write.
   */
 final class AvroRecordPrism[A] private[avro] (
     private[avro] val focus: AvroFocus[A],

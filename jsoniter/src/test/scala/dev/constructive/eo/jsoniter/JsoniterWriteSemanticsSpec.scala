@@ -9,14 +9,14 @@ import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.optics.Traversal
 import org.specs2.mutable.Specification
 
-/** Write-semantics pins for the JSON byte optics — born from the 2026-07-04 expert review.
-  * These pin the DOCUMENTED contract so drift is caught:
+/** Write-semantics pins for the JSON byte optics — born from the 2026-07-04 expert review. These
+  * pin the DOCUMENTED contract so drift is caught:
   *
   *   - the Optional/Traversal laws hold up to CANONICAL RE-ENCODING of the focused slice: a
   *     non-canonical focus (`1e0`, `A` escapes, exotic number forms) is normalised by
   *     `modify(identity)` — the law is `modify(identity) == identity` on the canonical quotient,
-  *     not on raw bytes. Bytes OUTSIDE the focused span (whitespace, sibling formatting) are
-  *     never touched.
+  *     not on raw bytes. Bytes OUTSIDE the focused span (whitespace, sibling formatting) are never
+  *     touched.
   *   - the Affine write decodes the current focus before splicing — `.replace` onto a span whose
   *     current value doesn't decode as `A` is a Miss pass-through, so templates must carry VALID
   *     placeholder encodings.
@@ -49,8 +49,10 @@ class JsoniterWriteSemanticsSpec extends Specification:
     val template = bytes("""{"id":{},"name":"x"}""")
     val idP = JsoniterPrism[Double]("$.id")
     ((idP.replace(9.5)(template) eq template) === true)
-      .and(str(idP.replace(9.5)(bytes("""{"id":0.0,"name":"x"}"""))) ===
-        """{"id":9.5,"name":"x"}""")
+      .and(
+        str(idP.replace(9.5)(bytes("""{"id":0.0,"name":"x"}"""))) ===
+          """{"id":9.5,"name":"x"}"""
+      )
   }
 
   // covers: same-carrier andThen — byte traversal composed with the core each-traversal reads
