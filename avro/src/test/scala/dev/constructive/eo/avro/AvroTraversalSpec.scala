@@ -21,7 +21,7 @@ class AvroTraversalSpec extends Specification:
 
   /** Build a basket whose items array holds `elems`, then run the per-element name traversal. */
   private def runItemsModify(elems: AnyRef*): Ior[Chain[AvroFailure], IndexedRecord] =
-    codecPrism[Basket].items.each.name.modify(_.toUpperCase)(basketRoot(elems))
+    codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)(basketRoot(elems))
 
   /** Compare two records via apache-avro's structural compare. */
   private def recordsEqual(a: IndexedRecord, b: IndexedRecord): Boolean =
@@ -42,15 +42,15 @@ class AvroTraversalSpec extends Specification:
       basket.copy(items = List(Order("X", 1.0, 1), Order("Y", 2.0, 2), Order("Z", 3.0, 3)))
     )
 
-    val ior = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(record)
-    val unsafe = codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(record)
+    val ior = codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)(record)
+    val unsafe = codecPrism[Basket].items.each.name.record.modifyUnsafe(_.toUpperCase)(record)
     val parityM = ior match
       case Ior.Right(out) => recordsEqual(out, unsafe)
       case _              => false
     val correctM = recordsEqual(unsafe, expected)
 
-    val getAllIor = codecPrism[Basket].items.each.name.getAll(record)
-    val getAllUnsafe = codecPrism[Basket].items.each.name.getAllUnsafe(record)
+    val getAllIor = codecPrism[Basket].items.each.name.record.getAll(record)
+    val getAllUnsafe = codecPrism[Basket].items.each.name.record.getAllUnsafe(record)
     val parityGA = getAllIor === Ior.Right(getAllUnsafe)
     val correctGA = getAllUnsafe === Vector("x", "y", "z")
 
@@ -65,7 +65,7 @@ class AvroTraversalSpec extends Specification:
     val emptyBasket = Basket("Alice", List.empty)
     val emptyRecord = basketRecord(emptyBasket)
     val emptyOk =
-      codecPrism[Basket].items.each.name.modify(_.toUpperCase)(emptyRecord) match
+      codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)(emptyRecord) match
         case Ior.Right(out) => recordsEqual(out, emptyRecord) === true
         case other          =>
           org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
@@ -85,16 +85,17 @@ class AvroTraversalSpec extends Specification:
     val stump = new GenericData.Record(stumpSchema)
     stump.put(0, "Alice")
 
-    val mResult = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(stump)
+    val mResult = codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)(stump)
     val mOk = mResult match
       case Ior.Left(chain) =>
         (chain.length === 1L)
           .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("items")))
       case _ =>
         org.specs2.execute.Failure(s"expected Ior.Left, got $mResult"): org.specs2.execute.Result
-    val gaOk = codecPrism[Basket].items.each.name.getAll(stump).isLeft === true
+    val gaOk = codecPrism[Basket].items.each.name.record.getAll(stump).isLeft === true
     val unsafeOk =
-      (codecPrism[Basket].items.each.name.modifyUnsafe(_.toUpperCase)(stump) eq stump) === true
+      val out = codecPrism[Basket].items.each.name.record.modifyUnsafe(_.toUpperCase)(stump)
+      (out eq stump) === true
 
     emptyOk.and(mOk).and(gaOk).and(unsafeOk)
   }
@@ -165,8 +166,8 @@ class AvroTraversalSpec extends Specification:
       basket.copy(items = List(Order("Z", 1.0, 1), Order("Z", 2.0, 2)))
     )
 
-    val place = codecPrism[Basket].items.each.name.place("Z")(record)
-    val placeUnsafe = codecPrism[Basket].items.each.name.placeUnsafe("Z")(record)
+    val place = codecPrism[Basket].items.each.name.record.place("Z")(record)
+    val placeUnsafe = codecPrism[Basket].items.each.name.record.placeUnsafe("Z")(record)
     val placeOk = (place match
       case Ior.Right(out) => recordsEqual(out, expectedZ)
       case _              => false
@@ -176,8 +177,9 @@ class AvroTraversalSpec extends Specification:
     val expectedZZZ = basketRecord(
       basket.copy(items = List(Order("ZZZ", 1.0, 1), Order("ZZZ", 2.0, 2)))
     )
-    val transfer = codecPrism[Basket].items.each.name.transfer(upcase)(record)("zzz")
-    val transferUnsafe = codecPrism[Basket].items.each.name.transferUnsafe(upcase)(record)("zzz")
+    val transfer = codecPrism[Basket].items.each.name.record.transfer(upcase)(record)("zzz")
+    val transferUnsafe =
+      codecPrism[Basket].items.each.name.record.transferUnsafe(upcase)(record)("zzz")
     val transferOk = (transfer match
       case Ior.Right(out) => recordsEqual(out, expectedZZZ)
       case _              => false
@@ -197,7 +199,7 @@ class AvroTraversalSpec extends Specification:
     val stump = new GenericData.Record(stumpSchema)
     stump.put(0, "Alice")
 
-    val placeMissing = codecPrism[Basket].items.each.name.place("Z")(stump).isLeft === true
+    val placeMissing = codecPrism[Basket].items.each.name.record.place("Z")(stump).isLeft === true
 
     (placeOk === true).and(transferOk === true).and(placeMissing)
   }

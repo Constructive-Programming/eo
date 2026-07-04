@@ -57,7 +57,7 @@ ThisBuild / githubWorkflowJavaVersions := Seq(
 // auto-fix.
 ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   WorkflowStep.Sbt(
-    List("scalafmtCheckAll", "scalafmtSbtCheck"),
+    List("scalafmtCheckAll", "scalafmtSbtCheck", "benchmarks/scalafmtCheck", "benchmarks/Test/scalafmtCheck"),
     name = Some("Check formatting"),
   ),
   WorkflowStep.Sbt(

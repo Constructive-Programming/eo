@@ -115,6 +115,43 @@ object AvroSpecFixtures:
   case class Cash(amount: Long) extends Payment
   case class Card(number: String) extends Payment
 
+  /** Envelope-shaped record with a MID-RECORD union field: `payment` (the [[Payment]] union) sits
+    * between scalar fields on both sides, so the byte-span specs get a real prefix (`id`, `seq`)
+    * and a real suffix (`note`) around the sliced / grafted span. Mirrors the Kafka "envelope +
+    * passthrough payload" shape the slice/graft surface was built for.
+    */
+  case class WireEnvelope(id: String, seq: Long, payment: Payment, note: String)
+
+  object WireEnvelope:
+
+    given AvroEncoder[WireEnvelope] = AvroEncoder.derived
+    given AvroDecoder[WireEnvelope] = AvroDecoder.derived
+    given AvroSchemaFor[WireEnvelope] = AvroSchemaFor.derived
+
+  /** Reader schema for [[WireEnvelope]] — used by the byte-span specs to re-encode / re-decode. */
+  lazy val envelopeSchema: Schema = summon[AvroCodec[WireEnvelope]].schema
+
+  /** Build a kindlings-encoded record for an [[WireEnvelope]]. */
+  def envelopeRecord(e: WireEnvelope): GenericRecord =
+    summon[AvroCodec[WireEnvelope]].encode(e).asInstanceOf[GenericRecord]
+
+  /** Encode a single VALUE (not necessarily a record) to Avro binary under `schema` — the
+    * counterpart to [[toBinary]] for the fragment-fidelity assertions, where the sliced span is a
+    * bare `long` / union-branch record rather than a top-level record.
+    */
+  def toBinaryValue(value: Any, schema: Schema): Array[Byte] =
+    val out = new ByteArrayOutputStream()
+    val encoder = EncoderFactory.get().binaryEncoder(out, null)
+    val writer = new GenericDatumWriter[Any](schema)
+    writer.write(value, encoder)
+    encoder.flush()
+    out.toByteArray
+
+  /** Decode a single VALUE from Avro binary under `schema` — inverse of [[toBinaryValue]]. */
+  def fromBinaryValue(bytes: Array[Byte], schema: Schema): Any =
+    val reader = new org.apache.avro.generic.GenericDatumReader[Any](schema)
+    reader.read(null, org.apache.avro.io.DecoderFactory.get().binaryDecoder(bytes, null))
+
   /** Build a kindlings-encoded Transaction record. */
   def transactionRecord(t: Transaction): GenericRecord =
     summon[AvroCodec[Transaction]].encode(t).asInstanceOf[GenericRecord]

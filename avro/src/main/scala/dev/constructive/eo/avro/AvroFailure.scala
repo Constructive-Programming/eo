@@ -70,6 +70,20 @@ enum AvroFailure:
     */
   case BadEnumSymbol(symbol: String, valid: List[String], step: PathStep)
 
+  /** The byte-offset locator ([[AvroBinaryCursor]]) reached a [[PathStep]] kind it cannot resolve
+    * to a byte span — currently [[PathStep.Index]]: array elements sit inside length-prefixed
+    * blocks, so a single element's span is not graftable without rewriting the block framing.
+    * Surfaced only by `sliceBytes` / `graftBytes`; the decode-based surfaces (`get` / `modify` /
+    * `at`) keep supporting Index steps.
+    */
+  case UnsupportedSpanStep(step: PathStep)
+
+  /** Input bytes are not a Confluent-framed payload — shorter than the 5-byte header, or the magic
+    * byte isn't `0x00`. Surfaced only by [[ConfluentWire.strip]]; `reason` names the specific check
+    * that refused.
+    */
+  case NotConfluentFramed(reason: String)
+
   /** Human-readable diagnostic. Kept separate from `toString` so the default enum representation
     * remains useful for structural inspection / pattern-matching-in-tests.
     */
@@ -85,6 +99,8 @@ enum AvroFailure:
       s"union resolution failed at $s (branches: ${b.mkString(", ")})"
     case BadEnumSymbol(sym, valid, s) =>
       s"bad enum symbol '$sym' at $s (valid: ${valid.mkString(", ")})"
+    case UnsupportedSpanStep(s) => s"byte-span location unsupported at $s"
+    case NotConfluentFramed(r)  => s"not a Confluent-framed payload: $r"
 
 object AvroFailure:
 

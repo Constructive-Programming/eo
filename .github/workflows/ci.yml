@@ -68,7 +68,7 @@ jobs:
         run: sbt +update
 
       - name: Check formatting
-        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck
+        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck benchmarks/scalafmtCheck benchmarks/Test/scalafmtCheck
 
       - name: Check scalafix
         run: sbt '++ ${{ matrix.scala }}' 'scalafixAll --check'

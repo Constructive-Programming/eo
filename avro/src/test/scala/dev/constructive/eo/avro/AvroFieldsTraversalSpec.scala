@@ -22,7 +22,7 @@ class AvroFieldsTraversalSpec extends Specification:
   import AvroFieldsTraversalSpec.given
 
   /** Build a basket whose `items` array holds `elems`, then run the multi-field traversal
-    * `.modify(f)`.
+    * `.record.modify(f)`.
     */
   private def runFieldsModify(
       elems: Seq[AnyRef],
@@ -32,6 +32,7 @@ class AvroFieldsTraversalSpec extends Specification:
       .items
       .each
       .fields(_.name, _.price)
+      .record
       .modify(f)(basketRoot(elems))
 
   /** Compare two records via apache-avro's structural compare. */
@@ -68,14 +69,15 @@ class AvroFieldsTraversalSpec extends Specification:
       )
     )
 
-    val ior = codecPrism[Basket].items.each.fields(_.name, _.price).modify(f)(record)
-    val unsafe = codecPrism[Basket].items.each.fields(_.name, _.price).modifyUnsafe(f)(record)
+    val ior = codecPrism[Basket].items.each.fields(_.name, _.price).record.modify(f)(record)
+    val unsafe =
+      codecPrism[Basket].items.each.fields(_.name, _.price).record.modifyUnsafe(f)(record)
     val parity = ior match
       case Ior.Right(out) => recordsEqual(out, unsafe)
       case _              => false
     val correct = recordsEqual(unsafe, expected)
 
-    val getAll = codecPrism[Basket].items.each.fields(_.name, _.price).getAll(record)
+    val getAll = codecPrism[Basket].items.each.fields(_.name, _.price).record.getAll(record)
     val getAllOk = getAll.toOption must beSome.which { vec =>
       (vec.length === 3)
         .and(vec(0).name === "x")
@@ -178,6 +180,7 @@ class AvroFieldsTraversalSpec extends Specification:
       .items
       .each
       .fields(_.name, _.price)
+      .record
       .modify(nt => (name = nt.name, price = nt.price))(emptyRec) match
       case Ior.Right(out) => recordsEqual(out, emptyRec)
       case _              => false
@@ -199,6 +202,7 @@ class AvroFieldsTraversalSpec extends Specification:
       .items
       .each
       .fields(_.name, _.price)
+      .record
       .modify(nt => (name = nt.name, price = nt.price))(stump)
       .isLeft === true
 
@@ -208,9 +212,13 @@ class AvroFieldsTraversalSpec extends Specification:
       basket.copy(items = List(Order("Z", 99.0, qty = 1), Order("Z", 99.0, qty = 2)))
     )
     val place =
-      codecPrism[Basket].items.each.fields(_.name, _.price).place(nt)(basketRecord(basket))
-    val placeUnsafe =
-      codecPrism[Basket].items.each.fields(_.name, _.price).placeUnsafe(nt)(basketRecord(basket))
+      codecPrism[Basket].items.each.fields(_.name, _.price).record.place(nt)(basketRecord(basket))
+    val placeUnsafe = codecPrism[Basket]
+      .items
+      .each
+      .fields(_.name, _.price)
+      .record
+      .placeUnsafe(nt)(basketRecord(basket))
     val placeOk = place match
       case Ior.Right(out) => recordsEqual(out, expectedZ)
       case _              => false

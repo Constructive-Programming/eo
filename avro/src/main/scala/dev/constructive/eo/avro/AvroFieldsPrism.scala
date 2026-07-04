@@ -11,8 +11,8 @@ package dev.constructive.eo.avro
   * downstream type ascriptions compiling.
   *
   * Users seeing this alias in error messages should read it as "an `AvroPrism[A]` whose focus
-  * assembles `A` (a NamedTuple) from selected fields" — same surface, same Optic supertype, same
-  * Ior diagnostics.
+  * assembles `A` (a NamedTuple) from selected fields" — same surface, same byte-carried Optic
+  * supertype, same Ior diagnostics behind `.record`.
   *
   * Mirrors `dev.constructive.eo.circe.JsonFieldsPrism` (which is similarly a `type =` alias for
   * `JsonPrism[A]`).

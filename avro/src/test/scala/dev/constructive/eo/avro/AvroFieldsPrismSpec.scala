@@ -47,7 +47,7 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   "AvroFieldsPrism default-Ior surface forAll: modify-id / parity / get / round-trip / compose" >> forAll {
     (p: Person, suffix: String, newName: String, newAge: Int) =>
       val record = personRecord(p)
-      val L = codecPrism[Person].fields(_.name, _.age)
+      val L = codecPrism[Person].fields(_.name, _.age).record
       val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
 
       val modIdOk = L.modify(identity[NameAge])(record) match
@@ -67,8 +67,8 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
         case Some(read) => read.name == newName && read.age == newAge
         case None       => false
 
-      val nameL = codecPrism[Person].field(_.name)
-      val ageL = codecPrism[Person].field(_.age)
+      val nameL = codecPrism[Person].field(_.name).record
+      val ageL = codecPrism[Person].field(_.age).record
       val stepByStep =
         ageL.modifyUnsafe((i: Int) => i + 1)(
           nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
@@ -93,7 +93,7 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   //   getOptionUnsafe on a partial-miss record returns None
   "AvroFieldsPrism partial-miss surfaces (D4): get/modify/modifyUnsafe/getOptionUnsafe" >> {
     val ageOnly = ageOnlyRecord(30)
-    val L = codecPrism[Person](personSchema).fields(_.name, _.age)
+    val L = codecPrism[Person](personSchema).fields(_.name, _.age).record
 
     val getOk = L.get(ageOnly) match
       case Ior.Left(chain) =>

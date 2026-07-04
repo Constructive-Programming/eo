@@ -26,15 +26,15 @@ class AvroUnionSpec extends Specification:
   //
   // 2026-04-29 consolidation: 4 Option[Long] branch tests → 1 composite.
 
-  // covers: Some(long) branch round-trip on .field(_.amount).union[Long].modify (Ior.Right + schema preserved),
+  // covers: Some(long) branch round-trip on .field(_.amount).union[Long].record.modify (Ior.Right + schema preserved),
   //   .get on Some(long) returns Ior.Right(longValue),
-  //   None / null-branch on .union[Long].get surfaces UnionResolutionFailed with schema-declared
+  //   None / null-branch on .union[Long].record.get surfaces UnionResolutionFailed with schema-declared
   //     alternatives ["null", "long"],
   //   None / null-branch on .modify yields Ior.Both(UnionResolutionFailed, originalRecord),
   //   .getOptionUnsafe on the null-branch returns None silently
   "field(_.amount).union[Long]: Some round-trip + None branch surfaces UnionResolutionFailed" >> {
     val record1 = transactionRecord(Transaction("t-1", Some(42L)))
-    val prism = codecPrism[Transaction].field(_.amount).union[Long]
+    val prism = codecPrism[Transaction].field(_.amount).union[Long].record
 
     val modifyOk = prism.modify(_ + 1L)(record1) match
       case Ior.Right(out) =>
@@ -115,6 +115,7 @@ class AvroUnionSpec extends Specification:
     val cashL = AvroPrism
       .codecPrism[Payment](envSchema.getField("payment").schema)
       .union[Cash]
+      .record
 
     val cashHappy = cashL.modify((c: Cash) => c.copy(amount = c.amount + 5L))(cashRec) match
       case Ior.Right(rec) =>
@@ -124,7 +125,7 @@ class AvroUnionSpec extends Specification:
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-    val cardL = AvroPrism.codecPrism[Payment].union[Card]
+    val cardL = AvroPrism.codecPrism[Payment].union[Card].record
     val cashOnCardOk = cardL.get(cashRec) match
       case Ior.Left(chain) =>
         chain.headOption.get match

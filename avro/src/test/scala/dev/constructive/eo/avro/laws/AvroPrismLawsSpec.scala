@@ -13,15 +13,16 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-/** Unit 9: witness that [[AvroPrism]] satisfies the three Prism laws on a full-cover Avro fixture,
-  * plus ScalaCheck property coverage against both the default Ior surface and the `*Unsafe` escape
-  * hatches.
+/** Unit 9: witness that the record-carried face of [[AvroPrism]] (an [[AvroRecordPrism]], reached
+  * via `.record`) satisfies the three Prism laws on a full-cover Avro fixture, plus ScalaCheck
+  * property coverage against both the default Ior surface and the `*Unsafe` escape hatches.
   *
   * Mirrors `dev.constructive.eo.circe.JsonFieldsPrismLawsSpec` block-for-block — same shape, same
   * scenario count — with two Avro-forced deviations:
   *
-  *   1. '''Discipline `PrismTests` runs against the IDENTITY full-cover prism `codecPrism[Pair]`
-  *      (focus = `Pair`), not against `codecPrism[Pair].fields(_.a, _.b)` (focus = NamedTuple).'''
+  *   1. '''Discipline `PrismTests` runs against the IDENTITY full-cover prism
+  *      `codecPrism[Pair].record` (focus = `Pair`), not against
+  *      `codecPrism[Pair].fields(_.a, _.b).record` (focus = NamedTuple).'''
   *      `PrismLaws.partialRoundTripOneWay` is `prism.reverseGet(a) == s` — universal `==`. For
   *      `IndexedRecord`, `GenericData.Record.equals` is schema-instance-sensitive: two records are
   *      equal only when their schemas are the same instance AND their fields compare structurally.
@@ -43,10 +44,10 @@ import org.typelevel.discipline.specs2.mutable.Discipline
   * shared structural [[Eq]] given (`given Eq[IndexedRecord]` from the package object) routes
   * through `GenericData.compare` and would pass; but `PrismLaws` doesn't take a cats `Eq[S]` — it
   * uses `==` directly (mirroring Monocle). So we shift the discipline ruleset to a fixture where
-  * the focus IS the source: `codecPrism[Pair]` with focus = `Pair`. `reverseGet` re-encodes `Pair`
-  * through the same codec under the same schema, and the law holds. Partial-cover behaviour is
-  * still witnessed by [[AvroFieldsPrismSpec]]'s forAll properties + the `forAll` block here (which
-  * uses `Eq[IndexedRecord]` for comparison).
+  * the focus IS the source: `codecPrism[Pair].record` with focus = `Pair`. `reverseGet` re-encodes
+  * `Pair` through the same codec under the same schema, and the law holds. Partial-cover behaviour
+  * is still witnessed by [[AvroFieldsPrismSpec]]'s forAll properties + the `forAll` block here
+  * (which uses `Eq[IndexedRecord]` for comparison).
   *
   * The smoke test that produced those numbers lives in the conversation history; the fact that it
   * produced `rebuilt == record: false` was the criterion to move the discipline ruleset off
@@ -75,16 +76,16 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   // to round-trip through the source `S` via universal `==`. For an
   // Avro carrier that means the rebuilt `IndexedRecord` must satisfy
   // apache-avro's schema-instance-sensitive `equals`. The full-cover
-  // identity prism `codecPrism[Pair]` (focus = Pair, NOT the .fields
+  // identity prism `codecPrism[Pair].record` (focus = Pair, NOT the .fields
   // NamedTuple sub-cover) re-encodes through the same codec under the
   // same schema, so `==` holds. See the class doc above for the
   // smoke-test numbers that drove this fixture choice.
 
   val pairPrism: Optic[IndexedRecord, IndexedRecord, Pair, Pair, Either] =
-    codecPrism[Pair]
+    codecPrism[Pair].record
 
   checkAll(
-    "AvroPrism — codecPrism[Pair] (full-cover identity)",
+    "AvroRecordPrism — codecPrism[Pair].record (full-cover identity)",
     new PrismTests[IndexedRecord, Pair]:
       val laws: PrismLaws[IndexedRecord, Pair] = new PrismLaws[IndexedRecord, Pair]:
         val prism = pairPrism
@@ -104,7 +105,7 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   "AvroFieldsPrism .fields default-Ior forAll: modify-id / parity / get / round-trip / compose" >> forAll {
     (p: Person, suffix: String, newName: String, newAge: Int) =>
       val record = personRecord(p)
-      val L = codecPrism[Person].fields(_.name, _.age)
+      val L = codecPrism[Person].fields(_.name, _.age).record
       val f: NameAge => NameAge = nt => (name = nt.name + suffix, age = nt.age)
 
       val modIdOk = L.modify(identity[NameAge])(record) match
@@ -124,8 +125,8 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
         case Some(read) => read.name == newName && read.age == newAge
         case None       => false
 
-      val nameL = codecPrism[Person].field(_.name)
-      val ageL = codecPrism[Person].field(_.age)
+      val nameL = codecPrism[Person].field(_.name).record
+      val ageL = codecPrism[Person].field(_.age).record
       val stepByStep =
         ageL.modifyUnsafe((i: Int) => i + 1)(
           nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
@@ -147,7 +148,7 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   "AvroPrism .union[Long] on Option[Long] forAll: get / modify-id / compose-modify on Some" >> forAll {
     (id: String, n: Long) =>
       val record = transactionRecord(Transaction(id, Some(n)))
-      val U = codecPrism[Transaction].field(_.amount).union[Long]
+      val U = codecPrism[Transaction].field(_.amount).union[Long].record
 
       val getOk = U.get(record) match
         case Ior.Right(read) => read == n
@@ -171,17 +172,19 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
       getOk && modIdOk && composeOk
   }
 
-  // covers: AvroTraversal modify(identity) on a valid Basket record === Ior.Right(record),
+  // covers: AvroTraversal's record face (`.record`) modify(identity) on a valid Basket record
+  //   === Ior.Right(record),
   //   compose-modify: T.modify(f).andThen(T.modify(g)) == T.modify(g.compose(f)),
   //   replaceIdempotent: T.replace(a).andThen(T.replace(a)) == T.replace(a)
   //
-  // EO's `TraversalTests` parameterises on `T[_]` + `Forget[T]` carrier — AvroTraversal doesn't
-  // fit (source is a flat IndexedRecord; the multi-focus shape lives entirely inside the carrier).
+  // EO's `TraversalTests` parameterises on `T[_]` + `Forget[T]` carrier — the record-carried face
+  // exercised here (`AvroRecordTraversal`, via `.record`) isn't an Optic at all (source is a flat
+  // IndexedRecord; the multi-focus shape lives entirely inside the surface).
   // The two universal Traversal laws + the replace-idempotence behaviour are witnessed by hand.
   "AvroTraversal default-Ior forAll: modify-id / compose-modify / replace-idempotent" >> forAll {
     (b: AvroSpecFixtures.Basket, suffix: String, name: String) =>
       val record = AvroSpecFixtures.basketRecord(b)
-      val T = codecPrism[AvroSpecFixtures.Basket].items.each.name
+      val T = codecPrism[AvroSpecFixtures.Basket].items.each.name.record
 
       val modIdOk = T.modify(identity[String])(record) match
         case Ior.Right(out) => recordsEqual(out, record)
@@ -225,7 +228,7 @@ object AvroPrismLawsSpec:
 
   // ---- Full-cover identity fixture for the discipline Prism laws ----
   //
-  // A 2-field case class. PrismTests runs against `codecPrism[Pair]`
+  // A 2-field case class. PrismTests runs against `codecPrism[Pair].record`
   // — the IDENTITY prism whose focus IS Pair — so `reverseGet`
   // re-encodes through the same codec under the same Pair schema and
   // universal `==` works (see class doc for the smoke-test numbers

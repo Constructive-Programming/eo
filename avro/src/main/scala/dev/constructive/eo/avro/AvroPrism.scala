@@ -3,52 +3,59 @@ package dev.constructive.eo.avro
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 import org.apache.avro.Schema
-import org.apache.avro.generic.IndexedRecord
 
-/** Specialised Prism from [[org.apache.avro.generic.IndexedRecord]] to a native type `A`. Mirrors
-  * `dev.constructive.eo.circe.JsonPrism` for the Avro carrier:
+/** Optic from the Avro BINARY WIRE FORM to a native type `A` — the wire bytes are the default
+  * carrier:
   *
   * {{{
-  *   AvroPrism[A] <: Optic[IndexedRecord, IndexedRecord, A, A, Either]
-  *   type X = (AvroFailure, IndexedRecord)
+  *   AvroPrism[A] <: Optic[Array[Byte], Array[Byte], A, A, Affine]
+  *   type X = (Array[Byte], (Array[Byte], BinarySpan))
   * }}}
   *
-  * Two call-surface tiers (via [[AvroOpticOps]]):
+  * Reads locate the focused field's byte span via [[AvroBinaryCursor]] and decode only that slice;
+  * writes re-encode the focus and splice it in place (three `arraycopy`s, union branch index
+  * re-synthesised) — no [[org.apache.avro.generic.IndexedRecord]] materialised on either side.
+  * Mirrors [[dev.constructive.eo.jsoniter.JsoniterPrism]] shape-for-shape:
   *
-  *   - Default Ior-bearing: `modify` / `get` etc. accumulate `Chain[AvroFailure]` on failure;
-  *     partial success surfaces as `Ior.Both(chain, inputRecord)`.
-  *   - `*Unsafe`: silent pass-through hot path.
+  *   - `Fst[X] = Array[Byte]` — original payload; `Miss` carries it for pass-through (parse
+  *     failure, path miss, union-branch mismatch, decode failure, unsupported index step).
+  *   - `Snd[X] = (Array[Byte], BinarySpan)` — payload + located span, so `from` can splice.
   *
-  * Triple-input shape `IndexedRecord | Array[Byte] | String` (where `String` is the Avro JSON wire
-  * format). The prism caches the root schema in [[rootSchemaCached]] for byte-input decoding.
+  * The whole capability-gated extension surface lights up on the bytes — `.getOption`, `.modify`,
+  * `.replace`, `.foldMap`, `.andThen`, … Drill with the same macro sugar as ever (`.field(_.x)` /
+  * `.fields(...)` / `.union[B]` / `.at(i)` / `.each` / Dynamic field selection).
+  *
+  * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
+  *
+  *   - [[record]] — the [[IndexedRecord]]-carried optic ([[AvroRecordPrism]]) with the Ior-bearing
+  *     diagnostic surface (`get` / `modify` / `place` / `transfer` + `*Unsafe`) over
+  *     `IndexedRecord | Array[Byte] | String` input. Use it when you hold parsed records or need
+  *     accumulated [[AvroFailure]] diagnostics.
+  *   - [[sliceBytes]] / [[graftBytes]] — the encoded-fragment surface for hashing / shipping /
+  *     splicing a field's raw encoding across payloads without decoding the focus at all.
   *
   * Storage decomposition (Unit 5): an `AvroPrism[A]` holds an [[AvroFocus]] (Leaf vs Fields) and a
-  * cached root schema; per-record hooks delegate to the focus.
+  * cached root schema; the byte walk uses the focus's path, the slice decode uses its codec.
   */
 final class AvroPrism[A] private[avro] (
     private[avro] val focus: AvroFocus[A],
     private[avro] val rootSchemaCached: Schema,
-) extends Optic[IndexedRecord, IndexedRecord, A, A, Either],
-      AvroOpticOps[A],
+) extends Optic[Array[Byte], Array[Byte], A, A, Affine],
       Dynamic:
 
-  type X = (AvroFailure, IndexedRecord)
-
-  override protected def rootSchema: Schema = rootSchemaCached
+  type X = (Array[Byte], (Array[Byte], AvroBinaryCursor.BinarySpan))
 
   /** The focus's storage path (`path` for a Leaf focus, `parentPath` for a Fields focus). Used by
-    * the `widenPath*` helpers (which only fire on Leaf focuses) and by tests that introspect the
-    * cursor position.
+    * the byte walk, the `widenPath*` helpers, and tests that introspect the cursor position.
     */
   private[avro] def path: Array[PathStep] = focus match
     case l: AvroFocus.Leaf[A]   => l.path
     case f: AvroFocus.Fields[A] => f.parentPath
 
-  /** Codec accessor — kept for the `widenPath` paths and for backwards compatibility with code that
-    * read this field off the prism directly.
-    */
+  /** Codec accessor — the slice decode / splice encode side of the focus. */
   private[avro] def codec: AvroCodec[A] = focus.codec
 
   // Selectable field sugar — `codecPrism[Person].name` lowers to
@@ -59,74 +66,112 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Abstract Optic members ---------------------------------------
 
-  def to(record: IndexedRecord): Either[(AvroFailure, IndexedRecord), A] =
-    focus.navigateRaw(record) match
-      case Left(failure) => Left((failure, record))
-      case Right(any)    =>
-        focus.decodeFrom(any) match
-          case Right(a) => Right(a)
-          case Left(t)  =>
-            Left((AvroFailure.DecodeFailed(AvroWalk.terminalOf(path), t), record))
+  // 1-call forwarders; the big bodies live in private methods so the abstract-`def` entry stays
+  // a few bytes and inlines at hot use sites (same PrintInlining rationale as JsoniterPrism).
+  def to(bytes: Array[Byte]): Affine[X, A] = scan(bytes)
+  def from(aff: Affine[X, A]): Array[Byte] = spliceAff(aff)
 
-  def from(e: Either[(AvroFailure, IndexedRecord), A]): IndexedRecord =
-    e match
-      case Left((_, record)) => record
-      case Right(a)          => reverseGet(a)
+  private def scan(bytes: Array[Byte]): Affine[X, A] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
+      case Left(_)     => new Affine.Miss[X, A](bytes)
+      case Right(span) =>
+        AvroBinaryCursor.decodeSlice(bytes, span, codec) match
+          case Right(a) => new Affine.Hit[X, A]((bytes, span), a)
+          case Left(_)  => new Affine.Miss[X, A](bytes)
 
-  // ---- Read surface --------------------------------------------------
+  private def spliceAff(aff: Affine[X, A]): Array[Byte] =
+    aff match
+      case m: Affine.Miss[X, A] => m.fst
+      case h: Affine.Hit[X, A]  =>
+        val (src, span) = h.snd
+        AvroBinaryCursor.encodeValue(h.b, span, codec) match
+          // ponytail: silent pass-through on encode failure — from has no failure channel;
+          // callers needing diagnostics use the .record Ior surface
+          case Left(_)        => src
+          case Right(encoded) => AvroBinaryCursor.splice(src, span, encoded)
 
-  /** Decode the focused value, threading parse failures (for `Array[Byte]` input) and walk failures
-    * through the Ior channel.
+  // ---- Record-carried face -------------------------------------------
+
+  /** The [[IndexedRecord]]-carried counterpart of this prism — same focus, but
+    * `Optic[IndexedRecord, IndexedRecord, A, A, Either]` plus the Ior-bearing diagnostic surface.
+    * Drill here on the byte prism, then flip at the end:
+    *
+    * {{{
+    *   codecPrism[Person].field(_.name).record.modify(_.toUpperCase)(record)
+    * }}}
     */
-  def get(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], A] =
-    AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
+  def record: AvroRecordPrism[A] = new AvroRecordPrism[A](focus, rootSchemaCached)
 
-  /** Encode `a` standalone, returning the codec's [[IndexedRecord]] payload (or a synthesised empty
-    * record when the encoded value isn't record-shaped). Counterpart to `JsonPrism.reverseGet`.
+  // ---- Byte-span surface (slice / graft) -----------------------------
+  //
+  // The encoded-FRAGMENT face of the same locate machinery the optic's to/from use: where
+  // .getOption / .modify decode and re-encode the focus, these keep it as raw bytes so the
+  // fragment can be hashed, passed around, and spliced into another payload with no decode at all.
+
+  /** Slice the focused field's encoded value bytes out of a binary payload.
+    *
+    * The returned [[AvroFragment]] carries the value bytes (union branch index STRIPPED when the
+    * prism focuses a union branch), the resolved field / branch schema, and the branch ordinal. The
+    * runtime branch must match the prism's focused branch — a payload sitting on a different branch
+    * surfaces [[AvroFailure.UnionResolutionFailed]].
+    *
+    * Array-index steps are unsupported ([[AvroFailure.UnsupportedSpanStep]]); for a `.fields(...)`
+    * prism the span addressed is the PARENT record enclosing the selected fields (the selected
+    * fields themselves are not contiguous).
     */
-  def reverseGet(a: A): IndexedRecord =
-    focus.codec.encode(a) match
-      case any: IndexedRecord => any
-      case _                  =>
-        new org.apache.avro.generic.GenericData.Record(rootSchemaCached)
+  def sliceBytes(bytes: Array[Byte]): Ior[Chain[AvroFailure], AvroFragment] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
+      case Left(failure) => Ior.Left(Chain.one(failure))
+      case Right(span)   =>
+        Ior.Right(
+          AvroFragment(
+            java.util.Arrays.copyOfRange(bytes, span.valueStart, span.end),
+            span.valueSchema,
+            span.branchOrdinal,
+          )
+        )
 
-  /** Silent counterpart to [[get]] — `None` on any failure. */
-  inline def getOptionUnsafe(input: IndexedRecord | Array[Byte] | String): Option[A] =
-    focus.readImpl(AvroFailure.parseInputUnsafe(input, rootSchemaCached))
+  /** Silent counterpart to [[sliceBytes]] — `None` on any failure. */
+  def sliceBytesUnsafe(bytes: Array[Byte]): Option[AvroFragment] =
+    AvroBinaryCursor
+      .locate(bytes, rootSchemaCached, path, strictTerminalUnion = true)
+      .toOption
+      .map(span =>
+        AvroFragment(
+          java.util.Arrays.copyOfRange(bytes, span.valueStart, span.end),
+          span.valueSchema,
+          span.branchOrdinal,
+        )
+      )
 
-  // ---- Per-record Ior-bearing hooks (delegate to focus) -------------
+  /** Graft an encoded fragment into a binary payload at the focused field — splice bytes in place
+    * of the field's current encoding, decode-free: prefix copy + (when the prism focuses a union
+    * branch: the zigzag-encoded index of the prism's focused branch, re-synthesised from the path —
+    * the payload's current branch is discarded, so grafting can SWITCH branches) + the fragment
+    * bytes + suffix copy.
+    *
+    * '''NO SCHEMA VALIDATION.''' The fragment bytes are spliced verbatim — this method does NOT
+    * check that `fragment` is a valid encoding of the focused field's schema. A fragment encoded
+    * under a different (or drifted) schema produces a payload that is silently corrupt until
+    * something decodes it. The caller owns schema-fingerprint checks (compare the writer schema /
+    * Confluent schema id of the fragment's source against the receiving field's schema) BEFORE
+    * grafting.
+    */
+  def graftBytes(
+      bytes: Array[Byte],
+      fragment: Array[Byte],
+  ): Ior[Chain[AvroFailure], Array[Byte]] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
+      case Left(failure) => Ior.Left(Chain.one(failure))
+      case Right(span)   => Ior.Right(AvroBinaryCursor.splice(bytes, span, fragment))
 
-  override protected def modifyIor(
-      record: IndexedRecord,
-      f: A => A,
-  ): Ior[Chain[AvroFailure], IndexedRecord] =
-    focus.modifyIor(record, f)
-
-  override protected def transformIor(
-      record: IndexedRecord,
-      f: IndexedRecord => IndexedRecord,
-  ): Ior[Chain[AvroFailure], IndexedRecord] =
-    focus.transformIor(record, f)
-
-  override protected def placeIor(
-      record: IndexedRecord,
-      a: A,
-  ): Ior[Chain[AvroFailure], IndexedRecord] =
-    focus.placeIor(record, a)
-
-  // ---- Per-record silent (*Unsafe) hooks (delegate to focus) --------
-
-  override protected def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-    focus.modifyImpl(record, f)
-
-  override protected def transformImpl(
-      record: IndexedRecord,
-      f: IndexedRecord => IndexedRecord,
-  ): IndexedRecord =
-    focus.transformImpl(record, f)
-
-  override protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-    focus.placeImpl(record, a)
+  /** Silent counterpart to [[graftBytes]] — input bytes pass through unchanged on any failure. Same
+    * NO-SCHEMA-VALIDATION caveat as [[graftBytes]].
+    */
+  def graftBytesUnsafe(bytes: Array[Byte], fragment: Array[Byte]): Array[Byte] =
+    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
+      case Left(_)     => bytes
+      case Right(span) => AvroBinaryCursor.splice(bytes, span, fragment)
 
   // ---- Path widening (used by macro extensions) ---------------------
 

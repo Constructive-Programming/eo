@@ -8,11 +8,12 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 import org.specs2.mutable.Specification
 
 /** Behaviour spec for the `IndexedRecord | Array[Byte] | String` triple-input overloads on every
-  * public Avro optic surface. The `String` arm is the Avro JSON wire format, parsed by
-  * apache-avro's `JsonDecoder` against the prism's cached reader schema.
+  * public Avro record surface — reached via `.record` on prisms and traversals alike. The `String`
+  * arm is the Avro JSON wire format, parsed by apache-avro's `JsonDecoder` against the prism's
+  * cached reader schema.
   *
   * Mirrors `dev.constructive.eo.circe.StringInputSpec` block-for-block — one composite block per
-  * carrier (AvroPrism / AvroFieldsPrism / AvroTraversal) covering happy-path,
+  * carrier (AvroPrism `.record` / fields-prism `.record` / AvroTraversal) covering happy-path,
   * `Ior.Left(JsonParseFailed)` on bad input, and synthetic-empty-record / empty-vector fallbacks on
   * the Unsafe surface; one extra block for record-input parity (the widened union still routes
   * record input through the no-op arm).
@@ -39,18 +40,19 @@ class StringInputSpec extends Specification:
   // 2026-04-29 consolidation: 4 String-input tests → 2 composites (one for prism+fields+
   // pass-through, one for traversal). Same code paths witnessed exhaustively per surface.
 
-  // covers: AvroPrism String-input — happy parse + modify (Ior.Right + structural record equality),
+  // covers: AvroPrism.record String-input — happy parse + modify (Ior.Right + structural record
+  //   equality),
   //   .get round-trips on well-formed String, .place via Ior, .transfer via Ior,
   //   bad-JSON surfaces Ior.Left(JsonParseFailed), modifyUnsafe on bad JSON returns synthetic
   //   empty record under personSchema, getOptionUnsafe on bad JSON returns None;
-  //   AvroFieldsPrism (multi-field NamedTuple focus) — happy parse + modify (Ior.Right),
+  //   fields-prism .record (multi-field NamedTuple focus) — happy parse + modify (Ior.Right),
   //   bad-JSON surfaces Ior.Left(JsonParseFailed) on the multi-field surface;
   //   IndexedRecord input still routes cleanly through the widened (record | bytes | String)
   //   signature — parity with String input on the Person.field(_.name) modify
   "AvroPrism + AvroFieldsPrism String-input + record pass-through (one composite)" >> {
     val str = """{"name":"Alice","age":30}"""
     val expected = personRecord(Person("ALICE", 30))
-    val nameL = codecPrism[Person].field(_.name)
+    val nameL = codecPrism[Person].field(_.name).record
 
     val modOk = nameL.modify((s: String) => s.toUpperCase)(str) match
       case Ior.Right(out) => recordsEqual(out, expected)
@@ -75,7 +77,7 @@ class StringInputSpec extends Specification:
     val unsafeBadOk = unsafeBad.getSchema == personSchema
     val unsafeNoneOk = nameL.getOptionUnsafe(badStr) == None
 
-    val fp = codecPrism[Person].fields(_.name, _.age)
+    val fp = codecPrism[Person].fields(_.name, _.age).record
     val fieldsExpected = personRecord(Person("ALICE", 31))
     val fieldsOk = fp.modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(str) match
       case Ior.Right(out) => recordsEqual(out, fieldsExpected)
@@ -121,17 +123,18 @@ class StringInputSpec extends Specification:
       basket.copy(items = List(Order("A", 1.0, 1), Order("B", 2.0, 2)))
     )
 
-    val modOk = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(str) match
+    val modOk = codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)(str) match
       case Ior.Right(out) => recordsEqual(out, expected)
       case _              => false
 
-    val badIor = codecPrism[Basket].items.each.name.modify(_.toUpperCase)("totally not json")
+    val badIor =
+      codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)("totally not json")
     val badIorOk = badIor match
       case Ior.Left(chain) =>
         chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
       case _ => false
 
-    val unsafeEmpty = codecPrism[Basket].items.each.name.getAllUnsafe("not json")
+    val unsafeEmpty = codecPrism[Basket].items.each.name.record.getAllUnsafe("not json")
     val unsafeEmptyOk = unsafeEmpty == Vector.empty
 
     (modOk === true).and(badIorOk === true).and(unsafeEmptyOk === true)

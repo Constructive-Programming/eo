@@ -30,7 +30,9 @@ class AvroFailureSpec extends Specification:
   //   BinaryParseFailed constructible w/ "binary" tag + wrapped cause message,
   //   JsonParseFailed constructible w/ "Avro JSON" tag + wrapped cause message,
   //   UnionResolutionFailed constructible w/ "union resolution" + alternatives in message,
-  //   BadEnumSymbol constructible w/ invalid symbol + valid-set listing in message
+  //   BadEnumSymbol constructible w/ invalid symbol + valid-set listing in message,
+  //   UnsupportedSpanStep constructible w/ "byte-span" tag + step identifier,
+  //   NotConfluentFramed constructible w/ "Confluent" tag + reason text
   "AvroFailure: every case constructible + message contains its diagnostic anchors" >> {
     val pm: AvroFailure = AvroFailure.PathMissing(PathStep.Field("name"))
     val pmOk = (pm.message must contain("path missing"))
@@ -71,6 +73,12 @@ class AvroFailureSpec extends Specification:
       AvroFailure.BadEnumSymbol("MAGENTA", List("RED", "GREEN", "BLUE"), PathStep.Field("color"))
     val beOk = (be.message must contain("MAGENTA")).and(be.message must contain("RED"))
 
+    val us: AvroFailure = AvroFailure.UnsupportedSpanStep(PathStep.Index(2))
+    val usOk = (us.message must contain("byte-span")).and(us.message must contain("Index(2)"))
+
+    val cf: AvroFailure = AvroFailure.NotConfluentFramed("magic byte is 0x2a, not 0x00")
+    val cfOk = (cf.message must contain("Confluent")).and(cf.message must contain("0x2a"))
+
     pmOk
       .and(nrOk)
       .and(naOk)
@@ -80,6 +88,8 @@ class AvroFailureSpec extends Specification:
       .and(jfOk)
       .and(urOk)
       .and(beOk)
+      .and(usOk)
+      .and(cfOk)
   }
 
   // ---- Eq instance --------------------------------------------------

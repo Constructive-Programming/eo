@@ -4,7 +4,8 @@ package dev.constructive.eo.avro
   *
   * '''2026-04-27 (Unit 6).''' Originally planned as a separate class. Now an `AvroTraversal[A]`
   * whose focus is an [[AvroFocus.Fields]] — the parentPath / fieldNames / codec storage moved into
-  * the `Fields` focus, and the per-element walk delegates to it. See [[AvroPrism]]'s class comment
-  * for the rethink history; mirrors `dev.constructive.eo.circe.JsonFieldsTraversal`.
+  * the `Fields` focus, and the per-element walk delegates to it (byte-carried by default; the
+  * record-carried Ior surface sits behind `.record`). See [[AvroPrism]]'s class comment for the
+  * rethink history; mirrors `dev.constructive.eo.circe.JsonFieldsTraversal`.
   */
 type AvroFieldsTraversal[A] = AvroTraversal[A]
