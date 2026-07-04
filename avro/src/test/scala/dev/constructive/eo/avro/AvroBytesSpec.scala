@@ -3,14 +3,16 @@ package dev.constructive.eo.avro
 import scala.language.implicitConversions
 
 import cats.data.Ior
+import dev.constructive.eo.data.Affine
+import dev.constructive.eo.optics.Optic.*
 import org.apache.avro.generic.{GenericRecord, IndexedRecord}
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Behaviour spec for the bytes-in/bytes-out surface: `modifyBytes` / `placeBytes` (parse → optic
-  * → re-encode), `sliceBytes` (byte-span extraction, [[AvroFragment]]) and `graftBytes` (fragment
+/** Behaviour spec for the bytes-in/bytes-out surface: `modifyBytes` / `placeBytes` (parse → optic →
+  * re-encode), `sliceBytes` (byte-span extraction, [[AvroFragment]]) and `graftBytes` (fragment
   * splicing) on [[AvroPrism]] — Phase 1 of the zero-copy plan.
   *
   * The load-bearing witnesses:
@@ -57,7 +59,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       val placeOk = nameL.placeBytes(bytes, "Carol") match
         case Ior.Right(out) => java.util.Arrays.equals(out, expectedPlace)
         case _              => false
-      val placeUnsafeOk = java.util.Arrays.equals(nameL.placeBytesUnsafe(bytes, "Carol"), expectedPlace)
+      val placeUnsafeOk =
+        java.util.Arrays.equals(nameL.placeBytesUnsafe(bytes, "Carol"), expectedPlace)
 
       val badBytes: Array[Byte] = Array(0.toByte)
       val badOk = nameL.modifyBytes(badBytes)(identity) match
@@ -127,13 +130,18 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         val schemaOk = frag.schema.getType === org.apache.avro.Schema.Type.LONG
         val ordinalOk = frag.branchOrdinal === None
         val fidelity =
-          java.util.Arrays.equals(frag.bytes, toBinaryValue(java.lang.Long.valueOf(7L), frag.schema)) === true
+          java
+            .util
+            .Arrays
+            .equals(frag.bytes, toBinaryValue(java.lang.Long.valueOf(7L), frag.schema)) === true
         val selfGraft = seqL.graftBytes(bytes, frag.bytes) match
           case Ior.Right(out) => java.util.Arrays.equals(out, bytes) === true
           case other          =>
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
         val unsafeParity =
-          seqL.sliceBytesUnsafe(bytes).exists(f => java.util.Arrays.equals(f.bytes, frag.bytes)) === true
+          seqL
+            .sliceBytesUnsafe(bytes)
+            .exists(f => java.util.Arrays.equals(f.bytes, frag.bytes)) === true
         schemaOk.and(ordinalOk).and(fidelity).and(selfGraft).and(unsafeParity)
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
@@ -168,7 +176,10 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         (frag.branchOrdinal === None)
           .and(frag.schema.getType === org.apache.avro.Schema.Type.UNION)
           .and(
-            java.util.Arrays.equals(frag.bytes, toBinaryValue(cashRecordOf(100L), frag.schema)) === true
+            java
+              .util
+              .Arrays
+              .equals(frag.bytes, toBinaryValue(cashRecordOf(100L), frag.schema)) === true
           )
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
@@ -210,10 +221,11 @@ class AvroBytesSpec extends Specification with ScalaCheck:
 
     // Decode the grafted payload: payload switched, every other field (incl. the suffix field
     // `note`, AFTER the focused union) carries the OUTPUT's values.
-    val decodedOk = codecPrism[WireEnvelope].get(cashL.graftBytesUnsafe(outputBytes, frag.bytes)) match
-      case Ior.Right(env) => env === WireEnvelope("out", 2L, Cash(100L), "out-note")
-      case other          =>
-        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+    val decodedOk =
+      codecPrism[WireEnvelope].get(cashL.graftBytesUnsafe(outputBytes, frag.bytes)) match
+        case Ior.Right(env) => env === WireEnvelope("out", 2L, Cash(100L), "out-note")
+        case other          =>
+          org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
 
     graftOk.and(unsafeOk).and(decodedOk)
   }
@@ -279,7 +291,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         )
       )
       org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
-    val ageOnlyBytes = toBinary(buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30)), ageOnlySchema)
+    val ageOnlyBytes =
+      toBinary(buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30)), ageOnlySchema)
     val missingOk = codecPrism[Person](ageOnlySchema).field(_.name).sliceBytes(ageOnlyBytes) match
       case Ior.Left(chain) =>
         chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name"))) === true
@@ -294,8 +307,49 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       .and(missingOk)
   }
 
-  /** The runtime union value for `payment = Cash(amount)` — a bare Cash record, as the writer
-    * sees it when encoding the union-typed field.
+  // ---- .bytes — the byte-carried optic --------------------------------
+
+  // covers: AvroPrism.bytes is a genuine Optic[Array[Byte], Array[Byte], A, A, Affine] — `to`
+  //   Hits with the decoded focus, `.modify` / `.replace` splice byte-for-byte what the
+  //   parse→optic→re-encode surface produces (siblings preserved by full byte equality),
+  //   `.modify(identity)` is the identity on the wire form
+  "AvroPrism.bytes: byte-carried Affine optic — read/modify/replace mirror the record surface byte-for-byte" >> forAll {
+    (p: Person) =>
+      val nameB = codecPrism[Person].field(_.name).bytes
+      val bytes = toBinary(personRecord(p), personSchema)
+      val expectedModify = toBinary(personRecord(p.copy(name = p.name.toUpperCase)), personSchema)
+      val expectedPlace = toBinary(personRecord(p.copy(name = "Carol")), personSchema)
+
+      val readOk = nameB.to(bytes) match
+        case h: Affine.Hit[nameB.X, String]  => h.b == p.name
+        case _: Affine.Miss[nameB.X, String] => false
+
+      val modifyOk = java.util.Arrays.equals(nameB.modify(_.toUpperCase)(bytes), expectedModify)
+      val replaceOk = java.util.Arrays.equals(nameB.replace("Carol")(bytes), expectedPlace)
+      val identityOk = java.util.Arrays.equals(nameB.modify(identity[String])(bytes), bytes)
+
+      readOk && modifyOk && replaceOk && identityOk
+  }
+
+  // covers: Miss pass-through — unparseable bytes flow through `.modify` untouched (reference
+  //   equality: from(Miss) returns the original array); unsupported index paths Miss the same way
+  "AvroPrism.bytes: Miss pass-through on bad bytes and on unsupported index paths" >> {
+    // A single 0x00 is a VALID prefix for the name field (empty string), so the truncation must
+    // bite past it: focus age, whose walk hits EOF after skipping name.
+    val ageB = codecPrism[Person].field(_.age).bytes
+    val badBytes: Array[Byte] = Array(0.toByte)
+    val badOk = (ageB.modify(identity[Int])(badBytes) eq badBytes) === true
+
+    val basket = Basket("ann", List(Order("tea", 2.5, 1)))
+    val basketBytes = toBinary(basketRecord(basket), basketSchema)
+    val itemB = codecPrism[Basket].field(_.items).at(0).bytes
+    val indexOk = (itemB.modify(identity[Order])(basketBytes) eq basketBytes) === true
+
+    badOk.and(indexOk)
+  }
+
+  /** The runtime union value for `payment = Cash(amount)` — a bare Cash record, as the writer sees
+    * it when encoding the union-typed field.
     */
   private def cashRecordOf(amount: Long): IndexedRecord =
     summon[AvroCodec[Cash]].encode(Cash(amount)).asInstanceOf[IndexedRecord]

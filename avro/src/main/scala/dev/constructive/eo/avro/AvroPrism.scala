@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.language.dynamics
 
 import cats.data.{Chain, Ior}
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
@@ -189,7 +190,7 @@ final class AvroPrism[A] private[avro] (
   ): Ior[Chain[AvroFailure], Array[Byte]] =
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
       case Left(failure) => Ior.Left(Chain.one(failure))
-      case Right(span)   => Ior.Right(splice(bytes, span, fragment))
+      case Right(span)   => Ior.Right(AvroBinaryCursor.splice(bytes, span, fragment))
 
   /** Silent counterpart to [[graftBytes]] — input bytes pass through unchanged on any failure. Same
     * NO-SCHEMA-VALIDATION caveat as [[graftBytes]].
@@ -197,30 +198,15 @@ final class AvroPrism[A] private[avro] (
   def graftBytesUnsafe(bytes: Array[Byte], fragment: Array[Byte]): Array[Byte] =
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
       case Left(_)     => bytes
-      case Right(span) => splice(bytes, span, fragment)
+      case Right(span) => AvroBinaryCursor.splice(bytes, span, fragment)
 
-  /** Assemble prefix + (synthesised branch index) + fragment + suffix. */
-  private def splice(
-      bytes: Array[Byte],
-      span: AvroBinaryCursor.BinarySpan,
-      fragment: Array[Byte],
-  ): Array[Byte] =
-    val index = span.branchOrdinal match
-      case Some(ordinal) => AvroBinaryCursor.zigZagInt(ordinal)
-      case None          => Array.emptyByteArray
-    val suffixLen = bytes.length - span.end
-    val out = new Array[Byte](span.fieldStart + index.length + fragment.length + suffixLen)
-    System.arraycopy(bytes, 0, out, 0, span.fieldStart)
-    System.arraycopy(index, 0, out, span.fieldStart, index.length)
-    System.arraycopy(fragment, 0, out, span.fieldStart + index.length, fragment.length)
-    System.arraycopy(
-      bytes,
-      span.end,
-      out,
-      span.fieldStart + index.length + fragment.length,
-      suffixLen,
-    )
-    out
+  /** Re-carrier this prism onto the raw binary payload: the same focus `A`, but with `S = T =
+    * Array[Byte]` — the second of the two optics an `AvroPrism` gives you (the prism itself reads /
+    * writes through [[IndexedRecord]]; this one reads / writes the wire bytes directly). See
+    * [[AvroBytesPrism]] for carrier shape and semantics.
+    */
+  def bytes: Optic[Array[Byte], Array[Byte], A, A, Affine] =
+    AvroBytesPrism(this)
 
   // ---- Path widening (used by macro extensions) ---------------------
 

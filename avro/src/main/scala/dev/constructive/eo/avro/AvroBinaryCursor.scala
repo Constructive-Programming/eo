@@ -87,6 +87,27 @@ private[avro] object AvroBinaryCursor:
     val len = BinaryData.encodeInt(n, buf, 0)
     if len == 5 then buf else java.util.Arrays.copyOf(buf, len)
 
+  /** Assemble prefix + (synthesised branch index, when `span` addresses a union branch) + fragment
+    * + suffix — the splice step shared by [[AvroPrism.graftBytes]] and [[AvroBytesPrism]].
+    */
+  def splice(bytes: Array[Byte], span: BinarySpan, fragment: Array[Byte]): Array[Byte] =
+    val index = span.branchOrdinal match
+      case Some(ordinal) => zigZagInt(ordinal)
+      case None          => Array.emptyByteArray
+    val suffixLen = bytes.length - span.end
+    val out = new Array[Byte](span.fieldStart + index.length + fragment.length + suffixLen)
+    System.arraycopy(bytes, 0, out, 0, span.fieldStart)
+    System.arraycopy(index, 0, out, span.fieldStart, index.length)
+    System.arraycopy(fragment, 0, out, span.fieldStart + index.length, fragment.length)
+    System.arraycopy(
+      bytes,
+      span.end,
+      out,
+      span.fieldStart + index.length + fragment.length,
+      suffixLen,
+    )
+    out
+
   /** The walk body — may throw (EOF on truncated input, avro decode complaints); [[locate]] wraps
     * every NonFatal throw into [[AvroFailure.BinaryParseFailed]].
     */
@@ -227,11 +248,11 @@ private[avro] object AvroBinaryCursor:
       val types = schema.getTypes
       List.tabulate(types.size)(i => types.get(i).getFullName)
 
-  /** Position-counting [[InputStream]] over an `Array[Byte]` — the substrate that makes the
-    * direct (non-buffering) binary decoder's consumption observable as byte offsets. All three
-    * read shapes plus `skip` keep [[position]] exact.
+  /** Position-counting [[InputStream]] over an `Array[Byte]` — the substrate that makes the direct
+    * (non-buffering) binary decoder's consumption observable as byte offsets. All three read shapes
+    * plus `skip` keep [[position]] exact.
     */
-  private final class CountingInputStream(bytes: Array[Byte]) extends InputStream:
+  final private class CountingInputStream(bytes: Array[Byte]) extends InputStream:
 
     private var pos: Int = 0
 
