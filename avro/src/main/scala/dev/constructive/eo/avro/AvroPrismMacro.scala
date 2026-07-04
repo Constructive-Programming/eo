@@ -2,6 +2,8 @@ package dev.constructive.eo.avro
 
 import scala.quoted.*
 
+import dev.constructive.eo.generics.MacroSelectors
+
 /** Macros backing `AvroPrism.field(_.x)`, `selectDynamic`, `at(i)`, `union[Branch]`. Mirror of
   * `circe.JsonPrismMacro`, with two-given codec summoning (`AvroEncoder + AvroDecoder`) collapsed
   * to one [[AvroCodec]] wrapper. Uses `'{ this }` rather than `'this` (scalafix-parser limitation).
@@ -18,7 +20,7 @@ object AvroPrismMacro:
   )(using q: Quotes): Expr[AvroPrism[B]] =
     import quotes.reflect.*
 
-    val name: String = extractFieldName(selector.asTerm).getOrElse {
+    val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "AvroPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + "Nested paths are not yet supported inside a single call;\n"
@@ -52,7 +54,7 @@ object AvroPrismMacro:
       parent: Expr[AvroPrism[A]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    val elemTpe = iterableElementType[A]("AvroPrism.at")
+    val elemTpe = MacroSelectors.iterableElementType[A]("AvroPrism.at")
 
     elemTpe.asType match
       case '[b] =>
@@ -164,7 +166,7 @@ object AvroPrismMacro:
   def eachImpl[A: Type](
       parent: Expr[AvroPrism[A]]
   )(using q: Quotes): Expr[Any] =
-    val elemTpe = iterableElementType[A]("AvroPrism.each")
+    val elemTpe = MacroSelectors.iterableElementType[A]("AvroPrism.each")
 
     elemTpe.asType match
       case '[b] =>
@@ -182,7 +184,7 @@ object AvroPrismMacro:
   )(using q: Quotes): Expr[AvroTraversal[B]] =
     import quotes.reflect.*
 
-    val name: String = extractFieldName(selector.asTerm).getOrElse {
+    val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "AvroTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + s"Got: ${selector.asTerm.show}"
@@ -198,7 +200,7 @@ object AvroPrismMacro:
       parent: Expr[AvroTraversal[A]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    val elemTpe = iterableElementType[A]("AvroTraversal.at")
+    val elemTpe = MacroSelectors.iterableElementType[A]("AvroTraversal.at")
 
     elemTpe.asType match
       case '[b] =>
@@ -395,20 +397,6 @@ object AvroPrismMacro:
         )
         emit[b](name, codecB)
 
-  private def iterableElementType[A: Type](
-      who: String
-  )(using q: Quotes): q.reflect.TypeRepr =
-    import quotes.reflect.*
-    val aTpe = TypeRepr.of[A]
-    val iterSym = TypeRepr.of[Iterable[Any]].typeSymbol
-    aTpe.baseType(iterSym) match
-      case AppliedType(_, elem :: Nil) => elem.widen
-      case _                           =>
-        report.errorAndAbort(
-          s"$who: expected a Scala collection (Vector / List / Seq / …) with a single element type; got ${Type
-              .show[A]}."
-        )
-
   /** Summon `AvroCodec[B]` with a caller-supplied error message. */
   private def summonCodec[B: Type](
       errorMsg: String
@@ -416,21 +404,10 @@ object AvroPrismMacro:
     import quotes.reflect.*
     Expr.summon[AvroCodec[B]].getOrElse(report.errorAndAbort(errorMsg))
 
-  /** Pull the field name out of a `_.field` selector lambda. */
-  private def extractFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
-    import quotes.reflect.*
-    t match
-      case Inlined(_, _, inner)                      => extractFieldName(inner)
-      case Typed(inner, _)                           => extractFieldName(inner)
-      case Lambda(_, Select(_, name))                => Some(name)
-      case Lambda(_, Inlined(_, _, Select(_, name))) => Some(name)
-      case Lambda(_, Typed(Select(_, name), _))      => Some(name)
-      case _                                         => None
-
   /** Strict variant — rejects nested Select chains; routes to the shared
     * `MacroSelectors.extractSingleFieldName`.
     */
   private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
-    dev.constructive.eo.generics.MacroSelectors.extractSingleFieldName(t)
+    MacroSelectors.extractSingleFieldName(t)
 
 end AvroPrismMacro

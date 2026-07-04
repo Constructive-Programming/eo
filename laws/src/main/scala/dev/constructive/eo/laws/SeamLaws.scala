@@ -19,13 +19,13 @@ import optics.Optic.*
   * on every composed / upcast write. This law makes that failure loud for any carrier.
   *
   * Equality is INJECTED because some carriers' `S` has no lawful universal `==`: avro
-  * `IndexedRecord` uses schema-instance-sensitive `equals`, so pass a structural comparison;
-  * circe `Json` and most value types can pass `_ == _`.
+  * `IndexedRecord` uses schema-instance-sensitive `equals`, so pass a structural comparison; circe
+  * `Json` and most value types can pass `_ == _`.
   */
 trait SeamLaws[S, A]:
 
-  /** The optic under test, as its BARE `Optic` supertype — so `.modify` / `.replace` resolve to
-    * the generic seam extension, not a shadowing member.
+  /** The optic under test, as its BARE `Optic` supertype — so `.modify` / `.replace` resolve to the
+    * generic seam extension, not a shadowing member.
     */
   def optic: Optic[S, S, A, A, Affine]
 
