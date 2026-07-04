@@ -8,9 +8,9 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 import org.specs2.mutable.Specification
 
 /** Behaviour spec for the `IndexedRecord | Array[Byte] | String` triple-input overloads on every
-  * public Avro record surface — reached via `.record` on prisms, directly on traversals. The
-  * `String` arm is the Avro JSON wire format, parsed by apache-avro's `JsonDecoder` against the
-  * prism's cached reader schema.
+  * public Avro record surface — reached via `.record` on prisms and traversals alike. The `String`
+  * arm is the Avro JSON wire format, parsed by apache-avro's `JsonDecoder` against the prism's
+  * cached reader schema.
   *
   * Mirrors `dev.constructive.eo.circe.StringInputSpec` block-for-block — one composite block per
   * carrier (AvroPrism `.record` / fields-prism `.record` / AvroTraversal) covering happy-path,
@@ -123,17 +123,18 @@ class StringInputSpec extends Specification:
       basket.copy(items = List(Order("A", 1.0, 1), Order("B", 2.0, 2)))
     )
 
-    val modOk = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(str) match
+    val modOk = codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)(str) match
       case Ior.Right(out) => recordsEqual(out, expected)
       case _              => false
 
-    val badIor = codecPrism[Basket].items.each.name.modify(_.toUpperCase)("totally not json")
+    val badIor =
+      codecPrism[Basket].items.each.name.record.modify(_.toUpperCase)("totally not json")
     val badIorOk = badIor match
       case Ior.Left(chain) =>
         chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
       case _ => false
 
-    val unsafeEmpty = codecPrism[Basket].items.each.name.getAllUnsafe("not json")
+    val unsafeEmpty = codecPrism[Basket].items.each.name.record.getAllUnsafe("not json")
     val unsafeEmptyOk = unsafeEmpty == Vector.empty
 
     (modOk === true).and(badIorOk === true).and(unsafeEmptyOk === true)

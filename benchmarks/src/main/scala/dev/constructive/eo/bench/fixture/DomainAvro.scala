@@ -39,4 +39,4 @@ object DomainAvro:
   val streetPrism = codecPrism[Order].field(_.customer).field(_.address).field(_.street).record
 
   /** array write traversal `lines[*].name`. */
-  val namesTraversal = codecPrism[Order].lines.each.name
+  val namesTraversal = codecPrism[Order].lines.each.name.record

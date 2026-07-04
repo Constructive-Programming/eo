@@ -1,15 +1,11 @@
 package dev.constructive.eo.avro
 
 import scala.language.dynamics
-import scala.util.control.NonFatal
 
 import cats.data.{Chain, Ior}
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
-import java.io.ByteArrayOutputStream
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
-import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 /** Optic from the Avro BINARY WIRE FORM to a native type `A` — the wire bytes are the default
   * carrier:
@@ -79,45 +75,20 @@ final class AvroPrism[A] private[avro] (
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
       case Left(_)     => new Affine.Miss[X, A](bytes)
       case Right(span) =>
-        decodeSlice(bytes, span) match
+        AvroBinaryCursor.decodeSlice(bytes, span, codec) match
           case Right(a) => new Affine.Hit[X, A]((bytes, span), a)
           case Left(_)  => new Affine.Miss[X, A](bytes)
-
-  private def decodeSlice(
-      bytes: Array[Byte],
-      span: AvroBinaryCursor.BinarySpan,
-  ): Either[Throwable, A] =
-    try
-      val reader = new GenericDatumReader[Any](span.valueSchema)
-      val decoder = DecoderFactory
-        .get()
-        .binaryDecoder(bytes, span.valueStart, span.end - span.valueStart, null)
-      codec.decodeEither(reader.read(null, decoder))
-    catch case NonFatal(t) => Left(t)
 
   private def spliceAff(aff: Affine[X, A]): Array[Byte] =
     aff match
       case m: Affine.Miss[X, A] => m.fst
       case h: Affine.Hit[X, A]  =>
         val (src, span) = h.snd
-        encodeValue(h.b, span) match
+        AvroBinaryCursor.encodeValue(h.b, span, codec) match
           // ponytail: silent pass-through on encode failure — from has no failure channel;
           // callers needing diagnostics use the .record Ior surface
           case Left(_)        => src
           case Right(encoded) => AvroBinaryCursor.splice(src, span, encoded)
-
-  private def encodeValue(
-      a: A,
-      span: AvroBinaryCursor.BinarySpan,
-  ): Either[Throwable, Array[Byte]] =
-    try
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[Any](span.valueSchema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      writer.write(codec.encode(a), encoder)
-      encoder.flush()
-      Right(out.toByteArray)
-    catch case NonFatal(t) => Left(t)
 
   // ---- Record-carried face -------------------------------------------
 

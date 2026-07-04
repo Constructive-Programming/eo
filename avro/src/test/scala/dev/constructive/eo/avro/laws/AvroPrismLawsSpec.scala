@@ -172,17 +172,19 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
       getOk && modIdOk && composeOk
   }
 
-  // covers: AvroTraversal modify(identity) on a valid Basket record === Ior.Right(record),
+  // covers: AvroTraversal's record face (`.record`) modify(identity) on a valid Basket record
+  //   === Ior.Right(record),
   //   compose-modify: T.modify(f).andThen(T.modify(g)) == T.modify(g.compose(f)),
   //   replaceIdempotent: T.replace(a).andThen(T.replace(a)) == T.replace(a)
   //
-  // EO's `TraversalTests` parameterises on `T[_]` + `Forget[T]` carrier — AvroTraversal doesn't
-  // fit (source is a flat IndexedRecord; the multi-focus shape lives entirely inside the carrier).
+  // EO's `TraversalTests` parameterises on `T[_]` + `Forget[T]` carrier — the record-carried face
+  // exercised here (`AvroRecordTraversal`, via `.record`) isn't an Optic at all (source is a flat
+  // IndexedRecord; the multi-focus shape lives entirely inside the surface).
   // The two universal Traversal laws + the replace-idempotence behaviour are witnessed by hand.
   "AvroTraversal default-Ior forAll: modify-id / compose-modify / replace-idempotent" >> forAll {
     (b: AvroSpecFixtures.Basket, suffix: String, name: String) =>
       val record = AvroSpecFixtures.basketRecord(b)
-      val T = codecPrism[AvroSpecFixtures.Basket].items.each.name
+      val T = codecPrism[AvroSpecFixtures.Basket].items.each.name.record
 
       val modIdOk = T.modify(identity[String])(record) match
         case Ior.Right(out) => recordsEqual(out, record)

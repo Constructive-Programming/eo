@@ -161,7 +161,7 @@ class CrossCarrierCompositionSpec extends Specification:
   // observes chain failures
   "(4) generics lens → AvroTraversal: manual composition (Unsafe + Ior unwrap + diagnostic)" >> {
     val outer = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
-    val trav = codecPrism[Basket].items.each.name
+    val trav = codecPrism[Basket].items.each.name.record
 
     val basket = Basket("Alice", List(Order("x", 1.0, 1), Order("y", 2.0, 2), Order("z", 3.0, 3)))
     val env = Envelope("env", basketRecord(basket))
@@ -208,7 +208,7 @@ class CrossCarrierCompositionSpec extends Specification:
   // diagnostic case: missing per-element field surfaces through direct .modify
   "(5) generics lens → multi-field AvroTraversal: manual (Unsafe + Ior + per-elem diagnostic)" >> {
     val outer = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
-    val fieldsT = codecPrism[Basket].items.each.fields(_.name, _.price)
+    val fieldsT = codecPrism[Basket].items.each.fields(_.name, _.price).record
 
     val basket = Basket("Alice", List(Order("x", 1.0, 1), Order("y", 2.0, 2)))
     val env = Envelope("env", basketRecord(basket))

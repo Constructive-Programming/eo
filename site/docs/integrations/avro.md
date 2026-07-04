@@ -34,8 +34,8 @@ focused field's byte span in the binary payload, decodes only that
 slice on read, and splices the re-encoded focus back in place on
 write — no record materialised. When you hold a parsed
 [`IndexedRecord`](https://avro.apache.org/docs/current/api/java/org/apache/avro/generic/IndexedRecord.html)
-instead, `.record` flips the same drilled prism to a record-carried
-face (`AvroRecordPrism` / `AvroTraversal`) that walks the record,
+instead, `.record` flips the same drilled optic to a record-carried
+face (`AvroRecordPrism` / `AvroRecordTraversal`) that walks the record,
 modifying only the focused leaf and rebuilding the parents on the
 way up. The
 [`OrderAvroBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderAvroBench.scala)
@@ -159,21 +159,24 @@ walker accumulates `IndexOutOfRange` / `NotAnArray` /
 `.each` splits the path at the current array focus and returns
 an `AvroTraversal` that walks every element. Further `.field` /
 `.at` / selectable-sugar calls on the traversal extend the
-per-element suffix:
+per-element suffix. Like the prism, the traversal is byte-carried
+by default — `.foldMap` / `.modify` operate on `Array[Byte]`
+directly, splicing every element's focus in one pass — and `.record`
+flips to the record-carried Ior surface:
 
 ```scala mdoc
 val everyName = codecPrism[Basket].items.each.name
 
-everyName.modifyUnsafe(_.toUpperCase)(basketRec)
+everyName.record.modifyUnsafe(_.toUpperCase)(basketRec)
   .asInstanceOf[GenericRecord].get("items").toString
-everyName.getAllUnsafe(basketRec)
+everyName.record.getAllUnsafe(basketRec)
 ```
 
 Empty arrays and missing prefixes leave the record unchanged on
-the silent surface; on the default Ior surface, prefix-walk
-failures land in `Ior.Left` (nothing to iterate) and per-element
-skips accumulate one `AvroFailure` per refused element into
-`Ior.Both(chain, partialRecord)`.
+the silent surface; on the record face's default Ior surface,
+prefix-walk failures land in `Ior.Left` (nothing to iterate) and
+per-element skips accumulate one `AvroFailure` per refused element
+into `Ior.Both(chain, partialRecord)`.
 
 ## Multi-field focus — `.fields(_.a, _.b)`
 
@@ -246,9 +249,9 @@ mismatch.
 ## Reading diagnostics from the default Ior surface
 
 The default `modify` / `transform` / `place` / `transfer` / `get`
-methods on the record-carried faces — `AvroPrism.record`
-(`AvroRecordPrism`), `AvroTraversal`, and `AvroFieldsTraversal` —
-all return
+methods on the record-carried faces — `.record` on a drilled
+`AvroPrism` or `AvroTraversal` (`AvroRecordPrism` /
+`AvroRecordTraversal`) — all return
 `Ior[Chain[AvroFailure], IndexedRecord]` (or `, A]` /
 `, Vector[A]]` for the reads). Three observable shapes:
 
@@ -452,8 +455,8 @@ For plain binary payloads the prism itself is the whole story:
 `Array[Byte]` back, splice-style, with silent pass-through on any
 failure. When you want DIAGNOSTICS — or your input is a `String`
 (Avro JSON wire format) or an already-parsed `IndexedRecord` — the
-record face steps in: every edit and read method on `.record` (and
-on `AvroTraversal` / `AvroFieldsTraversal`) accepts
+record face steps in: every edit and read method behind `.record`
+(on prisms and traversals alike) accepts
 `IndexedRecord | Array[Byte] | String` as the source. Bytes parse
 through apache-avro's `BinaryDecoder` under the reader schema
 cached on the prism; strings go through apache-avro's
@@ -563,9 +566,10 @@ call-site budget — every prism / traversal class ships both.
 
 ## Surface summary
 
-`AvroPrism[A]` itself is the byte optic — `modify(f)` / `replace(a)`
-/ `getOption` take and return `Array[Byte]`, silent pass-through on
-failure (plus `sliceBytes` / `graftBytes` for raw fragments). The
+`AvroPrism[A]` and `AvroTraversal[A]` themselves are the byte
+optics — `modify(f)` / `replace(a)` / `getOption` / `foldMap` take
+and return `Array[Byte]`, silent pass-through on failure (plus
+`sliceBytes` / `graftBytes` on the prism for raw fragments). The
 Ior-bearing record surface lives behind `.record`:
 
 | Class                     | Default (Ior-bearing)                                                          | `*Unsafe` (silent)            |
@@ -576,8 +580,8 @@ Ior-bearing record surface lives behind `.record`:
 | `AvroPrism[A].record`     | `transfer(f): In => C => Ior[...]`                                             | `transferUnsafe(f)`           |
 | `AvroPrism[A].record`     | `get(in): Ior[..., A]`                                                         | `getOptionUnsafe`             |
 | `AvroFieldsPrism[A].record` | same five                                                                    | same five                     |
-| `AvroTraversal[A]`        | `modify(f) / transform(f) / place(a) / transfer(f) / getAll(in): Ior[...]`     | `modifyUnsafe / ... / getAllUnsafe` |
-| `AvroFieldsTraversal[A]`  | same five                                                                      | same five                     |
+| `AvroTraversal[A].record` | `modify(f) / transform(f) / place(a) / transfer(f) / getAll(in): Ior[...]`     | `modifyUnsafe / ... / getAllUnsafe` |
+| `AvroFieldsTraversal[A].record` | same five                                                                | same five                     |
 
 `In` = `IndexedRecord | Array[Byte] | String` everywhere.
 

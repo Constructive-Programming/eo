@@ -5,7 +5,7 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
 
 /** Public surface forwarder for the record-carried Avro optics [[AvroRecordPrism]] and
-  * [[AvroTraversal]] (plus the `AvroFieldsTraversal` alias).
+  * [[AvroRecordTraversal]] — the `.record` faces of [[AvroPrism]] / [[AvroTraversal]].
   *
   * '''Per OQ-avro-7 (plan):''' this is a deliberate copy-paste of
   * `dev.constructive.eo.circe.JsonOpticOps`. When a third cursor module appears (eo-protobuf,
@@ -85,10 +85,10 @@ private[avro] trait AvroOpticOps[A]:
   ): (IndexedRecord | Array[Byte] | String) => C => Ior[Chain[AvroFailure], IndexedRecord] =
     input => c => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, f(c)))
 
-  // NOTE: there is deliberately no bytes-in/bytes-out surface here. [[AvroPrism]] IS the
-  // byte-carried optic — `.modify` / `.replace` / `.getOption` on the prism itself operate on
-  // `Array[Byte]` directly (locate + slice-decode + splice), so a parse→record→re-encode tier
-  // would be a second way to do the same thing.
+  // NOTE: there is deliberately no bytes-in/bytes-out surface here. [[AvroPrism]] and
+  // [[AvroTraversal]] ARE the byte-carried optics — `.modify` / `.replace` / `.getOption` /
+  // `.foldMap` on them operate on `Array[Byte]` directly (locate + slice-decode + splice), so a
+  // parse→record→re-encode tier would be a second way to do the same thing.
 
   // ---- *Unsafe (silent) escape hatches -------------------------------
 

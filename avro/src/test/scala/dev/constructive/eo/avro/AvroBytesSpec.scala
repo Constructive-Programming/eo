@@ -282,6 +282,40 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       .and(missingOk)
   }
 
+  // ---- byte-carried traversal ------------------------------------------
+
+  // covers: AvroTraversal IS Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]] — reads
+  //   fold every element's focus straight off the wire; `.modify` splices every element
+  //   byte-for-byte vs the record-rebuild + re-encode path (sibling fields preserved by full
+  //   byte equality); `.modify(identity)` is the identity on the wire form; whole-walk failure
+  //   passes the input through by reference; empty arrays read as empty and write as identity
+  "AvroTraversal default surface: per-element read/modify on the wire form ≡ record rebuild" >> {
+    val basket = Basket("ann", List(Order("tea", 2.5, 1), Order("mate", 4.0, 2)))
+    val bytes = toBinary(basketRecord(basket), basketSchema)
+    val namesT = codecPrism[Basket].items.each.name
+
+    val readOk = namesT.foldMap(List(_))(bytes) === List("tea", "mate")
+
+    val expected = toBinary(
+      basketRecord(basket.copy(items = basket.items.map(o => o.copy(name = o.name.toUpperCase)))),
+      basketSchema,
+    )
+    val modifyOk = java.util.Arrays.equals(namesT.modify(_.toUpperCase)(bytes), expected) === true
+    val identityOk =
+      java.util.Arrays.equals(namesT.modify(identity[String])(bytes), bytes) === true
+
+    val badBytes: Array[Byte] = Array(2.toByte)
+    val missOk = (namesT.modify(identity[String])(badBytes) eq badBytes) === true
+
+    val emptyBasket = Basket("bo", Nil)
+    val emptyBytes = toBinary(basketRecord(emptyBasket), basketSchema)
+    val emptyReadOk = namesT.foldMap(List(_))(emptyBytes) === Nil
+    val emptyWriteOk =
+      java.util.Arrays.equals(namesT.modify(_.toUpperCase)(emptyBytes), emptyBytes) === true
+
+    readOk.and(modifyOk).and(identityOk).and(missOk).and(emptyReadOk).and(emptyWriteOk)
+  }
+
   /** The runtime union value for `payment = Cash(amount)` — a bare Cash record, as the writer sees
     * it when encoding the union-typed field.
     */

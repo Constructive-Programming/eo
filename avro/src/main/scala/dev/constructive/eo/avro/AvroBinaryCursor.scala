@@ -2,9 +2,10 @@ package dev.constructive.eo.avro
 
 import scala.util.control.NonFatal
 
-import java.io.InputStream
+import java.io.{ByteArrayOutputStream, InputStream}
 import org.apache.avro.Schema
-import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory}
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
+import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory, EncoderFactory}
 
 /** Internal byte-offset locator behind [[AvroPrism]]'s byte-carried optic (`to`/`from`) and its
   * slice/graft surface.
@@ -76,8 +77,111 @@ private[avro] object AvroBinaryCursor:
       path: Array[PathStep],
       strictTerminalUnion: Boolean,
   ): Either[AvroFailure, BinarySpan] =
-    try locateUncaught(bytes, rootSchema, path, strictTerminalUnion)
+    locateFrom(bytes, rootSchema, path, strictTerminalUnion, startPos = 0)
+
+  /** [[locate]] starting at an interior offset — `bytes(startPos)` must open an encoding of
+    * `schema`. Backs the per-element focus walk of [[locateElements]].
+    */
+  def locateFrom(
+      bytes: Array[Byte],
+      schema: Schema,
+      path: Array[PathStep],
+      strictTerminalUnion: Boolean,
+      startPos: Int,
+  ): Either[AvroFailure, BinarySpan] =
+    try locateUncaught(bytes, schema, path, strictTerminalUnion, startPos)
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
+
+  /** The focused byte spans of an array-terminal walk — the traversal counterpart of [[locate]].
+    *
+    * Resolves `prefix` to an array-typed field, walks the array's block framing, and resolves
+    * `suffix` inside EVERY element. Elements whose suffix walk refuses (path miss, union-branch
+    * mismatch, index step, decode boundary) are silently dropped from the span set — the traversal
+    * semantic "fold the focuses that exist"; whole-walk failures (bad prefix, non-array terminal,
+    * truncated bytes) surface as `Left`.
+    *
+    * `writable = false` flags payloads whose array used the negative-count (byte-sized) block
+    * framing: splicing size-changing values would leave the recorded block byte-size stale, so
+    * writers must pass through unchanged.
+    */
+  final case class ElementSpans(spans: Vector[BinarySpan], writable: Boolean)
+
+  def locateElements(
+      bytes: Array[Byte],
+      rootSchema: Schema,
+      prefix: Array[PathStep],
+      suffix: Array[PathStep],
+  ): Either[AvroFailure, ElementSpans] =
+    locate(bytes, rootSchema, prefix, strictTerminalUnion = true).flatMap { arr =>
+      if arr.valueSchema.getType != Schema.Type.ARRAY then
+        Left(AvroFailure.NotAnArray(AvroWalk.terminalOf(prefix)))
+      else
+        try Right(walkElementsUncaught(bytes, arr, suffix))
+        catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
+    }
+
+  private def walkElementsUncaught(
+      bytes: Array[Byte],
+      arr: BinarySpan,
+      suffix: Array[PathStep],
+  ): ElementSpans =
+    val elemSchema = arr.valueSchema.getElementType
+    val in = new CountingInputStream(bytes, arr.valueStart)
+    val d = DecoderFactory.get().directBinaryDecoder(in, null)
+    val spans = Vector.newBuilder[BinarySpan]
+    var writable = true
+    var count = d.readLong()
+    while count != 0L do
+      var n = count
+      if n < 0L then
+        n = -n
+        d.readLong(): Unit // block byte-size — goes stale across a size-changing splice
+        writable = false
+      var i = 0L
+      while i < n do
+        val elemStart = in.position
+        skipValue(elemSchema, d)
+        // Per-element focus walk on a fresh cursor positioned at the element. Failures drop the
+        // element from the focus set; the block walk above already advanced past it.
+        locateFrom(bytes, elemSchema, suffix, strictTerminalUnion = true, startPos = elemStart)
+          .foreach(spans += _)
+        i += 1
+      count = d.readLong()
+    ElementSpans(spans.result(), writable)
+
+  /** Decode the value slice addressed by `span` through `codec` — GenericDatumReader under the
+    * span's resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
+    * [[AvroTraversal]]'s per-element reads.
+    */
+  def decodeSlice[A](
+      bytes: Array[Byte],
+      span: BinarySpan,
+      codec: AvroCodec[A],
+  ): Either[Throwable, A] =
+    try
+      val reader = new GenericDatumReader[Any](span.valueSchema)
+      val decoder = DecoderFactory
+        .get()
+        .binaryDecoder(bytes, span.valueStart, span.end - span.valueStart, null)
+      codec.decodeEither(reader.read(null, decoder))
+    catch case NonFatal(t) => Left(t)
+
+  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then a
+    * GenericDatumWriter. Mirror of [[decodeSlice]]; shared by the prism and traversal write paths.
+    */
+  def encodeValue[A](
+      a: A,
+      span: BinarySpan,
+      codec: AvroCodec[A],
+  ): Either[Throwable, Array[Byte]] =
+    try
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[Any](span.valueSchema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      writer.write(codec.encode(a), encoder)
+      encoder.flush()
+      Right(out.toByteArray)
+    catch case NonFatal(t) => Left(t)
 
   /** Zigzag-varint encoding of `n` (Avro `int` wire form) — used by graft to synthesise a union
     * branch index. Delegates to apache-avro's [[BinaryData.encodeInt]].
@@ -88,24 +192,41 @@ private[avro] object AvroBinaryCursor:
     if len == 5 then buf else java.util.Arrays.copyOf(buf, len)
 
   /** Assemble prefix + (synthesised branch index, when `span` addresses a union branch) + fragment
-    * + suffix — the splice step shared by [[AvroPrism.graftBytes]] and [[AvroBytesPrism]].
+    * + suffix — the splice step shared by [[AvroPrism.graftBytes]] and the byte optics' `from`.
     */
   def splice(bytes: Array[Byte], span: BinarySpan, fragment: Array[Byte]): Array[Byte] =
-    val index = span.branchOrdinal match
-      case Some(ordinal) => zigZagInt(ordinal)
-      case None          => Array.emptyByteArray
-    val suffixLen = bytes.length - span.end
-    val out = new Array[Byte](span.fieldStart + index.length + fragment.length + suffixLen)
-    System.arraycopy(bytes, 0, out, 0, span.fieldStart)
-    System.arraycopy(index, 0, out, span.fieldStart, index.length)
-    System.arraycopy(fragment, 0, out, span.fieldStart + index.length, fragment.length)
-    System.arraycopy(
-      bytes,
-      span.end,
-      out,
-      span.fieldStart + index.length + fragment.length,
-      suffixLen,
-    )
+    spliceAll(bytes, Vector((span, fragment)))
+
+  /** One-pass multi-span [[splice]]: `replacements` must be sorted by `fieldStart` and
+    * non-overlapping (guaranteed by construction for [[locateElements]] output). Each span's branch
+    * index is re-synthesised exactly as in the single-span case.
+    */
+  def spliceAll(
+      bytes: Array[Byte],
+      replacements: Vector[(BinarySpan, Array[Byte])],
+  ): Array[Byte] =
+    var total = bytes.length
+    replacements.foreach { (span, enc) =>
+      val idxLen = span.branchOrdinal.fold(0)(o => zigZagInt(o).length)
+      total += idxLen + enc.length - (span.end - span.fieldStart)
+    }
+    val out = new Array[Byte](total)
+    var src = 0
+    var dst = 0
+    replacements.foreach { (span, enc) =>
+      val pre = span.fieldStart - src
+      System.arraycopy(bytes, src, out, dst, pre)
+      dst += pre
+      span.branchOrdinal.foreach { o =>
+        val idx = zigZagInt(o)
+        System.arraycopy(idx, 0, out, dst, idx.length)
+        dst += idx.length
+      }
+      System.arraycopy(enc, 0, out, dst, enc.length)
+      dst += enc.length
+      src = span.end
+    }
+    System.arraycopy(bytes, src, out, dst, bytes.length - src)
     out
 
   /** The walk body — may throw (EOF on truncated input, avro decode complaints); [[locate]] wraps
@@ -116,8 +237,9 @@ private[avro] object AvroBinaryCursor:
       rootSchema: Schema,
       path: Array[PathStep],
       strictTerminalUnion: Boolean,
+      startPos: Int,
   ): Either[AvroFailure, BinarySpan] =
-    val in = new CountingInputStream(bytes)
+    val in = new CountingInputStream(bytes, startPos)
     val d = DecoderFactory.get().directBinaryDecoder(in, null)
     var schema = rootSchema
     var failure: AvroFailure | Null = null
@@ -252,9 +374,10 @@ private[avro] object AvroBinaryCursor:
     * (non-buffering) binary decoder's consumption observable as byte offsets. All three read shapes
     * plus `skip` keep [[position]] exact.
     */
-  final private class CountingInputStream(bytes: Array[Byte]) extends InputStream:
+  final private class CountingInputStream(bytes: Array[Byte], startPos: Int = 0)
+      extends InputStream:
 
-    private var pos: Int = 0
+    private var pos: Int = startPos
 
     def position: Int = pos
 
