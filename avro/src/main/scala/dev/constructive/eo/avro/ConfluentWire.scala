@@ -1,7 +1,5 @@
 package dev.constructive.eo.avro
 
-import org.apache.avro.Schema
-
 /** Confluent Schema Registry wire-format framing for binary Avro payloads: a 5-byte header — magic
   * byte `0x00` followed by the big-endian 4-byte schema id — then the Avro binary body.
   *
@@ -17,11 +15,6 @@ object ConfluentWire:
 
   /** Header length: 1 magic byte + 4 big-endian schema-id bytes. */
   val HeaderLength: Int = 5
-
-  /** Registry hook — resolve a Confluent schema id to its [[Schema]]. Purely an alias so signatures
-    * that need resolution stay registry-agnostic; this module never calls it.
-    */
-  type SchemaById = Int => Schema
 
   /** A stripped Confluent frame: the schema id and the Avro binary body.
     *

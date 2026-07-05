@@ -2,6 +2,7 @@ package dev.constructive.eo.circe
 
 import scala.quoted.*
 
+import dev.constructive.eo.generics.MacroSelectors
 import io.circe.{Decoder, Encoder}
 
 /** Macros backing `JsonPrism.field(_.fieldName)`, `selectDynamic`, `at(i)`, `each`, `fields`.
@@ -24,7 +25,7 @@ object JsonPrismMacro:
   )(using q: Quotes): Expr[JsonPrism[B]] =
     import quotes.reflect.*
 
-    val name: String = extractFieldName(selector.asTerm).getOrElse {
+    val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "JsonPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + "Nested paths are not yet supported inside a single call;\n"
@@ -57,7 +58,7 @@ object JsonPrismMacro:
       parent: Expr[JsonPrism[A]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    val elemTpe = iterableElementType[A]("JsonPrism.at")
+    val elemTpe = MacroSelectors.iterableElementType[A]("JsonPrism.at")
 
     elemTpe.asType match
       case '[b] =>
@@ -71,7 +72,7 @@ object JsonPrismMacro:
   def eachImpl[A: Type](
       parent: Expr[JsonPrism[A]]
   )(using q: Quotes): Expr[Any] =
-    val elemTpe = iterableElementType[A]("JsonPrism.each")
+    val elemTpe = MacroSelectors.iterableElementType[A]("JsonPrism.each")
 
     elemTpe.asType match
       case '[b] =>
@@ -90,7 +91,7 @@ object JsonPrismMacro:
   )(using q: Quotes): Expr[JsonTraversal[B]] =
     import quotes.reflect.*
 
-    val name: String = extractFieldName(selector.asTerm).getOrElse {
+    val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "JsonTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + s"Got: ${selector.asTerm.show}"
@@ -106,7 +107,7 @@ object JsonPrismMacro:
       parent: Expr[JsonTraversal[A]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    val elemTpe = iterableElementType[A]("JsonTraversal.at")
+    val elemTpe = MacroSelectors.iterableElementType[A]("JsonTraversal.at")
 
     elemTpe.asType match
       case '[b] =>
@@ -311,20 +312,6 @@ object JsonPrismMacro:
   /** Shared helper: pull the element type out of a Scala collection's `Iterable` base type, or
     * abort with a clear error mentioning the call site (`who`).
     */
-  private def iterableElementType[A: Type](
-      who: String
-  )(using q: Quotes): q.reflect.TypeRepr =
-    import quotes.reflect.*
-    val aTpe = TypeRepr.of[A]
-    val iterSym = TypeRepr.of[Iterable[Any]].typeSymbol
-    aTpe.baseType(iterSym) match
-      case AppliedType(_, elem :: Nil) => elem.widen
-      case _                           =>
-        report.errorAndAbort(
-          s"$who: expected a Scala collection (Vector / List / Seq / …) with a single element type; got ${Type
-              .show[A]}."
-        )
-
   /** Shared helper: summon both `Encoder[B]` and `Decoder[B]` from the enclosing scope, with a
     * caller-supplied error message on either failure. Each former call site spelled the same "no
     * given Encoder[…] in scope. …" twice, once for `Encoder` and once for `Decoder`; the caller now
@@ -339,23 +326,9 @@ object JsonPrismMacro:
     val dec = Expr.summon[Decoder[B]].getOrElse(report.errorAndAbort(errorMsg("Decoder")))
     (enc, dec)
 
-  /** Strip `Inlined` / `Typed` wrappers around a lambda and pull the field name out of its body.
-    * Mirrors the eo-generics `extractFieldName` helper so both macros agree on what a "single-field
-    * selector" looks like.
-    */
-  private def extractFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
-    import quotes.reflect.*
-    t match
-      case Inlined(_, _, inner)                      => extractFieldName(inner)
-      case Typed(inner, _)                           => extractFieldName(inner)
-      case Lambda(_, Select(_, name))                => Some(name)
-      case Lambda(_, Inlined(_, _, Select(_, name))) => Some(name)
-      case Lambda(_, Typed(Select(_, name), _))      => Some(name)
-      case _                                         => None
-
-  /** Strict variant of [[extractFieldName]] that rejects nested Select chains — routes through the
-    * shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to keep the strict
-    * receiver-is-Ident rule consistent with the lens macro's selector parsing.
+  /** Strict variant of [[MacroSelectors.extractFieldName]] that rejects nested Select chains —
+    * routes through the shared `MacroSelectors.extractSingleFieldName` helper in eo-generics to
+    * keep the strict receiver-is-Ident rule consistent with the lens macro's selector parsing.
     */
   private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
-    dev.constructive.eo.generics.MacroSelectors.extractSingleFieldName(t)
+    MacroSelectors.extractSingleFieldName(t)

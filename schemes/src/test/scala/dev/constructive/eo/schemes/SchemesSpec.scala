@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package schemes
 
+import scala.annotation.tailrec
+
 import io.circe.Json
 import org.specs2.mutable.Specification
 
@@ -144,11 +146,9 @@ class SchemesSpec extends Specification:
   // ----- stack-safety (the win over a hand-written one-off) -----
 
   "cata is stack-safe over a depth-10^6 Neg spine" >> {
-    var e: Expr = Expr.Lit(0.0)
-    var i = 0
-    while i < 1_000_000 do
-      e = Expr.Neg(e)
-      i += 1
+    @tailrec def negSpine(e: Expr, i: Int): Expr =
+      if i < 1_000_000 then negSpine(Expr.Neg(e), i + 1) else e
+    val e = negSpine(Expr.Lit(0.0), 0)
     val depth: (Expr, PSVec[Int]) => Int = (node, kids) =>
       node match
         case Expr.Lit(_) => 0

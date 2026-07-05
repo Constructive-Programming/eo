@@ -1,5 +1,6 @@
 package dev.constructive.eo.avro
 
+import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import cats.data.{Chain, Ior}
@@ -75,6 +76,18 @@ sealed abstract private[avro] class AvroFocus[A]:
     */
   def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any]
 
+  /** Navigate + decode the focus in ONE walk, and capture a writer that places a new focus back
+    * WITHOUT walking again — the writer closes over the walk this call already did (parents for a
+    * Leaf, resolved parent + walk for a Fields). Backs [[AvroRecordPrism]]'s `Affine` `to`/`from`
+    * seam so a generic/composed `modify` is a single tree walk, mirroring how the byte face
+    * captures a `BinarySpan`.
+    *
+    * `Left` on navigate/decode failure. The returned writer catches encode/rebuild failures and
+    * returns the original `record` unchanged — the Optic `from` has no failure channel; diagnostics
+    * live on the Ior member surface.
+    */
+  def navigateForWrite(record: IndexedRecord): Either[AvroFailure, (A, A => IndexedRecord)]
+
   /** Decode an Avro-shaped runtime value to `A`. Shared one-line default. */
   final def decodeFrom(any: Any): Either[Throwable, A] = codec.decodeEither(any)
 
@@ -95,19 +108,43 @@ private[avro] object AvroFocus:
     def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any] =
       AvroWalk.walkPathArr(record, path).map(_.cur)
 
-    def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      AvroWalk.walkPathArr(record, path) match
-        case Left(_)       => record
-        case Right(walked) =>
-          codec.decodeEither(walked.cur) match
-            case Left(_)  => record
-            case Right(a) =>
+    def navigateForWrite(
+        record: IndexedRecord
+    ): Either[AvroFailure, (A, A => IndexedRecord)] =
+      if path.length == 0 then
+        codec.decodeEither(record) match
+          case Left(t)  => Left(AvroFailure.DecodeFailed(terminalStep, t))
+          case Right(a) =>
+            // Root full-cover: the writer IS the old reverseGet (encode standalone).
+            val writer: A => IndexedRecord = b =>
               try
-                val encoded = codec.encode(f(a))
-                AvroWalk
-                  .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
-                  .asInstanceOf[IndexedRecord]
+                codec.encode(b) match
+                  case asRec: IndexedRecord => asRec
+                  case _                    => record
               catch case NonFatal(_) => record
+            Right((a, writer))
+      else
+        AvroWalk.walkPathArr(record, path) match
+          case Left(failure) => Left(failure)
+          case Right(walked) =>
+            codec.decodeEither(walked.cur) match
+              case Left(t)  => Left(AvroFailure.DecodeFailed(terminalStep, t))
+              case Right(a) =>
+                val writer: A => IndexedRecord = b =>
+                  try
+                    AvroWalk
+                      .rebuildPathArr(walked.parents, walked.parentsLen, path, codec.encode(b))
+                      .asInstanceOf[IndexedRecord]
+                  catch case NonFatal(_) => record
+                Right((a, writer))
+
+    def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
+      // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
+      // the silent modify can't drift from it. The captured writer already re-encodes, rebuilds,
+      // and falls back to `record` on a NonFatal encode/rebuild failure.
+      navigateForWrite(record) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => record
 
     def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
       AvroWalk.walkPathArr(record, path) match
@@ -229,23 +266,46 @@ private[avro] object AvroFocus:
             case _ => Left(AvroFailure.NotARecord(terminalStep))
       }
 
+    def navigateForWrite(
+        record: IndexedRecord
+    ): Either[AvroFailure, (A, A => IndexedRecord)] =
+      walkParent(record) match
+        case Left(failure)           => Left(failure)
+        case Right((parent, walked)) =>
+          readFields(parent) match
+            case Left(chain) =>
+              Left(chain.headOption.getOrElse(AvroFailure.PathMissing(terminalStep)))
+            case Right(sub) =>
+              codec.decodeEither(sub) match
+                case Left(t)  => Left(AvroFailure.DecodeFailed(terminalStep, t))
+                case Right(a) =>
+                  // Writer overlays the NT fields BY NAME onto the resolved parent (writeFields)
+                  // and rebuilds through the captured walk — one walk total.
+                  val writer: A => IndexedRecord = b =>
+                    try rebuild(writeFields(parent, b), walked)
+                    catch case NonFatal(_) => record
+                  Right((a, writer))
+
     /** Atomic read — succeeds only when ALL selected fields are present; missing fields accumulate
       * as `PathMissing`.
       */
     private def readFields(parent: IndexedRecord): Either[Chain[AvroFailure], IndexedRecord] =
       val parentSchema = parent.getSchema
       val sub = new GenericData.Record(ntSchema)
-      var chain = Chain.empty[AvroFailure]
-      var i = 0
-      while i < fieldNames.length do
-        val name = fieldNames(i)
-        val parentField = parentSchema.getField(name)
-        if parentField == null then chain = chain :+ AvroFailure.PathMissing(PathStep.Field(name))
+      @tailrec def loop(i: Int, chain: Chain[AvroFailure]): Chain[AvroFailure] =
+        if i >= fieldNames.length then chain
         else
-          // ntField is non-null for any selector the macro accepted.
-          val ntField = ntSchema.getField(name)
-          sub.put(ntField.pos, parent.get(parentField.pos))
-        i += 1
+          val name = fieldNames(i)
+          val parentField = parentSchema.getField(name)
+          val next =
+            if parentField == null then chain :+ AvroFailure.PathMissing(PathStep.Field(name))
+            else
+              // ntField is non-null for any selector the macro accepted.
+              val ntField = ntSchema.getField(name)
+              sub.put(ntField.pos, parent.get(parentField.pos))
+              chain
+          loop(i + 1, next)
+      val chain = loop(0, Chain.empty[AvroFailure])
       if chain.isEmpty then Right(sub) else Left(chain)
 
     /** Project selected fields out of `parent` for transform-shape ops; missing → `null`.
@@ -254,20 +314,21 @@ private[avro] object AvroFocus:
     private def buildSubRecord(parent: IndexedRecord): IndexedRecord =
       val parentSchema = parent.getSchema
       val sub = new GenericData.Record(ntSchema)
-      var i = 0
-      while i < fieldNames.length do
-        val name = fieldNames(i)
-        val parentField = parentSchema.getField(name)
-        val ntField = ntSchema.getField(name)
-        val value: Any = if parentField == null then null else parent.get(parentField.pos)
-        if ntField != null then sub.put(ntField.pos, value)
-        i += 1
+      @tailrec def loop(i: Int): Unit =
+        if i < fieldNames.length then
+          val name = fieldNames(i)
+          val parentField = parentSchema.getField(name)
+          val ntField = ntSchema.getField(name)
+          val value: Any = if parentField == null then null else parent.get(parentField.pos)
+          if ntField != null then sub.put(ntField.pos, value)
+          loop(i + 1)
+      loop(0)
       sub
 
     /** Overlay the encoder's output for `a` onto `parent`; encoders that omit a selected field
       * leave the parent's entry untouched.
       */
-    private def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
+    private[avro] def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
       codec.encode(a) match
         case encoded: IndexedRecord =>
           val updates: Map[String, Any] =
@@ -315,17 +376,12 @@ private[avro] object AvroFocus:
         .asInstanceOf[IndexedRecord]
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      walkParent(record) match
-        case Left(_)                 => record
-        case Right((parent, walked)) =>
-          readFields(parent) match
-            case Left(_)    => record
-            case Right(sub) =>
-              codec.decodeEither(sub) match
-                case Left(_)  => record
-                case Right(a) =>
-                  try rebuild(writeFields(parent, f(a)), walked)
-                  catch case NonFatal(_) => record
+      // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays
+      // separate — it must surface readFields' accumulated PathMissing Chain, which
+      // navigateForWrite collapses to a single failure.
+      navigateForWrite(record) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => record
 
     def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
       walkParent(record) match

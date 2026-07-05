@@ -10,31 +10,33 @@ import org.apache.avro.Schema
   *
   * {{{
   *   AvroTraversal[A] <: Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]
-  *   type X = (Array[Byte], Vector[BinarySpan])
+  *   type X = (Array[Byte], Option[ElementSpans])
   * }}}
   *
   * `to` resolves the prefix to an array-typed field, walks the array's block framing, and locates +
   * slice-decodes the focus inside every element ([[AvroBinaryCursor.locateElements]]); `from`
   * re-encodes each focus and splices all spans back in one pass. Avro's standard (positive-count)
-  * array framing carries no byte lengths, so per-element splices can change size freely — the write
-  * path needs no re-framing. Same carrier as [[dev.constructive.eo.jsoniter.JsoniterTraversal]]
-  * (`MultiFocus[PSVec]`), so `.foldMap` / `.all` / `.modify` / `.headOption` / same-carrier
-  * `.andThen` light up from the standard extension catalogue — but unlike the jsoniter one, this
-  * traversal is WRITE-capable.
+  * array framing carries no byte lengths, so per-element splices can change size freely; payloads
+  * whose array used the negative-count (byte-sized) framing are RE-FRAMED on write — the whole
+  * array region is rebuilt as one canonical positive-count block with the focus splices applied
+  * ([[AvroBinaryCursor.reframeArray]]). Same carrier as
+  * [[dev.constructive.eo.jsoniter.JsoniterTraversal]] (`MultiFocus[PSVec]`), so `.foldMap` / `.all`
+  * / `.modify` / `.headOption` / same-carrier `.andThen` light up from the standard extension
+  * catalogue.
   *
   * Read semantics are "fold the focuses that exist": elements whose focus walk or slice decode
-  * refuses are dropped from the focus set (and stay untouched on write). Two pass-through cases on
-  * the write side, both silent (diagnostics live on [[record]]):
+  * refuses keep their bytes but leave the focus set (untouched on write). Whole-walk failure (bad
+  * prefix / non-array terminal / truncated bytes) yields no foci and `from` returns the input —
+  * silent, like every write-side refusal here (diagnostics live on [[record]]).
   *
-  *   - whole-walk failure (bad prefix / non-array terminal / truncated bytes) → no foci, `from`
-  *     returns the input;
-  *   - a payload whose array uses the negative-count (byte-sized) block framing — splicing would
-  *     leave the recorded block sizes stale, so writes pass through unchanged.
+  * [[AvroPrism]]'s '''Laws & preconditions''' section applies verbatim: laws hold up to canonical
+  * re-encoding of the focused slices, writes need decodable current focuses, and the payload must
+  * be encoded under exactly this traversal's reader schema.
   *
   * The record-carried face — the Ior-bearing `modify` / `getAll` / `place` / `transfer` surface
   * over `IndexedRecord | Array[Byte] | String` input — lives behind ONE factory: [[record]]
-  * ([[AvroRecordTraversal]]). Drilling (`.field` / `.at` / `.fields` / Dynamic selection) stays
-  * here, the single mechanism; drill first, flip last.
+  * ([[AvroRecordTraversal]]). Drilling (`.field` / `.at` / `.union[Branch]` / `.fields` / Dynamic
+  * selection) stays here, the single mechanism; drill first, flip last.
   *
   * The Fields-vs-Leaf split lives entirely inside `focus` (per [[AvroFocus]]); the compatibility
   * alias [[AvroFieldsTraversal]] points back here.
@@ -46,7 +48,7 @@ final class AvroTraversal[A] private[avro] (
 ) extends Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]],
       Dynamic:
 
-  type X = (Array[Byte], Vector[AvroBinaryCursor.BinarySpan])
+  type X = (Array[Byte], Option[AvroBinaryCursor.ElementSpans])
 
   /** The per-element focus path (`path` for a Leaf focus, `parentPath` for a Fields focus). */
   private[avro] def suffix: Array[PathStep] = focus match
@@ -67,41 +69,64 @@ final class AvroTraversal[A] private[avro] (
 
   private def scan(bytes: Array[Byte]): MultiFocus[PSVec][X, A] =
     AvroBinaryCursor.locateElements(bytes, rootSchemaCached, prefix, suffix) match
-      case Left(_)   => MultiFocus((bytes, Vector.empty), PSVec.empty[A])
+      case Left(_)   => MultiFocus((bytes, None), PSVec.empty[A])
       case Right(es) =>
-        // Decode each focused span; a span whose decode refuses is dropped TOGETHER with its
-        // focus so the span↔focus alignment `from` relies on survives.
-        val kept = es
-          .spans
-          .flatMap(span =>
-            AvroBinaryCursor.decodeSlice(bytes, span, codec).toOption.map(a => (span, a))
-          )
-        val arr = new Array[AnyRef](kept.length)
+        // Decode each focused span; an element whose decode refuses is DEMOTED to focus-less
+        // (its bytes survive writes untouched) so the span↔focus alignment `from` relies on
+        // survives.
+        val decoded = Vector.newBuilder[A]
+        val elements = es
+          .elements
+          .map { e =>
+            e.focus match
+              case None       => e
+              case Some(span) =>
+                AvroBinaryCursor.decodeSlice(bytes, span, codec) match
+                  case Right(a) =>
+                    decoded += a
+                    e
+                  case Left(_) => e.copy(focus = None)
+          }
+        val foci = decoded.result()
+        val arr = new Array[AnyRef](foci.length)
         var i = 0
-        kept.foreach { (_, a) =>
+        foci.foreach { a =>
           arr(i) = a.asInstanceOf[AnyRef]
           i += 1
         }
-        // Non-writable framing (negative-count blocks): keep the foci readable but store no
-        // spans, so `from` falls into the pass-through arm below.
-        // ponytail: re-frame negative-count blocks on write if such payloads ever matter
-        val spans = if es.writable then kept.map(_._1) else Vector.empty
-        MultiFocus((bytes, spans), PSVec.unsafeWrap[A](arr))
+        MultiFocus((bytes, Some(es.copy(elements = elements))), PSVec.unsafeWrap[A](arr))
 
   private def spliceFoci(mf: MultiFocus[PSVec][X, A]): Array[Byte] =
-    val (bytes, spans) = mf.context
+    val (bytes, planOpt) = mf.context
     val foci = mf.foci
-    if spans.isEmpty || spans.length != foci.length then bytes
-    else
-      val reps = Vector.newBuilder[(AvroBinaryCursor.BinarySpan, Array[Byte])]
-      var i = 0
-      while i < spans.length do
-        AvroBinaryCursor.encodeValue(foci(i), spans(i), codec) match
-          case Right(enc) => reps += ((spans(i), enc))
-          // silent per-element pass-through on encode failure — that element keeps its bytes
-          case Left(_) => ()
-        i += 1
-      AvroBinaryCursor.spliceAll(bytes, reps.result())
+    planOpt match
+      case None       => bytes
+      case Some(plan) =>
+        val active = plan.elements.flatMap(_.focus)
+        if active.isEmpty || active.length != foci.length then bytes
+        else
+          // Encode each focus (leaf: value under the span schema; fields: by-name overlay onto
+          // the parent slice). None = encode failure → that element keeps its original bytes.
+          val encoded: Vector[Option[Array[Byte]]] =
+            active.zipWithIndex.map { (span, i) => encodeFocus(foci(i), bytes, span).toOption }
+          if plan.canonicalFraming then
+            val reps = active
+              .zip(encoded)
+              .collect { case (span, Some(enc)) => (span, enc) }
+            AvroBinaryCursor.spliceAll(bytes, reps)
+          else
+            // Byte-sized block framing: in-place splices would falsify the recorded block
+            // sizes, so rebuild the whole array region with canonical framing instead.
+            AvroBinaryCursor.reframeArray(bytes, plan, encoded)
+
+  private def encodeFocus(
+      a: A,
+      bytes: Array[Byte],
+      span: AvroBinaryCursor.BinarySpan,
+  ): Either[Throwable, Array[Byte]] =
+    focus match
+      case f: AvroFocus.Fields[A] => AvroBinaryCursor.encodeFieldsOverlay(bytes, span, f, a)
+      case _: AvroFocus.Leaf[A]   => AvroBinaryCursor.encodeValue(a, span, codec)
 
   // ---- Record-carried face -------------------------------------------
 
@@ -126,6 +151,12 @@ final class AvroTraversal[A] private[avro] (
       i: Int
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
     widenSuffixStep[B](PathStep.Index(i))
+
+  /** Extend the per-element suffix by a union-branch step. Used by `.union[Branch]`. */
+  private[avro] def widenSuffixUnion[B](
+      branchName: String
+  )(using codecB: AvroCodec[B]): AvroTraversal[B] =
+    widenSuffixStep[B](PathStep.UnionBranch(branchName))
 
   private def widenSuffixStep[B](
       step: PathStep
@@ -165,6 +196,12 @@ object AvroTraversal:
 
     transparent inline def at(i: Int): Any =
       ${ AvroPrismMacro.atTraversalImpl[A]('t, 'i) }
+
+  /** `.union[Branch]` — narrow the per-element focus to one union alternative. */
+  extension [A](t: AvroTraversal[A])
+
+    transparent inline def union[Branch]: Any =
+      ${ AvroPrismMacro.unionTraversalImpl[A, Branch]('t) }
 
   /** `.fields(_.a, _.b, ...)` — focus a NamedTuple per element. */
   extension [A](t: AvroTraversal[A])

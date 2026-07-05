@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import scala.annotation.tailrec
+
 import cats.Eq
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
@@ -25,16 +27,21 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   *   val namePrism:   AvroPrism[String]   = personPrism.field(_.name)
   *   namePrism.modify(_.toUpperCase)(payloadBytes)
   *   // → the same Array[Byte] payload, with `name` upper-cased in
-  *   //   place — no Person (and no IndexedRecord) ever materialised.
+  *   //   place — no Person (nor any root record) ever materialised.
   *   namePrism.record.modify(_.toUpperCase)(record)
   *   // → the IndexedRecord-carried face, with Ior diagnostics.
   * }}}
   *
   * The default carrier is the binary wire form itself (`Array[Byte]`, mirroring
-  * `dev.constructive.eo.jsoniter.JsoniterPrism`); the record-carried face behind `.record` mirrors
+  * `dev.constructive.eo.jsoniter.JsoniterPrism`); the record-carried face behind `.record` follows
   * `dev.constructive.eo.circe`'s architecture decisions on `Json`: `IndexedRecord` plays the role
   * of `Json`, [[AvroCodec]] plays the role of `(io.circe.Encoder[A], io.circe.Decoder[A])`, and
   * `AvroFailure` plays the role of `JsonFailure`.
+  *
+  * '''Carrier note.''' Both `AvroRecordPrism` and `eo-circe`'s `JsonPrism` are `Affine`-carried —
+  * lawful Optionals whose composed / upcast writes preserve siblings. A drilled focus is an
+  * Optional, so the carrier widens to `Affine` (via the Composer on composition) rather than
+  * pretending to be a `Prism`; the two record faces stay in step.
   *
   * '''Gap-1 (per the eo-avro plan).''' [[PathStep]] is duplicated, not shared with eo-circe — the
   * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. The
@@ -100,28 +107,31 @@ package object avro:
   private def avroRecordChildren(rec: IndexedRecord): PSVec[IndexedRecord] =
     val n = rec.getSchema.getFields.size
     val buf = collection.mutable.ArrayBuffer.empty[IndexedRecord]
-    var i = 0
-    while i < n do
-      rec.get(i) match
-        case child: IndexedRecord => buf += child
-        case _                    => ()
-      i += 1
+    @tailrec def loop(i: Int): Unit =
+      if i < n then
+        rec.get(i) match
+          case child: IndexedRecord => buf += child
+          case _                    => ()
+        loop(i + 1)
+    loop(0)
     PSVec.fromIterable(buf)
 
   private def avroRecordRebuild(rec: IndexedRecord, vec: PSVec[IndexedRecord]): IndexedRecord =
     val schema = rec.getSchema
     val n = schema.getFields.size
     val copy = new GenericData.Record(schema)
-    var i = 0
-    var k = 0
-    while i < n do
-      rec.get(i) match
-        case _: IndexedRecord =>
-          copy.put(i, vec(k))
-          k += 1
-        case other =>
-          copy.put(i, other)
-      i += 1
+    @tailrec def loop(i: Int, k: Int): Unit =
+      if i < n then
+        val nextK =
+          rec.get(i) match
+            case _: IndexedRecord =>
+              copy.put(i, vec(k))
+              k + 1
+            case other =>
+              copy.put(i, other)
+              k
+        loop(i + 1, nextK)
+    loop(0, 0)
     copy
 
 end avro

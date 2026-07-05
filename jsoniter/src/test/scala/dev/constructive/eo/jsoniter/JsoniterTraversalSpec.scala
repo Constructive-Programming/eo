@@ -9,15 +9,15 @@ import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
 import org.specs2.mutable.Specification
 
-/** Phase-1.5 spike for `JsoniterTraversal`. Exercises:
+/** Read-side spec for `JsoniterTraversal`. Exercises:
   *
   *   - parser accepts `[*]` wildcard, preserves position in nested paths
   *   - scanner.findAll fans out across array elements; empty/missing arrays produce empty list
   *   - JsoniterTraversal[A].foldMap sums over hit elements, returns Monoid.empty on miss
   *   - JsoniterPrism rejects wildcard paths at construction (cross-check)
   *
-  * Phase 2 (write-back splice — `.modify` re-encoding each element back into the buffer) is out of
-  * scope here.
+  * The write-back splice surface (`.modify` re-encoding each element into the buffer) is covered by
+  * `JsoniterTraversalWriteSpec`.
   */
 class JsoniterTraversalSpec extends Specification:
 

@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import scala.annotation.tailrec
+
 import cats.Eval
 
 import data.{MultiFocus, PSVec, ModifyF}
@@ -125,10 +127,11 @@ object Plated:
       else
         val n = kids.length
         val out = new Array[AnyRef](n)
-        var i = 0
-        while i < n do
-          out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
-          i += 1
+        @tailrec def fill(i: Int): Unit =
+          if i < n then
+            out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
+            fill(i + 1)
+        fill(0)
         f(P.rebuild(s, PSVec.unsafeWrap[S](out)))
     rec(root, 0)
 
@@ -146,16 +149,20 @@ object Plated:
       if kids.isEmpty then ret = f(s)
       else stack.push(new Frame(s, kids, new Array[AnyRef](kids.length), 0))
     enter(root)
-    while !stack.isEmpty do
-      val fr = stack.peek()
-      if fr.i > 0 then fr.out(fr.i - 1) = ret.asInstanceOf[AnyRef] // stash the child just finished
-      if fr.i < fr.kids.length then
-        val child = fr.kids(fr.i)
-        fr.i += 1
-        enter(child)
-      else
-        ret = f(P.rebuild(fr.node, PSVec.unsafeWrap[S](fr.out)))
-        val _ = stack.pop()
+    @tailrec def drive(): Unit =
+      if !stack.isEmpty then
+        val fr = stack.peek()
+        if fr.i > 0 then
+          fr.out(fr.i - 1) = ret.asInstanceOf[AnyRef] // stash the child just finished
+        if fr.i < fr.kids.length then
+          val child = fr.kids(fr.i)
+          fr.i += 1
+          enter(child)
+        else
+          ret = f(P.rebuild(fr.node, PSVec.unsafeWrap[S](fr.out)))
+          val _ = stack.pop()
+        drive()
+    drive()
     ret
 
   /** The whole structure as a composable optic that reaches *every* sub-term — `transform` in optic
@@ -207,12 +214,10 @@ object Plated:
         case Nil    => acc.reverse
         case h :: t =>
           val vec = P.childrenVec(h)
-          var pushed = t
-          var i = vec.length - 1
-          while i >= 0 do
-            pushed = vec(i) :: pushed
-            i -= 1
-          loop(pushed, h :: acc)
+          @tailrec def pushDown(i: Int, pushed: List[S]): List[S] =
+            if i >= 0 then pushDown(i - 1, vec(i) :: pushed)
+            else pushed
+          loop(pushDown(vec.length - 1, t), h :: acc)
     loop(s :: Nil, Nil)
 
   /** The "both" surface: treat any self-traversal optic as a [[Plated]] and call the combinators on

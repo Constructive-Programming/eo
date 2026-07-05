@@ -156,9 +156,15 @@ focuses that exist and ignores the rest. `JsoniterPrism` rejects
 wildcard paths at construction with an explicit redirect to this
 factory.
 
-Phase-1.5 ships read-only Traversal. Write-back over `[*]` is a phase-3
-question (each splice would invalidate subsequent spans, so a naive
-loop is wrong) — punt unless a real workload demands it.
+`.modify` writes back over `[*]` too: every focus is re-encoded and
+all spans are spliced in a single pass (segments between spans are
+copied verbatim, so later spans can't be invalidated by earlier
+splices). Elements whose decode refused are dropped from the focus
+set together with their span and stay byte-untouched:
+
+```scala mdoc
+new String(itemsT.modify(_ * 10)(cart), "UTF-8")
+```
 
 ## JSONPath subset
 

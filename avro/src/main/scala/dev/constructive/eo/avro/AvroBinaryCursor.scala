@@ -1,10 +1,11 @@
 package dev.constructive.eo.avro
 
+import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import java.io.{ByteArrayOutputStream, InputStream}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter}
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, IndexedRecord}
 import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory, EncoderFactory}
 
 /** Internal byte-offset locator behind [[AvroPrism]]'s byte-carried optic (`to`/`from`) and its
@@ -92,19 +93,27 @@ private[avro] object AvroBinaryCursor:
     try locateUncaught(bytes, schema, path, strictTerminalUnion, startPos)
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
 
+  /** One array element's boundaries plus its focused sub-span. `focus = None` when the suffix walk
+    * refused this element (path miss, branch mismatch, index step) — or, later, when the slice
+    * decode refused: the traversal demotes those so spans and foci stay 1:1.
+    */
+  final case class ElementSpan(start: Int, end: Int, focus: Option[BinarySpan])
+
   /** The focused byte spans of an array-terminal walk — the traversal counterpart of [[locate]].
     *
     * Resolves `prefix` to an array-typed field, walks the array's block framing, and resolves
-    * `suffix` inside EVERY element. Elements whose suffix walk refuses (path miss, union-branch
-    * mismatch, index step, decode boundary) are silently dropped from the span set — the traversal
-    * semantic "fold the focuses that exist"; whole-walk failures (bad prefix, non-array terminal,
-    * truncated bytes) surface as `Left`.
+    * `suffix` inside EVERY element. Whole-walk failures (bad prefix, non-array terminal, truncated
+    * bytes) surface as `Left`.
     *
-    * `writable = false` flags payloads whose array used the negative-count (byte-sized) block
-    * framing: splicing size-changing values would leave the recorded block byte-size stale, so
-    * writers must pass through unchanged.
+    * `canonicalFraming = false` flags payloads whose array used the negative-count (byte-sized)
+    * block framing: in-place splices would leave the recorded block byte-sizes stale, so write
+    * paths must go through [[reframeArray]] instead of [[spliceAll]].
     */
-  final case class ElementSpans(spans: Vector[BinarySpan], writable: Boolean)
+  final case class ElementSpans(
+      array: BinarySpan,
+      elements: Vector[ElementSpan],
+      canonicalFraming: Boolean,
+  )
 
   def locateElements(
       bytes: Array[Byte],
@@ -128,29 +137,141 @@ private[avro] object AvroBinaryCursor:
     val elemSchema = arr.valueSchema.getElementType
     val in = new CountingInputStream(bytes, arr.valueStart)
     val d = DecoderFactory.get().directBinaryDecoder(in, null)
-    val spans = Vector.newBuilder[BinarySpan]
-    var writable = true
-    var count = d.readLong()
-    while count != 0L do
-      var n = count
-      if n < 0L then
-        n = -n
-        d.readLong(): Unit // block byte-size — goes stale across a size-changing splice
-        writable = false
-      var i = 0L
-      while i < n do
-        val elemStart = in.position
-        skipValue(elemSchema, d)
-        // Per-element focus walk on a fresh cursor positioned at the element. Failures drop the
-        // element from the focus set; the block walk above already advanced past it.
-        locateFrom(bytes, elemSchema, suffix, strictTerminalUnion = true, startPos = elemStart)
-          .foreach(spans += _)
-        i += 1
-      count = d.readLong()
-    ElementSpans(spans.result(), writable)
+    val elements = Vector.newBuilder[ElementSpan]
+    val canonical =
+      walkElementBlocks(bytes, elemSchema, suffix, in, d, elements, d.readLong(), true)
+    ElementSpans(arr, elements.result(), canonical)
 
-  /** Decode the value slice addressed by `span` through `codec` — GenericDatumReader under the
-    * span's resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
+  /** Walk `remaining` elements of one array block: skip each element's encoding, then run the
+    * per-element focus locate (`suffix`) on a fresh cursor at the element start, recording an
+    * [[ElementSpan]]. A focus-walk failure keeps the element (marked focus-less) so its bytes
+    * survive a re-frame.
+    */
+  @tailrec private def walkElementItems(
+      bytes: Array[Byte],
+      elemSchema: Schema,
+      suffix: Array[PathStep],
+      in: CountingInputStream,
+      d: Decoder,
+      elements: scala.collection.mutable.Builder[ElementSpan, Vector[ElementSpan]],
+      remaining: Long,
+  ): Unit =
+    if remaining > 0L then
+      val elemStart = in.position
+      skipValue(elemSchema, d)
+      val focus = locateFrom(
+        bytes,
+        elemSchema,
+        suffix,
+        strictTerminalUnion = true,
+        startPos = elemStart,
+      ).toOption
+      elements += ElementSpan(elemStart, in.position, focus)
+      walkElementItems(bytes, elemSchema, suffix, in, d, elements, remaining - 1L)
+
+  /** Walk one array's `d.readLong()`-framed block structure from an already-read leading `count`,
+    * threading whether the framing has stayed canonical (positive counts only — negative byte-sized
+    * blocks make in-place splices unsafe). Returns the final canonical flag; companion of
+    * [[walkElementItems]].
+    */
+  @tailrec private def walkElementBlocks(
+      bytes: Array[Byte],
+      elemSchema: Schema,
+      suffix: Array[PathStep],
+      in: CountingInputStream,
+      d: Decoder,
+      elements: scala.collection.mutable.Builder[ElementSpan, Vector[ElementSpan]],
+      count: Long,
+      canonical: Boolean,
+  ): Boolean =
+    if count == 0L then canonical
+    else
+      // -Long.MinValue == Long.MinValue: negating leaves it negative, the item loop would be
+      // skipped, and the walk would confidently misparse element data as block framing.
+      val negative = count < 0L
+      if negative && count == Long.MinValue then
+        throw new java.io.IOException("array block count Long.MinValue is not a valid framing")
+      val n = if negative then -count else count
+      if negative then
+        d.readLong(): Unit // block byte-size — goes stale across a size-changing splice
+      walkElementItems(bytes, elemSchema, suffix, in, d, elements, n)
+      walkElementBlocks(
+        bytes,
+        elemSchema,
+        suffix,
+        in,
+        d,
+        elements,
+        d.readLong(),
+        canonical && !negative,
+      )
+
+  /** Zigzag-varint encoding of `n` (Avro `long` wire form) — the block count emitted by
+    * [[reframeArray]].
+    */
+  def zigZagLong(n: Long): Array[Byte] =
+    val buf = new Array[Byte](10)
+    val len = BinaryData.encodeLong(n, buf, 0)
+    if len == 10 then buf else java.util.Arrays.copyOf(buf, len)
+
+  /** Rebuild the whole array region with CANONICAL framing (one positive-count block + zero
+    * terminator), applying per-element focus replacements — the write path for payloads whose
+    * original framing carried block byte-sizes that an in-place splice would falsify.
+    *
+    * `encodedFoci` aligns 1:1, in order, with the elements whose `focus` is defined; `None` entries
+    * (encode failures) keep that element's original bytes.
+    */
+  def reframeArray(
+      bytes: Array[Byte],
+      plan: ElementSpans,
+      encodedFoci: Vector[Option[Array[Byte]]],
+  ): Array[Byte] =
+    val out = new ByteArrayOutputStream(bytes.length + 16)
+    out.write(bytes, 0, plan.array.valueStart)
+    if plan.elements.nonEmpty then
+      val countBytes = zigZagLong(plan.elements.length.toLong)
+      out.write(countBytes, 0, countBytes.length)
+    var k = 0
+    plan.elements.foreach { e =>
+      e.focus match
+        case Some(f) =>
+          val enc = encodedFoci(k)
+          k += 1
+          enc match
+            case Some(newBytes) =>
+              out.write(bytes, e.start, f.fieldStart - e.start)
+              // Re-synthesise the requested union branch index when the element focus is a
+              // `.each.union[B]` branch (branchOrdinal = Some) — mirrors spliceAll. For a leaf /
+              // fields element focus branchOrdinal is None and this is a no-op.
+              f.branchOrdinal.foreach { o =>
+                val idx = zigZagInt(o)
+                out.write(idx, 0, idx.length)
+              }
+              out.write(newBytes, 0, newBytes.length)
+              out.write(bytes, f.end, e.end - f.end)
+            case None => out.write(bytes, e.start, e.end - e.start)
+        case None => out.write(bytes, e.start, e.end - e.start)
+    }
+    out.write(0) // zero-count block terminator
+    out.write(bytes, plan.array.end, bytes.length - plan.array.end)
+    out.toByteArray
+
+  /** Read one datum of `schema` from `bytes[from, from+len)` via a bounded GenericDatumReader. */
+  private def readDatum(schema: Schema, bytes: Array[Byte], from: Int, len: Int): Any =
+    val reader = new GenericDatumReader[Any](schema)
+    reader.read(null, DecoderFactory.get().binaryDecoder(bytes, from, len, null))
+
+  /** Encode `datum` under `schema` to its binary wire form via a GenericDatumWriter. */
+  private def writeDatum(schema: Schema, datum: Any): Array[Byte] =
+    val out = new ByteArrayOutputStream()
+    val writer = new GenericDatumWriter[Any](schema)
+    val encoder = EncoderFactory.get().binaryEncoder(out, null)
+    writer.write(datum, encoder)
+    encoder.flush()
+    out.toByteArray
+
+  /** Decode the value slice addressed by `span` through `codec` — [[readDatum]] under the span's
+    * resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
     * [[AvroTraversal]]'s per-element reads.
     */
   def decodeSlice[A](
@@ -159,28 +280,40 @@ private[avro] object AvroBinaryCursor:
       codec: AvroCodec[A],
   ): Either[Throwable, A] =
     try
-      val reader = new GenericDatumReader[Any](span.valueSchema)
-      val decoder = DecoderFactory
-        .get()
-        .binaryDecoder(bytes, span.valueStart, span.end - span.valueStart, null)
-      codec.decodeEither(reader.read(null, decoder))
+      codec.decodeEither(
+        readDatum(span.valueSchema, bytes, span.valueStart, span.end - span.valueStart)
+      )
     catch case NonFatal(t) => Left(t)
 
-  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then a
-    * GenericDatumWriter. Mirror of [[decodeSlice]]; shared by the prism and traversal write paths.
+  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then [[writeDatum]].
+    * Mirror of [[decodeSlice]]; shared by the prism and traversal write paths for LEAF focuses (the
+    * codec's runtime shape matches the span schema exactly).
     */
   def encodeValue[A](
       a: A,
       span: BinarySpan,
       codec: AvroCodec[A],
   ): Either[Throwable, Array[Byte]] =
+    try Right(writeDatum(span.valueSchema, codec.encode(a)))
+    catch case NonFatal(t) => Left(t)
+
+  /** Encode step for FIELDS focuses — a `.fields(...)` span addresses the PARENT record, and the
+    * NamedTuple's runtime record (selected fields, selector order) must NOT be written under the
+    * parent schema: avro's `GenericDatumWriter` fetches datum fields by POSITION, so a partial
+    * cover blows past the NT arity and a reordered same-typed full cover silently swaps values.
+    * Instead: decode the parent slice, overlay the NT fields BY NAME (the same
+    * [[AvroFocus.Fields.writeFields]] overlay the record face uses), and re-encode the parent.
+    */
+  def encodeFieldsOverlay[A](
+      bytes: Array[Byte],
+      span: BinarySpan,
+      fields: AvroFocus.Fields[A],
+      a: A,
+  ): Either[Throwable, Array[Byte]] =
     try
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[Any](span.valueSchema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      writer.write(codec.encode(a), encoder)
-      encoder.flush()
-      Right(out.toByteArray)
+      val parent = readDatum(span.valueSchema, bytes, span.valueStart, span.end - span.valueStart)
+        .asInstanceOf[IndexedRecord]
+      Right(writeDatum(span.valueSchema, fields.writeFields(parent, a)))
     catch case NonFatal(t) => Left(t)
 
   /** Zigzag-varint encoding of `n` (Avro `int` wire form) — used by graft to synthesise a union
@@ -241,54 +374,9 @@ private[avro] object AvroBinaryCursor:
   ): Either[AvroFailure, BinarySpan] =
     val in = new CountingInputStream(bytes, startPos)
     val d = DecoderFactory.get().directBinaryDecoder(in, null)
-    var schema = rootSchema
-    var failure: AvroFailure | Null = null
-    // Populated iff the terminal step is a UnionBranch (index bytes already consumed).
-    var unionSpan: BinarySpan | Null = null
-    var i = 0
-    while i < path.length && failure == null do
-      path(i) match
-        case step @ PathStep.Field(name) =>
-          if schema.getType != Schema.Type.RECORD then failure = AvroFailure.NotARecord(step)
-          else
-            val field = schema.getField(name)
-            if field == null then failure = AvroFailure.PathMissing(step)
-            else
-              val fields = schema.getFields
-              var j = 0
-              while j < field.pos do
-                skipValue(fields.get(j).schema, d)
-                j += 1
-              schema = field.schema
-
-        case step @ PathStep.UnionBranch(branchName) =>
-          if schema.getType != Schema.Type.UNION then
-            failure = AvroFailure.UnionResolutionFailed(declaredBranches(schema), step)
-          else
-            val requested = branchOrdinalOf(schema, branchName)
-            if requested < 0 then
-              failure = AvroFailure.UnionResolutionFailed(declaredBranches(schema), step)
-            else
-              val isTerminal = i == path.length - 1
-              val indexStart = in.position
-              val runtime = d.readIndex()
-              val runtimeSchema = schema.getTypes.get(runtime)
-              if runtime != requested && (strictTerminalUnion || !isTerminal) then
-                failure = AvroFailure.UnionResolutionFailed(declaredBranches(schema), step)
-              else if isTerminal then
-                unionSpan = BinarySpan(
-                  fieldStart = indexStart,
-                  valueStart = in.position,
-                  end = 0, // patched below once the branch value is skipped
-                  valueSchema = schema.getTypes.get(requested),
-                  branchOrdinal = Some(requested),
-                )
-                schema = runtimeSchema
-              else schema = runtimeSchema
-
-        case step @ PathStep.Index(_) =>
-          failure = AvroFailure.UnsupportedSpanStep(step)
-      i += 1
+    // `unionSpan` is populated iff the terminal step is a UnionBranch (index bytes already read).
+    val (failure, schema, unionSpan) =
+      locateLoop(path, d, in, strictTerminalUnion, 0, rootSchema, null)
     if failure != null then Left(failure)
     else
       unionSpan match
@@ -301,6 +389,69 @@ private[avro] object AvroBinaryCursor:
           val start = in.position
           skipValue(schema, d)
           Right(BinarySpan(start, start, in.position, schema, None))
+
+  /** The path-walk step machine behind [[locateUncaught]] — advances `schema`/`unionSpan` step by
+    * step, skipping non-target siblings via the decoder, until the path is exhausted or a step
+    * fails. Returns `(failure, terminalSchema, unionSpan)`; a non-null first component is the
+    * structured failure.
+    */
+  @tailrec private def locateLoop(
+      path: Array[PathStep],
+      d: Decoder,
+      in: CountingInputStream,
+      strictTerminalUnion: Boolean,
+      i: Int,
+      schema: Schema,
+      unionSpan: BinarySpan | Null,
+  ): (AvroFailure | Null, Schema, BinarySpan | Null) =
+    if i >= path.length then (null, schema, unionSpan)
+    else
+      path(i) match
+        case step @ PathStep.Field(name) =>
+          if schema.getType != Schema.Type.RECORD then
+            (AvroFailure.NotARecord(step), schema, unionSpan)
+          else
+            val field = schema.getField(name)
+            if field == null then (AvroFailure.PathMissing(step), schema, unionSpan)
+            else
+              skipFieldsBefore(schema.getFields, d, 0, field.pos)
+              locateLoop(path, d, in, strictTerminalUnion, i + 1, field.schema, unionSpan)
+
+        case step @ PathStep.UnionBranch(branchName) =>
+          if schema.getType != Schema.Type.UNION then
+            (AvroFailure.UnionResolutionFailed(declaredBranches(schema), step), schema, unionSpan)
+          else
+            val requested = branchOrdinalOf(schema, branchName)
+            if requested < 0 then
+              (
+                AvroFailure.UnionResolutionFailed(declaredBranches(schema), step),
+                schema,
+                unionSpan,
+              )
+            else
+              val isTerminal = i == path.length - 1
+              val indexStart = in.position
+              val runtime = d.readIndex()
+              val runtimeSchema = schema.getTypes.get(runtime)
+              if runtime != requested && (strictTerminalUnion || !isTerminal) then
+                (
+                  AvroFailure.UnionResolutionFailed(declaredBranches(schema), step),
+                  schema,
+                  unionSpan,
+                )
+              else if isTerminal then
+                val span = BinarySpan(
+                  fieldStart = indexStart,
+                  valueStart = in.position,
+                  end = 0, // patched below once the branch value is skipped
+                  valueSchema = schema.getTypes.get(requested),
+                  branchOrdinal = Some(requested),
+                )
+                locateLoop(path, d, in, strictTerminalUnion, i + 1, runtimeSchema, span)
+              else locateLoop(path, d, in, strictTerminalUnion, i + 1, runtimeSchema, unionSpan)
+
+        case step @ PathStep.Index(_) =>
+          (AvroFailure.UnsupportedSpanStep(step), schema, unionSpan)
 
   /** Skip one encoded value of `schema` — the hand-rolled switch over `Schema.Type`. Records
     * recurse field-by-field, arrays / maps consume block framing (negative block counts carry a
@@ -322,30 +473,49 @@ private[avro] object AvroBinaryCursor:
       case Schema.Type.UNION   => skipValue(schema.getTypes.get(d.readIndex()), d)
       case Schema.Type.RECORD  =>
         val fields = schema.getFields
-        val n = fields.size
-        var i = 0
-        while i < n do
-          skipValue(fields.get(i).schema, d)
-          i += 1
-      case Schema.Type.ARRAY =>
-        val elem = schema.getElementType
-        var l = d.skipArray()
-        while l > 0 do
-          var i = 0L
-          while i < l do
-            skipValue(elem, d)
-            i += 1
-          l = d.skipArray()
-      case Schema.Type.MAP =>
-        val value = schema.getValueType
-        var l = d.skipMap()
-        while l > 0 do
-          var i = 0L
-          while i < l do
-            d.skipString()
-            skipValue(value, d)
-            i += 1
-          l = d.skipMap()
+        skipFieldsBefore(fields, d, 0, fields.size)
+      case Schema.Type.ARRAY => skipArrayBlocks(schema.getElementType, d, d.skipArray())
+      case Schema.Type.MAP   => skipMapBlocks(schema.getValueType, d, d.skipMap())
+
+  /** Skip the encodings of `fields` in the index range `[j, upTo)` — the leading siblings before a
+    * `Field` step's target position (and, with `upTo = size`, a whole record).
+    */
+  @tailrec private def skipFieldsBefore(
+      fields: java.util.List[Schema.Field],
+      d: Decoder,
+      j: Int,
+      upTo: Int,
+  ): Unit =
+    if j < upTo then
+      skipValue(fields.get(j).schema, d)
+      skipFieldsBefore(fields, d, j + 1, upTo)
+
+  /** Skip `remaining` array elements of `elem`. */
+  @tailrec private def skipArrayItems(elem: Schema, d: Decoder, remaining: Long): Unit =
+    if remaining > 0L then
+      skipValue(elem, d)
+      skipArrayItems(elem, d, remaining - 1L)
+
+  /** Skip a whole `d.skipArray()`-framed array of `elem`, block by block (avro's `skipArray` folds
+    * negative byte-sized framing into a plain positive element count).
+    */
+  @tailrec private def skipArrayBlocks(elem: Schema, d: Decoder, count: Long): Unit =
+    if count > 0L then
+      skipArrayItems(elem, d, count)
+      skipArrayBlocks(elem, d, d.skipArray())
+
+  /** Skip `remaining` map entries (string key + `value` value). */
+  @tailrec private def skipMapItems(value: Schema, d: Decoder, remaining: Long): Unit =
+    if remaining > 0L then
+      d.skipString()
+      skipValue(value, d)
+      skipMapItems(value, d, remaining - 1L)
+
+  /** Skip a whole `d.skipMap()`-framed map of `value`, block by block. */
+  @tailrec private def skipMapBlocks(value: Schema, d: Decoder, count: Long): Unit =
+    if count > 0L then
+      skipMapItems(value, d, count)
+      skipMapBlocks(value, d, d.skipMap())
 
   /** Ordinal of the union alternative whose full name is `branchName`, or -1. Matches the naming
     * convention of [[PathStep.UnionBranch]] (schema full names — `"long"` for primitives,
@@ -354,12 +524,11 @@ private[avro] object AvroBinaryCursor:
   private def branchOrdinalOf(union: Schema, branchName: String): Int =
     val types = union.getTypes
     val n = types.size
-    var i = 0
-    var found = -1
-    while i < n && found < 0 do
-      if types.get(i).getFullName == branchName then found = i
-      i += 1
-    found
+    @tailrec def loop(i: Int): Int =
+      if i >= n then -1
+      else if types.get(i).getFullName == branchName then i
+      else loop(i + 1)
+    loop(0)
 
   /** Declared alternative names of a union schema (empty for non-unions) — the diagnostic payload
     * of [[AvroFailure.UnionResolutionFailed]].

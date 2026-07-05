@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.language.implicitConversions
 
 import cats.data.Ior
+import dev.constructive.eo.data.Affine
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
@@ -46,7 +47,7 @@ class CrossCarrierCompositionSpec extends Specification:
   "(1)+(2)+(3) lens → AvroFieldsPrism + AffineFold + multi-field .fields: cross-carrier + diagnostics" >> {
     // ---- (1) plain Lens → AvroFieldsPrism → AffineFold ----
     val box = Lens[Box, IndexedRecord](_.payload, (b, r) => b.copy(payload = r))
-    val personFields: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Either] =
+    val personFields: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Affine] =
       codecPrism[Person].fields(_.name, _.age).record
     val adultName: AffineFold[NameAge, String] =
       AffineFold(nt => Option.when(nt.age >= 18)(nt.name))
@@ -78,7 +79,7 @@ class CrossCarrierCompositionSpec extends Specification:
 
     // ---- (2) single-field ----
     val outer2 = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
-    val inner2: Optic[IndexedRecord, IndexedRecord, String, String, Either] =
+    val inner2: Optic[IndexedRecord, IndexedRecord, String, String, Affine] =
       codecPrism[Person].field(_.name).record
     val chain2 = outer2.andThen(inner2)
 
@@ -110,7 +111,7 @@ class CrossCarrierCompositionSpec extends Specification:
     // ---- (3) multi-field ----
     val outerGen: Optic[Envelope, Envelope, IndexedRecord, IndexedRecord, Tuple2] =
       lens[Envelope](_.payload)
-    val inner3: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Either] =
+    val inner3: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Affine] =
       codecPrism[Person].fields(_.name, _.age).record
     val chain3: Optic[Envelope, Envelope, NameAge, NameAge, dev.constructive.eo.data.Affine] =
       outerGen.andThen(inner3)
@@ -120,7 +121,13 @@ class CrossCarrierCompositionSpec extends Specification:
     val out: Envelope = chain3.modify(f)(validEnv3)
     val outName = out.payload.asInstanceOf[GenericData.Record].get("name").toString
     val outAge = out.payload.asInstanceOf[GenericData.Record].get("age").asInstanceOf[Int]
-    val modOk = (outName === "ALICE").and(outAge === 31)
+    // The composite's write now goes through the Affine carrier's from(Hit(source, b)), which
+    // rebuilds the payload IN PLACE under its own (Person) schema with siblings preserved — the
+    // record face is an Optional, not a reconstruct-standalone Prism. This assertion is the
+    // positive proof the upcast/compose sibling-drop footgun is fixed (it previously read
+    // "NamedTuple", the standalone reconstruction).
+    val schemaPreservedOk = out.payload.getSchema.getName === "Person"
+    val modOk = (outName === "ALICE").and(outAge === 31).and(schemaPreservedOk)
 
     val p = Person("Alice", 30)
     val concrete = codecPrism[Person].fields(_.name, _.age).record

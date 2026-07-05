@@ -25,6 +25,17 @@ import dev.constructive.eo.optics.Optic
   * automatically — `.foldMap`, `.modify`, `.replace`, `.andThen`, etc. No new Composer /
   * AssociativeFunctor needed; reuses the existing Affine machinery.
   *
+  * '''Laws & preconditions''' (normative):
+  *
+  *   - The Optional laws hold '''up to canonical re-encoding of the focused slice''':
+  *     `modify(identity)` re-encodes the focus through the codec, normalising number forms (`1e0` →
+  *     `1.0`), escapes, and key order INSIDE the span. Bytes outside the span (whitespace, sibling
+  *     formatting) are never touched. Byte-for-byte identity holds only for focus slices already in
+  *     the codec's canonical form.
+  *   - '''Writes require a decodable current focus''': the Affine `to` decodes eagerly, so
+  *     `.replace` onto a span whose current value doesn't decode as `A` is a Miss pass-through —
+  *     template placeholders must be VALID encodings of the focus type.
+  *
   * @group Optics
   */
 object JsoniterPrism:
@@ -88,7 +99,7 @@ object JsoniterPrism:
           try
             val a = readFromSubArray(bytes, span.start, span.end)(using codec)
             new Affine.Hit[X, A]((bytes, span.start, span.end), a)
-          catch case _: Throwable => new Affine.Miss[X, A](bytes)
+          catch case scala.util.control.NonFatal(_) => new Affine.Miss[X, A](bytes)
 
       private def splice(aff: Affine[X, A]): Array[Byte] =
         aff match

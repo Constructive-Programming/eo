@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package data
 
+import scala.annotation.tailrec
+
 import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
 import forgetful.*
@@ -101,12 +103,11 @@ private[eo] object MultiFocusFromList:
       case h :: Nil => PSVec.singleton[A](h)
       case _        =>
         val arr = new Array[AnyRef](xs.size)
-        var i = 0
-        var cur = xs
-        while cur.nonEmpty do
-          arr(i) = cur.head.asInstanceOf[AnyRef]
-          i += 1
-          cur = cur.tail
+        @tailrec def loop(i: Int, cur: List[A]): Unit =
+          if cur.nonEmpty then
+            arr(i) = cur.head.asInstanceOf[AnyRef]
+            loop(i + 1, cur.tail)
+        loop(0, xs)
         PSVec.unsafeWrap[A](arr)
 
     override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): PSVec[A] =
@@ -297,22 +298,24 @@ object MultiFocusK:
         case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
           // Always-hit fast path (mfSingleton): every call produces exactly one focus.
           val flatBuf = new ObjArrBuilder(n)
-          var i = 0
-          while i < n do
-            val (xi, c) = ah.singletonTo(va(i))
-            ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
-            flatBuf.unsafeAppend(c.asInstanceOf[AnyRef])
-            i += 1
+          @tailrec def loop(i: Int): Unit =
+            if i < n then
+              val (xi, c) = ah.singletonTo(va(i))
+              ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
+              flatBuf.unsafeAppend(c.asInstanceOf[AnyRef])
+              loop(i + 1)
+          loop(0)
           val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
           (sndZ, flatBuf.freezeAsPSVec[C])
         case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked =>
           // Maybe-hit fast path (Prism / Optional morphs).
           val lenBuf = new IntArrBuilder(n)
           val flatBuf = new ObjArrBuilder(n)
-          var i = 0
-          while i < n do
-            mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
-            i += 1
+          @tailrec def loop(i: Int): Unit =
+            if i < n then
+              mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
+              loop(i + 1)
+          loop(0)
           val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
           (sndZ, flatBuf.freezeAsPSVec[C])
         case _ =>
@@ -339,13 +342,14 @@ object MultiFocusK:
             // sub-containers) from doubling *more* than the old default-capacity-16 builder did.
             val lenBuf = new IntArrBuilder(n)
             val flatBuf = new ObjArrBuilder(math.max(n, 16))
-            var i = 0
-            while i < n do
-              val (xi, vy) = inner.to(va(i))
-              lenBuf.append(vy.length)
-              ysBuf.append(xi.asInstanceOf[AnyRef])
-              flatBuf.appendAllFromPSVec(vy)
-              i += 1
+            @tailrec def loop(i: Int): Unit =
+              if i < n then
+                val (xi, vy) = inner.to(va(i))
+                lenBuf.append(vy.length)
+                ysBuf.append(xi.asInstanceOf[AnyRef])
+                flatBuf.appendAllFromPSVec(vy)
+                loop(i + 1)
+            loop(0)
             val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
             (sndZ, flatBuf.freezeAsPSVec[C])
 
@@ -366,37 +370,36 @@ object MultiFocusK:
         case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
           // Always-hit fast path (lens == null, every element hits exactly once).
           val n = ys.length
-          var i = 0
-          while i < n do
-            resultBuf.unsafeAppend(
-              ah.singletonFrom(ys(i).asInstanceOf[Xi], vys(i)).asInstanceOf[AnyRef]
-            )
-            i += 1
+          @tailrec def loop(i: Int): Unit =
+            if i < n then
+              resultBuf.unsafeAppend(
+                ah.singletonFrom(ys(i).asInstanceOf[Xi], vys(i)).asInstanceOf[AnyRef]
+              )
+              loop(i + 1)
+          loop(0)
         case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked =>
           val lensArr = lens.nn
           val n = lensArr.length
-          var offset = 0
-          var i = 0
-          while i < n do
-            val len = lensArr(i)
-            resultBuf.unsafeAppend(
-              mh.reconstructSingleton(ys(i), vys, offset, len).asInstanceOf[AnyRef]
-            )
-            offset += len
-            i += 1
+          @tailrec def loop(i: Int, offset: Int): Unit =
+            if i < n then
+              val len = lensArr(i)
+              resultBuf.unsafeAppend(
+                mh.reconstructSingleton(ys(i), vys, offset, len).asInstanceOf[AnyRef]
+              )
+              loop(i + 1, offset + len)
+          loop(0, 0)
         case _ =>
           // Generic fallback paired with composeTo's escape-hatch branch above.
           val lensArr = lens.nn
           val n = lensArr.length
-          var offset = 0
-          var i = 0
-          while i < n do
-            val len = lensArr(i)
-            val y = ys(i).asInstanceOf[Xi]
-            val chunk = vys.slice(offset, offset + len)
-            resultBuf.unsafeAppend(inner.from((y, chunk)).asInstanceOf[AnyRef])
-            offset += len
-            i += 1
+          @tailrec def loop(i: Int, offset: Int): Unit =
+            if i < n then
+              val len = lensArr(i)
+              val y = ys(i).asInstanceOf[Xi]
+              val chunk = vys.slice(offset, offset + len)
+              resultBuf.unsafeAppend(inner.from((y, chunk)).asInstanceOf[AnyRef])
+              loop(i + 1, offset + len)
+          loop(0, 0)
       outer.from((sndZ.xo, resultBuf.freezeAsPSVec[B]))
 
   /** Composed existential leftover for `MultiFocus[PSVec]` `andThen`. Parallel arrays rather than a
@@ -769,10 +772,11 @@ object MultiFocusK:
       def from(pair: (Unit, Int => A)): T =
         val k = pair._2
         val arr = new Array[Object](size)
-        var i = 0
-        while i < size do
-          arr(i) = k(i).asInstanceOf[Object]
-          i += 1
+        @tailrec def loop(i: Int): Unit =
+          if i < size then
+            arr(i) = k(i).asInstanceOf[Object]
+            loop(i + 1)
+        loop(0)
         Tuple.fromArray(arr).asInstanceOf[T]
 
   // ------------------------------------------------------------------

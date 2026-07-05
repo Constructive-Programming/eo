@@ -25,6 +25,17 @@ object AvroSpecFixtures:
 
   // ---- ADTs ----------------------------------------------------------
 
+  /** Two SAME-typed fields — the fixture that catches positional/by-name write confusion (a
+    * positional write of a reordered full-cover NamedTuple silently swaps these).
+    */
+  case class FullName(first: String, last: String)
+
+  object FullName:
+
+    given AvroEncoder[FullName] = AvroEncoder.derived
+    given AvroDecoder[FullName] = AvroDecoder.derived
+    given AvroSchemaFor[FullName] = AvroSchemaFor.derived
+
   /** Two-field case class — minimal product type for the prism specs. */
   case class Person(name: String, age: Int)
 
@@ -130,6 +141,60 @@ object AvroSpecFixtures:
 
   /** Reader schema for [[WireEnvelope]] — used by the byte-span specs to re-encode / re-decode. */
   lazy val envelopeSchema: Schema = summon[AvroCodec[WireEnvelope]].schema
+
+  /** Union whose branches carry MULTIPLE fields — the fixture for `.union[Branch].fields(...)`
+    * composition (a single-field branch can't feed `.fields`, which needs arity ≥ 2).
+    */
+  sealed trait Contact
+
+  object Contact:
+
+    given AvroEncoder[Contact] = AvroEncoder.derived
+    given AvroDecoder[Contact] = AvroDecoder.derived
+    given AvroSchemaFor[Contact] = AvroSchemaFor.derived
+
+    given AvroEncoder[Email] = AvroEncoder.derived
+    given AvroDecoder[Email] = AvroDecoder.derived
+    given AvroSchemaFor[Email] = AvroSchemaFor.derived
+
+    given AvroEncoder[Phone] = AvroEncoder.derived
+    given AvroDecoder[Phone] = AvroDecoder.derived
+    given AvroSchemaFor[Phone] = AvroSchemaFor.derived
+
+  case class Email(user: String, domain: String) extends Contact
+  case class Phone(country: String, number: String) extends Contact
+
+  /** Record with a union field whose branches are multi-field — hosts the Fields-under-union
+    * composition tests (`.field(_.contact).union[Email].fields(_.user, _.domain)`).
+    */
+  case class Directory(id: String, contact: Contact)
+
+  object Directory:
+
+    given AvroEncoder[Directory] = AvroEncoder.derived
+    given AvroDecoder[Directory] = AvroDecoder.derived
+    given AvroSchemaFor[Directory] = AvroSchemaFor.derived
+
+  lazy val directorySchema: Schema = summon[AvroCodec[Directory]].schema
+
+  def directoryRecord(d: Directory): GenericRecord =
+    summon[AvroCodec[Directory]].encode(d).asInstanceOf[GenericRecord]
+
+  /** Array-of-union record — hosts the `.entries.each.union[Cash]` composition (per-element union
+    * branch focus) including under non-canonical block framing.
+    */
+  case class Ledger(owner: String, entries: List[Payment])
+
+  object Ledger:
+
+    given AvroEncoder[Ledger] = AvroEncoder.derived
+    given AvroDecoder[Ledger] = AvroDecoder.derived
+    given AvroSchemaFor[Ledger] = AvroSchemaFor.derived
+
+  lazy val ledgerSchema: Schema = summon[AvroCodec[Ledger]].schema
+
+  def ledgerRecord(l: Ledger): GenericRecord =
+    summon[AvroCodec[Ledger]].encode(l).asInstanceOf[GenericRecord]
 
   /** Build a kindlings-encoded record for an [[WireEnvelope]]. */
   def envelopeRecord(e: WireEnvelope): GenericRecord =

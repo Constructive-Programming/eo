@@ -225,6 +225,23 @@ check the three Lens laws and three Prism laws on derived instances
 across all the supported shapes (case class, enum, union, recursive
 parameterised ADT). Independent of `cats-eo-laws` at runtime.
 
+## Code conventions
+
+Beyond the scalafix `DisableSyntax` bans in `.scalafix.conf` (no `return`,
+no XML, no `finalize`):
+
+- **No `while` loops.** Write a tail-recursive `@tailrec` function instead —
+  it compiles to the same loop bytecode (no perf or stack cost) while keeping
+  the code expression-oriented. Thread loop counters / accumulators / cursor
+  positions as immutable recursion params and return the final value where an
+  imperative loop would read a `var` afterward; every recursive call must be in
+  tail position (the annotation enforces it). `var` is still allowed for the
+  genuine mutable *fields* of the perf-critical builders (`IntArrBuilder`,
+  `ObjArrBuilder`, `PSVec` cursors) — it's the `while` *control flow* that's
+  banned, in new code as well. (No scalafix rule enforces this: `DisableSyntax`
+  has no `noWhile`, and a regex ban false-positives on the word "while" in
+  prose — so it's a review convention.)
+
 ## Metals MCP (stdio)
 
 `metals-mcp` (new in v1.6.7) is registered as a project-local MCP server in
