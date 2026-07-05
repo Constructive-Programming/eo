@@ -167,6 +167,15 @@ ThisBuild / githubWorkflowGeneratedDownloadSteps ~= { steps =>
   steps.map(bumpActionVersion("actions", "download-artifact", "v8"))
 }
 
+// sbt-typelevel 0.8.x still generates `actions/checkout@v6`; we run @v7
+// (Dependabot's bump). `githubWorkflowCheck` enforces ci.yml == the
+// generated output, so pin v7 at the source — in the shared job setup —
+// rather than hand-editing the YAML (which the check would reject). Drop
+// this once the plugin ships a release that generates checkout@v7.
+ThisBuild / githubWorkflowJobSetup ~= { steps =>
+  steps.map(bumpActionVersion("actions", "checkout", "v7"))
+}
+
 ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
   jobs.map { job =>
     if (job.id == "dependency-submission")
