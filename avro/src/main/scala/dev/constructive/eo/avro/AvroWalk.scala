@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
 /** Shared internal helpers for fold-based Avro walks used by [[AvroPrism]] and [[AvroTraversal]].
@@ -387,6 +388,101 @@ private[avro] object AvroWalk:
         loop(i + 1)
     loop(0)
     fresh
+
+  // ---- Schema-name resolution (issue #35) ----------------------------
+  //
+  // Field navigation must honour the schema's field name, not the raw Scala field name: a codec
+  // built with a name transform (kindlings snake/kebab/custom) or vulcan overrides emits schema
+  // fields whose names differ from the case-class fields. The `.field(_.x)` macros know `x`'s
+  // DECLARATION index; these helpers walk the cached schema at prism-construction time and read
+  // back the actual schema field name at that position, so the stored PathStep.Field carries the
+  // schema name and the (unchanged) runtime walkers hit it. Resolution is construction-time only —
+  // zero per-operation cost.
+
+  /** Walk `root` along `steps` and return the terminal schema, or a diagnostic. The Field steps
+    * carry already-resolved schema names, so `getField` hits; UnionBranch unwraps to the branch,
+    * Index descends into the element/value type. Mirrors the cursor's schema descent.
+    */
+  def schemaAt(root: Schema, steps: Array[PathStep]): Either[String, Schema] =
+    @tailrec def loop(i: Int, schema: Schema): Either[String, Schema] =
+      if i >= steps.length then Right(schema)
+      else
+        steps(i) match
+          case PathStep.Field(name) =>
+            if schema.getType != Schema.Type.RECORD then
+              Left(s"step $i: expected a record but found ${schema.getType} (field '$name')")
+            else
+              val f = schema.getField(name)
+              if f == null then Left(s"step $i: schema record has no field '$name'")
+              else loop(i + 1, f.schema)
+          case PathStep.UnionBranch(branchName) =>
+            if schema.getType != Schema.Type.UNION then
+              Left(s"step $i: expected a union but found ${schema.getType}")
+            else
+              val types = schema.getTypes
+              @tailrec def find(j: Int): Schema | Null =
+                if j >= types.size then null
+                else if types.get(j).getFullName == branchName then types.get(j)
+                else find(j + 1)
+              find(0) match
+                case null      => Left(s"step $i: union has no branch '$branchName'")
+                case b: Schema => loop(i + 1, b)
+          case PathStep.Index(_) =>
+            schema.getType match
+              case Schema.Type.ARRAY => loop(i + 1, schema.getElementType)
+              case Schema.Type.MAP   => loop(i + 1, schema.getValueType)
+              case other             => Left(s"step $i: expected an array/map but found $other")
+    loop(0, root)
+
+  /** The schema field name for the case-class field at declaration index `declIdx` inside the
+    * record reached by [[schemaAt]]`(root, parentPath)`. Position resolution: the i-th case field
+    * maps to the i-th schema field, honouring any codec name transform (identity / snake / kebab /
+    * custom / vulcan overrides), because the name is read back OUT of the schema.
+    *
+    * `declIdx < 0` (index undeterminable — a non-case-class parent such as a NamedTuple) falls back
+    * to the literal `scalaName`, preserving the pre-#35 behaviour for those parents. Every other
+    * mismatch (path miss, non-record parent, index past the schema's field count) throws LOUDLY —
+    * never a silent miss — with the candidate names and a pointer at the `.fieldNamed` escape
+    * hatch.
+    */
+  def resolveFieldName(
+      root: Schema,
+      parentPath: Array[PathStep],
+      scalaName: String,
+      declIdx: Int,
+      who: String,
+  ): String =
+    if declIdx < 0 then scalaName
+    else
+      schemaAt(root, parentPath) match
+        case Left(err) =>
+          throw new IllegalArgumentException(
+            s"$who('$scalaName'): cannot resolve the schema field — $err."
+              + " Navigate by explicit schema name with .fieldNamed(\"<name>\")."
+          )
+        case Right(parent) =>
+          fieldNameAt(parent, scalaName, declIdx, who)
+
+  /** Schema field name at declaration index `declIdx` of `record` (which must be a RECORD). Split
+    * out so [[AvroTraversal]] can resolve against an element record it computed itself.
+    */
+  def fieldNameAt(record: Schema, scalaName: String, declIdx: Int, who: String): String =
+    if record.getType != Schema.Type.RECORD then
+      throw new IllegalArgumentException(
+        s"$who('$scalaName'): parent focus is a ${record.getType}, not a record."
+          + " Descend a nullable/union field with .union[Branch] first."
+      )
+    else
+      val fields = record.getFields
+      if declIdx >= fields.size then
+        throw new IllegalArgumentException(
+          s"$who('$scalaName'): case field #$declIdx has no matching schema field —"
+            + s" record '${record.getFullName}' has ${fields.size} field(s): "
+            + fields.asScala.map(_.name).mkString(", ")
+            + ". For a reordered hand-written codec, navigate by explicit schema name with"
+            + " .fieldNamed(\"<name>\")."
+        )
+      else fields.get(declIdx).name
 
   /** Union-branch name for a runtime value. Schema-driven where possible; falls back to the raw
     * class name (the fallback is cosmetic — UnionBranch steps reach this only from a schemaful

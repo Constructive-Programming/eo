@@ -30,7 +30,7 @@ object AvroPrismMacro:
     }
 
     '{
-      $parent.widenPath[B](${ Expr(name) })(using $codecB)
+      $parent.widenPath[B](${ Expr(name) }, ${ Expr(declIndexOf[A](name)) })(using $codecB)
     }
 
   /** Drives `codecPrism[Person].name`. Looks `name` up on `A`'s schema, summons `AvroCodec[B]`,
@@ -43,8 +43,8 @@ object AvroPrismMacro:
     selectDynamicCommon[A](
       "AvroPrism selectDynamic",
       nameE,
-    ) { [b] => (name: String, codecB: Expr[AvroCodec[b]]) =>
-      '{ $parent.widenPath[b](${ Expr(name) })(using $codecB) }
+    ) { [b] => (name: String, declIdx: Int, codecB: Expr[AvroCodec[b]]) =>
+      '{ $parent.widenPath[b](${ Expr(name) }, ${ Expr(declIdx) })(using $codecB) }
     }
 
   /** Macro for `.at(i)`. Verifies `A <: Iterable`, extracts the element type, summons the codec,
@@ -192,7 +192,7 @@ object AvroPrismMacro:
     }
 
     '{
-      $parent.widenSuffix[B](${ Expr(name) })(using $codecB)
+      $parent.widenSuffix[B](${ Expr(name) }, ${ Expr(declIndexOf[A](name)) })(using $codecB)
     }
 
   /** Traversal counterpart to [[atImpl]] — extends the suffix by an array index. */
@@ -221,8 +221,9 @@ object AvroPrismMacro:
     fieldsCommon[A]("AvroPrism.fields", selectorsE) {
       [nt] => (
           namesExpr: Expr[Array[String]],
+          declIdxsExpr: Expr[Array[Int]],
           codecNT: Expr[AvroCodec[nt]],
-      ) => '{ $parent.toFieldsPrism[nt]($namesExpr)(using $codecNT) }
+      ) => '{ $parent.toFieldsPrism[nt]($namesExpr, $declIdxsExpr)(using $codecNT) }
     }
 
   /** Traversal counterpart to [[fieldsImpl]]. */
@@ -233,8 +234,9 @@ object AvroPrismMacro:
     fieldsCommon[A]("AvroTraversal.fields", selectorsE) {
       [nt] => (
           namesExpr: Expr[Array[String]],
+          declIdxsExpr: Expr[Array[Int]],
           codecNT: Expr[AvroCodec[nt]],
-      ) => '{ $parent.toFieldsTraversal[nt]($namesExpr)(using $codecNT) }
+      ) => '{ $parent.toFieldsTraversal[nt]($namesExpr, $declIdxsExpr)(using $codecNT) }
     }
 
   /** Traversal counterpart to [[selectFieldImpl]] — drives Dynamic sugar by extending the suffix.
@@ -246,8 +248,8 @@ object AvroPrismMacro:
     selectDynamicCommon[A](
       "AvroTraversal selectDynamic",
       nameE,
-    ) { [b] => (name: String, codecB: Expr[AvroCodec[b]]) =>
-      '{ $parent.widenSuffix[b](${ Expr(name) })(using $codecB) }
+    ) { [b] => (name: String, declIdx: Int, codecB: Expr[AvroCodec[b]]) =>
+      '{ $parent.widenSuffix[b](${ Expr(name) }, ${ Expr(declIdx) })(using $codecB) }
     }
 
   /** Shared backbone for [[fieldsImpl]] (and, in Unit 6+, the matching traversal-side
@@ -264,7 +266,11 @@ object AvroPrismMacro:
       who: String,
       selectorsE: Expr[Seq[A => Any]],
   )(
-      emit: [nt] => (Expr[Array[String]], Expr[AvroCodec[nt]]) => Type[nt] ?=> Expr[Any]
+      emit: [nt] => (
+          Expr[Array[String]],
+          Expr[Array[Int]],
+          Expr[AvroCodec[nt]],
+      ) => Type[nt] ?=> Expr[Any]
   )(using q: Quotes): Expr[Any] =
     import quotes.reflect.*
 
@@ -359,14 +365,20 @@ object AvroPrismMacro:
         val namesExpr: Expr[Array[String]] =
           '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
 
-        emit[nt](namesExpr, codecNT)
+        // Declaration indices (parallel to namesExpr, selector order) — resolved to the actual
+        // schema field name by position at construction time (issue #35).
+        val declIdxs: List[Int] = selectedNames.map(n => knownFields.indexOf(n))
+        val declIdxsExpr: Expr[Array[Int]] =
+          '{ Array[Int](${ Varargs(declIdxs.map(Expr(_))) }*) }
+
+        emit[nt](namesExpr, declIdxsExpr, codecNT)
 
   // ---- Shared helpers ----------------------------------------------------------
 
   private def selectDynamicCommon[A: Type](
       who: String,
       nameE: Expr[String],
-  )(emit: [b] => (String, Expr[AvroCodec[b]]) => Type[b] ?=> Expr[Any])(using
+  )(emit: [b] => (String, Int, Expr[AvroCodec[b]]) => Type[b] ?=> Expr[Any])(using
       q: Quotes
   ): Expr[Any] =
     import quotes.reflect.*
@@ -389,13 +401,22 @@ object AvroPrismMacro:
     }
 
     val fieldTpe = aTpe.memberType(fieldSym).widen
+    val declIdx = cases.indexWhere(_.name == name)
 
     fieldTpe.asType match
       case '[b] =>
         val codecB = summonCodec[b](
           s"$who: no given AvroCodec[${Type.show[b]}] in scope for field '$name' of ${Type.show[A]}."
         )
-        emit[b](name, codecB)
+        emit[b](name, declIdx, codecB)
+
+  /** Declaration index of case field `name` in `A` (`-1` when `A` isn't a case class / has no such
+    * case field — a NamedTuple parent, say). Fed to the widen helpers so schema field names resolve
+    * by position; `-1` makes them fall back to the literal name (issue #35).
+    */
+  private def declIndexOf[A: Type](name: String)(using q: Quotes): Int =
+    import quotes.reflect.*
+    TypeRepr.of[A].typeSymbol.caseFields.indexWhere(_.name == name)
 
   /** Summon `AvroCodec[B]` with a caller-supplied error message. */
   private def summonCodec[B: Type](

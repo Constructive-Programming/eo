@@ -240,6 +240,12 @@ private[avro] object AvroFocus:
   /** Multi-field focus — reaches a parent record via `parentPath`, then assembles a NamedTuple `A`
     * from `fieldNames`. All-or-nothing: a partial read accumulates one `PathMissing` per missing
     * field and the modify family leaves the input unchanged at that location.
+    *
+    * `fieldNames` are the resolved PARENT-record schema names, in selector order (issue #35). The
+    * NT side is addressed by POSITION (selector index → NT schema field position), never by name,
+    * so the parent and NT namespaces are free to differ — a snake_case parent with a
+    * kindlings-identity NT codec, a vulcan-override parent, etc. — without a name collision or an
+    * NPE.
     */
   final class Fields[A] private[avro] (
       private[avro] val parentPath: Array[PathStep],
@@ -249,8 +255,8 @@ private[avro] object AvroFocus:
 
     protected def terminalStep: PathStep = AvroWalk.terminalOf(parentPath)
 
-    /** NT's schema (kindlings derives field names matching the case class so positional layout
-      * aligns with the parent record by name).
+    /** NT's schema. Addressed positionally (selector index i → `ntSchema.getFields.get(i)`); its
+      * field NAMES need not match the parent's (issue #35).
       */
     private val ntSchema: Schema = codec.schema
 
@@ -300,9 +306,8 @@ private[avro] object AvroFocus:
           val next =
             if parentField == null then chain :+ AvroFailure.PathMissing(PathStep.Field(name))
             else
-              // ntField is non-null for any selector the macro accepted.
-              val ntField = ntSchema.getField(name)
-              sub.put(ntField.pos, parent.get(parentField.pos))
+              // NT side by position i (selector order), never by name — see the class doc.
+              sub.put(ntSchema.getFields.get(i).pos, parent.get(parentField.pos))
               chain
           loop(i + 1, next)
       val chain = loop(0, Chain.empty[AvroFailure])
@@ -316,11 +321,10 @@ private[avro] object AvroFocus:
       val sub = new GenericData.Record(ntSchema)
       @tailrec def loop(i: Int): Unit =
         if i < fieldNames.length then
-          val name = fieldNames(i)
-          val parentField = parentSchema.getField(name)
-          val ntField = ntSchema.getField(name)
+          val parentField = parentSchema.getField(fieldNames(i))
           val value: Any = if parentField == null then null else parent.get(parentField.pos)
-          if ntField != null then sub.put(ntField.pos, value)
+          // NT side by position i (selector order), never by name — see the class doc.
+          sub.put(ntSchema.getFields.get(i).pos, value)
           loop(i + 1)
       loop(0)
       sub
@@ -331,30 +335,29 @@ private[avro] object AvroFocus:
     private[avro] def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
       codec.encode(a) match
         case encoded: IndexedRecord =>
+          // Read the NT record by POSITION (selector order), key updates by the PARENT schema name.
           val updates: Map[String, Any] =
-            val encodedSchema = encoded.getSchema
+            val encFields = encoded.getSchema.getFields
             fieldNames
+              .indices
               .iterator
-              .flatMap { name =>
-                val ef = encodedSchema.getField(name)
-                if ef == null then Iterator.empty else Iterator.single(name -> encoded.get(ef.pos))
-              }
+              .map(i => fieldNames(i) -> encoded.get(encFields.get(i).pos))
               .toMap
           AvroWalk.replaceRecordFields(parent, updates)
         case _ =>
           // Encoder produced a non-record (shouldn't happen for an NT under a record schema).
           parent
 
-    /** Overlay a foreign sub-record (transform's result) onto `parent`. */
+    /** Overlay a foreign sub-record (transform's result, same NT shape) onto `parent`. Reads the
+      * sub-record by POSITION (selector order), keys updates by the PARENT schema name.
+      */
     private def overlayFields(parent: IndexedRecord, newSub: IndexedRecord): IndexedRecord =
-      val newSchema = newSub.getSchema
+      val newFields = newSub.getSchema.getFields
       val updates: Map[String, Any] =
         fieldNames
+          .indices
           .iterator
-          .flatMap { name =>
-            val nf = newSchema.getField(name)
-            if nf == null then Iterator.empty else Iterator.single(name -> newSub.get(nf.pos))
-          }
+          .map(i => fieldNames(i) -> newSub.get(newFields.get(i).pos))
           .toMap
       AvroWalk.replaceRecordFields(parent, updates)
 

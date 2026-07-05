@@ -254,7 +254,10 @@ class AvroBytesSpec extends Specification with ScalaCheck:
           org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
 
     // PathMissing is schema-driven for the byte walker: the prism's ROOT schema must lack the
-    // field (the walker never sees the record, only bytes + schema).
+    // field (the walker never sees the record, only bytes + schema). `.field(_.name)` now resolves
+    // by DECLARATION POSITION (issue #35), so on this drifted 1-field schema it would land on the
+    // 0th schema field ("age"); to assert a genuine name-miss we navigate by explicit schema name
+    // via the `.fieldNamed` escape hatch, which bypasses position resolution.
     val ageOnlySchema =
       val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
       fields.add(
@@ -268,11 +271,12 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
     val ageOnlyBytes =
       toBinary(buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30)), ageOnlySchema)
-    val missingOk = codecPrism[Person](ageOnlySchema).field(_.name).sliceBytes(ageOnlyBytes) match
-      case Ior.Left(chain) =>
-        chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name"))) === true
-      case other =>
-        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+    val missingOk =
+      codecPrism[Person](ageOnlySchema).fieldNamed[String]("name").sliceBytes(ageOnlyBytes) match
+        case Ior.Left(chain) =>
+          chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name"))) === true
+        case other =>
+          org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
 
     indexSliceOk
       .and(indexGraftOk)

@@ -30,6 +30,15 @@ import org.apache.avro.Schema
   * `.replace`, `.foldMap`, `.andThen`, … Drill with the same macro sugar as ever (`.field(_.x)` /
   * `.fields(...)` / `.union[B]` / `.at(i)` / `.each` / Dynamic field selection).
   *
+  * '''Field navigation honours the SCHEMA field name (issue #35).''' `.field(_.x)` (and `.fields`,
+  * `selectDynamic`, the traversal siblings) resolve the case-class field `x` to whatever schema
+  * field the codec actually emitted for it — under any name transform (kindlings snake / kebab /
+  * custom `transformFieldNames`, or a vulcan per-field override map) — by DECLARATION POSITION: the
+  * i-th case field maps to the i-th schema field, read back out of the cached schema at construction
+  * time (zero per-operation cost). The rare hand-written codec whose schema field ORDER diverges
+  * from declaration order needs [[AvroPrism.fieldNamed]]`("schema_name")` to navigate by the explicit
+  * schema name instead. Map keys are data, not schema-named fields, and keep their literal key.
+  *
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *
   *   - [[record]] — the [[IndexedRecord]]-carried optic ([[AvroRecordPrism]]) with the Ior-bearing
@@ -204,9 +213,28 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Path widening (used by macro extensions) ---------------------
 
-  /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. */
-  private[avro] def widenPath[B](step: String)(using codecB: AvroCodec[B]): AvroPrism[B] =
-    widenPathStep[B](PathStep.Field(step))
+  /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. `scalaName` is the
+    * case-class field name and `declIdx` its declaration index; the actual schema field name (which
+    * may differ under a snake/kebab/custom transform or vulcan overrides) is resolved off the
+    * cached schema by position — see [[AvroWalk.resolveFieldName]] (issue #35).
+    */
+  private[avro] def widenPath[B](scalaName: String, declIdx: Int)(using
+      codecB: AvroCodec[B]
+  ): AvroPrism[B] =
+    widenPathStep[B](
+      PathStep.Field(
+        AvroWalk.resolveFieldName(rootSchemaCached, path, scalaName, declIdx, "AvroPrism.field")
+      )
+    )
+
+  /** Extend the Leaf path by an EXPLICIT schema field name — the escape hatch for a hand-written
+    * codec whose schema field order diverges from case-class declaration order (position resolution
+    * would land on the wrong field). Used by [[fieldNamed]].
+    */
+  private[avro] def widenPathNamed[B](schemaName: String)(using
+      codecB: AvroCodec[B]
+  ): AvroPrism[B] =
+    widenPathStep[B](PathStep.Field(schemaName))
 
   /** Extend by an array-index step. Used by [[at]]. */
   private[avro] def widenPathIndex[B](i: Int)(using codecB: AvroCodec[B]): AvroPrism[B] =
@@ -226,12 +254,36 @@ final class AvroPrism[A] private[avro] (
     newPath(path.length) = step
     new AvroPrism[B](new AvroFocus.Leaf[B](newPath, codecB), rootSchemaCached)
 
-  /** Hand off as an `AvroPrism` whose focus is a Fields focus over `fieldNames`. Used by `.fields`.
+  /** Hand off as an `AvroPrism` whose focus is a Fields focus over the selected fields. Used by
+    * `.fields`. `scalaNames` / `declIdxs` align 1:1 in selector order; each is resolved to the
+    * actual schema field name by position (issue #35) so the parent-record overlay hits under any
+    * codec name transform.
     */
   private[avro] def toFieldsPrism[B](
-      fieldNames: Array[String]
+      scalaNames: Array[String],
+      declIdxs: Array[Int],
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
-    new AvroPrism[B](new AvroFocus.Fields[B](path, fieldNames, codecB), rootSchemaCached)
+    new AvroPrism[B](
+      new AvroFocus.Fields[B](path, resolveFieldNames(scalaNames, declIdxs), codecB),
+      rootSchemaCached,
+    )
+
+  /** Resolve a selector-order batch of `(scalaName, declIdx)` to schema field names against this
+    * prism's parent record. Shared by [[toFieldsPrism]].
+    */
+  private def resolveFieldNames(
+      scalaNames: Array[String],
+      declIdxs: Array[Int],
+  ): Array[String] =
+    Array.tabulate(scalaNames.length)(i =>
+      AvroWalk.resolveFieldName(
+        rootSchemaCached,
+        path,
+        scalaNames(i),
+        declIdxs(i),
+        "AvroPrism.fields",
+      )
+    )
 
   /** Hand off as an `AvroTraversal[B]` over the iterated element type. Used by `.each`. */
   private[avro] def toTraversal[B](using codecB: AvroCodec[B]): AvroTraversal[B] =
@@ -262,6 +314,16 @@ object AvroPrism:
         inline selector: A => B
     )(using codecB: AvroCodec[B]): AvroPrism[B] =
       ${ AvroPrismMacro.fieldImpl[A, B]('o, 'selector, 'codecB) }
+
+  /** `.fieldNamed[B]("schema_name")` — drill by the EXPLICIT schema field name, bypassing position
+    * resolution. The escape hatch (issue #35) for a hand-written codec whose schema field order
+    * diverges from case-class declaration order; the common (derived / order-preserving) codecs
+    * need `.field(_.x)` instead, which resolves the name for you.
+    */
+  extension [A](o: AvroPrism[A])
+
+    def fieldNamed[B](schemaName: String)(using codecB: AvroCodec[B]): AvroPrism[B] =
+      o.widenPathNamed[B](schemaName)
 
   /** `.at(i)` — drill into the i-th array element / map entry. */
   extension [A](o: AvroPrism[A])

@@ -143,9 +143,43 @@ final class AvroTraversal[A] private[avro] (
   // ---- Path extension (used by field / at / selectDynamic macros) --
 
   private[avro] def widenSuffix[B](
-      step: String
+      scalaName: String,
+      declIdx: Int,
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
-    widenSuffixStep[B](PathStep.Field(step))
+    widenSuffixStep[B](
+      PathStep.Field(
+        AvroWalk.fieldNameAt(suffixParentRecord, scalaName, declIdx, "AvroTraversal.field")
+      )
+    )
+
+  /** Extend the per-element suffix by an EXPLICIT schema field name — the traversal counterpart of
+    * [[AvroPrism.widenPathNamed]] (issue #35 escape hatch). Used by [[AvroTraversal.fieldNamed]].
+    */
+  private[avro] def widenSuffixNamed[B](
+      schemaName: String
+  )(using codecB: AvroCodec[B]): AvroTraversal[B] =
+    widenSuffixStep[B](PathStep.Field(schemaName))
+
+  /** The record schema the per-element suffix currently points at: walk the prefix to the array
+    * field, descend to its element type, then walk the suffix. The parent for the next `.field` /
+    * `.fields` resolution. Throws loudly (never silently) on a schema/path mismatch — issue #35.
+    */
+  private def suffixParentRecord: Schema =
+    val arr = AvroWalk.schemaAt(rootSchemaCached, prefix) match
+      case Right(s)  => s
+      case Left(err) =>
+        throw new IllegalArgumentException(s"AvroTraversal.field: cannot resolve the array — $err.")
+    if arr.getType != Schema.Type.ARRAY then
+      throw new IllegalArgumentException(
+        s"AvroTraversal.field: prefix does not point at an array (found ${arr.getType})."
+      )
+    else
+      AvroWalk.schemaAt(arr.getElementType, suffix) match
+        case Right(s)  => s
+        case Left(err) =>
+          throw new IllegalArgumentException(
+            s"AvroTraversal.field: cannot resolve the focus — $err."
+          )
 
   private[avro] def widenSuffixIndex[B](
       i: Int
@@ -171,11 +205,16 @@ final class AvroTraversal[A] private[avro] (
     * the alias is preserved.
     */
   private[avro] def toFieldsTraversal[B](
-      fieldNames: Array[String]
+      scalaNames: Array[String],
+      declIdxs: Array[Int],
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
+    val parent = suffixParentRecord
+    val resolved = Array.tabulate(scalaNames.length)(i =>
+      AvroWalk.fieldNameAt(parent, scalaNames(i), declIdxs(i), "AvroTraversal.fields")
+    )
     new AvroTraversal[B](
       prefix,
-      new AvroFocus.Fields[B](suffix, fieldNames, codecB),
+      new AvroFocus.Fields[B](suffix, resolved, codecB),
       rootSchemaCached,
     )
 
@@ -190,6 +229,14 @@ object AvroTraversal:
         inline selector: A => B
     )(using codecB: AvroCodec[B]): AvroTraversal[B] =
       ${ AvroPrismMacro.fieldTraversalImpl[A, B]('t, 'selector, 'codecB) }
+
+  /** `.fieldNamed[B]("schema_name")` — drill by EXPLICIT schema field name (issue #35 escape
+    * hatch), the traversal counterpart of [[AvroPrism.fieldNamed]].
+    */
+  extension [A](t: AvroTraversal[A])
+
+    def fieldNamed[B](schemaName: String)(using codecB: AvroCodec[B]): AvroTraversal[B] =
+      t.widenSuffixNamed[B](schemaName)
 
   /** `.at(i)` sugar — extend the suffix by an array index. */
   extension [A](t: AvroTraversal[A])
