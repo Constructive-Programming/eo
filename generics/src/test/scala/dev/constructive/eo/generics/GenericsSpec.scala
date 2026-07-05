@@ -3,7 +3,16 @@ package generics
 
 import scala.language.implicitConversions
 
-import dev.constructive.eo.generics.samples.{Employee, LTree, Person, Shape, Tree}
+import dev.constructive.eo.generics.samples.{
+  Beacon,
+  Employee,
+  LTree,
+  Person,
+  Ping,
+  Pong,
+  Shape,
+  Tree,
+}
 import dev.constructive.eo.optics.Optic.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
@@ -145,6 +154,45 @@ class GenericsSpec extends Specification with ScalaCheck:
         case Left(u2) => u2 == u
     }
     focusInt && focusString && roundTrip && partialInt && partialString
+  }
+
+  // ---------- Union Prism on case-class members + lens∘prism → Optional ----------
+
+  val pingP: dev.constructive.eo.optics.Optic[Ping | Pong, Ping | Pong, Ping, Ping, Either] =
+    prism[Ping | Pong, Ping]
+
+  // lens into the union-typed field, then prism into one branch. The Lens is total, the Prism is
+  // partial, so the composition lands on the partial (Affine) carrier — the carrier upgrade of
+  // issue #37. The witness is at the use site below: `.getOption` is gated by `PartialAccessor[F]`,
+  // so it only type-checks because the composed carrier is partial (a total Lens carrier has no
+  // such instance).
+  val beaconPing = lens[Beacon](_.payload).andThen(pingP)
+
+  // covers: prism on case-class union members (focus Ping / miss on Pong / round-trip), and the
+  // lens∘prism composition upgrading to a partial (Affine) carrier — Some on the Ping branch, None
+  // on the Pong branch, and replace/modify rebuilding the Beacon (present branch writes, absent
+  // branch untouched).
+  "derived Prism on Ping | Pong (case-class members) + lens∘prism upgrades to a partial carrier" >> {
+    val prismFocus = forAll { (n: Int, s: String) =>
+      val up: Ping | Pong = Ping(n)
+      val uq: Ping | Pong = Pong(s)
+      pingP.to(up) == Right(Ping(n)) && pingP.to(uq) == Left(uq) &&
+      pingP.reverseGet(Ping(n)) == (Ping(n): Ping | Pong)
+    }
+
+    val composedHit = forAll { (id: String, n: Int) =>
+      beaconPing.getOption(Beacon(id, Ping(n))) == Some(Ping(n))
+    }
+    val composedMiss = forAll { (id: String, s: String) =>
+      beaconPing.getOption(Beacon(id, Pong(s))) == None
+    }
+    val composedWrite = forAll { (id: String, n: Int, m: Int) =>
+      // Present branch → write lands; absent branch → structure untouched.
+      beaconPing.replace(Ping(m))(Beacon(id, Ping(n))) == Beacon(id, Ping(m)) &&
+      beaconPing.replace(Ping(m))(Beacon(id, Pong("x"))) == Beacon(id, Pong("x"))
+    }
+
+    prismFocus && composedHit && composedMiss && composedWrite
   }
 
   // ---------- Recursive-type Lens / Prism derivation ----------

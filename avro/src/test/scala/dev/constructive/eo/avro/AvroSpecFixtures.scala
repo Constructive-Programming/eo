@@ -180,6 +180,43 @@ object AvroSpecFixtures:
   def directoryRecord(d: Directory): GenericRecord =
     summon[AvroCodec[Directory]].encode(d).asInstanceOf[GenericRecord]
 
+  /** Scala 3 untagged-union branches (issue #37). Two record-shaped members with distinct
+    * full-names so `.union[Ping]` / `.union[Pong]` resolve by `getFullName` off the branch codec,
+    * exactly as the sealed-trait path does — kindlings derives the same `union<Ping, Pong>` schema
+    * for the `A | B` field as for a sealed trait.
+    */
+  case class Ping(seq: Long)
+  case class Pong(label: String)
+
+  object Ping:
+
+    given AvroEncoder[Ping] = AvroEncoder.derived
+    given AvroDecoder[Ping] = AvroDecoder.derived
+    given AvroSchemaFor[Ping] = AvroSchemaFor.derived
+
+  object Pong:
+
+    given AvroEncoder[Pong] = AvroEncoder.derived
+    given AvroDecoder[Pong] = AvroDecoder.derived
+    given AvroSchemaFor[Pong] = AvroSchemaFor.derived
+
+  /** Record with an untagged-union-typed field `payload: Ping | Pong` — the real #37 shape:
+    * `codecPrism[Beacon].field(_.payload).union[Ping]` used to abort at compile time on the
+    * `OrType` focus. Kindlings derives a codec for the union field directly.
+    */
+  case class Beacon(id: String, payload: Ping | Pong)
+
+  object Beacon:
+
+    given AvroEncoder[Beacon] = AvroEncoder.derived
+    given AvroDecoder[Beacon] = AvroDecoder.derived
+    given AvroSchemaFor[Beacon] = AvroSchemaFor.derived
+
+  lazy val beaconSchema: Schema = summon[AvroCodec[Beacon]].schema
+
+  def beaconRecord(b: Beacon): GenericRecord =
+    summon[AvroCodec[Beacon]].encode(b).asInstanceOf[GenericRecord]
+
   /** Array-of-union record — hosts the `.entries.each.union[Cash]` composition (per-element union
     * branch focus) including under non-canonical block framing.
     */

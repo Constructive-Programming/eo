@@ -3,6 +3,17 @@
 Date: 2026-04-28 — empirical investigation feeding Unit 8 of the eo-avro
 plan (the `.union[Branch]` macro).
 
+> **Correction (2026-07-05, issue #37).** The claim below that kindlings
+> "does NOT support Scala 3 untagged union types" is **wrong**, and was
+> never actually tested by this probe: the original `.union` macro aborted
+> on an `OrType` focus *before* summoning a union codec, so the "NO" row
+> reflects our own pre-emptive abort, not a kindlings failure. Re-verified
+> directly: `AvroCodec.derived[Long | String]` yields `["long","string"]`
+> and `AvroCodec.derived[A | B]` (case-class members) yields a
+> `UNION<A, B>` — identical in shape to a sealed trait, with each branch's
+> `getFullName` matching. `.union[Branch]` now accepts `OrType` accordingly.
+> The `Long | String` row and the first take-away below are struck through.
+
 The probe was a one-shot specs2 file (`UnionSchemaProbeSpec`, deleted
 after Unit 8 landed) that derived `AvroSchemaFor[X]` for several
 union/sum shapes and dumped the resulting `org.apache.avro.Schema` to
@@ -15,15 +26,18 @@ stdout. All findings below are direct stdout captures from
 |------------------------------------------ |----------|-------------|-----------------------------------------------|
 | `Option[Long]`                            | Yes      | UNION       | `null`, `long`                                 |
 | `Option[String]`                          | Yes      | UNION       | `null`, `string`                               |
-| `Long \| String` (Scala 3 union)          | **NO**   | —           | macro abort: kindlings does not derive these   |
+| ~~`Long \| String` (Scala 3 union)~~ *(see correction)* | ~~**NO**~~ **Yes** | UNION | `long`, `string` — kindlings DOES derive; the "NO" was our macro's abort |
 | `sealed trait Payment { Cash, Card }`     | Yes      | UNION       | `Cash`, `Card` (simple class name, no ns)      |
 | `enum Status { Active, Disabled, Pending(reason: String) }` | Yes | UNION | `Active`, `Disabled`, `Pending` (records all)  |
 
 Take-aways:
 
-- Kindlings does NOT support Scala 3 untagged union types. The macro
+- ~~Kindlings does NOT support Scala 3 untagged union types. The macro
   has to abort with a clear message at compile time when the parent
-  focus is one of those.
+  focus is one of those.~~ **Corrected 2026-07-05 (#37):** kindlings
+  derives an Avro `UNION` for untagged unions just like for a sealed
+  trait; `.union[Branch]` accepts `OrType` and resolves the branch by
+  `getFullName` on the same code path.
 - Sealed traits and Scala 3 `enum`s both produce UNION schemas where
   every alternative is a `RECORD` (parameterless enum cases become
   empty records — `name=Active` of type RECORD with zero fields).
@@ -81,9 +95,10 @@ which equals the schema-declared branch identifier.
    - **`Branch` is a known alternative of `A`.** For sealed/enum,
      iterate `Enum.parse[A].cases` and verify `Branch <:< caseType`
      for some case. For `Option`, verify `Branch =:= elementType`.
-   - **Scala 3 untagged union (`A | B`)** — abort with "kindlings does
-     not support untagged union types; use a sealed trait or
-     `Option[T]` instead".
+   - **Scala 3 untagged union (`A | B`)** — ~~abort with "kindlings does
+     not support untagged union types"~~. **Corrected 2026-07-05 (#37):**
+     accepted — flatten the `OrType` members and verify `Branch` is one,
+     then resolve by `getFullName` on the same runtime path.
 
 4. **Runtime-side validation.** What only the walker can verify
    (because it needs the actual schema, not just a Scala type):
@@ -113,9 +128,10 @@ which equals the schema-declared branch identifier.
     runtime (the macro emits `summon[AvroCodec[Branch]].schema.getFullName`).
     This dodges any compile-time vs kindlings convention drift.
   - Compile-time check: parent `A` must be one of {sealed trait, enum,
-    `Option[_]`, Scala 3 union type}. Scala 3 untagged unions abort
-    with a clear "not supported by kindlings" error. The other shapes
-    abort if `Branch` isn't one of the known alternatives.
+    `Option[_]`, Scala 3 untagged union}. ~~Scala 3 untagged unions abort
+    with a clear "not supported by kindlings" error.~~ **Corrected
+    2026-07-05 (#37):** untagged unions are accepted (member-flattened);
+    every shape aborts only if `Branch` isn't one of the known alternatives.
 - Walker: keep the existing `unionBranchName` heuristic but also
   consult the parent's union schema (looked up via the chain of
   parent schemas threaded through the walker) when the `cur` value
