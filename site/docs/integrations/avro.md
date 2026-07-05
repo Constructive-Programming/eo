@@ -245,13 +245,14 @@ amountP.record.modifyUnsafe(_ + 1L)(txRec)
 ```
 
 `.union[Branch]` works against `Option[A]` (`union<null, A>`),
-sealed-trait sums (`union<RecordA, RecordB, ...>`), and Scala 3
-enums. It does **not** accept Scala 3 `A | B` union types — those
-have no schema-side mapping in kindlings. When the runtime value
-sits on a different branch than the requested one, the walker
-surfaces `AvroFailure.UnionResolutionFailed` carrying the
-schema-declared alternatives so the caller can route on the
-mismatch.
+sealed-trait sums (`union<RecordA, RecordB, ...>`), Scala 3 enums,
+and Scala 3 untagged unions `A | B | C` (`Branch` must be one of the
+members). Kindlings derives the same `union<...>` schema for an
+untagged-union field as for a sealed trait, so the branch resolves at
+runtime off `AvroCodec[Branch].schema.getFullName` the same way. When
+the runtime value sits on a different branch than the requested one,
+the walker surfaces `AvroFailure.UnionResolutionFailed` carrying the
+schema-declared alternatives so the caller can route on the mismatch.
 
 ## Reading diagnostics from the default Ior surface
 

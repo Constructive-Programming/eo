@@ -77,6 +77,16 @@ package object samples:
         d <- Gen.alphaStr
       yield Employee(i, n, s, d))
 
+  // Scala 3 untagged union (OrType) of two case classes, plus a wrapper whose
+  // field is that union. Exercises `prism[Ping | Pong, Ping]` on case-class
+  // members (the spec's other union test uses primitives) and the
+  // lens-into-union-field ∘ prism-into-branch composition, which must
+  // upgrade the carrier to an Optional/Affine (issue #37).
+  final case class Ping(seq: Int)
+  final case class Pong(label: String)
+
+  final case class Beacon(id: String, payload: Ping | Pong)
+
   // Non-case-class with a `count` accessor, for exercising the
   // `CaseClass.parse` rejection branch of the varargs macro.
   class NotACaseClass(val count: Int)

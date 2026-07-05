@@ -65,9 +65,9 @@ object AvroPrismMacro:
         '{ $parent.widenPathIndex[b]($iE)(using $codecB) }
 
   /** `.union[Branch]` — drill into one alternative of a union-shaped focus. Supported parent
-    * shapes: `Option[T]` (user writes `.union[T]`), sealed traits, Scala 3 `enum`. Scala 3 untagged
-    * unions (`A | B`) abort. Branch identifier resolves at runtime off
-    * `AvroCodec[Branch].schema.getFullName` (robust against kindlings naming drift).
+    * shapes: `Option[T]` (user writes `.union[T]`), sealed traits, Scala 3 `enum`, and Scala 3
+    * untagged unions `A | B | C` (`Branch` must be one of the members). Branch identifier resolves
+    * at runtime off `AvroCodec[Branch].schema.getFullName` (robust against kindlings naming drift).
     */
   def unionImpl[A: Type, B: Type](
       parent: Expr[AvroPrism[A]]
@@ -92,8 +92,8 @@ object AvroPrismMacro:
     }
 
   /** Shared `.union[Branch]` validation for the prism and traversal paths. Confirms the parent
-    * focus `A` is a union-shaped type (`Option[T]`, sealed trait, or Scala 3 `enum`) with `B` as a
-    * valid alternative, rejects Scala 3 untagged unions, and summons `AvroCodec[B]`. `label` names
+    * focus `A` is a union-shaped type (`Option[T]`, sealed trait, Scala 3 `enum`, or an untagged
+    * union `A | B | C`) with `B` as a valid alternative, and summons `AvroCodec[B]`. `label` names
     * the caller in diagnostics (`"AvroPrism"` / `"AvroTraversal"`).
     */
   private def validateUnionBranch[A: Type, B: Type](
@@ -104,15 +104,11 @@ object AvroPrismMacro:
     val aTpe = TypeRepr.of[A].dealias
     val bTpe = TypeRepr.of[B].dealias
 
-    // Reject Scala 3 untagged unions — kindlings doesn't derive for these.
-    aTpe match
-      case OrType(_, _) =>
-        report.errorAndAbort(
-          s"$label.union[${Type.show[B]}]: parent focus ${Type
-              .show[A]} is a Scala 3 untagged union type; kindlings-avro-derivation does not"
-            + " support these. Use a sealed trait, Scala 3 `enum`, or `Option[T]` instead."
-        )
-      case _ => ()
+    // Flatten a (possibly nested) Scala 3 untagged union `A | B | C` into its leaf members.
+    def unionMembers(t: TypeRepr): List[TypeRepr] =
+      t.dealias match
+        case OrType(l, r) => unionMembers(l) ++ unionMembers(r)
+        case other        => List(other)
 
     // Option[T]: kindlings emits union<null, T>; the user writes .union[T].
     val optionElemTpe: Option[TypeRepr] =
@@ -121,14 +117,29 @@ object AvroPrismMacro:
           Some(elem.dealias.widen)
         case _ => None
 
-    optionElemTpe match
-      case Some(elem) =>
+    aTpe match
+      // Scala 3 untagged union `A | B | C`: verify Branch is one of the members. Kindlings derives
+      // the same UNION<members...> schema as a sealed trait, so runtime resolution off the branch
+      // codec's getFullName (below) is identical — only the compile-time shape check differs.
+      case OrType(_, _) =>
+        val members = unionMembers(aTpe)
+        val matched = members.exists(t => bTpe =:= t || bTpe =:= t.widen)
+        if !matched then
+          val knownNames = members.map(_.show).mkString(" | ")
+          report.errorAndAbort(
+            s"$label.union[${Type.show[B]}]: ${Type.show[B]} is not a member of the union"
+              + s" ${Type.show[A]}. Members: $knownNames."
+          )
+
+      case _ if optionElemTpe.isDefined =>
+        val elem = optionElemTpe.get
         if !(bTpe =:= elem) then
           report.errorAndAbort(
             s"$label.union[${Type.show[B]}]: parent focus is Option[${elem.show}];"
               + s" the only valid branch is ${elem.show} (got ${Type.show[B]})."
           )
-      case None =>
+
+      case _ =>
         // Sealed trait / Scala 3 enum: verify Branch is among the direct children.
         val aSym = aTpe.typeSymbol
         val isSealed = aSym.flags.is(Flags.Sealed)
@@ -136,8 +147,8 @@ object AvroPrismMacro:
         if !isSealed && !isEnum then
           report.errorAndAbort(
             s"$label.union[${Type.show[B]}]: parent focus ${Type.show[A]} is not a union-shaped"
-              + " type. Expected: a sealed trait, a Scala 3 `enum`, or `Option[T]`. Scala 3 untagged"
-              + " union types (`A | B`) are not supported by kindlings."
+              + " type. Expected: a sealed trait, a Scala 3 `enum`, an untagged union `A | B`, or"
+              + " `Option[T]`."
           )
 
         val children: List[Symbol] = aSym.children

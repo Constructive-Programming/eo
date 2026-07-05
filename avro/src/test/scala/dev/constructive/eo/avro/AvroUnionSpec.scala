@@ -156,10 +156,10 @@ class AvroUnionSpec extends Specification:
 
   // covers: .union[NotInSchema] on a Payment-shaped focus -> "not a known alternative",
   //   .union on a non-union focus (Person) -> "not a union-shaped type",
-  //   .union on a Scala 3 untagged union focus -> kindlings "Scala 3 untagged union" or
-  //     "kindlings-avro-derivation does not" diagnostic,
+  //   .union[NonMember] on a Scala 3 untagged union focus (Ping | Pong) -> "not a member of the
+  //     union" (issue #37: OrType is now supported, so only a non-member branch is rejected),
   //   .union[String] on Option[Long] -> "the only valid branch is" or "not a known alternative"
-  "compile errors: .union macro rejects non-union, wrong-branch, and Scala-3-union focuses" >> {
+  "compile errors: .union macro rejects non-union, wrong-branch, and non-member-of-union focuses" >> {
     val notInSchema = scala
       .compiletime
       .testing
@@ -180,25 +180,17 @@ class AvroUnionSpec extends Specification:
       """)
     val nonUnionOk = nonUnion.exists(_.message.contains("not a union-shaped type"))
 
-    // Stub AvroCodec for the union — the parent codec is irrelevant since the macro should
-    // abort before summoning anything else; supply a `???` codec to keep the test focused on
-    // the macro's compile-time check, not on kindlings' refusal to derive.
-    val scala3Union = scala
+    // Untagged union `Ping | Pong` (issue #37): a MEMBER branch is now accepted; only a
+    // non-member branch is rejected, with a "not a member of the union" diagnostic.
+    val nonMemberUnion = scala
       .compiletime
       .testing
       .typeCheckErrors("""
-        import dev.constructive.eo.avro.{AvroCodec, AvroPrism}
-        given AvroCodec[Long | String] =
-          new AvroCodec[Long | String]:
-            def schema: org.apache.avro.Schema = ???
-            def encode(a: Long | String): Any = ???
-            def decodeEither(any: Any): Either[Throwable, Long | String] = ???
-        AvroPrism.codecPrism[Long | String].union[Long]
+        import dev.constructive.eo.avro.codecPrism
+        import dev.constructive.eo.avro.AvroSpecFixtures.{Beacon, Cash}
+        codecPrism[Beacon].field(_.payload).union[Cash]
       """)
-    val scala3UnionOk = scala3Union.exists(e =>
-      e.message.contains("Scala 3 untagged union") ||
-        e.message.contains("kindlings-avro-derivation does not")
-    )
+    val nonMemberUnionOk = nonMemberUnion.exists(_.message.contains("not a member of the union"))
 
     val wrongOptionBranch = scala
       .compiletime
@@ -215,8 +207,54 @@ class AvroUnionSpec extends Specification:
 
     (notInSchemaOk === true)
       .and(nonUnionOk === true)
-      .and(scala3UnionOk === true)
+      .and(nonMemberUnionOk === true)
       .and(wrongOptionBranchOk === true)
+  }
+
+  // ---- Scala 3 untagged-union field (issue #37) --------------------
+
+  // covers: codecPrism[Beacon].field(_.payload).union[Ping] on an OrType-typed field —
+  //   .get on the Ping branch returns Ior.Right(Ping), .modify rebuilds it, and the same prism
+  //   on a Pong-branch record surfaces UnionResolutionFailed. The macro used to abort at compile
+  //   time on the OrType focus; it now resolves the branch by getFullName just like a sealed trait.
+  "field(_.payload).union[Ping] on an untagged union: branch get/modify + Pong-branch mismatch" >> {
+    val pingPrism = codecPrism[Beacon].field(_.payload).union[Ping].record
+
+    val pingRec = beaconRecord(Beacon("b-1", Ping(7L)))
+    val getPingOk = pingPrism.get(pingRec) match
+      case Ior.Right(Ping(seq)) => seq === 7L
+      case other                =>
+        org.specs2.execute.Failure(s"expected Right(Ping), got $other"): org.specs2.execute.Result
+
+    val modifyPingOk = pingPrism.modify(p => Ping(p.seq + 1L))(pingRec) match
+      case Ior.Right(out) =>
+        codecPrism[Beacon].record.getOptionUnsafe(out.asInstanceOf[GenericRecord]) match
+          case Some(Beacon(_, Ping(seq))) => seq === 8L
+          case other                      =>
+            org
+              .specs2
+              .execute
+              .Failure(s"expected Beacon(Ping(8)), got $other"): org.specs2.execute.Result
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+
+    val pongRec = beaconRecord(Beacon("b-2", Pong("hi")))
+    val mismatchOk = pingPrism.get(pongRec) match
+      case Ior.Left(chain) =>
+        chain.headOption.get match
+          case AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch("Ping")) =>
+            true === true: org.specs2.execute.Result
+          case other =>
+            org
+              .specs2
+              .execute
+              .Failure(
+                s"expected UnionResolutionFailed(Ping), got $other"
+              ): org.specs2.execute.Result
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+
+    getPingOk.and(modifyPingOk).and(mismatchOk)
   }
 
 end AvroUnionSpec
