@@ -18,7 +18,7 @@ val scala3Version = "3.8.3"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.3"
+ThisBuild / tlBaseVersion := "0.4"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -28,13 +28,13 @@ ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
 
-// MiMa stays disabled for 0.3.0: another deliberate breaking release —
-// 0.2.0 broke JsonPrism into an Affine `Optional` (PR #31 `fix(circe)!`),
-// and 0.3.0 changes avro field navigation to resolve schema names by
-// declaration position (issue #35), so checking binary compat against
-// 0.2.0 would only flag intended breaks. Re-enable (set to the published
-// 0.3.x line) once the API is stable and we want to enforce compat
-// within the 0.3 series.
+// MiMa stays disabled for 0.4.0. Unlike 0.2.0 (JsonPrism → Affine `Optional`,
+// PR #31) and 0.3.0 (avro field navigation by declaration position, #35), 0.4.0
+// is purely ADDITIVE — untagged-union support in `.union` / `prism` (#37) and the
+// Confluent-framed read optic `.confluent` (#38) only add API. It's kept off for
+// consistency across the still-evolving 0.x line (and cats-eo-avro has no earlier
+// published baseline at all). Re-enable (set to the published 0.4.x line) once the
+// API is stable and we want to enforce compat within the 0.4 series.
 ThisBuild / tlMimaPreviousVersions := Set.empty
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
