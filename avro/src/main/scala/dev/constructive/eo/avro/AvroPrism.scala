@@ -34,10 +34,11 @@ import org.apache.avro.Schema
   * `selectDynamic`, the traversal siblings) resolve the case-class field `x` to whatever schema
   * field the codec actually emitted for it — under any name transform (kindlings snake / kebab /
   * custom `transformFieldNames`, or a vulcan per-field override map) — by DECLARATION POSITION: the
-  * i-th case field maps to the i-th schema field, read back out of the cached schema at construction
-  * time (zero per-operation cost). The rare hand-written codec whose schema field ORDER diverges
-  * from declaration order needs [[AvroPrism.fieldNamed]]`("schema_name")` to navigate by the explicit
-  * schema name instead. Map keys are data, not schema-named fields, and keep their literal key.
+  * i-th case field maps to the i-th schema field, read back out of the cached schema at
+  * construction time (zero per-operation cost). The rare hand-written codec whose schema field
+  * ORDER diverges from declaration order needs [[AvroPrism.fieldNamed]]`("schema_name")` to
+  * navigate by the explicit schema name instead. Map keys are data, not schema-named fields, and
+  * keep their literal key.
   *
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *

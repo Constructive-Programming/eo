@@ -56,12 +56,14 @@ class AvroFieldNamingSpec extends Specification:
 
   private val clickCodec = summon[AvroCodec[Click]]
   private val click = Click("abc", 7)
-  private val clickBytes = toBinary(clickCodec.encode(click).asInstanceOf[GenericRecord], clickCodec.schema)
+
+  private val clickBytes =
+    toBinary(clickCodec.encode(click).asInstanceOf[GenericRecord], clickCodec.schema)
 
   "the fixture really uses a divergent (snake_case) schema name" >> {
     // Guards the whole spec: if the codec stopped transforming, these fixtures would prove nothing.
-    (clickCodec.schema.getField("clickId") must beNull) and
-      (clickCodec.schema.getField("click_id") must not(beNull))
+    (clickCodec.schema.getField("clickId") must beNull)
+      .and(clickCodec.schema.getField("click_id") must not(beNull))
   }
 
   "byte face: .field(_.clickId).getOption resolves click_id (issue #35 repro)" >> {
@@ -82,7 +84,7 @@ class AvroFieldNamingSpec extends Specification:
     val readOk = codecPrism[Click].field(_.landingPageId).record.getOption(rec) must beSome(7)
     val modified = codecPrism[Click].field(_.landingPageId).record.modifyUnsafe(_ + 1)(rec)
     val modOk = clickCodec.decodeEither(modified) must beRight(Click("abc", 8))
-    readOk and modOk
+    readOk.and(modOk)
   }
 
   "nested record: .field(_.meta).field(_.performanceSourceId) descends under snake_case" >> {
@@ -94,7 +96,7 @@ class AvroFieldNamingSpec extends Specification:
     val writeOk = codecPrism[Event].getOption(optic.modify(_ + 1)(bytes)) must beSome(
       Event("e1", Meta(43, "hot"))
     )
-    readOk and writeOk
+    readOk.and(writeOk)
   }
 
   ".fieldNamed escape hatch navigates by explicit schema name" >> {
