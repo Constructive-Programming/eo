@@ -81,15 +81,9 @@ sealed trait PSVec[+B]:
       else h
     loop(0, 1)
 
-  override def toString(): String =
-    val sb = new StringBuilder("PSVec(")
-    @tailrec def loop(i: Int): Unit =
-      if i < length then
-        if i > 0 then sb.append(", ")
-        sb.append(apply(i))
-        loop(i + 1)
-    loop(0)
-    sb.append(")").toString
+  // Cold / debug-only path — `mkString` says exactly "comma-join the elements"; no hand-rolled
+  // loop needed here (the hot paths above stay index-based for allocation control).
+  override def toString(): String = toList.mkString("PSVec(", ", ", ")")
 
 /** Constructors for [[PSVec]] — the primary entry points are `empty`, `singleton`, and `unsafeWrap`
   * (zero-copy from an `Array[AnyRef]`). The three `Slice` / `Single` / `Empty` subclasses are
