@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package avro
 
+import scala.annotation.tailrec
+
 import dev.constructive.eo.optics.Plated
 import org.apache.avro.SchemaBuilder
 import org.apache.avro.generic.{GenericData, IndexedRecord}
@@ -50,10 +52,11 @@ class AvroPlatedSpec extends Specification:
     else
       val copy = new GenericData.Record(schema)
       val n = schema.getFields.size
-      var i = 0
-      while i < n do
-        copy.put(i, rec.get(i))
-        i += 1
+      @tailrec def copyFields(i: Int): Unit =
+        if i < n then
+          copy.put(i, rec.get(i))
+          copyFields(i + 1)
+      copyFields(0)
       copy.put(field.pos, rec.get(field.pos).toString.toUpperCase)
       copy
 

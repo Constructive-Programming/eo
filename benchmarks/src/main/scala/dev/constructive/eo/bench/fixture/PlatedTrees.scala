@@ -2,6 +2,7 @@ package dev.constructive.eo
 package bench
 package fixture
 
+import scala.annotation.tailrec
 import cats.{Applicative, Traverse}
 import cats.instances.list.given
 import cats.instances.vector.given
@@ -74,12 +75,9 @@ object PlatedTrees:
 
   /** A left-leaning `Bin` spine of `depth` `Node`s — the degenerate deep shape. */
   def deepBin(depth: Int): Bin =
-    var t: Bin = Bin.Leaf(0)
-    var i = 0
-    while i < depth do
-      t = Bin.Node(t, Bin.Leaf(i))
-      i += 1
-    t
+    @tailrec def loop(t: Bin, i: Int): Bin =
+      if i < depth then loop(Bin.Node(t, Bin.Leaf(i)), i + 1) else t
+    loop(Bin.Leaf(0), 0)
 
   /** A balanced JSON array tree of ~`leaves` string leaves — "normal" depth. */
   def balancedJson(leaves: Int): Json =

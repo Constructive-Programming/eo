@@ -17,8 +17,10 @@ import org.apache.avro.Schema
   *
   * Reads locate the focused field's byte span via [[AvroBinaryCursor]] and decode only that slice;
   * writes re-encode the focus and splice it in place (three `arraycopy`s, union branch index
-  * re-synthesised) — no [[org.apache.avro.generic.IndexedRecord]] materialised on either side.
-  * Mirrors [[dev.constructive.eo.jsoniter.JsoniterPrism]] shape-for-shape:
+  * re-synthesised). The ROOT object is never materialised — neither as a case class nor as a
+  * generic record; a record-SHAPED focus is materialised only as that branch's own
+  * [[org.apache.avro.generic.IndexedRecord]] during the slice decode / re-encode. Mirrors
+  * [[dev.constructive.eo.jsoniter.JsoniterPrism]] shape-for-shape:
   *
   *   - `Fst[X] = Array[Byte]` — original payload; `Miss` carries it for pass-through (parse
   *     failure, path miss, union-branch mismatch, decode failure, unsupported index step).
@@ -39,6 +41,27 @@ import org.apache.avro.Schema
   *
   * Storage decomposition (Unit 5): an `AvroPrism[A]` holds an [[AvroFocus]] (Leaf vs Fields) and a
   * cached root schema; the byte walk uses the focus's path, the slice decode uses its codec.
+  *
+  * '''Laws & preconditions''' (normative):
+  *
+  *   - The Optional laws hold '''up to canonical re-encoding of the focused slice''':
+  *     `modify(identity)` re-encodes the focus, so a payload whose focused slice used non-canonical
+  *     (but spec-legal) encodings — non-minimal varints, byte-sized array blocks — comes back
+  *     canonicalised. Byte-for-byte identity holds for payloads from conformant writers
+  *     (apache-avro's own encoders included); put-get and put-put hold unconditionally.
+  *   - '''Writes require a decodable current focus''': the Affine `to` decodes eagerly, so
+  *     `.replace` onto a span whose current value doesn't decode as `A` — or a `.union[B]` focus
+  *     sitting on a different runtime branch — is a Miss pass-through. [[graftBytes]] is the
+  *     decode-free write (and the only one that can SWITCH union branches).
+  *   - '''The payload must be encoded under exactly this prism's reader schema.''' The byte walk
+  *     performs no writer/reader schema resolution: structurally drifted payloads Miss silently,
+  *     and a same-typed field REORDER between writer and reader is undetectable from the bytes —
+  *     the walk reads the wrong field with full confidence. Confluent-framed payloads must be
+  *     [[ConfluentWire.strip]]ped first. Mixed-schema topics need a resolving decode (the record
+  *     face with the right schema per payload), not this walk.
+  *   - Dynamic field sugar is shadowed by real members: an Avro field named like a member of this
+  *     class (`record`, `field`, `at`, `union`, `each`, `fields`, …) must be drilled with the
+  *     explicit `.field(_.record)` form.
   */
 final class AvroPrism[A] private[avro] (
     private[avro] val focus: AvroFocus[A],
@@ -84,7 +107,13 @@ final class AvroPrism[A] private[avro] (
       case m: Affine.Miss[X, A] => m.fst
       case h: Affine.Hit[X, A]  =>
         val (src, span) = h.snd
-        AvroBinaryCursor.encodeValue(h.b, span, codec) match
+        val encoded = focus match
+          // A Fields span addresses the PARENT record — overlay the NT fields by name onto the
+          // decoded parent slice (a positional write under the parent schema would swap or drop
+          // values; see AvroBinaryCursor.encodeFieldsOverlay).
+          case f: AvroFocus.Fields[A] => AvroBinaryCursor.encodeFieldsOverlay(src, span, f, h.b)
+          case _: AvroFocus.Leaf[A]   => AvroBinaryCursor.encodeValue(h.b, span, codec)
+        encoded match
           // ponytail: silent pass-through on encode failure — from has no failure channel;
           // callers needing diagnostics use the .record Ior surface
           case Left(_)        => src

@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package schemes
 
+import scala.annotation.tailrec
+
 import data.PSVec
 import optics.{Getter, Plated, Review, Unfold}
 
@@ -47,17 +49,52 @@ object Schemes:
     * `OutOfMemoryError` — rather than overflowing the stack).
     */
   private def unfoldFold[N, R](expand: N => PSVec[N], combine: (N, PSVec[R]) => R): N => R =
+    n0 => unfoldFoldRec(expand, combine, n0, 0)
 
-    def heap(root: N): R =
-      final class Frame(val node: N, val kids: PSVec[N], val out: Array[AnyRef], var i: Int)
-      val stack = new java.util.ArrayDeque[Frame]()
-      var ret: AnyRef = null.asInstanceOf[AnyRef]
-      def enter(n: N): Unit =
-        val kids = expand(n)
-        if kids.isEmpty then ret = combine(n, PSVec.empty[R]).asInstanceOf[AnyRef]
-        else stack.push(new Frame(n, kids, new Array[AnyRef](kids.length), 0))
-      enter(root)
-      while !stack.isEmpty do
+  /** On-stack fast path for [[unfoldFold]]: direct post-order recursion up to [[OnStackLimit]],
+    * beyond which the subtree is handed to [[unfoldFoldHeap]]. The inner `@tailrec loop` fills the
+    * child-result slots left to right.
+    */
+  private def unfoldFoldRec[N, R](
+      expand: N => PSVec[N],
+      combine: (N, PSVec[R]) => R,
+      n: N,
+      depth: Int,
+  ): R =
+    if depth >= OnStackLimit then unfoldFoldHeap(expand, combine, n)
+    else
+      val kids = expand(n)
+      val k = kids.length
+      if k == 0 then combine(n, PSVec.empty[R])
+      else
+        val out = new Array[AnyRef](k)
+        @tailrec def loop(i: Int): Unit =
+          if i < k then
+            out(i) = unfoldFoldRec(expand, combine, kids(i), depth + 1).asInstanceOf[AnyRef]
+            loop(i + 1)
+        loop(0)
+        combine(n, PSVec.unsafeWrap[R](out))
+
+  /** Heap trampoline for [[unfoldFold]]: an explicit `ArrayDeque` post-order walk that keeps the
+    * recursion off the JVM stack. The `enter` push-closure and the `@tailrec loop` driver share the
+    * one `stack` + `ret` cell — `loop`'s self-call stays in tail position for stack-safety.
+    */
+  private def unfoldFoldHeap[N, R](
+      expand: N => PSVec[N],
+      combine: (N, PSVec[R]) => R,
+      root: N,
+  ): R =
+    final class Frame(val node: N, val kids: PSVec[N], val out: Array[AnyRef], var i: Int)
+    val stack = new java.util.ArrayDeque[Frame]()
+    var ret: AnyRef = null.asInstanceOf[AnyRef]
+    def enter(n: N): Unit =
+      val kids = expand(n)
+      if kids.isEmpty then ret = combine(n, PSVec.empty[R]).asInstanceOf[AnyRef]
+      else stack.push(new Frame(n, kids, new Array[AnyRef](kids.length), 0))
+    enter(root)
+    @tailrec def loop(): R =
+      if stack.isEmpty then ret.asInstanceOf[R]
+      else
         val fr = stack.peek()
         if fr.i > 0 then fr.out(fr.i - 1) = ret
         if fr.i < fr.kids.length then
@@ -67,45 +104,56 @@ object Schemes:
         else
           ret = combine(fr.node, PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
           val _ = stack.pop()
-      ret.asInstanceOf[R]
-
-    def rec(n: N, depth: Int): R =
-      if depth >= OnStackLimit then heap(n)
-      else
-        val kids = expand(n)
-        val k = kids.length
-        if k == 0 then combine(n, PSVec.empty[R])
-        else
-          val out = new Array[AnyRef](k)
-          var i = 0
-          while i < k do
-            out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
-            i += 1
-          combine(n, PSVec.unsafeWrap[R](out))
-
-    n0 => rec(n0, 0)
+        loop()
+    loop()
 
   /** Engine for the *build* scheme ([[ana]]). One [[Coalg]] call per node yields its children and
     * its combiner closure (stored in the frame on the heap path). Same on-stack/heap hybrid and
     * stack-safety as [[unfoldFold]].
     */
   private def unfoldCoalg[N, R](coalg: Coalg[N, R]): N => R =
+    n0 => unfoldCoalgRec(coalg, n0, 0)
 
-    def heap(root: N): R =
-      final class Frame(
-          val combine: PSVec[R] => R,
-          val kids: PSVec[N],
-          val out: Array[AnyRef],
-          var i: Int,
-      )
-      val stack = new java.util.ArrayDeque[Frame]()
-      var ret: AnyRef = null.asInstanceOf[AnyRef]
-      def enter(n: N): Unit =
-        val (kids, combine) = coalg(n)
-        if kids.isEmpty then ret = combine(PSVec.empty[R]).asInstanceOf[AnyRef]
-        else stack.push(new Frame(combine, kids, new Array[AnyRef](kids.length), 0))
-      enter(root)
-      while !stack.isEmpty do
+  /** On-stack fast path for [[unfoldCoalg]]: one [[Coalg]] call per node yields its children and
+    * combiner; recurses directly up to [[OnStackLimit]], then defers to [[unfoldCoalgHeap]]. The
+    * inner `@tailrec loop` fills the child-result slots left to right.
+    */
+  private def unfoldCoalgRec[N, R](coalg: Coalg[N, R], n: N, depth: Int): R =
+    if depth >= OnStackLimit then unfoldCoalgHeap(coalg, n)
+    else
+      val (kids, combine) = coalg(n)
+      val k = kids.length
+      if k == 0 then combine(PSVec.empty[R])
+      else
+        val out = new Array[AnyRef](k)
+        @tailrec def loop(i: Int): Unit =
+          if i < k then
+            out(i) = unfoldCoalgRec(coalg, kids(i), depth + 1).asInstanceOf[AnyRef]
+            loop(i + 1)
+        loop(0)
+        combine(PSVec.unsafeWrap[R](out))
+
+  /** Heap trampoline for [[unfoldCoalg]]: the [[unfoldFoldHeap]] walk with each node's combiner
+    * closure stored in its frame. `enter` and the `@tailrec loop` driver share the one `stack` +
+    * `ret` cell; `loop`'s self-call stays in tail position for stack-safety.
+    */
+  private def unfoldCoalgHeap[N, R](coalg: Coalg[N, R], root: N): R =
+    final class Frame(
+        val combine: PSVec[R] => R,
+        val kids: PSVec[N],
+        val out: Array[AnyRef],
+        var i: Int,
+    )
+    val stack = new java.util.ArrayDeque[Frame]()
+    var ret: AnyRef = null.asInstanceOf[AnyRef]
+    def enter(n: N): Unit =
+      val (kids, combine) = coalg(n)
+      if kids.isEmpty then ret = combine(PSVec.empty[R]).asInstanceOf[AnyRef]
+      else stack.push(new Frame(combine, kids, new Array[AnyRef](kids.length), 0))
+    enter(root)
+    @tailrec def loop(): R =
+      if stack.isEmpty then ret.asInstanceOf[R]
+      else
         val fr = stack.peek()
         if fr.i > 0 then fr.out(fr.i - 1) = ret
         if fr.i < fr.kids.length then
@@ -115,23 +163,8 @@ object Schemes:
         else
           ret = fr.combine(PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
           val _ = stack.pop()
-      ret.asInstanceOf[R]
-
-    def rec(n: N, depth: Int): R =
-      if depth >= OnStackLimit then heap(n)
-      else
-        val (kids, combine) = coalg(n)
-        val k = kids.length
-        if k == 0 then combine(PSVec.empty[R])
-        else
-          val out = new Array[AnyRef](k)
-          var i = 0
-          while i < k do
-            out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
-            i += 1
-          combine(PSVec.unsafeWrap[R](out))
-
-    n0 => rec(n0, 0)
+        loop()
+    loop()
 
   /** In-place fold engine for [[cata]]. `childrenOf` returns a **fresh, owned** `Array[AnyRef]` of
     * the node's children (via `Plated.childrenArray`); the engine folds each child and **overwrites
@@ -141,17 +174,53 @@ object Schemes:
     * the array is freshly allocated and not aliased.
     */
   private def foldInPlace[S, A](childrenOf: S => Array[AnyRef], alg: (S, PSVec[A]) => A): S => A =
+    s0 => foldInPlaceRec(childrenOf, alg, s0, 0)
 
-    def heap(root: S): A =
-      final class Frame(val node: S, val arr: Array[AnyRef], var i: Int)
-      val stack = new java.util.ArrayDeque[Frame]()
-      var ret: AnyRef = null.asInstanceOf[AnyRef]
-      def enter(s: S): Unit =
-        val arr = childrenOf(s)
-        if arr.length == 0 then ret = alg(s, PSVec.empty[A]).asInstanceOf[AnyRef]
-        else stack.push(new Frame(s, arr, 0))
-      enter(root)
-      while !stack.isEmpty do
+  /** On-stack fast path for [[foldInPlace]]: post-order recursion up to [[OnStackLimit]] that folds
+    * each child **into its own slot** of the freshly-owned children array (reusing it as the result
+    * accumulator), then defers deep subtrees to [[foldInPlaceHeap]].
+    */
+  private def foldInPlaceRec[S, A](
+      childrenOf: S => Array[AnyRef],
+      alg: (S, PSVec[A]) => A,
+      s: S,
+      depth: Int,
+  ): A =
+    if depth >= OnStackLimit then foldInPlaceHeap(childrenOf, alg, s)
+    else
+      val arr = childrenOf(s)
+      val k = arr.length
+      if k == 0 then alg(s, PSVec.empty[A])
+      else
+        @tailrec def loop(i: Int): Unit =
+          if i < k then
+            val child = arr(i).asInstanceOf[S]
+            arr(i) = foldInPlaceRec(childrenOf, alg, child, depth + 1).asInstanceOf[AnyRef]
+            loop(i + 1)
+        loop(0)
+        alg(s, PSVec.unsafeWrap[A](arr))
+
+  /** Heap trampoline for [[foldInPlace]]: the [[unfoldFoldHeap]] walk specialised to overwrite each
+    * child's slot in the owned array with its fold result (no separate out-array). `enter` and the
+    * `@tailrec loop` driver share the one `stack` + `ret` cell; `loop`'s self-call stays in tail
+    * position for stack-safety.
+    */
+  private def foldInPlaceHeap[S, A](
+      childrenOf: S => Array[AnyRef],
+      alg: (S, PSVec[A]) => A,
+      root: S,
+  ): A =
+    final class Frame(val node: S, val arr: Array[AnyRef], var i: Int)
+    val stack = new java.util.ArrayDeque[Frame]()
+    var ret: AnyRef = null.asInstanceOf[AnyRef]
+    def enter(s: S): Unit =
+      val arr = childrenOf(s)
+      if arr.length == 0 then ret = alg(s, PSVec.empty[A]).asInstanceOf[AnyRef]
+      else stack.push(new Frame(s, arr, 0))
+    enter(root)
+    @tailrec def loop(): A =
+      if stack.isEmpty then ret.asInstanceOf[A]
+      else
         val fr = stack.peek()
         if fr.i > 0 then fr.arr(fr.i - 1) = ret // overwrite the just-folded child's slot
         if fr.i < fr.arr.length then
@@ -161,22 +230,8 @@ object Schemes:
         else
           ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr)).asInstanceOf[AnyRef]
           val _ = stack.pop()
-      ret.asInstanceOf[A]
-
-    def rec(s: S, depth: Int): A =
-      if depth >= OnStackLimit then heap(s)
-      else
-        val arr = childrenOf(s)
-        val k = arr.length
-        if k == 0 then alg(s, PSVec.empty[A])
-        else
-          var i = 0
-          while i < k do
-            arr(i) = rec(arr(i).asInstanceOf[S], depth + 1).asInstanceOf[AnyRef]
-            i += 1
-          alg(s, PSVec.unsafeWrap[A](arr))
-
-    s0 => rec(s0, 0)
+        loop()
+    loop()
 
   /** Catamorphism as a composable `Getter`, driven by `Plated[S]`. The algebra sees the original
     * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe; folds child

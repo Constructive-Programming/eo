@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package data
 
+import scala.annotation.tailrec
+
 import cats.{Applicative, Eval, Foldable, Functor, Traverse}
 
 /** Lightweight array-backed focus vector underlying `MultiFocus[PSVec]`. Three variants so empty
@@ -32,11 +34,12 @@ sealed trait PSVec[+B]:
     */
   def toList: List[B] =
     val b = List.newBuilder[B]
-    var i = 0
     val n = length
-    while i < n do
-      b += apply(i)
-      i += 1
+    @tailrec def loop(i: Int): Unit =
+      if i < n then
+        b += apply(i)
+        loop(i + 1)
+    loop(0)
     b.result()
 
   /** Materialise as a fresh `Array[AnyRef]`. `Slice` overrides with `System.arraycopy` (intrinsic)
@@ -45,10 +48,11 @@ sealed trait PSVec[+B]:
   def toAnyRefArray: Array[AnyRef] =
     val n = length
     val a = new Array[AnyRef](n)
-    var i = 0
-    while i < n do
-      a(i) = apply(i).asInstanceOf[AnyRef]
-      i += 1
+    @tailrec def loop(i: Int): Unit =
+      if i < n then
+        a(i) = apply(i).asInstanceOf[AnyRef]
+        loop(i + 1)
+    loop(0)
     a
 
   /** Like [[toAnyRefArray]] but MAY share the backing array zero-copy when a dense Slice covers its
@@ -62,31 +66,24 @@ sealed trait PSVec[+B]:
     case other: PSVec[?] =>
       if length != other.length then false
       else
-        var i = 0
-        var eq = true
-        while eq && i < length do
-          eq = apply(i) == other.apply(i)
-          i += 1
-        eq
+        @tailrec def loop(i: Int): Boolean =
+          if i >= length then true
+          else if apply(i) != other.apply(i) then false
+          else loop(i + 1)
+        loop(0)
     case _ => false
 
   override def hashCode(): Int =
-    var h = 1
-    var i = 0
-    while i < length do
-      val e = apply(i)
-      h = h * 31 + (if e == null then 0 else e.hashCode)
-      i += 1
-    h
+    @tailrec def loop(i: Int, h: Int): Int =
+      if i < length then
+        val e = apply(i)
+        loop(i + 1, h * 31 + (if e == null then 0 else e.hashCode))
+      else h
+    loop(0, 1)
 
-  override def toString(): String =
-    val sb = new StringBuilder("PSVec(")
-    var i = 0
-    while i < length do
-      if i > 0 then sb.append(", ")
-      sb.append(apply(i))
-      i += 1
-    sb.append(")").toString
+  // Cold / debug-only path — `mkString` says exactly "comma-join the elements"; no hand-rolled
+  // loop needed here (the hot paths above stay index-based for allocation control).
+  override def toString(): String = toList.mkString("PSVec(", ", ", ")")
 
 /** Constructors for [[PSVec]] — the primary entry points are `empty`, `singleton`, and `unsafeWrap`
   * (zero-copy from an `Array[AnyRef]`). The three `Slice` / `Single` / `Empty` subclasses are
@@ -107,22 +104,21 @@ object PSVec:
       if n == 0 then PSVec.empty[B]
       else
         val arr = new Array[AnyRef](n)
-        var i = 0
-        while i < n do
-          arr(i) = f(fa(i)).asInstanceOf[AnyRef]
-          i += 1
+        @tailrec def loop(i: Int): Unit =
+          if i < n then
+            arr(i) = f(fa(i)).asInstanceOf[AnyRef]
+            loop(i + 1)
+        loop(0)
         PSVec.unsafeWrap[B](arr)
 
   given pSVecFoldable: Foldable[PSVec] with
 
     def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
-      var acc = b
       val n = fa.length
-      var i = 0
-      while i < n do
-        acc = f(acc, fa(i))
-        i += 1
-      acc
+      @tailrec def loop(i: Int, acc: B): B =
+        if i < n then loop(i + 1, f(acc, fa(i)))
+        else acc
+      loop(0, b)
 
     def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
         f: (A, Eval[B]) => Eval[B]
@@ -142,16 +138,19 @@ object PSVec:
       val n = fa.length
       if n == 0 then G.pure(PSVec.empty[B])
       else
-        var acc: G[Array[AnyRef]] = G.pure(new Array[AnyRef](n))
-        var i = 0
-        while i < n do
-          val idx = i
-          val gb = f(fa(idx))
-          acc = G.map2(acc, gb) { (a, b) =>
-            a(idx) = b.asInstanceOf[AnyRef]
-            a
-          }
-          i += 1
+        @tailrec def loop(i: Int, acc: G[Array[AnyRef]]): G[Array[AnyRef]] =
+          if i < n then
+            val idx = i
+            val gb = f(fa(idx))
+            loop(
+              i + 1,
+              G.map2(acc, gb) { (a, b) =>
+                a(idx) = b.asInstanceOf[AnyRef]
+                a
+              },
+            )
+          else acc
+        val acc = loop(0, G.pure(new Array[AnyRef](n)))
         G.map(acc)(arr => PSVec.unsafeWrap[B](arr))
 
     def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
@@ -259,8 +258,9 @@ object PSVec:
     else
       val a = new Array[AnyRef](n)
       val it = xs.iterator
-      var i = 0
-      while it.hasNext do
-        a(i) = it.next().asInstanceOf[AnyRef]
-        i += 1
+      @tailrec def loop(i: Int): Unit =
+        if it.hasNext then
+          a(i) = it.next().asInstanceOf[AnyRef]
+          loop(i + 1)
+      loop(0)
       unsafeWrap(a)

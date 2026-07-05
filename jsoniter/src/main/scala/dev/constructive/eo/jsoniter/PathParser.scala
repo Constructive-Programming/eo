@@ -1,5 +1,7 @@
 package dev.constructive.eo.jsoniter
 
+import scala.annotation.tailrec
+
 /** Parser for the JSONPath subset we accept in [[JsoniterPrism]] / [[JsoniterTraversal]]. Grammar:
   *
   * {{{
@@ -47,8 +49,10 @@ object PathParser:
     if pos >= s.length || !isIdentStart(s.charAt(pos)) then
       Left(s"expected identifier at position $pos")
     else
-      var end = pos + 1
-      while end < s.length && isIdentPart(s.charAt(end)) do end += 1
+      @tailrec def scanEnd(end: Int): Int =
+        if end < s.length && isIdentPart(s.charAt(end)) then scanEnd(end + 1)
+        else end
+      val end = scanEnd(pos + 1)
       val name = s.substring(pos, end)
       parseSteps(s, end, PathStep.Field(name) :: acc)
 
@@ -62,8 +66,10 @@ object PathParser:
         Left(s"expected ']' after '*' at position ${pos + 1}")
       else parseSteps(s, pos + 2, PathStep.Wildcard :: acc)
     else
-      var end = pos
-      while end < s.length && s.charAt(end).isDigit do end += 1
+      @tailrec def scanEnd(end: Int): Int =
+        if end < s.length && s.charAt(end).isDigit then scanEnd(end + 1)
+        else end
+      val end = scanEnd(pos)
       if end == pos then Left(s"expected integer or '*' at position $pos")
       else if end >= s.length || s.charAt(end) != ']' then Left(s"expected ']' at position $end")
       else

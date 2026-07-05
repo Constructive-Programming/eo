@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package data
 
+import scala.annotation.tailrec
+
 /** Minimal grow-on-demand `Array[AnyRef]` builder. Used by [[MultiFocus]]'s `mfAssocPSVec` and
   * [[optics.Traversal.pEach]] to accumulate focus elements without `ArrayBuffer.toArray`'s final
   * copy. No `ClassTag` needed; the cast in [[freezeAsPSVec]] is sound (generic B erases to Object).
@@ -34,8 +36,10 @@ final private[eo] class ObjArrBuilder(initialCapacity: Int = 16):
         len += n
 
   private def grow(minCap: Int): Unit =
-    var newCap = arr.length * 2
-    while newCap < minCap do newCap *= 2
+    @tailrec def doubleTo(cap: Int): Int =
+      if cap < minCap then doubleTo(cap * 2)
+      else cap
+    val newCap = doubleTo(arr.length * 2)
     val newArr = new Array[AnyRef](newCap)
     System.arraycopy(arr, 0, newArr, 0, len)
     arr = newArr

@@ -1,5 +1,7 @@
 package dev.constructive.eo.circe
 
+import scala.annotation.tailrec
+
 import cats.data.{Chain, Ior}
 import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
 
@@ -52,11 +54,19 @@ sealed abstract private[circe] class JsonFocus[A]:
   def placeImpl(json: Json, a: A): Json
   def readImpl(json: Json): Option[A]
 
-  /** Build the ACursor for the abstract `to` method. */
+  /** Build the ACursor for read-side navigation. */
   def navigateCursor(json: Json): ACursor
 
   /** Decode an `A` from the navigated `ACursor`. */
   def decodeFromCursor(c: ACursor): Either[DecodingFailure, A] = c.as[A](using decoder)
+
+  /** Navigate + decode the focus in ONE walk, and capture a writer that places a new focus back
+    * into the SOURCE json (preserving siblings) — backs [[JsonPrism]]'s `Affine` `to`/`from` seam
+    * so a generic/composed `.modify` rebuilds around the original document rather than
+    * reconstructing the focus standalone. `Left` on navigate/decode failure. Mirrors
+    * `dev.constructive.eo.avro.AvroFocus.navigateForWrite`.
+    */
+  def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)]
 
 private[circe] object JsonFocus:
 
@@ -72,22 +82,37 @@ private[circe] object JsonFocus:
     protected def terminalStep: PathStep = JsonWalk.terminalOf(path)
 
     def navigateCursor(json: Json): ACursor =
-      var c: ACursor = json.hcursor
-      var i = 0
-      while i < path.length do
-        c = path(i) match
-          case PathStep.Field(name) => c.downField(name)
-          case PathStep.Index(idx)  => c.downN(idx)
-        i += 1
-      c
+      @tailrec def loop(c: ACursor, i: Int): ACursor =
+        if i < path.length then
+          val c2 = path(i) match
+            case PathStep.Field(name) => c.downField(name)
+            case PathStep.Index(idx)  => c.downN(idx)
+          loop(c2, i + 1)
+        else c
+      loop(json.hcursor, 0)
+
+    def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
+      if path.length == 0 then
+        decoder.decodeJson(json) match
+          case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
+          case Right(a) =>
+            // Root full-cover: the writer IS the old reverseGet (encode standalone).
+            Right((a, (b: A) => encoder(b)))
+      else
+        JsonWalk.walkPath(json, path) match
+          case Left(failure)         => Left(failure)
+          case Right((cur, parents)) =>
+            decoder.decodeJson(cur) match
+              case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
+              case Right(a) =>
+                Right((a, (b: A) => JsonWalk.rebuildPath(parents, path, encoder(b))))
 
     def modifyImpl(json: Json, f: A => A): Json =
-      JsonWalk.walkPath(json, path) match
-        case Left(_)               => json
-        case Right((cur, parents)) =>
-          decoder.decodeJson(cur) match
-            case Left(_)  => json
-            case Right(a) => JsonWalk.rebuildPath(parents, path, encoder(f(a)))
+      // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
+      // the silent modify can't drift from it. The captured writer re-encodes and rebuilds.
+      navigateForWrite(json) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => json
 
     def transformImpl(json: Json, f: Json => Json): Json =
       JsonWalk.walkPath(json, path) match
@@ -190,16 +215,27 @@ private[circe] object JsonFocus:
     private def rebuild(newParent: JsonObject, parents: Vector[AnyRef]): Json =
       JsonWalk.rebuildPath(parents, parentPath, Json.fromJsonObject(newParent))
 
-    def modifyImpl(json: Json, f: A => A): Json =
+    def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
       walkParent(json) match
-        case Left(_)               => json
+        case Left(failure)         => Left(failure)
         case Right((obj, parents)) =>
-          readFields(obj)
-            .flatMap(sub =>
-              Json.fromJsonObject(sub).as[A](using decoder).left.map(_ => Chain.empty)
-            )
-            .map(a => rebuild(writeFields(obj, f(a)), parents))
-            .getOrElse(json)
+          readFields(obj) match
+            case Left(chain) =>
+              Left(chain.headOption.getOrElse(JsonFailure.PathMissing(terminalStep)))
+            case Right(sub) =>
+              Json.fromJsonObject(sub).as[A](using decoder) match
+                case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
+                case Right(a) =>
+                  // Writer overlays the NT fields BY NAME onto the resolved parent object.
+                  Right((a, (b: A) => rebuild(writeFields(obj, b), parents)))
+
+    def modifyImpl(json: Json, f: A => A): Json =
+      // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays
+      // separate — it must surface readFields' accumulated PathMissing Chain, which
+      // navigateForWrite collapses to a single failure.
+      navigateForWrite(json) match
+        case Right((a, writer)) => writer(f(a))
+        case Left(_)            => json
 
     def transformImpl(json: Json, f: Json => Json): Json =
       walkParent(json) match

@@ -85,6 +85,16 @@ private[avro] trait AvroOpticOps[A]:
   ): (IndexedRecord | Array[Byte] | String) => C => Ior[Chain[AvroFailure], IndexedRecord] =
     input => c => AvroFailure.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, f(c)))
 
+  /** Replace the focused value with `a`, rebuilding the record around it — silent tier (pair with
+    * [[place]] for Ior diagnostics).
+    *
+    * A trait MEMBER deliberately: without it, `.replace` on a record-carried optic resolves to the
+    * generic Either-carrier extension, which routes through `from(Right(a)) = reverseGet(a)` and
+    * reconstructs the focus STANDALONE — for any drilled optic that silently destroys every sibling
+    * field. This member shadows the extension with the sibling-preserving placeImpl walk.
+    */
+  def replace(a: A): (IndexedRecord | Array[Byte] | String) => IndexedRecord = placeUnsafe(a)
+
   // NOTE: there is deliberately no bytes-in/bytes-out surface here. [[AvroPrism]] and
   // [[AvroTraversal]] ARE the byte-carried optics — `.modify` / `.replace` / `.getOption` /
   // `.foldMap` on them operate on `Array[Byte]` directly (locate + slice-decode + splice), so a

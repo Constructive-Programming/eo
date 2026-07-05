@@ -2,8 +2,8 @@ package dev.constructive.eo.avro
 package laws
 
 import cats.data.Ior
-import dev.constructive.eo.laws.PrismLaws
-import dev.constructive.eo.laws.discipline.PrismTests
+import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests}
+import dev.constructive.eo.laws.{OptionalLaws, SeamLaws}
 import dev.constructive.eo.optics.Optic
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.generic.{GenericData, IndexedRecord}
@@ -14,16 +14,21 @@ import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
 /** Unit 9: witness that the record-carried face of [[AvroPrism]] (an [[AvroRecordPrism]], reached
-  * via `.record`) satisfies the three Prism laws on a full-cover Avro fixture, plus ScalaCheck
-  * property coverage against both the default Ior surface and the `*Unsafe` escape hatches.
+  * via `.record`) is a lawful Optional. The record face is `Affine`-carried, so the honest
+  * discipline ruleset is `OptionalTests` on a full-cover Avro fixture; on top of it this spec
+  * RE-ADDS the two reverseGet round-trip laws for the root full-cover prism (still honest there),
+  * ADDS drilled-seam Optional coverage through the generic extension (the sibling-preserving path
+  * the old Either carrier got wrong), and keeps ScalaCheck property coverage against both the
+  * default Ior surface and the `*Unsafe` escape hatches. Net: more law coverage than the old
+  * PrismTests-only shape, not less.
   *
   * Mirrors `dev.constructive.eo.circe.JsonFieldsPrismLawsSpec` block-for-block — same shape, same
   * scenario count — with two Avro-forced deviations:
   *
-  *   1. '''Discipline `PrismTests` runs against the IDENTITY full-cover prism
+  *   1. '''Discipline `OptionalTests` runs against the IDENTITY full-cover prism
   *      `codecPrism[Pair].record` (focus = `Pair`), not against
   *      `codecPrism[Pair].fields(_.a, _.b).record` (focus = NamedTuple).'''
-  *      `PrismLaws.partialRoundTripOneWay` is `prism.reverseGet(a) == s` — universal `==`. For
+  *      `OptionalLaws.modifyIdentity` is `optional.modify(identity)(s) == s` — universal `==`. For
   *      `IndexedRecord`, `GenericData.Record.equals` is schema-instance-sensitive: two records are
   *      equal only when their schemas are the same instance AND their fields compare structurally.
   *      A `.fields(...)` cover encodes `a` through the NamedTuple's codec — the resulting record
@@ -70,26 +75,67 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   import AvroPrismLawsSpec.*
   import AvroPrismLawsSpec.given
 
-  // ---- discipline PrismLaws ---------------------------------------
+  // ---- discipline OptionalLaws ------------------------------------
   //
-  // The generic Prism laws (ported from Monocle) require `reverseGet`
-  // to round-trip through the source `S` via universal `==`. For an
-  // Avro carrier that means the rebuilt `IndexedRecord` must satisfy
-  // apache-avro's schema-instance-sensitive `equals`. The full-cover
-  // identity prism `codecPrism[Pair].record` (focus = Pair, NOT the .fields
-  // NamedTuple sub-cover) re-encodes through the same codec under the
-  // same schema, so `==` holds. See the class doc above for the
-  // smoke-test numbers that drove this fixture choice.
+  // The record face is now `Affine`-carried (an Optional, not a Prism): a drilled focus lives
+  // inside a record, so rebuilding needs the siblings, which a Prism's reverseGet can't see. The
+  // honest discipline ruleset is therefore `OptionalTests`, not `PrismTests`. It runs against the
+  // full-cover identity prism `codecPrism[Pair].record` (focus = Pair): `modify(identity)`
+  // re-encodes through the same codec under the same schema, so universal `==` holds (same reason
+  // the old PrismTests passed on this fixture; see class doc for the smoke-test numbers on why
+  // `.fields(_.a, _.b)` does NOT survive `==`).
+  //
+  // Migrating Prism→Optional drops the two reverseGet round-trip laws — but those were only ever
+  // honest for the ROOT full-cover prism anyway, and we RE-ADD them explicitly below (root
+  // reverseGet round-trips) PLUS gain new drilled-seam Optional coverage (the drilled generic
+  // extension, which the old Either carrier got structurally wrong). Net: more laws, not fewer.
 
-  val pairPrism: Optic[IndexedRecord, IndexedRecord, Pair, Pair, Either] =
-    codecPrism[Pair].record
+  val pairRecordPrism: AvroRecordPrism[Pair] = codecPrism[Pair].record
 
   checkAll(
-    "AvroRecordPrism — codecPrism[Pair].record (full-cover identity)",
-    new PrismTests[IndexedRecord, Pair]:
-      val laws: PrismLaws[IndexedRecord, Pair] = new PrismLaws[IndexedRecord, Pair]:
-        val prism = pairPrism
-    .prism,
+    "AvroRecordPrism — codecPrism[Pair].record (full-cover identity, Optional)",
+    new OptionalTests[IndexedRecord, Pair]:
+      val laws: OptionalLaws[IndexedRecord, Pair] = new OptionalLaws[IndexedRecord, Pair]:
+        val optional
+            : Optic[IndexedRecord, IndexedRecord, Pair, Pair, dev.constructive.eo.data.Affine] =
+          pairRecordPrism
+    .optional,
+  )
+
+  // Retain the two Prism round-trip laws the discipline migration drops — still honest for the
+  // ROOT full-cover prism, whose `reverseGet` re-encodes the whole record. `reverseGet` remains a
+  // member exactly so these hold; proving them keeps the root's Prism-strength coverage.
+  "root full-cover reverseGet round-trips (getOption∘reverseGet and reverseGet∘getOption)" >> forAll {
+    (p: Pair) =>
+      val record = summon[AvroCodec[Pair]].encode(p).asInstanceOf[IndexedRecord]
+      // getOption ∘ reverseGet == id
+      val otherWay = pairRecordPrism.get(pairRecordPrism.reverseGet(p)) match
+        case Ior.Right(read) => read == p
+        case _               => false
+      // reverseGet ∘ getOption == id (structurally, on the record)
+      val oneWay = pairRecordPrism.get(record) match
+        case Ior.Right(read) => recordsEqual(pairRecordPrism.reverseGet(read), record)
+        case _               => false
+      otherWay && oneWay
+  }
+
+  // The regression that would have caught the sibling-drop FIRST — the shared [[SeamLaws]] run on
+  // a DRILLED optic through the generic `.modify` / `.replace` seam. The old `Either` carrier's
+  // `from(Right) = reverseGet` fails `seam modify identity` / `seam replace overwrite` here
+  // (drops `age`); the full-cover-only OptionalTests above could never reach it. Uses the
+  // structural record Eq because `IndexedRecord` `==` is schema-instance-sensitive, and a
+  // Person-record Arbitrary so the `.field(_.name)` walk actually Hits (a Pair record would Miss
+  // and the law would pass vacuously).
+  private val arbPersonRecord: Arbitrary[IndexedRecord] =
+    Arbitrary(arbPerson.arbitrary.map(personRecord))
+
+  checkAll(
+    "AvroRecordPrism drilled seam — codecPrism[Person].field(_.name).record",
+    new SeamTests[IndexedRecord, String]:
+      val laws: SeamLaws[IndexedRecord, String] = new SeamLaws[IndexedRecord, String]:
+        val optic = codecPrism[Person].field(_.name).record
+        val eqv = recordsEqual
+    .seam(using arbPersonRecord, summon[Arbitrary[String]], summon[Cogen[String]]),
   )
 
   // ---- forAll properties on the default Ior surface ---------------

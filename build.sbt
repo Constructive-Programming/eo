@@ -18,7 +18,7 @@ val scala3Version = "3.8.3"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.1"
+ThisBuild / tlBaseVersion := "0.2"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -28,9 +28,11 @@ ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
 
-// MiMa starts *enforcing* binary compatibility from 0.1.1 onward.
-// 0.1.0 is the first publish, so there is no previous version to
-// compare against.
+// MiMa is left disabled for 0.2.0: it is a deliberate breaking release
+// (JsonPrism became an Affine `Optional`, PR #31 `fix(circe)!`), so
+// checking binary compat against 0.1.0 would only flag the intended
+// break. Re-enable (set to the published 0.2.x line) once the API is
+// stable and we want to enforce compat within the 0.2 series.
 ThisBuild / tlMimaPreviousVersions := Set.empty
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
@@ -57,7 +59,12 @@ ThisBuild / githubWorkflowJavaVersions := Seq(
 // auto-fix.
 ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   WorkflowStep.Sbt(
-    List("scalafmtCheckAll", "scalafmtSbtCheck", "benchmarks/scalafmtCheck", "benchmarks/Test/scalafmtCheck"),
+    List(
+      "scalafmtCheckAll",
+      "scalafmtSbtCheck",
+      "benchmarks/scalafmtCheck",
+      "benchmarks/Test/scalafmtCheck",
+    ),
     name = Some("Check formatting"),
   ),
   WorkflowStep.Sbt(
@@ -498,20 +505,21 @@ lazy val avroIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
-// Read-only spike: byte-cursor JSON optics over `Array[Byte]`, backed
-// by jsoniter-scala. Reuses the existing `Affine` carrier — the optic
+// Byte-cursor JSON optics over `Array[Byte]`, backed by
+// jsoniter-scala. Reuses the existing `Affine` carrier — the optic
 // shape `Optic[Array[Byte], Array[Byte], A, A, Affine]` keeps the
 // source bytes in the structural leftover (Hit's `snd` carries
-// `(bytes, span)`, Miss's `fst` carries `bytes` for pass-through), so
-// future read-write phase 2 can splice into the same structure without
-// a carrier change. No runtime AST allocation: the path scanner walks
-// raw bytes and the focus is decoded via `JsonValueCodec[A]` only when
-// the user reads it.
+// `(bytes, span)`, Miss's `fst` carries `bytes` for pass-through) and
+// writes splice into the recorded spans. No runtime AST allocation:
+// the path scanner walks raw bytes and the focus is decoded via
+// `JsonValueCodec[A]` only when the user reads it. avroIntegration is
+// Test-scoped for the cross-format Avro-bytes → JSON-bytes bridge spec.
 lazy val jsoniterIntegration: Project = project
   .in(file("jsoniter"))
   .dependsOn(
     LocalProject("core"),
     LocalProject("laws") % Test,
+    LocalProject("avroIntegration") % Test,
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)

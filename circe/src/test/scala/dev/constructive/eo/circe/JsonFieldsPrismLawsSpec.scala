@@ -1,8 +1,9 @@
 package dev.constructive.eo.circe
 
 import cats.data.Ior
-import dev.constructive.eo.laws.PrismLaws
-import dev.constructive.eo.laws.discipline.PrismTests
+import dev.constructive.eo.data.Affine
+import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests}
+import dev.constructive.eo.laws.{OptionalLaws, SeamLaws}
 import dev.constructive.eo.optics.Optic
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
@@ -13,15 +14,14 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-/** Unit 6: witness that [[JsonFieldsPrism]] satisfies the three Prism laws, plus ScalaCheck
+/** Unit 6: witness that [[JsonPrism]] is a lawful Optional (`Affine`-carried), plus ScalaCheck
   * property coverage against both the default Ior surface and the `*Unsafe` escape hatches.
   *
-  * The discipline `PrismTests` RuleSet is computed against the *trait binding* — the generic
-  * `Optic[Json, Json, A, A, Either]` supertype — which routes through
-  * `ForgetfulFunctor[Either].map` rather than the concrete-class Ior surface. That gives the laws
-  * direct access to the `to` / `reverseGet` contract, which is what PrismLaws expects.
-  *
-  * forAll properties separately exercise the Ior-bearing default surface.
+  * The discipline `OptionalTests` RuleSet runs against the *trait binding* — the generic
+  * `Optic[Json, Json, A, A, Affine]` supertype — on a full-cover fixture. Beyond it, the root
+  * reverseGet round-trips (still honest for the full-cover prism) and the drilled-seam Optional
+  * laws (the sibling-preserving generic-extension path the old `Either` carrier got wrong) are
+  * witnessed explicitly. forAll properties exercise the Ior-bearing default surface.
   */
 class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCheck:
 
@@ -29,31 +29,59 @@ class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCh
   import JsonFieldsPrismLawsSpec.*
   import JsonFieldsPrismLawsSpec.given
 
-  // ---- discipline PrismLaws ---------------------------------------
+  // ---- discipline OptionalLaws ------------------------------------
   //
-  // The generic Prism laws (ported from Monocle) require `reverseGet`
-  // to round-trip through the source `S` — `getOption(s) match { case
-  // Some(a) => reverseGet(a) == s }`. For a JsonFieldsPrism whose
-  // focus covers every field of the source case class, `reverseGet(nt)`
-  // reproduces the full Json; for partial-cover focuses the outer
-  // context (non-focused fields) is lost, and the Prism laws genuinely
-  // don't hold — that's the expected consequence of reusing the Prism
-  // carrier for a structurally-Optional-like shape (see D1 of the
-  // multi-field plan).
+  // JsonPrism is now `Affine`-carried (an Optional, not a Prism): a drilled focus lives inside a
+  // document, so rebuilding needs the siblings, which a Prism's reverseGet can't see. The honest
+  // discipline ruleset is `OptionalTests`, run against a FULL-COVER fixture where
+  // `modify(identity)` reproduces the source Json structurally (circe `Json` `==` is structural,
+  // so this holds cleanly).
   //
-  // We therefore witness the Prism laws on a FULL-COVER fixture where
-  // selecting every field reproduces the source. Partial-cover
-  // behaviour is still covered by JsonPrismSpec's behavioural specs
-  // and the forAll properties below.
-  val pairPrism: Optic[Json, Json, PairFocus, PairFocus, Either] =
+  // Migrating Prism→Optional drops the two reverseGet round-trip laws — but those were only ever
+  // honest for a full-cover / root prism, and we RE-ADD them explicitly below (root reverseGet
+  // round-trips) PLUS gain new drilled-seam Optional coverage (the drilled generic extension,
+  // which the old Either carrier got wrong: siblings dropped). Net: more laws, not fewer.
+  val pairPrism: Optic[Json, Json, PairFocus, PairFocus, Affine] =
     codecPrism[Pair].fields(_.a, _.b)
 
   checkAll(
-    "JsonFieldsPrism — codecPrism[Pair].fields(_.a, _.b) (full cover)",
-    new PrismTests[Json, PairFocus]:
-      val laws: PrismLaws[Json, PairFocus] = new PrismLaws[Json, PairFocus]:
-        val prism = pairPrism
-    .prism,
+    "JsonPrism — codecPrism[Pair].fields(_.a, _.b) (full cover, Optional)",
+    new OptionalTests[Json, PairFocus]:
+      val laws: OptionalLaws[Json, PairFocus] = new OptionalLaws[Json, PairFocus]:
+        val optional = pairPrism
+    .optional,
+  )
+
+  // Retain the two Prism round-trip laws the discipline migration drops — still honest for the
+  // ROOT full-cover prism, whose `reverseGet` re-encodes the whole document.
+  "root reverseGet round-trips (getOption∘reverseGet and reverseGet∘getOption)" >> forAll {
+    (p: Pair) =>
+      val json = p.asJson
+      val root = codecPrism[Pair]
+      val otherWay = root.get(root.reverseGet(p)) match
+        case Ior.Right(read) => read == p
+        case _               => false
+      val oneWay = root.get(json) match
+        case Ior.Right(read) => root.reverseGet(read) == json
+        case _               => false
+      otherWay && oneWay
+  }
+
+  // The regression that would have caught the sibling-drop FIRST — the shared [[SeamLaws]] run on
+  // a DRILLED optic through the generic `.modify` / `.replace` seam. The old `Either` carrier's
+  // `from(Right) = encoder` fails `seam modify identity` / `seam replace overwrite` here (drops
+  // age + address); the full-cover-only laws above could never reach it. `Json` `==` is
+  // structural, so plain equality works; a Person-JSON Arbitrary so `.field(_.name)` actually
+  // Hits (a Pair JSON would Miss and the law would pass vacuously).
+  private val arbPersonJson: Arbitrary[Json] = Arbitrary(arbPerson.arbitrary.map(_.asJson))
+
+  checkAll(
+    "JsonPrism drilled seam — codecPrism[Person].field(_.name)",
+    new SeamTests[Json, String]:
+      val laws: SeamLaws[Json, String] = new SeamLaws[Json, String]:
+        val optic = codecPrism[Person].field(_.name)
+        val eqv = (a: Json, b: Json) => a == b
+    .seam(using arbPersonJson, summon[Arbitrary[String]], summon[Cogen[String]]),
   )
 
   // ---- forAll properties on the default Ior surface ---------------

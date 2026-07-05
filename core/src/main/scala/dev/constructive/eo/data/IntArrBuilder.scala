@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package data
 
+import scala.annotation.tailrec
+
 /** Grow-on-demand primitive `Array[Int]` builder. Used by `MultiFocus.mfAssocPSVec` to accumulate
   * per-element focus counts without `Integer` boxing and without `ArrayBuffer.toArray`'s final
   * copy.
@@ -22,8 +24,10 @@ final private[eo] class IntArrBuilder(initialCapacity: Int = 16):
     len += 1
 
   private def grow(minCap: Int): Unit =
-    var newCap = arr.length * 2
-    while newCap < minCap do newCap *= 2
+    @tailrec def doubleTo(cap: Int): Int =
+      if cap < minCap then doubleTo(cap * 2)
+      else cap
+    val newCap = doubleTo(arr.length * 2)
     val newArr = new Array[Int](newCap)
     System.arraycopy(arr, 0, newArr, 0, len)
     arr = newArr
