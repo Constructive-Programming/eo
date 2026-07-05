@@ -453,6 +453,8 @@ def route(chain: cats.data.Chain[AvroFailure]): List[String] =
     case AvroFailure.BadEnumSymbol(sym, valid, s) => s"enum:    $s '$sym' valid=${valid.mkString(",")}"
     case AvroFailure.UnsupportedSpanStep(step)    => s"span:    $step (no byte span)"
     case AvroFailure.NotConfluentFramed(reason)   => s"framing: $reason"
+    case AvroFailure.SchemaResolutionFailed(id, c) => s"resolve: id $id: ${c.getMessage}"
+    case AvroFailure.SchemaMismatch(id, w, r)      => s"drift:   id $id (writer=$w reader=$r)"
   }
 ```
 
@@ -536,8 +538,9 @@ reader schema. Three consequences to respect in a pipeline:
   undetectable from the bytes: the walk reads the *wrong field*
   with full confidence (this is why the requirement is absolute,
   not "usually fine");
-- Confluent-framed payloads must be `ConfluentWire.strip`ped
-  before the walk — the 5-byte header parses as plausible varints.
+- Confluent-framed payloads must be de-framed before the walk —
+  the 5-byte header parses as plausible varints. Use `.confluent`
+  (below) rather than hand-stripping.
 
 Mixed-schema topics therefore need a resolving decode per payload
 (the record face with the correct writer schema), not the byte
@@ -546,6 +549,41 @@ focused slice: `.modify` re-encodes the focus, so spec-legal but
 non-canonical encodings (byte-sized array blocks, non-minimal
 varints) come back canonicalised — byte-for-byte identity is
 guaranteed only for payloads from conformant writers.
+
+## Confluent-framed reads — `.confluent(schemaById)`
+
+`.confluent` turns any byte prism into a reader over a full
+Schema-Registry payload (5-byte header + body), so a Kafka
+consumer doesn't have to hand-roll the strip-resolve-gate dance:
+
+```scala
+import dev.constructive.eo.avro.ConfluentWire
+
+// Your registry client / cache, resolved to a synchronous lookup.
+val schemaById: ConfluentWire.SchemaById = id => registryCache(id)
+
+val p = codecPrism[Person](readerSchema).field(_.name).confluent(schemaById)
+p.get(framedBytes)   // Ior[Chain[AvroFailure], String]
+```
+
+It strips the header, resolves the writer schema for the framed
+id via the injected `SchemaById = Int => Schema` hook, then
+classifies by Avro parsing-canonical-form fingerprint
+(`SchemaNormalization.parsingFingerprint64`):
+
+- **writer fingerprint == reader fingerprint** → the body is
+  byte-identical under both schemas, so the existing walk is exact
+  and the optic applies directly;
+- **fingerprints differ** → `AvroFailure.SchemaMismatch` (carrying
+  both fingerprints) rather than a silent misread. A resolving
+  writer→reader `ResolvingDecoder` fallback is not shipped yet —
+  route the mismatch to your own resolving decode until it is.
+
+A bad frame surfaces `NotConfluentFramed` (before the hook is
+consulted); a throwing hook becomes `SchemaResolutionFailed`.
+Read-only for now (`get` / `getOptionUnsafe`); the hook is
+synchronous by design — eo ships no registry client and wraps no
+effect, so the caller owns the cache and any `IO` around it.
 
 ## Schema sourcing — runtime vs. derived
 

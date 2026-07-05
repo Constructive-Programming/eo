@@ -66,9 +66,10 @@ import org.apache.avro.Schema
   *   - '''The payload must be encoded under exactly this prism's reader schema.''' The byte walk
   *     performs no writer/reader schema resolution: structurally drifted payloads Miss silently,
   *     and a same-typed field REORDER between writer and reader is undetectable from the bytes —
-  *     the walk reads the wrong field with full confidence. Confluent-framed payloads must be
-  *     [[ConfluentWire.strip]]ped first. Mixed-schema topics need a resolving decode (the record
-  *     face with the right schema per payload), not this walk.
+  *     the walk reads the wrong field with full confidence. Confluent-framed payloads are read
+  *     through [[confluent]] (strip + registry-resolve + fingerprint-gate), not this raw walk; past
+  *     a fingerprint mismatch a mixed-schema topic still needs a resolving decode (the record face
+  *     with the right schema per payload).
   *   - Dynamic field sugar is shadowed by real members: an Avro field named like a member of this
   *     class (`record`, `field`, `at`, `union`, `each`, `fields`, …) must be drilled with the
   *     explicit `.field(_.record)` form.
@@ -140,6 +141,19 @@ final class AvroPrism[A] private[avro] (
     * }}}
     */
   def record: AvroRecordPrism[A] = new AvroRecordPrism[A](focus, rootSchemaCached)
+
+  /** Confluent-framed read face — consumes a full Schema-Registry payload (5-byte header + body)
+    * rather than headerless bytes. Strips the header, resolves the writer schema for the framed id
+    * via `schemaById`, and — when the writer is byte-identical to this prism's reader schema (equal
+    * Avro parsing-canonical-form fingerprints) — applies the optic to the body. On schema drift it
+    * surfaces `AvroFailure.SchemaMismatch` instead of misreading. See [[AvroConfluentPrism]].
+    *
+    * {{{
+    *   codecPrism[A](readerSchema).field(_.x).confluent(schemaById).get(framedBytes)
+    * }}}
+    */
+  def confluent(schemaById: ConfluentWire.SchemaById): AvroConfluentPrism[A] =
+    new AvroConfluentPrism[A](focus, rootSchemaCached, schemaById)
 
   // ---- Byte-span surface (slice / graft) -----------------------------
   //

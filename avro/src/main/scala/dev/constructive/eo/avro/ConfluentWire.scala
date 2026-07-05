@@ -1,14 +1,24 @@
 package dev.constructive.eo.avro
 
+import org.apache.avro.Schema
+
 /** Confluent Schema Registry wire-format framing for binary Avro payloads: a 5-byte header — magic
   * byte `0x00` followed by the big-endian 4-byte schema id — then the Avro binary body.
   *
   * Registry-agnostic by design: no registry client, no new dependencies. [[strip]] / [[attach]]
   * only move the frame; resolving a schema id to a [[Schema]] is the caller's job, for which the
   * [[SchemaById]] alias is the hook (plug in a registry client, a static map, a cache — whatever
-  * the deployment owns).
+  * the deployment owns). [[AvroPrism.confluent]] takes that same hook to read straight off a framed
+  * payload.
   */
 object ConfluentWire:
+
+  /** Resolve a Confluent schema id to the writer [[Schema]] it names. Synchronous by design: the
+    * caller owns the registry client, the cache, and any effect wrapping around it, and hands
+    * [[AvroPrism.confluent]] an already-resolved lookup. May throw (a registry miss, a network
+    * error); [[AvroPrism.confluent]] catches it into `AvroFailure.SchemaResolutionFailed`.
+    */
+  type SchemaById = Int => Schema
 
   /** The Confluent magic byte — always `0x00` in the current wire format. */
   val Magic: Byte = 0x00

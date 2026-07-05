@@ -84,6 +84,20 @@ enum AvroFailure:
     */
   case NotConfluentFramed(reason: String)
 
+  /** The [[ConfluentWire.SchemaById]] hook threw while resolving `schemaId` to a writer schema — a
+    * registry miss, a network error, whatever the injected lookup raised. Surfaced only by
+    * [[AvroPrism.confluent]].
+    */
+  case SchemaResolutionFailed(schemaId: Int, cause: Throwable)
+
+  /** A Confluent-framed payload's writer schema (id `schemaId`) is not byte-identical to this
+    * prism's reader schema — their Avro parsing-canonical-form fingerprints differ — so the direct
+    * byte walk would misread it. [[AvroPrism.confluent]] refuses rather than decode under the wrong
+    * schema; a resolving writer→reader decode is the (not-yet-shipped) fallback. Surfaced only by
+    * [[AvroPrism.confluent]].
+    */
+  case SchemaMismatch(schemaId: Int, writerFingerprint: Long, readerFingerprint: Long)
+
   /** Human-readable diagnostic. Kept separate from `toString` so the default enum representation
     * remains useful for structural inspection / pattern-matching-in-tests.
     */
@@ -99,15 +113,20 @@ enum AvroFailure:
       s"union resolution failed at $s (branches: ${b.mkString(", ")})"
     case BadEnumSymbol(sym, valid, s) =>
       s"bad enum symbol '$sym' at $s (valid: ${valid.mkString(", ")})"
-    case UnsupportedSpanStep(s) => s"byte-span location unsupported at $s"
-    case NotConfluentFramed(r)  => s"not a Confluent-framed payload: $r"
+    case UnsupportedSpanStep(s)        => s"byte-span location unsupported at $s"
+    case NotConfluentFramed(r)         => s"not a Confluent-framed payload: $r"
+    case SchemaResolutionFailed(id, c) =>
+      s"could not resolve writer schema for id $id: ${c.getMessage}"
+    case SchemaMismatch(id, w, r) =>
+      s"writer schema (id $id, fingerprint $w) differs from reader schema (fingerprint $r);"
+        + " a resolving writer→reader decode is required"
 
 object AvroFailure:
 
   /** Structural equality — two [[AvroFailure]] values are equal iff they are the same case with the
-    * same arguments. [[Throwable]] cases ([[DecodeFailed]] and [[BinaryParseFailed]]) fall back to
-    * reference equality; tests that need to assert on the failure shape pattern-match the case
-    * instead of comparing whole values.
+    * same arguments. [[Throwable]]-bearing cases ([[DecodeFailed]], [[BinaryParseFailed]],
+    * [[JsonParseFailed]], [[SchemaResolutionFailed]]) fall back to reference equality; tests that
+    * need to assert on the failure shape pattern-match the case instead of comparing whole values.
     *
     * Required for `Eq[Chain[AvroFailure]]` to be summonable at specs2-`===` call sites.
     */
