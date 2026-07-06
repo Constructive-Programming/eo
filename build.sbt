@@ -18,7 +18,7 @@ val scala3Version = "3.8.3"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.4"
+ThisBuild / tlBaseVersion := "0.5"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -28,13 +28,13 @@ ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
 
-// MiMa stays disabled for 0.4.0. Unlike 0.2.0 (JsonPrism → Affine `Optional`,
-// PR #31) and 0.3.0 (avro field navigation by declaration position, #35), 0.4.0
-// is purely ADDITIVE — untagged-union support in `.union` / `prism` (#37) and the
-// Confluent-framed read optic `.confluent` (#38) only add API. It's kept off for
-// consistency across the still-evolving 0.x line (and cats-eo-avro has no earlier
-// published baseline at all). Re-enable (set to the published 0.4.x line) once the
-// API is stable and we want to enforce compat within the 0.4 series.
+// MiMa stays disabled for 0.5.0 — a deliberate breaking release: it corrects the
+// mis-shaped 0.4.0 Confluent surface, removing the decode-welded `AvroPrism.confluent`
+// / `AvroConfluentPrism` in favour of the decode-agnostic `ConfluentWire.confluent`
+// Prism + `ConfluentWire.resolve` (#41). (Earlier 0.x lines: 0.2.0 JsonPrism → Affine
+// `Optional` #31, 0.3.0 avro field-naming #35, 0.4.0 additive #37/#38.) Kept off across
+// the still-evolving 0.x line — and cats-eo-avro has no published baseline anyway.
+// Re-enable (set to the published 0.5.x line) once the API is stable.
 ThisBuild / tlMimaPreviousVersions := Set.empty
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
