@@ -85,9 +85,10 @@ enum AvroFailure:
 
   /** A Confluent-framed payload's writer schema (id `schemaId`) is not byte-identical to the reader
     * schema — their Avro parsing-canonical-form fingerprints differ — so the direct byte walk would
-    * misread it. [[ConfluentWire.resolve]] refuses rather than hand back bytes that would
-    * misdecode; a resolving writer→reader decode is the (not-yet-shipped) fallback. Surfaced only
-    * by [[ConfluentWire.resolve]] (and as `None` from [[ConfluentWire.confluent]]).
+    * misread it. [[ConfluentWire.resolve]] / [[ConfluentWire.confluent]] GATE (refuse) here rather
+    * than hand back bytes that would misdecode. To TRANSLATE the drift instead of refusing, use the
+    * resolving reader ([[ConfluentWire.reader]] / [[ConfluentWire.resolving]]), which resolves
+    * writer→reader via Avro's `ResolvingDecoder`. Surfaced only by the gating surface.
     */
   case SchemaMismatch(schemaId: Int, writerFingerprint: Long, readerFingerprint: Long)
 
@@ -97,6 +98,14 @@ enum AvroFailure:
     * schema. The wrapped [[Throwable]] is whatever apache-avro's `GenericDatumWriter` threw.
     */
   case EncodeFailed(cause: Throwable)
+
+  /** Avro writer→reader schema resolution refused — the writer schema (resolved by id) and the
+    * reader schema aren't compatible, so `ResolvingDecoder` can't translate the payload. The
+    * wrapped [[Throwable]] is whatever apache-avro's resolving `GenericDatumReader` threw
+    * (typically an `AvroTypeException`). Surfaced by [[AvroCodec.decodeResolvedRecord]] /
+    * `decodeResolvedValue` and the `ConfluentWire` resolving reader.
+    */
+  case ResolveFailed(cause: Throwable)
 
   /** Human-readable diagnostic. Kept separate from `toString` so the default enum representation
     * remains useful for structural inspection / pattern-matching-in-tests.
@@ -120,18 +129,26 @@ enum AvroFailure:
     case SchemaMismatch(id, w, r) =>
       s"writer schema (id $id, fingerprint $w) differs from reader schema (fingerprint $r);"
         + " a resolving writer→reader decode is required"
-    case EncodeFailed(c) => s"value didn't encode to Avro binary: ${c.getMessage}"
+    case EncodeFailed(c)  => s"value didn't encode to Avro binary: ${c.getMessage}"
+    case ResolveFailed(c) => s"writer→reader schema resolution failed: ${c.getMessage}"
 
 object AvroFailure:
 
   /** Structural equality — two [[AvroFailure]] values are equal iff they are the same case with the
     * same arguments. [[Throwable]]-bearing cases ([[DecodeFailed]], [[BinaryParseFailed]],
-    * [[JsonParseFailed]], [[SchemaResolutionFailed]], [[EncodeFailed]]) fall back to reference
-    * equality; tests that need to assert on the failure shape pattern-match the case instead of
-    * comparing whole values.
+    * [[JsonParseFailed]], [[SchemaResolutionFailed]], [[EncodeFailed]], [[ResolveFailed]]) fall
+    * back to reference equality; tests that need to assert on the failure shape pattern-match the
+    * case instead of comparing whole values.
     *
     * Required for `Eq[Chain[AvroFailure]]` to be summonable at specs2-`===` call sites.
     */
   given Eq[AvroFailure] = Eq.fromUniversalEquals
 
 end AvroFailure
+
+/** Carries an [[AvroFailure]] as a `Throwable`, so an effectful reader (e.g.
+  * [[ConfluentWire.reader]] under a `MonadThrow[F]`) can `raiseError` the structured failure into
+  * `F`'s error channel. The pure surface keeps returning `Either[AvroFailure, …]`; this is only the
+  * bridge to an `F` that fails.
+  */
+final class AvroFailureException(val failure: AvroFailure) extends RuntimeException(failure.message)

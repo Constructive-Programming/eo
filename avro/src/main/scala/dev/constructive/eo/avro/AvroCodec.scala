@@ -114,6 +114,32 @@ object AvroCodec:
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 
+  /** Binary-decode `bytes` written under `writerSchema` and RESOLVE them to `readerSchema` via
+    * apache-avro's schema resolution (`GenericDatumReader(writerSchema, readerSchema)` — reorder /
+    * default / promotion / aliases). The writer≠reader counterpart of [[decodeRecord]] (which
+    * assumes a single schema). Incompatible schemas → [[AvroFailure.ResolveFailed]].
+    */
+  def decodeResolvedRecord(
+      bytes: Array[Byte],
+      writerSchema: Schema,
+      readerSchema: Schema,
+  ): Either[AvroFailure, IndexedRecord] =
+    try
+      val reader = new GenericDatumReader[GenericRecord](writerSchema, readerSchema)
+      val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
+      Right(reader.read(null, decoder))
+    catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
+
+  /** [[decodeResolvedRecord]] resolving `writerSchema` → `codec`'s schema, then the codec's
+    * `Any ⇒ A` side — the writer≠reader counterpart of [[decodeValue]].
+    */
+  def decodeResolvedValue[A](bytes: Array[Byte], writerSchema: Schema)(using
+      codec: AvroCodec[A]
+  ): Either[AvroFailure, A] =
+    decodeResolvedRecord(bytes, writerSchema, codec.schema).flatMap { record =>
+      codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
+    }
+
   /** Binary-encode an already-`Any`-shaped `datum` under `schema` — the write-side counterpart of
     * [[decodeRecord]]. `GenericDatumWriter` throws `AvroTypeException` / `NullPointerException` /
     * `ClassCastException` when the datum doesn't line up with the schema; caught into
