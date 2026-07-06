@@ -15,8 +15,8 @@ import org.apache.avro.Schema
   *           Affine]
   * }}}
   *
-  * `to` decodes the writer bytes under `A`'s schema (a `Miss` if they don't decode — bad bytes, or a
-  * payload that isn't an `A` at all); you supply the `A ⇒ B` migration through `.modify`; `from`
+  * `to` decodes the writer bytes under `A`'s schema (a `Miss` if they don't decode — bad bytes, or
+  * a payload that isn't an `A` at all); you supply the `A ⇒ B` migration through `.modify`; `from`
   * re-encodes the `B` under `B`'s schema, yielding `Either[Chain[AvroFailure], Array[Byte]]`. The
   * failure on the write side is the point of the shape: eo has no carrier whose `from` can itself
   * fail, so we simulate that "fallible build" by putting the failure in `T = Either[E, T1]` (the
@@ -63,8 +63,8 @@ object AvroBridge:
     new Optional[Array[Byte], Migrated, A, B](
       getOrModify = bytesA =>
         decodeUnder(bytesA, schemaA, codecA) match
-          case Right(a)     => Right(a)
-          case Left(chain)  => Left(Left(chain)), // Optional-miss; the T value carries the failure
+          case Right(a)    => Right(a)
+          case Left(chain) => Left(Left(chain)), // Optional-miss; the T value carries the failure
       reverseGet = (_, b) => encodeUnder(b, schemaB, codecB),
     )
 

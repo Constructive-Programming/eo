@@ -47,7 +47,10 @@ class AvroBridgeSpec extends Specification:
     val writeOk = migrated match
       case Right(v2bytes) => valueOf[PersonV2](v2bytes) === PersonV2("Ada", 0)
       case Left(chain)    =>
-        org.specs2.execute.Failure(s"expected Right(bytes), got Left($chain)"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Right(bytes), got Left($chain)"): org.specs2.execute.Result
 
     readOk.and(writeOk)
   }
@@ -59,7 +62,10 @@ class AvroBridgeSpec extends Specification:
     back.modify(v2 => PersonV1(v2.name))(v2bytes) match
       case Right(v1bytes) => valueOf[PersonV1](v1bytes) === PersonV1("Bo")
       case Left(chain)    =>
-        org.specs2.execute.Failure(s"expected Right(bytes), got Left($chain)"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Right(bytes), got Left($chain)"): org.specs2.execute.Result
   }
 
   "replace overwrites the write focus without reading it (on a decodable source)" >> {
@@ -68,7 +74,10 @@ class AvroBridgeSpec extends Specification:
     bridge.replace(PersonV2("Cy", 7))(v1bytes) match
       case Right(v2bytes) => valueOf[PersonV2](v2bytes) === PersonV2("Cy", 7)
       case Left(chain)    =>
-        org.specs2.execute.Failure(s"expected Right(bytes), got Left($chain)"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Right(bytes), got Left($chain)"): org.specs2.execute.Result
   }
 
   "undecodable source: getOption None + modify surfaces the failure in T's Left" >> {
@@ -88,7 +97,10 @@ class AvroBridgeSpec extends Specification:
               .execute
               .Failure(s"expected a decode failure, got $other"): org.specs2.execute.Result
       case Right(bs) =>
-        org.specs2.execute.Failure(s"expected Left, got Right(${bs.length} bytes)"): org.specs2.execute.Result
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Left, got Right(${bs.length} bytes)"): org.specs2.execute.Result
 
     noneOk.and(leftOk)
   }
