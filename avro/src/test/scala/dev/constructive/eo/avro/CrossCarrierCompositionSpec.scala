@@ -100,7 +100,7 @@ class CrossCarrierCompositionSpec extends Specification:
     emptyRec.put(0, Integer.valueOf(0))
     val emptyEnv = Envelope("env", emptyRec)
 
-    val direct = codecPrism[Person](personSchema).field(_.name).record
+    val direct = codecPrism[Person].field(_.name).record
     val diag2 = direct.modify(_.toUpperCase)(emptyRec) match
       case Ior.Both(c, _) => c.headOption.get === AvroFailure.PathMissing(PathStep.Field("name"))
       case other          => ko(s"expected Ior.Both, got $other")
@@ -153,7 +153,7 @@ class CrossCarrierCompositionSpec extends Specification:
     val nameOnlyRec = new GenericData.Record(nameOnlySchema)
     nameOnlyRec.put(0, "Alice")
     val diag3 =
-      codecPrism[Person](personSchema).fields(_.name, _.age).record.get(nameOnlyRec) match
+      codecPrism[Person].fields(_.name, _.age).record.get(nameOnlyRec) match
         case Ior.Left(c) =>
           c.toList.contains(AvroFailure.PathMissing(PathStep.Field("age"))) === true
         case other => ko(s"expected Ior.Left, got $other")

@@ -80,7 +80,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
         "name" -> "Alice",
         "age" -> "thirty",
       )
-      val pPrism = codecPrism[Person](personSchema).record
+      val pPrism = codecPrism[Person].record
       val violGetOk = pPrism.get(viol) match
         case Ior.Left(chain) => chain.headOption.exists(_.isInstanceOf[AvroFailure.DecodeFailed])
         case _               => false
@@ -136,7 +136,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
         )
         org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
       val partial = buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30))
-      val nameLfix = codecPrism[Person](personSchema).field(_.name).record
+      val nameLfix = codecPrism[Person].field(_.name).record
 
       val missGetOk = nameLfix.get(partial) match
         case Ior.Left(chain) =>

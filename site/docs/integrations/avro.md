@@ -573,7 +573,7 @@ val schemaById: ConfluentWire.SchemaById = id => registryCache(id)
 
 val cf = ConfluentWire.confluent(schemaById, readerSchema, frameId = readerSchemaId)
 
-cf.andThen(codecPrism[Person](readerSchema).field(_.name)).getOption(framedBytes) // Option[String]
+cf.andThen(codecPrism[Person].field(_.name)).getOption(framedBytes) // Option[String]
 cf.getOption(framedBytes)  // Option[Array[Byte]] — the resolved body, decode it yourself
 ```
 
@@ -645,29 +645,22 @@ Each side decodes / encodes under its **own exact schema**, so this is
 an *explicit, user-driven* migration between two versions — distinct
 from Avro's automatic writer→reader compatibility resolution.
 
-## Schema sourcing — runtime vs. derived
+## Schema sourcing — always the codec's
 
-By default `codecPrism[S]` reads the schema off the in-scope
-`AvroCodec[S]` (which kindlings derives from the case class
-shape). For the streaming-pipeline case where the reader schema
-arrives at runtime — from an `.avsc` file or a Schema
-Registry lookup — the explicit-schema overload accepts it
-directly:
+`codecPrism[S]` reads the wire schema off the in-scope
+`AvroCodec[S]` (which kindlings derives from the case-class
+shape). There is **no explicit-schema overload**: a reader
+schema allowed to diverge from its codec is a footgun — the
+byte walk would read fields by a schema the bytes weren't
+written under, misreading silently on structural drift.
 
-```scala
-import org.apache.avro.Schema
-import dev.constructive.eo.avro.AvroPrism
-
-val readerSchema: Schema = /* loaded from registry */ ???
-val explicit = AvroPrism.codecPrism[Person](readerSchema)
-```
-
-The user-supplied schema overrides whatever `codec.schema`
-would produce; the codec is still summoned (kindlings needs
-both sides for encode + decode) but the wire-format boundary
-defers to the explicit reader schema. This is the standard
-pattern when the producer schema and the consumer schema can
-drift independently.
+For the streaming case where the schema arrives at runtime
+(an `.avsc` file, a Schema Registry lookup), carry it *on the
+codec* — provide a `given AvroCodec[S]` whose `schema` is the
+loaded one — so the read and the schema can't drift apart. For
+Confluent-framed, writer-vs-reader drift is handled explicitly
+by `ConfluentWire.confluent` / `.resolve` (above), not by
+swapping in a bare schema.
 
 ## Ignoring failures (the `*Unsafe` escape hatch)
 

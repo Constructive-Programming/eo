@@ -113,7 +113,7 @@ class AvroUnionSpec extends Specification:
     // just hand-build the prism via raw widenPath / widenPathUnion calls instead of going
     // through codecPrism[Envelope].
     val cashL = AvroPrism
-      .codecPrism[Payment](envSchema.getField("payment").schema)
+      .codecPrism[Payment]
       .union[Cash]
       .record
 
