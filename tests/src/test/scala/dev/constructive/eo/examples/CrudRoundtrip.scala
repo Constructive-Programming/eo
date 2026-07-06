@@ -9,99 +9,28 @@ import cats.{Eq, Show}
 import hearth.kindlings.catsderivation.extensions.*
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.parser.decode as parseJson
-import io.circe.syntax.*
-import io.circe.{Codec, Decoder, Encoder, Json}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
+import io.circe.{Codec, Json}
 
 import optics.{Optic, Traversal}
 import optics.Optic.*
 import generics.lens
 import data.{MultiFocus, PSVec}
 
-/** Motivating example for cats-eo — the "why this library exists" showcase.
+/** Domain model, mock services, optic declarations, and both handlers for the CRUD round-trip
+  * showcase — the compile-time-heavy half of the example.
   *
-  * Scenario: an HTTP endpoint receives a JSON user-update, runs effectful validation over specific
-  * fields (including every `shippingAddress.zipCode` of every order the user owns), persists the
-  * result through a toy database, and replies with the new id.
+  * Split out of `CrudRoundtripSpec` (the behaviour assertions) so the kindlings `Codec` / `Eq` /
+  * `Show` derivations (14 across `Item` / `Address` / `Order` / `User` / `Problem`) compile in
+  * their OWN unit rather than interleaved with the specs2 + ScalaCheck spec body. Fewer live macro
+  * expansions per compilation unit means lower transient heap, which keeps any single kindlings
+  * derivation from tripping its 2 s wall-clock budget under a loaded CI runner (the
+  * `KindlingsEncoder.deriveAsObject timed out after 2000ms` flake). Behaviour is unchanged; this is
+  * a compile-pressure split, not a logic change.
   *
-  * Iteration 1 — single file, mock HTTP via a plain `Json => Result[Long]` handler,
-  * `Result[A] = Either[Problem, A]` as the applicative so the example stays focused on optics. Real
-  * code would swap `Result` for `IO` or `EitherT[IO, Problem, *]`; the optic composition is
-  * identical — only the `modify{F,A}[G]` summoner changes.
-  *
-  * Domain typeclasses (`Codec`, `Show`, `Eq`) are derived by Kubuszok's kindlings library so the
-  * boilerplate doesn't distract from the optic story. Every per-field lens is synthesised by
-  * eo-generics' `lens[S](_.field)` macro — including on the 4-field `User`, which the macro now
-  * supports by packing the complement into a scala.Tuple of the non-focused fields.
-  *
-  * The punchline is in [[CrudRoundtripSpec.handleWithOptics]]: every validation step is one line,
-  * `optic.modifyA[Result](validator)`. Compare with [[CrudRoundtripSpec.handleNaive]], whose
-  * order-list traversal has to write the `copy(copy(copy(...)))` chain by hand.
+  * See [[CrudRoundtripHappyPathSpec]] / [[CrudRoundtripErrorPathSpec]] for the scenarios and the
+  * `handleWithOptics` vs `handleNaive` punchline.
   */
-class CrudRoundtripSpec extends Specification with ScalaCheck:
-
-  import CrudRoundtripSpec.*
-
-  // ---------------------------------------------------------------------
-  // Happy path
-  // ---------------------------------------------------------------------
-
-  "CRUD round-trip — happy path" should {
-
-    val alice = User(
-      id = 42L,
-      name = "  Alice  ",
-      address = Address("Main St", "Amsterdam", "01234"),
-      orders = List(
-        Order(1L, Address("Ship1", "Rotterdam", "56789"), List(Item("SKU-A", 2))),
-        Order(2L, Address("Ship2", "Utrecht", "24680"), List(Item("SKU-B", 1))),
-      ),
-    )
-
-    "naive and optic handlers persist the same user" >> {
-      val dbNaive = InMemoryDb()
-      val dbOptic = InMemoryDb()
-      val payload = alice.asJson
-
-      val idNaive = handleNaive(dbNaive, payload)
-      val idOptic = handleWithOptics(dbOptic, payload)
-
-      (idNaive.isRight && idOptic.isRight) must beTrue
-      dbNaive.snapshot.values.toSet === dbOptic.snapshot.values.toSet
-    }
-
-    "optic handler normalises the user's name in place" >> {
-      val db = InMemoryDb()
-      val body = alice.asJson
-      handleWithOptics(db, body)
-        .map(id => db.snapshot(id).name) === Right("Alice")
-    }
-  }
-
-  // ---------------------------------------------------------------------
-  // Error path: invalid zip in a nested order surfaces as a Problem
-  // ---------------------------------------------------------------------
-
-  "CRUD round-trip — error path" should {
-
-    val bob = User(
-      id = 7L,
-      name = "Bob",
-      address = Address("Main St", "Amsterdam", "01234"),
-      orders = List(
-        Order(1L, Address("Ship1", "Rotterdam", "not-a-zip"), Nil)
-      ),
-    )
-
-    "both handlers return the same Problem on an invalid nested zip" >> {
-      val db = InMemoryDb()
-      val payload = bob.asJson
-      handleNaive(db, payload) === handleWithOptics(db, payload)
-    }
-  }
-
-object CrudRoundtripSpec:
+object CrudRoundtrip:
 
   // =====================================================================
   // Domain types
@@ -286,3 +215,5 @@ object CrudRoundtripSpec:
 
   private def parseUser(body: Json): Result[User] =
     parseJson[User](body.noSpaces).leftMap(e => Problem.JsonDecodeError(e.getMessage))
+
+end CrudRoundtrip
