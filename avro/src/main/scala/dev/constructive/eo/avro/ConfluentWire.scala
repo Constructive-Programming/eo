@@ -1,6 +1,9 @@
 package dev.constructive.eo.avro
 
-import org.apache.avro.Schema
+import scala.util.control.NonFatal
+
+import dev.constructive.eo.optics.{PickMendPrism, Prism}
+import org.apache.avro.{Schema, SchemaNormalization}
 
 /** Confluent Schema Registry wire-format framing for binary Avro payloads: a 5-byte header — magic
   * byte `0x00` followed by the big-endian 4-byte schema id — then the Avro binary body.
@@ -8,15 +11,23 @@ import org.apache.avro.Schema
   * Registry-agnostic by design: no registry client, no new dependencies. [[strip]] / [[attach]]
   * only move the frame; resolving a schema id to a [[Schema]] is the caller's job, for which the
   * [[SchemaById]] alias is the hook (plug in a registry client, a static map, a cache — whatever
-  * the deployment owns). [[AvroPrism.confluent]] takes that same hook to read straight off a framed
-  * payload.
+  * the deployment owns).
+  *
+  * Two layers sit on top of that framing, both decode-agnostic — they hand you the header-stripped,
+  * writer-resolved, fingerprint-gated BODY BYTES and let you decode however you like (kindlings,
+  * vulcan, a generic-record → JSON walk, …):
+  *
+  *   - [[resolve]] — the one-shot primitive: `Array[Byte] => Either[AvroFailure, Array[Byte]]`.
+  *   - [[confluent]] — the same as a composable eo [[Prism]] `Array[Byte] (framed) ↔ Array[Byte]
+  *     (body)`, so you drop it BEFORE any byte optic:
+  *     `confluent(…).andThen(codecPrism[A].field(…))`.
   */
 object ConfluentWire:
 
   /** Resolve a Confluent schema id to the writer [[Schema]] it names. Synchronous by design: the
     * caller owns the registry client, the cache, and any effect wrapping around it, and hands
-    * [[AvroPrism.confluent]] an already-resolved lookup. May throw (a registry miss, a network
-    * error); [[AvroPrism.confluent]] catches it into `AvroFailure.SchemaResolutionFailed`.
+    * [[resolve]] / [[confluent]] an already-resolved lookup. May throw (a registry miss, a network
+    * error); [[resolve]] catches it into `AvroFailure.SchemaResolutionFailed`.
     */
   type SchemaById = Int => Schema
 
@@ -71,5 +82,86 @@ object ConfluentWire:
     out(4) = (schemaId & 0xff).toByte
     System.arraycopy(body, 0, out, HeaderLength, body.length)
     out
+
+  /** Strip + resolve + fingerprint-gate a Confluent-framed payload down to its BODY BYTES, without
+    * decoding to any type — the seam issue #41 asked for. Steps:
+    *
+    *   1. [[strip]] the 5-byte header → `(schemaId, body)`;
+    *   2. resolve the writer schema for `schemaId` via `schemaById`;
+    *   3. gate by Avro parsing-canonical-form fingerprint
+    *      ([[org.apache.avro.SchemaNormalization.parsingFingerprint64]]): when the writer
+    *      fingerprint equals the reader's, the body is byte-identical under both schemas — return
+    *      it as-is; else refuse with [[AvroFailure.SchemaMismatch]] rather than hand back bytes
+    *      that would misdecode.
+    *
+    * The returned bytes are the caller's to decode with whatever they own — kindlings
+    * (`codecPrism[A]`), vulcan `Codec.fromBinary`, a generic-record → JSON walk, anything.
+    * Failures: [[AvroFailure.NotConfluentFramed]] (bad frame),
+    * [[AvroFailure.SchemaResolutionFailed]] (the hook threw), [[AvroFailure.SchemaMismatch]]
+    * (writer ≠ reader fingerprint). Exactly one failure point per payload, so `Either`, not the
+    * `Ior[Chain, …]` the multi-failure walk surfaces.
+    */
+  def resolve(
+      framed: Array[Byte],
+      schemaById: SchemaById,
+      readerSchema: Schema,
+  ): Either[AvroFailure, Array[Byte]] =
+    resolveWith(framed, schemaById, SchemaNormalization.parsingFingerprint64(readerSchema))
+
+  /** [[resolve]] with a precomputed reader fingerprint — the hot-path form [[confluent]] closes
+    * over so `parsingFingerprint64(readerSchema)` runs once at construction, not per payload.
+    */
+  private def resolveWith(
+      framed: Array[Byte],
+      schemaById: SchemaById,
+      readerFingerprint: Long,
+  ): Either[AvroFailure, Array[Byte]] =
+    strip(framed) match
+      case Left(f)      => Left(f)
+      case Right(frame) =>
+        val writer =
+          try Right(schemaById(frame.schemaId))
+          catch case NonFatal(t) => Left(AvroFailure.SchemaResolutionFailed(frame.schemaId, t))
+        writer match
+          case Left(f)  => Left(f)
+          case Right(w) =>
+            val writerFingerprint = SchemaNormalization.parsingFingerprint64(w)
+            if writerFingerprint == readerFingerprint then Right(frame.body)
+            else
+              Left(AvroFailure.SchemaMismatch(frame.schemaId, writerFingerprint, readerFingerprint))
+
+  /** The [[resolve]] strip + resolve + fingerprint-gate as a composable eo [[Prism]] over bytes:
+    * `Array[Byte]` (a full Confluent frame) ↔ `Array[Byte]` (the byte-exact resolved body). Drop it
+    * BEFORE any byte optic and let the normal walk run on the body:
+    *
+    * {{{
+    *   val cf = ConfluentWire.confluent(schemaById, readerSchema, frameId)
+    *   // typed (kindlings):
+    *   cf.andThen(codecPrism[A](readerSchema).field(_.x)).getOption(framedBytes)   // Option[X]
+    *   // decode-agnostic: hand the resolved body to vulcan / a generic-record walk:
+    *   cf.getOption(framedBytes)                                                   // Option[Array[Byte]]
+    * }}}
+    *
+    *   - `getOption(framed)` runs strip + resolve + fingerprint-gate; a bad frame, an unresolvable
+    *     id, or a fingerprint mismatch all yield `None`. Use [[resolve]] when you want the specific
+    *     [[AvroFailure]] reason instead of `None`.
+    *   - `reverseGet(body)` re-frames via [[attach]] under `frameId` — the schema id to publish
+    *     under (typically the reader schema's registry id). Only exercised on write-back (`modify`
+    *     / `replace`); a read-only pipeline never calls it. A monomorphic byte Prism can't thread
+    *     the original per-message id from read to write, so re-framing uses this fixed id; if you
+    *     must preserve the incoming id on write, use [[resolve]] + [[attach]] by hand.
+    *
+    * The reader fingerprint is computed once here, not per payload.
+    */
+  def confluent(
+      schemaById: SchemaById,
+      readerSchema: Schema,
+      frameId: Int,
+  ): PickMendPrism[Array[Byte], Array[Byte], Array[Byte]] =
+    val readerFingerprint = SchemaNormalization.parsingFingerprint64(readerSchema)
+    Prism.optional[Array[Byte], Array[Byte]](
+      getOption = framed => resolveWith(framed, schemaById, readerFingerprint).toOption,
+      reverseGet = body => attach(frameId, body),
+    )
 
 end ConfluentWire

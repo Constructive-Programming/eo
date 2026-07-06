@@ -86,15 +86,15 @@ enum AvroFailure:
 
   /** The [[ConfluentWire.SchemaById]] hook threw while resolving `schemaId` to a writer schema — a
     * registry miss, a network error, whatever the injected lookup raised. Surfaced only by
-    * [[AvroPrism.confluent]].
+    * [[ConfluentWire.resolve]] / [[ConfluentWire.confluent]].
     */
   case SchemaResolutionFailed(schemaId: Int, cause: Throwable)
 
-  /** A Confluent-framed payload's writer schema (id `schemaId`) is not byte-identical to this
-    * prism's reader schema — their Avro parsing-canonical-form fingerprints differ — so the direct
-    * byte walk would misread it. [[AvroPrism.confluent]] refuses rather than decode under the wrong
-    * schema; a resolving writer→reader decode is the (not-yet-shipped) fallback. Surfaced only by
-    * [[AvroPrism.confluent]].
+  /** A Confluent-framed payload's writer schema (id `schemaId`) is not byte-identical to the reader
+    * schema — their Avro parsing-canonical-form fingerprints differ — so the direct byte walk would
+    * misread it. [[ConfluentWire.resolve]] refuses rather than hand back bytes that would
+    * misdecode; a resolving writer→reader decode is the (not-yet-shipped) fallback. Surfaced only
+    * by [[ConfluentWire.resolve]] (and as `None` from [[ConfluentWire.confluent]]).
     */
   case SchemaMismatch(schemaId: Int, writerFingerprint: Long, readerFingerprint: Long)
 
