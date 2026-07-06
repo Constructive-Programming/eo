@@ -4,10 +4,15 @@ import scala.util.control.NonFatal
 
 import cats.Eq
 import cats.data.{Chain, Ior}
-import java.io.ByteArrayInputStream
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
-import org.apache.avro.io.DecoderFactory
+import org.apache.avro.generic.{
+  GenericDatumReader,
+  GenericDatumWriter,
+  GenericRecord,
+  IndexedRecord,
+}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 /** Structured failure surfaced by the default Ior-bearing surface of [[AvroPrism]].
   *
@@ -98,6 +103,13 @@ enum AvroFailure:
     */
   case SchemaMismatch(schemaId: Int, writerFingerprint: Long, readerFingerprint: Long)
 
+  /** Encoding a value back to Avro binary failed — the write-side counterpart of [[DecodeFailed]].
+    * Surfaced by the fallible-build seam (`T = Either[Chain[AvroFailure], Array[Byte]]`), e.g.
+    * [[AvroBridge]]'s `from`, when the codec's `Any` payload can't be written under the target
+    * schema. The wrapped [[Throwable]] is whatever apache-avro's `GenericDatumWriter` threw.
+    */
+  case EncodeFailed(cause: Throwable)
+
   /** Human-readable diagnostic. Kept separate from `toString` so the default enum representation
     * remains useful for structural inspection / pattern-matching-in-tests.
     */
@@ -120,13 +132,15 @@ enum AvroFailure:
     case SchemaMismatch(id, w, r) =>
       s"writer schema (id $id, fingerprint $w) differs from reader schema (fingerprint $r);"
         + " a resolving writer→reader decode is required"
+    case EncodeFailed(c) => s"value didn't encode to Avro binary: ${c.getMessage}"
 
 object AvroFailure:
 
   /** Structural equality — two [[AvroFailure]] values are equal iff they are the same case with the
     * same arguments. [[Throwable]]-bearing cases ([[DecodeFailed]], [[BinaryParseFailed]],
-    * [[JsonParseFailed]], [[SchemaResolutionFailed]]) fall back to reference equality; tests that
-    * need to assert on the failure shape pattern-match the case instead of comparing whole values.
+    * [[JsonParseFailed]], [[SchemaResolutionFailed]], [[EncodeFailed]]) fall back to reference
+    * equality; tests that need to assert on the failure shape pattern-match the case instead of
+    * comparing whole values.
     *
     * Required for `Eq[Chain[AvroFailure]]` to be summonable at specs2-`===` call sites.
     */
@@ -211,6 +225,26 @@ object AvroFailure:
       val reader = new GenericDatumReader[GenericRecord](schema)
       val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
       Right(reader.read(null, decoder))
+    catch case NonFatal(t) => Left(t)
+
+  /** Encode an already-`Any`-shaped datum (a kindlings-encoded value) to Avro binary under `schema`
+    * — the write-side counterpart of [[decodeBinary]]. Kindlings owns the native→`Any` side; this
+    * plugs into apache-avro's `GenericDatumWriter` for the `Any`→bytes boundary. Catches NonFatal
+    * (`GenericDatumWriter` throws `AvroTypeException` / `NullPointerException` /
+    * `ClassCastException` when the datum doesn't line up with the schema) so callers can lift it
+    * into [[AvroFailure.EncodeFailed]].
+    */
+  private[avro] def encodeBinary(
+      datum: Any,
+      schema: Schema,
+  ): Either[Throwable, Array[Byte]] =
+    try
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[Any](schema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      writer.write(datum, encoder)
+      encoder.flush()
+      Right(out.toByteArray)
     catch case NonFatal(t) => Left(t)
 
   /** Use apache-avro's `JsonDecoder` to parse the Avro JSON wire format. Same boundary semantics as

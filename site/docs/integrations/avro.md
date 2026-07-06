@@ -455,6 +455,7 @@ def route(chain: cats.data.Chain[AvroFailure]): List[String] =
     case AvroFailure.NotConfluentFramed(reason)   => s"framing: $reason"
     case AvroFailure.SchemaResolutionFailed(id, c) => s"resolve: id $id: ${c.getMessage}"
     case AvroFailure.SchemaMismatch(id, w, r)      => s"drift:   id $id (writer=$w reader=$r)"
+    case AvroFailure.EncodeFailed(c)               => s"encode:  ${c.getMessage}"
   }
 ```
 
@@ -599,6 +600,44 @@ mismatch case is not shipped yet — route `SchemaMismatch` to your
 own resolving decode until it is. The hook is synchronous by
 design — eo ships no registry client and wraps no effect, so the
 caller owns the cache and any `IO` around it.
+
+## Migrating between schema versions — `AvroBridge`
+
+When two *versions* of a model coexist on the wire — `PersonV1` and a
+later `PersonV2` that added a field — `AvroBridge.between[A, B]` is an
+optic that reads the old bytes, lets you migrate, and writes the new
+bytes:
+
+```scala
+val bridge = AvroBridge.between[PersonV1, PersonV2]
+
+bridge.getOption(v1Bytes)                              // Option[PersonV1]
+bridge.modify(v1 => PersonV2(v1.name, age = 0))(v1Bytes)
+//   : Either[Chain[AvroFailure], Array[Byte]]         // V2 bytes, or a failure
+```
+
+Its carrier is `Affine` and its type is
+
+```scala
+Optic[Array[Byte],                          // writer bytes (schema A)
+      Either[Chain[AvroFailure], Array[Byte]], // reader bytes (schema B) — or a failure
+      A, B,                                  // read focus A, write focus B
+      Affine]
+```
+
+`to` decodes the source under `A`'s schema (a **`Miss`** — `getOption`
+`None` — when the bytes don't decode as `A`); the `A ⇒ B` migration is
+the function you hand to `.modify`; `from` re-encodes the `B` under
+`B`'s schema. The write can itself fail (the `B` doesn't encode), and
+eo has no carrier whose `from` is fallible — so that outcome lives in
+`T = Either[Chain[AvroFailure], Array[Byte]]` (`Left(EncodeFailed(...))`
+/ `Left(BinaryParseFailed(...))`), simulating a fallible build without a
+new carrier. The reverse migration is just the type-swapped bridge,
+`AvroBridge.between[B, A]`.
+
+Each side decodes / encodes under its **own exact schema**, so this is
+an *explicit, user-driven* migration between two versions — distinct
+from Avro's automatic writer→reader compatibility resolution.
 
 ## Schema sourcing — runtime vs. derived
 
