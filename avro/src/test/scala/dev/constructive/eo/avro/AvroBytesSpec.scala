@@ -271,8 +271,16 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       org.apache.avro.Schema.createRecord("Person", null, "eo.avro.test", false, fields)
     val ageOnlyBytes =
       toBinary(buildRecord(ageOnlySchema)("age" -> Integer.valueOf(30)), ageOnlySchema)
+    // `codecPrism` no longer takes an explicit schema (the reader schema always matches the
+    // codec's). To exercise the walker on a ROOT schema that drifted from the codec — bytes under a
+    // narrower schema than `Person`'s — build the prism directly with the internal constructor.
+    val ageOnlyPrism =
+      new AvroPrism[Person](
+        new AvroFocus.Leaf[Person](Array.empty[PathStep], summon[AvroCodec[Person]]),
+        ageOnlySchema,
+      )
     val missingOk =
-      codecPrism[Person](ageOnlySchema).fieldNamed[String]("name").sliceBytes(ageOnlyBytes) match
+      ageOnlyPrism.fieldNamed[String]("name").sliceBytes(ageOnlyBytes) match
         case Ior.Left(chain) =>
           chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name"))) === true
         case other =>

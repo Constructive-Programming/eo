@@ -28,7 +28,7 @@ import org.specs2.mutable.Specification
   *   - genuinely bad JSON (`"not json at all"`) → `org.apache.avro.AvroTypeException`;
   *   - JSON-but-wrong-shape (missing required field) → `AvroTypeException` ("Expected field …");
   *   - unknown field → silently dropped by apache-avro on read, so the parser succeeds and the test
-  *     asserts on the resulting `Ior.Right`. (See [[AvroFailure.decodeJsonString]] doc.)
+  *     asserts on the resulting `Ior.Right`. (See [[AvroCodec.decodeJsonString]] doc.)
   */
 class StringInputSpec extends Specification:
 

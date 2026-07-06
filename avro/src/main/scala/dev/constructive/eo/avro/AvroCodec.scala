@@ -2,8 +2,18 @@ package dev.constructive.eo.avro
 
 import scala.util.control.NonFatal
 
+import cats.data.{Chain, Ior}
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.avro.Schema
+import org.apache.avro.generic.{
+  GenericData,
+  GenericDatumReader,
+  GenericDatumWriter,
+  GenericRecord,
+  IndexedRecord,
+}
+import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
 /** A unified read/write/schema codec for Avro values, combining the kindlings-avro-derivation
   * triplet `(AvroEncoder[A], AvroDecoder[A], AvroSchemaFor[A])` into a single typeclass that user
@@ -77,5 +87,102 @@ object AvroCodec:
       def decodeEither(any: Any): Either[Throwable, A] =
         try Right(dec.decode(any))
         catch case NonFatal(t) => Left(t)
+
+  // ---- Serialization boundary (apache-avro binary / JSON) ------------
+  //
+  // The `Any` ↔ bytes/JSON wire boundary. Kindlings owns the native↔`Any` side (`encode` /
+  // `decodeEither` above); apache-avro owns wire-format serialization, and these helpers are the
+  // eo-avro counterpart to it. Record-level (`*Record`) works under an explicit schema; value-level
+  // (`*Value`) threads a codec's own schema plus its `Any` conversion.
+
+  /** Binary-decode `bytes` under `schema` to a generic record — no typed codec involved. Catches
+    * apache-avro's binary-decoder throws (`IOException` / `EOFException` / `AvroRuntimeException`)
+    * into [[AvroFailure.BinaryParseFailed]].
+    */
+  def decodeRecord(bytes: Array[Byte], schema: Schema): Either[AvroFailure, IndexedRecord] =
+    try
+      val reader = new GenericDatumReader[GenericRecord](schema)
+      val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
+      Right(reader.read(null, decoder))
+    catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
+
+  /** [[decodeRecord]] under `codec`'s schema, then the codec's `Any ⇒ A` side —
+    * [[AvroFailure.DecodeFailed]] when the parsed record doesn't line up with `A`.
+    */
+  def decodeValue[A](bytes: Array[Byte])(using codec: AvroCodec[A]): Either[AvroFailure, A] =
+    decodeRecord(bytes, codec.schema).flatMap { record =>
+      codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
+    }
+
+  /** Binary-encode an already-`Any`-shaped `datum` under `schema` — the write-side counterpart of
+    * [[decodeRecord]]. `GenericDatumWriter` throws `AvroTypeException` / `NullPointerException` /
+    * `ClassCastException` when the datum doesn't line up with the schema; caught into
+    * [[AvroFailure.EncodeFailed]].
+    */
+  def encodeRecord(datum: Any, schema: Schema): Either[AvroFailure, Array[Byte]] =
+    try
+      val out = new ByteArrayOutputStream()
+      val writer = new GenericDatumWriter[Any](schema)
+      val encoder = EncoderFactory.get().binaryEncoder(out, null)
+      writer.write(datum, encoder)
+      encoder.flush()
+      Right(out.toByteArray)
+    catch case NonFatal(t) => Left(AvroFailure.EncodeFailed(t))
+
+  /** The codec's `A ⇒ Any` side, then [[encodeRecord]] under `codec`'s schema. */
+  def encodeValue[A](value: A)(using codec: AvroCodec[A]): Either[AvroFailure, Array[Byte]] =
+    encodeRecord(codec.encode(value), codec.schema)
+
+  /** Resolve an `IndexedRecord | Array[Byte] | String` input to a parsed `IndexedRecord`, threading
+    * parse failures through the Ior channel. Used by every dual-/triple-input-accepting overload on
+    * [[AvroPrism]] / [[AvroTraversal]] so the parse step is uniform.
+    *
+    * Arms: [[IndexedRecord]] passes through (`Ior.Right`, no parse); `Array[Byte]` runs
+    * [[decodeRecord]] (→ `BinaryParseFailed`); `String` runs the Avro-JSON wire format decoder (→
+    * `JsonParseFailed`). The `String` arm matches the exact runtime type —
+    * `org.apache.avro.util.Utf8` also implements `CharSequence` and would otherwise be miscaptured
+    * as JSON.
+    *
+    * @param schema
+    *   the reader schema used to decode binary / JSON input. Ignored for record input.
+    */
+  private[avro] def parseInputIor(
+      input: IndexedRecord | Array[Byte] | String,
+      schema: Schema,
+  ): Ior[Chain[AvroFailure], IndexedRecord] =
+    input match
+      case r: IndexedRecord => Ior.Right(r)
+      case bs: Array[Byte]  =>
+        decodeRecord(bs, schema).fold(f => Ior.Left(Chain.one(f)), Ior.Right(_))
+      case s: String =>
+        decodeJsonString(s, schema) match
+          case Right(r) => Ior.Right(r)
+          case Left(t)  => Ior.Left(Chain.one(AvroFailure.JsonParseFailed(t)))
+
+  /** Resolve an `IndexedRecord | Array[Byte] | String` input, dropping failures — for the `*Unsafe`
+    * escape hatches. Bad bytes / bad JSON produce a synthetic empty record built from `schema`
+    * (positional slots zero-initialised).
+    */
+  private[avro] def parseInputUnsafe(
+      input: IndexedRecord | Array[Byte] | String,
+      schema: Schema,
+  ): IndexedRecord =
+    input match
+      case r: IndexedRecord => r
+      case bs: Array[Byte]  => decodeRecord(bs, schema).getOrElse(new GenericData.Record(schema))
+      case s: String        =>
+        decodeJsonString(s, schema) match
+          case Right(r) => r
+          case Left(_)  => new GenericData.Record(schema)
+
+  /** Avro-JSON wire-format decode (Jackson-backed under the hood). Kept private — the public parse
+    * surface is [[parseInputIor]] / [[parseInputUnsafe]]; there's no bare JSON-record caller yet.
+    */
+  private def decodeJsonString(s: String, schema: Schema): Either[Throwable, IndexedRecord] =
+    try
+      val reader = new GenericDatumReader[GenericRecord](schema)
+      val decoder = DecoderFactory.get().jsonDecoder(schema, s)
+      Right(reader.read(null, decoder))
+    catch case NonFatal(t) => Left(t)
 
 end AvroCodec

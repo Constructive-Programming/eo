@@ -137,7 +137,7 @@ object ConfluentWire:
     * {{{
     *   val cf = ConfluentWire.confluent(schemaById, readerSchema, frameId)
     *   // typed (kindlings):
-    *   cf.andThen(codecPrism[A](readerSchema).field(_.x)).getOption(framedBytes)   // Option[X]
+    *   cf.andThen(codecPrism[A].field(_.x)).getOption(framedBytes)                 // Option[X]
     *   // decode-agnostic: hand the resolved body to vulcan / a generic-record walk:
     *   cf.getOption(framedBytes)                                                   // Option[Array[Byte]]
     * }}}

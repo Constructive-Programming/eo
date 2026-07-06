@@ -64,7 +64,7 @@ final class AvroRecordPrism[A] private[avro] (
     * through the Ior channel.
     */
   def get(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], A] =
-    AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
+    AvroCodec.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
 
   /** Encode `a` standalone, returning the codec's [[IndexedRecord]] payload (or a synthesised empty
     * record when the encoded value isn't record-shaped). Lawful only for the ROOT full-cover prism
@@ -80,7 +80,7 @@ final class AvroRecordPrism[A] private[avro] (
 
   /** Silent counterpart to [[get]] — `None` on any failure. */
   inline def getOptionUnsafe(input: IndexedRecord | Array[Byte] | String): Option[A] =
-    focus.readImpl(AvroFailure.parseInputUnsafe(input, rootSchemaCached))
+    focus.readImpl(AvroCodec.parseInputUnsafe(input, rootSchemaCached))
 
   // ---- Per-record Ior-bearing hooks (delegate to focus) -------------
 

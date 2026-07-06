@@ -1,13 +1,6 @@
 package dev.constructive.eo.avro
 
-import scala.util.control.NonFatal
-
 import cats.Eq
-import cats.data.{Chain, Ior}
-import java.io.ByteArrayInputStream
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
-import org.apache.avro.io.DecoderFactory
 
 /** Structured failure surfaced by the default Ior-bearing surface of [[AvroPrism]].
   *
@@ -98,6 +91,13 @@ enum AvroFailure:
     */
   case SchemaMismatch(schemaId: Int, writerFingerprint: Long, readerFingerprint: Long)
 
+  /** Encoding a value back to Avro binary failed — the write-side counterpart of [[DecodeFailed]].
+    * Surfaced by the fallible-build seam (`T = Either[Chain[AvroFailure], Array[Byte]]`), e.g.
+    * [[AvroBridge]]'s `from`, when the codec's `Any` payload can't be written under the target
+    * schema. The wrapped [[Throwable]] is whatever apache-avro's `GenericDatumWriter` threw.
+    */
+  case EncodeFailed(cause: Throwable)
+
   /** Human-readable diagnostic. Kept separate from `toString` so the default enum representation
     * remains useful for structural inspection / pattern-matching-in-tests.
     */
@@ -120,125 +120,18 @@ enum AvroFailure:
     case SchemaMismatch(id, w, r) =>
       s"writer schema (id $id, fingerprint $w) differs from reader schema (fingerprint $r);"
         + " a resolving writer→reader decode is required"
+    case EncodeFailed(c) => s"value didn't encode to Avro binary: ${c.getMessage}"
 
 object AvroFailure:
 
   /** Structural equality — two [[AvroFailure]] values are equal iff they are the same case with the
     * same arguments. [[Throwable]]-bearing cases ([[DecodeFailed]], [[BinaryParseFailed]],
-    * [[JsonParseFailed]], [[SchemaResolutionFailed]]) fall back to reference equality; tests that
-    * need to assert on the failure shape pattern-match the case instead of comparing whole values.
+    * [[JsonParseFailed]], [[SchemaResolutionFailed]], [[EncodeFailed]]) fall back to reference
+    * equality; tests that need to assert on the failure shape pattern-match the case instead of
+    * comparing whole values.
     *
     * Required for `Eq[Chain[AvroFailure]]` to be summonable at specs2-`===` call sites.
     */
   given Eq[AvroFailure] = Eq.fromUniversalEquals
 
-  /** Resolve an `IndexedRecord | Array[Byte] | String` input to a parsed `IndexedRecord`, threading
-    * parse failures through the Ior channel. Used by every dual-/triple-input-accepting overload on
-    * [[AvroPrism]] / [[AvroTraversal]] so the parse step is uniform (same failure shape, same
-    * message format).
-    *
-    * Arm dispatch:
-    *   - [[IndexedRecord]] is a pure `Ior.Right` (no parse step);
-    *   - `Array[Byte]` runs through apache-avro's `BinaryDecoder`; parse failures arrive as
-    *     `Ior.Left(Chain(AvroFailure.BinaryParseFailed(t)))`;
-    *   - `String` runs through apache-avro's `JsonDecoder` (Avro JSON wire format under the reader
-    *     schema); parse failures arrive as `Ior.Left(Chain(AvroFailure.JsonParseFailed(t)))`.
-    *
-    * Match arms are ordered `IndexedRecord, Array[Byte], String` — this matches both the declared
-    * union order and observed-frequency. The `String` arm uses `case s: String =>` (exact runtime
-    * type), not `case _: CharSequence =>`, since `org.apache.avro.util.Utf8` also implements
-    * `CharSequence` and would otherwise be miscaptured as JSON.
-    *
-    * @param schema
-    *   the reader schema used to decode binary / JSON input. Ignored for record input.
-    */
-  private[avro] def parseInputIor(
-      input: IndexedRecord | Array[Byte] | String,
-      schema: Schema,
-  ): Ior[Chain[AvroFailure], IndexedRecord] =
-    input match
-      case r: IndexedRecord => Ior.Right(r)
-      case bs: Array[Byte]  =>
-        decodeBinary(bs, schema) match
-          case Right(r) => Ior.Right(r)
-          case Left(t)  => Ior.Left(Chain.one(AvroFailure.BinaryParseFailed(t)))
-      case s: String =>
-        decodeJsonString(s, schema) match
-          case Right(r) => Ior.Right(r)
-          case Left(t)  => Ior.Left(Chain.one(AvroFailure.JsonParseFailed(t)))
-
-  /** Resolve an `IndexedRecord | Array[Byte] | String` input, dropping failures. For the `*Unsafe`
-    * escape hatches: parsed-record input passes through; bad bytes / bad JSON produce a synthetic
-    * empty record built from the supplied schema.
-    *
-    * There's no meaningful silent fallback for unparseable input — callers who need parse
-    * diagnostics must use the Ior-bearing default surface.
-    *
-    * @param schema
-    *   the reader schema; also used to synthesise the empty-record fallback. The fallback is a bare
-    *   [[org.apache.avro.generic.GenericData.Record]] with all positional slots zero-initialised
-    *   (`null` for nullable fields, default values for the rest).
-    */
-  private[avro] def parseInputUnsafe(
-      input: IndexedRecord | Array[Byte] | String,
-      schema: Schema,
-  ): IndexedRecord =
-    input match
-      case r: IndexedRecord => r
-      case bs: Array[Byte]  =>
-        decodeBinary(bs, schema) match
-          case Right(r) => r
-          case Left(_)  => new org.apache.avro.generic.GenericData.Record(schema)
-      case s: String =>
-        decodeJsonString(s, schema) match
-          case Right(r) => r
-          case Left(_)  => new org.apache.avro.generic.GenericData.Record(schema)
-
-  /** Use apache-avro's `GenericDatumReader` to parse a binary payload under the supplied schema.
-    * Kindlings' `AvroEncoder` / `AvroDecoder` operate over already-parsed `Any` payloads, leaving
-    * binary serialisation to the apache-avro layer. This helper is the eo-avro counterpart to that
-    * boundary.
-    *
-    * Catches every NonFatal Throwable (apache-avro's binary decoder throws a wide variety —
-    * `IOException`, `EOFException`, `AvroRuntimeException`) and surfaces them through the
-    * structured-failure channel.
-    */
-  private def decodeBinary(
-      bytes: Array[Byte],
-      schema: Schema,
-  ): Either[Throwable, IndexedRecord] =
-    try
-      val reader = new GenericDatumReader[GenericRecord](schema)
-      val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
-      Right(reader.read(null, decoder))
-    catch case NonFatal(t) => Left(t)
-
-  /** Use apache-avro's `JsonDecoder` to parse the Avro JSON wire format. Same boundary semantics as
-    * [[decodeBinary]] — kindlings owns native↔`Any` decoding, apache-avro owns the wire-format
-    * boundary; this helper plugs into the latter for the JSON arm.
-    *
-    * Empirical failure-class survey (compiled against apache-avro 1.12.1):
-    *   - malformed JSON (`"not json at all"`, `"{ malformed"`) → `JsonParseFailed` wrapping a
-    *     `com.fasterxml.jackson.core.JsonParseException` (Jackson is apache-avro's underlying
-    *     parser);
-    *   - well-formed JSON of the wrong shape (missing required field, wrong primitive type) →
-    *     `JsonParseFailed` wrapping an `org.apache.avro.AvroTypeException` ("Expected int. Got
-    *     END_OBJECT" / "Expected int. Got VALUE_STRING");
-    *   - JSON with an unknown extra field → silently accepted (apache-avro skips fields not in the
-    *     schema). Returns `Right`, not `JsonParseFailed`. Trailing garbage after a complete record
-    *     is also silently accepted — apache-avro stops reading once the schema is satisfied.
-    *
-    * Decode-vs-parse boundary: `JsonParseFailed` covers ANY apache-avro failure at the wire-
-    * format-to-`IndexedRecord` boundary (parse + schema-validation). Codec-level decode failures
-    * (e.g. native `A` value rejected by kindlings' decoder) surface separately as
-    * `DecodeFailed(step, cause)` from the per-record optic hooks, after parsing succeeds.
-    */
-  private def decodeJsonString(
-      s: String,
-      schema: Schema,
-  ): Either[Throwable, IndexedRecord] =
-    try
-      val reader = new GenericDatumReader[GenericRecord](schema)
-      val decoder = DecoderFactory.get().jsonDecoder(schema, s)
-      Right(reader.read(null, decoder))
-    catch case NonFatal(t) => Left(t)
+end AvroFailure

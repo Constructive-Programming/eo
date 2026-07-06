@@ -300,15 +300,12 @@ end AvroPrism
 
 object AvroPrism:
 
-  /** Root `AvroPrism[S]`, summoning the schema from the codec (`AvroCodec[S].schema`). */
+  /** Root `AvroPrism[S]`, summoning the schema from the codec (`AvroCodec[S].schema`). The reader
+    * schema always matches the codec's — there is no explicit-schema overload, since a reader
+    * schema diverging from its codec is a footgun (silent misreads on structural drift).
+    */
   def codecPrism[S](using codec: AvroCodec[S]): AvroPrism[S] =
     new AvroPrism[S](new AvroFocus.Leaf[S](Array.empty[PathStep], codec), codec.schema)
-
-  /** Root `AvroPrism[S]` with an explicit reader schema (overrides `codec.schema`). Use when
-    * loading from `.avsc` / Schema Registry.
-    */
-  def codecPrism[S](schema: Schema)(using codec: AvroCodec[S]): AvroPrism[S] =
-    new AvroPrism[S](new AvroFocus.Leaf[S](Array.empty[PathStep], codec), schema)
 
   /** `.field(_.x)` — drill via selector lambda. */
   extension [A](o: AvroPrism[A])

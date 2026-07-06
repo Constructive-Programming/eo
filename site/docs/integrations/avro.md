@@ -455,6 +455,7 @@ def route(chain: cats.data.Chain[AvroFailure]): List[String] =
     case AvroFailure.NotConfluentFramed(reason)   => s"framing: $reason"
     case AvroFailure.SchemaResolutionFailed(id, c) => s"resolve: id $id: ${c.getMessage}"
     case AvroFailure.SchemaMismatch(id, w, r)      => s"drift:   id $id (writer=$w reader=$r)"
+    case AvroFailure.EncodeFailed(c)               => s"encode:  ${c.getMessage}"
   }
 ```
 
@@ -572,7 +573,7 @@ val schemaById: ConfluentWire.SchemaById = id => registryCache(id)
 
 val cf = ConfluentWire.confluent(schemaById, readerSchema, frameId = readerSchemaId)
 
-cf.andThen(codecPrism[Person](readerSchema).field(_.name)).getOption(framedBytes) // Option[String]
+cf.andThen(codecPrism[Person].field(_.name)).getOption(framedBytes) // Option[String]
 cf.getOption(framedBytes)  // Option[Array[Byte]] — the resolved body, decode it yourself
 ```
 
@@ -600,29 +601,66 @@ own resolving decode until it is. The hook is synchronous by
 design — eo ships no registry client and wraps no effect, so the
 caller owns the cache and any `IO` around it.
 
-## Schema sourcing — runtime vs. derived
+## Migrating between schema versions — `AvroBridge`
 
-By default `codecPrism[S]` reads the schema off the in-scope
-`AvroCodec[S]` (which kindlings derives from the case class
-shape). For the streaming-pipeline case where the reader schema
-arrives at runtime — from an `.avsc` file or a Schema
-Registry lookup — the explicit-schema overload accepts it
-directly:
+When two *versions* of a model coexist on the wire — `PersonV1` and a
+later `PersonV2` that added a field — `AvroBridge.between[A, B]` is an
+optic that reads the old bytes, lets you migrate, and writes the new
+bytes:
 
 ```scala
-import org.apache.avro.Schema
-import dev.constructive.eo.avro.AvroPrism
+val bridge = AvroBridge.between[PersonV1, PersonV2]
 
-val readerSchema: Schema = /* loaded from registry */ ???
-val explicit = AvroPrism.codecPrism[Person](readerSchema)
+bridge.getOption(v1Bytes)                              // Option[PersonV1]
+bridge.modify(v1 => PersonV2(v1.name, age = 0))(v1Bytes)
+//   : AvroBridge.BridgedBytes                         // = Either[AvroFailure, Array[Byte]]
 ```
 
-The user-supplied schema overrides whatever `codec.schema`
-would produce; the codec is still summoned (kindlings needs
-both sides for encode + decode) but the wire-format boundary
-defers to the explicit reader schema. This is the standard
-pattern when the producer schema and the consumer schema can
-drift independently.
+Its carrier is `Affine` and its type is
+
+```scala
+Optic[Array[Byte],    // writer bytes (version A)
+      BridgedBytes,   // = Either[AvroFailure, Array[Byte]] — reader bytes (version B), or the failure
+      A, B,           // writerFocus A, readerFocus B
+      Affine]
+```
+
+`to` decodes the source under the **writer** codec's schema (a
+**`Miss`** — `getOption` `None` — when the bytes don't decode as `A`);
+the `A ⇒ B` migration is the function you hand to `.modify`; `from`
+re-encodes the `B` under the **reader** codec's schema. The write can
+itself fail (the `B` doesn't encode), and eo has no carrier whose `from`
+is fallible — so that outcome lives in `T = BridgedBytes =
+Either[AvroFailure, Array[Byte]]` (a single `AvroFailure`:
+`EncodeFailed` / `BinaryParseFailed` / `DecodeFailed`), simulating a
+fallible build without a new carrier.
+
+It's **directed** — read = writer version, write = reader version — and
+`bridge.reverse` swaps the codecs to give the `B ⇒ A` bridge
+(`AvroBridge[B, A]`). A fully symmetric encoding would be a
+`BijectionIso` `Optic[BridgedBytes, BridgedBytes, A, B, Direct]`, but we
+favour the directedness and don't implement it.
+
+Each side decodes / encodes under its **own exact schema**, so this is
+an *explicit, user-driven* migration between two versions — distinct
+from Avro's automatic writer→reader compatibility resolution.
+
+## Schema sourcing — always the codec's
+
+`codecPrism[S]` reads the wire schema off the in-scope
+`AvroCodec[S]` (which kindlings derives from the case-class
+shape). There is **no explicit-schema overload**: a reader
+schema allowed to diverge from its codec is a footgun — the
+byte walk would read fields by a schema the bytes weren't
+written under, misreading silently on structural drift.
+
+For the streaming case where the schema arrives at runtime
+(an `.avsc` file, a Schema Registry lookup), carry it *on the
+codec* — provide a `given AvroCodec[S]` whose `schema` is the
+loaded one — so the read and the schema can't drift apart. For
+Confluent-framed, writer-vs-reader drift is handled explicitly
+by `ConfluentWire.confluent` / `.resolve` (above), not by
+swapping in a bare schema.
 
 ## Ignoring failures (the `*Unsafe` escape hatch)
 

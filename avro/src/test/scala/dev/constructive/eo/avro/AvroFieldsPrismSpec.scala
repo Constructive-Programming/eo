@@ -93,7 +93,7 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   //   getOptionUnsafe on a partial-miss record returns None
   "AvroFieldsPrism partial-miss surfaces (D4): get/modify/modifyUnsafe/getOptionUnsafe" >> {
     val ageOnly = ageOnlyRecord(30)
-    val L = codecPrism[Person](personSchema).fields(_.name, _.age).record
+    val L = codecPrism[Person].fields(_.name, _.age).record
 
     val getOk = L.get(ageOnly) match
       case Ior.Left(chain) =>

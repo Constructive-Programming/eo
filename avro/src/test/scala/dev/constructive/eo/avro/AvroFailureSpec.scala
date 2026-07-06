@@ -6,8 +6,8 @@ import cats.data.{Chain, Ior}
 import org.apache.avro.generic.GenericRecord
 import org.specs2.mutable.Specification
 
-/** Observable-identity behaviour spec for [[AvroFailure]] and the [[AvroFailure.parseInputIor]] /
-  * [[AvroFailure.parseInputUnsafe]] dual-input parse helpers.
+/** Observable-identity behaviour spec for [[AvroFailure]] and the [[AvroCodec.parseInputIor]] /
+  * [[AvroCodec.parseInputUnsafe]] dual-input parse helpers.
   *
   * Mirrors `JsonFailureSpec`'s consolidation density: one composite block per case + one block per
   * parse-helper code path.
@@ -118,9 +118,9 @@ class AvroFailureSpec extends Specification:
     val badBytes: Array[Byte] = Array(0.toByte)
 
     // ---- Ior path ------
-    val iorRecord = AvroFailure.parseInputIor(record, schema)
-    val iorGood = AvroFailure.parseInputIor(goodBytes, schema)
-    val iorBad = AvroFailure.parseInputIor(badBytes, schema)
+    val iorRecord = AvroCodec.parseInputIor(record, schema)
+    val iorGood = AvroCodec.parseInputIor(goodBytes, schema)
+    val iorBad = AvroCodec.parseInputIor(badBytes, schema)
 
     // `IndexedRecord` has reference equality; compare by identity for record input.
     val iorRecordOk = iorRecord match
@@ -146,9 +146,9 @@ class AvroFailureSpec extends Specification:
         org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
 
     // ---- Unsafe path ------
-    val unsafeRecord = AvroFailure.parseInputUnsafe(record, schema)
-    val unsafeGood = AvroFailure.parseInputUnsafe(goodBytes, schema)
-    val unsafeBad = AvroFailure.parseInputUnsafe(badBytes, schema)
+    val unsafeRecord = AvroCodec.parseInputUnsafe(record, schema)
+    val unsafeGood = AvroCodec.parseInputUnsafe(goodBytes, schema)
+    val unsafeBad = AvroCodec.parseInputUnsafe(badBytes, schema)
 
     val unsafeRecordOk = (unsafeRecord eq record) === true
     val unsafeGoodOk = unsafeGood.asInstanceOf[GenericRecord].get("name").toString === p.name
@@ -176,8 +176,8 @@ class AvroFailureSpec extends Specification:
     val badJson = "not json at all"
 
     // ---- Ior path ------
-    val iorGood = AvroFailure.parseInputIor(goodJson, schema)
-    val iorBad = AvroFailure.parseInputIor(badJson, schema)
+    val iorGood = AvroCodec.parseInputIor(goodJson, schema)
+    val iorBad = AvroCodec.parseInputIor(badJson, schema)
 
     val iorGoodOk = iorGood match
       case Ior.Right(r) =>
@@ -195,8 +195,8 @@ class AvroFailureSpec extends Specification:
         org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
 
     // ---- Unsafe path ------
-    val unsafeGood = AvroFailure.parseInputUnsafe(goodJson, schema)
-    val unsafeBad = AvroFailure.parseInputUnsafe(badJson, schema)
+    val unsafeGood = AvroCodec.parseInputUnsafe(goodJson, schema)
+    val unsafeBad = AvroCodec.parseInputUnsafe(badJson, schema)
 
     val unsafeGoodOk = unsafeGood.asInstanceOf[GenericRecord].get("name").toString === p.name
     val unsafeBadOk = unsafeBad.getSchema === schema

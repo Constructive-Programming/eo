@@ -5,7 +5,6 @@ import scala.annotation.tailrec
 import cats.Eq
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
-import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
@@ -49,25 +48,11 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   */
 package object avro:
 
-  /** Type alias for the Avro carrier — the underlying `org.apache.avro.generic.IndexedRecord`
-    * interface, exposing positional `get(i)` / `put(i, v)` accessors that map cleanly to a
-    * path-step navigation. The optic surface threads `Avro` everywhere `JsonPrism` would have
-    * threaded `Json`.
-    */
-  type Avro = IndexedRecord
-
   /** Root-level Prism from Avro to a native type `S`. Reads `S`'s schema off the in-scope
     * [[AvroCodec]]`[S]` (per OQ-avro-5). Alias for [[AvroPrism.codecPrism]] that reads more
     * naturally when composed with `.field`.
     */
   def codecPrism[S](using codec: AvroCodec[S]): AvroPrism[S] = AvroPrism.codecPrism[S]
-
-  /** Root-level Prism from Avro to a native type `S`, with an explicit reader schema. Use when the
-    * schema is loaded at runtime from an `.avsc` file or a Schema Registry rather than derived from
-    * the codec.
-    */
-  def codecPrism[S](schema: Schema)(using codec: AvroCodec[S]): AvroPrism[S] =
-    AvroPrism.codecPrism[S](schema)
 
   /** Structural equality for [[IndexedRecord]] — schema + positional field values, recursing
     * through nested records / arrays / maps.
