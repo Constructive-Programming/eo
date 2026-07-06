@@ -33,7 +33,7 @@ class AvroBridgeSpec extends Specification:
 
   // Decode Avro binary back to a value under its own codec's schema.
   private def valueOf[T](bs: Array[Byte])(using c: AvroCodec[T]): T =
-    AvroFailure.parseInputIor(bs, c.schema).toOption.flatMap(c.decodeEither(_).toOption).get
+    AvroCodec.parseInputIor(bs, c.schema).toOption.flatMap(c.decodeEither(_).toOption).get
 
   "forward bridge V1 -> V2: read V1, migrate via modify, get V2 bytes" >> {
     val bridge = AvroBridge.between[PersonV1, PersonV2]

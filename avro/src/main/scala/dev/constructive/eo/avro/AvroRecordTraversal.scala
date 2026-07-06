@@ -32,10 +32,10 @@ final class AvroRecordTraversal[A] private[avro] (
   // ---- Read surface (multi-focus specific) --------------------------
 
   def getAll(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], Vector[A]] =
-    AvroFailure.parseInputIor(input, rootSchemaCached).flatMap(getAllIor)
+    AvroCodec.parseInputIor(input, rootSchemaCached).flatMap(getAllIor)
 
   inline def getAllUnsafe(input: IndexedRecord | Array[Byte] | String): Vector[A] =
-    val record = AvroFailure.parseInputUnsafe(input, rootSchemaCached)
+    val record = AvroCodec.parseInputUnsafe(input, rootSchemaCached)
     walkPrefixOpt(record).fold(Vector.empty[A])(_.flatMap {
       case rec: IndexedRecord => focus.readImpl(rec)
       case _                  => None
