@@ -241,12 +241,12 @@ lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // functor + Fix encoding). Benchmark-only; never a published dependency.
 lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
 // kindlings 0.2.0 (all three) ship a configurable macro-expansion timeout
-// (`DerivationTimeout`, default 5s) and pull hearth 0.3.1 + kindlings-derivation-commons
+// (`DerivationTimeout`, default 5s) and pull hearth 0.4.0 + kindlings-derivation-commons
 // 0.2.0. We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30`
 // (see the `ThisBuild / scalacOptions` above) so a loaded CI runner stops tripping the old
 // hardcoded 2s budget (the recurring `deriveAsObject timed out after 2000ms` flake).
 // NB 0.2.0 also fully-qualifies derived Avro record names (namespace = enclosing path).
-lazy val hearth = Kubuszok %% "hearth" % "0.3.1"
+lazy val hearth = Kubuszok %% "hearth" % "0.4.0"
 lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.2.0"
 lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.2.0"
 lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.2.0"
