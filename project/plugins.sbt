@@ -4,7 +4,7 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.7")
 // Format check gate for CI (`sbt scalafmtCheckAll scalafmtSbtCheck`
 // in the workflow). The project ships a `.scalafmt.conf` pinned to
 // 3.x; sbt-scalafmt honours that pin automatically.
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.5")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.6")
 
 // `sbt-typelevel-ci-release` wires the Sonatype Central Portal flow
 // (post-June-2025 OSSRH sunset): derives the version from git tags,
