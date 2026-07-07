@@ -235,7 +235,7 @@ val Plokhotnyuk = "com.github.plokhotnyuk.jsoniter-scala"
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
-lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.17.1"
+lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.19.0"
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
