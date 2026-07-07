@@ -246,6 +246,75 @@ Traversals), <https://leanpub.com/optics-by-example/>; Gonzalez
 — *Control.Lens.Tutorial*,
 <https://hackage.haskell.org/package/lens-tutorial-1.0.5/docs/Control-Lens-Tutorial.html>.
 
+### Sibling fields into one traversal — every timestamp on the sheet
+
+**Why:** a balance sheet holds two lists of transactions — `froms`
+and `tos` — and every transaction carries two timestamps. "Adjust
+every timestamp on the sheet" spans two sibling fields at two
+levels; hand-written, that's four nested `copy` walks.
+`Traversal.two` focuses a pair of sibling fields as one traversal,
+and it rides the same `MultiFocus[PSVec]` carrier as `each` — so the
+fixed-arity hops and the list walk chain into one optic:
+
+```scala mdoc:silent
+import java.time.Instant
+import dev.constructive.eo.data.{MultiFocus, PSVec}
+
+case class Transaction(issue: Instant, acknowledge: Instant)
+case class Sheet(froms: List[Transaction], tos: List[Transaction])
+
+val sheetTransactions =   // froms AND tos, as one traversal
+  Traversal.two[Sheet, Sheet, List[Transaction], List[Transaction]](
+    _.froms,
+    _.tos,
+    Sheet(_, _),
+  )
+
+val transactionTimes =    // issue AND acknowledge
+  Traversal.two[Transaction, Transaction, Instant, Instant](
+    _.issue,
+    _.acknowledge,
+    Transaction(_, _),
+  )
+
+val sheetTimes =
+  sheetTransactions
+    .andThen(Traversal.each[List, Transaction])
+    .andThen(transactionTimes)
+```
+
+```scala mdoc
+val sheet = Sheet(
+  froms = List(Transaction(Instant.EPOCH, Instant.EPOCH.plusSeconds(5))),
+  tos = List(Transaction(Instant.EPOCH.plusSeconds(60), Instant.EPOCH.plusSeconds(65))),
+)
+
+// Re-use any plain Instant => Instant at every depth in one pass.
+sheetTimes.modify(_.plusSeconds(3600))(sheet)
+```
+
+Nothing downstream has to name `Sheet`: a function can require the
+optic instead of the type, and any structure that can point at its
+`Instant`s gets the behaviour —
+
+```scala mdoc:silent
+def adjustTimes[S](t: Optic[S, S, Instant, Instant, MultiFocus[PSVec]])(
+    f: Instant => Instant
+): S => S = t.modify(f)
+
+val bumpSheet = adjustTimes(sheetTimes)(_.plusSeconds(3600))
+```
+
+One shape caveat: `reverse` (`Sheet(_, _)` above) sees only the
+modified foci, so `Traversal.two/three/four` suit types the foci
+fully cover. When the pair sits beside other fields, drill in with a
+Lens first — the "Lens drills into `Traversal.two`" seam preserves
+the siblings, like every other composed write.
+
+**Source:** Hansen — *We Need More Optics*, The Startup,
+<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>; the
+fixed-arity framing is Monocle's `Traversal.applyN`.
+
 ### Sparse traversal over a Prism (cats-eo-unique)
 
 **Why:** you have a list of results, some `Ok` and some `Err`, and
@@ -827,12 +896,9 @@ import io.circe.parser.decode
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import dev.constructive.eo.generics.lens
 
-// Stand-in for your effect type (cats-effect IO, ZIO, Future…).
-final class IO[A](val unsafeRun: () => A):
-  def map[B](f: A => B): IO[B] = IO(f(unsafeRun()))
-  def flatMap[B](f: A => IO[B]): IO[B] = IO(f(unsafeRun()).unsafeRun())
-object IO:
-  def apply[A](a: => A): IO[A] = new IO(() => a)
+// cats.Eval stands in for your effect type (cats-effect IO, ZIO,
+// Future…) — deferred, has map/flatMap, already on the classpath.
+import cats.Eval
 
 final case class BalanceSheet(id: Long, owner: String, total: Double)
 object BalanceSheet:
@@ -843,28 +909,28 @@ object BalanceSheet:
 val sheetId = lens[BalanceSheet](_.id)
 
 // The effectful store: inserts the row, hands back the generated id.
-def save(sheet: BalanceSheet): IO[Long] = IO {
+def save(sheet: BalanceSheet): Eval[Long] = Eval.always {
   val _ = sheet // pretend: INSERT … RETURNING id
   42L
 }
 
 // Persist, then stamp the returned id back onto the object with the
 // lens — `save(...).map(sheetId.replace(_)(sheet))`.
-def store(sheet: BalanceSheet): IO[BalanceSheet] =
+def store(sheet: BalanceSheet): Eval[BalanceSheet] =
   save(sheet).map(sheetId.replace(_)(sheet))
 
 // The whole PUT handler: request bytes in, response bytes out.
-def handlePut(body: String): IO[String] =
+def handlePut(body: String): Eval[String] =
   decode[BalanceSheet](body) match
     case Right(draft) => store(draft).map(_.asJson.noSpaces)
-    case Left(err)    => IO(Json.obj("error" -> err.getMessage.asJson).noSpaces)
+    case Left(err)    => Eval.now(Json.obj("error" -> err.getMessage.asJson).noSpaces)
 ```
 
 ```scala mdoc
 // Incoming PUT body — `id` is a placeholder the store overwrites.
 val request = """{"id":0,"owner":"Acme Corp","total":1234.5}"""
 
-handlePut(request).unsafeRun()
+handlePut(request).value
 ```
 
 Every step earns its place: `decode` is the wire → domain hop
@@ -1168,3 +1234,43 @@ between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
   Ior decision tree.
 - [Migrating from Monocle](migration-from-monocle.md) —
   side-by-side translation guide.
+
+### Law-check your own optics
+
+Composing optics means the combinators are already tested — what's
+left to check is *your* instances. The discipline suites that gate
+cats-eo's own carriers ship in `cats-eo-laws`, so a composed optic
+like `sheetTimes` (Theme C) gets the full Traversal rule-set in one
+`checkAll` instead of hand-written round-trip tests:
+
+```scala
+libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
+```
+
+```scala
+import cats.Functor
+import dev.constructive.eo.laws.TraversalLaws
+import dev.constructive.eo.laws.discipline.TraversalTests
+
+// sheetTimes walks a plain Sheet, so T is the constant type lambda —
+// its Functor is one line. Arbitrary[Sheet] and Cogen[Instant] come
+// from your ScalaCheck generators.
+given Functor[[X] =>> Sheet] with
+  def map[A, B](fa: Sheet)(f: A => B): Sheet = fa
+
+checkAll(
+  "sheetTimes",
+  new TraversalTests[[X] =>> Sheet, Instant]:
+    val laws = new TraversalLaws[[X] =>> Sheet, Instant]:
+      val traversal = sheetTimes
+  .traversal,
+)
+```
+
+Every optic family has a matching `FooLaws` / `FooTests` pair — the
+[migration guide](migration-from-monocle.md#what-stays-the-same) has
+the import-swap table.
+
+**Source:** Hansen — *We Need More Optics*, The Startup,
+<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> ("Re-usable
+tests").
