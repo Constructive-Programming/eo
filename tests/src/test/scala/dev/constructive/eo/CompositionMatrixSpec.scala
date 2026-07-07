@@ -20,7 +20,7 @@ import scala.compiletime.testing.typeChecks
 import org.specs2.mutable.Specification
 
 import optics.*
-import data.{Affine, Direct, Forget, MultiFocus, PSVec, ModifyF}
+import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 
 object MatrixFixtures:
   case class Box[A](a: A)

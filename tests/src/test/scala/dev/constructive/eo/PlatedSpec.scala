@@ -4,9 +4,7 @@ import scala.annotation.tailrec
 
 import dev.constructive.eo.generics.plate
 import dev.constructive.eo.optics.Optic.* // .andThen / .modify
-
 import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
-
 import dev.constructive.eo.optics.{Lens, Plated, Prism}
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.mutable.Specification

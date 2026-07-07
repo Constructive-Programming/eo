@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 
 import cats.Eval
 
-import data.{MultiFocus, PSVec, ModifyF}
+import data.{ModifyF, MultiFocus, PSVec}
 
 /** A self-similar structure: a value of `S` whose immediate sub-terms are themselves `S`. The
   * single member [[plate]] is a `Traversal[S, S]` focusing those immediate children — the cats-eo

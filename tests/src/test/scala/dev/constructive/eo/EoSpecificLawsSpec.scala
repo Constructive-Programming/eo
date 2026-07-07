@@ -9,7 +9,7 @@ import org.specs2.mutable.Specification
 
 import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
-import data.{Affine, Direct, MultiFocus, PSVec, ModifyF}
+import data.{Affine, Direct, ModifyF, MultiFocus, PSVec}
 import laws.eo.{
   IsoComposeLaws,
   LensComposeLaws,
@@ -19,7 +19,7 @@ import laws.eo.{
   PrismComposeLaws,
   PutIsReverseGetLaws,
   ReverseInvolutionLaws,
-  TransformLaws,
+  TransformLaws
 }
 import laws.eo.discipline.{
   IsoComposeTests,
@@ -30,7 +30,7 @@ import laws.eo.discipline.{
   PrismComposeTests,
   PutIsReverseGetTests,
   ReverseInvolutionTests,
-  TransformTests,
+  TransformTests
 }
 import laws.typeclass.{ComposerPathIndependenceLaws, ComposerPreservesGetLaws}
 import laws.typeclass.discipline.{ComposerPathIndependenceTests, ComposerPreservesGetTests}

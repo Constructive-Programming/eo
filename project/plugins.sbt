@@ -30,13 +30,11 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.6")
 // transitively via `scalafixSemanticdb`; we wire it explicitly in
 // build.sbt so every module exports SemanticDB consistently.
 //
-// HELD at 0.14.6 (Scala Steward proposes 0.14.7): 0.14.7's OrganizeImports
-// strips trailing commas from multi-line import selectors, which our scalafmt
-// `trailingCommas = multiple` (.scalafmt.conf) immediately re-adds — the two
-// tools then fight forever, and `scalafixAll --check` (run over the whole tree
-// in CI) would demand a repo-wide cosmetic import reformat. Unpin once
-// OrganizeImports offers a trailing-comma knob or scalafmt aligns.
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.6")
+// 0.14.7's OrganizeImports normalises multi-line import selectors WITHOUT a
+// trailing comma. scalafix fully owns imports (sorting, grouping, and now
+// trailing commas), so scalafmt is set to `trailingCommas = keep`
+// (.scalafmt.conf) to stay out of import formatting — the two no longer fight.
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.7")
 
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme

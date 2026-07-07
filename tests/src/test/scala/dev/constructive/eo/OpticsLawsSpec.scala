@@ -14,33 +14,33 @@ import optics.{
   Getter,
   Iso,
   Lens,
+  Modify,
   Optic,
   Optional,
   Prism,
-  Modify,
   Traversal,
-  Unfold,
+  Unfold
 }
-import data.{Affine, Forget, Direct, MultiFocus, PSVec, ModifyF}
+import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 import laws.{
   AffineFoldLaws,
   GetterLaws,
   IsoLaws,
   LensLaws,
+  ModifyLaws,
   OptionalLaws,
   PrismLaws,
-  ModifyLaws,
-  UnfoldLaws,
+  UnfoldLaws
 }
 import laws.discipline.{
   AffineFoldTests,
   GetterTests,
   IsoTests,
   LensTests,
+  ModifyTests,
   OptionalTests,
   PrismTests,
-  ModifyTests,
-  UnfoldTests,
+  UnfoldTests
 }
 import laws.data.{AffineLaws, ModifyFLaws}
 import laws.data.discipline.{AffineTests, ModifyFTests}

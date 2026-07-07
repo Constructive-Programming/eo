@@ -11,7 +11,7 @@ import dev.constructive.eo.generics.samples.{
   Ping,
   Pong,
   Shape,
-  Tree,
+  Tree
 }
 import dev.constructive.eo.optics.Optic.*
 import org.scalacheck.Prop.forAll

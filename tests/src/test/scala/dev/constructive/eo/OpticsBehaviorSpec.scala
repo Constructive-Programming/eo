@@ -20,15 +20,15 @@ import optics.{
   Iso,
   Lens,
   MendTearPrism,
+  Modify,
   Optic,
   Optional,
   Prism,
   Review,
-  Modify,
-  Traversal,
+  Traversal
 }
 import optics.Optic.*
-import data.{Affine, Forget, Direct, MultiFocus, MultiFocusSingleton, PSVec, ModifyF}
+import data.{Affine, Direct, Forget, ModifyF, MultiFocus, MultiFocusSingleton, PSVec}
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
   * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,

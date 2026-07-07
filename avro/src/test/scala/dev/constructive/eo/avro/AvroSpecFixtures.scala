@@ -8,7 +8,7 @@ import org.apache.avro.generic.{
   GenericData,
   GenericDatumWriter,
   GenericRecord,
-  GenericRecordBuilder,
+  GenericRecordBuilder
 }
 import org.apache.avro.io.EncoderFactory
 

@@ -11,7 +11,7 @@ import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-import data.{Direct, MultiFocus, ModifyF}
+import data.{Direct, ModifyF, MultiFocus}
 import data.MultiFocus.{collectList, collectMap}
 import optics.*
 import optics.Optic.*

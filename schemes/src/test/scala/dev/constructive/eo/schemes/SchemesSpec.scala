@@ -9,7 +9,6 @@ import org.specs2.mutable.Specification
 import data.PSVec
 import optics.{Getter, Plated, Review, Unfold}
 import optics.Optic.* // cross, andThen, get
-
 import generics.plate
 import circe.platedJson
 import schemes.samples.{Expr, Wrapped}

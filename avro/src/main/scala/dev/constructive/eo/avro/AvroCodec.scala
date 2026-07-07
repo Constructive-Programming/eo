@@ -11,7 +11,7 @@ import org.apache.avro.generic.{
   GenericDatumReader,
   GenericDatumWriter,
   GenericRecord,
-  IndexedRecord,
+  IndexedRecord
 }
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
