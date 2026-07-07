@@ -1,18 +1,6 @@
 package dev.constructive.eo
 package optics
 
-/** Zero-alloc phantom recasts, the `Either` analogue of `Affine.Miss.widenB`: a `Left` never stores
-  * its right type parameter and a `Right` never stores its left, so re-typing that side is a cast,
-  * not a rebuild. The composition kernels below pass miss / hit wrappers through unchanged instead
-  * of re-allocating `Left(t)` / `Right(c)` at every hop. (The stdlib's `withRight` / `withLeft` are
-  * upcasts only — they can't re-type the phantom side to an unrelated type.)
-  */
-extension [L, R](l: Left[L, R])
-  private[optics] inline def widenRight[R2]: Either[L, R2] = l.asInstanceOf[Either[L, R2]]
-
-extension [L, R](r: Right[L, R])
-  private[optics] inline def widenLeft[L2]: Either[L2, R] = r.asInstanceOf[Either[L2, R]]
-
 /** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. A `Prism[S, A]`
   * (short for `Optic[S, S, A, A, Either]`) encodes a branch of a sum type: `getOption(s)` succeeds
   * when `s` matches, `reverseGet(a)` lifts back. The `eo-generics` module's `prism[S, A]` macro

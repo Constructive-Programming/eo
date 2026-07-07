@@ -2,6 +2,7 @@ package dev.constructive.eo.circe
 
 import scala.annotation.tailrec
 
+import dev.constructive.eo.widenRight
 import io.circe.{Json, JsonObject}
 
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
@@ -85,7 +86,7 @@ private[circe] object JsonWalk:
     ): Either[JsonFailure, State] =
       if i < path.length then
         stepInto(path(i), cur, parents, policy) match
-          case Left(f)              => Left(f)
+          case l @ Left(_)          => l.widenRight
           case Right((c, parents2)) => loop(c, parents2, i + 1)
       else Right((cur, parents))
     loop(json, Vector.empty, 0)

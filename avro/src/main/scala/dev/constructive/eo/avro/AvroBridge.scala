@@ -2,6 +2,7 @@ package dev.constructive.eo.avro
 
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
+import dev.constructive.eo.widenRight
 
 /** A two-version Avro *migration bridge* as an `Affine`-carried optic. Named from the OPTIC's point
   * of view — it reads with the `readCodec` and writes with the `writeCodec`:
@@ -52,8 +53,8 @@ final class AvroBridge[A, B] private (
 
   def to(bytes: Array[Byte]): Affine[X, A] =
     AvroCodec.decodeValue(bytes)(using readCodec) match
-      case Right(a) => new Affine.Hit[X, A](bytes, a)
-      case Left(f)  => new Affine.Miss[X, A](Left(f))
+      case Right(a)    => new Affine.Hit[X, A](bytes, a)
+      case l @ Left(_) => new Affine.Miss[X, A](l.widenRight)
 
   def from(aff: Affine[X, B]): BridgedBytes =
     aff match

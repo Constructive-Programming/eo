@@ -543,6 +543,11 @@ object MultiFocusK:
         def from(pair: (X, F[B])): T =
           o.from((pair._1, pickSingletonOrThrow(pair._2, "Tuple2")))
 
+  /** Shared hit marker for the `X = Either[…, Unit]` bridges — covariance upcasts
+    * `Either[Nothing, Unit]` to any `Either[x, Unit]`, so one instance serves every hit.
+    */
+  private val hitUnit: Either[Nothing, Unit] = Right(())
+
   /** Prism → MultiFocus[F]. */
   given either2multifocus[F[_]: Alternative: Foldable]: Composer[Either, MultiFocus[F]] with
 
@@ -551,11 +556,11 @@ object MultiFocusK:
         type X = Either[o.X, Unit]
         def to(s: S): (X, F[A]) =
           o.to(s) match
-            case Right(a) => (Right(()), Applicative[F].pure(a))
-            case Left(x)  => (Left(x), Alternative[F].empty[A])
+            case Right(a)    => (hitUnit, Applicative[F].pure(a))
+            case l @ Left(_) => (l.widenRight[Unit], Alternative[F].empty[A])
         def from(pair: (X, F[B])): T =
           pair match
-            case (Left(xMiss), _) => o.from(Left(xMiss))
+            case (l @ Left(_), _) => o.from(l.widenRight[B])
             case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
 
   /** Optional → MultiFocus[F]. */
@@ -563,19 +568,21 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
-        type X = Either[Fst[o.X], Snd[o.X]]
+        // X = the Affine itself (miss recycled via widenB, both directions) rather than an
+        // unpacked Either[Fst, Snd] — same shape as `multifocusF2multifocus` below.
+        type X = Affine[o.X, Unit]
         def to(s: S): (X, F[A]) =
           o.to(s) match
             case h: Affine.Hit[o.X, A] =>
-              (Right(h.snd), Applicative[F].pure(h.b))
+              (new Affine.Hit[o.X, Unit](h.snd, ()), Applicative[F].pure(h.b))
             case m: Affine.Miss[o.X, A] =>
-              (Left(m.fst), Alternative[F].empty[A])
+              (m.widenB[Unit], Alternative[F].empty[A])
         def from(pair: (X, F[B])): T =
           pair match
-            case (Left(fstX), _) =>
-              o.from(new Affine.Miss[o.X, B](fstX))
-            case (Right(sndX), fb) =>
-              o.from(new Affine.Hit[o.X, B](sndX, pickSingletonOrThrow(fb, "Affine")))
+            case (m: Affine.Miss[o.X, Unit] @unchecked, _) =>
+              o.from(m.widenB[B])
+            case (h: Affine.Hit[o.X, Unit] @unchecked, fb) =>
+              o.from(new Affine.Hit[o.X, B](h.snd, pickSingletonOrThrow(fb, "Affine")))
 
   // PSVec-specialised Composer instances. PSVec admits neither Applicative nor Alternative
   // naturally; these use `PSVec.singleton` / `PSVec.empty` directly. The Tuple2 bridge specialises
@@ -654,15 +661,20 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
-        type X = Either[Fst[o.X], Snd[o.X]]
+        // X = the Affine itself (miss recycled via widenB, both directions) — see
+        // `affine2multifocus`. The collectTo / reconstructSingleton buffer protocol below
+        // is X-independent and keeps its unpacked fst / snd encoding.
+        type X = Affine[o.X, Unit]
         def to(s: S): (X, PSVec[A]) =
           o.to(s) match
-            case m: Affine.Miss[o.X, A] => (Left(m.fst), PSVec.empty[A])
-            case h: Affine.Hit[o.X, A]  => (Right(h.snd), PSVec.singleton[A](h.b))
+            case m: Affine.Miss[o.X, A] => (m.widenB[Unit], PSVec.empty[A])
+            case h: Affine.Hit[o.X, A]  =>
+              (new Affine.Hit[o.X, Unit](h.snd, ()), PSVec.singleton[A](h.b))
         def from(pair: (X, PSVec[B])): T =
           pair match
-            case (Left(fx), _)   => o.from(new Affine.Miss[o.X, B](fx))
-            case (Right(sx), vs) => o.from(new Affine.Hit[o.X, B](sx, vs.head))
+            case (m: Affine.Miss[o.X, Unit] @unchecked, _) => o.from(m.widenB[B])
+            case (h: Affine.Hit[o.X, Unit] @unchecked, vs) =>
+              o.from(new Affine.Hit[o.X, B](h.snd, vs.head))
 
         def collectTo(
             s: S,
@@ -712,11 +724,11 @@ object MultiFocusK:
       type X = Either[prism.X, Unit]
       def to(s: S): (X, F[A]) =
         prism.to(s) match
-          case Right(fa) => (Right(()), fa)
-          case Left(x)   => (Left(x), MonoidK[F].empty[A])
+          case Right(fa)   => (hitUnit, fa)
+          case l @ Left(_) => (l.widenRight[Unit], MonoidK[F].empty[A])
       def from(pair: (X, F[B])): T =
         pair match
-          case (Left(xMiss), _) => prism.from(Left(xMiss))
+          case (l @ Left(_), _) => prism.from(l.widenRight[F[B]])
           case (Right(_), fb)   => prism.from(Right(fb))
 
   // Function1-shaped MultiFocus factories (the Grate-absorbed surface).

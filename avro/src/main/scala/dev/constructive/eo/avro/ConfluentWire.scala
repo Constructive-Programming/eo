@@ -5,6 +5,7 @@ import scala.util.control.NonFatal
 import cats.MonadThrow
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.{Optic, Optional, PickMendPrism, Prism}
+import dev.constructive.eo.{widenLeft, widenRight}
 import org.apache.avro.generic.IndexedRecord
 import org.apache.avro.{Schema, SchemaNormalization}
 
@@ -120,14 +121,14 @@ object ConfluentWire:
       readerFingerprint: Long,
   ): Either[AvroFailure, Array[Byte]] =
     strip(framed) match
-      case Left(f)      => Left(f)
+      case l @ Left(_)  => l.widenRight
       case Right(frame) =>
         val writer =
           try Right(schemaById(frame.schemaId))
           catch case NonFatal(t) => Left(AvroFailure.SchemaResolutionFailed(frame.schemaId, t))
         writer match
-          case Left(f)  => Left(f)
-          case Right(w) =>
+          case l @ Left(_) => l.widenRight
+          case Right(w)    =>
             val writerFingerprint = SchemaNormalization.parsingFingerprint64(w)
             if writerFingerprint == readerFingerprint then Right(frame.body)
             else
@@ -187,8 +188,8 @@ object ConfluentWire:
     new Optional[Array[Byte], AvroBridge.BridgedBytes, A, A](
       getOrModify = framed =>
         strip(framed).flatMap(f => AvroCodec.decodeResolvedValue[A](f.body, readSchema)) match
-          case Right(a)   => Right(a)
-          case Left(fail) => Left(Left(fail)),
+          case r @ Right(_) => r.widenLeft
+          case Left(fail)   => Left(Left(fail)),
       reverseGet = (_, a) => AvroCodec.encodeValue[A](a).map(attach(frameId, _)),
     )
 
@@ -205,8 +206,8 @@ object ConfluentWire:
         strip(framed).flatMap(f =>
           AvroCodec.decodeResolvedRecord(f.body, readSchema, writeSchema)
         ) match
-          case Right(r)   => Right(r)
-          case Left(fail) => Left(Left(fail)),
+          case r @ Right(_) => r.widenLeft
+          case Left(fail)   => Left(Left(fail)),
       reverseGet = (_, r) => AvroCodec.encodeRecord(r, writeSchema).map(attach(frameId, _)),
     )
 

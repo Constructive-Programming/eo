@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import cats.data.{Chain, Ior}
+import dev.constructive.eo.widenRight
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
@@ -125,7 +126,7 @@ private[avro] object AvroFocus:
             Right((a, writer))
       else
         AvroWalk.walkPathArr(record, path) match
-          case Left(failure) => Left(failure)
+          case l @ Left(_)   => l.widenRight
           case Right(walked) =>
             codec.decodeEither(walked.cur) match
               case Left(t)  => Left(AvroFailure.DecodeFailed(terminalStep, t))
@@ -276,7 +277,7 @@ private[avro] object AvroFocus:
         record: IndexedRecord
     ): Either[AvroFailure, (A, A => IndexedRecord)] =
       walkParent(record) match
-        case Left(failure)           => Left(failure)
+        case l @ Left(_)             => l.widenRight
         case Right((parent, walked)) =>
           readFields(parent) match
             case Left(chain) =>

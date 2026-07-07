@@ -90,8 +90,8 @@ object ModifyF:
     def to[S, T, A, B](o: optics.Optic[S, T, A, B, Either]): optics.Optic[S, T, A, B, ModifyF] =
       coerceToModify: (s, f) =>
         o.to(s) match
-          case Right(a) => o.from(Right(f(a)))
-          case Left(xo) => o.from(Left(xo))
+          case Right(a)    => o.from(Right(f(a)))
+          case l @ Left(_) => o.from(l.widenRight[B])
 
   /** Optional → ModifyF. Mirror of [[either2modify]] split across `Affine.Hit` / `Affine.Miss`;
     * miss uses `widenB` instead of allocating a fresh `Miss`.

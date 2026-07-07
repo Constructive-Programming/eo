@@ -83,6 +83,6 @@ object AssociativeFunctor:
         outer: Optic[S, T, A, B, Either] { type X = Xo },
     ): T =
       xd match
-        case Right(d)       => outer.from(Right(inner.from(Right(d))))
+        case r @ Right(_)   => outer.from(Right(inner.from(r.widenLeft[Xi])))
         case Left(Right(y)) => outer.from(Right(inner.from(Left(y))))
         case Left(Left(x))  => outer.from(Left(x))

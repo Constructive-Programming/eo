@@ -16,6 +16,11 @@ import data.Affine
   */
 type AffineFold[S, A] = Optic[S, Unit, A, Unit, Affine]
 
+/** Every `PickFold` miss is `Miss(())` with a phantom `B` — one shared instance serves all
+  * (re-typed per use via `widenB`, zero allocation on the miss path).
+  */
+private val pickFoldMiss: Affine.Miss[(Unit, Unit), Nothing] = new Affine.Miss(())
+
 /** Concrete Optic subclass for [[AffineFold]] — a `final class` storing `pick` directly, NOT a
   * shared anonymous wrapper: a single anon class would host one `pick.apply` bytecode site for
   * every AffineFold instance, the megamorphic-dispatch trap PrintInlining exposed on the
@@ -30,7 +35,7 @@ final class PickFold[S, A](val pick: S => Option[A]) extends Optic[S, Unit, A, U
   def to(s: S): Affine[X, A] =
     pick(s) match
       case Some(a) => new Affine.Hit[X, A]((), a)
-      case None    => new Affine.Miss[X, A](())
+      case None    => pickFoldMiss.widenB[A]
 
   def from(a: Affine[X, Unit]): Unit = ()
 

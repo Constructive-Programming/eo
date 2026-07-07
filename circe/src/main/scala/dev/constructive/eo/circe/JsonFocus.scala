@@ -3,6 +3,7 @@ package dev.constructive.eo.circe
 import scala.annotation.tailrec
 
 import cats.data.{Chain, Ior}
+import dev.constructive.eo.widenRight
 import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
 
 /** Focus on a value of type `A` somewhere inside a `Json`. Storage decomposition along two axes:
@@ -100,7 +101,7 @@ private[circe] object JsonFocus:
             Right((a, (b: A) => encoder(b)))
       else
         JsonWalk.walkPath(json, path) match
-          case Left(failure)         => Left(failure)
+          case l @ Left(_)           => l.widenRight
           case Right((cur, parents)) =>
             decoder.decodeJson(cur) match
               case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
@@ -217,7 +218,7 @@ private[circe] object JsonFocus:
 
     def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
       walkParent(json) match
-        case Left(failure)         => Left(failure)
+        case l @ Left(_)           => l.widenRight
         case Right((obj, parents)) =>
           readFields(obj) match
             case Left(chain) =>

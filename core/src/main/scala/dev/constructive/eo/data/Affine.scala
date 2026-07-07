@@ -67,7 +67,7 @@ sealed trait Affine[A, B]:
     */
   def aTraverse[C, G[_]: Applicative](f: B => G[C]): G[Affine[A, C]] = this match
     case m: Miss[A, B] =>
-      Applicative[G].pure(new Miss[A, C](m.fst))
+      Applicative[G].pure[Affine[A, C]](m.widenB[C])
     case h: Hit[A, B] =>
       Applicative[G].map(f(h.b))(c => new Hit[A, C](h.snd, c))
 
@@ -138,7 +138,7 @@ object Affine:
   given map: ForgetfulFunctor[Affine] with
 
     def map[X, A, B](fa: Affine[X, A], f: A => B): Affine[X, B] = fa match
-      case m: Miss[X, A] => new Miss[X, B](m.fst)
+      case m: Miss[X, A] => m.widenB[B]
       case h: Hit[X, A]  => new Hit[X, B](h.snd, f(h.b))
 
   /** `ForgetfulFold[Affine]` — miss empty, hit runs `f` on the focus. Carrier-owned (like [[map]] /

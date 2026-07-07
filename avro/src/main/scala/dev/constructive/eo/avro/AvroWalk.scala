@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
+import dev.constructive.eo.widenRight
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
@@ -104,7 +105,7 @@ private[avro] object AvroWalk:
       policy: OnMissingField = OnMissingField.Strict,
   ): Either[AvroFailure, State] =
     walkPathArr(record, path, policy) match
-      case Left(failure) => Left(failure)
+      case l @ Left(_)   => l.widenRight
       case Right(walked) =>
         val parentsVec =
           if walked.parentsLen == 0 then Vector.empty[AnyRef]
