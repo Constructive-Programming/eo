@@ -126,10 +126,12 @@ class AvroUnionSpec extends Specification:
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
     val cardL = AvroPrism.codecPrism[Payment].union[Card].record
+    // Branch id is the codec schema's full name (kindlings namespaces records by enclosing path).
+    val cardName = summon[AvroCodec[Card]].schema.getFullName
     val cashOnCardOk = cardL.get(cashRec) match
       case Ior.Left(chain) =>
         chain.headOption.get match
-          case AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch("Card")) =>
+          case AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch(`cardName`)) =>
             org.specs2.execute.Success(): org.specs2.execute.Result
           case other =>
             org
@@ -141,11 +143,16 @@ class AvroUnionSpec extends Specification:
       case other =>
         org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
 
-    // Macro identifier: "long" lowercase for primitives, "Cash"/"Card" record-fullname.
+    // Macro identifier: "long" (lowercase primitive, un-namespaced) for Long; the record schema's
+    // full name (namespaced by kindlings) for Cash.
     val longUnion = codecPrism[Transaction].field(_.amount).union[Long]
     val cashUnion = AvroPrism.codecPrism[Payment].union[Cash]
     val branchIdsOk = (longUnion.path.toList.last === PathStep.UnionBranch("long"))
-      .and(cashUnion.path.toList.last === PathStep.UnionBranch("Cash"))
+      .and(
+        cashUnion.path.toList.last === PathStep.UnionBranch(
+          summon[AvroCodec[Cash]].schema.getFullName
+        )
+      )
 
     cashHappy.and(cashOnCardOk).and(branchIdsOk)
   }
@@ -239,10 +246,11 @@ class AvroUnionSpec extends Specification:
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
 
     val pongRec = beaconRecord(Beacon("b-2", Pong("hi")))
+    val pingName = summon[AvroCodec[Ping]].schema.getFullName
     val mismatchOk = pingPrism.get(pongRec) match
       case Ior.Left(chain) =>
         chain.headOption.get match
-          case AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch("Ping")) =>
+          case AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch(`pingName`)) =>
             true === true: org.specs2.execute.Result
           case other =>
             org

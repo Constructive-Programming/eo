@@ -23,10 +23,10 @@ object DomainCirce:
 
   // ---- codecs (every type on every focus path) ----------------------
 
-  given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
-  given Codec.AsObject[Customer] = KindlingsCodecAsObject.derive
-  given Codec.AsObject[LineItem] = KindlingsCodecAsObject.derive
-  given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Address] = KindlingsCodecAsObject.derived
+  given Codec.AsObject[Customer] = KindlingsCodecAsObject.derived
+  given Codec.AsObject[LineItem] = KindlingsCodecAsObject.derived
+  given Codec.AsObject[Order] = KindlingsCodecAsObject.derived
 
   // ---- EO circe optics ----------------------------------------------
 

@@ -147,4 +147,4 @@ object FieldsMacroErrorSpec:
   case class NoCodec(a: Int, b: String)
 
   object NoCodec:
-    given Codec.AsObject[NoCodec] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[NoCodec] = KindlingsCodecAsObject.derived

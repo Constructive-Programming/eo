@@ -283,7 +283,7 @@ Breaking change surface (called out explicitly):
   `KindlingsCodecAsObject` object ships
   `EncoderHandleAsNamedTupleRuleImpl` /
   `DecoderHandleAsNamedTupleRuleImpl` rules, so
-  `KindlingsCodecAsObject.derive[NT]` does produce a
+  `KindlingsCodecAsObject.derived[NT]` does produce a
   `Codec.AsObject[NT]` for a NamedTuple `NT`. Confirmed via `cellar
   search-external com.kubuszok:kindlings-circe-derivation_3:0.1.0
   NamedTuple`. Still requires a spike — see OQ1.
@@ -675,7 +675,7 @@ existing `JsonPrism.field:` / `JsonPrism selectDynamic:` /
 | Selector not a `_.field` | `"selector at position $i must be a single-field accessor like \`_.fieldName\`. Nested paths (e.g. \`_.a.b\`) are not yet supported. Got: ${selectorTerm.show}"` |
 | Unknown field | `"'$fieldName' is not a field of ${Type.show[A]}. Known fields: ${knownFields.mkString(\", \")}."` |
 | Duplicate selectors | `"duplicate field selector '$fieldName' at positions $i, $j. Each field may appear at most once."` |
-| NamedTuple codec unreachable | `"no given Encoder[$NT] / Decoder[$NT] in scope. Derive one via \`given Codec.AsObject[$NT] = KindlingsCodecAsObject.derive\`, or provide one manually."` (surfaces as `Expr.summon[Encoder[nt]].getOrElse(report.errorAndAbort(…))`) |
+| NamedTuple codec unreachable | `"no given Encoder[$NT] / Decoder[$NT] in scope. Derive one via \`given Codec.AsObject[$NT] = KindlingsCodecAsObject.derived\`, or provide one manually."` (surfaces as `Expr.summon[Encoder[nt]].getOrElse(report.errorAndAbort(…))`) |
 
 ### D11. `.fields` is published via `extension` on `JsonPrism` / `JsonTraversal` — not as a method on the class
 
@@ -773,7 +773,7 @@ decision in D3 settles it. OQ6 remains and is reframed below.
   `EncoderHandleAsNamedTupleRuleImpl` and
   `DecoderHandleAsNamedTupleRuleImpl` rules (verified via `cellar
   search-external com.kubuszok:kindlings-circe-derivation_3:0.1.0
-  NamedTuple`), so `KindlingsCodecAsObject.derive[NT]` **should**
+  NamedTuple`), so `KindlingsCodecAsObject.derived[NT]` **should**
   produce a `Codec.AsObject[NT]` for a NamedTuple `NT`. But the
   rules may interact oddly with macro-synthesised NamedTuple type
   representations (e.g. opaque alias vs. raw Tuple). **Unit 0 spike
@@ -1015,7 +1015,7 @@ otherwise the naming symmetry breaks.
 
 - [x] **Unit 0: NamedTuple codec derivation spike**
 
-  **Goal:** confirm that `KindlingsCodecAsObject.derive[NT]` produces
+  **Goal:** confirm that `KindlingsCodecAsObject.derived[NT]` produces
   a usable `Codec.AsObject[NT]` for a macro-synthesised NamedTuple,
   and that `Expr.summon[Encoder[NT]]` inside a Scala 3 quote resolves
   it.
@@ -1027,7 +1027,7 @@ otherwise the naming symmetry breaks.
 
   **Approach:** two tests. (1) Hand-declared:
   `given c: Codec.AsObject[NamedTuple[("name", "age"), (String, Int)]]
-  = KindlingsCodecAsObject.derive; val j: Json =
+  = KindlingsCodecAsObject.derived; val j: Json =
   NamedTuple[…]("Alice", 30).asJson; j.as[NamedTuple[…]] === Right(…)`.
   (2) Via `Expr.summon`: a tiny inline macro in the test scope that
   runs `Expr.summon[Encoder[NamedTuple[("n",), (Int,)]]]` and

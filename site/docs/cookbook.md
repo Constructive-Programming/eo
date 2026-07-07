@@ -316,11 +316,11 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 case class UserAddress(street: String, zip: Int)
 object UserAddress:
-  given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derived
 
 case class SiteUser(name: String, address: UserAddress)
 object SiteUser:
-  given Codec.AsObject[SiteUser] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[SiteUser] = KindlingsCodecAsObject.derived
 
 val userStreet = codecPrism[SiteUser].address.street
 ```
@@ -347,11 +347,11 @@ step splits the Prism into a `JsonTraversal`:
 ```scala mdoc:silent
 case class Item(name: String, price: Double)
 object Item:
-  given Codec.AsObject[Item] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
 
 case class Basket(owner: String, items: Vector[Item])
 object Basket:
-  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
 ```
 
 ```scala mdoc
@@ -407,7 +407,7 @@ modify lambda:
 
 ```scala mdoc:silent
 type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derive
+given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derived
 
 val premiumNames =
   codecPrism[Basket]
@@ -836,7 +836,7 @@ object IO:
 
 final case class BalanceSheet(id: Long, owner: String, total: Double)
 object BalanceSheet:
-  given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derived
 
 // One derived lens onto the id — no hand-written getter/setter, and
 // it works even though `id` shares the case class with two other fields.
@@ -901,11 +901,11 @@ chain:
 ```scala mdoc:silent
 case class SimpleItem(name: String)
 object SimpleItem:
-  given Codec.AsObject[SimpleItem] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[SimpleItem] = KindlingsCodecAsObject.derived
 
 case class SimpleBasket(owner: String, items: Vector[SimpleItem])
 object SimpleBasket:
-  given Codec.AsObject[SimpleBasket] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[SimpleBasket] = KindlingsCodecAsObject.derived
 ```
 
 ```scala mdoc

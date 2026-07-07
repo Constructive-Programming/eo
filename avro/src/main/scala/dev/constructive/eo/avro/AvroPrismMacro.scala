@@ -271,7 +271,7 @@ object AvroPrismMacro:
     *
     * Counterpart to `JsonPrismMacro.fieldsCommon`; the only differences are the codec-summon shape
     * (one [[AvroCodec]] vs circe's `Encoder` / `Decoder` pair) and the error-message hint pointing
-    * at `AvroCodec.derived` instead of `KindlingsCodecAsObject.derive`.
+    * at `AvroCodec.derived` instead of `KindlingsCodecAsObject.derived`.
     */
   private def fieldsCommon[A: Type](
       who: String,

@@ -366,12 +366,12 @@ object JsonPrismSpec:
   // ---- NamedTuple codec givens for multi-field (.fields) specs ----
 
   type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derived
 
   type NameAgeAddress =
     NamedTuple.NamedTuple[("name", "age", "address"), (String, Int, Address)]
 
-  given Codec.AsObject[NameAgeAddress] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[NameAgeAddress] = KindlingsCodecAsObject.derived
 
   type AgeName = NamedTuple.NamedTuple[("age", "name"), (Int, String)]
-  given Codec.AsObject[AgeName] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[AgeName] = KindlingsCodecAsObject.derived

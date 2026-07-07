@@ -46,21 +46,21 @@ object CrudRoundtrip:
   case class Item(sku: String, qty: Int)
 
   object Item:
-    given Codec.AsObject[Item] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
     given Eq[Item] = Eq.derived
     given Show[Item] = Show.derived
 
   case class Address(street: String, city: String, zipCode: String)
 
   object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Address] = KindlingsCodecAsObject.derived
     given Eq[Address] = Eq.derived
     given Show[Address] = Show.derived
 
   case class Order(id: Long, shippingAddress: Address, items: List[Item])
 
   object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Order] = KindlingsCodecAsObject.derived
     given Eq[Order] = Eq.derived
     given Show[Order] = Show.derived
 
@@ -72,7 +72,7 @@ object CrudRoundtrip:
   )
 
   object User:
-    given Codec.AsObject[User] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[User] = KindlingsCodecAsObject.derived
     given Eq[User] = Eq.derived
     given Show[User] = Show.derived
 

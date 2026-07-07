@@ -168,12 +168,12 @@ object JsonFieldsTraversalSpec:
   case class Order(name: String, price: Double, qty: Int)
 
   object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Order] = KindlingsCodecAsObject.derived
 
   case class Basket(owner: String, items: Vector[Order])
 
   object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
 
   type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-  given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derived

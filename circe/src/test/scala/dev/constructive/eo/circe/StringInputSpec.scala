@@ -94,14 +94,14 @@ class StringInputSpec extends JsonSpecBase:
 object StringInputSpec:
 
   given Codec.AsObject[NamedTuple.NamedTuple[("name", "age"), (String, Int)]] =
-    KindlingsCodecAsObject.derive
+    KindlingsCodecAsObject.derived
 
   final case class Item(name: String, qty: Int)
 
   object Item:
-    given Codec.AsObject[Item] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
 
   final case class Basket(items: List[Item])
 
   object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived

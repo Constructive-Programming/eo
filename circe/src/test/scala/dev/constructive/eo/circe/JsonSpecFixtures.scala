@@ -6,7 +6,7 @@ import io.circe.{Codec, Json}
 /** Shared ADT fixtures + Circe codecs for the circe-test specs.
   *
   * '''2026-04-26 dedup.''' Six spec files were each carrying identical companion-object copies of
-  * `Address` / `Person` / `Order` / `Basket` (and the `KindlingsCodecAsObject.derive` `given` for
+  * `Address` / `Person` / `Order` / `Basket` (and the `KindlingsCodecAsObject.derived` `given` for
   * each). They now `import JsonSpecFixtures.*` for a single source of truth.
   *
   * The macro-summon path used by [[JsonPrism.field]] / [[JsonPrism.fields]] resolves `Encoder` /
@@ -21,22 +21,22 @@ object JsonSpecFixtures:
   case class Address(street: String, zip: Int)
 
   object Address:
-    given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Address] = KindlingsCodecAsObject.derived
 
   case class Person(name: String, age: Int, address: Address)
 
   object Person:
-    given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Person] = KindlingsCodecAsObject.derived
 
   case class Order(name: String)
 
   object Order:
-    given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Order] = KindlingsCodecAsObject.derived
 
   case class Basket(owner: String, items: Vector[Order])
 
   object Basket:
-    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
 
   /** Build a basket-shaped root JSON `{ "owner": "Alice", "items": [...] }` from a list of
     * pre-encoded element JSONs. Used by the traversal specs whose scenarios all share this "wrap a

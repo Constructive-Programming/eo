@@ -245,7 +245,7 @@ object JsonPrismMacro:
         val (enc, dec) = summonCodecs[nt](role =>
           s"$who[${Type.show[A]}]: no given $role[${Type.show[nt]}] in scope."
             + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
-            + " KindlingsCodecAsObject.derive`, or provide one manually."
+            + " KindlingsCodecAsObject.derived`, or provide one manually."
         )
 
         // Compile-time-known Array[String] of field names.

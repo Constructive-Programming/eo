@@ -214,12 +214,12 @@ object CrossCarrierCompositionSpec:
   case class MItem(name: String, price: Double, qty: Int)
 
   object MItem:
-    given Codec.AsObject[MItem] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[MItem] = KindlingsCodecAsObject.derived
 
   case class MultiBasket(owner: String, items: Vector[MItem])
 
   object MultiBasket:
-    given Codec.AsObject[MultiBasket] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[MultiBasket] = KindlingsCodecAsObject.derived
 
   case class Box(payload: Json)
 
@@ -229,10 +229,10 @@ object CrossCarrierCompositionSpec:
   case class Tagged(name: String, tags: List[Int])
 
   object Tagged:
-    given Codec.AsObject[Tagged] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Tagged] = KindlingsCodecAsObject.derived
 
   type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derived
 
   type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-  given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derived

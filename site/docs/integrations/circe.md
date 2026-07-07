@@ -47,11 +47,11 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
 case class Address(street: String, zip: Int)
 object Address:
-  given Codec.AsObject[Address] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Address] = KindlingsCodecAsObject.derived
 
 case class Person(name: String, age: Int, address: Address)
 object Person:
-  given Codec.AsObject[Person] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Person] = KindlingsCodecAsObject.derived
 ```
 
 Construct a Prism to the root type, then drill into fields.
@@ -96,11 +96,11 @@ streetP.modifyUnsafe(_.toUpperCase)(stump).noSpacesSortKeys
 ```scala mdoc:silent
 case class Order(name: String)
 object Order:
-  given Codec.AsObject[Order] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Order] = KindlingsCodecAsObject.derived
 
 case class Basket(owner: String, items: Vector[Order])
 object Basket:
-  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
 ```
 
 ```scala mdoc
@@ -139,7 +139,7 @@ selector-order; the NamedTuple type reflects that. Arity must be
 
 ```scala mdoc:silent
 type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive
+given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derived
 ```
 
 ```scala mdoc
@@ -158,7 +158,7 @@ guarantee we cannot provide.
 
 ```scala mdoc:silent
 type Full = NamedTuple.NamedTuple[("name", "age", "address"), (String, Int, Address)]
-given Codec.AsObject[Full] = KindlingsCodecAsObject.derive
+given Codec.AsObject[Full] = KindlingsCodecAsObject.derived
 ```
 
 ```scala mdoc
@@ -173,14 +173,14 @@ NamedTuple on every element of an array:
 ```scala mdoc:silent
 case class Item(name: String, price: Double, qty: Int)
 object Item:
-  given Codec.AsObject[Item] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
 
 case class MultiBasket(owner: String, items: Vector[Item])
 object MultiBasket:
-  given Codec.AsObject[MultiBasket] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[MultiBasket] = KindlingsCodecAsObject.derived
 
 type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derive
+given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derived
 ```
 
 ```scala mdoc

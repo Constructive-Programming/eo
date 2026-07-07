@@ -132,7 +132,7 @@ object JsonFieldsPrismLawsSpec:
   import JsonSpecFixtures.{Address, Person}
 
   type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derived
 
   // ---- Full-cover fixture for the discipline Prism laws ----------
   //
@@ -142,10 +142,10 @@ object JsonFieldsPrismLawsSpec:
   case class Pair(a: Int, b: String)
 
   object Pair:
-    given Codec.AsObject[Pair] = KindlingsCodecAsObject.derive
+    given Codec.AsObject[Pair] = KindlingsCodecAsObject.derived
 
   type PairFocus = NamedTuple.NamedTuple[("a", "b"), (Int, String)]
-  given Codec.AsObject[PairFocus] = KindlingsCodecAsObject.derive
+  given Codec.AsObject[PairFocus] = KindlingsCodecAsObject.derived
 
   // ---- Arbitrary + Cogen instances for the laws ------------------
 

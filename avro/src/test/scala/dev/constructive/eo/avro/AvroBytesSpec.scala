@@ -125,12 +125,13 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // ---- union-branch focus: payment.union[Cash] ----
     val cashL = codecPrism[WireEnvelope].field(_.payment).union[Cash]
     val paymentSchema = envelopeSchema.getField("payment").schema
+    val cashName = summon[AvroCodec[Cash]].schema.getFullName
     val cashOk = cashL.sliceBytes(bytes) match
       case Ior.Right(frag) =>
-        val schemaOk = frag.schema.getFullName === "Cash"
+        val schemaOk = frag.schema.getFullName === cashName
         // The ordinal is Cash's position in the union schema, and the index bytes are STRIPPED:
         // the fragment re-encodes byte-for-byte as a bare Cash record (no union framing).
-        val cashOrdinal = paymentSchema.getIndexNamed("Cash").intValue
+        val cashOrdinal = paymentSchema.getIndexNamed(cashName).intValue
         val ordinalOk = frag.branchOrdinal === Some(cashOrdinal)
         val decoded = fromBinaryValue(frag.bytes, frag.schema)
         val fidelity =
