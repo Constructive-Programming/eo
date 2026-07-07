@@ -44,13 +44,6 @@ sealed trait Affine[A, B]:
     case m: Miss[A, B] => onMiss(m.fst)
     case h: Hit[A, B]  => onHit(h.snd, h.b)
 
-  /** Legacy Either-shaped accessor (reconstructs a fresh `Either` + Tuple2 on each call). Kept for
-    * law suites; new code should pattern-match `Miss` / `Hit` directly.
-    */
-  def affine: Either[Fst[A], (Snd[A], B)] = this match
-    case m: Miss[A, B] => Left(m.fst)
-    case h: Hit[A, B]  => Right((h.snd, h.b))
-
   /** Fold both branches into a new `Affine[A, C]`. Dispatches via direct pattern match (no
     * intermediate Either).
     *
@@ -178,7 +171,12 @@ object Affine:
     * @group Instances
     */
   given assoc[Xo, Xi]: AssociativeFunctor[Affine, Xo, Xi] with
-    type Z = (Either[Fst[Xo], (Snd[Xo], Fst[Xi])], (Snd[Xo], Snd[Xi]))
+    // Miss discrimination: an untagged `Fst[Xo] | FstXi` union is NOT runtime-separable
+    // (Fst[Xo] is abstract and may itself be a Tuple2), so the outer Miss object doubles
+    // as the tag — it is already allocated, its B is phantom, and it can never be a Tuple2.
+    type FstXi = (Snd[Xo], Fst[Xi])
+    type SndXi = (Snd[Xo], Snd[Xi])
+    type Z = (Miss[Xo, Nothing] | FstXi, SndXi)
 
     def composeTo[S, T, A, B, C, D](
         s: S,
@@ -186,11 +184,11 @@ object Affine:
         inner: Optic[A, B, C, D, Affine] { type X = Xi },
     ): Affine[Z, C] = outer.to(s) match
       case om: Miss[Xo, A] =>
-        new Miss[Z, C](Left(om.fst))
+        new Miss[Z, C](om.widenB[Nothing])
       case oh: Hit[Xo, A] =>
         inner.to(oh.b) match
           case im: Miss[Xi, C] =>
-            new Miss[Z, C](Right((oh.snd, im.fst)))
+            new Miss[Z, C]((oh.snd, im.fst))
           case ih: Hit[Xi, C] =>
             new Hit[Z, C]((oh.snd, ih.snd), ih.b)
 
@@ -200,15 +198,14 @@ object Affine:
         outer: Optic[S, T, A, B, Affine] { type X = Xo },
     ): T = xd match
       case m: Miss[Z, D] =>
-        // Fst[Z] = Either[Fst[Xo], (Snd[Xo], Fst[Xi])] — but the match-type
-        // reduction can't be proven at the trait level, so we cast.
-        m.fst.asInstanceOf[Either[Fst[Xo], (Snd[Xo], Fst[Xi])]] match
-          case Left(y)         => outer.from(new Miss[Xo, B](y))
-          case Right((x1, y0)) =>
-            val b: B = inner.from(new Miss[Xi, D](y0))
-            outer.from(new Hit[Xo, B](x1, b))
+        m.fst match
+          case om: Miss[?, ?] =>
+            outer.from(om.asInstanceOf[Miss[Xo, Nothing]].widenB[B])
+          case fstXi: FstXi @unchecked =>
+            val b: B = inner.from(new Miss[Xi, D](fstXi._2))
+            outer.from(new Hit[Xo, B](fstXi._1, b))
       case h: Hit[Z, D] =>
-        val pair = h.snd.asInstanceOf[(Snd[Xo], Snd[Xi])]
+        val pair = h.snd
         val xoSnd = pair._1
         val xiSnd = pair._2
         val b: B = inner.from(new Hit[Xi, D](xiSnd, h.b))

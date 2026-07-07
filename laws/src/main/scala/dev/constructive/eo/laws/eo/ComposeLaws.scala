@@ -74,7 +74,7 @@ trait OptionalComposeLaws[S, A, B]:
   private def getOpt[X, Y](
       p: Optic[X, X, Y, Y, Affine],
       x: X,
-  ): Option[Y] = p.to(x).affine.toOption.map(_._2)
+  ): Option[Y] = p.to(x).fold(_ => None, (_, y) => Some(y))
 
   /** `(o ∘ i).getOption(s) == o.getOption(s).flatMap(i.getOption)`. */
   def composedGetOption(s: S): Boolean =

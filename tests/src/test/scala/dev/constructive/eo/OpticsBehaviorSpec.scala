@@ -217,7 +217,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val eitherOk = (asPrism.to(10) == Right(20)) && (asPrism.reverseGet(20) == 10)
 
     val asAffine = doubleIso.morph[Tuple2].morph[Affine]
-    val affineOk = forAll((n: Int) => asAffine.to(n).affine.toOption.map(_._2) == Some(n * 2))
+    val affineOk =
+      forAll((n: Int) => asAffine.to(n).fold(_ => None, (_, a) => Some(a)) == Some(n * 2))
 
     val triSide: Optic[Shape3, Shape3, Int, Int, Affine] = triP.andThen(triSideL)
     val r1 = (triSide.modify(_ + 10)(Shape3.Tri(3)) == Shape3.Tri(13)) &&

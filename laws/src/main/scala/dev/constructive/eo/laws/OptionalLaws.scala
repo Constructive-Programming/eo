@@ -9,15 +9,15 @@ import optics.Optic.*
 /** Law equations for an `Optional[S, A]` — `Optic[S, S, A, A, Affine]`.
   *
   * Ported from Monocle's `monocle.law.OptionalLaws`. `getOption` is recovered from EO's primitive
-  * `to`, whose `Affine` carrier is essentially `Either[S, (X, A)]` — the
-  * `.affine.toOption.map(_._2)` chain projects out the focused value when present.
+  * `to`, whose `Affine` carrier is a Miss/Hit sum — `fold` projects out the focused value when
+  * present.
   */
 trait OptionalLaws[S, A]:
   def optional: Optic[S, S, A, A, Affine]
 
   /** Mirror of Monocle's `Optional.getOption`. */
   def getOption(s: S): Option[A] =
-    optional.to(s).affine.toOption.map(_._2)
+    optional.to(s).fold(_ => None, (_, a) => Some(a))
 
   def modifyIdentity(s: S): Boolean =
     optional.modify(identity[A])(s) == s
