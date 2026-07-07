@@ -274,8 +274,8 @@ lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.21.5"
 // directly from `Array[Byte]` without allocating a runtime AST. The
 // `-macros` artifact ships `JsonCodecMaker` so callers can derive a
 // `JsonValueCodec[A]` per focus type at compile time.
-lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.9"
-lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.9"
+lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
+lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
