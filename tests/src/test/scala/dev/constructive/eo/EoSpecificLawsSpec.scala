@@ -313,16 +313,16 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
 
   // =============== Traversal.two: modify now works =================
   //
-  // With `Traversal.{two,three,four}` carrying `MultiFocus[Function1[Int, *]]`
-  // (post-FixedTraversal-fold), the fixed-arity traversals inherit `.modify`
-  // and `.replace` via the shared `mfFunctor[Function1[Int, *]]` instance.
-  // Behaviour smoke-test pins the semantics down and lights up the
-  // previously-unreached `from` clauses of those constructors.
+  // `Traversal.{two,three,four}` carry `MultiFocus[PSVec]` (arity tabulated at
+  // construction), so the fixed-arity traversals inherit `.modify` and
+  // `.replace` via the shared PSVec carrier instances. Behaviour smoke-test
+  // pins the semantics down and lights up the previously-unreached `from`
+  // clauses of those constructors. Cross-family composition lives in
+  // `FixedArityTraversalSpec`.
 
-  // covers: Traversal.two modifies both components and preserves structure
-  //   (mfFunctor[Function1] with arity 2),
-  //   Traversal.three modifies all three components (the same mfFunctor instance, arity 3)
-  "Traversal.two / Traversal.three: pointwise modify across MultiFocus[Function1[Int, *]]" >> {
+  // covers: Traversal.two modifies both components and preserves structure,
+  //   Traversal.three modifies all three components
+  "Traversal.two / Traversal.three: pointwise modify across MultiFocus[PSVec]" >> {
     val t2 = Traversal.two[(Int, Int), (Int, Int), Int, Int](
       _._1,
       _._2,

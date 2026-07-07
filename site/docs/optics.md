@@ -764,11 +764,13 @@ widen back into a Forget / MultiFocus / Lens. Same-carrier
 so the standard `Optic.andThen` resolves transparently.
 
 **Fixed-arity traversal (`Traversal.two` / `.three` / `.four`)** —
-these factories produce `MultiFocus[Function1[Int, *]]`-carrier optics,
-so they inherit the Grate sub-shape's composability: `Iso ↪
-MF[Function1[Int, *]]`, `MF[Function1[Int, *]] ↪ ModifyF`, and
-same-carrier `.andThen` via `mfAssocFunction1`. Lens / Prism / Optional
-do NOT bridge in (Function1 lacks `Foldable` / `Alternative`).
+these factories tabulate their (construction-time-known) arity straight
+into `MultiFocus[PSVec]`, so they compose exactly like `each`: past a
+Lens, a Prism, another traversal, in both directions
+(`FixedArityTraversalSpec` pins the sweep). The
+`MultiFocus[Function1[Int, *]]` Grate sub-shape — and its
+narrower Iso-only inbound story — now belongs to `MultiFocus.tuple`
+alone.
 
 The authoritative cell-by-cell record is
 [`CompositionMatrixSpec`](https://github.com/Constructive-Programming/eo/blob/main/tests/src/test/scala/dev/constructive/eo/CompositionMatrixSpec.scala)

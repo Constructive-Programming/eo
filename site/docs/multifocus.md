@@ -30,7 +30,7 @@ multi-focus job:
 | **Kaleidoscope** | `F: Apply` | Aggregating reads — collapse every focus to one value via `.collectMap` / `.collectList`. |
 | **Grate** | `Function1[X0, *]` | Uniform rewrite across a fixed shape — homogeneous tuples and Naperian / representable containers (`MultiFocus.tuple` / `representable` / `representableAt`). |
 | **PowerSeries** | `PSVec` | Element-wise traversal of a collection with downstream `.andThen` composition — the `Traversal.each` carrier; carries the hand-tuned `mfAssocPSVec` fast paths (`MultiFocusSingleton` for Lens morphs, `MultiFocusPSMaybeHit` for Prism / Optional). |
-| **`FixedTraversal[N]`** | `Function1[Int, *]` | Fixed-arity traversal — the `Traversal.{two,three,four}` factories, same carrier as `MultiFocus.tuple`. |
+| **`FixedTraversal[N]`** | `PSVec` | Fixed-arity traversal — the `Traversal.{two,three,four}` factories tabulate their known arity into the PowerSeries carrier, so they compose like `each`. |
 
 All five share one runtime shape — a leftover paired with a focus
 container — so they live as a single carrier rather than five. See
@@ -316,9 +316,9 @@ Applicative: Foldable]` (and the Prism / Optional variants) doesn't
 fire for the Naperian carrier. The Iso bridge
 `forgetful2multifocusFunction1` carries no constraint — it's the
 only inbound for the absorbed-Grate sub-shape — so chains of the
-form `iso.andThen(MultiFocus.tuple[...])` and
-`iso.andThen(Traversal.two(...))` work, but `lens.andThen(grate)`
-does not.
+form `iso.andThen(MultiFocus.tuple[...])` work, but
+`lens.andThen(grate)` does not. (`Traversal.two/three/four` are
+unaffected: they ride `MultiFocus[PSVec]` and compose freely.)
 
 ## Worked examples
 
