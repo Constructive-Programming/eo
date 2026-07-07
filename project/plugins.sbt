@@ -29,7 +29,7 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.5")
 // agree on rule semantics. Brings the SemanticDB compiler plugin
 // transitively via `scalafixSemanticdb`; we wire it explicitly in
 // build.sbt so every module exports SemanticDB consistently.
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.6")
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.7")
 
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
