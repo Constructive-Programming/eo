@@ -18,7 +18,7 @@ val scala3Version = "3.8.3"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.5"
+ThisBuild / tlBaseVersion := "0.6"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -28,13 +28,16 @@ ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
 
-// MiMa stays disabled for 0.5.0 — a deliberate breaking release: it corrects the
-// mis-shaped 0.4.0 Confluent surface, removing the decode-welded `AvroPrism.confluent`
-// / `AvroConfluentPrism` in favour of the decode-agnostic `ConfluentWire.confluent`
-// Prism + `ConfluentWire.resolve` (#41). (Earlier 0.x lines: 0.2.0 JsonPrism → Affine
-// `Optional` #31, 0.3.0 avro field-naming #35, 0.4.0 additive #37/#38.) Kept off across
-// the still-evolving 0.x line — and cats-eo-avro has no published baseline anyway.
-// Re-enable (set to the published 0.5.x line) once the API is stable.
+// MiMa stays disabled for 0.6.0 — a deliberate breaking release: the kindlings
+// 0.2.0 migration fully-qualifies derived Avro record names by enclosing path
+// (namespace), so records written/read through the derived codecs carry
+// different on-wire schema names than 0.5.x — a wire-format break. (0.6.0 also
+// raises the derivation macro timeout to 30s and pins jackson to CVE-patched
+// 2.21.5.) Earlier 0.x lines: 0.2.0 JsonPrism → Affine `Optional` #31, 0.3.0
+// avro field-naming #35, 0.4.0 additive #37/#38, 0.5.0 Confluent surface #41.
+// Kept off across the still-evolving 0.x line — and cats-eo-avro has no
+// published baseline anyway. Re-enable (set to the published 0.6.x line) once
+// the API is stable.
 ThisBuild / tlMimaPreviousVersions := Set.empty
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
