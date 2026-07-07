@@ -44,4 +44,4 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.5")
 // for the rule lives on `ThisBuild / unusedCodeConfig` in `build.sbt`;
 // the rule itself ships as `_2.13` only but loads inside the Scalafix
 // classloader so Scala 3 sources are parsed via `Dialect.Scala3`.
-addSbtPlugin("com.github.xuwei-k" % "unused-code-plugin" % "0.5.1")
+addSbtPlugin("com.github.xuwei-k" % "unused-code-plugin" % "0.5.5")
