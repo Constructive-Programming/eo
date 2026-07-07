@@ -1,0 +1,27 @@
+# Scala Steward — opens PRs for sbt library / plugin / Scala version upgrades.
+# Dependabot (see .github/dependabot.yml) doesn't understand sbt, so it only
+# covers GitHub Actions; Steward covers everything under build.sbt / project/.
+#
+# Uses the default GITHUB_TOKEN (the repo already grants Actions write +
+# create-PR permission). ponytail: GITHUB_TOKEN-opened PRs do NOT trigger the
+# CI workflow — add a PAT as the SCALA_STEWARD_TOKEN secret and swap it into
+# `github-token` below if you want CI to run on Steward PRs automatically.
+name: Scala Steward
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch: # allow manual runs from the Actions tab
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  scala-steward:
+    name: Launch Scala Steward
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: scala-steward-org/scala-steward-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
