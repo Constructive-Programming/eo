@@ -80,7 +80,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       case Left(reason) =>
         report.errorAndAbort(s"lens[${Type.prettyPrint[S]}]: $reason")
       case Right(cc) =>
-        val knownFields: List[String] = cc.caseFields.map(_.value.name)
+        val knownFields: List[String] = cc.caseFields.map(_.name)
 
         // Resolve every selector to a field name (position threaded through for error messages).
         val resolved: List[(Int, String)] =

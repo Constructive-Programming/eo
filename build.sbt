@@ -1,4 +1,4 @@
-val scala3Version = "3.8.3"
+val scala3Version = "3.8.4"
 
 // ---- Publishing metadata -------------------------------------------
 //
@@ -103,7 +103,7 @@ ThisBuild / scalafixDependencies +=
 ThisBuild / scalacOptions += "-Wunused:all"
 // Raise kindlings' per-derivation macro-expansion budget from the 2s default (which a loaded CI
 // runner intermittently trips: `deriveAsObject timed out after 2000ms`) to 30s. One namespace per
-// kindlings module (circe / cats / avro derivation); read by kindlings 0.2.0's `DerivationTimeout`.
+// kindlings module (circe / cats / avro derivation); read by kindlings 0.3.x's `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30,catsDerivation.timeout=30,avroDerivation.timeout=30"
@@ -135,7 +135,7 @@ ThisBuild / unusedCodeConfig ~= { c =>
 }
 
 // -------------------------------------------------------------------
-// Bump hardcoded GitHub Action versions that sbt-typelevel 0.8.5
+// Bump hardcoded GitHub Action versions that sbt-typelevel 0.8.6
 // pins to older releases:
 //
 //   - actions/upload-artifact           v5 → v7
@@ -235,47 +235,49 @@ val Plokhotnyuk = "com.github.plokhotnyuk.jsoniter-scala"
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
-lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.17.1"
+lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.19.0"
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
 lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
-// kindlings 0.2.0 (all three) ship a configurable macro-expansion timeout
-// (`DerivationTimeout`, default 5s) and pull hearth 0.3.1 + kindlings-derivation-commons
-// 0.2.0. We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30`
+// kindlings 0.3.x (all three) ship a configurable macro-expansion timeout
+// (`DerivationTimeout`, default 5s) and pull hearth 0.4.0 + kindlings-derivation-commons.
+// We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30`
 // (see the `ThisBuild / scalacOptions` above) so a loaded CI runner stops tripping the old
 // hardcoded 2s budget (the recurring `deriveAsObject timed out after 2000ms` flake).
-// NB 0.2.0 also fully-qualifies derived Avro record names (namespace = enclosing path).
-lazy val hearth = Kubuszok %% "hearth" % "0.3.1"
-lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.2.0"
-lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.2.0"
-lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.2.0"
-lazy val circe = Circe %% "circe-core" % "0.14.10"
-lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
+// NB kindlings fully-qualifies derived Avro record names (namespace = enclosing path) —
+// established in 0.2.0, unchanged in 0.3.x.
+lazy val hearth = Kubuszok %% "hearth" % "0.4.0"
+lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.3.0"
+lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.3.0"
+lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.0"
+lazy val circe = Circe %% "circe-core" % "0.14.16"
+lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // Pin apache-avro 1.12.1 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
 // `GenericData` / `Schema` directly on the hot path.
 lazy val avro = ApacheAvro % "avro" % "1.12.1"
-// Force jackson to the patched 2.21.5 — `apache-avro 1.12.1` brings
-// `jackson-databind 2.20.0` (and `jackson-core`) transitively, both inside
-// the CVE-affected `>= 2.19.0, < 2.21.5` range (four GHSA dependabot alerts:
-// two PolymorphicTypeValidator/allowlist bypasses, an InetSocketAddress SSRF,
-// and a @JsonIgnoreProperties case-insensitive bypass). 2.21.5 is the first
-// release patched against all four. Overrides apply via
+// Force jackson to 2.22.0 — `apache-avro 1.12.1` brings `jackson-databind
+// 2.20.0` (and `jackson-core`) transitively, both inside the CVE-affected
+// `>= 2.19.0, < 2.21.5` range (four GHSA dependabot alerts: two
+// PolymorphicTypeValidator/allowlist bypasses, an InetSocketAddress SSRF, and
+// a @JsonIgnoreProperties case-insensitive bypass). 2.21.5 was the first
+// release patched against all four; we track the Steward-current 2.22.0.
+// Overrides apply via
 // `commonSettings.dependencyOverrides` across every module so any future
 // jackson-pulling transitive (e.g. a kindlings bump) inherits the safe
 // versions automatically. eo never enables polymorphic/default typing, so the
 // PTV bypasses aren't reachable here — this just keeps the dep tree clean.
-lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.5"
-lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.21.5"
+lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.22.0"
+lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.22.0"
 // jsoniter-scala — high-perf JSON codec (~5–10× circe on hot paths).
 // Used by `eo-jsoniter` to back byte-cursor JSON optics that decode
 // directly from `Array[Byte]` without allocating a runtime AST. The
 // `-macros` artifact ships `JsonCodecMaker` so callers can derive a
 // `JsonValueCodec[A]` per focus type at compile time.
-lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.9"
-lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.9"
+lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
+lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
