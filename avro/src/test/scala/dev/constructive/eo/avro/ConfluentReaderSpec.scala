@@ -35,6 +35,42 @@ object StrictEvent:
   given AvroDecoder[StrictEvent] = AvroDecoder.derived
   given AvroSchemaFor[StrictEvent] = AvroSchemaFor.derived
 
+/** Field MOVED across versions: writer and reader declare the SAME field names in a DIFFERENT
+  * order. Avro resolves record fields by name, so the reader must recover each value regardless of
+  * position — the "a field moved" case.
+  */
+final case class ReorderWriter(alpha: String, beta: Int, gamma: Boolean)
+
+object ReorderWriter:
+  given AvroEncoder[ReorderWriter] = AvroEncoder.derived
+  given AvroDecoder[ReorderWriter] = AvroDecoder.derived
+  given AvroSchemaFor[ReorderWriter] = AvroSchemaFor.derived
+
+final case class ReorderReader(gamma: Boolean, alpha: String, beta: Int)
+
+object ReorderReader:
+  given AvroEncoder[ReorderReader] = AvroEncoder.derived
+  given AvroDecoder[ReorderReader] = AvroDecoder.derived
+  given AvroSchemaFor[ReorderReader] = AvroSchemaFor.derived
+
+/** Field TYPE CHANGED across versions: the writer stores `count` as an Avro `int`, the reader wants
+  * a `long`. Avro's numeric-promotion resolution widens int → long — the "a field changed type"
+  * case. `label` is carried unchanged alongside, to prove the promotion is per-field.
+  */
+final case class PromoteWriter(label: String, count: Int)
+
+object PromoteWriter:
+  given AvroEncoder[PromoteWriter] = AvroEncoder.derived
+  given AvroDecoder[PromoteWriter] = AvroDecoder.derived
+  given AvroSchemaFor[PromoteWriter] = AvroSchemaFor.derived
+
+final case class PromoteReader(label: String, count: Long)
+
+object PromoteReader:
+  given AvroEncoder[PromoteReader] = AvroEncoder.derived
+  given AvroDecoder[PromoteReader] = AvroDecoder.derived
+  given AvroSchemaFor[PromoteReader] = AvroSchemaFor.derived
+
 /** Behaviour spec for the no-hassle Confluent resolving reader — `ConfluentWire.reader` /
   * `recordReader` (effectful, raise-in-F) and the pure `resolving` Prism. Uses
   * `Either[Throwable, *]` as the test effect `F` (it has a `MonadThrow`), so no fs2 / cats-effect
@@ -118,6 +154,62 @@ class ConfluentReaderSpec extends Specification:
       case Right(bytes) =>
         ConfluentWire.reader[Res, ReaderEvent](_ => Right(readerSchema))(bytes) === Right(
           ReaderEvent("E-6")
+        )
+      case Left(f) =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Right(bytes), got Left($f)"): org.specs2.execute.Result
+    readOk.and(writeOk)
+  }
+
+  "reader: fields MOVED (reordered writer→reader) resolve by name, not position" >> {
+    val ws = summon[AvroCodec[ReorderWriter]].schema
+    val reg: Int => Res[Schema] =
+      case 7  => Right(ws)
+      case id => Left(new NoSuchElementException(s"no schema for id $id"))
+    val bytes = ConfluentWire.attach(
+      7,
+      AvroSpecFixtures.toBinaryValue(
+        summon[AvroCodec[ReorderWriter]].encode(ReorderWriter("x", 42, true)),
+        ws,
+      ),
+    )
+    // gamma/alpha/beta land on the right reader fields despite the flipped declaration order.
+    ConfluentWire.reader[Res, ReorderReader](reg)(bytes) === Right(ReorderReader(true, "x", 42))
+  }
+
+  "reader: a field whose TYPE CHANGED (int writer → long reader) is promoted, siblings intact" >> {
+    val ws = summon[AvroCodec[PromoteWriter]].schema
+    val reg: Int => Res[Schema] =
+      case 7  => Right(ws)
+      case id => Left(new NoSuchElementException(s"no schema for id $id"))
+    val bytes = ConfluentWire.attach(
+      7,
+      AvroSpecFixtures.toBinaryValue(
+        summon[AvroCodec[PromoteWriter]].encode(PromoteWriter("n", 42)),
+        ws,
+      ),
+    )
+    ConfluentWire.reader[Res, PromoteReader](reg)(bytes) === Right(PromoteReader("n", 42L))
+  }
+
+  "resolving Prism: read across a MOVED-field schema, modify, re-frame back to the reader shape" >> {
+    val ws = summon[AvroCodec[ReorderWriter]].schema
+    val rs = summon[AvroCodec[ReorderReader]].schema
+    val cf = ConfluentWire.resolving[ReorderReader](ws, frameId = 7)
+    val frame = ConfluentWire.attach(
+      7,
+      AvroSpecFixtures.toBinaryValue(
+        summon[AvroCodec[ReorderWriter]].encode(ReorderWriter("x", 42, true)),
+        ws,
+      ),
+    )
+    val readOk = cf.getOption(frame) === Some(ReorderReader(true, "x", 42))
+    val writeOk = cf.modify(r => ReorderReader(r.gamma, r.alpha.toUpperCase, r.beta))(frame) match
+      case Right(bytes) =>
+        ConfluentWire.reader[Res, ReorderReader](_ => Right(rs))(bytes) === Right(
+          ReorderReader(true, "X", 42)
         )
       case Left(f) =>
         org
