@@ -103,7 +103,7 @@ ThisBuild / scalafixDependencies +=
 ThisBuild / scalacOptions += "-Wunused:all"
 // Raise kindlings' per-derivation macro-expansion budget from the 2s default (which a loaded CI
 // runner intermittently trips: `deriveAsObject timed out after 2000ms`) to 30s. One namespace per
-// kindlings module (circe / cats / avro derivation); read by kindlings 0.2.0's `DerivationTimeout`.
+// kindlings module (circe / cats / avro derivation); read by kindlings 0.3.0's `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30,catsDerivation.timeout=30,avroDerivation.timeout=30"
@@ -240,16 +240,16 @@ lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
 lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
-// kindlings 0.2.0 (all three) ship a configurable macro-expansion timeout
+// kindlings 0.3.0 (all three) ship a configurable macro-expansion timeout
 // (`DerivationTimeout`, default 5s) and pull hearth 0.3.1 + kindlings-derivation-commons
 // 0.2.0. We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30`
 // (see the `ThisBuild / scalacOptions` above) so a loaded CI runner stops tripping the old
 // hardcoded 2s budget (the recurring `deriveAsObject timed out after 2000ms` flake).
 // NB 0.2.0 also fully-qualifies derived Avro record names (namespace = enclosing path).
 lazy val hearth = Kubuszok %% "hearth" % "0.3.1"
-lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.2.0"
-lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.2.0"
-lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.2.0"
+lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.3.0"
+lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.3.0"
+lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.0"
 lazy val circe = Circe %% "circe-core" % "0.14.10"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
 // Pin apache-avro 1.12.1 explicitly even though kindlings-avro-derivation
