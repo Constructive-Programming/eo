@@ -258,19 +258,23 @@ lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
 // `GenericData` / `Schema` directly on the hot path.
 lazy val avro = ApacheAvro % "avro" % "1.12.1"
-// Force jackson to 2.22.0 — `apache-avro 1.12.1` brings `jackson-databind
-// 2.20.0` (and `jackson-core`) transitively, both inside the CVE-affected
+// Force jackson to 2.21.5 — `apache-avro 1.12.1` brings `jackson-databind
+// 2.20.0` (and `jackson-core`) transitively, inside the CVE-affected
 // `>= 2.19.0, < 2.21.5` range (four GHSA dependabot alerts: two
 // PolymorphicTypeValidator/allowlist bypasses, an InetSocketAddress SSRF, and
 // a @JsonIgnoreProperties case-insensitive bypass). 2.21.5 was the first
-// release patched against all four; we track the Steward-current 2.22.0.
+// release patched against all four. Do NOT bump to 2.22.0: it REGRESSED the
+// @JsonIgnoreProperties case-insensitive fix (CVE-2026-54515, dependabot
+// alert #7; re-fixed only in the unreleased 2.22.1) — the 0.6.1 bulk Steward
+// upgrade briefly did, re-opening the alert. `.scala-steward.conf` pins the
+// 2.21.x series; lift both pins together once 2.22.1 is on Central.
 // Overrides apply via
 // `commonSettings.dependencyOverrides` across every module so any future
 // jackson-pulling transitive (e.g. a kindlings bump) inherits the safe
 // versions automatically. eo never enables polymorphic/default typing, so the
 // PTV bypasses aren't reachable here — this just keeps the dep tree clean.
-lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.22.0"
-lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.22.0"
+lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.5"
+lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.21.5"
 // jsoniter-scala — high-perf JSON codec (~5–10× circe on hot paths).
 // Used by `eo-jsoniter` to back byte-cursor JSON optics that decode
 // directly from `Array[Byte]` without allocating a runtime AST. The
