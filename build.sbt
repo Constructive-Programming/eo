@@ -254,13 +254,18 @@ lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
 // `GenericData` / `Schema` directly on the hot path.
 lazy val avro = ApacheAvro % "avro" % "1.12.1"
-// Force jackson-core to the patched 2.21.1 — `apache-avro 1.12.1` brings
-// `jackson-databind 2.20.0` transitively, which depends on the
-// CVE-affected `jackson-core` range `>= 2.19.0, < 2.21.1` (GHSA dependabot
-// alert #2). Override applies via `commonSettings.dependencyOverrides`
-// across every module so any future jackson-pulling transitive (e.g. a
-// future kindlings-circe bump) inherits the safe version automatically.
-lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.1"
+// Force jackson to the patched 2.21.5 — `apache-avro 1.12.1` brings
+// `jackson-databind 2.20.0` (and `jackson-core`) transitively, both inside
+// the CVE-affected `>= 2.19.0, < 2.21.5` range (four GHSA dependabot alerts:
+// two PolymorphicTypeValidator/allowlist bypasses, an InetSocketAddress SSRF,
+// and a @JsonIgnoreProperties case-insensitive bypass). 2.21.5 is the first
+// release patched against all four. Overrides apply via
+// `commonSettings.dependencyOverrides` across every module so any future
+// jackson-pulling transitive (e.g. a kindlings bump) inherits the safe
+// versions automatically. eo never enables polymorphic/default typing, so the
+// PTV bypasses aren't reachable here — this just keeps the dep tree clean.
+lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.5"
+lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.21.5"
 // jsoniter-scala — high-perf JSON codec (~5–10× circe on hot paths).
 // Used by `eo-jsoniter` to back byte-cursor JSON optics that decode
 // directly from `Array[Byte]` without allocating a runtime AST. The
@@ -286,9 +291,9 @@ lazy val commonSettings = Seq(
   // library's code and the warning is a Hearth-side concern rather
   // than a cats-eo bug.
   Test / scalacOptions += "-Wconf:src=.*/cats-derivation/.*:silent",
-  // Pin jackson-core at the CVE-patched 2.21.1 across every module —
-  // see the `jacksonCore` definition above for context.
-  dependencyOverrides += jacksonCore,
+  // Pin jackson-core + jackson-databind at the CVE-patched 2.21.5 across
+  // every module — see the `jacksonCore` / `jacksonDatabind` defs above.
+  dependencyOverrides ++= Seq(jacksonCore, jacksonDatabind),
 )
 
 // Library-appropriate scalac options layered on top of the baseline set
