@@ -250,8 +250,8 @@ lazy val hearth = Kubuszok %% "hearth" % "0.3.1"
 lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.2.0"
 lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.2.0"
 lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.2.0"
-lazy val circe = Circe %% "circe-core" % "0.14.10"
-lazy val circeParser = Circe %% "circe-parser" % "0.14.10"
+lazy val circe = Circe %% "circe-core" % "0.14.16"
+lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // Pin apache-avro 1.12.1 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
