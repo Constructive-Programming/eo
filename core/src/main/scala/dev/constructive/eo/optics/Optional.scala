@@ -89,8 +89,8 @@ final class Optional[S, T, A, B](
     new Optional(
       getOrModify = s =>
         getOrModify(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => innerHit(s, a),
+          case l @ Left(_) => l.widenRight[C]
+          case Right(a)    => innerHit(s, a),
       reverseGet = (s, d) =>
         getOrModify(s) match
           case Left(t)  => t
@@ -105,8 +105,8 @@ final class Optional[S, T, A, B](
     fuseToOptional(
       innerHit = (s, a) =>
         inner.getOrModify(a) match
-          case Left(b)  => Left(reverseGet(s, b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(reverseGet(s, b))
+          case r @ Right(_) => r.widenLeft[T],
       innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
@@ -123,8 +123,8 @@ final class Optional[S, T, A, B](
     fuseToOptional(
       innerHit = (s, a) =>
         inner.tear(a) match
-          case Left(b)  => Left(reverseGet(s, b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(reverseGet(s, b))
+          case r @ Right(_) => r.widenLeft[T],
       innerWrite = (_, d) => inner.mend(d),
     )
 

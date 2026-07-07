@@ -1,6 +1,18 @@
 package dev.constructive.eo
 package optics
 
+/** Zero-alloc phantom recasts, the `Either` analogue of `Affine.Miss.widenB`: a `Left` never stores
+  * its right type parameter and a `Right` never stores its left, so re-typing that side is a cast,
+  * not a rebuild. The composition kernels below pass miss / hit wrappers through unchanged instead
+  * of re-allocating `Left(t)` / `Right(c)` at every hop. (The stdlib's `withRight` / `withLeft` are
+  * upcasts only — they can't re-type the phantom side to an unrelated type.)
+  */
+extension [L, R](l: Left[L, R])
+  private[optics] inline def widenRight[R2]: Either[L, R2] = l.asInstanceOf[Either[L, R2]]
+
+extension [L, R](r: Right[L, R])
+  private[optics] inline def widenLeft[L2]: Either[L2, R] = r.asInstanceOf[Either[L2, R]]
+
 /** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. A `Prism[S, A]`
   * (short for `Optic[S, S, A, A, Either]`) encodes a branch of a sum type: `getOption(s)` succeeds
   * when `s` matches, `reverseGet(a)` lifts back. The `eo-generics` module's `prism[S, A]` macro
@@ -100,8 +112,8 @@ final class MendTearPrism[S, T, A, B](
     new MendTearPrism(
       tear = s =>
         tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => innerTear(a),
+          case l @ Left(_) => l.widenRight[C]
+          case Right(a)    => innerTear(a),
       mend = d => mend(innerMend(d)),
     )
 
@@ -116,8 +128,8 @@ final class MendTearPrism[S, T, A, B](
     new Optional(
       getOrModify = s =>
         tear(s) match
-          case Left(t)  => Left(t)
-          case Right(a) => innerHit(a),
+          case l @ Left(_) => l.widenRight[C]
+          case Right(a)    => innerHit(a),
       reverseGet = (s, d) =>
         tear(s) match
           case Left(t)  => t
@@ -133,8 +145,8 @@ final class MendTearPrism[S, T, A, B](
     fuseToMendTear(
       innerTear = a =>
         inner.tear(a) match
-          case Left(b)  => Left(mend(b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(mend(b))
+          case r @ Right(_) => r.widenLeft[T],
       innerMend = d => inner.mend(d),
     )
 
@@ -173,8 +185,8 @@ final class MendTearPrism[S, T, A, B](
     fuseToOptional(
       innerHit = a =>
         inner.getOrModify(a) match
-          case Left(b)  => Left(mend(b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(mend(b))
+          case r @ Right(_) => r.widenLeft[T],
       innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
@@ -235,8 +247,8 @@ final class PickMendPrism[S, A, B](
           case None    => Left(s)
           case Some(a) =>
             inner.tear(a) match
-              case Left(b)  => Left(mend(b))
-              case Right(c) => Right(c),
+              case Left(b)      => Left(mend(b))
+              case r @ Right(_) => r.widenLeft[S],
       mend = d => mend(inner.mend(d)),
     )
 

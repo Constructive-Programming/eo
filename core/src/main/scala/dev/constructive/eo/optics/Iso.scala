@@ -68,8 +68,8 @@ final class BijectionIso[S, T, A, B](
     new MendTearPrism(
       tear = s =>
         inner.tear(get(s)) match
-          case Left(b)  => Left(reverseGet(b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(reverseGet(b))
+          case r @ Right(_) => r.widenLeft[T],
       mend = d => reverseGet(inner.mend(d)),
     )
 
@@ -78,8 +78,8 @@ final class BijectionIso[S, T, A, B](
     new Optional(
       getOrModify = s =>
         inner.getOrModify(get(s)) match
-          case Left(b)  => Left(reverseGet(b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(reverseGet(b))
+          case r @ Right(_) => r.widenLeft[T],
       reverseGet = (s, d) =>
         val newB = inner.reverseGet(get(s), d)
         reverseGet(newB),

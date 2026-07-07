@@ -117,8 +117,8 @@ class GetReplaceLens[S, T, A, B](
     new Optional(
       getOrModify = s =>
         inner.tear(get(s)) match
-          case Left(b)  => Left(enplace(s, b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(enplace(s, b))
+          case r @ Right(_) => r.widenLeft[T],
       reverseGet = (s, d) => enplace(s, inner.mend(d)),
     )
 
@@ -141,8 +141,8 @@ class GetReplaceLens[S, T, A, B](
     new Optional(
       getOrModify = s =>
         inner.getOrModify(get(s)) match
-          case Left(b)  => Left(enplace(s, b))
-          case Right(c) => Right(c),
+          case Left(b)      => Left(enplace(s, b))
+          case r @ Right(_) => r.widenLeft[T],
       reverseGet = (s, d) =>
         val newB = inner.reverseGet(get(s), d)
         enplace(s, newB),
