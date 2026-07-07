@@ -605,17 +605,18 @@ client and wraps no effect, so the caller owns the cache.
 ## The no-hassle resolving reader — `ConfluentWire.reader`
 
 For a Kafka consumer, the one-call form drops straight into an
-fs2 `Stream.evalMap`. It auto-detects the header, looks the writer
-schema up by id (effectfully), and *resolves* writer→reader via
-Avro's `ResolvingDecoder` (reorder / default / promotion / aliases)
-rather than gating:
+fs2 `Stream.evalMap`. It auto-detects the header, looks the **read
+schema** up by id (the schema the bytes were written under —
+effectfully), and *resolves* it into your type via Avro's
+`ResolvingDecoder` (reorder / default / promotion / aliases) rather
+than gating:
 
 ```scala
 import cats.MonadThrow
 import org.apache.avro.Schema
 import dev.constructive.eo.avro.ConfluentWire
 
-// Your registry client, resolved to an effectful lookup (id → writer schema).
+// Your registry client, resolved to an effectful lookup (id → read schema).
 val schemaById: Int => F[Schema] = id => registry.fetch(id)
 
 val read: Array[Byte] => F[Person] = ConfluentWire.reader[F, Person](schemaById)
@@ -624,22 +625,26 @@ val read: Array[Byte] => F[Person] = ConfluentWire.reader[F, Person](schemaById)
 stream.evalMap(read)   // Stream[F, Array[Byte]] => Stream[F, Person]
 ```
 
+Naming is optic-centric: **`readSchema`** is the schema the bytes are
+read in (apache-avro's *writer* schema), **`writeSchema`** the shape
+they resolve into / are written under (apache-avro's *reader* schema).
+
 - Effectful lookup `Int => F[Schema]` (`MonadThrow[F]`, cats-core —
-  no cats-effect dependency). A framed payload has its writer schema
-  looked up and is resolve-decoded writer→reader into `A`; an
-  **unframed** payload is decoded directly under the codec's own
-  schema (the hook is never consulted).
+  no cats-effect dependency). A framed payload has its read schema
+  looked up and is resolve-decoded into `A` (the write schema =
+  the codec's own schema); an **unframed** payload is decoded directly
+  under the codec's schema (the hook is never consulted).
 - Failures are **raised in `F`**: a decode/resolve failure surfaces
   as `AvroFailureException(ResolveFailed | DecodeFailed | …)`; a
   `schemaById` failure propagates as `F`'s own error. Dead-letter by
   catching in `F`.
-- **No reader case class?** `ConfluentWire.recordReader[F](schemaById,
-  readerSchema): Array[Byte] => F[IndexedRecord]` resolves to a
-  generic record under a caller-supplied reader schema.
+- **No case class?** `ConfluentWire.recordReader[F](schemaById,
+  writeSchema): Array[Byte] => F[IndexedRecord]` resolves to a generic
+  record under a caller-supplied write schema.
 
-For a single-schema topic or a producer, the pure per-writer-schema
-optic is `ConfluentWire.resolving[A](writerSchema, frameId)` — an
-`Affine` `Prism` (`read` resolve-decodes, `from` re-encodes + re-frames),
+For a single-schema topic or a producer, the pure per-read-schema
+optic is `ConfluentWire.resolving[A](readSchema, frameId)` — an
+`Affine` `Prism` (`to` resolve-decodes, `from` re-encodes + re-frames),
 `Either[AvroFailure, Array[Byte]]` on the write side.
 
 ## Migrating between schema versions — `AvroBridge`

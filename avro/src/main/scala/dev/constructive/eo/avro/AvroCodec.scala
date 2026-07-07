@@ -114,29 +114,33 @@ object AvroCodec:
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 
-  /** Binary-decode `bytes` written under `writerSchema` and RESOLVE them to `readerSchema` via
-    * apache-avro's schema resolution (`GenericDatumReader(writerSchema, readerSchema)` — reorder /
-    * default / promotion / aliases). The writer≠reader counterpart of [[decodeRecord]] (which
-    * assumes a single schema). Incompatible schemas → [[AvroFailure.ResolveFailed]].
+  /** Binary-decode `bytes` (encoded under `readSchema`) and RESOLVE them into `writeSchema` via
+    * apache-avro's schema resolution (reorder / default / promotion / aliases) — the drift
+    * counterpart of [[decodeRecord]] (which assumes one schema). Named from the reader's point of
+    * view: `readSchema` is the schema the bytes are read in, `writeSchema` the shape they resolve
+    * into (what you'd write). In apache-avro's own vocabulary these are the *writer* schema and the
+    * *reader* schema respectively — hence `GenericDatumReader(readSchema, writeSchema)` below.
+    * Incompatible schemas → [[AvroFailure.ResolveFailed]].
     */
   def decodeResolvedRecord(
       bytes: Array[Byte],
-      writerSchema: Schema,
-      readerSchema: Schema,
+      readSchema: Schema,
+      writeSchema: Schema,
   ): Either[AvroFailure, IndexedRecord] =
     try
-      val reader = new GenericDatumReader[GenericRecord](writerSchema, readerSchema)
+      // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
+      val reader = new GenericDatumReader[GenericRecord](readSchema, writeSchema)
       val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
       Right(reader.read(null, decoder))
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
 
-  /** [[decodeResolvedRecord]] resolving `writerSchema` → `codec`'s schema, then the codec's
-    * `Any ⇒ A` side — the writer≠reader counterpart of [[decodeValue]].
+  /** [[decodeResolvedRecord]] resolving `readSchema` → `codec`'s schema (the write schema), then
+    * the codec's `Any ⇒ A` side — the drift counterpart of [[decodeValue]].
     */
-  def decodeResolvedValue[A](bytes: Array[Byte], writerSchema: Schema)(using
+  def decodeResolvedValue[A](bytes: Array[Byte], readSchema: Schema)(using
       codec: AvroCodec[A]
   ): Either[AvroFailure, A] =
-    decodeResolvedRecord(bytes, writerSchema, codec.schema).flatMap { record =>
+    decodeResolvedRecord(bytes, readSchema, codec.schema).flatMap { record =>
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 

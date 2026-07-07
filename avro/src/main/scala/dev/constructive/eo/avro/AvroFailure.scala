@@ -99,10 +99,10 @@ enum AvroFailure:
     */
   case EncodeFailed(cause: Throwable)
 
-  /** Avro writer→reader schema resolution refused — the writer schema (resolved by id) and the
-    * reader schema aren't compatible, so `ResolvingDecoder` can't translate the payload. The
-    * wrapped [[Throwable]] is whatever apache-avro's resolving `GenericDatumReader` threw
-    * (typically an `AvroTypeException`). Surfaced by [[AvroCodec.decodeResolvedRecord]] /
+  /** Avro schema resolution refused — the read schema (what the bytes were written under) and the
+    * write schema (the resolve target) aren't compatible, so `ResolvingDecoder` can't translate the
+    * payload. The wrapped [[Throwable]] is whatever apache-avro's resolving `GenericDatumReader`
+    * threw (typically an `AvroTypeException`). Surfaced by [[AvroCodec.decodeResolvedRecord]] /
     * `decodeResolvedValue` and the `ConfluentWire` resolving reader.
     */
   case ResolveFailed(cause: Throwable)
