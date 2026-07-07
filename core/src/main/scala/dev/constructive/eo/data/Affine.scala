@@ -35,6 +35,14 @@ type Snd[T] = T match
 sealed trait Affine[A, B]:
   import Affine.*
 
+  /** Legacy Either-shaped accessor (reconstructs a fresh `Either` + Tuple2 on each call). New code
+    * should pattern-match `Miss` / `Hit` or use [[fold]] directly.
+    */
+  @deprecated("pattern-match Miss / Hit or use fold instead", "0.6.3")
+  def affine: Either[Fst[A], (Snd[A], B)] = this match
+    case m: Miss[A, B] => Left(m.fst)
+    case h: Hit[A, B]  => Right((h.snd, h.b))
+
   /** Monomorphic fold — pattern-match on Miss/Hit and run the matching branch.
     *
     * @tparam C
