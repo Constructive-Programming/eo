@@ -182,7 +182,7 @@ re-encode — or, with [eo-circe](integrations/circe.md) / [eo-avro](integration
 form in place and never fully decode at all.
 
 Put together, that turns a request handler into a short pipeline. The
-**persist-and-stamp** recipe ([Cookbook → Theme H](cookbook.md)) is the
+**persist-and-stamp** recipe ([Cookbook → Effect threading](cookbook.md)) is the
 canonical shape — decode a PUT body into a domain object, store it effectfully,
 stamp the database-assigned id back on with a derived id-lens, and re-encode the
 result: the whole handler reads as `decode → store → stamp → encode`.
@@ -309,8 +309,9 @@ Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(
 Works on enums, sealed hierarchies, and recursive case classes. See
 the [cookbook Plated recipe](cookbook.md) for a worked, runnable
 example. (The block above is illustrative — the `new` the macro
-emits for an enum case can't run inside this page's doc sandbox, so
-the cookbook spells the instance out by hand instead.)
+emits for an enum case can't run inside this page's doc sandbox;
+the cookbook runs the same derivation against a package-level
+sample ADT instead.)
 
 ## Macro errors
 

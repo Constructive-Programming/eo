@@ -374,9 +374,8 @@ the foci out as one summary rather than rewrite them in place. See
 ("classifier") lens whose focus is computed over the structure: the
 read side folds/classifies, the write side broadcasts back. The
 `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` factories lift
-a single-focus optic over an `F[A]` focus into this shape. See
-[MultiFocus reference](multifocus.md) and
-[Cookbook → Recipe C](cookbook.md).
+a single-focus optic over an `F[A]` focus into this shape. See the
+[MultiFocus reference](multifocus.md).
 
 ## Single direction
 
