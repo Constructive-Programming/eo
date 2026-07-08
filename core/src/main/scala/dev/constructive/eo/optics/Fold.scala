@@ -49,7 +49,8 @@ object Fold:
 final class ForgetFold[S, F[_], A](
     val read: S => F[A]
 )(using FF: Foldable[F])
-    extends Optic[S, Unit, A, Unit, Forget[F]]:
+    extends Optic[S, Unit, A, Unit, Forget[F]],
+      CanFold[S, A]:
   type X = Nothing
   def to(s: S): Forget[F][X, A] = Forget(read(s))
   def from(u: Forget[F][X, Unit]): Unit = ()

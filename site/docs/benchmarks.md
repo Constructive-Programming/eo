@@ -170,6 +170,32 @@ rebuilds via `Functor[PSVec].map`, where Monocle wraps each element in
 Monocle trails, widening to ~4.8× by 512 line items (each element pays a `LineItem`
 copy that dwarfs the carrier difference).
 
+## Capability dispatch
+
+`CapsBench` backs the [capabilities](capabilities.md) doctrine — "consume via capability,
+construct via optic" — with four variants per operation on the canonical `Order`:
+
+- `*Direct` — receiver typed as the concrete class (`GetReplaceLens`, `ForgetFold`): the
+  fused member, today's baseline.
+- `*Cap` — receiver typed as the capability trait (`CanGet`, `CanModify`, `CanFold`):
+  interface dispatch into the **same final method**, since the concrete classes implement
+  the capabilities directly. This is what a consuming signature pays when handed a concrete
+  optic.
+- `*DerivedHeld` — the capability derived once from a generic `Optic[…, F]` given and
+  reused: the wrapper's per-call cost with the summon amortised.
+- `*DerivedPerCall` — the given re-summoned inside the measured call (a fresh SAM every
+  invocation): what a generic method's use-site pays when its optic given is bound only at
+  the generic type. This is the honest worst case — the held variants structurally cannot
+  falsify "the ergonomics are free", so this one exists to try.
+
+Operations: `get` (shallow `order.id` + depth-3 `street`), `modify` (same two), and
+`foldMap` over an 8-element list.
+
+> Table pending its first run of the `benchmarks.yml` CI workflow (filter `CapsBench.*`,
+> with `-prof gc` to separate wrapper allocation from EA-elided cost) — local numbers are
+> not trustworthy for deltas this small, so this section ships with the run that produces
+> them.
+
 ## Integration: edit without decoding
 
 The three integration benches share **one realistic `Order` document** — deep

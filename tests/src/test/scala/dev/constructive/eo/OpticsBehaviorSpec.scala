@@ -988,7 +988,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   private val streetLens: GetReplaceLens[Address, Address, String, String] =
     new GetReplaceLens[Address, Address, String, String](
-      get = _.street,
+      read = _.street,
       enplace = (a, s) => a.copy(street = s),
     )
 
@@ -1029,8 +1029,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     val swapIso: BijectionIso[Address, Address, (Int, String), (Int, String)] =
       new BijectionIso[Address, Address, (Int, String), (Int, String)](
-        get = a => (a.zip, a.street),
-        reverseGet = { case (z, s) => Address(s, z) },
+        read = a => (a.zip, a.street),
+        build = { case (z, s) => Address(s, z) },
       )
     val isoChain = addressOpt.andThen(swapIso)
     val isoOk = (isoChain.modify { case (z, s) => (z + 1, s + "!") }(hit) ===

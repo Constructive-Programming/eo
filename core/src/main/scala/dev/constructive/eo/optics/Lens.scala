@@ -70,17 +70,23 @@ object Lens:
   * so hand-written lenses pick up the fused hot path automatically.
   */
 class GetReplaceLens[S, T, A, B](
-    val get: S => A,
+    read: S => A,
     val enplace: (S, B) => T,
-) extends Optic[S, T, A, B, Tuple2]:
+) extends Optic[S, T, A, B, Tuple2],
+      CanGet[S, A],
+      CanModifyP[S, T, A, B],
+      CanFold[S, A]:
   type X = S
-  def to(s: S): (S, A) = (s, get(s))
+  def get(s: S): A = read(s)
+  def to(s: S): (S, A) = (s, read(s))
   def from(pair: (S, B)): T = enplace(pair._1, pair._2)
 
-  inline def replace: B => S => T = b => s => enplace(s, b)
+  override inline def replace(b: B): S => T = s => enplace(s, b)
 
   inline def modify(f: A => B): S => T =
     s => enplace(s, f(get(s)))
+
+  def foldMap[M](f: A => M)(s: S)(using cats.Monoid[M]): M = f(read(s))
 
   /** Fused `Lens.andThen(Lens)` — collapses into another `GetReplaceLens` directly on `get` /
     * `enplace`, skipping the generic `AssociativeFunctor[Tuple2]` round-trip. Scala's overload
@@ -97,7 +103,7 @@ class GetReplaceLens[S, T, A, B](
     */
   inline def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
-      get = s => inner.get(get(s)),
+      read = s => inner.get(get(s)),
       enplace = (s, d) => enplace(s, inner.enplace(get(s), d)),
     )
 
@@ -106,7 +112,7 @@ class GetReplaceLens[S, T, A, B](
     */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
-      get = s => inner.get(get(s)),
+      read = s => inner.get(get(s)),
       enplace = (s, d) => enplace(s, inner.reverseGet(d)),
     )
 
@@ -154,11 +160,15 @@ class GetReplaceLens[S, T, A, B](
   * extensions when the evidence is available.
   */
 class SplitCombineLens[S, T, A, B, XA](
-    val get: S => A,
+    read: S => A,
     val split: S => (XA, A),
     val combine: (XA, B) => T,
-) extends Optic[S, T, A, B, Tuple2]:
+) extends Optic[S, T, A, B, Tuple2],
+      CanGet[S, A],
+      CanModifyP[S, T, A, B],
+      CanFold[S, A]:
   type X = XA
+  def get(s: S): A = read(s)
   def to(s: S): (XA, A) = split(s)
   def from(pair: (XA, B)): T = combine(pair._1, pair._2)
 
@@ -167,10 +177,12 @@ class SplitCombineLens[S, T, A, B, XA](
       val (x, a) = to(s)
       combine(x, f(a))
 
-  inline def replace(b: B): S => T =
+  override inline def replace(b: B): S => T =
     s =>
       val (x, _) = to(s)
       combine(x, b)
+
+  def foldMap[M](f: A => M)(s: S)(using cats.Monoid[M]): M = f(read(s))
 
 /** Monomorphic split-combine lens (`S = T`, `A = B`). The matched source / target lets the `to`
   * splitter double as the `T => (X, A)` evidence the mutation extensions need, so `place` /

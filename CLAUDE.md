@@ -242,6 +242,25 @@ no XML, no `finalize`):
   has no `noWhile`, and a regex ban false-positives on the word "while" in
   prose — so it's a review convention.)
 
+- **Consume via capability, construct via optic.** Method parameters that
+  *use* an optic take the weakest capability trait (`CanGet`, `CanGetOption`,
+  `CanModify`, `CanFold`, … — top-level in `dev.constructive.eo`), never a
+  concrete optic type; concrete types (`Lens`, `Prism`, `Getter`, …) are for
+  construction and composition. Keep ONE optic given per `(S, A)` pair in
+  scope — capabilities are keyed by their type params only, so two same-typed
+  foci need newtypes or explicit `(using myLens)` passing. A read-then-write
+  method demands one `CanModify`, not split `CanGet` + `CanModify` evidence
+  (nothing ties two summons to the same optic).
+
+- **Optic before gate typeclass in `using` clauses.** When a signature takes
+  an `Optic[…, F]` together with a typeclass on `F`, both go in the SAME
+  using clause with the optic first (left-to-right resolution pins `F`).
+  Never write the gate as a context bound (`F[_, _]: Accessor`): SIP-64
+  desugars it to a clause searched BEFORE the optic, with `F` still free —
+  it fails with a misleading "given was not considered" error whenever the
+  gate has more than one instance. `CapsMatrixSpec` pins this for the
+  capability companions.
+
 ## Metals MCP (stdio)
 
 `metals-mcp` (new in v1.6.7) is registered as a project-local MCP server in

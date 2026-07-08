@@ -29,8 +29,16 @@ private val pickFoldMiss: Affine.Miss[(Unit, Unit), Nothing] = new Affine.Miss((
   * Returned by [[AffineFold.apply]] / [[AffineFold.select]] so hand-written affine folds pick up
   * the fused members automatically.
   */
-final class PickFold[S, A](val pick: S => Option[A]) extends Optic[S, Unit, A, Unit, Affine]:
+final class PickFold[S, A](val pick: S => Option[A])
+    extends Optic[S, Unit, A, Unit, Affine],
+      CanGetOption[S, A],
+      CanFold[S, A]:
   type X = (Unit, Unit)
+
+  def foldMap[M](f: A => M)(s: S)(using M: cats.Monoid[M]): M =
+    pick(s) match
+      case Some(a) => f(a)
+      case None    => M.empty
 
   def to(s: S): Affine[X, A] =
     pick(s) match
