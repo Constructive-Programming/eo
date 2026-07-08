@@ -678,3 +678,33 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     "MultiFocus[Const[Int, *]][Int] — Const carrier",
     constMultiFocus,
   )
+
+  import data.MultiFocus.collectWith
+
+  // covers: MultiFocus.pApply (type-changing generic factory) + collectWith batch-relative
+  //   rewrite — the report-row shape. The MF4/MF5 discipline laws are monomorphic (A = B), so
+  //   the type change is pinned here: each Int becomes a (value, distance-from-total) pair.
+  "MultiFocus.pApply + collectWith: type-changing batch-relative rewrite" >> forAll {
+    (xs: List[Int]) =>
+      val rows = MultiFocus
+        .pApply[List, Int, (Int, Int)]
+        .collectWith { fa =>
+          val total = fa.sum
+          v => (v, total - v)
+        }(xs)
+      rows == xs.map(v => (v, xs.sum - v))
+  }
+
+  // covers: collectWith through a composed Lens ∘ each chain (carrier MultiFocus[PSVec]) — the
+  //   structural leftover X must survive the batch-relative rewrite, i.e. the sibling field and
+  //   the container shape are intact while every focus shifts by the batch total.
+  "collectWith through Lens ∘ each preserves the surrounding structure" >> forAll {
+    (label: String, xs: List[Int]) =>
+      val sndEach = Lens[(String, List[Int]), List[Int]](_._2, (s, l) => s.copy(_2 = l))
+        .andThen(Traversal.each[List, Int])
+      val out = sndEach.collectWith { fa =>
+        val total = cats.Foldable[PSVec].toList(fa).sum
+        v => v + total
+      }((label, xs))
+      out == ((label, xs.map(_ + xs.sum)))
+  }

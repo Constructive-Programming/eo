@@ -31,4 +31,8 @@ abstract class MultiFocusTests[S, A, F[_]] extends Laws:
       OpticLawProps.composeModify[S, A](laws.composeModify),
       "collect via map" ->
         forAll((s: S, agg: F[A] => A) => laws.collectViaMap(s, agg)),
+      "collectWith subsumes collectMap" ->
+        forAll((s: S, agg: F[A] => A) => laws.collectWithSubsumesCollectMap(s, agg)),
+      "collectWith subsumes modify" ->
+        forAll((s: S, f: A => A) => laws.collectWithSubsumesModify(s, f)),
     )
