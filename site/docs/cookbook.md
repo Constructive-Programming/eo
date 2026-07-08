@@ -423,36 +423,44 @@ per-slot rewrite (`.modifyA[G]`), reach for a collection-backed
 
 #### Recipe B — Summarise a batch, then broadcast or collapse
 
-**Why:** you have a column of numbers from a batch — sensor
-readings, line-item amounts, weights — and you need a summary in a
-particular shape. Sometimes you want it written back into every
-position (so each row carries the batch total as the denominator
-for a "share of total", or the mean as a baseline); sometimes you
-want the batch collapsed to a single value. The same `MultiFocus[F]`
-optic does both — you pick the flavour at the call site:
+**Why:** a column of readings from a batch needs to become a
+*report*: each row pairing the original value with its distance
+from the batch average, plus the batch-level statistics — mean,
+variance, standard deviation — computed once. The same
+`MultiFocus[F]` optic covers every shape the report needs:
+broadcast a summary into every position, collapse the batch to a
+single footer value, or fold out the statistical moments in one
+pass — you pick the flavour at the call site:
 
 ```scala mdoc:silent
-import cats.data.ZipList
+case class ReportRow(value: Double, distanceFromMean: Double)
 
-val zipMF = MultiFocus.apply[ZipList, Double]
-val intListMF = MultiFocus.apply[List, Int]
+val readings = List(12.0, 14.0, 11.0, 15.0)
+
+val readingsMF = MultiFocus.apply[List, Double]
 ```
 
 ```scala mdoc
-// (1) .collectMap broadcasts one summary back to every position —
-//     here the batch mean, so every slot ends up holding the average.
-//     (.value just unwraps the ZipList so the result prints legibly.)
-zipMF.collectMap[Double](zl => zl.value.sum / zl.value.size.toDouble)(
-  ZipList(List(1.0, 2.0, 3.0, 4.0))
-).value
+// (1) Baseline column — .collectMap broadcasts the batch mean back
+//     into every position, keeping the shape.
+readingsMF.collectMap[Double](xs => xs.sum / xs.size)(readings)
 
-// (2) .collectList collapses the whole batch to a single value —
-//     the total as a one-element result, whatever the input length.
-intListMF.collectList(_.sum)(List(1, 2, 3, 4))
+// (2) Report footer — .collectList collapses the batch to a single
+//     summary value, whatever the input length.
+readingsMF.collectList(xs => xs.sum / xs.size)(readings)
 
-// (3) Same optic, .collectMap flavour: the grand total stamped onto
-//     every position — the denominator for a later "share of total".
-intListMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
+// (3) The batch statistics in ONE foldMap pass: count, sum and sum
+//     of squares via the tuple monoid, then the moments fall out.
+val (n, sum, sumSq) = readingsMF.foldMap(v => (1, v, v * v))(readings)
+val mean     = sum / n
+val variance = sumSq / n - mean * mean   // population variance
+val stdDev   = math.sqrt(variance)
+
+// (4) The report rows — Traversal.pEach is the type-changing walk,
+//     so the write emits a DIFFERENT element type: each original
+//     paired with its distance from the average.
+Traversal.pEach[List, Double, ReportRow]
+  .modify(v => ReportRow(v, v - mean))(readings)
 ```
 
 **Which flavour?**
@@ -464,6 +472,11 @@ intListMF.collectMap[Int](_.sum)(List(1, 2, 3, 4))
 - `.collectList(agg: List[A] => B)` produces a single-element result
   regardless of input length. Reach for it when you just want the
   summary.
+- Both collect flavours keep the element type —
+  `MultiFocus.apply[F, A]` pins the write-back to `A`. When the
+  report row is a *different* type, fold the aggregate out first
+  (`.foldMap`, as in step 3), then re-walk with the type-changing
+  `Traversal.pEach[F, A, Row]` (step 4).
 
 Why two flavours, rather than one derived automatically? The
 [MultiFocus reference](multifocus.md#why-two-collect-variants) has
