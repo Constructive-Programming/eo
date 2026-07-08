@@ -378,8 +378,8 @@ The third post-fold shape — PowerSeries downstream composition,
 `Traversal.each` into a downstream `Lens` (which the deleted
 `Traversal.forEach` shape, `Forget[T]`-based and terminal,
 couldn't) — is exercised throughout the cookbook's decoupling
-recipes: the `lineAmounts` chain in "Ask for the weakest capability
-you need" is exactly `Lens → each → Lens`.
+recipes: the `lineAmounts` chain in "Depend only on what's needed"
+is exactly `Lens → each → Lens`.
 
 ## Historical landmarks
 

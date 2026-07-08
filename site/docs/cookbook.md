@@ -39,7 +39,7 @@ JSON you never decode. The recipes ramp by *shape*, and the point
 throughout is that no step dead-ends: whatever you just focused,
 the next `.andThen` keeps going.
 
-### Prism + Lens — branch into a case, then edit inside
+### Visit contingent fields
 
 **Why:** you want to rewrite one variant of a sum type — the bound
 variable of a `Var` node in an AST, say — and leave every other
@@ -91,7 +91,7 @@ full story on the NamedTuple focus.
 Wlaschin — *Domain Modeling Made Functional*, ch. 4,
 <https://pragprog.com/titles/swdddf/domain-modeling-made-functional/>.
 
-### …and across the whole tree — `Plated` + `everywhere`
+### Visit across whole trees
 
 `varName` edits exactly the node you hand it: `Var("x")` hits,
 `Lam(...)` misses — the nested `Var("y")` inside stays untouched,
@@ -146,7 +146,7 @@ Processing* (Uniplate),
 Haskell `lens` `Control.Lens.Plated`,
 <https://hackage.haskell.org/package/lens/docs/Control-Lens-Plated.html>.
 
-### Sparse traversal over a Prism
+### Visit through arbitrary structure
 
 **Why:** you have a list of results, some `Ok` and some `Err`, and
 want to bump only the successes — leaving the failures exactly
@@ -191,7 +191,7 @@ per-benchmark curve lives in
 Actions) + ch. 10 (Missing Values),
 <https://leanpub.com/optics-by-example/>.
 
-### Multi-field focus into a fold — total inventory value
+### Isolate what you need
 
 **Why:** you have a basket of line items and want one number —
 total value — without writing a fold by hand or threading two
@@ -234,7 +234,7 @@ of the NamedTuple focus.
 **Source:** cats-eo internal; fold framing from Penner — *Optics
 By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 
-### Many focuses at once: rewrite, aggregate, broadcast
+### Compute aggregations
 
 A `Lens` sees one value; a `Traversal` sees many but only lets you
 map over them. `MultiFocus[F]` is the optic for the jobs in between:
@@ -362,7 +362,7 @@ the answer.
 <https://chrispenner.ca/posts/kaleidoscopes>; Penner —
 *Algebraic lenses*, <https://chrispenner.ca/posts/algebraic>.
 
-### Edit one leaf deep in a JSON tree, no decode
+### Edit JSON without decoding
 
 **Why:** you need to change one field deep inside a JSON payload
 and pass the rest through untouched — no full decode into a
@@ -410,7 +410,7 @@ covers routing it.
 **Source:** cats-eo internal (`JsonPrism`); related to circe-optics'
 `root.*` idiom <https://circe.github.io/circe/optics.html>.
 
-### …and every element of a JSON array
+#### …and every element of a JSON array
 
 Walk an array without materialising it as a Scala collection;
 only the focused leaf of each element is decoded. The `.each`
@@ -505,7 +505,7 @@ publishing one optic value instead of exposing its shape.
 <https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>
 ("Modular Application Design").
 
-### Ask for the weakest capability you need
+### Depend only on what's needed
 
 **Why:** the recipe above still pins the carrier — it accepts
 traversals only. Most functions need even less: "something I can
@@ -571,7 +571,7 @@ demands `Accessor` *and* `ReverseAccessor` insists on an Iso. The
 specify if you need the guarantees of an Iso, or the freedom of a
 Getter"); capability-gated surface is cats-eo internal.
 
-### Kafka payload edit
+### Serdes free pipes
 
 **Why:** a Kafka consumer gets an `Array[Byte]` payload, needs to
 change one field, and re-emits binary on the producer side. The
@@ -657,7 +657,7 @@ default surface). Background framing on the streaming /
 Kafka use case lives in the
 [Avro integration intro](integrations/avro.md#why-this-exists).
 
-### Cross-format bridge — Avro bytes ⇄ JSON bytes
+### Inspectable cross-format bridges
 
 **Why:** the consumer reads Avro off a topic and must emit JSON
 to a partner API — or receives JSON and must re-emit Avro. Two
@@ -724,7 +724,7 @@ between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
 **Source:** `AvroJsonBridgeSpec` (jsoniter module) and
 `AvroJsonBridgeBench` (benchmarks) in cats-eo.
 
-### The contract at the seam — law-check your own optics
+### Re-usable laws for testing
 
 A decoupled boundary needs a tested contract. Composing optics
 means the combinators are already tested — what's left to check is
@@ -813,13 +813,13 @@ the carrier is deferred to a follow-up release.
 **Source:** Monocle / Haskell `lens` classic `traverseOf`,
 generalised.
 
-### One optic, many control flows — swap the effect
+### Structure orthogonal to effects
 
 **Why:** the article's `systemVerifier` insight — "what to do is
 decided by the effect type" — in its smallest honest form. Take the
-`lineAmounts` traversal from the [weakest-capability
-recipe](#ask-for-the-weakest-capability-you-need)
-and thread three different `G`s through the *same* `.modifyA`. The
+`lineAmounts` traversal from the "Depend only on what's needed"
+recipe and thread three different `G`s through the *same*
+`.modifyA`. The
 optic never changes; the control flow does:
 
 ```scala mdoc:silent
@@ -862,7 +862,7 @@ domain types never learn any of this is happening.
 <https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> ("What
 to do is decided by the effect type").
 
-### Batch-load nested IDs — O(N) → O(1) queries
+### Batch-load nested IDs
 
 **Why:** every node in a structure carries an ID you need to
 resolve against a database, and the naive `.modifyA` fires one
@@ -904,7 +904,7 @@ cats-eo-specific API to learn.
 **Source:** Penner — *Using traversals to batch database
 queries*, <https://chrispenner.ca/posts/traversals-for-batching>.
 
-### Persist-and-stamp — return the stored object with its DB id
+### Persist-and-stamp decode free
 
 **Why:** a `PUT` (or `POST`) handler receives a draft entity on the
 wire, persists it, and must return the *same* entity enriched with

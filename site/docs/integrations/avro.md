@@ -789,7 +789,7 @@ shape.
 | Parse + edit Avro JSON wire payloads                       | `AvroPrism.modify(...)` on `String`                |
 
 For the Kafka end-to-end recipe (read bytes, modify, re-emit),
-see the [Cookbook → Kafka payload edit](../cookbook.md#kafka-payload-edit).
+see the [Cookbook → Serdes free pipes](../cookbook.md#serdes-free-pipes).
 For the full failure-mode matrix and the per-case behaviour
 specs, see
 [`AvroPrismSpec`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/test/scala/dev/constructive/eo/avro/AvroPrismSpec.scala)
