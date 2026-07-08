@@ -14,12 +14,12 @@ of N&sup2; hand-written `.andThen` overloads.
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo" % "0.1.0"
+libraryDependencies += "dev.constructive" %% "cats-eo" % "0.6.3"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %% "cats-eo-laws"     % "0.1.0" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "0.1.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-circe"    % "0.1.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-avro"     % "0.1.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-laws"     % "0.6.3" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "0.6.3"
+libraryDependencies += "dev.constructive" %% "cats-eo-circe"    % "0.6.3"
+libraryDependencies += "dev.constructive" %% "cats-eo-avro"     % "0.6.3"
 ```
 
 Requires Scala 3.8.x on JDK 17 or JDK 21.
