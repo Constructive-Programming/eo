@@ -15,9 +15,9 @@ aggregation, and same-carrier `.andThen` — with no new carrier, law
 surface, or `AssociativeFunctor` instance to write.
 
 For the mechanical intro see [Optics → MultiFocus](optics.md#multifocus);
-for runnable patterns the [Cookbook](cookbook.md) ships three
-end-to-end recipes that exercise the prototypical Grate / Kaleidoscope /
-PowerSeries-downstream shapes.
+for runnable patterns the [Cookbook](cookbook.md) ships two
+end-to-end recipes that exercise the prototypical Grate and
+Kaleidoscope shapes.
 
 ## Sub-shapes
 
@@ -361,7 +361,7 @@ unaffected: they ride `MultiFocus[PSVec]` and compose freely.)
 
 ## Worked examples
 
-Three end-to-end recipes in the [Cookbook](cookbook.md) cover the
+Two end-to-end recipes in the [Cookbook](cookbook.md) cover the
 prototypical post-fold shapes:
 
 - **[Recipe A — Prototypical Grate-shape via `MultiFocus.tuple`](cookbook.md)** —
@@ -372,11 +372,14 @@ prototypical post-fold shapes:
   the "applicative-aware aggregation" idiom, told as report-row
   preparation: broadcast baseline, cartesian footer, and the
   type-changing `pApply` + `collectWith` batch-relative rewrite.
-- **[Recipe C — PowerSeries downstream composition (`Lens → each → Lens`)](cookbook.md)** —
-  the post-consolidation crown jewel: the absorbed-PowerSeries
-  sub-shape `MultiFocus[PSVec]` lets `.andThen` continue past
-  `Traversal.each` into a downstream `Lens`. The deleted
-  `Traversal.forEach` shape (`Forget[T]`-based, terminal) couldn't.
+
+The third post-fold shape — PowerSeries downstream composition,
+`MultiFocus[PSVec]` letting `.andThen` continue past
+`Traversal.each` into a downstream `Lens` (which the deleted
+`Traversal.forEach` shape, `Forget[T]`-based and terminal,
+couldn't) — is exercised throughout the cookbook's decoupling
+recipes: the `lineAmounts` chain in "Ask for the weakest capability
+you need" is exactly `Lens → each → Lens`.
 
 ## Historical landmarks
 
@@ -463,8 +466,8 @@ respectively.
 ## Further reading
 
 - [Cookbook → Many focuses at once](cookbook.md) —
-  the three end-to-end recipes that ground each absorbed
-  sub-shape.
+  the end-to-end recipes that ground the absorbed
+  sub-shapes.
 - [Concepts → Composition](concepts.md#composition) — the carrier
   graph and the bridge / lattice diagrams.
 - [`MultiFocus.scala`](https://github.com/Constructive-Programming/eo/blob/main/core/src/main/scala/dev/constructive/eo/data/MultiFocus.scala) —

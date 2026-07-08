@@ -309,8 +309,9 @@ Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(
 Works on enums, sealed hierarchies, and recursive case classes. See
 the [cookbook Plated recipe](cookbook.md) for a worked, runnable
 example. (The block above is illustrative — the `new` the macro
-emits for an enum case can't run inside this page's doc sandbox, so
-the cookbook spells the instance out by hand instead.)
+emits for an enum case can't run inside this page's doc sandbox;
+the cookbook runs the same derivation against a package-level
+sample ADT instead.)
 
 ## Macro errors
 
