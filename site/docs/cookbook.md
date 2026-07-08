@@ -429,8 +429,9 @@ from the batch average, plus the batch-level statistics — mean,
 variance, standard deviation — computed once. The same
 `MultiFocus[F]` optic covers every shape the report needs:
 broadcast a summary into every position, collapse the batch to a
-single footer value, or fold out the statistical moments in one
-pass — you pick the flavour at the call site:
+single footer value, rewrite every row *relative to the batch* in
+one expression, or fold out the statistical moments in one pass —
+you pick the flavour at the call site:
 
 ```scala mdoc:silent
 case class ReportRow(value: Double, distanceFromMean: Double)
@@ -449,18 +450,24 @@ readingsMF.collectMap[Double](xs => xs.sum / xs.size)(readings)
 //     summary value, whatever the input length.
 readingsMF.collectList(xs => xs.sum / xs.size)(readings)
 
-// (3) The batch statistics in ONE foldMap pass: count, sum and sum
-//     of squares via the tuple monoid, then the moments fall out.
+// (3) The report rows, in one expression — .collectWith is the
+//     algebraic-lens universal: the aggregate sees the whole batch
+//     ONCE, computes the baseline, and returns the per-row rewrite.
+//     The pApply factory makes the walk type-changing, so each
+//     Double becomes a ReportRow pairing the original with its
+//     distance from the average.
+MultiFocus.pApply[List, Double, ReportRow].collectWith { xs =>
+  val mean = xs.sum / xs.size
+  v => ReportRow(v, v - mean)
+}(readings)
+
+// (4) The batch-level statistics for the report footer: count, sum
+//     and sum of squares in ONE foldMap pass via the tuple monoid,
+//     then the moments fall out.
 val (n, sum, sumSq) = readingsMF.foldMap(v => (1, v, v * v))(readings)
 val mean     = sum / n
 val variance = sumSq / n - mean * mean   // population variance
 val stdDev   = math.sqrt(variance)
-
-// (4) The report rows — Traversal.pEach is the type-changing walk,
-//     so the write emits a DIFFERENT element type: each original
-//     paired with its distance from the average.
-Traversal.pEach[List, Double, ReportRow]
-  .modify(v => ReportRow(v, v - mean))(readings)
 ```
 
 **Which flavour?**
@@ -472,13 +479,18 @@ Traversal.pEach[List, Double, ReportRow]
 - `.collectList(agg: List[A] => B)` produces a single-element result
   regardless of input length. Reach for it when you just want the
   summary.
-- Both collect flavours keep the element type —
-  `MultiFocus.apply[F, A]` pins the write-back to `A`. When the
-  report row is a *different* type, fold the aggregate out first
-  (`.foldMap`, as in step 3), then re-walk with the type-changing
-  `Traversal.pEach[F, A, Row]` (step 4).
+- `.collectWith(agg: F[A] => A => B)` is the general map-shaped
+  collect — the aggregate sees the batch once and the returned
+  function runs per position, so batch-relative rewrites
+  (share-of-total, distance-from-mean) are one expression.
+  `collectMap` is its constant-function special case, and the
+  type-changing `MultiFocus.pApply[F, A, B]` factory un-pins the
+  element type so the rewrite can emit a different row type
+  (step 3). Only `collectList` stays separate — its singleton
+  collapse changes the focus count, which no map-shaped combinator
+  can express.
 
-Why two flavours, rather than one derived automatically? The
+Why distinct flavours, rather than one derived automatically? The
 [MultiFocus reference](multifocus.md#why-two-collect-variants) has
 the answer.
 

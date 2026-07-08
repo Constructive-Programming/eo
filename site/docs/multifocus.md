@@ -10,9 +10,9 @@ What you get: the optic's surface is exactly the intersection of cats's
 typeclass hierarchy on `F` with what the generic carrier body supports.
 Pick an `F` and the methods light up automatically — `.modify`
 (`Functor`), `.foldMap` (`Foldable`), `.modifyA` (`Traverse`), `.at(i)`
-(`Representable`), `.collectMap` / `.collectList` aggregation, and
-same-carrier `.andThen` — with no new carrier, law surface, or
-`AssociativeFunctor` instance to write.
+(`Representable`), `.collectWith` / `.collectMap` / `.collectList`
+aggregation, and same-carrier `.andThen` — with no new carrier, law
+surface, or `AssociativeFunctor` instance to write.
 
 For the mechanical intro see [Optics → MultiFocus](optics.md#multifocus);
 for runnable patterns the [Cookbook](cookbook.md) ships three
@@ -27,7 +27,7 @@ multi-focus job:
 | Sub-shape | `F` | What it's for |
 |-----------|-----|---------------|
 | **`AlgLens[F]`** | `F: Functor / Foldable / Traverse` | Algebraic ("classifier") lenses — a focus computed as a fold / classification over the structure, broadcast back on write. |
-| **Kaleidoscope** | `F: Apply` | Aggregating reads — collapse every focus to one value via `.collectMap` / `.collectList`. |
+| **Kaleidoscope** | `F: Apply` | Aggregating reads and batch-relative rewrites — `.collectWith` / `.collectMap` / `.collectList`. |
 | **Grate** | `Function1[X0, *]` | Uniform rewrite across a fixed shape — homogeneous tuples and Naperian / representable containers (`MultiFocus.tuple` / `representable` / `representableAt`). |
 | **PowerSeries** | `PSVec` | Element-wise traversal of a collection with downstream `.andThen` composition — the `Traversal.each` carrier; carries the hand-tuned `mfAssocPSVec` fast paths (`MultiFocusSingleton` for Lens morphs, `MultiFocusPSMaybeHit` for Prism / Optional). |
 | **`FixedTraversal[N]`** | `PSVec` | Fixed-arity traversal — the `Traversal.{two,three,four}` factories tabulate their known arity into the PowerSeries carrier, so they compose like `each`. |
@@ -77,7 +77,7 @@ import cats.instances.function.given
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
-import dev.constructive.eo.data.MultiFocus.{at, collectList, collectMap}
+import dev.constructive.eo.data.MultiFocus.{at, collectList, collectMap, collectWith}
 ```
 
 ### `.modify` — `Functor[F]`
@@ -144,6 +144,38 @@ aggregator collapses the entire `F[A]` focus to a single `B`; the
 broadcast `F.map(_ => b)` puts the aggregate back into every position,
 preserving the `F`-shape exactly.
 
+### `.collectWith` — the algebraic-lens universal
+
+`collectMap`'s aggregate never sees the individual focus.
+`.collectWith(agg: F[A] => A => B)` is the general map-shaped
+collect: the curried aggregate sees the whole batch ONCE, and the
+`A => B` it returns runs per position — so batch-relative rewrites
+(distance-from-mean, share-of-total) are one expression. It
+subsumes both map-shaped siblings — `collectMap(agg) =
+collectWith(fa => _ => agg(fa))` and `modify(f) = collectWith(_ => f)`,
+pinned as discipline laws MF4 / MF5 — and requires only
+`Functor[F]`, like `collectMap`.
+
+```scala mdoc
+// Batch-relative rewrite: subtract the column mean from every slot.
+zipMF.collectWith { zl =>
+  val mean = zl.value.sum / zl.value.size.toDouble
+  v => v - mean
+}(ZipList(List(1.0, 2.0, 3.0, 4.0)))
+
+// Type-changing via the pApply factory: each reading becomes a
+// (value, distance) pair — the report-row shape.
+MultiFocus.pApply[List, Double, (Double, Double)].collectWith { xs =>
+  val mean = xs.sum / xs.size
+  v => (v, v - mean)
+}(List(1.0, 2.0, 3.0, 4.0))
+```
+
+The second call runs through `MultiFocus.pApply[F, A, B]` — the
+polymorphic counterpart to the generic `MultiFocus.apply[F, A]`
+factory (`apply` is now `pApply[F, A, A]`), sound because the
+factory's rebuild is identity on the written-back `F[B]`.
+
 ### `.collectList` — List-only cartesian collapse
 
 ```scala mdoc
@@ -191,6 +223,13 @@ uniformly — picking one would have silently changed the v1 List
 semantics. The chosen split (Functor-broadcast as the carrier-wide
 default, List-cartesian as the call-site extension) is honest about
 the choice without cluttering the discipline surface.
+
+`.collectWith` later generalised the *map-shaped* side: it is the
+universal that `collectMap` and `modify` specialise (laws MF4 /
+MF5), so the surviving split is map-shaped (`collectWith` and its
+special cases, `Functor`-derivable) versus shape-collapsing
+(`collectList`, the one behaviour no map-shaped combinator can
+express).
 
 ## Composability profile
 
@@ -329,11 +368,10 @@ prototypical post-fold shapes:
   the "broadcast a uniform `A => B` over a homogeneous tuple"
   idiom. Exercises the absorbed-Grate sub-shape
   `MultiFocus[Function1[Int, *]]`.
-- **[Recipe B — Prototypical Kaleidoscope-shape via `.collectMap` / `.collectList`](cookbook.md)** —
-  the "applicative-aware aggregation" idiom. Exercises the
-  absorbed-Kaleidoscope reasoning across `MultiFocus[ZipList]`
-  (length-preserving broadcast) and `MultiFocus[List]` (cartesian
-  collapse).
+- **[Recipe B — Prototypical Kaleidoscope-shape via `.collectWith` / `.collectMap` / `.collectList`](cookbook.md)** —
+  the "applicative-aware aggregation" idiom, told as report-row
+  preparation: broadcast baseline, cartesian footer, and the
+  type-changing `pApply` + `collectWith` batch-relative rewrite.
 - **[Recipe C — PowerSeries downstream composition (`Lens → each → Lens`)](cookbook.md)** —
   the post-consolidation crown jewel: the absorbed-PowerSeries
   sub-shape `MultiFocus[PSVec]` lets `.andThen` continue past
@@ -388,6 +426,9 @@ specialisation.
 ```scala
 // Generic factory — F[A] source, identity rebuild
 def apply[F[_], A]: Optic[F[A], F[A], A, A, MultiFocus[F]]
+
+// Polymorphic counterpart — focus type change, the pEach analogue
+def pApply[F[_], A, B]: Optic[F[A], F[B], A, B, MultiFocus[F]]
 
 // Cross-carrier lifts — focus is already F[A], inner gets A
 def fromLensF[F, S, T, A, B](
