@@ -421,7 +421,7 @@ respectively.
 
 ## Further reading
 
-- [Cookbook → Theme E (Algebraic / classifier)](cookbook.md) —
+- [Cookbook → Many focuses at once](cookbook.md) —
   the three end-to-end recipes that ground each absorbed
   sub-shape.
 - [Concepts → Composition](concepts.md#composition) — the carrier

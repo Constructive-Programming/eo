@@ -182,7 +182,7 @@ re-encode — or, with [eo-circe](integrations/circe.md) / [eo-avro](integration
 form in place and never fully decode at all.
 
 Put together, that turns a request handler into a short pipeline. The
-**persist-and-stamp** recipe ([Cookbook → Theme H](cookbook.md)) is the
+**persist-and-stamp** recipe ([Cookbook → Effect threading](cookbook.md)) is the
 canonical shape — decode a PUT body into a domain object, store it effectfully,
 stamp the database-assigned id back on with a derived id-lens, and re-encode the
 result: the whole handler reads as `decode → store → stamp → encode`.

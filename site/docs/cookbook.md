@@ -1,17 +1,29 @@
 # Cookbook
 
-Runnable patterns for the questions that come up most often. Each
-recipe opens with the problem it solves, every fence is compiled by
-mdoc against the current library version, and every recipe cites
-the source — Penner's *Optics By Example*, Monocle docs, Haskell
-`lens` tutorial, circe-optics, or cats-eo itself where the surface
-is novel.
+Optics are probably the most powerful unused tool in our arsenal —
+this page is the working proof. Runnable patterns for the questions
+that come up most often, organised by the three jobs optics do best:
 
-These are worked examples, not a tutorial — for the optic families
-themselves see the [Optics reference](optics.md). Recipes are
-grouped by theme, moving from the everyday to the most
-cats-eo-unique capability; skim the headings for a jumping-off
-point.
+1. **[Navigating structures](#navigating-structures)** — reach one
+   value, one branch, many siblings, every node of a recursive tree,
+   or a field inside bytes you never decode. One `.andThen` surface
+   for all of it.
+2. **[Decoupling and modularity](#decoupling-and-modularity)** —
+   replace a direct dependence on a data type with an optic: depend
+   on the *relationship*, ask for the *weakest capability* you need,
+   and let independent modules interoperate at the call site.
+3. **[Effect threading](#effect-threading)** — turn control flow
+   into type definitions: the optic pins *where*, the effect type
+   decides *what happens* — abort, accumulate, audit, defer.
+
+The framing follows Hansen — *We Need More Optics*
+(<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>) and
+Penner — *Optics By Example*
+(<https://leanpub.com/optics-by-example/>). These are worked
+examples, not a tutorial — for the optic families themselves see the
+[Optics reference](optics.md). Every fence is compiled by mdoc
+against the current library version, and every recipe cites its
+source.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
@@ -19,7 +31,13 @@ import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.data.MultiFocus.given   // Functor / Foldable / Traverse for MultiFocus[PSVec] (post-fold)
 ```
 
-## Theme A — Product editing
+## Navigating structures
+
+One value at any depth; one branch of a sum; many foci at once —
+siblings, collection elements, every node of a tree; and the same
+moves over JSON you never decode. The recipes ramp by *shape*, and
+the point throughout is that no step dead-ends: whatever you just
+focused, the next `.andThen` keeps going.
 
 ### Virtual-field Iso — Celsius ↔ Fahrenheit facade
 
@@ -55,56 +73,13 @@ fahrenheit.modify(_ + 9.0)(Temperature(0.0))
 concrete-subclass override — no per-hop typeclass dispatch —
 so the facade-as-public-API refactor story doesn't cost
 anything at runtime. See [Iso](optics.md#iso) for the carrier
-details.
+details. The virtual field is also a *decoupling* device — the
+representation can change under a stable surface — a thread
+picked up in [Decoupling and
+modularity](#decoupling-and-modularity).
 
 **Source:** Penner — *Virtual Record Fields Using Lenses*,
 <https://chrispenner.ca/posts/virtual-fields>.
-
-### Total inventory value — multi-field focus into a fold (cats-eo-unique)
-
-**Why:** you have a basket of line items and want one number —
-total value — without writing a fold by hand or threading two
-fields through a loop. The `lens[S](_.a, _.b)` macro focuses both
-`quantity` and `price` as a single Scala 3 `NamedTuple`, so the
-multiply-and-sum drops straight into `foldMap`. No Monocle
-analogue for the multi-field focus.
-
-```scala mdoc:silent
-import cats.instances.list.given     // Traverse[List] for .each
-import cats.instances.double.given   // Monoid[Double] for .foldMap
-import dev.constructive.eo.generics.lens
-
-case class OrderItem(sku: String, quantity: Int, price: Double)
-
-// Focus both pricing fields at once, then walk every item.
-val lineValue =
-  Traversal.each[List, OrderItem]
-    .andThen(lens[OrderItem](_.quantity, _.price))
-```
-
-```scala mdoc
-val inventory = List(
-  OrderItem("apple",   3, 9.99),
-  OrderItem("pear",   10, 2.50),
-  OrderItem("lobster", 2, 45.00),
-)
-
-// One pass: see each item's (quantity, price) NamedTuple, multiply,
-// and let the Double monoid sum the line values into a grand total.
-lineValue.foldMap(nt => nt.quantity * nt.price)(inventory)
-```
-
-The focus arrives in selector order, so `nt.quantity` and
-`nt.price` are named — the lambda reads like the business rule it
-encodes. The same `lineValue` optic also writes (`.modify` to
-re-price every line); the fold is just the read-side escape. See
-[Generics → Multi-field Lens](generics.md) for the full treatment
-of the NamedTuple focus.
-
-**Source:** cats-eo internal; fold framing from Penner — *Optics
-By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
-
-## Theme B — Sum-branch access
 
 ### Prism + Lens — branch into a case, then edit inside
 
@@ -207,8 +182,6 @@ Processing* (Uniplate),
 Haskell `lens` `Control.Lens.Plated`,
 <https://hackage.haskell.org/package/lens/docs/Control-Lens-Plated.html>.
 
-## Theme C — Collection walks
-
 ### `each` past the traversal — drill, then keep drilling
 
 **Why:** flip the `isMobile` flag on every phone a subscriber owns.
@@ -258,7 +231,6 @@ fixed-arity hops and the list walk chain into one optic:
 
 ```scala mdoc:silent
 import java.time.Instant
-import dev.constructive.eo.data.{MultiFocus, PSVec}
 
 case class Transaction(issue: Instant, acknowledge: Instant)
 case class Sheet(froms: List[Transaction], tos: List[Transaction])
@@ -293,23 +265,16 @@ val sheet = Sheet(
 sheetTimes.modify(_.plusSeconds(3600))(sheet)
 ```
 
-Nothing downstream has to name `Sheet`: a function can require the
-optic instead of the type, and any structure that can point at its
-`Instant`s gets the behaviour —
-
-```scala mdoc:silent
-def adjustTimes[S](t: Optic[S, S, Instant, Instant, MultiFocus[PSVec]])(
-    f: Instant => Instant
-): S => S = t.modify(f)
-
-val bumpSheet = adjustTimes(sheetTimes)(_.plusSeconds(3600))
-```
-
 One shape caveat: `reverse` (`Sheet(_, _)` above) sees only the
 modified foci, so `Traversal.two/three/four` suit types the foci
 fully cover. When the pair sits beside other fields, drill in with a
 Lens first — the "Lens drills into `Traversal.two`" seam preserves
 the siblings, like every other composed write.
+
+Nothing downstream has to name `Sheet` at all: a function can
+require the *optic* instead of the type. That is the decoupling
+story, and `sheetTimes` reappears as its star witness in
+[Require the optic, not the type](#require-the-optic-not-the-type).
 
 **Source:** Hansen — *We Need More Optics*, The Startup,
 <https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>; the
@@ -360,212 +325,51 @@ per-benchmark curve lives in
 Actions) + ch. 10 (Missing Values),
 <https://leanpub.com/optics-by-example/>.
 
-## Theme D — JSON editing and tree walks
+### Multi-field focus into a fold — total inventory value (cats-eo-unique)
 
-### The JSON arc — edit leaf, edit array, diagnose
-
-**Why:** you need to change one field deep inside a JSON payload
-and pass the rest through untouched — no full decode into a
-case-class tree, no re-encode, no decoder for the siblings you
-never read. One vignette in three acts: edit a deep leaf, edit
-every element of a nested array, then see *why* an edit was a
-silent no-op. The [Ior failure-flow
-diagram](integrations/circe.md#failure-flow) covers the full decision tree.
-
-#### Act 1 — edit one leaf deep in a JSON tree (no decode)
-
-`codecPrism[S]` walks circe's `Json` directly; only the focused
-leaf is materialised as `A`:
+**Why:** you have a basket of line items and want one number —
+total value — without writing a fold by hand or threading two
+fields through a loop. The `lens[S](_.a, _.b)` macro focuses both
+`quantity` and `price` as a single Scala 3 `NamedTuple`, so the
+multiply-and-sum drops straight into `foldMap`. No Monocle
+analogue for the multi-field focus.
 
 ```scala mdoc:silent
-import dev.constructive.eo.circe.codecPrism
-import io.circe.Codec
-import io.circe.syntax.*
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import cats.instances.list.given     // Traverse[List] for .each
+import cats.instances.double.given   // Monoid[Double] for .foldMap
+import dev.constructive.eo.generics.lens
 
-case class UserAddress(street: String, zip: Int)
-object UserAddress:
-  given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derived
+case class OrderItem(sku: String, quantity: Int, price: Double)
 
-case class SiteUser(name: String, address: UserAddress)
-object SiteUser:
-  given Codec.AsObject[SiteUser] = KindlingsCodecAsObject.derived
-
-val userStreet = codecPrism[SiteUser].address.street
+// Focus both pricing fields at once, then walk every item.
+val lineValue =
+  Traversal.each[List, OrderItem]
+    .andThen(lens[OrderItem](_.quantity, _.price))
 ```
 
 ```scala mdoc
-val userJson = SiteUser("Alice", UserAddress("Main St", 12345)).asJson
-userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
+val inventory = List(
+  OrderItem("apple",   3, 9.99),
+  OrderItem("pear",   10, 2.50),
+  OrderItem("lobster", 2, 45.00),
+)
+
+// One pass: see each item's (quantity, price) NamedTuple, multiply,
+// and let the Double monoid sum the line values into a grand total.
+lineValue.foldMap(nt => nt.quantity * nt.price)(inventory)
 ```
 
-The
-[`OrderCirceBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderCirceBench.scala)
-suite shows this edit is **flat in document size** — ~1.3 µs whether the record
-is small or large — while the decode / `.copy` / re-encode path scales with the
-whole payload, so the gap grows from ~3× on a tiny record to ~160× on a large
-one. circe-optics' analogous `root.user.address.street` surface forces a full
-decode per level; cats-eo's cursor walk does not.
+The focus arrives in selector order, so `nt.quantity` and
+`nt.price` are named — the lambda reads like the business rule it
+encodes. The same `lineValue` optic also writes (`.modify` to
+re-price every line); the fold is just the read-side escape. See
+[Generics → Multi-field Lens](generics.md) for the full treatment
+of the NamedTuple focus.
 
-#### Act 2 — edit every element of a JSON array
+**Source:** cats-eo internal; fold framing from Penner — *Optics
+By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 
-Walk an array without materialising it as a Scala collection;
-only the focused leaf of each element is decoded. The `.each`
-step splits the Prism into a `JsonTraversal`:
-
-```scala mdoc:silent
-case class Item(name: String, price: Double)
-object Item:
-  given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
-
-case class Basket(owner: String, items: Vector[Item])
-object Basket:
-  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
-```
-
-```scala mdoc
-val basket = Basket("Alice", Vector(Item("apple", 1.0), Item("pear", 2.0)))
-val everyItemName = codecPrism[Basket].items.each.name
-
-everyItemName.modifyUnsafe(_.toUpperCase)(basket.asJson).noSpacesSortKeys
-```
-
-Per-element failures to decode accumulate into
-`Ior.Both(chain, partialJson)` on the default surface — next act.
-
-#### Act 3 — diagnose a silent edit no-op
-
-A deep `.modify` appears to do nothing — which path step
-refused? The `*Unsafe` methods preserve the pre-v0.2 silent
-behaviour, but the default `modify` returns
-`Ior[Chain[JsonFailure], Json]` so the diagnostic is
-observable:
-
-```scala mdoc:silent
-import cats.data.Ior
-import io.circe.Json
-
-// A stump Json missing the `.address` field altogether.
-val stump = Json.obj("name" -> Json.fromString("Alice"))
-```
-
-```scala mdoc
-userStreet.modify(_.toUpperCase)(stump)
-```
-
-The `Ior.Both(chain, json)` carries both the pre-v0.2 behaviour
-(the unchanged Json) and the diagnostic (the chain). Fold the
-chain into a readable message, route each case to its own log
-stream, or collapse on the `getOrElse` escape hatch — the full
-cascade is Theme H below.
-
-**Source:** cats-eo internal (`JsonPrism`, `JsonTraversal`);
-related to circe-optics' `root.*` idiom
-<https://circe.github.io/circe/optics.html>. Structured-failure
-inspiration from cats' `Ior` typeclass and
-`DecodingFailure.history`.
-
-### jq-style path + predicate
-
-**Why:** the jq one-liner you'd reach for at the shell —
-`.items[] | select(.price > 100) | .name |= ascii_upcase`,
-"uppercase the name of every item over $100" — but in typed Scala,
-over a `Json` you never fully decode. The optic reaches through the
-multi-field focus (a Scala 3 NamedTuple) and branches inside the
-modify lambda:
-
-```scala mdoc:silent
-type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derived
-
-val premiumNames =
-  codecPrism[Basket]
-    .items
-    .each
-    .fields(_.name, _.price)
-```
-
-```scala mdoc
-val mixedBasket = Basket(
-  "Alice",
-  Vector(
-    Item("apple",  1.0),
-    Item("lobster", 150.0),
-    Item("truffle", 300.0),
-  ),
-).asJson
-
-premiumNames
-  .modifyUnsafe { nt =>
-    if nt.price > 100.0 then
-      (name = nt.name.toUpperCase, price = nt.price)
-    else nt
-  }(mixedBasket)
-  .noSpacesSortKeys
-```
-
-A tighter spelling via `filtered` / `selected` is not in
-cats-eo 0.1.0 — track that as AffineFold-adjacent work for the
-0.2 cycle. Today the predicate inlines inside the modify lambda,
-which is honest about the shape of the work.
-
-**Source:** Penner — *Generalizing 'jq' and Traversal Systems*,
-<https://chrispenner.ca/posts/traversal-systems>.
-
-### Recursive rename over a user-defined Tree
-
-**Why:** rename every leaf of *your own* recursive tree type —
-not a container the library knows about. cats-eo ships no tree
-carrier and doesn't need one: if your type has a `cats.Traverse`,
-`each` picks it up and walks it. Bring your own instance:
-
-```scala mdoc:silent
-import cats.Traverse
-import cats.Applicative
-import cats.syntax.functor.*
-
-enum Tree[+A]:
-  case Leaf(value: A)
-  case Branch(left: Tree[A], right: Tree[A])
-
-// Hand-rolled Traverse[Tree] — in real code reach for a derivation
-// or cats.Reducible instance on your own ADT.
-given Traverse[Tree] with
-  def foldLeft[A, B](fa: Tree[A], b: B)(f: (B, A) => B): B = fa match
-    case Tree.Leaf(a)       => f(b, a)
-    case Tree.Branch(l, r)  => foldLeft(r, foldLeft(l, b)(f))(f)
-  def foldRight[A, B](fa: Tree[A], lb: cats.Eval[B])(f: (A, cats.Eval[B]) => cats.Eval[B]): cats.Eval[B] =
-    fa match
-      case Tree.Leaf(a)       => f(a, lb)
-      case Tree.Branch(l, r)  => foldRight(l, foldRight(r, lb)(f))(f)
-  def traverse[G[_]: Applicative, A, B](fa: Tree[A])(f: A => G[B]): G[Tree[B]] =
-    fa match
-      case Tree.Leaf(a)       => f(a).map(Tree.Leaf(_))
-      case Tree.Branch(l, r)  =>
-        Applicative[G].map2(traverse(l)(f), traverse(r)(f))(Tree.Branch(_, _))
-
-val renameLeaves = Traversal.each[Tree, String]
-```
-
-```scala mdoc
-val tree: Tree[String] =
-  Tree.Branch(
-    Tree.Leaf("a"),
-    Tree.Branch(Tree.Leaf("b"), Tree.Leaf("c")),
-  )
-renameLeaves.modify(_.toUpperCase)(tree)
-```
-
-Works identically for any other `Traverse[F]` — trees, rose
-trees, non-empty lists, user ADTs. The *Iris classifier*
-follow-on (algebraic lens over a labelled dataset) is tracked
-separately in
-[`docs/plans/2026-04-22-002-feat-iris-classifier-example.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/plans/2026-04-22-002-feat-iris-classifier-example.md).
-
-**Source:** Stanislav Glebik — *RefTree talk*,
-<https://stanch.github.io/reftree/docs/talks/Visualize/>.
-
-## Theme E — Many focuses at once: rewrite, aggregate, broadcast
+### Many focuses at once: rewrite, aggregate, broadcast
 
 A `Lens` sees one value; a `Traversal` sees many but only lets you
 map over them. `MultiFocus[F]` is the optic for the jobs in between:
@@ -576,7 +380,7 @@ three recipes below are the prototypical jobs; the [MultiFocus
 reference](multifocus.md) carries the design story (it unifies five
 separate optics from v1 into this one carrier).
 
-### Recipe A — Adjust every channel of a colour at once
+#### Recipe A — Adjust every channel of a colour at once
 
 **Why:** you have a fixed-shape record of same-typed fields — the
 R, G, B of a colour, the x/y/z of a vector, the left/right of a
@@ -617,7 +421,7 @@ per-slot rewrite (`.modifyA[G]`), reach for a collection-backed
 **Source:** Penner — *Grate: yet another optic*,
 <https://chrispenner.ca/posts/grate>.
 
-### Recipe B — Summarise a batch, then broadcast or collapse
+#### Recipe B — Summarise a batch, then broadcast or collapse
 
 **Why:** you have a column of numbers from a batch — sensor
 readings, line-item amounts, weights — and you need a summary in a
@@ -669,7 +473,7 @@ the answer.
 <https://chrispenner.ca/posts/kaleidoscopes>; Penner —
 *Algebraic lenses*, <https://chrispenner.ca/posts/algebraic>.
 
-### Recipe C — Bulk-edit a nested collection, then read it back
+#### Recipe C — Bulk-edit a nested collection, then read it back
 
 **Why:** the everyday "update all the line items" edit — rename
 every order in a cart, bump every price, flag every overdue
@@ -726,9 +530,182 @@ have the curve.
 [Optics → PowerSeries](optics.md#powerseries) and the
 [benchmarks](benchmarks.md#powerseries-traversal-with-downstream-composition).
 
-## Theme F — Composition
+### Recursive rename over a user-defined Tree
 
-### Three-family ladder: Iso → Lens → Traversal → Prism → Lens
+**Why:** rename every leaf of *your own* recursive tree type —
+not a container the library knows about. cats-eo ships no tree
+carrier and doesn't need one: if your type has a `cats.Traverse`,
+`each` picks it up and walks it. Bring your own instance:
+
+```scala mdoc:silent
+import cats.Traverse
+import cats.Applicative
+import cats.syntax.functor.*
+
+enum Tree[+A]:
+  case Leaf(value: A)
+  case Branch(left: Tree[A], right: Tree[A])
+
+// Hand-rolled Traverse[Tree] — in real code reach for a derivation
+// or cats.Reducible instance on your own ADT.
+given Traverse[Tree] with
+  def foldLeft[A, B](fa: Tree[A], b: B)(f: (B, A) => B): B = fa match
+    case Tree.Leaf(a)       => f(b, a)
+    case Tree.Branch(l, r)  => foldLeft(r, foldLeft(l, b)(f))(f)
+  def foldRight[A, B](fa: Tree[A], lb: cats.Eval[B])(f: (A, cats.Eval[B]) => cats.Eval[B]): cats.Eval[B] =
+    fa match
+      case Tree.Leaf(a)       => f(a, lb)
+      case Tree.Branch(l, r)  => foldRight(l, foldRight(r, lb)(f))(f)
+  def traverse[G[_]: Applicative, A, B](fa: Tree[A])(f: A => G[B]): G[Tree[B]] =
+    fa match
+      case Tree.Leaf(a)       => f(a).map(Tree.Leaf(_))
+      case Tree.Branch(l, r)  =>
+        Applicative[G].map2(traverse(l)(f), traverse(r)(f))(Tree.Branch(_, _))
+
+val renameLeaves = Traversal.each[Tree, String]
+```
+
+```scala mdoc
+val tree: Tree[String] =
+  Tree.Branch(
+    Tree.Leaf("a"),
+    Tree.Branch(Tree.Leaf("b"), Tree.Leaf("c")),
+  )
+renameLeaves.modify(_.toUpperCase)(tree)
+```
+
+Works identically for any other `Traverse[F]` — trees, rose
+trees, non-empty lists, user ADTs. The *Iris classifier*
+follow-on (algebraic lens over a labelled dataset) is tracked
+separately in
+[`docs/plans/2026-04-22-002-feat-iris-classifier-example.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/plans/2026-04-22-002-feat-iris-classifier-example.md).
+
+**Source:** Stanislav Glebik — *RefTree talk*,
+<https://stanch.github.io/reftree/docs/talks/Visualize/>.
+
+### Edit one leaf deep in a JSON tree, no decode
+
+**Why:** you need to change one field deep inside a JSON payload
+and pass the rest through untouched — no full decode into a
+case-class tree, no re-encode, no decoder for the siblings you
+never read. Navigation doesn't stop at the case-class boundary:
+`codecPrism[S]` walks circe's `Json` directly, and only the focused
+leaf is materialised as `A`:
+
+```scala mdoc:silent
+import dev.constructive.eo.circe.codecPrism
+import io.circe.Codec
+import io.circe.syntax.*
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
+
+case class UserAddress(street: String, zip: Int)
+object UserAddress:
+  given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derived
+
+case class SiteUser(name: String, address: UserAddress)
+object SiteUser:
+  given Codec.AsObject[SiteUser] = KindlingsCodecAsObject.derived
+
+val userStreet = codecPrism[SiteUser].address.street
+```
+
+```scala mdoc
+val userJson = SiteUser("Alice", UserAddress("Main St", 12345)).asJson
+userStreet.modifyUnsafe(_.toUpperCase)(userJson).noSpacesSortKeys
+```
+
+The
+[`OrderCirceBench`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/src/main/scala/dev/constructive/eo/bench/OrderCirceBench.scala)
+suite shows this edit is **flat in document size** — ~1.3 µs whether the record
+is small or large — while the decode / `.copy` / re-encode path scales with the
+whole payload, so the gap grows from ~3× on a tiny record to ~160× on a large
+one. circe-optics' analogous `root.user.address.street` surface forces a full
+decode per level; cats-eo's cursor walk does not.
+
+When a deep edit silently does *nothing*, the same optic tells you
+which step refused — that's an effect-threading story, picked up in
+[Failure as an effect](#failure-as-an-effect-the-ior-arc).
+
+**Source:** cats-eo internal (`JsonPrism`); related to circe-optics'
+`root.*` idiom <https://circe.github.io/circe/optics.html>.
+
+### …and every element of a JSON array
+
+Walk an array without materialising it as a Scala collection;
+only the focused leaf of each element is decoded. The `.each`
+step splits the Prism into a `JsonTraversal`:
+
+```scala mdoc:silent
+case class Item(name: String, price: Double)
+object Item:
+  given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
+
+case class Basket(owner: String, items: Vector[Item])
+object Basket:
+  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
+```
+
+```scala mdoc
+val basket = Basket("Alice", Vector(Item("apple", 1.0), Item("pear", 2.0)))
+val everyItemName = codecPrism[Basket].items.each.name
+
+everyItemName.modifyUnsafe(_.toUpperCase)(basket.asJson).noSpacesSortKeys
+```
+
+Per-element failures to decode accumulate into
+`Ior.Both(chain, partialJson)` on the default surface — see
+[Partial-success array walk](#partial-success-array-walk).
+
+**Source:** cats-eo internal (`JsonTraversal`).
+
+### jq-style path + predicate
+
+**Why:** the jq one-liner you'd reach for at the shell —
+`.items[] | select(.price > 100) | .name |= ascii_upcase`,
+"uppercase the name of every item over $100" — but in typed Scala,
+over a `Json` you never fully decode. The optic reaches through the
+multi-field focus (a Scala 3 NamedTuple) and branches inside the
+modify lambda:
+
+```scala mdoc:silent
+type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
+given Codec.AsObject[NamePrice] = KindlingsCodecAsObject.derived
+
+val premiumNames =
+  codecPrism[Basket]
+    .items
+    .each
+    .fields(_.name, _.price)
+```
+
+```scala mdoc
+val mixedBasket = Basket(
+  "Alice",
+  Vector(
+    Item("apple",  1.0),
+    Item("lobster", 150.0),
+    Item("truffle", 300.0),
+  ),
+).asJson
+
+premiumNames
+  .modifyUnsafe { nt =>
+    if nt.price > 100.0 then
+      (name = nt.name.toUpperCase, price = nt.price)
+    else nt
+  }(mixedBasket)
+  .noSpacesSortKeys
+```
+
+A tighter spelling via `filtered` / `selected` is not in
+cats-eo 0.1.0 — track that as AffineFold-adjacent work for the
+0.2 cycle. Today the predicate inlines inside the modify lambda,
+which is honest about the shape of the work.
+
+**Source:** Penner — *Generalizing 'jq' and Traversal Systems*,
+<https://chrispenner.ca/posts/traversal-systems>.
+
+### Capstone — five hops across three families
 
 **Why:** real edits cross optic families — an Iso here, a Lens, a
 Traversal over a list, a Prism into one variant, another Lens
@@ -797,7 +774,339 @@ concepts page.
 and Borjas' lunar-phase example
 <https://tech.lfborjas.com/optics/>.
 
-## Theme G — Effectful modification
+## Decoupling and modularity
+
+Because an optic is a concrete, portable value relating two types,
+you can replace a direct dependence on a *data type* with a
+dependence on the *relationship*: a function that needs "every
+`Instant` in whatever you give me" asks for the optic, not the
+type. You can also say precisely how much you need — the guarantees
+of an Iso, or just the freedom of a fold — and modules that share
+no types at all can still interoperate at the call site, or even at
+the wire-format level.
+
+### Require the optic, not the type
+
+**Why:** `adjustSheetTimes` shouldn't have to know about
+`BalanceSheet`. Any function whose real job is "apply `f` at every
+`Instant`" can take the optic as its parameter and let the caller
+decide what structure it runs against — the dependence on the
+concrete type evaporates:
+
+```scala mdoc:silent
+import dev.constructive.eo.data.{MultiFocus, PSVec}
+
+def adjustTimes[S](t: Optic[S, S, Instant, Instant, MultiFocus[PSVec]])(
+    f: Instant => Instant
+): S => S = t.modify(f)
+
+val bumpSheet = adjustTimes(sheetTimes)(_.plusSeconds(3600))
+```
+
+The same function immediately serves a structure it has never
+heard of — all it takes is that structure's own optic:
+
+```scala mdoc:silent
+case class Meeting(subject: String, start: Instant, end: Instant)
+
+val meetingTimes =
+  Lens[Meeting, (Instant, Instant)](
+    m => (m.start, m.end),
+    (m, se) => m.copy(start = se._1, end = se._2),
+  ).andThen(Traversal.two[(Instant, Instant), (Instant, Instant), Instant, Instant](
+    _._1,
+    _._2,
+    (_, _),
+  ))
+
+val bumpMeeting = adjustTimes(meetingTimes)(_.plusSeconds(3600))
+```
+
+```scala mdoc
+bumpSheet(sheet)
+bumpMeeting(Meeting("standup", Instant.EPOCH, Instant.EPOCH.plusSeconds(900)))
+```
+
+`Sheet` and `Meeting` share no interface, no parent trait, no
+typeclass — the optic *is* the interface. This is the article's
+central move: interoperability between otherwise wholly independent
+modules, done at the call site, with the structure-owning module
+publishing one optic value instead of exposing its shape.
+
+**Source:** Hansen — *We Need More Optics*, The Startup,
+<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>
+("Modular Application Design").
+
+### Ask for the weakest capability you need (cats-eo-unique)
+
+**Why:** the recipe above still pins the carrier — it accepts
+traversals only. Most functions need even less: "something I can
+fold `Double`s out of", "something I can rewrite `Double`s
+through". In cats-eo every operation is gated by a typeclass on the
+carrier `F`, so a signature can demand exactly the capability it
+uses — and then *any* optic family strong enough qualifies. You get
+to specify whether you need the guarantees of an Iso or just the
+freedom of a fold:
+
+```scala mdoc:silent
+import dev.constructive.eo.forgetful.{ForgetfulFold, ForgetfulFunctor}
+
+// Read-side contract: anything foldable over Double foci qualifies —
+// Lens, Prism, Optional, Traversal, Fold, Iso all admit ForgetfulFold.
+def total[S, T, B, F[_, _]](o: Optic[S, T, Double, B, F])(using
+    ForgetfulFold[F]
+): S => Double =
+  o.foldMap(identity)
+
+// Write-side contract: anything that can map its focus in place.
+def scale[S, F[_, _]](k: Double)(o: Optic[S, S, Double, Double, F])(using
+    ForgetfulFunctor[F]
+): S => S =
+  o.modify(_ * k)
+```
+
+```scala mdoc:silent
+case class Line(desc: String, amount: Double)
+case class Invoice(fee: Double, lines: List[Line])
+
+val feeL = Lens[Invoice, Double](_.fee, (i, f) => i.copy(fee = f))
+
+val lineAmounts =
+  Lens[Invoice, List[Line]](_.lines, (i, ls) => i.copy(lines = ls))
+    .andThen(Traversal.each[List, Line])
+    .andThen(Lens[Line, Double](_.amount, (l, a) => l.copy(amount = a)))
+```
+
+```scala mdoc
+val inv = Invoice(5.0, List(Line("widgets", 10.0), Line("gadgets", 20.0)))
+
+// One function, two optic families: a Lens (carrier Tuple2) and a
+// composed Traversal (carrier MultiFocus[PSVec]) both satisfy the
+// ForgetfulFold contract.
+total(feeL)(inv)
+total(lineAmounts)(inv)
+
+// And the write-side contract, satisfied by the same traversal.
+scale(1.1)(lineAmounts)(inv)
+```
+
+The capability ladder, weakest first: `ForgetfulFold[F]` unlocks
+`.foldMap` / `.headOption` / `.exists` / `.length`;
+`PartialAccessor[F]` unlocks `.getOption`; `ForgetfulFunctor[F]`
+unlocks `.modify` / `.replace`; `Accessor[F]` unlocks exact `.get`;
+`ReverseAccessor[F]` unlocks `.reverseGet` (build). A signature
+that demands only `ForgetfulFold` accepts everything; one that
+demands `Accessor` *and* `ReverseAccessor` insists on an Iso. The
+[concepts page](concepts.md) maps the full lattice.
+
+**Source:** Hansen — *We Need More Optics* ("you are able to
+specify if you need the guarantees of an Iso, or the freedom of a
+Getter"); capability-gated surface is cats-eo internal.
+
+### Kafka payload edit
+
+**Why:** a Kafka consumer gets an `Array[Byte]` payload, needs to
+change one field, and re-emits binary on the producer side. The
+conventional answer couples the consumer to the *whole* schema — a
+decode into the full case-class tree per message, on a hot path
+where that is pure overhead. `AvroPrism` decouples it: the module
+depends on one field's optic, not on `OrderEvent`. It IS a
+byte-carried optic (`Optic[Array[Byte], Array[Byte], A, A,
+Affine]`): it locates the focused field's byte span under a cached
+reader schema, decodes only that slice, and writes by splicing the
+re-encoded focus back into the payload — no `IndexedRecord`
+materialised on either side:
+
+```scala mdoc:silent
+import dev.constructive.eo.avro as eoavro
+import dev.constructive.eo.avro.AvroCodec
+import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.io.ByteArrayOutputStream
+import org.apache.avro.generic.{GenericDatumWriter, GenericRecord}
+import org.apache.avro.io.EncoderFactory
+
+case class OrderEvent(orderId: String, customer: String, total: Double)
+object OrderEvent:
+  given AvroEncoder[OrderEvent] = AvroEncoder.derived
+  given AvroDecoder[OrderEvent] = AvroDecoder.derived
+  given AvroSchemaFor[OrderEvent] = AvroSchemaFor.derived
+
+// Stand-in for an inbound Kafka record: serialise an OrderEvent to
+// binary under the same schema the prism caches.
+val outSchema = summon[AvroCodec[OrderEvent]].schema
+val sample = OrderEvent("ord-42", "alice", 99.99)
+val sampleBytes: Array[Byte] =
+  val rec = summon[AvroCodec[OrderEvent]].encode(sample).asInstanceOf[GenericRecord]
+  val out = new ByteArrayOutputStream()
+  val encoder = EncoderFactory.get().binaryEncoder(out, null)
+  val writer = new GenericDatumWriter[GenericRecord](outSchema)
+  writer.write(rec, encoder)
+  encoder.flush()
+  out.toByteArray
+
+// The optic: walk into `customer` once at construction time,
+// reuse on every inbound record. Disambiguate the Avro
+// `codecPrism` from the circe one imported earlier in this page
+// by qualifying through the `eoavro` alias.
+val upperCustomer = eoavro.codecPrism[OrderEvent].customer
+```
+
+```scala mdoc
+// Kafka hot path: bytes in → splice in place → bytes out. No
+// re-serialisation step — the prism's write side IS the emit path.
+val outBytes: Array[Byte] =
+  upperCustomer.modify(_.toUpperCase)(sampleBytes)
+
+// Round-trip witness — decode the output to confirm the customer
+// field changed and the rest is preserved.
+(upperCustomer.getOption(outBytes),
+ eoavro.codecPrism[OrderEvent].getOption(outBytes))
+```
+
+`.modify` on the byte optic is silent-pass-through — bad bytes,
+missing fields, or decode mismatches leave the input payload
+untouched (an `Affine` Miss) rather than allocating an `Ior`
+chain. That matches the Kafka consumer budget: at-least-once
+delivery already implies the consumer must be tolerant of
+malformed payloads at the offset commit boundary, and the
+per-record allocation cost of `Ior` is a tax on the happy path.
+When you DO want the diagnostic — for a dead-letter queue, say —
+flip to the record-carried face:
+`upperCustomer.record.modify(...)` accepts the same bytes and
+returns `Ior[Chain[AvroFailure], IndexedRecord]`; route on the
+`Ior.Both` / `Ior.Left` shape from there.
+
+The cached reader schema is the load-bearing piece: a single
+`codecPrism[OrderEvent]` value pins the schema once, and the
+parser reuses it across millions of inbound records. For the
+schema-registry case where the reader schema arrives at
+runtime, use the explicit-schema overload —
+`AvroPrism.codecPrism[OrderEvent](runtimeSchema)` — to bypass
+the kindlings-derived schema entirely.
+
+**Source:** cats-eo internal (`AvroPrism`'s byte-carried
+default surface). Background framing on the streaming /
+Kafka use case lives in the
+[Avro integration intro](integrations/avro.md#why-this-exists).
+
+### Cross-format bridge — Avro bytes ⇄ JSON bytes
+
+**Why:** the consumer reads Avro off a topic and must emit JSON
+to a partner API — or receives JSON and must re-emit Avro. Two
+modules, two wire formats, and the only thing they genuinely share
+is one field. The conventional bridge couples them anyway: decode
+the whole record into a case class, build a whole output value,
+encode it all. With a byte optic on each side of the seam, only the
+moved branch is ever decoded and re-encoded: the full object is
+**never constructed** on either format. (`AvroJsonBridgeSpec`
+proves this with a counting root codec — both bridge directions run
+with zero root decodes and zero root encodes; `AvroJsonBridgeBench`
+puts B/op numbers on it.)
+
+```scala mdoc:silent
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import dev.constructive.eo.jsoniter.JsoniterPrism
+
+given JsonValueCodec[String] = JsonCodecMaker.make
+
+// One byte optic per format, same focus type. Drilled once,
+// reused for every message.
+val customerAvro = eoavro.codecPrism[OrderEvent].customer
+val customerJson = JsoniterPrism[String]("$.customer")
+
+// The JSON side's output skeleton. Placeholders must be VALID
+// encodings of the branch type — the splice write decodes the
+// current focus before replacing it.
+val receiptTemplate: Array[Byte] =
+  """{"kind":"receipt","customer":"","status":"ok"}""".getBytes("UTF-8")
+```
+
+```scala mdoc
+// Avro → JSON: slice the branch off the Avro wire form, splice
+// it into the JSON template. No OrderEvent, no receipt object.
+val receipt = customerAvro.getOption(sampleBytes) match
+  case Some(c) => customerJson.replace(c)(receiptTemplate)
+  case None    => receiptTemplate
+new String(receipt, "UTF-8")
+```
+
+```scala mdoc
+// JSON → Avro: read the branch from JSON bytes, splice it into
+// existing Avro wire bytes. Same guarantee, reversed.
+val inbound: Array[Byte] =
+  """{"kind":"receipt","customer":"carol","status":"ok"}""".getBytes("UTF-8")
+val updatedAvro = customerJson.getOption(inbound) match
+  case Some(c) => customerAvro.replace(c)(sampleBytes)
+  case None    => sampleBytes
+
+// Witness (this read DOES construct the object — the bridge
+// above never did): the branch moved, the siblings survived.
+eoavro.codecPrism[OrderEvent].getOption(updatedAvro)
+```
+
+Cost model worth knowing: each `.replace` locates the span,
+decodes the *current* focus (the `Affine` write carries it),
+re-encodes the new one, and allocates one output buffer. Moving
+one branch this way is far cheaper than materialising a wide
+object — but for many branches per message, or fragment moves
+between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
+(no decode at all).
+
+**Source:** `AvroJsonBridgeSpec` (jsoniter module) and
+`AvroJsonBridgeBench` (benchmarks) in cats-eo.
+
+### The contract at the seam — law-check your own optics
+
+A decoupled boundary needs a tested contract. Composing optics
+means the combinators are already tested — what's left to check is
+*your* instances, the optic values your module publishes. The
+discipline suites that gate cats-eo's own carriers ship in
+`cats-eo-laws`, so a composed optic like `sheetTimes` gets the full
+Traversal rule-set in one `checkAll` instead of hand-written
+round-trip tests:
+
+```scala
+libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
+```
+
+```scala
+import cats.Functor
+import dev.constructive.eo.laws.TraversalLaws
+import dev.constructive.eo.laws.discipline.TraversalTests
+
+// sheetTimes walks a plain Sheet, so T is the constant type lambda —
+// its Functor is one line. Arbitrary[Sheet] and Cogen[Instant] come
+// from your ScalaCheck generators.
+given Functor[[X] =>> Sheet] with
+  def map[A, B](fa: Sheet)(f: A => B): Sheet = fa
+
+checkAll(
+  "sheetTimes",
+  new TraversalTests[[X] =>> Sheet, Instant]:
+    val laws = new TraversalLaws[[X] =>> Sheet, Instant]:
+      val traversal = sheetTimes
+  .traversal,
+)
+```
+
+Every optic family has a matching `FooLaws` / `FooTests` pair — the
+[migration guide](migration-from-monocle.md#what-stays-the-same) has
+the import-swap table.
+
+**Source:** Hansen — *We Need More Optics*, The Startup,
+<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> ("Re-usable
+tests").
+
+## Effect threading
+
+Optics are great at turning a host language's control flow into
+just type definitions. The optic fixes *where* — which foci, at
+what depth; the effect type `G` you thread through `.modifyF` /
+`.modifyA` decides *what the control flow is*: abort on first
+failure, accumulate every failure, log alongside the rewrite, defer
+into `IO`. Swapping behaviours means swapping `G`, never touching
+the optic.
 
 ### Validate-in-place with `modifyF`
 
@@ -828,13 +1137,62 @@ visitorAgeL.modifyF[Option](age =>
 
 `.modifyA[G]` is the `Applicative[G]` variant — reach for it
 when the chain has branching effects to combine (traversal +
-validation, for instance). `Witherable`-style filter-and-drop
-traversal is cross-referenced from
+validation, for instance); the next recipe is exactly that.
+`Witherable`-style filter-and-drop traversal is cross-referenced from
 [Penner — *Composable filters using Witherable optics*](https://chrispenner.ca/posts/witherable-optics);
 the carrier is deferred to a follow-up release.
 
 **Source:** Monocle / Haskell `lens` classic `traverseOf`,
 generalised.
+
+### One optic, many control flows — swap the effect
+
+**Why:** the article's `systemVerifier` insight — "what to do is
+decided by the effect type" — in its smallest honest form. Take the
+`lineAmounts` traversal from the [weakest-capability
+recipe](#ask-for-the-weakest-capability-you-need-cats-eo-unique)
+and thread three different `G`s through the *same* `.modifyA`. The
+optic never changes; the control flow does:
+
+```scala mdoc:silent
+import cats.data.{ValidatedNel, Writer}
+import cats.syntax.validated.*
+
+type Checked[A] = ValidatedNel[String, A]
+type Audit[A]   = Writer[List[String], A]
+
+val badInv = Invoice(5.0, List(Line("widgets", -10.0), Line("gadgets", -20.0)))
+```
+
+```scala mdoc
+// G = Option: abort on the first bad focus — short-circuit control flow.
+lineAmounts.modifyA[Option](a =>
+  if a > 0 then Some(a * 1.1) else None
+)(badInv)
+
+// G = ValidatedNel: visit EVERY focus, accumulate every failure —
+// same optic, same lambda shape, completely different control flow.
+lineAmounts.modifyA[Checked](a =>
+  if a > 0 then (a * 1.1).validNel else s"non-positive amount: $a".invalidNel
+)(badInv)
+
+// G = Writer: rewrite AND emit an audit line per focus — the effect
+// threads a log through the walk without touching the domain types.
+lineAmounts.modifyA[Audit](a =>
+  Writer(List(s"scaled $a"), a * 1.1)
+)(inv).run
+```
+
+The same slot takes `IO` (each focus becomes an effect to
+sequence), `Eval` (defer the whole rewrite), or an fs2 `Stream` —
+the article's original `systemVerifier` pipes every focus of a
+traversal through a verification stream with `.modifyF`, and its
+shape is exactly the three calls above with a fancier `G`. The
+domain types never learn any of this is happening.
+
+**Source:** Hansen — *We Need More Optics*, The Startup,
+<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> ("What
+to do is decided by the effect type").
 
 ### Batch-load nested IDs — O(N) → O(1) queries (cats-eo-unique)
 
@@ -947,15 +1305,44 @@ without the id field; the shape of the pipeline doesn't change.
 <https://gist.github.com/kryptt/af0a626849f0e3f5b16fcd161a5545e4>;
 see also [Generics → Composing into pipelines](generics.md#composing-derived-optics-into-pipelines).
 
-## Theme H — Observable failure (cats-eo-unique)
+### Failure as an effect: the Ior arc
 
-The next three recipes cover the observability story for the
-JSON cursor optics: partial-success walks, parse errors surfaced
-through the same chain, and how to classify the failures by
-case. The [Ior failure-flow diagram](integrations/circe.md#failure-flow) has
-the full decision tree.
+The JSON cursor optics from [Navigating
+structures](#edit-one-leaf-deep-in-a-json-tree-no-decode) thread
+their failure channel as an effect too: the default `modify`
+returns `Ior[Chain[JsonFailure], Json]`, so partial success,
+parse errors, and per-step refusals all surface through the same
+composed chain. Four acts; the [Ior failure-flow
+diagram](integrations/circe.md#failure-flow) has the full decision
+tree.
 
-### Partial-success array walk — `Ior.Both`
+#### Diagnose a silent edit no-op
+
+A deep `.modify` appears to do nothing — which path step
+refused? The `*Unsafe` methods preserve the pre-v0.2 silent
+behaviour, but the default `modify` returns
+`Ior[Chain[JsonFailure], Json]` so the diagnostic is
+observable:
+
+```scala mdoc:silent
+import cats.data.Ior
+import io.circe.Json
+
+// A stump Json missing the `.address` field altogether.
+val stump = Json.obj("name" -> Json.fromString("Alice"))
+```
+
+```scala mdoc
+userStreet.modify(_.toUpperCase)(stump)
+```
+
+The `Ior.Both(chain, json)` carries both the pre-v0.2 behaviour
+(the unchanged Json) and the diagnostic (the chain). Fold the
+chain into a readable message, route each case to its own log
+stream, or collapse on the `getOrElse` escape hatch — the rest of
+this arc.
+
+#### Partial-success array walk
 
 **Why:** some elements of the array decode, some don't, and you
 want *both* outcomes — the JSON updated where it could be, and a
@@ -998,7 +1385,7 @@ know you don't want the diagnostic.
 
 **Source:** cats-eo internal.
 
-### Parse-error surface — `Json | String` input
+#### Parse-error surface — `Json | String` input
 
 **Why:** the bytes on the wire might not be JSON at all. Feed the
 optic a raw `String` and a parse failure comes back as
@@ -1027,7 +1414,7 @@ unchanged. Parse cost is zero when the input is already a
 
 **Source:** cats-eo internal.
 
-### Classify failures — *why* did the edit no-op?
+#### Classify failures — *why* did the edit no-op?
 
 **Why:** the edit did nothing and you need to know which step
 refused — a missing path? the wrong shape? a decode failure? — so
@@ -1064,157 +1451,6 @@ service boundaries.
 
 **Source:** cats-eo internal.
 
-## Theme I — Streaming / Kafka
-
-### Kafka payload edit
-
-**Why:** a Kafka consumer gets an `Array[Byte]` payload, needs to
-change one field, and re-emits binary on the producer side — on a
-hot path where decoding the whole record into a case-class tree per
-message is pure overhead. `AvroPrism` IS a byte-carried optic
-(`Optic[Array[Byte], Array[Byte], A, A, Affine]`): it locates the
-focused field's byte span under a cached reader schema, decodes
-only that slice, and writes by splicing the re-encoded focus back
-into the payload — no `IndexedRecord` materialised on either side:
-
-```scala mdoc:silent
-import dev.constructive.eo.avro as eoavro
-import dev.constructive.eo.avro.AvroCodec
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.ByteArrayOutputStream
-import org.apache.avro.generic.{GenericDatumWriter, GenericRecord}
-import org.apache.avro.io.EncoderFactory
-
-case class OrderEvent(orderId: String, customer: String, total: Double)
-object OrderEvent:
-  given AvroEncoder[OrderEvent] = AvroEncoder.derived
-  given AvroDecoder[OrderEvent] = AvroDecoder.derived
-  given AvroSchemaFor[OrderEvent] = AvroSchemaFor.derived
-
-// Stand-in for an inbound Kafka record: serialise an OrderEvent to
-// binary under the same schema the prism caches.
-val outSchema = summon[AvroCodec[OrderEvent]].schema
-val sample = OrderEvent("ord-42", "alice", 99.99)
-val sampleBytes: Array[Byte] =
-  val rec = summon[AvroCodec[OrderEvent]].encode(sample).asInstanceOf[GenericRecord]
-  val out = new ByteArrayOutputStream()
-  val encoder = EncoderFactory.get().binaryEncoder(out, null)
-  val writer = new GenericDatumWriter[GenericRecord](outSchema)
-  writer.write(rec, encoder)
-  encoder.flush()
-  out.toByteArray
-
-// The optic: walk into `customer` once at construction time,
-// reuse on every inbound record. Disambiguate the Avro
-// `codecPrism` from the circe one imported earlier in this page
-// by qualifying through the `eoavro` alias.
-val upperCustomer = eoavro.codecPrism[OrderEvent].customer
-```
-
-```scala mdoc
-// Kafka hot path: bytes in → splice in place → bytes out. No
-// re-serialisation step — the prism's write side IS the emit path.
-val outBytes: Array[Byte] =
-  upperCustomer.modify(_.toUpperCase)(sampleBytes)
-
-// Round-trip witness — decode the output to confirm the customer
-// field changed and the rest is preserved.
-(upperCustomer.getOption(outBytes),
- eoavro.codecPrism[OrderEvent].getOption(outBytes))
-```
-
-`.modify` on the byte optic is silent-pass-through — bad bytes,
-missing fields, or decode mismatches leave the input payload
-untouched (an `Affine` Miss) rather than allocating an `Ior`
-chain. That matches the Kafka consumer budget: at-least-once
-delivery already implies the consumer must be tolerant of
-malformed payloads at the offset commit boundary, and the
-per-record allocation cost of `Ior` is a tax on the happy path.
-When you DO want the diagnostic — for a dead-letter queue, say —
-flip to the record-carried face:
-`upperCustomer.record.modify(...)` accepts the same bytes and
-returns `Ior[Chain[AvroFailure], IndexedRecord]`; route on the
-`Ior.Both` / `Ior.Left` shape from there.
-
-The cached reader schema is the load-bearing piece: a single
-`codecPrism[OrderEvent]` value pins the schema once, and the
-parser reuses it across millions of inbound records. For the
-schema-registry case where the reader schema arrives at
-runtime, use the explicit-schema overload —
-`AvroPrism.codecPrism[OrderEvent](runtimeSchema)` — to bypass
-the kindlings-derived schema entirely.
-
-**Source:** cats-eo internal (`AvroPrism`'s byte-carried
-default surface). Background framing on the streaming /
-Kafka use case lives in the
-[Avro integration intro](integrations/avro.md#why-this-exists).
-
-### Cross-format bridge — Avro bytes ⇄ JSON bytes
-
-**Why:** the consumer reads Avro off a topic and must emit JSON
-to a partner API — or receives JSON and must re-emit Avro. The
-conventional bridge decodes the whole record into a case class,
-builds a whole output value, and encodes it all. With a byte
-optic on each side of the seam, only the moved branch is ever
-decoded and re-encoded: the full object is **never constructed**
-on either format. (`AvroJsonBridgeSpec` proves this with a
-counting root codec — both bridge directions run with zero root
-decodes and zero root encodes; `AvroJsonBridgeBench` puts B/op
-numbers on it.)
-
-```scala mdoc:silent
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.jsoniter.JsoniterPrism
-
-given JsonValueCodec[String] = JsonCodecMaker.make
-
-// One byte optic per format, same focus type. Drilled once,
-// reused for every message.
-val customerAvro = eoavro.codecPrism[OrderEvent].customer
-val customerJson = JsoniterPrism[String]("$.customer")
-
-// The JSON side's output skeleton. Placeholders must be VALID
-// encodings of the branch type — the splice write decodes the
-// current focus before replacing it.
-val receiptTemplate: Array[Byte] =
-  """{"kind":"receipt","customer":"","status":"ok"}""".getBytes("UTF-8")
-```
-
-```scala mdoc
-// Avro → JSON: slice the branch off the Avro wire form, splice
-// it into the JSON template. No OrderEvent, no receipt object.
-val receipt = customerAvro.getOption(sampleBytes) match
-  case Some(c) => customerJson.replace(c)(receiptTemplate)
-  case None    => receiptTemplate
-new String(receipt, "UTF-8")
-```
-
-```scala mdoc
-// JSON → Avro: read the branch from JSON bytes, splice it into
-// existing Avro wire bytes. Same guarantee, reversed.
-val inbound: Array[Byte] =
-  """{"kind":"receipt","customer":"carol","status":"ok"}""".getBytes("UTF-8")
-val updatedAvro = customerJson.getOption(inbound) match
-  case Some(c) => customerAvro.replace(c)(sampleBytes)
-  case None    => sampleBytes
-
-// Witness (this read DOES construct the object — the bridge
-// above never did): the branch moved, the siblings survived.
-eoavro.codecPrism[OrderEvent].getOption(updatedAvro)
-```
-
-Cost model worth knowing: each `.replace` locates the span,
-decodes the *current* focus (the `Affine` write carries it),
-re-encodes the new one, and allocates one output buffer. Moving
-one branch this way is far cheaper than materialising a wide
-object — but for many branches per message, or fragment moves
-between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
-(no decode at all).
-
-**Source:** `AvroJsonBridgeSpec` (jsoniter module) and
-`AvroJsonBridgeBench` (benchmarks) in cats-eo.
-
 ## Further reading
 
 - [Concepts](concepts.md) — the theory behind the unified Optic
@@ -1234,43 +1470,6 @@ between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
   Ior decision tree.
 - [Migrating from Monocle](migration-from-monocle.md) —
   side-by-side translation guide.
-
-### Law-check your own optics
-
-Composing optics means the combinators are already tested — what's
-left to check is *your* instances. The discipline suites that gate
-cats-eo's own carriers ship in `cats-eo-laws`, so a composed optic
-like `sheetTimes` (Theme C) gets the full Traversal rule-set in one
-`checkAll` instead of hand-written round-trip tests:
-
-```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
-```
-
-```scala
-import cats.Functor
-import dev.constructive.eo.laws.TraversalLaws
-import dev.constructive.eo.laws.discipline.TraversalTests
-
-// sheetTimes walks a plain Sheet, so T is the constant type lambda —
-// its Functor is one line. Arbitrary[Sheet] and Cogen[Instant] come
-// from your ScalaCheck generators.
-given Functor[[X] =>> Sheet] with
-  def map[A, B](fa: Sheet)(f: A => B): Sheet = fa
-
-checkAll(
-  "sheetTimes",
-  new TraversalTests[[X] =>> Sheet, Instant]:
-    val laws = new TraversalLaws[[X] =>> Sheet, Instant]:
-      val traversal = sheetTimes
-  .traversal,
-)
-```
-
-Every optic family has a matching `FooLaws` / `FooTests` pair — the
-[migration guide](migration-from-monocle.md#what-stays-the-same) has
-the import-swap table.
-
-**Source:** Hansen — *We Need More Optics*, The Startup,
-<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> ("Re-usable
-tests").
+- Hansen — *We Need More Optics*, The Startup,
+  <https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> — the
+  article this page's three-part structure follows.
