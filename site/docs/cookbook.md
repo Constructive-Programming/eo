@@ -508,29 +508,26 @@ publishing one optic value instead of exposing its shape.
 ### Depend only on what's needed
 
 **Why:** the recipe above still pins the carrier — it accepts
-traversals only. Most functions need even less: "something I can
-fold `Double`s out of", "something I can rewrite `Double`s
-through". In cats-eo every operation is gated by a typeclass on the
-carrier `F`, so a signature can demand exactly the capability it
-uses — and then *any* optic family strong enough qualifies. You get
-to specify whether you need the guarantees of an Iso or just the
-freedom of a fold:
+traversals only, and the optic travels as an explicit argument.
+Most functions need even less: "something I can fold `Double`s out
+of", "something I can rewrite `Double`s through". The
+[capability traits](capabilities.md) — `CanGet`, `CanGetOption`,
+`CanModify`, `CanFold`, … — are exactly those contracts as proper
+types, so the optic arrives as **`using` evidence** and the subject
+type stays fully generic. This is the article's
+`implicit T: Traversal[T, DateTime]` move, with the carrier erased:
 
 ```scala mdoc:silent
-import dev.constructive.eo.forgetful.{ForgetfulFold, ForgetfulFunctor}
+import dev.constructive.eo.{CanFold, CanModify}
 
-// Read-side contract: anything foldable over Double foci qualifies —
-// Lens, Prism, Optional, Traversal, Fold, Iso all admit ForgetfulFold.
-def total[S, T, B, F[_, _]](o: Optic[S, T, Double, B, F])(using
-    ForgetfulFold[F]
-): S => Double =
-  o.foldMap(identity)
+// Read-side contract: anything that can fold Doubles out of S —
+// Lens, Prism, Optional, Traversal, Fold, Iso all qualify.
+def total[S](s: S)(using o: CanFold[S, Double]): Double =
+  o.foldMap(identity)(s)
 
-// Write-side contract: anything that can map its focus in place.
-def scale[S, F[_, _]](k: Double)(o: Optic[S, S, Double, Double, F])(using
-    ForgetfulFunctor[F]
-): S => S =
-  o.modify(_ * k)
+// Write-side contract: anything that can rewrite Doubles in place.
+def scale[S](k: Double)(using cm: CanModify[S, Double]): S => S =
+  cm.modify(_ * k)
 ```
 
 ```scala mdoc:silent
@@ -545,31 +542,42 @@ val lineAmounts =
     .andThen(Lens[Line, Double](_.amount, (l, a) => l.copy(amount = a)))
 ```
 
+Concrete optic classes *implement* the capabilities, so a lens can
+be handed over as the evidence itself; an optic known only at the
+generic `Optic[…, F]` type — like the composed traversal — is bound
+as a `given` and the capability is derived on the spot:
+
 ```scala mdoc
 val inv = Invoice(5.0, List(Line("widgets", 10.0), Line("gadgets", 20.0)))
 
-// One function, two optic families: a Lens (carrier Tuple2) and a
-// composed Traversal (carrier MultiFocus[PSVec]) both satisfy the
-// ForgetfulFold contract.
-total(feeL)(inv)
-total(lineAmounts)(inv)
+// A Lens IS a CanFold — pass it as the evidence directly.
+total(inv)(using feeL)
 
-// And the write-side contract, satisfied by the same traversal.
-scale(1.1)(lineAmounts)(inv)
+// The composed traversal is an anonymous Optic; bind it as a given
+// and both contracts derive from it.
+given Optic[Invoice, Invoice, Double, Double, MultiFocus[PSVec]] = lineAmounts
+total(inv)
+scale(1.1)(inv)
 ```
 
-The capability ladder, weakest first: `ForgetfulFold[F]` unlocks
-`.foldMap` / `.headOption` / `.exists` / `.length`;
-`PartialAccessor[F]` unlocks `.getOption`; `ForgetfulFunctor[F]`
-unlocks `.modify` / `.replace`; `Accessor[F]` unlocks exact `.get`;
-`ReverseAccessor[F]` unlocks `.reverseGet` (build). A signature
-that demands only `ForgetfulFold` accepts everything; one that
-demands `Accessor` *and* `ReverseAccessor` insists on an Iso. The
-[concepts page](concepts.md) maps the full lattice.
+The trait ladder, weakest first: `CanFold` (`foldMap` /
+`headOption` / `exists` / `length` / `foci`), `CanGetOption`,
+`CanModify` (`modify` / `replace`), `CanGet`, `CanReverseGet`
+(build). A signature that demands only `CanFold` accepts
+everything; one that demands both `CanGet` and `CanReverseGet`
+insists on an Iso. Under the hood each trait is gated by the
+matching typeclass on the carrier (`ForgetfulFold[F]`,
+`PartialAccessor[F]`, `ForgetfulFunctor[F]`, `Accessor[F]`,
+`ReverseAccessor[F]`) — a signature can still take `Optic[…, F]`
+plus the gate directly when it genuinely needs the carrier; see
+[Capabilities](capabilities.md) for the full matrix, the coherence
+rules, and the using-clause ordering footgun that page documents
+for hand-written gate signatures.
 
-**Source:** Hansen — *We Need More Optics* ("you are able to
-specify if you need the guarantees of an Iso, or the freedom of a
-Getter"); capability-gated surface is cats-eo internal.
+**Source:** Hansen — *We Need More Optics* ("We can eliminate the
+dependence on the BalanceSheet type by requiring a Traversal
+instead"; "you are able to specify if you need the guarantees of an
+Iso, or the freedom of a Getter").
 
 ### Serdes free pipes
 
