@@ -2,7 +2,7 @@ package dev.constructive.eo
 package laws
 
 import _root_.dev.constructive.eo.data.MultiFocus
-import _root_.dev.constructive.eo.data.MultiFocus.collectMap
+import _root_.dev.constructive.eo.data.MultiFocus.{collectMap, collectWith}
 import cats.Functor
 
 import optics.Optic
@@ -14,6 +14,9 @@ import optics.Optic.*
   *   - MF2 composeModify — `mf.modify(g) ∘ mf.modify(f) == mf.modify(f andThen g)`.
   *   - MF3 collectViaMap — `mf.collectMap[A](agg)(s) == F.map(s)(_ => agg(s))` at the generic
   *     `MultiFocus.apply[F, A]` factory.
+  *   - MF4 collectWithSubsumesCollectMap —
+  *     `mf.collectWith(fa => _ => agg(fa)) == mf.collectMap(agg)`.
+  *   - MF5 collectWithSubsumesModify — `mf.collectWith(_ => f) == mf.modify(f)`.
   *
   * @see
   *   `dev.constructive.eo.laws.discipline.MultiFocusTests`.
@@ -37,3 +40,14 @@ trait MultiFocusLaws[S, A, F[_]]:
     val fa: F[A] = ev(s)
     val expected: F[A] = Functor[F].map(fa)(_ => agg(fa))
     multiFocus.collectMap[A](agg)(s) == ev.flip(expected)
+
+  /** MF4 — `.collectWith` subsumes `.collectMap`: a constant per-focus function recovers the
+    * broadcast exactly. Unlike MF3 this needs no `S =:= F[A]` evidence — both sides go through the
+    * optic, so the law holds at any `MultiFocus[F]` optic, composed ones included.
+    */
+  def collectWithSubsumesCollectMap(s: S, agg: F[A] => A): Boolean =
+    multiFocus.collectWith(fa => _ => agg(fa))(s) == multiFocus.collectMap[A](agg)(s)
+
+  /** MF5 — `.collectWith` subsumes `.modify`: ignoring the aggregate recovers the pointwise map. */
+  def collectWithSubsumesModify(s: S, f: A => A): Boolean =
+    multiFocus.collectWith(_ => f)(s) == multiFocus.modify(f)(s)

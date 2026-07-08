@@ -29,7 +29,7 @@ import optics.Optic
   *   - `.modify` / `.replace` need `Functor[F]`.
   *   - `.foldMap` needs `Foldable[F]`.
   *   - `.modifyA` / `.all` need `Traverse[F]`.
-  *   - `.collectMap` needs `Functor[F]`; `collectList` is List-specific.
+  *   - `.collectMap` / `.collectWith` need `Functor[F]`; `collectList` is List-specific.
   *   - Same-carrier `.andThen` needs `Traverse[F] + MultiFocusFromList[F]`.
   *   - `fromPrismF` / `fromOptionalF` need `MonoidK[F]`.
   */
@@ -452,6 +452,22 @@ object MultiFocusK:
         val fb: F[B] = F.map(fa)(_ => b.asInstanceOf[B])
         o.from((x, fb))
 
+    /** The algebraic-lens universal for the map-shaped collects — `agg` sees the whole focus
+      * collection ONCE, returns the per-focus rewrite, and that rewrite is mapped back over every
+      * position: `fa.map(a => agg(fa)(a))`. The currying is load-bearing: compute the batch summary
+      * in `agg(fa)`, and the returned `A => B` runs per position without recomputing it.
+      *
+      * Subsumes both map-shaped siblings — `collectMap(agg) = collectWith(fa => _ => agg(fa))`
+      * (constant per-focus function) and `modify(f) = collectWith(_ => f)` (aggregate ignored);
+      * pinned as laws MF4 / MF5. The shape-collapsing [[collectList]] is NOT expressible here: it
+      * changes the focus count, which no `Functor`-based combinator can. Requires only
+      * `Functor[F]`, like [[collectMap]].
+      */
+    def collectWith(agg: F[A] => A => B): S => T =
+      (s: S) =>
+        val (x, fa) = o.to(s)
+        o.from((x, F.map(fa)(agg(fa))))
+
   // Read-only escape (`.foldMap`) is provided by the carrier-wide `Optic.foldMap` extension via
   // `ForgetfulFold[MultiFocus[F]]` (`mfFold[F: Foldable]`). An explicit `Composer[MultiFocus[F],
   // Forget[F]]` (`multifocus2forget`, defined below) also ships as a read-only escape — it's the
@@ -472,10 +488,19 @@ object MultiFocusK:
     * `Kaleidoscope.apply`.
     */
   def apply[F[_], A]: Optic[F[A], F[A], A, A, MultiFocus[F]] =
-    new Optic[F[A], F[A], A, A, MultiFocus[F]]:
+    pApply[F, A, A]
+
+  /** Polymorphic counterpart to [[apply]] — allows focus type change (`F[A] => F[B]`), the
+    * `Traversal.pEach` analogue at the generic factory. Sound for the same reason: the rebuild is
+    * identity on the written-back `F[B]`, so no `B` ever has to fit an `A`-shaped hole. This is
+    * what un-pins the collect flavours' element type — `pApply[F, A, Row].collectWith(...)` emits a
+    * different row type than it read.
+    */
+  def pApply[F[_], A, B]: Optic[F[A], F[B], A, B, MultiFocus[F]] =
+    new Optic[F[A], F[B], A, B, MultiFocus[F]]:
       type X = F[A]
       def to(fa: F[A]): (F[A], F[A]) = (fa, fa)
-      def from(pair: (F[A], F[A])): F[A] = pair._2
+      def from(pair: (F[A], F[B])): F[B] = pair._2
 
   /** Iso → MultiFocus[F]. Requires `Applicative[F]` to broadcast the Iso's plain `A` focus into a
     * singleton `F[A]`.
