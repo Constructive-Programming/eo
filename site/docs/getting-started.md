@@ -21,8 +21,6 @@ Requires Scala 3.8.x on JDK 17 or JDK 21.
 
 ```scala mdoc:silent
 import dev.constructive.eo.CanModify
-import dev.constructive.eo.optics.*
-import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
 ```
@@ -82,16 +80,18 @@ def emphasized[T](using cm: CanModify[T, String]): T => T =
 The signature is the contract: "give me proof a String can be
 rewritten inside `T`, and I'll return the rewrite." Any optic that
 can modify — a lens, a composed path, a prism into one branch — is
-that proof. A concrete lens is passed straight in; a *composed*
-optic like `streetL` is bound as a `given` instead, and the
-capability derives from it on the spot:
+that proof — including the composed `streetL`, which stays a
+concrete lens through `.andThen`:
 
 ```scala mdoc
 emphasized(using nameL)(alice)
-
-given Optic[Person, Person, String, String, Tuple2] = streetL
-emphasized[Person](alice)
+emphasized(using streetL)(alice)
 ```
+
+(An optic known only at the generic `Optic[…, F]` type — a
+cross-carrier composition, a `Traversal` — is bound as a `given`
+instead, and the capability derives from it on the spot; see
+[Capabilities](capabilities.md).)
 
 This is the library's core habit: use capabilities to write truly
 modular, de-coupled code by passing optics along as proof of

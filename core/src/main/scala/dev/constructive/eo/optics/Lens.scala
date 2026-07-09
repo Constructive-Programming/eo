@@ -186,6 +186,27 @@ class SplitCombineLens[S, T, A, B, XA](
 
   def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
+  /** Fused `SplitCombineLens.andThen(SplitCombineLens)` — pairs the two leftovers directly instead
+    * of routing through the generic `AssociativeFunctor[Tuple2]`, so macro-derived lens chains
+    * (`lens[Person](_.address).andThen(lens[Address](_.street))`) compose into another concrete
+    * class: the composite keeps the fused read / write paths AND the capability mixins (CanGet /
+    * CanModifyP / CanFold) that let it be passed as evidence directly. `inline` so each compose
+    * site splices distinct lambdas per level — the same C2 recursive-inline-cap dodge as
+    * [[GetReplaceLens.andThen]].
+    */
+  inline def andThen[C, D, XI](
+      inner: SplitCombineLens[A, B, C, D, XI]
+  ): SplitCombineLens[S, T, C, D, (XA, XI)] =
+    new SplitCombineLens(
+      read = s => inner.get(get(s)),
+      split = s =>
+        val (xa, a) = split(s)
+        val (xi, c) = inner.split(a)
+        ((xa, xi), c)
+      ,
+      combine = (x, d) => combine(x._1, inner.combine(x._2, d)),
+    )
+
 /** Monomorphic split-combine lens (`S = T`, `A = B`). The matched source / target lets the `to`
   * splitter double as the `T => (X, A)` evidence the mutation extensions need, so `place` /
   * `transfer` land on the class body directly. Used by [[Lens.first]], [[Lens.second]], and the

@@ -8,7 +8,7 @@ One `Optic[S, T, A, B, F]` trait, parameterised over a carrier
 families through `Composer[F, G]` bridges rather than N² hand-
 written `.andThen` overloads.
 
-## What optics buy you
+## Stacking Benefits
 
 What an optic buys you depends on the scale you're working at — and
 it compounds.
@@ -38,17 +38,18 @@ dispatch into the same fused methods ([Benchmarks](benchmarks.md)).
 
 Current version: @VERSION@.
 
-## 60-second example
+## Ergonomics
 
 ```scala mdoc:silent
 import dev.constructive.eo.CanModify
-import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
 
-val street =
-  lens[Person](_.address)
-    .andThen(lens[Address](_.street))
+val personName    = lens[Person](_.name)
+val personAddress = lens[Person](_.address)
+val addressStreet = lens[Address](_.street)
+
+val street = personAddress.andThen(addressStreet)
 ```
 
 ```scala mdoc
@@ -68,18 +69,19 @@ about `Person` or `Address` — it asks for proof that a `String` can
 be rewritten inside `T`, and any optic with that power is the proof:
 
 ```scala mdoc
-def shout[T](using cm: CanModify[T, String]): T => T =
+def shout[T](cm: CanModify[T, String]): T => T =
   cm.modify(_.toUpperCase)
 
-shout(using lens[Person](_.name))(alice)
-shout(using lens[Address](_.street))(alice.address)
+shout(personName)(alice)
+shout(personAddress.andThen(addressStreet))(alice)
 ```
 
-One generic function, two unrelated types — the optic passed at each
-call site is the entire coupling surface. That contract style is the
+One generic function, two different paths — a plain lens or a
+composed one, handed over as the proof. The optic passed at the call
+site is the entire coupling surface; that contract style is the
 library's core habit: [Capabilities](capabilities.md).
 
-## Keep reading
+## Further Reading
 
 - [Getting started](getting-started.md) — install + the 60-second
   tour expanded.
