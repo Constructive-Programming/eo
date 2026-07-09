@@ -1,10 +1,9 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** `Optional.modify` / `Optional.replace` on a `Nested0.flag: Option[String]` focus, at varying
   * composition depth, paired against Monocle's `Optional`.

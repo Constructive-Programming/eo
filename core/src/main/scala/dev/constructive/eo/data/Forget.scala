@@ -4,7 +4,7 @@ package data
 import cats.syntax.coflatMap.*
 import cats.syntax.flatMap.*
 import cats.syntax.functor.*
-import cats.{Applicative, Bifunctor, Comonad, FlatMap, Foldable, Functor, Monad, Traverse}
+import cats.{Applicative, Bifunctor, Comonad, FlatMap, Foldable, Functor, Monad, Monoid, Traverse}
 
 import forgetful.*
 import compose.*
@@ -137,7 +137,7 @@ object ForgetK extends LowPriorityForgetInstances:
     */
   given forgetFFold[F[_]: Foldable]: ForgetfulFold[Forget[F]] with
 
-    def foldMap[X, A, M: cats.Monoid](f: A => M, fa: Forget[F][X, A]): M =
+    def foldMap[X, A, M: Monoid](f: A => M, fa: Forget[F][X, A]): M =
       Foldable[F].foldMap(fa)(f)
 
   /** `ForgetfulTraverse[Forget[F], Applicative]` — lifts `Traverse[F]` into the two-parameter

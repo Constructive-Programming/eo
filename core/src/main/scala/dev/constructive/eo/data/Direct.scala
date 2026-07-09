@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package data
 
-import cats.Invariant
+import cats.{Invariant, Monoid}
 
 import accessor.*
 import forgetful.*
@@ -55,7 +55,7 @@ object Direct:
     */
   given fold: ForgetfulFold[Direct] with
 
-    def foldMap[X, A, M: cats.Monoid](f: A => M, fa: Direct[X, A]): M = f(fa)
+    def foldMap[X, A, M: Monoid](f: A => M, fa: Direct[X, A]): M = f(fa)
 
   /** `pure[X, A] = a`; unlocks `.put` on Iso / Getter. @group Instances */
   given applicative: ForgetfulApplicative[Direct] with

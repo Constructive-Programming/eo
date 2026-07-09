@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
 import dev.constructive.eo.widenRight
+import java.util.{ArrayList, LinkedHashMap}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
@@ -309,7 +310,7 @@ private[avro] object AvroWalk:
             fresh
           case map: java.util.Map[?, ?] =>
             val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
-            val fresh = new java.util.LinkedHashMap[Any, Any](asMap)
+            val fresh = new LinkedHashMap[Any, Any](asMap)
             // Drop both string + Utf8 forms before re-inserting under the string key.
             fresh.remove(name)
             fresh.remove(new org.apache.avro.util.Utf8(name))
@@ -327,7 +328,7 @@ private[avro] object AvroWalk:
                 case _                        => null
             val fresh: java.util.List[Any] =
               if schema != null then new GenericData.Array[Any](asList.size, schema)
-              else new java.util.ArrayList[Any](asList.size)
+              else new ArrayList[Any](asList.size)
             addListSlots(fresh, asList, child, idx, 0, asList.size)
             fresh
           case other =>

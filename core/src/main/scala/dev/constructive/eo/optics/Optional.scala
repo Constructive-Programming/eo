@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 import data.Affine
 
 /** Constructor for `Optional` — the conditionally-present single-focus optic, backed by `Affine`.
@@ -87,7 +89,7 @@ final class Optional[S, T, A, B](
         case Right(a) => reverseGet(s, f(a))
         case Left(t)  => t
 
-  def foldMap[M](f: A => M)(s: S)(using M: cats.Monoid[M]): M =
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
     getOrModify(s) match
       case Right(a) => f(a)
       case Left(_)  => M.empty

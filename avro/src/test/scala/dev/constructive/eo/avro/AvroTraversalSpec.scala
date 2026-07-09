@@ -3,6 +3,8 @@ package dev.constructive.eo.avro
 import scala.language.implicitConversions
 
 import cats.data.{Chain, Ior}
+import java.util.ArrayList
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.specs2.mutable.Specification
 
@@ -72,9 +74,9 @@ class AvroTraversalSpec extends Specification:
 
     // Build a stump record whose schema lacks `items` entirely.
     val stumpSchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "owner",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,
@@ -109,9 +111,9 @@ class AvroTraversalSpec extends Specification:
     val good = orderRecord(Order("x", 1.0, 1))
     // A record whose schema lacks the `name` field — the per-element walk surfaces PathMissing.
     val malformedSchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -130,9 +132,9 @@ class AvroTraversalSpec extends Specification:
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
     def nameless =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -186,9 +188,9 @@ class AvroTraversalSpec extends Specification:
     ) && recordsEqual(transferUnsafe, expectedZZZ)
 
     val stumpSchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "owner",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,

@@ -4,15 +4,12 @@ package bench
 import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import cats.instances.arraySeq.given
 import cats.instances.list.given
-
 import dev.constructive.eo.bench.fixture.{Company, Department, Employee}
-
-import monocle.{Lens => MLens, Traversal => MTraversal}
+import java.util.concurrent.TimeUnit
+import monocle.{Lens as MLens, Traversal as MTraversal}
+import org.openjdk.jmh.annotations.*
 
 /** Nested-traversal PowerSeries bench — tree-of-trees shape.
   *

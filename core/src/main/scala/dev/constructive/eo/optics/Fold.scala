@@ -1,8 +1,10 @@
 package dev.constructive.eo
 package optics
 
+import scala.annotation.targetName
+
 import cats.instances.option.given
-import cats.{Foldable, Monoid}
+import cats.{FlatMap, Foldable, Monoid}
 import dev.constructive.eo.data.Forget
 
 import compose.*
@@ -69,7 +71,7 @@ final class ForgetFold[S, F[_], A](
     * read-collapse trait members both match a read-only inner). Requires `FlatMap[F]`, exactly as
     * the generic `assocForgetMonad` path did.
     */
-  def andThen[C](inner: ForgetFold[A, F, C])(using FM: cats.FlatMap[F]): ForgetFold[S, F, C] =
+  def andThen[C](inner: ForgetFold[A, F, C])(using FM: FlatMap[F]): ForgetFold[S, F, C] =
     new ForgetFold[S, F, C](s => FM.flatMap(read(s))(inner.read))
 
   /** Read-only outer ∘ ANY inner — a `Fold` only reads (many), so the inner's write side is
@@ -77,7 +79,7 @@ final class ForgetFold[S, F[_], A](
     * [[ReadCompose]]. Covers the writable inners (`fold ∘ lens / prism / optional / traversal`);
     * the fused same-`F` `andThen` above stays as the more-specific fast path.
     */
-  @annotation.targetName("andThenReadAny")
+  @targetName("andThenReadAny")
   def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using
       rc: ReadCompose[Forget[F], FI]
   ): rc.Out[S, C] =

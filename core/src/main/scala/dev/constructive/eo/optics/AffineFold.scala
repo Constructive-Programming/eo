@@ -1,6 +1,10 @@
 package dev.constructive.eo
 package optics
 
+import scala.annotation.targetName
+
+import cats.Monoid
+
 import compose.*
 import data.Affine
 
@@ -35,7 +39,7 @@ final class PickFold[S, A](val pick: S => Option[A])
       CanFold[S, A]:
   type X = (Unit, Unit)
 
-  def foldMap[M](f: A => M)(s: S)(using M: cats.Monoid[M]): M =
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
     pick(s) match
       case Some(a) => f(a)
       case None    => M.empty
@@ -65,7 +69,7 @@ final class PickFold[S, A](val pick: S => Option[A])
     * prism / optional / traversal`); the fused `andThen(Getter)` / `andThen(PickFold)` members
     * above stay as the more-specific fast paths.
     */
-  @annotation.targetName("andThenReadAny")
+  @targetName("andThenReadAny")
   def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using
       rc: ReadCompose[Affine, FI]
   ): rc.Out[S, C] =

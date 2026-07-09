@@ -4,6 +4,8 @@ import scala.language.implicitConversions
 
 import cats.data.Ior
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.util.ArrayList
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.specs2.mutable.Specification
 
@@ -105,9 +107,9 @@ class AvroFieldsTraversalSpec extends Specification:
   "atomicity: per-element failures (single-field miss + both-missing accumulation)" >> {
     val good = orderRecord(Order("x", 1.0, qty = 1))
     val brokenElem =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "name",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,
@@ -115,7 +117,7 @@ class AvroFieldsTraversalSpec extends Specification:
         )
       )
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -140,9 +142,9 @@ class AvroFieldsTraversalSpec extends Specification:
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
     def emptyOrder =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -186,9 +188,9 @@ class AvroFieldsTraversalSpec extends Specification:
       case _              => false
 
     val stumpSchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "owner",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,

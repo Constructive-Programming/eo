@@ -4,14 +4,11 @@ package bench
 import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import cats.instances.arraySeq.given
-
 import dev.constructive.eo.bench.fixture.Result
-
-import monocle.{Prism => MPrism, Traversal => MTraversal}
+import java.util.concurrent.TimeUnit
+import monocle.{Prism as MPrism, Traversal as MTraversal}
+import org.openjdk.jmh.annotations.*
 
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a
   * Traversal.

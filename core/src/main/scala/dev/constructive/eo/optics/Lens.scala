@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 /** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. A
   * `Lens[S, A]` (short for `Optic[S, S, A, A, Tuple2]`) reads a field via `get(s)` and rewrites it
   * via `modify` / `replace`. The `eo-generics` module's `lens[S](_.field)` macro derives both.
@@ -86,7 +88,7 @@ class GetReplaceLens[S, T, A, B](
   inline def modify(f: A => B): S => T =
     s => enplace(s, f(get(s)))
 
-  def foldMap[M](f: A => M)(s: S)(using cats.Monoid[M]): M = f(read(s))
+  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
   /** Fused `Lens.andThen(Lens)` — collapses into another `GetReplaceLens` directly on `get` /
     * `enplace`, skipping the generic `AssociativeFunctor[Tuple2]` round-trip. Scala's overload
@@ -182,7 +184,7 @@ class SplitCombineLens[S, T, A, B, XA](
       val (x, _) = to(s)
       combine(x, b)
 
-  def foldMap[M](f: A => M)(s: S)(using cats.Monoid[M]): M = f(read(s))
+  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
 /** Monomorphic split-combine lens (`S = T`, `A = B`). The matched source / target lets the `to`
   * splitter double as the `T => (X, A)` evidence the mutation extensions need, so `place` /

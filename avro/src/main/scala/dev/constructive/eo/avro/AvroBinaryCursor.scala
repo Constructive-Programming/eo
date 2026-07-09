@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import java.io.{ByteArrayOutputStream, InputStream}
+import java.util.Arrays
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, IndexedRecord}
 import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory, EncoderFactory}
@@ -212,7 +213,7 @@ private[avro] object AvroBinaryCursor:
   def zigZagLong(n: Long): Array[Byte] =
     val buf = new Array[Byte](10)
     val len = BinaryData.encodeLong(n, buf, 0)
-    if len == 10 then buf else java.util.Arrays.copyOf(buf, len)
+    if len == 10 then buf else Arrays.copyOf(buf, len)
 
   /** Rebuild the whole array region with CANONICAL framing (one positive-count block + zero
     * terminator), applying per-element focus replacements — the write path for payloads whose
@@ -322,7 +323,7 @@ private[avro] object AvroBinaryCursor:
   def zigZagInt(n: Int): Array[Byte] =
     val buf = new Array[Byte](5)
     val len = BinaryData.encodeInt(n, buf, 0)
-    if len == 5 then buf else java.util.Arrays.copyOf(buf, len)
+    if len == 5 then buf else Arrays.copyOf(buf, len)
 
   /** Assemble prefix + (synthesised branch index, when `span` addresses a union branch) + fragment
     * + suffix — the splice step shared by [[AvroPrism.graftBytes]] and the byte optics' `from`.

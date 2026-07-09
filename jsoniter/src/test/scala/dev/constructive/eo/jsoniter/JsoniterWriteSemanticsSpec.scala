@@ -7,6 +7,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.optics.Traversal
+import java.util.Arrays
 import org.specs2.mutable.Specification
 
 /** Write-semantics pins for the JSON byte optics — born from the 2026-07-04 expert review. These
@@ -40,7 +41,7 @@ class JsoniterWriteSemanticsSpec extends Specification:
     val idP = JsoniterPrism[Double]("$.id")
     val out = idP.modify(identity[Double])(nonCanonical)
     (str(out) === """{"id":1.0,  "name":"x"}""")
-      .and(java.util.Arrays.equals(out, nonCanonical) === false)
+      .and(Arrays.equals(out, nonCanonical) === false)
   }
 
   // covers: replace requires a DECODABLE current focus — an invalid placeholder is a Miss and

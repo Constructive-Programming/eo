@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import cats.Foldable
+import cats.data.{Chain, Const, ZipList}
 import cats.instances.list.given
 import dev.constructive.eo.accessor.*
 import dev.constructive.eo.compose.*
@@ -450,7 +452,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // classifier shapes. Custom Arbitraries below mix empty / singleton / multi-element
   // payloads so `ForgetfulTraverse`'s sequencing law sees non-trivial cardinalities (the
   // Scalacheck defaults skew to short lists and under-sample the empty edge).
-  import cats.data.Chain
 
   // Weighted generator aimed at the cardinality edges most likely to break carrier-level laws:
   //   - ~16% empty (exercises `empty`/`Nil` paths),
@@ -629,8 +630,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // the user's option (a) we ship only `collectViaMap`. The List-singleton story stays at the call
   // site as the `collectList` extension.
 
-  import cats.data.ZipList
-
   // Arbitrary[ZipList[Int]] — constructed from an Arbitrary[List[Int]].
   private given arbZipListInt: Arbitrary[ZipList[Int]] =
     Arbitrary(Arbitrary.arbitrary[List[Int]].map(ZipList(_)))
@@ -661,7 +660,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // Const[Int, *] summation fixture — the third "aggregation shape" (summation). Lands as a plain
   // bonus fixture. `Const[Int, Int]`'s `A` slot is phantom, so MF3 reduces to a retag witness.
   // Scalacheck Arbitraries for Const are hand-rolled.
-  import cats.data.Const
 
   private given arbConstIntInt: Arbitrary[Const[Int, Int]] =
     Arbitrary(Arbitrary.arbitrary[Int].map(Const(_)))
@@ -703,7 +701,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       val sndEach = Lens[(String, List[Int]), List[Int]](_._2, (s, l) => s.copy(_2 = l))
         .andThen(Traversal.each[List, Int])
       val out = sndEach.collectWith { fa =>
-        val total = cats.Foldable[PSVec].toList(fa).sum
+        val total = Foldable[PSVec].toList(fa).sum
         v => v + total
       }((label, xs))
       out == ((label, xs.map(_ + xs.sum)))

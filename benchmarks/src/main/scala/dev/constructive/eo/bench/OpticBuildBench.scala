@@ -1,14 +1,12 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.circe.{JsonPrism, codecPrism}
-
+import dev.constructive.eo.circe.{codecPrism, JsonPrism}
 import io.circe.Json
 import io.circe.syntax.*
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Integration-optic construction / amortization (plan 009, Phase 2).
   *

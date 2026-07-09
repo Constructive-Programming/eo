@@ -4,6 +4,7 @@ import scala.language.implicitConversions
 
 import cats.data.Ior
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.util.ArrayList
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 import org.scalacheck.Prop.forAll
@@ -124,7 +125,7 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
     */
   private def ageOnlyRecord(age: Int): GenericRecord =
     val ageOnlySchema =
-      val fields = new java.util.ArrayList[Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
         new Schema.Field("age", Schema.create(Schema.Type.INT), null, null)
       )

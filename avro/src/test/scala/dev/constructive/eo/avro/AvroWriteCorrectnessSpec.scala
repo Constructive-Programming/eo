@@ -6,6 +6,8 @@ import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.optics.{Lens, Optic}
 import java.io.ByteArrayOutputStream
+import java.util.{ArrayList, Arrays}
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, IndexedRecord}
 import org.apache.avro.io.EncoderFactory
 import org.scalacheck.Prop.forAll
@@ -167,7 +169,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     val blocked = toBlockedBinary(basketRecord(basket), basketSchema)
     val canonical = toBinary(basketRecord(basket), basketSchema)
     // Framing witness: the fixture really is non-canonical, or this test proves nothing.
-    val framingOk = java.util.Arrays.equals(blocked, canonical) === false
+    val framingOk = Arrays.equals(blocked, canonical) === false
 
     val namesT = codecPrism[Basket].items.each.name
     val readOk = namesT.record.getAllUnsafe(blocked) === Vector("tea", "mate")
@@ -300,7 +302,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
       val ageL = codecPrism[Person].field(_.age)
       val s = toBinary(personRecord(p), personSchema)
 
-      val getPut = java.util.Arrays.equals(ageL.modify(identity[Int])(s), s)
+      val getPut = Arrays.equals(ageL.modify(identity[Int])(s), s)
       val putGet = ageL.getOption(ageL.replace(x)(s)).contains(x)
       val putPut = java
         .util
@@ -327,9 +329,9 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
   "schema drift, incompatible shape: byte walk Misses, writes pass through (documented)" >> {
     // Writer schema: (extra: long, name: string, age: int) — the walk under Person's schema
     // reads `extra`'s varint bytes as `name`'s string length and derails.
-    val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+    val fields = new ArrayList[Schema.Field]()
     fields.add(
-      new org.apache.avro.Schema.Field(
+      new Schema.Field(
         "extra",
         org.apache.avro.Schema.create(org.apache.avro.Schema.Type.LONG),
         null,
@@ -337,7 +339,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
       )
     )
     fields.add(
-      new org.apache.avro.Schema.Field(
+      new Schema.Field(
         "name",
         org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
         null,
@@ -361,9 +363,9 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
   //   exact-writer-schema requirement is absolute, not merely "mostly Misses".
   "schema drift, same-typed reorder: byte walk reads the WRONG field (why the rule is absolute)" >> {
     // Writer laid the record out as (last, first); the prism's reader schema says (first, last).
-    val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+    val fields = new ArrayList[Schema.Field]()
     fields.add(
-      new org.apache.avro.Schema.Field(
+      new Schema.Field(
         "last",
         org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
         null,
@@ -371,7 +373,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
       )
     )
     fields.add(
-      new org.apache.avro.Schema.Field(
+      new Schema.Field(
         "first",
         org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
         null,

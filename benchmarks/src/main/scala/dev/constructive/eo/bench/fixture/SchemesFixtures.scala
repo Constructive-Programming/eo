@@ -3,11 +3,10 @@ package bench
 package fixture
 
 import cats.Functor
-import higherkindness.droste.data.Fix
-import higherkindness.droste.{Algebra, Coalgebra}
-
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.schemes.Schemes
+import higherkindness.droste.data.Fix
+import higherkindness.droste.{Algebra, Coalgebra}
 
 /** Pattern functor for the native [[Bin]] tree (`Leaf(Int)` / `Node(Bin, Bin)`).
   *

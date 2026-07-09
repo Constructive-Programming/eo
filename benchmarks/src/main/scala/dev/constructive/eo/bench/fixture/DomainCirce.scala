@@ -2,15 +2,12 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.circe.{JsonFailure, JsonPrism, codecPrism}
-import dev.constructive.eo.optics.{Lens => EoLens, Traversal => EoTraversal}
-
 import cats.data.{Chain, Ior}
 import cats.instances.list.given
-
-import io.circe.{Codec, Json}
-
+import dev.constructive.eo.circe.{codecPrism, JsonFailure, JsonPrism}
+import dev.constructive.eo.optics.{Lens as EoLens, Traversal as EoTraversal}
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import io.circe.{Codec, Json}
 
 /** circe `Codec.AsObject` instances and EO circe optics for the canonical [[Order]] schema, shared
   * by every circe-flavoured bench (`OrderCirceBench`, `OpticBuildBench`, the eo-circe side of

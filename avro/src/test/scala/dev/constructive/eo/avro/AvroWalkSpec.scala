@@ -2,6 +2,7 @@ package dev.constructive.eo.avro
 
 import scala.language.implicitConversions
 
+import java.util.{ArrayList, Arrays, LinkedHashMap}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 import org.specs2.mutable.Specification
@@ -18,7 +19,7 @@ class AvroWalkSpec extends Specification:
 
   /** Schema for `record Wrapper { array<Person> people; }` — needed for the array-walk specs. */
   private val wrapperSchema: Schema =
-    val fields = new java.util.ArrayList[Schema.Field]()
+    val fields = new ArrayList[Schema.Field]()
     fields.add(
       new Schema.Field("people", Schema.createArray(personSchema), null, null)
     )
@@ -26,7 +27,7 @@ class AvroWalkSpec extends Specification:
 
   /** Schema for `record TaggedMap { map<string> tags; }` — used by the map-walk spec. */
   private val taggedMapSchema: Schema =
-    val fields = new java.util.ArrayList[Schema.Field]()
+    val fields = new ArrayList[Schema.Field]()
     fields.add(
       new Schema.Field("tags", Schema.createMap(Schema.create(Schema.Type.STRING)), null, null)
     )
@@ -35,9 +36,9 @@ class AvroWalkSpec extends Specification:
   /** Schema for a `union<null, long>` field embedded in a wrapper record. */
   private val maybeLongSchema: Schema =
     val unionSchema = Schema.createUnion(
-      java.util.Arrays.asList(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG))
+      Arrays.asList(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG))
     )
-    val fields = new java.util.ArrayList[Schema.Field]()
+    val fields = new ArrayList[Schema.Field]()
     fields.add(new Schema.Field("amount", unionSchema, null, null))
     Schema.createRecord("MaybeLong", null, "eo.avro.test", false, fields)
 
@@ -110,7 +111,7 @@ class AvroWalkSpec extends Specification:
 
   // covers: walk into a map<string> entry by key returns the entry value
   "Map walk: by string key" >> {
-    val tags = new java.util.LinkedHashMap[String, String]()
+    val tags = new LinkedHashMap[String, String]()
     tags.put("env", "prod")
     tags.put("region", "us")
     val record = buildRecord(taggedMapSchema)("tags" -> tags)

@@ -3,11 +3,10 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.optics.Optic.*
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Bytes-in/bytes-out avro bench (zero-copy plan, Phase 1) over CONVERSION-SHAPED fixtures — a
   * 7-field envelope with a mid-record union payload and an 18-field record with nested sub-records

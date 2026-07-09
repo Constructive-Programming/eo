@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import scala.annotation.targetName
+
 import cats.{Applicative, Functor}
 
 import accessor.ReverseAccessor
@@ -68,7 +70,7 @@ final class Unfold[T, B, F[_]] @scala.annotation.publicInBinary private (
     * Prism), then the layer embeds. The build-direction mirror of [[Getter]]'s `andThenReadAny`;
     * the fused `andThen(Review)` member above stays as the more-specific fast path.
     */
-  @annotation.targetName("andThenBuildAny")
+  @targetName("andThenBuildAny")
   inline def andThen[G[_, _], D](inner: Optic[?, B, ?, D, G])(using
       ra: ReverseAccessor[G],
       F: Functor[F],

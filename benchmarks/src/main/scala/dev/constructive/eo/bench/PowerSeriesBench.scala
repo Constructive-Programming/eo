@@ -4,14 +4,11 @@ package bench
 import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import cats.instances.arraySeq.*
-
 import dev.constructive.eo.bench.fixture.{Person, Phone}
-
-import monocle.{Lens => MLens, Traversal => MTraversal}
+import java.util.concurrent.TimeUnit
+import monocle.{Lens as MLens, Traversal as MTraversal}
+import org.openjdk.jmh.annotations.*
 
 /** PowerSeries-backed Traversal over a nested focus, paired against a hand-written iterative
   * baseline and the equivalent Monocle composition.

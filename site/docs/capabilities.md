@@ -20,11 +20,11 @@ this library was written for: leave the subject type generic, and demand only th
 import dev.constructive.eo.*
 import dev.constructive.eo.optics.*
 
-import java.time.Instant
+import java.time.{Duration, Instant}
 
 // This function knows NOTHING about the shape of T — only that an
 // Instant can be rewritten inside it.
-def adjustTimes[T](delta: java.time.Duration)(using cm: CanModify[T, Instant]): T => T =
+def adjustTimes[T](delta: Duration)(using cm: CanModify[T, Instant]): T => T =
   cm.modify(_.plus(delta))
 
 // Each domain type supplies its own evidence — here, a plain lens.
@@ -34,7 +34,7 @@ given GetReplaceLens[Meeting, Meeting, Instant, Instant] =
 ```
 
 ```scala mdoc
-val shift = adjustTimes[Meeting](java.time.Duration.ofHours(1))
+val shift = adjustTimes[Meeting](Duration.ofHours(1))
 shift(Meeting("standup", Instant.EPOCH))
 ```
 

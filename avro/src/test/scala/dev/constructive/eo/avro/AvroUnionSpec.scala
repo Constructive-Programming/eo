@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.language.implicitConversions
 
 import cats.data.Ior
+import java.util.ArrayList
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.specs2.mutable.Specification
@@ -101,7 +102,7 @@ class AvroUnionSpec extends Specification:
     // Wrap the alternative inside a synthetic `record { Payment payment; }` envelope so the path
     // walker has a Field step to land on before the UnionBranch.
     val envSchema: Schema = {
-      val fields = new java.util.ArrayList[Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(new Schema.Field("payment", paymentSchema, null, null))
       Schema.createRecord("Envelope", null, "eo.avro.test", false, fields)
     }

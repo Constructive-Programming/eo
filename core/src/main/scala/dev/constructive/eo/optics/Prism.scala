@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 /** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. A `Prism[S, A]`
   * (short for `Optic[S, S, A, A, Either]`) encodes a branch of a sum type: `getOption(s)` succeeds
   * when `s` matches, `reverseGet(a)` lifts back. The `eo-generics` module's `prism[S, A]` macro
@@ -93,7 +95,7 @@ final class MendTearPrism[S, T, A, B](
   inline def getOption(s: S): Option[A] = tear(s).toOption
   inline def reverseGet(b: B): T = mend(b)
 
-  def foldMap[M](f: A => M)(s: S)(using M: cats.Monoid[M]): M =
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
     tear(s) match
       case Right(a) => f(a)
       case Left(_)  => M.empty
@@ -226,7 +228,7 @@ final class PickMendPrism[S, A, B](
   inline def getOption(s: S): Option[A] = pick(s)
   inline def reverseGet(b: B): S = mend(b)
 
-  def foldMap[M](f: A => M)(s: S)(using M: cats.Monoid[M]): M =
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
     pick(s) match
       case Some(a) => f(a)
       case None    => M.empty

@@ -4,6 +4,7 @@ package optics
 import scala.annotation.tailrec
 
 import cats.Eval
+import java.util.ArrayDeque
 
 import data.{ModifyF, MultiFocus, PSVec}
 
@@ -142,7 +143,7 @@ object Plated:
     */
   private def transformMachine[S](f: S => S)(root: S)(using P: Plated[S]): S =
     final class Frame(val node: S, val kids: PSVec[S], val out: Array[AnyRef], var i: Int)
-    val stack = new java.util.ArrayDeque[Frame]()
+    val stack = new ArrayDeque[Frame]()
     var ret: S = root // overwritten before any read (only read once a child has completed)
     def enter(s: S): Unit =
       val kids = P.childrenVec(s)
@@ -208,7 +209,7 @@ object Plated:
     * children are pushed straight off the `PSVec` (no per-node `List`).
     */
   def universe[S](s: S)(using P: Plated[S]): List[S] =
-    @annotation.tailrec
+    @tailrec
     def loop(stack: List[S], acc: List[S]): List[S] =
       stack match
         case Nil    => acc.reverse

@@ -5,6 +5,8 @@ import scala.language.implicitConversions
 import cats.data.Ior
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic.*
+import java.util.{ArrayList, Arrays}
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericRecord, IndexedRecord}
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
@@ -53,9 +55,9 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         case h: Affine.Hit[nameL.X, String]  => h.b == p.name
         case _: Affine.Miss[nameL.X, String] => false
 
-      val modifyOk = java.util.Arrays.equals(nameL.modify(_.toUpperCase)(bytes), expectedModify)
-      val replaceOk = java.util.Arrays.equals(nameL.replace("Carol")(bytes), expectedPlace)
-      val identityOk = java.util.Arrays.equals(nameL.modify(identity[String])(bytes), bytes)
+      val modifyOk = Arrays.equals(nameL.modify(_.toUpperCase)(bytes), expectedModify)
+      val replaceOk = Arrays.equals(nameL.replace("Carol")(bytes), expectedPlace)
+      val identityOk = Arrays.equals(nameL.modify(identity[String])(bytes), bytes)
       val decodesOk = codecPrism[Person]
         .getOption(nameL.modify(_.toUpperCase)(bytes))
         .contains(p.copy(name = p.name.toUpperCase))
@@ -111,13 +113,13 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .Arrays
             .equals(frag.bytes, toBinaryValue(java.lang.Long.valueOf(7L), frag.schema)) === true
         val selfGraft = seqL.graftBytes(bytes, frag.bytes) match
-          case Ior.Right(out) => java.util.Arrays.equals(out, bytes) === true
+          case Ior.Right(out) => Arrays.equals(out, bytes) === true
           case other          =>
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
         val unsafeParity =
           seqL
             .sliceBytesUnsafe(bytes)
-            .exists(f => java.util.Arrays.equals(f.bytes, frag.bytes)) === true
+            .exists(f => Arrays.equals(f.bytes, frag.bytes)) === true
         schemaOk.and(ordinalOk).and(fidelity).and(selfGraft).and(unsafeParity)
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
@@ -135,11 +137,11 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         val ordinalOk = frag.branchOrdinal === Some(cashOrdinal)
         val decoded = fromBinaryValue(frag.bytes, frag.schema)
         val fidelity =
-          java.util.Arrays.equals(frag.bytes, toBinaryValue(decoded, frag.schema)) === true
+          Arrays.equals(frag.bytes, toBinaryValue(decoded, frag.schema)) === true
         val decodedOk =
           decoded.asInstanceOf[GenericRecord].get("amount").asInstanceOf[Long] === 100L
         val selfGraft = cashL.graftBytes(bytes, frag.bytes) match
-          case Ior.Right(out) => java.util.Arrays.equals(out, bytes) === true
+          case Ior.Right(out) => Arrays.equals(out, bytes) === true
           case other          =>
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
         schemaOk.and(ordinalOk).and(fidelity).and(decodedOk).and(selfGraft)
@@ -189,11 +191,11 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     val expected = paymentL.replace(Cash(100L))(outputBytes)
 
     val graftOk = cashL.graftBytes(outputBytes, frag.bytes) match
-      case Ior.Right(out) => java.util.Arrays.equals(out, expected) === true
+      case Ior.Right(out) => Arrays.equals(out, expected) === true
       case other          =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
     val unsafeOk =
-      java.util.Arrays.equals(cashL.graftBytesUnsafe(outputBytes, frag.bytes), expected) === true
+      Arrays.equals(cashL.graftBytesUnsafe(outputBytes, frag.bytes), expected) === true
 
     // Decode the grafted payload: payload switched, every other field (incl. the suffix field
     // `note`, AFTER the focused union) carries the OUTPUT's values.
@@ -231,7 +233,7 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       .and((itemL.graftBytesUnsafe(basketBytes, Array(0.toByte)) eq basketBytes) === true)
 
     val personBytes = toBinary(personRecord(Person("Alice", 30)), personSchema)
-    val truncated = java.util.Arrays.copyOf(personBytes, personBytes.length - 1)
+    val truncated = Arrays.copyOf(personBytes, personBytes.length - 1)
     val truncatedOk = codecPrism[Person].field(_.age).sliceBytes(truncated) match
       case Ior.Left(chain) =>
         chain.headOption.exists(_.isInstanceOf[AvroFailure.BinaryParseFailed]) === true
@@ -260,9 +262,9 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // 0th schema field ("age"); to assert a genuine name-miss we navigate by explicit schema name
     // via the `.fieldNamed` escape hatch, which bypasses position resolution.
     val ageOnlySchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "age",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -313,9 +315,9 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       basketRecord(basket.copy(items = basket.items.map(o => o.copy(name = o.name.toUpperCase)))),
       basketSchema,
     )
-    val modifyOk = java.util.Arrays.equals(namesT.modify(_.toUpperCase)(bytes), expected) === true
+    val modifyOk = Arrays.equals(namesT.modify(_.toUpperCase)(bytes), expected) === true
     val identityOk =
-      java.util.Arrays.equals(namesT.modify(identity[String])(bytes), bytes) === true
+      Arrays.equals(namesT.modify(identity[String])(bytes), bytes) === true
 
     val badBytes: Array[Byte] = Array(2.toByte)
     val missOk = (namesT.modify(identity[String])(badBytes) eq badBytes) === true
@@ -324,7 +326,7 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     val emptyBytes = toBinary(basketRecord(emptyBasket), basketSchema)
     val emptyReadOk = namesT.foldMap(List(_))(emptyBytes) === Nil
     val emptyWriteOk =
-      java.util.Arrays.equals(namesT.modify(_.toUpperCase)(emptyBytes), emptyBytes) === true
+      Arrays.equals(namesT.modify(_.toUpperCase)(emptyBytes), emptyBytes) === true
 
     readOk.and(modifyOk).and(identityOk).and(missOk).and(emptyReadOk).and(emptyWriteOk)
   }

@@ -5,12 +5,11 @@ package fixture
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.{
   AffineFold,
-  Getter => EoGetter,
-  Optional => EoOptional,
-  Modify => EoModify,
+  Getter as EoGetter,
+  Modify as EoModify,
+  Optional as EoOptional
 }
-
-import monocle.{Getter => MGetter, Optional => MOptional, Setter => MSetter}
+import monocle.{Getter as MGetter, Optional as MOptional, Setter as MSetter}
 
 /** Canonical in-memory EO + Monocle optics over the decoded [[Order]], for the per-family
   * micro-benches that don't go through a byte/AST backend (`GetterBench`, `SetterBench`,

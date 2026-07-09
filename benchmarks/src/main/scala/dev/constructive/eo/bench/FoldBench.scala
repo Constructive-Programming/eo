@@ -3,16 +3,13 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
-import dev.constructive.eo.bench.fixture.{Domain, LineItem}
-import dev.constructive.eo.optics.{Fold => EoFold}
-
 import cats.instances.double.given
 import cats.instances.list.given
-
-import monocle.{Fold => MFold}
+import dev.constructive.eo.bench.fixture.{Domain, LineItem}
+import dev.constructive.eo.optics.Fold as EoFold
+import java.util.concurrent.TimeUnit
+import monocle.Fold as MFold
+import org.openjdk.jmh.annotations.*
 
 /** `Fold.foldMap` over a `List[Int]`, paired EO vs Monocle.
   *

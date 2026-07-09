@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 import data.Direct
 
 /** Constructor for `Iso` — a bijective single-focus optic, backed by `Direct`. An `Iso[S, A]`
@@ -52,7 +54,7 @@ final class BijectionIso[S, T, A, B](
     val t = reverseGet(b)
     _ => t
 
-  def foldMap[M](f: A => M)(s: S)(using cats.Monoid[M]): M = f(read(s))
+  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
   /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. `inline` so each
     * compose site splices distinct lambdas, keeping a deep `iso.andThen(iso)…` chain under C2's

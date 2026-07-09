@@ -7,6 +7,8 @@ import dev.constructive.eo.data.Affine
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.util.ArrayList
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.specs2.mutable.Specification
 
@@ -59,9 +61,9 @@ class CrossCarrierCompositionSpec extends Specification:
     val adultBox = Box(personRecord(Person("Alice", 30)))
     val minorBox = Box(personRecord(Person("Bob", 12)))
     val brokenSchema = {
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "tag",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,
@@ -85,9 +87,9 @@ class CrossCarrierCompositionSpec extends Specification:
 
     val validEnv = Envelope("env", personRecord(Person("Alice", 30)))
     val emptySchema = {
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "other",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -139,9 +141,9 @@ class CrossCarrierCompositionSpec extends Specification:
       case other => ko(s"expected Ior.Right, got $other")
 
     val nameOnlySchema = {
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "name",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,
@@ -248,9 +250,9 @@ class CrossCarrierCompositionSpec extends Specification:
     // Diagnostic case: a basket whose first element is a record under a schema lacking `price`,
     // so the per-element multi-field walk surfaces PathMissing(price).
     val noPriceSchema = {
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "name",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,
@@ -258,7 +260,7 @@ class CrossCarrierCompositionSpec extends Specification:
         )
       )
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,

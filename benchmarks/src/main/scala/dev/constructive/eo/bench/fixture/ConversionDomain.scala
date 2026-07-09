@@ -2,16 +2,16 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.avro.{AvroCodec, AvroPrism, codecPrism}
-
+import dev.constructive.eo.avro.{codecPrism, AvroCodec, AvroPrism}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
+import java.util.ArrayList
 import org.apache.avro.Schema
 import org.apache.avro.generic.{
   GenericDatumReader,
   GenericDatumWriter,
   GenericRecord,
-  IndexedRecord,
+  IndexedRecord
 }
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
 
@@ -198,7 +198,7 @@ object ConversionDomain:
     */
   def prunedSchemaOf(full: Schema, fieldName: String): Schema =
     val source = full.getField(fieldName)
-    val fields = new java.util.ArrayList[Schema.Field]()
+    val fields = new ArrayList[Schema.Field]()
     fields.add(new Schema.Field(fieldName, source.schema, null, null))
     Schema.createRecord(full.getName, null, full.getNamespace, false, fields)
 

@@ -1,10 +1,9 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
+import cats.instances.list.given
 import dev.constructive.eo.bench.fixture.*
+import dev.constructive.eo.data.Forget
 import dev.constructive.eo.optics.{
   Fold as EoFold,
   ForgetFold,
@@ -12,8 +11,8 @@ import dev.constructive.eo.optics.{
   Lens as EoLens,
   Optic
 }
-
-import cats.instances.list.given
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Capability-call vs direct-call on the canonical [[Order]] — the evidence behind the "consume via
   * capability" doctrine. Four variants per operation:
@@ -65,7 +64,7 @@ class CapsBench extends JmhDefaults:
 
   // generic-optic givens — the derivation route (wrapper, not mixin)
   given idGeneric: Optic[Order, Order, Long, Long, Tuple2] = eoId
-  given foldGeneric: Optic[List[Int], Unit, Int, Unit, data.Forget[List]] = eoFold
+  given foldGeneric: Optic[List[Int], Unit, Int, Unit, Forget[List]] = eoFold
 
   // derived once, held
   val idGetDerived: CanGet[Order, Long] = summon

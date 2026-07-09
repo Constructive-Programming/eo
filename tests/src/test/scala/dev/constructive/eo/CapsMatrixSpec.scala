@@ -28,6 +28,7 @@ import scala.compiletime.testing.typeChecks
 import org.specs2.mutable.Specification
 
 import optics.*
+import optics.SimpleLens.transformEvidence
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 
 object CapsFixtures:
@@ -324,14 +325,12 @@ class CapsMatrixSpec extends Specification:
   // ----------------------------------------------- CanPlace/CanTransform
   "CanPlace / CanTransform (explicit constructors — no derived given by design)" >> {
     "CanPlace.from lifts a SimpleLens via its transformEvidence" >> {
-      import optics.SimpleLens.transformEvidence
       given SimpleLens[(String, Int), String, Int] = firstLens
       val cp = CanPlace.from(firstLens)
       cp.place("z")(("a", 1)) === (("z", 1))
       cp.transfer[Int](_.toString)(("a", 1))(42) === (("42", 1))
     }
     "CanTransform.from lifts a SimpleLens" >> {
-      import optics.SimpleLens.transformEvidence
       given SimpleLens[(String, Int), String, Int] = firstLens
       val ct: CanTransform[(String, Int), String, String] = CanTransform.from(firstLens)
       ct.transform(_.toUpperCase)(("a", 1)) === (("A", 1))

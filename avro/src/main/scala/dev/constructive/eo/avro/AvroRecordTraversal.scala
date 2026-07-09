@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.annotation.tailrec
 
 import cats.data.{Chain, Ior}
+import java.util.ArrayList
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
@@ -228,7 +229,7 @@ final class AvroRecordTraversal[A] private[avro] (
       case _                        => null
     val fresh: java.util.List[Any] =
       if schema != null then new GenericData.Array[Any](newElems.size, schema)
-      else new java.util.ArrayList[Any](newElems.size)
+      else new ArrayList[Any](newElems.size)
     newElems.foreach(fresh.add(_))
     fresh
 

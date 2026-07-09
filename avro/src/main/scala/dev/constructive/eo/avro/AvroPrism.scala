@@ -5,6 +5,7 @@ import scala.language.dynamics
 import cats.data.{Chain, Ior}
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
+import java.util.Arrays
 import org.apache.avro.Schema
 
 /** Optic from the Avro BINARY WIRE FORM to a native type `A` — the wire bytes are the default
@@ -166,7 +167,7 @@ final class AvroPrism[A] private[avro] (
       case Right(span)   =>
         Ior.Right(
           AvroFragment(
-            java.util.Arrays.copyOfRange(bytes, span.valueStart, span.end),
+            Arrays.copyOfRange(bytes, span.valueStart, span.end),
             span.valueSchema,
             span.branchOrdinal,
           )
@@ -179,7 +180,7 @@ final class AvroPrism[A] private[avro] (
       .toOption
       .map(span =>
         AvroFragment(
-          java.util.Arrays.copyOfRange(bytes, span.valueStart, span.end),
+          Arrays.copyOfRange(bytes, span.valueStart, span.end),
           span.valueSchema,
           span.branchOrdinal,
         )
