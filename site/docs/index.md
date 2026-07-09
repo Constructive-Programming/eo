@@ -10,24 +10,31 @@ written `.andThen` overloads.
 
 ## What optics buy you
 
-An optic is a tool for cleanly specifying a complex, pinpointed
-operation against a value — at a much higher level of interpretation
-than the operation itself. You name *which* part of a value you care
-about; the carrier names *how* that focus is reached and rebuilt;
-your action against the focus stays a one-liner regardless of how
-deep the structure goes or how heterogeneously the layers are
-encoded.
+What an optic buys you depends on the scale you're working at — and
+it compounds.
 
-The Lens / Prism / Traversal vocabulary you'd normally use for
-in-memory case-class trees is the same vocabulary that lights up
-when one side of the structure is a JSON byte stream
-([eo-jsoniter](integrations/jsoniter.md)) or an Apache Avro record on the wire
-([eo-avro](integrations/avro.md)) or a circe `Json` AST ([eo-circe](integrations/circe.md)).
-You get to specify one side of the mirror — the focus, the
-operation, the path — and let the carrier implement the other.
-On one side: the bytestream, the wire, the buffered representation.
-On the other: your domain classes. Same `.modify` / `.replace` /
-`.andThen` reads against both.
+*At the value level*: a pinpointed operation, cleanly specified.
+Name the part you care about and act on it in one line — no `.copy`
+chains, no cursor plumbing, no depth tax.
+
+*At the format level*: the same one line, regardless of encoding.
+Lens / Prism / Traversal read identically against in-memory trees,
+circe `Json` ([eo-circe](integrations/circe.md)), Avro on the wire
+([eo-avro](integrations/avro.md)), and raw JSON bytes
+([eo-jsoniter](integrations/jsoniter.md)) — where the byte-level
+edit is *flat* in document size and decode-modify-encode is
+on-demand.
+
+*At the architecture level*: the optic becomes a contract. A module
+demands `CanModify[T, Instant]` — proof that doesn't anchor `T` —
+and the caller supplies the optic relevant to their particular
+context. Truly modular, de-coupled code: optics passed along as
+proof of capability contracts across modules
+([Capabilities](capabilities.md)).
+
+The whole ladder runs at hand-written speed — fused hot paths match
+or beat what's currently done on large systems, and capability calls
+dispatch into the same fused methods ([Benchmarks](benchmarks.md)).
 
 Current version: @VERSION@.
 
