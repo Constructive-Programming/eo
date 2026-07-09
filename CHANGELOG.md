@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-09
+
+### Added
+
+- **Capability traits at `dev.constructive.eo`** — `CanGet`, `CanGetOption`,
+  `CanReverseGet`, `CanModifyP`/`CanModify`, `CanFold`, `CanPutP`/`CanPut`,
+  `CanModifyFP`/`CanModifyF`, `CanModifyAP`/`CanModifyA`, `CanPlace`,
+  `CanTransform`: the carrier-free consuming surface of an optic, usable as
+  `using` evidence (`def adjustTimes[T](using cm: CanModify[T, Instant])`).
+  Concrete optic classes implement their capabilities directly (hot path);
+  a derived given per companion serves optics bound at the generic
+  `Optic[…, F]` type. `CanFold.foci` is the carrier-free counterpart of the
+  `all` extension. See the new [Capabilities](https://eo.constructive.dev/capabilities.html)
+  page and `CapsBench` (capability call ≈ direct call on CI).
+- **Fused `SplitCombineLens.andThen(SplitCombineLens)`** — macro-derived lens
+  chains (`lens[Person](_.address).andThen(lens[Address](_.street))`) now
+  compose into a concrete class, keeping the fused read/write paths and the
+  capability mixins instead of falling back to an anonymous `Optic`.
+
+### Changed
+
+- **Binary-breaking (recompile required):** stored-function `val`s whose names
+  collide with capability kernels became private constructor params + methods:
+  `Getter.get`, `GetReplaceLens.get`, `SplitCombineLens.get`,
+  `BijectionIso.get`/`reverseGet`, `Review.reverseGet`;
+  `GetReplaceLens.replace` went niladic → unary. Source-compatible via
+  auto-eta (`xs.map(g.get)` still compiles), but jars compiled against
+  ≤ 0.6.x fail at runtime against 0.7.0 core — the `inline` fused `andThen`s
+  spliced the old accessors into caller bytecode. Recompile downstream.
+
 ### Added
 
 - **`Getter`s now compose with `Getter`s via `andThen`.** `g1.andThen(g2)` reads
