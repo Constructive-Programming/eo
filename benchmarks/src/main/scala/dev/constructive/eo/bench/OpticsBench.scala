@@ -3,22 +3,19 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.optics.{
-  Iso => EoIso,
-  Lens => EoLens,
-  Optic,
-  Prism => EoPrism,
-  Traversal => EoTraversal,
-}
-import dev.constructive.eo.data.{MultiFocus, PSVec}
-
 import cats.instances.list.given
-
-import monocle.{Iso => MIso, Lens => MLens, Prism => MPrism, Traversal => MTraversal}
+import dev.constructive.eo.bench.fixture.*
+import dev.constructive.eo.data.{MultiFocus, PSVec}
+import dev.constructive.eo.optics.{
+  Iso as EoIso,
+  Lens as EoLens,
+  Optic,
+  Prism as EoPrism,
+  Traversal as EoTraversal
+}
+import java.util.concurrent.TimeUnit
+import monocle.{Iso as MIso, Lens as MLens, Prism as MPrism, Traversal as MTraversal}
+import org.openjdk.jmh.annotations.*
 
 /** Lens.get / Lens.replace / Lens.modify on the canonical [[Order]], paired EO vs Monocle.
   *

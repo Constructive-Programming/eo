@@ -1,14 +1,12 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import cats.data.{Const, ZipList}
-
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 import dev.constructive.eo.optics.Optic
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** `MultiFocus` aggregator (`collect*`) and `tuple` benches — split out of the former
   * `MultiFocusBench` junk drawer (plan 009, Phase 3).

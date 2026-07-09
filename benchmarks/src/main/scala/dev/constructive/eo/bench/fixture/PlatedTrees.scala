@@ -3,15 +3,15 @@ package bench
 package fixture
 
 import scala.annotation.tailrec
-import cats.{Applicative, Traverse}
+
 import cats.instances.list.given
 import cats.instances.vector.given
-import io.circe.Json
-import monocle.{PTraversal, Traversal as MTraversal}
-import monocle.function.Plated as MPlated
-
+import cats.{Applicative, Traverse}
 import dev.constructive.eo.generics.plate
 import dev.constructive.eo.optics.Plated as EoPlated
+import io.circe.Json
+import monocle.function.Plated as MPlated
+import monocle.{PTraversal, Traversal as MTraversal}
 
 /** Recursive ADTs + paired EO / Monocle `Plated` instances for the `PlatedUniverseBench`.
   *

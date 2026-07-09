@@ -170,6 +170,48 @@ rebuilds via `Functor[PSVec].map`, where Monocle wraps each element in
 Monocle trails, widening to ~4.8× by 512 line items (each element pays a `LineItem`
 copy that dwarfs the carrier difference).
 
+## Capability dispatch
+
+`CapsBench` backs the [capabilities](capabilities.md) doctrine — "consume via capability,
+construct via optic" — with four variants per operation on the canonical `Order`:
+
+- `*Direct` — receiver typed as the concrete class (`GetReplaceLens`, `ForgetFold`): the
+  fused member, today's baseline.
+- `*Cap` — receiver typed as the capability trait (`CanGet`, `CanModify`, `CanFold`):
+  interface dispatch into the **same final method**, since the concrete classes implement
+  the capabilities directly. This is what a consuming signature pays when handed a concrete
+  optic.
+- `*DerivedHeld` — the capability derived once from a generic `Optic[…, F]` given and
+  reused: the wrapper's per-call cost with the summon amortised.
+- `*DerivedPerCall` — the given re-summoned inside the measured call (a fresh SAM every
+  invocation): what a generic method's use-site pays when its optic given is bound only at
+  the generic type. This is the honest worst case — the held variants structurally cannot
+  falsify "the ergonomics are free", so this one exists to try.
+
+Operations: `get` (shallow `order.id` + depth-3 `street`), `modify` (same two), and
+`foldMap` over an 8-element list.
+
+| Operation | Direct | Cap | DerivedHeld | DerivedPerCall |
+|---|--:|--:|--:|--:|
+| `get` (`id`)              |  0.81 |  0.90 |  1.77 |  1.15 |
+| `get` (deep `street`)     |  1.06 |  1.19 |     — |     — |
+| `modify` (`id`)           |  5.49 |  5.36 |  5.61 |  5.42 |
+| `modify` (deep `street`)  | 27.47 | 28.80 |     — |     — |
+| `foldMap` (8 ints)        | 20.45 | 20.14 | 21.37 | 19.12 |
+
+(Error half-widths ≤ ±0.71 ns on every row.)
+
+The doctrine holds: **capability-typed calls are free where it matters.** The `Cap` column —
+what a consuming signature pays when handed a concrete optic — sits within ~0.1 ns of direct
+on the scalar reads and inside the error bars on `modify` / `foldMap`; the only visible gap is
+~1.3 ns (~5 %) on the depth-3 modify. The derived-wrapper route costs at most ~1 ns of fixed
+overhead on the cheapest op (`get`: 0.81 → 1.77 held) and disappears entirely once the op does
+real work (`modify` and `foldMap` land within noise across all four variants). The per-call
+summon — a fresh SAM per invocation — is *cheaper* than the held wrapper on `get`
+(1.15 vs 1.77): the freshly-allocated wrapper is escape-analysis-elided at its monomorphic
+use, while the held one is a real field load and double dispatch. So the honest worst case,
+re-deriving the capability on every call of a generic method, costs ~0.35 ns over direct.
+
 ## Integration: edit without decoding
 
 The three integration benches share **one realistic `Order` document** — deep

@@ -3,6 +3,7 @@ package data
 
 import scala.annotation.tailrec
 
+import cats.data.Chain
 import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 
 import forgetful.*
@@ -89,8 +90,8 @@ private[eo] object MultiFocusFromList:
     override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): Vector[A] =
       Vector.tabulate(size)(i => arr(from + i).asInstanceOf[A])
 
-  given forChain: MultiFocusFromList[cats.data.Chain] with
-    def fromList[A](xs: List[A]): cats.data.Chain[A] = cats.data.Chain.fromSeq(xs)
+  given forChain: MultiFocusFromList[Chain] with
+    def fromList[A](xs: List[A]): Chain[A] = Chain.fromSeq(xs)
 
   /** PSVec builder — `fromArraySlice` is zero-copy (returns a `PSVec.Slice` view over the source
     * array). The crucial perf hook that lets `mfAssocPSVec.composeFrom` hand each inner reassembly

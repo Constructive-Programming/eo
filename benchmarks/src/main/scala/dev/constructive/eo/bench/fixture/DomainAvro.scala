@@ -2,8 +2,7 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.avro.{AvroCodec, codecPrism}
-
+import dev.constructive.eo.avro.{codecPrism, AvroCodec}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 
 /** Avro `Encoder`/`Decoder`/`SchemaFor` instances and EO avro optics for the canonical [[Order]]

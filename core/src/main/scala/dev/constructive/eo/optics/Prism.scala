@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 /** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. A `Prism[S, A]`
   * (short for `Optic[S, S, A, A, Either]`) encodes a branch of a sum type: `getOption(s)` succeeds
   * when `s` matches, `reverseGet(a)` lifts back. The `eo-generics` module's `prism[S, A]` macro
@@ -65,7 +67,11 @@ object Prism:
 final class MendTearPrism[S, T, A, B](
     val tear: S => Either[T, A],
     val mend: B => T,
-) extends Optic[S, T, A, B, Either]:
+) extends Optic[S, T, A, B, Either],
+      CanGetOption[S, A],
+      CanReverseGet[T, B],
+      CanModifyP[S, T, A, B],
+      CanFold[S, A]:
   type X = T
   def to(s: S): Either[T, A] = tear(s)
 
@@ -80,7 +86,7 @@ final class MendTearPrism[S, T, A, B](
         case Right(a) => mend(f(a))
         case Left(t)  => t
 
-  inline def replace(b: B): S => T =
+  override inline def replace(b: B): S => T =
     s =>
       tear(s) match
         case Right(_) => mend(b)
@@ -88,6 +94,11 @@ final class MendTearPrism[S, T, A, B](
 
   inline def getOption(s: S): Option[A] = tear(s).toOption
   inline def reverseGet(b: B): T = mend(b)
+
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
+    tear(s) match
+      case Right(a) => f(a)
+      case Left(_)  => M.empty
 
   /** Shared kernel for `MendTearPrism` ∘ Either-carrier composition. Outer-miss short-circuits;
     * outer-hit threads through `innerTear` (read) and `innerMend` (write). `inline` so the call
@@ -185,7 +196,11 @@ final class MendTearPrism[S, T, A, B](
 final class PickMendPrism[S, A, B](
     val pick: S => Option[A],
     val mend: B => S,
-) extends Optic[S, S, A, B, Either]:
+) extends Optic[S, S, A, B, Either],
+      CanGetOption[S, A],
+      CanReverseGet[S, B],
+      CanModifyP[S, S, A, B],
+      CanFold[S, A]:
   type X = S
 
   def to(s: S): Either[S, A] =
@@ -204,7 +219,7 @@ final class PickMendPrism[S, A, B](
         case Some(a) => mend(f(a))
         case None    => s
 
-  inline def replace(b: B): S => S =
+  override inline def replace(b: B): S => S =
     s =>
       pick(s) match
         case Some(_) => mend(b)
@@ -212,6 +227,11 @@ final class PickMendPrism[S, A, B](
 
   inline def getOption(s: S): Option[A] = pick(s)
   inline def reverseGet(b: B): S = mend(b)
+
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
+    pick(s) match
+      case Some(a) => f(a)
+      case None    => M.empty
 
   /** Fused `PickMend.andThen(PickMend)` — outer mono in focus; preserves the Option-fast-path shape
     * rather than materialising an intermediate Either. `inline` so a deep fast-path prism chain

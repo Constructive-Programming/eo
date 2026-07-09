@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 import data.Affine
 
 /** Constructor for `Optional` — the conditionally-present single-focus optic, backed by `Affine`.
@@ -60,7 +62,10 @@ object Optional:
 final class Optional[S, T, A, B](
     val getOrModify: S => Either[T, A],
     val reverseGet: (S, B) => T,
-) extends Optic[S, T, A, B, Affine]:
+) extends Optic[S, T, A, B, Affine],
+      CanGetOption[S, A],
+      CanModifyP[S, T, A, B],
+      CanFold[S, A]:
   type X = (T, S)
 
   def to(s: S): Affine[X, A] =
@@ -72,6 +77,22 @@ final class Optional[S, T, A, B](
     a match
       case h: Affine.Hit[X, B]  => reverseGet(h.snd, h.b)
       case m: Affine.Miss[X, B] => m.fst
+
+  /** Fused reads / writes — pattern-match `getOrModify` once, skipping the `Affine` carrier
+    * round-trip the generic extensions perform.
+    */
+  def getOption(s: S): Option[A] = getOrModify(s).toOption
+
+  def modify(f: A => B): S => T =
+    s =>
+      getOrModify(s) match
+        case Right(a) => reverseGet(s, f(a))
+        case Left(t)  => t
+
+  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
+    getOrModify(s) match
+      case Right(a) => f(a)
+      case Left(_)  => M.empty
 
   /** Shared fused-andThen kernel for `Optional` outer. Outer-miss short-circuits; outer-hit threads
     * through `innerHit` (read) and `innerWrite` (write). `inline` so call sites allocate the same

@@ -3,13 +3,11 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import cats.instances.list.*
-
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.data.MultiFocus
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** `MultiFocus[List]` (via `fromLensF`) vs `MultiFocus[PSVec]` (via `Traversal.each[List, _]`) on
   * the same `Lens[Order, List[LineItem]] → inner → Lens[LineItem, Int]` chain over the canonical

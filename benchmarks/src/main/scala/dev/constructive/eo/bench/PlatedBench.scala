@@ -3,16 +3,14 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
-import io.circe.Json
-import monocle.function.Plated as MPlated
-
-import dev.constructive.eo.bench.fixture.{Bin, Expr, PlatedTrees}
 import dev.constructive.eo.bench.fixture.PlatedTrees.given
+import dev.constructive.eo.bench.fixture.{Bin, Expr, PlatedTrees}
 import dev.constructive.eo.circe.platedJson // EO Plated[Json]
 import dev.constructive.eo.optics.Plated as EoPlated
+import io.circe.Json
+import java.util.concurrent.TimeUnit
+import monocle.function.Plated as MPlated
+import org.openjdk.jmh.annotations.*
 
 /** `Plated` recursion — the read side (`universe`, enumerate every sub-term) and the write side
   * (`transform`, bottom-up rebuild) — measured three ways:

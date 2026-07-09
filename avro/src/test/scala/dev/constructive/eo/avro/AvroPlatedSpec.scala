@@ -3,6 +3,7 @@ package avro
 
 import scala.annotation.tailrec
 
+import cats.Eq
 import dev.constructive.eo.optics.Plated
 import org.apache.avro.SchemaBuilder
 import org.apache.avro.generic.{GenericData, IndexedRecord}
@@ -80,5 +81,5 @@ class AvroPlatedSpec extends Specification:
   "transform(identity) round-trips the record unchanged (structural Eq)" >> {
     val before = outer("a", "b", "t")
     val after = Plated.transform(identity[IndexedRecord])(before)
-    summon[cats.Eq[IndexedRecord]].eqv(before, after)
+    summon[Eq[IndexedRecord]].eqv(before, after)
   }

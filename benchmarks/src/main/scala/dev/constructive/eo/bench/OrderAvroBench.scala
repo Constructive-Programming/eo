@@ -3,12 +3,10 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
-
+import java.util.concurrent.TimeUnit
 import org.apache.avro.generic.IndexedRecord
+import org.openjdk.jmh.annotations.*
 
 /** Canonical-schema avro bench (plan 009, Phase 1).
   *

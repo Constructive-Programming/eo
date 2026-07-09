@@ -5,13 +5,13 @@ import scala.compiletime.uninitialized
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray, JsonValueCodec}
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.bench.fixture.ConversionDomain.*
 import dev.constructive.eo.jsoniter.JsoniterPrism
 import dev.constructive.eo.optics.Optic.*
+import java.util.Arrays
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Cross-format bridge bench, BOTH directions between `Array[Byte]` (Avro binary) and `Array[Byte]`
   * (JSON) — the AvroPrism × JsoniterPrism pipeline the `AvroJsonBridgeSpec` proves correct. Each
@@ -69,19 +69,19 @@ class AvroJsonBridgeBench extends JmhDefaults:
     wideBytes = encodeWide(wideConversion)
     // Each strategy pair must agree byte-for-byte, or the comparison is meaningless.
     assert(
-      java.util.Arrays.equals(naiveClickToJson, eoClickToJson),
+      Arrays.equals(naiveClickToJson, eoClickToJson),
       "click→json outputs diverged",
     )
     assert(
-      java.util.Arrays.equals(naiveWideToJson, eoWideToJson),
+      Arrays.equals(naiveWideToJson, eoWideToJson),
       "wide→json outputs diverged",
     )
     assert(
-      java.util.Arrays.equals(naiveClickToAvro, eoClickToAvro),
+      Arrays.equals(naiveClickToAvro, eoClickToAvro),
       "click→avro outputs diverged",
     )
     assert(
-      java.util.Arrays.equals(naiveWideToAvro, eoWideToAvro),
+      Arrays.equals(naiveWideToAvro, eoWideToAvro),
       "wide→avro outputs diverged",
     )
 

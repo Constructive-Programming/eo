@@ -36,7 +36,9 @@ object Modify:
   * [[Getter]]. Returned by [[Modify.apply]] so hand-written modifiers pick up the fused path
   * automatically.
   */
-final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T) extends Optic[S, T, A, B, ModifyF]:
+final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
+    extends Optic[S, T, A, B, ModifyF],
+      CanModifyP[S, T, A, B]:
   type X = (S, A)
 
   def to(s: S): ModifyF[X, A] = ModifyF(s, identity[A])
@@ -47,7 +49,7 @@ final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T) extends Optic[S
   inline def modify(f: A => B): S => T = modifyFn(f)
 
   /** Fused `.replace` — constant-writer special case of [[modify]]. */
-  inline def replace(b: B): S => T = modifyFn(_ => b)
+  override inline def replace(b: B): S => T = modifyFn(_ => b)
 
   /** Fused `Modify.andThen(Modify)` — composes the writers directly:
     * `modify(g) == outer.modify(inner.modify(g))`, skipping the generic

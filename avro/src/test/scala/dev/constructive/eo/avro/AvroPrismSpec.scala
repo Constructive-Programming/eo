@@ -3,6 +3,8 @@ package dev.constructive.eo.avro
 import scala.language.implicitConversions
 
 import cats.data.Ior
+import java.util.ArrayList
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericRecord, IndexedRecord}
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
@@ -58,9 +60,9 @@ class AvroPrismSpec extends Specification with ScalaCheck:
 
       // ---- Schema-violating record: DecodeFailed on get + Ior.Both on modify (absorbed) ----
       val violSchema =
-        val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+        val fields = new ArrayList[Schema.Field]()
         fields.add(
-          new org.apache.avro.Schema.Field(
+          new Schema.Field(
             "name",
             org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
             null,
@@ -68,7 +70,7 @@ class AvroPrismSpec extends Specification with ScalaCheck:
           )
         )
         fields.add(
-          new org.apache.avro.Schema.Field(
+          new Schema.Field(
             "age",
             org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
             null,
@@ -125,9 +127,9 @@ class AvroPrismSpec extends Specification with ScalaCheck:
 
       // ---- Missing-path branch (constants) ----
       val ageOnlySchema =
-        val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+        val fields = new ArrayList[Schema.Field]()
         fields.add(
-          new org.apache.avro.Schema.Field(
+          new Schema.Field(
             "age",
             org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
             null,

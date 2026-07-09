@@ -2,6 +2,7 @@ package dev.constructive.eo.avro
 
 import scala.language.implicitConversions
 
+import cats.Eq
 import cats.data.{Chain, Ior}
 import org.apache.avro.generic.GenericRecord
 import org.specs2.mutable.Specification
@@ -96,7 +97,7 @@ class AvroFailureSpec extends Specification:
 
   // covers: structural equality is total + agrees with ==
   "AvroFailure Eq is total + agrees with ==" >> {
-    val eq = summon[cats.Eq[AvroFailure]]
+    val eq = summon[Eq[AvroFailure]]
     val a: AvroFailure = AvroFailure.PathMissing(PathStep.Field("x"))
     val b: AvroFailure = AvroFailure.PathMissing(PathStep.Field("x"))
     val c: AvroFailure = AvroFailure.PathMissing(PathStep.Field("y"))

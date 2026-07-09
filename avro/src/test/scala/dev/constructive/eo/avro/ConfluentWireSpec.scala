@@ -2,6 +2,7 @@ package dev.constructive.eo.avro
 
 import scala.language.implicitConversions
 
+import java.util.Arrays
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
@@ -27,10 +28,10 @@ class ConfluentWireSpec extends Specification with ScalaCheck:
       val stripped = ConfluentWire.strip(framed)
 
       val roundTrip = stripped match
-        case Right(f) => f.schemaId == schemaId && java.util.Arrays.equals(f.body, body)
+        case Right(f) => f.schemaId == schemaId && Arrays.equals(f.body, body)
         case Left(_)  => false
       val reconstruct = stripped match
-        case Right(f) => java.util.Arrays.equals(ConfluentWire.attach(f.schemaId, f.body), framed)
+        case Right(f) => Arrays.equals(ConfluentWire.attach(f.schemaId, f.body), framed)
         case Left(_)  => false
       val length = framed.length == ConfluentWire.HeaderLength + body.length
       val magic = framed(0) == ConfluentWire.Magic

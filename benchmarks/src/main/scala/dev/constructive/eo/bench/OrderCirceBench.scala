@@ -3,16 +3,13 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
+import cats.data.{Chain, Ior}
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.circe.JsonFailure
-
-import cats.data.{Chain, Ior}
-
 import io.circe.Json
 import io.circe.syntax.*
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Canonical-schema circe bench (plan 009, Phase 1 proof-of-concept).
   *

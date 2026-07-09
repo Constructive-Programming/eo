@@ -4,6 +4,8 @@ import scala.language.implicitConversions
 
 import cats.data.Ior
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import java.util.{ArrayList, List as JList}
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.specs2.mutable.Specification
 
@@ -89,7 +91,7 @@ class AvroFieldsTraversalSpec extends Specification:
     // Sibling field qty preserved on the Unsafe surface.
     val items = unsafe.asInstanceOf[org.apache.avro.generic.GenericRecord].get("items")
     val firstItem =
-      items.asInstanceOf[java.util.List[?]].get(0).asInstanceOf[IndexedRecord]
+      items.asInstanceOf[JList[?]].get(0).asInstanceOf[IndexedRecord]
     val qtyOk = firstItem.get(firstItem.getSchema.getField("qty").pos) === 7
 
     (parity === true).and(correct === true).and(getAllOk).and(qtyOk)
@@ -105,9 +107,9 @@ class AvroFieldsTraversalSpec extends Specification:
   "atomicity: per-element failures (single-field miss + both-missing accumulation)" >> {
     val good = orderRecord(Order("x", 1.0, qty = 1))
     val brokenElem =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "name",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,
@@ -115,7 +117,7 @@ class AvroFieldsTraversalSpec extends Specification:
         )
       )
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -140,9 +142,9 @@ class AvroFieldsTraversalSpec extends Specification:
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
     def emptyOrder =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "qty",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
           null,
@@ -186,9 +188,9 @@ class AvroFieldsTraversalSpec extends Specification:
       case _              => false
 
     val stumpSchema =
-      val fields = new java.util.ArrayList[org.apache.avro.Schema.Field]()
+      val fields = new ArrayList[Schema.Field]()
       fields.add(
-        new org.apache.avro.Schema.Field(
+        new Schema.Field(
           "owner",
           org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING),
           null,

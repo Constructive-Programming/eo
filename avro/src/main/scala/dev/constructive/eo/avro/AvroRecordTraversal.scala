@@ -3,6 +3,7 @@ package dev.constructive.eo.avro
 import scala.annotation.tailrec
 
 import cats.data.{Chain, Ior}
+import java.util.{ArrayList, List as JList}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
@@ -50,8 +51,8 @@ final class AvroRecordTraversal[A] private[avro] (
     AvroWalk.walkPath(record, prefix).toOption.flatMap {
       case (cur, _) =>
         cur match
-          case lst: java.util.List[?] => Some(toVector(lst))
-          case _                      => None
+          case lst: JList[?] => Some(toVector(lst))
+          case _             => None
     }
 
   /** Walk the prefix with structured failure reporting; success projects the terminal as a
@@ -59,7 +60,7 @@ final class AvroRecordTraversal[A] private[avro] (
     */
   private def walkPrefixIor(
       record: IndexedRecord
-  ): Either[Ior.Left[Chain[AvroFailure]], (java.util.List[?], Vector[Any], Vector[AnyRef])] =
+  ): Either[Ior.Left[Chain[AvroFailure]], (JList[?], Vector[Any], Vector[AnyRef])] =
     AvroWalk
       .walkPath(record, prefix)
       .left
@@ -67,13 +68,13 @@ final class AvroRecordTraversal[A] private[avro] (
       .flatMap {
         case (cur, parents) =>
           cur match
-            case lst: java.util.List[?] =>
+            case lst: JList[?] =>
               Right((lst, toVector(lst), parents))
             case _ =>
               Left(Ior.Left(Chain.one(AvroFailure.NotAnArray(AvroWalk.terminalOf(prefix)))))
       }
 
-  private def toVector(lst: java.util.List[?]): Vector[Any] =
+  private def toVector(lst: JList[?]): Vector[Any] =
     val b = Vector.newBuilder[Any]
     b.sizeHint(lst.size)
     @tailrec def loop(i: Int): Unit =
@@ -106,7 +107,7 @@ final class AvroRecordTraversal[A] private[avro] (
       case None                 => record
       case Some((cur, parents)) =>
         cur match
-          case lst: java.util.List[?] =>
+          case lst: JList[?] =>
             val newList = replaceArrayContents(lst, toVector(lst).map(elemUpdate))
             AvroWalk.rebuildPath(parents, prefix, newList).asInstanceOf[IndexedRecord]
           case _ => record
@@ -220,15 +221,15 @@ final class AvroRecordTraversal[A] private[avro] (
     * allocation directly here.
     */
   private def replaceArrayContents(
-      orig: java.util.List[?],
+      orig: JList[?],
       newElems: Vector[Any],
-  ): java.util.List[Any] =
+  ): JList[Any] =
     val schema = orig match
       case ga: GenericData.Array[?] => ga.getSchema
       case _                        => null
-    val fresh: java.util.List[Any] =
+    val fresh: JList[Any] =
       if schema != null then new GenericData.Array[Any](newElems.size, schema)
-      else new java.util.ArrayList[Any](newElems.size)
+      else new ArrayList[Any](newElems.size)
     newElems.foreach(fresh.add(_))
     fresh
 

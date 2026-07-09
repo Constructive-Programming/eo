@@ -3,15 +3,12 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
-
 import dev.constructive.eo.bench.fixture.*
-
 import io.circe.Json
 import io.circe.parser.parse as circeParse
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** `eo-jsoniter` vs `eo-circe` on the canonical [[Order]] — the cross-EO comparison the
   * `Order*Bench` baselines don't cover (those pit one backend against native/naive/monocle).

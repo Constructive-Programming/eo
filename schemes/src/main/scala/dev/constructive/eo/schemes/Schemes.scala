@@ -3,6 +3,8 @@ package schemes
 
 import scala.annotation.tailrec
 
+import java.util.ArrayDeque
+
 import data.PSVec
 import optics.{Getter, Plated, Review, Unfold}
 
@@ -85,7 +87,7 @@ object Schemes:
       root: N,
   ): R =
     final class Frame(val node: N, val kids: PSVec[N], val out: Array[AnyRef], var i: Int)
-    val stack = new java.util.ArrayDeque[Frame]()
+    val stack = new ArrayDeque[Frame]()
     var ret: AnyRef = null.asInstanceOf[AnyRef]
     def enter(n: N): Unit =
       val kids = expand(n)
@@ -144,7 +146,7 @@ object Schemes:
         val out: Array[AnyRef],
         var i: Int,
     )
-    val stack = new java.util.ArrayDeque[Frame]()
+    val stack = new ArrayDeque[Frame]()
     var ret: AnyRef = null.asInstanceOf[AnyRef]
     def enter(n: N): Unit =
       val (kids, combine) = coalg(n)
@@ -211,7 +213,7 @@ object Schemes:
       root: S,
   ): A =
     final class Frame(val node: S, val arr: Array[AnyRef], var i: Int)
-    val stack = new java.util.ArrayDeque[Frame]()
+    val stack = new ArrayDeque[Frame]()
     var ret: AnyRef = null.asInstanceOf[AnyRef]
     def enter(s: S): Unit =
       val arr = childrenOf(s)

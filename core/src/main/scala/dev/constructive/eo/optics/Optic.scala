@@ -1,6 +1,7 @@
 package dev.constructive.eo
 package optics
 
+import scala.annotation.{nowarn, targetName}
 import scala.compiletime.summonInline
 
 import cats.arrow.Profunctor
@@ -63,7 +64,7 @@ trait Optic[S, T, A, B, F[_, _]]:
     * val streetLens = lens[Person](_.address).andThen(lens[Address](_.street))
     *   }}}
     */
-  @annotation.nowarn("id=E197")
+  @nowarn("id=E197")
   inline def andThen[C, D](o: Optic[A, B, C, D, F]): Optic[S, T, C, D, F] =
     val af = summonInline[AssociativeFunctor[F, self.X, o.X]]
     new Optic:
@@ -178,7 +179,7 @@ object Optic:
     */
   extension [S, T, A, B, F[_, _]](self: Optic[S, T, A, B, F])
 
-    @annotation.targetName("andThenMorphed")
+    @targetName("andThenMorphed")
     inline def andThen[G[_, _], C, D](o: Optic[A, B, C, D, G])(using
         m: Morph[F, G]
     ): Optic[S, T, C, D, m.Out] =
@@ -242,7 +243,7 @@ object Optic:
         def to(b: B): F[X, T] = RA.reverseGet(self.from(RA.reverseGet(b)))
         def from(fs: F[X, S]): A = A.get(self.to(A.get(fs)))
 
-    @annotation.targetName("crossMorphed")
+    @targetName("crossMorphed")
     inline def cross[G[_, _], C, D](o: Optic[T, S, C, D, G])(using
         m: Morph[F, G]
     ): Optic[B, A, C, D, m.Out] =
@@ -370,7 +371,7 @@ object Optic:
       * @group Operations
       */
     def length(s: S): Int =
-      o.foldMap[Int](_ => 1)(using cats.Monoid[Int])(s)
+      o.foldMap[Int](_ => 1)(using Monoid[Int])(s)
 
     /** True iff at least one focus satisfies `p`. Short-circuits on the first hit when the
       * carrier's `ForgetfulFold[F]` is short-circuit-aware. The default `Monoid[Boolean]` cats

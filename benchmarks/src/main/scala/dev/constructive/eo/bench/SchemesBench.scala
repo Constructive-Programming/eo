@@ -1,16 +1,14 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
+import dev.constructive.eo.bench.fixture.*
+import dev.constructive.eo.bench.fixture.PlatedTrees.eoBin // given Plated[Bin]
+import dev.constructive.eo.bench.fixture.SchemesFixtures.given
+import dev.constructive.eo.schemes.Schemes
 import higherkindness.droste.data.Fix
 import higherkindness.droste.scheme
-
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.bench.fixture.SchemesFixtures.given
-import dev.constructive.eo.bench.fixture.PlatedTrees.eoBin // given Plated[Bin]
-import dev.constructive.eo.schemes.Schemes
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Recursion schemes — `cata` / `ana` / `hylo` — three ways, on the same workload:
   *

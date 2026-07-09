@@ -26,11 +26,15 @@ import data.Direct
   * Review builds from ONE focus; its many-rung sibling is [[Unfold]] (assemble a `T` from an
   * `F`-layer of parts), reachable by composition through the fused `andThen(Unfold)` below.
   */
-final class Review[T, B](val reverseGet: B => T) extends Optic[Unit, T, Unit, B, Direct]:
+final class Review[T, B](build: B => T)
+    extends Optic[Unit, T, Unit, B, Direct],
+      CanReverseGet[T, B]:
   type X = Nothing
 
+  def reverseGet(b: B): T = build(b)
+
   def to(u: Unit): Direct[X, Unit] = Direct(u)
-  def from(d: Direct[X, B]): T = reverseGet(d.value)
+  def from(d: Direct[X, B]): T = build(d.value)
 
   /** Fused `Review.andThen(Review)` — the build-direction mirror of [[Getter.andThen]]. `this`
     * builds `S` from `A`, `inner` builds `A` from `B`, so the composite builds `S` from `B`

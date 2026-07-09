@@ -1,11 +1,10 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.optics.AffineFold
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** `AffineFold.getOption` on a `Nested0.flag: Option[String]` focus at varying composition depth,
   * paired against Monocle's `Optional.getOption` (Monocle 3.x does not ship a standalone

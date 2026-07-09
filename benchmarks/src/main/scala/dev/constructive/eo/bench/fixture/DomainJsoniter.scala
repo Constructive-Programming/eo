@@ -4,7 +4,6 @@ package fixture
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonValueCodec, JsonWriter}
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-
 import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
 import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
 import dev.constructive.eo.optics.Optic

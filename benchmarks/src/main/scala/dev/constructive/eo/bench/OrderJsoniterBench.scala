@@ -3,12 +3,10 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray}
-
 import dev.constructive.eo.bench.fixture.*
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Canonical-schema jsoniter bench (plan 009, Phase 1).
   *

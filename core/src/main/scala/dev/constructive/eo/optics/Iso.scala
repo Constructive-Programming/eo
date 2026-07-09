@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package optics
 
+import cats.Monoid
+
 import data.Direct
 
 /** Constructor for `Iso` — a bijective single-focus optic, backed by `Direct`. An `Iso[S, A]`
@@ -32,19 +34,27 @@ object Iso:
   * hand-written isos pick up the fused path automatically.
   */
 final class BijectionIso[S, T, A, B](
-    val get: S => A,
-    val reverseGet: B => T,
-) extends Optic[S, T, A, B, Direct]:
+    read: S => A,
+    build: B => T,
+) extends Optic[S, T, A, B, Direct],
+      CanGet[S, A],
+      CanReverseGet[T, B],
+      CanModifyP[S, T, A, B],
+      CanFold[S, A]:
   type X = Nothing
-  def to(s: S): Direct[X, A] = Direct(get(s))
-  def from(d: Direct[X, B]): T = reverseGet(d.value)
+  def get(s: S): A = read(s)
+  def reverseGet(b: B): T = build(b)
+  def to(s: S): Direct[X, A] = Direct(read(s))
+  def from(d: Direct[X, B]): T = build(d.value)
 
   inline def modify(f: A => B): S => T =
     s => reverseGet(f(get(s)))
 
-  inline def replace(b: B): S => T =
+  override inline def replace(b: B): S => T =
     val t = reverseGet(b)
     _ => t
+
+  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
   /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. `inline` so each
     * compose site splices distinct lambdas, keeping a deep `iso.andThen(iso)…` chain under C2's
@@ -52,14 +62,14 @@ final class BijectionIso[S, T, A, B](
     */
   inline def andThen[C, D](inner: BijectionIso[A, B, C, D]): BijectionIso[S, T, C, D] =
     new BijectionIso(
-      get = s => inner.get(get(s)),
-      reverseGet = d => reverseGet(inner.reverseGet(d)),
+      read = s => inner.get(get(s)),
+      build = d => reverseGet(inner.reverseGet(d)),
     )
 
   /** Fused `Iso.andThen(Lens)` — threads the iso around the inner lens. */
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
-      get = s => inner.get(get(s)),
+      read = s => inner.get(get(s)),
       enplace = (s, d) => reverseGet(inner.enplace(get(s), d)),
     )
 

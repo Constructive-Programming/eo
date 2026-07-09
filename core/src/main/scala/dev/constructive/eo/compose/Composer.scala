@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package compose
 
+import cats.{Applicative, Foldable}
+
 import optics.Optic
 
 /** Bridge between carriers — reshape an `F`-carrier optic into a `G`-carrier optic. Used by
@@ -27,7 +29,7 @@ trait Composer[F[_, _], G[_, _]]:
   */
 object Composer extends LowPriorityComposerInstances:
 
-  import data.Direct
+  import data.{Direct, Forget, MultiFocusK}
 
   /** Express an Iso (or Getter) as a Lens — the Lens's leftover is `Unit` because the bijection
     * doesn't need any.
@@ -77,16 +79,16 @@ object Composer extends LowPriorityComposerInstances:
     * @group Instances
     */
   given direct2forget[F[_]](using
-      F: cats.Applicative[F],
-      FF: cats.Foldable[F],
-  ): Composer[Direct, data.Forget[F]] with
+      F: Applicative[F],
+      FF: Foldable[F],
+  ): Composer[Direct, Forget[F]] with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, data.Forget[F]] =
-      new Optic[S, T, A, B, data.Forget[F]]:
+    def to[S, T, A, B](o: Optic[S, T, A, B, Direct]): Optic[S, T, A, B, Forget[F]] =
+      new Optic[S, T, A, B, Forget[F]]:
         type X = Nothing
-        def to(s: S): data.Forget[F][X, A] = data.Forget(F.pure(o.to(s).value))
-        def from(fb: data.Forget[F][X, B]): T =
-          o.from(Direct(data.MultiFocusK.pickSingletonOrThrow[F, B](fb.value, "Direct")))
+        def to(s: S): Forget[F][X, A] = Forget(F.pure(o.to(s).value))
+        def from(fb: Forget[F][X, B]): T =
+          o.from(Direct(MultiFocusK.pickSingletonOrThrow[F, B](fb.value, "Direct")))
 
 /** Low-priority `Composer` instances —
   * [[LowPriorityComposerInstances.chainViaTuple2 chainViaTuple2]], a transitive derivation pinned

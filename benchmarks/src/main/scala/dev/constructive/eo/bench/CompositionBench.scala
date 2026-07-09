@@ -1,10 +1,9 @@
 package dev.constructive.eo
 package bench
 
-import org.openjdk.jmh.annotations.*
-import java.util.concurrent.TimeUnit
-
 import dev.constructive.eo.bench.fixture.*
+import java.util.concurrent.TimeUnit
+import org.openjdk.jmh.annotations.*
 
 /** Cross-carrier `.andThen` composition cost — EO's signature feature (plan 009, Phase 2).
   *

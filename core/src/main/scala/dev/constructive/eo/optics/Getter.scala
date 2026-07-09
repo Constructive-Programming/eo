@@ -1,6 +1,10 @@
 package dev.constructive.eo
 package optics
 
+import scala.annotation.targetName
+
+import cats.Monoid
+
 import compose.*
 import data.Direct
 
@@ -12,10 +16,17 @@ import data.Direct
   * the same shape as [[BijectionIso]] / [[GetReplaceLens]]. Returned by [[Getter.apply]] so
   * hand-written getters pick up the fused path automatically.
   */
-final class Getter[S, A](val get: S => A) extends Optic[S, Unit, A, Unit, Direct]:
+final class Getter[S, A](read: S => A)
+    extends Optic[S, Unit, A, Unit, Direct],
+      CanGet[S, A],
+      CanFold[S, A]:
   type X = Nothing
 
-  def to(s: S): Direct[X, A] = Direct(get(s))
+  def get(s: S): A = read(s)
+
+  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
+
+  def to(s: S): Direct[X, A] = Direct(read(s))
   def from(d: Direct[X, Unit]): Unit = ()
 
   /** Fused `Getter.andThen(Getter)` — composes the read functions; the vestigial `Unit` write path
@@ -38,7 +49,7 @@ final class Getter[S, A](val get: S => A) extends Optic[S, Unit, A, Unit, Direct
     * read-only-inner overload cannot reach; the fused `andThen(Getter)` / `andThen(PickFold)`
     * members above stay as the more-specific fast paths.
     */
-  @annotation.targetName("andThenReadAny")
+  @targetName("andThenReadAny")
   def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using
       rc: ReadCompose[Direct, FI]
   ): rc.Out[S, C] =
