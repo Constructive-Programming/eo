@@ -4,7 +4,7 @@ import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
 import dev.constructive.eo.widenRight
-import java.util.{ArrayList, LinkedHashMap}
+import java.util.{ArrayList, LinkedHashMap, List as JList, Map as JMap}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
@@ -65,8 +65,8 @@ private[avro] object AvroWalk:
                 case OnMissingField.Strict  => Left(AvroFailure.PathMissing(step))
                 case OnMissingField.Lenient => Right((null, parents :+ rec))
             else Right((rec.get(field.pos), parents :+ rec))
-          case map: java.util.Map[?, ?] =>
-            val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
+          case map: JMap[?, ?] =>
+            val asMap = map.asInstanceOf[JMap[Any, Any]]
             val direct = asMap.get(name)
             val viaUtf8 =
               if direct == null then asMap.get(new org.apache.avro.util.Utf8(name)) else direct
@@ -81,7 +81,7 @@ private[avro] object AvroWalk:
 
       case PathStep.Index(idx) =>
         cur match
-          case lst: java.util.List[?] =>
+          case lst: JList[?] =>
             val size = lst.size
             if idx < 0 || idx >= size then Left(AvroFailure.IndexOutOfRange(step, size))
             else Right((lst.get(idx), parents :+ lst.asInstanceOf[AnyRef]))
@@ -164,8 +164,8 @@ private[avro] object AvroWalk:
               else
                 parents(parentsLen) = rec
                 walkArrLoop(path, parents, policy, i + 1, parentsLen + 1, rec.get(field.pos))
-            case map: java.util.Map[?, ?] =>
-              val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
+            case map: JMap[?, ?] =>
+              val asMap = map.asInstanceOf[JMap[Any, Any]]
               val direct = asMap.get(name)
               val viaUtf8 =
                 if direct == null then asMap.get(new org.apache.avro.util.Utf8(name))
@@ -185,7 +185,7 @@ private[avro] object AvroWalk:
 
         case PathStep.Index(idx) =>
           cur match
-            case lst: java.util.List[?] =>
+            case lst: JList[?] =>
               val size = lst.size
               if idx < 0 || idx >= size then Left(AvroFailure.IndexOutOfRange(step, size))
               else
@@ -308,8 +308,8 @@ private[avro] object AvroWalk:
             // Iterate by index — avoids the asScala iterator alloc.
             putRecordSlots(fresh, rec, child, schema.getField(name).pos, 0, schema.getFields.size)
             fresh
-          case map: java.util.Map[?, ?] =>
-            val asMap = map.asInstanceOf[java.util.Map[Any, Any]]
+          case map: JMap[?, ?] =>
+            val asMap = map.asInstanceOf[JMap[Any, Any]]
             val fresh = new LinkedHashMap[Any, Any](asMap)
             // Drop both string + Utf8 forms before re-inserting under the string key.
             fresh.remove(name)
@@ -320,13 +320,13 @@ private[avro] object AvroWalk:
             sys.error(s"AvroWalk.rebuildStep: cannot Field-splice into $other (step=$step)")
       case PathStep.Index(idx) =>
         parent match
-          case lst: java.util.List[?] =>
-            val asList = lst.asInstanceOf[java.util.List[Any]]
+          case lst: JList[?] =>
+            val asList = lst.asInstanceOf[JList[Any]]
             val schema =
               lst match
                 case ga: GenericData.Array[?] => ga.getSchema
                 case _                        => null
-            val fresh: java.util.List[Any] =
+            val fresh: JList[Any] =
               if schema != null then new GenericData.Array[Any](asList.size, schema)
               else new ArrayList[Any](asList.size)
             addListSlots(fresh, asList, child, idx, 0, asList.size)
@@ -357,8 +357,8 @@ private[avro] object AvroWalk:
     * the list splice loop behind [[rebuildStep]].
     */
   @tailrec private def addListSlots(
-      fresh: java.util.List[Any],
-      src: java.util.List[Any],
+      fresh: JList[Any],
+      src: JList[Any],
       child: Any,
       idx: Int,
       i: Int,
@@ -492,16 +492,16 @@ private[avro] object AvroWalk:
     */
   private def unionBranchName(value: Any): String =
     value match
-      case rec: IndexedRecord     => rec.getSchema.getFullName
-      case _: CharSequence        => "string"
-      case _: java.lang.Integer   => "int"
-      case _: java.lang.Long      => "long"
-      case _: java.lang.Float     => "float"
-      case _: java.lang.Double    => "double"
-      case _: java.lang.Boolean   => "boolean"
-      case _: Array[Byte]         => "bytes"
-      case _: java.util.List[?]   => "array"
-      case _: java.util.Map[?, ?] => "map"
-      case other                  => other.getClass.getName
+      case rec: IndexedRecord   => rec.getSchema.getFullName
+      case _: CharSequence      => "string"
+      case _: java.lang.Integer => "int"
+      case _: java.lang.Long    => "long"
+      case _: java.lang.Float   => "float"
+      case _: java.lang.Double  => "double"
+      case _: java.lang.Boolean => "boolean"
+      case _: Array[Byte]       => "bytes"
+      case _: JList[?]          => "array"
+      case _: JMap[?, ?]        => "map"
+      case other                => other.getClass.getName
 
 end AvroWalk

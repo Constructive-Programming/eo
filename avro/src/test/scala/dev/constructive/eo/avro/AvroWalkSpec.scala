@@ -2,7 +2,7 @@ package dev.constructive.eo.avro
 
 import scala.language.implicitConversions
 
-import java.util.{ArrayList, Arrays, LinkedHashMap}
+import java.util.{ArrayList, Arrays, LinkedHashMap, List as JList}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 import org.specs2.mutable.Specification
@@ -181,11 +181,11 @@ class AvroWalkSpec extends Specification:
         // After rebuild, original wrapper is still Alice; rebuilt is Bob.
         val origPeople = wrapper
           .get(wrapperSchema.getField("people").pos)
-          .asInstanceOf[java.util.List[GenericRecord]]
+          .asInstanceOf[JList[GenericRecord]]
         val origName = origPeople.get(0).get(personSchema.getField("name").pos).toString
         val newPeople = rebuilt
           .get(wrapperSchema.getField("people").pos)
-          .asInstanceOf[java.util.List[GenericRecord]]
+          .asInstanceOf[JList[GenericRecord]]
         val newName = newPeople.get(0).get(personSchema.getField("name").pos).toString
         (origName === "Alice").and(newName === "Bob")
       case other =>

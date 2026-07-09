@@ -4,7 +4,7 @@ import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import java.io.{ByteArrayOutputStream, InputStream}
-import java.util.Arrays
+import java.util.{Arrays, List as JList}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, IndexedRecord}
 import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory, EncoderFactory}
@@ -482,7 +482,7 @@ private[avro] object AvroBinaryCursor:
     * `Field` step's target position (and, with `upTo = size`, a whole record).
     */
   @tailrec private def skipFieldsBefore(
-      fields: java.util.List[Schema.Field],
+      fields: JList[Schema.Field],
       d: Decoder,
       j: Int,
       upTo: Int,

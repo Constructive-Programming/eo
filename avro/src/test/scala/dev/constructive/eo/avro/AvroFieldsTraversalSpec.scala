@@ -4,7 +4,7 @@ import scala.language.implicitConversions
 
 import cats.data.Ior
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.util.ArrayList
+import java.util.{ArrayList, List as JList}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.specs2.mutable.Specification
@@ -91,7 +91,7 @@ class AvroFieldsTraversalSpec extends Specification:
     // Sibling field qty preserved on the Unsafe surface.
     val items = unsafe.asInstanceOf[org.apache.avro.generic.GenericRecord].get("items")
     val firstItem =
-      items.asInstanceOf[java.util.List[?]].get(0).asInstanceOf[IndexedRecord]
+      items.asInstanceOf[JList[?]].get(0).asInstanceOf[IndexedRecord]
     val qtyOk = firstItem.get(firstItem.getSchema.getField("qty").pos) === 7
 
     (parity === true).and(correct === true).and(getAllOk).and(qtyOk)
