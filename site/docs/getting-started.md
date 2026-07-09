@@ -20,6 +20,7 @@ Requires Scala 3.8.x on JDK 17 or JDK 21.
 ## First example
 
 ```scala mdoc:silent
+import dev.constructive.eo.CanModify
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
@@ -30,10 +31,24 @@ A Lens focuses a single field of a product:
 ```scala mdoc
 val nameL = lens[Person](_.name)
 
-val alice = Person("Alice", Address("Main St", Zip(12345, "6789")))
+val alice = Person("ms. alice liddell, esq.", Address("main st.", Zip(12345, "6789")))
 
 nameL.get(alice)
-nameL.modify(_.toUpperCase)(alice)
+```
+
+A rewrite goes through the same lens. The rule is a plain
+`String => String` — a text-utilities function that has never heard
+of `Person`: split into words, strip symbols other than `'.'`,
+shout the short words, title-case the rest:
+
+```scala mdoc
+def emphasize(s: String): String =
+  s.split(" ")
+    .map(_.filter(c => c.isLetterOrDigit || c == '.'))
+    .map(w => if w.length < 4 then w.toUpperCase else w.capitalize)
+    .mkString(" ")
+
+nameL.modify(emphasize)(alice)
 ```
 
 Compose two lenses with `.andThen` — the result is another Lens
@@ -46,15 +61,45 @@ val streetL =
 
 streetL.get(alice)
 streetL.replace("Broadway")(alice)
-streetL.modify(_.toUpperCase)(alice)
+streetL.modify(emphasize)(alice)
 ```
 
 No `.copy` chains; the `lens` macro generates the setter for you.
+
+## From call site to contract — capabilities
+
+`nameL.modify(emphasize)(alice)` works, but the line couples three
+decisions: the rule (`emphasize`), the shape (`Person`), and the
+field (`name`). Move the rule behind a **capability** and the shape
+and field become the caller's business:
+
+```scala mdoc
+def emphasized[T](using cm: CanModify[T, String]): T => T =
+  cm.modify(emphasize)
+```
+
+The signature is the contract: "give me proof a String can be
+rewritten inside `T`, and I'll return the rewrite." Any optic that
+can modify — a lens, a composed path, a prism into one branch — is
+that proof, for any subject type:
+
+```scala mdoc
+emphasized(using nameL)(alice)
+emphasized(using lens[Address](_.street))(alice.address)
+```
+
+This is the library's core habit: use capabilities to write truly
+modular, de-coupled code by passing optics along as proof of
+capability contracts across modules. Deep dive:
+[Capabilities](capabilities.md).
 
 ## What next?
 
 - If you want to understand what a *carrier* is and why one trait
   backs every optic family, read [Concepts](concepts.md).
+- If the capability contract above is the part that hooked you,
+  [Capabilities](capabilities.md) has the full matrix and the
+  coherence rules.
 - If you want the per-family tour with the kind of optic you'd
   reach for in each situation, read [Optics reference](optics.md).
 - If you're coming from Monocle, jump to
