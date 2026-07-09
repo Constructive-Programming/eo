@@ -73,7 +73,7 @@ def shout[T](cm: CanModify[T, String]): T => T =
   cm.modify(_.toUpperCase)
 
 shout(personName)(alice)
-shout(personAddress.andThen(addressStreet))(alice)
+shout(street)(alice)
 ```
 
 One generic function, two different paths — a plain lens or a
