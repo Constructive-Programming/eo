@@ -46,3 +46,7 @@ enum Expr:
   case Var(name: String)
   case App(f: Expr, x: Expr)
   case Lam(bind: String, body: Expr)
+
+enum Result:
+  case Ok(value: Int)
+  case Err(reason: String)

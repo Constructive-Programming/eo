@@ -18,7 +18,7 @@ this library was written for: leave the subject type generic, and demand only th
 
 ```scala mdoc:silent
 import dev.constructive.eo.*
-import dev.constructive.eo.optics.*
+import dev.constructive.eo.generics.lens
 
 import java.time.{Duration, Instant}
 
@@ -27,10 +27,11 @@ import java.time.{Duration, Instant}
 def adjustTimes[T](delta: Duration)(using cm: CanModify[T, Instant]): T => T =
   cm.modify(_.plus(delta))
 
-// Each domain type supplies its own evidence — here, a plain lens.
+// Each domain type supplies its own evidence — a derived lens
+// IS the capability, so the given can be declared at the
+// capability type directly.
 case class Meeting(title: String, start: Instant)
-given GetReplaceLens[Meeting, Meeting, Instant, Instant] =
-  Lens[Meeting, Instant](_.start, (m, i) => m.copy(start = i))
+given CanModify[Meeting, Instant] = lens[Meeting](_.start)
 ```
 
 ```scala mdoc

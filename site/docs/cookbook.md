@@ -157,21 +157,17 @@ hand-roll; here it's a one-liner.
 ```scala mdoc:silent
 import scala.collection.immutable.ArraySeq
 
-enum Result:
-  case Ok(value: Int)
-  case Err(reason: String)
+// Result (Ok | Err) is hosted in dev.constructive.eo.docs like Expr
+// above — enum macro targets need a package-level home under mdoc.
+import dev.constructive.eo.docs.Result
 
-val okP = Prism[Result, Result.Ok](
-  {
-    case o: Result.Ok => Right(o)
-    case other        => Left(other)
-  },
-  identity,
-)
+val okP = prism[Result, Result.Ok]
 
 val bumpOks =
   Traversal.each[ArraySeq, Result]
     .andThen(okP)
+    // Result.Ok is single-field, where the full-cover lens macro returns
+    // an Iso with a NamedTuple focus — hand-write the Int lens instead.
     .andThen(Lens[Result.Ok, Int](_.value, (o, v) => o.copy(value = v)))
 ```
 
@@ -534,12 +530,12 @@ def scale[S](k: Double)(using cm: CanModify[S, Double]): S => S =
 case class Line(desc: String, amount: Double)
 case class Invoice(fee: Double, lines: List[Line])
 
-val feeL = Lens[Invoice, Double](_.fee, (i, f) => i.copy(fee = f))
+val feeL = lens[Invoice](_.fee)
 
 val lineAmounts =
-  Lens[Invoice, List[Line]](_.lines, (i, ls) => i.copy(lines = ls))
+  lens[Invoice](_.lines)
     .andThen(Traversal.each[List, Line])
-    .andThen(Lens[Line, Double](_.amount, (l, a) => l.copy(amount = a)))
+    .andThen(lens[Line](_.amount))
 ```
 
 Concrete optic classes *implement* the capabilities, so a lens can
@@ -794,8 +790,7 @@ lifts an `A => G[B]` through any carrier that admits `Functor[G]`:
 ```scala mdoc:silent
 case class Visitor(name: String, age: Int)
 
-val visitorAgeL =
-  Lens[Visitor, Int](_.age, (v, a) => v.copy(age = a))
+val visitorAgeL = lens[Visitor](_.age)
 ```
 
 ```scala mdoc
