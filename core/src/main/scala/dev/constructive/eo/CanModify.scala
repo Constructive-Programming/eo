@@ -32,3 +32,22 @@ object CanModifyP:
       ff: ForgetfulFunctor[F],
   ): CanModifyP[S, T, A, B] =
     f => o.modify(f)
+
+  /** Read-modify-write fanout. Modifying a coupled pair `(A, C) => (A, C)` must first *observe*
+    * both foci, so — unlike the read-only [[CanGet.zip]] — the writeable zip needs both read and
+    * write. The receiver is therefore the intersection
+    * `CanGet[S, A] & CanModify[S, A]`, which every concrete optic (Lens, Optional, …) already
+    * satisfies, so the read and write are tied to the SAME optic (honouring the doctrine's "one
+    * CanModify observes and rewrites"). The two writes reconcile sequentially (leg-2 on leg-1's
+    * result), so no merge is needed. Lawful iff the foci are disjoint.
+    */
+  extension [S, A](self: CanGet[S, A] & CanModify[S, A])
+
+    def zip[C](
+        that: CanGet[S, C] & CanModify[S, C]
+    ): CanGet[S, (A, C)] & CanModify[S, (A, C)] =
+      new CanGet[S, (A, C)] with CanModifyP[S, S, (A, C), (A, C)]:
+        def get(s: S): (A, C) = (self.get(s), that.get(s))
+        def modify(g: ((A, C)) => (A, C)): S => S = s =>
+          val (a, c) = g(get(s))
+          that.replace(c)(self.replace(a)(s))
