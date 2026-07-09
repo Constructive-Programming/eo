@@ -34,6 +34,7 @@ Current version: @VERSION@.
 ## 60-second example
 
 ```scala mdoc:silent
+import dev.constructive.eo.CanModify
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
@@ -48,17 +49,36 @@ val alice = Person("Alice", Address("Main St", Zip(12345, "6789")))
 
 street.get(alice)
 street.replace("Broadway")(alice)
-street.modify(_.toUpperCase)(alice)
 ```
 
 No `.copy` chains, no setter lambdas, no `GenLens` boilerplate. The
 `lens` macro works on plain case classes, Scala 3 enums, and union
 types alike.
 
+And the part that scales beyond one call site: a function can demand
+the *capability* instead of the type. `shout` below knows nothing
+about `Person` or `Address` — it asks for proof that a `String` can
+be rewritten inside `T`, and any optic with that power is the proof:
+
+```scala mdoc
+def shout[T](using cm: CanModify[T, String]): T => T =
+  cm.modify(_.toUpperCase)
+
+shout(using lens[Person](_.name))(alice)
+shout(using lens[Address](_.street))(alice.address)
+```
+
+One generic function, two unrelated types — the optic passed at each
+call site is the entire coupling surface. That contract style is the
+library's core habit: [Capabilities](capabilities.md).
+
 ## Keep reading
 
 - [Getting started](getting-started.md) — install + the 60-second
   tour expanded.
+- [Capabilities](capabilities.md) — `CanGet` / `CanModify` /
+  `CanFold` & co: consume optics as `using` evidence and keep
+  modules decoupled; the availability matrix and coherence rules.
 - [Concepts](concepts.md) — what an Optic *is*, what a carrier is,
   and how `Composer` bridges family boundaries.
 - [Optics reference](optics.md) — one section per family, with
