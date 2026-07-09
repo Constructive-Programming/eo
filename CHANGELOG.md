@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Optic.zip` — fanout (`&&&`) of two same-source, same-carrier optics** —
+  combine two `Optic[S, S, A, A, F]` / `Optic[S, S, C, C, F]` into a single
+  `Optic[S, S, (A, C), (A, C), Out]` focusing the pair. Reads run both legs;
+  writes reconcile them *sequentially* (rebuild through leg-1, re-read leg-2 on
+  the intermediate), so no caller-supplied merge is needed. Dispatches through
+  the new **`compose.ZipFunctor[F, X1, X2]`** carrier typeclass (the `zip`
+  counterpart of `AssociativeFunctor`): a concrete per-carrier instance hosts
+  the hot `to` / `from` and chooses the result carrier `Out`, so escape analysis
+  scalar-replaces the write intermediate (allocation matches a hand-written pair
+  lens — reads 24 B/op, writes 32 B/op). Two instances ship: `tuple2Zip`
+  (`Tuple2`, lens × lens, total → `Out = Tuple2`) and `affine2Zip` (`Affine`,
+  Optional × Optional, partial → `Out = Affine`, the pair hits iff BOTH legs
+  hit; a miss leaves the source unchanged). The composite is a lawful optic iff
+  the two foci are disjoint (`laws.ZipLaws` is the runnable certificate —
+  self-zipping an overlapping pair fails `replace-get`); the `eo-generics`
+  `lens[S](_.a, _.b)` macro is the disjoint-by-construction alternative for
+  statically-known fields — prefer it, this `zip` is for optics not known at
+  compile time.
+- **Capability-surface fanout** — `.zip` on the carrier-free capabilities:
+  - `CanGet.zip` / `CanGetOption.zip` — read (and both-hit partial-read) fanout,
+    no write path, unconditionally lawful.
+  - `CanModifyP.zip` — read-modify-write fanout on the `CanGet & CanModify`
+    intersection (modifying a coupled pair must observe both foci first, so the
+    receiver ties read and write to the same optic; the two writes reconcile
+    sequentially). Result is again a `CanGet & CanModify` of the pair.
+- **`laws.ZipLaws` / `laws.discipline.ZipTests`** — the disjointness obligation
+  as a Discipline `RuleSet`: the `get`/`replace` round-trips plus the three
+  independence equations (`writes commute`, `read-stable-under-write` each way).
+
 ## [0.7.0] - 2026-07-09
 
 ### Added

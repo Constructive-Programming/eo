@@ -32,7 +32,8 @@ import laws.{
   ModifyLaws,
   OptionalLaws,
   PrismLaws,
-  UnfoldLaws
+  UnfoldLaws,
+  ZipLaws
 }
 import laws.discipline.{
   AffineFoldTests,
@@ -42,7 +43,8 @@ import laws.discipline.{
   ModifyTests,
   OptionalTests,
   PrismTests,
-  UnfoldTests
+  UnfoldTests,
+  ZipTests
 }
 import laws.data.{AffineLaws, ModifyFLaws}
 import laws.data.discipline.{AffineTests, ModifyFTests}
@@ -118,6 +120,16 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       val laws = new LensLaws[(Int, String), String]:
         val lens = secondLens
     .lens,
+  )
+
+  // ----- Zip (fanout): disjoint first × second → lawful pair lens -----
+  checkAll(
+    "Optic.zip[(Int,String)] — first × second (disjoint foci)",
+    new ZipTests[(Int, String), Int, String]:
+      val laws = new ZipLaws[(Int, String), Int, String]:
+        val l1 = firstLens
+        val l2 = secondLens
+    .zip,
   )
 
   // ----- Prism: even Int, isomorphic to its half ----------------

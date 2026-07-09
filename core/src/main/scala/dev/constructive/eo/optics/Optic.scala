@@ -203,6 +203,31 @@ object Optic:
       self: Optic[S, T, A, B, F]
   )(using A: PartialAccessor[F]) inline def getOption(s: S): Option[A] = A.getOption(self.to(s))
 
+  /** Fanout (`&&&`) — combine two optics on the SAME source `S` and SAME carrier `F` into one
+    * focusing the pair `(A, C)`. Reads run both legs; writes reconcile them *sequentially* (rebuild
+    * through leg-1, then re-read leg-2 on the intermediate), so no caller-supplied merge is needed.
+    * Dispatches through a [[compose.ZipFunctor]] keyed on the leg carrier, so the hot `to` / `from`
+    * live in a concrete per-carrier instance (escape analysis scalar-replaces the intermediate
+    * there — the carrier-erased body cannot). Two instances ship: `Tuple2` (lens × lens, total →
+    * `Out = Tuple2`, always hits) and `Affine` (Optional × Optional, partial → `Out = Affine`, hits
+    * iff BOTH legs hit). A carrier without a `ZipFunctor` (Iso / Getter, Modify, Traversal, Fold)
+    * has no writeable zip; read-fanout those through [[CanGet.zip]] / [[CanGetOption.zip]].
+    *
+    * The composite is a lawful optic iff the two foci are disjoint (this mirrors Haskell's
+    * `Control.Lens.Unsound.lensProduct`); the [[laws.ZipLaws]] set is the runnable certificate
+    * (self-zipping an overlapping pair fails `replace-get`). The `eo-generics` `lens[S](_.a, _.b)`
+    * macro is the disjoint-by-construction alternative when the fields are statically known —
+    * prefer it; this `zip` is for optics not known at compile time.
+    *
+    * @group Operations
+    */
+  extension [S, A, F[_, _]](o1: Optic[S, S, A, A, F])
+
+    def zip[C](
+        o2: Optic[S, S, C, C, F]
+    )(using zf: ZipFunctor[F, o1.X, o2.X]): Optic[S, S, (A, C), (A, C), zf.Out] =
+      zf.zip(o1, o2)
+
   /** Build the "no context" reverse — takes a fresh `B` and produces the corresponding `T`.
     * Available when the carrier has a `ReverseAccessor[F]` instance (today: `Either` and `Direct`).
     *

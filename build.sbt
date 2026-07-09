@@ -18,7 +18,7 @@ val scala3Version = "3.8.4"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.6"
+ThisBuild / tlBaseVersion := "0.7"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
