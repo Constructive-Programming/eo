@@ -17,10 +17,11 @@ libraryDependencies ++= Seq(
 
 Requires Scala 3.8.x on JDK 17 or JDK 21.
 
-## First example
+## Define
 
 ```scala mdoc:silent
 import dev.constructive.eo.CanModify
+import dev.constructive.eo.optics.*
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
@@ -66,7 +67,7 @@ streetL.modify(emphasize)(alice)
 
 No `.copy` chains; the `lens` macro generates the setter for you.
 
-## From call site to contract — capabilities
+## Call
 
 `nameL.modify(emphasize)(alice)` works, but the line couples three
 decisions: the rule (`emphasize`), the shape (`Person`), and the
@@ -81,11 +82,15 @@ def emphasized[T](using cm: CanModify[T, String]): T => T =
 The signature is the contract: "give me proof a String can be
 rewritten inside `T`, and I'll return the rewrite." Any optic that
 can modify — a lens, a composed path, a prism into one branch — is
-that proof, for any subject type:
+that proof. A concrete lens is passed straight in; a *composed*
+optic like `streetL` is bound as a `given` instead, and the
+capability derives from it on the spot:
 
 ```scala mdoc
 emphasized(using nameL)(alice)
-emphasized(using lens[Address](_.street))(alice.address)
+
+given Optic[Person, Person, String, String, Tuple2] = streetL
+emphasized[Person](alice)
 ```
 
 This is the library's core habit: use capabilities to write truly
@@ -93,7 +98,7 @@ modular, de-coupled code by passing optics along as proof of
 capability contracts across modules. Deep dive:
 [Capabilities](capabilities.md).
 
-## What next?
+## Learn More
 
 - If you want to understand what a *carrier* is and why one trait
   backs every optic family, read [Concepts](concepts.md).
@@ -105,7 +110,7 @@ capability contracts across modules. Deep dive:
 - If you're coming from Monocle, jump to
   [Migrating from Monocle](migration-from-monocle.md).
 
-## Development commands
+## Contribute
 
 For contributors working on the library itself:
 
