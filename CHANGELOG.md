@@ -42,6 +42,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Optional` dependency: it never reaches downstream classpaths transitively, and any caller of
   this sub-package already depends on circe directly — its API surface *names* `io.circe.Json`.
 
+### Changed
+
+- **`ConfluentWire.reader` / `recordReader` are strict on the frame.** A payload that does not
+  parse as a Confluent frame now raises `AvroFailureException(NotConfluentFramed)` in `F` instead
+  of silently falling back to a direct decode under the codec's schema — the fallback could
+  accidentally succeed on corrupt bytes and yield garbage. Consumers of topics with mixed framed /
+  unframed producers opt into their own fallback by catching that failure and decoding directly
+  (`AvroCodec.decodeValue[A]` / `AvroCodec.decodeRecord`). Behavioural break for anyone relying on
+  the auto-detect; correctness over convenience.
+
 ### Fixed
 
 - **`ConfluentWire.strip(null)` is a defined failure, not an NPE.** A `null` payload (a Kafka

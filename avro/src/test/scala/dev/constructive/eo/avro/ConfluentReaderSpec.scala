@@ -107,13 +107,47 @@ class ConfluentReaderSpec extends Specification:
         org.specs2.execute.Failure(s"expected Right(record), got $t"): org.specs2.execute.Result
   }
 
-  "reader: unframed bytes decode under the codec's own schema, hook never consulted" >> {
+  // covers: strict frame contract — an unframed payload raises NotConfluentFramed rather than
+  //   silently direct-decoding (which could accidentally succeed on corrupt bytes and yield
+  //   garbage); the hook is never consulted. Mixed-topic callers opt into their own fallback by
+  //   catching this and decoding directly (AvroCodec.decodeValue).
+  "reader: unframed bytes raise NotConfluentFramed in F, hook never consulted" >> {
     val boom: Int => Res[Schema] = _ => Left(new AssertionError("hook must not be called"))
     val raw = AvroSpecFixtures.toBinaryValue(
       summon[AvroCodec[ReaderEvent]].encode(ReaderEvent("e-3")),
       readerSchema,
     )
-    ConfluentWire.reader[Res, ReaderEvent](boom)(raw) === Right(ReaderEvent("e-3"))
+    ConfluentWire.reader[Res, ReaderEvent](boom)(raw) match
+      case Left(e: AvroFailureException) =>
+        (e.failure match
+          case AvroFailure.NotConfluentFramed(_) => true
+          case _                                 => false
+        ) === true
+      case other =>
+        org
+          .specs2
+          .execute
+          .Failure(
+            s"expected Left(AvroFailureException(NotConfluentFramed)), got $other"
+          ): org.specs2.execute.Result
+  }
+
+  // covers: recordReader shares the strict frame contract
+  "recordReader: unframed bytes raise NotConfluentFramed in F" >> {
+    val boom: Int => Res[Schema] = _ => Left(new AssertionError("hook must not be called"))
+    ConfluentWire.recordReader[Res](boom, readerSchema)(Array[Byte](1, 2, 3)) match
+      case Left(e: AvroFailureException) =>
+        (e.failure match
+          case AvroFailure.NotConfluentFramed(_) => true
+          case _                                 => false
+        ) === true
+      case other =>
+        org
+          .specs2
+          .execute
+          .Failure(
+            s"expected Left(AvroFailureException(NotConfluentFramed)), got $other"
+          ): org.specs2.execute.Result
   }
 
   "reader: incompatible reader (field absent from writer, no default) raises ResolveFailed in F" >> {

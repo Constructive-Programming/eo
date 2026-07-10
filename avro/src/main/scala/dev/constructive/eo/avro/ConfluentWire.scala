@@ -282,17 +282,17 @@ object ConfluentWire:
     framed => strip(framed).flatMap(f => bridgeFor(f.schemaId).flatMap(bridge => bridge(f.body)))
 
   /** Typed per-message Confluent reader: `Array[Byte] => F[A]`, ready for an fs2 `Stream.evalMap`.
-    * A framed payload has its writer schema looked up by id (`schemaById`, effectful) and is
-    * resolve-decoded into `A` (reader shape = the codec's own schema).
+    * Per payload: [[strip]] the header, look the writer schema up by id (`schemaById`, effectful),
+    * resolve-decode into `A` (reader shape = the codec's own schema).
     *
-    * '''Auto-detect caveat''': a payload that does NOT parse as a Confluent frame is decoded
-    * directly under the codec's schema instead of failing. That serves topics with mixed framed /
-    * unframed producers — but it also means a corrupted header degrades to a direct-decode attempt
-    * rather than surfacing [[AvroFailure.NotConfluentFramed]]. On an all-framed topic, prefer
-    * failing fast via [[strip]] + your own decode, or [[resolvingBytes]] + a byte optic.
+    * Strict on the frame: a payload that does not parse as a Confluent frame raises
+    * [[AvroFailure.NotConfluentFramed]] — no silent fallback to a direct decode, which could
+    * accidentally succeed on corrupt bytes and yield garbage. A topic with mixed framed / unframed
+    * producers opts into its own fallback by catching that failure and decoding directly
+    * (`AvroCodec.decodeValue[A]`).
     *
-    * Failures (`ResolveFailed` / `DecodeFailed` / `BinaryParseFailed`, or a `schemaById` failure)
-    * are raised in `F` — the former via [[AvroFailureException]], the latter as the effect's own
+    * All failures are raised in `F`: `NotConfluentFramed` / `ResolveFailed` / `DecodeFailed` /
+    * `BinaryParseFailed` via [[AvroFailureException]]; a `schemaById` failure as the effect's own
     * error.
     */
   def reader[F[_], A](schemaById: Int => F[Schema])(using
@@ -305,11 +305,11 @@ object ConfluentWire:
           F.flatMap(schemaById(frame.schemaId)) { readSchema =>
             raiseFailure(AvroCodec.decodeResolvedValue[A](frame.body, readSchema))
           }
-        case Left(_) => raiseFailure(AvroCodec.decodeValue[A](framed))
+        case Left(fail) => raiseFailure(Left(fail))
 
   /** Generic counterpart of [[reader]] — yields `Array[Byte] => F[IndexedRecord]` resolved into the
-    * caller-supplied `writeSchema`, for when no reader case class exists. Same auto-detect caveat
-    * as [[reader]].
+    * caller-supplied `writeSchema`, for when no reader case class exists. Same strict frame
+    * contract as [[reader]] (opt-in fallback decode: `AvroCodec.decodeRecord`).
     */
   def recordReader[F[_]](schemaById: Int => F[Schema], writeSchema: Schema)(using
       F: MonadThrow[F]
@@ -320,7 +320,7 @@ object ConfluentWire:
           F.flatMap(schemaById(frame.schemaId)) { readSchema =>
             raiseFailure(AvroCodec.decodeResolvedRecord(frame.body, readSchema, writeSchema))
           }
-        case Left(_) => raiseFailure(AvroCodec.decodeRecord(framed, writeSchema))
+        case Left(fail) => raiseFailure(Left(fail))
 
   /** Lift an `Either[AvroFailure, A]` into `F`, raising a `Left` as an [[AvroFailureException]]. */
   private def raiseFailure[F[_], A](e: Either[AvroFailure, A])(using F: MonadThrow[F]): F[A] =

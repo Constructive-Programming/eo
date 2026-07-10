@@ -605,7 +605,7 @@ client and wraps no effect, so the caller owns the cache.
 ## The no-hassle resolving reader — `ConfluentWire.reader`
 
 For a Kafka consumer, the one-call form drops straight into an
-fs2 `Stream.evalMap`. It auto-detects the header, looks the **read
+fs2 `Stream.evalMap`. It strips the header, looks the **read
 schema** up by id (the schema the bytes were written under —
 effectfully), and *resolves* it into your type via Avro's
 `ResolvingDecoder` (reorder / default / promotion / aliases) rather
@@ -632,10 +632,14 @@ they resolve into / are written under (apache-avro's *reader* schema).
 - Effectful lookup `Int => F[Schema]` (`MonadThrow[F]`, cats-core —
   no cats-effect dependency). A framed payload has its read schema
   looked up and is resolve-decoded into `A` (the write schema =
-  the codec's own schema); an **unframed** payload is decoded directly
-  under the codec's schema (the hook is never consulted).
-- Failures are **raised in `F`**: a decode/resolve failure surfaces
-  as `AvroFailureException(ResolveFailed | DecodeFailed | …)`; a
+  the codec's own schema).
+- **Strict on the frame**: an unframed payload raises
+  `NotConfluentFramed` — no silent fallback to a direct decode, which
+  could accidentally succeed on corrupt bytes. On a topic with mixed
+  framed / unframed producers, catch that failure and decode directly
+  (`AvroCodec.decodeValue[A]`) — the fallback is yours to opt into.
+- Failures are **raised in `F`**: `AvroFailureException(
+  NotConfluentFramed | ResolveFailed | DecodeFailed | …)`; a
   `schemaById` failure propagates as `F`'s own error. Dead-letter by
   catching in `F`.
 - **No case class?** `ConfluentWire.recordReader[F](schemaById,
