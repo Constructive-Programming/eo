@@ -35,11 +35,11 @@ object CanModifyP:
 
   /** Read-modify-write fanout. Modifying a coupled pair `(A, C) => (A, C)` must first *observe*
     * both foci, so — unlike the read-only [[CanGet.zip]] — the writeable zip needs both read and
-    * write. The receiver is therefore the intersection
-    * `CanGet[S, A] & CanModify[S, A]`, which every concrete optic (Lens, Optional, …) already
-    * satisfies, so the read and write are tied to the SAME optic (honouring the doctrine's "one
-    * CanModify observes and rewrites"). The two writes reconcile sequentially (leg-2 on leg-1's
-    * result), so no merge is needed. Lawful iff the foci are disjoint.
+    * write. The receiver is therefore the intersection `CanGet[S, A] & CanModify[S, A]`, which
+    * every concrete optic (Lens, Optional, …) already satisfies, so the read and write are tied to
+    * the SAME optic (honouring the doctrine's "one CanModify observes and rewrites"). The two
+    * writes reconcile sequentially (leg-2 on leg-1's result), so no merge is needed. Lawful iff the
+    * foci are disjoint.
     */
   extension [S, A](self: CanGet[S, A] & CanModify[S, A])
 
