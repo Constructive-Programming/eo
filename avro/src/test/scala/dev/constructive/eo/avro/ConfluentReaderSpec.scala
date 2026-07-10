@@ -219,4 +219,107 @@ class ConfluentReaderSpec extends Specification:
     readOk.and(writeOk)
   }
 
+  // ---- resolvingBytes (framed → reader-layout framed bytes, drift-translating) -----
+
+  "resolvingBytes: a drifted-writer frame is TRANSLATED to reader-layout bytes, re-framed under frameId" >> {
+    val ws = summon[AvroCodec[ReorderWriter]].schema
+    val rs = summon[AvroCodec[ReorderReader]].schema
+    val reg: ConfluentWire.SchemaById =
+      case 7  => ws
+      case id => throw new NoSuchElementException(s"no schema for id $id")
+    val f = ConfluentWire.resolvingBytes(reg, rs, frameId = 1)
+    val in = ConfluentWire.attach(
+      7,
+      AvroSpecFixtures.toBinaryValue(
+        summon[AvroCodec[ReorderWriter]].encode(ReorderWriter("x", 42, true)),
+        ws,
+      ),
+    )
+    f(in) match
+      case Right(out) =>
+        val framedOk = ConfluentWire.strip(out) match
+          case Right(ConfluentWire.Framed(1, _)) => true === true
+          case other                             =>
+            org
+              .specs2
+              .execute
+              .Failure(s"expected reframe under id 1, got $other"): org.specs2.execute.Result
+        // reader-layout bytes read back (under the reader schema) as the resolved reader value.
+        val readBack = ConfluentWire.reader[Res, ReorderReader](_ => Right(rs))(out) === Right(
+          ReorderReader(true, "x", 42)
+        )
+        framedOk.and(readBack)
+      case Left(fail) =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Right(bytes), got Left($fail)"): org.specs2.execute.Result
+  }
+
+  "resolvingBytes: schemaById is consulted once per distinct writer id (bridge cached)" >> {
+    val ws = summon[AvroCodec[ReorderWriter]].schema
+    val rs = summon[AvroCodec[ReorderReader]].schema
+    var calls = 0
+    val counting: ConfluentWire.SchemaById = id =>
+      calls += 1
+      if id == 7 then ws else throw new NoSuchElementException(s"no schema for id $id")
+    val f = ConfluentWire.resolvingBytes(counting, rs, frameId = 1)
+    val in = ConfluentWire.attach(
+      7,
+      AvroSpecFixtures.toBinaryValue(
+        summon[AvroCodec[ReorderWriter]].encode(ReorderWriter("x", 42, true)),
+        ws,
+      ),
+    )
+    val _ = f(in)
+    val _ = f(in)
+    val _ = f(in)
+    calls === 1
+  }
+
+  "resolvingBytes: unframed / unresolvable / incompatible surface the specific AvroFailure" >> {
+    val ws = summon[AvroCodec[WriterEvent]].schema
+    val body =
+      AvroSpecFixtures.toBinaryValue(summon[AvroCodec[WriterEvent]].encode(WriterEvent("e", 1)), ws)
+
+    // Raw body, no header. A throwing hook proves the frame check precedes any resolution.
+    val boom: ConfluentWire.SchemaById = _ => throw new AssertionError("hook must not be called")
+    val unframed = ConfluentWire.resolvingBytes(boom, readerSchema, 1)(body) match
+      case Left(AvroFailure.NotConfluentFramed(_)) => true === true
+      case other                                   =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
+
+    // id 99 → the hook throws → SchemaResolutionFailed(99).
+    val throwing: ConfluentWire.SchemaById =
+      id => throw new NoSuchElementException(s"no schema for id $id")
+    val unresolvable =
+      ConfluentWire.resolvingBytes(throwing, readerSchema, 1)(ConfluentWire.attach(99, body)) match
+        case Left(AvroFailure.SchemaResolutionFailed(99, _)) => true === true
+        case other                                           =>
+          org
+            .specs2
+            .execute
+            .Failure(s"expected SchemaResolutionFailed(99), got $other"): org.specs2.execute.Result
+
+    // Writer resolves, but the reader schema needs a field the writer lacks (no default) →
+    // ResolveFailed, surfaced as a Left (the drift is genuinely unresolvable, not merely a gate).
+    val strictSchema = summon[AvroCodec[StrictEvent]].schema
+    val reg: ConfluentWire.SchemaById =
+      case 1  => ws
+      case id => throw new NoSuchElementException(s"no schema for id $id")
+    val incompatible =
+      ConfluentWire.resolvingBytes(reg, strictSchema, 1)(ConfluentWire.attach(1, body)) match
+        case Left(AvroFailure.ResolveFailed(_)) => true === true
+        case other                              =>
+          org
+            .specs2
+            .execute
+            .Failure(s"expected ResolveFailed, got $other"): org.specs2.execute.Result
+
+    unframed.and(unresolvable).and(incompatible)
+  }
+
 end ConfluentReaderSpec

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ConfluentWire.resolvingBytes` — the framed → framed drift-translating diagonal.**
+  The Confluent surface had every corner except one: a `Array[Byte] => Either[AvroFailure,
+  Array[Byte]]` that does per-message writer-schema resolution (like `recordReader` / `confluent`)
+  AND *translates* writer→reader drift (like `resolvingRecord` — Avro's `ResolvingDecoder`, never
+  the `resolve` fingerprint gate), handing back reader-layout framed bytes rather than a typed `A`
+  or an `F[A]`. Per payload: strip the header, look the writer schema up by id, resolve-decode the
+  body writer→reader, re-encode under `readerSchema` and re-frame under `frameId`. Because the
+  output is reader-layout, it is stable across writer-schema evolution within a reader generation —
+  the property the gating `resolve` (which refuses drift with `SchemaMismatch`) cannot give. A
+  factory in the `confluent` mould (compute once at construction, cheap per call): the returned
+  function closes over a `ConcurrentHashMap` keyed by writer id, so `schemaById` is consulted once
+  per distinct writer id and every later payload under a seen id reuses the cached bridge. Failures
+  are `Left` per the existing taxonomy — `NotConfluentFramed` (bad/`null` frame),
+  `SchemaResolutionFailed` (the hook threw), `ResolveFailed` / `EncodeFailed`.
+- **`cats-eo-avro-circe` — structural Avro → circe read bridge.** A new module
+  (`dev.constructive.eo.avrocirce.AvroJson`) that walks an Avro generic `IndexedRecord` straight
+  into an `io.circe.Json` document with no typed decode: `avroToJson(record): Json` and the
+  `bytesToJson(schema): Getter[Array[Byte], Json]` optic (parse-to-record fused with the structural
+  walk via `Getter.andThen`). Renders each runtime type the way a hand-written circe encoder would
+  for the *structural* cases (record → object in schema-declaration order, map → object, list →
+  array, `Utf8`/`CharSequence` → string, int/long → `fromLong`, double/float →
+  `fromDoubleOrNull`/`fromFloatOrNull`, enum → string, `ByteBuffer`/`GenericFixed` → array of signed
+  byte ints, resolved `null` branch → `Json.Null`); logical types and encoder-specific
+  string-transforms are explicit non-goals (the walk sees only the runtime value). It needs BOTH
+  apache-avro and circe on the classpath, so it lives in its own cross-dep module rather than being
+  forced into `cats-eo-avro` (every avro user would then pull circe) or `cats-eo-circe` (every circe
+  user would pull avro) — the same isolation rationale those single-dep modules already state.
+
+### Fixed
+
+- **`ConfluentWire.strip(null)` is a defined failure, not an NPE.** A `null` payload (a Kafka
+  tombstone or a mis-produced record) previously dereferenced `bytes.length` and threw
+  `NullPointerException` out of the header strip; it now returns
+  `Left(AvroFailure.NotConfluentFramed(...))` like any other malformed frame, so a downstream
+  consumer rejects it diagnosably. `strip`'s parameter widens to `Array[Byte] | Null` (source- and
+  binary-compatible under the module's `-Yexplicit-nulls`).
+
 ## [0.7.0] - 2026-07-09
 
 ### Added
