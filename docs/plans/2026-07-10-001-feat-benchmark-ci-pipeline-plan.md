@@ -1,7 +1,7 @@
 ---
 title: "feat: Benchmark CI pipeline — PR A/B deltas, generated BENCHMARKS.md, release history"
 type: feat
-status: active
+status: completed
 date: 2026-07-10
 origin: docs/brainstorms/2026-07-10-benchmark-ci-pipeline-requirements.md
 ---
@@ -236,7 +236,7 @@ flowchart TB
 
 ### Phase 1 — PR early warning
 
-- [ ] **Unit 1: `bench_tools.py` — mapping, diff, and render tool**
+- [x] **Unit 1: `bench_tools.py` — mapping, diff, and render tool**
 
 **Goal:** All pipeline logic (affected-selection, mapping validation, JSON
 pair diffing, comment/BENCHMARKS.md/series rendering, noise report) in one
@@ -294,7 +294,7 @@ tested, stdlib-only Python file.
 `affected`/`validate-mapping` against the real repo tree maps every
 existing `*Bench.scala` class.
 
-- [ ] **Unit 2: `bench-pr.yml` — same-job A/B workflow with sticky comment**
+- [x] **Unit 2: `bench-pr.yml` — same-job A/B workflow with sticky comment**
 
 **Goal:** The automatic PR delta: same-repo guard, path filter, merge-base
 run then head run on one VM at the reduced profile, diff, sticky comment
@@ -343,7 +343,7 @@ workflow itself is verified by drills)*
 **Verification:** the drills above pass on a scratch PR; fork-PR simulation
 (dispatch from a fork or trigger-condition review) confirms the guard.
 
-- [ ] **Unit 3: A/A calibration mode + noise floors**
+- [x] **Unit 3: A/A calibration mode + noise floors**
 
 **Goal:** `workflow_dispatch` mode on bench-pr.yml benchmarking the same
 ref twice in one job; `noise-report` aggregates artifacts into per-family
@@ -378,7 +378,7 @@ documented in the report artifact.
 
 ### Phase 2 — history and publication
 
-- [ ] **Unit 4: `bench-sweep.yml` — nightly-if-changed full sweep**
+- [x] **Unit 4: `bench-sweep.yml` — nightly-if-changed full sweep**
 
 **Goal:** Scheduled nightly + `workflow_run` (CI success on `v*`) +
 manual dispatch workflow that runs the full sweep on main with full-rigor
@@ -417,7 +417,7 @@ commit equals the swept source SHA recorded in the series.
 measured wall time recorded in the PR description for the sharding
 decision.
 
-- [ ] **Unit 5: series append + BENCHMARKS.md bot commit**
+- [x] **Unit 5: series append + BENCHMARKS.md bot commit**
 
 **Goal:** The sweep publishes: append one provenance-stamped JSONL line to
 `bench/series.jsonl` on gh-pages (creating the orphan branch on first
@@ -460,7 +460,7 @@ gh-pages; BENCHMARKS.md is on main via bot commit; no CI run was
 triggered by it; the next nightly no-ops (proves R8+R9 interplay
 end-to-end).
 
-- [ ] **Unit 6: chart page**
+- [x] **Unit 6: chart page**
 
 **Goal:** `bench/index.html` on gh-pages: per-benchmark history charts
 from `series.jsonl`, B/op as the default metric, ns/op behind a toggle
@@ -490,7 +490,7 @@ family filter + metric toggle. B/op first-class per origin decision.
 regression step introduced in test data is visible as a step in the
 B/op line.
 
-- [ ] **Unit 7: release asset attachment**
+- [x] **Unit 7: release asset attachment**
 
 **Goal:** On the `workflow_run` `v*` path, upload the sweep's
 `jmh-results.json` (+ provenance file) to the GitHub release for that
@@ -520,7 +520,7 @@ the version.
 
 ### Phase 3 — rollout
 
-- [ ] **Unit 8: docs, label, and gate-flip runbook**
+- [x] **Unit 8: docs, label, and gate-flip runbook**
 
 **Goal:** Make the pipeline discoverable and its rollout explicit:
 CONTRIBUTING.md + CLAUDE.md sections (what runs when, how to read the
