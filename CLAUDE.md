@@ -22,13 +22,12 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |
 | `schemes` | `schemes/` | `cats-eo-schemes` | Recursion schemes (cata/ana/hylo) as composable optics |
 | `circe` | `circe/` | `cats-eo-circe` | `Plated[Json]` and circe optic integration |
-| `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration |
-| `avroCirceIntegration` | `avro-circe/` | `cats-eo-avro-circe` | Structural Avro → circe read bridge (`AvroJson`) |
+| `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration; the `eo.avro.circe` sub-package is the structural Avro ↔ circe bridge (`AvroJson`) — circe is an `Optional` dep, callers add `circe-core` themselves |
 | `jsoniter` | `jsoniter/` | `cats-eo-jsoniter` | jsoniter-scala optic integration |
 | `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
 
 The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
-`circe`, `avro`, `avroCirceIntegration`, and `jsoniter`. `sbt compile` and `sbt test` cover those;
+`circe`, `avro`, and `jsoniter`. `sbt compile` and `sbt test` cover those;
 benchmarks must be invoked explicitly (see below).
 
 ## Toolchain

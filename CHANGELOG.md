@@ -23,19 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   per distinct writer id and every later payload under a seen id reuses the cached bridge. Failures
   are `Left` per the existing taxonomy — `NotConfluentFramed` (bad/`null` frame),
   `SchemaResolutionFailed` (the hook threw), `ResolveFailed` / `EncodeFailed`.
-- **`cats-eo-avro-circe` — structural Avro → circe read bridge.** A new module
-  (`dev.constructive.eo.avrocirce.AvroJson`) that walks an Avro generic `IndexedRecord` straight
-  into an `io.circe.Json` document with no typed decode: `avroToJson(record): Json` and the
-  `bytesToJson(schema): Getter[Array[Byte], Json]` optic (parse-to-record fused with the structural
-  walk via `Getter.andThen`). Renders each runtime type the way a hand-written circe encoder would
-  for the *structural* cases (record → object in schema-declaration order, map → object, list →
-  array, `Utf8`/`CharSequence` → string, int/long → `fromLong`, double/float →
-  `fromDoubleOrNull`/`fromFloatOrNull`, enum → string, `ByteBuffer`/`GenericFixed` → array of signed
-  byte ints, resolved `null` branch → `Json.Null`); logical types and encoder-specific
-  string-transforms are explicit non-goals (the walk sees only the runtime value). It needs BOTH
-  apache-avro and circe on the classpath, so it lives in its own cross-dep module rather than being
-  forced into `cats-eo-avro` (every avro user would then pull circe) or `cats-eo-circe` (every circe
-  user would pull avro) — the same isolation rationale those single-dep modules already state.
+- **`eo.avro.circe.AvroJson` — structural Avro ↔ circe bridge, a lawful `Prism`.** A new
+  sub-package of `cats-eo-avro` bridging Avro's generic value model and `io.circe.Json` with no
+  typed case class in the middle. `AvroJson.record(schema): Prism[Json, IndexedRecord]` is the
+  bidirectional entry point — and `AvroJson.codecPrism[A]: Prism[Json, A]` its typed counterpart
+  (schema off the `AvroCodec`, no `IndexedRecord` at the call site; decode failure is the same
+  prism miss): `reverseGet` is the total structural walk (record → object in
+  schema-declaration order, map → object, list → array, `Utf8`/`CharSequence` → string, int/long →
+  `fromLong`, double/float → `fromDoubleOrNull`/`fromFloatOrNull`, enum → string,
+  `ByteBuffer`/`GenericFixed` → array of signed byte ints, resolved `null` branch → `Json.Null`);
+  `getOption` is the strict schema-guided inverse (exact field cover — no extras, no defaults;
+  `toInt`/`toLong` integrality and range; enum symbols and fixed lengths checked; unions
+  first-branch-that-parses, `Json.Null` only ever matching a `null` branch), so the two prism
+  round-trip laws hold (property-pinned). Also `avroToJson(record): Json` directly and the
+  `bytesToJson(schema): Getter[Array[Byte], Json]` read optic (parse-to-record fused with the walk
+  via `Getter.andThen`). Logical types and encoder-specific string-transforms are explicit
+  non-goals (the bridge sees only the runtime value). circe rides on `cats-eo-avro` as an
+  `Optional` dependency: it never reaches downstream classpaths transitively, and any caller of
+  this sub-package already depends on circe directly — its API surface *names* `io.circe.Json`.
 
 ### Fixed
 

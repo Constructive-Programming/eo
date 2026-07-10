@@ -377,7 +377,6 @@ lazy val root: Project = project
     generics,
     circeIntegration,
     avroIntegration,
-    avroCirceIntegration,
     jsoniterIntegration,
     schemes,
   )
@@ -540,29 +539,11 @@ lazy val avroIntegration: Project = project
     // `GenericData` directly for hot-path walks, so the dep is part
     // of our reachable API.
     libraryDependencies += avro,
-    libraryDependencies += discipline % Test,
-  )
-
-// Structural Avro → circe read bridge (`AvroJson.avroToJson` / `bytesToJson`): walk an Avro
-// generic `IndexedRecord` straight into an `io.circe.Json` document, no typed decode. It needs
-// BOTH apache-avro and circe on the classpath, so — following the same isolation rationale the
-// single-dep integration modules state ("kept in its own module so base users don't pull in
-// circe" / "… kindlings / avro") — it must not be forced into `circeIntegration` (that would
-// make every circe user pull avro) nor `avroIntegration` (every avro user would pull circe). A
-// cross-dep bridge gets its own cross-dep module. Depends only on `core` (for `Getter`); the walk
-// uses apache-avro's generic API + circe directly, not `AvroCodec` / `JsonPrism`.
-lazy val avroCirceIntegration: Project = project
-  .in(file("avro-circe"))
-  .dependsOn(LocalProject("core"))
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
-  .settings(
-    name := "cats-eo-avro-circe",
-    libraryDependencies += cats,
-    libraryDependencies += avro,
-    libraryDependencies += circe,
-    // The behaviour spec builds generic records directly via the apache-avro generic API
-    // (`Schema.Parser` + `GenericData`) — no codec, so no kindlings / avroIntegration dep.
+    // circe is Optional: only the `dev.constructive.eo.avro.circe` sub-package (the structural
+    // Avro ↔ circe bridge, `AvroJson`) touches it, and its API surface *names* `io.circe.Json` —
+    // so any caller already depends on circe directly to write the call site. Optional keeps it
+    // off downstream classpaths; avro-only users never load the bridge's classfiles.
+    libraryDependencies += circe % Optional,
     libraryDependencies += discipline % Test,
   )
 
