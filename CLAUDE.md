@@ -154,6 +154,22 @@ fork count of at least 3 (the annotation defaults are `@Fork(3)`), the
 `-prof` profilers when investigating specific suspicions, and the usual
 reminder that "the numbers below are just data".
 
+#### Benchmark CI pipeline
+
+Three hand-written workflows (NOT in the generated ci.yml) automate this:
+`bench-pr.yml` posts a same-VM A/B delta comment on PRs touching
+benchmark-mapped paths (reduced profile, `perf:full` label escalates,
+same-repo PRs only); `bench-sweep.yml` runs the nightly-if-changed /
+release-tag full sweep, appends `bench/series.jsonl` on gh-pages, renders
+the chart, bot-commits `BENCHMARKS.md` (generated — never hand-edit), and
+attaches results to releases. All logic lives in
+`.github/bench/bench_tools.py` (stdlib-only, unit-tested — run
+`python3 -m unittest discover .github/bench`); the path→bench mapping is
+its `MODULE_BENCHES` dict (import-derived; `core/` or harness changes ⇒
+full suite). Doctrine: **B/op gates (only once
+`.github/bench/thresholds.json` exists, set from A/A calibration), ns/op
+advises**. Operator runbook: `.github/bench/README.md`.
+
 ### Auto-derivation: `eo-generics`
 
 `generics/` is a separate sub-project that synthesises boilerplate

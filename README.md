@@ -110,6 +110,8 @@ for cats typeclasses.
 - circe integration: <https://eo.constructive.dev/integrations/circe.html>
 - Avro integration: <https://eo.constructive.dev/integrations/avro.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
+- Benchmarks vs Monocle: [`BENCHMARKS.md`](./BENCHMARKS.md) (generated
+  each sweep; B/op is the comparable metric, ns/op is directional)
 - Composition gap analysis (research):
   [`docs/research/2026-04-23-composition-gap-analysis.md`](./docs/research/2026-04-23-composition-gap-analysis.md)
 
