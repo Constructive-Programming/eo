@@ -10,29 +10,51 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.avro.generic.IndexedRecord
 import org.apache.avro.{Schema, SchemaNormalization}
 
-/** Confluent Schema Registry wire-format framing for binary Avro payloads: a 5-byte header — magic
-  * byte `0x00` followed by the big-endian 4-byte schema id — then the Avro binary body.
+/** The Confluent Schema Registry wire format for binary Avro payloads — a 5-byte header (magic byte
+  * `0x00`, then the writer schema's registry id as a big-endian 4-byte int) in front of the plain
+  * Avro binary body — and the consumer surface built on it. This is the framing every
+  * Confluent-serialized Kafka topic carries; anything reading such a topic outside Confluent's own
+  * serializer stack needs exactly what lives here.
   *
-  * Registry-agnostic by design: no registry client, no new dependencies. [[strip]] / [[attach]]
-  * only move the frame; resolving a schema id to a [[Schema]] is the caller's job, for which the
-  * [[SchemaById]] alias is the hook (plug in a registry client, a static map, a cache — whatever
-  * the deployment owns).
+  * '''Registry-agnostic by design.''' No registry client, no new dependency: every member that
+  * needs a schema looked up takes the [[SchemaById]] hook (or its effectful `Int => F[Schema]`
+  * sibling). Plug in a registry client, a static map, a cache — the deployment owns it. All
+  * failures are values from the [[AvroFailure]] taxonomy (or an [[AvroFailureException]] raised in
+  * the caller's `F`), never a bare NPE or an Avro internal exception.
   *
-  * Two layers sit on top of that framing, both decode-agnostic — they hand you the header-stripped,
-  * writer-resolved, fingerprint-gated BODY BYTES and let you decode however you like (kindlings,
-  * vulcan, a generic-record → JSON walk, …):
+  * The surface splits along two axes.
   *
-  *   - [[resolve]] — the one-shot primitive: `Array[Byte] => Either[AvroFailure, Array[Byte]]`.
-  *   - [[confluent]] — the same as a composable eo [[Prism]] `Array[Byte] (framed) ↔ Array[Byte]
-  *     (body)`, so you drop it BEFORE any byte optic:
-  *     `confluent(…).andThen(codecPrism[A].field(…))`.
+  * '''Axis 1 — drift policy.''' What happens when the writer schema named by the frame's id differs
+  * from the schema the consumer reads with:
+  *   - '''Gate''' ([[resolve]], [[confluent]]): compare parsing-canonical-form fingerprints and
+  *     REFUSE any difference ([[AvroFailure.SchemaMismatch]]). The body bytes pass through
+  *     untouched — byte-exact, zero re-encode. For payloads that must stay verbatim (hashing,
+  *     signatures, archiving, pass-through forwarding), and for consumers where drift is a bug to
+  *     surface, not a condition to absorb.
+  *   - '''Translate''' ([[resolving]], [[resolvingRecord]], [[resolvingBytes]], [[reader]],
+  *     [[recordReader]]): run Avro schema resolution (`ResolvingDecoder`) writer → reader, so
+  *     compatible evolution — added fields with defaults, reordered fields, promotions — is
+  *     absorbed instead of refused.
+  *
+  * '''Axis 2 — output altitude.''' Each translating member hands back a different currency:
+  *   - typed `A` (via [[AvroCodec]]): [[resolving]] for a KNOWN writer schema (pure optic),
+  *     [[reader]] for a per-message lookup (effectful, `Stream.evalMap`-ready);
+  *   - generic [[IndexedRecord]] (no case class needed): [[resolvingRecord]] / [[recordReader]],
+  *     same split;
+  *   - reader-layout framed '''bytes''' (no decode at all): [[resolvingBytes]] — per-message
+  *     lookup, writer-id-cached, for consumers that hash / slice / forward rather than deserialize.
+  *
+  * Underneath sit the pure frame primitives [[strip]] / [[attach]] (header handling only, no schema
+  * involvement) — the building blocks for anything the members above don't cover.
   */
 object ConfluentWire:
 
+  // ---- Frame primitives (header only, no schema involvement) ---------
+
   /** Resolve a Confluent schema id to the writer [[Schema]] it names. Synchronous by design: the
-    * caller owns the registry client, the cache, and any effect wrapping around it, and hands
-    * [[resolve]] / [[confluent]] an already-resolved lookup. May throw (a registry miss, a network
-    * error); [[resolve]] catches it into `AvroFailure.SchemaResolutionFailed`.
+    * caller owns the registry client, the cache, and any effect wrapping, and hands this surface an
+    * already-synchronous lookup. May throw (a registry miss, a network error) — callers here catch
+    * that into [[AvroFailure.SchemaResolutionFailed]].
     */
   type SchemaById = Int => Schema
 
@@ -44,18 +66,16 @@ object ConfluentWire:
 
   /** A stripped Confluent frame: the schema id and the Avro binary body.
     *
-    * `body` is a COPY of the payload bytes, not a zero-copy offset view: `Array[Byte]` cannot carry
-    * an offset, and every downstream consumer in this module ([[AvroPrism]]'s dual-input surface,
-    * `sliceBytes` / `graftBytes`) takes whole arrays. The copy is one `arraycopy` of `length - 5`
-    * bytes — noise next to any decode that follows. A true offset view is a concern for the
-    * deferred byte-native optic surface.
+    * `body` is a COPY of the payload bytes, not a zero-copy offset view — `Array[Byte]` cannot
+    * carry an offset, and every downstream consumer takes whole arrays. The copy is one `arraycopy`
+    * of `length - 5` bytes: noise next to any decode that follows.
     */
   final case class Framed(schemaId: Int, body: Array[Byte])
 
   /** Validate and strip the 5-byte Confluent header. Fails structurally
     * ([[AvroFailure.NotConfluentFramed]]) on a `null` payload (a Kafka tombstone / mis-produced
-    * record — a defined failure rather than an NPE, so downstream consumers reject it diagnosably),
-    * on inputs shorter than the header, or whose magic byte isn't `0x00`.
+    * record — a defined failure rather than an NPE), on inputs shorter than the header, or whose
+    * magic byte isn't `0x00`.
     */
   def strip(bytes: Array[Byte] | Null): Either[AvroFailure, Framed] =
     if bytes == null then
@@ -91,23 +111,24 @@ object ConfluentWire:
     System.arraycopy(body, 0, out, HeaderLength, body.length)
     out
 
+  // ---- Gate surface (byte-exact: refuse drift, never re-encode) ------
+
   /** Strip + resolve + fingerprint-gate a Confluent-framed payload down to its BODY BYTES, without
-    * decoding to any type — the seam issue #41 asked for. Steps:
+    * decoding. Per payload:
     *
     *   1. [[strip]] the 5-byte header → `(schemaId, body)`;
     *   2. resolve the writer schema for `schemaId` via `schemaById`;
-    *   3. gate by Avro parsing-canonical-form fingerprint
+    *   3. gate by parsing-canonical-form fingerprint
     *      ([[org.apache.avro.SchemaNormalization.parsingFingerprint64]]): when the writer
     *      fingerprint equals the reader's, the body is byte-identical under both schemas — return
     *      it as-is; else refuse with [[AvroFailure.SchemaMismatch]] rather than hand back bytes
     *      that would misdecode.
     *
-    * The returned bytes are the caller's to decode with whatever they own — kindlings
-    * (`codecPrism[A]`), vulcan `Codec.fromBinary`, a generic-record → JSON walk, anything.
+    * The returned bytes are the caller's to decode (or hash, or forward) with whatever they own.
     * Failures: [[AvroFailure.NotConfluentFramed]] (bad frame),
     * [[AvroFailure.SchemaResolutionFailed]] (the hook threw), [[AvroFailure.SchemaMismatch]]
-    * (writer ≠ reader fingerprint). Exactly one failure point per payload, so `Either`, not the
-    * `Ior[Chain, …]` the multi-failure walk surfaces.
+    * (writer ≠ reader fingerprint). To ABSORB compatible drift instead of refusing it, use the
+    * translating surface below.
     */
   def resolve(
       framed: Array[Byte],
@@ -138,28 +159,25 @@ object ConfluentWire:
             else
               Left(AvroFailure.SchemaMismatch(frame.schemaId, writerFingerprint, readerFingerprint))
 
-  /** The [[resolve]] strip + resolve + fingerprint-gate as a composable eo [[Prism]] over bytes:
-    * `Array[Byte]` (a full Confluent frame) ↔ `Array[Byte]` (the byte-exact resolved body). Drop it
-    * BEFORE any byte optic and let the normal walk run on the body:
+  /** [[resolve]] as a composable eo [[Prism]] over bytes: `Array[Byte]` (a full Confluent frame) ↔
+    * `Array[Byte]` (the byte-exact gated body). Drop it BEFORE any byte optic and compose:
     *
     * {{{
     *   val cf = ConfluentWire.confluent(schemaById, readerSchema, frameId)
-    *   // typed (kindlings):
-    *   cf.andThen(codecPrism[A].field(_.x)).getOption(framedBytes)                 // Option[X]
-    *   // decode-agnostic: hand the resolved body to vulcan / a generic-record walk:
-    *   cf.getOption(framedBytes)                                                   // Option[Array[Byte]]
+    *   cf.andThen(codecPrism[A].field(_.x)).getOption(framedBytes)   // Option[X]
+    *   cf.getOption(framedBytes)                                     // Option[Array[Byte]]
     * }}}
     *
     *   - `getOption(framed)` runs strip + resolve + fingerprint-gate; a bad frame, an unresolvable
-    *     id, or a fingerprint mismatch all yield `None`. Use [[resolve]] when you want the specific
-    *     [[AvroFailure]] reason instead of `None`.
+    *     id, or a fingerprint mismatch all yield `None`. Use [[resolve]] when you need the specific
+    *     [[AvroFailure]] instead of `None`.
     *   - `reverseGet(body)` re-frames via [[attach]] under `frameId` — the schema id to publish
     *     under (typically the reader schema's registry id). Only exercised on write-back (`modify`
-    *     / `replace`); a read-only pipeline never calls it. A monomorphic byte Prism can't thread
-    *     the original per-message id from read to write, so re-framing uses this fixed id; if you
-    *     must preserve the incoming id on write, use [[resolve]] + [[attach]] by hand.
+    *     / `replace`). A monomorphic byte Prism can't thread the original per-message id from read
+    *     to write, so re-framing uses this fixed id; to preserve the incoming id, use [[resolve]] +
+    *     [[attach]] by hand.
     *
-    * The reader fingerprint is computed once here, not per payload.
+    * The reader fingerprint is computed once at construction, not per payload.
     */
   def confluent(
       schemaById: SchemaById,
@@ -172,21 +190,21 @@ object ConfluentWire:
       reverseGet = body => attach(frameId, body),
     )
 
-  // ---- Resolving surface (read→write translation, not a gate) --------
+  // ---- Translating surface (absorb drift via Avro schema resolution) --
   //
-  // Unlike `confluent` / `resolve` (which byte-exact GATE and refuse on drift), these actually
-  // TRANSLATE the drift via `AvroCodec.decodeResolved*` (Avro's `ResolvingDecoder`). Named from the
-  // optic's view: `readSchema` = the schema the bytes were read in (Avro's writer schema),
-  // `writeSchema` = the shape they resolve into / are written under (Avro's reader schema).
-  // `resolvingBytes` is the bytes-in / bytes-out member for a mixed-schema stream (per-message
-  // writer lookup + drift translation, writer-id-cached).
+  // Everything below runs `ResolvingDecoder` writer → reader (via `AvroCodec.decodeResolved*`)
+  // instead of gating. Parameter naming on the pure optics follows the OPTIC's view, which is
+  // the reverse of Avro's: `readSchema` = the schema the bytes were written under (Avro's
+  // "writer"), `writeSchema` = the shape they resolve into and are re-encoded under (Avro's
+  // "reader"). The per-message members use Avro's names (`readerSchema`) since no optic is
+  // involved.
 
-  /** A pure, read+write Confluent optic for a KNOWN read schema. `to` strips the header and
-    * resolve-decodes the body from `readSchema` into `A` (the write schema =
-    * `AvroCodec[A].schema`); `from` re-encodes `A` and re-frames under `frameId`. `Affine`-carried
-    * with the same `T = Either[AvroFailure, Array[Byte]]` fallible-build shape as [[AvroBridge]].
-    * Per-read-schema — for a single-schema topic or a producer; for a mixed-schema stream use
-    * [[reader]], which looks the read schema up per message.
+  /** Read+write Confluent optic for a KNOWN writer schema (single-schema topic, or a producer's own
+    * output). `to` strips the header and resolve-decodes the body from `readSchema` into `A` (the
+    * write schema = `AvroCodec[A].schema`); `from` re-encodes `A` and re-frames under `frameId`.
+    * `Affine`-carried with the same `T = Either[AvroFailure, Array[Byte]]` fallible-build shape as
+    * [[AvroBridge]]. For a mixed-schema stream use [[reader]] (typed) or [[resolvingBytes]]
+    * (bytes), which look the writer schema up per message.
     */
   def resolving[A](readSchema: Schema, frameId: Int)(using
       codec: AvroCodec[A]
@@ -200,7 +218,7 @@ object ConfluentWire:
     )
 
   /** Generic counterpart of [[resolving]] — resolves `readSchema` → the caller-supplied
-    * `writeSchema` into an [[IndexedRecord]] (no reader codec / case class).
+    * `writeSchema` into an [[IndexedRecord]], for when no reader codec / case class exists.
     */
   def resolvingRecord(
       readSchema: Schema,
@@ -217,36 +235,23 @@ object ConfluentWire:
       reverseGet = (_, r) => AvroCodec.encodeRecord(r, writeSchema).map(attach(frameId, _)),
     )
 
-  /** The missing diagonal of the Confluent surface: framed bytes → reader-layout framed bytes,
-    * translating writer-schema drift, for a MIXED-schema stream. It is [[recordReader]]'s
-    * per-message writer resolution (look the writer schema up by id) fused with
-    * [[resolvingRecord]]'s drift TRANSLATION (Avro's `ResolvingDecoder`, never the fingerprint
-    * gate) — and it hands back `Array[Byte]`, not a typed `A` or an `F[A]`, so the caller decodes /
-    * hashes / re-frames however they own. Per payload:
+  /** Framed bytes → reader-layout framed bytes for a MIXED-schema stream: per-message writer lookup
+    * (like [[recordReader]]) fused with drift translation (like [[resolvingRecord]]), handing back
+    * `Array[Byte]` rather than a typed `A` or an `F[A]`. Per payload: [[strip]], resolve-decode the
+    * body writer → reader, re-encode under `readerSchema`, re-frame under `frameId`. Because the
+    * output is reader-layout, it is stable across writer-schema evolution within a reader
+    * generation — so digests, slices, and forwards computed downstream don't churn when producers
+    * upgrade. That is the property the gate ([[resolve]]) cannot give.
     *
-    *   1. [[strip]] the header → `(writerId, body)`;
-    *   2. select the per-writer-id bridge `resolvingRecord(schemaById(writerId), readerSchema,
-    *      frameId)` (built once per distinct writer id, then cached);
-    *   3. resolve-decode the body writer→reader and re-encode under `readerSchema`, re-framed under
-    *      `frameId` — the reader-layout framed bytes.
+    * A factory, like [[confluent]]: the returned function closes over a per-writer-id cache
+    * ([[java.util.concurrent.ConcurrentHashMap]]), so `schemaById` is consulted once per DISTINCT
+    * writer id — one entry per schema version seen on the stream. Keep the returned function;
+    * re-calling `resolvingBytes` per message discards the cache.
     *
-    * Because the digest / decode downstream runs on reader-layout bytes, the output is '''stable
-    * across writer-schema evolution within a reader generation''' — the property [[resolve]] (the
-    * fingerprint GATE, which refuses drift with [[AvroFailure.SchemaMismatch]]) cannot give.
-    *
-    * '''Caching.''' A factory: `parsingFingerprint`-free but structurally the same shape as
-    * [[confluent]] (compute once at construction, cheap per call). The returned function closes
-    * over a [[java.util.concurrent.ConcurrentHashMap]] keyed by writer id, so `schemaById` is
-    * consulted '''once per distinct writer id''' — every later payload under a seen id reuses the
-    * cached bridge. Keep the returned function (don't re-call `resolvingBytes` per message) to keep
-    * the cache warm.
-    *
-    * '''Failures''' (as `Left`, matching the taxonomy): [[AvroFailure.NotConfluentFramed]] (bad or
-    * `null` frame — checked before `schemaById`), [[AvroFailure.SchemaResolutionFailed]] (the
-    * `schemaById` hook threw), [[AvroFailure.ResolveFailed]] / [[AvroFailure.EncodeFailed]] (the
-    * writer→reader resolve-decode or the reader-layout re-encode failed). The framed→framed
-    * function is the whole contract — decode the resolved body with [[recordReader]] / a byte optic
-    * if you want the record instead.
+    * Failures as `Left`: [[AvroFailure.NotConfluentFramed]] (bad or `null` frame, checked before
+    * `schemaById`), [[AvroFailure.SchemaResolutionFailed]] (the hook threw),
+    * [[AvroFailure.ResolveFailed]] / [[AvroFailure.EncodeFailed]] (resolve-decode / re-encode
+    * failed).
     */
   def resolvingBytes(
       schemaById: SchemaById,
@@ -264,21 +269,31 @@ object ConfluentWire:
           bridges.computeIfAbsent(
             writerId,
             id =>
-              val optic = resolvingRecord(schemaById(id), readerSchema, frameId)
-              framed => optic.from(optic.to(framed)),
+              val writerSchema = schemaById(id)
+              body =>
+                AvroCodec
+                  .decodeResolvedRecord(body, writerSchema, readerSchema)
+                  .flatMap(AvroCodec.encodeRecord(_, readerSchema))
+                  .map(attach(frameId, _)),
           )
         )
       catch case NonFatal(t) => Left(AvroFailure.SchemaResolutionFailed(writerId, t))
 
-    framed => strip(framed).flatMap(f => bridgeFor(f.schemaId).flatMap(bridge => bridge(framed)))
+    framed => strip(framed).flatMap(f => bridgeFor(f.schemaId).flatMap(bridge => bridge(f.body)))
 
-  /** The no-hassle Confluent reader: `Array[Byte] => F[A]`, ready for an fs2 `Stream.evalMap`. Per
-    * message it auto-detects the header — a framed payload has its read schema (the schema the
-    * bytes were written under) looked up by id (`schemaById`, effectful) and is resolve-decoded
-    * into `A` (the write schema = the codec's own schema); an unframed payload is decoded directly
-    * under the codec's schema. Failures (`ResolveFailed` / `DecodeFailed` / `BinaryParseFailed`, or
-    * a `schemaById` failure) are raised in `F` — the former via [[AvroFailureException]], the
-    * latter as the effect's own error.
+  /** Typed per-message Confluent reader: `Array[Byte] => F[A]`, ready for an fs2 `Stream.evalMap`.
+    * A framed payload has its writer schema looked up by id (`schemaById`, effectful) and is
+    * resolve-decoded into `A` (reader shape = the codec's own schema).
+    *
+    * '''Auto-detect caveat''': a payload that does NOT parse as a Confluent frame is decoded
+    * directly under the codec's schema instead of failing. That serves topics with mixed framed /
+    * unframed producers — but it also means a corrupted header degrades to a direct-decode attempt
+    * rather than surfacing [[AvroFailure.NotConfluentFramed]]. On an all-framed topic, prefer
+    * failing fast via [[strip]] + your own decode, or [[resolvingBytes]] + a byte optic.
+    *
+    * Failures (`ResolveFailed` / `DecodeFailed` / `BinaryParseFailed`, or a `schemaById` failure)
+    * are raised in `F` — the former via [[AvroFailureException]], the latter as the effect's own
+    * error.
     */
   def reader[F[_], A](schemaById: Int => F[Schema])(using
       F: MonadThrow[F],
@@ -293,7 +308,8 @@ object ConfluentWire:
         case Left(_) => raiseFailure(AvroCodec.decodeValue[A](framed))
 
   /** Generic counterpart of [[reader]] — yields `Array[Byte] => F[IndexedRecord]` resolved into the
-    * caller-supplied `writeSchema`, for when the reader's case class is unavailable.
+    * caller-supplied `writeSchema`, for when no reader case class exists. Same auto-detect caveat
+    * as [[reader]].
     */
   def recordReader[F[_]](schemaById: Int => F[Schema], writeSchema: Schema)(using
       F: MonadThrow[F]
