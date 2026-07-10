@@ -18,7 +18,7 @@ val scala3Version = "3.8.4"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.6"
+ThisBuild / tlBaseVersion := "0.7"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -539,6 +539,11 @@ lazy val avroIntegration: Project = project
     // `GenericData` directly for hot-path walks, so the dep is part
     // of our reachable API.
     libraryDependencies += avro,
+    // circe is Optional: only the `dev.constructive.eo.avro.circe` sub-package (the structural
+    // Avro ↔ circe bridge, `AvroJson`) touches it, and its API surface *names* `io.circe.Json` —
+    // so any caller already depends on circe directly to write the call site. Optional keeps it
+    // off downstream classpaths; avro-only users never load the bridge's classfiles.
+    libraryDependencies += circe % Optional,
     libraryDependencies += discipline % Test,
   )
 

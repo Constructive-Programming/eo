@@ -79,4 +79,16 @@ class ConfluentWireSpec extends Specification with ScalaCheck:
     emptyOk.and(shortOk).and(magicOk).and(headerOnlyOk)
   }
 
+  // covers: a null payload (a Kafka tombstone / mis-produced record) is a DEFINED
+  //   NotConfluentFramed rather than an NPE, so downstream consumers reject it diagnosably
+  "strip: a null payload surfaces NotConfluentFramed, not an NPE" >> {
+    ConfluentWire.strip(null) match
+      case Left(AvroFailure.NotConfluentFramed(reason)) => reason must contain("null")
+      case other                                        =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected NotConfluentFramed, got $other"): org.specs2.execute.Result
+  }
+
 end ConfluentWireSpec

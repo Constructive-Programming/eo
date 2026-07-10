@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`ConfluentWire.resolvingBytes` — the framed → framed drift-translating diagonal.**
+  The Confluent surface had every corner except one: a `Array[Byte] => Either[AvroFailure,
+  Array[Byte]]` that does per-message writer-schema resolution (like `recordReader` / `confluent`)
+  AND *translates* writer→reader drift (like `resolvingRecord` — Avro's `ResolvingDecoder`, never
+  the `resolve` fingerprint gate), handing back reader-layout framed bytes rather than a typed `A`
+  or an `F[A]`. Per payload: strip the header, look the writer schema up by id, resolve-decode the
+  body writer→reader, re-encode under `readerSchema` and re-frame under `frameId`. Because the
+  output is reader-layout, it is stable across writer-schema evolution within a reader generation —
+  the property the gating `resolve` (which refuses drift with `SchemaMismatch`) cannot give. A
+  factory in the `confluent` mould (compute once at construction, cheap per call): the returned
+  function closes over a `ConcurrentHashMap` keyed by writer id, so `schemaById` is consulted once
+  per distinct writer id and every later payload under a seen id reuses the cached bridge. Failures
+  are `Left` per the existing taxonomy — `NotConfluentFramed` (bad/`null` frame),
+  `SchemaResolutionFailed` (the hook threw), `ResolveFailed` / `EncodeFailed`.
+- **`eo.avro.circe.AvroJson` — structural Avro ↔ circe bridge, a lawful `Prism`.** A new
+  sub-package of `cats-eo-avro` bridging Avro's generic value model and `io.circe.Json` with no
+  typed case class in the middle. `AvroJson.record(schema): Prism[Json, IndexedRecord]` is the
+  bidirectional entry point — and `AvroJson.codecPrism[A]: Prism[Json, A]` its typed counterpart
+  (schema off the `AvroCodec`, no `IndexedRecord` at the call site; decode failure is the same
+  prism miss): `reverseGet` is the total structural walk (record → object in
+  schema-declaration order, map → object, list → array, `Utf8`/`CharSequence` → string, int/long →
+  `fromLong`, double/float → `fromDoubleOrNull`/`fromFloatOrNull`, enum → string,
+  `ByteBuffer`/`GenericFixed` → array of signed byte ints, resolved `null` branch → `Json.Null`);
+  `getOption` is the strict schema-guided inverse (exact field cover — no extras, no defaults;
+  `toInt`/`toLong` integrality and range; enum symbols and fixed lengths checked; unions
+  first-branch-that-parses, `Json.Null` only ever matching a `null` branch), so the two prism
+  round-trip laws hold (property-pinned). Also `avroToJson(record): Json` directly and the
+  `bytesToJson(schema): Getter[Array[Byte], Json]` read optic (parse-to-record fused with the walk
+  via `Getter.andThen`). Logical types and encoder-specific string-transforms are explicit
+  non-goals (the bridge sees only the runtime value). circe rides on `cats-eo-avro` as an
+  `Optional` dependency: it never reaches downstream classpaths transitively, and any caller of
+  this sub-package already depends on circe directly — its API surface *names* `io.circe.Json`.
+
+### Changed
+
+- **`ConfluentWire.reader` / `recordReader` are strict on the frame.** A payload that does not
+  parse as a Confluent frame now raises `AvroFailureException(NotConfluentFramed)` in `F` instead
+  of silently falling back to a direct decode under the codec's schema — the fallback could
+  accidentally succeed on corrupt bytes and yield garbage. Consumers of topics with mixed framed /
+  unframed producers opt into their own fallback by catching that failure and decoding directly
+  (`AvroCodec.decodeValue[A]` / `AvroCodec.decodeRecord`). Behavioural break for anyone relying on
+  the auto-detect; correctness over convenience.
+
+### Fixed
+
+- **`ConfluentWire.strip(null)` is a defined failure, not an NPE.** A `null` payload (a Kafka
+  tombstone or a mis-produced record) previously dereferenced `bytes.length` and threw
+  `NullPointerException` out of the header strip; it now returns
+  `Left(AvroFailure.NotConfluentFramed(...))` like any other malformed frame, so a downstream
+  consumer rejects it diagnosably. `strip`'s parameter widens to `Array[Byte] | Null` (source- and
+  binary-compatible under the module's `-Yexplicit-nulls`).
+
 ## [0.7.0] - 2026-07-09
 
 ### Added
