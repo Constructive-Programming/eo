@@ -76,7 +76,11 @@ IGNORED_PREFIXES = (
 )
 
 BENCH_SRC = "benchmarks/src/main/scala/dev/constructive/eo/bench"
-GC_NORM = "·gc.alloc.rate.norm"  # JMH's ·gc.alloc.rate.norm
+# This JMH's JSON emits the gc profiler key WITHOUT the legacy "·" prefix
+# (verified against a real `-prof gc -rf json` run); older JMH used "·gc.…".
+# Accept both so a toolchain bump can't silently kill the gate metric.
+GC_NORM = "gc.alloc.rate.norm"
+GC_NORM_KEYS = (GC_NORM, "·gc.alloc.rate.norm")
 
 
 def affected(paths: list[str]) -> str:
@@ -98,7 +102,7 @@ def affected(paths: list[str]) -> str:
                 return "FULL"
     if not classes:
         return ""
-    return "(" + "|".join(sorted(classes)) + ")\\..*"
+    return "(" + "|".join(sorted(re.escape(c) for c in classes)) + ")\\..*"
 
 
 def validate_mapping(repo_root: pathlib.Path) -> list[str]:
@@ -128,10 +132,9 @@ def load_results(path: pathlib.Path) -> dict:
         key = (e["benchmark"], tuple(sorted(params.items())))
         pm = e["primaryMetric"]
         err = pm.get("scoreError")
-        bop = None
-        gc = (e.get("secondaryMetrics") or {}).get(GC_NORM)
-        if gc is not None:
-            bop = gc["score"]
+        sm = e.get("secondaryMetrics") or {}
+        gc = next((sm[k] for k in GC_NORM_KEYS if k in sm), None)
+        bop = gc["score"] if gc is not None else None
         out[key] = {
             "benchmark": e["benchmark"],
             "params": params,
@@ -433,6 +436,8 @@ def series_line(results: dict, prov: dict) -> str:
 
 
 def noise_report(deltas_list: list[dict]) -> str:
+    if not deltas_list:
+        raise SystemExit("noise-report: no A/A deltas provided")
     profiles = {json.dumps(d.get("provenance", {}).get("profile"), sort_keys=True) for d in deltas_list}
     if len(profiles) > 1:
         raise SystemExit(
@@ -454,7 +459,7 @@ def noise_report(deltas_list: list[dict]) -> str:
         if not vals:
             return None
         s = sorted(vals)
-        return s[min(len(s) - 1, int(frac * len(s)))]
+        return s[int(frac * (len(s) - 1))]
 
     lines = [
         f"# A/A noise floor ({len(deltas_list)} run(s))",
@@ -493,7 +498,7 @@ def _prov(ns) -> dict:
     return {k: getattr(ns, k) for k in keys if getattr(ns, k, None)}
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="bench_tools")
     sub = ap.add_subparsers(dest="cmd", required=True)
 

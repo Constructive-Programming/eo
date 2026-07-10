@@ -15,6 +15,27 @@ only metric that may ever gate; ns/op is directional advice.**
 | `chart/index.html` | Static history chart, deployed by the sweep next to the series. |
 | `thresholds.json` | **Absent = advisory (current state).** Present = the B/op gate is live. |
 
+## Running the tool locally
+
+```sh
+python3 -m unittest discover .github/bench            # tool self-test
+python3 .github/bench/bench_tools.py validate-mapping # mapping drift check
+git diff --name-only main...HEAD \
+  | python3 .github/bench/bench_tools.py affected     # -> JMH regex | FULL | ''
+python3 .github/bench/bench_tools.py diff base.json head.json -o deltas.json \
+  --base-sha X --head-sha Y --profile "pr:-i3-wi2-f1-t1-gc"   # exit 3 = gate
+python3 .github/bench/bench_tools.py comment-md deltas.json   # PR comment md
+python3 .github/bench/bench_tools.py benchmarks-md sweep.json --source-sha X …
+python3 .github/bench/bench_tools.py append-series sweep.json --source-sha X …
+python3 .github/bench/bench_tools.py noise-report a.json b.json  # A/A floors
+```
+
+`base.json`/`head.json`/`sweep.json` are JMH `-rf json` output (run with
+`-prof gc` or the B/op column is empty and `benchmarks-md` refuses).
+Provenance flags are shared: `--source-sha --base-sha --head-sha --date
+--jdk --runner --jmh-params --profile`; `--help` on any subcommand lists
+what it takes.
+
 ## Maintaining the path→bench mapping
 
 `MODULE_BENCHES` in `bench_tools.py` maps leaf module dirs to the bench

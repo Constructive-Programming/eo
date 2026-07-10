@@ -121,6 +121,12 @@ class Diff(unittest.TestCase):
         self.assertEqual(len(d["removed"]), 1)
         self.assertEqual(d["rename_suspects"], ["eoGet"])
 
+    def test_legacy_dotted_gc_key_still_read(self):
+        e = jmh_entry(FQN, 100.0)
+        e["secondaryMetrics"] = {"·gc.alloc.rate.norm": {"score": 24.0, "scoreUnit": "B/op"}}
+        (entry,) = load([e]).values()
+        self.assertEqual(entry["bop"], 24.0)
+
     def test_missing_gc_metric_pairs_with_none(self):
         base = load([jmh_entry(FQN, 100.0)])
         head = load([jmh_entry(FQN, 100.0)])

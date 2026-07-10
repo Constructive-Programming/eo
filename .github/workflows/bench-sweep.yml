@@ -131,38 +131,11 @@ jobs:
           sbt -batch -Dsbt.color=false \
             "benchmarks/Jmh/run $JMH_FLAGS -rff sweep.json ${{ inputs.filter || '' }}"
 
-      - name: Append series + chart to gh-pages
-        if: steps.ctx.outputs.skip == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          PROV=(--source-sha "${{ steps.ctx.outputs.source_sha }}" \
-                --date "${{ steps.ctx.outputs.date }}" \
-                --jdk temurin-21 --runner ubuntu-22.04 \
-                --jmh-params "$JMH_FLAGS" --profile "$JMH_PROFILE")
-          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
-          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
-            git clone --quiet --depth 1 --branch gh-pages "$REPO_URL" ghp
-          else
-            mkdir ghp
-            git -C ghp init --quiet -b gh-pages
-            git -C ghp remote add origin "$REPO_URL"
-          fi
-          mkdir -p ghp/bench
-          touch ghp/.nojekyll
-          python3 .github/bench/bench_tools.py append-series \
-            benchmarks/sweep.json "${PROV[@]}" >> ghp/bench/series.jsonl
-          # Chart ships from the swept tree so gh-pages stays bot-only.
-          if [ -f .github/bench/chart/index.html ]; then
-            cp .github/bench/chart/index.html ghp/bench/index.html
-          fi
-          git -C ghp config user.name "github-actions[bot]"
-          git -C ghp config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C ghp add -A
-          git -C ghp commit -m "bench: sweep ${{ steps.ctx.outputs.source_sha }} (${{ steps.ctx.outputs.date }})"
-          # Explicit refspec — never rely on push.default.
-          git -C ghp push origin HEAD:refs/heads/gh-pages
-
+      # Publish ORDER matters: BENCHMARKS.md to main FIRST, series append
+      # LAST. The no-op check keys on the series' source_sha, so the series
+      # entry must certify a COMPLETE publish — if anything fails in
+      # between, the next nightly re-sweeps and heals the gap instead of
+      # no-oping on a half-published state.
       - name: Render and bot-commit BENCHMARKS.md to main
         if: steps.ctx.outputs.skip == 'false'
         run: |
@@ -189,6 +162,38 @@ jobs:
           # Rebase-retry once: a human merge can race the nightly.
           git push origin main:refs/heads/main \
             || { git pull --rebase origin main && git push origin main:refs/heads/main; }
+
+      - name: Append series + chart to gh-pages
+        if: steps.ctx.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PROV=(--source-sha "${{ steps.ctx.outputs.source_sha }}" \
+                --date "${{ steps.ctx.outputs.date }}" \
+                --jdk temurin-21 --runner ubuntu-22.04 \
+                --jmh-params "$JMH_FLAGS" --profile "$JMH_PROFILE")
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null; then
+            git clone --quiet --depth 1 --branch gh-pages "$REPO_URL" ghp
+          else
+            mkdir ghp
+            git -C ghp init --quiet -b gh-pages
+            git -C ghp remote add origin "$REPO_URL"
+          fi
+          mkdir -p ghp/bench
+          touch ghp/.nojekyll
+          python3 .github/bench/bench_tools.py append-series \
+            benchmarks/sweep.json "${PROV[@]}" >> ghp/bench/series.jsonl
+          # Chart ships from the tree (now main) so gh-pages stays bot-only.
+          if [ -f .github/bench/chart/index.html ]; then
+            cp .github/bench/chart/index.html ghp/bench/index.html
+          fi
+          git -C ghp config user.name "github-actions[bot]"
+          git -C ghp config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C ghp add -A
+          git -C ghp commit -m "bench: sweep ${{ steps.ctx.outputs.source_sha }} (${{ steps.ctx.outputs.date }})"
+          # Explicit refspec — never rely on push.default.
+          git -C ghp push origin HEAD:refs/heads/gh-pages
 
       - name: Attach results to the GitHub release
         if: steps.ctx.outputs.skip == 'false' && steps.ctx.outputs.tag != ''

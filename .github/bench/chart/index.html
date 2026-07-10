@@ -117,6 +117,10 @@ runner. Allocation (B/op) is the comparable metric; timing is directional.</p>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
+// Series data is bot-written from repo code, but escape anyway — the page
+// must never trust benchmark-derived strings (same rule as the PR comment).
+const escHtml = (s) => String(s).replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const SIDE = /^(eo|m)(?=[A-Z0-9])/;
 let entries = [], metric = "bop";
 
@@ -155,7 +159,7 @@ function drawPanel(panel) {
   const W = 330, H = 170, L = 46, R = 34, T = 8, B = 22;
   const div = document.createElement("div");
   div.className = "panel";
-  div.innerHTML = `<h3>${panel.stem}</h3><p class="params">${panel.params === "-" ? "" : panel.params}</p>`;
+  div.innerHTML = `<h3>${escHtml(panel.stem)}</h3><p class="params">${panel.params === "-" ? "" : escHtml(panel.params)}</p>`;
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
     "aria-label": `${panel.stem} ${metric} history` });
   div.appendChild(svg);
@@ -233,9 +237,9 @@ function drawPanel(panel) {
     const row = (name, r) => r == null ? "" :
       `<div><span class="k">${name}:</span> ${fmt(r[metric])} ${metric === "bop" ? "B/op" : "ns/op"}` +
       (metric === "ns" && r.ns_err != null ? ` ± ${fmt(r.ns_err)}` : "") + `</div>`;
-    tip.innerHTML = `<div><b>${e.date || ""}</b> <span class="k">${(e.source_sha || "").slice(0, 7)}</span></div>` +
+    tip.innerHTML = `<div><b>${escHtml(e.date || "")}</b> <span class="k">${escHtml((e.source_sha || "").slice(0, 7))}</span></div>` +
       row("eo", eo) + row("monocle", m) +
-      `<div class="k">${e.profile || ""}</div>`;
+      `<div class="k">${escHtml(e.profile || "")}</div>`;
     tip.style.display = "block";
     tip.style.left = Math.min(ev.clientX + 14, innerWidth - 310) + "px";
     tip.style.top = (ev.clientY + 14) + "px";
@@ -251,7 +255,7 @@ function renderTable(fam) {
   const rows = last.results.filter((r) => familyOf(r.b) === fam);
   $("table").innerHTML =
     `<table><tr><th>benchmark</th><th>params</th><th>ns/op</th><th>±</th><th>B/op</th></tr>` +
-    rows.map((r) => `<tr><td>${r.b}</td><td>${r.p}</td><td>${fmt(r.ns)}</td>` +
+    rows.map((r) => `<tr><td>${escHtml(r.b)}</td><td>${escHtml(r.p)}</td><td>${fmt(r.ns)}</td>` +
       `<td>${fmt(r.ns_err)}</td><td>${fmt(r.bop)}</td></tr>`).join("") +
     `</table>`;
 }

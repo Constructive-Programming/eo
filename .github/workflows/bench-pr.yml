@@ -159,17 +159,31 @@ jobs:
                 --jdk temurin-21 --runner ubuntu-22.04 \
                 --jmh-params "$JMH_FLAGS" --profile "$JMH_PROFILE")
           GATE=0
+          TOOLFAIL=0
           if [ "$BASE_OUTCOME" != "success" ] || [ "$HEAD_OUTCOME" != "success" ]; then
             FAIL="base: $BASE_OUTCOME, head: $HEAD_OUTCOME — sbt Jmh/run failed (compile error on that side? see the run logs)"
             python3 .github/bench/bench_tools.py comment-md --failure "$FAIL" > comment.md
           else
+            # Exit 3 = B/op gate violation; any OTHER non-zero exit is a
+            # tooling failure (e.g. truncated JMH JSON) and must render as
+            # an explicit ❌ comment, never masquerade as a gate result.
+            set +e
             python3 .github/bench/bench_tools.py diff \
-              benchmarks/base.json benchmarks/head.json -o deltas.json "${PROV[@]}" \
-              || GATE=$?
-            python3 .github/bench/bench_tools.py comment-md deltas.json > comment.md
+              benchmarks/base.json benchmarks/head.json -o deltas.json "${PROV[@]}"
+            RC=$?
+            set -e
+            if [ "$RC" -eq 0 ] || [ "$RC" -eq 3 ]; then
+              GATE=$RC
+              python3 .github/bench/bench_tools.py comment-md deltas.json > comment.md
+            else
+              TOOLFAIL=$RC
+              python3 .github/bench/bench_tools.py comment-md \
+                --failure "bench tooling failed (diff exit $RC) — truncated JMH JSON? see run logs" > comment.md
+            fi
           fi
           cat comment.md >> "$GITHUB_STEP_SUMMARY"
           echo "gate=$GATE" >> "$GITHUB_OUTPUT"
+          echo "toolfail=$TOOLFAIL" >> "$GITHUB_OUTPUT"
 
       - name: Post sticky comment
         if: steps.plan.outputs.skip == 'false' && github.event_name == 'pull_request'
@@ -199,6 +213,14 @@ jobs:
             noise-report.md
           retention-days: 30
           if-no-files-found: warn
+
+      # A tool crash is a broken pipeline, not a benchmark result — fail the
+      # job loudly AFTER the ❌ comment has been posted.
+      - name: Fail on tooling error
+        if: steps.plan.outputs.skip == 'false' && steps.diff.outputs.toolfail != '0'
+        run: |
+          echo "bench tooling failed (exit ${{ steps.diff.outputs.toolfail }}); ❌ comment posted."
+          exit 1
 
       # Advisory-first (R4): while thresholds.json is absent, `diff` always
       # exits 0 and this step never fires. Once calibration lands a
