@@ -285,7 +285,16 @@ async function main() {
        after the first sweep runs.</p>`);
     return;
   }
-  entries = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  try {
+    entries = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  } catch (e) {
+    // A missing file can surface as a 200 HTML fallback page (Cloudflare
+    // Pages) rather than a 404 — treat unparseable content as "no series".
+    document.body.insertAdjacentHTML("beforeend",
+      `<p class="err">series.jsonl is not parseable (${e}). The series appears
+       after the first sweep runs.</p>`);
+    return;
+  }
   if (!entries.length) {
     document.body.insertAdjacentHTML("beforeend",
       `<p class="err">series.jsonl is empty — no sweeps recorded yet.</p>`);
