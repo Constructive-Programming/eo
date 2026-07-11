@@ -694,6 +694,9 @@ lazy val docs: Project = project
           // above (scmInfo := None) so this list is the full set in
           // the rendered order.
           navLinks = Seq(
+            // Benchmark history chart — a static page in laika-static/,
+            // so an internal link (preview-deployment-safe).
+            TextLink.internal(Path.Root / "bench" / "index.html", "bench history"),
             ImageLink.external(
               "https://www.constructive.dev/",
               Image.external("https://www.constructive.dev/assets/img/favicon.svg"),

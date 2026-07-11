@@ -87,9 +87,13 @@
   td { font-variant-numeric: tabular-nums; }
   .err { color: var(--ink-2); background: var(--surface-1); padding: 16px;
          border: 1px solid var(--border); border-radius: 10px; }
+  .crumbs { font-size: 0.85rem; color: var(--ink-2); margin-bottom: 12px; }
+  .crumbs a { color: var(--series-eo); text-decoration: none; }
+  .crumbs a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
+<nav class="crumbs"><a href="../">cats-eo docs</a> · <a href="../benchmarks.html">benchmarks</a></nav>
 <h1>cats-eo benchmark history</h1>
 <p class="sub">One point per full sweep (nightly-if-changed + releases), GitHub-hosted
 runner. Allocation (B/op) is the comparable metric; timing is directional.</p>

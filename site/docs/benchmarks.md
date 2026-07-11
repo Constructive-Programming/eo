@@ -35,7 +35,7 @@ table, and for the ratios everywhere, the signal holds.
 > [`benchmarks/README.md`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md).
 
 For the trend over time, the nightly sweep pipeline records every full run:
-the **[benchmark history chart](https://eo.constructive.dev/bench/)** plots B/op and ns/op per benchmark
+the **[benchmark history chart](bench/index.html)** plots B/op and ns/op per benchmark
 across sweeps, and the latest full table is generated into
 [`BENCHMARKS.md`](https://github.com/Constructive-Programming/eo/blob/main/BENCHMARKS.md).
 
