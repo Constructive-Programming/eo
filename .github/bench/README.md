@@ -11,8 +11,8 @@ only metric that may ever gate; ns/op is directional advice.**
 |---|---|
 | `bench_tools.py` | All pipeline logic (mapping, diff, rendering). `python3 -m unittest discover .github/bench` runs its suite; both workflows run it as their first step. |
 | `bench-pr.yml` | Same-job A/B on same-repo PRs touching mapped paths: merge-base run, head run, sticky comment. `perf:full` label ⇒ full suite. `workflow_dispatch mode=aa` ⇒ noise calibration. |
-| `bench-sweep.yml` | Nightly-if-changed + release-tag full sweep. Publishes gh-pages `bench/series.jsonl` + chart, bot-commits `BENCHMARKS.md` (`[skip ci]`), attaches `jmh-results-<tag>.json` to releases. |
-| `chart/index.html` | Static history chart, deployed by the sweep next to the series. |
+| `bench-sweep.yml` | Nightly-if-changed + release-tag full sweep. One atomic bot commit to main (`[skip ci]`) carrying `BENCHMARKS.md` + an append to `site/laika-static/bench/series.jsonl`; attaches `jmh-results-<tag>.json` to releases. |
+| `site/laika-static/bench/index.html` | Static history chart, shipped in-tree; Laika copies it (and the series) verbatim into the docs site, so it serves at `/bench/` on the existing Cloudflare Pages deployment — refreshed at each site deploy (preview per main push, production per `v*` tag). |
 | `thresholds.json` | **Absent = advisory (current state).** Present = the B/op gate is live. |
 
 ## Running the tool locally
@@ -77,7 +77,7 @@ recorded in the provenance (`--jmh-params` / `--profile`).
   `contents: read` + `pull-requests: write`; the sticky-comment action is
   SHA-pinned. Fork PRs get no run/comment (deploy-site.yml caveat).
 - `bench-sweep.yml` executes trusted main/tag code only and is the sole
-  holder of `contents: write` and the sole writer of gh-pages.
+  holder of `contents: write` and the sole writer of the series file.
 - Bot pushes use the plain `GITHUB_TOKEN` (proven by
   update-readme-version.yml). If branch protection ever blocks it, switch
   to a fine-grained PAT or GitHub App with contents:write and add it as a
@@ -86,6 +86,7 @@ recorded in the provenance (`--jmh-params` / `--profile`).
 ## One-time repo setup
 
 - [ ] Create the `perf:full` label (`gh label create perf:full ...`).
-- [ ] After the first sweep creates `gh-pages`: repo Settings → Pages →
-      deploy from `gh-pages` branch, `/ (root)`; the chart then serves at
-      `https://<owner>.github.io/eo/bench/`.
+
+No Pages setup needed: the chart and series ride the existing docs-site
+deployment (Laika copies `site/laika-static/` verbatim; deploy-site.yml
+ships it to Cloudflare Pages), serving at `https://eo.constructive.dev/bench/`.
