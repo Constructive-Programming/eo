@@ -20,10 +20,13 @@ import optics.Optic.*
   * extension drives off.
   */
 trait IsoLaws[S, A]:
+  /** The optic under test. */
   def iso: Optic[S, S, A, A, Direct]
 
+  /** `reverseGet(get(s)) == s` — deconstruct-then-rebuild is the identity on `S`. */
   def roundTripOneWay(s: S): Boolean =
     iso.reverseGet(iso.get(s)) == s
 
+  /** `get(reverseGet(a)) == a` — rebuild-then-deconstruct is the identity on `A`. */
   def roundTripOtherWay(a: A): Boolean =
     iso.get(iso.reverseGet(a)) == a

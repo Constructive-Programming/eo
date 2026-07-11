@@ -9,8 +9,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ModifyFLaws]]. */
 abstract class ModifyFTests[X, A] extends Laws:
+  /** Laws under test. */
   def laws: ModifyFLaws[X, A]
 
+  /** The "ModifyF" rule set. */
   def modifyF(using
       Arbitrary[Fst[X]],
       Arbitrary[Snd[X]],

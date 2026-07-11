@@ -64,10 +64,10 @@ final class PickFold[S, A](val pick: S => Option[A])
     new PickFold(s => pick(s).flatMap(inner.pick))
 
   /** Read-only outer ∘ ANY inner — a `PickFold` only reads (partially), so the inner's write side
-    * is irrelevant and the composite is the read-only join via [[ReadCompose]] (`PickFold` unless
-    * the inner has many foci, then `ForgetFold`). Covers the writable inners (`affineFold ∘ lens /
-    * prism / optional / traversal`); the fused `andThen(Getter)` / `andThen(PickFold)` members
-    * above stay as the more-specific fast paths.
+    * is irrelevant and the composite is the read-only join via [[compose.ReadCompose]] (`PickFold`
+    * unless the inner has many foci, then `ForgetFold`). Covers the writable inners (`affineFold ∘
+    * lens / prism / optional / traversal`); the fused `andThen(Getter)` / `andThen(PickFold)`
+    * members above stay as the more-specific fast paths.
     */
   @targetName("andThenReadAny")
   def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using

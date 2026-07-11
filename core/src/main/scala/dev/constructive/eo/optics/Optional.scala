@@ -96,7 +96,7 @@ final class Optional[S, T, A, B](
 
   /** Shared fused-andThen kernel for `Optional` outer. Outer-miss short-circuits; outer-hit threads
     * through `innerHit` (read) and `innerWrite` (write). `inline` so call sites allocate the same
-    * single Optional they would pre-refactor.
+    * single Optional a hand-fused compose would.
     *
     *   - `innerHit(s, a)` — given the original `s` and outer-hit focus `a`, returns either a final
     *     `T` (inner-miss, lifted via outer.reverseGet) or a combined focus `C`.

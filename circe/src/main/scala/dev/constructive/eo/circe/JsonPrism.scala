@@ -27,8 +27,8 @@ import io.circe.{Decoder, Encoder, Json}
   *     surfaces as `Ior.Both(chain, inputJson)`.
   *   - `*Unsafe`: silent pass-through hot path.
   *
-  * Storage decomposition: a `JsonPrism[A]` holds a [[JsonFocus]] (Leaf vs Fields). The
-  * compatibility alias [[JsonFieldsPrism]] points back at this class so old code keeps compiling.
+  * Storage decomposition: a `JsonPrism[A]` holds a `JsonFocus` (Leaf vs Fields). The compatibility
+  * alias [[JsonFieldsPrism]] points back at this class so old code keeps compiling.
   */
 final class JsonPrism[A] private[circe] (
     private[circe] val focus: JsonFocus[A]
@@ -36,7 +36,9 @@ final class JsonPrism[A] private[circe] (
       JsonOpticOps[A],
       Dynamic:
 
-  // Fst[X] = source json (Miss pass-through); Snd[X] = the single-walk writer captured by `to`.
+  /** Existential seam: `Fst[X]` = source json (Miss pass-through); `Snd[X]` = the single-walk
+    * sibling-preserving writer captured by [[to]].
+    */
   type X = (Json, A => Json)
 
   /** The focus's storage path (`path` for a Leaf focus, `parentPath` for a Fields focus). */
@@ -48,19 +50,27 @@ final class JsonPrism[A] private[circe] (
   private[circe] def encoder: Encoder[A] = focus.encoder
   private[circe] def decoder: Decoder[A] = focus.decoder
 
-  // Selectable field sugar — `codecPrism[Person].name` lowers to
-  // `codecPrism[Person].field(_.name)` via the macro.
-
+  /** Dynamic field sugar — `codecPrism[Person].name` lowers to `codecPrism[Person].field(_.name)`.
+    * Compile-time checked against `A`'s case fields; the field's codecs are summoned at the call
+    * site, so the result is a precisely-typed child `JsonPrism`.
+    */
   transparent inline def selectDynamic(inline name: String): Any =
     ${ JsonPrismMacro.selectFieldImpl[A]('{ this }, 'name) }
 
   // ---- Abstract Optic members ---------------------------------------
 
+  /** Navigate + decode in ONE walk. Hit carries the decoded focus and a writer that splices a new
+    * focus back into the SOURCE json (siblings preserved); Miss carries the source for
+    * pass-through.
+    */
   def to(json: Json): Affine[X, A] =
     focus.navigateForWrite(json) match
       case Left(_)            => new Affine.Miss[X, A](json)
       case Right((a, writer)) => new Affine.Hit[X, A](writer, a)
 
+  /** Rebuild: Hit applies the captured writer to the (possibly modified) focus; Miss returns the
+    * source unchanged.
+    */
   def from(aff: Affine[X, A]): Json =
     aff match
       case m: Affine.Miss[X, A] => m.fst
@@ -68,6 +78,9 @@ final class JsonPrism[A] private[circe] (
 
   // ---- Read surface (single-focus specific) -------------------------
 
+  /** Read the focus. `String` input is parsed first (parse failures arrive as
+    * `JsonFailure.ParseFailed`); navigation / decode failures surface as `Ior.Left(chain)`.
+    */
   def get(input: Json | String): Ior[Chain[JsonFailure], A] =
     JsonFailure.parseInputIor(input).flatMap(focus.readIor)
 
@@ -77,6 +90,7 @@ final class JsonPrism[A] private[circe] (
     */
   inline def reverseGet(a: A): Json = focus.encoder(a)
 
+  /** Silent read — `None` on any parse / navigation / decode failure. */
   inline def getOptionUnsafe(input: Json | String): Option[A] =
     focus.readImpl(JsonFailure.parseInputUnsafe(input))
 

@@ -20,8 +20,10 @@ import optics.Optic.*
 
 /** D1 — `optic.modifyA[Id]` is pointwise equal to `optic.modify`. */
 trait ModifyAIdLaws[S, A, F[_, _]]:
+  /** The optic under test. */
   def optic: Optic[S, S, A, A, F]
 
+  /** `modifyA[Id](f)(s) == modify(f)(s)`. */
   def modifyAIdIsModify(s: S, f: A => A)(using
       ForgetfulFunctor[F],
       ForgetfulTraverse[F, Applicative],
@@ -34,8 +36,10 @@ trait ModifyAIdLaws[S, A, F[_, _]]:
   * with `M = Int` (additive).
   */
 trait ModifyAConstLaws[S, A, F[_, _]]:
+  /** The optic under test. */
   def optic: Optic[S, S, A, A, F]
 
+  /** `modifyA[Const[Int, *]](Const(f(_)))(s).getConst == foldMap(f)(s)`. */
   def modifyAConstIsFoldMap(s: S, f: A => Int)(using
       ForgetfulFold[F],
       ForgetfulTraverse[F, Applicative],

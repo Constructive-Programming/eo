@@ -20,10 +20,16 @@ import dev.constructive.eo.optics.{Optic, Prism}
   */
 object PrismMacro:
 
-  /** @group Constructors */
+  /** Inline entry behind the top-level `prism[S, A]` — see the object doc for accepted shapes.
+    *
+    * @group Constructors
+    */
   inline def derive[S, A <: S]: Optic[S, S, A, A, Either] =
     ${ deriveImpl[S, A] }
 
+  /** Quoted-macro implementation behind [[derive]] — instantiates the Hearth-backed derivation
+    * against the call-site `Quotes`.
+    */
   def deriveImpl[S: Type, A <: S: Type](using
       q: Quotes
   ): Expr[Optic[S, S, A, A, Either]] =

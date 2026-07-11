@@ -9,12 +9,10 @@ import cats.Eq
   * representation for testability; [[message]] gives a human-readable diagnostic.
   *
   * Mirrors `dev.constructive.eo.circe.JsonFailure` case-for-case, plus the schema-driven cases that
-  * Avro adds: [[UnionResolutionFailed]], [[BadEnumSymbol]]. The two tied carriers differ on exactly
-  * the schema-aware concept set; that's why eo-avro ships its own ADT rather than a shared one with
+  * Avro adds: [[AvroFailure.UnionResolutionFailed]], [[AvroFailure.BadEnumSymbol]]. The two tied
+  * carriers differ on exactly the schema-aware concept set; like [[PathStep]], this ADT is a
+  * deliberate divergence from `JsonFailure` — sharing would force Avro-specific cases into
   * eo-circe.
-  *
-  * '''Gap-1 (per the eo-avro plan).''' Like [[PathStep]], this ADT is a deliberate divergence from
-  * `JsonFailure`. Sharing would force Avro-specific cases into eo-circe.
   */
 enum AvroFailure:
 
@@ -39,7 +37,7 @@ enum AvroFailure:
 
   /** Input `Array[Byte]` didn't parse as an Avro binary record under the supplied schema. Surfaced
     * only by the `Avro | Array[Byte]` overloads; when the caller passes a parsed
-    * [[org.apache.avro.generic.IndexedRecord]] directly this case cannot fire.
+    * `org.apache.avro.generic.IndexedRecord` directly this case cannot fire.
     */
   case BinaryParseFailed(cause: Throwable)
 
@@ -63,11 +61,11 @@ enum AvroFailure:
     */
   case BadEnumSymbol(symbol: String, valid: List[String], step: PathStep)
 
-  /** The byte-offset locator ([[AvroBinaryCursor]]) reached a [[PathStep]] kind it cannot resolve
-    * to a byte span — currently [[PathStep.Index]]: array elements sit inside length-prefixed
-    * blocks, so a single element's span is not graftable without rewriting the block framing.
-    * Surfaced only by `sliceBytes` / `graftBytes`; the decode-based surfaces (`get` / `modify` /
-    * `at`) keep supporting Index steps.
+  /** The byte-offset locator (`AvroBinaryCursor`) reached a [[PathStep]] kind it cannot resolve to
+    * a byte span — currently [[PathStep.Index]]: array elements sit inside length-prefixed blocks,
+    * so a single element's span is not graftable without rewriting the block framing. Surfaced only
+    * by `sliceBytes` / `graftBytes`; the decode-based surfaces (`get` / `modify` / `at`) keep
+    * supporting Index steps.
     */
   case UnsupportedSpanStep(step: PathStep)
 

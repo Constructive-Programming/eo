@@ -9,12 +9,12 @@ import dev.constructive.eo.compose.*
 import optics.Optic
 import optics.Optic.*
 
-/** Laws for `Composer.chainViaTuple2` — multi-hop carrier coercion. Two laws: C1 path independence
-  * (two intermediates → same modify output) and C2 preserves `get` on `Accessor`-bearing chains.
-  */
+// Laws for `Composer.chainViaTuple2` — multi-hop carrier coercion. Two laws: C1 path independence
+// (two intermediates → same modify output) and C2 preserves `get` on `Accessor`-bearing chains.
 
 /** C1 — path independence. An Iso → Affine via Tuple2 vs via Either should be modify-equivalent. */
 trait ComposerPathIndependenceLaws[S, A]:
+  /** The optic under test. */
   def iso: Optic[S, S, A, A, Direct]
 
   // Spelled out explicitly to sidestep the `iso.morph[Affine]` ambiguity.
@@ -24,17 +24,27 @@ trait ComposerPathIndependenceLaws[S, A]:
   private def viaEither: Optic[S, S, A, A, Affine] =
     Affine.either2affine.to(Composer.direct2either.to(iso))
 
+  /** `Direct→Tuple2→Affine` and `Direct→Either→Affine` agree on `modify`. */
   def pathIndependence(s: S, f: A => A): Boolean =
     viaTuple2.modify(f)(s) == viaEither.modify(f)(s)
 
 /** C2 — chain preserves `get` whenever both ends have an `Accessor`. */
 trait ComposerPreservesGetLaws[S, A, F[_, _], G[_, _], H[_, _]]:
+  /** The optic under test. */
   def optic: Optic[S, S, A, A, F]
+
+  /** First coercion hop. */
   def fToG: Composer[F, G]
+
+  /** Second coercion hop. */
   def gToH: Composer[G, H]
 
+  /** `Accessor` evidence at the chain's start carrier. */
   given accessorF: _root_.dev.constructive.eo.accessor.Accessor[F]
+
+  /** `Accessor` evidence at the chain's end carrier. */
   given accessorH: _root_.dev.constructive.eo.accessor.Accessor[H]
 
+  /** `gToH.to(fToG.to(optic)).get(s) == optic.get(s)`. */
   def preservesGet(s: S): Boolean =
     gToH.to(fToG.to(optic)).get(s) == optic.get(s)

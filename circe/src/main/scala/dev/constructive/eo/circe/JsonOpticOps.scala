@@ -29,29 +29,45 @@ private[circe] trait JsonOpticOps[A]:
 
   // ---- Default (Ior-bearing) surface --------------------------------
 
+  /** Decode each focus, apply `f`, re-encode in place. `String` input is parsed first; failures
+    * accumulate as `Chain[JsonFailure]`, with the input Json preserved on the `Ior.Both` side.
+    */
   def modify(f: A => A): (Json | String) => Ior[Chain[JsonFailure], Json] =
     input => JsonFailure.parseInputIor(input).flatMap(j => modifyIor(j, f))
 
+  /** Rewrite the raw `Json` at each focus — no decode of the focus, so `f` sees (and must return)
+    * plain Json. Same parse / failure-accumulation behaviour as [[modify]].
+    */
   def transform(f: Json => Json): (Json | String) => Ior[Chain[JsonFailure], Json] =
     input => JsonFailure.parseInputIor(input).flatMap(j => transformIor(j, f))
 
+  /** Replace each focus with the encoding of `a`. Same parse / failure-accumulation behaviour as
+    * [[modify]].
+    */
   def place(a: A): (Json | String) => Ior[Chain[JsonFailure], Json] =
     input => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, a))
 
+  /** [[place]] from a foreign source: replace each focus with the encoding of `f(c)`. */
   def transfer[C](f: C => A): (Json | String) => C => Ior[Chain[JsonFailure], Json] =
     input => c => JsonFailure.parseInputIor(input).flatMap(j => placeIor(j, f(c)))
 
   // ---- *Unsafe (silent) escape hatches -------------------------------
 
+  /** Silent [[modify]] — any parse / navigation / decode failure passes the input through unchanged
+    * (an unparseable `String` becomes `Json.Null` first).
+    */
   def modifyUnsafe(f: A => A): (Json | String) => Json =
     input => modifyImpl(JsonFailure.parseInputUnsafe(input), f)
 
+  /** Silent [[transform]] — input pass-through on any failure. */
   def transformUnsafe(f: Json => Json): (Json | String) => Json =
     input => transformImpl(JsonFailure.parseInputUnsafe(input), f)
 
+  /** Silent [[place]] — input pass-through on any failure. */
   def placeUnsafe(a: A): (Json | String) => Json =
     input => placeImpl(JsonFailure.parseInputUnsafe(input), a)
 
+  /** Silent [[transfer]] — input pass-through on any failure. */
   def transferUnsafe[C](f: C => A): (Json | String) => C => Json =
     input => c => placeImpl(JsonFailure.parseInputUnsafe(input), f(c))
 

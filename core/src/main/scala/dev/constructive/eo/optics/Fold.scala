@@ -76,8 +76,8 @@ final class ForgetFold[S, F[_], A](
 
   /** Read-only outer ∘ ANY inner — a `Fold` only reads (many), so the inner's write side is
     * irrelevant and the composite is always a `ForgetFold` (many ∘ anything = many) via
-    * [[ReadCompose]]. Covers the writable inners (`fold ∘ lens / prism / optional / traversal`);
-    * the fused same-`F` `andThen` above stays as the more-specific fast path.
+    * [[compose.ReadCompose]]. Covers the writable inners (`fold ∘ lens / prism / optional /
+    * traversal`); the fused same-`F` `andThen` above stays as the more-specific fast path.
     */
   @targetName("andThenReadAny")
   def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using

@@ -1,12 +1,12 @@
 package dev.constructive.eo.jsoniter
 
-/** One step of a JSON path expression. Phase-1.5 scope:
+/** One step of a JSON path expression:
   *
   *   - `.field` — descend into an object property by exact name (powers [[JsoniterPrism]]).
   *   - `[i]` — descend into an array element by zero-based index (powers [[JsoniterPrism]]).
   *   - `[*]` — fan out across every element of the current array (powers [[JsoniterTraversal]]).
   *
-  * Filters / recursive descent are still deferred to phase 2+.
+  * Filters / recursive descent are out of scope.
   *
   * @group AST
   */

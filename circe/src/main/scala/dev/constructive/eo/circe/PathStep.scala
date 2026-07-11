@@ -5,10 +5,13 @@ package dev.constructive.eo.circe
   * The path walker dispatches on the case to decide which of circe's representations to pierce:
   * `JsonObject` for named fields, or the underlying `Vector[Json]` for array indices.
   *
-  * Visibility is package-default (public) so users can read `PathStep` values off [[JsonFailure]]
-  * instances exposed by the default [[JsonPrism]] / [[JsonTraversal]] Ior-bearing surface. The
-  * `Field(name)` and `Index(i)` constructors are stable across v0.2.
+  * Public so users can read `PathStep` values off [[JsonFailure]] instances exposed by the default
+  * [[JsonPrism]] / [[JsonTraversal]] Ior-bearing surface.
   */
 enum PathStep:
+
+  /** Descend into the named object field. */
   case Field(name: String)
+
+  /** Descend into the array element at zero-based index `i`. */
   case Index(i: Int)

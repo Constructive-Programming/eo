@@ -24,6 +24,7 @@ import optics.Optic.*
   * that check should exercise it as a spec-level property test against the concrete constructor.
   */
 trait FoldLaws[S, A, F[_, _]]:
+  /** The optic under test. */
   def fold: Optic[S, Unit, A, Unit, F]
 
   /** `foldMap(const(mempty))(s) == mempty` for any source `s`. */

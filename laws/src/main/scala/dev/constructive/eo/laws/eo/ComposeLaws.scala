@@ -15,35 +15,48 @@ import optics.Optic.*
 
 /** C1/C2 — Lens ∘ Lens composition laws. */
 trait LensComposeLaws[S, A, B]:
+  /** Outer optic. */
   def outer: Optic[S, S, A, A, Tuple2]
+
+  /** Inner optic. */
   def inner: Optic[A, A, B, B, Tuple2]
 
+  /** C1 — `(o ∘ i).get(s) == i.get(o.get(s))`. */
   def composedGet(s: S): Boolean =
     outer.andThen(inner).get(s) == inner.get(outer.get(s))
 
+  /** C2 — `(o ∘ i).replace(b)(s) == o.replace(i.replace(b)(o.get(s)))(s)`. */
   def composedReplace(s: S, b: B): Boolean =
     outer.andThen(inner).replace(b)(s) ==
       outer.replace(inner.replace(b)(outer.get(s)))(s)
 
 /** C3/C4 — Iso ∘ Iso composition laws. */
 trait IsoComposeLaws[S, A, B]:
+  /** Outer optic. */
   def outer: Optic[S, S, A, A, Direct]
+
+  /** Inner optic. */
   def inner: Optic[A, A, B, B, Direct]
 
   // Both `Direct.assoc` and `Affine.assoc` go by the bare name `assoc`; this alias pins the
   // Direct instance for this trait's `andThen` calls.
   private given forgetfulAssoc[X, Y]: AssociativeFunctor[Direct, X, Y] = Direct.assoc
 
+  /** C3 — `(o ∘ i).get(s) == i.get(o.get(s))`. */
   def composedGet(s: S): Boolean =
     outer.andThen(inner).get(s) == inner.get(outer.get(s))
 
+  /** C4 — `(o ∘ i).reverseGet(c) == o.reverseGet(i.reverseGet(c))`. */
   def composedReverseGet(c: B): Boolean =
     outer.andThen(inner).reverseGet(c) ==
       outer.reverseGet(inner.reverseGet(c))
 
 /** C5 — Prism ∘ Prism composition laws. */
 trait PrismComposeLaws[S, A, B]:
+  /** Outer optic. */
   def outer: Optic[S, S, A, A, Either]
+
+  /** Inner optic. */
   def inner: Optic[A, A, B, B, Either]
 
   private def getOpt[X, Y](
@@ -64,8 +77,12 @@ trait PrismComposeLaws[S, A, B]:
 
 /** Optional ∘ Optional composition laws. */
 trait OptionalComposeLaws[S, A, B]:
-  // X <: Tuple matches `Optional.apply`'s `type X = (T, S)` materialisation.
+  /** Outer optic — the `X <: Tuple` refinement matches `Optional.apply`'s `type X = (T, S)`
+    * materialisation.
+    */
   val outer: Optic[S, S, A, A, Affine] { type X <: Tuple }
+
+  /** Inner optic. */
   val inner: Optic[A, A, B, B, Affine] { type X <: Tuple }
 
   // Disambiguate `Affine.assoc` from the ambient `Direct.assoc` wildcard import.

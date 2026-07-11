@@ -43,9 +43,9 @@ final class Getter[S, A](read: S => A)
     new Getter(s => inner.get(get(s)))
 
   /** Read-only outer ∘ ANY inner — a `Getter` only reads, so the inner's write side is irrelevant
-    * and the composite is the read-only join via [[ReadCompose]] (`Getter` when the inner reads
-    * totally, `PickFold` when partially, `ForgetFold` when it has many foci). This member covers
-    * the writable inners (`getter ∘ lens / prism / optional / traversal`) that the trait's
+    * and the composite is the read-only join via [[compose.ReadCompose]] (`Getter` when the inner
+    * reads totally, `PickFold` when partially, `ForgetFold` when it has many foci). This member
+    * covers the writable inners (`getter ∘ lens / prism / optional / traversal`) that the trait's
     * read-only-inner overload cannot reach; the fused `andThen(Getter)` / `andThen(PickFold)`
     * members above stay as the more-specific fast paths.
     */

@@ -4,7 +4,8 @@ import scala.quoted.*
 
 import dev.constructive.eo.generics.MacroSelectors
 
-/** Macros backing `AvroPrism.field(_.x)`, `selectDynamic`, `at(i)`, `union[Branch]`. Mirror of
+/** Macros backing the drilling sugar on [[AvroPrism]] and [[AvroTraversal]] — `.field(_.x)`,
+  * `selectDynamic`, `.at(i)`, `.union[Branch]`, `.each`, `.fields(...)`. Mirror of
   * `circe.JsonPrismMacro`, with two-given codec summoning (`AvroEncoder + AvroDecoder`) collapsed
   * to one [[AvroCodec]] wrapper. Uses `'{ this }` rather than `'this` (scalafix-parser limitation).
   */
@@ -263,11 +264,10 @@ object AvroPrismMacro:
       '{ $parent.widenSuffix[b](${ Expr(name) }, ${ Expr(declIdx) })(using $codecB) }
     }
 
-  /** Shared backbone for [[fieldsImpl]] (and, in Unit 6+, the matching traversal-side
-    * `fieldsTraversalImpl`). Validates the varargs selector list per the plan's D10 rules,
-    * synthesises the SELECTOR-order NamedTuple type, summons its [[AvroCodec]], and hands the three
-    * pieces (`namesExpr`, the codec expression, plus the `Type[nt]` evidence) to the
-    * caller-supplied `emit` callback.
+  /** Shared backbone for [[fieldsImpl]] / [[fieldsTraversalImpl]]. Validates the varargs selector
+    * list (arity ≥ 2, no duplicates, known non-nested fields), synthesises the SELECTOR-order
+    * NamedTuple type, summons its [[AvroCodec]], and hands the pieces (`namesExpr`, `declIdxsExpr`,
+    * the codec expression, plus the `Type[nt]` evidence) to the caller-supplied `emit` callback.
     *
     * Counterpart to `JsonPrismMacro.fieldsCommon`; the only differences are the codec-summon shape
     * (one [[AvroCodec]] vs circe's `Encoder` / `Decoder` pair) and the error-message hint pointing

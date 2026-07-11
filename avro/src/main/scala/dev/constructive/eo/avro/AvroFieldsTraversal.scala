@@ -1,11 +1,10 @@
 package dev.constructive.eo.avro
 
-/** Compatibility alias for the multi-field Traversal shape on the Avro carrier.
-  *
-  * '''2026-04-27 (Unit 6).''' Originally planned as a separate class. Now an `AvroTraversal[A]`
-  * whose focus is an [[AvroFocus.Fields]] — the parentPath / fieldNames / codec storage moved into
-  * the `Fields` focus, and the per-element walk delegates to it (byte-carried by default; the
-  * record-carried Ior surface sits behind `.record`). See [[AvroPrism]]'s class comment for the
-  * rethink history; mirrors `dev.constructive.eo.circe.JsonFieldsTraversal`.
+/** Compatibility alias for the multi-field Traversal shape on the Avro carrier: an
+  * `AvroTraversal[A]` whose per-element focus assembles `A` (a NamedTuple) from selected fields —
+  * the parentPath / fieldNames / codec storage lives in the internal Fields focus, and the
+  * per-element walk delegates to it (byte-carried by default; the record-carried Ior surface sits
+  * behind `.record`). Mirrors `dev.constructive.eo.circe.JsonFieldsTraversal`; see
+  * [[AvroFieldsPrism]] for the same factoring on the prism side.
   */
 type AvroFieldsTraversal[A] = AvroTraversal[A]

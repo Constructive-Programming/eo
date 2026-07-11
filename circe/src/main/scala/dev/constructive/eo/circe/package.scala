@@ -13,8 +13,8 @@ import io.circe.{Decoder, Encoder, Json, JsonObject}
   *   val streetPrism: JsonPrism[String] =
   *     personPrism.field(_.address).field(_.street)
   *   streetPrism.modify(_.toUpperCase)(personJson)
-  *   // → the same Json, with .address.street upper-cased — no Person
-  *   //   ever materialised.
+  *   // → Ior.Right of the same Json, with .address.street upper-cased —
+  *   //   no Person ever materialised.
   * }}}
   */
 package object circe:

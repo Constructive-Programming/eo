@@ -7,12 +7,12 @@ import java.util.{ArrayList, List as JList}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 
-/** The [[org.apache.avro.generic.IndexedRecord]]-carried face of an [[AvroTraversal]] — reachable
+/** The `org.apache.avro.generic.IndexedRecord`-carried face of an [[AvroTraversal]] — reachable
   * ONLY through [[AvroTraversal.record]], never constructed directly. Walks the record from the
   * root down to some array, then applies the focus update to every element of that array.
   *
   * Mirrors `dev.constructive.eo.circe.JsonTraversal` line-for-line: a traversal is "a prism applied
-  * per-element after a prefix walk". Two call-surface tiers (via [[AvroOpticOps]]):
+  * per-element after a prefix walk". Two call-surface tiers (via `AvroOpticOps`):
   *
   *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` / `getAll`
   *     accumulate per-element failures into the chain. Prefix-walk failures return `Ior.Left` —
@@ -32,9 +32,16 @@ final class AvroRecordTraversal[A] private[avro] (
 
   // ---- Read surface (multi-focus specific) --------------------------
 
+  /** Decode the focus of every element of the focused array. Parse / prefix-walk failures return
+    * `Ior.Left`; per-element failures accumulate into the chain while surviving elements land in
+    * the Vector (`Ior.Both`).
+    */
   def getAll(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], Vector[A]] =
     AvroCodec.parseInputIor(input, rootSchemaCached).flatMap(getAllIor)
 
+  /** Silent counterpart to [[getAll]] — refusing elements are dropped; a whole-walk failure yields
+    * `Vector.empty`.
+    */
   inline def getAllUnsafe(input: IndexedRecord | Array[Byte] | String): Vector[A] =
     val record = AvroCodec.parseInputUnsafe(input, rootSchemaCached)
     walkPrefixOpt(record).fold(Vector.empty[A])(_.flatMap {

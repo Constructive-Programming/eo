@@ -6,7 +6,7 @@ import dev.constructive.eo.optics.Optic
 import org.apache.avro.Schema
 import org.apache.avro.generic.IndexedRecord
 
-/** The [[org.apache.avro.generic.IndexedRecord]]-carried face of an [[AvroPrism]] — reachable ONLY
+/** The `org.apache.avro.generic.IndexedRecord`-carried face of an [[AvroPrism]] — reachable ONLY
   * through [[AvroPrism.record]], never constructed directly:
   *
   * {{{
@@ -22,7 +22,7 @@ import org.apache.avro.generic.IndexedRecord
   * `andThen` (the composite threads the writer end-to-end). Same carrier and law story as the byte
   * face; only the root full-cover prism is also a lawful Prism, and [[reverseGet]] stays for it.
   *
-  * Two call-surface tiers (via [[AvroOpticOps]]):
+  * Two call-surface tiers (via `AvroOpticOps`):
   *
   *   - Default Ior-bearing: `modify` / `get` etc. accumulate `Chain[AvroFailure]` on failure;
   *     partial success surfaces as `Ior.Both(chain, inputRecord)`.
@@ -41,18 +41,24 @@ final class AvroRecordPrism[A] private[avro] (
 ) extends Optic[IndexedRecord, IndexedRecord, A, A, Affine],
       AvroOpticOps[A]:
 
-  // Fst[X] = source record (Miss pass-through); Snd[X] = the single-walk writer captured by `to`.
+  /** Structural leftover: `Fst[X]` is the source record (Miss pass-through), `Snd[X]` the
+    * single-walk writer captured by [[to]].
+    */
   type X = (IndexedRecord, A => IndexedRecord)
 
   override protected def rootSchema: Schema = rootSchemaCached
 
   // ---- Abstract Optic members ---------------------------------------
 
+  /** Navigate + decode the focus in one walk; a `Hit` carries the writer that walk captured. */
   def to(record: IndexedRecord): Affine[X, A] =
     focus.navigateForWrite(record) match
       case Left(_)            => new Affine.Miss[X, A](record)
       case Right((a, writer)) => new Affine.Hit[X, A](writer, a)
 
+  /** Apply the captured writer to the (possibly modified) focus — sibling-preserving; a `Miss`
+    * passes the source record through unchanged.
+    */
   def from(aff: Affine[X, A]): IndexedRecord =
     aff match
       case m: Affine.Miss[X, A] => m.fst
@@ -66,7 +72,7 @@ final class AvroRecordPrism[A] private[avro] (
   def get(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], A] =
     AvroCodec.parseInputIor(input, rootSchemaCached).flatMap(focus.readIor)
 
-  /** Encode `a` standalone, returning the codec's [[IndexedRecord]] payload (or a synthesised empty
+  /** Encode `a` standalone, returning the codec's `IndexedRecord` payload (or a synthesised empty
     * record when the encoded value isn't record-shaped). Lawful only for the ROOT full-cover prism
     * (a real `Prism.reverseGet`); on a drilled prism it cannot restore siblings, which is exactly
     * why the Optic seam carries the source instead of calling this. Kept for root full-cover users

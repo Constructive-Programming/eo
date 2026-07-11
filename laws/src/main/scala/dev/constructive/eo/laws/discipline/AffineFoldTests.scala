@@ -8,8 +8,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[AffineFoldLaws]]. */
 abstract class AffineFoldTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: AffineFoldLaws[S, A]
 
+  /** The "AffineFold" rule set. */
   def affineFold(using Arbitrary[S], Cogen[A]): RuleSet =
     new SimpleRuleSet(
       "AffineFold",

@@ -72,6 +72,7 @@ object ForgetK extends LowPriorityForgetInstances:
       */
     def redistribute[D, B](xd: F[D])(fromInner: F[D] => B): F[B]
 
+  /** Shipped [[ForgetPull]] strategies. */
   object ForgetPull:
 
     /** Monad-based pull — the algebraic-lens semantics. `inner.from(xd)` collapses the F[D] to a
@@ -162,11 +163,6 @@ object ForgetK extends LowPriorityForgetInstances:
   given assocForgetMonad[F[_]: Monad, Xo, Xi]: AssociativeFunctor[Forget[F], Xo, Xi] =
     assocFor[F, Xo, Xi](ForgetPull.monadicPull[F])
 
-/** Lower-priority instance drawer — holds the `FlatMap + Comonad` `AssociativeFunctor` which
-  * composes via `coflatMap` (parallel-fold semantics, genuinely different from the Monad-based
-  * algebraic-lens composition in the main object). Kept at lower priority so Monad wins when both
-  * apply.
-  */
 /** API façade under the carrier's public name. The instances live in [[ForgetK]] (the opaque
   * anchor's companion, where implicit scope finds them); this re-export keeps `Forget.assocFor`
   * call-shapes and legacy `import data.Forget.given` working.
@@ -174,6 +170,11 @@ object ForgetK extends LowPriorityForgetInstances:
 object Forget:
   export ForgetK.{given, *}
 
+/** Lower-priority instance drawer — holds the `FlatMap + Comonad` `AssociativeFunctor` which
+  * composes via `coflatMap` (parallel-fold semantics, genuinely different from the Monad-based
+  * algebraic-lens composition in [[ForgetK]]). Kept at lower priority so Monad wins when both
+  * apply.
+  */
 trait LowPriorityForgetInstances:
 
   /** Comonad-pull composition for `F: FlatMap + Comonad`. Composes via `coflatMap` on `from`.

@@ -30,6 +30,7 @@ import optics.Optic.*
   * extension to stay within the existential-optic surface.
   */
 trait AffineFoldLaws[S, A]:
+  /** The optic under test. */
   def af: AffineFold[S, A]
 
   /** `getOption` agrees with the `foldMap`-list head. */

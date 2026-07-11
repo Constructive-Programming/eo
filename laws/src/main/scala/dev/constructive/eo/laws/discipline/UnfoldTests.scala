@@ -13,8 +13,10 @@ import org.typelevel.discipline.Laws
   * unfolds can state.
   */
 abstract class UnfoldTests[T, B, F[_]] extends Laws:
+  /** Laws under test. */
   def laws: UnfoldLaws[T, B, F]
 
+  /** The core "Unfold" rule set — any `Functor[F]` carrier. */
   def unfold(using
       Arbitrary[F[B]],
       Arbitrary[F[Int]],
@@ -33,6 +35,7 @@ abstract class UnfoldTests[T, B, F[_]] extends Laws:
         forAll((g: Int => B, fi: F[Int]) => laws.preComposeCoherent(g, fi)),
     )
 
+  /** Core set plus the vestigial-read law — `Unfold.apply`-built (Applicative) carriers only. */
   def unfoldApplicative(using
       Arbitrary[F[B]],
       Arbitrary[F[Int]],

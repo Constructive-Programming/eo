@@ -14,14 +14,14 @@ import org.apache.avro.Schema
   * }}}
   *
   * `to` resolves the prefix to an array-typed field, walks the array's block framing, and locates +
-  * slice-decodes the focus inside every element ([[AvroBinaryCursor.locateElements]]); `from`
+  * slice-decodes the focus inside every element (`AvroBinaryCursor.locateElements`); `from`
   * re-encodes each focus and splices all spans back in one pass. Avro's standard (positive-count)
   * array framing carries no byte lengths, so per-element splices can change size freely; payloads
   * whose array used the negative-count (byte-sized) framing are RE-FRAMED on write — the whole
   * array region is rebuilt as one canonical positive-count block with the focus splices applied
-  * ([[AvroBinaryCursor.reframeArray]]). Same carrier as
-  * [[dev.constructive.eo.jsoniter.JsoniterTraversal]] (`MultiFocus[PSVec]`), so `.foldMap` / `.all`
-  * / `.modify` / `.headOption` / same-carrier `.andThen` light up from the standard extension
+  * (`AvroBinaryCursor.reframeArray`). Same carrier as
+  * `dev.constructive.eo.jsoniter.JsoniterTraversal` (`MultiFocus[PSVec]`), so `.foldMap` / `.all` /
+  * `.modify` / `.headOption` / same-carrier `.andThen` light up from the standard extension
   * catalogue.
   *
   * Read semantics are "fold the focuses that exist": elements whose focus walk or slice decode
@@ -38,7 +38,7 @@ import org.apache.avro.Schema
   * ([[AvroRecordTraversal]]). Drilling (`.field` / `.at` / `.union[Branch]` / `.fields` / Dynamic
   * selection) stays here, the single mechanism; drill first, flip last.
   *
-  * The Fields-vs-Leaf split lives entirely inside `focus` (per [[AvroFocus]]); the compatibility
+  * The Fields-vs-Leaf split lives entirely inside `focus` (per `AvroFocus`); the compatibility
   * alias [[AvroFieldsTraversal]] points back here.
   */
 final class AvroTraversal[A] private[avro] (
@@ -48,6 +48,9 @@ final class AvroTraversal[A] private[avro] (
 ) extends Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]],
       Dynamic:
 
+  /** Structural leftover: the original payload plus the located element-span plan (`None` on a
+    * whole-walk failure, in which case `from` returns the input).
+    */
   type X = (Array[Byte], Option[AvroBinaryCursor.ElementSpans])
 
   /** The per-element focus path (`path` for a Leaf focus, `parentPath` for a Fields focus). */
@@ -59,12 +62,23 @@ final class AvroTraversal[A] private[avro] (
 
   // ---- Dynamic field sugar -----------------------------------------
 
+  /** Dynamic field sugar — `basket.items.each.name` lowers to `.field(_.name)` via the macro. An
+    * Avro field named like a real member of this class must be drilled with the explicit
+    * `.field(_.x)` form.
+    */
   transparent inline def selectDynamic(inline name: String): Any =
     ${ AvroPrismMacro.selectFieldTraversalImpl[A]('{ this }, 'name) }
 
   // ---- Abstract Optic members ---------------------------------------
 
+  /** Locate every element's focused span and slice-decode the focuses that exist; whole-walk
+    * failure yields no foci (and a `None` plan, so [[from]] passes the input through).
+    */
   def to(bytes: Array[Byte]): MultiFocus[PSVec][X, A] = scan(bytes)
+
+  /** Re-encode each focus and splice all spans back in one pass (re-framing the array region when
+    * the original framing was byte-sized); any refusal returns the input bytes.
+    */
   def from(mf: MultiFocus[PSVec][X, A]): Array[Byte] = spliceFoci(mf)
 
   private def scan(bytes: Array[Byte]): MultiFocus[PSVec][X, A] =
@@ -130,8 +144,8 @@ final class AvroTraversal[A] private[avro] (
 
   // ---- Record-carried face -------------------------------------------
 
-  /** The [[org.apache.avro.generic.IndexedRecord]]-carried counterpart of this traversal — the
-    * Ior-bearing diagnostic surface (`modify` / `getAll` / `place` / `transfer` + `*Unsafe`) over
+  /** The `IndexedRecord`-carried counterpart of this traversal — the Ior-bearing diagnostic surface
+    * (`modify` / `getAll` / `place` / `transfer` + `*Unsafe`) over
     * `IndexedRecord | Array[Byte] | String` input:
     *
     * {{{

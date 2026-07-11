@@ -14,8 +14,10 @@ import org.typelevel.discipline.Laws
   * (ForgetfulFunctor vs. Accessor) and not every carrier pair satisfies both.
   */
 abstract class MorphTests[S, A, F[_, _], G[_, _]] extends Laws:
+  /** Laws under test. */
   def laws: MorphLaws[S, A, F, G]
 
+  /** The "Morph preserves modify" rule set — needs `ForgetfulFunctor` on both carriers. */
   def morphPreservesModify(using
       Arbitrary[S],
       Arbitrary[A],
@@ -29,6 +31,7 @@ abstract class MorphTests[S, A, F[_, _], G[_, _]] extends Laws:
         forAll((s: S, f: A => A) => laws.morphPreservesModify(s, f)),
     )
 
+  /** The "Morph preserves get" rule set — needs `Accessor` on both carriers. */
   def morphPreservesGet(using
       Arbitrary[S],
       _root_.dev.constructive.eo.accessor.Accessor[F],

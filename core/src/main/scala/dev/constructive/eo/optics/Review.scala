@@ -9,11 +9,10 @@ import data.Direct
   * vestigial `from`); `Review` is the dual `Optic[Unit, S, Unit, A, Direct]` — a vestigial `to`
   * (reads `Unit`) and a real `from` that *builds* `S` from the focus `A`.
   *
-  * It therefore IS an [[Optic]]. (An earlier version was a bare `case class` that did not extend
-  * `Optic` on the grounds that "pure Review has no `to`" — but with source `Unit` the `to` is
-  * exactly as vestigial as `Getter`'s `from`, so that asymmetry with `Getter` was a choice, not a
-  * necessity.) A Review composes with another Review through the fused `andThen` just as `Getter`s
-  * do, and slots into the `Direct`-carrier optic surface.
+  * It therefore IS an [[Optic]] — with source `Unit` the `to` is exactly as vestigial as `Getter`'s
+  * `from`, so "pure Review has no `to`" is no reason to sit outside the trait. A Review composes
+  * with another Review through the fused `andThen` just as `Getter`s do, and slots into the
+  * `Direct`-carrier optic surface.
   *
   * A `final class` storing `reverseGet` directly — NOT an abstract class with an abstract member —
   * for the same composed-dispatch reason documented on [[Getter]].
@@ -45,6 +44,11 @@ final class Review[T, B](build: B => T)
   inline def andThen[D](inner: Review[B, D]): Review[T, D] =
     Review(d => reverseGet(inner.reverseGet(d)))
 
+  /** Build-only outer ∘ ANY reversible inner — only the inner's build half is used (`reverseGet`,
+    * available when `G` admits a `ReverseAccessor`: `Direct` for Iso, `Either` for Prism), so the
+    * composite stays a build-only [[Review]]. The single-focus mirror of [[Unfold]]'s
+    * `andThenBuildAny`.
+    */
   inline def andThen[G[_, _], D](inner: Optic[?, B, ?, D, G])(using
       ReverseAccessor[G]
   ): Review[T, D] =

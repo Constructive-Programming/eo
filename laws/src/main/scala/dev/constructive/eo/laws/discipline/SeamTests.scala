@@ -13,8 +13,10 @@ import org.typelevel.discipline.Laws
   * `seam modify identity` / `seam replace overwrite`.
   */
 abstract class SeamTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: SeamLaws[S, A]
 
+  /** The "Seam" rule set. */
   def seam(using Arbitrary[S], Arbitrary[A], Cogen[A]): RuleSet =
     new SimpleRuleSet(
       "Seam",

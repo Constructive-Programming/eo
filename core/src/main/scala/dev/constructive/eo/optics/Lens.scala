@@ -218,11 +218,17 @@ final class SimpleLens[S, A, XA](
     combine: (XA, A) => S,
 ) extends SplitCombineLens[S, S, A, A, XA](get, split, combine):
 
+  /** Overwrite the focus in an already-built `S` — the class-level twin of the generic
+    * `Optic.place` extension, with the `T => (X, A)` evidence supplied by `split`.
+    */
   inline def place(a: A): S => S =
     s =>
       val (x, _) = to(s)
       combine(x, a)
 
+  /** Lift a `C => A` into a focus overwrite — the class-level twin of the generic `Optic.transfer`
+    * extension.
+    */
   inline def transfer[C](f: C => A): S => C => S =
     s =>
       c =>

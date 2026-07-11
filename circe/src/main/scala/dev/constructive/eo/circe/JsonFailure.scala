@@ -11,10 +11,6 @@ import io.circe.{DecodingFailure, Json, ParsingFailure}
   * Every case carries a [[PathStep]] so the walk that produced the failure can point at the
   * specific cursor position that refused. The default enum `toString` keeps the structural
   * representation for testability; [[message]] gives a human-readable diagnostic.
-  *
-  * Shape choice: a Scala 3 `enum`, consistent with [[PathStep]]. An expanded `pathContext:
-  * Array[PathStep]` field was discussed (OQ3) and deferred to a later pass — the adapter
-  * `JsonFailure.withPath(prefix)` can decorate after the fact if user demand appears.
   */
 enum JsonFailure:
 

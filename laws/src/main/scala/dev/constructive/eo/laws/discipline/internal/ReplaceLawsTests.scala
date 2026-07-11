@@ -11,9 +11,9 @@ import org.typelevel.discipline.Laws
   * replace idempotent, consistent replace-modify); the leaf Tests classes pass a parent built here
   * to their `RuleSet.parents` and only have to spell out the props that are unique to themselves.
   *
-  * '''Path B (2026-04-25)''': replaces the per-leaf duplication of those four `forAll` lines with a
-  * single inheritance hop. Discipline aggregates parent props automatically, so the user-facing
-  * prop names ("modify identity", "compose modify", …) and check predicates are unchanged.
+  * Discipline aggregates parent props automatically, so the user-facing prop names ("modify
+  * identity", "compose modify", …) and check predicates are exactly what the leaves used to spell
+  * out inline.
   *
   * Visibility: `private[discipline]`. The leaf Tests classes (`ModifyTests`, `LensTests`,
   * `TraversalTests`) are the only intended consumers — downstream users wire to those.

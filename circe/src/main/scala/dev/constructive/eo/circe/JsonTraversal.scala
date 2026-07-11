@@ -30,14 +30,22 @@ final class JsonTraversal[A] private[circe] (
 
   // ---- Dynamic field sugar -----------------------------------------
 
+  /** Dynamic field sugar — `traversal.name` lowers to `traversal.field(_.name)`. Compile-time
+    * checked against `A`'s case fields; codecs for the field type are summoned at the call site.
+    */
   transparent inline def selectDynamic(inline name: String): Any =
     ${ JsonPrismMacro.selectFieldTraversalImpl[A]('{ this }, 'name) }
 
   // ---- Read surface (multi-focus specific) --------------------------
 
+  /** Read every focus. `String` input is parsed first; a prefix-walk miss (or non-array terminal)
+    * is `Ior.Left(chain)`, per-element failures accumulate — elements that fail drop out of the
+    * Vector while their failures join the chain (`Ior.Both`).
+    */
   def getAll(input: Json | String): Ior[Chain[JsonFailure], Vector[A]] =
     JsonFailure.parseInputIor(input).flatMap(getAllIor)
 
+  /** Silent read — prefix miss yields `Vector.empty`; undecodable elements are dropped. */
   inline def getAllUnsafe(input: Json | String): Vector[A] =
     val json = JsonFailure.parseInputUnsafe(input)
     walkPrefixOpt(json).fold(Vector.empty[A])(arr => arr.flatMap(focus.readImpl))

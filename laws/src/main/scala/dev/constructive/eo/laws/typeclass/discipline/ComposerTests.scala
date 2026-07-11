@@ -9,8 +9,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ComposerPathIndependenceLaws]]. */
 abstract class ComposerPathIndependenceTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: ComposerPathIndependenceLaws[S, A]
 
+  /** The "Composer.chain path independence" rule set. */
   def composerPathIndependence(using
       Arbitrary[S],
       Arbitrary[A],
@@ -24,8 +26,10 @@ abstract class ComposerPathIndependenceTests[S, A] extends Laws:
 
 /** Discipline `RuleSet` for [[ComposerPreservesGetLaws]]. */
 abstract class ComposerPreservesGetTests[S, A, F[_, _], G[_, _], H[_, _]] extends Laws:
+  /** Laws under test. */
   def laws: ComposerPreservesGetLaws[S, A, F, G, H]
 
+  /** The "Composer.chain preserves get" rule set. */
   def composerPreservesGet(using Arbitrary[S]): RuleSet =
     new SimpleRuleSet(
       "Composer.chain preserves get",

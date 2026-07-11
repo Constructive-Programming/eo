@@ -10,20 +10,20 @@ import forgetful.*
 import compose.*
 import optics.Optic
 
-/** Unified pair carrier for the `AlgLens`, `Kaleidoscope`, and `Grate` optic families —
-  * `MultiFocus[F][X, A] = (X, F[A])`. Each pairs a structural leftover `X` with a focus collection
-  * / aggregate / rebuild-closure `F[A]`; the three v1 carriers were structurally identical, only
-  * differing in how `F` was represented (type parameter vs path-dependent vs Function1-shaped).
+/** Unified pair carrier for the algebraic-lens, kaleidoscope, and grate optic families —
+  * `MultiFocus[F][X, A] = (X, F[A])`: a structural leftover `X` paired with a focus collection /
+  * aggregate / rebuild-closure `F[A]`. One carrier serves all three families; only the choice of
+  * `F` differs (a container for Traversal, `Function1`-shaped for the grate encoding, …).
   *
-  * Kaleidoscope's `Reflector[F].reflect` operation was the only non-cats piece; it has two natural
-  * derivations and the choice is structural, not derivable from a single typeclass:
+  * The kaleidoscope aggregation ("summarise the foci, write the summary back") has two natural
+  * derivations, and the choice is structural — not derivable from a single typeclass:
   *
   *   - Functor-broadcast: `fa.map(_ => f(fa))`. Length-preserving; default. Needs `Functor[F]`.
   *   - Applicative-broadcast: `F.pure(f(fa))`. Singleton/cartesian. Needs `Applicative[F]`.
   *
   * The default is the first; List users wanting the singleton collapse can compose `_.headOption`
   * downstream or call `collectList` explicitly. See
-  * `docs/research/2026-04-29-fixedtraversal-fold-spike.md` for the Grate-absorption justification.
+  * `docs/research/2026-04-29-fixedtraversal-fold-spike.md` for the grate-absorption justification.
   *
   * @tparam F
   *   classifier shape — operation requirements:
@@ -41,7 +41,7 @@ import optics.Optic
 // `MultiFocus[F][X, A]` stops at `MultiFocusK[F, X, A]`, whose companion (where the instances
 // live) *is* an implicit-scope anchor — no import needed. (`MultiFocus` itself must stay a plain
 // alias: an opaque type cannot have the curried `[F[_]] => [X, A] =>> …` shape.) Within this file
-// the opaque is transparent; outside, [[MultiFocusK.wrap]] / [[MultiFocusK.context]] /
+// the opaque is transparent; outside, `MultiFocus.apply` / [[MultiFocusK.context]] /
 // [[MultiFocusK.foci]] are the (runtime-identity) boundary.
 opaque type MultiFocusK[F[_], X, A] = (X, F[A])
 
@@ -134,6 +134,12 @@ private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
 
   def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T
 
+/** Instance home for [[MultiFocusK]] — the capability instances (`mfFunctor` / `mfFold` /
+  * `mfTraverse`), the same-carrier composition kernels (`mfAssoc` and its Function1 / PSVec
+  * specialisations), the `Composer` bridges from every other carrier, the factories, and the
+  * `.collect*` / `.at` aggregation surface. Being the opaque anchor's companion, everything here is
+  * in implicit scope with no import; the public call-shape is the [[MultiFocus]] façade.
+  */
 object MultiFocusK:
 
   // Construct via the façade `MultiFocus(x, fa)` (an `apply` on the public object below); these
@@ -152,16 +158,32 @@ object MultiFocusK:
   // typed by its anonymous class, so the *written* member signatures are what inline extensions
   // (`Optic.modify` / `.modifyA` / `.foldMap`, …) splice against at call sites — where only the
   // opaque spelling typechecks.
+
+  /** `ForgetfulFunctor[MultiFocus[F]]` via `Functor[F]` — maps every focus, leftover untouched.
+    * Unlocks `.modify` / `.replace` on Traversal-family optics.
+    *
+    * @group Instances
+    */
   given mfFunctor[F[_]: Functor]: ForgetfulFunctor[MultiFocus[F]] with
 
     def map[X, A, B](xa: MultiFocus[F][X, A], f: A => B): MultiFocus[F][X, B] =
       (xa._1, Functor[F].map(xa._2)(f))
 
+  /** `ForgetfulFold[MultiFocus[F]]` via `Foldable[F]` — folds the focus vector, discarding the
+    * leftover. Unlocks `.foldMap` / `.headOption` / `.length` / `.exists`.
+    *
+    * @group Instances
+    */
   given mfFold[F[_]: Foldable]: ForgetfulFold[MultiFocus[F]] with
 
     def foldMap[X, A, M: Monoid](f: A => M, xa: MultiFocus[F][X, A]): M =
       Foldable[F].foldMap(xa._2)(f)
 
+  /** `ForgetfulTraverse[MultiFocus[F], Applicative]` via `Traverse[F]` — effectful rewrite of every
+    * focus in `F`'s traversal order. Unlocks `.modifyA` / `.all`.
+    *
+    * @group Instances
+    */
   given mfTraverse[F[_]: Traverse]: ForgetfulTraverse[MultiFocus[F], Applicative] with
 
     def traverse[X, A, B, G[_]: Applicative](
@@ -170,8 +192,15 @@ object MultiFocusK:
     ): G[MultiFocus[F][X, B]] =
       Applicative[G].map(Traverse[F].traverse(xa._2)(f))(fb => (xa._1, fb))
 
-  // Same-carrier composition — F-parametric, with `MultiFocusSingleton` fast-path on the inner.
-
+  /** Same-carrier composition for `MultiFocus[F]` — `traversal.andThen(traversal)`, F-parametric.
+    * `Z = (Xo, F[(Xi, Int)])`: the outer leftover plus, per outer focus, the inner leftover and its
+    * focus count, so `composeFrom` can carve the flat modified vector back into per-element slices
+    * (cursor over an array snapshot). Inners that mix in `MultiFocusSingleton` (the Lens bridge)
+    * take an always-hit fast path that skips the per-element inner fold. Flat focus order is the
+    * outer's traversal order, inner order within each element.
+    *
+    * @group Instances
+    */
   given mfAssoc[F[_]: Traverse: MultiFocusFromList, Xo, Xi]
       : AssociativeFunctor[MultiFocus[F], Xo, Xi] with
     type Z = (Xo, F[(Xi, Int)])
@@ -250,11 +279,14 @@ object MultiFocusK:
         s"Composer[$carrier, MultiFocus[F]]: expected F[B] of cardinality 1, got $sz."
       )
 
-  // Function1-shaped specialisation — the Grate-absorbed case. The general `mfAssoc` requires
-  // `Traverse[F]` + `MultiFocusFromList[F]`; Function1[X0, *] admits neither. The outer rebuild is
-  // a constant broadcast: every shipped outer (iso-morphed, tuple-built) rebuilds via broadcast
-  // anyway. See `docs/research/2026-04-29-fixedtraversal-fold-spike.md`.
-
+  /** Function1-shaped same-carrier composition — the grate-absorbed case. The general [[mfAssoc]]
+    * requires `Traverse[F]` + `MultiFocusFromList[F]`; `Function1[X0, *]` admits neither, so this
+    * instance composes the rebuild closures directly. The outer rebuild is a constant broadcast —
+    * sound because every shipped outer (iso-morphed, tuple-built) rebuilds via broadcast anyway.
+    * See `docs/research/2026-04-29-fixedtraversal-fold-spike.md`.
+    *
+    * @group Instances
+    */
   given mfAssocFunction1[X0, Xo, Xi]: AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
     type Z = (Xo, Xi)
 
@@ -278,11 +310,16 @@ object MultiFocusK:
       val b: B = inner.from((null.asInstanceOf[Xi], kD))
       outer.from((null.asInstanceOf[Xo], (_: X0) => b))
 
-  // PSVec-specialised same-carrier composition. The generic `mfAssoc` body builds two intermediate
-  // List accumulators + materialises via `fromList`; this body writes directly into `IntArrBuilder`
-  // / `ObjArrBuilder` and stores the existential as parallel arrays in `AssocSndZ`, sidestepping the
-  // per-element `(Xi, Int)` Tuple2 the generic path pays. See `docs/research/2026-04-29-powerseries-fold-spike.md`.
-
+  /** PSVec-specialised same-carrier composition. Where the generic [[mfAssoc]] body builds two
+    * intermediate List accumulators + materialises via `fromList`, this body writes directly into
+    * `IntArrBuilder` / `ObjArrBuilder` and stores the existential as parallel arrays in
+    * `AssocSndZ`, sidestepping the per-element `(Xi, Int)` Tuple2 the generic path pays. Fast paths
+    * for `MultiFocusSingleton` (always-hit, Lens bridge) and `MultiFocusPSMaybeHit` (Prism /
+    * Optional bridges) inners; reassembly hands each inner an O(1) `PSVec.slice` view. See
+    * `docs/research/2026-04-29-powerseries-fold-spike.md`.
+    *
+    * @group Instances
+    */
   given mfAssocPSVec[Xo, Xi]: AssociativeFunctor[MultiFocus[PSVec], Xo, Xi] with
     type SndZ = AssocSndZ[Xo, Xi]
     type Z = SndZ
@@ -415,33 +452,31 @@ object MultiFocusK:
   )
 
   // ------------------------------------------------------------------
-  // Kaleidoscope universal — `.collect`. Multifocus-unification spike Q1
-  // finding: NOT derivable from Apply alone in a way that preserves all
-  // three v1 Reflector instances. We expose two variants and let the user
-  // pick the aggregation shape.
+  // Kaleidoscope universal — the `.collect*` aggregation surface. Not derivable from a single
+  // typeclass in a way that covers both aggregation shapes, so two variants ship and the user
+  // picks (see the carrier doc above).
   // ------------------------------------------------------------------
 
-  /** Length-preserving broadcast — `reflect(fa)(f) = fa.map(_ => f(fa))`. Matches the v1
-    * `forZipList` and `forConst` Reflector instances exactly; CHANGES the v1 `forList` semantics
-    * (was singleton, becomes length-preserving). Requires only `Functor[F]`.
-    *
-    * For the generic `MultiFocus.apply[F, A]` factory (X = F[A], rebuild = identity), `.collectMap`
-    * is `s => s.map(_ => agg(s))` — semantically identical to `Functor.map(_ => agg)` over the
-    * source.
+  /** Singleton / cartesian aggregation, List-specific — collapses the whole focus list to ONE
+    * aggregated element: the result list has length 1 regardless of the focus count.
+    * Shape-changing, which is exactly what no `Functor`-based combinator can express; the
+    * length-preserving alternatives are [[collectMap]] / [[collectWith]].
     */
   extension [S, T, A, B](o: Optic[S, T, A, B, MultiFocus[List]])
 
     def collectList(agg: List[A] => B)(using ev: S =:= List[A], ev2: T =:= List[B]): S => T =
       val _ = (ev, ev2)
-      // Cartesian / singleton — matches v1 Reflector[List]. T = List[B] preserved via List(b).
+      // Cartesian / singleton — T = List[B] preserved via List(b).
       (s: S) =>
         val (_, fa) = o.to(s)
         val b: B = agg(fa.asInstanceOf[List[A]])
         o.from((null.asInstanceOf[o.X], List(b)).asInstanceOf[(o.X, List[B])])
 
-  /** Functor-broadcast variant — preserves F-shape via `map(_ => agg(fa))`. Works for any
-    * `Functor[F]`; for List this is the ZipList-style length-preserving aggregation. Use
-    * [[collectList]] for the v1 List-singleton semantics.
+  /** Functor-broadcast aggregation — preserves F-shape via `map(_ => agg(fa))`; every focus
+    * position receives the aggregate. Works for any `Functor[F]`; for List this is the
+    * ZipList-style length-preserving aggregation (use [[collectList]] for the shape-collapsing
+    * List-singleton semantics). For the generic [[apply]] factory (`X = F[A]`, rebuild = identity),
+    * `.collectMap` is `s => s.map(_ => agg(s))` — semantically `Functor.map` over the source.
     */
   extension [S, T, A, B, F[_]](o: Optic[S, T, A, B, MultiFocus[F]])(using F: Functor[F])
 
@@ -485,8 +520,9 @@ object MultiFocusK:
       val (_, fa) = o.to(s)
       F.index(fa)(i)
 
-  /** Generic factory: `X = F[A]`, focus = fa, rebuild = identity. Replaces the v1
-    * `Kaleidoscope.apply`.
+  /** Generic factory: `X = F[A]`, focus = fa, rebuild = identity.
+    *
+    * @group Constructors
     */
   def apply[F[_], A]: Optic[F[A], F[A], A, A, MultiFocus[F]] =
     pApply[F, A, A]
@@ -496,6 +532,8 @@ object MultiFocusK:
     * identity on the written-back `F[B]`, so no `B` ever has to fit an `A`-shaped hole. This is
     * what un-pins the collect flavours' element type — `pApply[F, A, Row].collectWith(...)` emits a
     * different row type than it read.
+    *
+    * @group Constructors
     */
   def pApply[F[_], A, B]: Optic[F[A], F[B], A, B, MultiFocus[F]] =
     new Optic[F[A], F[B], A, B, MultiFocus[F]]:
@@ -504,7 +542,9 @@ object MultiFocusK:
       def from(pair: (F[A], F[B])): F[B] = pair._2
 
   /** Iso → MultiFocus[F]. Requires `Applicative[F]` to broadcast the Iso's plain `A` focus into a
-    * singleton `F[A]`.
+    * singleton `F[A]`; the write-back picks the singleton out (throws on cardinality ≠ 1).
+    *
+    * @group Instances
     */
   given forgetful2multifocus[F[_]: Applicative: Foldable]: Composer[Direct, MultiFocus[F]] with
 
@@ -515,7 +555,10 @@ object MultiFocusK:
         def from(pair: (Unit, F[B])): T =
           o.from(Direct(pickSingletonOrThrow(pair._2, "Direct")))
 
-  /** Forget[F] ↪ MultiFocus[F]. */
+  /** Forget[F] ↪ MultiFocus[F] — a Fold slots into the pair carrier with `X = Unit`.
+    *
+    * @group Instances
+    */
   given forget2multifocus[F[_]]: Composer[Forget[F], MultiFocus[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Forget[F]]): Optic[S, T, A, B, MultiFocus[F]] =
@@ -525,9 +568,8 @@ object MultiFocusK:
         def from(pair: (Unit, F[B])): T = o.from(ForgetK(pair._2))
 
   /** MultiFocus[F] ↪ Forget[F] — read-only escape: discard the structural leftover, keep the
-    * focused `F[A]`. Closes the top-5 plan's gap #2 by giving users an explicit carrier morph
-    * (alongside the carrier-wide `Optic.foldMap` / `.headOption` / `.length` / `.exists` extension
-    * methods).
+    * focused `F[A]`. An explicit carrier morph alongside the carrier-wide `Optic.foldMap` /
+    * `.headOption` / `.length` / `.exists` extension methods.
     *
     * Structurally this is the inverse of [[forget2multifocus]] — both Composer directions ship.
     * That's normally banned by the cats-eo Morph resolution invariant (a bidirectional pair makes
@@ -542,6 +584,8 @@ object MultiFocusK:
     *
     * Practical Morph fallout: if a user actually hits the ambiguity, they get a clear implicit-not-
     * found message naming both Composers; the workaround is one extra `.morph`-shaped call.
+    *
+    * @group Instances
     */
   given multifocus2forget[F[_]]: Composer[MultiFocus[F], Forget[F]] with
 
@@ -555,7 +599,10 @@ object MultiFocusK:
           // they explicitly routed through this Composer — defensive only.
           ().asInstanceOf[T]
 
-  /** Lens → MultiFocus[F]. Mixes in `MultiFocusSingleton` so the `mfAssoc` fast-path fires. */
+  /** Lens → MultiFocus[F]. Mixes in `MultiFocusSingleton` so the [[mfAssoc]] fast-path fires.
+    *
+    * @group Instances
+    */
   given tuple2multifocus[F[_]: Applicative: Foldable]: Composer[Tuple2, MultiFocus[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, MultiFocus[F]] =
@@ -574,7 +621,10 @@ object MultiFocusK:
     */
   private val hitUnit: Either[Nothing, Unit] = Right(())
 
-  /** Prism → MultiFocus[F]. */
+  /** Prism → MultiFocus[F] — hit becomes a `pure` singleton, miss becomes `Alternative[F].empty`.
+    *
+    * @group Instances
+    */
   given either2multifocus[F[_]: Alternative: Foldable]: Composer[Either, MultiFocus[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[F]] =
@@ -589,7 +639,10 @@ object MultiFocusK:
             case (l @ Left(_), _) => o.from(l.widenRight[B])
             case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
 
-  /** Optional → MultiFocus[F]. */
+  /** Optional → MultiFocus[F] — mirror of [[either2multifocus]] over the `Affine` miss / hit split.
+    *
+    * @group Instances
+    */
   given affine2multifocus[F[_]: Alternative: Foldable]: Composer[Affine, MultiFocus[F]] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[F]] =
@@ -619,6 +672,8 @@ object MultiFocusK:
     * generic body would build. The `to` body builds anonymous Optic values inline so
     * `MultiFocusSingleton` can refer to `o.X` without tripping Scala 3's "class parent cannot refer
     * to constructor parameters" rule.
+    *
+    * @group Instances
     */
   given tuple2multifocusPSVec: Composer[Tuple2, MultiFocus[PSVec]] with
 
@@ -642,10 +697,11 @@ object MultiFocusK:
             def singletonTo(s: S): (o.X, A) = o.to(s)
             def singletonFrom(x: o.X, b: B): T = o.from((x, b))
 
-  /** `Composer[Either, MultiFocus[PSVec]]` — lifts a Prism-carrier optic into MultiFocus[PSVec] so
-    * `prism.andThen(traversal)` type-checks. Mixes in `MultiFocusPSMaybeHit` so the
-    * PSVec-specialised `mfAssocPSVec` body skips the per-element `Either[o.X, Unit]` wrapper the
-    * generic `to` path would build. Mirror of the legacy `either2ps`.
+  /** Prism → MultiFocus[PSVec] — lifts a Prism-carrier optic so `prism.andThen(traversal)`
+    * type-checks. Mixes in `MultiFocusPSMaybeHit` so the PSVec-specialised [[mfAssocPSVec]] body
+    * skips the per-element `Either[o.X, Unit]` wrapper the generic `to` path would build.
+    *
+    * @group Instances
     */
   given either2multifocusPSVec: Composer[Either, MultiFocus[PSVec]] with
 
@@ -680,8 +736,10 @@ object MultiFocusK:
           if len == 0 then o.from(Left(y.asInstanceOf[o.X]))
           else o.from(Right(vys(pos)))
 
-  /** Optional → MultiFocus[PSVec]. Mixes in `MultiFocusPSMaybeHit` so `mfAssocPSVec` skips the
+  /** Optional → MultiFocus[PSVec]. Mixes in `MultiFocusPSMaybeHit` so [[mfAssocPSVec]] skips the
     * per-element `Affine[o.X, Unit]` wrapper the generic path would build.
+    *
+    * @group Instances
     */
   given affine2multifocusPSVec: Composer[Affine, MultiFocus[PSVec]] with
 
@@ -721,7 +779,10 @@ object MultiFocusK:
           if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
           else o.from(new Affine.Hit[o.X, B](y.asInstanceOf[Snd[o.X]], vys(pos)))
 
-  /** MultiFocus[F] → ModifyF. Uniform Modify widening for any `Functor[F]`. */
+  /** MultiFocus[F] → ModifyF. Uniform Modify widening for any `Functor[F]`.
+    *
+    * @group Instances
+    */
   given multifocus2modify[F[_]: Functor]: Composer[MultiFocus[F], ModifyF] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, ModifyF] =
@@ -735,6 +796,11 @@ object MultiFocusK:
 
   // F[A]-focus factories.
 
+  /** Reinterpret a Lens whose focus is already an `F[A]` as a MultiFocus optic over the elements —
+    * the container the Lens reads IS the focus vector; `X` and the rebuild pass straight through.
+    *
+    * @group Constructors
+    */
   def fromLensF[F[_], S, T, A, B](
       lens: Optic[S, T, F[A], F[B], Tuple2]
   ): Optic[S, T, A, B, MultiFocus[F]] =
@@ -743,6 +809,12 @@ object MultiFocusK:
       def to(s: S): (X, F[A]) = lens.to(s)
       def from(pair: (X, F[B])): T = lens.from(pair)
 
+  /** Reinterpret a Prism whose focus is an `F[A]` as a MultiFocus optic over the elements — the
+    * miss branch surfaces as `MonoidK[F].empty` (zero foci) and passes the leftover back through
+    * the prism's build path on write.
+    *
+    * @group Constructors
+    */
   def fromPrismF[F[_]: MonoidK, S, T, A, B](
       prism: Optic[S, T, F[A], F[B], Either]
   ): Optic[S, T, A, B, MultiFocus[F]] =
@@ -764,6 +836,8 @@ object MultiFocusK:
     * Encoding: `X = Unit`, rebuild = `F.Representation => A`. On `to(fa)` snapshot `F.index(fa)`;
     * on `from((_, k))` materialise via `F.tabulate(k)`. The `.modify(f)` round-trip is exactly
     * `F.map(fa)(f)`.
+    *
+    * @group Constructors
     */
   def representable[F[_], A](using
       F: Representable[F]
@@ -776,6 +850,8 @@ object MultiFocusK:
   /** Representable-indexed variant with explicit representative index. The `repr0` argument is
     * unused at runtime (rebuild operates pointwise via `F.tabulate`); preserved for API parity and
     * to leave the door open for a future `.lead` accessor.
+    *
+    * @group Constructors
     */
   def representableAt[F[_], A](F: Representable[F])(
       repr0: F.Representation
@@ -795,6 +871,8 @@ object MultiFocusK:
     *   g3.modify(_ + 1)((1, 2, 3))   // (2, 3, 4)
     *   g3.replace(42)((1, 2, 3))     // (42, 42, 42)
     *   }}}
+    *
+    * @group Constructors
     */
   def tuple[T <: Tuple, A](using
       sz: ValueOf[Tuple.Size[T]],
@@ -817,13 +895,12 @@ object MultiFocusK:
         loop(0)
         Tuple.fromArray(arr).asInstanceOf[T]
 
-  // ------------------------------------------------------------------
-  // Iso → Function1-shaped MultiFocus bridge — absorbs v1 `forgetful2grate`.
-  // ------------------------------------------------------------------
-
-  /** Iso ↪ MultiFocus[Function1[X0, *]]. Iso's forward `to: S => A` is broadcast to the constant
-    * rebuild `_ => a`; the reverse reads the rebuild at any X0 (null sentinel — lead dropped per
-    * fixedtraversal-fold-spike Q1).
+  /** Iso ↪ MultiFocus[Function1[X0, *]] — the Iso side of the grate-shaped surface. Iso's forward
+    * `to: S => A` is broadcast to the constant rebuild `_ => a`; the reverse reads the rebuild at
+    * any X0 (null sentinel — sound because no shipped rebuild observes its argument; see the
+    * fixedtraversal-fold spike doc).
+    *
+    * @group Instances
     */
   given forgetful2multifocusFunction1[X0]: Composer[Direct, MultiFocus[Function1[X0, *]]] with
 
@@ -838,6 +915,12 @@ object MultiFocusK:
         def from(pair: (Unit, X0 => B)): T =
           o.from(Direct(pair._2(null.asInstanceOf[X0])))
 
+  /** Reinterpret an Optional whose focus is an `F[A]` as a MultiFocus optic over the elements — the
+    * mirror of [[fromPrismF]] over the `Affine` miss / hit split (miss recycled via `widenB`, both
+    * directions).
+    *
+    * @group Constructors
+    */
   def fromOptionalF[F[_]: MonoidK, S, T, A, B](
       opt: Optic[S, T, F[A], F[B], Affine]
   ): Optic[S, T, A, B, MultiFocus[F]] =
@@ -863,4 +946,8 @@ object MultiFocusK:
 object MultiFocus:
   export MultiFocusK.{given, *}
 
+  /** Pair a leftover `x` with a focus vector `fa` as the carrier value. Identity at runtime (the
+    * opaque type erases to the pair); the unwrap boundary is [[MultiFocusK.context]] /
+    * [[MultiFocusK.foci]].
+    */
   transparent inline def apply[F[_], X, A](x: X, fa: F[A]): MultiFocusK[F, X, A] = (x, fa)

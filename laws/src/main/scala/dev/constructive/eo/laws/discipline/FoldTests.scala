@@ -9,8 +9,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[FoldLaws]]. */
 abstract class FoldTests[S, A, F[_, _]] extends Laws:
+  /** Laws under test. */
   def laws: FoldLaws[S, A, F]
 
+  /** The "Fold" rule set. */
   def fold(using
       Arbitrary[S],
       Cogen[A],

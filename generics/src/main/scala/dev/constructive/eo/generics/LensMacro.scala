@@ -15,7 +15,7 @@ import dev.constructive.eo.optics.{BijectionIso, Optic, SimpleLens}
   * val asTuple = lens[Person](_.name, _.age)     // BijectionIso (full cover)
   * }}}
   *
-  *   - Single-selector, partial cover → `SimpleLens[S, A, XA]` with `X` the structural complement
+  *   - Single-selector, partial cover → `SimpleLens[S, A, XA]` with `XA` the structural complement
   *     (gives `transform` / `place` / `transfer` for free).
   *   - Multi-selector, partial cover → `SimpleLens` with NamedTuple focus (SELECTOR order) and
   *     NamedTuple complement (DECLARATION order among non-focused fields).
@@ -39,6 +39,9 @@ object LensMacro:
   ): Optic[S, S, ?, ?, ?] =
     ${ deriveMultiImpl[S]('selectors) }
 
+  /** Quoted-macro implementation behind [[deriveMulti]] — instantiates the Hearth-backed derivation
+    * against the call-site `Quotes`.
+    */
   def deriveMultiImpl[S: Type](
       selectorsExpr: Expr[Seq[S => Any]]
   )(using q: Quotes): Expr[Optic[S, S, ?, ?, ?]] =

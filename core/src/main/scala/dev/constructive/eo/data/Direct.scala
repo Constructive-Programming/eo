@@ -12,13 +12,13 @@ import optics.Optic
   * the focus is fully determined and no reassembly information is needed — the optic's `to` /
   * `from` are plain functions, so it is the *forgetful functor* (it forgets the leftover `X`
   * entirely). Its instances therefore live under the `Forgetful*` typeclasses
-  * ([[ForgetfulFunctor]], [[ForgetfulTraverse]], …). The `F`-shape sibling [[Forget]] lives in its
-  * own file.
+  * ([[forgetful.ForgetfulFunctor]], [[forgetful.ForgetfulTraverse]], …). The `F`-shape sibling
+  * [[Forget]] lives in its own file.
   *
   * `opaque` (not a transparent alias) so it is a *distinct* type for implicit search: `object
   * Direct` is its companion, so `Accessor[Direct]`, `AssociativeFunctor[Direct, …]`, etc. resolve
   * via companion scope with no import, and the compiler never dealiases `Direct[X, A]` to `A`
-  * (which would lose those givens). It still erases to `A`, so [[Direct.apply]] (wrap) / [[value]]
+  * (which would lose those givens). It still erases to `A`, so [[Direct.apply]] (wrap) / `value`
   * (unwrap) are identity at runtime.
   */
 opaque type Direct[X, A] = A

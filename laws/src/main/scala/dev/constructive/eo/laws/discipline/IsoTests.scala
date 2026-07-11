@@ -8,8 +8,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[IsoLaws]]. */
 abstract class IsoTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: IsoLaws[S, A]
 
+  /** The "Iso" rule set. */
   def iso(using Arbitrary[S], Arbitrary[A]): RuleSet =
     new SimpleRuleSet(
       "Iso",

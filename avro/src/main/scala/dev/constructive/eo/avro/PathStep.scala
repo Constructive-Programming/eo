@@ -4,16 +4,14 @@ package dev.constructive.eo.avro
   * branch.
   *
   * The path walker dispatches on the case to decide which of Avro's runtime representations to
-  * pierce: [[org.apache.avro.generic.IndexedRecord]] for named record fields, [[java.util.List]]
-  * (typically `org.apache.avro.generic.GenericData.Array`) for array indices, [[java.util.Map]] for
+  * pierce: `org.apache.avro.generic.IndexedRecord` for named record fields, `java.util.List`
+  * (typically `org.apache.avro.generic.GenericData.Array`) for array indices, `java.util.Map` for
   * `map<T>` keys, and the runtime alternative directly for union branches.
   *
-  * '''Gap-1 (per the eo-avro plan).''' This enum is duplicated from
-  * `dev.constructive.eo.circe.PathStep` rather than shared. The two enums share `Field(name)` and
-  * `Index(i)` but eo-avro adds `UnionBranch(branchName)` — Avro's schema-driven feature with no
-  * JSON parallel. Sharing the type would force `UnionBranch` into eo-circe's dependency graph
-  * (where unions don't exist), so the duplication is intentional. One file, ~25 LoC, deliberate
-  * divergence.
+  * '''Deliberate duplication.''' This enum is duplicated from `dev.constructive.eo.circe.PathStep`
+  * rather than shared. The two enums share `Field(name)` and `Index(i)` but eo-avro adds
+  * `UnionBranch(branchName)` — Avro's schema-driven feature with no JSON parallel. Sharing the type
+  * would force `UnionBranch` into eo-circe's dependency graph (where unions don't exist).
   *
   * Visibility is package-default (public) so users can read [[PathStep]] values off [[AvroFailure]]
   * instances exposed by the default Ior-bearing surface. The `Field(name)`, `Index(i)`, and

@@ -10,8 +10,10 @@ import org.typelevel.discipline.Laws
   * laws on their own recursive types (hand-written or macro-derived `plate`).
   */
 abstract class PlatedTests[S] extends Laws:
+  /** Laws under test. */
   def laws: PlatedLaws[S]
 
+  /** The "Plated" rule set. */
   def plated(using Arbitrary[S]): RuleSet =
     new SimpleRuleSet(
       "Plated",

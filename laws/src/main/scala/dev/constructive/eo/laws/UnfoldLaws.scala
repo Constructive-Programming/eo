@@ -24,6 +24,7 @@ import optics.Optic.*
   * (see `UnfoldSpec`).
   */
 trait UnfoldLaws[T, B, F[_]]:
+  /** The optic under test. */
   def unfold: Unfold[T, B, F]
 
   /** The function this unfold is declared to represent — typically the same `F[B] => T` passed to

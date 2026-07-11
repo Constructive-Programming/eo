@@ -117,7 +117,7 @@ final class MendTearPrism[S, T, A, B](
 
   /** Shared kernel for `MendTearPrism` ∘ Either-carrier composition. Outer-miss short-circuits;
     * outer-hit threads through `innerTear` (read) and `innerMend` (write). `inline` so the call
-    * site allocates the same single `MendTearPrism` it would pre-refactor.
+    * site allocates the same single `MendTearPrism` a hand-fused compose would.
     */
   private inline def fuseToMendTear[C, D](
       innerTear: A => Either[T, C],

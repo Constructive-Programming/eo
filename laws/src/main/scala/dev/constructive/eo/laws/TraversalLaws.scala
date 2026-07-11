@@ -17,17 +17,22 @@ import optics.Optic
   * be testing what the name suggests.
   */
 trait TraversalLaws[T[_], A](using val FT: Functor[T]):
+  /** The optic under test. */
   def traversal: Optic[T[A], T[A], A, A, MultiFocus[PSVec]]
 
+  /** `modify(identity) == identity`. */
   def modifyIdentity(s: T[A]): Boolean =
     traversal.modify(identity[A])(s) == s
 
+  /** `modify(g) ∘ modify(f) == modify(f andThen g)`. */
   def composeModify(s: T[A], f: A => A, g: A => A): Boolean =
     traversal.modify(g)(traversal.modify(f)(s)) ==
       traversal.modify(f.andThen(g))(s)
 
+  /** put-put: `replace(a) ∘ replace(a) == replace(a)`. */
   def replaceIdempotent(s: T[A], a: A): Boolean =
     traversal.replace(a)(traversal.replace(a)(s)) == traversal.replace(a)(s)
 
+  /** `replace(a) == modify(_ => a)`. */
   def consistentReplaceModify(s: T[A], a: A): Boolean =
     traversal.replace(a)(s) == traversal.modify(_ => a)(s)

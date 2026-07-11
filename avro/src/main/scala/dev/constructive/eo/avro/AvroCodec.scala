@@ -41,9 +41,9 @@ trait AvroCodec[A]:
     */
   def schema: Schema
 
-  /** Encode an `A` to an Avro-shaped runtime value (an [[org.apache.avro.generic.IndexedRecord]], a
-    * primitive box, an [[org.apache.avro.util.Utf8]], or a [[org.apache.avro.generic.GenericArray]]
-    * — varies by `A`). The kindlings encoder is a pure (no-`Either`) shape; the optic layer never
+  /** Encode an `A` to an Avro-shaped runtime value (an `org.apache.avro.generic.IndexedRecord`, a
+    * primitive box, an `org.apache.avro.util.Utf8`, or an `org.apache.avro.generic.GenericArray` —
+    * varies by `A`). The kindlings encoder is a pure (no-`Either`) shape; the optic layer never
     * needs to recover here.
     */
   def encode(a: A): Any
@@ -167,7 +167,7 @@ object AvroCodec:
     * parse failures through the Ior channel. Used by every dual-/triple-input-accepting overload on
     * [[AvroPrism]] / [[AvroTraversal]] so the parse step is uniform.
     *
-    * Arms: [[IndexedRecord]] passes through (`Ior.Right`, no parse); `Array[Byte]` runs
+    * Arms: `IndexedRecord` passes through (`Ior.Right`, no parse); `Array[Byte]` runs
     * [[decodeRecord]] (→ `BinaryParseFailed`); `String` runs the Avro-JSON wire format decoder (→
     * `JsonParseFailed`). The `String` arm matches the exact runtime type —
     * `org.apache.avro.util.Utf8` also implements `CharSequence` and would otherwise be miscaptured

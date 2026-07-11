@@ -9,8 +9,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ForgetfulTraverseLaws]]. */
 abstract class ForgetfulTraverseTests[F[_, _], X, A] extends Laws:
+  /** Laws under test. */
   def laws: ForgetfulTraverseLaws[F, X, A]
 
+  /** The "ForgetfulTraverse" rule set. */
   def forgetfulTraverse(using
       Arbitrary[F[X, A]],
       ForgetfulTraverse[F, Applicative],

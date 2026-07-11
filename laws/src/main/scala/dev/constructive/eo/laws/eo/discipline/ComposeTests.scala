@@ -9,8 +9,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[LensComposeLaws]]. */
 abstract class LensComposeTests[S, A, B] extends Laws:
+  /** Laws under test. */
   def laws: LensComposeLaws[S, A, B]
 
+  /** The "Lens ∘ Lens" rule set. */
   def lensCompose(using Arbitrary[S], Arbitrary[B]): RuleSet =
     new SimpleRuleSet(
       "Lens ∘ Lens",
@@ -21,8 +23,10 @@ abstract class LensComposeTests[S, A, B] extends Laws:
 
 /** Discipline `RuleSet` for [[IsoComposeLaws]]. */
 abstract class IsoComposeTests[S, A, B] extends Laws:
+  /** Laws under test. */
   def laws: IsoComposeLaws[S, A, B]
 
+  /** The "Iso ∘ Iso" rule set. */
   def isoCompose(using Arbitrary[S], Arbitrary[B]): RuleSet =
     new SimpleRuleSet(
       "Iso ∘ Iso",
@@ -33,8 +37,10 @@ abstract class IsoComposeTests[S, A, B] extends Laws:
 
 /** Discipline `RuleSet` for [[PrismComposeLaws]]. */
 abstract class PrismComposeTests[S, A, B] extends Laws:
+  /** Laws under test. */
   def laws: PrismComposeLaws[S, A, B]
 
+  /** The "Prism ∘ Prism" rule set. */
   def prismCompose(using Arbitrary[S], Arbitrary[B]): RuleSet =
     new SimpleRuleSet(
       "Prism ∘ Prism",
@@ -46,8 +52,10 @@ abstract class PrismComposeTests[S, A, B] extends Laws:
 
 /** Discipline `RuleSet` for [[OptionalComposeLaws]]. */
 abstract class OptionalComposeTests[S, A, B] extends Laws:
+  /** Laws under test. */
   def laws: OptionalComposeLaws[S, A, B]
 
+  /** The "Optional ∘ Optional" rule set. */
   def optionalCompose(using Arbitrary[S]): RuleSet =
     new SimpleRuleSet(
       "Optional ∘ Optional",

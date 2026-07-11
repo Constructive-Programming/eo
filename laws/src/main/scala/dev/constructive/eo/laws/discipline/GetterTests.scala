@@ -8,8 +8,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[GetterLaws]]. */
 abstract class GetterTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: GetterLaws[S, A]
 
+  /** The "Getter" rule set. */
   def getter(using Arbitrary[S]): RuleSet =
     new SimpleRuleSet(
       "Getter",

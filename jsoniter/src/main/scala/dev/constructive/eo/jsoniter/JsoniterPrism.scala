@@ -8,7 +8,8 @@ import dev.constructive.eo.optics.Optic
   * decodes the focused slice via `JsonValueCodec[A]` on read, encodes-and-splices on write. No
   * runtime AST.
   *
-  * Carrier: [[Affine]]. Shape `Optic[Array[Byte], Array[Byte], A, A, Affine]`:
+  * Carrier: [[dev.constructive.eo.data.Affine]]. Shape
+  * `Optic[Array[Byte], Array[Byte], A, A, Affine]`:
   *
   *   - `type X = (Array[Byte], (Array[Byte], Int, Int))`
   *     - `Fst[X] = Array[Byte]` — original source bytes (Miss carries this for pass-through)
@@ -40,7 +41,7 @@ import dev.constructive.eo.optics.Optic
   */
 object JsoniterPrism:
 
-  /** Build a read-only Prism over a JSON byte buffer at the given JSONPath.
+  /** Build a read-write Prism over a JSON byte buffer at the given JSONPath.
     *
     * Throws `IllegalArgumentException` if the path string is not parseable. Path syntax: `$`,
     * dotted field names (`$.foo.bar`), array indices (`$[0]`). See [[PathParser]] for the full

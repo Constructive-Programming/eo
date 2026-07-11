@@ -10,8 +10,8 @@ import dev.constructive.eo.forgetful.{ForgetfulFunctor, ForgetfulTraverse}
   * tuple-like "got the focus" case (`(Snd[X], A)`). The laws pin down its two main type-class
   * instances:
   *
-  * * `ForgetfulFunctor[Affine]` — identity and composition. * `ForgetfulTraverse[Affine,
-  * Applicative]` at `Id` — identity.
+  *   - `ForgetfulFunctor[Affine]` — identity and composition.
+  *   - `ForgetfulTraverse[Affine, Applicative]` at `Id` — identity.
   *
   * The `AssociativeFunctor[Affine, X, Y]` instance is already exercised by `Optional ∘ Optional` at
   * the optic level (see [[dev.constructive.eo.laws.eo.OptionalComposeLaws]]); re-stating its
@@ -20,15 +20,15 @@ import dev.constructive.eo.forgetful.{ForgetfulFunctor, ForgetfulTraverse}
   */
 trait AffineLaws[X, A]:
 
-  /** A sample `Affine` value produced by the concrete subclass. The subclass typically supplies
-    * scalacheck-generated values through the `forAll` calls in
-    * [[dev.constructive.eo.laws.data.discipline.AffineTests]].
+  /** `map(fa, identity) == fa`. Sample `Affine` values are scalacheck-generated through the
+    * `forAll` calls in [[dev.constructive.eo.laws.data.discipline.AffineTests]].
     */
   def functorIdentity(fa: Affine[X, A])(using
       FF: ForgetfulFunctor[Affine]
   ): Boolean =
     FF.map(fa, identity[A]) == fa
 
+  /** `map(map(fa, f), g) == map(fa, f andThen g)`. */
   def functorComposition(fa: Affine[X, A], f: A => A, g: A => A)(using
       FF: ForgetfulFunctor[Affine]
   ): Boolean =

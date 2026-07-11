@@ -29,9 +29,16 @@ import dev.constructive.eo.optics.Plated
   */
 object PlateMacro:
 
-  /** @group Constructors */
+  /** Inline entry behind the top-level `plate[S]` — see the object doc for the exact-self-type
+    * child rule and accepted shapes.
+    *
+    * @group Constructors
+    */
   inline def derive[S]: Plated[S] = ${ deriveImpl[S] }
 
+  /** Quoted-macro implementation behind [[derive]] — instantiates the Hearth-backed derivation
+    * against the call-site `Quotes`.
+    */
   def deriveImpl[S: Type](using q: Quotes): Expr[Plated[S]] =
     new HearthPlateMacro(q).derivePlate[S]
 

@@ -47,15 +47,23 @@ final class AvroBridge[A, B] private (
 
   import AvroBridge.BridgedBytes
 
-  // Fst[X] = BridgedBytes (a Miss carries the failure as the T value); Snd[X] = the source bytes
-  // (unused by `from`, which re-encodes the migrated B from scratch). Same X shape as `Optional`.
+  /** Structural leftover: `Fst[X]` is a [[AvroBridge.BridgedBytes]] (a Miss carries the failure as
+    * the `T` value), `Snd[X]` the source bytes (unused by [[from]], which re-encodes the migrated
+    * `B` from scratch). Same `X` shape as `Optional`.
+    */
   type X = (BridgedBytes, Array[Byte])
 
+  /** Decode the source bytes under the `readCodec`'s schema — a `Miss` when they don't decode as an
+    * `A`.
+    */
   def to(bytes: Array[Byte]): Affine[X, A] =
     AvroCodec.decodeValue(bytes)(using readCodec) match
       case Right(a)    => new Affine.Hit[X, A](bytes, a)
       case l @ Left(_) => new Affine.Miss[X, A](l.widenRight)
 
+  /** Re-encode the migrated `B` under the `writeCodec`'s schema; a `Miss` passes its failure
+    * through as the `Left` of [[AvroBridge.BridgedBytes]].
+    */
   def from(aff: Affine[X, B]): BridgedBytes =
     aff match
       case h: Affine.Hit[X, B]  => AvroCodec.encodeValue(h.b)(using writeCodec)

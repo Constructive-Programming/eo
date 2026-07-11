@@ -10,8 +10,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[FoldMapHomomorphismLaws]]. */
 abstract class FoldMapHomomorphismTests[S, A, F[_, _]] extends Laws:
+  /** Laws under test. */
   def laws: FoldMapHomomorphismLaws[S, A, F]
 
+  /** The "foldMap is a Monoid homomorphism" rule set. */
   def foldMapHomomorphism(using
       Arbitrary[S],
       Cogen[A],

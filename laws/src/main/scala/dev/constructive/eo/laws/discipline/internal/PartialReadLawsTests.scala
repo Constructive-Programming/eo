@@ -12,8 +12,6 @@ import org.typelevel.discipline.Laws
   * round-trip "getOption survives a no-op modify"). Leaves add only the props specific to them —
   * Prism contributes the two reverse-roundtrip props on top.
   *
-  * '''Path B (2026-04-25)''': removes the duplicate three-prop body each leaf used to spell out.
-  *
   * Visibility: `private[discipline]`. Leaves: `OptionalTests`, `PrismTests`.
   */
 abstract private[discipline] class PartialReadLawsTests[S, A] extends Laws:

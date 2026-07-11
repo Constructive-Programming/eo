@@ -16,12 +16,12 @@ import org.apache.avro.Schema
   *   type X = (Array[Byte], (Array[Byte], BinarySpan))
   * }}}
   *
-  * Reads locate the focused field's byte span via [[AvroBinaryCursor]] and decode only that slice;
+  * Reads locate the focused field's byte span via `AvroBinaryCursor` and decode only that slice;
   * writes re-encode the focus and splice it in place (three `arraycopy`s, union branch index
   * re-synthesised). The ROOT object is never materialised — neither as a case class nor as a
   * generic record; a record-SHAPED focus is materialised only as that branch's own
-  * [[org.apache.avro.generic.IndexedRecord]] during the slice decode / re-encode. Mirrors
-  * [[dev.constructive.eo.jsoniter.JsoniterPrism]] shape-for-shape:
+  * `org.apache.avro.generic.IndexedRecord` during the slice decode / re-encode. Mirrors
+  * `dev.constructive.eo.jsoniter.JsoniterPrism` shape-for-shape:
   *
   *   - `Fst[X] = Array[Byte]` — original payload; `Miss` carries it for pass-through (parse
   *     failure, path miss, union-branch mismatch, decode failure, unsupported index step).
@@ -43,15 +43,15 @@ import org.apache.avro.Schema
   *
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *
-  *   - [[record]] — the [[IndexedRecord]]-carried optic ([[AvroRecordPrism]]) with the Ior-bearing
+  *   - [[record]] — the `IndexedRecord`-carried optic ([[AvroRecordPrism]]) with the Ior-bearing
   *     diagnostic surface (`get` / `modify` / `place` / `transfer` + `*Unsafe`) over
   *     `IndexedRecord | Array[Byte] | String` input. Use it when you hold parsed records or need
   *     accumulated [[AvroFailure]] diagnostics.
   *   - [[sliceBytes]] / [[graftBytes]] — the encoded-fragment surface for hashing / shipping /
   *     splicing a field's raw encoding across payloads without decoding the focus at all.
   *
-  * Storage decomposition (Unit 5): an `AvroPrism[A]` holds an [[AvroFocus]] (Leaf vs Fields) and a
-  * cached root schema; the byte walk uses the focus's path, the slice decode uses its codec.
+  * Storage decomposition: an `AvroPrism[A]` holds an `AvroFocus` (Leaf vs Fields) and a cached root
+  * schema; the byte walk uses the focus's path, the slice decode uses its codec.
   *
   * '''Laws & preconditions''' (normative):
   *
@@ -82,6 +82,9 @@ final class AvroPrism[A] private[avro] (
 ) extends Optic[Array[Byte], Array[Byte], A, A, Affine],
       Dynamic:
 
+  /** Structural leftover: `Fst[X]` is the original payload (Miss pass-through), `Snd[X]` the
+    * payload plus the located span so `from` can splice without re-walking.
+    */
   type X = (Array[Byte], (Array[Byte], AvroBinaryCursor.BinarySpan))
 
   /** The focus's storage path (`path` for a Leaf focus, `parentPath` for a Fields focus). Used by
@@ -94,9 +97,10 @@ final class AvroPrism[A] private[avro] (
   /** Codec accessor — the slice decode / splice encode side of the focus. */
   private[avro] def codec: AvroCodec[A] = focus.codec
 
-  // Selectable field sugar — `codecPrism[Person].name` lowers to
-  // `codecPrism[Person].field(_.name)` via the macro.
-
+  /** Dynamic field sugar — `codecPrism[Person].name` lowers to `codecPrism[Person].field(_.name)`
+    * via the macro. Shadowed by real members ([[record]], `field`, `at`, …); use the explicit
+    * `.field(_.x)` form for an Avro field named like one of them.
+    */
   transparent inline def selectDynamic(inline name: String): Any =
     ${ AvroPrismMacro.selectFieldImpl[A]('{ this }, 'name) }
 
@@ -104,7 +108,13 @@ final class AvroPrism[A] private[avro] (
 
   // 1-call forwarders; the big bodies live in private methods so the abstract-`def` entry stays
   // a few bytes and inlines at hot use sites (same PrintInlining rationale as JsoniterPrism).
+
+  /** Locate + slice-decode the focus — `Hit` carries the span for [[from]], `Miss` the payload. */
   def to(bytes: Array[Byte]): Affine[X, A] = scan(bytes)
+
+  /** Re-encode the focus and splice it over the located span; a `Miss` passes the payload through
+    * unchanged.
+    */
   def from(aff: Affine[X, A]): Array[Byte] = spliceAff(aff)
 
   private def scan(bytes: Array[Byte]): Affine[X, A] =
@@ -134,8 +144,8 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Record-carried face -------------------------------------------
 
-  /** The [[IndexedRecord]]-carried counterpart of this prism — same focus, but
-    * `Optic[IndexedRecord, IndexedRecord, A, A, Either]` plus the Ior-bearing diagnostic surface.
+  /** The `IndexedRecord`-carried counterpart of this prism — same focus, but
+    * `Optic[IndexedRecord, IndexedRecord, A, A, Affine]` plus the Ior-bearing diagnostic surface.
     * Drill here on the byte prism, then flip at the end:
     *
     * {{{

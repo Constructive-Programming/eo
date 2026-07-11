@@ -237,7 +237,8 @@ object Schemes:
 
   /** Catamorphism as a composable `Getter`, driven by `Plated[S]`. The algebra sees the original
     * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe; folds child
-    * results in place (see [[foldInPlace]]) so it allocates one array per node, not two.
+    * results in place (see the private `foldInPlace` engine) so it allocates one array per node,
+    * not two.
     */
   def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): Getter[S, A] =
     Getter[S, A](foldInPlace[S, A](P.childrenArray, alg))

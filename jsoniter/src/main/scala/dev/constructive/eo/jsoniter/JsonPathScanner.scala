@@ -33,6 +33,8 @@ object JsonPathScanner:
     * @group Scanner
     */
   final case class Span(start: Int, end: Int):
+
+    /** True when the scan resolved — `start >= 0`. */
     inline def isHit: Boolean = start >= 0
 
   /** The single sentinel "miss" Span. */

@@ -2,9 +2,9 @@ package dev.constructive.eo.generics
 
 import scala.quoted.*
 
-/** Quote-context selector-AST helpers shared between [[LensMacro]] and `JsonPrismMacro` /
-  * `AvroPrismMacro`. Both parse single-field selector lambdas (`_.fieldName`) and validate
-  * non-duplicates; the per-macro divergence is just the error-message tag.
+/** Quote-context selector-AST helpers shared between [[LensMacro]] and the `JsonPrismMacro` /
+  * `AvroPrismMacro` cursor macros. All parse single-field selector lambdas (`_.fieldName`) and
+  * validate non-duplicates; the per-macro divergence is just the error-message tag.
   */
 object MacroSelectors:
 

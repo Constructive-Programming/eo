@@ -10,8 +10,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[AffineLaws]]. */
 abstract class AffineTests[X, A] extends Laws:
+  /** Laws under test. */
   def laws: AffineLaws[X, A]
 
+  /** The "Affine" rule set. */
   def affine(using
       Arbitrary[Affine[X, A]],
       Arbitrary[A],

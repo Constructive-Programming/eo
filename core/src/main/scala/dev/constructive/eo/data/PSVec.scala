@@ -97,6 +97,11 @@ object PSVec:
   // companion, NOT on MultiFocusK's (where these were once parked behind
   // `import data.MultiFocus.given`).
 
+  /** `cats.Functor` — index-based map into one fresh backing array (0/1-element results normalise
+    * through [[unsafeWrap]] to `Empty` / `Single`).
+    *
+    * @group Instances
+    */
   given pSVecFunctor: Functor[PSVec] with
 
     def map[A, B](fa: PSVec[A])(f: A => B): PSVec[B] =
@@ -111,6 +116,11 @@ object PSVec:
         loop(0)
         PSVec.unsafeWrap[B](arr)
 
+  /** `cats.Foldable` — index-based `foldLeft`, `Eval`-deferred `foldRight` (stack-safe), O(1)
+    * `size`.
+    *
+    * @group Instances
+    */
   given pSVecFoldable: Foldable[PSVec] with
 
     def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
@@ -131,6 +141,12 @@ object PSVec:
 
     override def size[A](fa: PSVec[A]): Long = fa.length.toLong
 
+  /** `cats.Traverse` — the instance Traversal's `.modifyA` / `.all` route through when the carrier
+    * is `MultiFocus[PSVec]`. Effects run left-to-right in index order, results land in one
+    * pre-sized backing array threaded through `G.map2` (no per-element vector rebuild).
+    *
+    * @group Instances
+    */
   given pSVecTraverse: Traverse[PSVec] with
 
     def traverse[G[_]: Applicative, A, B](fa: PSVec[A])(f: A => G[B]): G[PSVec[B]] =

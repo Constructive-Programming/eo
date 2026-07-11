@@ -39,8 +39,8 @@ import org.apache.avro.{Schema, SchemaNormalization}
   * '''Axis 2 — output altitude.''' Each translating member hands back a different currency:
   *   - typed `A` (via [[AvroCodec]]): [[resolving]] for a KNOWN writer schema (pure optic),
   *     [[reader]] for a per-message lookup (effectful, `Stream.evalMap`-ready);
-  *   - generic [[IndexedRecord]] (no case class needed): [[resolvingRecord]] / [[recordReader]],
-  *     same split;
+  *   - generic `IndexedRecord` (no case class needed): [[resolvingRecord]] / [[recordReader]], same
+  *     split;
   *   - reader-layout framed '''bytes''' (no decode at all): [[resolvingBytes]] — per-message
   *     lookup, writer-id-cached, for consumers that hash / slice / forward rather than deserialize.
   *
@@ -51,7 +51,7 @@ object ConfluentWire:
 
   // ---- Frame primitives (header only, no schema involvement) ---------
 
-  /** Resolve a Confluent schema id to the writer [[Schema]] it names. Synchronous by design: the
+  /** Resolve a Confluent schema id to the writer `Schema` it names. Synchronous by design: the
     * caller owns the registry client, the cache, and any effect wrapping, and hands this surface an
     * already-synchronous lookup. May throw (a registry miss, a network error) — callers here catch
     * that into [[AvroFailure.SchemaResolutionFailed]].
@@ -119,10 +119,10 @@ object ConfluentWire:
     *   1. [[strip]] the 5-byte header → `(schemaId, body)`;
     *   2. resolve the writer schema for `schemaId` via `schemaById`;
     *   3. gate by parsing-canonical-form fingerprint
-    *      ([[org.apache.avro.SchemaNormalization.parsingFingerprint64]]): when the writer
-    *      fingerprint equals the reader's, the body is byte-identical under both schemas — return
-    *      it as-is; else refuse with [[AvroFailure.SchemaMismatch]] rather than hand back bytes
-    *      that would misdecode.
+    *      (`org.apache.avro.SchemaNormalization.parsingFingerprint64`): when the writer fingerprint
+    *      equals the reader's, the body is byte-identical under both schemas — return it as-is;
+    *      else refuse with [[AvroFailure.SchemaMismatch]] rather than hand back bytes that would
+    *      misdecode.
     *
     * The returned bytes are the caller's to decode (or hash, or forward) with whatever they own.
     * Failures: [[AvroFailure.NotConfluentFramed]] (bad frame),
@@ -159,8 +159,9 @@ object ConfluentWire:
             else
               Left(AvroFailure.SchemaMismatch(frame.schemaId, writerFingerprint, readerFingerprint))
 
-  /** [[resolve]] as a composable eo [[Prism]] over bytes: `Array[Byte]` (a full Confluent frame) ↔
-    * `Array[Byte]` (the byte-exact gated body). Drop it BEFORE any byte optic and compose:
+  /** [[resolve]] as a composable eo [[dev.constructive.eo.optics.Prism]] over bytes: `Array[Byte]`
+    * (a full Confluent frame) ↔ `Array[Byte]` (the byte-exact gated body). Drop it BEFORE any byte
+    * optic and compose:
     *
     * {{{
     *   val cf = ConfluentWire.confluent(schemaById, readerSchema, frameId)
@@ -218,7 +219,7 @@ object ConfluentWire:
     )
 
   /** Generic counterpart of [[resolving]] — resolves `readSchema` → the caller-supplied
-    * `writeSchema` into an [[IndexedRecord]], for when no reader codec / case class exists.
+    * `writeSchema` into an `IndexedRecord`, for when no reader codec / case class exists.
     */
   def resolvingRecord(
       readSchema: Schema,
@@ -244,7 +245,7 @@ object ConfluentWire:
     * upgrade. That is the property the gate ([[resolve]]) cannot give.
     *
     * A factory, like [[confluent]]: the returned function closes over a per-writer-id cache
-    * ([[java.util.concurrent.ConcurrentHashMap]]), so `schemaById` is consulted once per DISTINCT
+    * (`java.util.concurrent.ConcurrentHashMap`), so `schemaById` is consulted once per DISTINCT
     * writer id — one entry per schema version seen on the stream. Keep the returned function;
     * re-calling `resolvingBytes` per message discards the cache.
     *

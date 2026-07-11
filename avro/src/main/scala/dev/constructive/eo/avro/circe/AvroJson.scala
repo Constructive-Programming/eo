@@ -108,9 +108,9 @@ object AvroJson:
   /** The fundamental codec diagonal — every prism below is this one with its inputs pre-composed
     * via `MendTearPrism.tearFrom` / `mendFrom`. Tears an Avro '''generic runtime value''' into a
     * typed `A` via the codec's decode; a miss surrenders the '''structural Json view''' of the
-    * value ([[valueToJson]]) instead of the raw input, so a payload that is valid Avro but not a
-    * valid `A` still lands somewhere inspectable. The mend renders any generic value back as `Json`
-    * — the same structural walk.
+    * value (the [[avroToJson]] walk generalised to any value) instead of the raw input, so a
+    * payload that is valid Avro but not a valid `A` still lands somewhere inspectable. The mend
+    * renders any generic value back as `Json` — the same structural walk.
     *
     * The family below varies the two '''input''' slots only: what the tear consumes (generic value
     * / payload bytes / record) and what the mend accepts (generic value / `A` / `IndexedRecord`).
@@ -320,10 +320,10 @@ object AvroJson:
         }.map(_.toArray)
       )
 
-  /** The read optic: the base [[avroToJson]] composed onto a bytes → record read [[Getter]].
-    * `parseRecord` parses payload bytes to a generic `IndexedRecord` (no typed decode), and eo's
-    * fused `Getter.andThen(Getter)` maps the structural walk over it, yielding a total
-    * `Getter[Array[Byte], Json]`.
+  /** The read optic: the base [[avroToJson]] composed onto a bytes → record read
+    * [[dev.constructive.eo.optics.Getter]]. The parse step reads payload bytes to a generic
+    * `IndexedRecord` (no typed decode), and eo's fused `Getter.andThen(Getter)` maps the structural
+    * walk over it, yielding a total `Getter[Array[Byte], Json]`.
     *
     * The `schema` must be the exact writer schema the bytes were encoded under: the parse is
     * position-based and does no writer/reader resolution, so a mismatched schema silently misreads.

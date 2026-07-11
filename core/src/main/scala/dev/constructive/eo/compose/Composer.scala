@@ -64,15 +64,13 @@ object Composer extends LowPriorityComposerInstances:
 
   /** Express a Direct optic (a Getter, Review, or Iso) as a `Forget[F]`-carrier optic — lift the
     * single focus into `F` via `pure` on the read side, and pick the single `B` back out of the
-    * `F[B]` on the build side. This is the `Composer[Direct, Forget[F]]` bridge
-    * [[dev.constructive.eo.laws.GetterLaws]] anticipated. Powers `Getter.andThen(Fold)`,
-    * `Optic.cross` against a `Fold`, and — since [[optics.Unfold]] gave `Forget[F]` a genuine
-    * build-only citizen — the build side of `review.andThen(unfold)` chains.
+    * `F[B]` on the build side. Powers `Getter.andThen(Fold)`, `Optic.cross` against a `Fold`, and
+    * the build side of `review.andThen(unfold)` chains ([[optics.Unfold]] is `Forget[F]`'s
+    * build-only citizen, so `from` is reachable via `assocForgetMonad.composeFrom` on a `Monad[F]`
+    * chain).
     *
-    * The `from` was a documented-unreachable `???` while `Forget[F]` had no build-capable
-    * inhabitant; `Unfold` made it reachable (via `assocForgetMonad.composeFrom` on a `Monad[F]`
-    * chain). The singleton pick is sound on every reachable path: the only `F[B]` ever fed to a
-    * lifted Direct optic's `from` is `ForgetPull.monadicPull`'s `pure(b)`. A hand-routed call with
+    * The singleton pick is sound on every reachable path: the only `F[B]` ever fed to a lifted
+    * Direct optic's `from` is `ForgetPull.monadicPull`'s `pure(b)`. A hand-routed call with
     * cardinality ≠ 1 throws, mirroring the other `pickSingletonOrThrow` bridges. Requires
     * `Applicative[F]` for `pure` and `Foldable[F]` for the pick.
     *

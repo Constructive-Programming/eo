@@ -16,8 +16,10 @@ import org.typelevel.discipline.Laws
   * generic `Cogen[F[A]]` derivation isn't available for `ZipList` / `Const` out of the box.
   */
 abstract class MultiFocusTests[S, A, F[_]] extends Laws:
+  /** Laws under test. */
   def laws: MultiFocusLaws[S, A, F]
 
+  /** The "MultiFocus" rule set. */
   def multiFocus(using
       Arbitrary[S],
       Arbitrary[A],

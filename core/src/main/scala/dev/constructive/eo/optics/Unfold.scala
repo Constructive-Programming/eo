@@ -32,8 +32,8 @@ import data.Forget
   *     that reach `to` (`.modify`, `.foldMap`, …) degrade to the singleton layer.
   *   - [[Unfold.algebra]] (no constraint) — for pattern functors (`BinF`, `RoseF`, …), which admit
   *     `Functor`/`Traverse` but no `Applicative` (`pure` cannot pick a constructor). Its `to` is
-  *     genuinely unreachable through the build-only surface and THROWS if forced — the mirror of
-  *     `Composer.direct2forget`'s formerly-`???` `from`.
+  *     genuinely unreachable through the build-only surface and THROWS if forced — the same
+  *     reachable-path contract as `Composer.direct2forget`'s singleton-pick `from`.
   *
   * A `final class` storing `embed` directly — NOT an abstract member — per the composed-dispatch
   * findings on [[Getter]] / [[Review]]. Fused `andThen` members keep build-only chains concrete.

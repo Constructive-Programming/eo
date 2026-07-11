@@ -7,11 +7,11 @@ import org.apache.avro.generic.IndexedRecord
 /** Public surface forwarder for the record-carried Avro optics [[AvroRecordPrism]] and
   * [[AvroRecordTraversal]] — the `.record` faces of [[AvroPrism]] / [[AvroTraversal]].
   *
-  * '''Per OQ-avro-7 (plan):''' this is a deliberate copy-paste of
-  * `dev.constructive.eo.circe.JsonOpticOps`. When a third cursor module appears (eo-protobuf,
-  * eo-cbor, ...) the right thing is to generalise to `core.OpticOps[Carrier, Failure, A]`. Until
-  * then the duplication is intentional — the surface is small enough that a clean abstraction is
-  * cheaper to reach for once we have three concrete shapes than to design upfront.
+  * A deliberate copy-paste of `dev.constructive.eo.circe.JsonOpticOps`. When a third cursor module
+  * appears (eo-protobuf, eo-cbor, ...) the right thing is to generalise to
+  * `core.OpticOps[Carrier, Failure, A]`. Until then the duplication is intentional — the surface is
+  * small enough that a clean abstraction is cheaper to reach for once we have three concrete shapes
+  * than to design upfront.
   *
   * Concrete classes supply six per-record hooks (three Ior-bearing, three silent); the trait wires
   * up the public surface in terms of those hooks plus the common [[AvroCodec.parseInputIor]] /
@@ -22,9 +22,8 @@ private[avro] trait AvroOpticOps[A]:
   // ---- Abstract members supplied by each carrier ---------------------
 
   /** The reader schema used to decode `Array[Byte]` and `String` (Avro JSON wire format) inputs.
-    * The carrier's constructor cached this off the user's `AvroCodec[Root]` (or accepted it as a
-    * `given Schema` per OQ-avro-5); exposing it here lets [[AvroCodec.parseInputIor]] thread it
-    * without re-summoning.
+    * The carrier's constructor cached this off the user's `AvroCodec[Root]`; exposing it here lets
+    * `AvroCodec.parseInputIor` thread it without re-summoning.
     */
   protected def rootSchema: Schema
 
@@ -57,14 +56,13 @@ private[avro] trait AvroOpticOps[A]:
   ): (IndexedRecord | Array[Byte] | String) => Ior[Chain[AvroFailure], IndexedRecord] =
     input => AvroCodec.parseInputIor(input, rootSchema).flatMap(j => modifyIor(j, f))
 
-  /** Apply `f` to the raw [[IndexedRecord]] at the focused position (no decode / encode through the
+  /** Apply `f` to the raw `IndexedRecord` at the focused position (no decode / encode through the
     * codec layer). Useful for carrier-aware rewrites that don't want to round-trip through the
     * focus type.
     *
-    * Note: [[transformIor]]'s implementation in [[AvroPrism]] passes through the focused cursor's
-    * *value* — for a leaf focus that may be a primitive (Long, Utf8, …), so the user's
-    * `f: IndexedRecord => IndexedRecord` is a slight type misfit at non-record-typed leaves. Unit
-    * 5+ may revisit the parametric shape.
+    * Note: the focused cursor's *value* is what gets passed through — for a leaf focus that may be
+    * a primitive (Long, Utf8, …), so the user's `f: IndexedRecord => IndexedRecord` is a slight
+    * type misfit at non-record-typed leaves.
     */
   def transform(
       f: IndexedRecord => IndexedRecord

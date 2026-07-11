@@ -5,7 +5,8 @@ import dev.constructive.eo.forgetful.ForgetfulFunctor
 /** Law equations for any `ForgetfulFunctor[F]` instance — the usual two functor laws, stated in
   * carrier-carrier form:
   *
-  * * `map(id) == id` * `map(g) ∘ map(f) == map(f andThen g)`
+  *   - `map(id) == id`
+  *   - `map(g) ∘ map(f) == map(f andThen g)`
   *
   * Holds for every carrier EO uses: `Tuple2`, `Either`, `Affine`, `ModifyF`, `Direct`, `Forget[F]`,
   * `MultiFocus[F]`. The law trait is parameterised so downstream adding a new carrier can witness
@@ -17,9 +18,11 @@ import dev.constructive.eo.forgetful.ForgetfulFunctor
   */
 trait ForgetfulFunctorLaws[F[_, _], X, A]:
 
+  /** `map(fa, identity) == fa`. */
   def functorIdentity(fa: F[X, A])(using FF: ForgetfulFunctor[F]): Boolean =
     FF.map(fa, identity[A]) == fa
 
+  /** `map(map(fa, f), g) == map(fa, f andThen g)`. */
   def functorComposition(
       fa: F[X, A],
       f: A => A,

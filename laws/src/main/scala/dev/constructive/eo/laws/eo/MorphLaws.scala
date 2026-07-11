@@ -20,7 +20,10 @@ import optics.Optic
   * without changing observable behaviour.
   */
 trait MorphLaws[S, A, F[_, _], G[_, _]]:
+  /** The optic under test, at its original carrier `F`. */
   def optic: Optic[S, S, A, A, F]
+
+  /** The same optic reshaped to carrier `G` via `Optic.morph`. */
   def morphed: Optic[S, S, A, A, G]
 
   /** A1 — morph preserves modify. */

@@ -8,8 +8,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ForgetfulFunctorLaws]]. */
 abstract class ForgetfulFunctorTests[F[_, _], X, A] extends Laws:
+  /** Laws under test. */
   def laws: ForgetfulFunctorLaws[F, X, A]
 
+  /** The "ForgetfulFunctor" rule set. */
   def forgetfulFunctor(using
       Arbitrary[F[X, A]],
       Arbitrary[A],

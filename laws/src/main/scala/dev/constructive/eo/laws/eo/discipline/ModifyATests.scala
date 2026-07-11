@@ -11,8 +11,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ModifyAIdLaws]]. */
 abstract class ModifyAIdTests[S, A, F[_, _]] extends Laws:
+  /** Laws under test. */
   def laws: ModifyAIdLaws[S, A, F]
 
+  /** The "modifyA at Id ≡ modify" rule set. */
   def modifyAId(using
       Arbitrary[S],
       Arbitrary[A],
@@ -28,8 +30,10 @@ abstract class ModifyAIdTests[S, A, F[_, _]] extends Laws:
 
 /** Discipline `RuleSet` for [[ModifyAConstLaws]]. */
 abstract class ModifyAConstTests[S, A, F[_, _]] extends Laws:
+  /** Laws under test. */
   def laws: ModifyAConstLaws[S, A, F]
 
+  /** The "modifyA at Const[M,*] ≡ foldMap" rule set. */
   def modifyAConst(using
       Arbitrary[S],
       Cogen[A],

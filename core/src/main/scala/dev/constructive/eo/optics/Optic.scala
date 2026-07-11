@@ -74,7 +74,7 @@ trait Optic[S, T, A, B, F[_, _]]:
 
   /** ANY outer ∘ read-only inner — the inner is honestly one-way (`T = Unit`: a Getter, AffineFold,
     * or Fold), so only the two READ sides matter and the composite collapses to the read-only join
-    * of their strengths via [[ReadCompose]] (`Getter` / `PickFold` / `ForgetFold`).
+    * of their strengths via [[compose.ReadCompose]] (`Getter` / `PickFold` / `ForgetFold`).
     *
     * A trait *member* (not an extension in the companion) deliberately: once a receiver is
     * statically one of the fused concrete classes, its `andThen` member overloads enter resolution
@@ -164,11 +164,11 @@ object Optic:
         def to(s: S): F[X, C] = F.map(o.to(s), g)
         def from(xd: F[X, D]): T = o.from(F.map(xd, f))
 
-  /** Cross-carrier `.andThen` — picks the direction via a summoned [[Morph]] when the two optics'
-    * carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), cats-eo ships
-    * no bidirectional Composer pairs, so at most one Morph applies per carrier pair. That one pair
-    * can make a `Forget[F]` ⇄ `MultiFocus[F]` chain ambiguous; it's resolved via the explicit
-    * `Composer[..].to(o)` form (see `multifocus2forget`).
+  /** Cross-carrier `.andThen` — picks the direction via a summoned [[compose.Morph]] when the two
+    * optics' carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`),
+    * cats-eo ships no bidirectional Composer pairs, so at most one Morph applies per carrier pair.
+    * That one pair can make a `Forget[F]` ⇄ `MultiFocus[F]` chain ambiguous; it's resolved via the
+    * explicit `Composer[..].to(o)` form (see `multifocus2forget`).
     *
     * @example
     *   {{{
@@ -185,12 +185,19 @@ object Optic:
     ): Optic[S, T, C, D, m.Out] =
       m.morphSelf(self).andThen(m.morphO(o))
 
-    /** Re-express this optic over a different carrier `G`. Package-private; users compose
-      * cross-carrier via [[andThen]] above. Reachable for law / behaviour specs inside `eo.*`.
+    /** Re-express this optic over a different carrier `G` via the summoned `Composer[F, G]`.
+      * Ordinary code composes cross-carrier through [[andThen]] above (which morphs implicitly);
+      * the explicit form serves law / behaviour specs and the rare `Morph`-ambiguous chain.
       */
     def morph[G[_, _]](using cf: Composer[F, G]): Optic[S, T, A, B, G] =
       cf.to(self)
 
+  /** Total read — extract the focus, available when the carrier always hits (`Accessor[F]`:
+    * `Tuple2` for Lens, `Direct` for Iso / Getter). [[readOnly]] wraps the same read as a concrete
+    * [[Getter]], the one-way view of a writable optic.
+    *
+    * @group Operations
+    */
   extension [S, T, A, B, F[_, _]](
       self: Optic[S, T, A, B, F]
   )(using accessor: Accessor[F])
@@ -199,6 +206,11 @@ object Optic:
     inline def readOnly: Getter[S, A] =
       Getter(get)
 
+  /** Partial read — `Some(focus)` on hit, `None` on miss. Available when the carrier may miss
+    * (`PartialAccessor[F]`: `Either` for Prism, `Affine` for Optional / AffineFold).
+    *
+    * @group Operations
+    */
   extension [S, T, A, B, F[_, _]](
       self: Optic[S, T, A, B, F]
   )(using A: PartialAccessor[F]) inline def getOption(s: S): Option[A] = A.getOption(self.to(s))
@@ -213,6 +225,10 @@ object Optic:
   )(using ra: ReverseAccessor[F])
     inline def reverseGet(b: B): T = self.from(ra.reverseGet(b))
 
+    /** ANY reversible outer ∘ build-only inner — only the two BUILD sides matter, so the composite
+      * collapses to a [[Review]] (`reverseGet ∘ reverseGet`), the build-direction mirror of the
+      * read-only `andThen` collapse.
+      */
     inline def andThen[D](o: Review[B, D]): Review[T, D] =
       Review(d => reverseGet(o.reverseGet(d)))
 
@@ -225,6 +241,7 @@ object Optic:
     inline def andThen[G[_], D](o: Unfold[B, D, G]): Unfold[T, D, G] =
       o.into(b => reverseGet(b))
 
+    /** The build half alone as a concrete [[Review]] — the write-direction dual of [[readOnly]]. */
     inline def writeOnly: Review[T, B] =
       Review(reverseGet)
 
@@ -264,6 +281,9 @@ object Optic:
     inline def replace(b: B): S => T =
       s => self.from(FF.map(self.to(s), _ => b))
 
+    /** ANY writable outer ∘ write-only inner — the inner cannot be read, so the composite is
+      * write-only too: a [[Modify]] running `modify(o.modify(f))`.
+      */
     inline def andThen[C, D](o: Modify[A, B, C, D]): Modify[S, T, C, D] =
       Modify(f => modify(o.modify(f)))
 
@@ -331,6 +351,9 @@ object Optic:
     inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
       s => FT.traverse(o.to(s), f)(using G).map(o.from)
 
+    /** Every visited focus, still inside its carrier (`List[F[o.X, A]]`) — the raw-optic
+      * counterpart of the carrier-free `CanFold.foci`.
+      */
     inline def all(s: S): List[F[o.X, A]] =
       FT.traverse(o.to(s), List(_))(using Applicative[List])
 

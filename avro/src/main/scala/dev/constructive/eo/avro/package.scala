@@ -10,7 +10,7 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
   *
   * The entry point is [[AvroPrism.codecPrism]] (read-aloud API parallel to
-  * [[dev.constructive.eo.circe.codecPrism]]):
+  * `dev.constructive.eo.circe.codecPrism`):
   *
   * {{{
   *   import dev.constructive.eo.avro.{AvroCodec, codecPrism}
@@ -42,24 +42,23 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   * Optional, so the carrier widens to `Affine` (via the Composer on composition) rather than
   * pretending to be a `Prism`; the two record faces stay in step.
   *
-  * '''Gap-1 (per the eo-avro plan).''' [[PathStep]] is duplicated, not shared with eo-circe — the
-  * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. The
-  * duplication is intentional; see [[PathStep]]'s class doc.
+  * '''Deliberate duplication.''' [[PathStep]] is duplicated, not shared with eo-circe — the
+  * `UnionBranch` case is Avro-only and forcing it into eo-circe would pollute that module. See
+  * [[PathStep]]'s class doc.
   */
 package object avro:
 
   /** Root-level Prism from Avro to a native type `S`. Reads `S`'s schema off the in-scope
-    * [[AvroCodec]]`[S]` (per OQ-avro-5). Alias for [[AvroPrism.codecPrism]] that reads more
-    * naturally when composed with `.field`.
+    * [[AvroCodec]]`[S]`. Alias for [[AvroPrism.codecPrism]] that reads more naturally when composed
+    * with `.field`.
     */
   def codecPrism[S](using codec: AvroCodec[S]): AvroPrism[S] = AvroPrism.codecPrism[S]
 
-  /** Structural equality for [[IndexedRecord]] — schema + positional field values, recursing
-    * through nested records / arrays / maps.
+  /** Structural equality for `IndexedRecord` — schema + positional field values, recursing through
+    * nested records / arrays / maps.
     *
-    * Per Gap-5 / OQ-avro-9 this is a public `given`. Downstream property tests and round-trip specs
-    * that compare records by value (rather than reference) pick this up via
-    * `import dev.constructive.eo.avro.given`.
+    * A public `given`: downstream property tests and round-trip specs that compare records by value
+    * (rather than reference) pick this up via `import dev.constructive.eo.avro.given`.
     *
     * Implementation note: defers to `org.apache.avro.generic.GenericData.compare` which already
     * walks the schema-driven runtime shape recursively. Equal iff `compare == 0`.
@@ -70,7 +69,7 @@ package object avro:
       x.getSchema == y.getSchema &&
         GenericData.get().compare(x, y, x.getSchema) == 0
 
-  /** [[Eq]] specialised to [[GenericRecord]] — the more common runtime type. Reuses the same
+  /** `Eq` specialised to `GenericRecord` — the more common runtime type. Reuses the same
     * `compare`-based implementation.
     */
   given Eq[GenericRecord] = Eq.by(identity[IndexedRecord])

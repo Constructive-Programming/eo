@@ -22,12 +22,17 @@ import optics.Optic.*
   *   `dev.constructive.eo.laws.discipline.MultiFocusTests`.
   */
 trait MultiFocusLaws[S, A, F[_]]:
+  /** The optic under test. */
   def multiFocus: Optic[S, S, A, A, MultiFocus[F]]
+
+  /** `Functor` evidence for the focus classifier `F`. */
   given functor: Functor[F]
 
+  /** MF1 — `modify(identity) == identity`. */
   def modifyIdentity(s: S): Boolean =
     multiFocus.modify(identity[A])(s) == s
 
+  /** MF2 — `modify(g) ∘ modify(f) == modify(f andThen g)`. */
   def composeModify(s: S, f: A => A, g: A => A): Boolean =
     multiFocus.modify(g)(multiFocus.modify(f)(s)) == multiFocus.modify(f.andThen(g))(s)
 

@@ -309,14 +309,8 @@ object JsonPrismMacro:
         )
         emit[b](name, enc, dec)
 
-  /** Shared helper: pull the element type out of a Scala collection's `Iterable` base type, or
-    * abort with a clear error mentioning the call site (`who`).
-    */
-  /** Shared helper: summon both `Encoder[B]` and `Decoder[B]` from the enclosing scope, with a
-    * caller-supplied error message on either failure. Each former call site spelled the same "no
-    * given Encoder[…] in scope. …" twice, once for `Encoder` and once for `Decoder`; the caller now
-    * passes a single `errorMsg(role)` and the helper plugs in `"Encoder"` / `"Decoder"` for the
-    * missing one.
+  /** Shared helper: summon both `Encoder[B]` and `Decoder[B]` from the enclosing scope, aborting
+    * with `errorMsg(role)` (role = `"Encoder"` / `"Decoder"`) for whichever is missing.
     */
   private def summonCodecs[B: Type](
       errorMsg: String => String

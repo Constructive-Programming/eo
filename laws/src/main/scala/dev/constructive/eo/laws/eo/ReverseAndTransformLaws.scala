@@ -12,22 +12,25 @@ import optics.Optic.*
 
 /** B1 — Iso `reverse` is involutive on both `get` and `reverseGet`. */
 trait ReverseInvolutionLaws[S, A]:
+  /** The optic under test. */
   def iso: Optic[S, S, A, A, Direct]
 
+  /** `reverse.reverse.get == get`. */
   def reverseInvolutionGet(s: S): Boolean =
     iso.reverse.reverse.get(s) == iso.get(s)
 
+  /** `reverse.reverse.reverseGet == reverseGet`. */
   def reverseInvolutionReverseGet(a: A): Boolean =
     iso.reverse.reverse.reverseGet(a) == iso.reverseGet(a)
 
-/** H1/H2/H4 — Lens `transform` / `place` / `transfer` mutually agree. `optic` is a `val` so
-  * `optic.X` is a stable path; `transformEv` is abstract so each concrete subclass supplies the
-  * `S => (X0, A)` evidence (identity for `Lens.second`, swap for `Lens.first`, …).
-  */
+/** H1/H2/H4 — Lens `transform` / `place` / `transfer` mutually agree. */
 trait TransformLaws[S, A, X0]:
+  /** The optic under test — a `val` so `optic.X` is a stable path. */
   val optic: Optic[S, S, A, A, Tuple2] { type X = X0 }
 
-  /** Evidence that `S` can be viewed as `(X0, A)`. */
+  /** Evidence that `S` can be viewed as `(X0, A)` — supplied by each concrete subclass (identity
+    * for `Lens.second`, swap for `Lens.first`, …).
+    */
   given transformEv: (S => (X0, A))
 
   /** H4 — transform identity is a no-op. */
@@ -44,7 +47,9 @@ trait TransformLaws[S, A, X0]:
 
 /** H3 — Iso `put` is the curried `reverseGet ∘ pure`. */
 trait PutIsReverseGetLaws[S, A]:
+  /** The optic under test. */
   def iso: Optic[S, S, A, A, Direct]
 
+  /** `put(f)(a) == reverseGet(f(a))`. */
   def putIsReverseGetCompose(a: A, f: A => A): Boolean =
     iso.put(f)(a) == iso.reverseGet(f(a))

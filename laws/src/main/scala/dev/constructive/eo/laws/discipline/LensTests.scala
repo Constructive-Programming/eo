@@ -7,11 +7,12 @@ import org.scalacheck.{Arbitrary, Cogen}
 
 /** Discipline `RuleSet` for [[LensLaws]].
   *
-  * '''Hierarchy:''' inherits the four modify-tier props from [[internal.ReplaceLawsTests]] and adds
+  * '''Hierarchy:''' inherits the four modify-tier props from `internal.ReplaceLawsTests` and adds
   * the two get/replace round-trip props (`getReplace`, `replaceGet`) that distinguish a Lens from a
   * Modify / Traversal.
   */
 abstract class LensTests[S, A] extends internal.ReplaceLawsTests[S, A]:
+  /** Laws under test. */
   def laws: LensLaws[S, A]
 
   protected def modifyIdentityFn: S => Boolean = laws.modifyIdentity
@@ -19,6 +20,7 @@ abstract class LensTests[S, A] extends internal.ReplaceLawsTests[S, A]:
   protected def replaceIdempotentFn: (S, A) => Boolean = laws.replaceIdempotent
   protected def consistentReplaceModifyFn: (S, A) => Boolean = laws.consistentReplaceModify
 
+  /** The "Lens" rule set. */
   def lens(using Arbitrary[S], Arbitrary[A], Cogen[A]): RuleSet =
     new DefaultRuleSet(
       name = "Lens",

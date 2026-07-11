@@ -110,7 +110,7 @@ object ModifyF:
 
   // MultiFocus[F] → ModifyF lives in `MultiFocus.scala` (`multifocus2modify`).
 
-  /** Same-carrier composition for `Optic[…, ModifyF]` — closes top-5 plan gap #4.
+  /** Same-carrier composition for `Optic[…, ModifyF]` — `modify.andThen(modify)`.
     *
     * Encoding: `Z = (Fst[Xo], Snd[Xi])`. `composeTo` seeds the ModifyF with `(outer-source,
     * identity[C])` — no `inner.to` call needed because ModifyF's continuation is structurally

@@ -226,11 +226,22 @@ object Plated:
     */
   extension [S](self: Optic[S, S, S, S, MultiFocus[PSVec]])
 
+    /** Wrap this self-traversal as a [[Plated]] instance (carrier-default `childrenVec` /
+      * `rebuild`; a derived / [[Plated.fromChildrenVec]] instance is cheaper — see
+      * [[Plated.rebuild]]).
+      */
     def asPlated: Plated[S] =
       new Plated[S]:
         val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = self
 
+    /** [[Plated.transform]] over this optic — bottom-up rewrite of every sub-term. */
     def transformAll(f: S => S)(s: S): S = Plated.transform(f)(s)(using asPlated)
+
+    /** [[Plated.rewrite]] over this optic — bottom-up rewrite to a fixpoint. */
     def rewriteAll(f: S => Option[S])(s: S): S = Plated.rewrite(f)(s)(using asPlated)
+
+    /** [[Plated.children]] over this optic — the immediate sub-terms. */
     def childrenOf(s: S): List[S] = Plated.children(s)(using asPlated)
+
+    /** [[Plated.universe]] over this optic — every sub-term, pre-order, `s` first. */
     def universeOf(s: S): List[S] = Plated.universe(s)(using asPlated)

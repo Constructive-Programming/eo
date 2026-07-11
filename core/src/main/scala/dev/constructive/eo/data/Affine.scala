@@ -121,7 +121,7 @@ object Affine:
   /** Convenience wrapping extension — turns a raw `Either[Fst[X], (Snd[X], B)]` into an
     * `Affine[X, B]` via the [[apply]] smart constructor.
     *
-    * @group Instances
+    * @group Constructors
     */
   extension [X <: Tuple, B](e: Either[Fst[X], (Snd[X], B)]) def affine: Affine[X, B] = Affine(e)
 
@@ -171,10 +171,10 @@ object Affine:
     def traverse[X, A, B, G[_]: Applicative](fa: Affine[X, A], f: A => G[B]): G[Affine[X, B]] =
       fa.aTraverse(f)
 
-  /** Composition functor for `Affine` carriers. `X` / `Y` are deliberately unbounded — Affine's
+  /** Composition functor for `Affine` carriers. `Xo` / `Xi` are deliberately unbounded — Affine's
     * `Fst[X]` / `Snd[X]` match types stay inert when `X` is not a `Tuple`, which is sound for every
     * shipped concrete optic (every concrete X is a Tuple2). A `ValidCarrier[F, X]` threading is a
-    * possible post-0.1.0 cleanup.
+    * possible future cleanup.
     *
     * @group Instances
     */

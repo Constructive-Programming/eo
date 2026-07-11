@@ -10,8 +10,10 @@ import org.typelevel.discipline.Laws
 /** Discipline `RuleSet` for [[AssociativeFunctorLaws]]. */
 abstract class AssociativeFunctorTests[S, A, C, F[_, _]] extends Laws:
 
+  /** Laws under test. */
   def laws: AssociativeFunctorLaws[S, A, C, F]
 
+  /** The "AssociativeFunctor" rule set. */
   def associativeFunctor(using
       Arbitrary[S],
       Arbitrary[C => C],

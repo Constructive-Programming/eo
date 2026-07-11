@@ -9,8 +9,10 @@ import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[ReverseInvolutionLaws]]. */
 abstract class ReverseInvolutionTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: ReverseInvolutionLaws[S, A]
 
+  /** The "Iso reverse is involutive" rule set. */
   def reverseInvolution(using Arbitrary[S], Arbitrary[A]): RuleSet =
     new SimpleRuleSet(
       "Iso reverse is involutive",
@@ -22,8 +24,10 @@ abstract class ReverseInvolutionTests[S, A] extends Laws:
 
 /** Discipline `RuleSet` for [[TransformLaws]]. */
 abstract class TransformTests[S, A, X0] extends Laws:
+  /** Laws under test. */
   def laws: TransformLaws[S, A, X0]
 
+  /** The "Lens transform / place / transfer" rule set. */
   def transform(using Arbitrary[S], Arbitrary[A], Cogen[A]): RuleSet =
     new SimpleRuleSet(
       "Lens transform / place / transfer",
@@ -37,8 +41,10 @@ abstract class TransformTests[S, A, X0] extends Laws:
 
 /** Discipline `RuleSet` for [[PutIsReverseGetLaws]]. */
 abstract class PutIsReverseGetTests[S, A] extends Laws:
+  /** Laws under test. */
   def laws: PutIsReverseGetLaws[S, A]
 
+  /** The "Optic.put ≡ reverseGet ∘ pure" rule set. */
   def putIsReverseGet(using Arbitrary[A], Cogen[A]): RuleSet =
     new SimpleRuleSet(
       "Optic.put ≡ reverseGet ∘ pure",
