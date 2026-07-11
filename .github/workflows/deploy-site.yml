@@ -72,7 +72,17 @@ jobs:
           cache: sbt
 
       - name: Build site
-        run: sbt 'docs/tlSite'
+        run: sbt 'docs/tlSite; unidocs/unidoc'
+
+      # Self-hosted scaladoc: mount the merged unidoc tree under /api/
+      # in the deployed site. Done AFTER the Laika render on purpose —
+      # Laika never sees the scaladoc HTML (it would try to validate /
+      # transform it); the "API" top-nav link is external ("/api/")
+      # for the same reason.
+      - name: Mount API docs under /api
+        run: |
+          mkdir -p site/target/docs/site/api
+          cp -r unidocs/target/scala-*/unidoc/. site/target/docs/site/api/
 
       - name: Deploy to Cloudflare Pages
         id: deploy

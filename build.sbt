@@ -694,6 +694,12 @@ lazy val docs: Project = project
           // above (scmInfo := None) so this list is the full set in
           // the rendered order.
           navLinks = Seq(
+            // Merged scaladoc (the `unidocs` project) — mounted at
+            // /api/ by deploy-site.yml AFTER the Laika render, so
+            // Laika never sees it: the link must be external (an
+            // internal one would fail validation). Root-relative so
+            // previews and production both resolve.
+            TextLink.external("/api/", "API"),
             // Benchmark history chart — a static page in laika-static/,
             // so an internal link (preview-deployment-safe).
             TextLink.internal(Path.Root / "bench" / "index.html", "bench history"),
@@ -712,6 +718,33 @@ lazy val docs: Project = project
         .site
         .internalJS(Path.Root / "static" / "cp-theme-toggle.js")
     },
+  )
+
+// Merged scaladoc across the published modules, self-hosted on the
+// docs site: deploy-site.yml runs `unidocs/unidoc` and copies the
+// output into the Cloudflare Pages tree under `/api/` (the "API"
+// top-nav link in `tlSiteHelium` above points there root-relatively,
+// so previews and production both resolve). Not published to Maven —
+// the site is the delivery channel — and not in the root aggregate,
+// so `sbt test` / `sbt compile` don't pay for it.
+lazy val unidocs: Project = project
+  .in(file("unidocs"))
+  .enablePlugins(ScalaUnidocPlugin)
+  .settings(
+    name := "cats-eo-api-docs",
+    publish / skip := true,
+    // Same `-groups` the per-module docs get (commonSettings), so
+    // @group buckets render as sections in the merged tree too.
+    ScalaUnidoc / unidoc / scalacOptions ++= Seq("-groups"),
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
+      core,
+      laws,
+      generics,
+      schemes,
+      circeIntegration,
+      avroIntegration,
+      jsoniterIntegration,
+    ),
   )
 
 // Benchmarks deliberately stay OUT of the root aggregator: they're a

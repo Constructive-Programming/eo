@@ -50,3 +50,9 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.6")
 // the rule itself ships as `_2.13` only but loads inside the Scalafix
 // classloader so Scala 3 sources are parsed via `Dialect.Scala3`.
 addSbtPlugin("com.github.xuwei-k" % "unused-code-plugin" % "0.5.5")
+
+// `sbt-unidoc` merges scaladoc across the published modules into one
+// tree (the `unidocs` project in build.sbt). We self-host the output —
+// deploy-site.yml copies it into the Cloudflare Pages tree under
+// `/api/`.
+addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
