@@ -236,21 +236,79 @@ class AvroJsonSpec extends Specification with ScalaCheck:
       )
   }
 
-  // ---- codecPrism (typed: schema off the codec, no IndexedRecord at the call site) ----
+  // ---- valuePrism and its torn/mended diagonal family ----
 
-  // covers: codecPrism round-trips a kindlings-derived codec both ways; codec-level strictness
-  //   (a field value the schema rejects) is the same prism miss
-  "codecPrism: typed round-trip both ways and strict miss" >> {
-    val p = AvroJson.codecPrism[Combo]
-    val a = Combo("x", 9L, active = true)
-    val json = p.reverseGet(a)
-    (json === Json.obj(
-      "name" -> Json.fromString("x"),
-      "size" -> Json.fromLong(9L),
-      "active" -> Json.True,
-    ))
-      .and(p.getOption(json) === Some(a))
-      .and(p.getOption(json.mapObject(_.add("size", Json.fromString("big")))) === None)
+  private val comboCodec = summon[dev.constructive.eo.avro.AvroCodec[Combo]]
+  private val combo = Combo("x", 9L, active = true)
+  private val comboRec = comboCodec.encode(combo).asInstanceOf[IndexedRecord]
+
+  private def binary(rec: IndexedRecord, schema: Schema): Array[Byte] =
+    val out = new ByteArrayOutputStream()
+    val encoder = EncoderFactory.get().binaryEncoder(out, null)
+    new GenericDatumWriter[IndexedRecord](schema).write(rec, encoder)
+    encoder.flush()
+    out.toByteArray
+
+  // covers: the fundamental diagonal — typed tear off a generic value, Json mend of any generic
+  //   value; a codec-level decode miss surrenders the structural Json view, not the input
+  "valuePrism: typed tear, Json mend, decode-miss falls back to structural Json" >> {
+    val rejecting = new dev.constructive.eo.avro.AvroCodec[Combo]:
+      def schema = comboCodec.schema
+      def encode(c: Combo) = comboCodec.encode(c)
+      def decodeEither(any: Any) = Left(new RuntimeException("rejected"))
+
+    val p = AvroJson.valuePrism[Combo]
+    (p.getOption(comboRec) === Some(combo))
+      .and(p.reverseGet(comboRec) === AvroJson.avroToJson(comboRec))
+      .and(
+        AvroJson.valuePrism[Combo](using rejecting).tear(comboRec) ===
+          Left(AvroJson.avroToJson(comboRec))
+      )
+  }
+
+  // covers: each tearFrom/mendFrom variant of valuePrism — pPrism (bytes tear, record mend), bytesPrism
+  //   (bytes tear, typed mend via encode), recordPrism (record tear, typed mend), pRecord
+  //   (bytes tear, untyped record focus, no codec)
+  "torn/mended diagonals: pPrism, bytesPrism, recordPrism, pRecord" >> {
+    val bytes = binary(comboRec, comboCodec.schema)
+    val upper = comboCodec.encode(combo.copy(name = "X")).asInstanceOf[IndexedRecord]
+
+    (AvroJson.pPrism[Combo].getOption(bytes) === Some(combo))
+      .and(AvroJson.pPrism[Combo].modify(_ => comboRec)(bytes) === AvroJson.avroToJson(comboRec))
+      .and(
+        AvroJson.bytesPrism[Combo].modify(c => c.copy(name = c.name.toUpperCase))(bytes) ===
+          AvroJson.avroToJson(upper)
+      )
+      .and(AvroJson.recordPrism[Combo].getOption(comboRec) === Some(combo))
+      .and(
+        AvroJson.recordPrism[Combo].modify(c => c.copy(size = 10L))(comboRec) ===
+          AvroJson.avroToJson(
+            comboCodec.encode(combo.copy(size = 10L)).asInstanceOf[IndexedRecord]
+          )
+      )
+      .and(
+        AvroJson.pRecord(comboCodec.schema).getOption(bytes).map(AvroJson.avroToJson) ===
+          Some(AvroJson.avroToJson(comboRec))
+      )
+  }
+
+  // covers: the writer-schema overload resolves a field-reordered writer schema by name before
+  //   the typed decode (the plain overload is position-based and would misread these bytes)
+  "bytesPrism(writer): resolves a reordered writer schema" >> {
+    val rs = comboCodec.schema
+    val writer = Schema.createRecord(
+      rs.getName,
+      null,
+      rs.getNamespace,
+      false,
+      rs.getFields.asScala.toList.reverse.map(f => new Schema.Field(f.name, f.schema)).asJava,
+    )
+    val wrec = new GenericData.Record(writer)
+    wrec.put("name", combo.name)
+    wrec.put("size", combo.size)
+    wrec.put("active", combo.active)
+
+    AvroJson.bytesPrism[Combo](writer).getOption(binary(wrec, writer)) === Some(combo)
   }
 
   // ---- Leaf renderings with no source coverage in the property schema

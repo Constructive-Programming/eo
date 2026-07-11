@@ -25,7 +25,9 @@ import org.apache.avro.io.DecoderFactory
   * The bidirectional entry points are [[record]], a lawful `Prism[Json, IndexedRecord]` per schema
   * — `getOption` is the strict schema-guided parse (Json → record, misses on any shape the schema
   * does not pin), `reverseGet` the total structural walk [[avroToJson]] (record → Json) — and its
-  * typed counterpart [[codecPrism]], a `Prism[Json, A]` for any `A` with an `AvroCodec`.
+  * polymorphic diagonal family rooted at [[valuePrism]] — [[pPrism]], [[bytesPrism]],
+  * [[recordPrism]] and [[pRecord]] pre-compose its inputs via `tearFrom` / `mendFrom`, tearing
+  * generic values / payload bytes / records into a typed `A` and mending back out as `Json`.
   *
   * ==Rendering conventions (record → Json)==
   *
@@ -82,10 +84,12 @@ import org.apache.avro.io.DecoderFactory
   *
   * @groupname prism Bidirectional prism (Json ↔ record)
   * @groupprio prism 0
+  * @groupname diagonal Codec diagonals (tearFrom / mendFrom of valuePrism)
+  * @groupprio diagonal 1
   * @groupname base Structural walk
-  * @groupprio base 1
+  * @groupprio base 2
   * @groupname optic Read optic (bytes → Json)
-  * @groupprio optic 2
+  * @groupprio optic 3
   */
 object AvroJson:
 
@@ -101,23 +105,90 @@ object AvroJson:
       avroToJson,
     )
 
-  /** Typed counterpart of [[record]] — no `IndexedRecord` at the call site: the schema comes off
-    * the [[dev.constructive.eo.avro.AvroCodec]], mirroring `codecPrism[A]` in
-    * `dev.constructive.eo.circe`. Reading is [[record]]'s strict schema-guided parse followed by
-    * the codec's decode (either failing is the prism miss); writing is the codec's pure encode
-    * followed by the structural walk. Lawful whenever the codec itself round-trips (kindlings'
-    * derived codecs do). Works for non-record top-level schemas too — the parse is driven by
-    * `codec.schema`, whatever its shape.
-    * @group prism
+  /** The fundamental codec diagonal — every prism below is this one with its inputs pre-composed
+    * via `MendTearPrism.tearFrom` / `mendFrom`. Tears an Avro '''generic runtime value''' into a
+    * typed `A` via the codec's decode; a miss surrenders the '''structural Json view''' of the
+    * value ([[valueToJson]]) instead of the raw input, so a payload that is valid Avro but not a
+    * valid `A` still lands somewhere inspectable. The mend renders any generic value back as `Json`
+    * — the same structural walk.
+    *
+    * The family below varies the two '''input''' slots only: what the tear consumes (generic value
+    * / payload bytes / record) and what the mend accepts (generic value / `A` / `IndexedRecord`).
+    * The outputs — typed focus `A`, Json fallback — are fixed here.
+    * @group diagonal
     */
-  def codecPrism[A](using codec: AvroCodec[A]): MendTearPrism[Json, Json, A, A] =
-    Prism[Json, A](
-      json =>
-        jsonToValue(json, codec.schema)
-          .flatMap(v => codec.decodeEither(v).toOption)
-          .toRight(json),
-      a => valueToJson(codec.encode(a)),
+  def valuePrism[A](using codec: AvroCodec[A]): MendTearPrism[Any, Json, A, Any] =
+    Prism.pPrism[Any, Json, A, Any](
+      value => codec.decodeEither(value).left.map(_ => valueToJson(value)),
+      valueToJson,
     )
+
+  /** [[valuePrism]] torn from a binary parse — tear Avro '''payload bytes''' into a typed `A`, mend
+    * a generic record out as `Json`.
+    *
+    * Same parse contract as [[bytesToJson]]: position-based under `codec.schema`, no writer/reader
+    * resolution — malformed or schema-mismatched bytes throw rather than miss. For a mixed-schema
+    * stream use the writer-schema overload of [[bytesPrism]] (or `ConfluentWire.resolvingBytes`).
+    * @group diagonal
+    */
+  def pPrism[A](using codec: AvroCodec[A]): MendTearPrism[Array[Byte], Json, A, IndexedRecord] =
+    valuePrism[A].tearFrom(parse(codec.schema)).mendFrom((r: IndexedRecord) => r)
+
+  /** Typed-both-ways byte diagonal — [[pPrism]] with the mend routed through the codec's encode, so
+    * `modify(f: A => A): Array[Byte] => Json` works in one hop with no generic record at the call
+    * site.
+    * @group diagonal
+    */
+  def bytesPrism[A](using codec: AvroCodec[A]): MendTearPrism[Array[Byte], Json, A, A] =
+    valuePrism[A].tearFrom(parse(codec.schema)).mendFrom(codec.encode)
+
+  /** [[bytesPrism]] for a stream written under a '''different''' (but compatible) writer schema:
+    * the tear resolves writer → `codec.schema` (Avro schema resolution — field reordering,
+    * defaults, promotions) before decoding.
+    * @group diagonal
+    */
+  def bytesPrism[A](writer: Schema)(using
+      codec: AvroCodec[A]
+  ): MendTearPrism[Array[Byte], Json, A, A] =
+    valuePrism[A].tearFrom(parse(writer, codec.schema)).mendFrom(codec.encode)
+
+  /** Record-sourced diagonal — for streams already resolved to generic records (e.g. the output of
+    * `ConfluentWire.recordReader`): tear an `IndexedRecord` into a typed `A`, mend `A` out as
+    * `Json`.
+    * @group diagonal
+    */
+  def recordPrism[A](using codec: AvroCodec[A]): MendTearPrism[IndexedRecord, Json, A, A] =
+    valuePrism[A].tearFrom((r: IndexedRecord) => r).mendFrom(codec.encode)
+
+  /** Untyped byte diagonal — no codec, no case class: [[bytesPrism]] instantiated at
+    * `IndexedRecord` via a trivial per-schema codec (encode = identity, decode = runtime-type
+    * check). For registry / dynamic-schema consumers; effectively [[bytesToJson]] upgraded to a
+    * writable prism.
+    * @group diagonal
+    */
+  def pRecord(schema: Schema): MendTearPrism[Array[Byte], Json, IndexedRecord, IndexedRecord] =
+    bytesPrism[IndexedRecord](using recordCodec(schema))
+
+  /** Position-based binary parse to a generic value under a single schema — the `tearFrom` behind
+    * the byte diagonals.
+    */
+  private def parse(schema: Schema): Array[Byte] => Any =
+    val reader = new GenericDatumReader[Any](schema)
+    bytes => reader.read(null, DecoderFactory.get.binaryDecoder(bytes, null))
+
+  /** Writer → reader resolving parse (Avro schema resolution). */
+  private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =
+    val datumReader = new GenericDatumReader[Any](writer, reader)
+    bytes => datumReader.read(null, DecoderFactory.get.binaryDecoder(bytes, null))
+
+  /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
+  private def recordCodec(schema0: Schema): AvroCodec[IndexedRecord] =
+    new AvroCodec[IndexedRecord]:
+      def schema: Schema = schema0
+      def encode(r: IndexedRecord): Any = r
+      def decodeEither(any: Any): Either[Throwable, IndexedRecord] = any match
+        case r: IndexedRecord => Right(r)
+        case other            => Left(new IllegalArgumentException(s"not an IndexedRecord: $other"))
 
   /** The whole substance of the write side: a recursive structural walk of an Avro generic record
     * into a circe [[io.circe.Json]] object. Allocates no typed case class; field order is the

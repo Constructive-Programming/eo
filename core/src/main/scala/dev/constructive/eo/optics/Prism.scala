@@ -100,6 +100,21 @@ final class MendTearPrism[S, T, A, B](
       case Right(a) => f(a)
       case Left(_)  => M.empty
 
+  /** Pre-compose the tear's source: read from an `S1` that `f` turns into this prism's `S`. One
+    * half of the contravariant (input-side) mapping pair — `T` and `A` stay fixed (map those by
+    * composing an outer / inner iso instead). Returns the concrete `MendTearPrism` — unlike
+    * `Optic.outerProfunctor` / `innerProfunctor`, whose `dimap` erases to an anonymous `Optic` and
+    * drops the fused-compose / capability surface. Sibling: [[mendFrom]].
+    */
+  def tearFrom[S1](f: S1 => S): MendTearPrism[S1, T, A, B] =
+    new MendTearPrism(f.andThen(tear), mend)
+
+  /** Pre-compose the mend's focus: write back a `B1` that `g` turns into this prism's `B`. The
+    * other half of the input-side mapping pair — see [[tearFrom]].
+    */
+  def mendFrom[B1](g: B1 => B): MendTearPrism[S, T, A, B1] =
+    new MendTearPrism(tear, g.andThen(mend))
+
   /** Shared kernel for `MendTearPrism` ∘ Either-carrier composition. Outer-miss short-circuits;
     * outer-hit threads through `innerTear` (read) and `innerMend` (write). `inline` so the call
     * site allocates the same single `MendTearPrism` it would pre-refactor.
