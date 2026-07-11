@@ -3,8 +3,7 @@ package optics
 
 import scala.annotation.targetName
 
-import cats.{Applicative, Functor}
-
+import kernel.{Applicative, Functor}
 import accessor.ReverseAccessor
 import data.Forget
 

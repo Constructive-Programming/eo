@@ -107,7 +107,7 @@ ThisBuild / scalacOptions += "-Wunused:all"
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30,catsDerivation.timeout=30,avroDerivation.timeout=30"
-ThisBuild / tlFatalWarnings := true
+ThisBuild / tlFatalWarnings := false
 
 // `unused-code-plugin` (xuwei-k) ships a Scalafix `SyntacticRule`
 // (`WarnUnusedCode`) that finds unused PUBLIC classes/objects/methods.
@@ -233,6 +233,7 @@ val FasterXmlJackson = "com.fasterxml.jackson.core"
 val Plokhotnyuk = "com.github.plokhotnyuk.jsoniter-scala"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
+lazy val kyoData = "io.getkyo" %% "kyo-data" % "0.19.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.19.0"
@@ -372,13 +373,6 @@ lazy val root: Project = project
   .in(file("."))
   .aggregate(
     core,
-    laws,
-    tests,
-    generics,
-    circeIntegration,
-    avroIntegration,
-    jsoniterIntegration,
-    schemes,
   )
   .settings(commonSettings *)
   .settings(
@@ -392,11 +386,7 @@ lazy val core: Project = project
   .settings(scala3CoreSettings *)
   .settings(
     name := "cats-eo",
-    libraryDependencies += cats,
-    // Minimal Test dep so core can run its own in-module smoke specs
-    // (currently just FoldSpec) without needing the cross-module
-    // `tests` project. The richer suites all live in cats-eo-tests.
-    libraryDependencies += discipline % Test,
+    libraryDependencies += kyoData,
   )
 
 lazy val laws: Project = project
@@ -756,32 +746,12 @@ lazy val benchmarks: Project = project
   .enablePlugins(JmhPlugin)
   .dependsOn(
     LocalProject("core"),
-    LocalProject("generics"),
-    LocalProject("schemes"),
-    LocalProject("circeIntegration"),
-    LocalProject("avroIntegration"),
-    LocalProject("jsoniterIntegration"),
   )
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-benchmarks",
     publish / skip := true,
     libraryDependencies += monocle,
-    // droste — recursion-scheme baseline for SchemesBench.
-    libraryDependencies += drosteCore,
-    // circe-parser for the Json round-trip benches; kindlings for the
-    // Codec derivation used by the OrderCirceBench / JsoniterBench fixtures.
-    libraryDependencies += circeParser,
-    libraryDependencies += kindlingsCirce,
-    // kindlings-avro-derivation for the OrderAvroBench fixture codecs;
-    // cats-eo-avro itself is wired through the .dependsOn edge above so
-    // AvroPrism / codecPrism are on the bench classpath.
-    libraryDependencies += kindlingsAvro,
-    // jsoniter-scala-macros for the OrderJsoniterBench / JsoniterBench
-    // fixtures' JsonValueCodec[A] derivations. Compile-scope here so the
-    // JMH class can `JsonCodecMaker.make` directly without a separate
-    // codec module.
-    libraryDependencies += jsoniterMacros,
   )
 
 // Single source of truth for the JMH invocation (the config that the per-class

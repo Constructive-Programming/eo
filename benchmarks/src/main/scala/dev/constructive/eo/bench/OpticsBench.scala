@@ -4,6 +4,7 @@ package bench
 import scala.compiletime.uninitialized
 
 import cats.instances.list.given
+import kyo.Maybe
 import dev.constructive.eo.bench.fixture.*
 import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.optics.{
@@ -87,15 +88,15 @@ class PrismBench extends JmhDefaults:
   val absent: Option[Int] = None
   val raw: Int = 7
 
-  val eoSome = EoPrism.optional[Option[Int], Int](identity, Some(_))
+  val eoSome = EoPrism.optional[Option[Int], Int](Maybe.fromOption, Some(_))
 
   val mSome: MPrism[Option[Int], Int] =
     MPrism[Option[Int], Int](identity)(Some(_))
 
-  @Benchmark def eoGetOptionPresent: Option[Int] = eoSome.getOption(present)
+  @Benchmark def eoGetOptionPresent: Maybe[Int] = eoSome.getOption(present)
   @Benchmark def mGetOptionPresent: Option[Int] = mSome.getOption(present)
 
-  @Benchmark def eoGetOptionAbsent: Option[Int] = eoSome.getOption(absent)
+  @Benchmark def eoGetOptionAbsent: Maybe[Int] = eoSome.getOption(absent)
   @Benchmark def mGetOptionAbsent: Option[Int] = mSome.getOption(absent)
 
   @Benchmark def eoReverseGet: Option[Int] = eoSome.reverseGet(raw)
@@ -110,15 +111,18 @@ class PrismBench extends JmhDefaults:
   // / `Option`-flavoured constructor so the shapes match across EO and
   // Monocle.
   val eoRight =
-    EoPrism.optional[Either[String, Int], Int](_.toOption, Right(_))
+    EoPrism.optional[Either[String, Int], Int](
+      _.fold(_ => Maybe.empty, Maybe(_)),
+      Right(_),
+    )
 
   val mRight: MPrism[Either[String, Int], Int] =
     MPrism[Either[String, Int], Int](_.toOption)(Right(_))
 
-  @Benchmark def eoGetRightPresent: Option[Int] = eoRight.getOption(rightPresent)
+  @Benchmark def eoGetRightPresent: Maybe[Int] = eoRight.getOption(rightPresent)
   @Benchmark def mGetRightPresent: Option[Int] = mRight.getOption(rightPresent)
 
-  @Benchmark def eoGetRightAbsent: Option[Int] = eoRight.getOption(rightAbsent)
+  @Benchmark def eoGetRightAbsent: Maybe[Int] = eoRight.getOption(rightAbsent)
   @Benchmark def mGetRightAbsent: Option[Int] = mRight.getOption(rightAbsent)
 
   @Benchmark def eoRightReverseGet: Either[String, Int] = eoRight.reverseGet(raw)

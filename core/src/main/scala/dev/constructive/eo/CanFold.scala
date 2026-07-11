@@ -1,7 +1,6 @@
 package dev.constructive.eo
 
-import cats.Monoid
-
+import kernel.Monoid
 import forgetful.ForgetfulFold
 import optics.Optic
 
@@ -17,8 +16,10 @@ import optics.Optic
 trait CanFold[S, A]:
   def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M
 
-  def headOption(s: S): Option[A] =
-    foldMap(a => Some(a): Option[A])(s)(using Monoid.instance(None, (l, r) => l.orElse(r)))
+  def headOption(s: S): kyo.Maybe[A] =
+    foldMap(a => kyo.Maybe.Present(a): kyo.Maybe[A])(s)(using
+      Monoid.instance(kyo.Maybe.Absent, (l, r) => l.orElse(r))
+    )
 
   def length(s: S): Int =
     foldMap(_ => 1)(s)

@@ -3,8 +3,7 @@ package optics
 
 import scala.annotation.targetName
 
-import cats.Monoid
-
+import kernel.Monoid
 import compose.*
 import data.Direct
 

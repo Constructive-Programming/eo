@@ -1,8 +1,7 @@
 package dev.constructive.eo
 package data
 
-import cats.{Applicative, Monoid}
-
+import kernel.{Applicative, Monoid}
 import forgetful.*
 import compose.*
 import optics.Optic

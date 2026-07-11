@@ -3,9 +3,10 @@ package data
 
 import scala.annotation.tailrec
 
-import cats.data.Chain
-import cats.{Alternative, Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
+import kyo.Maybe.{Absent, Present}
+import kyo.{Chunk, Maybe, Result}
 
+import kernel.{Applicative, Foldable, Functor, Monoid, MonoidK, Representable, Traverse}
 import forgetful.*
 import compose.*
 import optics.Optic
@@ -84,14 +85,24 @@ private[eo] object MultiFocusFromList:
           s"MultiFocusFromList[Option]: cannot represent ${xs.size} elements; cardinality is 0 or 1."
         )
 
+  given forMaybe: MultiFocusFromList[Maybe] with
+
+    def fromList[A](xs: List[A]): Maybe[A] = xs match
+      case Nil      => Absent
+      case h :: Nil => Present(h)
+      case _        =>
+        throw new IllegalStateException(
+          s"MultiFocusFromList[Maybe]: cannot represent ${xs.size} elements; cardinality is 0 or 1."
+        )
+
   given forVector: MultiFocusFromList[Vector] with
     def fromList[A](xs: List[A]): Vector[A] = xs.toVector
 
     override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): Vector[A] =
       Vector.tabulate(size)(i => arr(from + i).asInstanceOf[A])
 
-  given forChain: MultiFocusFromList[Chain] with
-    def fromList[A](xs: List[A]): Chain[A] = Chain.fromSeq(xs)
+  given forChunk: MultiFocusFromList[Chunk] with
+    def fromList[A](xs: List[A]): Chunk[A] = Chunk.from(xs)
 
   /** PSVec builder — `fromArraySlice` is zero-copy (returns a `PSVec.Slice` view over the source
     * array). The crucial perf hook that lets `mfAssocPSVec.composeFrom` hand each inner reassembly
@@ -616,34 +627,41 @@ object MultiFocusK:
         def from(pair: (X, F[B])): T =
           o.from((pair._1, pickSingletonOrThrow(pair._2, "Tuple2")))
 
-  /** Shared hit marker for the `X = Either[…, Unit]` bridges — covariance upcasts
-    * `Either[Nothing, Unit]` to any `Either[x, Unit]`, so one instance serves every hit.
+  /** Shared hit marker for the `X = Result[…, Unit]` bridges — covariance upcasts
+    * `Result[Nothing, Unit]` to any `Result[x, Unit]`, so one instance serves every hit.
     */
-  private val hitUnit: Either[Nothing, Unit] = Right(())
+  private val hitUnit: Result[Nothing, Unit] = Result.succeed(())
 
-  /** Prism → MultiFocus[F] — hit becomes a `pure` singleton, miss becomes `Alternative[F].empty`.
+  /** Prism → MultiFocus[F] — hit becomes a `pure` singleton, miss becomes `MonoidK[F].empty`.
     *
     * @group Instances
     */
-  given either2multifocus[F[_]: Alternative: Foldable]: Composer[Either, MultiFocus[F]] with
+  given result2multifocus[F[_]: Applicative: MonoidK: Foldable]: Composer[Result, MultiFocus[F]]
+  with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[F]] =
+    def to[S, T, A, B](o: Optic[S, T, A, B, Result]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
-        type X = Either[o.X, Unit]
+        type X = Result[o.X, Unit]
         def to(s: S): (X, F[A]) =
-          o.to(s) match
-            case Right(a)    => (hitUnit, Applicative[F].pure(a))
-            case l @ Left(_) => (l.widenRight[Unit], Alternative[F].empty[A])
+          o.to(s)
+            .foldError(
+              a => (hitUnit, Applicative[F].pure(a)),
+              err => (err, MonoidK[F].empty[A]),
+            )
         def from(pair: (X, F[B])): T =
-          pair match
-            case (l @ Left(_), _) => o.from(l.widenRight[B])
-            case (Right(_), fb)   => o.from(Right(pickSingletonOrThrow(fb, "Either")))
+          pair
+            ._1
+            .foldError(
+              _ => o.from(Result.succeed(pickSingletonOrThrow(pair._2, "Result"))),
+              err => o.from(err),
+            )
 
   /** Optional → MultiFocus[F] — mirror of [[either2multifocus]] over the `Affine` miss / hit split.
     *
     * @group Instances
     */
-  given affine2multifocus[F[_]: Alternative: Foldable]: Composer[Affine, MultiFocus[F]] with
+  given affine2multifocus[F[_]: Applicative: MonoidK: Foldable]: Composer[Affine, MultiFocus[F]]
+  with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
@@ -655,7 +673,7 @@ object MultiFocusK:
             case h: Affine.Hit[o.X, A] =>
               (new Affine.Hit[o.X, Unit](h.snd, ()), Applicative[F].pure(h.b))
             case m: Affine.Miss[o.X, A] =>
-              (m.widenB[Unit], Alternative[F].empty[A])
+              (m.widenB[Unit], MonoidK[F].empty[A])
         def from(pair: (X, F[B])): T =
           pair match
             case (m: Affine.Miss[o.X, Unit] @unchecked, _) =>
@@ -703,19 +721,20 @@ object MultiFocusK:
     *
     * @group Instances
     */
-  given either2multifocusPSVec: Composer[Either, MultiFocus[PSVec]] with
+  given result2multifocusPSVec: Composer[Result, MultiFocus[PSVec]] with
 
-    def to[S, T, A, B](o: Optic[S, T, A, B, Either]): Optic[S, T, A, B, MultiFocus[PSVec]] =
+    def to[S, T, A, B](o: Optic[S, T, A, B, Result]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
-        type X = Option[o.X]
-        def to(s: S): (Option[o.X], PSVec[A]) =
-          o.to(s) match
-            case Left(x)  => (Some(x), PSVec.empty[A])
-            case Right(a) => (None, PSVec.singleton[A](a))
-        def from(pair: (Option[o.X], PSVec[B])): T =
-          pair match
-            case (Some(x), _) => o.from(Left(x))
-            case (None, vs)   => o.from(Right(vs.head))
+        type X = Maybe[o.X]
+        def to(s: S): (Maybe[o.X], PSVec[A]) =
+          o.to(s)
+            .fold(
+              a => (Absent, PSVec.singleton[A](a)),
+              x => (Present(x), PSVec.empty[A]),
+              thr => throw thr,
+            )
+        def from(pair: (Maybe[o.X], PSVec[B])): T =
+          pair._1.fold(o.from(Result.succeed(pair._2.head)))(x => o.from(Result.fail(x)))
 
         def collectTo(
             s: S,
@@ -723,18 +742,23 @@ object MultiFocusK:
             ysBuf: ObjArrBuilder,
             flatBuf: ObjArrBuilder,
         ): Unit =
-          o.to(s) match
-            case Left(x) =>
-              lenBuf.unsafeAppend(0)
-              ysBuf.unsafeAppend(x.asInstanceOf[AnyRef])
-            case Right(a) =>
-              lenBuf.unsafeAppend(1)
-              ysBuf.unsafeAppend(null.asInstanceOf[AnyRef])
-              flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
+          o.to(s)
+            .fold(
+              a => {
+                lenBuf.unsafeAppend(1)
+                ysBuf.unsafeAppend(null.asInstanceOf[AnyRef])
+                flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
+              },
+              x => {
+                lenBuf.unsafeAppend(0)
+                ysBuf.unsafeAppend(x.asInstanceOf[AnyRef])
+              },
+              thr => throw thr,
+            )
 
         def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
-          if len == 0 then o.from(Left(y.asInstanceOf[o.X]))
-          else o.from(Right(vys(pos)))
+          if len == 0 then o.from(Result.fail(y.asInstanceOf[o.X]))
+          else o.from(Result.succeed(vys(pos)))
 
   /** Optional → MultiFocus[PSVec]. Mixes in `MultiFocusPSMaybeHit` so [[mfAssocPSVec]] skips the
     * per-element `Affine[o.X, Unit]` wrapper the generic path would build.
@@ -816,18 +840,24 @@ object MultiFocusK:
     * @group Constructors
     */
   def fromPrismF[F[_]: MonoidK, S, T, A, B](
-      prism: Optic[S, T, F[A], F[B], Either]
+      prism: Optic[S, T, F[A], F[B], Result]
   ): Optic[S, T, A, B, MultiFocus[F]] =
     new Optic[S, T, A, B, MultiFocus[F]]:
-      type X = Either[prism.X, Unit]
+      type X = Result[prism.X, Unit]
       def to(s: S): (X, F[A]) =
-        prism.to(s) match
-          case Right(fa)   => (hitUnit, fa)
-          case l @ Left(_) => (l.widenRight[Unit], MonoidK[F].empty[A])
+        prism
+          .to(s)
+          .foldError(
+            fa => (hitUnit, fa),
+            err => (err, MonoidK[F].empty[A]),
+          )
       def from(pair: (X, F[B])): T =
-        pair match
-          case (l @ Left(_), _) => prism.from(l.widenRight[F[B]])
-          case (Right(_), fb)   => prism.from(Right(fb))
+        pair
+          ._1
+          .foldError(
+            _ => prism.from(Result.succeed(pair._2)),
+            err => prism.from(err),
+          )
 
   // Function1-shaped MultiFocus factories (the Grate-absorbed surface).
 

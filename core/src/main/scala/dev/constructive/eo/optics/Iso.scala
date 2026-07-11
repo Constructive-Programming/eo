@@ -1,8 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
-
+import kernel.Monoid
 import data.Direct
 
 /** Constructor for `Iso` — a bijective single-focus optic, backed by `Direct`. An `Iso[S, A]`
@@ -76,20 +75,14 @@ final class BijectionIso[S, T, A, B](
   /** Fused `Iso.andThen(Prism)` — on inner miss, outer.reverseGet lifts the leftover. */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
     new MendTearPrism(
-      tear = s =>
-        inner.tear(get(s)) match
-          case Left(b)      => Left(reverseGet(b))
-          case r @ Right(_) => r.widenLeft[T],
+      tear = s => inner.tear(get(s)).mapFailure(reverseGet),
       mend = d => reverseGet(inner.mend(d)),
     )
 
   /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(
-      getOrModify = s =>
-        inner.getOrModify(get(s)) match
-          case Left(b)      => Left(reverseGet(b))
-          case r @ Right(_) => r.widenLeft[T],
+      getOrModify = s => inner.getOrModify(get(s)).mapFailure(reverseGet),
       reverseGet = (s, d) =>
         val newB = inner.reverseGet(get(s), d)
         reverseGet(newB),

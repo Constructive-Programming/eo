@@ -4,10 +4,10 @@ package optics
 import scala.annotation.{nowarn, targetName}
 import scala.compiletime.summonInline
 
-import cats.arrow.Profunctor
-import cats.syntax.functor.*
-import cats.{Applicative, Functor, Monoid}
+import kyo.Maybe
+import kyo.Maybe.{Absent, Present}
 
+import kernel.{Applicative, Functor, Monoid, Profunctor}
 import accessor.*
 import forgetful.*
 import compose.*
@@ -213,7 +213,7 @@ object Optic:
     */
   extension [S, T, A, B, F[_, _]](
       self: Optic[S, T, A, B, F]
-  )(using A: PartialAccessor[F]) inline def getOption(s: S): Option[A] = A.getOption(self.to(s))
+  )(using A: PartialAccessor[F]) inline def getOption(s: S): Maybe[A] = A.getOption(self.to(s))
 
   /** Build the "no context" reverse — takes a fresh `B` and produces the corresponding `T`.
     * Available when the carrier has a `ReverseAccessor[F]` instance (today: `Either` and `Direct`).
@@ -337,7 +337,7 @@ object Optic:
   )(using FT: ForgetfulTraverse[F, Functor])
 
     inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
-      s => FT.traverse(o.to(s), f)(using G).map(o.from)
+      s => G.map(FT.traverse(o.to(s), f)(using G))(o.from)
 
   /** Effectful modify over any `Applicative[G]`; unlike [[modifyF]] this variant also exposes
     * [[all]], which collects every visited focus via `Applicative[List]`.
@@ -349,7 +349,7 @@ object Optic:
   )(using FT: ForgetfulTraverse[F, Applicative])
 
     inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
-      s => FT.traverse(o.to(s), f)(using G).map(o.from)
+      s => G.map(FT.traverse(o.to(s), f)(using G))(o.from)
 
     /** Every visited focus, still inside its carrier (`List[F[o.X, A]]`) — the raw-optic
       * counterpart of the carrier-free `CanFold.foci`.
@@ -382,9 +382,9 @@ object Optic:
       *
       * @group Operations
       */
-    def headOption(s: S): Option[A] =
-      o.foldMap[Option[A]](a => Some(a))(using
-        Monoid.instance[Option[A]](None, (l, r) => l.orElse(r))
+    def headOption(s: S): Maybe[A] =
+      o.foldMap[Maybe[A]](a => Present(a))(using
+        Monoid.instance[Maybe[A]](Absent, (l, r) => l.orElse(r))
       )(s)
 
     /** Number of foci visible through the optic. O(n) in the focus count via `Foldable.foldMap`

@@ -3,8 +3,9 @@ package optics
 
 import scala.annotation.targetName
 
-import cats.Monoid
+import kyo.Maybe
 
+import kernel.Monoid
 import compose.*
 import data.Affine
 
@@ -33,28 +34,24 @@ private val pickFoldMiss: Affine.Miss[(Unit, Unit), Nothing] = new Affine.Miss((
   * Returned by [[AffineFold.apply]] / [[AffineFold.select]] so hand-written affine folds pick up
   * the fused members automatically.
   */
-final class PickFold[S, A](val pick: S => Option[A])
+final class PickFold[S, A](val pick: S => Maybe[A])
     extends Optic[S, Unit, A, Unit, Affine],
       CanGetOption[S, A],
       CanFold[S, A]:
   type X = (Unit, Unit)
 
   def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
-    pick(s) match
-      case Some(a) => f(a)
-      case None    => M.empty
+    pick(s).fold(M.empty)(f)
 
   def to(s: S): Affine[X, A] =
-    pick(s) match
-      case Some(a) => new Affine.Hit[X, A]((), a)
-      case None    => pickFoldMiss.widenB[A]
+    pick(s).fold(pickFoldMiss.widenB[A])(a => new Affine.Hit[X, A]((), a))
 
   def from(a: Affine[X, Unit]): Unit = ()
 
   /** Fused `getOption` — reads `pick` directly, skipping the `Affine` carrier round-trip the
     * generic extension performs. Wins over the extension by member precedence at static type.
     */
-  inline def getOption(s: S): Option[A] = pick(s)
+  inline def getOption(s: S): Maybe[A] = pick(s)
 
   /** Fused `AffineFold.andThen(AffineFold)` — `flatMap`s the picks; no `Affine` wrappers, no
     * `Morph`. `inline` so each compose site splices its own lambda (per-site monomorphic dispatch —
@@ -93,15 +90,15 @@ object AffineFold:
     * @example
     *   {{{
     * case class Person(age: Int)
-    * val adultAge = AffineFold[Person, Int](p => Option.when(p.age >= 18)(p.age))
+    * val adultAge = AffineFold[Person, Int](p => Maybe.when(p.age >= 18)(p.age))
     *   }}}
     */
-  def apply[S, A](matches: S => Option[A]): PickFold[S, A] =
+  def apply[S, A](matches: S => Maybe[A]): PickFold[S, A] =
     new PickFold(matches)
 
   /** Filtering — hits only on inputs satisfying `p`. @group Constructors */
   def select[A](p: A => Boolean): PickFold[A, A] =
-    new PickFold(a => Option(a).filter(p))
+    new PickFold(a => Maybe(a).filter(p))
 
   // No `fromOptional` / `fromPrism` weakening factories: a writable optic's read-only view is
   // just `AffineFold(optic.getOption)` (`.getOption` is defined on both the Affine and Either
