@@ -34,6 +34,11 @@ table, and for the ratios everywhere, the signal holds.
 > sub-nanosecond truth. See [Reproducing](#reproducing) and
 > [`benchmarks/README.md`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md).
 
+For the trend over time, the nightly sweep pipeline records every full run:
+the **[benchmark history chart](bench/index.html)** plots B/op and ns/op per benchmark
+across sweeps, and the latest full table is generated into
+[`BENCHMARKS.md`](https://github.com/Constructive-Programming/eo/blob/main/BENCHMARKS.md).
+
 ## Optic micro-benchmarks
 
 For a single operation the hand-written baseline is direct field access

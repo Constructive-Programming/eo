@@ -1,0 +1,321 @@
+<!doctype html>
+<!-- Benchmark history chart — lives in site/laika-static/bench/ so Laika
+     copies it verbatim into the docs site (serves at /bench/), next to
+     series.jsonl (the append-only sweep series bench-sweep.yml bot-commits).
+     Single static file, no build step, no external requests.
+
+     B/op (allocation) is the first-class metric: it is deterministic on
+     shared runners and comparable across sweeps. ns/op is DIRECTIONAL —
+     each point comes from a different shared VM — and is labeled as such
+     wherever it is shown. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>cats-eo benchmarks</title>
+<style>
+  :root {
+    --surface-1: #fcfcfb; --page: #f9f9f7;
+    --ink-1: #0b0b0b; --ink-2: #52514e; --ink-muted: #898781;
+    --grid: #e1e0d9; --axis: #c3c2b7; --border: rgba(11,11,11,.10);
+    --series-eo: #2a78d6; --series-m: #1baf7a; --marker: #898781;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --surface-1: #1a1a19; --page: #0d0d0d;
+      --ink-1: #ffffff; --ink-2: #c3c2b7; --ink-muted: #898781;
+      --grid: #2c2c2a; --axis: #383835; --border: rgba(255,255,255,.10);
+      --series-eo: #3987e5; --series-m: #199e70;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; background: var(--page); color: var(--ink-1);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  .sub { color: var(--ink-2); margin: 0 0 16px; }
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+    margin-bottom: 16px;
+  }
+  select, .toggle button {
+    font: inherit; color: var(--ink-1); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
+  }
+  .toggle button { cursor: pointer; }
+  .toggle button[aria-pressed="true"] {
+    border-color: var(--series-eo); font-weight: 600;
+  }
+  .directional {
+    color: var(--ink-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 2px 8px; font-size: 12px; display: none;
+  }
+  .legend { display: flex; gap: 16px; color: var(--ink-2); font-size: 13px; }
+  .legend .chip {
+    display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+    margin-right: 5px; vertical-align: baseline;
+  }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+  }
+  .panel {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 12px 6px;
+  }
+  .panel h3 {
+    font-size: 13px; font-weight: 600; margin: 0 0 2px; color: var(--ink-1);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .panel .params { color: var(--ink-muted); font-size: 12px; margin: 0 0 6px; }
+  svg text { fill: var(--ink-muted); font-size: 11px; }
+  svg .endlabel { font-size: 11px; font-weight: 600; }
+  #tooltip {
+    position: fixed; pointer-events: none; display: none; z-index: 10;
+    background: var(--surface-1); color: var(--ink-1);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.18); max-width: 300px;
+  }
+  #tooltip .k { color: var(--ink-2); }
+  details { margin-top: 20px; }
+  summary { cursor: pointer; color: var(--ink-2); }
+  table { border-collapse: collapse; margin-top: 8px; font-size: 13px; }
+  th, td { text-align: right; padding: 4px 10px; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  td { font-variant-numeric: tabular-nums; }
+  .err { color: var(--ink-2); background: var(--surface-1); padding: 16px;
+         border: 1px solid var(--border); border-radius: 10px; }
+  .crumbs { font-size: 0.85rem; color: var(--ink-2); margin-bottom: 12px; }
+  .crumbs a { color: var(--series-eo); text-decoration: none; }
+  .crumbs a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<nav class="crumbs"><a href="../">cats-eo docs</a> · <a href="../benchmarks.html">benchmarks</a></nav>
+<h1>cats-eo benchmark history</h1>
+<p class="sub">One point per full sweep (nightly-if-changed + releases), GitHub-hosted
+runner. Allocation (B/op) is the comparable metric; timing is directional.</p>
+
+<div class="controls">
+  <label>Family <select id="family"></select></label>
+  <span class="toggle" role="group" aria-label="metric">
+    <button id="btn-bop" aria-pressed="true">B/op</button>
+    <button id="btn-ns" aria-pressed="false">ns/op</button>
+  </span>
+  <span class="directional" id="directional">⚠ ns/op across sweeps is directional —
+  different VMs; trust B/op</span>
+  <span class="legend">
+    <span><span class="chip" style="background:var(--series-eo)"></span>eo</span>
+    <span><span class="chip" style="background:var(--series-m)"></span>monocle</span>
+    <span><span class="chip" style="background:transparent;border:1px dashed var(--marker)"></span>profile change</span>
+  </span>
+</div>
+
+<div class="grid" id="grid"></div>
+<details id="tablewrap"><summary>Latest sweep as a table</summary>
+  <div id="table"></div>
+</details>
+<div id="tooltip"></div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+// Series data is bot-written from repo code, but escape anyway — the page
+// must never trust benchmark-derived strings (same rule as the PR comment).
+const escHtml = (s) => String(s).replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const SIDE = /^(eo|m)(?=[A-Z0-9])/;
+let entries = [], metric = "bop";
+
+const fmt = (v) => v == null ? "—"
+  : v >= 1000 ? v.toLocaleString("en-US", { maximumFractionDigits: 0 })
+  : v.toLocaleString("en-US", { maximumFractionDigits: v < 10 ? 2 : 1 });
+
+function familyOf(b) { const i = b.indexOf("."); return i < 0 ? b : b.slice(0, i); }
+
+// family -> Map(panelKey -> {stem, params, eo: idx->point, m: idx->point})
+function panelsFor(fam) {
+  const panels = new Map();
+  entries.forEach((e, i) => e.results.forEach((r) => {
+    if (familyOf(r.b) !== fam) return;
+    const method = r.b.slice(r.b.indexOf(".") + 1);
+    const m = SIDE.exec(method);
+    const side = m ? (m[1] === "eo" ? "eo" : "m") : "eo";
+    const stem = m ? method.replace(SIDE, "") : method;
+    const key = stem + " " + r.p;
+    if (!panels.has(key)) panels.set(key, { stem, params: r.p, eo: new Map(), m: new Map() });
+    panels.get(key)[side].set(i, r);
+  }));
+  return [...panels.values()].sort((a, b) =>
+    a.stem.localeCompare(b.stem) || a.params.localeCompare(b.params));
+}
+
+const NS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const n = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+function drawPanel(panel) {
+  const W = 330, H = 170, L = 46, R = 34, T = 8, B = 22;
+  const div = document.createElement("div");
+  div.className = "panel";
+  div.innerHTML = `<h3>${escHtml(panel.stem)}</h3><p class="params">${panel.params === "-" ? "" : escHtml(panel.params)}</p>`;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", role: "img",
+    "aria-label": `${panel.stem} ${metric} history` });
+  div.appendChild(svg);
+
+  const xs = entries.map((_, i) => i);
+  const val = (side, i) => {
+    const r = panel[side].get(i);
+    return r ? r[metric] : null;
+  };
+  const all = [];
+  for (const side of ["eo", "m"]) for (const i of xs) {
+    const v = val(side, i); if (v != null) all.push(v);
+  }
+  if (!all.length) return null;
+  const yMax = Math.max(...all) * 1.12 || 1;
+  const x = (i) => xs.length < 2 ? (L + (W - L - R) / 2) : L + (W - L - R) * (i / (xs.length - 1));
+  const y = (v) => T + (H - T - B) * (1 - v / yMax);
+
+  for (const f of [0, 0.5, 1]) { // recessive grid: 3 hairlines
+    const gy = y(yMax / 1.12 * f);
+    el("line", { x1: L, x2: W - R, y1: gy, y2: gy, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    el("text", { x: L - 6, y: gy + 4, "text-anchor": "end" }, svg)
+      .textContent = fmt(yMax / 1.12 * f);
+  }
+  el("line", { x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  const tickEvery = Math.max(1, Math.ceil(xs.length / 4));
+  xs.forEach((i) => {
+    if (i % tickEvery && i !== xs.length - 1) return;
+    el("text", { x: x(i), y: H - 6, "text-anchor": "middle" }, svg)
+      .textContent = (entries[i].date || "").slice(5);
+  });
+  // profile-change markers
+  xs.forEach((i) => {
+    if (i > 0 && entries[i].profile !== entries[i - 1].profile)
+      el("line", { x1: x(i) - 0.5, x2: x(i) - 0.5, y1: T, y2: H - B,
+        stroke: "var(--marker)", "stroke-width": 1, "stroke-dasharray": "3 3" }, svg);
+  });
+
+  const endLabels = [];
+  for (const [side, color] of [["eo", "var(--series-eo)"], ["m", "var(--series-m)"]]) {
+    const pts = xs.filter((i) => val(side, i) != null);
+    if (!pts.length) continue;
+    if (pts.length > 1)
+      el("polyline", { points: pts.map((i) => `${x(i)},${y(val(side, i))}`).join(" "),
+        fill: "none", stroke: color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    for (const i of pts)
+      el("circle", { cx: x(i), cy: y(val(side, i)), r: pts.length > 1 ? 2.5 : 4,
+        fill: color, stroke: "var(--surface-1)", "stroke-width": 1 }, svg);
+    const last = pts[pts.length - 1]; // direct label at line end (relief rule)
+    endLabels.push({ x: x(last) + 5, y: y(val(side, last)) + 4, color,
+      text: fmt(val(side, last)) });
+  }
+  if (endLabels.length === 2 && Math.abs(endLabels[0].y - endLabels[1].y) < 12) {
+    const [a, b] = endLabels[0].y <= endLabels[1].y
+      ? [endLabels[0], endLabels[1]] : [endLabels[1], endLabels[0]];
+    const mid = (a.y + b.y) / 2;
+    a.y = mid - 6; b.y = mid + 6;
+  }
+  for (const l of endLabels)
+    el("text", { x: l.x, y: l.y, fill: l.color, class: "endlabel" }, svg)
+      .textContent = l.text;
+
+  // hover: crosshair + tooltip, whole-plot hit target
+  const cross = el("line", { y1: T, y2: H - B, stroke: "var(--marker)",
+    "stroke-width": 1, opacity: 0 }, svg);
+  const tip = $("tooltip");
+  svg.addEventListener("mousemove", (ev) => {
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.clientX - rect.left) * (W / rect.width);
+    const i = Math.max(0, Math.min(xs.length - 1,
+      Math.round((px - L) / Math.max(1, (W - L - R)) * (xs.length - 1))));
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i));
+    cross.setAttribute("opacity", 0.6);
+    const e = entries[i], eo = panel.eo.get(i), m = panel.m.get(i);
+    const row = (name, r) => r == null ? "" :
+      `<div><span class="k">${name}:</span> ${fmt(r[metric])} ${metric === "bop" ? "B/op" : "ns/op"}` +
+      (metric === "ns" && r.ns_err != null ? ` ± ${fmt(r.ns_err)}` : "") + `</div>`;
+    tip.innerHTML = `<div><b>${escHtml(e.date || "")}</b> <span class="k">${escHtml((e.source_sha || "").slice(0, 7))}</span></div>` +
+      row("eo", eo) + row("monocle", m) +
+      `<div class="k">${escHtml(e.profile || "")}</div>`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 310) + "px";
+    tip.style.top = (ev.clientY + 14) + "px";
+  });
+  svg.addEventListener("mouseleave", () => {
+    cross.setAttribute("opacity", 0); tip.style.display = "none";
+  });
+  return div;
+}
+
+function renderTable(fam) {
+  const last = entries[entries.length - 1];
+  const rows = last.results.filter((r) => familyOf(r.b) === fam);
+  $("table").innerHTML =
+    `<table><tr><th>benchmark</th><th>params</th><th>ns/op</th><th>±</th><th>B/op</th></tr>` +
+    rows.map((r) => `<tr><td>${escHtml(r.b)}</td><td>${escHtml(r.p)}</td><td>${fmt(r.ns)}</td>` +
+      `<td>${fmt(r.ns_err)}</td><td>${fmt(r.bop)}</td></tr>`).join("") +
+    `</table>`;
+}
+
+function render() {
+  const fam = $("family").value;
+  $("directional").style.display = metric === "ns" ? "inline-block" : "none";
+  const grid = $("grid");
+  grid.innerHTML = "";
+  for (const p of panelsFor(fam)) {
+    const d = drawPanel(p);
+    if (d) grid.appendChild(d);
+  }
+  renderTable(fam);
+}
+
+async function main() {
+  let text;
+  try {
+    const resp = await fetch("series.jsonl", { cache: "no-store" });
+    if (!resp.ok) throw new Error(resp.status);
+    text = await resp.text();
+  } catch (e) {
+    document.body.insertAdjacentHTML("beforeend",
+      `<p class="err">Could not load series.jsonl (${e}). The series appears
+       after the first sweep runs.</p>`);
+    return;
+  }
+  try {
+    entries = text.split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  } catch (e) {
+    // A missing file can surface as a 200 HTML fallback page (Cloudflare
+    // Pages) rather than a 404 — treat unparseable content as "no series".
+    document.body.insertAdjacentHTML("beforeend",
+      `<p class="err">series.jsonl is not parseable (${e}). The series appears
+       after the first sweep runs.</p>`);
+    return;
+  }
+  if (!entries.length) {
+    document.body.insertAdjacentHTML("beforeend",
+      `<p class="err">series.jsonl is empty — no sweeps recorded yet.</p>`);
+    return;
+  }
+  const fams = [...new Set(entries.flatMap((e) => e.results.map((r) => familyOf(r.b))))].sort();
+  $("family").innerHTML = fams.map((f) => `<option>${f}</option>`).join("");
+  $("btn-bop").onclick = () => { metric = "bop"; setPressed(); render(); };
+  $("btn-ns").onclick = () => { metric = "ns"; setPressed(); render(); };
+  function setPressed() {
+    $("btn-bop").setAttribute("aria-pressed", metric === "bop");
+    $("btn-ns").setAttribute("aria-pressed", metric === "ns");
+  }
+  $("family").onchange = render;
+  render();
+}
+main();
+</script>
+</body>
+</html>

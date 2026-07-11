@@ -25,3 +25,4 @@ site/target/
 # wrangler's local Pages state
 .wrangler/
 .#*
+__pycache__/
