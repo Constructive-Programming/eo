@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-11
+
+### Added
+
+- **`MendTearPrism.tearFrom` / `mendFrom` (core).** The input-side mapping pair on the concrete
+  prism: `tearFrom(f: S1 => S)` pre-composes the tear's source, `mendFrom(g: B1 => B)` pre-composes
+  the mend's focus; `T` and `A` stay fixed. Unlike `Optic.outerProfunctor` / `innerProfunctor`,
+  whose `dimap` erases to an anonymous `Optic`, both return the concrete `MendTearPrism` and so
+  keep the fused-compose overloads and capability surface.
+- **`AvroJson.valuePrism[A]` — the fundamental codec diagonal.** A
+  `MendTearPrism[Any, Json, A, Any]`: the tear runs the codec's decode on an Avro generic runtime
+  value, and a decode miss surrenders the *structural Json view* of the value (never the raw
+  input), so a payload that is valid Avro but not a valid `A` still lands somewhere inspectable;
+  the mend renders any generic value back as `Json`. Every other diagonal is this prism with its
+  inputs pre-composed via `tearFrom` / `mendFrom`:
+  - `pPrism[A]: MendTearPrism[Array[Byte], Json, A, IndexedRecord]` — tear payload bytes into a
+    typed `A`, mend a generic record out as `Json`;
+  - `bytesPrism[A]: MendTearPrism[Array[Byte], Json, A, A]` — typed both ways, so
+    `modify(f: A => A): Array[Byte] => Json` works in one hop; plus a `bytesPrism[A](writer)`
+    overload that Avro-resolves a drifted (compatible) writer schema before the decode;
+  - `recordPrism[A]: MendTearPrism[IndexedRecord, Json, A, A]` — for streams already resolved to
+    generic records (e.g. `ConfluentWire.recordReader` output);
+  - `pRecord(schema): MendTearPrism[Array[Byte], Json, IndexedRecord, IndexedRecord]` — untyped
+    and codec-free (a trivial per-schema `AvroCodec[IndexedRecord]` reuses the typed family);
+    effectively `bytesToJson` upgraded to a writable prism.
+
+### Removed
+
+- **`AvroJson.codecPrism[A]: Prism[Json, A]`** — superseded by the `valuePrism` family the same
+  day it shipped. The `Json`-sourced typed parse it provided is the one diagonal the family cannot
+  express lawfully (a poly miss needs a *total* `S => T`, and `Json` renders into nothing totally),
+  and its two halves survive: the strict schema-guided parse via `AvroJson.record(schema)` +
+  `AvroCodec`, the render via `valuePrism`'s mend. Binary-breaking, shipped in a patch release
+  deliberately: 0.8.0 was cut earlier the same day and MiMa remains disabled build-wide.
+
 ## [0.8.0] - 2026-07-11
 
 ### Added
