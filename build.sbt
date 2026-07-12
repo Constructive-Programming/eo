@@ -197,6 +197,23 @@ ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
             bumpActionVersion("scalacenter", "sbt-dependency-submission", "v3")
           )
       )
+    // sbt-typelevel 0.8.x pins the steward-validate job to temurin@11,
+    // but scala-steward releases are now compiled for JDK 17 — the
+    // coursier-resolved launcher dies with UnsupportedClassVersionError
+    // on 11. Bump the matrix AND the literal setup step (whose `if:` is
+    // hardcoded to temurin@11 and would otherwise never fire, leaving
+    // the runner-default JDK 11). Drop when the plugin bumps upstream.
+    else if (job.id == "validate-steward")
+      job
+        .withJavas(List(JavaSpec.temurin("17")))
+        .withSteps(job.steps.map {
+          case s: WorkflowStep.Use if s.id.exists(_.startsWith("setup-java")) =>
+            s.withParams(s.params.updated("java-version", "17"))
+              .withId(Some("setup-java-temurin-17"))
+              .withName(Some("Setup Java (temurin@17)"))
+              .withCond(Some("matrix.java == 'temurin@17'"))
+          case s => s
+        })
     else job
   }
 }
