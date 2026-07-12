@@ -126,15 +126,34 @@ not counted against the target.
 
 ## Releasing a new version (maintainer reference)
 
-1. Update [`CHANGELOG.md`](./CHANGELOG.md): rename the `[Unreleased]`
-   heading to `[X.Y.Z]` with today's date, and add a fresh
-   `[Unreleased]` placeholder above it.
-2. Commit with `release: vX.Y.Z`.
-3. `git tag vX.Y.Z && git push origin main vX.Y.Z`.
-4. The GitHub Actions release workflow triggers on the `v*` tag and
-   runs the staged Sonatype Central Portal publish.
-5. Watch the workflow; on success the artifacts appear at
+1. Update [`CHANGELOG.md`](./CHANGELOG.md): cut a `## [X.Y.Z] - date`
+   section out of `[Unreleased]` (keep the `[Unreleased]` placeholder
+   above it). This is load-bearing: the GitHub Release is created from
+   this section, and the release workflow **fails** if it's missing.
+2. Run `sbt githubWorkflowGenerate` and commit any `ci.yml` drift —
+   a stale generated workflow has killed a tag build before. Never
+   hand-edit `ci.yml`.
+3. Commit with `release: vX.Y.Z`.
+4. `git tag vX.Y.Z && git push origin main vX.Y.Z`.
+5. The tag build runs the staged Sonatype Central Portal publish. On
+   success, two hand-maintained follow-up workflows fire on their own:
+   `update-readme-version.yml` bumps the README's artifact versions on
+   `main`, and `github-release.yml` publishes the GitHub Release —
+   the tag's CHANGELOG section as the curated headline, with GitHub's
+   auto-generated PR list appended (categorised per
+   [`.github/release.yml`](./.github/release.yml), so label PRs:
+   `breaking-change`, `enhancement`, `bug`, `performance`,
+   `documentation`).
+6. Watch the workflow; on success the artifacts appear at
    `https://repo1.maven.org/maven2/dev/constructive/cats-eo_3/X.Y.Z/`.
+
+Release-notes conventions: a binary-breaking release leads its
+changelog section with the recompile warning (inline-spliced call
+sites fail at runtime against old jars — downstream users must see
+this on the release page); link site pages
+(`https://eo.constructive.dev/…`) rather than source files; when
+performance is part of the story, include the CI benchmark numbers,
+never local ones.
 
 ## Manual recovery for a partial Central Portal publish
 

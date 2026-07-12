@@ -1,0 +1,27 @@
+# Categories for GitHub's auto-generated release notes (`--generate-notes`,
+# appended below the curated CHANGELOG section by github-release.yml).
+changelog:
+  exclude:
+    authors:
+      - scala-steward
+  categories:
+    - title: "⚠️ Breaking changes"
+      labels:
+        - breaking-change
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+    - title: Fixes
+      labels:
+        - bug
+    - title: Performance & benchmarks
+      labels:
+        - performance
+        - benchmarks
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Other changes
+      labels:
+        - "*"
