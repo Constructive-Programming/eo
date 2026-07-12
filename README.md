@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Constructive-Programming/eo/actions/workflows/ci.yml/badge.svg)](https://github.com/Constructive-Programming/eo/actions/workflows/ci.yml)
 [![Maven Central](https://img.shields.io/maven-central/v/dev.constructive/cats-eo_3.svg)](https://central.sonatype.com/artifact/dev.constructive/cats-eo_3)
-[![Scaladoc](https://javadoc.io/badge2/dev.constructive/cats-eo_3/javadoc.svg)](https://javadoc.io/doc/dev.constructive/cats-eo_3)
+[![Scaladoc](https://img.shields.io/maven-central/v/dev.constructive/cats-eo_3.svg?label=scaladoc&color=blue)](https://eo.constructive.dev/api/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
 `cats-eo` is an existential optics library for Scala 3, layered on
