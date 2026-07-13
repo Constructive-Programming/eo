@@ -6,6 +6,8 @@ import java.util.concurrent.TimeUnit
 import cats.syntax.all.*
 import org.openjdk.jmh.annotations.*
 
+import _root_.vulcan.Codec as VCodec
+
 import avro.vulcan.AvroVulcan
 import avro.{codecPrism, AvroCodec, AvroPrism}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
@@ -42,8 +44,8 @@ object AvroVulcanImpls:
     given AvroDecoder[Hit] = AvroDecoder.derived
     given AvroSchemaFor[Hit] = AvroSchemaFor.derived
 
-  val vulcanCodec: _root_.vulcan.Codec[Hit] =
-    _root_.vulcan.Codec.record(name = "Hit", namespace = "dev.constructive.eo.bench") { fb =>
+  val vulcanCodec: VCodec[Hit] =
+    VCodec.record(name = "Hit", namespace = "dev.constructive.eo.bench") { fb =>
       (fb("name", _.name), fb("count", _.count), fb("active", _.active)).mapN(Hit.apply)
     }
 

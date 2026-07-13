@@ -1,5 +1,6 @@
 package dev.constructive.eo.avro.vulcan
 
+import _root_.vulcan.Codec as VCodec
 import dev.constructive.eo.avro.AvroCodec
 import org.apache.avro.Schema
 
@@ -37,7 +38,7 @@ object AvroVulcan:
   /** Bridge the in-scope `vulcan.Codec[A]` into an [[AvroCodec]][A]. Throws at construction if the
     * vulcan schema is invalid (see the object docs for the full error mapping).
     */
-  def codec[A](using c: _root_.vulcan.Codec[A]): AvroCodec[A] = new AvroCodec[A]:
+  def codec[A](using c: VCodec[A]): AvroCodec[A] = new AvroCodec[A]:
     val schema: Schema = c.schema.fold(e => throw e.throwable, identity)
     def encode(a: A): Any = c.encode(a).fold(e => throw e.throwable, identity)
     def decodeEither(any: Any): Either[Throwable, A] = c.decode(any, schema).left.map(_.throwable)
@@ -47,4 +48,4 @@ object AvroVulcan:
   * kindlings-derived `AvroCodec` givens for the same `A` in one scope, or the summon turns
   * ambiguous.
   */
-given vulcanAvroCodec[A](using _root_.vulcan.Codec[A]): AvroCodec[A] = AvroVulcan.codec[A]
+given vulcanAvroCodec[A](using VCodec[A]): AvroCodec[A] = AvroVulcan.codec[A]

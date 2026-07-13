@@ -2,6 +2,7 @@ package dev.constructive.eo.avro.vulcan
 
 import scala.language.implicitConversions
 
+import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
 import dev.constructive.eo.avro.circe.AvroJson
 import dev.constructive.eo.avro.{codecPrism, AvroCodec}
@@ -11,8 +12,8 @@ import org.specs2.mutable.Specification
 // Top-level so the vulcan record codec and the derived prisms see a plain classfile.
 case class Combo(name: String, size: Long, active: Boolean)
 
-given _root_.vulcan.Codec[Combo] =
-  _root_.vulcan.Codec.record(name = "Combo", namespace = "dev.constructive.eo.avro.vulcan") { fb =>
+given VCodec[Combo] =
+  VCodec.record(name = "Combo", namespace = "dev.constructive.eo.avro.vulcan") { fb =>
     (fb("name", _.name), fb("size", _.size), fb("active", _.active)).mapN(Combo.apply)
   }
 
