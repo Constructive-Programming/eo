@@ -712,6 +712,30 @@ Confluent-framed, writer-vs-reader drift is handled explicitly
 by `ConfluentWire.confluent` / `.resolve` (above), not by
 swapping in a bare schema.
 
+## vulcan codecs — `AvroVulcan`
+
+Every typed entry point above is keyed on eo's `AvroCodec[A]`. A
+codebase whose codecs are [vulcan](https://fd4s.github.io/vulcan/)
+bridges them once instead of hand-writing an adapter per use site:
+
+```scala
+import dev.constructive.eo.avro.vulcan.given
+// every in-scope vulcan.Codec[A] now serves as AvroCodec[A]:
+val countL = codecPrism[ClickInfo].field(_.count)
+```
+
+or, named and explicit,
+`given AvroCodec[ClickInfo] = AvroVulcan.codec`. The schema is
+resolved once at construction (an invalid vulcan schema fails at
+the `given` site, not on the first record); encode errors throw
+(eo's `encode` is total — an encode failure under a matching
+schema is a codec-definition bug); decode errors surface as
+`Left` like every other `AvroCodec`.
+
+vulcan is an `Optional` dependency of `cats-eo-avro` — add it to
+your own build to use this sub-package; avro-only users never
+load it.
+
 ## Ignoring failures (the `*Unsafe` escape hatch)
 
 For Kafka consumers and other hot-path call sites where the
