@@ -167,7 +167,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       forAll((n: Int) => evenFold.to(n).value == (if n % 2 == 0 then Some(n) else None))
 
     val evenFstOpt: Optic[(Int, Int), (Int, Int), Int, Int, Affine] =
-      Optional[(Int, Int), (Int, Int), Int, Int, Tuple2](
+      Optional[(Int, Int), (Int, Int), Int, Int](
         { case (a, b) => if a % 2 == 0 then Right(a) else Left((a, b)) },
         { case ((_, b), newA) => (newA, b) },
       )
@@ -282,7 +282,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val afSelOk = (evenAF.getOption(4) === Some(4)).and(evenAF.getOption(3) === None)
 
     val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
-      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+      Optional[AdultPerson, AdultPerson, Int, Int](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
@@ -296,7 +296,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(afFromPrism.getOption("nope") === None)
 
     case class Wrapper(inner: AdultPerson)
-    val wrapAge = Optional[Wrapper, Wrapper, Int, Int, Affine](
+    val wrapAge = Optional[Wrapper, Wrapper, Int, Int](
       getOrModify = w => Either.cond(w.inner.age >= 18, w.inner.age, w),
       reverseGet = { case (w, a) => w.copy(inner = AdultPerson(a)) },
     )
@@ -335,7 +335,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
     // partial readers -> AffineFold
     val ageOpt: Optional[AdultPerson, AdultPerson, Int, Int] =
-      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+      Optional[AdultPerson, AdultPerson, Int, Int](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
@@ -358,7 +358,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       fstLens.andThen(plusModify)
     val setLensOk = lensThenSet.modify(_ + 1)((7, "x")) === ((8, "x"))
 
-    val ageOptW = Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+    val ageOptW = Optional[AdultPerson, AdultPerson, Int, Int](
       getOrModify = p => Either.cond(p.age >= 18, p.age, p),
       reverseGet = { case (_, a) => AdultPerson(a) },
     )
@@ -521,7 +521,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       (eitherLiftedMF.modify(_ * 2)(3) === 6).and(eitherLiftedMF.modify(_ * 2)(4) === 4)
 
     val adultOpt: Optic[AdultPerson, AdultPerson, Int, Int, Affine] =
-      Optional[AdultPerson, AdultPerson, Int, Int, Affine](
+      Optional[AdultPerson, AdultPerson, Int, Int](
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
@@ -530,7 +530,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(affineLiftedMF.modify(_ + 1)(AdultPerson(12)) === AdultPerson(12))
 
     val posOpt: Optic[Int, Int, Int, Int, Affine] =
-      Optional[Int, Int, Int, Int, Affine](
+      Optional[Int, Int, Int, Int](
         getOrModify = n => Either.cond(n > 0, n, n),
         reverseGet = { case (_, n) => n },
       )
@@ -684,7 +684,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         .and(lensPrismMiss === Outer(Inner(5), "x"))
 
     val posOpt: Optic[Int, Int, Int, Int, Affine] =
-      Optional[Int, Int, Int, Int, Affine](
+      Optional[Int, Int, Int, Int](
         getOrModify = n => Either.cond(n > 0, n, n),
         reverseGet = { case (_, n) => n },
       )
@@ -763,7 +763,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       List[Int],
       Affine,
     ] =
-      Optional[(Int, List[Int]), (Int, List[Int]), List[Int], List[Int], Tuple2](
+      Optional[(Int, List[Int]), (Int, List[Int]), List[Int], List[Int]](
         {
           case (_, xs) if xs.nonEmpty => Right(xs)
           case other                  => Left(other)
@@ -928,7 +928,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     ) === List(Pair(2, 12), Pair(4, 14))
 
     val positive =
-      Optional[Int, Int, Int, Int, Affine](
+      Optional[Int, Int, Int, Int](
         getOrModify = n => if n > 0 then Right(n) else Left(n),
         reverseGet = (_, k) => k,
       )
@@ -957,7 +957,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     case class Owner(phones: List[Phone])
     case class Phone(number: String, active: Option[Boolean])
     val activePhone =
-      Optional[Phone, Phone, Boolean, Boolean, Affine](
+      Optional[Phone, Phone, Boolean, Boolean](
         getOrModify = p => p.active.toRight(p),
         reverseGet = (p, b) => p.copy(active = Some(b)),
       )
@@ -981,7 +981,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   case class AddressCarrier(address: Option[Address])
 
   private val addressOpt: Optional[AddressCarrier, AddressCarrier, Address, Address] =
-    Optional[AddressCarrier, AddressCarrier, Address, Address, Affine](
+    Optional[AddressCarrier, AddressCarrier, Address, Address](
       getOrModify = c => c.address.toRight(c),
       reverseGet = (c, a) => c.copy(address = Some(a)),
     )
@@ -1001,7 +1001,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val miss = AddressCarrier(None)
 
     val idAddr: Optional[Address, Address, Address, Address] =
-      Optional[Address, Address, Address, Address, Affine](Right(_), (_, a) => a)
+      Optional[Address, Address, Address, Address](Right(_), (_, a) => a)
     val optChain = addressOpt.andThen(idAddr)
     val optOk =
       (optChain.modify(a => a.copy(street = a.street.toUpperCase))(hit) ===

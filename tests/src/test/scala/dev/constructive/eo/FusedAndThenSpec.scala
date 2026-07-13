@@ -5,7 +5,6 @@ import scala.language.implicitConversions
 import org.specs2.mutable.Specification
 
 import optics.{BijectionIso, GetReplaceLens, MendTearPrism, Optional, PickMendPrism}
-import data.Affine
 
 /** Dedicated coverage for the 21 fused `.andThen` overloads on the concrete optic subclasses
   * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`).
@@ -47,7 +46,7 @@ class FusedAndThenSpec extends Specification:
     )
 
   private val adultOpt: Optional[Inner, Inner, Int, Int] =
-    Optional[Inner, Inner, Int, Int, Affine](
+    Optional[Inner, Inner, Int, Int](
       getOrModify = i => if i.n >= 18 then Right(i.n) else Left(i),
       reverseGet = (i, n2) => i.copy(n = n2),
     )

@@ -104,14 +104,13 @@ shipping a domain-tuned optic end to end. The same machinery is what
 makes the stock families compose:
 
 ```scala mdoc:silent
-import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Lens
 import dev.constructive.eo.optics.Optional
 
 case class MigConfig(timeout: Option[Int])
 case class MigApp(config: MigConfig)
 
-val timeoutOpt = Optional[MigConfig, MigConfig, Int, Int, Affine](
+val timeoutOpt = Optional[MigConfig, MigConfig, Int, Int](
   getOrModify = c => c.timeout.toRight(c),
   reverseGet  = { case (c, t) => c.copy(timeout = Some(t)) },
 )
@@ -234,7 +233,7 @@ See the [cookbook recipe](cookbook.md).
 | `Prism[S, A](_.some)(identity)`                    | `Prism.optional[S, A](_.some, identity)`            |
 | `GenPrism[S, A]`                                   | `prism[S, A]` (from `dev.constructive.eo.generics`)                  |
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
-| `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A, Affine](getOrModify, rg)`     |
+| `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A](getOrModify, rg)`             |
 | `optional.getOption` used as a read-only view      | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold(optic.getOption)` — a standalone read-only 0-or-1 family, `T = Unit` forbids `.modify` |
 | *(Monocle prefers to keep its surface to the classic optics)* | `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` — classifier-shaped optic over an `F[A]` focus, plus `.collectMap` / `.collectList` aggregation universals; see [Optics → MultiFocus](optics.md#multifocus) |
 | `Setter[S, A](f => s => …)`                        | `Modify[S, S, A, A](f => s => …)`                   |

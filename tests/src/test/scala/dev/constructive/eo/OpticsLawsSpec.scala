@@ -152,7 +152,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   // getOrModify takes (h, hs) to Right(h); reverseGet(s, h') = (h', hs).
 
   val headOptional: Optic[(Int, List[Int]), (Int, List[Int]), Int, Int, Affine] =
-    Optional[(Int, List[Int]), (Int, List[Int]), Int, Int, Affine](
+    Optional[(Int, List[Int]), (Int, List[Int]), Int, Int](
       { case (h, _) => Right(h) },
       { case ((_, hs), h2) => (h2, hs) },
     )

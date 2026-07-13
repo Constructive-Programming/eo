@@ -13,20 +13,20 @@ import data.Affine
 object Optional:
 
   /** Construct an Optional from `getOrModify` (`Right(a)` on hit, `Left(t)` on miss) and
-    * `reverseGet: (S, B) => T`. The `F` parameter is unused — kept for constructor-shape symmetry.
+    * `reverseGet: (S, B) => T`.
     *
     * @group Constructors
     *
     * @example
     *   {{{
     * case class Person(age: Int, name: String)
-    * val adultAge = Optional[Person, Person, Int, Int, Affine](
+    * val adultAge = Optional[Person, Person, Int, Int](
     *   getOrModify = p => Either.cond(p.age >= 18, p.age, p),
     *   reverseGet  = { case (p, a) => p.copy(age = a) },
     * )
     *   }}}
     */
-  def apply[S, T, A, B, F[_, _]](
+  def apply[S, T, A, B](
       getOrModify: S => Either[T, A],
       reverseGet: ((S, B)) => T,
   ): Optional[S, T, A, B] =

@@ -289,13 +289,13 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
       : Optic[(Int, Option[Int]), (Int, Option[Int]), Option[Int], Option[Int], Affine] {
         type X <: Tuple
       } =
-    Optional[(Int, Option[Int]), (Int, Option[Int]), Option[Int], Option[Int], Tuple2](
+    Optional[(Int, Option[Int]), (Int, Option[Int]), Option[Int], Option[Int]](
       { case (_, opt) => Right(opt) },
       { case ((i, _), newOpt) => (i, newOpt) },
     )
 
   val innerAffineOptional: Optic[Option[Int], Option[Int], Int, Int, Affine] { type X <: Tuple } =
-    Optional[Option[Int], Option[Int], Int, Int, Tuple2](
+    Optional[Option[Int], Option[Int], Int, Int](
       opt => opt.toRight(opt),
       { case (_, a) => Some(a) },
     )

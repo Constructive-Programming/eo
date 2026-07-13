@@ -227,12 +227,11 @@ An `Optional[S, A]` focuses a conditionally-present field — an
 narrowing.
 
 ```scala mdoc:silent
-import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optional
 
 case class Contact(flag: Option[String])
 
-val presentFlag = Optional[Contact, Contact, String, String, Affine](
+val presentFlag = Optional[Contact, Contact, String, String](
   getOrModify = c => c.flag.toRight(c),
   reverseGet  = { case (c, s) => c.copy(flag = Some(s)) },
 )

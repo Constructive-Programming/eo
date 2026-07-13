@@ -134,13 +134,12 @@ two ends bridge into. The seam exists only in the implicit
 search, never in the surface syntax:
 
 ```scala mdoc:silent
-import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optional
 
 case class Maybe(flag: Option[String])
 case class Wrapped(maybe: Maybe)
 
-val mainOnly = Optional[Maybe, Maybe, String, String, Affine](
+val mainOnly = Optional[Maybe, Maybe, String, String](
   getOrModify = m => m.flag.filter(_.startsWith("M")).toRight(m),
   reverseGet  = { case (m, s) => m.copy(flag = Some(s)) },
 )

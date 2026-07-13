@@ -31,12 +31,12 @@ object MatrixFixtures:
   val o_prism = Prism[Box[Box[Int]], Box[Int]](b => Right(b.a), Box(_))
   val o_prismL = Prism[Box[List[Int]], List[Int]](b => Right(b.a), Box(_))
 
-  val o_optional = Optional[Box[Box[Int]], Box[Box[Int]], Box[Int], Box[Int], Affine](
+  val o_optional = Optional[Box[Box[Int]], Box[Box[Int]], Box[Int], Box[Int]](
     b => Right(b.a),
     sb => Box(sb._2),
   )
 
-  val o_optionalL = Optional[Box[List[Int]], Box[List[Int]], List[Int], List[Int], Affine](
+  val o_optionalL = Optional[Box[List[Int]], Box[List[Int]], List[Int], List[Int]](
     b => Right(b.a),
     sb => Box(sb._2),
   )
@@ -59,7 +59,7 @@ object MatrixFixtures:
   val i_iso = Iso[Box[Int], Box[Int], Int, Int](_.a, Box(_))
   val i_lens = Lens[Box[Int], Int](_.a, (s, m) => Box(m))
   val i_prism = Prism[Box[Int], Int](b => Right(b.a), Box(_))
-  val i_optional = Optional[Box[Int], Box[Int], Int, Int, Affine](b => Right(b.a), sb => Box(sb._2))
+  val i_optional = Optional[Box[Int], Box[Int], Int, Int](b => Right(b.a), sb => Box(sb._2))
   val i_trav = Traversal.each[List, Int]
   val i_getter = Getter[Box[Int], Int](_.a)
   val i_affold = AffineFold[Box[Int], Int](b => Some(b.a))

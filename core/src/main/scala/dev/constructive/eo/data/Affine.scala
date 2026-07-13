@@ -19,9 +19,8 @@ type Snd[T] = T match
 
 /** Carrier for the `Optional` family — sealed hierarchy: [[Affine.Miss]] (no focus; carries
   * `Fst[A]`) and [[Affine.Hit]] (focus present; carries `Snd[A]` + `B`). Miss / Hit store fields
-  * directly (no Either / Tuple2 wrapper); a `.affine: Either[Fst[A], (Snd[A], B)]` legacy accessor
-  * reconstructs the old view on demand. Prefer matching `Miss(...)` / `Hit(...)` for zero-alloc
-  * access.
+  * directly (no Either / Tuple2 wrapper); match `Miss(...)` / `Hit(...)` or use [[fold]] for
+  * zero-alloc access.
   *
   * At every constructor site `A` is a concrete `Tuple2` (so `Fst[A]` / `Snd[A]` reduce); when
   * carried through an `Optic[…, Affine]` existential, `A` is abstract and the match types stay
@@ -34,14 +33,6 @@ type Snd[T] = T match
   */
 sealed trait Affine[A, B]:
   import Affine.*
-
-  /** Legacy Either-shaped accessor (reconstructs a fresh `Either` + Tuple2 on each call). New code
-    * should pattern-match `Miss` / `Hit` or use [[fold]] directly.
-    */
-  @deprecated("pattern-match Miss / Hit or use fold instead", "0.6.3")
-  def affine: Either[Fst[A], (Snd[A], B)] = this match
-    case m: Miss[A, B] => Left(m.fst)
-    case h: Hit[A, B]  => Right((h.snd, h.b))
 
   /** Monomorphic fold — pattern-match on Miss/Hit and run the matching branch.
     *

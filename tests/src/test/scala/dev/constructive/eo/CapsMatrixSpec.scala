@@ -62,7 +62,7 @@ object CapsFixtures:
     Prism.optional[Option[Int], Int](identity, Some(_))
 
   val zipOptional: Optional[Address, Address, Int, Int] =
-    Optional[Address, Address, Int, Int, Affine](
+    Optional[Address, Address, Int, Int](
       a => if a.zip > 0 then Right(a.zip) else Left(a),
       sb => sb._1.copy(zip = sb._2),
     )
