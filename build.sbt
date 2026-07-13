@@ -269,6 +269,10 @@ lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.3.0"
 lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.3.0"
 lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.0"
 lazy val circe = Circe %% "circe-core" % "0.14.16"
+// vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.1 pin
+// below wins on the compile classpath, and as an Optional dep vulcan forces
+// nothing downstream anyway.
+lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.13.0"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // Pin apache-avro 1.12.1 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
@@ -561,6 +565,10 @@ lazy val avroIntegration: Project = project
     // so any caller already depends on circe directly to write the call site. Optional keeps it
     // off downstream classpaths; avro-only users never load the bridge's classfiles.
     libraryDependencies += circe % Optional,
+    // vulcan is Optional for the same reason: only `dev.constructive.eo.avro.vulcan` (the
+    // vulcan.Codec → AvroCodec bridge, issue #73) touches it, and its API surface *names*
+    // `vulcan.Codec` — callers already depend on vulcan directly.
+    libraryDependencies += vulcan % Optional,
     libraryDependencies += discipline % Test,
   )
 
@@ -794,6 +802,9 @@ lazy val benchmarks: Project = project
     // cats-eo-avro itself is wired through the .dependsOn edge above so
     // AvroPrism / codecPrism are on the bench classpath.
     libraryDependencies += kindlingsAvro,
+    // vulcan for AvroVulcanBench — avro's Optional dep doesn't propagate
+    // through the .dependsOn edge, so the bench declares it directly.
+    libraryDependencies += vulcan,
     // jsoniter-scala-macros for the OrderJsoniterBench / JsoniterBench
     // fixtures' JsonValueCodec[A] derivations. Compile-scope here so the
     // JMH class can `JsonCodecMaker.make` directly without a separate

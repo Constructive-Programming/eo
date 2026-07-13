@@ -1,0 +1,55 @@
+package dev.constructive.eo.avro.vulcan
+
+import scala.language.implicitConversions
+
+import cats.syntax.all.*
+import dev.constructive.eo.avro.circe.AvroJson
+import dev.constructive.eo.avro.{codecPrism, AvroCodec, AvroFailureException}
+import org.apache.avro.generic.IndexedRecord
+import org.specs2.mutable.Specification
+
+// Top-level so the vulcan record codec and the derived prisms see a plain classfile.
+case class Combo(name: String, size: Long, active: Boolean)
+
+given _root_.vulcan.Codec[Combo] =
+  _root_.vulcan.Codec.record(name = "Combo", namespace = "dev.constructive.eo.avro.vulcan") { fb =>
+    (fb("name", _.name), fb("size", _.size), fb("active", _.active)).mapN(Combo.apply)
+  }
+
+class AvroVulcanSpec extends Specification:
+
+  private val original = Combo("ada", 42L, active = true)
+
+  "AvroVulcan.codec" should {
+
+    "round-trip encode → decodeEither through the bridged codec" in {
+      val bridged = AvroVulcan.codec[Combo]
+      bridged.decodeEither(bridged.encode(original)) must beRight(original)
+    }
+
+    "expose vulcan's schema, resolved once at construction" in {
+      AvroVulcan.codec[Combo].schema.getFullName === "dev.constructive.eo.avro.vulcan.Combo"
+    }
+
+    "surface decode failures as Left, never throw" in {
+      AvroVulcan.codec[Combo].decodeEither("not a record") must beLeft
+    }
+  }
+
+  "the vulcanAvroCodec given" should {
+
+    "power AvroCodec-keyed entry points from a vulcan.Codec alone" in {
+      // `codecPrism` demands `AvroCodec[Combo]`; only the vulcan codec is defined above —
+      // evidence arrives through the bridge given (downstream: `import eo.avro.vulcan.given`).
+      val bytes =
+        AvroCodec.encodeValue(original).fold(f => throw new AvroFailureException(f), identity)
+      codecPrism[Combo].getOption(bytes) must beSome(original)
+    }
+
+    "collapse the issue-#73 decode-or-throw sites onto the AvroJson diagonals" in {
+      val rec = summon[AvroCodec[Combo]].encode(original) match
+        case r: IndexedRecord => r
+        case other => throw new IllegalStateException(s"vulcan encoded a non-record: $other")
+      AvroJson.recordPrism[Combo].getOption(rec) must beSome(original)
+    }
+  }

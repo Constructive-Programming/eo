@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`eo.avro.vulcan.AvroVulcan` — bridge a `vulcan.Codec[A]` into an `AvroCodec[A]`** (#73). A new
+  sub-package of `cats-eo-avro` on the `AvroJson`/circe pattern: vulcan is an `Optional`
+  dependency (the API surface *names* `vulcan.Codec`, so callers already depend on vulcan
+  directly), and `import dev.constructive.eo.avro.vulcan.given` makes every in-scope vulcan codec
+  usable wherever eo demands `AvroCodec[A]` evidence — `codecPrism`, `AvroPrism.field` /
+  `widenPath*`, `AvroTraversal`, the `AvroJson` diagonals. Error mapping: the schema resolves once
+  at construction and fails fast if invalid; encode errors throw (eo's `encode` is total — an
+  encode failure under a matching schema is a codec-definition bug); decode errors surface as
+  `Left` via vulcan's own `AvroError.throwable`. Kills both downstream patterns from #73: the
+  per-bench hand-rolled adapter and the throw-stub codecs fabricated for navigation-only prisms.
+
 ## [0.8.1] - 2026-07-11
 
 ### Added

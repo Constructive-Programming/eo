@@ -40,7 +40,7 @@ import sys
 # new module without a mapping entry must never silently skip benchmarks.
 
 MODULE_BENCHES = {
-    "avro/": ["AvroBytesBench", "AvroJsonBridgeBench", "OrderAvroBench"],
+    "avro/": ["AvroBytesBench", "AvroJsonBridgeBench", "AvroVulcanBench", "OrderAvroBench"],
     "circe/": ["JsoniterBench", "OpticBuildBench", "OrderCirceBench", "PlatedBench"],
     "jsoniter/": [
         "AvroJsonBridgeBench",
