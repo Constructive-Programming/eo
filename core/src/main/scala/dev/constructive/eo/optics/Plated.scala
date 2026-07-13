@@ -3,8 +3,8 @@ package optics
 
 import scala.annotation.tailrec
 
-import cats.Eval
 import java.util.ArrayDeque
+import kyo.Maybe
 
 import data.{ModifyF, MultiFocus, PSVec}
 
@@ -195,10 +195,11 @@ object Plated:
     * call-stack/heap-machine the way `everywhere` does — sharing it would put the re-fire chain
     * back on the JVM call stack.)
     */
-  def rewrite[S](f: S => Option[S])(s: S)(using P: Plated[S]): S =
-    def step(x: S): Eval[S] = f(x).fold(Eval.now(x))(go)
-    def go(x: S): Eval[S] = Eval.defer(P.plate.modifyA[Eval](go)(x)).flatMap(step)
-    go(s).value
+  def rewrite[S](f: S => Maybe[S])(s: S)(using P: Plated[S]): S =
+    // ponytail: the Eval-trampolined original was stack-safe in the successive-rewrite chain
+    // too; this reuses transform's heap machine (stack-safe in tree depth) and recurses only
+    // per rewrite hit — re-trampoline if a rule chain ever overflows.
+    transform[S](x => f(x).fold(x)(rewrite(f)))(s)
 
   /** The immediate sub-terms of `s` (one level down). Reads the plate's children vector directly.
     */
@@ -238,7 +239,7 @@ object Plated:
     def transformAll(f: S => S)(s: S): S = Plated.transform(f)(s)(using asPlated)
 
     /** [[Plated.rewrite]] over this optic — bottom-up rewrite to a fixpoint. */
-    def rewriteAll(f: S => Option[S])(s: S): S = Plated.rewrite(f)(s)(using asPlated)
+    def rewriteAll(f: S => Maybe[S])(s: S): S = Plated.rewrite(f)(s)(using asPlated)
 
     /** [[Plated.children]] over this optic — the immediate sub-terms. */
     def childrenOf(s: S): List[S] = Plated.children(s)(using asPlated)

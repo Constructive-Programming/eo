@@ -1,48 +1,27 @@
 package dev.constructive.eo
 package compose
 
-import cats.syntax.either.*
+import kyo.Result
 
 import optics.Optic
 
-/** Composition algebra for a two-parameter carrier `F[_, _]`. [[composeTo]] threads the focus
-  * through inner ∘ outer to produce `F[Z, C]`; [[composeFrom]] unfolds it back. `Xo` / `Xi` are the
-  * outer / inner optics' existentials; named distinct from `Optic#X` so `composeTo` / `composeFrom`
-  * can refinement-type on them. Carriers can specialise by pattern-matching on the `outer` /
-  * `inner` arguments.
-  *
-  * @tparam F
-  *   carrier
-  * @tparam Xo
-  *   outer-optic existential
-  * @tparam Xi
-  *   inner-optic existential
-  */
 trait AssociativeFunctor[F[_, _], Xo, Xi]:
-  /** Combined existential carried through the composed optic. */
   type Z
 
-  /** Push-side: `outer.to(s)` → focus through `inner.to` → reassemble as `F[Z, C]`. */
   def composeTo[S, T, A, B, C, D](
       s: S,
       outer: Optic[S, T, A, B, F] { type X = Xo },
       inner: Optic[A, B, C, D, F] { type X = Xi },
   ): F[Z, C]
 
-  /** Pull-side: unfold `F[Z, D]` back through `inner.from` and `outer.from`. */
   def composeFrom[S, T, A, B, C, D](
       xd: F[Z, D],
       inner: Optic[A, B, C, D, F] { type X = Xi },
       outer: Optic[S, T, A, B, F] { type X = Xo },
   ): T
 
-/** Typeclass instances for [[AssociativeFunctor]]. */
 object AssociativeFunctor:
 
-  /** `Tuple2` — `Z = (Xo, Xi)`. Powers `lens.andThen(lens)`.
-    *
-    * @group Instances
-    */
   given tupleAssocF[Xo, Xi]: AssociativeFunctor[Tuple2, Xo, Xi] with
     type Z = (Xo, Xi)
 
@@ -63,26 +42,34 @@ object AssociativeFunctor:
       val ((x, y), d) = xd
       outer.from(x, inner.from(y, d))
 
-  /** `Either` — bubbles `Left` miss branches up. Powers `prism.andThen(prism)`.
-    *
-    * @group Instances
-    */
-  given eitherAssocF[Xo, Xi]: AssociativeFunctor[Either, Xo, Xi] with
-    type Z = Either[Xo, Xi]
+  given resultAssocF[Xo, Xi]: AssociativeFunctor[Result, Xo, Xi] with
+    type Z = Result[Xo, Xi]
 
     def composeTo[S, T, A, B, C, D](
         s: S,
-        outer: Optic[S, T, A, B, Either] { type X = Xo },
-        inner: Optic[A, B, C, D, Either] { type X = Xi },
-    ): Either[Z, C] =
-      outer.to(s).fold(_.asLeft[Xi].asLeft[C], inner.to(_).leftMap(_.asRight[Xo]))
+        outer: Optic[S, T, A, B, Result] { type X = Xo },
+        inner: Optic[A, B, C, D, Result] { type X = Xi },
+    ): Result[Z, C] =
+      outer
+        .to(s)
+        .foldError(
+          a => inner.to(a).mapFailure(xi => Result.succeed[Xo, Xi](xi)),
+          // the outer Error[Xo] IS a Result[Xo, Xi] (success-free), so it can sit in the
+          // failure slot unchanged — mirror of the cats `Left(Left(x))` shape without rewrap
+          err => Result.fail[Z, C](err),
+        )
 
     def composeFrom[S, T, A, B, C, D](
-        xd: Either[Z, D],
-        inner: Optic[A, B, C, D, Either] { type X = Xi },
-        outer: Optic[S, T, A, B, Either] { type X = Xo },
+        xd: Result[Z, D],
+        inner: Optic[A, B, C, D, Result] { type X = Xi },
+        outer: Optic[S, T, A, B, Result] { type X = Xo },
     ): T =
-      xd match
-        case r @ Right(_)   => outer.from(Right(inner.from(r.widenLeft[Xi])))
-        case Left(Right(y)) => outer.from(Right(inner.from(Left(y))))
-        case Left(Left(x))  => outer.from(Left(x))
+      xd.fold(
+        d => outer.from(Result.succeed(inner.from(Result.succeed(d)))),
+        z =>
+          z.foldError(
+            xi => outer.from(Result.succeed(inner.from(Result.fail(xi)))),
+            errXo => outer.from(errXo),
+          ),
+        thr => throw thr,
+      )

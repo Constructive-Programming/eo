@@ -3,7 +3,7 @@ package data
 
 import scala.annotation.tailrec
 
-import cats.{Applicative, Eval, Foldable, Functor, Traverse}
+import kernel.{Applicative, Foldable, Functor, Traverse}
 
 /** Lightweight array-backed focus vector underlying `MultiFocus[PSVec]`. Three variants so empty
   * and singleton focus vectors don't pay a backing-array allocation:
@@ -92,7 +92,7 @@ sealed trait PSVec[+B]:
   */
 object PSVec:
 
-  // Cats instances — live here (the PSVec companion) because implicit scope for
+  // Kernel instances — live here (the PSVec companion) because implicit scope for
   // `Functor[PSVec]` / `Foldable[PSVec]` / `Traverse[PSVec]` anchors on PSVec's own
   // companion, NOT on MultiFocusK's (where these were once parked behind
   // `import data.MultiFocus.given`).
@@ -130,15 +130,6 @@ object PSVec:
         else acc
       loop(0, b)
 
-    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
-        f: (A, Eval[B]) => Eval[B]
-    ): Eval[B] =
-      val n = fa.length
-      def loop(i: Int): Eval[B] =
-        if i >= n then lb
-        else f(fa(i), Eval.defer(loop(i + 1)))
-      Eval.defer(loop(0))
-
     override def size[A](fa: PSVec[A]): Long = fa.length.toLong
 
   /** `cats.Traverse` — the instance Traversal's `.modifyA` / `.all` route through when the carrier
@@ -172,9 +163,19 @@ object PSVec:
     def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
       pSVecFoldable.foldLeft(fa, b)(f)
 
-    def foldRight[A, B](fa: PSVec[A], lb: Eval[B])(
-        f: (A, Eval[B]) => Eval[B]
-    ): Eval[B] = pSVecFoldable.foldRight(fa, lb)(f)
+    def mapAccumulate[S, A, B](init: S, fa: PSVec[A])(f: (S, A) => (S, B)): (S, PSVec[B]) =
+      val n = fa.length
+      if n == 0 then (init, PSVec.empty[B])
+      else
+        val arr = new Array[AnyRef](n)
+        @tailrec def loop(i: Int, s: S): S =
+          if i < n then
+            val (s2, b) = f(s, fa(i))
+            arr(i) = b.asInstanceOf[AnyRef]
+            loop(i + 1, s2)
+          else s
+        val s = loop(0, init)
+        (s, PSVec.unsafeWrap[B](arr))
 
   /** Zero-element shared singleton; Prism / Affine miss branches allocate nothing. */
   case object Empty extends PSVec[Nothing]:

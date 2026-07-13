@@ -1,7 +1,9 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
+import kyo.Result
+
+import kernel.Monoid
 
 /** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. A
   * `Lens[S, A]` (short for `Optic[S, S, A, A, Tuple2]`) reads a field via `get(s)` and rewrites it
@@ -123,10 +125,7 @@ class GetReplaceLens[S, T, A, B](
     */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(
-      getOrModify = s =>
-        inner.tear(get(s)) match
-          case Left(b)      => Left(enplace(s, b))
-          case r @ Right(_) => r.widenLeft[T],
+      getOrModify = s => inner.tear(get(s)).mapFailure(b => enplace(s, b)),
       reverseGet = (s, d) => enplace(s, inner.mend(d)),
     )
 
@@ -138,19 +137,16 @@ class GetReplaceLens[S, T, A, B](
   ): Optional[S, T, C, D] =
     new Optional(
       getOrModify = s =>
-        inner.pick(get(s)) match
-          case Some(c) => Right(c)
-          case None    => Left(enplace(s, ev(get(s)))),
+        inner
+          .pick(get(s))
+          .fold(Result.fail(enplace(s, ev(get(s)))))(c => Result.succeed(c)),
       reverseGet = (s, d) => enplace(s, ev(inner.mend(d))),
     )
 
   /** Fused `Lens.andThen(Optional)` — outer always hits, inner may miss. Result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(
-      getOrModify = s =>
-        inner.getOrModify(get(s)) match
-          case Left(b)      => Left(enplace(s, b))
-          case r @ Right(_) => r.widenLeft[T],
+      getOrModify = s => inner.getOrModify(get(s)).mapFailure(b => enplace(s, b)),
       reverseGet = (s, d) =>
         val newB = inner.reverseGet(get(s), d)
         enplace(s, newB),

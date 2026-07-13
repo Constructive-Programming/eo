@@ -1,17 +1,12 @@
 package dev.constructive.eo
 package accessor
 
-/** Dual of [[Accessor]] — build a fresh `F[X, A]` from an `A`. Required by `Optic.reverseGet`.
-  *
-  * @tparam F
-  *   the carrier
-  */
+import kyo.Result
+
 trait ReverseAccessor[F[_, _]]:
   def reverseGet[X, A](a: A): F[X, A]
 
-/** Typeclass instances for [[ReverseAccessor]]. */
 object ReverseAccessor:
 
-  /** `Either` — wraps `A` as `Right[X, A](a)`. @group Instances */
-  given eitherRevAccessor: ReverseAccessor[Either] with
-    def reverseGet[X, A](a: A): Either[X, A] = Right[X, A](a)
+  given resultRevAccessor: ReverseAccessor[Result] with
+    def reverseGet[X, A](a: A): Result[X, A] = Result.succeed(a)

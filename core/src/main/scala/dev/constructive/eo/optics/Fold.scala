@@ -3,10 +3,10 @@ package optics
 
 import scala.annotation.targetName
 
-import cats.instances.option.given
-import cats.{FlatMap, Foldable, Monoid}
 import dev.constructive.eo.data.Forget
+import kyo.Maybe
 
+import kernel.{FlatMap, Foldable, Monoid}
 import compose.*
 
 /** Constructors for `Fold` — read-only multi-focus optic, backed by `Forget[F]` (`Forget[F][X, A] =
@@ -34,8 +34,8 @@ object Fold:
     new ForgetFold[F[A], F, A](identity)
 
   /** Filtering Fold — backed by `Forget[Option]`. @group Constructors */
-  def select[A](p: A => Boolean): ForgetFold[A, Option, A] =
-    new ForgetFold[A, Option, A](a => Option(a).filter(p))
+  def select[A](p: A => Boolean): ForgetFold[A, Maybe, A] =
+    new ForgetFold[A, Maybe, A](a => Maybe(a).filter(p))
 
 /** Concrete `Optic` subclass for [[Fold]], storing the source projection `to` and the underlying
   * `Foldable[F]` directly. This lets the terminal [[foldMap]] fold the focus eagerly through the

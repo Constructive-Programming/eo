@@ -3,8 +3,7 @@ package optics
 
 import scala.collection.immutable.ArraySeq
 
-import cats.Traverse
-
+import kernel.Traverse
 import data.{MultiFocus, ObjArrBuilder, PSVec}
 
 /** Constructors for `Traversal`. Every constructor here — [[each]] / [[pEach]] / [[selfChildren]]

@@ -10,7 +10,7 @@ import optics.Optic
   * given-per-`(S, A)` coherence rule.
   */
 trait CanGetOption[S, A]:
-  def getOption(s: S): Option[A]
+  def getOption(s: S): kyo.Maybe[A]
 
 object CanGetOption:
 

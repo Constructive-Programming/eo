@@ -1,7 +1,6 @@
 package dev.constructive.eo
 
-import cats.Applicative
-
+import kernel.Applicative
 import forgetful.ForgetfulTraverse
 import optics.Optic
 
