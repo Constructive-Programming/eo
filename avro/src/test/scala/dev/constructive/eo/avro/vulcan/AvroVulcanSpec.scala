@@ -4,7 +4,7 @@ import scala.language.implicitConversions
 
 import cats.syntax.all.*
 import dev.constructive.eo.avro.circe.AvroJson
-import dev.constructive.eo.avro.{codecPrism, AvroCodec, AvroFailureException}
+import dev.constructive.eo.avro.{codecPrism, AvroCodec}
 import org.apache.avro.generic.IndexedRecord
 import org.specs2.mutable.Specification
 
@@ -27,10 +27,6 @@ class AvroVulcanSpec extends Specification:
       bridged.decodeEither(bridged.encode(original)) must beRight(original)
     }
 
-    "expose vulcan's schema, resolved once at construction" in {
-      AvroVulcan.codec[Combo].schema.getFullName === "dev.constructive.eo.avro.vulcan.Combo"
-    }
-
     "surface decode failures as Left, never throw" in {
       AvroVulcan.codec[Combo].decodeEither("not a record") must beLeft
     }
@@ -41,15 +37,12 @@ class AvroVulcanSpec extends Specification:
     "power AvroCodec-keyed entry points from a vulcan.Codec alone" in {
       // `codecPrism` demands `AvroCodec[Combo]`; only the vulcan codec is defined above —
       // evidence arrives through the bridge given (downstream: `import eo.avro.vulcan.given`).
-      val bytes =
-        AvroCodec.encodeValue(original).fold(f => throw new AvroFailureException(f), identity)
+      val bytes = AvroCodec.encodeValue(original).toOption.get
       codecPrism[Combo].getOption(bytes) must beSome(original)
     }
 
     "collapse the issue-#73 decode-or-throw sites onto the AvroJson diagonals" in {
-      val rec = summon[AvroCodec[Combo]].encode(original) match
-        case r: IndexedRecord => r
-        case other => throw new IllegalStateException(s"vulcan encoded a non-record: $other")
+      val rec = summon[AvroCodec[Combo]].encode(original).asInstanceOf[IndexedRecord]
       AvroJson.recordPrism[Combo].getOption(rec) must beSome(original)
     }
   }

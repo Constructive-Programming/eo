@@ -19,8 +19,9 @@ import org.apache.avro.Schema
   *
   *   - '''codec plane''' — `encode` / `decodeEither` on the generic-value form (no bytes, no
   *     optics): the adapter itself.
-  *   - '''bytes plane''' — `AvroCodec.encodeValue` / root `codecPrism.getOption`: the typed entry
-  *     points downstream actually calls (issue #73's motivating sites).
+  *   - '''bytes plane''' — root `codecPrism.getOption`: the typed entry point downstream actually
+  *     calls (issue #73's motivating site). Bytes-out needs no benchmark of its own: the serialize
+  *     step after `encode` is codec-independent, so the codec plane already isolates its delta.
   *   - '''field plane''' — a drilled `codecPrism[Hit].field(_.count).getOption`: the
   *     navigation-only pattern that used to need throw-stub codecs.
   *
@@ -89,9 +90,6 @@ class AvroVulcanBench extends JmhDefaults:
   @Benchmark def decode_vulcanRaw: Any = vulcanCodec.decode(bridgedValue, vulcanSchema)
 
   // ---- bytes plane: the typed entry points ----------------------------------------------------
-  @Benchmark def encodeValue_native: Any = AvroCodec.encodeValue(hit)(using nativeCodec)
-  @Benchmark def encodeValue_bridged: Any = AvroCodec.encodeValue(hit)(using bridgedCodec)
-
   @Benchmark def rootGet_native: Option[Hit] = nativeRoot.getOption(nativeBytes)
   @Benchmark def rootGet_bridged: Option[Hit] = bridgedRoot.getOption(bridgedBytes)
 
