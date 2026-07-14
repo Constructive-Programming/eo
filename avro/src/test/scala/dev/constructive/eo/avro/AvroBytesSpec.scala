@@ -113,8 +113,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .Arrays
             .equals(frag.bytes, toBinaryValue(java.lang.Long.valueOf(7L), frag.schema)) === true
         val selfGraft = seqL.graftBytes(bytes, frag.bytes) match
-          case Ior.Right(out) => Arrays.equals(out, bytes) === true
-          case other          =>
+          case Right(out) => Arrays.equals(out, bytes) === true
+          case other      =>
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
         val unsafeParity =
           seqL
@@ -141,8 +141,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         val decodedOk =
           decoded.asInstanceOf[GenericRecord].get("amount").asInstanceOf[Long] === 100L
         val selfGraft = cashL.graftBytes(bytes, frag.bytes) match
-          case Ior.Right(out) => Arrays.equals(out, bytes) === true
-          case other          =>
+          case Right(out) => Arrays.equals(out, bytes) === true
+          case other      =>
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
         schemaOk.and(ordinalOk).and(fidelity).and(decodedOk).and(selfGraft)
       case other =>
@@ -191,9 +191,9 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     val expected = paymentL.replace(Cash(100L))(outputBytes)
 
     val graftOk = cashL.graftBytes(outputBytes, frag.bytes) match
-      case Ior.Right(out) => Arrays.equals(out, expected) === true
-      case other          =>
-        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+      case Right(out) => Arrays.equals(out, expected) === true
+      case other      =>
+        org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
     val unsafeOk =
       Arrays.equals(cashL.graftBytesUnsafe(outputBytes, frag.bytes), expected) === true
 
@@ -225,10 +225,10 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
     val indexGraftOk = itemL.graftBytes(basketBytes, Array(0.toByte)) match
-      case Ior.Left(chain) =>
-        chain.headOption.contains(AvroFailure.UnsupportedSpanStep(PathStep.Index(0))) === true
+      case Left(failure) =>
+        failure === AvroFailure.UnsupportedSpanStep(PathStep.Index(0))
       case other =>
-        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+        org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
     val indexUnsafeOk = (itemL.sliceBytesUnsafe(basketBytes) === None)
       .and((itemL.graftBytesUnsafe(basketBytes, Array(0.toByte)) eq basketBytes) === true)
 
