@@ -207,15 +207,19 @@ final class AvroPrism[A] private[avro] (
     * under a different (or drifted) schema produces a payload that is silently corrupt until
     * something decodes it. The caller owns schema-fingerprint checks (compare the writer schema /
     * Confluent schema id of the fragment's source against the receiving field's schema) BEFORE
-    * grafting.
+    * grafting — the [[ConfluentWire.graftGated]] / [[ConfluentWire.graftResolving]] factories are
+    * the fingerprint-gated wrappers that do exactly that.
+    *
+    * The located [[AvroFailure]] is a bare `Left` (the graft locate yields exactly one failure,
+    * nothing to accumulate); the spliced payload a `Right`.
     */
   def graftBytes(
       bytes: Array[Byte],
       fragment: Array[Byte],
-  ): Ior[Chain[AvroFailure], Array[Byte]] =
+  ): Either[AvroFailure, Array[Byte]] =
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
-      case Left(failure) => Ior.Left(Chain.one(failure))
-      case Right(span)   => Ior.Right(AvroBinaryCursor.splice(bytes, span, fragment))
+      case Left(failure) => Left(failure)
+      case Right(span)   => Right(AvroBinaryCursor.splice(bytes, span, fragment))
 
   /** Silent counterpart to [[graftBytes]] — input bytes pass through unchanged on any failure. Same
     * NO-SCHEMA-VALIDATION caveat as [[graftBytes]].

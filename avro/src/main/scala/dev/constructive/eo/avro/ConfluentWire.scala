@@ -44,6 +44,11 @@ import org.apache.avro.{Schema, SchemaNormalization}
   *   - reader-layout framed '''bytes''' (no decode at all): [[resolvingBytes]] — per-message
   *     lookup, writer-id-cached, for consumers that hash / slice / forward rather than deserialize.
   *
+  * '''Produce side.''' [[graftGated]] / [[graftResolving]] are the write twins of the two drift
+  * policies: gate-or-translate a stored, framed fragment into the focus of an eo prism, so a
+  * producer can splice a verbatim Confluent-framed sub-record into an outgoing encode without
+  * decoding it — same fingerprint criterion, refused or absorbed.
+  *
   * Underneath sit the pure frame primitives [[strip]] / [[attach]] (header handling only, no schema
   * involvement) — the building blocks for anything the members above don't cover.
   */
@@ -281,6 +286,106 @@ object ConfluentWire:
       catch case NonFatal(t) => Left(AvroFailure.SchemaResolutionFailed(writerId, t))
 
     framed => strip(framed).flatMap(f => bridgeFor(f.schemaId).flatMap(bridge => bridge(f.body)))
+
+  // ---- Produce surface (graft a framed fragment into a parent encode) -
+  //
+  // The write-side twins of the gate ([[resolve]]) and translate ([[resolvingBytes]]) members
+  // above, expressed against a target eo prism instead of a reader schema. The prism already
+  // carries its focus schema (`into.codec.schema`) and codec, so the caller supplies only the
+  // prism — composed from plain Scala types, e.g. `codecPrism[Conversion].field(_.clickInfo)
+  // .union[ClickInfo]` — and the registry hook; no frame math, fingerprint compare, branch-index
+  // synthesis, or [[AvroFailure]] juggling leaks into their code. Both close over a per-writer-id
+  // cache keyed like [[resolvingBytes]], so `schemaById` is consulted once per DISTINCT writer id;
+  // KEEP the returned function (re-calling per message discards the cache). Lookup FAILURES are
+  // never cached — a throwing `schemaById` leaves no map entry — only the successful per-id verdict.
+
+  /** Gate + graft a Confluent-framed fragment into `parent` at `into`'s focus, byte-exact: refuse
+    * any writer/focus drift rather than splice bytes that would misdecode. Per call:
+    *
+    *   1. [[strip]] the fragment's 5-byte header → `(writerId, body)`;
+    *   2. resolve the writer schema for `writerId` via `schemaById` (cached per id);
+    *   3. gate by parsing-canonical-form fingerprint against `into`'s focus schema
+    *      (`into.codec.schema`); on equality graft the bare body into `parent` via
+    *      [[AvroPrism.graftBytes]] (branch index re-synthesised), else refuse with
+    *      [[AvroFailure.SchemaMismatch]].
+    *
+    * Distinct `Left` causes for metering: [[AvroFailure.SchemaMismatch]] (permanent structural
+    * drift) vs [[AvroFailure.SchemaResolutionFailed]] (transient — the hook threw) vs
+    * [[AvroFailure.NotConfluentFramed]] (bad fragment frame) vs the graft's own locate failure. The
+    * caller owns the fallback on a `Left` (decode-and-re-encode, alert, drop). To ABSORB compatible
+    * drift automatically instead of refusing it, use [[graftResolving]].
+    */
+  def graftGated[B](
+      into: AvroPrism[B],
+      schemaById: SchemaById,
+  ): (Array[Byte], Array[Byte]) => Either[AvroFailure, Array[Byte]] =
+    val branchFingerprint = SchemaNormalization.parsingFingerprint64(into.codec.schema)
+    val verdicts = new ConcurrentHashMap[Int, Either[AvroFailure, Unit]]()
+
+    def verdictFor(writerId: Int): Either[AvroFailure, Unit] =
+      try
+        verdicts.computeIfAbsent(
+          writerId,
+          id =>
+            val writerFingerprint = SchemaNormalization.parsingFingerprint64(schemaById(id))
+            if writerFingerprint == branchFingerprint then Right(())
+            else Left(AvroFailure.SchemaMismatch(id, writerFingerprint, branchFingerprint)),
+        )
+      catch case NonFatal(t) => Left(AvroFailure.SchemaResolutionFailed(writerId, t))
+
+    (parent, framedFragment) =>
+      strip(framedFragment).flatMap(f =>
+        verdictFor(f.schemaId).flatMap(_ => into.graftBytes(parent, f.body))
+      )
+
+  /** Graft a Confluent-framed fragment into `parent` at `into`'s focus, ABSORBING writer/focus
+    * drift instead of refusing it: on fingerprint match the body is spliced verbatim (zero
+    * re-encode); on drift the body is resolve-decoded writer → `into`'s focus schema and re-encoded
+    * into that shape, so a compatible-but-not-identical fragment grafts as correct bytes rather
+    * than the silent garbage a raw byte splice would produce. Always yields valid `parent` bytes
+    * for a resolvable, decodable fragment — the fingerprint gate never surfaces.
+    *
+    * The auto-translate twin of [[resolvingBytes]]. Per writer id the cache holds a bridge —
+    * identity (verbatim) on match, resolve + re-encode on drift — built once. `Left` only on the
+    * irreducibly-unrecoverable: [[AvroFailure.NotConfluentFramed]] (bad frame),
+    * [[AvroFailure.SchemaResolutionFailed]] (the hook threw), [[AvroFailure.ResolveFailed]] /
+    * [[AvroFailure.EncodeFailed]] (the translate itself failed), or the graft's own locate failure.
+    * Use [[graftGated]] when drift is a bug to surface and meter, not a condition to absorb.
+    */
+  def graftResolving[B](
+      into: AvroPrism[B],
+      schemaById: SchemaById,
+  ): (Array[Byte], Array[Byte]) => Either[AvroFailure, Array[Byte]] =
+    given AvroCodec[B] = into.codec
+    val branchFingerprint = SchemaNormalization.parsingFingerprint64(into.codec.schema)
+    val bridges = new ConcurrentHashMap[Int, Array[Byte] => Either[AvroFailure, Array[Byte]]]()
+
+    def bridgeFor(
+        writerId: Int
+    ): Either[AvroFailure, Array[Byte] => Either[AvroFailure, Array[Byte]]] =
+      try
+        Right(
+          bridges.computeIfAbsent(
+            writerId,
+            id =>
+              val writerSchema = schemaById(id)
+              if SchemaNormalization.parsingFingerprint64(writerSchema) == branchFingerprint then
+                body => Right(body)
+              else
+                body =>
+                  AvroCodec
+                    .decodeResolvedValue[B](body, writerSchema)
+                    .flatMap(AvroCodec.encodeValue[B]),
+          )
+        )
+      catch case NonFatal(t) => Left(AvroFailure.SchemaResolutionFailed(writerId, t))
+
+    (parent, framedFragment) =>
+      strip(framedFragment).flatMap(f =>
+        bridgeFor(f.schemaId)
+          .flatMap(bridge => bridge(f.body))
+          .flatMap(body => into.graftBytes(parent, body))
+      )
 
   /** Typed per-message Confluent reader: `Array[Byte] => F[A]`, ready for an fs2 `Stream.evalMap`.
     * Per payload: [[strip]] the header, look the writer schema up by id (`schemaById`, effectful),
