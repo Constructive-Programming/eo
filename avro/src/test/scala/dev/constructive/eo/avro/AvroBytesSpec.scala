@@ -104,7 +104,7 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // ---- scalar mid-record focus: seq (long between id and payment) ----
     val seqL = codecPrism[WireEnvelope].field(_.seq)
     val seqOk = seqL.sliceBytes(bytes) match
-      case Ior.Right(frag) =>
+      case Right(frag) =>
         val schemaOk = frag.schema.getType === org.apache.avro.Schema.Type.LONG
         val ordinalOk = frag.branchOrdinal === None
         val fidelity =
@@ -122,14 +122,14 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .exists(f => Arrays.equals(f.bytes, frag.bytes)) === true
         schemaOk.and(ordinalOk).and(fidelity).and(selfGraft).and(unsafeParity)
       case other =>
-        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+        org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
     // ---- union-branch focus: payment.union[Cash] ----
     val cashL = codecPrism[WireEnvelope].field(_.payment).union[Cash]
     val paymentSchema = envelopeSchema.getField("payment").schema
     val cashName = summon[AvroCodec[Cash]].schema.getFullName
     val cashOk = cashL.sliceBytes(bytes) match
-      case Ior.Right(frag) =>
+      case Right(frag) =>
         val schemaOk = frag.schema.getFullName === cashName
         // The ordinal is Cash's position in the union schema, and the index bytes are STRIPPED:
         // the fragment re-encodes byte-for-byte as a bare Cash record (no union framing).
@@ -146,12 +146,12 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
         schemaOk.and(ordinalOk).and(fidelity).and(decodedOk).and(selfGraft)
       case other =>
-        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+        org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
     // ---- union-TYPED field focused WITHOUT .union[Branch]: index bytes are part of the span ----
     val paymentL = codecPrism[WireEnvelope].field(_.payment)
     val unionFieldOk = paymentL.sliceBytes(bytes) match
-      case Ior.Right(frag) =>
+      case Right(frag) =>
         (frag.branchOrdinal === None)
           .and(frag.schema.getType === org.apache.avro.Schema.Type.UNION)
           .and(
@@ -161,7 +161,7 @@ class AvroBytesSpec extends Specification with ScalaCheck:
               .equals(frag.bytes, toBinaryValue(cashRecordOf(100L), frag.schema)) === true
           )
       case other =>
-        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+        org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
     seqOk.and(cashOk).and(unionFieldOk)
   }
@@ -182,8 +182,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     val paymentL = codecPrism[WireEnvelope].field(_.payment)
 
     val frag = cashL.sliceBytes(inputBytes) match
-      case Ior.Right(f) => f
-      case other        => sys.error(s"slice failed: $other")
+      case Right(f)  => f
+      case Left(err) => sys.error(s"slice failed: $err")
 
     // Output currently sits on the Card branch; grafting through .union[Cash] must synthesize
     // Cash's index — byte-identical to routing the decoded value through the union-typed field's
@@ -220,10 +220,10 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     val itemL = codecPrism[Basket].field(_.items).at(0)
 
     val indexSliceOk = itemL.sliceBytes(basketBytes) match
-      case Ior.Left(chain) =>
-        chain.headOption.contains(AvroFailure.UnsupportedSpanStep(PathStep.Index(0))) === true
+      case Left(failure) =>
+        failure === AvroFailure.UnsupportedSpanStep(PathStep.Index(0))
       case other =>
-        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+        org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
     val indexGraftOk = itemL.graftBytes(basketBytes, Array(0.toByte)) match
       case Left(failure) =>
         failure === AvroFailure.UnsupportedSpanStep(PathStep.Index(0))
@@ -235,26 +235,22 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     val personBytes = toBinary(personRecord(Person("Alice", 30)), personSchema)
     val truncated = Arrays.copyOf(personBytes, personBytes.length - 1)
     val truncatedOk = codecPrism[Person].field(_.age).sliceBytes(truncated) match
-      case Ior.Left(chain) =>
-        chain.headOption.exists(_.isInstanceOf[AvroFailure.BinaryParseFailed]) === true
+      case Left(failure) =>
+        failure.isInstanceOf[AvroFailure.BinaryParseFailed] === true
       case other =>
-        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+        org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
 
     val noneTx = transactionRecord(Transaction("t-1", None))
     val noneBytes = toBinary(noneTx, transactionSchema)
     val wrongBranchOk =
       codecPrism[Transaction].field(_.amount).union[Long].sliceBytes(noneBytes) match
-        case Ior.Left(chain) =>
-          chain.headOption.get match
-            case AvroFailure.UnionResolutionFailed(branches, PathStep.UnionBranch("long")) =>
-              branches === List("null", "long")
-            case other =>
-              org
-                .specs2
-                .execute
-                .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
+        case Left(AvroFailure.UnionResolutionFailed(branches, PathStep.UnionBranch("long"))) =>
+          branches === List("null", "long")
         case other =>
-          org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+          org
+            .specs2
+            .execute
+            .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
 
     // PathMissing is schema-driven for the byte walker: the prism's ROOT schema must lack the
     // field (the walker never sees the record, only bytes + schema). `.field(_.name)` now resolves
@@ -284,10 +280,10 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       )
     val missingOk =
       ageOnlyPrism.fieldNamed[String]("name").sliceBytes(ageOnlyBytes) match
-        case Ior.Left(chain) =>
-          chain.headOption.contains(AvroFailure.PathMissing(PathStep.Field("name"))) === true
+        case Left(failure) =>
+          failure === AvroFailure.PathMissing(PathStep.Field("name"))
         case other =>
-          org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+          org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
 
     indexSliceOk
       .and(indexGraftOk)

@@ -2,7 +2,6 @@ package dev.constructive.eo.avro
 
 import scala.language.dynamics
 
-import cats.data.{Chain, Ior}
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 import java.util.Arrays
@@ -170,12 +169,15 @@ final class AvroPrism[A] private[avro] (
     * Array-index steps are unsupported ([[AvroFailure.UnsupportedSpanStep]]); for a `.fields(...)`
     * prism the span addressed is the PARENT record enclosing the selected fields (the selected
     * fields themselves are not contiguous).
+    *
+    * The located [[AvroFailure]] is a bare `Left` (the span locate yields exactly one failure,
+    * nothing to accumulate); the fragment a `Right`.
     */
-  def sliceBytes(bytes: Array[Byte]): Ior[Chain[AvroFailure], AvroFragment] =
+  def sliceBytes(bytes: Array[Byte]): Either[AvroFailure, AvroFragment] =
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
-      case Left(failure) => Ior.Left(Chain.one(failure))
+      case Left(failure) => Left(failure)
       case Right(span)   =>
-        Ior.Right(
+        Right(
           AvroFragment(
             Arrays.copyOfRange(bytes, span.valueStart, span.end),
             span.valueSchema,
