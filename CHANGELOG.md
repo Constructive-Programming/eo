@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-14
+
+### Added
+
+- **Produce-side gated / resolving graft — `ConfluentWire.graftGated` / `graftResolving`** (#75,
+  #76). The write twins of the consume-side gate/translate surface: splice a stored,
+  Confluent-framed fragment into an outgoing encode at a prism focus, with the frame strip +
+  registry resolve + parsing-canonical-form fingerprint gate + union-branch-index synthesis +
+  per-writer-id cache all contained inside the combinator. The caller composes the prism from
+  plain Scala types (`codecPrism[Conversion].field(_.clickInfo).union[ClickInfo]`) and supplies the
+  registry hook — no frame math or `AvroFailure` juggling leaks into caller code. `graftGated`
+  refuses drift with distinct causes to meter (`SchemaMismatch` permanent-structural vs
+  `SchemaResolutionFailed` transient); `graftResolving` absorbs compatible drift by resolve-decoding
+  writer → focus schema and re-encoding, so a compatible-but-not-identical fragment grafts as
+  correct bytes rather than the silent garbage a raw byte splice would produce. Lookup failures are
+  never cached.
+
+### Changed
+
+- **BREAKING: `AvroPrism.graftBytes` and `AvroPrism.sliceBytes` now return `Either[AvroFailure, …]`**
+  instead of `Ior[Chain[AvroFailure], …]`. Both locate a single span and yield exactly one failure
+  — never a `Both`, and the `Chain` was always length 1 — so the `Ior` / `Chain` wrapper was
+  ceremony. Call sites that pattern-matched `Ior.Right` / `Ior.Left` move to `Right` / `Left`. The
+  `IndexedRecord`-carried `.record` face keeps its genuinely-accumulating `Ior` diagnostic surface
+  unchanged.
+
 ## [0.8.2] - 2026-07-13
 
 ### Added
