@@ -296,6 +296,15 @@ lazy val avro = ApacheAvro % "avro" % "1.12.1"
 // PTV bypasses aren't reachable here — this just keeps the dep tree clean.
 lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.5"
 lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.21.5"
+// Floor commons-lang3 at 3.18.0 — `apache-avro 1.12.1 -> commons-compress
+// 1.28.0` brings it transitively, and every release below 3.18.0 is in the
+// CVE-2025-48924 range (uncontrolled recursion on long inputs; dependabot
+// alert #1). commons-compress 1.28.0 already resolves 3.18.0, so this is a
+// regression floor rather than a live bump — pinned via
+// `commonSettings.dependencyOverrides` (same mechanism as jackson) so a future
+// avro/commons-compress shuffle can't reintroduce a vulnerable version, and the
+// submitted dependency graph shows the safe version unambiguously.
+lazy val commonsLang3 = "org.apache.commons" % "commons-lang3" % "3.18.0"
 // jsoniter-scala — high-perf JSON codec (~5–10× circe on hot paths).
 // Used by `eo-jsoniter` to back byte-cursor JSON optics that decode
 // directly from `Array[Byte]` without allocating a runtime AST. The
@@ -321,9 +330,10 @@ lazy val commonSettings = Seq(
   // library's code and the warning is a Hearth-side concern rather
   // than a cats-eo bug.
   Test / scalacOptions += "-Wconf:src=.*/cats-derivation/.*:silent",
-  // Pin jackson-core + jackson-databind at the CVE-patched 2.21.5 across
-  // every module — see the `jacksonCore` / `jacksonDatabind` defs above.
-  dependencyOverrides ++= Seq(jacksonCore, jacksonDatabind),
+  // Pin jackson-core + jackson-databind at the CVE-patched 2.21.5 and floor
+  // commons-lang3 at 3.18.0 across every module — see the `jacksonCore` /
+  // `jacksonDatabind` / `commonsLang3` defs above.
+  dependencyOverrides ++= Seq(jacksonCore, jacksonDatabind, commonsLang3),
 )
 
 // Library-appropriate scalac options layered on top of the baseline set
