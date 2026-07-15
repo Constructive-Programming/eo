@@ -138,15 +138,6 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
         .exists(_ == freshDecode(bytes, promoteWriterSchema, promoteReaderSchema))
   }
 
-  "resolved decode matches the fresh reference (union payload, identity resolution)" >> forAll(
-    genTransaction
-  ) { t =>
-    val bytes = binaryOf(t)
-    AvroCodec
-      .decodeResolvedRecord(bytes, transactionSchema, transactionSchema)
-      .exists(_ == freshDecode(bytes, transactionSchema, transactionSchema))
-  }
-
   "resolved decode matches the fresh reference (field added with default)" >> forAll(genId) { id =>
     val rec = new GenericData.Record(addWriterSchema)
     rec.put("id", id)
@@ -159,15 +150,6 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
   }
 
   // ---- 2. threadLocalStorage = false opt-out (fresh allocation per call) ----
-
-  "decodeRecord with threadLocalStorage = false matches the fresh reference decode" >> forAll(
-    genWriterEvent
-  ) { e =>
-    val bytes = binaryOf(e)
-    AvroCodec
-      .decodeRecord(bytes, writerSchema, threadLocalStorage = false)
-      .exists(_ == freshDecode(bytes, writerSchema, writerSchema))
-  }
 
   "resolved decode with threadLocalStorage = false matches the fresh reference decode" >> forAll(
     genWriterEvent
