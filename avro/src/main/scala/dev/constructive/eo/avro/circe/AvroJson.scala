@@ -163,20 +163,22 @@ object AvroJson:
     bytesPrism[IndexedRecord](using recordCodec(schema))
 
   /** Position-based binary parse to a generic value under a single schema — the `tearFrom` behind
-    * the byte diagonals. Routed through [[AvroBinaryCursor.readDatum]] (the module's single binary
+    * the byte diagonals. Routed through [[AvroBinaryCursor.leaves]] (the module's single binary
     * read), so the reader comes from the shared per-thread cache instead of a closure-held instance
     * that every thread using the optic would share.
     */
   private def parse(schema: Schema): Array[Byte] => Any =
     bytes =>
       AvroBinaryCursor
-        .readDatum[Any](bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+        .leaves
+        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
   /** Writer → reader resolving parse (Avro schema resolution). */
   private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =
     bytes =>
       AvroBinaryCursor
-        .readDatum[Any](bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
+        .leaves
+        .read(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
 
   /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
   private def recordCodec(schema0: Schema): AvroCodec[IndexedRecord] =
@@ -337,6 +339,7 @@ object AvroJson:
   private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
     bytes =>
       AvroBinaryCursor
-        .readDatum[IndexedRecord](bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+        .records
+        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
 end AvroJson

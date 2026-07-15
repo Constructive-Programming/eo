@@ -204,7 +204,7 @@ object ConfluentWire:
   // "reader"). The per-message members use Avro's names (`readerSchema`) since no optic is
   // involved.
 
-  /** The translating surface's decode — [[AvroBinaryCursor.readDatum]] writer → reader under the
+  /** The translating surface's decode — [[AvroBinaryCursor.records]] writer → reader under the
     * constructor's captured `threadLocalStorage` field, failures as [[AvroFailure.ResolveFailed]].
     * (The always-cached public counterpart is `AvroCodec.decodeResolvedRecord`.)
     */
@@ -217,7 +217,8 @@ object ConfluentWire:
     try
       Right(
         AvroBinaryCursor
-          .readDatum[IndexedRecord](
+          .records
+          .read(
             bytes,
             0,
             bytes.length,

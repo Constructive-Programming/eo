@@ -90,7 +90,8 @@ object AvroCodec:
     try
       Right(
         AvroBinaryCursor
-          .readDatum[IndexedRecord](
+          .records
+          .read(
             bytes,
             0,
             bytes.length,
@@ -126,7 +127,8 @@ object AvroCodec:
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
       Right(
         AvroBinaryCursor
-          .readDatum[IndexedRecord](
+          .records
+          .read(
             bytes,
             0,
             bytes.length,
