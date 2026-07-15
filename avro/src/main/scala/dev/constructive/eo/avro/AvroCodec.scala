@@ -110,13 +110,14 @@ object AvroCodec:
     * honest. Held in a `ThreadLocal` because `GenericDatumReader` is mutable and NOT thread-safe,
     * and the decode helpers are called concurrently — each thread keeps its own readers.
     *
-    * Opt out per call with `threadLocalStorage = false` on the decode helpers (or on the
-    * `ConfluentWire` constructors, which thread it here): that path allocates a fresh reader and
-    * decoder per call — the pre-cache behaviour. Two reasons to: the cache has no eviction (it
-    * grows by one reader per distinct schema pair per thread, for the thread's lifetime — fine for
-    * consumers decoding a few schema versions on a fixed pool, wrong for dynamically-parsed schemas
-    * on large pools), and virtual-thread-per-task executors (each task is a fresh thread, so
-    * caching only adds ThreadLocal + map overhead to every decode).
+    * Opt out at optic construction with `threadLocalStorage = false` on the `ConfluentWire` decode
+    * constructors — the value is captured as a field of the built optic / reader and routed to the
+    * `private[avro]` decode overloads: that path allocates a fresh reader and decoder per call —
+    * the pre-cache behaviour. Two reasons to: the cache has no eviction (it grows by one reader per
+    * distinct schema pair per thread, for the thread's lifetime — fine for consumers decoding a few
+    * schema versions on a fixed pool, wrong for dynamically-parsed schemas on large pools), and
+    * virtual-thread-per-task executors (each task is a fresh thread, so caching only adds
+    * ThreadLocal + map overhead to every decode).
     */
   private val readerCache
       : ThreadLocal[HashMap[(Schema, Schema), GenericDatumReader[GenericRecord]]] =
@@ -162,21 +163,15 @@ object AvroCodec:
     * apache-avro's binary-decoder throws (`IOException` / `EOFException` / `AvroRuntimeException`)
     * into [[AvroFailure.BinaryParseFailed]].
     */
-  def decodeRecord(
-      bytes: Array[Byte],
-      schema: Schema,
-      threadLocalStorage: Boolean = true,
-  ): Either[AvroFailure, IndexedRecord] =
-    try Right(readRecord(bytes, schema, schema, threadLocalStorage))
+  def decodeRecord(bytes: Array[Byte], schema: Schema): Either[AvroFailure, IndexedRecord] =
+    try Right(readRecord(bytes, schema, schema, threadLocalStorage = true))
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
 
   /** [[decodeRecord]] under `codec`'s schema, then the codec's `Any ⇒ A` side —
     * [[AvroFailure.DecodeFailed]] when the parsed record doesn't line up with `A`.
     */
-  def decodeValue[A](bytes: Array[Byte], threadLocalStorage: Boolean = true)(using
-      codec: AvroCodec[A]
-  ): Either[AvroFailure, A] =
-    decodeRecord(bytes, codec.schema, threadLocalStorage).flatMap { record =>
+  def decodeValue[A](bytes: Array[Byte])(using codec: AvroCodec[A]): Either[AvroFailure, A] =
+    decodeRecord(bytes, codec.schema).flatMap { record =>
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 
@@ -192,7 +187,17 @@ object AvroCodec:
       bytes: Array[Byte],
       readSchema: Schema,
       writeSchema: Schema,
-      threadLocalStorage: Boolean = true,
+  ): Either[AvroFailure, IndexedRecord] =
+    decodeResolvedRecord(bytes, readSchema, writeSchema, threadLocalStorage = true)
+
+  /** [[decodeResolvedRecord]] with the construction-time reuse switch — the seam the
+    * `ConfluentWire` decode constructors route their captured `threadLocalStorage` field through.
+    */
+  private[avro] def decodeResolvedRecord(
+      bytes: Array[Byte],
+      readSchema: Schema,
+      writeSchema: Schema,
+      threadLocalStorage: Boolean,
   ): Either[AvroFailure, IndexedRecord] =
     try
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
@@ -202,10 +207,18 @@ object AvroCodec:
   /** [[decodeResolvedRecord]] resolving `readSchema` → `codec`'s schema (the write schema), then
     * the codec's `Any ⇒ A` side — the drift counterpart of [[decodeValue]].
     */
-  def decodeResolvedValue[A](
+  def decodeResolvedValue[A](bytes: Array[Byte], readSchema: Schema)(using
+      codec: AvroCodec[A]
+  ): Either[AvroFailure, A] =
+    decodeResolvedValue(bytes, readSchema, threadLocalStorage = true)
+
+  /** [[decodeResolvedValue]] with the construction-time reuse switch (see the record-level
+    * overload).
+    */
+  private[avro] def decodeResolvedValue[A](
       bytes: Array[Byte],
       readSchema: Schema,
-      threadLocalStorage: Boolean = true,
+      threadLocalStorage: Boolean,
   )(using
       codec: AvroCodec[A]
   ): Either[AvroFailure, A] =

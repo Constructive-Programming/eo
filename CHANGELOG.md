@@ -9,14 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Decode-path allocation reuse in `AvroCodec` (perf, source-compatible, decode output
-  unchanged).** The binary decode helpers now reuse a per-thread `GenericDatumReader` per distinct
-  `(writer, reader)` schema pair and a per-thread `BinaryDecoder` (decoding straight from the byte
-  array), instead of allocating both per call — the top allocators on per-record consume paths
-  like `ConfluentWire.recordReader`. Records are still fresh datums (no `Utf8`/bytes aliasing).
-  Opt out with `threadLocalStorage = false`, a new defaulted parameter on the decode helpers and
-  the `ConfluentWire` decode constructors (`resolving`, `resolvingRecord`, `resolvingBytes`,
-  `reader`, `recordReader`).
+- **Decode-path allocation reuse in `AvroCodec` (perf, decode output unchanged).** The binary
+  decode helpers now reuse a per-thread `GenericDatumReader` per distinct `(writer, reader)`
+  schema pair and a per-thread `BinaryDecoder` (decoding straight from the byte array), instead of
+  allocating both per call — the top allocators on per-record consume paths like
+  `ConfluentWire.recordReader`. Records are still fresh datums (no `Utf8`/bytes aliasing).
+  `AvroCodec`'s decode helpers keep their existing signatures; the opt-out is set at optic
+  construction — `threadLocalStorage = false`, a new defaulted parameter on the `ConfluentWire`
+  decode constructors (`resolving`, `resolvingRecord`, `resolvingBytes`, `reader`,
+  `recordReader`), captured as a field of the built optic / reader.
 
 ### Added
 
