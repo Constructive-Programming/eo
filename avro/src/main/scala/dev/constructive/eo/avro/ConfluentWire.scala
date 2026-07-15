@@ -217,7 +217,14 @@ object ConfluentWire:
     try
       Right(
         AvroBinaryCursor
-          .readRecordDatum(bytes, 0, bytes.length, readSchema, writeSchema, threadLocalStorage)
+          .readDatum[IndexedRecord](
+            bytes,
+            0,
+            bytes.length,
+            readSchema,
+            writeSchema,
+            threadLocalStorage
+          )
       )
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
 

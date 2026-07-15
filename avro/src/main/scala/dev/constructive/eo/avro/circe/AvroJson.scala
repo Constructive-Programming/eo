@@ -169,12 +169,14 @@ object AvroJson:
     */
   private def parse(schema: Schema): Array[Byte] => Any =
     bytes =>
-      AvroBinaryCursor.readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+      AvroBinaryCursor
+        .readDatum[Any](bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
   /** Writer → reader resolving parse (Avro schema resolution). */
   private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =
     bytes =>
-      AvroBinaryCursor.readDatum(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
+      AvroBinaryCursor
+        .readDatum[Any](bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
 
   /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
   private def recordCodec(schema0: Schema): AvroCodec[IndexedRecord] =
@@ -335,6 +337,6 @@ object AvroJson:
   private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
     bytes =>
       AvroBinaryCursor
-        .readRecordDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+        .readDatum[IndexedRecord](bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
 end AvroJson

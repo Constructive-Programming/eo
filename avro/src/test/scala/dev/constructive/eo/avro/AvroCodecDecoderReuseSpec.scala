@@ -155,7 +155,7 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
     genWriterEvent
   ) { e =>
     val bytes = binaryOf(e)
-    AvroBinaryCursor.readDatum(
+    AvroBinaryCursor.readDatum[IndexedRecord](
       bytes,
       0,
       bytes.length,

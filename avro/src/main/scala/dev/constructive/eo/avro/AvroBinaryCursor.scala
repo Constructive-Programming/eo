@@ -298,46 +298,36 @@ private[avro] object AvroBinaryCursor:
     * thread's cached reader and reusable `BinaryDecoder` are used, decoding straight from the array
     * (no `ByteArrayInputStream`); without it, a fresh reader and decoder are allocated per call.
     *
+    * `D` declares the datum shape the SCHEMA determines: `IndexedRecord` at a record schema, `Any`
+    * for slice decodes whose leaf may be a primitive / `Utf8` / union branch. Avro's reader is
+    * erased, so `D` is the schema's promise, not the compiler's — the cached branch recasts the
+    * shared `GenericDatumReader[Any]` to `D`, the module's single unchecked narrowing.
+    *
     * Datum reuse (`read(reuse, …)`) is deliberately NOT used: apache-avro aliases the reused
     * record's mutable `Utf8` / bytes / fixed buffers, which would corrupt any caller that retains a
     * decoded record past the next decode on the same thread. A fresh datum (`read(null, …)`) keeps
     * every returned record independent — the reader and decoder reuse are the unconditionally-safe
     * bulk of the allocation win.
     */
-  private[avro] def readDatum(
+  private[avro] def readDatum[D](
       bytes: Array[Byte],
       from: Int,
       len: Int,
       writer: Schema,
       reader: Schema,
       threadLocalStorage: Boolean,
-  ): Any =
+  ): D =
     if threadLocalStorage then
       val decoder = DecoderFactory.get().binaryDecoder(bytes, from, len, binaryDecoderCache.get())
       binaryDecoderCache.set(decoder)
       readerCache
         .get()
         .computeIfAbsent((writer, reader), k => new GenericDatumReader[Any](k._1, k._2))
+        .asInstanceOf[GenericDatumReader[D]]
         .read(null, decoder)
     else
-      new GenericDatumReader[Any](writer, reader)
+      new GenericDatumReader[D](writer, reader)
         .read(null, DecoderFactory.get().binaryDecoder(bytes, from, len, null))
-
-  /** [[readDatum]] at a record schema — the ONE place apache-avro's erased datum type is narrowed
-    * to `IndexedRecord`. The engine returns `Any` because slice decodes focus non-record leaves (an
-    * `int`, a `Utf8`, a union branch); root/record callers narrow here, once. The narrowing is the
-    * same erased `checkcast` a `GenericDatumReader[GenericRecord]` call site inserts invisibly —
-    * spelled out so it is auditable, and not repeated per caller.
-    */
-  private[avro] def readRecordDatum(
-      bytes: Array[Byte],
-      from: Int,
-      len: Int,
-      writer: Schema,
-      reader: Schema,
-      threadLocalStorage: Boolean,
-  ): IndexedRecord =
-    readDatum(bytes, from, len, writer, reader, threadLocalStorage).asInstanceOf[IndexedRecord]
 
   /** THE module's binary write — [[readDatum]]'s mirror: encode an `Any`-shaped `datum` under
     * `schema` to its binary wire form. Fresh writer/encoder per call: `GenericDatumWriter` carries
@@ -362,7 +352,7 @@ private[avro] object AvroBinaryCursor:
   ): Either[Throwable, A] =
     try
       codec.decodeEither(
-        readDatum(
+        readDatum[Any](
           bytes,
           span.valueStart,
           span.end - span.valueStart,
@@ -399,7 +389,7 @@ private[avro] object AvroBinaryCursor:
       a: A,
   ): Either[Throwable, Array[Byte]] =
     try
-      val parent = readRecordDatum(
+      val parent = readDatum[IndexedRecord](
         bytes,
         span.valueStart,
         span.end - span.valueStart,
