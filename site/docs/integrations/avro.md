@@ -209,7 +209,7 @@ nameAge
 ```
 
 Full-cover selection — spanning every field of `Person` — still
-returns an `AvroFieldsPrism`, **not** an `Iso`. Avro decode can
+returns an `AvroPrism` (fields-focused), **not** an `Iso`. Avro decode can
 always fail (the input may not even be record-shaped, the codec
 may refuse a field, the union branch may not match) so totality
 isn't witnessable, and an Iso would misleadingly advertise a
@@ -776,9 +776,9 @@ Ior-bearing record surface lives behind `.record`:
 | `AvroPrism[A].record`     | `place(a): In => Ior[...]`                                                     | `placeUnsafe(a)`              |
 | `AvroPrism[A].record`     | `transfer(f): In => C => Ior[...]`                                             | `transferUnsafe(f)`           |
 | `AvroPrism[A].record`     | `get(in): Ior[..., A]`                                                         | `getOptionUnsafe`             |
-| `AvroFieldsPrism[A].record` | same five                                                                    | same five                     |
+| `AvroPrism[A].fields(…).record` | same five                                                                    | same five                     |
 | `AvroTraversal[A].record` | `modify(f) / transform(f) / place(a) / transfer(f) / getAll(in): Ior[...]`     | `modifyUnsafe / ... / getAllUnsafe` |
-| `AvroFieldsTraversal[A].record` | same five                                                                | same five                     |
+| `AvroTraversal[A].fields(…).record` | same five                                                                | same five                     |
 
 `In` = `IndexedRecord | Array[Byte] | String` everywhere.
 

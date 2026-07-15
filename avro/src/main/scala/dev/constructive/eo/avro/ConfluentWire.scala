@@ -31,16 +31,15 @@ import org.apache.avro.{Schema, SchemaNormalization}
   *     untouched — byte-exact, zero re-encode. For payloads that must stay verbatim (hashing,
   *     signatures, archiving, pass-through forwarding), and for consumers where drift is a bug to
   *     surface, not a condition to absorb.
-  *   - '''Translate''' ([[resolving]], [[resolvingRecord]], [[resolvingBytes]], [[reader]],
-  *     [[recordReader]]): run Avro schema resolution (`ResolvingDecoder`) writer → reader, so
-  *     compatible evolution — added fields with defaults, reordered fields, promotions — is
-  *     absorbed instead of refused.
+  *   - '''Translate''' ([[resolving]], [[resolvingBytes]], [[reader]], [[recordReader]]): run Avro
+  *     schema resolution (`ResolvingDecoder`) writer → reader, so compatible evolution — added
+  *     fields with defaults, reordered fields, promotions — is absorbed instead of refused.
   *
   * '''Axis 2 — output altitude.''' Each translating member hands back a different currency:
   *   - typed `A` (via [[AvroCodec]]): [[resolving]] for a KNOWN writer schema (pure optic),
   *     [[reader]] for a per-message lookup (effectful, `Stream.evalMap`-ready);
-  *   - generic `IndexedRecord` (no case class needed): [[resolvingRecord]] / [[recordReader]], same
-  *     split;
+  *   - generic `IndexedRecord` (no case class needed): [[recordReader]] (per-message lookup; for a
+  *     known writer schema, `AvroCodec.decodeResolvedRecord` after [[strip]] is the two-liner);
   *   - reader-layout framed '''bytes''' (no decode at all): [[resolvingBytes]] — per-message
   *     lookup, writer-id-cached, for consumers that hash / slice / forward rather than deserialize.
   *
@@ -253,27 +252,8 @@ object ConfluentWire:
       reverseGet = (_, a) => AvroCodec.encodeValue[A](a).map(attach(frameId, _)),
     )
 
-  /** Generic counterpart of [[resolving]] — resolves `readSchema` → the caller-supplied
-    * `writeSchema` into an `IndexedRecord`, for when no reader codec / case class exists.
-    */
-  def resolvingRecord(
-      readSchema: Schema,
-      writeSchema: Schema,
-      frameId: Int,
-      threadLocalStorage: Boolean = true,
-  ): Optic[Array[Byte], AvroBridge.BridgedBytes, IndexedRecord, IndexedRecord, Affine] =
-    new Optional[Array[Byte], AvroBridge.BridgedBytes, IndexedRecord, IndexedRecord](
-      getOrModify = framed =>
-        strip(framed).flatMap(f =>
-          resolveDecodeRecord(f.body, readSchema, writeSchema, threadLocalStorage)
-        ) match
-          case r @ Right(_) => r.widenLeft
-          case Left(fail)   => Left(Left(fail)),
-      reverseGet = (_, r) => AvroCodec.encodeRecord(r, writeSchema).map(attach(frameId, _)),
-    )
-
   /** Framed bytes → reader-layout framed bytes for a MIXED-schema stream: per-message writer lookup
-    * (like [[recordReader]]) fused with drift translation (like [[resolvingRecord]]), handing back
+    * (like [[recordReader]]) fused with drift translation (Avro schema resolution), handing back
     * `Array[Byte]` rather than a typed `A` or an `F[A]`. Per payload: [[strip]], resolve-decode the
     * body writer → reader, re-encode under `readerSchema`, re-frame under `frameId`. Because the
     * output is reader-layout, it is stable across writer-schema evolution within a reader

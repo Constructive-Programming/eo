@@ -12,7 +12,8 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Behaviour spec for [[AvroFieldsPrism]] — the multi-field NamedTuple Prism on the Avro carrier.
+/** Behaviour spec for the multi-field NamedTuple Prism ([[AvroPrism]] with a Fields focus) on the
+  * Avro carrier.
   *
   * Mirrors `dev.constructive.eo.circe.JsonFieldsPrismLawsSpec`'s forAll-property block. Discipline
   * `PrismTests` is omitted: the Avro Prism laws would require `reverseGet(focus) == input`, which

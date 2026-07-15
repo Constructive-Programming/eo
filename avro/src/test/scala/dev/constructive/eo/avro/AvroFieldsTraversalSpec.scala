@@ -9,8 +9,8 @@ import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, IndexedRecord}
 import org.specs2.mutable.Specification
 
-/** Behaviour spec for [[AvroFieldsTraversal]] — the multi-field array traversal produced by
-  * `AvroTraversal.fields(_.a, _.b, ...)` (Unit 6).
+/** Behaviour spec for the multi-field array traversal ([[AvroTraversal]] with a Fields focus)
+  * produced by `AvroTraversal.fields(_.a, _.b, ...)` (Unit 6).
   *
   * Mirrors `dev.constructive.eo.circe.JsonFieldsTraversalSpec` block-for-block (five named cases):
   * one happy-path block with default ↔ Unsafe parity + qty preserved, two atomicity blocks (single

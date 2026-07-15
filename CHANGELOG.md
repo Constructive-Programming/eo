@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **Public-surface pruning in `cats-eo-avro` — duplicate ways to do the same thing** (0.10, with
+  the binary-compat bump already paid by this release):
+  - `ConfluentWire.resolvingRecord` — unused; for a known writer schema, compose `strip` +
+    `AvroCodec.decodeResolvedRecord` (its per-message twin `recordReader` remains).
+  - `AvroCodec#decodeUnsafe` — unused throw-on-failure convenience; use
+    `decodeEither(x).fold(throw _, identity)`.
+  - The `AvroFieldsPrism` / `AvroFieldsTraversal` compatibility type aliases — they were
+    `= AvroPrism[A]` / `= AvroTraversal[A]`; use the real names.
+
 ### Changed
 
 - **Decode-path allocation reuse in `AvroCodec` (perf, decode output unchanged).** The binary
@@ -16,8 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ConfluentWire.recordReader`. Records are still fresh datums (no `Utf8`/bytes aliasing).
   `AvroCodec`'s decode helpers keep their existing signatures; the opt-out is set at optic
   construction — `threadLocalStorage = false`, a new defaulted parameter on the `ConfluentWire`
-  decode constructors (`resolving`, `resolvingRecord`, `resolvingBytes`, `reader`,
-  `recordReader`), captured as a field of the built optic / reader.
+  decode constructors (`resolving`, `resolvingBytes`, `reader`, `recordReader`), captured as a
+  field of the built optic / reader.
 - **Single binary read/write path in `cats-eo-avro`.** Every binary Avro decode now funnels
   through one internal engine on the byte cursor, `AvroBinaryCursor.readDatum` (and every binary
   encode through `writeDatum`): the `AvroCodec` root-payload helpers, the prism/traversal slice

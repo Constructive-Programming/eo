@@ -47,13 +47,6 @@ trait AvroCodec[A]:
     */
   def decodeEither(any: Any): Either[Throwable, A]
 
-  /** Convenience: throw on failure. Used internally by the macro layer when a structured failure
-    * isn't available; production call sites should prefer [[decodeEither]].
-    */
-  def decodeUnsafe(any: Any): A = decodeEither(any) match
-    case Right(a) => a
-    case Left(t)  => throw t
-
 end AvroCodec
 
 object AvroCodec:
