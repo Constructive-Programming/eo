@@ -335,7 +335,6 @@ object AvroJson:
   private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
     bytes =>
       AvroBinaryCursor
-        .readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
-        .asInstanceOf[IndexedRecord]
+        .readRecordDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
 end AvroJson

@@ -90,8 +90,7 @@ object AvroCodec:
     try
       Right(
         AvroBinaryCursor
-          .readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
-          .asInstanceOf[IndexedRecord]
+          .readRecordDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
       )
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
 
@@ -120,8 +119,14 @@ object AvroCodec:
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
       Right(
         AvroBinaryCursor
-          .readDatum(bytes, 0, bytes.length, readSchema, writeSchema, threadLocalStorage = true)
-          .asInstanceOf[IndexedRecord]
+          .readRecordDatum(
+            bytes,
+            0,
+            bytes.length,
+            readSchema,
+            writeSchema,
+            threadLocalStorage = true
+          )
       )
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
 
