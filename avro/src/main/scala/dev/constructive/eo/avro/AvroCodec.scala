@@ -112,7 +112,11 @@ object AvroCodec:
     *
     * Opt out per call with `threadLocalStorage = false` on the decode helpers (or on the
     * `ConfluentWire` constructors, which thread it here): that path allocates a fresh reader and
-    * decoder per call — the pre-cache behaviour.
+    * decoder per call — the pre-cache behaviour. Two reasons to: the cache has no eviction (it
+    * grows by one reader per distinct schema pair per thread, for the thread's lifetime — fine for
+    * consumers decoding a few schema versions on a fixed pool, wrong for dynamically-parsed schemas
+    * on large pools), and virtual-thread-per-task executors (each task is a fresh thread, so
+    * caching only adds ThreadLocal + map overhead to every decode).
     */
   private val readerCache
       : ThreadLocal[HashMap[(Schema, Schema), GenericDatumReader[GenericRecord]]] =

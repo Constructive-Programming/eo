@@ -18,7 +18,10 @@ val scala3Version = "3.8.4"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.9"
+// 0.10: the threadLocalStorage defaulted params (#77) change the descriptors of
+// AvroCodec's decode helpers and ConfluentWire's decode constructors — binary-breaking
+// per the early-semver doctrine in mima.sbt, so the containing release bumps the minor.
+ThisBuild / tlBaseVersion := "0.10"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
