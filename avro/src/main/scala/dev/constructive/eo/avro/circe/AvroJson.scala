@@ -2,7 +2,7 @@ package dev.constructive.eo.avro.circe
 
 import scala.jdk.CollectionConverters.*
 
-import dev.constructive.eo.avro.AvroCodec
+import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec}
 import dev.constructive.eo.optics.{Getter, MendTearPrism, Prism}
 import io.circe.Json
 import java.nio.ByteBuffer
@@ -163,16 +163,18 @@ object AvroJson:
     bytesPrism[IndexedRecord](using recordCodec(schema))
 
   /** Position-based binary parse to a generic value under a single schema — the `tearFrom` behind
-    * the byte diagonals. Routed through [[AvroCodec.readDatum]] (the module's single binary read),
-    * so the reader comes from the shared per-thread cache instead of a closure-held instance that
-    * every thread using the optic would share.
+    * the byte diagonals. Routed through [[AvroBinaryCursor.readDatum]] (the module's single binary
+    * read), so the reader comes from the shared per-thread cache instead of a closure-held instance
+    * that every thread using the optic would share.
     */
   private def parse(schema: Schema): Array[Byte] => Any =
-    bytes => AvroCodec.readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+    bytes =>
+      AvroBinaryCursor.readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
   /** Writer → reader resolving parse (Avro schema resolution). */
   private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =
-    bytes => AvroCodec.readDatum(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
+    bytes =>
+      AvroBinaryCursor.readDatum(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
 
   /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
   private def recordCodec(schema0: Schema): AvroCodec[IndexedRecord] =
@@ -332,7 +334,7 @@ object AvroJson:
     */
   private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
     bytes =>
-      AvroCodec
+      AvroBinaryCursor
         .readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
         .asInstanceOf[IndexedRecord]
 

@@ -4,17 +4,9 @@ import scala.util.control.NonFatal
 
 import cats.data.{Chain, Ior}
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.ByteArrayOutputStream
-import java.util.HashMap
 import org.apache.avro.Schema
-import org.apache.avro.generic.{
-  GenericData,
-  GenericDatumReader,
-  GenericDatumWriter,
-  GenericRecord,
-  IndexedRecord
-}
-import org.apache.avro.io.{BinaryDecoder, DecoderFactory, EncoderFactory}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord, IndexedRecord}
+import org.apache.avro.io.DecoderFactory
 
 /** A unified read/write/schema codec for Avro values, combining the kindlings-avro-derivation
   * triplet `(AvroEncoder[A], AvroDecoder[A], AvroSchemaFor[A])` into a single typeclass that user
@@ -92,88 +84,10 @@ object AvroCodec:
   // ---- Serialization boundary (apache-avro binary / JSON) ------------
   //
   // The `Any` ↔ bytes/JSON wire boundary. Kindlings owns the native↔`Any` side (`encode` /
-  // `decodeEither` above); apache-avro owns wire-format serialization, and these helpers are the
-  // eo-avro counterpart to it. Record-level (`*Record`) works under an explicit schema; value-level
-  // (`*Value`) threads a codec's own schema plus its `Any` conversion.
-
-  /** Per-thread `GenericDatumReader` cache backing [[readDatum]] — and through it every binary
-    * decode in the module.
-    *
-    * `ConfluentWire.recordReader` (and every other per-record entry point) drives the decode
-    * helpers once per Kafka record, so allocating a fresh `GenericDatumReader` per call — which
-    * rebuilds the writer→reader resolution each time — and a fresh `BinaryDecoder` `ByteSource` per
-    * call made these the two dominant decode-path allocators. A topic decodes the same
-    * schema(-pair) over and over, so the reader is built once per distinct `(writer, reader)` pair
-    * and reused.
-    *
-    * The reader is keyed on BOTH schemas (by structural `Schema` equality): a reader built for one
-    * writer→reader pair is never handed a record of a different pair, so schema evolution stays
-    * honest. Held in a `ThreadLocal` because `GenericDatumReader` is mutable and NOT thread-safe,
-    * and the decode helpers are called concurrently — each thread keeps its own readers.
-    *
-    * Opt out at optic construction with `threadLocalStorage = false` on the `ConfluentWire` decode
-    * constructors — the value is captured as a field of the built optic / reader and routed to the
-    * `private[avro]` decode overloads: that path allocates a fresh reader and decoder per call —
-    * the pre-cache behaviour. Two reasons to: the cache has no eviction (it grows by one reader per
-    * distinct schema pair per thread, for the thread's lifetime — fine for consumers decoding a few
-    * schema versions on a fixed pool, wrong for dynamically-parsed schemas on large pools), and
-    * virtual-thread-per-task executors (each task is a fresh thread, so caching only adds
-    * ThreadLocal + map overhead to every decode).
-    */
-  private val readerCache: ThreadLocal[HashMap[(Schema, Schema), GenericDatumReader[Any]]] =
-    ThreadLocal.withInitial(() => new HashMap())
-
-  /** Per-thread reusable `BinaryDecoder` — `null` until a thread's first binary decode. Passed as
-    * the `reuse` argument to `DecoderFactory.binaryDecoder`, which returns the same instance
-    * reconfigured onto the new byte range, so a thread allocates a decoder only once. `null`-safe:
-    * a `null` reuse makes apache-avro allocate a fresh decoder (the first-call path).
-    */
-  private val binaryDecoderCache: ThreadLocal[BinaryDecoder | Null] =
-    new ThreadLocal()
-
-  /** THE module's binary read — every binary Avro decode (root payloads, the prism/traversal slice
-    * decodes in `AvroBinaryCursor`, the circe-bridge parses in `AvroJson`) funnels here: one datum
-    * of `reader`-schema shape read from `bytes[from, from+len)` as written under `writer`. With
-    * `threadLocalStorage` (the default everywhere except an opted-out `ConfluentWire` optic) the
-    * thread's cached reader and reusable `BinaryDecoder` are used, decoding straight from the array
-    * (no `ByteArrayInputStream`); without it, a fresh reader and decoder are allocated per call.
-    *
-    * Datum reuse (`read(reuse, …)`) is deliberately NOT used: apache-avro aliases the reused
-    * record's mutable `Utf8` / bytes / fixed buffers, which would corrupt any caller that retains a
-    * decoded record past the next decode on the same thread. A fresh datum (`read(null, …)`) keeps
-    * every returned record independent — the reader and decoder reuse are the unconditionally-safe
-    * bulk of the allocation win.
-    */
-  private[avro] def readDatum(
-      bytes: Array[Byte],
-      from: Int,
-      len: Int,
-      writer: Schema,
-      reader: Schema,
-      threadLocalStorage: Boolean,
-  ): Any =
-    if threadLocalStorage then
-      val decoder = DecoderFactory.get().binaryDecoder(bytes, from, len, binaryDecoderCache.get())
-      binaryDecoderCache.set(decoder)
-      readerCache
-        .get()
-        .computeIfAbsent((writer, reader), k => new GenericDatumReader[Any](k._1, k._2))
-        .read(null, decoder)
-    else
-      new GenericDatumReader[Any](writer, reader)
-        .read(null, DecoderFactory.get().binaryDecoder(bytes, from, len, null))
-
-  /** THE module's binary write — [[readDatum]]'s mirror: encode an `Any`-shaped `datum` under
-    * `schema` to its binary wire form. Fresh writer/encoder per call: `GenericDatumWriter` carries
-    * no resolution state worth caching.
-    */
-  private[avro] def writeDatum(datum: Any, schema: Schema): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val writer = new GenericDatumWriter[Any](schema)
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    writer.write(datum, encoder)
-    encoder.flush()
-    out.toByteArray
+  // `decodeEither` above); apache-avro owns wire-format serialization, and the binary engine is
+  // [[AvroBinaryCursor.readDatum]] / [[AvroBinaryCursor.writeDatum]] — the helpers below are its
+  // failure-wrapped public adapters. Record-level (`*Record`) works under an explicit schema;
+  // value-level (`*Value`) threads a codec's own schema plus its `Any` conversion.
 
   /** Binary-decode `bytes` under `schema` to a generic record — no typed codec involved. Catches
     * apache-avro's binary-decoder throws (`IOException` / `EOFException` / `AvroRuntimeException`)
@@ -182,7 +96,8 @@ object AvroCodec:
   def decodeRecord(bytes: Array[Byte], schema: Schema): Either[AvroFailure, IndexedRecord] =
     try
       Right(
-        readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+        AvroBinaryCursor
+          .readDatum(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
           .asInstanceOf[IndexedRecord]
       )
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
@@ -208,21 +123,11 @@ object AvroCodec:
       readSchema: Schema,
       writeSchema: Schema,
   ): Either[AvroFailure, IndexedRecord] =
-    decodeResolvedRecord(bytes, readSchema, writeSchema, threadLocalStorage = true)
-
-  /** [[decodeResolvedRecord]] with the construction-time reuse switch — the seam the
-    * `ConfluentWire` decode constructors route their captured `threadLocalStorage` field through.
-    */
-  private[avro] def decodeResolvedRecord(
-      bytes: Array[Byte],
-      readSchema: Schema,
-      writeSchema: Schema,
-      threadLocalStorage: Boolean,
-  ): Either[AvroFailure, IndexedRecord] =
     try
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
       Right(
-        readDatum(bytes, 0, bytes.length, readSchema, writeSchema, threadLocalStorage)
+        AvroBinaryCursor
+          .readDatum(bytes, 0, bytes.length, readSchema, writeSchema, threadLocalStorage = true)
           .asInstanceOf[IndexedRecord]
       )
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
@@ -233,19 +138,7 @@ object AvroCodec:
   def decodeResolvedValue[A](bytes: Array[Byte], readSchema: Schema)(using
       codec: AvroCodec[A]
   ): Either[AvroFailure, A] =
-    decodeResolvedValue(bytes, readSchema, threadLocalStorage = true)
-
-  /** [[decodeResolvedValue]] with the construction-time reuse switch (see the record-level
-    * overload).
-    */
-  private[avro] def decodeResolvedValue[A](
-      bytes: Array[Byte],
-      readSchema: Schema,
-      threadLocalStorage: Boolean,
-  )(using
-      codec: AvroCodec[A]
-  ): Either[AvroFailure, A] =
-    decodeResolvedRecord(bytes, readSchema, codec.schema, threadLocalStorage).flatMap { record =>
+    decodeResolvedRecord(bytes, readSchema, codec.schema).flatMap { record =>
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 
@@ -255,7 +148,7 @@ object AvroCodec:
     * [[AvroFailure.EncodeFailed]].
     */
   def encodeRecord(datum: Any, schema: Schema): Either[AvroFailure, Array[Byte]] =
-    try Right(writeDatum(datum, schema))
+    try Right(AvroBinaryCursor.writeDatum(datum, schema))
     catch case NonFatal(t) => Left(AvroFailure.EncodeFailed(t))
 
   /** The codec's `A ⇒ Any` side, then [[encodeRecord]] under `codec`'s schema. */

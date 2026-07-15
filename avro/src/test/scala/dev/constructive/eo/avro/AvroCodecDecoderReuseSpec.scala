@@ -155,9 +155,14 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
     genWriterEvent
   ) { e =>
     val bytes = binaryOf(e)
-    AvroCodec
-      .decodeResolvedRecord(bytes, writerSchema, readerEventSchema, threadLocalStorage = false)
-      .exists(_ == freshDecode(bytes, writerSchema, readerEventSchema))
+    AvroBinaryCursor.readDatum(
+      bytes,
+      0,
+      bytes.length,
+      writerSchema,
+      readerEventSchema,
+      threadLocalStorage = false,
+    ) == freshDecode(bytes, writerSchema, readerEventSchema)
   }
 
   // ---- 3. Concurrent + non-aliased ----
