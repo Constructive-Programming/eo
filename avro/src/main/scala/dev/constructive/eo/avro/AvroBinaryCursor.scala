@@ -6,8 +6,8 @@ import scala.util.control.NonFatal
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.util.{Arrays, List as JList}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, IndexedRecord}
-import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory, EncoderFactory}
+import org.apache.avro.generic.IndexedRecord
+import org.apache.avro.io.{BinaryData, Decoder, DecoderFactory}
 
 /** Internal byte-offset locator behind [[AvroPrism]]'s byte-carried optic (`to`/`from`) and its
   * slice/graft surface.
@@ -257,22 +257,8 @@ private[avro] object AvroBinaryCursor:
     out.write(bytes, plan.array.end, bytes.length - plan.array.end)
     out.toByteArray
 
-  /** Read one datum of `schema` from `bytes[from, from+len)` via a bounded GenericDatumReader. */
-  private def readDatum(schema: Schema, bytes: Array[Byte], from: Int, len: Int): Any =
-    val reader = new GenericDatumReader[Any](schema)
-    reader.read(null, DecoderFactory.get().binaryDecoder(bytes, from, len, null))
-
-  /** Encode `datum` under `schema` to its binary wire form via a GenericDatumWriter. */
-  private def writeDatum(schema: Schema, datum: Any): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val writer = new GenericDatumWriter[Any](schema)
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    writer.write(datum, encoder)
-    encoder.flush()
-    out.toByteArray
-
-  /** Decode the value slice addressed by `span` through `codec` — [[readDatum]] under the span's
-    * resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
+  /** Decode the value slice addressed by `span` through `codec` — [[AvroCodec.readDatum]] under the
+    * span's resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
     * [[AvroTraversal]]'s per-element reads.
     */
   def decodeSlice[A](
@@ -282,20 +268,27 @@ private[avro] object AvroBinaryCursor:
   ): Either[Throwable, A] =
     try
       codec.decodeEither(
-        readDatum(span.valueSchema, bytes, span.valueStart, span.end - span.valueStart)
+        AvroCodec.readDatum(
+          bytes,
+          span.valueStart,
+          span.end - span.valueStart,
+          span.valueSchema,
+          span.valueSchema,
+          threadLocalStorage = true,
+        )
       )
     catch case NonFatal(t) => Left(t)
 
-  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then [[writeDatum]].
-    * Mirror of [[decodeSlice]]; shared by the prism and traversal write paths for LEAF focuses (the
-    * codec's runtime shape matches the span schema exactly).
+  /** Encode `a` under the span's resolved schema — the codec's A→Any side, then
+    * [[AvroCodec.writeDatum]]. Mirror of [[decodeSlice]]; shared by the prism and traversal write
+    * paths for LEAF focuses (the codec's runtime shape matches the span schema exactly).
     */
   def encodeValue[A](
       a: A,
       span: BinarySpan,
       codec: AvroCodec[A],
   ): Either[Throwable, Array[Byte]] =
-    try Right(writeDatum(span.valueSchema, codec.encode(a)))
+    try Right(AvroCodec.writeDatum(codec.encode(a), span.valueSchema))
     catch case NonFatal(t) => Left(t)
 
   /** Encode step for FIELDS focuses — a `.fields(...)` span addresses the PARENT record, and the
@@ -312,9 +305,17 @@ private[avro] object AvroBinaryCursor:
       a: A,
   ): Either[Throwable, Array[Byte]] =
     try
-      val parent = readDatum(span.valueSchema, bytes, span.valueStart, span.end - span.valueStart)
+      val parent = AvroCodec
+        .readDatum(
+          bytes,
+          span.valueStart,
+          span.end - span.valueStart,
+          span.valueSchema,
+          span.valueSchema,
+          threadLocalStorage = true,
+        )
         .asInstanceOf[IndexedRecord]
-      Right(writeDatum(span.valueSchema, fields.writeFields(parent, a)))
+      Right(AvroCodec.writeDatum(fields.writeFields(parent, a), span.valueSchema))
     catch case NonFatal(t) => Left(t)
 
   /** Zigzag-varint encoding of `n` (Avro `int` wire form) — used by graft to synthesise a union
