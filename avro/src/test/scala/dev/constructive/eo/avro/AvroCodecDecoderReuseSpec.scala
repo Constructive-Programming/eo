@@ -2,7 +2,6 @@ package dev.constructive.eo.avro
 
 import java.io.ByteArrayInputStream
 import java.util.concurrent.ConcurrentLinkedQueue
-import java.util.concurrent.atomic.AtomicIntegerArray
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord, IndexedRecord}
 import org.apache.avro.io.DecoderFactory
@@ -13,18 +12,14 @@ import org.specs2.mutable.Specification
 
 /** Decode-path reuse in [[AvroCodec]] — the per-thread `GenericDatumReader` cache and reusable
   * `BinaryDecoder` that replaced the fresh-allocate-per-decode code (`new GenericDatumReader(…)` +
-  * `binaryDecoder(new ByteArrayInputStream(…), null)`). Three guards, in the order they matter:
+  * `binaryDecoder(new ByteArrayInputStream(…), null)`). Two guards, in the order they matter:
   *
-  *   1. '''Byte-for-byte identical decode.''' The cached path must produce a record equal to the
-  *      OLD fresh-allocation reference decode (reproduced verbatim in [[freshDecode]]), across
-  *      writer→reader evolution (field dropped, added-with-default, reordered, promoted) and
-  *      union-typed payloads. This is the load-bearing correctness guard: a wrong decode in a serde
-  *      library corrupts every consumer.
-  *   2. '''Build once per key.''' A reader is constructed exactly once per distinct
-  *      `(writer, reader)` schema pair, proven via the per-thread
-  *      [[AvroCodec.readerBuildCountForCurrentThread]] seam — the whole point of the cache (killing
-  *      the per-record resolution rebuild).
-  *   3. '''Thread-safe + non-aliased.''' Concurrent decodes on many threads stay correct, and a
+  *   1. '''Byte-for-byte identical decode.''' The cached path — and the `threadLocalStorage =
+  *      false` opt-out — must produce a record equal to the OLD fresh-allocation reference decode
+  *      (reproduced verbatim in [[freshDecode]]), across writer→reader evolution (field dropped,
+  *      added-with-default, reordered, promoted) and union-typed payloads. This is the load-bearing
+  *      correctness guard: a wrong decode in a serde library corrupts every consumer.
+  *   2. '''Thread-safe + non-aliased.''' Concurrent decodes on many threads stay correct, and a
   *      record decoded earlier on a thread is never mutated by a later decode on that thread (fresh
   *      datum, no `Utf8`/bytes aliasing).
   *
@@ -69,28 +64,31 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
   private def binaryOf[A](a: A)(using codec: AvroCodec[A]): Array[Byte] =
     AvroSpecFixtures.toBinaryValue(codec.encode(a), codec.schema)
 
+  private val genId: Gen[String] =
+    Gen.alphaNumStr.map(s => if s.isEmpty then "x" else s.take(12))
+
   private val genWriterEvent: Gen[WriterEvent] =
     for
-      id <- Gen.alphaNumStr.map(s => if s.isEmpty then "x" else s.take(12))
+      id <- genId
       legacy <- Gen.chooseNum(Int.MinValue, Int.MaxValue)
     yield WriterEvent(id, legacy)
 
   private val genReorderWriter: Gen[ReorderWriter] =
     for
-      alpha <- Gen.alphaNumStr.map(s => if s.isEmpty then "a" else s.take(12))
+      alpha <- genId
       beta <- Gen.chooseNum(Int.MinValue, Int.MaxValue)
       gamma <- Gen.oneOf(true, false)
     yield ReorderWriter(alpha, beta, gamma)
 
   private val genPromoteWriter: Gen[PromoteWriter] =
     for
-      label <- Gen.alphaNumStr.map(s => if s.isEmpty then "l" else s.take(12))
+      label <- genId
       count <- Gen.chooseNum(Int.MinValue, Int.MaxValue)
     yield PromoteWriter(label, count)
 
   private val genTransaction: Gen[AvroSpecFixtures.Transaction] =
     for
-      id <- Gen.alphaNumStr.map(s => if s.isEmpty then "t" else s.take(12))
+      id <- genId
       amount <- Gen.option(Gen.chooseNum(Long.MinValue, Long.MaxValue))
     yield AvroSpecFixtures.Transaction(id, amount)
 
@@ -149,9 +147,7 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
       .exists(_ == freshDecode(bytes, transactionSchema, transactionSchema))
   }
 
-  "resolved decode matches the fresh reference (field added with default)" >> forAll(
-    Gen.alphaNumStr.map(s => if s.isEmpty then "x" else s.take(12))
-  ) { id =>
+  "resolved decode matches the fresh reference (field added with default)" >> forAll(genId) { id =>
     val rec = new GenericData.Record(addWriterSchema)
     rec.put("id", id)
     val bytes = AvroSpecFixtures.toBinary(rec, addWriterSchema)
@@ -162,27 +158,24 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
     cached.exists(_ == reference) && defaultApplied
   }
 
-  // ---- 2. Reader built exactly once per distinct (writer, reader) key ----
+  // ---- 2. threadLocalStorage = false opt-out (fresh allocation per call) ----
 
-  // Runs on a dedicated thread so the per-thread build counter starts clean and can't race the
-  // other (parallel) examples in this spec.
-  "a reader is constructed exactly once per distinct (writer, reader) key over many decodes" >> {
-    val counts = new AtomicIntegerArray(3)
-    val bytes = binaryOf(WriterEvent("k", 7))
-    val t = new Thread(() =>
-      (1 to 25).foreach(_ => AvroCodec.decodeRecord(bytes, writerSchema))
-      counts.set(0, AvroCodec.readerBuildCountForCurrentThread) // one key: (writer, writer)
-      (1 to 25).foreach(_ => AvroCodec.decodeResolvedRecord(bytes, writerSchema, readerEventSchema))
-      counts.set(1, AvroCodec.readerBuildCountForCurrentThread) // second key: (writer, reader)
-      (1 to 25).foreach { _ =>
-        AvroCodec.decodeRecord(bytes, writerSchema)
-        AvroCodec.decodeResolvedRecord(bytes, writerSchema, readerEventSchema)
-      }
-      counts.set(2, AvroCodec.readerBuildCountForCurrentThread) // no new keys
-    )
-    t.start()
-    t.join()
-    (counts.get(0) === 1).and(counts.get(1) === 2).and(counts.get(2) === 2)
+  "decodeRecord with threadLocalStorage = false matches the fresh reference decode" >> forAll(
+    genWriterEvent
+  ) { e =>
+    val bytes = binaryOf(e)
+    AvroCodec
+      .decodeRecord(bytes, writerSchema, threadLocalStorage = false)
+      .exists(_ == freshDecode(bytes, writerSchema, writerSchema))
+  }
+
+  "resolved decode with threadLocalStorage = false matches the fresh reference decode" >> forAll(
+    genWriterEvent
+  ) { e =>
+    val bytes = binaryOf(e)
+    AvroCodec
+      .decodeResolvedRecord(bytes, writerSchema, readerEventSchema, threadLocalStorage = false)
+      .exists(_ == freshDecode(bytes, writerSchema, readerEventSchema))
   }
 
   // ---- 3. Concurrent + non-aliased ----

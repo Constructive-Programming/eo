@@ -109,6 +109,10 @@ object AvroCodec:
     * writer→reader pair is never handed a record of a different pair, so schema evolution stays
     * honest. Held in a `ThreadLocal` because `GenericDatumReader` is mutable and NOT thread-safe,
     * and the decode helpers are called concurrently — each thread keeps its own readers.
+    *
+    * Opt out per call with `threadLocalStorage = false` on the decode helpers (or on the
+    * `ConfluentWire` constructors, which thread it here): that path allocates a fresh reader and
+    * decoder per call — the pre-cache behaviour.
     */
   private val readerCache
       : ThreadLocal[HashMap[(Schema, Schema), GenericDatumReader[GenericRecord]]] =
@@ -122,31 +126,9 @@ object AvroCodec:
   private val binaryDecoderCache: ThreadLocal[BinaryDecoder | Null] =
     new ThreadLocal()
 
-  /** Per-thread count of `GenericDatumReader` constructions — a test seam proving a reader is built
-    * exactly once per distinct `(writer, reader)` key. Thread-scoped so parallel specs never race a
-    * shared counter.
-    */
-  private val readerBuilds: ThreadLocal[Int] = ThreadLocal.withInitial(() => 0)
-
-  /** Reader-construction count on the calling thread. Test-only seam (see [[readerBuilds]]). */
-  private[avro] def readerBuildCountForCurrentThread: Int = readerBuilds.get()
-
-  /** This thread's `GenericDatumReader` for `(writer, reader)`, built once on first request and
-    * reused thereafter.
-    */
-  private def cachedReader(writer: Schema, reader: Schema): GenericDatumReader[GenericRecord] =
-    val map = readerCache.get()
-    val key = (writer, reader)
-    val existing = map.get(key)
-    if existing != null then existing
-    else
-      val built = new GenericDatumReader[GenericRecord](writer, reader)
-      map.put(key, built)
-      readerBuilds.set(readerBuilds.get() + 1)
-      built
-
-  /** Binary-decode `bytes` with this thread's cached reader for `(writer, reader)`, reusing the
-    * thread's `BinaryDecoder` and decoding straight from the array (no `ByteArrayInputStream`).
+  /** Binary-decode `bytes` for `(writer, reader)`. With `threadLocalStorage` (the default) the
+    * thread's cached reader and reusable `BinaryDecoder` are used, decoding straight from the array
+    * (no `ByteArrayInputStream`); without it, a fresh reader and decoder are allocated per call.
     *
     * Datum reuse (`read(reuse, …)`) is deliberately NOT used: apache-avro aliases the reused
     * record's mutable `Utf8` / bytes / fixed buffers, which would corrupt any caller that retains a
@@ -154,25 +136,43 @@ object AvroCodec:
     * every returned record independent — the reader and decoder reuse are the unconditionally-safe
     * bulk of the allocation win.
     */
-  private def readRecord(bytes: Array[Byte], writer: Schema, reader: Schema): IndexedRecord =
-    val decoder =
-      DecoderFactory.get().binaryDecoder(bytes, 0, bytes.length, binaryDecoderCache.get())
-    binaryDecoderCache.set(decoder)
-    cachedReader(writer, reader).read(null, decoder)
+  private def readRecord(
+      bytes: Array[Byte],
+      writer: Schema,
+      reader: Schema,
+      threadLocalStorage: Boolean,
+  ): IndexedRecord =
+    if threadLocalStorage then
+      val decoder =
+        DecoderFactory.get().binaryDecoder(bytes, 0, bytes.length, binaryDecoderCache.get())
+      binaryDecoderCache.set(decoder)
+      readerCache
+        .get()
+        .computeIfAbsent((writer, reader), k => new GenericDatumReader[GenericRecord](k._1, k._2))
+        .read(null, decoder)
+    else
+      new GenericDatumReader[GenericRecord](writer, reader)
+        .read(null, DecoderFactory.get().binaryDecoder(bytes, 0, bytes.length, null))
 
   /** Binary-decode `bytes` under `schema` to a generic record — no typed codec involved. Catches
     * apache-avro's binary-decoder throws (`IOException` / `EOFException` / `AvroRuntimeException`)
     * into [[AvroFailure.BinaryParseFailed]].
     */
-  def decodeRecord(bytes: Array[Byte], schema: Schema): Either[AvroFailure, IndexedRecord] =
-    try Right(readRecord(bytes, schema, schema))
+  def decodeRecord(
+      bytes: Array[Byte],
+      schema: Schema,
+      threadLocalStorage: Boolean = true,
+  ): Either[AvroFailure, IndexedRecord] =
+    try Right(readRecord(bytes, schema, schema, threadLocalStorage))
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
 
   /** [[decodeRecord]] under `codec`'s schema, then the codec's `Any ⇒ A` side —
     * [[AvroFailure.DecodeFailed]] when the parsed record doesn't line up with `A`.
     */
-  def decodeValue[A](bytes: Array[Byte])(using codec: AvroCodec[A]): Either[AvroFailure, A] =
-    decodeRecord(bytes, codec.schema).flatMap { record =>
+  def decodeValue[A](bytes: Array[Byte], threadLocalStorage: Boolean = true)(using
+      codec: AvroCodec[A]
+  ): Either[AvroFailure, A] =
+    decodeRecord(bytes, codec.schema, threadLocalStorage).flatMap { record =>
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 
@@ -188,19 +188,24 @@ object AvroCodec:
       bytes: Array[Byte],
       readSchema: Schema,
       writeSchema: Schema,
+      threadLocalStorage: Boolean = true,
   ): Either[AvroFailure, IndexedRecord] =
     try
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
-      Right(readRecord(bytes, readSchema, writeSchema))
+      Right(readRecord(bytes, readSchema, writeSchema, threadLocalStorage))
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
 
   /** [[decodeResolvedRecord]] resolving `readSchema` → `codec`'s schema (the write schema), then
     * the codec's `Any ⇒ A` side — the drift counterpart of [[decodeValue]].
     */
-  def decodeResolvedValue[A](bytes: Array[Byte], readSchema: Schema)(using
+  def decodeResolvedValue[A](
+      bytes: Array[Byte],
+      readSchema: Schema,
+      threadLocalStorage: Boolean = true,
+  )(using
       codec: AvroCodec[A]
   ): Either[AvroFailure, A] =
-    decodeResolvedRecord(bytes, readSchema, codec.schema).flatMap { record =>
+    decodeResolvedRecord(bytes, readSchema, codec.schema, threadLocalStorage).flatMap { record =>
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 
@@ -270,11 +275,9 @@ object AvroCodec:
     */
   private def decodeJsonString(s: String, schema: Schema): Either[Throwable, IndexedRecord] =
     try
-      // The reader is shared with the binary path (keyed on `schema`); the JSON decoder can't be
-      // reused across distinct input strings, so it stays per-call. This path is not the hot one
-      // (`recordReader` reads binary) — reusing the reader keeps the treatment consistent.
+      val reader = new GenericDatumReader[GenericRecord](schema)
       val decoder = DecoderFactory.get().jsonDecoder(schema, s)
-      Right(cachedReader(schema, schema).read(null, decoder))
+      Right(reader.read(null, decoder))
     catch case NonFatal(t) => Left(t)
 
 end AvroCodec

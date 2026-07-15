@@ -212,12 +212,14 @@ object ConfluentWire:
     * [[AvroBridge]]. For a mixed-schema stream use [[reader]] (typed) or [[resolvingBytes]]
     * (bytes), which look the writer schema up per message.
     */
-  def resolving[A](readSchema: Schema, frameId: Int)(using
+  def resolving[A](readSchema: Schema, frameId: Int, threadLocalStorage: Boolean = true)(using
       codec: AvroCodec[A]
   ): Optic[Array[Byte], AvroBridge.BridgedBytes, A, A, Affine] =
     new Optional[Array[Byte], AvroBridge.BridgedBytes, A, A](
       getOrModify = framed =>
-        strip(framed).flatMap(f => AvroCodec.decodeResolvedValue[A](f.body, readSchema)) match
+        strip(framed).flatMap(f =>
+          AvroCodec.decodeResolvedValue[A](f.body, readSchema, threadLocalStorage)
+        ) match
           case r @ Right(_) => r.widenLeft
           case Left(fail)   => Left(Left(fail)),
       reverseGet = (_, a) => AvroCodec.encodeValue[A](a).map(attach(frameId, _)),
@@ -230,11 +232,12 @@ object ConfluentWire:
       readSchema: Schema,
       writeSchema: Schema,
       frameId: Int,
+      threadLocalStorage: Boolean = true,
   ): Optic[Array[Byte], AvroBridge.BridgedBytes, IndexedRecord, IndexedRecord, Affine] =
     new Optional[Array[Byte], AvroBridge.BridgedBytes, IndexedRecord, IndexedRecord](
       getOrModify = framed =>
         strip(framed).flatMap(f =>
-          AvroCodec.decodeResolvedRecord(f.body, readSchema, writeSchema)
+          AvroCodec.decodeResolvedRecord(f.body, readSchema, writeSchema, threadLocalStorage)
         ) match
           case r @ Right(_) => r.widenLeft
           case Left(fail)   => Left(Left(fail)),
@@ -263,6 +266,7 @@ object ConfluentWire:
       schemaById: SchemaById,
       readerSchema: Schema,
       frameId: Int,
+      threadLocalStorage: Boolean = true,
   ): Array[Byte] => Either[AvroFailure, Array[Byte]] =
     val bridges =
       new ConcurrentHashMap[Int, Array[Byte] => Either[AvroFailure, Array[Byte]]]()
@@ -278,7 +282,7 @@ object ConfluentWire:
               val writerSchema = schemaById(id)
               body =>
                 AvroCodec
-                  .decodeResolvedRecord(body, writerSchema, readerSchema)
+                  .decodeResolvedRecord(body, writerSchema, readerSchema, threadLocalStorage)
                   .flatMap(AvroCodec.encodeRecord(_, readerSchema))
                   .map(attach(frameId, _)),
           )
@@ -401,7 +405,7 @@ object ConfluentWire:
     * `BinaryParseFailed` via [[AvroFailureException]]; a `schemaById` failure as the effect's own
     * error.
     */
-  def reader[F[_], A](schemaById: Int => F[Schema])(using
+  def reader[F[_], A](schemaById: Int => F[Schema], threadLocalStorage: Boolean = true)(using
       F: MonadThrow[F],
       codec: AvroCodec[A],
   ): Array[Byte] => F[A] =
@@ -409,7 +413,9 @@ object ConfluentWire:
       strip(framed) match
         case Right(frame) =>
           F.flatMap(schemaById(frame.schemaId)) { readSchema =>
-            raiseFailure(AvroCodec.decodeResolvedValue[A](frame.body, readSchema))
+            raiseFailure(
+              AvroCodec.decodeResolvedValue[A](frame.body, readSchema, threadLocalStorage)
+            )
           }
         case Left(fail) => raiseFailure(Left(fail))
 
@@ -417,14 +423,25 @@ object ConfluentWire:
     * caller-supplied `writeSchema`, for when no reader case class exists. Same strict frame
     * contract as [[reader]] (opt-in fallback decode: `AvroCodec.decodeRecord`).
     */
-  def recordReader[F[_]](schemaById: Int => F[Schema], writeSchema: Schema)(using
+  def recordReader[F[_]](
+      schemaById: Int => F[Schema],
+      writeSchema: Schema,
+      threadLocalStorage: Boolean = true,
+  )(using
       F: MonadThrow[F]
   ): Array[Byte] => F[IndexedRecord] =
     framed =>
       strip(framed) match
         case Right(frame) =>
           F.flatMap(schemaById(frame.schemaId)) { readSchema =>
-            raiseFailure(AvroCodec.decodeResolvedRecord(frame.body, readSchema, writeSchema))
+            raiseFailure(
+              AvroCodec.decodeResolvedRecord(
+                frame.body,
+                readSchema,
+                writeSchema,
+                threadLocalStorage
+              )
+            )
           }
         case Left(fail) => raiseFailure(Left(fail))
 
