@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-07-14
+### Changed
+
+- **Decode-path allocation reuse in `AvroCodec` (perf, no API/behaviour change).** `decodeRecord`,
+  `decodeResolvedRecord`, and the internal Avro-JSON decode no longer allocate a fresh
+  `GenericDatumReader` (which rebuilt writer→reader schema resolution) and a fresh `BinaryDecoder`
+  over a `ByteArrayInputStream` on every call. Readers are now cached per distinct
+  `(writer, reader)` schema pair and the `BinaryDecoder` is reused (decoding straight from the
+  byte array), so a thread allocates decode state only on its first decode of a given schema
+  shape. On a per-record consume path (`ConfluentWire.recordReader` and friends) these two were the
+  top decode-path allocators — profiled at ~6.9 % (`BinaryDecoder$ByteSource.attach`) + ~8.2 %
+  (`GenericDatumReader` construction / resolution) of allocations in a downstream service. All
+  reuse state is held per-thread (`ThreadLocal`) because these apache-avro types are not
+  thread-safe and the helpers are called concurrently; decode output is byte-for-byte identical to
+  the previous fresh-allocation path (records are decoded with a fresh datum — no `Utf8` / bytes
+  aliasing).
 
 ### Added
 
