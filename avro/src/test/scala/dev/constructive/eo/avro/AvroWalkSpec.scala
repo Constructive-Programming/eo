@@ -50,7 +50,7 @@ class AvroWalkSpec extends Specification:
   // covers: walk a 1-deep record field returns terminal value + parent stack of length 1,
   //   walk a missing record field with Strict policy surfaces PathMissing,
   //   walk a missing record field with Lenient policy returns null leaf + parent,
-  //   stepInto on a non-record parent surfaces NotARecord
+  //   walking a Field step into a non-record parent surfaces NotARecord
   "Record walk: 1-deep field, Strict miss, Lenient miss, non-record parent" >> {
     val r = personRecord(Person("Alice", 30))
 
@@ -69,12 +69,9 @@ class AvroWalkSpec extends Specification:
         case other                 =>
           org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-    val notARecord = AvroWalk.stepInto(
-      PathStep.Field("x"),
-      "I am not a record": Any,
-      Vector.empty,
-      AvroWalk.OnMissingField.Strict,
-    ) === Left(AvroFailure.NotARecord(PathStep.Field("x")))
+    val notARecord =
+      AvroWalk.walkPath(r, Array(PathStep.Field("name"), PathStep.Field("x"))) ===
+        Left(AvroFailure.NotARecord(PathStep.Field("x")))
 
     happy.and(strictMiss).and(lenientMiss).and(notARecord)
   }
@@ -99,12 +96,9 @@ class AvroWalkSpec extends Specification:
     val oob = AvroWalk.walkPath(wrapper, Array(PathStep.Field("people"), PathStep.Index(5))) ===
       Left(AvroFailure.IndexOutOfRange(PathStep.Index(5), 1))
 
-    val notArray = AvroWalk.stepInto(
-      PathStep.Index(0),
-      personRecord(Person("Alice", 30)): Any,
-      Vector.empty,
-      AvroWalk.OnMissingField.Strict,
-    ) === Left(AvroFailure.NotAnArray(PathStep.Index(0)))
+    val notArray =
+      AvroWalk.walkPath(wrapper, Array(PathStep.Index(0))) ===
+        Left(AvroFailure.NotAnArray(PathStep.Index(0)))
 
     happy.and(oob).and(notArray)
   }
