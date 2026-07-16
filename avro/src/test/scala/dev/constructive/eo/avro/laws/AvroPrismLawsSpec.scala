@@ -138,6 +138,26 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
     .seam(using arbPersonRecord, summon[Arbitrary[String]], summon[Cogen[String]]),
   )
 
+  // Tier 1 — an INDEX-drilled seam (AvroWalk.addListSlots' `i == idx` splice arm), companion of
+  // the Field-drilled seam above. `arbBasket` always builds a 3-element `items` list, so `.at(1)`
+  // Hits on every generated sample (no vacuous-pass risk).
+  private val arbBasketRecord: Arbitrary[IndexedRecord] =
+    Arbitrary(arbBasket.arbitrary.map(b => AvroSpecFixtures.basketRecord(b): IndexedRecord))
+
+  checkAll(
+    "AvroRecordPrism drilled seam (Index) — codecPrism[Basket].field(_.items).at(1).record",
+    new SeamTests[IndexedRecord, AvroSpecFixtures.Order]:
+      val laws: SeamLaws[IndexedRecord, AvroSpecFixtures.Order] =
+        new SeamLaws[IndexedRecord, AvroSpecFixtures.Order]:
+          val optic = codecPrism[AvroSpecFixtures.Basket].field(_.items).at(1).record
+          val eqv = recordsEqual
+    .seam(using
+      arbBasketRecord,
+      summon[Arbitrary[AvroSpecFixtures.Order]],
+      summon[Cogen[AvroSpecFixtures.Order]],
+    ),
+  )
+
   // ---- forAll properties on the default Ior surface ---------------
   //
   // 2026-04-29 consolidation: 11 forAll blocks across 3 should{}'s → 3 composite forAll
@@ -335,6 +355,9 @@ object AvroPrismLawsSpec:
       q <- Gen.choose(0, 100)
     yield AvroSpecFixtures.Order(n, p, q)
   )
+
+  given cogenOrder: Cogen[AvroSpecFixtures.Order] =
+    Cogen[(String, Double, Int)].contramap(o => (o.name, o.price, o.qty))
 
   given arbBasket: Arbitrary[AvroSpecFixtures.Basket] = Arbitrary(
     for

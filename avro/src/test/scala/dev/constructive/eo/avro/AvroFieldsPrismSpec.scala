@@ -118,6 +118,67 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
     getOk.and(modifyOk).and(unsafeModOk).and(unsafeGetOk)
   }
 
+  // ---- .record.transform / transformUnsafe (AvroFocus.Fields.buildSubRecord) -----------
+  //
+  // Unlike modify/get (which route through the ATOMIC readFields — any missing selected field
+  // fails the whole read), transform/transformUnsafe project the sub-record via buildSubRecord,
+  // which is non-atomic: a missing selected field projects as `null` instead of failing.
+
+  // covers: buildSubRecord's per-index projection loop — rewrite the projected NamedTuple
+  //   sub-record directly (no codec decode/encode) and splice back; the untouched selected
+  //   field (`age`) passes through the projection unchanged.
+  //   NOTE: uses the Person shape because a second differently-shaped .fields expansion in one
+  //   file trips an AvroPrismMacro hoisting bug ("reference to decode_String$macro$N outside
+  //   the scope where it was defined"); surfaced by this run, tracked separately.
+  "AvroFieldsPrism .record.transform / transformUnsafe: sub-record rewrite splices back, sibling survives" >> {
+    val record = personRecord(Person("alice", 30))
+    val L = codecPrism[Person].fields(_.name, _.age).record
+
+    def upperName(sub: IndexedRecord): IndexedRecord =
+      val fresh = new GenericData.Record(sub.getSchema)
+      val namePos = sub.getSchema.getField("name").pos
+      fresh.put(namePos, sub.get(namePos).toString.toUpperCase)
+      val agePos = sub.getSchema.getField("age").pos
+      fresh.put(agePos, sub.get(agePos))
+      fresh
+
+    val viaIor = L.transform(upperName)(record)
+    val viaUnsafe = L.transformUnsafe(upperName)(record)
+
+    val iorOk = viaIor match
+      case Ior.Right(out) =>
+        (out.get(personSchema.getField("name").pos).toString === "ALICE")
+          .and(out.get(personSchema.getField("age").pos).asInstanceOf[Int] === 30)
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+
+    val unsafeOk =
+      (viaUnsafe.get(personSchema.getField("name").pos).toString === "ALICE")
+        .and(viaUnsafe.get(personSchema.getField("age").pos).asInstanceOf[Int] === 30)
+
+    iorOk.and(unsafeOk)
+  }
+
+  // covers: buildSubRecord's missing-field branch (`if parentField == null then null`) — unlike
+  //   readFields (which Ior.Left/Ior.Both on ANY missing selected field), transformUnsafe's
+  //   non-atomic projection succeeds even when a selected field is absent from the schema, and
+  //   overlayFields silently drops the update for a field the parent schema doesn't have
+  "AvroFieldsPrism .record.transformUnsafe on a schema-drifted parent: missing field projects as null, present field still rewrites" >> {
+    val ageOnly = ageOnlyRecord(30)
+    val L = codecPrism[Person].fields(_.name, _.age).record
+
+    val bumpAge: IndexedRecord => IndexedRecord = sub =>
+      val fresh = new GenericData.Record(sub.getSchema)
+      val namePos = sub.getSchema.getField("name").pos
+      val agePos = sub.getSchema.getField("age").pos
+      fresh.put(namePos, sub.get(namePos)) // null — "name" is absent from ageOnly's schema
+      fresh.put(agePos, sub.get(agePos).asInstanceOf[Integer].intValue + 1)
+      fresh
+
+    val out = L.transformUnsafe(bumpAge)(ageOnly)
+    out.get(0).asInstanceOf[Integer].intValue === 31
+  }
+
   // ---- Helpers -----------------------------------------------------
 
   /** Build an `age`-only record (no `name` field) under a one-field schema. The walker reaches this

@@ -180,6 +180,27 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     framingOk.and(readOk).and(writeOk)
   }
 
+  // covers: a LENGTH-CHANGING per-element edit under blocked (byte-sized) array framing correctly
+  //   re-frames the array region AND leaves a field declared AFTER the array decodable — the F6
+  //   tests above only exercise SAME-length edits (upper-casing fixed-width strings / numeric
+  //   bumps), which can't distinguish a correct reframe from one that mishandles the tail copy
+  "negative-count array framing + LENGTH-CHANGING edit: trailing field still decodes correctly" >> {
+    val basket = BasketWithTotal(
+      "ann",
+      List(Order("x", 1.0, 1), Order("y", 2.0, 2)),
+      total = 42,
+    )
+    val blocked = toBlockedBinary(basketWithTotalRecord(basket), basketWithTotalSchema)
+
+    // Length-changing: "x" (1 byte) -> "much-longer-name" (17 bytes) grows the element's encoding.
+    val namesT = codecPrism[BasketWithTotal].items.each.name
+    val out = namesT.modify(n => if n == "x" then "much-longer-name" else n)(blocked)
+
+    val totalOk = codecPrism[BasketWithTotal].field(_.total).getOption(out) === Some(42)
+    val namesOk = namesT.record.getAllUnsafe(out) === Vector("much-longer-name", "y")
+    totalOk.and(namesOk)
+  }
+
   // ---- Post-re-review combination axes (reframe × overlay × union) -----
 
   // covers: .each.fields on a NON-canonical array — the reframe path AND the by-name field

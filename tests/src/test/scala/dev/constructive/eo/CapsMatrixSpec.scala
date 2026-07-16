@@ -227,6 +227,9 @@ class CapsMatrixSpec extends Specification:
       (somePrism: CanFold[Option[Int], Int]).foldMap(identity)(None) === 0
       (pickPrism: CanFold[Option[Int], Int]).headOption(None) === None
       (zipOptional: CanFold[Address, Int]).exists(_ > 9999)(addr) === true
+      // covers: CanFold.exists FALSE case (CanFold.scala:27) — `false` seed of
+      // Monoid.instance(false, _||_) weakened to `true` would report a match that never occurs.
+      (zipOptional: CanFold[Address, Int]).exists(_ > 999999)(addr) === false
       (zipAffineFold: CanFold[Address, Int]).headOption(addr) === Some(12345)
       (listFold: CanFold[List[Int], Int]).foldMap(identity)(List(1, 2, 3)) === 6
       (listFold: CanFold[List[Int], Int]).foci(List(1, 2, 3)) === List(1, 2, 3)

@@ -252,6 +252,15 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .execute
             .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
 
+    // Sibling strictTerminalUnion=true call sites (AvroPrism.to / .sliceBytesUnsafe) must refuse
+    // the same wrong-branch payload as sliceBytes above, not just the sliceBytes call site.
+    val toMissOk =
+      codecPrism[Transaction].field(_.amount).union[Long].to(noneBytes) match
+        case _: Affine.Miss[?, ?] => true
+        case _                    => false
+    val sliceUnsafeMissOk =
+      codecPrism[Transaction].field(_.amount).union[Long].sliceBytesUnsafe(noneBytes) === None
+
     // PathMissing is schema-driven for the byte walker: the prism's ROOT schema must lack the
     // field (the walker never sees the record, only bytes + schema). `.field(_.name)` now resolves
     // by DECLARATION POSITION (issue #35), so on this drifted 1-field schema it would land on the
@@ -291,6 +300,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       .and(truncatedOk)
       .and(wrongBranchOk)
       .and(missingOk)
+      .and(toMissOk === true)
+      .and(sliceUnsafeMissOk)
   }
 
   // ---- byte-carried traversal ------------------------------------------
@@ -332,5 +343,38 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     */
   private def cashRecordOf(amount: Long): IndexedRecord =
     summon[AvroCodec[Cash]].encode(Cash(amount)).asInstanceOf[IndexedRecord]
+
+  // ---- Map-field skip (byte walker must skip a leading Map before a trailing sibling) --------
+
+  // covers: reading/writing a field declared AFTER a `Map[String, Long]` field forces the byte
+  //   walker to skip the whole map's block framing first (AvroBinaryCursor.skipMapItems /
+  //   skipMapBlocks) — a populated (multi-entry) map exercises the per-item loop, an empty map
+  //   exercises the immediate zero-count terminator
+  "byte walker skips over a leading Map field to reach a trailing sibling: populated + empty" >> {
+    val populated = TaggedCounts(Map("a" -> 1L, "b" -> 2L, "c" -> 3L), 42)
+    val populatedBytes = toBinary(taggedCountsRecord(populated), taggedCountsSchema)
+    val populatedReadOk =
+      codecPrism[TaggedCounts].field(_.total).getOption(populatedBytes) === Some(42)
+    val populatedWriteOk =
+      codecPrism[TaggedCounts].getOption(
+        codecPrism[TaggedCounts].field(_.total).replace(99)(populatedBytes)
+      ) === Some(populated.copy(total = 99))
+
+    val empty = TaggedCounts(Map.empty, 7)
+    val emptyBytes = toBinary(taggedCountsRecord(empty), taggedCountsSchema)
+    val emptyReadOk = codecPrism[TaggedCounts].field(_.total).getOption(emptyBytes) === Some(7)
+
+    populatedReadOk.and(populatedWriteOk).and(emptyReadOk)
+  }
+
+  // ---- zigzag varint boundary lengths ------------------------------------
+
+  // covers: zigZagLong / zigZagInt at their widest inputs — Long.MinValue needs the full 10-byte
+  //   varint, Int.MinValue the full 5-byte varint (BinaryData.encodeLong/encodeInt's max width);
+  //   these back the union-branch-index synthesis in splice/spliceAll/reframeArray
+  "zigZagLong / zigZagInt: MinValue boundary lengths (10 / 5 bytes)" >> {
+    (AvroBinaryCursor.zigZagLong(Long.MinValue).length === 10)
+      .and(AvroBinaryCursor.zigZagInt(Int.MinValue).length === 5)
+  }
 
 end AvroBytesSpec

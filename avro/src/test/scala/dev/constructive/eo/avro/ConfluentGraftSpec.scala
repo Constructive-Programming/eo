@@ -129,6 +129,18 @@ class ConfluentGraftSpec extends Specification:
       case other => unexpected(other)
   }
 
+  // covers: graftResolving's identical-fingerprint fast path (`body => Right(body)`) splices the
+  //   fragment body VERBATIM, with no decode/re-encode attempt at all — proved by feeding bytes
+  //   that AREN'T a valid Click encoding: a decode-then-re-encode mutant would fail on garbage,
+  //   while the real fast path matches a raw graftBytes splice of that same garbage exactly
+  "graftResolving: an identical-fingerprint fragment splices GARBAGE bytes verbatim (fast path skips decode)" >> {
+    val garbage: Array[Byte] = Array(9, 8, 7, 6, 5).map(_.toByte)
+    val fragment = frame(1, garbage) // id 1 -> clickSchema, same fingerprint as `branch`'s focus
+    val resolved = ConfluentWire.graftResolving(branch, registry)(parent, fragment).map(_.toList)
+    val rawVerbatim = branch.graftBytes(parent, garbage).map(_.toList)
+    resolved === rawVerbatim
+  }
+
   "graftResolving: grafting onto a null branch SWITCHES the union to Click" >> {
     val parentNone = enc(Conversion("c", None))
     val fragment = frame(1, enc(Click("y", 2L)))

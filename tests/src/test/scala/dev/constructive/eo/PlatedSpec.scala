@@ -246,3 +246,42 @@ class PlatedSpec extends Specification with Discipline:
       case _                        => -1
     (leftmost(bumped, 0), topRight) must beEqualTo(((depth, 1), 2))
   }
+
+  // covers: Plated.transform / transformMachine leaf shortcuts (Plated.scala:126,150) —
+  // `kids.isEmpty` weakened to `false` would route leaves through `rebuild` too instead of
+  // applying `f` directly. A spy `rebuild` counts calls; leaves must never bump it, on
+  // both the call-stack path (shallow tree) and the heap-machine path (past the 512 depth
+  // handoff), where the internal-node count is known exactly (one Node per spine level).
+  "rebuild fires only for non-leaf nodes, on both the recursive and machine-handoff paths" >> {
+    var rebuildCount = 0
+    val spyPlate: Plated[Bin] = Plated.fromChildren[Bin](
+      {
+        case Bin.Node(l, r) => List(l, r)
+        case Bin.Leaf(_)    => Nil
+      },
+      (parent, kids) =>
+        rebuildCount += 1
+        (parent, kids) match
+          case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
+          case (leaf, _)                       => leaf,
+    )
+    val bump: Bin => Bin = { case Bin.Leaf(v) => Bin.Leaf(v + 1); case n => n }
+
+    // (a) shallow: Node(Node(Leaf,Leaf),Leaf) has exactly 2 internal nodes.
+    val shallow = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
+    rebuildCount = 0
+    Plated.transform(bump)(shallow)(using spyPlate)
+    val shallowCount = rebuildCount
+
+    // (b) deep: a 1500-deep left spine crosses transformRecursionLimit (512), handing the
+    // rest to transformMachine. Exactly one Node per spine level, so the count is exact.
+    val depth = 1500
+    @tailrec def spine(deep: Bin, i: Int): Bin =
+      if i < depth then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
+    val deep = spine(Bin.Leaf(0), 0)
+    rebuildCount = 0
+    Plated.transform(bump)(deep)(using spyPlate)
+    val deepCount = rebuildCount
+
+    (shallowCount must beEqualTo(2)).and(deepCount must beEqualTo(depth))
+  }

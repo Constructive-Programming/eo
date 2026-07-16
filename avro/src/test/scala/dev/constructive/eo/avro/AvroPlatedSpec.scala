@@ -83,3 +83,9 @@ class AvroPlatedSpec extends Specification:
     val after = Plated.transform(identity[IndexedRecord])(before)
     summon[Eq[IndexedRecord]].eqv(before, after)
   }
+
+  "Eq[IndexedRecord] negative case: same schema, different field values -> eqv is false" >> {
+    val a = outer("a", "b", "t")
+    val b = outer("a", "c", "t")
+    summon[Eq[IndexedRecord]].eqv(a, b) === false
+  }
