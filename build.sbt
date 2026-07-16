@@ -18,7 +18,8 @@ val scala3Version = "3.8.4"
 //   3. Generate a project GPG key, upload to keys.openpgp.org,
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
-ThisBuild / tlBaseVersion := "0.9"
+// 0.10: #77's ConfluentWire threadLocalStorage defaulted params are binary-breaking — see mima.sbt.
+ThisBuild / tlBaseVersion := "0.10"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)

@@ -2,7 +2,6 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.{
   Getter as EoGetter,
   Lens as EoLens,
@@ -31,7 +30,7 @@ object NestedOptics:
     * shape they would have if they declared the val locally).
     */
   val eoFlag =
-    EoOptional[Nested0, Nested0, String, String, Affine](
+    EoOptional[Nested0, Nested0, String, String](
       getOrModify = n0 => n0.flag.toRight(n0),
       reverseGet = (pair: (Nested0, String)) => pair._1.copy(flag = Some(pair._2)),
     )

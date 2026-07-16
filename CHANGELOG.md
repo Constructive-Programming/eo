@@ -7,7 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-07-14
+### Removed
+
+- **Public-surface pruning in `cats-eo-avro` — duplicate ways to do the same thing** (0.10, with
+  the binary-compat bump already paid by this release):
+  - `ConfluentWire.resolvingRecord` — unused; for a known writer schema, compose `strip` +
+    `AvroCodec.decodeResolvedRecord` (its per-message twin `recordReader` remains).
+  - `AvroCodec#decodeUnsafe` — unused throw-on-failure convenience; use
+    `decodeEither(x).fold(throw _, identity)`.
+  - The `AvroFieldsPrism` / `AvroFieldsTraversal` compatibility type aliases — they were
+    `= AvroPrism[A]` / `= AvroTraversal[A]`; use the real names.
+
+### Changed
+
+- **Decode-path allocation reuse in `AvroCodec` (perf, decode output unchanged).** The binary
+  decode helpers now reuse a per-thread `GenericDatumReader` per distinct `(writer, reader)`
+  schema pair and a per-thread `BinaryDecoder` (decoding straight from the byte array), instead of
+  allocating both per call — the top allocators on per-record consume paths like
+  `ConfluentWire.recordReader`. Records are still fresh datums (no `Utf8`/bytes aliasing).
+  `AvroCodec`'s decode helpers keep their existing signatures; the opt-out is set at optic
+  construction — `threadLocalStorage = false`, a new defaulted parameter on the `ConfluentWire`
+  decode constructors (`resolving`, `resolvingBytes`, `reader`, `recordReader`), captured as a
+  field of the built optic / reader.
+- **Single binary read/write path in `cats-eo-avro`.** Every binary Avro decode now funnels
+  through one internal engine on the byte cursor, `AvroBinaryCursor.readDatum` (and every binary
+  encode through `writeDatum`): the `AvroCodec` root-payload helpers, the prism/traversal slice
+  decodes, and `AvroJson`'s circe-bridge parses — which previously each carried their own
+  reader/decoder incantation with ad-hoc reuse policies. The slice and circe paths inherit the
+  per-thread reader/decoder reuse, and `AvroJson` no longer holds a single `GenericDatumReader` in
+  a closure shared across every thread using the optic. `AvroCodec` carries no reuse machinery or
+  internal seams — its helpers are plain failure-wrapped adapters over the cursor.
 
 ### Added
 

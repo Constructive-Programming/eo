@@ -38,8 +38,7 @@ import org.apache.avro.Schema
   * ([[AvroRecordTraversal]]). Drilling (`.field` / `.at` / `.union[Branch]` / `.fields` / Dynamic
   * selection) stays here, the single mechanism; drill first, flip last.
   *
-  * The Fields-vs-Leaf split lives entirely inside `focus` (per `AvroFocus`); the compatibility
-  * alias [[AvroFieldsTraversal]] points back here.
+  * The Fields-vs-Leaf split lives entirely inside `focus` (per `AvroFocus`).
   */
 final class AvroTraversal[A] private[avro] (
     private[avro] val prefix: Array[PathStep],
@@ -215,8 +214,7 @@ final class AvroTraversal[A] private[avro] (
     new AvroTraversal[B](prefix, new AvroFocus.Leaf[B](newSuffix, codecB), rootSchemaCached)
 
   /** Hand off the current (prefix, suffix) as a multi-field [[AvroTraversal]] whose focus is an
-    * [[AvroFocus.Fields]] enumerating `fieldNames`. Historically returned `AvroFieldsTraversal[B]`;
-    * the alias is preserved.
+    * [[AvroFocus.Fields]] enumerating `fieldNames`.
     */
   private[avro] def toFieldsTraversal[B](
       scalaNames: Array[String],

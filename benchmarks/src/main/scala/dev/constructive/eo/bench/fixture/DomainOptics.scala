@@ -2,7 +2,6 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.{
   AffineFold,
   Getter as EoGetter,
@@ -48,7 +47,7 @@ object DomainOptics:
   // ---- Optional / AffineFold on customer.loyaltyId ------------------
 
   val eoLoyalty =
-    EoOptional[Order, Order, String, String, Affine](
+    EoOptional[Order, Order, String, String](
       getOrModify = o => o.customer.loyaltyId.toRight(o),
       reverseGet = (pair: (Order, String)) =>
         pair._1.copy(customer = pair._1.customer.copy(loyaltyId = Some(pair._2))),

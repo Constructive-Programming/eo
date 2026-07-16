@@ -4,16 +4,9 @@ import scala.util.control.NonFatal
 
 import cats.data.{Chain, Ior}
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{
-  GenericData,
-  GenericDatumReader,
-  GenericDatumWriter,
-  GenericRecord,
-  IndexedRecord
-}
-import org.apache.avro.io.{DecoderFactory, EncoderFactory}
+import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord, IndexedRecord}
+import org.apache.avro.io.DecoderFactory
 
 /** A unified read/write/schema codec for Avro values, combining the kindlings-avro-derivation
   * triplet `(AvroEncoder[A], AvroDecoder[A], AvroSchemaFor[A])` into a single typeclass that user
@@ -54,13 +47,6 @@ trait AvroCodec[A]:
     */
   def decodeEither(any: Any): Either[Throwable, A]
 
-  /** Convenience: throw on failure. Used internally by the macro layer when a structured failure
-    * isn't available; production call sites should prefer [[decodeEither]].
-    */
-  def decodeUnsafe(any: Any): A = decodeEither(any) match
-    case Right(a) => a
-    case Left(t)  => throw t
-
 end AvroCodec
 
 object AvroCodec:
@@ -91,9 +77,10 @@ object AvroCodec:
   // ---- Serialization boundary (apache-avro binary / JSON) ------------
   //
   // The `Any` ↔ bytes/JSON wire boundary. Kindlings owns the native↔`Any` side (`encode` /
-  // `decodeEither` above); apache-avro owns wire-format serialization, and these helpers are the
-  // eo-avro counterpart to it. Record-level (`*Record`) works under an explicit schema; value-level
-  // (`*Value`) threads a codec's own schema plus its `Any` conversion.
+  // `decodeEither` above); apache-avro owns wire-format serialization, and the binary engine is
+  // [[AvroBinaryCursor.readDatum]] / [[AvroBinaryCursor.writeDatum]] — the helpers below are its
+  // failure-wrapped public adapters. Record-level (`*Record`) works under an explicit schema;
+  // value-level (`*Value`) threads a codec's own schema plus its `Any` conversion.
 
   /** Binary-decode `bytes` under `schema` to a generic record — no typed codec involved. Catches
     * apache-avro's binary-decoder throws (`IOException` / `EOFException` / `AvroRuntimeException`)
@@ -101,9 +88,18 @@ object AvroCodec:
     */
   def decodeRecord(bytes: Array[Byte], schema: Schema): Either[AvroFailure, IndexedRecord] =
     try
-      val reader = new GenericDatumReader[GenericRecord](schema)
-      val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
-      Right(reader.read(null, decoder))
+      Right(
+        AvroBinaryCursor
+          .records
+          .read(
+            bytes,
+            0,
+            bytes.length,
+            schema,
+            schema,
+            threadLocalStorage = true
+          )
+      )
     catch case NonFatal(t) => Left(AvroFailure.BinaryParseFailed(t))
 
   /** [[decodeRecord]] under `codec`'s schema, then the codec's `Any ⇒ A` side —
@@ -129,9 +125,18 @@ object AvroCodec:
   ): Either[AvroFailure, IndexedRecord] =
     try
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
-      val reader = new GenericDatumReader[GenericRecord](readSchema, writeSchema)
-      val decoder = DecoderFactory.get().binaryDecoder(new ByteArrayInputStream(bytes), null)
-      Right(reader.read(null, decoder))
+      Right(
+        AvroBinaryCursor
+          .records
+          .read(
+            bytes,
+            0,
+            bytes.length,
+            readSchema,
+            writeSchema,
+            threadLocalStorage = true
+          )
+      )
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
 
   /** [[decodeResolvedRecord]] resolving `readSchema` → `codec`'s schema (the write schema), then
@@ -150,13 +155,7 @@ object AvroCodec:
     * [[AvroFailure.EncodeFailed]].
     */
   def encodeRecord(datum: Any, schema: Schema): Either[AvroFailure, Array[Byte]] =
-    try
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[Any](schema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      writer.write(datum, encoder)
-      encoder.flush()
-      Right(out.toByteArray)
+    try Right(AvroBinaryCursor.writeDatum(datum, schema))
     catch case NonFatal(t) => Left(AvroFailure.EncodeFailed(t))
 
   /** The codec's `A ⇒ Any` side, then [[encodeRecord]] under `codec`'s schema. */

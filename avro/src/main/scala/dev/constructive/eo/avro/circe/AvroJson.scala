@@ -2,19 +2,12 @@ package dev.constructive.eo.avro.circe
 
 import scala.jdk.CollectionConverters.*
 
-import dev.constructive.eo.avro.AvroCodec
+import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec}
 import dev.constructive.eo.optics.{Getter, MendTearPrism, Prism}
 import io.circe.Json
 import java.nio.ByteBuffer
 import org.apache.avro.Schema
-import org.apache.avro.generic.{
-  GenericData,
-  GenericDatumReader,
-  GenericEnumSymbol,
-  GenericFixed,
-  IndexedRecord
-}
-import org.apache.avro.io.DecoderFactory
+import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, IndexedRecord}
 
 /** Structural Avro ↔ circe bridge: move between an Avro generic runtime value and a circe
   * [[io.circe.Json]] document '''without''' a typed case class in the middle. The Avro mirror of
@@ -170,16 +163,22 @@ object AvroJson:
     bytesPrism[IndexedRecord](using recordCodec(schema))
 
   /** Position-based binary parse to a generic value under a single schema — the `tearFrom` behind
-    * the byte diagonals.
+    * the byte diagonals. Routed through [[AvroBinaryCursor.leaves]] (the module's single binary
+    * read), so the reader comes from the shared per-thread cache instead of a closure-held instance
+    * that every thread using the optic would share.
     */
   private def parse(schema: Schema): Array[Byte] => Any =
-    val reader = new GenericDatumReader[Any](schema)
-    bytes => reader.read(null, DecoderFactory.get.binaryDecoder(bytes, null))
+    bytes =>
+      AvroBinaryCursor
+        .leaves
+        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
   /** Writer → reader resolving parse (Avro schema resolution). */
   private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =
-    val datumReader = new GenericDatumReader[Any](writer, reader)
-    bytes => datumReader.read(null, DecoderFactory.get.binaryDecoder(bytes, null))
+    bytes =>
+      AvroBinaryCursor
+        .leaves
+        .read(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
 
   /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
   private def recordCodec(schema0: Schema): AvroCodec[IndexedRecord] =
@@ -338,7 +337,9 @@ object AvroJson:
     * parse-to-generic-record step behind [[bytesToJson]].
     */
   private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
-    val reader = new GenericDatumReader[IndexedRecord](schema)
-    bytes => reader.read(null, DecoderFactory.get.binaryDecoder(bytes, null))
+    bytes =>
+      AvroBinaryCursor
+        .records
+        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
 end AvroJson
