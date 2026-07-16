@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.0] - 2026-07-16
 
 ### Removed
 
@@ -30,13 +30,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   decode constructors (`resolving`, `resolvingBytes`, `reader`, `recordReader`), captured as a
   field of the built optic / reader.
 - **Single binary read/write path in `cats-eo-avro`.** Every binary Avro decode now funnels
-  through one internal engine on the byte cursor, `AvroBinaryCursor.readDatum` (and every binary
-  encode through `writeDatum`): the `AvroCodec` root-payload helpers, the prism/traversal slice
+  through one internal engine on the byte cursor — `AvroBinaryCursor`'s typed `DatumReaders[D]`
+  caches (`records` / `leaves`, so no unchecked datum narrowing anywhere) — and every binary
+  encode through its `writeDatum`: the `AvroCodec` root-payload helpers, the prism/traversal slice
   decodes, and `AvroJson`'s circe-bridge parses — which previously each carried their own
   reader/decoder incantation with ad-hoc reuse policies. The slice and circe paths inherit the
   per-thread reader/decoder reuse, and `AvroJson` no longer holds a single `GenericDatumReader` in
   a closure shared across every thread using the optic. `AvroCodec` carries no reuse machinery or
   internal seams — its helpers are plain failure-wrapped adapters over the cursor.
+
+## [0.9.0] - 2026-07-14
 
 ### Added
 
