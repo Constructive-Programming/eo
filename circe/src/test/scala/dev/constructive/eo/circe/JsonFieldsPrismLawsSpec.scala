@@ -84,6 +84,22 @@ class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCh
     .seam(using arbPersonJson, summon[Arbitrary[String]], summon[Cogen[String]]),
   )
 
+  // The multi-field drilled analogue: `.fields(_.name, _.age)` on a Person leaves `address` as the
+  // untouched sibling, so the generic write seam must round-trip it. Circe `Json` `==` is
+  // structural (unlike avro's schema-instance-sensitive `IndexedRecord`, which forces the avro
+  // mirror onto a full-cover fixture — see `AvroPrismLawsSpec` class doc), so this NamedTuple-focus
+  // `.fields` cover is clean for the universal-`==` `SeamLaws`. It witnesses sibling preservation
+  // across a MULTI-focus rebuild, which the single-`.field` seam above cannot.
+  checkAll(
+    "JsonPrism drilled .fields seam — codecPrism[Person].fields(_.name, _.age) (sibling: address)",
+    new SeamTests[Json, NameAge]:
+      val laws: SeamLaws[Json, NameAge] = new SeamLaws[Json, NameAge]:
+        val optic: Optic[Json, Json, NameAge, NameAge, Affine] =
+          codecPrism[Person].fields(_.name, _.age)
+        val eqv = (a: Json, b: Json) => a == b
+    .seam(using arbPersonJson, summon[Arbitrary[NameAge]], summon[Cogen[NameAge]]),
+  )
+
   // ---- forAll properties on the default Ior surface ---------------
   //
   // 2026-04-29 consolidation: 5 forAll-property blocks → 1 composite forAll. The discipline

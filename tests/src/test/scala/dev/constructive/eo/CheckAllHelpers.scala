@@ -1,6 +1,6 @@
 package dev.constructive.eo
 
-import cats.{Applicative, Functor}
+import cats.{Applicative, Functor, Monoid}
 import dev.constructive.eo.accessor.*
 import dev.constructive.eo.forgetful.*
 import org.scalacheck.{Arbitrary, Cogen}
@@ -11,11 +11,26 @@ import org.typelevel.discipline.specs2.mutable.Discipline
 import data.{MultiFocus, PSVec}
 import laws.{FoldLaws, MultiFocusLaws, TraversalLaws}
 import laws.discipline.{FoldTests, MultiFocusTests, TraversalTests}
-import laws.eo.{FoldMapHomomorphismLaws, MorphLaws}
-import laws.eo.discipline.{FoldMapHomomorphismTests, MorphTests}
+import laws.eo.{
+  ComposedFoldMapLaws,
+  ComposedGetLaws,
+  ComposedGetOptionLaws,
+  ComposedReverseGetLaws,
+  FoldMapHomomorphismLaws,
+  MorphLaws
+}
+import laws.eo.discipline.{
+  ComposedFoldMapTests,
+  ComposedGetOptionTests,
+  ComposedGetTests,
+  ComposedReverseGetTests,
+  FoldMapHomomorphismTests,
+  MorphTests
+}
 import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
 import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
 import optics.Optic
+import optics.Optic.*
 
 /** Path B helpers — collapse the highly repetitive `checkAll(...)` patterns in `OpticsLawsSpec` and
   * `EoSpecificLawsSpec` into one-liners.
@@ -172,4 +187,97 @@ trait CheckAllHelpers extends Discipline:
         val laws = new TraversalLaws[T, A]:
           val traversal = traversalOptic
       .traversal,
+    )
+
+  // ===== Capability-keyed compose-coherence over three legs =====
+  //
+  // The `*Cap` builders wrap a concrete optic into the carrier-free capability its carrier admits;
+  // the `checkAllComposed*For` runners feed the three legs (outer / inner / composed) to the
+  // matching capability RuleSet. Because the laws are keyed by capability, ONE runner serves every
+  // family and cross-family cell — the call site just supplies which optics play the three legs.
+
+  /** Wrap any total-read optic as [[CanGet]]. */
+  protected def getCap[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using
+      Accessor[F]
+  ): CanGet[S, A] = s => o.get(s)
+
+  /** Wrap any partial-read optic as [[CanGetOption]]. */
+  protected def getOptionCap[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using
+      PartialAccessor[F]
+  ): CanGetOption[S, A] = s => o.getOption(s)
+
+  /** Wrap any foldable optic as [[CanFold]]. */
+  protected def foldCap[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using
+      ForgetfulFold[F]
+  ): CanFold[S, A] =
+    new CanFold[S, A]:
+      def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = o.foldMap(f)(s)
+
+  /** Wrap any build optic as [[CanReverseGet]]. */
+  protected def reverseGetCap[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using
+      ReverseAccessor[F]
+  ): CanReverseGet[T, B] = b => o.reverseGet(b)
+
+  /** Runs `ComposedGetTests` for the three read legs of a composition. */
+  def checkAllComposedGetFor[S, A, B](name: String)(
+      outer: CanGet[S, A],
+      inner: CanGet[A, B],
+      composed: CanGet[S, B],
+  )(using Arbitrary[S]): Fragment =
+    checkAll(
+      name,
+      new ComposedGetTests[S, A, B]:
+        val laws = new ComposedGetLaws[S, A, B]:
+          val getOuter = outer
+          val getInner = inner
+          val getComposed = composed
+      .composedGet,
+    )
+
+  /** Runs `ComposedGetOptionTests` for the three partial-read legs of a composition. */
+  def checkAllComposedGetOptionFor[S, A, B](name: String)(
+      outer: CanGetOption[S, A],
+      inner: CanGetOption[A, B],
+      composed: CanGetOption[S, B],
+  )(using Arbitrary[S]): Fragment =
+    checkAll(
+      name,
+      new ComposedGetOptionTests[S, A, B]:
+        val laws = new ComposedGetOptionLaws[S, A, B]:
+          val getOptionOuter = outer
+          val getOptionInner = inner
+          val getOptionComposed = composed
+      .composedGetOption,
+    )
+
+  /** Runs `ComposedFoldMapTests` for the three fold legs of a composition. */
+  def checkAllComposedFoldMapFor[S, A, B](name: String)(
+      outer: CanFold[S, A],
+      inner: CanFold[A, B],
+      composed: CanFold[S, B],
+  )(using Arbitrary[S], Cogen[B]): Fragment =
+    checkAll(
+      name,
+      new ComposedFoldMapTests[S, A, B]:
+        val laws = new ComposedFoldMapLaws[S, A, B]:
+          val foldOuter = outer
+          val foldInner = inner
+          val foldComposed = composed
+      .composedFoldMap,
+    )
+
+  /** Runs `ComposedReverseGetTests` for the three build legs of a composition. */
+  def checkAllComposedReverseGetFor[S, A, B](name: String)(
+      outer: CanReverseGet[S, A],
+      inner: CanReverseGet[A, B],
+      composed: CanReverseGet[S, B],
+  )(using Arbitrary[B]): Fragment =
+    checkAll(
+      name,
+      new ComposedReverseGetTests[S, A, B]:
+        val laws = new ComposedReverseGetLaws[S, A, B]:
+          val reverseOuter = outer
+          val reverseInner = inner
+          val reverseComposed = composed
+      .composedReverseGet,
     )

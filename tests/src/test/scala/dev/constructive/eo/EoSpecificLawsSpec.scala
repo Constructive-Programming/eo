@@ -3,14 +3,16 @@ package dev.constructive.eo
 import cats.instances.list.given
 import dev.constructive.eo.accessor.*
 import dev.constructive.eo.compose.*
+import dev.constructive.eo.forgetful.*
 import org.scalacheck.Arbitrary
 import org.scalacheck.Prop.forAll
 import org.specs2.mutable.Specification
 
-import optics.{Iso, Lens, Optic, Optional, Prism, Traversal}
+import optics.{Getter, Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
 import data.{Affine, Direct, ModifyF, MultiFocus, PSVec}
 import laws.eo.{
+  ComposeAssociativityLaws,
   IsoComposeLaws,
   LensComposeLaws,
   ModifyAConstLaws,
@@ -22,6 +24,7 @@ import laws.eo.{
   TransformLaws
 }
 import laws.eo.discipline.{
+  ComposeAssociativityTests,
   IsoComposeTests,
   LensComposeTests,
   ModifyAConstTests,
@@ -340,3 +343,176 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
       a2 && a3
     }
   }
+
+  // =============== andThen associativity (behavioural) ============
+  //
+  // ((a ∘ b) ∘ c) and (a ∘ (b ∘ c)) modify (and, on a total-read carrier, get) identically. Both
+  // bracketings are materialised here; the law trait can't call `.andThen` itself. Registered over a
+  // three-deep Lens chain (Tuple2 carrier — has `Accessor`, so `get` associativity rides too).
+
+  val assocA: Optic[
+    (((Int, Int), Int), String),
+    (((Int, Int), Int), String),
+    ((Int, Int), Int),
+    ((Int, Int), Int),
+    Tuple2,
+  ] =
+    Lens[(((Int, Int), Int), String), ((Int, Int), Int)](_._1, (s, x) => (x, s._2))
+
+  val assocB: Optic[((Int, Int), Int), ((Int, Int), Int), (Int, Int), (Int, Int), Tuple2] =
+    Lens[((Int, Int), Int), (Int, Int)](_._1, (s, x) => (x, s._2))
+
+  val assocC: Optic[(Int, Int), (Int, Int), Int, Int, Tuple2] =
+    Lens[(Int, Int), Int](_._1, (s, x) => (x, s._2))
+
+  checkAll(
+    "Lens chain: andThen is associative (modify + get)",
+    new ComposeAssociativityTests[(((Int, Int), Int), String), Int, Tuple2]:
+      val laws = new ComposeAssociativityLaws[(((Int, Int), Int), String), Int, Tuple2]:
+        val leftNested = assocA.andThen(assocB).andThen(assocC)
+        val rightNested = assocA.andThen(assocB.andThen(assocC))
+        val functor = summon[ForgetfulFunctor[Tuple2]]
+    .associativeComposeWithGet,
+  )
+
+  // =============== Capability-keyed compose-coherence across families ============
+  //
+  // The four capability laws each state ONE composition equation (get / getOption / foldMap /
+  // reverseGet distributes through `andThen`). Registered here at a representative spread of
+  // cross-family cells — the cells the OpticsBehaviorSpec composites exercise only ad-hoc — so the
+  // coherence equation is pinned as a discipline law rather than by hand.
+
+  // ---- ComposedGet (total read): Lens ∘ Getter, Iso ∘ Getter ----
+
+  val toStrGetter: Optic[Int, Unit, String, Unit, Direct] = Getter[Int, String](_.toString)
+
+  val lensThenGetter: Getter[(Int, String), String] = firstLens.andThen(toStrGetter)
+
+  // covers: Lens ∘ Getter get-coherence (firstLens reads Int, then toString) — the read-only
+  //   collapse the "any optic .andThen(Getter)" OpticsBehaviorSpec block exercises ad-hoc
+  checkAllComposedGetFor[(Int, String), Int, String]("Lens ∘ Getter — composed get")(
+    getCap(firstLens),
+    getCap(toStrGetter),
+    getCap(lensThenGetter),
+  )
+
+  val isoThenGetter: Getter[Int, String] = doubleIso.andThen(toStrGetter)
+
+  // covers: Iso ∘ Getter get-coherence
+  checkAllComposedGetFor[Int, Int, String]("Iso ∘ Getter — composed get")(
+    getCap(doubleIso),
+    getCap(toStrGetter),
+    getCap(isoThenGetter),
+  )
+
+  // ---- ComposedFoldMap: Prism ∘ Lens, Lens ∘ Prism ----
+
+  val someTupleP: Optic[
+    Option[(Int, String)],
+    Option[(Int, String)],
+    (Int, String),
+    (Int, String),
+    Either,
+  ] =
+    Prism[Option[(Int, String)], (Int, String)](opt => opt.toRight(opt), Some(_))
+
+  val prismLensComposed: Optic[Option[(Int, String)], Option[(Int, String)], Int, Int, Affine] =
+    someTupleP.andThen(firstLens)
+
+  // covers: Prism ∘ Lens foldMap-coherence — the "Prism∘Lens" cross-family cell (triP∘triSideL in
+  //   OpticsBehaviorSpec) as a monoidal-fold distribution law
+  checkAllComposedFoldMapFor[Option[(Int, String)], (Int, String), Int](
+    "Prism ∘ Lens — composed foldMap"
+  )(
+    foldCap(someTupleP),
+    foldCap(firstLens),
+    foldCap(prismLensComposed),
+  )
+
+  val optFieldLens
+      : Optic[(Option[Int], String), (Option[Int], String), Option[Int], Option[Int], Tuple2] =
+    Lens[(Option[Int], String), Option[Int]](_._1, (s, a) => (a, s._2))
+
+  val someIntP: Optic[Option[Int], Option[Int], Int, Int, Either] =
+    Prism[Option[Int], Int](opt => opt.toRight(opt), Some(_))
+
+  val lensPrismComposed: Optic[(Option[Int], String), (Option[Int], String), Int, Int, Affine] =
+    optFieldLens.andThen(someIntP)
+
+  // covers: Lens ∘ Prism foldMap-coherence (wrapperShape∘triP shape in OpticsBehaviorSpec)
+  checkAllComposedFoldMapFor[(Option[Int], String), Option[Int], Int](
+    "Lens ∘ Prism — composed foldMap"
+  )(
+    foldCap(optFieldLens),
+    foldCap(someIntP),
+    foldCap(lensPrismComposed),
+  )
+
+  // ---- ComposedGetOption (partial read): Optional ∘ Prism, Prism ∘ Optional ----
+
+  val headOptional
+      : Optic[(Int, Option[Int]), (Int, Option[Int]), Option[Int], Option[Int], Affine] {
+        type X <: Tuple
+      } =
+    Optional[(Int, Option[Int]), (Int, Option[Int]), Option[Int], Option[Int]](
+      { case (_, opt) => Right(opt) },
+      { case ((i, _), newOpt) => (i, newOpt) },
+    )
+
+  val optionalPrismComposed: Optic[(Int, Option[Int]), (Int, Option[Int]), Int, Int, Affine] =
+    headOptional.andThen(someIntP)
+
+  // covers: Optional ∘ Prism getOption-coherence (the Kleisli-over-Option law across carriers)
+  checkAllComposedGetOptionFor[(Int, Option[Int]), Option[Int], Int](
+    "Optional ∘ Prism — composed getOption"
+  )(
+    getOptionCap(headOptional),
+    getOptionCap(someIntP),
+    getOptionCap(optionalPrismComposed),
+  )
+
+  val someWrapP: Optic[
+    Option[(Int, Option[Int])],
+    Option[(Int, Option[Int])],
+    (Int, Option[Int]),
+    (Int, Option[Int]),
+    Either,
+  ] =
+    Prism[Option[(Int, Option[Int])], (Int, Option[Int])](opt => opt.toRight(opt), Some(_))
+
+  val prismOptionalComposed: Optic[Option[(Int, Option[Int])], Option[(Int, Option[Int])], Option[
+    Int
+  ], Option[Int], Affine] =
+    someWrapP.andThen(headOptional)
+
+  // covers: Prism ∘ Optional getOption-coherence
+  checkAllComposedGetOptionFor[Option[(Int, Option[Int])], (Int, Option[Int]), Option[Int]](
+    "Prism ∘ Optional — composed getOption"
+  )(
+    getOptionCap(someWrapP),
+    getOptionCap(headOptional),
+    getOptionCap(prismOptionalComposed),
+  )
+
+  // ---- ComposedReverseGet (build): Iso ∘ Prism, Prism ∘ Iso ----
+
+  val evenIntP: Optic[Int, Int, Int, Int, Either] =
+    Prism[Int, Int](n => if n % 2 == 0 then Right(n) else Left(n), identity)
+
+  val isoPrismComposed: Optic[Int, Int, Int, Int, Either] = doubleIso.andThen(evenIntP)
+
+  // covers: Iso ∘ Prism reverseGet-coherence (build distributes through the chain)
+  checkAllComposedReverseGetFor[Int, Int, Int]("Iso ∘ Prism — composed reverseGet")(
+    reverseGetCap(doubleIso),
+    reverseGetCap(evenIntP),
+    reverseGetCap(isoPrismComposed),
+  )
+
+  val prismIsoComposed: Optic[Int, Int, Int, Int, Either] = evenIntP.andThen(doubleIso)
+
+  // covers: Prism ∘ Iso reverseGet-coherence
+  checkAllComposedReverseGetFor[Int, Int, Int]("Prism ∘ Iso — composed reverseGet")(
+    reverseGetCap(evenIntP),
+    reverseGetCap(doubleIso),
+    reverseGetCap(prismIsoComposed),
+  )

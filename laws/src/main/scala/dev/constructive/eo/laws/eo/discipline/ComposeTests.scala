@@ -3,8 +3,9 @@ package laws
 package eo
 package discipline
 
-import org.scalacheck.Arbitrary
+import dev.constructive.eo.accessor.Accessor
 import org.scalacheck.Prop.forAll
+import org.scalacheck.{Arbitrary, Cogen}
 import org.typelevel.discipline.Laws
 
 /** Discipline `RuleSet` for [[LensComposeLaws]]. */
@@ -63,4 +64,88 @@ abstract class OptionalComposeTests[S, A, B] extends Laws:
         forAll((s: S) => laws.composedGetOption(s)),
       "composed modify(identity) is identity" ->
         forAll((s: S) => laws.composedModifyIdentity(s)),
+    )
+
+// ===== Capability-keyed compose-coherence rule sets =====
+
+/** Discipline `RuleSet` for [[ComposedGetLaws]] — capability-keyed `get` distribution, usable at
+  * any cross-family cell whose three legs all read totally.
+  */
+abstract class ComposedGetTests[S, A, B] extends Laws:
+  /** Laws under test. */
+  def laws: ComposedGetLaws[S, A, B]
+
+  /** The capability "composed get" rule set. */
+  def composedGet(using Arbitrary[S]): RuleSet =
+    new SimpleRuleSet(
+      "composed get (capability)",
+      "composed get" -> forAll((s: S) => laws.composedGet(s)),
+    )
+
+/** Discipline `RuleSet` for [[ComposedGetOptionLaws]] — capability-keyed partial-read distribution.
+  */
+abstract class ComposedGetOptionTests[S, A, B] extends Laws:
+  /** Laws under test. */
+  def laws: ComposedGetOptionLaws[S, A, B]
+
+  /** The capability "composed getOption" rule set. */
+  def composedGetOption(using Arbitrary[S]): RuleSet =
+    new SimpleRuleSet(
+      "composed getOption (capability)",
+      "composed getOption" -> forAll((s: S) => laws.composedGetOption(s)),
+    )
+
+/** Discipline `RuleSet` for [[ComposedFoldMapLaws]] — capability-keyed fold distribution, stated at
+  * the additive `Int` monoid (sufficient to witness the homomorphism).
+  */
+abstract class ComposedFoldMapTests[S, A, B] extends Laws:
+  /** Laws under test. */
+  def laws: ComposedFoldMapLaws[S, A, B]
+
+  /** The capability "composed foldMap" rule set. */
+  def composedFoldMap(using Arbitrary[S], Cogen[B]): RuleSet =
+    new SimpleRuleSet(
+      "composed foldMap (capability)",
+      "composed foldMap" ->
+        forAll((s: S, f: B => Int) => laws.composedFoldMap(f)(s)),
+    )
+
+/** Discipline `RuleSet` for [[ComposedReverseGetLaws]] — capability-keyed build distribution. */
+abstract class ComposedReverseGetTests[S, A, B] extends Laws:
+  /** Laws under test. */
+  def laws: ComposedReverseGetLaws[S, A, B]
+
+  /** The capability "composed reverseGet" rule set. */
+  def composedReverseGet(using Arbitrary[B]): RuleSet =
+    new SimpleRuleSet(
+      "composed reverseGet (capability)",
+      "composed reverseGet" -> forAll((c: B) => laws.composedReverseGet(c)),
+    )
+
+/** Discipline `RuleSet` for [[ComposeAssociativityLaws]]. */
+abstract class ComposeAssociativityTests[S, A, F[_, _]] extends Laws:
+  /** Laws under test. */
+  def laws: ComposeAssociativityLaws[S, A, F]
+
+  /** Associativity of `modify` alone — for carriers with only `ForgetfulFunctor[F]`. */
+  def associativeCompose(using Arbitrary[S], Arbitrary[A], Cogen[A]): RuleSet =
+    new SimpleRuleSet(
+      "compose associativity",
+      "associative modify" ->
+        forAll((s: S, f: A => A) => laws.associativeModify(s, f)),
+    )
+
+  /** Associativity of `modify` and `get` — for total-read carriers (`Accessor[F]`). */
+  def associativeComposeWithGet(using
+      Arbitrary[S],
+      Arbitrary[A],
+      Cogen[A],
+      Accessor[F],
+  ): RuleSet =
+    new SimpleRuleSet(
+      "compose associativity (readable)",
+      "associative modify" ->
+        forAll((s: S, f: A => A) => laws.associativeModify(s, f)),
+      "associative get" ->
+        forAll((s: S) => laws.associativeGet(s)),
     )
