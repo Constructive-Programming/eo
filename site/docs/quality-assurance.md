@@ -72,25 +72,30 @@ its statement coverage looks healthy. Packages with no branch statements show
 
 | Package | Statements | Stmt&nbsp;% | Branches | Branch&nbsp;% | BC/SC |
 |---|--:|--:|--:|--:|--:|
+| `dev.constructive.eo` | 33/35 | 94.3% | — | — | — |
 | `dev.constructive.eo.accessor` | 8/8 | 100.0% | — | — | — |
-| `dev.constructive.eo.avro` | 979/1430 | 68.5% | 214/355 | 60.3% | 0.88 |
-| `dev.constructive.eo.circe` | 668/846 | 79.0% | 128/174 | 73.6% | 0.93 |
-| `dev.constructive.eo.compose` | 90/118 | 76.3% | 7/8 | 87.5% | 1.15 |
-| `dev.constructive.eo.data` | 998/1139 | 87.6% | 153/172 | 89.0% | 1.02 |
-| `dev.constructive.eo.forgetful` | 24/28 | 85.7% | — | — | — |
-| `dev.constructive.eo.generics` | 397/472 | 84.1% | 66/79 | 83.5% | 0.99 |
-| `dev.constructive.eo.jsoniter` | 436/583 | 74.8% | 109/170 | 64.1% | 0.86 |
-| `dev.constructive.eo.laws` | 151/151 | 100.0% | 6/6 | 100.0% | 1.00 |
+| `dev.constructive.eo.avro` | 2020/2392 | 84.4% | 431/556 | 77.5% | 0.92 |
+| `dev.constructive.eo.avro.circe` | 205/213 | 96.2% | 32/34 | 94.1% | 0.98 |
+| `dev.constructive.eo.avro.vulcan` | 12/14 | 85.7% | — | — | — |
+| `dev.constructive.eo.circe` | 673/842 | 79.9% | 135/176 | 76.7% | 0.96 |
+| `dev.constructive.eo.compose` | 89/117 | 76.1% | 7/8 | 87.5% | 1.15 |
+| `dev.constructive.eo.data` | 1051/1182 | 88.9% | 185/205 | 90.2% | 1.01 |
+| `dev.constructive.eo.forgetful` | 28/28 | 100.0% | — | — | — |
+| `dev.constructive.eo.generics` | 410/494 | 83.0% | 70/87 | 80.5% | 0.97 |
+| `dev.constructive.eo.jsoniter` | 662/677 | 97.8% | 192/199 | 96.5% | 0.99 |
+| `dev.constructive.eo.laws` | 175/175 | 100.0% | 6/6 | 100.0% | 1.00 |
 | `dev.constructive.eo.laws.data` | 29/29 | 100.0% | — | — | — |
 | `dev.constructive.eo.laws.data.discipline` | 21/21 | 100.0% | — | — | — |
-| `dev.constructive.eo.laws.discipline` | 190/190 | 100.0% | — | — | — |
+| `dev.constructive.eo.laws.discipline` | 208/208 | 100.0% | — | — | — |
 | `dev.constructive.eo.laws.discipline.internal` | 21/21 | 100.0% | — | — | — |
-| `dev.constructive.eo.laws.eo` | 65/65 | 100.0% | — | — | — |
-| `dev.constructive.eo.laws.eo.discipline` | 96/96 | 100.0% | — | — | — |
+| `dev.constructive.eo.laws.eo` | 86/86 | 100.0% | — | — | — |
+| `dev.constructive.eo.laws.eo.discipline` | 129/135 | 95.6% | — | — | — |
 | `dev.constructive.eo.laws.typeclass` | 29/29 | 100.0% | — | — | — |
 | `dev.constructive.eo.laws.typeclass.discipline` | 36/36 | 100.0% | — | — | — |
-| `dev.constructive.eo.optics` | 404/483 | 83.6% | 46/52 | 88.5% | 1.06 |
-| `dev.constructive.eo.schemes` | 187/187 | 100.0% | 35/35 | 100.0% | 1.00 |
+| `dev.constructive.eo.optics` | 503/567 | 88.7% | 55/59 | 93.2% | 1.05 |
+| `dev.constructive.eo.schemes` | 211/211 | 100.0% | 47/47 | 100.0% | 1.00 |
+| `dev.constructive.eo.schemes.laws` | 4/4 | 100.0% | — | — | — |
+| `dev.constructive.eo.schemes.laws.discipline` | 6/6 | 100.0% | — | — | — |
 
 <!-- END GENERATED: coverage -->
 
@@ -156,14 +161,14 @@ run time by the suite stryker runs.
 
 | Module | Killed | Timeout | Survived | No&nbsp;cov | Compile&nbsp;err | Score (total) | Score (covered) | Notes |
 |---|--:|--:|--:|--:|--:|--:|--:|---|
-| `core` | 169 | 4 | 23 | 4 | 3 | 86.5% | 88.3% | Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`. |
-| `laws` | 83 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
+| `core` | 185 | 5 | 21 | 0 | 3 | 90.0% | 90.0% | Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`. |
+| `laws` | 85 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose. |
 | `generics` | 0 | 0 | 0 | 58 | 0 | 0.0% | — | Macro code: it expands at compile time, so mutants leave no runtime footprint for the test run to cover. |
-| `schemes` | 58 | 0 | 18 | 0 | 5 | 76.3% | 76.3% |  |
+| `schemes` | 70 | 0 | 12 | 0 | 5 | 85.4% | 85.4% |  |
 | `schemes-laws` | 1 | 0 | 0 | 0 | 0 | 100.0% | 100.0% | Recursion-scheme laws (hylo fusion so far; more expected). Like `laws`, mutating it probes whether the law spec notices a corrupted law. |
-| `circe` | 37 | 0 | 2 | 15 | 0 | 68.5% | 94.9% |  |
-| `avro` | — | — | — | — | — | — | — | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
-| `jsoniter` | — | — | — | — | — | — | — | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |
+| `circe` | 35 | 0 | 3 | 15 | 0 | 66.0% | 92.1% |  |
+| `avro` | 283 | 0 | 57 | 34 | 6 | 75.7% | 83.2% | Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`). |
+| `jsoniter` | 321 | 4 | 77 | 0 | 0 | 80.8% | 80.8% | Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place. |
 
 <!-- END GENERATED: mutation -->
 
