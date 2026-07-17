@@ -4,9 +4,9 @@ import org.scalacheck.{Gen, Prop}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Round-trip and boundary specs for [[PathParser]] — full grammar coverage via render/reparse,
-  * an exhaustive ASCII ident-start/-part sweep, and pinned error-path examples. See per-block
-  * `covers` comments for `PathParser.scala` line ranges targeted.
+/** Round-trip and boundary specs for [[PathParser]] — full grammar coverage via render/reparse, an
+  * exhaustive ASCII ident-start/-part sweep, and pinned error-path examples. See per-block `covers`
+  * comments for `PathParser.scala` line ranges targeted.
   */
 class PathParserBoundarySpec extends Specification with ScalaCheck:
 
@@ -48,13 +48,6 @@ class PathParserBoundarySpec extends Specification with ScalaCheck:
       PathParser.parse(s"$$.${ch}x").isRight == expected
     }
     allOk must beTrue
-  }
-
-  "digit continuation: $.i0 / $.i9 accepted (isIdentPart includes digits)" >> {
-    // covers: isIdentPart digit-range branch (lines 82-83).
-    val ok0 = PathParser.parse("$.i0") === Right(List(PathStep.Field("i0")))
-    val ok9 = PathParser.parse("$.i9") === Right(List(PathStep.Field("i9")))
-    ok0.and(ok9)
   }
 
   "error-path examples: never throw; exact Left messages where specified" >> {

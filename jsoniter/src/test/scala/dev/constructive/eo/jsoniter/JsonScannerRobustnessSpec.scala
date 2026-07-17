@@ -7,14 +7,15 @@ import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
 /** Grammar-sweep and robustness specs for [[JsonPathScanner]] — truncation-safety across every
-  * prefix of a generated document, literal/number/object/array skip grammars, and `findAll`
-  * fan-out over mixed steps. Complements [[JsoniterPrismSpec]] / [[JsoniterTraversalSpec]], which
-  * exercise the optic-level surface rather than the scanner's byte-level dispatch. See per-block
-  * `covers` comments for `JsonPathScanner.scala` line ranges targeted.
+  * prefix of a generated document, literal/number/object/array skip grammars, and `findAll` fan-out
+  * over mixed steps. Complements [[JsoniterPrismSpec]] / [[JsoniterTraversalSpec]], which exercise
+  * the optic-level surface rather than the scanner's byte-level dispatch. See per-block `covers`
+  * comments for `JsonPathScanner.scala` line ranges targeted.
   */
 class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
 
   private def bytes(s: String): Array[Byte] = s.getBytes("UTF-8")
+
   private def text(b: Array[Byte], span: JsonPathScanner.Span): String =
     new String(b.slice(span.start, span.end), "UTF-8")
 
@@ -32,7 +33,10 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     else
       Gen.oneOf(
         leaves,
-        Gen.choose(0, 3).flatMap(n => Gen.listOfN(n, genValue(depth - 1))).map(_.mkString("[", ",", "]")),
+        Gen
+          .choose(0, 3)
+          .flatMap(n => Gen.listOfN(n, genValue(depth - 1)))
+          .map(_.mkString("[", ",", "]")),
         Gen
           .choose(0, 3)
           .flatMap(n => Gen.listOfN(n, genValue(depth - 1)))
@@ -85,9 +89,10 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
 
   "literal skip: true/false/null valid/truncated/wrong-char/trailing, never throws" >> {
     // covers: skipLiteral dispatch + width checks (lines 312-317).
-    val allOk = literalCases.forall { case (doc, expectHit) =>
-      val r = scala.util.Try(JsonPathScanner.find(bytes(doc), List(PathStep.Field("b"))))
-      r.isSuccess && r.get.isHit == expectHit
+    val allOk = literalCases.forall {
+      case (doc, expectHit) =>
+        val r = scala.util.Try(JsonPathScanner.find(bytes(doc), List(PathStep.Field("b"))))
+        r.isSuccess && r.get.isHit == expectHit
     }
     allOk must beTrue
   }
@@ -108,17 +113,6 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
       val doc = bytes(s"""{"n":$num,"after":1}""")
       JsonPathScanner.find(doc, List(PathStep.Field("after"))).isHit
     }
-  }
-
-  private val truncatedNumberDocs: List[String] =
-    List("""{"n":1e+""", """{"n":1.""", """{"n":-""", """{"n":12e""")
-
-  "number skip: truncated exponent/fraction/sign never throws" >> {
-    // covers: skipDigits/skipNumber end-of-buffer guards (lines 328-338).
-    val allOk = truncatedNumberDocs.forall { doc =>
-      scala.util.Try(JsonPathScanner.find(bytes(doc), List(PathStep.Field("after")))).isSuccess
-    }
-    allOk must beTrue
   }
 
   // ----- 4: object sweep ---------------------------------------------------
@@ -146,23 +140,35 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
 
   "object scan: member-count x target-position sweep — Hit iff present, span decodes correctly" >> {
     // covers: findFieldValueLoop key-match / skip-and-advance (lines 165-182).
-    Prop.forAll(Gen.oneOf(objectScenarios)) { case (count, targetIdx) =>
-      val (doc, expected) = buildObject(count, targetIdx)
-      val span = JsonPathScanner.find(doc, List(PathStep.Field("target")))
-      val hitOk = span.isHit == expected.isDefined
-      val valueOk = expected.forall(v => text(doc, span) == v)
-      hitOk && valueOk
+    Prop.forAll(Gen.oneOf(objectScenarios)) {
+      case (count, targetIdx) =>
+        val (doc, expected) = buildObject(count, targetIdx)
+        val span = JsonPathScanner.find(doc, List(PathStep.Field("target")))
+        val hitOk = span.isHit == expected.isDefined
+        val valueOk = expected.forall(v => text(doc, span) == v)
+        hitOk && valueOk
     }
   }
 
-  private val malformedObjectDocs: List[String] =
-    List("""{a:1,"target":2}""", """{"a" 1,"target":2}""")
+  // Malformed or truncated scalar/object inputs that must resolve to a no-throw Miss.
+  // (Missing-]/-array truncation is already exercised by the section-1 truncation property,
+  // which drives k0[idx] into every prefix of a generated array — skipArray + findArray guards.)
+  private val malformedNoThrowCases: List[(String, List[PathStep])] = List(
+    // truncated numbers — skipNumber/skipDigits end-of-buffer guards (lines 322-338)
+    ("""{"n":1e+""", List(PathStep.Field("after"))),
+    ("""{"n":1.""", List(PathStep.Field("after"))),
+    ("""{"n":-""", List(PathStep.Field("after"))),
+    ("""{"n":12e""", List(PathStep.Field("after"))),
+    // unquoted key / missing colon — findFieldValueLoop quote/colon guards (lines 168, 173)
+    ("""{a:1,"target":2}""", List(PathStep.Field("target"))),
+    ("""{"a" 1,"target":2}""", List(PathStep.Field("target"))),
+  )
 
-  "object scan: unquoted key / missing colon never throws, resolves Miss" >> {
-    // covers: findFieldValueLoop quote/colon guards (lines 168, 173).
-    val allOk = malformedObjectDocs.forall { doc =>
-      val r = scala.util.Try(JsonPathScanner.find(bytes(doc), List(PathStep.Field("target"))))
-      r.isSuccess && !r.get.isHit
+  "malformed number/object inputs never throw, resolve to Miss" >> {
+    val allOk = malformedNoThrowCases.forall {
+      case (doc, path) =>
+        val r = scala.util.Try(JsonPathScanner.find(bytes(doc), path))
+        r.isSuccess && !r.get.isHit
     }
     allOk must beTrue
   }
@@ -179,32 +185,29 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
 
   "array scan: length x index sweep — Hit iff 0<=idx<len, correct span; $.after Hits (skipArray)" >> {
     // covers: findArrayElementLoop (lines 220-234), skipArray (lines 276-292).
-    Prop.forAll(Gen.oneOf(arraySwScenarios)) { case (len, idx) =>
-      val doc = buildArrayDoc(len)
-      val span = JsonPathScanner.find(doc, List(PathStep.Field("arr"), PathStep.Index(idx)))
-      val expectHit = idx >= 0 && idx < len
-      val hitOk = span.isHit == expectHit
-      val valueOk = !expectHit || text(doc, span) == (idx * 10).toString
-      val afterOk = JsonPathScanner.find(doc, List(PathStep.Field("after"))).isHit
-      hitOk && valueOk && afterOk
+    Prop.forAll(Gen.oneOf(arraySwScenarios)) {
+      case (len, idx) =>
+        val doc = buildArrayDoc(len)
+        val span = JsonPathScanner.find(doc, List(PathStep.Field("arr"), PathStep.Index(idx)))
+        val expectHit = idx >= 0 && idx < len
+        val hitOk = span.isHit == expectHit
+        val valueOk = !expectHit || text(doc, span) == (idx * 10).toString
+        val afterOk = JsonPathScanner.find(doc, List(PathStep.Field("after"))).isHit
+        hitOk && valueOk && afterOk
     }
-  }
-
-  "array scan: missing closing bracket never throws" >> {
-    // covers: skipArray end-of-buffer guard (line 283), findArrayElementLoop guard (line 226).
-    val doc = bytes("""{"arr":[1,2,3""")
-    val r = scala.util.Try(JsonPathScanner.find(doc, List(PathStep.Field("arr"), PathStep.Index(1))))
-    r.isSuccess must beTrue
   }
 
   // ----- 6: findAll mixed-step -----------------------------------------------
 
-  private val mixedDoc = bytes("""{"rows":[{"xs":[1,2]},{"xs":[3,4,5]},{"xs":[]},{"xs":[9,BAD,7]}]}""")
+  private val mixedDoc = bytes(
+    """{"rows":[{"xs":[1,2]},{"xs":[3,4,5]},{"xs":[]},{"xs":[9,BAD,7]}]}"""
+  )
 
   "findAll: mixed Index/Wildcard/Field steps resolve exact spans in document order" >> {
     // covers: walkAll Wildcard branch + walkAllArrayElementsLoop (lines 117-118, 136-150).
     val xsFirstSteps = PathParser.parse("$.rows[*].xs[0]").toOption.get
-    val values: List[String] = JsonPathScanner.findAll(mixedDoc, xsFirstSteps).map(s => text(mixedDoc, s))
+    val values: List[String] =
+      JsonPathScanner.findAll(mixedDoc, xsFirstSteps).map(s => text(mixedDoc, s))
     val valuesOk = values === List("1", "3", "9") // row2's xs is empty, so it contributes nothing
 
     val row0Steps = PathParser.parse("$.rows[0]").toOption.get
