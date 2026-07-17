@@ -44,59 +44,6 @@ private[avro] object AvroWalk:
       */
     case Lenient
 
-  /** One walk step. Index steps always fail strictly. Runtime dispatch: `IndexedRecord` → field,
-    * `Map` → key (same `Field(name)` shape), `List` → index, `UnionBranch` → type-check passthrough
-    * (apache-avro reader has already resolved the alternative).
-    */
-  def stepInto(
-      step: PathStep,
-      cur: Any,
-      parents: Vector[AnyRef],
-      policy: OnMissingField,
-  ): Either[AvroFailure, State] =
-    step match
-      case PathStep.Field(name) =>
-        cur match
-          case rec: IndexedRecord =>
-            val schema = rec.getSchema
-            val field = schema.getField(name)
-            if field == null then
-              policy match
-                case OnMissingField.Strict  => Left(AvroFailure.PathMissing(step))
-                case OnMissingField.Lenient => Right((null, parents :+ rec))
-            else Right((rec.get(field.pos), parents :+ rec))
-          case map: JMap[?, ?] =>
-            val asMap = map.asInstanceOf[JMap[Any, Any]]
-            val direct = asMap.get(name)
-            val viaUtf8 =
-              if direct == null then asMap.get(new org.apache.avro.util.Utf8(name)) else direct
-            viaUtf8 match
-              case null =>
-                policy match
-                  case OnMissingField.Strict  => Left(AvroFailure.PathMissing(step))
-                  case OnMissingField.Lenient => Right((null, parents :+ map.asInstanceOf[AnyRef]))
-              case v => Right((v, parents :+ map.asInstanceOf[AnyRef]))
-          case _ =>
-            Left(AvroFailure.NotARecord(step))
-
-      case PathStep.Index(idx) =>
-        cur match
-          case lst: JList[?] =>
-            val size = lst.size
-            if idx < 0 || idx >= size then Left(AvroFailure.IndexOutOfRange(step, size))
-            else Right((lst.get(idx), parents :+ lst.asInstanceOf[AnyRef]))
-          case _ => Left(AvroFailure.NotAnArray(step))
-
-      case PathStep.UnionBranch(branchName) =>
-        cur match
-          case null =>
-            if branchName == "null" then Right((null, parents))
-            else Left(AvroFailure.UnionResolutionFailed(List("null"), step))
-          case other =>
-            val actualName = unionBranchName(other)
-            if actualName == branchName then Right((other, parents))
-            else Left(AvroFailure.UnionResolutionFailed(List(actualName), step))
-
   /** Legacy entry — Vector-shaped parents. Preserved for tests; hot-path callers use
     * [[walkPathArr]].
     */

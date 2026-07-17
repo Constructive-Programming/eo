@@ -157,6 +157,42 @@ class AvroTraversalSpec extends Specification:
     singleOk.and(multiOk)
   }
 
+  // covers: AvroTraversalAccumulator.collectIor's Ior.Both arm — a READ (getAll) over a MIX of
+  //   decodable and malformed elements keeps every successful decode AND accumulates the
+  //   malformed element's failure, rather than dropping either the good reads or the bad chain
+  "AvroTraversal getAll on a mix of good + malformed elements: Ior.Both keeps both" >> {
+    val good1 = orderRecord(Order("x", 1.0, 1))
+    val malformedSchema =
+      val fields = new ArrayList[Schema.Field]()
+      fields.add(
+        new Schema.Field(
+          "qty",
+          org.apache.avro.Schema.create(org.apache.avro.Schema.Type.INT),
+          null,
+          null,
+        )
+      )
+      org.apache.avro.Schema.createRecord("Order", null, "eo.avro.test", false, fields)
+    val malformed = new GenericData.Record(malformedSchema)
+    malformed.put(0, Integer.valueOf(99))
+    val good2 = orderRecord(Order("z", 3.0, 3))
+
+    codecPrism[Basket]
+      .items
+      .each
+      .name
+      .record
+      .getAll(
+        basketRoot(Seq(good1, malformed, good2))
+      ) match
+      case Ior.Both(chain, vec) =>
+        (chain.length === 1L)
+          .and(chain.headOption.get === AvroFailure.PathMissing(PathStep.Field("name")))
+          .and(vec === Vector("x", "z"))
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
+  }
+
   // covers: place overwrites every element's focused field with a constant,
   // placeUnsafe overwrites every element, transfer lifts C => A into element
   // broadcaster, transferUnsafe lifts C => A, place on a missing prefix returns

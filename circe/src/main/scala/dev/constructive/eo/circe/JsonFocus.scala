@@ -1,10 +1,8 @@
 package dev.constructive.eo.circe
 
-import scala.annotation.tailrec
-
 import cats.data.{Chain, Ior}
 import dev.constructive.eo.widenRight
-import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
+import io.circe.{Decoder, Encoder, Json, JsonObject}
 
 /** Focus on a value of type `A` somewhere inside a `Json`. Storage decomposition along two axes:
   *
@@ -13,8 +11,7 @@ import io.circe.{ACursor, Decoder, DecodingFailure, Encoder, Json, JsonObject}
   *   2. Single- vs multi-focus — applied once at the root ([[JsonPrism]]) or per-element after a
   *      prefix walk ([[JsonTraversal]]).
   *
-  * Each focus exposes six per-Json ops (three Ior-bearing default + three silent) plus two reads
-  * and Optic-trait `to`-side hooks (`navigateCursor` / `decodeFromCursor`).
+  * Each focus exposes six per-Json ops (three Ior-bearing default + three silent) plus two reads.
   */
 sealed abstract private[circe] class JsonFocus[A]:
 
@@ -55,12 +52,6 @@ sealed abstract private[circe] class JsonFocus[A]:
   def placeImpl(json: Json, a: A): Json
   def readImpl(json: Json): Option[A]
 
-  /** Build the ACursor for read-side navigation. */
-  def navigateCursor(json: Json): ACursor
-
-  /** Decode an `A` from the navigated `ACursor`. */
-  def decodeFromCursor(c: ACursor): Either[DecodingFailure, A] = c.as[A](using decoder)
-
   /** Navigate + decode the focus in ONE walk, and capture a writer that places a new focus back
     * into the SOURCE json (preserving siblings) — backs [[JsonPrism]]'s `Affine` `to`/`from` seam
     * so a generic/composed `.modify` rebuilds around the original document rather than
@@ -81,16 +72,6 @@ private[circe] object JsonFocus:
   ) extends JsonFocus[A]:
 
     protected def terminalStep: PathStep = JsonWalk.terminalOf(path)
-
-    def navigateCursor(json: Json): ACursor =
-      @tailrec def loop(c: ACursor, i: Int): ACursor =
-        if i < path.length then
-          val c2 = path(i) match
-            case PathStep.Field(name) => c.downField(name)
-            case PathStep.Index(idx)  => c.downN(idx)
-          loop(c2, i + 1)
-        else c
-      loop(json.hcursor, 0)
 
     def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
       if path.length == 0 then
@@ -167,13 +148,6 @@ private[circe] object JsonFocus:
   ) extends JsonFocus[A]:
 
     protected def terminalStep: PathStep = JsonWalk.terminalOf(parentPath)
-
-    def navigateCursor(json: Json): ACursor =
-      parentPath.foldLeft[ACursor](json.hcursor) { (c, step) =>
-        step match
-          case PathStep.Field(name) => c.downField(name)
-          case PathStep.Index(idx)  => c.downN(idx)
-      }
 
     /** Non-atomic projection — missing → `Json.Null`. Used by transform-shape ops. */
     private def buildSubObject(obj: JsonObject): JsonObject =

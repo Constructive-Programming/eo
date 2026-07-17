@@ -45,15 +45,7 @@ sealed trait PSVec[+B]:
   /** Materialise as a fresh `Array[AnyRef]`. `Slice` overrides with `System.arraycopy` (intrinsic)
     * so the common rebuild path in `Traversal.pEach`'s `from` is one memcpy.
     */
-  def toAnyRefArray: Array[AnyRef] =
-    val n = length
-    val a = new Array[AnyRef](n)
-    @tailrec def loop(i: Int): Unit =
-      if i < n then
-        a(i) = apply(i).asInstanceOf[AnyRef]
-        loop(i + 1)
-    loop(0)
-    a
+  def toAnyRefArray: Array[AnyRef]
 
   /** Like [[toAnyRefArray]] but MAY share the backing array zero-copy when a dense Slice covers its
     * full range. Callers MUST treat the result as immutable. Used by consumers that also won't

@@ -50,7 +50,7 @@ class AvroWalkSpec extends Specification:
   // covers: walk a 1-deep record field returns terminal value + parent stack of length 1,
   //   walk a missing record field with Strict policy surfaces PathMissing,
   //   walk a missing record field with Lenient policy returns null leaf + parent,
-  //   stepInto on a non-record parent surfaces NotARecord
+  //   walking a Field step into a non-record parent surfaces NotARecord
   "Record walk: 1-deep field, Strict miss, Lenient miss, non-record parent" >> {
     val r = personRecord(Person("Alice", 30))
 
@@ -69,12 +69,9 @@ class AvroWalkSpec extends Specification:
         case other                 =>
           org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-    val notARecord = AvroWalk.stepInto(
-      PathStep.Field("x"),
-      "I am not a record": Any,
-      Vector.empty,
-      AvroWalk.OnMissingField.Strict,
-    ) === Left(AvroFailure.NotARecord(PathStep.Field("x")))
+    val notARecord =
+      AvroWalk.walkPath(r, Array(PathStep.Field("name"), PathStep.Field("x"))) ===
+        Left(AvroFailure.NotARecord(PathStep.Field("x")))
 
     happy.and(strictMiss).and(lenientMiss).and(notARecord)
   }
@@ -99,14 +96,28 @@ class AvroWalkSpec extends Specification:
     val oob = AvroWalk.walkPath(wrapper, Array(PathStep.Field("people"), PathStep.Index(5))) ===
       Left(AvroFailure.IndexOutOfRange(PathStep.Index(5), 1))
 
-    val notArray = AvroWalk.stepInto(
-      PathStep.Index(0),
-      personRecord(Person("Alice", 30)): Any,
-      Vector.empty,
-      AvroWalk.OnMissingField.Strict,
-    ) === Left(AvroFailure.NotAnArray(PathStep.Index(0)))
+    val notArray =
+      AvroWalk.walkPath(wrapper, Array(PathStep.Index(0))) ===
+        Left(AvroFailure.NotAnArray(PathStep.Index(0)))
 
     happy.and(oob).and(notArray)
+  }
+
+  // covers: exact index boundaries — idx == -1 and idx == size both surface IndexOutOfRange (the
+  //   `idx < 0 || idx >= size` guard's two disjuncts individually, not just an interior OOB index)
+  "Array walk: exact boundary indices -1 and size both surface IndexOutOfRange" >> {
+    val people: GenericData.Array[GenericRecord] =
+      buildArray(personSchema, Vector(personRecord(Person("Alice", 30))))
+    val wrapper = buildRecord(wrapperSchema)("people" -> people)
+
+    val negOne =
+      AvroWalk.walkPath(wrapper, Array(PathStep.Field("people"), PathStep.Index(-1))) ===
+        Left(AvroFailure.IndexOutOfRange(PathStep.Index(-1), 1))
+    val atSize =
+      AvroWalk.walkPath(wrapper, Array(PathStep.Field("people"), PathStep.Index(1))) ===
+        Left(AvroFailure.IndexOutOfRange(PathStep.Index(1), 1))
+
+    negOne.and(atSize)
   }
 
   // covers: walk into a map<string> entry by key returns the entry value
@@ -192,6 +203,76 @@ class AvroWalkSpec extends Specification:
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
     identityRebuild.and(deepModify)
+  }
+
+  // ---- Schema-name resolution (issue #35 escape-hatch machinery) -----------------------
+  //
+  // `AvroWalk.schemaAt` / `fieldNameAt` / `resolveFieldName` back `.field(_.x)`'s CONSTRUCTION-TIME
+  // schema-name resolution. Direct calls (private[avro], same package) exercise every Left / throw
+  // arm the happy `.field(_.x)` paths never touch.
+
+  // covers: schemaAt Field-step on a non-record schema -> Left("expected a record..."),
+  //   schemaAt Field-step whose name is absent from the record -> Left("has no field..."),
+  //   schemaAt UnionBranch-step on a non-union schema -> Left("expected a union..."),
+  //   schemaAt UnionBranch-step whose branch name isn't declared -> Left("has no branch..."),
+  //   schemaAt Index-step on neither an array nor a map -> Left("expected an array/map..."),
+  //   schemaAt Index-step happy arms (array element type / map value type)
+  "AvroWalk.schemaAt: every non-happy branch (non-record, missing field, non-union, unknown branch, non-array/map) + Index happy arms" >> {
+    val stringSchema = Schema.create(Schema.Type.STRING)
+    val unionSchema =
+      Schema.createUnion(
+        Arrays.asList(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG))
+      )
+
+    val nonRecordOk = AvroWalk.schemaAt(stringSchema, Array(PathStep.Field("x"))).isLeft === true
+    val missingFieldOk =
+      AvroWalk.schemaAt(personSchema, Array(PathStep.Field("nope"))).isLeft === true
+    val nonUnionOk =
+      AvroWalk.schemaAt(stringSchema, Array(PathStep.UnionBranch("long"))).isLeft === true
+    val unknownBranchOk =
+      AvroWalk.schemaAt(unionSchema, Array(PathStep.UnionBranch("string"))).isLeft === true
+    val nonArrayMapOk = AvroWalk.schemaAt(stringSchema, Array(PathStep.Index(0))).isLeft === true
+
+    val arraySchema = Schema.createArray(stringSchema)
+    val mapSchema = Schema.createMap(stringSchema)
+    val arrayOk = AvroWalk.schemaAt(arraySchema, Array(PathStep.Index(0))) === Right(stringSchema)
+    val mapOk = AvroWalk.schemaAt(mapSchema, Array(PathStep.Index(0))) === Right(stringSchema)
+
+    nonRecordOk
+      .and(missingFieldOk)
+      .and(nonUnionOk)
+      .and(unknownBranchOk)
+      .and(nonArrayMapOk)
+      .and(arrayOk)
+      .and(mapOk)
+  }
+
+  // covers: resolveFieldName's declIdx < 0 fallback returns the literal scalaName WITHOUT
+  //   consulting the schema at all (a non-record root would make schemaAt fail loudly if it were
+  //   consulted, proving the -1 branch short-circuits before that)
+  "AvroWalk.resolveFieldName: declIdx < 0 short-circuits to the literal scalaName" >> {
+    val stringSchema = Schema.create(Schema.Type.STRING)
+    AvroWalk.resolveFieldName(stringSchema, Array.empty, "literalName", -1, "test") ===
+      "literalName"
+  }
+
+  // covers: fieldNameAt on a non-record schema throws IllegalArgumentException,
+  //   fieldNameAt with declIdx past the field count throws IllegalArgumentException
+  "AvroWalk.fieldNameAt: non-record parent and out-of-range declIdx both throw loudly" >> {
+    val stringSchema = Schema.create(Schema.Type.STRING)
+    val nonRecordThrows =
+      try
+        AvroWalk.fieldNameAt(stringSchema, "x", 0, "test")
+        false
+      catch case _: IllegalArgumentException => true
+
+    val outOfRangeThrows =
+      try
+        AvroWalk.fieldNameAt(personSchema, "x", 99, "test")
+        false
+      catch case _: IllegalArgumentException => true
+
+    (nonRecordThrows === true).and(outOfRangeThrows === true)
   }
 
 end AvroWalkSpec

@@ -181,6 +181,37 @@ class InternalsCoverageSpec extends Specification:
     (base == diffSndSameB) must beFalse
   }
 
+  // covers: Affine.Miss.equals (Affine.scala:83) — `fst == other.fst` weakened to `!=`
+  // would flip both arms; no existing test ever compares Miss to Miss with the same shape.
+  "Affine.Miss equality discriminates same-shape equal vs differing fst" >> {
+    val missX = new Affine.Miss[(Int, String), Int](1)
+    val missXAgain = new Affine.Miss[(Int, String), Int](1)
+    val missY = new Affine.Miss[(Int, String), Int](2)
+    (missX == missXAgain) must beTrue
+    (missX == missY) must beFalse
+  }
+
+  // covers: PSVec.Slice.slice specialization guards (PSVec.scala:220-221) — `n == 0` /
+  // `n == 1` weakened to `false` would skip the Empty/Single specialization and fall
+  // through to an allocated zero/one-length Slice; structural `===` can't tell the
+  // difference (PSVec equality ignores variant), so this needs reference/type checks.
+  "PSVec.Slice.slice specializes to Empty (identity) and Single (type) at the n==0/n==1 edges" >> {
+    val arr: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
+    val w: PSVec[Int] = PSVec.unsafeWrap[Int](arr)
+    (w.slice(2, 2) must beTheSameAs(PSVec.empty[Int]))
+      .and(w.slice(2, 3) must beAnInstanceOf[PSVec.Single[?]])
+  }
+
+  // covers: PSVec.Slice.unsafeShareableArray aliasing guard (PSVec.scala:230) —
+  // `offset == 0 && length == arr.length` weakened to `||` would alias the FULL backing
+  // array whenever offset==0, even on a partial slice. The existing offset!=0 test can't
+  // discriminate this (both operands false either way); this pins offset==0, length<arr.length.
+  "PSVec.Slice.unsafeShareableArray does not alias the full backing array on a partial offset-0 slice" >> {
+    val backing: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
+    val partial: PSVec[Int] = PSVec.unsafeWrap[Int](backing).slice(0, 3)
+    partial.unsafeShareableArray.length must beEqualTo(3)
+  }
+
   // covers: MultiFocusK.pickSingletonOrThrow cardinality guard (MultiFocus.scala:245) —
   // weakened to `true` it silently returns the LAST element of a multi-focus instead of
   // raising the Composer cardinality error.

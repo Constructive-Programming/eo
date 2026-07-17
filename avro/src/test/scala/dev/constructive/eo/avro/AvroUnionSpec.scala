@@ -266,4 +266,28 @@ class AvroUnionSpec extends Specification:
     getPingOk.and(modifyPingOk).and(mismatchOk)
   }
 
+  // ---- Root-level .union (no preceding Field step) -----------------
+
+  // covers: unionBranchesAtArr's "no preceding Field step" arm — a root-level `.union` prism (the
+  //   UnionBranch step is the FIRST path step, so the backward search runs off the front of the
+  //   path immediately) can't recover the schema's declared alternatives; the mismatch must report
+  //   an EMPTY branch list rather than silently misattributing some other field's alternatives
+  "root-level .union mismatch: UnionResolutionFailed reports an EMPTY branch list (no preceding Field step)" >> {
+    val cashRec = summon[AvroCodec[Cash]].encode(Cash(100L)).asInstanceOf[GenericRecord]
+    val cardL = AvroPrism.codecPrism[Payment].union[Card].record
+    cardL.get(cashRec) match
+      case Ior.Left(chain) =>
+        chain.headOption.get match
+          case AvroFailure.UnionResolutionFailed(branches, _) => branches === Nil
+          case other                                          =>
+            org
+              .specs2
+              .execute
+              .Failure(
+                s"expected UnionResolutionFailed(Nil, _), got $other"
+              ): org.specs2.execute.Result
+      case other =>
+        org.specs2.execute.Failure(s"expected Ior.Left, got $other"): org.specs2.execute.Result
+  }
+
 end AvroUnionSpec

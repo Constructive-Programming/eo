@@ -237,6 +237,40 @@ object AvroSpecFixtures:
   def envelopeRecord(e: WireEnvelope): GenericRecord =
     summon[AvroCodec[WireEnvelope]].encode(e).asInstanceOf[GenericRecord]
 
+  /** A `Map[String, Long]` field declared BEFORE a scalar sibling — the fixture for the byte
+    * walker's map-skip path (`AvroBinaryCursor.skipMapItems` / `skipMapBlocks`): reading `total`
+    * off the wire form forces the walker to skip the whole `tags` map's block framing first.
+    */
+  case class TaggedCounts(tags: Map[String, Long], total: Int)
+
+  object TaggedCounts:
+
+    given AvroEncoder[TaggedCounts] = AvroEncoder.derived
+    given AvroDecoder[TaggedCounts] = AvroDecoder.derived
+    given AvroSchemaFor[TaggedCounts] = AvroSchemaFor.derived
+
+  lazy val taggedCountsSchema: Schema = summon[AvroCodec[TaggedCounts]].schema
+
+  def taggedCountsRecord(t: TaggedCounts): GenericRecord =
+    summon[AvroCodec[TaggedCounts]].encode(t).asInstanceOf[GenericRecord]
+
+  /** Owner + items array + a TRAILING scalar field — hosts the length-changing-edit-under-blocked-
+    * framing scenario: the traversal write must re-frame the array region AND leave `total`
+    * decodable right after it, even when the per-element edit changes byte length.
+    */
+  case class BasketWithTotal(owner: String, items: List[Order], total: Int)
+
+  object BasketWithTotal:
+
+    given AvroEncoder[BasketWithTotal] = AvroEncoder.derived
+    given AvroDecoder[BasketWithTotal] = AvroDecoder.derived
+    given AvroSchemaFor[BasketWithTotal] = AvroSchemaFor.derived
+
+  lazy val basketWithTotalSchema: Schema = summon[AvroCodec[BasketWithTotal]].schema
+
+  def basketWithTotalRecord(b: BasketWithTotal): GenericRecord =
+    summon[AvroCodec[BasketWithTotal]].encode(b).asInstanceOf[GenericRecord]
+
   /** Encode a single VALUE (not necessarily a record) to Avro binary under `schema` — the
     * counterpart to [[toBinary]] for the fragment-fidelity assertions, where the sliced span is a
     * bare `long` / union-branch record rather than a top-level record.
