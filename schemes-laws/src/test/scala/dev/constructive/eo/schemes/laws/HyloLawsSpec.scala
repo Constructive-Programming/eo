@@ -50,7 +50,7 @@ class HyloLawsSpec extends Specification with Discipline:
           node match
             case HyloExpr.Lit(v)    => v
             case HyloExpr.Add(_, _) => kids(0) + kids(1)
-        val fusedAlg: (Int, PSVec[Double]) => Double = (n, rs) =>
-          if n <= 0 then 1.0 else rs(0) + rs(1)
+        val fusedAlg: (Int, PSVec[Double]) => Double =
+          (n, rs) => if n <= 0 then 1.0 else rs(0) + rs(1)
     .hylo,
   )
