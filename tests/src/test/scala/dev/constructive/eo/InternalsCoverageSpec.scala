@@ -2,7 +2,7 @@ package dev.constructive.eo
 
 import org.specs2.mutable.Specification
 
-import data.{IntArrBuilder, ObjArrBuilder, PSVec}
+import data.{Affine, IntArrBuilder, MultiFocusFromList, MultiFocusK, ObjArrBuilder, PSVec}
 
 /** Direct coverage for internal machinery that shipped without user-facing specs.
   *
@@ -169,4 +169,61 @@ class InternalsCoverageSpec extends Specification:
     val partialOk = (out.length === 1).and(out(0) === "x")
 
     exactOk.and(growOk).and(partialOk)
+  }
+
+  // covers: Affine.Hit.equals conjunction (Affine.scala:106) — equal snd with different b
+  // must discriminate; an `||`-weakened equals would accept it.
+  "Affine.Hit equality discriminates on each component independently" >> {
+    val base = new Affine.Hit[(Int, String), Int]("s", 1)
+    val sameSndDiffB = new Affine.Hit[(Int, String), Int]("s", 2)
+    val diffSndSameB = new Affine.Hit[(Int, String), Int]("t", 1)
+    (base == sameSndDiffB) must beFalse
+    (base == diffSndSameB) must beFalse
+  }
+
+  // covers: MultiFocusK.pickSingletonOrThrow cardinality guard (MultiFocus.scala:245) —
+  // weakened to `true` it silently returns the LAST element of a multi-focus instead of
+  // raising the Composer cardinality error.
+  "pickSingletonOrThrow returns the singleton and throws on any other cardinality" >> {
+    MultiFocusK.pickSingletonOrThrow[List, Int](List(7), "test") must beEqualTo(7)
+    MultiFocusK.pickSingletonOrThrow[List, Int](List(1, 2), "test") must
+      throwAn[IllegalStateException]
+    MultiFocusK.pickSingletonOrThrow[List, Int](List.empty[Int], "test") must
+      throwAn[IllegalStateException]
+  }
+
+  // covers: the dead contract corners mutation testing flagged NoCoverage —
+  //   Affine.Miss/Hit equals false-arms (Affine.scala:92/:107): cross-variant comparison,
+  //   Hit.hashCode null guard (:109): hashing a null focus must be total,
+  //   PSVec equals false-arm (PSVec.scala:71): comparison against a non-PSVec,
+  //   Foldable[PSVec].foldRight (:132): the Eval loop's boundary and accumulation.
+  "dead contract corners: cross-variant equality, null hashing, foldRight" >> {
+    val miss = new Affine.Miss[(Int, String), Int](1)
+    val hit = new Affine.Hit[(Int, String), Int]("s", 1)
+    val crossOk = !miss.equals(hit) && !hit.equals(miss) && !miss.equals("x")
+    val nullHit = new Affine.Hit[(Int, String), String]("s", null)
+    val nullHashOk = nullHit.hashCode == nullHit.hashCode
+    val vec = PSVec.fromIterable(List(1, 2, 3))
+    val notAVecOk = !vec.equals("not a vector")
+    val folded = cats
+      .Foldable[PSVec]
+      .foldRight(vec, cats.Eval.now(List.empty[Int]))((a, eb) => eb.map(a :: _))
+      .value
+    (crossOk, nullHashOk, notAVecOk, folded) must beEqualTo((true, true, true, List(1, 2, 3)))
+  }
+
+  // covers: the remaining cold paths —
+  //   PSVec base toAnyRefArray (PSVec.scala:49): only Empty reaches it (Single/Slice
+  //   override); boundary mutants make the vacuous loop call the throwing Empty.apply(0);
+  //   MultiFocusFromList.forPSVec.fromList loop (MultiFocus.scala:106): a skipped loop
+  //   wraps a null-filled array;
+  //   Affine.Hit.hashCode null-guard `true` (Affine.scala:109): collapses to a
+  //   snd-only hash — pinned-witness canary, not a contract claim.
+  "cold paths: Empty.toAnyRefArray, fromList loop, Hit hash discrimination" >> {
+    val emptyArrOk = PSVec.empty[Int].toAnyRefArray.length == 0
+    val viaFromList = MultiFocusFromList.forPSVec.fromList(List(1, 2, 3))
+    val fromListOk = viaFromList == PSVec.fromIterable(List(1, 2, 3))
+    val h1 = new Affine.Hit[(Int, String), Int]("s", 1).hashCode
+    val h2 = new Affine.Hit[(Int, String), Int]("s", 2).hashCode
+    (emptyArrOk, fromListOk, h1 == h2) must beEqualTo((true, true, false))
   }

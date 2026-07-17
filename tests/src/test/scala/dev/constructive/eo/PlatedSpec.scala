@@ -85,64 +85,46 @@ class PlatedSpec extends Specification with Discipline:
     .plated,
   )
 
-  // ----- Behaviour: the cookbook example, uppercase every Var occurrence -----
+  // ----- Behaviour + composition: transform / plate∘Prism∘Lens / everywhere∘Prism∘Lens -----
+  //
+  // 2026-06-12 consolidation: 3 blocks → 1. The three blocks shared the same tree and
+  // duplicated the Var-prism + name-lens fixtures; all three assertions are kept verbatim.
 
-  "transform uppercases every Var occurrence and leaves the structure (and Lam binders) intact" >> {
+  // covers: transform uppercases every Var and leaves structure + Lam binders intact;
+  //   plate.andThen(Prism).andThen(Lens) rewrites IMMEDIATE children only (one level);
+  //   everywhere.andThen(Prism).andThen(Lens) rewrites ALL variables at every depth
+  //   (everywhere.modify(h) == transform(h), the composition law applied at each node).
+  "transform / plate∘Prism∘Lens (one level) / everywhere∘Prism∘Lens (all depths) semantics" >> {
+    val varP = Prism[Expr, Expr.Var](
+      {
+        case v: Expr.Var => Right(v)
+        case other       => Left(other)
+      },
+      identity,
+    )
+    val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
+    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+
+    // f -> F, the bound occurrence y -> Y, but the Lam binder "y" stays lowercase.
     val shout: Expr => Expr = {
       case Expr.Var(n) => Expr.Var(n.toUpperCase)
       case other       => other
     }
-    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
-    // f -> F, the bound occurrence y -> Y, but the Lam binder "y" stays lowercase.
-    Plated.transform(shout)(tree) ==
+    val transformOk = Plated.transform(shout)(tree) ==
       Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
-  }
 
-  // ----- Composition: `plate` is a first-class optic — it `.andThen`s a Prism + Lens -----
-
-  "plate composes with a Prism + Lens via andThen (one level of children)" >> {
-    val varP = Prism[Expr, Expr.Var](
-      {
-        case v: Expr.Var => Right(v)
-        case other       => Left(other)
-      },
-      identity,
-    )
-    val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
-
-    // plate (immediate children) → Prism (those that are Var) → Lens (their name).
-    // The composed value is itself an Optic, so `.modify` works on the whole chain.
+    // plate (immediate children) → Prism (those that are Var) → Lens (their name):
+    // only Var("f") is hit; the Lam and the nested Var("y") under it stay untouched.
     val immediateVarNames = Plated[Expr].plate.andThen(varP).andThen(nameL)
-
-    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
-    // App's immediate children are Var("f") and the Lam; only Var("f") is hit (-> "F").
-    // The Lam, and the nested Var("y") under it, are deeper than one level, so untouched.
-    // (For *every* variable in the tree, iterate plate via `transform` / `universe` above.)
-    immediateVarNames.modify(_.toUpperCase)(tree) ==
+    val oneLevelOk = immediateVarNames.modify(_.toUpperCase)(tree) ==
       Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("y")))
-  }
 
-  // ----- The headline: a recursive `everywhere` optic that composes with Prism + Lens -----
-
-  "everywhere (Modify modify = transform) composes with a Prism + Lens to rewrite ALL variables" >> {
-    val varP = Prism[Expr, Expr.Var](
-      {
-        case v: Expr.Var => Right(v)
-        case other       => Left(other)
-      },
-      identity,
-    )
-    val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
-
-    // `everywhere`.modify(h) == transform(h); by the composition law,
-    // everywhere.andThen(d).modify(g) == transform(d.modify(g)) — apply d at every node.
+    // everywhere: EVERY variable at every depth (Lam binder is a String, not a Var node).
     val allVarNames = Plated.everywhere[Expr].andThen(varP).andThen(nameL)
-
-    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
-    // EVERY variable, at every depth: f -> F and the nested y -> Y (Lam binder "y" is a String,
-    // not a Var node, so it stays — same semantics as the transform recipe).
-    allVarNames.modify(_.toUpperCase)(tree) ==
+    val allDepthsOk = allVarNames.modify(_.toUpperCase)(tree) ==
       Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
+
+    transformOk && oneLevelOk && allDepthsOk
   }
 
   // ----- Behaviour: rewrite re-fires to a fixpoint (bottom-up constant fold) -----
@@ -240,4 +222,27 @@ class PlatedSpec extends Specification with Discipline:
     val refireOk = Plated.rewrite(decrement)(Bin.Leaf(200000))(using binPlate) == Bin.Leaf(0)
 
     descentOk && refireOk
+  }
+
+  "transform rewrites the FULL depth of a spine that crosses the machine handoff" >> {
+    // covers: Plated.transformMachine internals (enter's leaf check at line 146, the
+    // drain loop at line 149). The 100k stack-safety test above reaches the machine but
+    // only asserts shallow shape, so a machine that returns its subtree UNCHANGED
+    // (drain loop skipped) survived. This pins the deepest leaf and the spine length
+    // after a transform that crosses transformRecursionLimit (512).
+    val depth = 1500
+    var deep: Bin = Bin.Leaf(0)
+    var i = 0
+    while i < depth do
+      deep = Bin.Node(deep, Bin.Leaf(1))
+      i += 1
+    val bump: Bin => Bin = { case Bin.Leaf(k) => Bin.Leaf(k + 1); case n => n }
+    val bumped = Plated.transform(bump)(deep)(using PlatedFixtures.platedBin)
+    def leftmost(b: Bin, d: Int): (Int, Int) = b match
+      case Bin.Node(l, _) => leftmost(l, d + 1)
+      case Bin.Leaf(k)    => (d, k)
+    val topRight = bumped match
+      case Bin.Node(_, Bin.Leaf(k)) => k
+      case _                        => -1
+    (leftmost(bumped, 0), topRight) must beEqualTo(((depth, 1), 2))
   }

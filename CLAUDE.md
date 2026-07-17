@@ -21,14 +21,15 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `tests` | `tests/` | — (not published) | Law-based and behavioural test suites |
 | `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |
 | `schemes` | `schemes/` | `cats-eo-schemes` | Recursion schemes (cata/ana/hylo) as composable optics |
+| `schemesLaws` | `schemes-laws/` | `cats-eo-schemes-laws` | Laws for the recursion schemes (hylo fusion so far; more expected) — separate from `laws` because they quantify over `schemes` types |
 | `circe` | `circe/` | `cats-eo-circe` | `Plated[Json]` and circe optic integration |
 | `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration; the `eo.avro.circe` sub-package is the structural Avro ↔ circe bridge (`AvroJson`) and `eo.avro.vulcan` bridges `vulcan.Codec` → `AvroCodec` (`AvroVulcan`) — circe and vulcan are `Optional` deps, callers add them themselves |
 | `jsoniter` | `jsoniter/` | `cats-eo-jsoniter` | jsoniter-scala optic integration |
 | `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
 
 The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
-`circe`, `avro`, and `jsoniter`. `sbt compile` and `sbt test` cover those;
-benchmarks must be invoked explicitly (see below).
+`schemesLaws`, `circe`, `avro`, and `jsoniter`. `sbt compile` and `sbt test`
+cover those; benchmarks must be invoked explicitly (see below).
 
 ## Toolchain
 
@@ -94,35 +95,92 @@ git push   --no-verify                # bypass pre-push if you need to
 coverage:
 
 ```sh
-sbt "clean; coverage; core/test; tests/test; circeIntegration/test; schemes/test; coverageReport; coverageAggregate"
+SBT_OPTS="-Xmx6g" sbt coverageAll
+# alias for: set ThisBuild/tlFatalWarnings := false; clean; coverage;
+#            test; coverageReport; coverageAggregate
 # HTML + XML under <module>/target/scala-<ver>/scoverage-report/
 # Aggregate report at target/scala-<ver>/scoverage-report/
 ```
 
-The `circeIntegration/test` and `schemes/test` calls are load-bearing —
-without them, `circe/*.scala` and `schemes/*.scala` (and the schemes-only
-exercise of core's `Optic.cross`) are silently omitted from the scoverage
-report. `coverageAggregate` rolls the per-module reports into a single
-cross-module view at the repo root.
+`coverageAll` runs the whole root-aggregate `test`, so every module's
+suite is exercised and `coverageAggregate` rolls them into one
+cross-module per-package view at the repo root. It relaxes the always-on
+`-Werror` (`tlFatalWarnings`) first because scoverage-instrumented
+sources can surface `-Wunused` warnings, and wants a larger heap because
+the `set` reapply re-evaluates the Laika docs settings.
 
 The report directory sits under `target/` and is `.gitignore`d.
 
-Coverage is the project's primary quality signal. The law and behaviour
-suites in `cats-eo-tests` currently reach ~70 %% of core's statements and
-branches — the rest is either pure type-level machinery (no runtime
-footprint) or code reachable only when someone adds the matching carrier
-/ composer instances to core.
+Coverage is the project's primary quality signal — see the
+[Quality Assurance docs page](./site/docs/quality-assurance.md) for the
+live per-package numbers (statement %, branch %, BC/SC ratio). The rest
+is either pure type-level machinery (no runtime footprint) or code
+reachable only when someone adds the matching carrier / composer
+instances.
 
-**Why not mutation testing?** sbt-stryker4s was evaluated earlier and
-dropped. Because EO is mostly type-level, stryker4s' default mutators
-find exactly **one** mutable runtime expression across the whole
-codebase — not enough signal to justify the plugin, the per-checkout
-`target/stryker4s-report/` directories, or the CI time. *Future work:*
-teaching stryker about EO-specific mutators (e.g. swapping the `to` /
-`from` halves of an `Optic` constructor, or flipping associators in
-`AssociativeFunctor` instances) would make mutation testing a much
-richer signal than the default AST-level mutations. A good project for
-someone who wants to understand stryker's mutator plugin API.
+### Mutation testing (stryker4s)
+
+[`sbt-stryker4s`](https://stryker-mutator.io/docs/stryker4s/) lives in
+[`project/plugins.sbt`](./project/plugins.sbt). It was dropped in an
+earlier pass (a whole-project run found a single mutable runtime
+expression — EO was almost entirely type-level) and reintroduced once
+`schemes` grew real runtime machinery and core gained opaque-carrier
+dispatch.
+
+```sh
+SBT_OPTS="-Xmx6g" sbt mutationAll
+# per-module reports under <module>/target/stryker4s-report/<ts>/
+```
+
+Key facts, all the hard-won kind:
+
+- **Invoke as `project <m>; stryker`, NOT `<m>/stryker`.** The
+  module-scoped task form reads `loadedTestFrameworks` from the
+  aggregating root project (no test deps), so specs2 is invisible and
+  *every* mutant comes back `NoCoverage`. The `mutationAll` alias uses the
+  project-switch form across core, laws, generics, schemes, schemesLaws,
+  circe, avro, jsoniter.
+- **It's a report, not a gate** (`strykerThresholdsBreak := 0`): a low
+  score never fails the build.
+- **`core` and `laws` are scored against the `tests/` suite via
+  task-level borrowing.** `core.dependsOn(tests % Test)` would be a
+  project cycle (tests → laws/generics → core), but cross-project *task*
+  references are legal: `mutationAll` appends `tests/Test/definedTests` +
+  `tests/Test/fullClasspath` to each module's Test scope for the run.
+  Sound because stryker compiles mutants behind runtime switches
+  (binary-compatible), so tests' specs — compiled against the unmutated
+  modules — still exercise the mutated bytecode (verified: core 3% →
+  ~63%/78% covered; laws unscoreable → ~97%). Works even though laws has
+  NO test framework of its own — specs2 is detected from the borrowed
+  classpath. Deliberately scoped to the alias: a permanent setting would
+  make root `sbt test` run the suite twice.
+- **StringLiteral mutants are excluded build-wide**
+  (`ThisBuild / strykerExcludedMutations`): string literals here are
+  error messages, vestigial-arm labels, and discipline rule-set names —
+  nothing any suite asserts on, so they survive as pure noise (laws: 99
+  of 101 unfiltered survivors were name labels).
+- **Mutating `laws` is the "who tests the tests" probe.** Killed mutant =
+  the discipline suites notice a corrupted law definition. The surviving
+  mutants are law-WEAKENING mutations (guard → `false` in
+  `AffineFoldLaws.missIsEmpty`, `&&` → `||` in
+  `ModifyFLaws.functorIdentity`/`functorComposition`): all instances
+  under test satisfy the weakened law too, so only **negative fixtures**
+  (deliberately unlawful instances pinned to fail) would kill them — a
+  known follow-up.
+  **`generics`** is macro code (expands at compile time → no runtime
+  mutants to cover), so it structurally can't be scored. Caveats are
+  documented in the QA page. The high-signal modules are `core`, `laws`,
+  `schemes`, `circe`.
+
+The [`quality.yml`](./.github/workflows/quality.yml) workflow runs
+`coverageAll` + `mutationAll` + `site/tools/gen-qa-report.py` on every
+release tag, refreshing the QA page tables and uploading the HTML reports
+as artifacts. The `improve-test-leverage` skill
+(`.claude/skills/improve-test-leverage/SKILL.md`) consumes both reports
+to plan high-leverage test additions. *Future work:* EO-specific mutators
+(swapping the `to` / `from` halves of an `Optic`, flipping
+`AssociativeFunctor` associators) would beat the default AST-level
+mutations — a good entry into stryker's mutator plugin API.
 
 ### Benchmarks (JMH vs Monocle)
 
