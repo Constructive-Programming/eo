@@ -87,21 +87,21 @@ class JsoniterPrismSpec extends Specification:
 
   "JsoniterPrism on Affine: hit decodes / miss passes through / decode-failure → Miss" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism[Long]("$.payload.user.id")
+      JsoniterPrism.fromPath[Long]("$.payload.user.id")
 
     val hitOk = idP.to(sample) match
       case h: Affine.Hit[idP.X, Long]  => h.b === 42L
       case _: Affine.Miss[idP.X, Long] => false === true // expected Hit
 
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism[Long]("$.payload.user.missing")
+      JsoniterPrism.fromPath[Long]("$.payload.user.missing")
     val missOk = absentP.to(sample) match
       case m: Affine.Miss[absentP.X, Long] => m.fst === sample
       case _: Affine.Hit[absentP.X, Long]  => false === true
 
     // Field 'email' is a String; decoding it as Long throws → Miss.
     val mistypedP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism[Long]("$.payload.user.email")
+      JsoniterPrism.fromPath[Long]("$.payload.user.email")
     val mistypedOk = mistypedP.to(sample) match
       case _: Affine.Miss[mistypedP.X, Long] => true === true
       case _: Affine.Hit[mistypedP.X, Long]  => false === true
@@ -111,25 +111,25 @@ class JsoniterPrismSpec extends Specification:
 
   "JsoniterPrism: from is identity in phase-1 (Hit and Miss both pass bytes through)" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism[Long]("$.payload.user.id")
+      JsoniterPrism.fromPath[Long]("$.payload.user.id")
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism[Long]("$.payload.user.missing")
+      JsoniterPrism.fromPath[Long]("$.payload.user.missing")
 
     (idP.from(idP.to(sample)) === sample)
       .and(absentP.from(absentP.to(sample)) === sample)
   }
 
   "JsoniterPrism: rejects malformed path at construction" >> {
-    JsoniterPrism[Long]("not-a-path") must throwAn[IllegalArgumentException]
+    JsoniterPrism.fromPath[Long]("not-a-path") must throwAn[IllegalArgumentException]
   }
 
   "JsoniterPrism: .foldMap over the Affine carrier — hit reads, miss returns Monoid.empty" >> {
     import cats.instances.string.given
 
     val emailP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-      JsoniterPrism[String]("$.payload.user.email")
+      JsoniterPrism.fromPath[String]("$.payload.user.email")
     val missingP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-      JsoniterPrism[String]("$.does.not.exist")
+      JsoniterPrism.fromPath[String]("$.does.not.exist")
 
     (emailP.foldMap(identity[String])(sample) === "alice@example.com")
       .and(missingP.foldMap(identity[String])(sample) === "")

@@ -19,7 +19,9 @@ val scala3Version = "3.8.4"
 //      configure GitHub Secrets (see docs/ci-secrets.md).
 
 // 0.10: #77's ConfluentWire threadLocalStorage defaulted params are binary-breaking — see mima.sbt.
-ThisBuild / tlBaseVersion := "0.10"
+// 0.11: JsoniterPrism / JsoniterTraversal factory return types narrowed from
+// `Optic[...]` to the new concrete classes (binary-breaking descriptor change).
+ThisBuild / tlBaseVersion := "0.11"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -646,6 +648,9 @@ lazy val jsoniterIntegration: Project = project
   .in(file("jsoniter"))
   .dependsOn(
     LocalProject("core"),
+    // MacroSelectors for the `.field(_.x)` / `.at` / `.each` cursor macros,
+    // same as circeIntegration.
+    LocalProject("generics"),
     LocalProject("laws") % Test,
     LocalProject("avroIntegration") % Test,
   )

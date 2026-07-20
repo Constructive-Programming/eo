@@ -29,15 +29,15 @@ object DomainJsoniter:
 
   /** depth-1 scalar `$.id` (`Long`) — read / replace / modify vehicle. */
   val idPrism: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    JsoniterPrism[Long]("$.id")
+    JsoniterPrism.fromPath[Long]("$.id")
 
   /** depth-3 scalar `$.customer.address.street` (`String`). */
   val streetPrism: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-    JsoniterPrism[String]("$.customer.address.street")
+    JsoniterPrism.fromPath[String]("$.customer.address.street")
 
   /** a deliberately-absent path `$.customer.absent` — the honest "miss" stress test. */
   val absentPrism: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    JsoniterPrism[Long]("$.customer.absent")
+    JsoniterPrism.fromPath[Long]("$.customer.absent")
 
   /** array fold `$.lines[*].price` (`Double`). */
   val pricesTraversal: Optic[Array[Byte], Array[Byte], Double, Double, MultiFocus[PSVec]] =

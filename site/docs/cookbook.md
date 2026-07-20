@@ -685,7 +685,7 @@ given JsonValueCodec[String] = JsonCodecMaker.make
 // One byte optic per format, same focus type. Drilled once,
 // reused for every message.
 val customerAvro = eoavro.codecPrism[OrderEvent].customer
-val customerJson = JsoniterPrism[String]("$.customer")
+val customerJson = JsoniterPrism.fromPath[String]("$.customer")
 
 // The JSON side's output skeleton. Placeholders must be VALID
 // encodings of the branch type — the splice write decodes the

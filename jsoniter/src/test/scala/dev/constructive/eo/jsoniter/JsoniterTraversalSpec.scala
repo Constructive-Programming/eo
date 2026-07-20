@@ -85,5 +85,5 @@ class JsoniterTraversalSpec extends Specification:
   }
 
   "JsoniterPrism: rejects wildcard paths at construction (cross-check)" >> {
-    JsoniterPrism[Long]("$.items[*]") must throwAn[IllegalArgumentException]
+    JsoniterPrism.fromPath[Long]("$.items[*]") must throwAn[IllegalArgumentException]
   }
