@@ -39,7 +39,7 @@ jobs:
       SBT_OPTS: "-Xmx6g -Xss8m -Dsbt.color=false"
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
