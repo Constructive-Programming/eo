@@ -4,7 +4,9 @@ The `cats-eo-jsoniter` module adds two cursor-backed optics for
 editing JSON byte streams without ever materialising an AST. They
 sit on top of [jsoniter-scala](https://github.com/plokhotnyuk/jsoniter-scala)
 and reuse the existing cats-eo carriers — no new carrier ships in
-this module.
+this module. Paths can be spelled as JSONPath strings or built with
+the compile-time-checked [typed cursors](#typed-cursors)
+(`JsoniterPrism[S].field(_.x)`), mirroring eo-circe's surface.
 
 ```scala
 libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter" % "@VERSION@"
@@ -73,8 +75,8 @@ given JsonValueCodec[String] = JsonCodecMaker.make
 val sample: Array[Byte] =
   """{"payload":{"user":{"id":42,"email":"alice@example.com"}}}""".getBytes("UTF-8")
 
-val idP    = JsoniterPrism[Long]("$.payload.user.id")
-val emailP = JsoniterPrism[String]("$.payload.user.email")
+val idP    = JsoniterPrism.fromPath[Long]("$.payload.user.id")
+val emailP = JsoniterPrism.fromPath[String]("$.payload.user.email")
 ```
 
 ### Reading
@@ -90,7 +92,7 @@ idP.foldMap(identity[Long])(sample)
 emailP.foldMap(identity[String])(sample)
 
 // Miss: path doesn't resolve, returns Monoid.empty
-val absentP = JsoniterPrism[Long]("$.payload.user.absent")
+val absentP = JsoniterPrism.fromPath[Long]("$.payload.user.absent")
 absentP.foldMap(identity[Long])(sample)
 ```
 
@@ -126,6 +128,181 @@ Miss path is a no-op — the original bytes pass through unchanged:
 val sameBytes = absentP.replace(99L)(sample)
 sameBytes.toSeq == sample.toSeq
 ```
+
+## Typed cursors
+
+`JsoniterPrism[A]` (no path argument) is the root-level
+`Prism[Array[Byte], A]`: `to` decodes the whole document via the
+codec, `from` / `reverseGet` encode it back. From the root, `.field(_.x)`
+/ `.at(i)` / `.each` drill in with compile-time checks against the
+case-class schema, so no JSONPath string is ever hand-written. The
+`.address.street` sugar is macro-powered and compiles to
+`.field(_.address).field(_.street)`:
+
+```scala mdoc:silent
+case class Zip(code: Int)
+case class Address(street: String, zip: Zip)
+case class Person(name: String, age: Int, address: Address)
+
+given JsonValueCodec[Int]     = JsonCodecMaker.make
+given JsonValueCodec[Zip]     = JsonCodecMaker.make
+given JsonValueCodec[Address] = JsonCodecMaker.make
+given JsonValueCodec[Person]  = JsonCodecMaker.make
+
+val alice       = Person("Alice", 30, Address("Main St", Zip(12345)))
+val aliceBytes  = com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(alice)
+```
+
+```scala mdoc
+val streetP = JsoniterPrism[Person].address.street          // Dynamic sugar
+val ageP    = JsoniterPrism[Person].field(_.age)            // explicit form
+
+streetP.foldMap(identity[String])(aliceBytes)
+new String(ageP.modify(_ + 1)(aliceBytes), "UTF-8")
+JsoniterPrism[Person].headOption(aliceBytes)                // whole-document decode
+```
+
+Every drilled cursor is the same `JsoniterPrism` the string-path
+factory builds — `JsoniterPrism[Person].address.street` and
+`JsoniterPrism.fromPath[String]("$.address.street")` are the identical optic.
+Each step needs a `JsonValueCodec` for its focus type in scope; when
+you don't want to derive codecs for intermediate types you never
+decode, use the string-path factory, which needs only the leaf codec.
+
+`.at(i)` and `.each` work on collection-typed fields; `.each` hands
+off to a `JsoniterTraversal`, and further `.field` calls continue
+past the wildcard:
+
+```scala mdoc:silent
+case class Item(sku: String, price: Double)
+case class Basket(items: List[Item])
+
+given JsonValueCodec[Double]     = JsonCodecMaker.make
+given JsonValueCodec[Item]       = JsonCodecMaker.make
+given JsonValueCodec[List[Item]] = JsonCodecMaker.make
+given JsonValueCodec[Basket]     = JsonCodecMaker.make
+
+val basketBytes = com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(
+  Basket(List(Item("a", 1.5), Item("b", 2.5)))
+)
+```
+
+```scala mdoc
+import cats.instances.double.given
+
+JsoniterPrism[Basket].field(_.items).at(1).headOption(basketBytes)
+JsoniterPrism[Basket].field(_.items).each.price.foldMap(identity[Double])(basketBytes)
+```
+
+## Migrating a `JsonCodecMaker` model (optics-as-evidence)
+
+There are two ways to use this module — pick deliberately:
+
+1. **Layer on an existing codec**: keep materialising your case class
+   elsewhere; use a prism for the one or two hot-path fields.
+2. **Replace the materialised model**: the wire `Array[Byte]` *is* the
+   data structure. This is the intended endpoint of "replace the
+   jsoniter macros with eo optics" — you do **not** look for a
+   codec-derivation API in this module, because the point is to stop
+   needing a whole-document codec.
+
+Before — macro-codec'd model, whole document decoded and re-encoded to
+touch one field:
+
+```scala
+case class User(id: Long, email: String, plan: String)
+object User:
+  given JsonValueCodec[User] = JsonCodecMaker.make
+
+val user    = readFromArray[User](bytes)   // materialises everything
+val updated = writeToArray(user.copy(plan = "pro"))
+```
+
+After — byte holder + field prisms with **leaf codecs only**
+(`JsonValueCodec[User]` is never derived):
+
+```scala mdoc:silent
+// given JsonValueCodec[String] = JsonCodecMaker.make   — leaf codec, already in scope above
+
+val userBytes: Array[Byte] =
+  """{"id":7,"email":"a@x.org","plan":"free"}""".getBytes("UTF-8")
+
+val planP = JsoniterPrism.fromPath[String]("$.plan")
+```
+
+```scala mdoc
+planP.headOption(userBytes)                          // read one field
+new String(planP.replace("pro")(userBytes), "UTF-8") // write it back, siblings untouched
+```
+
+The consuming code then follows the standard doctrine —
+[consume via capability, construct via optic](../capabilities.md).
+Signatures demand the weakest capability that covers what they do;
+the prism *is* the evidence, so the byte holder slots into functions
+that never name the optic or the wire format:
+
+```scala mdoc:silent
+import dev.constructive.eo.*
+
+// These know NOTHING about JSON, jsoniter, or Array[Byte] — only
+// that a String plan can be read out of / rewritten inside a T.
+// That generic T is what buys you:
+//   - testing:    unit-test the logic with a plain case class + lens,
+//                 no JSON fixtures or byte buffers involved;
+//   - re-use:     the same function serves the byte holder, the
+//                 materialised model, an Avro record, a circe Json —
+//                 any T with the evidence;
+//   - decoupling: the module defining these never depends on the wire
+//                 format, the codec choice, or this library's optics.
+def currentPlan[T](t: T)(using cg: CanGetOption[T, String]): Option[String] =
+  cg.getOption(t)
+
+def upgradePlan[T](t: T)(using cm: CanModify[T, String]): T =
+  cm.replace("pro")(t)
+
+// The prism given IS the capability evidence for T = Array[Byte]
+// (one optic given per (S, A) pair — the coherence rule applies):
+given JsoniterPrism[String] = planP
+```
+
+```scala mdoc
+currentPlan(userBytes)
+new String(upgradePlan(userBytes), "UTF-8")
+```
+
+And the same consumers serve the mode-1 materialised model unchanged —
+an [eo-generics lens](../generics.md) on the case class is equally
+valid evidence, which is also the natural way to unit-test them:
+
+```scala mdoc:silent
+import dev.constructive.eo.generics.lens
+
+case class User(id: Long, email: String, plan: String)
+
+given CanModify[User, String] = lens[User](_.plan)
+```
+
+```scala mdoc
+upgradePlan(User(7, "a@x.org", "free"))
+```
+
+The corners that trip a mechanical migration:
+
+- **Optional fields**: `JsonCodecMaker` omits `None` on the wire, so an
+  absent field is simply a Miss — `.headOption` returns `None`, writes
+  pass through. There is no way to *add* a missing field through a
+  prism (splice needs a span); keep a template with the field present,
+  or fall through to eo-circe for structural edits.
+- **Discriminated unions** (`"type"`-tagged enums): read the
+  discriminator with a `String` prism at the tag path, then apply the
+  per-variant prisms. A whole-variant focus works too — derive the
+  codec for the *case* (not the sealed parent) and point a prism at the
+  variant's payload path.
+- **Assembling a value from several fields**: compose reads (two
+  prisms, two `.headOption` calls) rather than looking for a
+  full-record decoder — if you find yourself wanting the whole record,
+  that's mode 1, and `JsoniterPrism[A]` (or plain `readFromArray`) is
+  the honest spelling.
 
 ## JsoniterTraversal
 
@@ -239,8 +416,11 @@ per-element reassembly, no Composer hop required.
 
 | Task                                                  | Use                       |
 |-------------------------------------------------------|---------------------------|
-| Read one scalar from a JSON byte buffer, no AST       | `JsoniterPrism[A]("$.path")`            |
-| Write one scalar back into a JSON byte buffer         | `JsoniterPrism[A].replace(b)(bytes)`    |
+| Read one scalar from a JSON byte buffer, no AST       | `JsoniterPrism.fromPath[A]("$.path")`            |
+| Same, compile-time checked against the case-class schema | `JsoniterPrism[S].field(_.x)` / `JsoniterPrism[S].x` |
+| Decode / encode the whole document (`Prism[Array[Byte], A]`) | `JsoniterPrism[A]`                  |
+| Replace a `JsonCodecMaker` model with bytes + optics  | [migration recipe](#migrating-a-jsoncodecmaker-model-optics-as-evidence) |
+| Write one scalar back into a JSON byte buffer         | `JsoniterPrism.fromPath[A]("$.path").replace(b)(bytes)` |
 | Sum / count over an array on the wire                 | `JsoniterTraversal[A]("$.path[*]").foldMap(...)` |
 | Drill into dynamic shapes (no codec for surrounding)  | eo-circe `codecPrism[…]` — different module |
 | Edit deeply through `[*]` on the wire                 | Phase-3 (not yet shipped); fall through to eo-circe today |

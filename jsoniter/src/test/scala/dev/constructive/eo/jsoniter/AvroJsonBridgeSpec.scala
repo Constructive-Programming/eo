@@ -52,7 +52,7 @@ class AvroJsonBridgeSpec extends Specification:
 
     // The two byte optics, one per format. Drilled once, reusable across payloads.
     val clickAvro = codecPrism[Envelope].field(_.click)
-    val clickJson = JsoniterPrism[Click]("$.click")
+    val clickJson = JsoniterPrism.fromPath[Click]("$.click")
 
     // The click placeholder must be a VALID Click encoding — the Affine write decodes the
     // current focus before splicing (a Hit carries the span AND the decoded value).
@@ -86,7 +86,7 @@ class AvroJsonBridgeSpec extends Specification:
     val avroBytes = BridgeFixtures.toAvroBinary(env)
 
     val idAvro = codecPrism[Envelope].field(_.id)
-    val idJson = JsoniterPrism[String]("$.envelopeId")
+    val idJson = JsoniterPrism.fromPath[String]("$.envelopeId")
     val template: Array[Byte] = """{"envelopeId":"","v":1}""".getBytes("UTF-8")
 
     BridgeFixtures.rootDecodes.set(0)
@@ -106,7 +106,7 @@ class AvroJsonBridgeSpec extends Specification:
     val jsonBytes: Array[Byte] =
       """{"click":{"url":"https://json.example/in","ts":77},"meta":"x"}""".getBytes("UTF-8")
 
-    val clickJson = JsoniterPrism[Click]("$.click")
+    val clickJson = JsoniterPrism.fromPath[Click]("$.click")
     val clickAvro = codecPrism[Envelope].field(_.click)
 
     BridgeFixtures.rootDecodes.set(0)

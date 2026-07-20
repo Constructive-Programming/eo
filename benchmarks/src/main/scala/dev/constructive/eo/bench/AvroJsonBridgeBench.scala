@@ -178,10 +178,10 @@ object AvroJsonBridgeBench:
   val conversionIdPrism = codecPrism[WideConversion].field(_.conversionId)
 
   /** JSON-side byte optics — branch codecs only. */
-  val clickJson = JsoniterPrism[ClickPayload]("$.click")
-  val partnerJson = JsoniterPrism[String]("$.partner")
-  val conversionIdJson = JsoniterPrism[String]("$.conversionId")
-  val countryJson = JsoniterPrism[String]("$.country")
+  val clickJson = JsoniterPrism.fromPath[ClickPayload]("$.click")
+  val partnerJson = JsoniterPrism.fromPath[String]("$.partner")
+  val conversionIdJson = JsoniterPrism.fromPath[String]("$.conversionId")
+  val countryJson = JsoniterPrism.fromPath[String]("$.country")
 
   /** Static output templates. Placeholders are VALID encodings of their branch types (the Affine
     * write decodes the current focus before splicing), built once from the naive codecs so the

@@ -1,6 +1,7 @@
 package dev.constructive.eo.jsoniter
 
 import scala.annotation.tailrec
+import scala.language.dynamics
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, writeToArray, JsonValueCodec}
 import dev.constructive.eo.data.{MultiFocus, PSVec}
@@ -36,8 +37,58 @@ import dev.constructive.eo.optics.Optic
   * hold up to canonical re-encoding of the focused slices, and writes need decodable current
   * focuses.
   *
+  * Typed drilling continues past the wildcard, mirroring eo-circe's `JsonTraversal`:
+  * `JsoniterPrism[Basket].field(_.items).each.field(_.price)` focuses `price` of every element.
+  * Each step is compile-time checked against the case-class schema and appends to the path.
+  *
   * @group Optics
   */
+final class JsoniterTraversal[A] private[jsoniter] (
+    private[jsoniter] val steps: List[PathStep]
+)(using codec: JsonValueCodec[A])
+    extends Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]],
+      Dynamic:
+
+  type X = (Array[Byte], List[JsonPathScanner.Span])
+
+  def to(bytes: Array[Byte]): MultiFocus[PSVec][X, A] =
+    val spans = JsonPathScanner.findAll(bytes, steps)
+    if spans.isEmpty then MultiFocus((bytes, spans), PSVec.empty[A])
+    else
+      val (keptSpans, psv) = JsoniterTraversal.decodeSpans[A](bytes, spans)
+      MultiFocus((bytes, keptSpans), psv)
+
+  def from(pair: MultiFocus[PSVec][X, A]): Array[Byte] =
+    val (bytes, spans) = pair.context
+    val foci = pair.foci
+    if spans.isEmpty || spans.length != foci.length then bytes
+    else
+      // Encode each focus; an element whose encode throws keeps its original bytes.
+      val reps = List.newBuilder[(JsonPathScanner.Span, Array[Byte])]
+      var i = 0
+      spans.foreach { span =>
+        try reps += ((span, writeToArray(foci(i))(using codec)))
+        catch case scala.util.control.NonFatal(_) => ()
+        i += 1
+      }
+      JsoniterTraversal.spliceAll(bytes, reps.result())
+
+  /** Dynamic field sugar — `itemsT.price` lowers to `itemsT.field(_.price)`. */
+  transparent inline def selectDynamic(inline name: String): Any =
+    ${ JsoniterPrismMacro.selectFieldTraversalImpl[A]('{ this }, 'name) }
+
+  // ---- Path widening (used by the macro extensions) ----------------
+
+  /** Extend the path by a field step. Used by [[JsoniterTraversal.field]] / `selectDynamic`. */
+  private[jsoniter] def widenField[B](name: String)(using
+      JsonValueCodec[B]
+  ): JsoniterTraversal[B] =
+    new JsoniterTraversal[B](steps :+ PathStep.Field(name))
+
+  /** Extend by an array-index step. Used by [[JsoniterTraversal.at]]. */
+  private[jsoniter] def widenIndex[B](i: Int)(using JsonValueCodec[B]): JsoniterTraversal[B] =
+    new JsoniterTraversal[B](steps :+ PathStep.Index(i))
+
 object JsoniterTraversal:
 
   /** Build a read-write Traversal over a JSON byte buffer at the given JSONPath. The path MAY
@@ -61,7 +112,7 @@ object JsoniterTraversal:
     */
   def apply[A](path: String)(using
       codec: JsonValueCodec[A]
-  ): Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]] =
+  ): JsoniterTraversal[A] =
     val steps = PathParser.parse(path) match
       case Right(s) => s
       case Left(e)  => throw new IllegalArgumentException(s"invalid JSONPath '$path': $e")
@@ -73,31 +124,22 @@ object JsoniterTraversal:
     */
   def fromSteps[A](steps: List[PathStep])(using
       codec: JsonValueCodec[A]
-  ): Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]] =
-    new Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]:
-      type X = (Array[Byte], List[JsonPathScanner.Span])
+  ): JsoniterTraversal[A] =
+    new JsoniterTraversal[A](steps)
 
-      def to(bytes: Array[Byte]): MultiFocus[PSVec][X, A] =
-        val spans = JsonPathScanner.findAll(bytes, steps)
-        if spans.isEmpty then MultiFocus((bytes, spans), PSVec.empty[A])
-        else
-          val (keptSpans, psv) = decodeSpans[A](bytes, spans)
-          MultiFocus((bytes, keptSpans), psv)
+  /** `.field(_.x)` — drill every focus into a field, compile-time checked against `A`. */
+  extension [A](o: JsoniterTraversal[A])
 
-      def from(pair: MultiFocus[PSVec][X, A]): Array[Byte] =
-        val (bytes, spans) = pair.context
-        val foci = pair.foci
-        if spans.isEmpty || spans.length != foci.length then bytes
-        else
-          // Encode each focus; an element whose encode throws keeps its original bytes.
-          val reps = List.newBuilder[(JsonPathScanner.Span, Array[Byte])]
-          var i = 0
-          spans.foreach { span =>
-            try reps += ((span, writeToArray(foci(i))(using codec)))
-            catch case scala.util.control.NonFatal(_) => ()
-            i += 1
-          }
-          spliceAll(bytes, reps.result())
+    transparent inline def field[B](
+        inline selector: A => B
+    )(using codecB: JsonValueCodec[B]): JsoniterTraversal[B] =
+      ${ JsoniterPrismMacro.fieldTraversalImpl[A, B]('o, 'selector, 'codecB) }
+
+  /** `.at(i)` — drill every focus into the i-th element of a nested array. */
+  extension [A](o: JsoniterTraversal[A])
+
+    transparent inline def at(i: Int): Any =
+      ${ JsoniterPrismMacro.atTraversalImpl[A]('o, 'i) }
 
   /** Decode every span via the codec into a single `Array[AnyRef]`, tight-packing only on partial
     * decode failure. A span whose decode throws is dropped together with its slot so spans↔foci

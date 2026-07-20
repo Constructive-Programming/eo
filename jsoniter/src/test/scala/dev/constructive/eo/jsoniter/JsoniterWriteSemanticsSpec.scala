@@ -38,7 +38,7 @@ class JsoniterWriteSemanticsSpec extends Specification:
   //   outside the span (the sibling and its spacing) survive verbatim.
   "modify(identity) canonicalises the focused slice; bytes outside the span are untouched" >> {
     val nonCanonical = bytes("""{"id":1e0,  "name":"x"}""")
-    val idP = JsoniterPrism[Double]("$.id")
+    val idP = JsoniterPrism.fromPath[Double]("$.id")
     val out = idP.modify(identity[Double])(nonCanonical)
     (str(out) === """{"id":1.0,  "name":"x"}""")
       .and(Arrays.equals(out, nonCanonical) === false)
@@ -48,7 +48,7 @@ class JsoniterWriteSemanticsSpec extends Specification:
   //   the write passes through by reference (the documented template precondition)
   "replace onto an undecodable current focus: Miss pass-through by reference" >> {
     val template = bytes("""{"id":{},"name":"x"}""")
-    val idP = JsoniterPrism[Double]("$.id")
+    val idP = JsoniterPrism.fromPath[Double]("$.id")
     ((idP.replace(9.5)(template) eq template) === true)
       .and(
         str(idP.replace(9.5)(bytes("""{"id":0.0,"name":"x"}"""))) ===
