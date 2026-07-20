@@ -7,7 +7,9 @@
 # GitHub Release for that tag. The body is the tag's `## [x.y.z]` section from
 # CHANGELOG.md — the curated headline — with GitHub's auto-generated notes
 # (PR list + contributors) appended. A missing changelog section FAILS the
-# run on purpose: cutting the section is part of releasing.
+# run on purpose: cutting the section is part of releasing. If the release
+# already exists (e.g. created by hand before CI finished), the run
+# short-circuits green BEFORE the changelog gate — its job is already done.
 # `workflow_dispatch` backfills a release for any existing tag.
 
 name: GitHub Release
@@ -60,13 +62,30 @@ jobs:
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      # The release may already exist (manual creation, previous backfill).
+      # Detect it BEFORE the changelog gate: the workflow's job is done, so
+      # exit green instead of failing on a section the frozen tag can't grow.
+      - name: Check for an existing release
+        id: existing
         if: steps.tag.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $TAG already exists — leaving it untouched."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.tag.outputs.tag != '' && steps.existing.outputs.exists != 'true'
         with:
           ref: ${{ steps.tag.outputs.tag }}
 
       - name: Extract the tag's CHANGELOG section
-        if: steps.tag.outputs.tag != ''
+        if: steps.tag.outputs.tag != '' && steps.existing.outputs.exists != 'true'
         env:
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
@@ -83,11 +102,12 @@ jobs:
           echo "--- release body ---"; cat release-body.md
 
       - name: Create the release
-        if: steps.tag.outputs.tag != ''
+        if: steps.tag.outputs.tag != '' && steps.existing.outputs.exists != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
+          # Race guard: the release may have appeared since the check above.
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             echo "Release $TAG already exists — leaving it untouched."
             exit 0

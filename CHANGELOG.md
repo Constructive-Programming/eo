@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-20
+
+### Added
+
+- **jsoniter typed cursors** (#79, #80):
+  - **`JsoniterPrism[A]`** — root `Prism[Array[Byte], A]`: whole-document decode via the codec,
+    `reverseGet` via `writeToArray`. String paths move to `JsoniterPrism.fromPath[A]("$...")`.
+  - **Compile-time field drilling**: `.field(_.x)` / `.at(i)` / `.each` and Dynamic sugar
+    (`JsoniterPrism[Person].address.street`), checked against the case-class schema; drilled
+    cursors are identical to their JSONPath twins. jsoniter now depends on `cats-eo-generics`.
+  - **Capability seam**: a `JsoniterPrism` given serves derived `CanGetOption` / `CanModify`
+    evidence for `T = Array[Byte]`.
+  - **Docs**: optics-as-evidence migration recipe (JsonCodecMaker model → byte holder +
+    leaf-codec prisms), capability-consumption examples, layer-on-codec vs replace-the-model
+    guidance.
+
+### Changed
+
+- **BREAKING (binary) vs 0.10.x**: `JsoniterPrism` / `JsoniterTraversal` factory return types
+  narrowed from `Optic[...]` to the new concrete classes (hence 0.11).
+
 ## [0.10.0] - 2026-07-16
 
 ### Removed
