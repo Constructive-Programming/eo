@@ -56,8 +56,9 @@ enum AvroFailure:
     */
   case UnionResolutionFailed(branches: List[String], step: PathStep)
 
-  /** Walker reached an enum value whose runtime symbol is not a member of the schema's declared
-    * symbol set. Schema-driven; no JSON analogue.
+  /** Walker resolved a union branch to an enum value whose runtime symbol is not a member of the
+    * schema's declared symbol set (`EnumSymbol` doesn't validate at construction, so hand-built
+    * payloads can carry one). Schema-driven; no JSON analogue.
     */
   case BadEnumSymbol(symbol: String, valid: List[String], step: PathStep)
 

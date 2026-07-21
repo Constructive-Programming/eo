@@ -6,7 +6,7 @@ import scala.jdk.CollectionConverters.*
 import dev.constructive.eo.widenRight
 import java.util.{ArrayList, LinkedHashMap, List as JList, Map as JMap}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, IndexedRecord}
+import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, IndexedRecord}
 
 /** Shared internal helpers for fold-based Avro walks used by [[AvroPrism]] and [[AvroTraversal]].
   * Mirrors `circe.JsonWalk` with parent-type dispatch generalised across `IndexedRecord` /
@@ -33,40 +33,17 @@ private[avro] object AvroWalk:
     */
   final class WalkRes(val cur: Any, val parents: Array[AnyRef], val parentsLen: Int)
 
-  /** Missing-field policy. */
-  enum OnMissingField:
-
-    /** Missing → `Left(PathMissing(step))`. Default for read / decoded-modify. */
-    case Strict
-
-    /** Missing → `Right((null, parents :+ parent))`. Used by Traversal raw-transform / place where
-      * missing elements are synthesised as `null` leaves.
-      */
-    case Lenient
-
-  /** Legacy entry — Vector-shaped parents. Preserved for tests; hot-path callers use
+  /** Legacy entry — Vector-shaped parents. Preserved for the non-hot callers; hot-path callers use
     * [[walkPathArr]].
     */
   def walkPath(
       record: IndexedRecord,
       path: Array[PathStep],
-      policy: OnMissingField = OnMissingField.Strict,
   ): Either[AvroFailure, State] =
-    walkPathArr(record, path, policy) match
+    walkPathArr(record, path) match
       case l @ Left(_)   => l.widenRight
       case Right(walked) =>
-        val parentsVec =
-          if walked.parentsLen == 0 then Vector.empty[AnyRef]
-          else
-            val b = Vector.newBuilder[AnyRef]
-            b.sizeHint(walked.parentsLen)
-            @tailrec def loop(i: Int): Unit =
-              if i < walked.parentsLen then
-                b += walked.parents(i)
-                loop(i + 1)
-            loop(0)
-            b.result()
-        Right((walked.cur, parentsVec))
+        Right((walked.cur, Vector.from(walked.parents.iterator.take(walked.parentsLen))))
 
   /** Hot-path walk — array-indexed `@tailrec` loop threading `(i, parentsLen, cur)`. Failure
     * short-circuits by returning `Left` in place (no sentinel, no `return`). UnionBranch failures
@@ -75,10 +52,9 @@ private[avro] object AvroWalk:
   def walkPathArr(
       record: IndexedRecord,
       path: Array[PathStep],
-      policy: OnMissingField = OnMissingField.Strict,
   ): Either[AvroFailure, WalkRes] =
     if path.length == 0 then Right(new WalkRes(record, EmptyParents, 0))
-    else walkArrLoop(path, new Array[AnyRef](path.length), policy, 0, 0, record)
+    else walkArrLoop(path, new Array[AnyRef](path.length), 0, 0, record)
 
   /** Step machine for [[walkPathArr]] — advances `(i, parentsLen, cur)` through `path`, filling
     * `parents` in place. Failure short-circuits by returning `Left`; UnionBranch failures resolve
@@ -87,7 +63,6 @@ private[avro] object AvroWalk:
   @tailrec private def walkArrLoop(
       path: Array[PathStep],
       parents: Array[AnyRef],
-      policy: OnMissingField,
       i: Int,
       parentsLen: Int,
       cur: Any,
@@ -101,32 +76,20 @@ private[avro] object AvroWalk:
             case rec: IndexedRecord =>
               val schema = rec.getSchema
               val field = schema.getField(name)
-              if field == null then
-                policy match
-                  case OnMissingField.Strict =>
-                    Left(AvroFailure.PathMissing(step))
-                  case OnMissingField.Lenient =>
-                    parents(parentsLen) = rec
-                    walkArrLoop(path, parents, policy, i + 1, parentsLen + 1, null)
+              if field == null then Left(AvroFailure.PathMissing(step))
               else
                 parents(parentsLen) = rec
-                walkArrLoop(path, parents, policy, i + 1, parentsLen + 1, rec.get(field.pos))
+                walkArrLoop(path, parents, i + 1, parentsLen + 1, rec.get(field.pos))
             case map: JMap[?, ?] =>
               val asMap = map.asInstanceOf[JMap[Any, Any]]
               val direct = asMap.get(name)
               val viaUtf8 =
                 if direct == null then asMap.get(new org.apache.avro.util.Utf8(name))
                 else direct
-              if viaUtf8 == null then
-                policy match
-                  case OnMissingField.Strict =>
-                    Left(AvroFailure.PathMissing(step))
-                  case OnMissingField.Lenient =>
-                    parents(parentsLen) = map.asInstanceOf[AnyRef]
-                    walkArrLoop(path, parents, policy, i + 1, parentsLen + 1, null)
+              if viaUtf8 == null then Left(AvroFailure.PathMissing(step))
               else
                 parents(parentsLen) = map.asInstanceOf[AnyRef]
-                walkArrLoop(path, parents, policy, i + 1, parentsLen + 1, viaUtf8)
+                walkArrLoop(path, parents, i + 1, parentsLen + 1, viaUtf8)
             case _ =>
               Left(AvroFailure.NotARecord(step))
 
@@ -137,15 +100,14 @@ private[avro] object AvroWalk:
               if idx < 0 || idx >= size then Left(AvroFailure.IndexOutOfRange(step, size))
               else
                 parents(parentsLen) = lst.asInstanceOf[AnyRef]
-                walkArrLoop(path, parents, policy, i + 1, parentsLen + 1, lst.get(idx))
+                walkArrLoop(path, parents, i + 1, parentsLen + 1, lst.get(idx))
             case _ =>
               Left(AvroFailure.NotAnArray(step))
 
         case PathStep.UnionBranch(branchName) =>
           cur match
             case null =>
-              if branchName == "null" then
-                walkArrLoop(path, parents, policy, i + 1, parentsLen, null)
+              if branchName == "null" then walkArrLoop(path, parents, i + 1, parentsLen, null)
               else
                 Left(
                   AvroFailure
@@ -156,9 +118,7 @@ private[avro] object AvroWalk:
                 )
             case other =>
               val actualName = unionBranchName(other)
-              if actualName == branchName then
-                walkArrLoop(path, parents, policy, i + 1, parentsLen, cur)
-              else
+              if actualName != branchName then
                 Left(
                   AvroFailure
                     .UnionResolutionFailed(
@@ -166,6 +126,22 @@ private[avro] object AvroWalk:
                       step,
                     )
                 )
+              else
+                other match
+                  // EnumSymbol doesn't validate at construction, so a hand-built payload can
+                  // carry a symbol the schema never declared — refuse it here rather than
+                  // passing a corrupt leaf downstream.
+                  case e: GenericEnumSymbol[?]
+                      if !e.getSchema.getEnumSymbols.contains(e.toString) =>
+                    Left(
+                      AvroFailure.BadEnumSymbol(
+                        e.toString,
+                        e.getSchema.getEnumSymbols.asScala.toList,
+                        step,
+                      )
+                    )
+                  case _ =>
+                    walkArrLoop(path, parents, i + 1, parentsLen, cur)
 
   private val EmptyParents: Array[AnyRef] = new Array[AnyRef](0)
 
@@ -318,7 +294,7 @@ private[avro] object AvroWalk:
 
   /** Allocate a fresh `IndexedRecord` under `parent.getSchema`, replacing slots whose name appears
     * in `updates`. Used by [[AvroFocus.Fields]]'s multi-field overlay paths (counterpart to
-    * `JsonFieldsPrism`'s overlay helpers).
+    * `JsonFocus.Fields`'s overlay helpers).
     */
   def replaceRecordFields(
       parent: IndexedRecord,
@@ -433,22 +409,26 @@ private[avro] object AvroWalk:
         )
       else fields.get(declIdx).name
 
-  /** Union-branch name for a runtime value. Schema-driven where possible; falls back to the raw
-    * class name (the fallback is cosmetic — UnionBranch steps reach this only from a schemaful
-    * parent).
+  /** Union-branch name for a runtime value. Schema-driven where possible — the named leaves
+    * (records, enums, fixed) answer with their schema's FULL name, matching how union branches are
+    * declared; generic-decoded `bytes` arrive as `ByteBuffer`. Falls back to the raw class name
+    * (the fallback is cosmetic — UnionBranch steps reach this only from a schemaful parent).
     */
   private def unionBranchName(value: Any): String =
     value match
-      case rec: IndexedRecord   => rec.getSchema.getFullName
-      case _: CharSequence      => "string"
-      case _: java.lang.Integer => "int"
-      case _: java.lang.Long    => "long"
-      case _: java.lang.Float   => "float"
-      case _: java.lang.Double  => "double"
-      case _: java.lang.Boolean => "boolean"
-      case _: Array[Byte]       => "bytes"
-      case _: JList[?]          => "array"
-      case _: JMap[?, ?]        => "map"
-      case other                => other.getClass.getName
+      case rec: IndexedRecord      => rec.getSchema.getFullName
+      case e: GenericEnumSymbol[?] => e.getSchema.getFullName
+      case f: GenericFixed         => f.getSchema.getFullName
+      case _: CharSequence         => "string"
+      case _: java.lang.Integer    => "int"
+      case _: java.lang.Long       => "long"
+      case _: java.lang.Float      => "float"
+      case _: java.lang.Double     => "double"
+      case _: java.lang.Boolean    => "boolean"
+      case _: java.nio.ByteBuffer  => "bytes"
+      case _: Array[Byte]          => "bytes"
+      case _: JList[?]             => "array"
+      case _: JMap[?, ?]           => "map"
+      case other                   => other.getClass.getName
 
 end AvroWalk

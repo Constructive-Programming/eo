@@ -42,16 +42,31 @@ class AvroWalkSpec extends Specification:
     fields.add(new Schema.Field("amount", unionSchema, null, null))
     Schema.createRecord("MaybeLong", null, "eo.avro.test", false, fields)
 
+  private val colorSchema: Schema =
+    Schema.createEnum("Color", null, "eo.avro.test", Arrays.asList("RED", "GREEN", "BLUE"))
+
+  private val hashSchema: Schema = Schema.createFixed("Hash", null, "eo.avro.test", 4)
+
+  /** Schema for `record UnionLeaves { union<null, Color> color; union<null, Hash> hash; union<null,
+    * bytes> blob; }` — the named-leaf and bytes union alternatives.
+    */
+  private val unionLeavesSchema: Schema =
+    def opt(s: Schema) = Schema.createUnion(Arrays.asList(Schema.create(Schema.Type.NULL), s))
+    val fields = new ArrayList[Schema.Field]()
+    fields.add(new Schema.Field("color", opt(colorSchema), null, null))
+    fields.add(new Schema.Field("hash", opt(hashSchema), null, null))
+    fields.add(new Schema.Field("blob", opt(Schema.create(Schema.Type.BYTES)), null, null))
+    Schema.createRecord("UnionLeaves", null, "eo.avro.test", false, fields)
+
   // ---- Record / Array / Map / Union walks (one composite per shape) ---------
   //
-  // 2026-04-29 consolidation: 11 → 5 named blocks. Each block covers the strict-happy +
-  // strict-miss + (where applicable) lenient or mismatch branches for one shape.
+  // 2026-04-29 consolidation: 11 → 5 named blocks. Each block covers the happy +
+  // miss + (where applicable) mismatch branches for one shape.
 
   // covers: walk a 1-deep record field returns terminal value + parent stack of length 1,
-  //   walk a missing record field with Strict policy surfaces PathMissing,
-  //   walk a missing record field with Lenient policy returns null leaf + parent,
+  //   walk a missing record field surfaces PathMissing,
   //   walking a Field step into a non-record parent surfaces NotARecord
-  "Record walk: 1-deep field, Strict miss, Lenient miss, non-record parent" >> {
+  "Record walk: 1-deep field, miss, non-record parent" >> {
     val r = personRecord(Person("Alice", 30))
 
     val happy = AvroWalk.walkPath(r, Array(PathStep.Field("name"))) match
@@ -63,17 +78,11 @@ class AvroWalkSpec extends Specification:
     val strictMiss = AvroWalk.walkPath(r, Array(PathStep.Field("nope"))) ===
       Left(AvroFailure.PathMissing(PathStep.Field("nope")))
 
-    val lenientMiss =
-      AvroWalk.walkPath(r, Array(PathStep.Field("nope")), AvroWalk.OnMissingField.Lenient) match
-        case Right((cur, parents)) => (cur === null).and(parents.length === 1)
-        case other                 =>
-          org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-
     val notARecord =
       AvroWalk.walkPath(r, Array(PathStep.Field("name"), PathStep.Field("x"))) ===
         Left(AvroFailure.NotARecord(PathStep.Field("x")))
 
-    happy.and(strictMiss).and(lenientMiss).and(notARecord)
+    happy.and(strictMiss).and(notARecord)
   }
 
   // covers: walk into people[0].name + parent stack length 3,
@@ -164,6 +173,82 @@ class AvroWalkSpec extends Specification:
       AvroWalk.terminalOf(Array(PathStep.Field("a"), PathStep.Index(2))) === PathStep.Index(2)
 
     longOk.and(mismatchOk).and(terminalEmpty).and(terminalLast)
+  }
+
+  // covers: enum value resolves its full-name union branch,
+  //   fixed value resolves its full-name union branch,
+  //   ByteBuffer value resolves the "bytes" union branch,
+  //   enum value whose runtime symbol is outside the schema's declared set surfaces BadEnumSymbol
+  //     carrying the symbol + declared set,
+  //   enum value against a non-matching branch still surfaces UnionResolutionFailed
+  "Union walk: enum / fixed / bytes alternatives resolve; corrupt enum symbol surfaces BadEnumSymbol" >> {
+    val record = buildRecord(unionLeavesSchema)(
+      "color" -> new GenericData.EnumSymbol(colorSchema, "GREEN"),
+      "hash" -> new GenericData.Fixed(hashSchema, Array[Byte](1, 2, 3, 4)),
+      "blob" -> java.nio.ByteBuffer.wrap(Array[Byte](9, 8)),
+    )
+
+    val enumOk = AvroWalk.walkPath(
+      record,
+      Array(PathStep.Field("color"), PathStep.UnionBranch("eo.avro.test.Color")),
+    ) match
+      case Right((cur, _)) => cur.toString === "GREEN"
+      case other           =>
+        org.specs2.execute.Failure(s"expected Right(GREEN), got $other"): org.specs2.execute.Result
+
+    val fixedOk = AvroWalk.walkPath(
+      record,
+      Array(PathStep.Field("hash"), PathStep.UnionBranch("eo.avro.test.Hash")),
+    ) match
+      case Right((cur: GenericData.Fixed, _)) => cur.bytes.toSeq === Seq[Byte](1, 2, 3, 4)
+      case other                              =>
+        org.specs2.execute.Failure(s"expected Right(Fixed), got $other"): org.specs2.execute.Result
+
+    val bytesOk = AvroWalk.walkPath(
+      record,
+      Array(PathStep.Field("blob"), PathStep.UnionBranch("bytes")),
+    ) match
+      case Right((cur: java.nio.ByteBuffer, _)) => cur.array.toSeq === Seq[Byte](9, 8)
+      case other                                =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected Right(ByteBuffer), got $other"): org.specs2.execute.Result
+
+    // EnumSymbol doesn't validate at construction — a hand-built payload can carry a symbol the
+    // schema never declared. Resolution must refuse it with the dedicated failure, not pass it on.
+    val corrupt = buildRecord(unionLeavesSchema)(
+      "color" -> new GenericData.EnumSymbol(colorSchema, "MAGENTA"),
+      "hash" -> new GenericData.Fixed(hashSchema, Array[Byte](1, 2, 3, 4)),
+      "blob" -> java.nio.ByteBuffer.wrap(Array[Byte](9, 8)),
+    )
+    val badSymbolOk = AvroWalk.walkPath(
+      corrupt,
+      Array(PathStep.Field("color"), PathStep.UnionBranch("eo.avro.test.Color")),
+    ) match
+      case Left(AvroFailure.BadEnumSymbol(sym, valid, step)) =>
+        (sym === "MAGENTA")
+          .and(valid === List("RED", "GREEN", "BLUE"))
+          .and(step === PathStep.UnionBranch("eo.avro.test.Color"))
+      case other =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected BadEnumSymbol, got $other"): org.specs2.execute.Result
+
+    val mismatchOk = AvroWalk.walkPath(
+      record,
+      Array(PathStep.Field("color"), PathStep.UnionBranch("string")),
+    ) match
+      case Left(AvroFailure.UnionResolutionFailed(_, PathStep.UnionBranch("string"))) =>
+        org.specs2.execute.Success(): org.specs2.execute.Result
+      case other =>
+        org
+          .specs2
+          .execute
+          .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
+
+    enumOk.and(fixedOk).and(bytesOk).and(badSymbolOk).and(mismatchOk)
   }
 
   // covers: identity rebuild yields a structurally-equal record (immutable boundary),
