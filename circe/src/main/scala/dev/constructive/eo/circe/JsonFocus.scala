@@ -170,8 +170,7 @@ private[circe] object JsonFocus:
       * leave the parent's entry untouched.
       */
     private def writeFields(parent: JsonObject, a: A): JsonObject =
-      val encoded: JsonObject = encoder(a).asObject.getOrElse(JsonObject.empty)
-      fieldNames.foldLeft(parent)((out, name) => encoded(name).fold(out)(v => out.add(name, v)))
+      overlayFields(parent, encoder(a).asObject.getOrElse(JsonObject.empty))
 
     /** Overlay a foreign sub-object (transform's result) onto `parent`. */
     private def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =

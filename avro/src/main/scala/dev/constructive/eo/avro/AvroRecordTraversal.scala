@@ -94,16 +94,16 @@ final class AvroRecordTraversal[A] private[avro] (
   // ---- *Unsafe surface — delegates to focus.modifyImpl etc. --------
 
   override protected def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-    mapAtPrefix(record)(elem => focusModifyOnElem(elem, f))
+    mapAtPrefix(record)(onRec(_)(focus.modifyImpl(_, f)))
 
   override protected def transformImpl(
       record: IndexedRecord,
       f: IndexedRecord => IndexedRecord,
   ): IndexedRecord =
-    mapAtPrefix(record)(elem => focusTransformOnElem(elem, f))
+    mapAtPrefix(record)(onRec(_)(focus.transformImpl(_, f)))
 
   override protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-    mapAtPrefix(record)(elem => focusPlaceOnElem(elem, a))
+    mapAtPrefix(record)(onRec(_)(focus.placeImpl(_, a)))
 
   /** Walk the prefix, replace the focused array by mapping every element through `elemUpdate`. On
     * prefix miss the input is returned unchanged. Element values that aren't [[IndexedRecord]] are
@@ -125,19 +125,9 @@ final class AvroRecordTraversal[A] private[avro] (
   // For the rare leaf-shaped element types (e.g. an array<string>) the silent surface preserves
   // the element unchanged — the codec round-trip happens in the Ior path below.
 
-  private def focusModifyOnElem(elem: Any, f: A => A): Any =
+  private def onRec(elem: Any)(f: IndexedRecord => Any): Any =
     elem match
-      case rec: IndexedRecord => focus.modifyImpl(rec, f)
-      case _                  => elem
-
-  private def focusTransformOnElem(elem: Any, f: IndexedRecord => IndexedRecord): Any =
-    elem match
-      case rec: IndexedRecord => focus.transformImpl(rec, f)
-      case _                  => elem
-
-  private def focusPlaceOnElem(elem: Any, a: A): Any =
-    elem match
-      case rec: IndexedRecord => focus.placeImpl(rec, a)
+      case rec: IndexedRecord => f(rec)
       case _                  => elem
 
   // ---- Default Ior surface — delegates to focus.modifyIor etc. -----
@@ -146,41 +136,28 @@ final class AvroRecordTraversal[A] private[avro] (
       record: IndexedRecord,
       f: A => A,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
-    iorMapElements(record)(elem => focusModifyIor(elem, f))
+    iorMapElements(record)(onRecIor(_)(focus.modifyIor(_, f)))
 
   override protected def transformIor(
       record: IndexedRecord,
       f: IndexedRecord => IndexedRecord,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
-    iorMapElements(record)(elem => focusTransformIor(elem, f))
+    iorMapElements(record)(onRecIor(_)(focus.transformIor(_, f)))
 
   override protected def placeIor(
       record: IndexedRecord,
       a: A,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
-    iorMapElements(record)(elem => focusPlaceIor(elem, a))
+    iorMapElements(record)(onRecIor(_)(focus.placeIor(_, a)))
 
   /** Per-element Ior dispatch — coerces `elem` to an [[IndexedRecord]] before delegating to the
     * focus, surfacing `NotARecord` for non-record elements (a basket entry that's a primitive).
     */
-  private def focusModifyIor(elem: Any, f: A => A): Ior[Chain[AvroFailure], IndexedRecord] =
-    elem match
-      case rec: IndexedRecord => focus.modifyIor(rec, f)
-      case _                  =>
-        Ior.Left(Chain.one(AvroFailure.NotARecord(AvroWalk.terminalOf(prefix))))
-
-  private def focusTransformIor(
-      elem: Any,
-      f: IndexedRecord => IndexedRecord,
+  private def onRecIor(elem: Any)(
+      f: IndexedRecord => Ior[Chain[AvroFailure], IndexedRecord]
   ): Ior[Chain[AvroFailure], IndexedRecord] =
     elem match
-      case rec: IndexedRecord => focus.transformIor(rec, f)
-      case _                  =>
-        Ior.Left(Chain.one(AvroFailure.NotARecord(AvroWalk.terminalOf(prefix))))
-
-  private def focusPlaceIor(elem: Any, a: A): Ior[Chain[AvroFailure], IndexedRecord] =
-    elem match
-      case rec: IndexedRecord => focus.placeIor(rec, a)
+      case rec: IndexedRecord => f(rec)
       case _                  =>
         Ior.Left(Chain.one(AvroFailure.NotARecord(AvroWalk.terminalOf(prefix))))
 

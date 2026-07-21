@@ -8,13 +8,11 @@ import io.circe.{Json, JsonObject}
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
   * and the [[JsonFocus]] enum.
   *
-  * '''2026-04-26 rethink.''' This file used to host two walks (`walkPath` strict /
-  * `walkPathLenient` lenient) and two single-step helpers (`stepInto` / `stepIntoLenient`). The
-  * four routines had the same fold shape and only diverged on a single decision: whether a missing
-  * field at a Field step is a hard miss or a `Json.Null` fallback. The duplicates have been
-  * collapsed by factoring the per-step decision out as an `OnMissingField` policy — `walkPath` and
-  * `stepInto` are the only entry points; passing `OnMissingField.Lenient` recovers the lenient
-  * semantics.
+  * '''2026-04-26 rethink.''' This file used to host two walks (strict / lenient) and two
+  * single-step helpers with the same fold shape. They were first collapsed behind an
+  * `OnMissingField` policy; the lenient arm then lost its last caller (the raw-transform / place
+  * paths now route through [[JsonFocus]]) and was deleted — `walkPath` and `stepInto` are the only
+  * entry points, and a missing field is always a hard miss.
   */
 private[circe] object JsonWalk:
 
@@ -24,28 +22,13 @@ private[circe] object JsonWalk:
     */
   type State = (Json, Vector[AnyRef])
 
-  /** Per-step policy controlling how missing field-steps behave. */
-  enum OnMissingField:
-
-    /** Missing field at a Field step → `Left(JsonFailure.PathMissing(step))`. The strict default,
-      * used by every read / decoded-modify path.
-      */
-    case Strict
-
-    /** Missing field at a Field step → `Right((Json.Null, parents :+ obj))`. Used by the per-
-      * element raw-transform / place paths on a Traversal, where a missing-field element is treated
-      * as "synthesise a Null leaf and let the user-supplied f or value take over".
-      */
-    case Lenient
-
-  /** One step of a walk under the given `OnMissingField` policy. Index steps always fail strictly
-    * (out-of-range indices and non-array parents are uniform errors regardless of policy).
+  /** One step of a walk. A missing field, an out-of-range index, and a non-container parent are all
+    * hard misses.
     */
   def stepInto(
       step: PathStep,
       cur: Json,
       parents: Vector[AnyRef],
-      policy: OnMissingField,
   ): Either[JsonFailure, State] =
     step match
       case PathStep.Field(name) =>
@@ -54,10 +37,7 @@ private[circe] object JsonWalk:
           case Some(obj) =>
             obj(name) match
               case Some(c) => Right((c, parents :+ obj))
-              case None    =>
-                policy match
-                  case OnMissingField.Strict  => Left(JsonFailure.PathMissing(step))
-                  case OnMissingField.Lenient => Right((Json.Null, parents :+ obj))
+              case None    => Left(JsonFailure.PathMissing(step))
       case PathStep.Index(idx) =>
         cur.asArray match
           case None      => Left(JsonFailure.NotAnArray(step))
@@ -65,8 +45,7 @@ private[circe] object JsonWalk:
             if idx < 0 || idx >= arr.length then Left(JsonFailure.IndexOutOfRange(step, arr.length))
             else Right((arr(idx), parents :+ arr))
 
-  /** Walk an entire `path` from `json`, accumulating parents at each step. Strict by default — pass
-    * `OnMissingField.Lenient` to tolerate missing field-steps as `Json.Null` leaves.
+  /** Walk an entire `path` from `json`, accumulating parents at each step.
     *
     * Manual index loop rather than a `foldLeftM` over `path.toVector`: this runs once per array
     * element on a Traversal write, so the per-call `Array → Vector` copy and the `Either`-monad
@@ -77,7 +56,6 @@ private[circe] object JsonWalk:
   def walkPath(
       json: Json,
       path: Array[PathStep],
-      policy: OnMissingField = OnMissingField.Strict,
   ): Either[JsonFailure, State] =
     @tailrec def loop(
         cur: Json,
@@ -85,7 +63,7 @@ private[circe] object JsonWalk:
         i: Int,
     ): Either[JsonFailure, State] =
       if i < path.length then
-        stepInto(path(i), cur, parents, policy) match
+        stepInto(path(i), cur, parents) match
           case l @ Left(_)          => l.widenRight
           case Right((c, parents2)) => loop(c, parents2, i + 1)
       else Right((cur, parents))

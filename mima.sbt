@@ -1,17 +1,32 @@
-// MiMa filter file.
+// MiMa setup — binary-compatibility checking, wired transitively
+// through sbt-typelevel-ci-release.
 //
-// 0.1.0 has no previous version to compare against, so this file
-// is empty. Starting with 0.1.1, every binary-breaking change must
-// be accompanied by a ProblemFilter entry here explaining the
-// justification.
+// MiMa is currently DISABLED across the still-evolving 0.x line:
+// every minor so far has been a deliberate breaking release, and
+// cats-eo-avro has no published baseline anyway. Breaking-change
+// history, newest first:
 //
-// Format (per MiMa docs):
+//   0.12: core Traversal constructors + Optional.readOnly/selectReadOnly
+//         return types narrowed to the new concrete `Traversal` class /
+//         `PickFold` (binary-breaking descriptor changes); `type
+//         AffineFold` alias removed (source-breaking).
+//   0.11: the same narrowing move for JsoniterPrism / JsoniterTraversal.
+//   0.10: #77's ConfluentWire threadLocalStorage defaulted params are
+//         binary-breaking.
+//   0.6.0: kindlings 0.2.0 fully-qualifies derived Avro record names by
+//         enclosing path (namespace) — a wire-format break vs 0.5.x.
+//   Earlier: 0.2.0 JsonPrism → Affine `Optional` #31, 0.3.0 avro
+//   field-naming #35, 0.4.0 additive #37/#38, 0.5.0 Confluent surface #41.
+//
+// Re-enable once the API is stable: set this to the published baseline
+// line, and accompany every subsequent binary-breaking change with a
+// justified ProblemFilter, e.g.
 //
 //   ThisBuild / mimaBinaryIssueFilters ++= Seq(
 //     ProblemFilters.exclude[MissingClassProblem]("dev.constructive.eo.internal.Foo"),
 //   )
 //
 // Only exclude symbols that are genuinely internal (`private` or
-// `private[pkg]`) or that shipped briefly in a non-0.1.x release.
-// Exclusions on the public 0.1.x API are binary-compat breakage
-// and should be a 0.2.0 concern instead.
+// `private[pkg]`); exclusions on the public API are binary-compat
+// breakage and belong in a version bump instead.
+ThisBuild / tlMimaPreviousVersions := Set.empty

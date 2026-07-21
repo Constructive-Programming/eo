@@ -7,8 +7,7 @@ import io.circe.{Decoder, Encoder, Json}
 
 /** Multi-focus counterpart to [[JsonPrism]]: walks the JSON to some array, then applies the focus
   * update to every element. Two pieces: `prefix: Array[PathStep]` (root-to-array, walked once) and
-  * `focus: JsonFocus[A]` (per-element). The Leaf-vs-Fields split lives in `focus`. Compat alias
-  * [[JsonFieldsTraversal]] points back here.
+  * `focus: JsonFocus[A]` (per-element). The Leaf-vs-Fields split lives in `focus`.
   *
   * Two tiers (Ior-bearing default + `*Unsafe`), same shape as [[JsonPrism]].
   */

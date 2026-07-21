@@ -2,7 +2,7 @@ package dev.constructive.eo
 
 import org.specs2.mutable.Specification
 
-import optics.AffineFold
+import optics.{AffineFold, PickFold}
 import data.ModifyF
 import forgetful.ForgetfulFunctor
 import laws.AffineFoldLaws
@@ -28,7 +28,7 @@ class UnlawfulFixturesSpec extends Specification:
     // impure, unlawful optic (purity is an implicit law). Unmutated law: Miss branch
     // compares foldMap(identity) = 7 with Monoid[Int].empty = 0 → false. Weakened guard
     // skips the Miss branch entirely → vacuously true → this expectation fails.
-    val brokenAf: AffineFold[Int, Int] =
+    val brokenAf: PickFold[Int, Int] =
       var calls = 0
       AffineFold[Int, Int] { _ =>
         calls += 1

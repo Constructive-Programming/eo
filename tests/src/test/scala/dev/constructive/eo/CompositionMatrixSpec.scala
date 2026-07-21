@@ -109,7 +109,9 @@ class CompositionMatrixSpec extends Specification:
     }
     "iso ∘ affold → AffineFold" >> {
       typeChecks("o_iso.andThen(i_affold)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_iso.andThen(i_affold)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_iso.andThen(i_affold)"
+      ) must beTrue
     }
     "iso ∘ fold → Optic" >> {
       typeChecks("o_isoL.andThen(i_fold)") must beTrue // resolves with no expected type
@@ -170,7 +172,9 @@ class CompositionMatrixSpec extends Specification:
     }
     "lens ∘ affold → AffineFold" >> {
       typeChecks("o_lens.andThen(i_affold)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_lens.andThen(i_affold)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_lens.andThen(i_affold)"
+      ) must beTrue
     }
     "lens ∘ fold → Optic" >> {
       typeChecks("o_lensL.andThen(i_fold)") must beTrue // resolves with no expected type
@@ -225,11 +229,15 @@ class CompositionMatrixSpec extends Specification:
     }
     "prism ∘ getter → AffineFold" >> {
       typeChecks("o_prism.andThen(i_getter)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_prism.andThen(i_getter)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_prism.andThen(i_getter)"
+      ) must beTrue
     }
     "prism ∘ affold → AffineFold" >> {
       typeChecks("o_prism.andThen(i_affold)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_prism.andThen(i_affold)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_prism.andThen(i_affold)"
+      ) must beTrue
     }
     "prism ∘ fold → Optic" >> {
       typeChecks("o_prismL.andThen(i_fold)") must beTrue // resolves with no expected type
@@ -286,11 +294,15 @@ class CompositionMatrixSpec extends Specification:
     }
     "optional ∘ getter → AffineFold" >> {
       typeChecks("o_optional.andThen(i_getter)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_optional.andThen(i_getter)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_optional.andThen(i_getter)"
+      ) must beTrue
     }
     "optional ∘ affold → AffineFold" >> {
       typeChecks("o_optional.andThen(i_affold)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_optional.andThen(i_affold)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_optional.andThen(i_affold)"
+      ) must beTrue
     }
     "optional ∘ fold → Optic" >> {
       typeChecks("o_optionalL.andThen(i_fold)") must beTrue // resolves with no expected type
@@ -386,11 +398,15 @@ class CompositionMatrixSpec extends Specification:
     }
     "getter ∘ prism → AffineFold" >> {
       typeChecks("o_getter.andThen(i_prism)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_getter.andThen(i_prism)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_getter.andThen(i_prism)"
+      ) must beTrue
     }
     "getter ∘ optional → AffineFold" >> {
       typeChecks("o_getter.andThen(i_optional)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_getter.andThen(i_optional)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_getter.andThen(i_optional)"
+      ) must beTrue
     }
     "getter ∘ trav → Optic" >> {
       typeChecks("o_getterL.andThen(i_trav)") must beTrue // resolves with no expected type
@@ -404,7 +420,9 @@ class CompositionMatrixSpec extends Specification:
     }
     "getter ∘ affold → AffineFold" >> {
       typeChecks("o_getter.andThen(i_affold)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_getter.andThen(i_affold)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_getter.andThen(i_affold)"
+      ) must beTrue
     }
     "getter ∘ fold → Optic" >> {
       typeChecks("o_getterL.andThen(i_fold)") must beTrue // resolves with no expected type
@@ -426,19 +444,27 @@ class CompositionMatrixSpec extends Specification:
   "affold (outer) composition row" >> {
     "affold ∘ iso → AffineFold" >> {
       typeChecks("o_affold.andThen(i_iso)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_affold.andThen(i_iso)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_affold.andThen(i_iso)"
+      ) must beTrue
     }
     "affold ∘ lens → AffineFold" >> {
       typeChecks("o_affold.andThen(i_lens)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_affold.andThen(i_lens)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_affold.andThen(i_lens)"
+      ) must beTrue
     }
     "affold ∘ prism → AffineFold" >> {
       typeChecks("o_affold.andThen(i_prism)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_affold.andThen(i_prism)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_affold.andThen(i_prism)"
+      ) must beTrue
     }
     "affold ∘ optional → AffineFold" >> {
       typeChecks("o_affold.andThen(i_optional)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_affold.andThen(i_optional)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_affold.andThen(i_optional)"
+      ) must beTrue
     }
     "affold ∘ trav → Optic" >> {
       typeChecks("o_affoldL.andThen(i_trav)") must beTrue // resolves with no expected type
@@ -448,11 +474,15 @@ class CompositionMatrixSpec extends Specification:
     }
     "affold ∘ getter → AffineFold" >> {
       typeChecks("o_affold.andThen(i_getter)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_affold.andThen(i_getter)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_affold.andThen(i_getter)"
+      ) must beTrue
     }
     "affold ∘ affold → AffineFold" >> {
       typeChecks("o_affold.andThen(i_affold)") must beTrue // resolves with no expected type
-      typeChecks("val r: AffineFold[Box[Box[Int]], Int] = o_affold.andThen(i_affold)") must beTrue
+      typeChecks(
+        "val r: Optic[Box[Box[Int]], Unit, Int, Unit, Affine] = o_affold.andThen(i_affold)"
+      ) must beTrue
     }
     "affold ∘ fold → Optic" >> {
       typeChecks("o_affoldL.andThen(i_fold)") must beTrue // resolves with no expected type

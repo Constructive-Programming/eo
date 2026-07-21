@@ -194,15 +194,7 @@ object JsonPathScanner:
       until: Int,
       target: String,
   ): Boolean =
-    val len = until - from
-    if len != target.length then false
-    else
-      @tailrec def loop(i: Int): Boolean =
-        if i < len then
-          if bytes(from + i) != target.charAt(i).toByte then false
-          else loop(i + 1)
-        else true
-      loop(0)
+    until - from == target.length && matches(bytes, from, target)
 
   // ----- array element lookup ------------------------------------------
 

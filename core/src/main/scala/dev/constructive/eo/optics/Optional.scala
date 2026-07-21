@@ -6,9 +6,21 @@ import cats.Monoid
 import data.Affine
 
 /** Constructor for `Optional` — the conditionally-present single-focus optic, backed by `Affine`.
-  * An `Optional[S, A]` (short for `Optic[S, S, A, A, Affine]`) encodes a field that may or may not
-  * be there. Composes freely with `Lens` via cross-carrier `.andThen` (auto-morphs through
+  * "An `Optional[S, A]`" is prose shorthand for `Optic[S, S, A, A, Affine]` — there is NO
+  * two-parameter alias to ascribe; the concrete [[Optional]] class below always takes all four
+  * parameters (`Optional[S, S, A, A]` for the monomorphic case). Ascribing the concrete class is
+  * fine — that keeps code on the hot, fused paths; what would knock it off is ascribing the generic
+  * `Optic[…]`, which drops the fused compose overloads and capability mixins for generic dispatch.
+  * [[Optional.apply]] returns that concrete class, so leave `val`s un-ascribed (or name the
+  * four-parameter class) and let consuming signatures demand a capability (`CanGetOption[S, A]`,
+  * `CanModify[S, A]`, …) instead. An optional encodes a field that may or may not be there.
+  * Composes freely with `Lens` via cross-carrier `.andThen` (auto-morphs through
   * `Composer[Tuple2, Affine]`).
+  *
+  * '''Miss semantics (normative).''' A write through a missed optional is a silent identity
+  * pass-through: `modify(f)(s)` and `replace(b)(s)` return `s` unchanged (`f` is never invoked),
+  * and `foldMap` folds zero foci (returns `Monoid.empty`). No error, no signal. When hit-ness
+  * matters, probe with `.getOption` first.
   */
 object Optional:
 
@@ -33,26 +45,25 @@ object Optional:
     new Optional[S, T, A, B](getOrModify, (s, b) => reverseGet((s, b)))
 
   /** Read-only Optional — `T = Unit` rules out `.modify` / `.replace`. Delegates to
-    * [[AffineFold.apply]]; see that constructor for the specialised `X = (Unit, Unit)` shape and
-    * its per-hit allocation savings.
+    * [[AffineFold.apply]]; see [[PickFold]] for the specialised `X = (Unit, Unit)` shape and its
+    * per-hit allocation savings.
     *
     * @group Constructors
     *
     * @example
     *   {{{
     * case class Person(age: Int)
-    * val adultAge: Optic[Person, Unit, Int, Int, Affine] =
-    *   Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
+    * val adultAge = Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
     *   }}}
     */
-  def readOnly[S, A](matches: S => Option[A]): AffineFold[S, A] =
+  def readOnly[S, A](matches: S => Option[A]): PickFold[S, A] =
     AffineFold(matches)
 
   /** Filtering read-only Optional — mirror of [[Fold.select]] over a single focus.
     *
     * @group Constructors
     */
-  def selectReadOnly[A](p: A => Boolean): AffineFold[A, A] =
+  def selectReadOnly[A](p: A => Boolean): PickFold[A, A] =
     AffineFold.select(p)
 
 /** Concrete Optic subclass for `Optional.apply` — stores `getOrModify` / `reverseGet` directly so

@@ -71,12 +71,6 @@ sealed abstract private[avro] class AvroFocus[A]:
   def placeImpl(record: IndexedRecord, a: A): IndexedRecord
   def readImpl(record: IndexedRecord): Option[A]
 
-  /** Walk to the value ready for decode (Leaf: leaf value; Fields: assembled atomic-read record).
-    * Counterpart to `JsonFocus.navigateCursor`, but returning the raw value (Avro has no cursor
-    * abstraction). Decode step is the shared [[decodeFrom]] default below.
-    */
-  def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any]
-
   /** Navigate + decode the focus in ONE walk, and capture a writer that places a new focus back
     * WITHOUT walking again — the writer closes over the walk this call already did (parents for a
     * Leaf, resolved parent + walk for a Fields). Backs [[AvroRecordPrism]]'s `Affine` `to`/`from`
@@ -88,9 +82,6 @@ sealed abstract private[avro] class AvroFocus[A]:
     * live on the Ior member surface.
     */
   def navigateForWrite(record: IndexedRecord): Either[AvroFailure, (A, A => IndexedRecord)]
-
-  /** Decode an Avro-shaped runtime value to `A`. Shared one-line default. */
-  final def decodeFrom(any: Any): Either[Throwable, A] = codec.decodeEither(any)
 
 end AvroFocus
 
@@ -105,9 +96,6 @@ private[avro] object AvroFocus:
   ) extends AvroFocus[A]:
 
     protected def terminalStep: PathStep = AvroWalk.terminalOf(path)
-
-    def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any] =
-      AvroWalk.walkPathArr(record, path).map(_.cur)
 
     def navigateForWrite(
         record: IndexedRecord
@@ -261,18 +249,6 @@ private[avro] object AvroFocus:
       */
     private val ntSchema: Schema = codec.schema
 
-    def navigateRaw(record: IndexedRecord): Either[AvroFailure, Any] =
-      AvroWalk.walkPath(record, parentPath).flatMap {
-        case (cur, _) =>
-          cur match
-            case parent: IndexedRecord =>
-              // navigateRaw can only carry one failure; surface readFields' first PathMissing.
-              readFields(parent)
-                .left
-                .map(_.headOption.getOrElse(AvroFailure.PathMissing(terminalStep)))
-            case _ => Left(AvroFailure.NotARecord(terminalStep))
-      }
-
     def navigateForWrite(
         record: IndexedRecord
     ): Either[AvroFailure, (A, A => IndexedRecord)] =
@@ -335,17 +311,8 @@ private[avro] object AvroFocus:
       */
     private[avro] def writeFields(parent: IndexedRecord, a: A): IndexedRecord =
       codec.encode(a) match
-        case encoded: IndexedRecord =>
-          // Read the NT record by POSITION (selector order), key updates by the PARENT schema name.
-          val updates: Map[String, Any] =
-            val encFields = encoded.getSchema.getFields
-            fieldNames
-              .indices
-              .iterator
-              .map(i => fieldNames(i) -> encoded.get(encFields.get(i).pos))
-              .toMap
-          AvroWalk.replaceRecordFields(parent, updates)
-        case _ =>
+        case encoded: IndexedRecord => overlayFields(parent, encoded)
+        case _                      =>
           // Encoder produced a non-record (shouldn't happen for an NT under a record schema).
           parent
 

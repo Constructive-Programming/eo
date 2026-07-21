@@ -2,7 +2,7 @@ package dev.constructive.eo
 package bench
 
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.optics.AffineFold
+import dev.constructive.eo.optics.{AffineFold, PickFold}
 import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
 
@@ -31,7 +31,7 @@ import org.openjdk.jmh.annotations.*
 @Measurement(iterations = 5, time = 1)
 class AffineFoldBench extends JmhDefaults:
 
-  private val eoFlagAF: AffineFold[Nested0, String] =
+  private val eoFlagAF: PickFold[Nested0, String] =
     AffineFold[Nested0, String](_.flag)
 
   import NestedOptics.{

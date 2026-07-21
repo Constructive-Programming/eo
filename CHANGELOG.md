@@ -5,6 +5,73 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-07-21
+
+### Fixed
+
+- **avro union resolution for enum / fixed / bytes leaves**: `AvroWalk`'s union-branch
+  resolution only knew records and unwrapped primitives, so a `union` alternative holding a
+  `GenericEnumSymbol`, `GenericFixed`, or generic-decoded `bytes` (`ByteBuffer`) ALWAYS failed
+  with `UnionResolutionFailed` even when the branch matched. Named leaves now resolve by their
+  schema's full name; `ByteBuffer` resolves the `"bytes"` branch.
+- **`AvroFailure.BadEnumSymbol` is now reachable**: union-branch resolution validates the
+  runtime enum symbol against the schema's declared set (`EnumSymbol` doesn't validate at
+  construction), refusing corrupt hand-built payloads with the symbol + declared set instead of
+  passing the leaf downstream. Previously the case was never constructed anywhere.
+
+### Changed
+
+- **BREAKING (binary) vs 0.11.x**: core `Traversal` constructors and
+  `Optional.readOnly` / `selectReadOnly` return types narrowed from `Optic[...]` to the concrete
+  `Traversal` class / `PickFold` — the same narrowing move 0.11 made for the jsoniter cursors.
+  Source-breaking: the `type AffineFold` alias is removed.
+- **`Traversal.two` / `three` / `four` are macro-generated `inline def`s**: one
+  `TraversalArityMacro` generator replaces the three hand-written tabulations. Expansion happens
+  per call site (monomorphic `to`/`from`, literal selector/reverse lambdas beta-reduced in);
+  the methods can no longer be eta-expanded.
+- `AvroCodec.decodeResolvedRecord` / `decodeResolvedValue` gained a
+  `threadLocalStorage: Boolean = true` parameter (binary-breaking descriptor change);
+  `ConfluentWire`'s private line-for-line copies of the same decode are gone.
+
+### Removed
+
+Repo-wide over-engineering audit — dead or speculative surface with zero call sites, all cuts
+grep-verified and the one perf-relevant cut B/op-verified:
+
+- core: `Affine.apply` (legacy Either constructor), the `.affine` extension, and
+  `Affine.ofLeft` / `ofRight` — construct `Affine.Miss` / `Affine.Hit` directly.
+- circe: the `JsonFieldsPrism` / `JsonFieldsTraversal` compatibility aliases (they were
+  `JsonPrism` / `JsonTraversal` since the JsonFocus unification).
+- circe + avro: the dead `OnMissingField.Lenient` walk policy (no main-code caller); walks are
+  strict, full stop.
+- avro: unreachable `AvroFocus.navigateRaw` / `decodeFrom` seam.
+- generics: delegate-only macro entry hops (`LensMacro.deriveMulti`, `PrismMacro.derive`,
+  `PlateMacro.derive`) — the package-object inline defs splice the `*Impl` methods directly.
+- jsoniter: `fromSteps` factories privatized (no external callers).
+- schemes: the dedicated `unfoldFold` engine trio — `hylo` routes through the one `Coalg`
+  engine; measured B/op-identical on `SchemesBench.eoHylo` (the per-node tuple + closure is
+  escape-analysis-elided).
+
+### Added
+
+- **Cookbook — "Re-use an optic across representations"**: `Optic.outerProfunctor` /
+  `innerProfunctor` documented as the re-aiming seam (UTC ↔ wall-clock foci via inner `dimap`,
+  domain record ↔ wire tuple via outer `dimap`), with the fused-overload erasure caveat.
+- **`generics.MacroSelectors.fieldsSelectorNT` / `caseFieldType`**: the shared validation +
+  SELECTOR-order NamedTuple synthesis backbone behind the avro / circe `.fields` macros and all
+  three modules' Dynamic sugar (~130 duplicated lines collapsed into the module each already
+  depended on).
+- **`sbt unusedCode` wired into quality.yml**: xuwei-k's `WarnUnusedCode` scan (unused PUBLIC
+  classes/objects/methods) now runs as a non-gating report on every release tag.
+
+### Infrastructure
+
+- MiMa setup and the per-minor breaking-change history moved into `mima.sbt`.
+- The generated per-push `clean.yml` artifact-deletion job is disabled
+  (`githubWorkflowIncludeClean := false`) — report workflows set explicit `retention-days`.
+- Three dead test files deleted; QA report generator de-duplicated (identity module map,
+  hand-rolled tally → `collections.Counter`).
+
 ## [0.11.0] - 2026-07-20
 
 ### Added

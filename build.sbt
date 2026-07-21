@@ -6,22 +6,9 @@ val scala3Version = "3.8.4"
 // tags (`v0.1.0` → `0.1.0`, untagged commits → a snapshot). The
 // fields below are ThisBuild-scoped so every published sub-module
 // inherits them.
-//
-// TODO before 0.1.0 tag:
-//   1. Register the `dev.constructive` namespace on Sonatype
-//      Central Portal, add the DNS TXT record it asks for on the
-//      `constructive.dev` domain, wait for verification.
-//   2. The repository lives at
-//      `https://github.com/Constructive-Programming/eo` (derived
-//      automatically for `scmInfo`); change `homepage` below if the
-//      project moves to a different host.
-//   3. Generate a project GPG key, upload to keys.openpgp.org,
-//      configure GitHub Secrets (see docs/ci-secrets.md).
 
-// 0.10: #77's ConfluentWire threadLocalStorage defaulted params are binary-breaking — see mima.sbt.
-// 0.11: JsoniterPrism / JsoniterTraversal factory return types narrowed from
-// `Optic[...]` to the new concrete classes (binary-breaking descriptor change).
-ThisBuild / tlBaseVersion := "0.11"
+// Breaking-change history per 0.x minor lives in mima.sbt.
+ThisBuild / tlBaseVersion := "0.12"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -31,17 +18,7 @@ ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
 
-// MiMa stays disabled for 0.6.0 — a deliberate breaking release: the kindlings
-// 0.2.0 migration fully-qualifies derived Avro record names by enclosing path
-// (namespace), so records written/read through the derived codecs carry
-// different on-wire schema names than 0.5.x — a wire-format break. (0.6.0 also
-// raises the derivation macro timeout to 30s and pins jackson to CVE-patched
-// 2.21.5.) Earlier 0.x lines: 0.2.0 JsonPrism → Affine `Optional` #31, 0.3.0
-// avro field-naming #35, 0.4.0 additive #37/#38, 0.5.0 Confluent surface #41.
-// Kept off across the still-evolving 0.x line — and cats-eo-avro has no
-// published baseline anyway. Re-enable (set to the published 0.6.x line) once
-// the API is stable.
-ThisBuild / tlMimaPreviousVersions := Set.empty
+// MiMa setup and history live in mima.sbt.
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
 // scalac side, `javacOptions --release 17` on the javac side). JDK 25+
@@ -60,6 +37,9 @@ ThisBuild / githubWorkflowJavaVersions := Seq(
   JavaSpec.temurin("17"),
   JavaSpec.temurin("21"),
 )
+// No generated clean.yml: the per-push artifact-deletion job is redundant —
+// quality.yml / bench workflows set explicit retention-days on their uploads.
+ThisBuild / githubWorkflowIncludeClean := false
 // Run `sbt test` + `sbt doc` + scalafmt check on every PR. MiMa
 // is wired transitively through sbt-typelevel-ci-release. The
 // scalafix check runs via `--check` so any rule drift fails CI
@@ -71,7 +51,6 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "scalafmtCheckAll",
       "scalafmtSbtCheck",
       "benchmarks/scalafmtCheck",
-      "benchmarks/Test/scalafmtCheck",
     ),
     name = Some("Check formatting"),
   ),
@@ -115,7 +94,10 @@ ThisBuild / tlFatalWarnings := true
 // `unused-code-plugin` (xuwei-k) ships a Scalafix `SyntacticRule`
 // (`WarnUnusedCode`) that finds unused PUBLIC classes/objects/methods.
 // It complements stdlib `RemoveUnused`, which only catches
-// private/local definitions. We use the WARN variant — never the
+// private/local definitions. Run it with `sbt unusedCode` (the task
+// scans every module's Compile sources, then applies the rule in a
+// forked scalafix run); quality.yml runs it on every release tag as a
+// non-gating report. We use the WARN variant — never the
 // REMOVE / ERROR variant — because cats-eo's public optic
 // constructors are intentionally part of the published API even when
 // no internal call site invokes them yet (downstream users are the
@@ -489,10 +471,9 @@ lazy val tests: Project = project
     name := "cats-eo-tests",
     publish / skip := true,
     libraryDependencies += discipline % Test,
-    // circe-core powers the JsonOptic demo spec ported from the
-    // `unthreaded` branch -- the behaviour specs there traverse a
-    // circe Json AST to show how Optic.modify composes over a
-    // recursive parser output.
+    // circe-core powers the CRUD round-trip example specs
+    // (examples/CrudRoundtrip*), which drive derived optics through a
+    // circe Json AST.
     libraryDependencies += circe % Test,
     libraryDependencies += circeParser % Test,
     // Kubuszok's kindlings library provides Hearth-powered derivation
@@ -585,9 +566,8 @@ lazy val circeIntegration: Project = project
     libraryDependencies += cats,
     libraryDependencies += circe,
     // Compile-scope: the `Json | String` overloads on JsonPrism /
-    // JsonFieldsPrism / JsonTraversal / JsonFieldsTraversal parse String
-    // inputs via io.circe.parser.parse before proceeding with the Json
-    // path. Parse failures surface via JsonFailure.ParseFailed.
+    // JsonTraversal parse String inputs via io.circe.parser.parse
+    // before proceeding with the Json path. Parse failures surface via JsonFailure.ParseFailed.
     libraryDependencies += circeParser,
     libraryDependencies += kindlingsCirce % Test,
     libraryDependencies += discipline % Test,

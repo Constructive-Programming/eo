@@ -168,10 +168,7 @@ object AvroJson:
     * that every thread using the optic would share.
     */
   private def parse(schema: Schema): Array[Byte] => Any =
-    bytes =>
-      AvroBinaryCursor
-        .leaves
-        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+    parse(schema, schema)
 
   /** Writer → reader resolving parse (Avro schema resolution). */
   private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =

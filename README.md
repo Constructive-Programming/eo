@@ -80,13 +80,11 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   build-only many optic (`embed: F[B] => T`); assemble one whole from
   an `F`-layer of parts — the algebra of a recursion scheme.
 - [`JsonPrism`](https://eo.constructive.dev/integrations/circe.html#jsonprism) —
-  cursor-backed JSON optic with observable-by-default `Ior` failures.
-- [`JsonFieldsPrism`](https://eo.constructive.dev/integrations/circe.html#multi-field-focus----fields-_a-_b) —
-  multi-field flavour of `JsonPrism`.
+  cursor-backed JSON optic with observable-by-default `Ior` failures;
+  [multi-field foci](https://eo.constructive.dev/integrations/circe.html#multi-field-focus----fields-_a-_b)
+  via `.fields`.
 - [`JsonTraversal`](https://eo.constructive.dev/integrations/circe.html#jsontraversal-each) —
-  `.each` traversal across JSON arrays.
-- [`JsonFieldsTraversal`](https://eo.constructive.dev/integrations/circe.html#multi-field-focus----fields-_a-_b) —
-  multi-field flavour of `JsonTraversal`.
+  `.each` traversal across JSON arrays, with the same `.fields` multi-field flavour.
 - [`AvroPrism`](https://eo.constructive.dev/integrations/avro.html) —
   schema-aware Avro optic over `IndexedRecord`, with the same `Ior`
   failure surface as `JsonPrism` plus a `.union[Branch]` macro for

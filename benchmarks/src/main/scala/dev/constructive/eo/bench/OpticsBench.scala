@@ -5,11 +5,9 @@ import scala.compiletime.uninitialized
 
 import cats.instances.list.given
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.optics.{
   Iso as EoIso,
   Lens as EoLens,
-  Optic,
   Prism as EoPrism,
   Traversal as EoTraversal
 }
@@ -183,7 +181,10 @@ class TraversalBench extends JmhDefaults:
 
   var lines: List[LineItem] = uninitialized
 
-  val eoEach: Optic[List[LineItem], List[LineItem], LineItem, LineItem, MultiFocus[PSVec]] =
+  // Un-ascribed: constructors return the concrete `Traversal` class since 0.12, so this is the
+  // type a user's val holds by default — resolution lands on the fused inline `modify` member
+  // (−40 B/op vs the generic extension; measured, see Traversal's scaladoc).
+  val eoEach =
     EoTraversal.each[List, LineItem]
 
   val mEach: MTraversal[List[LineItem], LineItem] =

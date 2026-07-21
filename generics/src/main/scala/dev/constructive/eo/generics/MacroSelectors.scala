@@ -79,3 +79,117 @@ object MacroSelectors:
             + s" ${sorted.mkString(", ")}. Each field may appear at most once."
         )
     }
+
+  /** Validate a Dynamic-sugar literal field name against `A`'s case-class schema. Returns the field
+    * name, its declaration index in `A`, and its widened TypeRepr; aborts with a `who`-tagged error
+    * when the name isn't a compile-time literal or `A` has no such case field. Shared backbone of
+    * the cursor macros' `selectDynamic` sugar — the caller owns the module-specific codec summon +
+    * emit.
+    */
+  def caseFieldType[A: Type](using
+      q: Quotes
+  )(
+      who: String,
+      nameE: Expr[String],
+  ): (String, Int, q.reflect.TypeRepr) =
+    import quotes.reflect.*
+    val name: String = nameE.value.getOrElse {
+      report.errorAndAbort(s"$who: field name must be a compile-time string literal.")
+    }
+    val aTpe = TypeRepr.of[A]
+    val cases = aTpe.typeSymbol.caseFields
+    val fieldSym = cases.find(_.name == name).getOrElse {
+      val available =
+        if cases.isEmpty then s"${Type.show[A]} has no case fields (is it a case class?)"
+        else s"Available: ${cases.map(_.name).mkString(", ")}"
+      report.errorAndAbort(
+        s"$who: type ${Type.show[A]} has no case field named '$name'. $available"
+      )
+    }
+    (name, cases.indexWhere(_.name == name), aTpe.memberType(fieldSym).widen)
+
+  /** Validate a `.fields(_.a, _.b, …)` varargs selector list against `A`'s case-class schema and
+    * synthesise the SELECTOR-order NamedTuple type: arity ≥ 2, single-hop selectors only, known
+    * fields, no duplicates. Returns the selected names (selector order), their declaration indices
+    * in `A` (declaration order lookup — the field-schema-naming resolution of issue #35), and the
+    * `NamedTuple[names, values]` TypeRepr. Shared backbone of `AvroPrismMacro.fieldsCommon` /
+    * `JsonPrismMacro.fieldsCommon` — the caller owns the module-specific codec summon + emit.
+    */
+  def fieldsSelectorNT[A: Type](using
+      q: Quotes
+  )(
+      who: String,
+      selectorsE: Expr[Seq[A => Any]],
+  ): (List[String], List[Int], q.reflect.TypeRepr) =
+    import quotes.reflect.*
+
+    val selectors: List[Expr[A => Any]] =
+      selectorsE match
+        case Varargs(es) => es.toList
+        case other       =>
+          report.errorAndAbort(
+            s"$who[${Type.show[A]}]: could not destructure varargs selector"
+              + s" list. Got: ${other.asTerm.show}"
+          )
+
+    if selectors.sizeIs < 2 then
+      report.errorAndAbort(
+        s"$who[${Type.show[A]}]: requires at least two field selectors"
+          + " (for one selector, use .field(_.x) instead)."
+      )
+
+    val aTpe = TypeRepr.of[A]
+    val caseFields = aTpe.typeSymbol.caseFields
+
+    if caseFields.isEmpty then
+      report.errorAndAbort(
+        s"$who[${Type.show[A]}]: parent focus ${Type.show[A]} has no case fields;"
+          + " .fields requires a case class."
+      )
+
+    val knownFields: List[String] = caseFields.map(_.name)
+
+    val resolved: List[(Int, String)] =
+      selectors.zipWithIndex.map { (sel, i) =>
+        val name = extractSingleFieldName(sel.asTerm).getOrElse {
+          report.errorAndAbort(
+            s"$who[${Type.show[A]}]: selector at position $i must be a single-field"
+              + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
+              + s" Got: ${sel.asTerm.show}"
+          )
+        }
+        if !knownFields.contains(name) then
+          report.errorAndAbort(
+            s"$who[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
+              + s" Known fields: ${knownFields.mkString(", ")}."
+          )
+        (i, name)
+      }
+
+    reportDuplicateSelectors(s"$who[${Type.show[A]}]", resolved)
+
+    val selectedNames: List[String] = resolved.map(_._2)
+
+    // NamedTuple type in SELECTOR order (singleton-String names + field-types tuple).
+    val selectorSyms: List[Symbol] = selectedNames.map { name =>
+      caseFields.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"$who[${Type.show[A]}]: internal error — field '$name' not found on"
+            + s" ${Type.show[A]}."
+        )
+      }
+    }
+    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
+
+    val namesTpe: TypeRepr =
+      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
+        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
+      }
+    val valuesTpe: TypeRepr =
+      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+    val ntTpe: TypeRepr =
+      TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
+
+    (selectedNames, selectedNames.map(knownFields.indexOf), ntTpe)

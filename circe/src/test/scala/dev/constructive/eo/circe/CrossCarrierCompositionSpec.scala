@@ -5,7 +5,7 @@ import scala.language.implicitConversions
 import cats.data.Ior
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.generics.lens
-import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
+import dev.constructive.eo.optics.{AffineFold, Lens, Optic, PickFold}
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
 import io.circe.{Codec, Json}
@@ -37,7 +37,7 @@ class CrossCarrierCompositionSpec extends Specification:
     val box = Lens[Box, Json](_.payload, (b, j) => b.copy(payload = j))
     val personFields: Optic[Json, Json, NameAge, NameAge, Affine] =
       codecPrism[Person].fields(_.name, _.age)
-    val adultName: AffineFold[NameAge, String] =
+    val adultName: PickFold[NameAge, String] =
       AffineFold(nt => Option.when(nt.age >= 18)(nt.name))
     val boxToFields: Optic[Box, Box, NameAge, NameAge, dev.constructive.eo.data.Affine] =
       box.andThen(personFields)

@@ -2,9 +2,9 @@
 
 Writing a `Lens` or `Prism` by hand is mechanical, repetitive work — a getter, a
 setter that rebuilds the whole case class around one changed field, a pattern
-match per sum-type branch. `cats-eo-generics` writes all of it for you. Two
-macros, `lens` and `prism`, inspect your case classes and enums at **compile
-time** and emit the optic directly: no runtime reflection, no derivation
+match per sum-type branch. `cats-eo-generics` writes all of it for you. Three
+macros — `lens`, `prism`, and `plate` — inspect your case classes and enums at
+**compile time** and emit the optic directly: no runtime reflection, no derivation
 typeclass to summon, no per-field wiring to keep in sync as the type evolves.
 What they generate is the same `new S(...)` construction and pattern match you'd
 have typed yourself, so a derived optic runs as fast as a hand-written one (it
@@ -29,7 +29,11 @@ import dev.constructive.eo.docs.{Address, Customer, NameAgePair, Person, Shape, 
 ```
 
 > Macro-derived optics need their target case classes and enum
-> cases to live at a package-level location. The page hosts its
+> cases to live at a package-level location. Deriving for a type
+> nested inside a class fails at compile time with
+> "missing outer accessor in class …" — the emitted `new S(...)`
+> call carries no outer pointer. The fix is to move the ADT to the
+> top level. The page hosts its
 > samples in `dev.constructive.eo.docs.*` for that reason — the same `lens` /
 > `prism` calls work identically on your own top-level ADTs.
 
@@ -37,7 +41,13 @@ import dev.constructive.eo.docs.{Address, Customer, NameAgePair, Person, Shape, 
 
 Point at a field and you get a `Lens` to it. It's a two-step call — `lens[Customer]`
 pins the source type, the second call picks the field — which keeps the field
-selector fully type-checked against `Customer`:
+selector fully type-checked against `Customer`.
+
+Coming from Monocle, this is EO's `GenLens[S](_.field)` / `Focus[S](_.field)`,
+with three differences: nested paths (`_.a.b`) are not supported in a single
+call (chain `.andThen` instead), a selector set covering every field promotes
+the result to a `BijectionIso` (the `GenIso` role — see below), and enum cases
+work. Likewise, `prism[S, A]` below is `GenPrism` extended to union types.
 
 ```scala mdoc:silent
 val nameL = lens[Customer](_.name)
@@ -57,6 +67,12 @@ enum cases, which would normally break under Monocle's
 direct `new S(…)` call through
 [hearth](https://github.com/MateuszKubuszok/hearth)'s
 `CaseClass.construct`, which works uniformly for both.
+
+> One surprise at arity 1: on a **1-field case class** the single
+> selector already covers every field, so `lens[Wrapper](_.value)`
+> returns a `BijectionIso` whose focus is a 1-field NamedTuple —
+> `.get` yields `(value = 42)`, not the bare `42`. See the
+> full-cover Iso section below.
 
 ### Composition
 
@@ -187,6 +203,24 @@ canonical shape — decode a PUT body into a domain object, store it effectfully
 stamp the database-assigned id back on with a derived id-lens, and re-encode the
 result: the whole handler reads as `decode → store → stamp → encode`.
 
+## What `generics` deliberately does not derive
+
+Knowing the module's edges saves a search through the API for things that
+aren't there:
+
+- **No Focus-style path DSL.** A nested selector path like
+  `lens[Person](_.address.street)` is a compile error, not a deep lens. Chain
+  two derivations with `.andThen` instead — composition is the module's whole
+  design, and the composed optic fuses just as well.
+- **No Traversal derivation.** There is no `each`-style macro; collection
+  traversal lives in core (`Traversal.each` and friends) and composes with
+  derived lenses and prisms through the same `.andThen`.
+- **No per-ADT optic bundles.** Each call derives exactly one optic. Nothing
+  generates "all the lenses of `Person`" as a companion-object bundle — you
+  ask for the fields you use.
+- **No runtime reflection.** Everything happens at compile time; the emitted
+  code is the same construction and pattern match you'd write by hand.
+
 ## Compile-time diagnostics
 
 All macro failures surface at compile time with explicit messages
@@ -198,7 +232,9 @@ prefixed `lens[S]:` for grep-ability:
   `CaseClass.parse` diagnostic.
 - **Non-field selector** — `lens[Customer](_.name.toUpperCase)` →
   "selector at position 0 must be a single-field accessor like
-  `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
+  `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported —
+  chain two derivations instead:
+  `lens[S](_.a).andThen(lens[A](_.b))`."
 - **Unknown field** — `lens[Widget](_.bogus)` → "'bogus' is not a
   field of Widget. Known fields: name, size".
 - **Duplicate selectors** — `lens[OrderItem](_.sku, _.sku)` →
@@ -258,7 +294,12 @@ intP.to("hi": Int | String)
 
 ### Composition with Lens chains
 
-`prism ∘ lens` works naturally through `Composer` bridges:
+`prism ∘ lens` works naturally through `Composer` bridges — but note what the
+composite *is*: a lens drilled through a prism can miss (the shape might be a
+`Square`), so the result auto-upgrades to the `Affine` carrier. That's why the
+`import dev.constructive.eo.data.Affine` below is load-bearing — the composed
+optic's type names `Affine`, so it must be in scope wherever that type is
+written down:
 
 ```scala mdoc:silent
 import dev.constructive.eo.data.Affine
@@ -269,7 +310,12 @@ val circleCoordsX =
     .andThen(lens[Coords](_.x))
 ```
 
+An `Affine` optic has no total `.get` — read through `.getOption`, and writes
+(`.modify` / `.replace`) simply no-op on the miss branch:
+
 ```scala mdoc
+circleCoordsX.getOption(Shape2.Circle(Coords(3, 4), 1.0))
+circleCoordsX.getOption(Shape2.Square(Coords(3, 4), 2.0))
 circleCoordsX.modify(_ + 10)(Shape2.Circle(Coords(3, 4), 1.0))
 circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
 ```

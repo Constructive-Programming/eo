@@ -8,30 +8,34 @@ import cats.Monoid
 import compose.*
 import data.Affine
 
-/** Read-only 0-or-1-focus optic — `Optic[S, Unit, A, Unit, Affine]`. Both `T` and the write-focus
-  * `B` are `Unit` (honestly one-way, like `Getter` / `Fold`): there is no value to put back, so
-  * `.modify` / `.replace` don't apply. The surface is `.getOption` and `.foldMap`. Composes with
-  * Lens / Prism via the same `Morph` bridges full Optional uses (they key off the carrier, not the
-  * `T` slot).
-  *
-  * Specialised existential `X = (Unit, Unit)`: `Affine.Hit` stores `snd: Unit + b: A` — one
-  * reference slot less than the `(S, A)` payload of a full Optional, since `from` throws its input
-  * away anyway.
-  */
-type AffineFold[S, A] = Optic[S, Unit, A, Unit, Affine]
-
 /** Every `PickFold` miss is `Miss(())` with a phantom `B` — one shared instance serves all
   * (re-typed per use via `widenB`, zero allocation on the miss path).
   */
 private val pickFoldMiss: Affine.Miss[(Unit, Unit), Nothing] = new Affine.Miss(())
 
-/** Concrete Optic subclass for [[AffineFold]] — a `final class` storing `pick` directly, NOT a
-  * shared anonymous wrapper: a single anon class would host one `pick.apply` bytecode site for
-  * every AffineFold instance, the megamorphic-dispatch trap PrintInlining exposed on the
-  * abstract-class [[Getter]] (the JIT profiles that one site over all instances' lambdas and gives
-  * up inlining). Same storage shape as [[PickMendPrism]] (`pick`) and [[ForgetFold]] (`read`).
-  * Returned by [[AffineFold.apply]] / [[AffineFold.select]] so hand-written affine folds pick up
-  * the fused members automatically.
+/** Concrete Optic subclass for the `AffineFold` family — the read-only 0-or-1-focus optic,
+  * `Optic[S, Unit, A, Unit, Affine]`. Both `T` and the write-focus `B` are `Unit` (honestly
+  * one-way, like `Getter` / `Fold`): there is no value to put back, so `.modify` / `.replace` don't
+  * apply. The surface is `.getOption` and `.foldMap`. Composes with Lens / Prism via the same
+  * `Morph` bridges full Optional uses (they key off the carrier, not the `T` slot).
+  *
+  * "An `AffineFold[S, A]`" is prose shorthand — there is deliberately NO type alias (one existed
+  * and was removed): an alias could only name the generic `Optic[S, Unit, A, Unit, Affine]` —
+  * composed read-collapse results are generic, not `PickFold` — and ascribing that knocks a
+  * CONSTRUCTED fold off the hot, fused paths below (`getOption` / `andThen` here on the concrete
+  * class). Ascribe `PickFold[S, A]` when you hold a constructed one; spell the full `Optic[…]` only
+  * for composed results — or, per the doctrine, leave `val`s un-ascribed and demand
+  * `CanGetOption[S, A]` / `CanFold[S, A]` in consuming signatures.
+  *
+  * A `final class` storing `pick` directly, NOT a shared anonymous wrapper: a single anon class
+  * would host one `pick.apply` bytecode site for every AffineFold instance, the
+  * megamorphic-dispatch trap PrintInlining exposed on the abstract-class [[Getter]] (the JIT
+  * profiles that one site over all instances' lambdas and gives up inlining). Same storage shape as
+  * [[PickMendPrism]] (`pick`) and [[ForgetFold]] (`read`). Specialised existential
+  * `X = (Unit, Unit)`: `Affine.Hit` stores `snd: Unit + b: A` — one reference slot less than the
+  * `(S, A)` payload of a full Optional, since `from` throws its input away anyway. Returned by
+  * [[AffineFold.apply]] / [[AffineFold.select]] so hand-written affine folds pick up the fused
+  * members automatically.
   */
 final class PickFold[S, A](val pick: S => Option[A])
     extends Optic[S, Unit, A, Unit, Affine],

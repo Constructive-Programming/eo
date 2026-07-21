@@ -19,6 +19,7 @@ import optics.{
   Modify,
   Optic,
   Optional,
+  PickFold,
   Prism,
   Traversal,
   Unfold
@@ -54,11 +55,11 @@ import laws.typeclass.discipline.AssociativeFunctorTests
 private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] =
   Arbitrary(
     Gen.oneOf(
-      Arbitrary.arbitrary[Int].map(Affine.ofLeft[(Int, String), Boolean]),
+      Arbitrary.arbitrary[Int].map(new Affine.Miss[(Int, String), Boolean](_)),
       for
         s <- Arbitrary.arbitrary[String]
         b <- Arbitrary.arbitrary[Boolean]
-      yield Affine.ofRight[(Int, String), Boolean]((s, b)),
+      yield new Affine.Hit[(Int, String), Boolean](s, b),
     )
   )
 
@@ -279,7 +280,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
   // ----- AffineFold: partial projection + filtering select -------
 
-  val adultAgeAF: AffineFold[(Int, String), Int] =
+  val adultAgeAF: PickFold[(Int, String), Int] =
     AffineFold { case (age, _) => Option.when(age >= 18)(age) }
 
   checkAll(
@@ -290,7 +291,7 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .affineFold,
   )
 
-  val evenSelectAF: AffineFold[Int, Int] = AffineFold.select[Int](_ % 2 == 0)
+  val evenSelectAF: PickFold[Int, Int] = AffineFold.select[Int](_ % 2 == 0)
 
   checkAll(
     "AffineFold.select[Int](even)",

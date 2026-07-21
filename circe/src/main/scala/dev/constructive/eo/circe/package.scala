@@ -16,6 +16,20 @@ import io.circe.{Decoder, Encoder, Json, JsonObject}
   *   // → Ior.Right of the same Json, with .address.street upper-cased —
   *   //   no Person ever materialised.
   * }}}
+  *
+  * From a root prism the whole surface lights up: `.field` (and its Dynamic sugar) drills deeper,
+  * `.at(i)` indexes into an array, `.each` widens to a [[JsonTraversal]] over every element,
+  * `.fields(_.a, _.b)` focuses a bundle of case fields as a Scala 3 NamedTuple. Independent of the
+  * path-walkers, [[platedJson]] makes `Json` a recursive self-traversal for whole-document
+  * rewrites.
+  *
+  * Every operation comes in two tiers: the default methods return `Ior[Chain[JsonFailure], _]` —
+  * `Ior.Both` is partial success, every skip documented in the chain — and the `*Unsafe` siblings
+  * are the silent pass-through hot path.
+  *
+  * Coming from circe-optics `JsonPath` or raw cursors: this is the compile-time-checked equivalent
+  * — `codecPrism[Person].address.street` ≈ `root.address.street.string` ≈ an `hcursor.downField`
+  * chain, with typed per-step codecs instead of stringly paths.
   */
 package object circe:
 

@@ -53,6 +53,16 @@ jobs:
           java-version: 21
           cache: sbt
 
+      - name: Unused public code (WarnUnusedCode)
+        # xuwei-k's unused-code-plugin: scans every module's Compile sources and
+        # warns on unused PUBLIC classes/objects/methods (stdlib RemoveUnused
+        # only sees private/local ones). A report, never a gate — the warnings
+        # land in the log; config lives on ThisBuild/unusedCodeConfig in
+        # build.sbt. Run locally with `sbt unusedCode`.
+        run: |
+          sbt -batch unusedCode \
+            || echo "::warning title=unusedCode::unused-code analysis failed (see log)"
+
       - name: Coverage (scoverage aggregate)
         run: sbt -batch coverageAll
 

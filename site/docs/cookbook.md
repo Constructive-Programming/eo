@@ -25,6 +25,26 @@ examples, not a tutorial — for the optic families themselves see the
 against the current library version, and every recipe cites its
 source.
 
+If you arrive with a task rather than an optic in mind, start here:
+
+| I want to…                                                  | Recipe |
+|-------------------------------------------------------------|--------|
+| edit one branch of a sum type, misses passing through       | [Visit contingent fields](#visit-contingent-fields) |
+| apply one edit at every node of a recursive tree            | [Visit across whole trees](#visit-across-whole-trees) |
+| update only the matching elements of a collection           | [Visit through arbitrary structure](#visit-through-arbitrary-structure) |
+| fold several fields into one number                         | [Isolate what you need](#isolate-what-you-need) |
+| rewrite every slot of a fixed shape, or summarise a batch   | [Compute aggregations](#compute-aggregations) |
+| change a field deep in JSON without decoding the payload    | [Edit JSON without decoding](#edit-json-without-decoding) |
+| depend on a relationship instead of a data type             | [Require the optic, not the type](#require-the-optic-not-the-type) |
+| ask for the weakest capability a function needs             | [Depend only on what's needed](#depend-only-on-what-s-needed) |
+| edit Avro bytes on a hot path, no decode                    | [Serdes free pipes](#serdes-free-pipes) |
+| move one field between wire formats (Avro ↔ JSON)           | [Inspectable cross-format bridges](#inspectable-cross-format-bridges) |
+| law-test the optics my module publishes                     | [Re-usable laws for testing](#re-usable-laws-for-testing) |
+| make an in-place update fallible                            | [Validate-in-place with `modifyF`](#validate-in-place-with-modifyf) |
+| swap abort / accumulate / audit without touching the optic  | [Structure orthogonal to effects](#structure-orthogonal-to-effects) |
+| batch N+1 lookups through one traversal                     | [Batch-load nested IDs](#batch-load-nested-ids) |
+| stamp an effect's result back into the entity               | [Persist-and-stamp decode free](#persist-and-stamp-decode-free) |
+
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic, Prism, Traversal}
 import dev.constructive.eo.optics.Optic.*
@@ -500,6 +520,66 @@ publishing one optic value instead of exposing its shape.
 **Source:** Hansen — *We Need More Optics*, The Startup,
 <https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>
 ("Modular Application Design").
+
+### Re-use an optic across representations
+
+**Why:** two subsystems rarely agree on representation — one thinks
+in UTC `Instant`s, another in wall-clock `LocalDateTime`s; one holds
+the domain record, another the wire tuple it serialises to. An optic
+is a value relating two types, and `Optic` carries two lawful
+`cats.arrow.Profunctor` instances that let you *re-aim* a published
+optic instead of re-deriving it: `Optic.innerProfunctor` maps the
+focus pair (what the optic yields, and what it accepts back), and
+`Optic.outerProfunctor` maps the source pair (what it reads from,
+and what it rebuilds).
+
+Re-aim the focus — `meetingTimes` above yields `Instant`s, but the
+calendar subsystem edits wall-clock times:
+
+```scala mdoc:silent
+import java.time.{LocalDateTime, ZoneOffset}
+
+val meetingWallClock =
+  Optic
+    .innerProfunctor[Meeting, Meeting, MultiFocus[PSVec]]
+    .dimap(meetingTimes)((wall: LocalDateTime) => wall.toInstant(ZoneOffset.UTC))(
+      LocalDateTime.ofInstant(_, ZoneOffset.UTC)
+    )
+```
+
+```scala mdoc
+meetingWallClock.modify(_.plusHours(2))(
+  Meeting("standup", Instant.EPOCH, Instant.EPOCH.plusSeconds(900))
+)
+```
+
+Re-aim the source — the scheduling gateway never sees `Meeting`, only
+the `(startEpochSecond, endEpochSecond)` pair it puts on the wire.
+The same optic serves it too:
+
+```scala mdoc:silent
+val wireTimes =
+  Optic
+    .outerProfunctor[Instant, Instant, MultiFocus[PSVec]]
+    .dimap(meetingTimes)((p: (Long, Long)) =>
+      Meeting("wire", Instant.ofEpochSecond(p._1), Instant.ofEpochSecond(p._2))
+    )(m => (m.start.getEpochSecond, m.end.getEpochSecond))
+```
+
+```scala mdoc
+wireTimes.modify(_.plusSeconds(3600))((0L, 900L))
+```
+
+The same moves cover any representation split: UTF-8 vs UTF-16 text
+(dimap through the re-encoding pair), big- vs little-endian words
+(dimap through `java.lang.Long.reverseBytes`), or a legacy envelope
+around the record you actually care about.
+
+One caveat: `dimap` returns an anonymous `Optic`, so the generic
+capability surface (`.modify`, `.foldMap`, …) applies but
+concrete-class fused overloads are erased. When the concrete optic
+ships its own input-side mapping — `Prism.tearFrom` / `mendFrom` —
+prefer that form on hot paths.
 
 ### Depend only on what's needed
 

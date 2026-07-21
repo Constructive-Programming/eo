@@ -29,15 +29,8 @@ import dev.constructive.eo.optics.Plated
   */
 object PlateMacro:
 
-  /** Inline entry behind the top-level `plate[S]` — see the object doc for the exact-self-type
-    * child rule and accepted shapes.
-    *
-    * @group Constructors
-    */
-  inline def derive[S]: Plated[S] = ${ deriveImpl[S] }
-
-  /** Quoted-macro implementation behind [[derive]] — instantiates the Hearth-backed derivation
-    * against the call-site `Quotes`.
+  /** Quoted-macro implementation behind the top-level `plate[S]` (spliced directly by the package
+    * object) — see the object doc for the exact-self-type child rule and accepted shapes.
     */
   def deriveImpl[S: Type](using q: Quotes): Expr[Plated[S]] =
     new HearthPlateMacro(q).derivePlate[S]
@@ -107,7 +100,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       '{ (s: S) => ${ selfFieldVec[S, S]('{ s }, sTpe) } }
 
     val rebuildExpr: Expr[(S, PSVec[S]) => S] =
-      '{ (s: S, vec: PSVec[S]) => ${ reconstructProduct[S](cc, '{ s }, '{ vec }, sTpe) } }
+      '{ (s: S, vec: PSVec[S]) => ${ reconstructFields[S, S](cc, '{ s }, '{ vec }, sTpe) } }
 
     '{ Plated.fromChildrenVec[S]($childrenExpr, $rebuildExpr) }
 
@@ -150,15 +143,6 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       case Right(cc) =>
         val built: Expr[V] = reconstructFields[S, V](cc, src, vec, sTpe)
         '{ ${ built }.asInstanceOf[S] }
-
-  /** Product `S` reconstruction (single-case path) — already at type `S`, no upcast needed. */
-  private def reconstructProduct[S: Type](
-      cc: CaseClass[S],
-      src: Expr[S],
-      vec: Expr[PSVec[S]],
-      sTpe: TypeRepr,
-  )(using Quotes): Expr[S] =
-    reconstructFields[S, S](cc, src, vec, sTpe)
 
   /** The constructor-threading core: route each declaration-order parameter to either the matching
     * new child (`vec(i)`, by self-field index) or the preserved field read off `src`.

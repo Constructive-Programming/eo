@@ -19,6 +19,16 @@ import optics.{Getter, Plated, Review, Unfold}
   * `someLens.andThen(cata(alg))`, and the materializing `ana(…).cross(cata(…))` (via the core
   * `Optic.cross` combinator) — the latter equal to `hylo` on the same computation (the hylo law).
   *
+  * Two usage modes. Run the optic directly (`cata(alg).get(tree)`, `ana(coalg).reverseGet(seed)`,
+  * `hylo(expand, alg).get(seed)`) — or hand it to capability-consuming code: the concrete optic
+  * types implement the capability traits, so a [[cata]] / [[hylo]] result satisfies `CanGet[S, A]`
+  * (and `CanFold[S, A]`) and an [[ana]] result satisfies `CanReverseGet[S, Seed]`, meaning a
+  * consuming signature like
+  * {{{
+  * def report[S](s: S)(using g: CanGet[S, Int]): String
+  * }}}
+  * accepts a catamorphism without ever naming `Getter`.
+  *
   * The *fold* schemes ([[cata]] / [[hylo]]) take an algebra `(N, PSVec[R]) => R` — a node plus its
   * already-folded children (paramorphism-flavored). The *build* scheme ([[ana]]) takes a [[Coalg]],
   * the canonical anamorphism shape: a seed yields its child seeds together with how to assemble the
@@ -44,74 +54,10 @@ object Schemes:
     */
   final private val OnStackLimit = 512
 
-  /** Engine for the *fold* schemes ([[cata]] / [[hylo]]). `expand` yields a node's children;
-    * `combine` folds a node plus its already-folded children — re-supplied the node, so it needs no
-    * per-node closure. Stack-safe for any *terminating* `expand` (past the on-stack limit the
-    * recursion lives on the heap, so a non-terminating `expand` exhausts the heap —
-    * `OutOfMemoryError` — rather than overflowing the stack).
-    */
-  private def unfoldFold[N, R](expand: N => PSVec[N], combine: (N, PSVec[R]) => R): N => R =
-    n0 => unfoldFoldRec(expand, combine, n0, 0)
-
-  /** On-stack fast path for [[unfoldFold]]: direct post-order recursion up to [[OnStackLimit]],
-    * beyond which the subtree is handed to [[unfoldFoldHeap]]. The inner `@tailrec loop` fills the
-    * child-result slots left to right.
-    */
-  private def unfoldFoldRec[N, R](
-      expand: N => PSVec[N],
-      combine: (N, PSVec[R]) => R,
-      n: N,
-      depth: Int,
-  ): R =
-    if depth >= OnStackLimit then unfoldFoldHeap(expand, combine, n)
-    else
-      val kids = expand(n)
-      val k = kids.length
-      if k == 0 then combine(n, PSVec.empty[R])
-      else
-        val out = new Array[AnyRef](k)
-        @tailrec def loop(i: Int): Unit =
-          if i < k then
-            out(i) = unfoldFoldRec(expand, combine, kids(i), depth + 1).asInstanceOf[AnyRef]
-            loop(i + 1)
-        loop(0)
-        combine(n, PSVec.unsafeWrap[R](out))
-
-  /** Heap trampoline for [[unfoldFold]]: an explicit `ArrayDeque` post-order walk that keeps the
-    * recursion off the JVM stack. The `enter` push-closure and the `@tailrec loop` driver share the
-    * one `stack` + `ret` cell — `loop`'s self-call stays in tail position for stack-safety.
-    */
-  private def unfoldFoldHeap[N, R](
-      expand: N => PSVec[N],
-      combine: (N, PSVec[R]) => R,
-      root: N,
-  ): R =
-    final class Frame(val node: N, val kids: PSVec[N], val out: Array[AnyRef], var i: Int)
-    val stack = new ArrayDeque[Frame]()
-    var ret: AnyRef = null.asInstanceOf[AnyRef]
-    def enter(n: N): Unit =
-      val kids = expand(n)
-      if kids.isEmpty then ret = combine(n, PSVec.empty[R]).asInstanceOf[AnyRef]
-      else stack.push(new Frame(n, kids, new Array[AnyRef](kids.length), 0))
-    enter(root)
-    @tailrec def loop(): R =
-      if stack.isEmpty then ret.asInstanceOf[R]
-      else
-        val fr = stack.peek()
-        if fr.i > 0 then fr.out(fr.i - 1) = ret
-        if fr.i < fr.kids.length then
-          val child = fr.kids(fr.i)
-          fr.i += 1
-          enter(child)
-        else
-          ret = combine(fr.node, PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
-          val _ = stack.pop()
-        loop()
-    loop()
-
-  /** Engine for the *build* scheme ([[ana]]). One [[Coalg]] call per node yields its children and
-    * its combiner closure (stored in the frame on the heap path). Same on-stack/heap hybrid and
-    * stack-safety as [[unfoldFold]].
+  /** Engine for the *build* scheme ([[ana]]) and — via a per-node `(kids, combine)` bundling of
+    * `expand` + `alg` — for the fused [[hylo]]. One [[Coalg]] call per node yields its children and
+    * its combiner closure (stored in the frame on the heap path). On-stack fast path below
+    * [[OnStackLimit]], heap `ArrayDeque` machine past it; stack-safe for any terminating coalgebra.
     */
   private def unfoldCoalg[N, R](coalg: Coalg[N, R]): N => R =
     n0 => unfoldCoalgRec(coalg, n0, 0)
@@ -135,9 +81,9 @@ object Schemes:
         loop(0)
         combine(PSVec.unsafeWrap[R](out))
 
-  /** Heap trampoline for [[unfoldCoalg]]: the [[unfoldFoldHeap]] walk with each node's combiner
-    * closure stored in its frame. `enter` and the `@tailrec loop` driver share the one `stack` +
-    * `ret` cell; `loop`'s self-call stays in tail position for stack-safety.
+  /** Heap trampoline for [[unfoldCoalg]]: an explicit `ArrayDeque` post-order walk with each node's
+    * combiner closure stored in its frame. `enter` and the `@tailrec loop` driver share the one
+    * `stack` + `ret` cell; `loop`'s self-call stays in tail position for stack-safety.
     */
   private def unfoldCoalgHeap[N, R](coalg: Coalg[N, R], root: N): R =
     final class Frame(
@@ -172,7 +118,7 @@ object Schemes:
     * the node's children (via `Plated.childrenArray`); the engine folds each child and **overwrites
     * its slot with the result**, reusing that one array as the result accumulator instead of
     * allocating a separate out-array per node — then wraps it once for `alg`. Same on-stack/heap
-    * hybrid and stack-safety as [[unfoldFold]]. Safe because `childrenArray`'s contract guarantees
+    * hybrid and stack-safety as [[unfoldCoalg]]. Safe because `childrenArray`'s contract guarantees
     * the array is freshly allocated and not aliased.
     */
   private def foldInPlace[S, A](childrenOf: S => Array[AnyRef], alg: (S, PSVec[A]) => A): S => A =
@@ -202,10 +148,10 @@ object Schemes:
         loop(0)
         alg(s, PSVec.unsafeWrap[A](arr))
 
-  /** Heap trampoline for [[foldInPlace]]: the [[unfoldFoldHeap]] walk specialised to overwrite each
-    * child's slot in the owned array with its fold result (no separate out-array). `enter` and the
-    * `@tailrec loop` driver share the one `stack` + `ret` cell; `loop`'s self-call stays in tail
-    * position for stack-safety.
+  /** Heap trampoline for [[foldInPlace]]: the [[unfoldCoalgHeap]] walk specialised to overwrite
+    * each child's slot in the owned array with its fold result (no separate out-array). `enter` and
+    * the `@tailrec loop` driver share the one `stack` + `ret` cell; `loop`'s self-call stays in
+    * tail position for stack-safety.
     */
   private def foldInPlaceHeap[S, A](
       childrenOf: S => Array[AnyRef],
@@ -236,9 +182,14 @@ object Schemes:
     loop()
 
   /** Catamorphism as a composable `Getter`, driven by `Plated[S]`. The algebra sees the original
-    * node `S` (paramorphism-flavored) plus its already-folded children. Stack-safe; folds child
-    * results in place (see the private `foldInPlace` engine) so it allocates one array per node,
-    * not two.
+    * node `S` (paramorphism-flavored) plus its already-folded children.
+    *
+    * Stack-safety contract: below the 512-frame on-stack limit the fold recurses directly on the
+    * JVM stack (no heap frames); past it, each deep subtree is handed to a heap `ArrayDeque`
+    * machine — so any *finite* tree folds without `StackOverflowError`, at any depth, and a
+    * `Plated` whose children never bottom out fails by exhausting the heap (`OutOfMemoryError`),
+    * not the stack. Folds child results in place (see the private `foldInPlace` engine) so it
+    * allocates one array per node, not two.
     */
   def cata[S, A](alg: (S, PSVec[A]) => A)(using P: Plated[S]): Getter[S, A] =
     Getter[S, A](foldInPlace[S, A](P.childrenArray, alg))
@@ -249,15 +200,21 @@ object Schemes:
     *
     * Note the honesty limit of the untyped path: a `PSVec` layer is node-blind, so a pure
     * `PSVec[A] => A` can express only constructor-independent folds (`size`, child counts, …) —
-    * `eval`-style algebras need the para-flavored `(S, PSVec[A]) => A` overload above. The typed
-    * pattern-functor path is where a pure `F[A] => A` algebra is fully expressive, because `F`'s
-    * constructors carry what `PSVec` erases.
+    * `eval`-style algebras need the para-flavored `(S, PSVec[A]) => A` overload above. A typed
+    * pattern-functor path — where a pure `F[A] => A` algebra would be fully expressive, because
+    * `F`'s constructors carry what `PSVec` erases — is ''planned'' but not part of this artifact
+    * yet: there is no `cataF` entry point to look for.
     */
   def cata[S, A](alg: Unfold[A, A, PSVec])(using Plated[S]): Getter[S, A] =
     cata[S, A]((_, kids) => alg.embed(kids))
 
   /** Anamorphism as a `Review` (reverse-construction optic): a stack-safe unfold `Seed => S` driven
     * by a [[Coalg]]. Materializing — the built `S` is `O(nodes)`.
+    *
+    * Stack-safety contract: below the 512-frame on-stack limit the unfold recurses directly on the
+    * JVM stack; past it, each deep subtree is handed to a heap `ArrayDeque` machine — so any
+    * ''terminating'' coalgebra builds without `StackOverflowError`, at any depth, and a
+    * non-terminating one fails by exhausting the heap (`OutOfMemoryError`), not the stack.
     */
   def ana[Seed, S](coalg: Coalg[Seed, S]): Review[S, Seed] =
     Review[S, Seed](unfoldCoalg(coalg))
@@ -266,9 +223,16 @@ object Schemes:
     * unfolds seeds and `alg` folds to `A` in one post-order pass. Returned as a `Getter[Seed, A]`
     * so it composes further. Equal to `ana(…).cross(cata(alg))` on the same computation (the hylo
     * law), but without materializing the structure.
+    *
+    * Stack-safety contract (same as [[cata]] / [[ana]]): on-stack recursion below the 512-frame
+    * limit, then a heap `ArrayDeque` machine per deep subtree — safe for any ''terminating''
+    * `expand` at any depth; a non-terminating `expand` fails by exhausting the heap
+    * (`OutOfMemoryError`), not by `StackOverflowError`.
     */
   def hylo[Seed, A](
       expand: Seed => PSVec[Seed],
       alg: (Seed, PSVec[A]) => A,
   ): Getter[Seed, A] =
-    Getter[Seed, A](unfoldFold(expand, alg))
+    // Routed through the one Coalg engine — B/op-checked vs the dedicated
+    // unfoldFold engine it replaced (SchemesBench.eoHylo, -prof gc).
+    Getter[Seed, A](unfoldCoalg[Seed, A](seed => (expand(seed), rs => alg(seed, rs))))

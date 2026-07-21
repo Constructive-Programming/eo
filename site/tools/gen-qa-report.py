@@ -25,6 +25,7 @@ re-running with the same inputs yields no diff.
     python3 site/tools/gen-qa-report.py            # rewrite the page in place
     python3 site/tools/gen-qa-report.py --check     # exit 1 if it would change
 """
+import collections
 import glob
 import json
 import os
@@ -125,15 +126,9 @@ def gen_matrix() -> str:
 # coverage
 # --------------------------------------------------------------------------
 def find_scoverage_xml() -> str:
-    pats = [
-        os.path.join(ROOT, "target", "scala-*", "scoverage-report", "scoverage.xml"),
-    ]
-    hits = []
-    for p in pats:
-        hits += glob.glob(p)
-    if not hits:
-        return ""
-    return max(hits, key=os.path.getmtime)
+    pat = os.path.join(ROOT, "target", "scala-*", "scoverage-report", "scoverage.xml")
+    hits = glob.glob(pat)
+    return max(hits, key=os.path.getmtime) if hits else ""
 
 
 def gen_coverage() -> str:
@@ -181,14 +176,6 @@ def latest_report(module_dir: str) -> str:
     return max(hits, key=os.path.getmtime) if hits else ""
 
 
-# circe/avro/jsoniter sbt ids map to these on-disk directories.
-MODULE_DIR = {
-    "core": "core", "laws": "laws", "generics": "generics", "schemes": "schemes",
-    "schemes-laws": "schemes-laws",
-    "circe": "circe", "avro": "avro", "jsoniter": "jsoniter",
-}
-
-
 def gen_mutation() -> str:
     rows = [
         "| Module | Killed | Timeout | Survived | No&nbsp;cov | Compile&nbsp;err | Score (total) | Score (covered) | Notes |",
@@ -196,17 +183,18 @@ def gen_mutation() -> str:
     ]
     any_report = False
     for proj, label, note in MUTATION_MODULES:
-        rep = latest_report(MODULE_DIR[proj])
+        rep = latest_report(proj)
         if not rep:
             why = note if note else "_no report — run `sbt mutationAll`_"
             rows.append(f"| `{label}` | — | — | — | — | — | — | — | {why} |")
             continue
         any_report = True
         data = json.load(open(rep, encoding="utf-8"))
-        counts = {}
-        for f in data.get("files", {}).values():
-            for m in f.get("mutants", []):
-                counts[m["status"]] = counts.get(m["status"], 0) + 1
+        counts = collections.Counter(
+            m["status"]
+            for f in data.get("files", {}).values()
+            for m in f.get("mutants", [])
+        )
         killed = counts.get("Killed", 0)
         survived = counts.get("Survived", 0)
         nocov = counts.get("NoCoverage", 0)

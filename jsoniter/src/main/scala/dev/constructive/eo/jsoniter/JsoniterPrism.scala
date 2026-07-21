@@ -199,7 +199,7 @@ object JsoniterPrism:
     *
     * @group Optics
     */
-  def fromSteps[A](steps: List[PathStep])(using
+  private[jsoniter] def fromSteps[A](steps: List[PathStep])(using
       codec: JsonValueCodec[A]
   ): JsoniterPrism[A] =
     new JsoniterPrism[A](steps)

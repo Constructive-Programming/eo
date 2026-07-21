@@ -20,15 +20,8 @@ import dev.constructive.eo.optics.{Optic, Prism}
   */
 object PrismMacro:
 
-  /** Inline entry behind the top-level `prism[S, A]` — see the object doc for accepted shapes.
-    *
-    * @group Constructors
-    */
-  inline def derive[S, A <: S]: Optic[S, S, A, A, Either] =
-    ${ deriveImpl[S, A] }
-
-  /** Quoted-macro implementation behind [[derive]] — instantiates the Hearth-backed derivation
-    * against the call-site `Quotes`.
+  /** Quoted-macro implementation behind the top-level `prism[S, A]` (spliced directly by the
+    * package object) — see the object doc for accepted shapes.
     */
   def deriveImpl[S: Type, A <: S: Type](using
       q: Quotes
@@ -61,7 +54,9 @@ final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommo
           report.errorAndAbort(
             s"prism[${Type.prettyPrint[S]}, ${Type.prettyPrint[A]}]:"
               + s" ${Type.prettyPrint[A]} is not a direct child of"
-              + s" ${Type.prettyPrint[S]}. Known children: $knownChildren"
+              + s" ${Type.prettyPrint[S]}. Known children: $knownChildren."
+              + " To reach a nested variant, compose two prisms:"
+              + " `prism[S, Child].andThen(prism[Child, Grandchild])`."
           )
 
         val deconstruct: Expr[S => Either[S, A]] =

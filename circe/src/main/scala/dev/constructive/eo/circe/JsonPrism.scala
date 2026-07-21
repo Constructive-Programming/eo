@@ -14,6 +14,22 @@ import io.circe.{Decoder, Encoder, Json}
   *   type X = (Json, A => Json)  // Fst = source (miss); Snd = single-walk writer
   * }}}
   *
+  * '''Two usage modes''' — pick deliberately:
+  *
+  *   - '''Layer on an existing model''' (hot-path edits): you keep decoding your case class
+  *     elsewhere and use a prism for the one or two fields on the hot path.
+  *   - '''Replace the materialised model''' (optics-as-evidence): the `Json` — or the wire
+  *     `String`, parsed on the fly — IS the data structure. `json.as[Whole]` never runs — do NOT go
+  *     looking for a whole-document decode step; not needing one is the point. Hold the `Json` and
+  *     read/write individual fields through `codecPrism` with leaf codecs only. Consuming code then
+  *     follows the standard doctrine — consume via capability, construct via optic — leaving the
+  *     CARRIER generic:
+  *     {{{
+  *     def widenStreet[T](t: T)(using cm: CanModify[T, String]): T = cm.replace("Broadway")(t)
+  *     }}}
+  *     and a `JsonPrism` given at the use site is the evidence that instantiates `T = Json`. See
+  *     the migration recipe in the circe integration docs.
+  *
   * '''An Optional, not a Prism.''' A drilled focus lives INSIDE a document, so rebuilding needs the
   * siblings — which a `Prism`'s `from(reverseGet)` cannot see (it gets the focus alone). Carrying
   * the source on the `Affine` seam fixes that at the carrier level: `to` captures a writer over the
@@ -27,8 +43,7 @@ import io.circe.{Decoder, Encoder, Json}
   *     surfaces as `Ior.Both(chain, inputJson)`.
   *   - `*Unsafe`: silent pass-through hot path.
   *
-  * Storage decomposition: a `JsonPrism[A]` holds a `JsonFocus` (Leaf vs Fields). The compatibility
-  * alias [[JsonFieldsPrism]] points back at this class so old code keeps compiling.
+  * Storage decomposition: a `JsonPrism[A]` holds a `JsonFocus` (Leaf vs Fields).
   */
 final class JsonPrism[A] private[circe] (
     private[circe] val focus: JsonFocus[A]

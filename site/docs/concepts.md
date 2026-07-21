@@ -51,6 +51,18 @@ consequences:
    from a `Composer[Tuple2, Affine]` value, not from cleverness
    in the Optic trait itself.
 
+Coming from the profunctor world, the reflexes to *unlearn*: do not
+search for `Strong` / `Choice` / `Wander` constraints,
+`P[A, B] => P[S, T]` lifts, or `Each` / `At` / `Ix` *typeclasses* —
+none exist here. (`Each` / `Index` / `At` do exist by name, but as
+plain constructor objects returning ordinary optics — nothing to
+instance.) The capability typeclasses on the carrier replaced the profunctor
+constraints (one per operation — the table below), and a
+`Composer[F, G]` is an ordinary value you write once per carrier
+pair, not framework plumbing. Supplying those instances is the
+*whole* cost of adding a new optic kind;
+[Extensibility](extensibility.md) walks through it end to end.
+
 ## Carriers
 
 A carrier `F[_, _]` answers: "what shape does the *middle* of

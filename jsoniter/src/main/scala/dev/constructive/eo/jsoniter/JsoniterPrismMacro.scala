@@ -107,9 +107,8 @@ object JsoniterPrismMacro:
       )
     }
 
-  /** Shared backbone for the Dynamic sugar: validates the literal-string name, looks the field up
-    * on `A`'s case-class schema, summons the field type's `JsonValueCodec`, and routes through the
-    * caller-supplied `emit` callback.
+  /** Shared backbone for the Dynamic sugar — name validation + field lookup live in the shared
+    * `MacroSelectors.caseFieldType` (eo-generics); this stub owns the `JsonValueCodec` summon.
     */
   private def selectDynamicCommon[A: Type](
       who: String,
@@ -117,25 +116,8 @@ object JsoniterPrismMacro:
   )(emit: [b] => (String, Expr[JsonValueCodec[b]]) => Type[b] ?=> Expr[Any])(using
       q: Quotes
   ): Expr[Any] =
-    import quotes.reflect.*
-
-    val name: String = nameE.value.getOrElse {
-      report.errorAndAbort(s"$who: field name must be a compile-time string literal.")
-    }
-
-    val aTpe = TypeRepr.of[A]
-    val cases = aTpe.typeSymbol.caseFields
-
-    val fieldSym = cases.find(_.name == name).getOrElse {
-      val available =
-        if cases.isEmpty then s"${Type.show[A]} has no case fields (is it a case class?)"
-        else s"Available: ${cases.map(_.name).mkString(", ")}"
-      report.errorAndAbort(
-        s"$who: type ${Type.show[A]} has no case field named '$name'. $available"
-      )
-    }
-
-    aTpe.memberType(fieldSym).widen.asType match
+    val (name, _, fieldTpe) = MacroSelectors.caseFieldType[A](who, nameE)
+    fieldTpe.asType match
       case '[b] =>
         emit[b](name, summonCodec[b](s"$who: for field '$name' of ${Type.show[A]}"))
 

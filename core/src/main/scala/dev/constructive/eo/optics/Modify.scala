@@ -7,6 +7,9 @@ import data.ModifyF
   * applies a function at the focus but cannot read it back; useful when observation would leak
   * information or when the focus is genuinely unreadable (e.g. inside a closure).
   *
+  * '''This is Monocle's / Haskell lens's `Setter`, renamed.''' The mapping is `Setter.modify` ↦
+  * `Modify.modify` and `Setter.set` ↦ `Modify.replace` — do not look for a `Setter` type here.
+  *
   * [[Modify.apply]] returns a concrete [[Modify]], so a Modify composes with another Modify through
   * the ordinary `andThen` (the fused [[Modify.andThen]]) — `s1.andThen(s2).modify(f) ==
   * s1.modify(s2.modify(f))` — exactly as `Iso` / `Lens` / `Getter` compose via their own fused

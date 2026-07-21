@@ -63,24 +63,81 @@ eo's `pLens` / polymorphic constructors one-for-one.
 
 Law testing ports directly too. Monocle ships
 `monocle-law` with discipline rule-sets; `cats-eo-laws` follows the
-exact same `checkAll` pattern, so your test setup is an import swap:
+same `checkAll` pattern, with one wiring difference: eo's `FooTests`
+are abstract classes you wire by overriding `laws` — there is no
+companion `apply`:
 
 ```scala
 libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
 ```
 
 ```scala
-// before: import monocle.law.discipline.LensTests
+// before: checkAll("Lens[Person, Int]", monocle.law.discipline.LensTests(ageL).lens)
+import dev.constructive.eo.laws.LensLaws
 import dev.constructive.eo.laws.discipline.LensTests
 
-checkAll("Lens[Person, Int]", LensTests[Person, Int](ageL).lens)
+checkAll(
+  "Lens[Person, Int]",
+  new LensTests[Person, Int]:
+    val laws = new LensLaws[Person, Int]:
+      val lens = ageL
+  .lens,
+)
 ```
+
+`cats-eo-laws` ships law equations and rule-sets only — no
+`Arbitrary`, `Cogen`, or `Eq` instances. The generators for your
+`S` and `A` come from your own ScalaCheck setup, exactly as they
+would for any other discipline suite.
 
 Every public optic family has a matching `FooLaws` / `FooTests`
 pair, including the families Monocle prefers not to ship (AffineFold,
 Review, Unfold, Modify, MultiFocus).
 
+One suite has no Monocle counterpart: `SeamTests`. It exercises the
+write *seam* — the generic `Optic.modify` / `Optic.replace` path
+that a composed or upcast write actually takes, rather than a
+concrete class's convenience surface — and it is **not optional**
+when you ship a carrier of your own. Run it on a **drilled** optic
+(a focus with surrounding context — a field beside siblings): a
+carrier whose `from` rebuilds the focus standalone passes every
+full-cover fixture and still drops the siblings on composed writes,
+which is exactly the bug class this suite makes loud. Equality is
+injected (`eqv: (S, S) => Boolean`) so sources without a lawful
+universal `==` — Avro's `IndexedRecord`, say — can supply a
+structural comparison.
+
 ## Where eo differs at the call site
+
+### Port signatures to capabilities, not optic types
+
+Monocle's subtype hierarchy makes `Getter[S, A]` the natural
+parameter type for "any optic I can read through" — every Lens *is*
+a Getter, so the upcast is free. cats-eo has no subtype hierarchy,
+and there is nothing to search for in its place: the porting move
+for *signatures* is the [capability traits](capabilities.md). A
+method that consumes an optic asks for the weakest capability
+covering what it does, and any optic that can honour the contract —
+concrete or composed — is the evidence:
+
+```scala
+// Monocle: accept anything readable via the hierarchy upcast.
+def render[S](s: S, g: Getter[S, Json]): Doc
+
+// cats-eo: the same contract as `using` evidence. A Lens, Iso, or
+// Getter IS a CanGet — pass it (or bind it as a given) directly.
+def render[S](s: S)(using g: CanGet[S, Json]): Doc
+```
+
+The translation table for parameter positions: `Getter` →
+`CanGet`, `Setter` → `CanModify`, `Fold` → `CanFold`, an `Optional`
+used as a read-only view → `CanGetOption`. Concrete optic types
+stay on the construction-and-composition side. See
+[Capabilities](capabilities.md) for the full matrix and the
+coherence rules — and, if a signature must take a raw `Optic[…, F]`
+plus a typeclass gate on `F`, the
+[using-clause ordering footgun](capabilities.md#writing-your-own-capability-gated-methods)
+that page documents.
 
 ### Bring your own optic
 
@@ -230,6 +287,11 @@ See the [cookbook recipe](cookbook.md).
 | `PLens[S, T, A, B](get)(set)`                      | `Lens.pLens[S, T, A, B](get, enplace)` — every family has a polymorphic `pType` constructor |
 | `GenLens[S](_.field)`                              | `lens[S](_.field)` (from `dev.constructive.eo.generics`)             |
 | `GenLens[S](_.a).andThen(GenLens[S](_.b)).andThen(...)` — N hand-composed GenLenses | `lens[S](_.a, _.b, ...)` — one varargs call; full-cover upgrades to `BijectionIso` automatically |
+| `GenLens[S](_.a.b.c)` / `Focus[S](_.a.b.c)` — nested selector path | rejected by the `lens` macro — selectors are single-step; chain instead: `lens[S](_.a).andThen(lens[A](_.b))` |
+| `lens.some` (`monocle.std.option`)                 | no `.some` extension — compose the prism explicitly: `.andThen(Prism.optional[Option[A], A](identity, Some(_)))` |
+| `lens.each` (`monocle.function.Each`)              | `.andThen(Each[F, A])` — `Each` is a plain constructor object (≡ `Traversal.each[F, A]`), not a typeclass |
+| `.index(i)` / `.index(k)` (`Index`)                | `.andThen(Index[Vector, A](i))` / `.andThen(Index[K, V](k))` — an ordinary `Optional`; writes on an absent slot pass through (never inserts) |
+| `.at(k)` (`At`)                                    | `.andThen(At[K, V](k))` — a total `Lens` to `Option[V]`: `Some` upserts, `None` deletes. Objects with `apply`, not typeclasses — nothing to instance |
 | `Prism[S, A](_.some)(identity)`                    | `Prism.optional[S, A](_.some, identity)`            |
 | `GenPrism[S, A]`                                   | `prism[S, A]` (from `dev.constructive.eo.generics`)                  |
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
@@ -254,3 +316,11 @@ See the [cookbook recipe](cookbook.md).
 | `optional.getOption(s)`                            | `optional.getOption(s)` — generic `.getOption` extension on any `Optic[_, _, _, _, Affine]` (Optional and AffineFold both ship it) |
 | `traversal.modify(f)(xs)`                          | `traversal.modify(f)(xs)` — same                    |
 | `fold.foldMap(f)(xs)`                              | `fold.foldMap(f)(xs)` — same                        |
+
+If a Monocle idiom is missing from this table, its absence on the
+eo side is a decision, not an unfinished port: eo either replaces
+the idiom with a construction shown in another row (constructor
+objects instead of the `At` / `Index` / `Each` typeclasses, explicit
+prism composition instead of `.some` syntax, capabilities instead of
+hierarchy upcasts) or has chosen not to ship the abstraction at
+all, to keep one composition surface.

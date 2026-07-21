@@ -5,9 +5,22 @@ import cats.Monoid
 
 import data.Direct
 
-/** Constructor for `Iso` — a bijective single-focus optic, backed by `Direct`. An `Iso[S, A]`
-  * (short for `Optic[S, S, A, A, Direct]`) encodes a data-shape bijection. `Direct[X, A] = A`
-  * carries no leftover, so every Iso operation reduces to plain function application.
+/** Monomorphic `Iso` — an alias for the CONCRETE [[BijectionIso]], not for the generic
+  * `Optic[S, S, A, A, Direct]`. Because it names the concrete class, ascribing
+  * `val nameI: Iso[Person, (String, Int)] = …` keeps code on the hot, fused paths — the fused
+  * compose overloads and capability mixins stay statically visible. This is the one family that CAN
+  * afford an alias: a single concrete class backs every Iso, where `Lens` / `Prism` each have two
+  * (which is why those stay prose shorthand — see [[Lens]]).
+  */
+type Iso[S, A] = BijectionIso[S, S, A, A]
+
+/** Constructor for `Iso` — a bijective single-focus optic, backed by `Direct`. The [[Iso]] type
+  * alias above names the concrete [[BijectionIso]] for the monomorphic case, so ascribing it is
+  * safe; [[Iso.apply]] returns that class carrying the fused compose overloads and capability
+  * mixins. Consuming signatures should still demand a capability (`CanGet[S, A]`,
+  * `CanReverseGet[S, A]`, …) rather than name `Iso`. An iso encodes a data-shape bijection.
+  * `Direct[X, A] = A` carries no leftover, so every Iso operation reduces to plain function
+  * application.
   */
 object Iso:
 

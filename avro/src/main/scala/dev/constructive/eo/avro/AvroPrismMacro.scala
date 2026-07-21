@@ -264,14 +264,11 @@ object AvroPrismMacro:
       '{ $parent.widenSuffix[b](${ Expr(name) }, ${ Expr(declIdx) })(using $codecB) }
     }
 
-  /** Shared backbone for [[fieldsImpl]] / [[fieldsTraversalImpl]]. Validates the varargs selector
-    * list (arity ≥ 2, no duplicates, known non-nested fields), synthesises the SELECTOR-order
-    * NamedTuple type, summons its [[AvroCodec]], and hands the pieces (`namesExpr`, `declIdxsExpr`,
-    * the codec expression, plus the `Type[nt]` evidence) to the caller-supplied `emit` callback.
-    *
-    * Counterpart to `JsonPrismMacro.fieldsCommon`; the only differences are the codec-summon shape
-    * (one [[AvroCodec]] vs circe's `Encoder` / `Decoder` pair) and the error-message hint pointing
-    * at `AvroCodec.derived` instead of `KindlingsCodecAsObject.derived`.
+  /** Shared backbone for [[fieldsImpl]] / [[fieldsTraversalImpl]] — validation + SELECTOR-order
+    * NamedTuple synthesis live in the shared `MacroSelectors.fieldsSelectorNT` (eo-generics); this
+    * stub owns the module-specific parts: the [[AvroCodec]] summon (vs circe's `Encoder` /
+    * `Decoder` pair, with the hint pointing at `AvroCodec.derived`) and the decl-index array
+    * (schema field names resolve by position at construction time — issue #35).
     */
   private def fieldsCommon[A: Type](
       who: String,
@@ -283,87 +280,7 @@ object AvroPrismMacro:
           Expr[AvroCodec[nt]],
       ) => Type[nt] ?=> Expr[Any]
   )(using q: Quotes): Expr[Any] =
-    import quotes.reflect.*
-
-    val selectors: List[Expr[A => Any]] =
-      selectorsE match
-        case Varargs(es) => es.toList
-        case other       =>
-          report.errorAndAbort(
-            s"$who[${Type.show[A]}]: could not destructure varargs selector"
-              + s" list. Got: ${other.asTerm.show}"
-          )
-
-    if selectors.sizeIs < 2 then
-      report.errorAndAbort(
-        s"$who[${Type.show[A]}]: requires at least two field selectors"
-          + " (for one selector, use .field(_.x) instead)."
-      )
-
-    val aTpe = TypeRepr.of[A]
-    val aSym = aTpe.typeSymbol
-    val caseFields = aSym.caseFields
-
-    if caseFields.isEmpty then
-      report.errorAndAbort(
-        s"$who[${Type.show[A]}]: parent focus ${Type.show[A]} has no case fields;"
-          + " .fields requires a case class."
-      )
-
-    val knownFields: List[String] = caseFields.map(_.name)
-
-    val resolved: List[(Int, String)] =
-      selectors.zipWithIndex.map { (sel, i) =>
-        val name = extractSingleFieldName(sel.asTerm).getOrElse {
-          report.errorAndAbort(
-            s"$who[${Type.show[A]}]: selector at position $i must be a single-field"
-              + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
-              + s" Got: ${sel.asTerm.show}"
-          )
-        }
-        if !knownFields.contains(name) then
-          report.errorAndAbort(
-            s"$who[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
-              + s" Known fields: ${knownFields.mkString(", ")}."
-          )
-        (i, name)
-      }
-
-    // Duplicate selectors → compile error (via the shared MacroSelectors helper in eo-generics).
-    dev
-      .constructive
-      .eo
-      .generics
-      .MacroSelectors
-      .reportDuplicateSelectors(
-        s"$who[${Type.show[A]}]",
-        resolved,
-      )
-
-    val selectedNames: List[String] = resolved.map(_._2)
-
-    // NamedTuple type in SELECTOR order (singleton-String names + field-types tuple).
-    val selectorSyms: List[Symbol] = selectedNames.map { name =>
-      caseFields.find(_.name == name).getOrElse {
-        report.errorAndAbort(
-          s"$who[${Type.show[A]}]: internal error — field '$name' not found on"
-            + s" ${Type.show[A]}."
-        )
-      }
-    }
-    val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
-
-    val namesTpe: TypeRepr =
-      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
-        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
-      }
-    val valuesTpe: TypeRepr =
-      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
-    val ntTpe: TypeRepr =
-      TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
-
+    val (selectedNames, declIdxs, ntTpe) = MacroSelectors.fieldsSelectorNT[A](who, selectorsE)
     ntTpe.asType match
       case '[nt] =>
         val codecNT = summonCodec[nt](
@@ -371,17 +288,10 @@ object AvroPrismMacro:
             + s" Derive one via `given AvroCodec[${Type.show[nt]}] = AvroCodec.derived` (which"
             + " auto-summons kindlings' AvroEncoder / AvroDecoder / AvroSchemaFor)."
         )
-
-        // Compile-time-known Array[String] of field names.
         val namesExpr: Expr[Array[String]] =
           '{ Array[String](${ Varargs(selectedNames.map(Expr(_))) }*) }
-
-        // Declaration indices (parallel to namesExpr, selector order) — resolved to the actual
-        // schema field name by position at construction time (issue #35).
-        val declIdxs: List[Int] = selectedNames.map(n => knownFields.indexOf(n))
         val declIdxsExpr: Expr[Array[Int]] =
           '{ Array[Int](${ Varargs(declIdxs.map(Expr(_))) }*) }
-
         emit[nt](namesExpr, declIdxsExpr, codecNT)
 
   // ---- Shared helpers ----------------------------------------------------------
@@ -392,28 +302,7 @@ object AvroPrismMacro:
   )(emit: [b] => (String, Int, Expr[AvroCodec[b]]) => Type[b] ?=> Expr[Any])(using
       q: Quotes
   ): Expr[Any] =
-    import quotes.reflect.*
-
-    val name: String = nameE.value.getOrElse {
-      report.errorAndAbort(s"$who: field name must be a compile-time string literal.")
-    }
-
-    val aTpe = TypeRepr.of[A]
-    val aSym = aTpe.typeSymbol
-    val cases = aSym.caseFields
-
-    val fieldSym = cases.find(_.name == name).getOrElse {
-      val available =
-        if cases.isEmpty then s"${Type.show[A]} has no case fields (is it a case class?)"
-        else s"Available: ${cases.map(_.name).mkString(", ")}"
-      report.errorAndAbort(
-        s"$who: type ${Type.show[A]} has no case field named '$name'. $available"
-      )
-    }
-
-    val fieldTpe = aTpe.memberType(fieldSym).widen
-    val declIdx = cases.indexWhere(_.name == name)
-
+    val (name, declIdx, fieldTpe) = MacroSelectors.caseFieldType[A](who, nameE)
     fieldTpe.asType match
       case '[b] =>
         val codecB = summonCodec[b](
@@ -435,11 +324,5 @@ object AvroPrismMacro:
   )(using q: Quotes): Expr[AvroCodec[B]] =
     import quotes.reflect.*
     Expr.summon[AvroCodec[B]].getOrElse(report.errorAndAbort(errorMsg))
-
-  /** Strict variant — rejects nested Select chains; routes to the shared
-    * `MacroSelectors.extractSingleFieldName`.
-    */
-  private def extractSingleFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
-    MacroSelectors.extractSingleFieldName(t)
 
 end AvroPrismMacro

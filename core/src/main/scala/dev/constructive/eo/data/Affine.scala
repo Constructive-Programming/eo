@@ -100,35 +100,6 @@ object Affine:
 
     override def hashCode(): Int = snd.hashCode * 31 + (if b == null then 0 else b.hashCode)
 
-  /** Legacy smart constructor — dispatches a raw Either to the matching variant. Prefer
-    * `new Miss(...)` / `new Hit(...)` in new code.
-    *
-    * @group Constructors
-    */
-  def apply[A, B](e: Either[Fst[A], (Snd[A], B)]): Affine[A, B] = e match
-    case Left(l)       => new Miss[A, B](l)
-    case Right((s, b)) => new Hit[A, B](s, b)
-
-  /** Convenience wrapping extension — turns a raw `Either[Fst[X], (Snd[X], B)]` into an
-    * `Affine[X, B]` via the [[apply]] smart constructor.
-    *
-    * @group Constructors
-    */
-  extension [X <: Tuple, B](e: Either[Fst[X], (Snd[X], B)]) def affine: Affine[X, B] = Affine(e)
-
-  /** Miss-branch constructor — produce an `Affine[X, B]` carrying `l` as its Fst component.
-    *
-    * @group Constructors
-    */
-  def ofLeft[X, B](l: Fst[X]): Affine[X, B] = new Miss[X, B](l)
-
-  /** Hit-branch constructor — produce an `Affine[X, B]` carrying `r._1` as Snd and `r._2` as the
-    * focus.
-    *
-    * @group Constructors
-    */
-  def ofRight[X, B](r: (Snd[X], B)): Affine[X, B] = new Hit[X, B](r._1, r._2)
-
   /** `ForgetfulFunctor[Affine]` — maps the focus `B`, passing the miss branch through. One
     * allocation per hit-branch map; pure pass-through on miss.
     *

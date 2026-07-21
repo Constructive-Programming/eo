@@ -1,8 +1,20 @@
 # circe integration
 
-The `cats-eo-circe` module adds two cursor-backed optics for
+The `cats-eo-circe` module adds two path-walking optics for
 editing [circe](https://circe.github.io/circe/) JSON without
 paying the cost of a full decode / re-encode round-trip.
+
+Coming from circe-optics, monocle-circe, or raw cursors, the
+vocabulary maps directly: `codecPrism[Person].address.street` is
+the counterpart of `JsonPath.root.address.street.string` and of an
+`hcursor.downField("address").downField("street")` chain. The
+differences: paths are compile-time checked against the case-class
+schema, every step carries a typed `Encoder` / `Decoder` rather
+than a stringly key, and writes rebuild in a single walk with
+[`Ior` diagnostics](#reading-diagnostics-from-the-default-ior-surface)
+on the default surface. There is deliberately no dynamic
+string-path API — for shapes unknown at compile time, stay on
+cursors or reach for `Plated[Json]` (below).
 
 ```scala
 libraryDependencies += "dev.constructive" %% "cats-eo-circe" % "@VERSION@"
@@ -56,7 +68,15 @@ object Person:
 
 Construct a Prism to the root type, then drill into fields.
 The `.address.street` sugar is macro-powered — it compiles to
-`.field(_.address).field(_.street)`:
+`.field(_.address).field(_.street)`.
+
+A note before the examples: they use the `*Unsafe` variants for
+brevity. In application code, start on the default `Ior` surface —
+`Ior.Right` is clean success, `Ior.Both` partial success plus the
+failure chain, `Ior.Left` nothing producible (see
+[Reading diagnostics from the default Ior surface](#reading-diagnostics-from-the-default-ior-surface))
+— and reach for `*Unsafe` only where you've measured and don't
+want the `Ior` allocation.
 
 ```scala mdoc
 val alice   = Person("Alice", 30, Address("Main St", 12345))
@@ -71,6 +91,16 @@ failures are surfaced rather than silently swallowed. The
 `*Unsafe` variants preserve the pre-v0.2 silent behaviour.
 Full coverage of both surfaces lives in the "Observable-by-default
 failures" section of the v0.2 release notes.
+
+One law-level caveat: a *drilled* prism like `streetP` is an
+Optional, not a lawful Prism. The focus lives inside a document,
+so rebuilding needs the siblings — they are kept on the `Affine`
+seam captured during the walk, which is why `modify` / `place`
+preserve them. Only the root `codecPrism[S]` is a lawful
+full-cover Prism, and `reverseGet` is a genuine build *only*
+there — never use it as the write path on a drilled prism (it
+would fabricate a document from the focus alone, dropping every
+sibling).
 
 Other operations (all the silent escape hatches):
 
@@ -136,6 +166,21 @@ Empty arrays and missing paths leave the Json unchanged.
 case-class fields as a Scala 3 `NamedTuple`. Selectors arrive in
 selector-order; the NamedTuple type reflects that. Arity must be
 ≥ 2 — use `.field(_.x)` for a single-field focus.
+
+The focused NamedTuple needs a `Codec.AsObject` of its own, and
+neither circe's generic derivation nor this module provides one —
+you bring it. The kindlings derivation used throughout this page
+(`import hearth.kindlings.circederivation.KindlingsCodecAsObject`,
+already in scope from the first fence) does the job, given the
+dependency:
+
+```scala
+libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "0.3.0"
+```
+
+A hand-written codec works just as well. Miss it and the `.fields`
+macro aborts at compile time, naming the import and dependency in
+its hint:
 
 ```scala mdoc:silent
 type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
@@ -434,6 +479,50 @@ hybrid, `universe` on a worklist, `rewrite` trampolined through
 document is safe. See the [cookbook Plated recipe](../cookbook.md) for the
 data-type side of the same API.
 
+## Working Json-first — migrating a Decoder-materialised model
+
+Two usage modes — pick deliberately:
+
+- **Layer on an existing model** (hot-path edits): keep decoding
+  your case class where the whole record matters, and use a prism
+  for the one or two fields on the hot path.
+- **Replace the materialised model** (optics-as-evidence): the
+  `Json` — or the wire `String`, parsed on the fly — *is* the data
+  structure. `json.as[Whole]` never runs; do not go looking for a
+  whole-document decode step — not needing one is the point. Hold
+  the `Json` and read/write individual fields through
+  `codecPrism`, and let the consuming code follow the standard
+  doctrine —
+  [consume via capability, construct via optic](../capabilities.md).
+
+Signatures demand the weakest capability that covers what they do;
+the prism *is* the evidence, so the `Json` holder slots into
+functions that never name the optic or circe:
+
+```scala mdoc:silent
+import dev.constructive.eo.*
+
+// Knows NOTHING about JSON, circe, or this library's optics —
+// only that a String street can be rewritten inside a T. That
+// generic T is what buys you: unit-testing the logic with a plain
+// case class + lens, and re-using the same function for the
+// materialised model, the Json, or any other T with the evidence.
+def widenStreet[T](t: T)(using cm: CanModify[T, String]): T =
+  cm.replace("Broadway")(t)
+
+// The prism given IS the capability evidence for T = Json
+// (one optic given per (S, A) pair — the coherence rule applies):
+given dev.constructive.eo.circe.JsonPrism[String] = streetP
+```
+
+```scala mdoc
+widenStreet(json).noSpacesSortKeys
+```
+
+The same consumer serves the mode-1 materialised model unchanged —
+an [eo-generics lens](../generics.md) on the case class is equally
+valid evidence, which is also the natural way to unit-test it.
+
 ## When to reach for which
 
 | Task                                                  | Use                       |
@@ -445,6 +534,7 @@ data-type side of the same API.
 | Edit multiple fields atomically                       | `codecPrism[…].fields(_.a, _.b).modify(...)` |
 | Observe why a modify was a silent no-op               | default Ior-bearing `.modify(...)` — inspect the `Ior.Both` / `Ior.Left` chain |
 | Edit the whole root record (and you have a Codec)     | `codecPrism[Person].modifyUnsafe(f)` |
+| Keep the wire Json as the model (no whole-document decode) | hold `Json` + `codecPrism`; consumers demand `CanGetOption` / `CanModify` |
 
 For the full failure-mode matrix (missing paths, non-array
 focuses, empty collections, out-of-range indices), see the

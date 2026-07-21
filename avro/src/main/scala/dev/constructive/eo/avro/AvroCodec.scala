@@ -24,8 +24,12 @@ import org.apache.avro.io.DecoderFactory
   * [[AvroFailure]]).
   *
   * '''Per the eo-avro plan (OQ-avro-1):''' the codec library at v0.1.0 is
-  * `com.kubuszok:kindlings-avro-derivation`. Vulcan and raw apache-avro stay viable as future
-  * alternatives if user demand surfaces, behind a copy-paste of this file.
+  * `com.kubuszok:kindlings-avro-derivation` — a choice of derivation BACKEND, not of typeclass
+  * surface. A codebase whose codecs are vulcan bridges them into this typeclass instead (issue
+  * #73): `import dev.constructive.eo.avro.vulcan.given` makes every in-scope `vulcan.Codec[A]`
+  * serve as an `AvroCodec[A]`, or name it explicitly via
+  * [[dev.constructive.eo.avro.vulcan.AvroVulcan.codec]] — see the
+  * [[dev.constructive.eo.avro.vulcan.AvroVulcan]] scaladoc for the error mapping.
   */
 trait AvroCodec[A]:
 
@@ -116,12 +120,15 @@ object AvroCodec:
     * view: `readSchema` is the schema the bytes are read in, `writeSchema` the shape they resolve
     * into (what you'd write). In apache-avro's own vocabulary these are the *writer* schema and the
     * *reader* schema respectively — hence `GenericDatumReader(readSchema, writeSchema)` below.
-    * Incompatible schemas → [[AvroFailure.ResolveFailed]].
+    * Incompatible schemas → [[AvroFailure.ResolveFailed]]. `threadLocalStorage = false` opts out of
+    * the thread-local decoder-state cache (see [[AvroBinaryCursor.records]]); ConfluentWire's
+    * translating surface threads its constructor-captured flag through here.
     */
   def decodeResolvedRecord(
       bytes: Array[Byte],
       readSchema: Schema,
       writeSchema: Schema,
+      threadLocalStorage: Boolean = true,
   ): Either[AvroFailure, IndexedRecord] =
     try
       // apache-avro arg order is (writerSchema, readerSchema) = (readSchema, writeSchema) here.
@@ -134,7 +141,7 @@ object AvroCodec:
             bytes.length,
             readSchema,
             writeSchema,
-            threadLocalStorage = true
+            threadLocalStorage
           )
       )
     catch case NonFatal(t) => Left(AvroFailure.ResolveFailed(t))
@@ -142,10 +149,12 @@ object AvroCodec:
   /** [[decodeResolvedRecord]] resolving `readSchema` → `codec`'s schema (the write schema), then
     * the codec's `Any ⇒ A` side — the drift counterpart of [[decodeValue]].
     */
-  def decodeResolvedValue[A](bytes: Array[Byte], readSchema: Schema)(using
-      codec: AvroCodec[A]
-  ): Either[AvroFailure, A] =
-    decodeResolvedRecord(bytes, readSchema, codec.schema).flatMap { record =>
+  def decodeResolvedValue[A](
+      bytes: Array[Byte],
+      readSchema: Schema,
+      threadLocalStorage: Boolean = true,
+  )(using codec: AvroCodec[A]): Either[AvroFailure, A] =
+    decodeResolvedRecord(bytes, readSchema, codec.schema, threadLocalStorage).flatMap { record =>
       codec.decodeEither(record).left.map(t => AvroFailure.DecodeFailed(PathStep.Field(""), t))
     }
 

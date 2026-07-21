@@ -4,6 +4,7 @@ package fixture
 
 import dev.constructive.eo.optics.{
   AffineFold,
+  PickFold,
   Getter as EoGetter,
   Modify as EoModify,
   Optional as EoOptional
@@ -58,5 +59,5 @@ object DomainOptics:
       o => o.copy(customer = o.customer.copy(loyaltyId = Some(s)))
     )
 
-  val eoLoyaltyAF: AffineFold[Order, String] =
+  val eoLoyaltyAF: PickFold[Order, String] =
     AffineFold[Order, String](_.customer.loyaltyId)

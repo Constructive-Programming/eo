@@ -3,9 +3,17 @@ package optics
 
 import cats.Monoid
 
-/** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. A
-  * `Lens[S, A]` (short for `Optic[S, S, A, A, Tuple2]`) reads a field via `get(s)` and rewrites it
-  * via `modify` / `replace`. The `eo-generics` module's `lens[S](_.field)` macro derives both.
+/** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. "A
+  * `Lens[S, A]`" is prose shorthand for `Optic[S, S, A, A, Tuple2]`: there is deliberately NO
+  * `type Lens[S, A]` alias to ascribe (`Lens` is only this constructor object). The reason is
+  * keeping code on the hot, fused paths: TWO concrete classes back this family — [[GetReplaceLens]]
+  * here, [[SimpleLens]] from [[first]] / [[second]] and the `eo-generics` macro — so an alias could
+  * only name the generic `Optic[S, S, A, A, Tuple2]`, and ascribing that erases the concrete class,
+  * dropping its fused compose overloads and capability mixins in favour of generic typeclass
+  * dispatch. (Contrast [[Iso]], whose single concrete class does get an alias.) So leave `val`s
+  * un-ascribed and let consuming signatures demand a capability (`CanGet[S, A]`, `CanModify[S, A]`,
+  * …) instead of a concrete optic type. A lens reads a field via `get(s)` and rewrites it via
+  * `modify` / `replace`. The `eo-generics` module's `lens[S](_.field)` macro derives both.
   */
 object Lens:
   import Function.uncurried

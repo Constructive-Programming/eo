@@ -2,6 +2,14 @@
 
 Don't worry about an abstraction tax: cats-eo turns deep, awkward read/modify code into a readable one-liner *and* runs at hand-written speed — matching or beating Monocle on the single-optic hot paths ([benchmarks](benchmarks.md)).
 
+Two ways in, depending on where your data lives. This page works on
+**in-memory values** — case classes and collections. If your data
+arrives *encoded* — circe `Json`, Avro records, raw JSON bytes —
+start from the integrations ([circe](integrations/circe.md),
+[Avro](integrations/avro.md), [jsoniter](integrations/jsoniter.md)):
+the same optic surface applies there, with no decode/re-encode
+round trip, and the habits below carry over unchanged.
+
 ## Install
 
 Add the module(s) you need to your `build.sbt`:
@@ -107,6 +115,9 @@ capability contracts across modules. Deep dive:
   coherence rules.
 - If you want the per-family tour with the kind of optic you'd
   reach for in each situation, read [Optics reference](optics.md).
+- If you'd rather start from a task — "edit one branch",
+  "batch-load nested IDs" — the [Cookbook](cookbook.md) opens with
+  a task index that maps straight to runnable recipes.
 - If you're coming from Monocle, jump to
   [Migrating from Monocle](migration-from-monocle.md).
 

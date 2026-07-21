@@ -34,7 +34,8 @@ class FieldsMacroErrorSpec extends Specification:
   //   unknown field name -> "'nope' is not a field of" + "Known fields:",
   //   duplicate selectors -> "duplicate field selector 'name'" + "positions 0, 1",
   //   non-case-class parent -> "has no case fields",
-  //   NamedTuple codec unreachable -> "no given Encoder" or "no given Decoder",
+  //   NamedTuple codec unreachable -> "no given Encoder" or "no given Decoder"
+  //     + kindlings import path & dependency coordinate in the hint,
   //   JsonTraversal.fields arity-1 -> "JsonTraversal.fields" + arity message
   "`.fields` D10 catalogue: every row's exact diagnostic surfaces" >> {
     val empty = typeCheckErrors("""
@@ -106,7 +107,12 @@ class FieldsMacroErrorSpec extends Specification:
         codecPrism[NoCodec].fields(_.a, _.b)
       """)
     val noCodecOk = noCodec.exists(e =>
-      e.message.contains("no given Encoder") || e.message.contains("no given Decoder")
+      (e.message.contains("no given Encoder") || e.message.contains("no given Decoder")) &&
+        e.message
+          .contains(
+            "(`import hearth.kindlings.circederivation.KindlingsCodecAsObject`,"
+              + " dependency `\"com.kubuszok\" %% \"kindlings-circe-derivation\" % \"0.3.0\"`),"
+          )
     )
 
     val travArity = typeCheckErrors("""

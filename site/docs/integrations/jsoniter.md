@@ -314,7 +314,6 @@ uniformly with the rest of cats-eo's traversal machinery.
 ```scala mdoc:silent
 import cats.instances.int.given
 
-import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.jsoniter.JsoniterTraversal
 
 val cart: Array[Byte] =

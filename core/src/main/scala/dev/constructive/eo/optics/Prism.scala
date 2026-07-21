@@ -3,10 +3,22 @@ package optics
 
 import cats.Monoid
 
-/** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. A `Prism[S, A]`
-  * (short for `Optic[S, S, A, A, Either]`) encodes a branch of a sum type: `getOption(s)` succeeds
-  * when `s` matches, `reverseGet(a)` lifts back. The `eo-generics` module's `prism[S, A]` macro
-  * derives prisms on enums / sealed traits / union types.
+/** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. "A `Prism[S, A]`"
+  * is prose shorthand for `Optic[S, S, A, A, Either]`: there is deliberately NO `type Prism[S, A]`
+  * alias to ascribe (`Prism` is only this constructor object) — TWO concrete classes back the
+  * family ([[MendTearPrism]], and [[PickMendPrism]] from [[optional]] / [[pOptional]]), so an alias
+  * could only name the generic `Optic`, and ascribing that would knock code off the hot, fused
+  * paths (the fused compose overloads and capability mixins live on the concrete classes; contrast
+  * [[Iso]], whose single concrete class does get an alias). Leave `val`s un-ascribed and let
+  * consuming signatures demand a capability (`CanGetOption[S, A]`, `CanReverseGet[S, A]`, …)
+  * instead. A prism encodes a branch of a sum type: `getOption(s)` succeeds when `s` matches,
+  * `reverseGet(a)` lifts back. The `eo-generics` module's `prism[S, A]` macro derives prisms on
+  * enums / sealed traits / union types.
+  *
+  * '''Miss semantics (normative).''' A write through a missed prism is a silent identity
+  * pass-through: `modify(f)(s)` and `replace(b)(s)` return `s` unchanged (`f` is never invoked),
+  * and `foldMap` folds zero foci (returns `Monoid.empty`). No error, no signal. When hit-ness
+  * matters, probe with `.getOption` first.
   */
 object Prism:
 

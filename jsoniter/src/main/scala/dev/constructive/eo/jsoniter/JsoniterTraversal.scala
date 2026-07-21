@@ -5,7 +5,7 @@ import scala.language.dynamics
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, writeToArray, JsonValueCodec}
 import dev.constructive.eo.data.{MultiFocus, PSVec}
-import dev.constructive.eo.optics.Optic
+import dev.constructive.eo.optics.Traversal
 
 /** Read-WRITE Traversal over JSON byte buffers. Resolves a wildcard-bearing JSONPath against
   * `Array[Byte]`, decodes each matched span via `JsonValueCodec[A]` on read, and encodes-and-
@@ -46,7 +46,7 @@ import dev.constructive.eo.optics.Optic
 final class JsoniterTraversal[A] private[jsoniter] (
     private[jsoniter] val steps: List[PathStep]
 )(using codec: JsonValueCodec[A])
-    extends Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]],
+    extends Traversal[Array[Byte], Array[Byte], A, A],
       Dynamic:
 
   type X = (Array[Byte], List[JsonPathScanner.Span])
@@ -122,7 +122,7 @@ object JsoniterTraversal:
     *
     * @group Optics
     */
-  def fromSteps[A](steps: List[PathStep])(using
+  private[jsoniter] def fromSteps[A](steps: List[PathStep])(using
       codec: JsonValueCodec[A]
   ): JsoniterTraversal[A] =
     new JsoniterTraversal[A](steps)

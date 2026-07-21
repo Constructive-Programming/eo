@@ -8,13 +8,19 @@ import cats.Monoid
 import compose.*
 import data.Direct
 
-/** Concrete Optic subclass for a read-only getter. A `final class` storing `get` directly — NOT an
-  * abstract class with an abstract `get`: the CI A/B showed composed-getter dispatch through the
-  * abstract-class form costs ~1.8x (eoGet_3 5.1ns final vs 11.5ns abstract) even with a fused
-  * `andThen`, while every fused path that stayed a concrete class (`GetReplaceLens` lens-reuse) was
-  * flat. The hot path skips the `Accessor[Direct]` dispatch the generic extension would perform —
-  * the same shape as [[BijectionIso]] / [[GetReplaceLens]]. Returned by [[Getter.apply]] so
-  * hand-written getters pick up the fused path automatically.
+/** Concrete Optic subclass for a read-only getter — the one-way view of an `S` whose focus `A` can
+  * only be read. Both the leftover `T` and the back-focus `B` are `Unit`, making the read-only-ness
+  * honest in the type (there is no `B` to put back, so `.modify` / `.replace` never exist).
+  * Implements [[CanGet]] and [[CanFold]] directly, so a `Getter` can be passed wherever a consuming
+  * signature demands `CanGet[S, A]`.
+  *
+  * Implementation notes: a `final class` storing `get` directly — NOT an abstract class with an
+  * abstract `get`: the CI A/B showed composed-getter dispatch through the abstract-class form costs
+  * ~1.8x (eoGet_3 5.1ns final vs 11.5ns abstract) even with a fused `andThen`, while every fused
+  * path that stayed a concrete class (`GetReplaceLens` lens-reuse) was flat. The hot path skips the
+  * `Accessor[Direct]` dispatch the generic extension would perform — the same shape as
+  * [[BijectionIso]] / [[GetReplaceLens]]. Returned by [[Getter.apply]] so hand-written getters pick
+  * up the fused path automatically.
   */
 final class Getter[S, A](read: S => A)
     extends Optic[S, Unit, A, Unit, Direct],

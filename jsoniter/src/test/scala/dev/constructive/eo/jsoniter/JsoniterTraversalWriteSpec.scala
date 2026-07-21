@@ -4,7 +4,6 @@ import scala.language.implicitConversions
 
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.optics.Optic.*
 import org.specs2.mutable.Specification
 
 /** Phase-2 write spec for `JsoniterTraversal`. Exercises:

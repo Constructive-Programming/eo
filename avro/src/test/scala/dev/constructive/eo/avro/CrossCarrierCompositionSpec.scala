@@ -5,7 +5,7 @@ import scala.language.implicitConversions
 import cats.data.Ior
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.generics.lens
-import dev.constructive.eo.optics.{AffineFold, Lens, Optic}
+import dev.constructive.eo.optics.{AffineFold, Lens, Optic, PickFold}
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.util.ArrayList
 import org.apache.avro.Schema
@@ -51,7 +51,7 @@ class CrossCarrierCompositionSpec extends Specification:
     val box = Lens[Box, IndexedRecord](_.payload, (b, r) => b.copy(payload = r))
     val personFields: Optic[IndexedRecord, IndexedRecord, NameAge, NameAge, Affine] =
       codecPrism[Person].fields(_.name, _.age).record
-    val adultName: AffineFold[NameAge, String] =
+    val adultName: PickFold[NameAge, String] =
       AffineFold(nt => Option.when(nt.age >= 18)(nt.name))
     val boxToFields: Optic[Box, Box, NameAge, NameAge, dev.constructive.eo.data.Affine] =
       box.andThen(personFields)

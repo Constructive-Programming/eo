@@ -120,6 +120,23 @@ stump.put(stumpSchema.getField("age").pos, 30)
 streetP.record.modifyUnsafe(_.toUpperCase)(stump).asInstanceOf[GenericRecord].get("address")
 ```
 
+## Field navigation is by SCHEMA name — `.fieldNamed` is the escape hatch
+
+`.field(_.x)` (and the `.fields(...)` / dynamic-sugar siblings)
+resolve the case-class field `x` to whatever schema field the codec
+actually emitted for it — by declaration position: the i-th case
+field maps to the i-th schema field, read off the cached schema at
+construction time, at zero per-operation cost. That makes
+navigation robust under any field-name transform — a kindlings
+snake / kebab / custom `transformFieldNames` config, or a vulcan
+per-field override map — so a renamed schema field is never a miss
+cause on a derived codec. The one shape position resolution cannot
+handle is a hand-written codec whose schema field **order**
+diverges from case-class declaration order: there, drill with
+`.fieldNamed[B]("schema_name")`, which navigates by the explicit
+schema name and bypasses position resolution entirely. Map keys are
+data, not schema-named fields — they keep their literal key.
+
 ## Array indexing
 
 `.at(i)` drills into the `i`-th element of an Avro `array<T>`:
@@ -736,6 +753,28 @@ vulcan is an `Optional` dependency of `cats-eo-avro` — add it to
 your own build to use this sub-package; avro-only users never
 load it.
 
+## circe bridge — `AvroJson`
+
+`dev.constructive.eo.avro.circe.AvroJson` is the structural
+Avro ↔ circe bridge: it moves between an Avro generic runtime
+value and a circe `Json` document with **no case class in the
+middle**. `AvroJson.record(schema)` is a lawful
+`Prism[Json, IndexedRecord]` per schema — `getOption` is the
+strict schema-guided parse (misses on any shape the schema does
+not pin), `reverseGet` the total structural walk back to `Json`.
+Around it sits the codec diagonal family — `valuePrism` /
+`bytesPrism` / `recordPrism` — tearing generic values / payload
+bytes / records into a typed `A` and mending back out as `Json`.
+The walk is defined by the wire shape, so logical types render
+their **runtime** shape: a timestamp-millis `Instant` is a `long`
+at runtime and renders as `Json.fromLong`, not the ISO-8601
+string a circe `Encoder[Instant]` would emit.
+
+Like vulcan above, circe is an `Optional` dependency of
+`cats-eo-avro` — add `circe-core` to your own build to use this
+sub-package. A failing `io.circe` import at compile time means
+your build lacks that dependency, not that the module is broken.
+
 ## Ignoring failures (the `*Unsafe` escape hatch)
 
 For Kafka consumers and other hot-path call sites where the
@@ -782,6 +821,50 @@ Ior-bearing record surface lives behind `.record`:
 
 `In` = `IndexedRecord | Array[Byte] | String` everywhere.
 
+## Migrating a codec-first model (optics-as-evidence)
+
+There are two ways to use this module — pick deliberately:
+
+1. **Layer on an existing codec**: keep decoding to your case class
+   elsewhere; point a prism at the one or two hot-path fields.
+2. **Replace the materialised model**: the wire `Array[Byte]` *is*
+   the data structure. `codecPrism[Person]` uses the in-scope
+   `AvroCodec[Person]` as **schema evidence only** — the root
+   decode never runs on the byte path; only the drilled leaf's
+   codec decodes its slice. Do **not** look for an avro4s-style
+   whole-record mapping API here: the point is that no `Person` is
+   ever materialised.
+
+The consuming code then follows the standard doctrine —
+[consume via capability, construct via optic](../capabilities.md).
+Signatures demand the weakest capability that covers what they do;
+the drilled prism *is* the evidence, so the raw payload slots into
+functions that never name Avro, the optic, or the wire format:
+
+```scala mdoc:silent
+import dev.constructive.eo.*
+import dev.constructive.eo.avro.AvroPrism
+
+// Knows NOTHING about Avro, codecs, or Array[Byte] — only that a
+// String street can be rewritten inside a T.
+def upgradeStreet[T](t: T)(using cm: CanModify[T, String]): T =
+  cm.modify(_.toUpperCase)(t)
+
+// The drilled prism IS the capability evidence for T = Array[Byte]
+// (one optic given per (S, A) pair — the coherence rule applies):
+given AvroPrism[String] = streetP
+```
+
+```scala mdoc
+upgradeStreet(incomingBytes).length   // T = Array[Byte]; no Person materialised
+streetP.record.getOptionUnsafe(upgradeStreet(incomingBytes))
+```
+
+And the same consumer serves the mode-1 materialised model
+unchanged — an [eo-generics lens](../generics.md) on the case
+class is equally valid evidence, which is also the natural way to
+unit-test it without Avro fixtures.
+
 ## Recursive edits — `Plated[IndexedRecord]`
 
 For edits that recurse through every nested record rather than
@@ -815,6 +898,12 @@ shape.
 | Observe why a modify was a silent no-op                    | default Ior `.modify(...)` — inspect the chain     |
 | Edit Kafka payloads in place (binary in, binary out)       | `AvroPrism.modifyUnsafe(...)` on `Array[Byte]`     |
 | Parse + edit Avro JSON wire payloads                       | `AvroPrism.modify(...)` on `String`                |
+| Read a Confluent-framed topic into a typed `A`             | `ConfluentWire.reader[F, A](schemaById)`           |
+| Compose a byte optic over Confluent-framed payloads        | `ConfluentWire.confluent(...).andThen(codecPrism[…]...)` |
+| Migrate a payload between schema versions                  | `AvroBridge.between[A, B]` + `.modify`             |
+| Hand-written codec with divergent schema field order       | `.fieldNamed[B]("schema_name")`                    |
+| Slice / graft a field's raw encoding, decode-free          | `sliceBytes` / `graftBytes` (`ConfluentWire.graftGated` when framed) |
+| Render an Avro record as circe `Json`                      | `AvroJson.record(schema)` — `eo.avro.circe`        |
 
 For the Kafka end-to-end recipe (read bytes, modify, re-emit),
 see the [Cookbook → Serdes free pipes](../cookbook.md#serdes-free-pipes).

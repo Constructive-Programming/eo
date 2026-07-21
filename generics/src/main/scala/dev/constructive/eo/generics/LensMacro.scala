@@ -27,20 +27,9 @@ import dev.constructive.eo.optics.{BijectionIso, Optic, SimpleLens}
   */
 object LensMacro:
 
-  /** Varargs entry — `transparent inline` so the macro-synthesised concrete subclass (`SimpleLens`
-    * partial / `BijectionIso` full) propagates to the call site.
-    *
-    * @group Constructors
-    * @tparam S
-    *   source case-class type
-    */
-  transparent inline def deriveMulti[S](
-      inline selectors: (S => Any)*
-  ): Optic[S, S, ?, ?, ?] =
-    ${ deriveMultiImpl[S]('selectors) }
-
-  /** Quoted-macro implementation behind [[deriveMulti]] — instantiates the Hearth-backed derivation
-    * against the call-site `Quotes`.
+  /** Quoted-macro implementation behind the package-level `lens[S](…)` entry (spliced directly by
+    * `PartiallyAppliedLens.apply`) — instantiates the Hearth-backed derivation against the
+    * call-site `Quotes`.
     */
   def deriveMultiImpl[S: Type](
       selectorsExpr: Expr[Seq[S => Any]]
@@ -88,11 +77,12 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
         // Resolve every selector to a field name (position threaded through for error messages).
         val resolved: List[(Int, String)] =
           selectors.zipWithIndex.map { (sel, i) =>
-            val name = extractFieldName(sel.asTerm).getOrElse {
+            val name = MacroSelectors.extractSingleFieldName(sel.asTerm).getOrElse {
               report.errorAndAbort(
                 s"lens[${Type.prettyPrint[S]}]: selector at position $i must be a"
                   + " single-field accessor like `_.fieldName`. Nested paths (e.g."
-                  + s" `_.a.b`) are not yet supported. Got: ${sel.asTerm.show}"
+                  + " `_.a.b`) are not yet supported — chain two derivations instead:"
+                  + s" `lens[S](_.a).andThen(lens[A](_.b))`. Got: ${sel.asTerm.show}"
               )
             }
             if !knownFields.contains(name) then
@@ -179,7 +169,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
           '{ (x: xa, a: A) =>
             ${
               val xTerm = '{ x }.asTerm
-              val constructed: Id[Option[Expr[S]]] = cc.construct[Id] { (param: Parameter) =>
+              constructOrAbort[S](cc) { (param: Parameter) =>
                 if param.name == fieldName then Existential[Expr, A]('{ a }): Expr_??
                 else
                   val idx = otherSyms.indexWhere(_.name == param.name)
@@ -188,17 +178,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
                       s"lens[${Type.prettyPrint[S]}]: internal error -- "
                         + s"unexpected parameter '${param.name}'."
                     )
-                  val tpe = otherTypes(idx)
-                  tpe.asType match
-                    case '[t] =>
-                      val accessor = tupleIndexAccessor[xa, t](xTerm.asExprOf[xa], idx)
-                      Existential[Expr, t](accessor): Expr_??
-              }
-              constructed.getOrElse {
-                report.errorAndAbort(
-                  s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
-                    + s" constructor of ${Type.prettyPrint[S]}."
-                )
+                  indexedRead[xa](xTerm.asExprOf[xa], idx, otherTypes(idx))
               }
             }
           }
@@ -215,8 +195,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       cc: CaseClass[S],
       selectedNames: List[String],
   ): Expr[Optic[S, S, ?, ?, ?]] =
-    val ctx = MultiBuildContext.from[S](selectedNames)
-    import ctx.{sTpe, allFieldSyms, selectorSyms, selectorTypes}
+    val (sTpe, allFieldSyms, selectorSyms, selectorTypes) = multiPrelude[S](selectedNames)
 
     // Declaration-order complement metadata, restricted to non-selected fields.
     val selectedSet: Set[String] = selectedNames.toSet
@@ -270,15 +249,10 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
             ${
               val xTerm = '{ x }.asTerm
               val aTerm = '{ a }.asTerm
-              val constructed: Id[Option[Expr[S]]] = cc.construct[Id] { (param: Parameter) =>
+              constructOrAbort[S](cc) { (param: Parameter) =>
                 val focusIdx = selectedNames.indexOf(param.name)
                 if focusIdx >= 0 then
-                  val tpe = selectorTypes(focusIdx)
-                  tpe.asType match
-                    case '[t] =>
-                      Existential[Expr, t](
-                        tupleIndexAccessor[focus, t](aTerm.asExprOf[focus], focusIdx)
-                      ): Expr_??
+                  indexedRead[focus](aTerm.asExprOf[focus], focusIdx, selectorTypes(focusIdx))
                 else
                   val complementIdx = otherSyms.indexWhere(_.name == param.name)
                   if complementIdx < 0 then
@@ -286,21 +260,11 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
                       s"lens[${Type.prettyPrint[S]}]: internal error -- "
                         + s"unexpected parameter '${param.name}'."
                     )
-                  val tpe = otherTypes(complementIdx)
-                  tpe.asType match
-                    case '[t] =>
-                      Existential[Expr, t](
-                        tupleIndexAccessor[complement, t](
-                          xTerm.asExprOf[complement],
-                          complementIdx,
-                        )
-                      ): Expr_??
-              }
-              constructed.getOrElse {
-                report.errorAndAbort(
-                  s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
-                    + s" constructor of ${Type.prettyPrint[S]}."
-                )
+                  indexedRead[complement](
+                    xTerm.asExprOf[complement],
+                    complementIdx,
+                    otherTypes(complementIdx),
+                  )
               }
             }
           }
@@ -315,8 +279,7 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       cc: CaseClass[S],
       selectedNames: List[String],
   ): Expr[Optic[S, S, ?, ?, ?]] =
-    val ctx = MultiBuildContext.from[S](selectedNames)
-    import ctx.{selectorSyms, selectorTypes}
+    val (_, _, selectorSyms, selectorTypes) = multiPrelude[S](selectedNames)
 
     val focusTpe: TypeRepr = namedTupleTypeOf(selectedNames, selectorTypes)
 
@@ -340,25 +303,14 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
           '{ (a: focus) =>
             ${
               val aTerm = '{ a }.asTerm
-              val constructed: Id[Option[Expr[S]]] = cc.construct[Id] { (param: Parameter) =>
+              constructOrAbort[S](cc) { (param: Parameter) =>
                 val focusIdx = selectedNames.indexOf(param.name)
                 if focusIdx < 0 then
                   report.errorAndAbort(
                     s"lens[${Type.prettyPrint[S]}]: internal error -- "
                       + s"unexpected parameter '${param.name}' absent from full-cover focus."
                   )
-                val tpe = selectorTypes(focusIdx)
-                tpe.asType match
-                  case '[t] =>
-                    Existential[Expr, t](
-                      tupleIndexAccessor[focus, t](aTerm.asExprOf[focus], focusIdx)
-                    ): Expr_??
-              }
-              constructed.getOrElse {
-                report.errorAndAbort(
-                  s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
-                    + s" constructor of ${Type.prettyPrint[S]}."
-                )
+                indexedRead[focus](aTerm.asExprOf[focus], focusIdx, selectorTypes(focusIdx))
               }
             }
           }
@@ -377,33 +329,51 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       }
     TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
 
-  /** Shared prelude for [[buildMultiLens]] / [[buildMultiIso]]. */
-  private case class MultiBuildContext(
-      sTpe: TypeRepr,
-      allFieldSyms: List[Symbol],
-      selectorSyms: List[Symbol],
-      selectorTypes: List[TypeRepr],
-  )
-
-  private object MultiBuildContext:
-
-    def from[S: Type](selectedNames: List[String]): MultiBuildContext =
-      val sTpe = TypeRepr.of[S]
-      val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
-      val syms: List[Symbol] = selectedNames.map { name =>
-        allFieldSyms.find(_.name == name).getOrElse {
-          report.errorAndAbort(
-            s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
-              + s" found on ${Type.prettyPrint[S]}."
-          )
-        }
+  /** Shared prelude for [[buildMultiLens]] / [[buildMultiIso]] — `(sTpe, allFieldSyms,
+    * selectorSyms, selectorTypes)`.
+    */
+  private def multiPrelude[S: Type](
+      selectedNames: List[String]
+  ): (TypeRepr, List[Symbol], List[Symbol], List[TypeRepr]) =
+    val sTpe = TypeRepr.of[S]
+    val allFieldSyms: List[Symbol] = sTpe.typeSymbol.caseFields
+    val syms: List[Symbol] = selectedNames.map { name =>
+      allFieldSyms.find(_.name == name).getOrElse {
+        report.errorAndAbort(
+          s"lens[${Type.prettyPrint[S]}]: internal error -- field '$name' not"
+            + s" found on ${Type.prettyPrint[S]}."
+        )
       }
-      val tpes: List[TypeRepr] = syms.map(sym => sTpe.memberType(sym))
-      MultiBuildContext(sTpe, allFieldSyms, syms, tpes)
+    }
+    (sTpe, allFieldSyms, syms, syms.map(sym => sTpe.memberType(sym)))
 
   /** Read each `Select.unique(sourceTerm, sym.name)`. */
   private def tupleFieldReads(sourceTerm: Term, fieldSyms: List[Symbol]): List[Expr[Any]] =
     fieldSyms.map(sym => Select.unique(sourceTerm, sym.name).asExpr)
+
+  /** Thread the primary constructor through Hearth's `cc.construct[Id]`, routing each
+    * declaration-order parameter via `route`; aborts when Hearth cannot call the constructor.
+    */
+  private def constructOrAbort[S: Type](cc: CaseClass[S])(route: Parameter => Expr_??): Expr[S] =
+    val constructed: Id[Option[Expr[S]]] = cc.construct[Id](route)
+    constructed.getOrElse {
+      report.errorAndAbort(
+        s"lens[${Type.prettyPrint[S]}]: failed to call the primary"
+          + s" constructor of ${Type.prettyPrint[S]}."
+      )
+    }
+
+  /** Wrap a [[tupleIndexAccessor]] read of slot `idx` (declared type `tpe`) as the existential
+    * `Expr_??` that `cc.construct` expects.
+    */
+  private def indexedRead[Carrier: Type](
+      carrier: Expr[Carrier],
+      idx: Int,
+      tpe: TypeRepr,
+  )(using Quotes): Expr_?? =
+    tpe.asType match
+      case '[t] =>
+        Existential[Expr, t](tupleIndexAccessor[Carrier, t](carrier, idx)): Expr_??
 
   /** `NamedTuple → Tuple → apply(i) → t` indexed read. NamedTuple's runtime IS the values tuple via
     * opaque subtyping; the cast is erased. `(using Quotes)` keeps the splice's `Quotes` in scope
@@ -415,7 +385,3 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
   )(using Quotes): Expr[T] =
     val idxExpr = scala.quoted.Expr(idx)
     '{ $carrier.asInstanceOf[Tuple].apply($idxExpr).asInstanceOf[T] }
-
-  /** Selector-AST extraction lives on `MacroSelectors`. */
-  private def extractFieldName(t: Term): Option[String] =
-    MacroSelectors.extractSingleFieldName(t)

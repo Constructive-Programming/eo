@@ -4,6 +4,18 @@ One section per family — the shape, carrier, primary use case, and a
 minimal runnable example. For the per-method reference see the
 Scaladoc.
 
+Everything here is the **construction side** of the library's core
+doctrine — *consume via capability, construct via optic*. The
+concrete families below (`Lens`, `Prism`, `Getter`, …) are what you
+build and compose; when a *signature* consumes an optic — an API
+seam, a `using` parameter — take the weakest
+[capability trait](capabilities.md) (`CanGet`, `CanModify`,
+`CanFold`, …) instead of a concrete type. And if a signature must
+take a raw `Optic[…, F]` together with a typeclass gate on `F`,
+read the
+[using-clause ordering footgun](capabilities.md#writing-your-own-capability-gated-methods)
+before writing it.
+
 ## Family taxonomy
 
 Every family is a specialisation of the same `Optic[S, T, A, B, F]`
@@ -219,6 +231,20 @@ For auto-derivation on enums / sealed traits / union types see
 The `Affine` carrier focuses a value that may or may not be present —
 a 0-or-1 focus. Two families ride it: **Optional** (read and write)
 and **AffineFold** (read-only).
+
+**A miss is not an error.** Across the core carriers the miss branch
+is silent pass-through: `.modify` / `.replace` return the source
+unchanged, `.getOption` returns `None` — no failure value is
+allocated or surfaced, because core has no failure channel (that is
+the planned fallible tier — **BiAffine** — in the
+[taxonomy](#family-taxonomy) above). When a miss must be
+*observable*, that lives at the integration boundaries: the
+[circe optics](integrations/circe.md) surface misses and decode
+failures as `Ior[Chain[JsonFailure], Json]`, and the
+[Avro optic](integrations/avro.md)'s `.record` face returns
+`Ior[Chain[AvroFailure], IndexedRecord]` — while the raw byte
+surfaces (the Avro default and jsoniter) stay deliberately silent
+for the hot path.
 
 ### Optional
 
@@ -636,13 +662,17 @@ algebra; see [Recursion schemes](schemes.md).
 ### AffineFold
 
 An `AffineFold[S, A]` is the read-only 0-or-1 focus shape: a
-partial projection with no write-back path. Type alias for
+partial projection with no write-back path. The shape is
 `Optic[S, Unit, A, Unit, Affine]` — both `T` and the back-focus
 `B` are pinned to `Unit`, which statically rules out `.modify` /
 `.replace` and leaves `.getOption`, `.foldMap`, and `.modifyA`
-(effectful read) as the surface. (Constructors return the concrete
-`PickFold` subclass, whose fused `andThen` keeps composed read-only
-chains concrete.)
+(effectful read) as the surface. There is deliberately no
+`AffineFold[S, A]` type alias (one existed and was removed):
+constructors return the concrete `PickFold[S, A]` — whose fused
+`andThen` keeps composed read-only chains concrete — and ascribing
+an alias to the generic `Optic` would erase exactly that. Ascribe
+`PickFold` when you hold a constructed one; spell the full `Optic`
+shape only for composed results, or leave `val`s un-ascribed.
 
 Use this when the source has no natural write-back
 (`headOption` on a List, predicate-gated filters), or as an
@@ -650,10 +680,10 @@ API-boundary declaration that callers cannot write through the
 returned optic.
 
 ```scala mdoc:silent
-import dev.constructive.eo.optics.AffineFold
+import dev.constructive.eo.optics.{AffineFold, PickFold}
 
 case class Adult(age: Int)
-val adultAge: AffineFold[Adult, Int] =
+val adultAge: PickFold[Adult, Int] =
   AffineFold(p => Option.when(p.age >= 18)(p.age))
 ```
 

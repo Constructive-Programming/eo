@@ -3,13 +3,13 @@ package dev.constructive.eo.avro
 import scala.language.dynamics
 
 import dev.constructive.eo.data.{MultiFocus, PSVec}
-import dev.constructive.eo.optics.Optic
+import dev.constructive.eo.optics.Traversal
 import org.apache.avro.Schema
 
 /** Multi-focus counterpart to [[AvroPrism]], carried on the BINARY WIRE FORM like the prism:
   *
   * {{{
-  *   AvroTraversal[A] <: Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]
+  *   AvroTraversal[A] <: dev.constructive.eo.optics.Traversal[Array[Byte], Array[Byte], A, A]
   *   type X = (Array[Byte], Option[ElementSpans])
   * }}}
   *
@@ -44,7 +44,7 @@ final class AvroTraversal[A] private[avro] (
     private[avro] val prefix: Array[PathStep],
     private[avro] val focus: AvroFocus[A],
     private[avro] val rootSchemaCached: Schema,
-) extends Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]],
+) extends Traversal[Array[Byte], Array[Byte], A, A],
       Dynamic:
 
   /** Structural leftover: the original payload plus the located element-span plan (`None` on a

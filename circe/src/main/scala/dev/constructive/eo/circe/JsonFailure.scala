@@ -6,7 +6,7 @@ import io.circe.parser.parse as circeParse
 import io.circe.{DecodingFailure, Json, ParsingFailure}
 
 /** Structured failure surfaced by the default Ior-bearing surface of [[JsonPrism]] /
-  * [[JsonFieldsPrism]] / [[JsonTraversal]] / [[JsonFieldsTraversal]].
+  * [[JsonTraversal]].
   *
   * Every case carries a [[PathStep]] so the walk that produced the failure can point at the
   * specific cursor position that refused. The default enum `toString` keeps the structural
@@ -59,9 +59,8 @@ object JsonFailure:
   given Eq[JsonFailure] = Eq.fromUniversalEquals
 
   /** Resolve a `Json | String` input to a parsed `Json`, threading parse failures through the Ior
-    * channel. Used by every `Json | String`-accepting overload on `JsonPrism` / `JsonFieldsPrism` /
-    * `JsonTraversal` / `JsonFieldsTraversal` so the parse step is uniform (same failure shape, same
-    * message format).
+    * channel. Used by every `Json | String`-accepting overload on `JsonPrism` / `JsonTraversal` so
+    * the parse step is uniform (same failure shape, same message format).
     *
     * When `input` is already a `Json`, this is a pure `Ior.Right`. When it's a `String`, parse
     * failures arrive as `Ior.Left(Chain(JsonFailure.ParseFailed(cause)))`. Downstream `flatMap`s

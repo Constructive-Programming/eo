@@ -3,8 +3,7 @@ package laws
 
 import cats.Monoid
 
-import optics.AffineFold
-import optics.Optic.*
+import optics.PickFold
 
 /** Law equations for an `AffineFold[S, A]` — a read-only 0-or-1 focus optic whose carrier is
   * `Affine` and whose write side is pinned to `Unit`.
@@ -30,8 +29,11 @@ import optics.Optic.*
   * extension to stay within the existential-optic surface.
   */
 trait AffineFoldLaws[S, A]:
-  /** The optic under test. */
-  def af: AffineFold[S, A]
+  /** The optic under test. Pinned to the concrete [[PickFold]] — every constructed affine fold is
+    * one, and a composed read-collapse result can be wrapped via `AffineFold(_.getOption(…))` when
+    * it needs law coverage.
+    */
+  def af: PickFold[S, A]
 
   /** `getOption` agrees with the `foldMap`-list head. */
   def getOptionConsistent(s: S): Boolean =

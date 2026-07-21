@@ -3,14 +3,85 @@ package optics
 
 import scala.collection.immutable.ArraySeq
 
-import cats.Traverse
+import cats.{Monoid, Traverse}
 
 import data.{MultiFocus, ObjArrBuilder, PSVec}
 
-/** Constructors for `Traversal`. Every constructor here — [[each]] / [[pEach]] / [[selfChildren]]
+/** Concrete family class for `Traversal` — the many-focus optic on the `MultiFocus[PSVec]` carrier.
+  * Every constructor in the [[Traversal$]] companion (and [[Each]]) returns this type, so "a
+  * `Traversal[S, A]`" is spelled `Traversal[S, S, A, A]` (like the four-parameter [[Optional]] and
+  * [[Modify]] classes). Ascribing it is SAFE — the fused members below are `inline`, so they
+  * survive ascription at THIS type (only ascribing the generic `Optic[…]` falls back to the generic
+  * extensions); capability evidence (`CanFold[S, A]`, `CanModify[S, A]`) is served by the derived
+  * givens in each capability's companion.
+  *
+  * '''Fused `modify` / `replace` / `foldMap`, by measurement''' (JMH `TraversalBench.eoModify`,
+  * size 64, `-prof gc`): the generic extensions summon the PARAMETERIZED `mfFunctor[F: Functor]` /
+  * `mfFold[F: Foldable]` givens — and a parameterized given instantiates per call — plus an extra
+  * capture in the spliced closure shape; together a fixed 40 B/op per operation (4 904 → 4 864 B/op
+  * measured, ±0.001). The members below splice the same logic with the CACHED `PSVec.pSVecFunctor`
+  * / `pSVecFoldable` instances instead. They are `inline` deliberately: each call site gets its own
+  * spliced body, so the `to` / `from` dispatch sites stay per-site monomorphic across the many
+  * subclasses (pEach / selfChildren / fixed-arity / the byte-carried integration traversals) — a
+  * plain `def` here would be ONE shared body accumulating every subclass's type profile, the
+  * megamorphic trap documented on [[Getter]] and [[PickFold]] (a plain-`def` variant was also
+  * measured: it recovers only 16 of the 40 B/op).
+  *
+  * Each instance keeps its own existential `X` (the reassembly context: the original container for
+  * [[Traversal.pEach]], the node for [[Traversal.selfChildren]], `Unit` for the fixed-arity
+  * tabulations). The byte-carried integration traversals — eo-jsoniter's `JsoniterTraversal` and
+  * eo-avro's `AvroTraversal` — extend this class too (same `Array[Byte]` / `MultiFocus[PSVec]`
+  * shape), so ascribing them as `Traversal[Array[Byte], Array[Byte], A, A]` is safe; only
+  * eo-circe's `JsonTraversal` is NOT a subtype — its surface is a bespoke
+  * `Ior[Chain[JsonFailure], _]`-accumulating one, not the `MultiFocus[PSVec]` carrier.
+  */
+abstract class Traversal[S, T, A, B] extends Optic[S, T, A, B, MultiFocus[PSVec]]:
+
+  /** Fused `modify` — same logic as the generic extension, with the cached `pSVecFunctor` in place
+    * of the per-call `mfFunctor[PSVec]` given instantiation (−40 B/op with [[replace]] /
+    * [[foldMap]]'s sibling savings; see the class scaladoc). `inline` so each call site splices its
+    * own copy — per-site monomorphic `to` / `from` dispatch.
+    */
+  inline def modify(f: A => B): S => T =
+    s =>
+      val mf = to(s)
+      from(MultiFocus(mf.context, PSVec.pSVecFunctor.map(mf.foci)(f)))
+
+  /** Fused `replace` — constant-function [[modify]]. */
+  inline def replace(b: B): S => T =
+    modify(_ => b)
+
+  /** Fused `foldMap` — folds the focus vector via the cached `pSVecFoldable`, skipping the per-call
+    * `mfFold[PSVec]` given instantiation the generic extension pays.
+    */
+  inline def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
+    PSVec.pSVecFoldable.foldMap(to(s).foci)(f)
+
+/** Constructors for [[Traversal]]. Every constructor here — [[each]] / [[pEach]] / [[selfChildren]]
   * and the [[two]] / [[three]] / [[four]] fixed-arity variants — rides the `MultiFocus[PSVec]`
   * carrier, so they all compose through the standard `.andThen` in both directions (past a Lens, a
   * Prism, another traversal, …).
+  *
+  * '''Keyed access lives in [[Index]] / [[At]] — as constructor objects, not typeclasses.'''
+  * `Index(i)` / `Index(k)` focuses one positional or keyed slot (write on an absent slot passes
+  * through — no insert), [[At]]`(k)` is the total Map lens to `Option[V]` (`Some` upserts, `None`
+  * deletes), and [[Each]] is [[each]] under the Monocle-searched name. Each returns an ordinary
+  * optic that composes after `.andThen` like any other; a bespoke keyed [[Optional]] remains a
+  * one-liner when the container isn't a `Seq`/`Map`:
+  *
+  * {{{
+  * def index[K, V](k: K): Optional[Map[K, V], Map[K, V], V, V] =
+  *   Optional[Map[K, V], Map[K, V], V, V](
+  *     getOrModify = m => m.get(k).toRight(m),
+  *     reverseGet = { case (m, v) => m.updated(k, v) },
+  *   )
+  * }}}
+  *
+  * Known-arity focus sets go through [[two]] / [[three]] / [[four]]. A predicate-filtering WRITE
+  * optic (Monocle's deprecated `filterIndex` / lens-library `filtered`) is unlawful — a write can
+  * flip which elements the predicate selects, breaking composition laws — so it is not provided;
+  * filter on the read side instead (`Fold.select` / `AffineFold.select` /
+  * [[Optional.selectReadOnly]]).
   */
 object Traversal:
 
@@ -18,7 +89,7 @@ object Traversal:
     *
     * @group Constructors
     */
-  def each[T[_]: Traverse, A]: Optic[T[A], T[A], A, A, MultiFocus[PSVec]] =
+  def each[T[_]: Traverse, A]: Traversal[T[A], T[A], A, A] =
     pEach[T, A, A]
 
   /** Polymorphic counterpart to [[each]] — allows focus type change.
@@ -32,8 +103,8 @@ object Traversal:
     *
     * @group Constructors
     */
-  def pEach[T[_]: Traverse, A, B]: Optic[T[A], T[B], A, B, MultiFocus[PSVec]] =
-    new Optic[T[A], T[B], A, B, MultiFocus[PSVec]]:
+  def pEach[T[_]: Traverse, A, B]: Traversal[T[A], T[B], A, B] =
+    new Traversal[T[A], T[B], A, B]:
       type X = T[A]
 
       def to(ta: T[A]): MultiFocus[PSVec][X, A] =
@@ -85,8 +156,8 @@ object Traversal:
   def selfChildren[S](
       children: S => PSVec[S],
       rebuild: (S, PSVec[S]) => S,
-  ): Optic[S, S, S, S, MultiFocus[PSVec]] =
-    new Optic[S, S, S, S, MultiFocus[PSVec]]:
+  ): Traversal[S, S, S, S] =
+    new Traversal[S, S, S, S]:
       type X = S
       def to(s: S): MultiFocus[PSVec][X, S] = MultiFocus(s, children(s))
       def from(pair: MultiFocus[PSVec][X, S]): S = rebuild(pair.context, pair.foci)
@@ -98,62 +169,34 @@ object Traversal:
     * any leftover context of `S` must be rebuilt by `reverse` itself (drill with a Lens first when
     * there are sibling fields). For the Grate-shaped `Int => A` encoding, see `MultiFocus.tuple`.
     *
+    * The tabulating subclass is macro-generated per CALL SITE (see [[TraversalArityMacro]]): each
+    * site keeps its own monomorphic `to` / `from` bodies, and literal selector / reverse lambdas
+    * are beta-reduced straight into the tabulation.
+    *
     * @group Constructors
     */
-  def two[S, T, A, B](
-      a: S => A,
-      b: S => A,
-      reverse: (B, B) => T,
-  ): Optic[S, T, A, B, MultiFocus[PSVec]] =
-    new Optic[S, T, A, B, MultiFocus[PSVec]]:
-      type X = Unit
-
-      def to(s: S): MultiFocus[PSVec][X, A] =
-        val arr = new Array[AnyRef](2)
-        arr(0) = a(s).asInstanceOf[AnyRef]
-        arr(1) = b(s).asInstanceOf[AnyRef]
-        MultiFocus((), PSVec.unsafeWrap[A](arr))
-
-      def from(pair: MultiFocus[PSVec][X, B]): T = reverse(pair.foci(0), pair.foci(1))
+  inline def two[S, T, A, B](
+      inline a: S => A,
+      inline b: S => A,
+      inline reverse: (B, B) => T,
+  ): Traversal[S, T, A, B] =
+    ${ TraversalArityMacro.twoImpl('a, 'b, 'reverse) }
 
   /** Fixed-arity-3 — see [[two]]. @group Constructors */
-  def three[S, T, A, B](
-      a: S => A,
-      b: S => A,
-      c: S => A,
-      reverse: (B, B, B) => T,
-  ): Optic[S, T, A, B, MultiFocus[PSVec]] =
-    new Optic[S, T, A, B, MultiFocus[PSVec]]:
-      type X = Unit
-
-      def to(s: S): MultiFocus[PSVec][X, A] =
-        val arr = new Array[AnyRef](3)
-        arr(0) = a(s).asInstanceOf[AnyRef]
-        arr(1) = b(s).asInstanceOf[AnyRef]
-        arr(2) = c(s).asInstanceOf[AnyRef]
-        MultiFocus((), PSVec.unsafeWrap[A](arr))
-
-      def from(pair: MultiFocus[PSVec][X, B]): T =
-        reverse(pair.foci(0), pair.foci(1), pair.foci(2))
+  inline def three[S, T, A, B](
+      inline a: S => A,
+      inline b: S => A,
+      inline c: S => A,
+      inline reverse: (B, B, B) => T,
+  ): Traversal[S, T, A, B] =
+    ${ TraversalArityMacro.threeImpl('a, 'b, 'c, 'reverse) }
 
   /** Fixed-arity-4 — see [[two]]. @group Constructors */
-  def four[S, T, A, B](
-      a: S => A,
-      b: S => A,
-      c: S => A,
-      d: S => A,
-      reverse: (B, B, B, B) => T,
-  ): Optic[S, T, A, B, MultiFocus[PSVec]] =
-    new Optic[S, T, A, B, MultiFocus[PSVec]]:
-      type X = Unit
-
-      def to(s: S): MultiFocus[PSVec][X, A] =
-        val arr = new Array[AnyRef](4)
-        arr(0) = a(s).asInstanceOf[AnyRef]
-        arr(1) = b(s).asInstanceOf[AnyRef]
-        arr(2) = c(s).asInstanceOf[AnyRef]
-        arr(3) = d(s).asInstanceOf[AnyRef]
-        MultiFocus((), PSVec.unsafeWrap[A](arr))
-
-      def from(pair: MultiFocus[PSVec][X, B]): T =
-        reverse(pair.foci(0), pair.foci(1), pair.foci(2), pair.foci(3))
+  inline def four[S, T, A, B](
+      inline a: S => A,
+      inline b: S => A,
+      inline c: S => A,
+      inline d: S => A,
+      inline reverse: (B, B, B, B) => T,
+  ): Traversal[S, T, A, B] =
+    ${ TraversalArityMacro.fourImpl('a, 'b, 'c, 'd, 'reverse) }

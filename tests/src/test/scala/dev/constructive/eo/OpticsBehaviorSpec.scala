@@ -23,6 +23,7 @@ import optics.{
   Modify,
   Optic,
   Optional,
+  PickFold,
   Prism,
   Review,
   Traversal
@@ -250,7 +251,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   val adultAge: Optic[AdultPerson, Unit, Int, Unit, Affine] =
     Optional.readOnly(p => Option.when(p.age >= 18)(p.age))
 
-  val adultAgeAF: AffineFold[AdultPerson, Int] =
+  val adultAgeAF: PickFold[AdultPerson, Int] =
     AffineFold(p => Option.when(p.age >= 18)(p.age))
 
   // covers: Optional.readOnly.foldMap folds the hit branch, returns empty on miss,
@@ -339,16 +340,16 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         getOrModify = p => Either.cond(p.age >= 18, p.age, p),
         reverseGet = { case (_, a) => AdultPerson(a) },
       )
-    val optThen: AffineFold[AdultPerson, String] = ageOpt.andThen(toStr)
+    val optThen: Optic[AdultPerson, Unit, String, Unit, Affine] = ageOpt.andThen(toStr)
     val optOk = (optThen.getOption(AdultPerson(20)) === Some("20"))
       .and(optThen.getOption(AdultPerson(15)) === None)
 
-    val afThen: AffineFold[AdultPerson, String] = adultAgeAF.andThen(toStr)
+    val afThen: Optic[AdultPerson, Unit, String, Unit, Affine] = adultAgeAF.andThen(toStr)
     val afOk = (afThen.getOption(AdultPerson(18)) === Some("18"))
       .and(afThen.getOption(AdultPerson(10)) === None)
 
     val intP = Prism.optional[String, Int](s => s.toIntOption, _.toString)
-    val prismThen: AffineFold[String, String] = intP.andThen(toStr)
+    val prismThen: Optic[String, Unit, String, Unit, Affine] = intP.andThen(toStr)
     val prismOk =
       (prismThen.getOption("42") === Some("42")).and(prismThen.getOption("nope") === None)
 

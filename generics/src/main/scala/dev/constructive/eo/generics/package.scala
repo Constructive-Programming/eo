@@ -24,8 +24,19 @@ package object generics:
     *   - full cover at any arity (including `lens[Wrapper](_.value)` on a 1-field case class) →
     *     `BijectionIso[S, S, NT, NT]`.
     *
+    * Even at arity 1 the full-cover focus is a 1-field NamedTuple, so
+    * `lens[Wrapper](_.value).get(w)` yields `(value = 42)`, not the bare `42`.
+    *
+    * Monocle users: this is `GenLens[S](_.field)` / `Focus[S](_.field)`, except nested paths are
+    * compile errors (chain `.andThen`), full cover takes the `GenIso` role, and enum cases work.
+    *
     * Selectors must be single-field accessors — nested paths (`_.a.b`), duplicates, and unknown
     * fields are compile errors.
+    *
+    * The declared `Optic[S, S, ?, ?, ?]` on `PartiallyAppliedLens.apply` is not the type you get:
+    * `transparent inline` narrows the result to the concrete `SimpleLens` / `BijectionIso` at each
+    * call site. Never ascribe the wildcard type to a derived optic — the ascription throws the
+    * narrowing (and the fused overloads that ride on it) away.
     *
     * @group Constructors
     *
@@ -49,11 +60,12 @@ package object generics:
     transparent inline def apply(
         inline selectors: (S => Any)*
     ): Optic[S, S, ?, ?, ?] =
-      LensMacro.deriveMulti[S](selectors*)
+      ${ LensMacro.deriveMultiImpl[S]('selectors) }
 
   /** Derive a `Prism` focusing on one variant of a sum type. Works on Scala 3 enums, sealed traits,
     * and union types via Hearth's `Enum.parse[S]`. `A` must be a '''direct child''' of `S` —
-    * anything else is a compile error listing the known children.
+    * anything else is a compile error listing the known children. Monocle users: this is
+    * `GenPrism`, extended to union types.
     *
     * @group Constructors
     *
@@ -67,7 +79,7 @@ package object generics:
     *   }}}
     */
   inline def prism[S, A <: S]: Optic[S, S, A, A, Either] =
-    PrismMacro.derive[S, A]
+    ${ PrismMacro.deriveImpl[S, A] }
 
   /** Derive a [[dev.constructive.eo.optics.Plated]] for a recursive ADT — the immediate
     * same-typed-children self-traversal that powers `transform` / `rewrite` / `children` /
@@ -87,4 +99,4 @@ package object generics:
     *   }}}
     */
   inline def plate[S]: Plated[S] =
-    PlateMacro.derive[S]
+    ${ PlateMacro.deriveImpl[S] }

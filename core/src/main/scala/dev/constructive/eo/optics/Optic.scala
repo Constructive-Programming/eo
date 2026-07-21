@@ -19,6 +19,18 @@ import compose.*
   * Optional, …). Operations live in the companion as capability-gated extensions; each extension's
   * `(using …)` clause names the typeclass on `F` that unlocks it.
   *
+  * '''Usage frame: construct via optic, consume via capability.''' Concrete optic types (`Lens`,
+  * `Prism`, `Getter`, …) belong where optics are built and composed; a signature that *uses* an
+  * optic should leave the subject generic and demand the weakest capability trait it needs
+  * ([[CanGet]], `CanGetOption`, `CanModify`, `CanFold`, …):
+  *
+  * {{{
+  * def validateId[T](idCarrier: T)(using CanGetOption[T, Id]): Boolean
+  * }}}
+  *
+  * Keep ONE optic given per `(S, A)` pair in scope — capabilities are keyed by their type
+  * parameters only, so two same-typed foci need newtypes or explicit `(using myLens)` passing.
+  *
   * @tparam S
   *   source type being observed / modified
   * @tparam T
@@ -120,6 +132,17 @@ trait Optic[S, T, A, B, F[_, _]]:
   * read-only / AffineFold / Modify / Review / Unfold collapses), `.readOnly`, `.cross`, `.morph`,
   * `.headOption`, `.length`, `.exists`. Adding a new carrier means supplying the typeclass
   * instances of the operations it should support.
+  *
+  * '''What composes.''' Of the 121 (outer family ∘ inner family) pairs across the 11 optic
+  * families, 87 compose import-free and without a type ascription — same-carrier pairs via
+  * [[compose.AssociativeFunctor]], cross-carrier pairs via a summoned [[compose.Morph]] (e.g. Lens
+  * ∘ Prism auto-morphs to Optional), and read-side collapses via [[compose.ReadCompose]]. The
+  * remaining 34 cells are void by design and do not compile: building through a non-invertible
+  * optic, writing through a read-only one, reading through a write-only one (plus the mirror
+  * cells). So an `.andThen` that fails to compile outside those cells is a typing problem at the
+  * call site — most often an `Optic[…]` ascription that dropped the concrete class's fused
+  * overloads, or a `Morph`-ambiguous chain needing the explicit [[Optic.morph]] form — never a
+  * missing feature. `CompositionMatrixSpec` pins the full matrix.
   */
 object Optic:
 
@@ -132,8 +155,16 @@ object Optic:
   def id[A]: BijectionIso[A, A, A, A] =
     Iso[A, A, A, A](identity, identity)
 
-  /** Profunctor over `(S, T)` — `dimap` on the outer parameter pair, letting callers pre-compose
-    * the source side and post-compose the result side of a fixed-focus optic.
+  /** Profunctor over `(S, T)` — `dimap` on the outer parameter pair: pre-compose the source side
+    * (`lmap`, an `R => S`) and post-compose the result side (`rmap`, a `T => U`) of a fixed-focus
+    * optic. This is how one published optic is re-used across subsystems that hold the *same*
+    * structure in different shapes — e.g. an optic over a domain record re-aimed at the wire tuple
+    * that record serialises to, without re-deriving anything. See the cookbook's "Re-use an optic
+    * across representations" recipe.
+    *
+    * The `dimap` result is an anonymous `Optic`: the generic capability surface (`.modify`,
+    * `.foldMap`, …) still applies, but concrete-class fused overloads are erased — when a concrete
+    * optic ships its own input-side mapping (e.g. `Prism.tearFrom` / `mendFrom`), prefer that.
     *
     * @group Instances
     */
@@ -147,8 +178,13 @@ object Optic:
         def to(r: R): F[X, A] = o.to(f(r))
         def from(fxb: F[X, B]): U = g(o.from(fxb))
 
-  /** Profunctor over `(B, A)` — `dimap` on the inner focus pair. Requires a `ForgetfulFunctor[F]`
-    * so the carrier can map its focus in place.
+  /** Profunctor over `(B, A)` — `dimap` on the inner focus pair: map what the optic *yields* (an
+    * `A => C` on the read side) and what it *accepts back* (a `D => B` on the write side), keeping
+    * the source fixed. This re-aims a published optic at a subsystem that thinks in a different
+    * focus representation — dates in UTC vs a wall-clock `LocalDateTime`, UTF-8 vs UTF-16 text,
+    * big- vs little-endian words. Requires a `ForgetfulFunctor[F]` so the carrier can map its focus
+    * in place. Same erasure caveat as [[outerProfunctor]]; cookbook recipe: "Re-use an optic across
+    * representations".
     *
     * @group Instances
     */

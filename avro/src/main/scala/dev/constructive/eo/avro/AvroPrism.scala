@@ -30,6 +30,18 @@ import org.apache.avro.Schema
   * `.replace`, `.foldMap`, `.andThen`, … Drill with the same macro sugar as ever (`.field(_.x)` /
   * `.fields(...)` / `.union[B]` / `.at(i)` / `.each` / Dynamic field selection).
   *
+  * '''Two usage modes — pick deliberately:'''
+  *
+  *   - '''Layer on an existing codec''': keep decoding to your case class elsewhere; point a prism
+  *     at the one or two hot-path fields.
+  *   - '''Optics-as-evidence''': the wire `Array[Byte]` IS the data structure. `codecPrism[S]` uses
+  *     `AvroCodec[S]` as SCHEMA evidence only — the root decode never runs on the byte path; only
+  *     the drilled leaf's codec decodes its slice. Do NOT look for an avro4s-style whole-record
+  *     mapping API here: no `S` is ever materialised. Consuming signatures demand the weakest
+  *     capability (`def validateId[T](idCarrier: T)(using CanGetOption[T, Id]): Boolean`), and a
+  *     drilled-prism given is the evidence that instantiates their `T` at `Array[Byte]`. See the
+  *     docs page's migration recipe for the runnable shape.
+  *
   * '''Field navigation honours the SCHEMA field name (issue #35).''' `.field(_.x)` (and `.fields`,
   * `selectDynamic`, the traversal siblings) resolve the case-class field `x` to whatever schema
   * field the codec actually emitted for it — under any name transform (kindlings snake / kebab /
@@ -187,16 +199,7 @@ final class AvroPrism[A] private[avro] (
 
   /** Silent counterpart to [[sliceBytes]] — `None` on any failure. */
   def sliceBytesUnsafe(bytes: Array[Byte]): Option[AvroFragment] =
-    AvroBinaryCursor
-      .locate(bytes, rootSchemaCached, path, strictTerminalUnion = true)
-      .toOption
-      .map(span =>
-        AvroFragment(
-          Arrays.copyOfRange(bytes, span.valueStart, span.end),
-          span.valueSchema,
-          span.branchOrdinal,
-        )
-      )
+    sliceBytes(bytes).toOption
 
   /** Graft an encoded fragment into a binary payload at the focused field — splice bytes in place
     * of the field's current encoding, decode-free: prefix copy + (when the prism focuses a union
@@ -227,9 +230,7 @@ final class AvroPrism[A] private[avro] (
     * NO-SCHEMA-VALIDATION caveat as [[graftBytes]].
     */
   def graftBytesUnsafe(bytes: Array[Byte], fragment: Array[Byte]): Array[Byte] =
-    AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
-      case Left(_)     => bytes
-      case Right(span) => AvroBinaryCursor.splice(bytes, span, fragment)
+    graftBytes(bytes, fragment).getOrElse(bytes)
 
   // ---- Path widening (used by macro extensions) ---------------------
 

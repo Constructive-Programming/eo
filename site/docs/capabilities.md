@@ -46,10 +46,11 @@ bringing an optic given (or passing one explicitly at the call site with `(using
 
 Every concrete optic class **implements** its capabilities directly, so a capability call on
 a Lens, Prism, Getter, … dispatches straight into the same fused method a direct call uses —
-no wrapper, no allocation (see [Benchmarks](benchmarks.md#capability-dispatch)). Optics known
-only at the generic `Optic[…, F]` type (e.g. results of generic composition, or `Traversal`,
-whose constructors return anonymous optics) are served by a **derived given** in each
-capability's companion instead — a thin wrapper delegating to the same extension methods.
+no wrapper, no allocation (see [Benchmarks](benchmarks.md#capability-dispatch)). Optics that
+implement no capability directly — results of generic composition, and the concrete
+`Traversal` class, which declares no capability mixins yet — are served by a **derived
+given** in each capability's companion instead — a thin wrapper delegating to the same
+extension methods.
 
 | Capability | Operations | Lens | Iso | Prism | Optional | Traversal | Getter | AffineFold | Fold | Review | Modify |
 |---|---|---|---|---|---|---|---|---|---|---|---|
