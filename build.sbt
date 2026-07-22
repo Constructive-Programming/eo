@@ -14,6 +14,21 @@ ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
 ThisBuild / licenses := Seq(License.Apache2)
 ThisBuild / homepage := Some(url("https://github.com/Constructive-Programming/eo"))
+// Scaladex maps Maven Central artifacts back to their GitHub repo
+// through the POM's <scm> block (#72; scalacenter/scaladex#1645).
+// sbt-typelevel-github normally derives `scmInfo` from the
+// `GITHUB_REPOSITORY` env var (in Actions) or by parsing the `origin`
+// remote — both are environment-dependent and fail silently to `None`
+// when neither is available (leaving the POM without <scm>). Pin it
+// explicitly so every published POM carries the section regardless of
+// where the artifacts are built.
+ThisBuild / scmInfo := Some(
+  ScmInfo(
+    url("https://github.com/Constructive-Programming/eo"),
+    "scm:git:https://github.com/Constructive-Programming/eo.git",
+    Some("scm:git:git@github.com:Constructive-Programming/eo.git"),
+  )
+)
 ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
