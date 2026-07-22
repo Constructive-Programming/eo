@@ -2,6 +2,7 @@ package dev.constructive.eo
 package data
 
 import scala.annotation.tailrec
+import scala.collection.immutable.ArraySeq
 
 import cats.{Applicative, Eval, Foldable, Functor, Traverse}
 
@@ -272,3 +273,19 @@ object PSVec:
           loop(i + 1)
       loop(0)
       unsafeWrap(a)
+
+  /** Collect the values of any `Foldable` container into a PSVec, in fold order. `ArraySeq.ofRef`'s
+    * backing array is aliased zero-copy (safe: ArraySeq is immutable and no PSVec operation mutates
+    * a wrapped array); every other shape collects through one exact-or-hinted builder.
+    */
+  def from[T[_]: Foldable, A](ta: T[A]): PSVec[A] =
+    ta match
+      case refArr: ArraySeq.ofRef[?] =>
+        unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
+      case _ =>
+        val hint = ta match
+          case it: Iterable[?] if it.knownSize >= 0 => it.knownSize
+          case _                                    => 16
+        val buf = new ObjArrBuilder(hint)
+        Foldable[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
+        buf.freezeAsPSVec[A]
