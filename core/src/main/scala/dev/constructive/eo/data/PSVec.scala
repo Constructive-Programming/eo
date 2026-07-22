@@ -24,8 +24,19 @@ sealed trait PSVec[+B] extends IterableOnce[B]:
 
   /** Index-walking iterator — the [[IterableOnce]] bridge (and what makes a PSVec acceptable
     * anywhere a collection is). Hot paths stay on the index loops.
+    *
+    * Deliberately hand-rolled, NOT `Iterator.tabulate(length)(apply)` — BY MEASUREMENT (2026-07-22,
+    * -prof gc): the tabulate version regressed `JsoniterBench.jReadId` 48 → 72 B/op (+50%) — its
+    * lambda-capturing shape perturbs inlining enough to un-elide the generic `foldMap` closure in
+    * forks that merely LOAD this class. Do not re-simplify without re-measuring that bench.
     */
-  def iterator: Iterator[B] = Iterator.tabulate(length)(apply)
+  def iterator: Iterator[B] = new collection.AbstractIterator[B]:
+    private var i = 0
+    def hasNext: Boolean = i < PSVec.this.length
+    def next(): B =
+      val b = apply(i)
+      i += 1
+      b
 
   override def knownSize: Int = length
 
@@ -268,6 +279,17 @@ object PSVec:
       case v: PSVec[B @unchecked]    => v
       case refArr: ArraySeq.ofRef[?] =>
         unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[Any]])
+      case list: List[?] =>
+        // Structural exact-size fill. List's `knownSize` is -1, so the generic branch pays
+        // `Iterator.toArray`'s grow-and-copy chain; the O(n) `length` pointer walk is cheaper —
+        // BY MEASUREMENT (TraversalBench.eoModify size=8, -prof gc: 608 vs 736 B/op, 2026-07-22).
+        val arr = new Array[Any](list.length)
+        @tailrec def fill(i: Int, rest: List[?]): Unit =
+          if rest.nonEmpty then
+            arr(i) = rest.head
+            fill(i + 1, rest.tail)
+        fill(0, list)
+        unsafeWrap(arr)
       case _ =>
         unsafeWrap(xs.iterator.toArray[Any])
 
