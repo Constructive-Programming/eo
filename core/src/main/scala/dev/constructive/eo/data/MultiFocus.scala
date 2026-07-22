@@ -478,8 +478,8 @@ object MultiFocusK:
       // Cartesian / singleton — T = List[B] preserved via List(b).
       (s: S) =>
         val (_, fa) = o.to(s)
-        val b: B = agg(fa.asInstanceOf[List[A]])
-        o.from((null.asInstanceOf[o.X], List(b)).asInstanceOf[(o.X, List[B])])
+        val b: B = agg(fa)
+        o.from((null.asInstanceOf[o.X], List(b)))
 
   /** Functor-broadcast aggregation — preserves F-shape via `map(_ => agg(fa))`; every focus
     * position receives the aggregate. Works for any `Functor[F]`; for List this is the
@@ -494,7 +494,7 @@ object MultiFocusK:
       (s: S) =>
         val (x, fa) = o.to(s)
         val b: C = agg(fa)
-        val fb: F[B] = F.map(fa)(_ => b.asInstanceOf[B])
+        val fb: F[B] = F.map(fa)(_ => ev(b))
         o.from((x, fb))
 
     /** The algebraic-lens universal for the map-shaped collects — `agg` sees the whole focus
@@ -688,8 +688,7 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       o match
-        case glr: optics.GetReplaceLens[?, ?, ?, ?] =>
-          val lens = glr.asInstanceOf[optics.GetReplaceLens[S, T, A, B]]
+        case lens: optics.GetReplaceLens[S, T, A, B] @unchecked =>
           new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusSingleton[S, T, A, B, S]:
             type X = S
             def to(s: S): (S, PSVec[A]) = (s, PSVec.singleton[A](lens.get(s)))
@@ -903,10 +902,10 @@ object MultiFocusK:
         ((), read)
       def from(pair: (Unit, Int => A)): T =
         val k = pair._2
-        val arr = new Array[Object](size)
+        val arr = new Array[Any](size)
         @tailrec def loop(i: Int): Unit =
           if i < size then
-            arr(i) = k(i).asInstanceOf[Object]
+            arr(i) = k(i)
             loop(i + 1)
         loop(0)
         Tuple.fromArray(arr).asInstanceOf[T]

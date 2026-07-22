@@ -269,7 +269,7 @@ object PSVec:
       case refArr: ArraySeq.ofRef[?] =>
         unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[Any]])
       case _ =>
-        unsafeWrap(xs.iterator.toArray[Any].asInstanceOf[Array[Any]])
+        unsafeWrap(xs.iterator.toArray[Any])
 
   /** Build a PSVec from an `Array` — one defensive copy (`Array.copyAs`: an intrinsic `arraycopy`
     * for reference arrays, a boxing fill for primitive ones). The array is caller-owned and
