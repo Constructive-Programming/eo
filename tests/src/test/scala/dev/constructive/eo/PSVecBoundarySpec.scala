@@ -94,6 +94,24 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
     (a.hashCode == b.hashCode) must beFalse
   }
 
+  "PSVec.from fast paths agree with the generic walk and are identity on PSVec" >> {
+    // covers: from(List) structural fill (order + exact size), from(Array) defensive copy
+    // (ref clone + primitive boxing, and mutation-after-build isolation), from(PSVec) no-op.
+    val viaList = PSVec.from(List(1, 2, 3))
+    val viaVector = PSVec.from(Vector(1, 2, 3))
+    val refArr = Array("a", "b")
+    val viaRefArr = PSVec.from(refArr)
+    refArr(0) = "mutated"
+    val primArr = Array(1, 2, 3)
+    val viaPrimArr = PSVec.from(primArr)
+    primArr(0) = -1
+    (viaList must beEqualTo(viaVector))
+      .and(PSVec.from(List.empty[Int]) must beEqualTo(PSVec.empty[Int]))
+      .and(viaRefArr.toList must beEqualTo(List("a", "b")))
+      .and(viaPrimArr.toList must beEqualTo(List(1, 2, 3)))
+      .and(PSVec.from(viaList) must beTheSameAs(viaList))
+  }
+
   "hashing a null-bearing PSVec is total" >> {
     // covers: PSVec.hashCode null guard (line 78) — a flipped or dropped guard NPEs on
     // null elements.

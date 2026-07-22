@@ -272,19 +272,50 @@ object PSVec:
 
   /** Build a PSVec from any collection. A PSVec passes through untouched; `ArraySeq.ofRef`'s
     * backing array is aliased zero-copy (safe: ArraySeq is immutable and no PSVec operation mutates
-    * a wrapped array); every other shape collects through one exact-or-hinted [[ObjArrBuilder]],
-    * whose freeze specialises 0 / 1 results to `Empty` / `Single`.
+    * a wrapped array); a `List` fills one exact-sized array structurally (the O(n) `length` pointer
+    * walk is cheaper than the builder's grow-and-copy chain a `knownSize == -1` shape otherwise
+    * pays); every other shape collects through one exact-or-hinted [[ObjArrBuilder]], whose freeze
+    * specialises 0 / 1 results to `Empty` / `Single`.
     */
   def from[B](xs: IterableOnce[B]): PSVec[B] =
     xs match
       case v: PSVec[?]               => v.asInstanceOf[PSVec[B]]
       case refArr: ArraySeq.ofRef[?] =>
         unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
+      case list: List[?] =>
+        if list.isEmpty then Empty
+        else
+          val arr = new Array[AnyRef](list.length)
+          @tailrec def fill(i: Int, rest: List[?]): Unit =
+            if rest.nonEmpty then
+              arr(i) = rest.head.asInstanceOf[AnyRef]
+              fill(i + 1, rest.tail)
+          fill(0, list)
+          unsafeWrap(arr)
       case _ =>
         val n = xs.knownSize
         val buf = new ObjArrBuilder(if n >= 0 then n else 16)
         xs.iterator.foreach(b => buf.append(b.asInstanceOf[AnyRef]))
         buf.freezeAsPSVec[B]
+
+  /** Build a PSVec from an `Array` — one defensive copy. The array is caller-owned and mutable, so
+    * it can NOT be aliased the way immutable `ArraySeq.ofRef`'s backing is; a reference array is
+    * one `clone`, a primitive array boxes through an exact-sized fill. Also spares the
+    * `Predef.genericWrapArray` allocation the `IterableOnce` overload would force on an Array
+    * argument.
+    */
+  def from[B](arr: Array[B]): PSVec[B] =
+    arr match
+      case refs: Array[AnyRef] => unsafeWrap[B](refs.clone())
+      case _                   =>
+        val n = arr.length
+        val a = new Array[AnyRef](n)
+        @tailrec def fill(i: Int): Unit =
+          if i < n then
+            a(i) = arr(i).asInstanceOf[AnyRef]
+            fill(i + 1)
+        fill(0)
+        unsafeWrap[B](a)
 
   /** [[from]] for any `Foldable` container, in fold order. An `IterableOnce`-backed container —
     * PSVec itself included — routes through the structural overload (sound whenever the instance
