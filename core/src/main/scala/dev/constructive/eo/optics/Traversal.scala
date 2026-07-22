@@ -3,7 +3,7 @@ package optics
 
 import scala.collection.immutable.ArraySeq
 
-import cats.{Monoid, Traverse}
+import cats.{Monoid, MonoidK, Traverse}
 
 import data.{MultiFocus, MultiFocusK, PSVec}
 
@@ -71,7 +71,7 @@ abstract class Traversal[S, T, A, B] extends Optic[S, T, A, B, MultiFocus[PSVec]
     * vector build (the extension routes through `to(s)`).
     */
   def headOption(s: S): Option[A] =
-    foldMap[Option[A]](Some(_))(s)(using Monoid.instance[Option[A]](None, (l, r) => l.orElse(r)))
+    foldMap[Option[A]](Some(_))(s)(using MonoidK[Option].algebra[A])
 
   /** Focus count via the streaming [[foldMap]] — member twin of the generic `Optic.length`. */
   def length(s: S): Int =

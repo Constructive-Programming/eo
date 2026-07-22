@@ -25,13 +25,7 @@ sealed trait PSVec[+B] extends IterableOnce[B]:
   /** Index-walking iterator — the [[IterableOnce]] bridge (and what makes a PSVec acceptable
     * anywhere a collection is). Hot paths stay on the index loops.
     */
-  def iterator: Iterator[B] = new collection.AbstractIterator[B]:
-    private var i = 0
-    def hasNext: Boolean = i < PSVec.this.length
-    def next(): B =
-      val b = apply(i)
-      i += 1
-      b
+  def iterator: Iterator[B] = Iterator.tabulate(length)(apply)
 
   override def knownSize: Int = length
 
@@ -283,15 +277,13 @@ object PSVec:
       case refArr: ArraySeq.ofRef[?] =>
         unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
       case list: List[?] =>
-        if list.isEmpty then Empty
-        else
-          val arr = new Array[AnyRef](list.length)
-          @tailrec def fill(i: Int, rest: List[?]): Unit =
-            if rest.nonEmpty then
-              arr(i) = rest.head.asInstanceOf[AnyRef]
-              fill(i + 1, rest.tail)
-          fill(0, list)
-          unsafeWrap(arr)
+        val arr = new Array[AnyRef](list.length)
+        @tailrec def fill(i: Int, rest: List[?]): Unit =
+          if rest.nonEmpty then
+            arr(i) = rest.head.asInstanceOf[AnyRef]
+            fill(i + 1, rest.tail)
+        fill(0, list)
+        unsafeWrap(arr)
       case _ =>
         val n = xs.knownSize
         val buf = new ObjArrBuilder(if n >= 0 then n else 16)
