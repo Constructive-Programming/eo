@@ -82,7 +82,7 @@ final class JsonTraversal[A] private[circe] (
 
   private def walkPrefixIor(
       json: Json
-  ): Either[Ior.Left[Chain[JsonFailure]], (Vector[Json], Vector[AnyRef])] =
+  ): Either[Ior.Left[Chain[JsonFailure]], (Vector[Json], Vector[JsonWalk.ParentStep])] =
     JsonWalk
       .walkPath(json, prefix)
       .left
@@ -114,7 +114,7 @@ final class JsonTraversal[A] private[circe] (
       .flatMap { case (cur, parents) => cur.asArray.map(arr => (arr, parents)) }
       .map {
         case (arr, parents) =>
-          JsonWalk.rebuildPath(parents, prefix, Json.fromValues(arr.map(elemUpdate)))
+          JsonWalk.rebuildPath(parents, Json.fromValues(arr.map(elemUpdate)))
       }
       .getOrElse(json)
 
@@ -137,7 +137,7 @@ final class JsonTraversal[A] private[circe] (
       case Left(l)               => l
       case Right((arr, parents)) =>
         val (newArr, chain) = JsonTraversalAccumulator.mapElementsIor(arr, elemUpdate)
-        val newChild = JsonWalk.rebuildPath(parents, prefix, Json.fromValues(newArr))
+        val newChild = JsonWalk.rebuildPath(parents, Json.fromValues(newArr))
         if chain.isEmpty then Ior.Right(newChild) else Ior.Both(chain, newChild)
 
   private def getAllIor(json: Json): Ior[Chain[JsonFailure], Vector[A]] =

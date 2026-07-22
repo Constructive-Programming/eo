@@ -87,7 +87,7 @@ private[circe] object JsonFocus:
             decoder.decodeJson(cur) match
               case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
               case Right(a) =>
-                Right((a, (b: A) => JsonWalk.rebuildPath(parents, path, encoder(b))))
+                Right((a, (b: A) => JsonWalk.rebuildPath(parents, encoder(b))))
 
     def modifyImpl(json: Json, f: A => A): Json =
       // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
@@ -99,14 +99,14 @@ private[circe] object JsonFocus:
     def transformImpl(json: Json, f: Json => Json): Json =
       JsonWalk.walkPath(json, path) match
         case Left(_)               => json
-        case Right((cur, parents)) => JsonWalk.rebuildPath(parents, path, f(cur))
+        case Right((cur, parents)) => JsonWalk.rebuildPath(parents, f(cur))
 
     def placeImpl(json: Json, a: A): Json =
       if path.length == 0 then encoder(a)
       else
         JsonWalk.walkPath(json, path) match
           case Left(_)             => json
-          case Right((_, parents)) => JsonWalk.rebuildPath(parents, path, encoder(a))
+          case Right((_, parents)) => JsonWalk.rebuildPath(parents, encoder(a))
 
     def readImpl(json: Json): Option[A] =
       JsonWalk.walkPath(json, path).toOption.flatMap(s => decoder.decodeJson(s._1).toOption)
@@ -115,13 +115,13 @@ private[circe] object JsonFocus:
       JsonWalk.walkPath(json, path) match
         case Left(failure)         => Ior.Both(Chain.one(failure), json)
         case Right((cur, parents)) =>
-          decodeOrFail(cur, json)(a => JsonWalk.rebuildPath(parents, path, encoder(f(a))))
+          decodeOrFail(cur, json)(a => JsonWalk.rebuildPath(parents, encoder(f(a))))
 
     def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
       JsonWalk.walkPath(json, path) match
         case Left(failure)         => Ior.Both(Chain.one(failure), json)
         case Right((cur, parents)) =>
-          Ior.Right(JsonWalk.rebuildPath(parents, path, f(cur)))
+          Ior.Right(JsonWalk.rebuildPath(parents, f(cur)))
 
     def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
       if path.length == 0 then Ior.Right(encoder(a))
@@ -129,7 +129,7 @@ private[circe] object JsonFocus:
         JsonWalk.walkPath(json, path) match
           case Left(failure)       => Ior.Both(Chain.one(failure), json)
           case Right((_, parents)) =>
-            Ior.Right(JsonWalk.rebuildPath(parents, path, encoder(a)))
+            Ior.Right(JsonWalk.rebuildPath(parents, encoder(a)))
 
     def readIor(json: Json): Ior[Chain[JsonFailure], A] =
       JsonWalk.walkPath(json, path) match
@@ -177,7 +177,9 @@ private[circe] object JsonFocus:
       fieldNames.foldLeft(parent)((out, name) => newSub(name).fold(out)(v => out.add(name, v)))
 
     /** Walk the parent path and project the terminal as a JsonObject. */
-    private def walkParent(json: Json): Either[JsonFailure, (JsonObject, Vector[AnyRef])] =
+    private def walkParent(
+        json: Json
+    ): Either[JsonFailure, (JsonObject, Vector[JsonWalk.ParentStep])] =
       JsonWalk.walkPath(json, parentPath).flatMap {
         case (cur, parents) =>
           cur
@@ -186,8 +188,8 @@ private[circe] object JsonFocus:
             .map(obj => (obj, parents))
       }
 
-    private def rebuild(newParent: JsonObject, parents: Vector[AnyRef]): Json =
-      JsonWalk.rebuildPath(parents, parentPath, Json.fromJsonObject(newParent))
+    private def rebuild(newParent: JsonObject, parents: Vector[JsonWalk.ParentStep]): Json =
+      JsonWalk.rebuildPath(parents, Json.fromJsonObject(newParent))
 
     def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
       walkParent(json) match
