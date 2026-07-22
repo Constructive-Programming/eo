@@ -1,83 +1,88 @@
 package dev.constructive.eo.circe
 
 import scala.annotation.tailrec
+import scala.util.control.ControlThrowable
 
-import dev.constructive.eo.widenRight
-import io.circe.{Json, JsonObject}
+import io.circe.Json
 
 /** Shared internal helpers for the fold-based JSON walks used by [[JsonPrism]] / [[JsonTraversal]]
   * and the [[JsonFocus]] enum.
   *
-  * '''2026-04-26 rethink.''' This file used to host two walks (strict / lenient) and two
-  * single-step helpers with the same fold shape. They were first collapsed behind an
-  * `OnMissingField` policy; the lenient arm then lost its last caller (the raw-transform / place
-  * paths now route through [[JsonFocus]]) and was deleted — `walkPath` and `stepInto` are the only
-  * entry points, and a missing field is always a hard miss.
+  * '''2026-07-22 rethink — fused walk + rebuild.''' This file used to walk down collecting a
+  * `parents` Vector (one node per hop, later one wrapper per hop) and fold it back leaf-to-root in
+  * a separate rebuild pass. The parents existed ONLY to serve that rebuild, in reverse order —
+  * which is exactly what a call stack provides for free. [[modifyPath]] now recurses down and
+  * splices on the way back up: each frame's container is a typed local (no stored parent, no cast,
+  * no walk/rebuild correlation invariant) and NOTHING per-hop reaches the heap — measured −72 B/op
+  * on `OrderCirceBench.eoStreet` vs the wrapper encoding, below the pre-fusion baseline too, since
+  * the `Vector.:+` nodes are gone as well. Reads take [[readPath]], which never touches rebuild
+  * state at all. Recursion depth = `path.length` (small, user-authored); rebuild-on-return is
+  * deliberately non-tail.
+  *
+  * Deferred writers (the `(a, writer)` algebraic-lens seam in `JsonFocus.navigateForWrite`) re-walk
+  * on invocation instead of capturing parents — a second pointer-chasing descent per write, paying
+  * (cheap, allocation-free) CPU instead of per-hop heap.
   */
 private[circe] object JsonWalk:
 
-  /** One collected parent hop: the container walked through PLUS the position taken in it —
-    * everything a rebuild needs, captured at walk time. Reifying the (container, position) pair
-    * makes the old correlation invariant ("`parents(i)`'s runtime shape matches `path(i)`'s step
-    * kind") structural: [[rebuildPath]] no longer takes the path at all, and the `AnyRef` casts the
-    * correlation demanded are gone.
+  /** Cold-branch control signal for [[modifyPath]] — a `ControlThrowable` (no stack trace, not
+    * caught by `NonFatal`), allocated only when the walk misses. Also throwable from the terminal
+    * function via [[miss]] for shape checks ("terminal isn't an array").
     */
-  enum ParentStep:
-    case InObject(obj: JsonObject, name: String)
-    case InArray(arr: Vector[Json], idx: Int)
+  final private class MissSignal(val failure: JsonFailure) extends ControlThrowable
 
-  /** A walked-cursor state: the current Json focus, paired with the Vector of parent hops collected
-    * so far. Hops are ordered root-to-leaf — `parents(0)` is the root container, `parents(n-1)` is
-    * the immediate parent of the terminal value.
+  /** Abort the enclosing [[modifyPath]] with `failure` — the input Json is returned untouched by
+    * the caller's `Left` branch. For terminal-shape checks inside the spliced function.
     */
-  type State = (Json, Vector[ParentStep])
+  def miss(failure: JsonFailure): Nothing = throw new MissSignal(failure)
 
-  /** One step of a walk. A missing field, an out-of-range index, and a non-container parent are all
-    * hard misses.
-    */
-  def stepInto(
-      step: PathStep,
-      cur: Json,
-      parents: Vector[ParentStep],
-  ): Either[JsonFailure, State] =
-    step match
-      case PathStep.Field(name) =>
-        cur.asObject match
-          case None      => Left(JsonFailure.NotAnObject(step))
-          case Some(obj) =>
-            obj(name) match
-              case Some(c) => Right((c, parents :+ ParentStep.InObject(obj, name)))
-              case None    => Left(JsonFailure.PathMissing(step))
-      case PathStep.Index(idx) =>
-        cur.asArray match
-          case None      => Left(JsonFailure.NotAnArray(step))
-          case Some(arr) =>
-            if idx < 0 || idx >= arr.length then Left(JsonFailure.IndexOutOfRange(step, arr.length))
-            else Right((arr(idx), parents :+ ParentStep.InArray(arr, idx)))
+  /** Walk `path` and return the terminal value. Read-only: no rebuild state of any kind. */
+  def readPath(json: Json, path: Array[PathStep]): Either[JsonFailure, Json] =
+    @tailrec def loop(cur: Json, i: Int): Either[JsonFailure, Json] =
+      if i >= path.length then Right(cur)
+      else
+        path(i) match
+          case step @ PathStep.Field(name) =>
+            cur.asObject match
+              case None      => Left(JsonFailure.NotAnObject(step))
+              case Some(obj) =>
+                obj(name) match
+                  case Some(c) => loop(c, i + 1)
+                  case None    => Left(JsonFailure.PathMissing(step))
+          case step @ PathStep.Index(idx) =>
+            cur.asArray match
+              case None      => Left(JsonFailure.NotAnArray(step))
+              case Some(arr) =>
+                if idx < 0 || idx >= arr.length then
+                  Left(JsonFailure.IndexOutOfRange(step, arr.length))
+                else loop(arr(idx), i + 1)
+    loop(json, 0)
 
-  /** Walk an entire `path` from `json`, accumulating parents at each step.
-    *
-    * Manual index loop rather than a `foldLeftM` over `path.toVector`: this runs once per array
-    * element on a Traversal write, so the per-call `Array → Vector` copy and the `Either`-monad
-    * fold machinery were pure churn. Behaviour is identical — first `Left` short-circuits (the
-    * `failure` flag ends the loop; no `return`, per the `DisableSyntax` scalafix rule). The happy
-    * path allocates nothing extra; `Some(f)` is built only on the cold miss branch.
+  /** Walk `path`, apply `f` to the terminal value, and splice the result back up to the root in the
+    * same recursion — the containers live on the call stack, typed, per frame. `f` may call
+    * [[miss]] to abort (decode failure, terminal-shape mismatch); the input is then untouched.
     */
-  def walkPath(
-      json: Json,
-      path: Array[PathStep],
-  ): Either[JsonFailure, State] =
-    @tailrec def loop(
-        cur: Json,
-        parents: Vector[ParentStep],
-        i: Int,
-    ): Either[JsonFailure, State] =
-      if i < path.length then
-        stepInto(path(i), cur, parents) match
-          case l @ Left(_)          => l.widenRight
-          case Right((c, parents2)) => loop(c, parents2, i + 1)
-      else Right((cur, parents))
-    loop(json, Vector.empty, 0)
+  def modifyPath(json: Json, path: Array[PathStep])(f: Json => Json): Either[JsonFailure, Json] =
+    def go(cur: Json, i: Int): Json =
+      if i >= path.length then f(cur)
+      else
+        path(i) match
+          case step @ PathStep.Field(name) =>
+            cur.asObject match
+              case None      => miss(JsonFailure.NotAnObject(step))
+              case Some(obj) =>
+                obj(name) match
+                  case None    => miss(JsonFailure.PathMissing(step))
+                  case Some(c) => Json.fromJsonObject(obj.add(name, go(c, i + 1)))
+          case step @ PathStep.Index(idx) =>
+            cur.asArray match
+              case None      => miss(JsonFailure.NotAnArray(step))
+              case Some(arr) =>
+                if idx < 0 || idx >= arr.length then
+                  miss(JsonFailure.IndexOutOfRange(step, arr.length))
+                else Json.fromValues(arr.updated(idx, go(arr(idx), i + 1)))
+    try Right(go(json, 0))
+    catch case m: MissSignal => Left(m.failure)
 
   /** The terminal step of `path`, or a sentinel `PathStep.Field("")` when `path` is empty. Used
     * when a non-step-shaped failure (decode failure, "terminal value isn't an array") needs to
@@ -85,24 +90,3 @@ private[circe] object JsonWalk:
     */
   inline def terminalOf(path: Array[PathStep]): PathStep =
     if path.length == 0 then PathStep.Field("") else path(path.length - 1)
-
-  /** Rebuild a Json from the leaf back to the root, using the parent hops collected during a walk.
-    * Each hop carries its own container and position, so no path is needed here.
-    *
-    * Manual reverse index loop rather than a `foldRight`: like [[walkPath]] this runs per array
-    * element on a Traversal write, so the fold machinery was pure churn. Behaviour is identical.
-    */
-  def rebuildPath(
-      parents: Vector[ParentStep],
-      newLeaf: Json,
-  ): Json =
-    @tailrec def loop(child: Json, i: Int): Json =
-      if i >= 0 then loop(rebuildStep(parents(i), child), i - 1)
-      else child
-    loop(newLeaf, parents.length - 1)
-
-  /** Splice `child` into `parent` at the position the hop recorded. */
-  inline def rebuildStep(parent: ParentStep, child: Json): Json =
-    parent match
-      case ParentStep.InObject(obj, name) => Json.fromJsonObject(obj.add(name, child))
-      case ParentStep.InArray(arr, idx)   => Json.fromValues(arr.updated(idx, child))

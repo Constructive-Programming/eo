@@ -81,60 +81,67 @@ private[circe] object JsonFocus:
             // Root full-cover: the writer IS the old reverseGet (encode standalone).
             Right((a, (b: A) => encoder(b)))
       else
-        JsonWalk.walkPath(json, path) match
-          case l @ Left(_)           => l.widenRight
-          case Right((cur, parents)) =>
+        JsonWalk.readPath(json, path) match
+          case l @ Left(_) => l.widenRight
+          case Right(cur)  =>
             decoder.decodeJson(cur) match
               case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
               case Right(a) =>
-                Right((a, (b: A) => JsonWalk.rebuildPath(parents, encoder(b))))
+                // Deferred writer: re-walk on invocation (fused, allocation-free per hop)
+                // instead of capturing parents. The walk above succeeded on this same
+                // immutable json + path, so the re-walk cannot miss; the fallback is dead.
+                Right(
+                  (a, (b: A) => JsonWalk.modifyPath(json, path)(_ => encoder(b)).getOrElse(json))
+                )
 
     def modifyImpl(json: Json, f: A => A): Json =
-      // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
-      // the silent modify can't drift from it. The captured writer re-encodes and rebuilds.
-      navigateForWrite(json) match
-        case Right((a, writer)) => writer(f(a))
-        case Left(_)            => json
+      // ONE fused walk: decode + re-encode happen at the terminal frame; a decode failure
+      // aborts via miss so the input passes through untouched (no partial rebuild).
+      if path.length == 0 then decoder.decodeJson(json).map(a => encoder(f(a))).getOrElse(json)
+      else
+        JsonWalk
+          .modifyPath(json, path) { cur =>
+            decoder.decodeJson(cur) match
+              case Right(a) => encoder(f(a))
+              case Left(df) => JsonWalk.miss(JsonFailure.DecodeFailed(terminalStep, df))
+          }
+          .getOrElse(json)
 
     def transformImpl(json: Json, f: Json => Json): Json =
-      JsonWalk.walkPath(json, path) match
-        case Left(_)               => json
-        case Right((cur, parents)) => JsonWalk.rebuildPath(parents, f(cur))
+      JsonWalk.modifyPath(json, path)(f).getOrElse(json)
 
     def placeImpl(json: Json, a: A): Json =
       if path.length == 0 then encoder(a)
-      else
-        JsonWalk.walkPath(json, path) match
-          case Left(_)             => json
-          case Right((_, parents)) => JsonWalk.rebuildPath(parents, encoder(a))
+      else JsonWalk.modifyPath(json, path)(_ => encoder(a)).getOrElse(json)
 
     def readImpl(json: Json): Option[A] =
-      JsonWalk.walkPath(json, path).toOption.flatMap(s => decoder.decodeJson(s._1).toOption)
+      JsonWalk.readPath(json, path).toOption.flatMap(cur => decoder.decodeJson(cur).toOption)
 
     def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
-      JsonWalk.walkPath(json, path) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), json)
-        case Right((cur, parents)) =>
-          decodeOrFail(cur, json)(a => JsonWalk.rebuildPath(parents, encoder(f(a))))
+      JsonWalk.modifyPath(json, path) { cur =>
+        decoder.decodeJson(cur) match
+          case Right(a) => encoder(f(a))
+          case Left(df) => JsonWalk.miss(JsonFailure.DecodeFailed(terminalStep, df))
+      } match
+        case Right(out)    => Ior.Right(out)
+        case Left(failure) => Ior.Both(Chain.one(failure), json)
 
     def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
-      JsonWalk.walkPath(json, path) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), json)
-        case Right((cur, parents)) =>
-          Ior.Right(JsonWalk.rebuildPath(parents, f(cur)))
+      JsonWalk.modifyPath(json, path)(f) match
+        case Right(out)    => Ior.Right(out)
+        case Left(failure) => Ior.Both(Chain.one(failure), json)
 
     def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
       if path.length == 0 then Ior.Right(encoder(a))
       else
-        JsonWalk.walkPath(json, path) match
-          case Left(failure)       => Ior.Both(Chain.one(failure), json)
-          case Right((_, parents)) =>
-            Ior.Right(JsonWalk.rebuildPath(parents, encoder(a)))
+        JsonWalk.modifyPath(json, path)(_ => encoder(a)) match
+          case Right(out)    => Ior.Right(out)
+          case Left(failure) => Ior.Both(Chain.one(failure), json)
 
     def readIor(json: Json): Ior[Chain[JsonFailure], A] =
-      JsonWalk.walkPath(json, path) match
-        case Left(failure)   => Ior.Left(Chain.one(failure))
-        case Right((cur, _)) => decodeOrLeft(cur)
+      JsonWalk.readPath(json, path) match
+        case Left(failure) => Ior.Left(Chain.one(failure))
+        case Right(cur)    => decodeOrLeft(cur)
 
   /** Multi-field focus — reaches a parent `JsonObject` via `parentPath`, then assembles a
     * NamedTuple `A` from `fieldNames`. All-or-nothing: a partial read accumulates one `PathMissing`
@@ -176,25 +183,28 @@ private[circe] object JsonFocus:
     private def overlayFields(parent: JsonObject, newSub: JsonObject): JsonObject =
       fieldNames.foldLeft(parent)((out, name) => newSub(name).fold(out)(v => out.add(name, v)))
 
-    /** Walk the parent path and project the terminal as a JsonObject. */
-    private def walkParent(
-        json: Json
-    ): Either[JsonFailure, (JsonObject, Vector[JsonWalk.ParentStep])] =
-      JsonWalk.walkPath(json, parentPath).flatMap {
-        case (cur, parents) =>
-          cur
-            .asObject
-            .toRight(JsonFailure.NotAnObject(terminalStep))
-            .map(obj => (obj, parents))
+    /** Walk the parent path (read-only) and project the terminal as a JsonObject. */
+    private def readParent(json: Json): Either[JsonFailure, JsonObject] =
+      JsonWalk.readPath(json, parentPath).flatMap { cur =>
+        cur.asObject.toRight(JsonFailure.NotAnObject(terminalStep))
       }
 
-    private def rebuild(newParent: JsonObject, parents: Vector[JsonWalk.ParentStep]): Json =
-      JsonWalk.rebuildPath(parents, Json.fromJsonObject(newParent))
+    /** Fused walk + parent-object splice: `compute` sees the walked parent and returns its
+      * replacement; a non-object terminal aborts via miss.
+      */
+    private def spliceParent(
+        json: Json
+    )(compute: JsonObject => JsonObject): Either[JsonFailure, Json] =
+      JsonWalk.modifyPath(json, parentPath) { cur =>
+        cur.asObject match
+          case Some(obj) => Json.fromJsonObject(compute(obj))
+          case None      => JsonWalk.miss(JsonFailure.NotAnObject(terminalStep))
+      }
 
     def navigateForWrite(json: Json): Either[JsonFailure, (A, A => Json)] =
-      walkParent(json) match
-        case l @ Left(_)           => l.widenRight
-        case Right((obj, parents)) =>
+      readParent(json) match
+        case l @ Left(_) => l.widenRight
+        case Right(obj)  =>
           readFields(obj) match
             case Left(chain) =>
               Left(chain.headOption.getOrElse(JsonFailure.PathMissing(terminalStep)))
@@ -202,67 +212,71 @@ private[circe] object JsonFocus:
               Json.fromJsonObject(sub).as[A](using decoder) match
                 case Left(df) => Left(JsonFailure.DecodeFailed(terminalStep, df))
                 case Right(a) =>
-                  // Writer overlays the NT fields BY NAME onto the resolved parent object.
-                  Right((a, (b: A) => rebuild(writeFields(obj, b), parents)))
+                  // Writer overlays the NT fields BY NAME onto the resolved parent object,
+                  // re-walking (fused, per-hop-allocation-free) on invocation.
+                  Right((a, (b: A) => spliceParent(json)(_ => writeFields(obj, b)).getOrElse(json)))
 
     def modifyImpl(json: Json, f: A => A): Json =
-      // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays
-      // separate — it must surface readFields' accumulated PathMissing Chain, which
-      // navigateForWrite collapses to a single failure.
-      navigateForWrite(json) match
-        case Right((a, writer)) => writer(f(a))
-        case Left(_)            => json
+      // ONE fused walk: fields read + decode + overlay happen at the parent frame; any
+      // failure aborts via miss and the input passes through. NB the *Ior* modify stays
+      // separate — it must surface readFields' accumulated PathMissing Chain, which this
+      // silent surface collapses to pass-through.
+      spliceParent(json) { obj =>
+        readFields(obj) match
+          case Left(chain) =>
+            JsonWalk.miss(chain.headOption.getOrElse(JsonFailure.PathMissing(terminalStep)))
+          case Right(sub) =>
+            Json.fromJsonObject(sub).as[A](using decoder) match
+              case Left(df) => JsonWalk.miss(JsonFailure.DecodeFailed(terminalStep, df))
+              case Right(a) => writeFields(obj, f(a))
+      }.getOrElse(json)
 
     def transformImpl(json: Json, f: Json => Json): Json =
-      walkParent(json) match
-        case Left(_)               => json
-        case Right((obj, parents)) =>
-          f(Json.fromJsonObject(buildSubObject(obj)))
-            .asObject
-            .map(newSub => rebuild(overlayFields(obj, newSub), parents))
-            .getOrElse(json)
+      spliceParent(json) { obj =>
+        f(Json.fromJsonObject(buildSubObject(obj))).asObject match
+          case Some(newSub) => overlayFields(obj, newSub)
+          case None         => JsonWalk.miss(JsonFailure.NotAnObject(terminalStep))
+      }.getOrElse(json)
 
     def placeImpl(json: Json, a: A): Json =
-      walkParent(json) match
-        case Left(_)               => json
-        case Right((obj, parents)) => rebuild(writeFields(obj, a), parents)
+      spliceParent(json)(obj => writeFields(obj, a)).getOrElse(json)
 
     def readImpl(json: Json): Option[A] =
-      walkParent(json).toOption.flatMap {
-        case (obj, _) =>
-          readFields(obj)
-            .toOption
-            .flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).toOption)
+      readParent(json).toOption.flatMap { obj =>
+        readFields(obj)
+          .toOption
+          .flatMap(sub => Json.fromJsonObject(sub).as[A](using decoder).toOption)
       }
 
     def modifyIor(json: Json, f: A => A): Ior[Chain[JsonFailure], Json] =
-      walkParent(json) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), json)
-        case Right((obj, parents)) =>
+      readParent(json) match
+        case Left(failure) => Ior.Both(Chain.one(failure), json)
+        case Right(obj)    =>
           readFields(obj) match
             case Left(chain) => Ior.Both(chain, json)
             case Right(sub)  =>
               decodeOrFail(Json.fromJsonObject(sub), json)(a =>
-                rebuild(writeFields(obj, f(a)), parents)
+                spliceParent(json)(_ => writeFields(obj, f(a))).getOrElse(json)
               )
 
     def transformIor(json: Json, f: Json => Json): Ior[Chain[JsonFailure], Json] =
-      walkParent(json) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), json)
-        case Right((obj, parents)) =>
-          f(Json.fromJsonObject(buildSubObject(obj))).asObject match
-            case None         => Ior.Both(Chain.one(JsonFailure.NotAnObject(terminalStep)), json)
-            case Some(newSub) => Ior.Right(rebuild(overlayFields(obj, newSub), parents))
+      spliceParent(json) { obj =>
+        f(Json.fromJsonObject(buildSubObject(obj))).asObject match
+          case Some(newSub) => overlayFields(obj, newSub)
+          case None         => JsonWalk.miss(JsonFailure.NotAnObject(terminalStep))
+      } match
+        case Right(out)    => Ior.Right(out)
+        case Left(failure) => Ior.Both(Chain.one(failure), json)
 
     def placeIor(json: Json, a: A): Ior[Chain[JsonFailure], Json] =
-      walkParent(json) match
-        case Left(failure)         => Ior.Both(Chain.one(failure), json)
-        case Right((obj, parents)) => Ior.Right(rebuild(writeFields(obj, a), parents))
+      spliceParent(json)(obj => writeFields(obj, a)) match
+        case Right(out)    => Ior.Right(out)
+        case Left(failure) => Ior.Both(Chain.one(failure), json)
 
     def readIor(json: Json): Ior[Chain[JsonFailure], A] =
-      walkParent(json) match
-        case Left(failure)   => Ior.Left(Chain.one(failure))
-        case Right((obj, _)) =>
+      readParent(json) match
+        case Left(failure) => Ior.Left(Chain.one(failure))
+        case Right(obj)    =>
           readFields(obj) match
             case Left(chain) => Ior.Left(chain)
             case Right(sub)  => decodeOrLeft(Json.fromJsonObject(sub))
