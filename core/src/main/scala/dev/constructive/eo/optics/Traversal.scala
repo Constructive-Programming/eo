@@ -1,7 +1,6 @@
 package dev.constructive.eo
 package optics
 
-import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 
 import cats.{Monoid, Traverse}
@@ -143,23 +142,31 @@ object Traversal:
       outer: Optic[S, T, A, B, MultiFocus[PSVec]],
       inner: Optic[A, B, C, D, MultiFocus[PSVec]],
   ): Traversal[S, T, C, D] =
-    val af = MultiFocusK.mfAssocPSVec[outer.X, inner.X]
-    new Traversal[S, T, C, D]:
-      type X = af.Z
-      def to(s: S): MultiFocus[PSVec][X, C] = af.composeTo(s, outer, inner)
-      def from(xd: MultiFocus[PSVec][X, D]): T = af.composeFrom(xd, inner, outer)
+    new ComposedTraversal[S, T, A, B, C, D, outer.X, inner.X](outer, inner)
 
-      // NO foldMap override — composed folds keep the base class's materialize-then-fold walk,
-      // BY MEASUREMENT (2026-07-22, -prof gc, List[LineItem] fixtures). Streaming was tried in
-      // three shapes and lost to the flat `composeTo` array walk in every regime that matters:
-      // per-element dispatch 2x'd B/op on `lens∘each∘lens` at n ≥ 32 (megamorphic loop body —
-      // nothing inlines, the singleton bridge's pair + boxes reach the heap); a pair-free
-      // `f ∘ singletonFocus` variant with the inner resolved once per call still lost ~35% B/op
-      // at n ≥ 256 (won only below ~32 foci); and even the each∘each shape — where inner
-      // dispatch amortizes over whole sub-containers — measured +37% B/op streamed
-      // (TraversalBench.eoFoldNested vs its Optic-ascribed materialized twin). The tight
-      // `@tailrec` walk over one flat array is what the JIT rewards; only the LEAF constructors
-      // (pEach / selfChildren) stream. Do not re-stream composed folds without re-measuring.
+  /** The concrete class behind [[composed]] — see its scaladoc for why the composition re-homes
+    * under [[Traversal]].
+    *
+    * NO foldMap override — composed folds keep the base class's materialize-then-fold walk, BY
+    * MEASUREMENT (2026-07-22, -prof gc, List[LineItem] fixtures). Streaming was tried in three
+    * shapes and lost to the flat `composeTo` array walk in every regime that matters: per-element
+    * dispatch 2x'd B/op on `lens∘each∘lens` at n ≥ 32 (megamorphic loop body — nothing inlines, the
+    * singleton bridge's pair + boxes reach the heap); a pair-free `f ∘ singletonFocus` variant with
+    * the inner resolved once per call still lost ~35% B/op at n ≥ 256 (won only below ~32 foci);
+    * and even the each∘each shape — where inner dispatch amortizes over whole sub-containers —
+    * measured +37% B/op streamed (TraversalBench.eoFoldNested vs its Optic-ascribed materialized
+    * twin). The tight `@tailrec` walk over one flat array is what the JIT rewards; only the LEAF
+    * constructors (pEach / selfChildren) stream. Do not re-stream composed folds without
+    * re-measuring.
+    */
+  final private[optics] class ComposedTraversal[S, T, A, B, C, D, Xo, Xi](
+      outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
+      inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+  ) extends Traversal[S, T, C, D]:
+    private[optics] val af = MultiFocusK.mfAssocPSVec[Xo, Xi]
+    type X = af.Z
+    def to(s: S): MultiFocus[PSVec][X, C] = af.composeTo(s, outer, inner)
+    def from(xd: MultiFocus[PSVec][X, D]): T = af.composeFrom(xd, inner, outer)
 
   /** Monomorphic Traversal over `Traverse[T]` — `S = T = T[A]`, focus preserved.
     *
@@ -180,74 +187,54 @@ object Traversal:
     * @group Constructors
     */
   def pEach[T[_]: Traverse, A, B]: Traversal[T[A], T[B], A, B] =
-    new Traversal[T[A], T[B], A, B]:
-      type X = T[A]
+    new TraverseTraversal[T, A, B]
 
-      // True only for cats' own head-to-tail List instance. Gates the List fast paths in `to` /
-      // `from` below: it rules out both a custom (possibly reverse-order) Traverse whose values
-      // erase to List AND shapes like `T = Id` over a value that happens to be a List (where the
-      // single focus is the list itself, not its elements).
-      private val listFast: Boolean =
-        Traverse[T] eq cats.instances.list.catsStdInstancesForList
+  /** The concrete class behind [[each]] / [[pEach]] — a Traversal over any `Traverse[T]`, with the
+    * original container as the reassembly context.
+    */
+  final private[optics] class TraverseTraversal[T[_]: Traverse, A, B]
+      extends Traversal[T[A], T[B], A, B]:
+    type X = T[A]
 
-      def to(ta: T[A]): MultiFocus[PSVec][X, A] =
-        ta match
-          case refArr: ArraySeq.ofRef[?] =>
-            // ArraySeq.ofRef.unsafeArray is already an Array[AnyRef]; aliasing is safe because
-            // ArraySeq is immutable and Functor[PSVec].map allocates fresh output.
-            MultiFocus(
-              ta,
-              PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]]),
-            )
-          case xs: List[?] if listFast =>
-            // Structural head-to-tail fill (the guarded instance's traversal order): one
-            // exact-sized array, no builder growth chain, no foldLeft closure. `xs.length` is an
-            // O(n) pointer walk — cheaper than the grow-and-copy chain it replaces.
-            if xs.isEmpty then MultiFocus(ta, PSVec.empty[A])
-            else
-              val arr = new Array[AnyRef](xs.length)
-              @tailrec def fill(i: Int, rest: List[?]): Unit =
-                if rest.nonEmpty then
-                  arr(i) = rest.head.asInstanceOf[AnyRef]
-                  fill(i + 1, rest.tail)
-              fill(0, xs)
-              MultiFocus(ta, PSVec.unsafeWrap[A](arr))
-          case _ =>
-            val buf = new ObjArrBuilder(ta match
-              case it: Iterable[?] if it.knownSize >= 0 => it.knownSize
-              case _                                    => 16)
-            Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
-            MultiFocus(ta, buf.freezeAsPSVec[A])
+    def to(ta: T[A]): MultiFocus[PSVec][X, A] =
+      MultiFocus(ta, foci(ta))
 
-      def from(pair: MultiFocus[PSVec][X, B]): T[B] =
-        val (xo, vec) = (pair.context, pair.foci)
-        xo match
-          case _: ArraySeq[?] =>
-            // `unsafeShareableArray` returns the Slice's backing array when it densely covers
-            // it (always true post-`composeFrom`); ArraySeq.unsafeWrapArray forbids mutation,
-            // so aliasing is safe end-to-end. Fallback PSVec shapes copy via toAnyRefArray.
-            ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
-          case _: List[?] if listFast =>
-            // Tail-first rebuild straight from the focus vector — for List the leftover context
-            // contributes only its length, so walking the stale `xo` through `Traverse[T].map`
-            // (plus the captured-`var` IntRef the closure boxes) is pure overhead.
-            @tailrec def build(i: Int, acc: List[B]): List[B] =
-              if i < 0 then acc
-              else build(i - 1, vec(i) :: acc)
-            build(vec.length - 1, Nil).asInstanceOf[T[B]]
-          case _ =>
-            var idx = 0
-            Traverse[T].map(xo) { _ =>
-              val b = vec(idx)
-              idx += 1
-              b
-            }
+    // The focus vector in Traverse[T] order. `ArraySeq.ofRef.unsafeArray` is already an
+    // Array[AnyRef]; aliasing it is safe because ArraySeq is immutable and Functor[PSVec].map
+    // allocates fresh output. Every other shape collects through one exact-or-hinted builder.
+    private def foci(ta: T[A]): PSVec[A] =
+      ta match
+        case refArr: ArraySeq.ofRef[?] =>
+          PSVec.unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
+        case _ =>
+          val hint = ta match
+            case it: Iterable[?] if it.knownSize >= 0 => it.knownSize
+            case _                                    => 16
+          val buf = new ObjArrBuilder(hint)
+          Traverse[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
+          buf.freezeAsPSVec[A]
 
-      // Streaming read path: fold the container directly — `to(ta)`'s focus vector (and for the
-      // non-ArraySeq shapes, its collect array) exists only to serve `from`, which a fold never
-      // calls. Same focus order as `to` by construction (both follow Traverse[T]).
-      override def foldMap[M](f: A => M)(ta: T[A])(using Monoid[M]): M =
-        Traverse[T].foldMap(ta)(f)
+    def from(pair: MultiFocus[PSVec][X, B]): T[B] =
+      val (xo, vec) = (pair.context, pair.foci)
+      xo match
+        case _: ArraySeq[?] =>
+          // `unsafeShareableArray` returns the Slice's backing array when it densely covers
+          // it (always true post-`composeFrom`); ArraySeq.unsafeWrapArray forbids mutation,
+          // so aliasing is safe end-to-end. Fallback PSVec shapes copy via toAnyRefArray.
+          ArraySeq.unsafeWrapArray(vec.unsafeShareableArray).asInstanceOf[T[B]]
+        case _ =>
+          var idx = 0
+          Traverse[T].map(xo) { _ =>
+            val b = vec(idx)
+            idx += 1
+            b
+          }
+
+    // Streaming read path: fold the container directly — `to(ta)`'s focus vector (and for the
+    // non-ArraySeq shapes, its collect array) exists only to serve `from`, which a fold never
+    // calls. Same focus order as `to` by construction (both follow Traverse[T]).
+    override def foldMap[M](f: A => M)(ta: T[A])(using Monoid[M]): M =
+      Traverse[T].foldMap(ta)(f)
 
   /** Monomorphic self-traversal from an explicit immediate-children view — focuses the values of
     * `S` that are themselves `S` (the immediate sub-terms), with `S` itself as the leftover
