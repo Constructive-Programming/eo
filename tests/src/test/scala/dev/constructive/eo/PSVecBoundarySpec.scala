@@ -95,8 +95,8 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
   }
 
   "PSVec.from fast paths agree with the generic walk and are identity on PSVec" >> {
-    // covers: from(List) structural fill (order + exact size), from(Array) defensive copy
-    // (ref clone + primitive boxing, and mutation-after-build isolation), from(PSVec) no-op.
+    // covers: from(IterableOnce) shape agreement (order + size), from(Array) defensive copy
+    // (ref + primitive via Array.copyAs, and mutation-after-build isolation), from(PSVec) no-op.
     val viaList = PSVec.from(List(1, 2, 3))
     val viaVector = PSVec.from(Vector(1, 2, 3))
     val refArr = Array("a", "b")
