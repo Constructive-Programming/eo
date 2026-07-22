@@ -53,7 +53,7 @@ final class AvroRecordPrism[A] private[avro] (
   /** Navigate + decode the focus in one walk; a `Hit` carries the writer that walk captured. */
   def to(record: IndexedRecord): Affine[X, A] =
     focus.navigateForWrite(record) match
-      case Left(_)            => new Affine.Miss[X, A](record)
+      case Left(_)            => new Affine.Miss[X](record)
       case Right((a, writer)) => new Affine.Hit[X, A](writer, a)
 
   /** Apply the captured writer to the (possibly modified) focus — sibling-preserving; a `Miss`
@@ -61,8 +61,8 @@ final class AvroRecordPrism[A] private[avro] (
     */
   def from(aff: Affine[X, A]): IndexedRecord =
     aff match
-      case m: Affine.Miss[X, A] => m.fst
-      case h: Affine.Hit[X, A]  => h.snd(h.b)
+      case m: Affine.Miss[X]   => m.fst
+      case h: Affine.Hit[X, A] => h.snd(h.b)
 
   // ---- Read surface --------------------------------------------------
 

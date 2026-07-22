@@ -299,7 +299,9 @@ object MultiFocusK:
     * @group Instances
     */
   given mfAssocFunction1[X0, Xo, Xi]: AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
-    type Z = (Xo, Xi)
+    // The broadcast carrier's composed context is never read (both `composeFrom` destructures
+    // discard it), so it is Unit BY TYPE — no null-sentinel pair to cast.
+    type Z = Unit
 
     def composeTo[S, T, A, B, C, D](
         s: S,
@@ -310,7 +312,7 @@ object MultiFocusK:
       // Null sentinel works because `.modify` doesn't observe the focus value (spike Q1).
       val a: A = kO(null.asInstanceOf[X0])
       val (_, kI) = inner.to(a)
-      ((null.asInstanceOf[Xo], null.asInstanceOf[Xi]), kI)
+      ((), kI)
 
     def composeFrom[S, T, A, B, C, D](
         xd: MultiFocus[Function1[X0, *]][Z, D],
@@ -656,19 +658,19 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
-        // X = the Affine itself (miss recycled via widenB, both directions) rather than an
+        // X = the Affine itself (miss recycled via covariant retype, both directions) rather than an
         // unpacked Either[Fst, Snd] — same shape as `multifocusF2multifocus` below.
         type X = Affine[o.X, Unit]
         def to(s: S): (X, F[A]) =
           o.to(s) match
             case h: Affine.Hit[o.X, A] =>
               (new Affine.Hit[o.X, Unit](h.snd, ()), Applicative[F].pure(h.b))
-            case m: Affine.Miss[o.X, A] =>
-              (m.widenB[Unit], Alternative[F].empty[A])
+            case m: Affine.Miss[o.X] =>
+              (m, Alternative[F].empty[A])
         def from(pair: (X, F[B])): T =
           pair match
-            case (m: Affine.Miss[o.X, Unit] @unchecked, _) =>
-              o.from(m.widenB[B])
+            case (m: Affine.Miss[o.X] @unchecked, _) =>
+              o.from(m)
             case (h: Affine.Hit[o.X, Unit] @unchecked, fb) =>
               o.from(new Affine.Hit[o.X, B](h.snd, pickSingletonOrThrow(fb, "Affine")))
 
@@ -760,18 +762,18 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
-        // X = the Affine itself (miss recycled via widenB, both directions) — see
+        // X = the Affine itself (miss recycled via covariant retype, both directions) — see
         // `affine2multifocus`. The collectTo / reconstructSingleton buffer protocol below
         // is X-independent and keeps its unpacked fst / snd encoding.
         type X = Affine[o.X, Unit]
         def to(s: S): (X, PSVec[A]) =
           o.to(s) match
-            case m: Affine.Miss[o.X, A] => (m.widenB[Unit], PSVec.empty[A])
-            case h: Affine.Hit[o.X, A]  =>
+            case m: Affine.Miss[o.X]   => (m, PSVec.empty[A])
+            case h: Affine.Hit[o.X, A] =>
               (new Affine.Hit[o.X, Unit](h.snd, ()), PSVec.singleton[A](h.b))
         def from(pair: (X, PSVec[B])): T =
           pair match
-            case (m: Affine.Miss[o.X, Unit] @unchecked, _) => o.from(m.widenB[B])
+            case (m: Affine.Miss[o.X] @unchecked, _)       => o.from(m)
             case (h: Affine.Hit[o.X, Unit] @unchecked, vs) =>
               o.from(new Affine.Hit[o.X, B](h.snd, vs.head))
 
@@ -782,7 +784,7 @@ object MultiFocusK:
             flatBuf: ObjArrBuilder,
         ): Unit =
           o.to(s) match
-            case m: Affine.Miss[o.X, A] =>
+            case m: Affine.Miss[o.X] =>
               lenBuf.unsafeAppend(0)
               ysBuf.unsafeAppend(m.fst)
             case h: Affine.Hit[o.X, A] =>
@@ -791,7 +793,7 @@ object MultiFocusK:
               flatBuf.unsafeAppend(h.b)
 
         def reconstructSingleton(y: Any, vys: PSVec[B], pos: Int, len: Int): T =
-          if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
+          if len == 0 then o.from(new Affine.Miss[o.X](y.asInstanceOf[Fst[o.X]]))
           else o.from(new Affine.Hit[o.X, B](y.asInstanceOf[Snd[o.X]], vys(pos)))
 
   /** MultiFocus[F] → ModifyF. Uniform Modify widening for any `Functor[F]`.
@@ -931,7 +933,7 @@ object MultiFocusK:
           o.from(Direct(pair._2(null.asInstanceOf[X0])))
 
   /** Reinterpret an Optional whose focus is an `F[A]` as a MultiFocus optic over the elements — the
-    * mirror of [[fromPrismF]] over the `Affine` miss / hit split (miss recycled via `widenB`, both
+    * mirror of [[fromPrismF]] over the `Affine` miss / hit split (miss recycled covariantly, both
     * directions).
     *
     * @group Constructors
@@ -943,14 +945,14 @@ object MultiFocusK:
       type X = Affine[opt.X, Unit]
       def to(s: S): (X, F[A]) =
         opt.to(s) match
-          case m: Affine.Miss[opt.X, F[A]] @unchecked =>
-            (m.widenB[Unit], MonoidK[F].empty[A])
+          case m: Affine.Miss[opt.X] @unchecked =>
+            (m, MonoidK[F].empty[A])
           case h: Affine.Hit[opt.X, F[A]] @unchecked =>
             (new Affine.Hit[opt.X, Unit](h.snd, ()), h.b)
       def from(pair: (X, F[B])): T =
         pair match
-          case (m: Affine.Miss[opt.X, Unit] @unchecked, _) =>
-            opt.from(m.widenB[F[B]])
+          case (m: Affine.Miss[opt.X] @unchecked, _) =>
+            opt.from(m)
           case (h: Affine.Hit[opt.X, Unit] @unchecked, fb) =>
             opt.from(new Affine.Hit[opt.X, F[B]](h.snd, fb))
 

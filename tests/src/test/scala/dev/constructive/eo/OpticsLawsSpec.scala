@@ -55,7 +55,7 @@ import laws.typeclass.discipline.AssociativeFunctorTests
 private given arbAffineIntStringBool: Arbitrary[Affine[(Int, String), Boolean]] =
   Arbitrary(
     Gen.oneOf(
-      Arbitrary.arbitrary[Int].map(new Affine.Miss[(Int, String), Boolean](_)),
+      Arbitrary.arbitrary[Int].map(new Affine.Miss[(Int, String)](_)),
       for
         s <- Arbitrary.arbitrary[String]
         b <- Arbitrary.arbitrary[Boolean]

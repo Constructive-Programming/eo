@@ -184,9 +184,9 @@ class InternalsCoverageSpec extends Specification:
   // covers: Affine.Miss.equals (Affine.scala:83) — `fst == other.fst` weakened to `!=`
   // would flip both arms; no existing test ever compares Miss to Miss with the same shape.
   "Affine.Miss equality discriminates same-shape equal vs differing fst" >> {
-    val missX = new Affine.Miss[(Int, String), Int](1)
-    val missXAgain = new Affine.Miss[(Int, String), Int](1)
-    val missY = new Affine.Miss[(Int, String), Int](2)
+    val missX = new Affine.Miss[(Int, String)](1)
+    val missXAgain = new Affine.Miss[(Int, String)](1)
+    val missY = new Affine.Miss[(Int, String)](2)
     (missX == missXAgain) must beTrue
     (missX == missY) must beFalse
   }
@@ -229,7 +229,7 @@ class InternalsCoverageSpec extends Specification:
   //   PSVec equals false-arm (PSVec.scala:71): comparison against a non-PSVec,
   //   Foldable[PSVec].foldRight (:132): the Eval loop's boundary and accumulation.
   "dead contract corners: cross-variant equality, null hashing, foldRight" >> {
-    val miss = new Affine.Miss[(Int, String), Int](1)
+    val miss = new Affine.Miss[(Int, String)](1)
     val hit = new Affine.Hit[(Int, String), Int]("s", 1)
     val crossOk = !miss.equals(hit) && !hit.equals(miss) && !miss.equals("x")
     val nullHit = new Affine.Hit[(Int, String), String]("s", null)

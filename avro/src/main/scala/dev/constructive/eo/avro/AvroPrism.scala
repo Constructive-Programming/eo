@@ -130,16 +130,16 @@ final class AvroPrism[A] private[avro] (
 
   private def scan(bytes: Array[Byte]): Affine[X, A] =
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
-      case Left(_)     => new Affine.Miss[X, A](bytes)
+      case Left(_)     => new Affine.Miss[X](bytes)
       case Right(span) =>
         AvroBinaryCursor.decodeSlice(bytes, span, codec) match
           case Right(a) => new Affine.Hit[X, A]((bytes, span), a)
-          case Left(_)  => new Affine.Miss[X, A](bytes)
+          case Left(_)  => new Affine.Miss[X](bytes)
 
   private def spliceAff(aff: Affine[X, A]): Array[Byte] =
     aff match
-      case m: Affine.Miss[X, A] => m.fst
-      case h: Affine.Hit[X, A]  =>
+      case m: Affine.Miss[X]   => m.fst
+      case h: Affine.Hit[X, A] =>
         val (src, span) = h.snd
         val encoded = focus match
           // A Fields span addresses the PARENT record — overlay the NT fields by name onto the

@@ -81,8 +81,8 @@ class JsoniterPrismWriteSpec extends Specification:
       JsoniterPrism.fromPath[Long]("$.payload.user.id")
     val written = idP.replace(99L)(sample)
     idP.to(written) match
-      case h: Affine.Hit[idP.X, Long]  => h.b === 99L
-      case _: Affine.Miss[idP.X, Long] => false === true
+      case h: Affine.Hit[idP.X, Long] => h.b === 99L
+      case _: Affine.Miss[idP.X]      => false === true
   }
 
   "JsoniterPrism .modify(identity): byte-equivalent output for canonical encodings" >> {
