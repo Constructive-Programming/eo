@@ -56,6 +56,17 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
   def singletonTo(s: S): (X0, A)
   def singletonFrom(x: X0, b: B): T
 
+  /** Tuple-free [[singletonTo]] for the PSVec fast path — appends the leftover to `ysBuf` and the
+    * focus to `flatBuf` directly, exactly one element each; the caller pre-sizes both builders
+    * (`unsafeAppend` contract). Mirrors [[MultiFocusPSMaybeHit.collectTo]]. The default
+    * destructures [[singletonTo]]; bridges whose `singletonTo` would build the pair only for it to
+    * be torn straight back down (the `GetReplaceLens` bridge) override with a pair-free body.
+    */
+  def collectSingletonTo(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
+    val (x, a) = singletonTo(s)
+    ysBuf.unsafeAppend(x.asInstanceOf[AnyRef])
+    flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
+
 /** Per-F O(n) builder. Carried as a typeclass because `MonoidK[F].combineK` has inconsistent
   * asymptotics across F (O(n²) on Vector, lossy on Option), so deriving `fromList` from
   * `Traverse[F] + MonoidK[F]` is asymptotically wrong on the carriers we care about.
@@ -338,9 +349,7 @@ object MultiFocusK:
           val flatBuf = new ObjArrBuilder(n)
           @tailrec def loop(i: Int): Unit =
             if i < n then
-              val (xi, c) = ah.singletonTo(va(i))
-              ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
-              flatBuf.unsafeAppend(c.asInstanceOf[AnyRef])
+              ah.collectSingletonTo(va(i), ysBuf, flatBuf)
               loop(i + 1)
           loop(0)
           val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
@@ -687,6 +696,13 @@ object MultiFocusK:
             def from(pair: (S, PSVec[B])): T = lens.enplace(pair._1, pair._2.head)
             def singletonTo(s: S): (S, A) = (s, lens.get(s))
             def singletonFrom(x: S, b: B): T = lens.enplace(x, b)
+            override def collectSingletonTo(
+                s: S,
+                ysBuf: ObjArrBuilder,
+                flatBuf: ObjArrBuilder,
+            ): Unit =
+              ysBuf.unsafeAppend(s.asInstanceOf[AnyRef])
+              flatBuf.unsafeAppend(lens.get(s).asInstanceOf[AnyRef])
         case _ =>
           new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusSingleton[S, T, A, B, o.X]:
             type X = o.X

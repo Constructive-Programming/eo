@@ -66,3 +66,11 @@ class MultiFocusBench extends JmhDefaults:
     order.copy(
       lines = order.lines.map(li => li.copy(qty = li.qty + 1))
     )
+
+  // Composed-chain fold: sum `qty` through the write-capable lens∘each∘lens chain — measures the
+  // read path's composeTo materialization (or, post-streaming-fold, its absence).
+  @Benchmark def eoFold_powerEach: Int =
+    psPath.foldMap(identity[Int])(order)
+
+  @Benchmark def naive_sumQty: Int =
+    order.lines.foldLeft(0)(_ + _.qty)

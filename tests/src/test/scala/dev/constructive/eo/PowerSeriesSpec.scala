@@ -9,7 +9,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-import optics.{Lens, Optic, Traversal}
+import optics.{Lens, Traversal}
 import optics.Optic.*
 import data.{MultiFocus, PSVec}
 
