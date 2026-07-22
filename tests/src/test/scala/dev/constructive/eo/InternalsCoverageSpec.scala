@@ -234,7 +234,7 @@ class InternalsCoverageSpec extends Specification:
     val crossOk = !miss.equals(hit) && !hit.equals(miss) && !miss.equals("x")
     val nullHit = new Affine.Hit[(Int, String), String]("s", null)
     val nullHashOk = nullHit.hashCode == nullHit.hashCode
-    val vec = PSVec.fromIterable(List(1, 2, 3))
+    val vec = PSVec.from(List(1, 2, 3))
     val notAVecOk = !vec.equals("not a vector")
     val folded = cats
       .Foldable[PSVec]
@@ -253,7 +253,7 @@ class InternalsCoverageSpec extends Specification:
   "cold paths: Empty.toAnyRefArray, fromList loop, Hit hash discrimination" >> {
     val emptyArrOk = PSVec.empty[Int].toAnyRefArray.length == 0
     val viaFromList = MultiFocusFromList.forPSVec.fromList(List(1, 2, 3))
-    val fromListOk = viaFromList == PSVec.fromIterable(List(1, 2, 3))
+    val fromListOk = viaFromList == PSVec.from(List(1, 2, 3))
     val h1 = new Affine.Hit[(Int, String), Int]("s", 1).hashCode
     val h2 = new Affine.Hit[(Int, String), Int]("s", 2).hashCode
     (emptyArrOk, fromListOk, h1 == h2) must beEqualTo((true, true, false))

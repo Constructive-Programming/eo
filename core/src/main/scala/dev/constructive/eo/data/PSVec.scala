@@ -239,7 +239,7 @@ object PSVec:
 
   /** Two-element vector — builds the backing array directly, no `List` / `Iterable` intermediate.
     * The common arity for binary-tree children (recursion-scheme coalgebras, `Node(l, r)`), where
-    * `PSVec.of(l, r)` replaces the wasteful `fromIterable(List(l, r))`.
+    * `PSVec.of(l, r)` replaces the wasteful `from(List(l, r))`.
     */
   def of[B](b0: B, b1: B): PSVec[B] =
     val a = new Array[AnyRef](2)
@@ -257,35 +257,29 @@ object PSVec:
       case 1 => new Single[B](arr(0).asInstanceOf[B])
       case _ => new Slice[B](arr, 0, arr.length)
 
-  /** Build a PSVec from any `Iterable` — one backing-array allocation, specialised at length 0 / 1.
-    * The bridge for `Plated` carriers whose children arrive as a `List` / `Vector` / circe object
-    * values rather than already as a focus vector.
+  /** Build a PSVec from any collection. `ArraySeq.ofRef`'s backing array is aliased zero-copy
+    * (safe: ArraySeq is immutable and no PSVec operation mutates a wrapped array); every other
+    * shape collects through one exact-or-hinted [[ObjArrBuilder]], whose freeze specialises 0 / 1
+    * results to `Empty` / `Single`.
     */
-  def fromIterable[B](xs: Iterable[B]): PSVec[B] =
-    val n = xs.size
-    if n == 0 then Empty
-    else
-      val a = new Array[AnyRef](n)
-      val it = xs.iterator
-      @tailrec def loop(i: Int): Unit =
-        if it.hasNext then
-          a(i) = it.next().asInstanceOf[AnyRef]
-          loop(i + 1)
-      loop(0)
-      unsafeWrap(a)
+  def from[B](xs: IterableOnce[B]): PSVec[B] =
+    xs match
+      case refArr: ArraySeq.ofRef[?] =>
+        unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
+      case _ =>
+        val n = xs.knownSize
+        val buf = new ObjArrBuilder(if n >= 0 then n else 16)
+        xs.iterator.foreach(b => buf.append(b.asInstanceOf[AnyRef]))
+        buf.freezeAsPSVec[B]
 
-  /** Collect the values of any `Foldable` container into a PSVec, in fold order. `ArraySeq.ofRef`'s
-    * backing array is aliased zero-copy (safe: ArraySeq is immutable and no PSVec operation mutates
-    * a wrapped array); every other shape collects through one exact-or-hinted builder.
+  /** [[from]] for any `Foldable` container, in fold order. An `Iterable`-backed container routes
+    * through the structural overload (sound whenever the instance folds in iteration order, as
+    * every cats instance does); anything else collects through its own `foldLeft`.
     */
   def from[T[_]: Foldable, A](ta: T[A]): PSVec[A] =
     ta match
-      case refArr: ArraySeq.ofRef[?] =>
-        unsafeWrap[A](refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
-      case _ =>
-        val hint = ta match
-          case it: Iterable[?] if it.knownSize >= 0 => it.knownSize
-          case _                                    => 16
-        val buf = new ObjArrBuilder(hint)
+      case xs: Iterable[?] => from(xs.asInstanceOf[Iterable[A]])
+      case _               =>
+        val buf = new ObjArrBuilder(16)
         Foldable[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
         buf.freezeAsPSVec[A]

@@ -84,7 +84,7 @@ object Plated:
       override def childrenVec(s: S): PSVec[S] = childrenFn(s)
       // `childrenFn` must return a *freshly-allocated* vector (every shipped instance does —
       // `generics.plate` emits `unsafeWrap(new Array(...))`, circe / `fromChildren` go through
-      // `PSVec.fromIterable`, both fresh per call). `unsafeShareableArray` then hands back that
+      // `PSVec.from`, both fresh per call). `unsafeShareableArray` then hands back that
       // backing array copy-free, and [[childrenArray]]'s contract lets the cata engine mutate it.
       override def childrenArray(s: S): Array[AnyRef] = childrenFn(s).unsafeShareableArray
       override def rebuild(parent: S, kids: PSVec[S]): S = rebuildFn(parent, kids)
@@ -96,7 +96,7 @@ object Plated:
     */
   def fromChildren[S](children: S => List[S], rebuild: (S, List[S]) => S): Plated[S] =
     fromChildrenVec(
-      s => PSVec.fromIterable(children(s)),
+      s => PSVec.from(children(s)),
       (s, vec) => rebuild(s, vec.toList),
     )
 

@@ -98,7 +98,7 @@ package object avro:
           case _                    => ()
         loop(i + 1)
     loop(0)
-    PSVec.fromIterable(buf)
+    PSVec.from(buf)
 
   private def avroRecordRebuild(rec: IndexedRecord, vec: PSVec[IndexedRecord]): IndexedRecord =
     val schema = rec.getSchema
