@@ -27,16 +27,16 @@ class InternalsCoverageSpec extends Specification:
 
   // ---- PSVec variants --------------------------------------------------
 
-  // covers: PSVec.Empty has length 0 + isEmpty + toAnyRefArray empty,
+  // covers: PSVec.Empty has length 0 + isEmpty + toAnyArray empty,
   //   PSVec.Empty apply throws IndexOutOfBoundsException,
   //   PSVec.Empty head throws NoSuchElementException,
   //   PSVec.Empty slice returns Empty,
   //   PSVec.empty[A] == PSVec.empty[B] across type args (Nothing-arg unification);
-  //   PSVec.Single has length 1 + apply(0) + head + toAnyRefArray exposes element,
+  //   PSVec.Single has length 1 + apply(0) + head + toAnyArray exposes element,
   //   PSVec.Single apply(i>0) throws IndexOutOfBoundsException,
   //   PSVec.Single slice(0,1) returns self, slice(0,0) / slice(1,1) return Empty,
   //   PSVec.Single slice(-5,5) clamps to self;
-  //   PSVec.Slice apply / head / length / toAnyRefArray over the backing,
+  //   PSVec.Slice apply / head / length / toAnyArray over the backing,
   //   PSVec.Slice slice produces smaller Slice / Single / Empty,
   //   unsafeShareableArray returns backing on full slice (identity),
   //   unsafeShareableArray copies on partial slice (no aliasing);
@@ -47,7 +47,7 @@ class InternalsCoverageSpec extends Specification:
     val empty: PSVec[Nothing] = PSVec.empty[Nothing]
     val emptyLen = (empty.length === 0)
       .and(empty.isEmpty === true)
-      .and(empty.toAnyRefArray.length === 0)
+      .and(empty.toAnyArray.length === 0)
     val emptyApplyThrows =
       try { PSVec.empty[Nothing].apply(0); false }
       catch case _: IndexOutOfBoundsException => true
@@ -61,7 +61,7 @@ class InternalsCoverageSpec extends Specification:
     val singleBasics = (s.length === 1)
       .and(s.apply(0) === 42)
       .and(s.head === 42)
-      .and(s.toAnyRefArray.toList === List(42))
+      .and(s.toAnyArray.toList === List(42))
     val singleOvershoot =
       try { PSVec.singleton(1).apply(1); false }
       catch case _: IndexOutOfBoundsException => true
@@ -71,37 +71,37 @@ class InternalsCoverageSpec extends Specification:
       .and(s2.slice(1, 1) === PSVec.Empty)
       .and(s2.slice(-5, 5) === s2)
 
-    val arrS: Array[AnyRef] = Array("a", "b", "c", "d").map(_.asInstanceOf[AnyRef])
+    val arrS: Array[Any] = Array("a", "b", "c", "d")
     val v: PSVec[String] = PSVec.unsafeWrap[String](arrS)
     val sliceBasics = (v.length === 4)
       .and(v.apply(2) === "c")
       .and(v.head === "a")
-      .and(v.toAnyRefArray.toList === List("a", "b", "c", "d"))
-    val arrI: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
+      .and(v.toAnyArray.toList === List("a", "b", "c", "d"))
+    val arrI: Array[Any] = Array(1, 2, 3, 4, 5)
     val w: PSVec[Int] = PSVec.unsafeWrap[Int](arrI)
-    val sliceOk = (w.slice(1, 4).toAnyRefArray.toList === List(2, 3, 4))
-      .and(w.slice(2, 3).toAnyRefArray.toList === List(3))
+    val sliceOk = (w.slice(1, 4).toAnyArray.toList === List(2, 3, 4))
+      .and(w.slice(2, 3).toAnyArray.toList === List(3))
       .and(w.slice(3, 3) === PSVec.Empty)
-    val arrFull: Array[AnyRef] = Array(1, 2, 3).map(_.asInstanceOf[AnyRef])
+    val arrFull: Array[Any] = Array(1, 2, 3)
     val full: PSVec[Int] = PSVec.unsafeWrap[Int](arrFull)
     val identityOk = (full.unsafeShareableArray eq arrFull) === true
-    val arrP: Array[AnyRef] = Array(1, 2, 3, 4).map(_.asInstanceOf[AnyRef])
+    val arrP: Array[Any] = Array(1, 2, 3, 4)
     val partial: PSVec[Int] = PSVec.unsafeWrap[Int](arrP).slice(1, 3)
     val copyOk = ((partial.unsafeShareableArray eq arrP) === false)
       .and(partial.unsafeShareableArray.toList === List(2, 3))
 
-    val unsafeWrapEmpty = PSVec.unsafeWrap(Array.empty[AnyRef]) === PSVec.Empty
-    val singleWrap: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1).map(_.asInstanceOf[AnyRef]))
+    val unsafeWrapEmpty = PSVec.unsafeWrap(Array.empty[Any]) === PSVec.Empty
+    val singleWrap: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1))
     val unsafeWrapSingle = (singleWrap.length === 1).and(singleWrap.head === 1)
-    val multiWrap: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef]))
+    val multiWrap: PSVec[Int] = PSVec.unsafeWrap[Int](Array(1, 2))
     val unsafeWrapMulti = multiWrap.length === 2
 
     val eqA: PSVec[Int] = PSVec.singleton(7)
     val eqB: PSVec[Int] =
-      PSVec.unsafeWrap[Int](Array(7, 8).map(_.asInstanceOf[AnyRef])).slice(0, 1)
+      PSVec.unsafeWrap[Int](Array(7, 8)).slice(0, 1)
     val eqOk = (eqA === eqB).and(eqA.hashCode === eqB.hashCode)
     val toStringOk =
-      PSVec.unsafeWrap[Int](Array(1, 2).map(_.asInstanceOf[AnyRef])).toString === "PSVec(1, 2)"
+      PSVec.unsafeWrap[Int](Array(1, 2)).toString === "PSVec(1, 2)"
 
     emptyLen
       .and(emptyApplyThrows === true)
@@ -155,16 +155,16 @@ class InternalsCoverageSpec extends Specification:
   // when internal array isn't exactly filled
   "ObjArrBuilder: append+freeze, grow path, partial-freeze copy" >> {
     val exact = new ObjArrBuilder(2)
-    exact.append("a".asInstanceOf[AnyRef]); exact.append("b".asInstanceOf[AnyRef])
+    exact.append("a"); exact.append("b")
     val exactOk = (exact.size === 2).and(exact.freezeArr.toList === List("a", "b"))
 
     val growing = new ObjArrBuilder(2)
-    growing.append("a".asInstanceOf[AnyRef]); growing.append("b".asInstanceOf[AnyRef])
-    growing.append("c".asInstanceOf[AnyRef])
+    growing.append("a"); growing.append("b")
+    growing.append("c")
     val growOk = (growing.size === 3).and(growing.freezeArr.toList === List("a", "b", "c"))
 
     val partial = new ObjArrBuilder(4)
-    partial.append("x".asInstanceOf[AnyRef])
+    partial.append("x")
     val out = partial.freezeArr
     val partialOk = (out.length === 1).and(out(0) === "x")
 
@@ -196,7 +196,7 @@ class InternalsCoverageSpec extends Specification:
   // through to an allocated zero/one-length Slice; structural `===` can't tell the
   // difference (PSVec equality ignores variant), so this needs reference/type checks.
   "PSVec.Slice.slice specializes to Empty (identity) and Single (type) at the n==0/n==1 edges" >> {
-    val arr: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
+    val arr: Array[Any] = Array(1, 2, 3, 4, 5)
     val w: PSVec[Int] = PSVec.unsafeWrap[Int](arr)
     (w.slice(2, 2) must beTheSameAs(PSVec.empty[Int]))
       .and(w.slice(2, 3) must beAnInstanceOf[PSVec.Single[?]])
@@ -207,7 +207,7 @@ class InternalsCoverageSpec extends Specification:
   // array whenever offset==0, even on a partial slice. The existing offset!=0 test can't
   // discriminate this (both operands false either way); this pins offset==0, length<arr.length.
   "PSVec.Slice.unsafeShareableArray does not alias the full backing array on a partial offset-0 slice" >> {
-    val backing: Array[AnyRef] = Array(1, 2, 3, 4, 5).map(_.asInstanceOf[AnyRef])
+    val backing: Array[Any] = Array(1, 2, 3, 4, 5)
     val partial: PSVec[Int] = PSVec.unsafeWrap[Int](backing).slice(0, 3)
     partial.unsafeShareableArray.length must beEqualTo(3)
   }
@@ -244,14 +244,14 @@ class InternalsCoverageSpec extends Specification:
   }
 
   // covers: the remaining cold paths —
-  //   PSVec base toAnyRefArray (PSVec.scala:49): only Empty reaches it (Single/Slice
+  //   PSVec base toAnyArray (PSVec.scala:49): only Empty reaches it (Single/Slice
   //   override); boundary mutants make the vacuous loop call the throwing Empty.apply(0);
   //   MultiFocusFromList.forPSVec.fromList loop (MultiFocus.scala:106): a skipped loop
   //   wraps a null-filled array;
   //   Affine.Hit.hashCode null-guard `true` (Affine.scala:109): collapses to a
   //   snd-only hash — pinned-witness canary, not a contract claim.
-  "cold paths: Empty.toAnyRefArray, fromList loop, Hit hash discrimination" >> {
-    val emptyArrOk = PSVec.empty[Int].toAnyRefArray.length == 0
+  "cold paths: Empty.toAnyArray, fromList loop, Hit hash discrimination" >> {
+    val emptyArrOk = PSVec.empty[Int].toAnyArray.length == 0
     val viaFromList = MultiFocusFromList.forPSVec.fromList(List(1, 2, 3))
     val fromListOk = viaFromList == PSVec.from(List(1, 2, 3))
     val h1 = new Affine.Hit[(Int, String), Int]("s", 1).hashCode

@@ -332,10 +332,10 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         a1 <- Arbitrary.arbitrary[Int]
         a2 <- Arbitrary.arbitrary[Int]
       yield
-        val arr = new Array[AnyRef](3)
-        arr(0) = a0.asInstanceOf[AnyRef]
-        arr(1) = a1.asInstanceOf[AnyRef]
-        arr(2) = a2.asInstanceOf[AnyRef]
+        val arr = new Array[Any](3)
+        arr(0) = a0
+        arr(1) = a1
+        arr(2) = a2
         MultiFocus((x, x), PSVec.unsafeWrap[Int](arr))
     )
 

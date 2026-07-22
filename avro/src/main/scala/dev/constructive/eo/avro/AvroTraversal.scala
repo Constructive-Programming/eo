@@ -101,10 +101,10 @@ final class AvroTraversal[A] private[avro] (
                   case Left(_) => e.copy(focus = None)
           }
         val foci = decoded.result()
-        val arr = new Array[AnyRef](foci.length)
+        val arr = new Array[Any](foci.length)
         var i = 0
         foci.foreach { a =>
-          arr(i) = a.asInstanceOf[AnyRef]
+          arr(i) = a
           i += 1
         }
         MultiFocus((bytes, Some(es.copy(elements = elements))), PSVec.unsafeWrap[A](arr))

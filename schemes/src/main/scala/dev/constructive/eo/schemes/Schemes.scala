@@ -73,10 +73,10 @@ object Schemes:
       val k = kids.length
       if k == 0 then combine(PSVec.empty[R])
       else
-        val out = new Array[AnyRef](k)
+        val out = new Array[Any](k)
         @tailrec def loop(i: Int): Unit =
           if i < k then
-            out(i) = unfoldCoalgRec(coalg, kids(i), depth + 1).asInstanceOf[AnyRef]
+            out(i) = unfoldCoalgRec(coalg, kids(i), depth + 1)
             loop(i + 1)
         loop(0)
         combine(PSVec.unsafeWrap[R](out))
@@ -89,15 +89,15 @@ object Schemes:
     final class Frame(
         val combine: PSVec[R] => R,
         val kids: PSVec[N],
-        val out: Array[AnyRef],
+        val out: Array[Any],
         var i: Int,
     )
     val stack = new ArrayDeque[Frame]()
-    var ret: AnyRef = null.asInstanceOf[AnyRef]
+    var ret: Any = null
     def enter(n: N): Unit =
       val (kids, combine) = coalg(n)
-      if kids.isEmpty then ret = combine(PSVec.empty[R]).asInstanceOf[AnyRef]
-      else stack.push(new Frame(combine, kids, new Array[AnyRef](kids.length), 0))
+      if kids.isEmpty then ret = combine(PSVec.empty[R])
+      else stack.push(new Frame(combine, kids, new Array[Any](kids.length), 0))
     enter(root)
     @tailrec def loop(): R =
       if stack.isEmpty then ret.asInstanceOf[R]
@@ -109,19 +109,19 @@ object Schemes:
           fr.i += 1
           enter(child)
         else
-          ret = fr.combine(PSVec.unsafeWrap[R](fr.out)).asInstanceOf[AnyRef]
+          ret = fr.combine(PSVec.unsafeWrap[R](fr.out))
           val _ = stack.pop()
         loop()
     loop()
 
-  /** In-place fold engine for [[cata]]. `childrenOf` returns a **fresh, owned** `Array[AnyRef]` of
-    * the node's children (via `Plated.childrenArray`); the engine folds each child and **overwrites
-    * its slot with the result**, reusing that one array as the result accumulator instead of
-    * allocating a separate out-array per node — then wraps it once for `alg`. Same on-stack/heap
-    * hybrid and stack-safety as [[unfoldCoalg]]. Safe because `childrenArray`'s contract guarantees
-    * the array is freshly allocated and not aliased.
+  /** In-place fold engine for [[cata]]. `childrenOf` returns a **fresh, owned** `Array[Any]` of the
+    * node's children (via `Plated.childrenArray`); the engine folds each child and **overwrites its
+    * slot with the result**, reusing that one array as the result accumulator instead of allocating
+    * a separate out-array per node — then wraps it once for `alg`. Same on-stack/heap hybrid and
+    * stack-safety as [[unfoldCoalg]]. Safe because `childrenArray`'s contract guarantees the array
+    * is freshly allocated and not aliased.
     */
-  private def foldInPlace[S, A](childrenOf: S => Array[AnyRef], alg: (S, PSVec[A]) => A): S => A =
+  private def foldInPlace[S, A](childrenOf: S => Array[Any], alg: (S, PSVec[A]) => A): S => A =
     s0 => foldInPlaceRec(childrenOf, alg, s0, 0)
 
   /** On-stack fast path for [[foldInPlace]]: post-order recursion up to [[OnStackLimit]] that folds
@@ -129,7 +129,7 @@ object Schemes:
     * accumulator), then defers deep subtrees to [[foldInPlaceHeap]].
     */
   private def foldInPlaceRec[S, A](
-      childrenOf: S => Array[AnyRef],
+      childrenOf: S => Array[Any],
       alg: (S, PSVec[A]) => A,
       s: S,
       depth: Int,
@@ -143,7 +143,7 @@ object Schemes:
         @tailrec def loop(i: Int): Unit =
           if i < k then
             val child = arr(i).asInstanceOf[S]
-            arr(i) = foldInPlaceRec(childrenOf, alg, child, depth + 1).asInstanceOf[AnyRef]
+            arr(i) = foldInPlaceRec(childrenOf, alg, child, depth + 1)
             loop(i + 1)
         loop(0)
         alg(s, PSVec.unsafeWrap[A](arr))
@@ -154,16 +154,16 @@ object Schemes:
     * tail position for stack-safety.
     */
   private def foldInPlaceHeap[S, A](
-      childrenOf: S => Array[AnyRef],
+      childrenOf: S => Array[Any],
       alg: (S, PSVec[A]) => A,
       root: S,
   ): A =
-    final class Frame(val node: S, val arr: Array[AnyRef], var i: Int)
+    final class Frame(val node: S, val arr: Array[Any], var i: Int)
     val stack = new ArrayDeque[Frame]()
-    var ret: AnyRef = null.asInstanceOf[AnyRef]
+    var ret: Any = null
     def enter(s: S): Unit =
       val arr = childrenOf(s)
-      if arr.length == 0 then ret = alg(s, PSVec.empty[A]).asInstanceOf[AnyRef]
+      if arr.length == 0 then ret = alg(s, PSVec.empty[A])
       else stack.push(new Frame(s, arr, 0))
     enter(root)
     @tailrec def loop(): A =
@@ -176,7 +176,7 @@ object Schemes:
           fr.i += 1
           enter(child)
         else
-          ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr)).asInstanceOf[AnyRef]
+          ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr))
           val _ = stack.pop()
         loop()
     loop()

@@ -197,7 +197,7 @@ class CrossCarrierCompositionSpec extends Specification:
     // primitive (not a record) — the per-element walk surfaces NotARecord. Build the array by
     // hand so the per-element shape is genuinely broken.
     val brokenElems: Seq[AnyRef] = Seq(
-      "oops".asInstanceOf[AnyRef],
+      "oops",
       orderRecord(Order("y", 2.0, 2)),
     )
     val brokenBasket = basketRoot(brokenElems)
