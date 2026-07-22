@@ -16,11 +16,24 @@ import cats.{Applicative, Eval, Foldable, Functor, Traverse}
   *
   * Equality is value-based across variants.
   */
-sealed trait PSVec[+B]:
+sealed trait PSVec[+B] extends IterableOnce[B]:
   def length: Int
 
   /** Indexed access. Unchecked: UB if `i < 0 || i >= length`. */
   def apply(i: Int): B
+
+  /** Index-walking iterator — the [[IterableOnce]] bridge (and what makes a PSVec acceptable
+    * anywhere a collection is). Hot paths stay on the index loops.
+    */
+  def iterator: Iterator[B] = new collection.AbstractIterator[B]:
+    private var i = 0
+    def hasNext: Boolean = i < PSVec.this.length
+    def next(): B =
+      val b = apply(i)
+      i += 1
+      b
+
+  override def knownSize: Int = length
 
   /** Read the first element. Unchecked: UB if [[length]] == 0. */
   def head: B
@@ -257,13 +270,14 @@ object PSVec:
       case 1 => new Single[B](arr(0).asInstanceOf[B])
       case _ => new Slice[B](arr, 0, arr.length)
 
-  /** Build a PSVec from any collection. `ArraySeq.ofRef`'s backing array is aliased zero-copy
-    * (safe: ArraySeq is immutable and no PSVec operation mutates a wrapped array); every other
-    * shape collects through one exact-or-hinted [[ObjArrBuilder]], whose freeze specialises 0 / 1
-    * results to `Empty` / `Single`.
+  /** Build a PSVec from any collection. A PSVec passes through untouched; `ArraySeq.ofRef`'s
+    * backing array is aliased zero-copy (safe: ArraySeq is immutable and no PSVec operation mutates
+    * a wrapped array); every other shape collects through one exact-or-hinted [[ObjArrBuilder]],
+    * whose freeze specialises 0 / 1 results to `Empty` / `Single`.
     */
   def from[B](xs: IterableOnce[B]): PSVec[B] =
     xs match
+      case v: PSVec[?]               => v.asInstanceOf[PSVec[B]]
       case refArr: ArraySeq.ofRef[?] =>
         unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[AnyRef]])
       case _ =>
@@ -272,14 +286,15 @@ object PSVec:
         xs.iterator.foreach(b => buf.append(b.asInstanceOf[AnyRef]))
         buf.freezeAsPSVec[B]
 
-  /** [[from]] for any `Foldable` container, in fold order. An `Iterable`-backed container routes
-    * through the structural overload (sound whenever the instance folds in iteration order, as
-    * every cats instance does); anything else collects through its own `foldLeft`.
+  /** [[from]] for any `Foldable` container, in fold order. An `IterableOnce`-backed container —
+    * PSVec itself included — routes through the structural overload (sound whenever the instance
+    * folds in iteration order, as every cats instance does); anything else collects through its own
+    * `foldLeft`.
     */
   def from[T[_]: Foldable, A](ta: T[A]): PSVec[A] =
     ta match
-      case xs: Iterable[?] => from(xs.asInstanceOf[Iterable[A]])
-      case _               =>
+      case xs: IterableOnce[?] => from(xs.asInstanceOf[IterableOnce[A]])
+      case _                   =>
         val buf = new ObjArrBuilder(16)
         Foldable[T].foldLeft(ta, ())((_, a) => { buf.append(a.asInstanceOf[AnyRef]); () })
         buf.freezeAsPSVec[A]
