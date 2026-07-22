@@ -14,6 +14,13 @@ ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
 ThisBuild / licenses := Seq(License.Apache2)
 ThisBuild / homepage := Some(url("https://github.com/Constructive-Programming/eo"))
+ThisBuild / scmInfo := Some(
+  ScmInfo(
+    url("https://github.com/Constructive-Programming/eo"),
+    "scm:git:https://github.com/Constructive-Programming/eo.git",
+    Some("scm:git:git@github.com:Constructive-Programming/eo.git"),
+  )
+)
 ThisBuild / developers := List(
   tlGitHubDev("kryptt", "Rodolfo Hansen")
 )
