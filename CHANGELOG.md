@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-07-23
+
+### Added
+
+- **Fused `Traversal` composition**: same-carrier `Traversal.andThen(Traversal)` and the
+  `Traversal.andThen(Lens)` overloads (plus their Lens-family duals) now return the concrete
+  `Traversal` class via the named `ComposedTraversal` / `TraverseTraversal` classes, so a
+  composed chain keeps the fused inline `modify` / `replace` members and per-site monomorphic
+  `to` / `from` dispatch.
+- **Streaming leaf folds**: `Traversal.foldMap` is an overridable member the leaf constructors
+  (`pEach`, `selfChildren`) override with folds that never build the focus vector; member twins
+  `headOption` / `length` / `exists` ride the same path. Composed folds deliberately keep the
+  materialize-then-fold walk — streamed variants measured worse in every regime that matters.
+- **`PSVec.from` universal constructors**: one `from` for `IterableOnce` (PSVec identity
+  pass-through, `ArraySeq.ofRef` zero-copy alias, structural `List` fast path), an `Array`
+  overload (one `Array.copyAs` defensive copy), and a `Foldable` overload; replaces
+  `fromIterable`. `PSVec` now extends `IterableOnce` (`iterator` / `knownSize`).
+
+### Changed
+
+- **BREAKING vs 0.12.x**: `Affine` is covariant in its focus and `Affine.Miss` drops its phantom
+  `B` type parameter entirely (`Miss[A] <: Affine[A, Nothing]`) — retyping a miss across a focus
+  change is now a compiler-verified upcast and the `widenB` cast helper is deleted.
+  `PSVec.fromIterable` is removed (use `from`), `toAnyRefArray` is renamed `toAnyArray`, and the
+  internal erased storage currency is `Array[Any]` end-to-end.
+
+### Fixed
+
+- **POMs always carry `<scm>`** (#72): `scmInfo` is pinned explicitly instead of derived from
+  the CI environment, so every published artifact keeps the section Scaladex needs regardless
+  of where it is built.
+
+### Performance
+
+- **circe path writes allocate less than 0.12** (`-prof gc`, size=8): fused walk + rebuild in
+  `JsonWalk` deletes the parents vector entirely (`eoStreet` 2 968 → 2 720 B/op,
+  `eoNames` 11 216 → 10 944), on top of removing its casts and the walk/rebuild correlation
+  invariant.
+- **`mfAssocPSVec.composeTo` now inlines**: the 432-byte monolith sat past C2's 325-byte
+  hot-inline ceiling on every release since the kernel landed; split into a 123-byte dispatcher
+  plus per-branch bodies, all under the ceiling.
+- **Small-container traversal modify**: `TraversalBench.eoModify` size=8 688 → 608 B/op via the
+  `PSVec.from` List fast path; jsoniter depth-3 reads 152 → 128 B/op via the single-outer
+  zero-copy composition branch.
+
 ## [0.12.0] - 2026-07-21
 
 ### Fixed
