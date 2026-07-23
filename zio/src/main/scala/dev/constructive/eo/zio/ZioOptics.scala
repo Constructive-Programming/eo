@@ -1,9 +1,9 @@
 package dev.constructive.eo
 package zio
 
-import _root_.zio.{Ref, Tag, Trace, UIO, URIO, ZEnvironment, ZIO, ZLayer}
+import _root_.zio.{Exit, Ref, Tag, Trace, UIO, URIO, ZEnvironment, ZIO, ZLayer}
 
-import optics.Lens
+import optics.{GetReplaceLens, Lens, PickMendPrism, Prism}
 
 /** ZIO dependency-injection integration.
   *
@@ -69,3 +69,30 @@ extension [S](ref: Ref[S])
   /** Atomically overwrite the focus. */
   def setFocus[A](a: A)(using m: CanModify[S, A])(using Trace): UIO[Unit] =
     ref.update(m.replace(a))
+
+// ---- automatic capability provision ------------------------------------
+//
+// `import dev.constructive.eo.zio.given` and ZIO's types provide eo
+// capabilities on their own — generic capability-consuming code
+// (`def render[T](t: T)(using CanGet[T, Config])`) accepts a ZIO subject
+// with no hand-written given. Both givens are declared at the concrete
+// optic class, so the class's own capability mixins satisfy the direct
+// summons (lexical givens win over the capability companions'
+// derivations) and the `Optic` facet feeds the derived ones
+// (`CanModifyF`, ...). Coherence: this is the ONE optic given per
+// `(S, A)` pair for these types — don't add competing ones.
+
+/** Service-slot optic given for `ZEnvironment[R]`: `CanGet` / `CanModify` / `CanFold` (and the
+  * `Optic`-derived capabilities) for every tagged `A` of `R`, summoned per pair through
+  * [[service]].
+  */
+given environmentOptic[R, A >: R](using
+    Tag[A]
+): GetReplaceLens[ZEnvironment[R], ZEnvironment[R], A, A] =
+  service[R, A]
+
+/** Success prism given for `Exit[E, A]`: `CanGetOption` / `CanModify` / `CanReverseGet` / `CanFold`
+  * on the completed branch; failed exits pass through writes untouched.
+  */
+given exitOptic[E, A]: PickMendPrism[Exit[E, A], A, A] =
+  Prism.optional(_.foldExit(_ => None, Some(_)), Exit.succeed)

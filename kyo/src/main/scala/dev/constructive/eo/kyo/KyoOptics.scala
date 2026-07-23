@@ -5,7 +5,7 @@ import scala.annotation.unused
 
 import _root_.kyo.*
 
-import optics.Lens
+import optics.{GetReplaceLens, Lens, PickMendPrism, Prism}
 
 /** Kyo dependency-injection integration (kyo-prelude only — Env / Var / Layer / TypeMap; no
   * kyo-core IO).
@@ -71,3 +71,30 @@ extension (@unused V: Var.type)
   /** Overwrite the focus. */
   def setFocus[S, A](a: A)(using m: CanModify[S, A])(using Tag[Var[S]], Frame): Unit < Var[S] =
     Var.updateDiscard[S](m.replace(a))
+
+// ---- automatic capability provision ------------------------------------
+//
+// `import dev.constructive.eo.kyo.given` and Kyo's types provide eo
+// capabilities on their own, mirroring the zio module's givens. Each is
+// the ONE optic given per `(S, A)` pair for its type — don't add
+// competing ones. Declared at the concrete optic classes so their
+// capability mixins satisfy direct summons and the `Optic` facet feeds
+// the derived ones.
+
+/** Slot optic given for `TypeMap[R]`: `CanGet` / `CanModify` / `CanFold` for every tagged `A` of
+  * `R`, summoned per pair through [[service]].
+  */
+given typeMapOptic[R, A >: R](using Tag[A]): GetReplaceLens[TypeMap[R], TypeMap[R], A, A] =
+  service[R, A]
+
+/** Present prism given for `Maybe[A]`: `CanGetOption` / `CanModify` / `CanReverseGet` / `CanFold`;
+  * `Absent` passes through writes untouched.
+  */
+given maybeOptic[A]: PickMendPrism[Maybe[A], A, A] =
+  Prism.optional(_.toOption, Maybe.Present(_))
+
+/** Success prism given for `Result[E, A]` — the analogue of the zio module's `Exit` prism; failures
+  * and panics pass through writes untouched.
+  */
+given resultOptic[E, A]: PickMendPrism[Result[E, A], A, A] =
+  Prism.optional(_.toMaybe.toOption, Result.succeed)

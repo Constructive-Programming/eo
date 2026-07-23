@@ -115,6 +115,38 @@ Unsafe.unsafe(implicit u =>
 `getFocus` (via `CanGet`) and `getFocusOption` (via `CanGetOption`,
 for Prism / Optional / AffineFold evidence) complete the read side.
 
+## Automatic capability givens
+
+ZIO's types can also provide eo capabilities *by themselves*. A
+`given` import (Scala 3's `*` wildcard deliberately does not pull
+givens) puts one optic given per pair in scope:
+
+- `(ZEnvironment[R], A)` for every tagged service `A` of `R` — the
+  [`service`](#the-service-lens) lens, so `CanGet` / `CanModify` /
+  `CanFold` and the derived capabilities;
+- `(Exit[E, A], A)` — a success prism, so `CanGetOption` /
+  `CanModify` / `CanReverseGet`; failed exits pass through writes
+  untouched.
+
+Generic capability-consuming code then accepts ZIO subjects with no
+hand-written given:
+
+```scala mdoc
+import dev.constructive.eo.zio.given
+
+def report[T](t: T)(using g: CanGet[T, Db]): String = g.get(t).url
+def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)
+
+report(env)
+
+bump(Exit.succeed(41))
+
+bump(Exit.fail("boom"): Exit[String, Int])
+```
+
+Coherence rule as everywhere in eo: these are THE optic givens for
+their `(S, A)` pairs — don't declare competing ones.
+
 ## Effectful modify
 
 There is deliberately **no** `modifyZIO` in this module.

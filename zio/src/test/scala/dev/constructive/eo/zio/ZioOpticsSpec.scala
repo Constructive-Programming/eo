@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package zio
 
-import _root_.zio.{Ref, Runtime, Unsafe, ZEnvironment, ZIO, ZLayer}
+import _root_.zio.{Exit, Ref, Runtime, Unsafe, ZEnvironment, ZIO, ZLayer}
 import org.specs2.mutable.Specification
 
 import optics.Lens
@@ -57,6 +57,20 @@ class ZioOpticsSpec extends Specification:
         d <- ref.get
       yield (url, d)
       run(program) === (("JDBC:H2", Db("JDBC:H2", 8)))
+    }
+  }
+
+  "automatic capability givens" should {
+    "serve generic capability-consuming code on ZEnvironment" >> {
+      def prefix[T](t: T)(using g: CanGet[T, Metrics]): String = g.get(t).prefix
+      def resize[T](t: T)(using m: CanModify[T, Db]): T = m.modify(_.copy(pool = 9))(t)
+      (prefix(env) === "eo").and(resize(env).get[Db].pool === 9)
+    }
+    "serve the Exit success prism, failures passing through" >> {
+      def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)
+      (bump(Exit.succeed(1)) === Exit.succeed(2))
+        .and(bump(Exit.fail("boom"): Exit[String, Int]) === Exit.fail("boom"))
+        .and(summon[CanGetOption[Exit[String, Int], Int]].getOption(Exit.succeed(3)) === Some(3))
     }
   }
 

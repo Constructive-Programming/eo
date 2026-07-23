@@ -111,6 +111,35 @@ Var.runTuple(Db("jdbc:h2", 4))(update).eval
 `getFocusOption` (via `CanGetOption`) covers partial foci — Prism,
 Optional and AffineFold evidence.
 
+## Automatic capability givens
+
+Kyo's types can also provide eo capabilities *by themselves*, mirroring
+[the ZIO module's givens](zio.md#automatic-capability-givens). A
+`given` import (the `*` wildcard deliberately does not pull givens)
+puts one optic given per pair in scope:
+
+- `(TypeMap[R], A)` for every tagged slot `A` of `R` — the
+  [`service`](#the-service-lens) lens;
+- `(Maybe[A], A)` — a `Present` prism;
+- `(Result[E, A], A)` — a success prism; failures and panics pass
+  through writes untouched.
+
+```scala mdoc
+import dev.constructive.eo.kyo.given
+
+def report[T](t: T)(using g: CanGet[T, Db]): String = g.get(t).url
+def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)
+
+report(tm)
+
+bump(Maybe(41))
+
+bump(Result.fail("e"): Result[String, Int])
+```
+
+Coherence rule as everywhere in eo: these are THE optic givens for
+their `(S, A)` pairs — don't declare competing ones.
+
 ## Explicit nulls
 
 Kyo's inline kernel is not `-Yexplicit-nulls`-clean: its machinery

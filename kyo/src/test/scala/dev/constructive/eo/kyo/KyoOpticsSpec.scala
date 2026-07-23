@@ -61,6 +61,22 @@ class KyoOpticsSpec extends Specification:
     }
   }
 
+  "automatic capability givens" should {
+    "serve generic capability-consuming code on TypeMap" >> {
+      def prefix[T](t: T)(using g: CanGet[T, Metrics]): String = g.get(t).prefix
+      def resize[T](t: T)(using m: CanModify[T, Db]): T = m.modify(_.copy(pool = 9))(t)
+      (prefix(tm) === "eo").and(resize(tm).get[Db].pool === 9)
+    }
+    "serve Maybe and Result prisms, misses passing through" >> {
+      def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)
+      (bump(Maybe(1)) === Maybe(2))
+        .and(bump(Maybe.empty[Int]) === Maybe.empty[Int])
+        .and(bump(Result.succeed(1): Result[String, Int]) === Result.succeed(2))
+        .and(bump(Result.fail("e"): Result[String, Int]) === Result.fail("e"))
+        .and(summon[CanGetOption[Maybe[Int], Int]].getOption(Maybe(5)) === Some(5))
+    }
+  }
+
   "Layer.focus" should {
     "derive the sub-service from the aggregate" >> {
       val out = Env.run(db)(Memo.run(Layer.focus[Db, String].run)).eval
