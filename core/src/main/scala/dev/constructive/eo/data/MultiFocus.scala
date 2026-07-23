@@ -337,70 +337,107 @@ object MultiFocusK:
     type SndZ = AssocSndZ[Xo, Xi]
     type Z = SndZ
 
+    // `composeTo` is a small dispatcher over four private per-branch bodies, NOT one method —
+    // the monolithic body measured 432 bytecode bytes, past C2's 325-byte hot-inline ceiling
+    // (`FreqInlineSize`), so it failed to inline at EVERY call site ("hot method too big",
+    // PrintInlining 2026-07-23, PowerSeriesNestedBench). Split, the dispatcher inlines and each
+    // branch body sits under the ceiling, so per-site profiles can flatten the whole path —
+    // the same forwarder pattern JsoniterPrism.to/from documents.
+
     def composeTo[S, T, A, B, C, D](
         s: S,
         outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
         inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
     ): MultiFocus[PSVec][Z, C] =
       val (xo, va) = outer.to(s)
+      inner match
+        case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked => singletonTo(xo, va, ah)
+        case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked    => maybeHitTo(xo, va, mh)
+        case _ if va.length == 1                                => singleOuterTo(xo, va, inner)
+        case _                                                  => genericTo(xo, va, inner)
+
+    /** Always-hit fast path (mfSingleton): every call produces exactly one focus. */
+    private def singletonTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        ah: MultiFocusSingleton[A, B, C, D, Xi],
+    ): MultiFocus[PSVec][Z, C] =
       val n = va.length
       val ysBuf = new ObjArrBuilder(n)
-      inner match
-        case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
-          // Always-hit fast path (mfSingleton): every call produces exactly one focus.
-          val flatBuf = new ObjArrBuilder(n)
-          @tailrec def loop(i: Int): Unit =
-            if i < n then
-              ah.collectSingletonTo(va(i), ysBuf, flatBuf)
-              loop(i + 1)
-          loop(0)
-          val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
-          (sndZ, flatBuf.freezeAsPSVec[C])
-        case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked =>
-          // Maybe-hit fast path (Prism / Optional morphs).
-          val lenBuf = new IntArrBuilder(n)
-          val flatBuf = new ObjArrBuilder(n)
-          @tailrec def loop(i: Int): Unit =
-            if i < n then
-              mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
-              loop(i + 1)
-          loop(0)
-          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-          (sndZ, flatBuf.freezeAsPSVec[C])
-        case _ =>
-          // Generic fallback: taken when `inner` is neither a `MultiFocusSingleton` (Lens bridge)
-          // nor a `MultiFocusPSMaybeHit` (Prism / Optional bridge) — i.e. a multi-focus inner such
-          // as `each` itself, or any composed `MultiFocus[PSVec]` optic. Reached on the common
-          // left-associated `lens.andThen(each)…` shape, so it is a real hot path, not merely a
-          // downstream escape hatch.
-          if n == 1 then
-            // Single outer focus (e.g. a Lens onto a collection field, then `each`): the inner's
-            // own focus vector IS the entire flat focus. Emit it zero-copy — no `flatBuf`, no
-            // grow, no O(n) `appendAllFromPSVec` copy. `composeFrom`'s generic branch reconstructs
-            // from a one-entry `lens` array + `vys.slice`, so this stays symmetric.
-            val (xi, vy) = inner.to(va(0))
-            ysBuf.unsafeAppend(xi)
-            val lenArr = new Array[Int](1)
-            lenArr(0) = vy.length
-            val sndZ = new AssocSndZ[Xo, Xi](xo, lenArr, ysBuf.freezeArr)
-            (sndZ, vy)
-          else
-            // `flatBuf`'s final size is the sum of the inners' cardinalities — unknown up front.
-            // Floor the capacity at `max(n, 16)`: `n` is a lower bound on the total, and the `16`
-            // keeps a small-`n`/high-fanout chain (e.g. `each.andThen(each)` over few-but-large
-            // sub-containers) from doubling *more* than the old default-capacity-16 builder did.
-            val lenBuf = new IntArrBuilder(n)
-            val flatBuf = new ObjArrBuilder(math.max(n, 16))
-            @tailrec def loop(i: Int): Unit =
-              if i < n then
-                val (xi, vy) = inner.to(va(i))
-                lenBuf.append(vy.length)
-                ysBuf.append(xi)
-                flatBuf.appendAllFromPSVec(vy)
-                loop(i + 1)
-            loop(0)
-            val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-            (sndZ, flatBuf.freezeAsPSVec[C])
+      val flatBuf = new ObjArrBuilder(n)
+      @tailrec def loop(i: Int): Unit =
+        if i < n then
+          ah.collectSingletonTo(va(i), ysBuf, flatBuf)
+          loop(i + 1)
+      loop(0)
+      val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
+      (sndZ, flatBuf.freezeAsPSVec[C])
+
+    /** Maybe-hit fast path (Prism / Optional morphs). */
+    private def maybeHitTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        mh: MultiFocusPSMaybeHit[A, B, C, D],
+    ): MultiFocus[PSVec][Z, C] =
+      val n = va.length
+      val ysBuf = new ObjArrBuilder(n)
+      val lenBuf = new IntArrBuilder(n)
+      val flatBuf = new ObjArrBuilder(n)
+      @tailrec def loop(i: Int): Unit =
+        if i < n then
+          mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
+          loop(i + 1)
+      loop(0)
+      val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+      (sndZ, flatBuf.freezeAsPSVec[C])
+
+    /** Single outer focus (e.g. a Lens onto a collection field, then `each`): the inner's own focus
+      * vector IS the entire flat focus. Emit it zero-copy — no `flatBuf`, no grow, no O(n)
+      * `appendAllFromPSVec` copy. `composeFrom`'s generic branch reconstructs from a one-entry
+      * `lens` array + `vys.slice`, so this stays symmetric.
+      */
+    private def singleOuterTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+    ): MultiFocus[PSVec][Z, C] =
+      val ysBuf = new ObjArrBuilder(1)
+      val (xi, vy) = inner.to(va.head)
+      ysBuf.unsafeAppend(xi)
+      val lenArr = new Array[Int](1)
+      lenArr(0) = vy.length
+      val sndZ = new AssocSndZ[Xo, Xi](xo, lenArr, ysBuf.freezeArr)
+      (sndZ, vy)
+
+    /** Generic fallback: taken when `inner` is neither a `MultiFocusSingleton` (Lens bridge) nor a
+      * `MultiFocusPSMaybeHit` (Prism / Optional bridge) and the outer is multi-focus — i.e. a
+      * multi-focus inner such as `each` itself, or any composed `MultiFocus[PSVec]` optic. Reached
+      * on `each.andThen(each)` shapes, so it is a real hot path, not merely a downstream escape
+      * hatch.
+      */
+    private def genericTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+    ): MultiFocus[PSVec][Z, C] =
+      val n = va.length
+      val ysBuf = new ObjArrBuilder(n)
+      // `flatBuf`'s final size is the sum of the inners' cardinalities — unknown up front.
+      // Floor the capacity at `max(n, 16)`: `n` is a lower bound on the total, and the `16`
+      // keeps a small-`n`/high-fanout chain (e.g. `each.andThen(each)` over few-but-large
+      // sub-containers) from doubling *more* than the old default-capacity-16 builder did.
+      val lenBuf = new IntArrBuilder(n)
+      val flatBuf = new ObjArrBuilder(math.max(n, 16))
+      @tailrec def loop(i: Int): Unit =
+        if i < n then
+          val (xi, vy) = inner.to(va(i))
+          lenBuf.append(vy.length)
+          ysBuf.append(xi)
+          flatBuf.appendAllFromPSVec(vy)
+          loop(i + 1)
+      loop(0)
+      val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+      (sndZ, flatBuf.freezeAsPSVec[C])
 
     def composeFrom[S, T, A, B, C, D](
         xd: MultiFocus[PSVec][Z, D],
