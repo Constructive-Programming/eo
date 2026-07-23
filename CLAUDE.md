@@ -25,10 +25,12 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `circe` | `circe/` | `cats-eo-circe` | `Plated[Json]` and circe optic integration |
 | `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration; the `eo.avro.circe` sub-package is the structural Avro ↔ circe bridge (`AvroJson`) and `eo.avro.vulcan` bridges `vulcan.Codec` → `AvroCodec` (`AvroVulcan`) — circe and vulcan are `Optional` deps, callers add them themselves |
 | `jsoniter` | `jsoniter/` | `cats-eo-jsoniter` | jsoniter-scala optic integration |
+| `zio` | `zio/` | `cats-eo-zio` | ZIO 2 DI integration: `ZEnvironment` service lens, capability-driven `Ref` focus ops, `ZLayer` projection through `CanGet` |
+| `kyo` | `kyo/` | `cats-eo-kyo` | Kyo DI integration (kyo-prelude only): `TypeMap` service lens, `Env.focus` / `Layer.focus`, `Var` focus ops. Module opts out of `-Yexplicit-nulls` (kyo's inline kernel isn't nulls-clean) |
 | `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
 
 The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
-`schemesLaws`, `circe`, `avro`, and `jsoniter`. `sbt compile` and `sbt test`
+`schemesLaws`, `circe`, `avro`, `jsoniter`, `zio`, and `kyo`. `sbt compile` and `sbt test`
 cover those; benchmarks must be invoked explicitly (see below).
 
 ## Toolchain
