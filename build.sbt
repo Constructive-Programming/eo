@@ -271,6 +271,8 @@ val Circe = "io.circe"
 val ApacheAvro = "org.apache.avro"
 val FasterXmlJackson = "com.fasterxml.jackson.core"
 val Plokhotnyuk = "com.github.plokhotnyuk.jsoniter-scala"
+val Ziverge = "dev.zio"
+val GetKyo = "io.getkyo"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
@@ -333,6 +335,15 @@ lazy val commonsLang3 = "org.apache.commons" % "commons-lang3" % "3.18.0"
 // directly from `Array[Byte]` without allocating a runtime AST. The
 // `-macros` artifact ships `JsonCodecMaker` so callers can derive a
 // `JsonValueCodec[A]` per focus type at compile time.
+// zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `cats-eo-zio`
+// integrates with. Compile-scope there: the module's whole API names
+// ZIO types.
+lazy val zioCore = Ziverge %% "zio" % "2.1.24"
+// kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
+// TypeMap all live here (kyo-data + kyo-kernel come transitively; no
+// kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
+// above it, matching Kyo's own module-granularity doctrine.
+lazy val kyoPrelude = GetKyo %% "kyo-prelude" % "0.19.0"
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
@@ -432,6 +443,8 @@ lazy val root: Project = project
     circeIntegration,
     avroIntegration,
     jsoniterIntegration,
+    zioIntegration,
+    kyoIntegration,
     schemes,
     schemesLaws,
   )
@@ -654,6 +667,55 @@ lazy val jsoniterIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
+// ZIO DI integration: optics into `ZEnvironment` (each tagged service
+// is a lawful Lens slot), capability-driven focus ops on `Ref`, and
+// `ZLayer` projection (derive a sub-service layer from an aggregate
+// service via `CanGet`). Consumes capabilities, constructs nothing new:
+// no new carrier — the service lens is a plain `GetReplaceLens`, so all
+// fused composition and the capability mixins come for free.
+lazy val zioIntegration: Project = project
+  .in(file("zio"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-zio",
+    libraryDependencies += cats,
+    libraryDependencies += zioCore,
+    libraryDependencies += discipline % Test,
+  )
+
+// Kyo DI integration, mirror of `zioIntegration` at kyo-prelude's
+// seams: `TypeMap` slots are lawful lenses (the ZEnvironment analog),
+// `Env.focus` routes reads through `CanGet`, `Var` gets the same
+// capability-driven focus ops as `zio.Ref`, and `Layer.focus` projects
+// an aggregate service into a sub-service layer (`Layer.from` is
+// CanGet-shaped). Depends on kyo-prelude ONLY — no kyo-core IO.
+lazy val kyoIntegration: Project = project
+  .in(file("kyo"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-kyo",
+    // Kyo's kernel is not explicit-nulls-clean: its `inline` machinery
+    // (Safepoint.eval passes a `null` Interceptor) re-typechecks inside
+    // OUR compilation units wherever a kyo inline def expands (`.eval`,
+    // `Env.run`, ...), and fails under `-Yexplicit-nulls`. Module-local
+    // opt-out; every other module keeps the flag.
+    scalacOptions -= "-Yexplicit-nulls",
+    Test / scalacOptions -= "-Yexplicit-nulls",
+    libraryDependencies += cats,
+    libraryDependencies += kyoPrelude,
+    libraryDependencies += discipline % Test,
+  )
+
 // Docs site — Laika + mdoc via sbt-typelevel-site. Rooted at
 // `site/` on disk, named `docs` in sbt so `sbt docs/tlSite` /
 // `sbt docs/mdoc` / `sbt docs/tlSitePreview` read naturally. Keeps
@@ -668,6 +730,8 @@ lazy val docs: Project = project
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
+    LocalProject("zioIntegration"),
+    LocalProject("kyoIntegration"),
     LocalProject("laws"),
     LocalProject("schemes"),
   )
@@ -845,6 +909,12 @@ lazy val benchmarks: Project = project
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
+    // DI-integration overhead benches (ZioDiBench / KyoDiBench):
+    // eo-composed access into ZEnvironment / TypeMap vs the hand-written
+    // equivalent. benchmarks/ has no -Yexplicit-nulls (commonSettings
+    // only), so kyo's inline `.eval` machinery expands fine here.
+    LocalProject("zioIntegration"),
+    LocalProject("kyoIntegration"),
   )
   .settings(commonSettings *)
   .settings(
@@ -936,5 +1006,7 @@ addCommandAlias(
     "project circeIntegration; stryker; " +
     "project avroIntegration; stryker; " +
     "project jsoniterIntegration; stryker; " +
+    "project zioIntegration; stryker; " +
+    "project kyoIntegration; stryker; " +
     "project root",
 )
