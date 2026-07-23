@@ -20,6 +20,17 @@ wiring functions already have optic shapes:
 libraryDependencies += "dev.constructive" %% "cats-eo-zio" % "@VERSION@"
 ```
 
+## Which direction are you integrating?
+
+The module is a two-way adapter; pick the row that matches what you
+are holding and what the other side expects:
+
+| You're holding | The other side expects | Reach for |
+|---|---|---|
+| an optic (`lens[AppConfig](_.db)`) | a `ZLayer` in the [dependency graph](https://zio.dev/reference/di/building-dependency-graph) | [`focusLayer`](#layer-projection) — the optic becomes the layer's wiring function |
+| an optic | an environment transformation ([overriding a dependency](https://zio.dev/reference/di/providing-different-implementation-of-a-service)) | [`service` + `.andThen`](#the-service-lens) handed to `provideSomeEnvironment` |
+| a `ZEnvironment`, `Exit`, or `Ref` of either | eo capability evidence (`CanGet[T, A]`, `CanModify[T, A]`, …) | [`import dev.constructive.eo.zio.given`](#automatic-capability-givens) — no hand-written given |
+
 ## The service lens
 
 `service[R, A]` focuses the `A` service slot inside a
@@ -57,17 +68,33 @@ val dbPool = dbL.andThen(poolL)
 dbPool.modify(_ * 2)(env).get[Db]
 ```
 
-That composed optic is what you hand to
-`provideSomeEnvironment` / `ZIO.updateService`-style test overrides:
+That composed optic is what you hand to `provideSomeEnvironment` —
+ZIO's own idiom for
+[providing a different implementation of a service](https://zio.dev/reference/di/providing-different-implementation-of-a-service):
 tweak one field deep inside one service, leave the rest of the
-environment alone.
+environment alone. Where ZIO's docs override a whole service, the
+drilled optic overrides one *field* of one service:
+
+```scala mdoc
+val poolOf: ZIO[Db & Metrics, Nothing, Int] = ZIO.serviceWith[Db](_.pool)
+
+val throttled = poolOf.provideSomeEnvironment[Db & Metrics](dbPool.replace(1))
+
+Unsafe.unsafe(implicit u =>
+  Runtime.default.unsafe.run(throttled.provideEnvironment(env)).getOrThrowFiberFailure()
+)
+```
 
 ## Layer projection
 
 ZIO's idiom for deriving one service from another is a `ZLayer` whose
-construction function projects the dependency. That projection *is* a
-getter, so `focusLayer[S, A]` builds the layer from `CanGet[S, A]`
-evidence — the optic is the wiring:
+construction function projects the dependency — see
+[building the dependency graph](https://zio.dev/reference/di/building-dependency-graph)
+and [dependency propagation](https://zio.dev/reference/di/dependency-propagation)
+in the ZIO docs. That projection *is* a getter, so `focusLayer[S, A]`
+builds the layer from `CanGet[S, A]` evidence and slots into the same
+`>>>` / `provide` graphs as any hand-written layer — the optic is the
+wiring:
 
 ```scala mdoc:silent
 val urlL = lens[Db](_.url)

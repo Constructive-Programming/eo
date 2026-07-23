@@ -29,6 +29,18 @@ applications alike.
 libraryDependencies += "dev.constructive" %% "cats-eo-kyo" % "@VERSION@"
 ```
 
+## Which direction are you integrating?
+
+The module is a two-way adapter; pick the row that matches what you
+are holding and what the other side expects:
+
+| You're holding | The other side expects | Reach for |
+|---|---|---|
+| an optic (`lens[Config](_.maxOrders)`) | an `Env` read ([Dependencies](https://getkyo.io/latest/kyo-prelude/#dependencies)) | [`Env.focus`](#kyo-docs-examples-through-optics) instead of an `Env.use` projection lambda |
+| an optic | a `Layer` in the wiring graph ([Wiring with layers](https://getkyo.io/latest/kyo-prelude/#wiring-with-layers)) | [`Layer.focus`](#kyo-docs-examples-through-optics) — the optic becomes the layer's wiring function |
+| an optic | a `TypeMap` for `Env.runAll` overrides | [`service` + `.andThen`](#the-service-lens) |
+| a `TypeMap`, `Maybe`, `Result`, or `Var` state | eo capability evidence (`CanGet[T, A]`, `CanModify[T, A]`, …) | [`import dev.constructive.eo.kyo.given`](#automatic-capability-givens) — no hand-written given |
+
 ## The service lens
 
 `service[R, A]` focuses the `A` slot inside a `TypeMap[R]` — the
@@ -88,6 +100,58 @@ wiring. It slots straight into `Env.runLayer` graphs:
 val prog = Env.runLayer(Layer(Db("jdbc:h2", 4)), Layer.focus[Db, String])(Env.get[String])
 
 Memo.run(prog).eval
+```
+
+## Kyo docs examples through optics
+
+The [Dependencies section of the kyo-prelude docs](https://getkyo.io/latest/kyo-prelude/#dependencies)
+reads a limit out of a config service with a projection lambda:
+
+```scala
+// from the kyo docs:
+case class Config(maxOrders: Int, currency: String)
+
+val limit: Int < Env[Config] =
+    Env.use[Config](_.maxOrders)
+```
+
+With an optic naming the field, the same value is `Env.focus` — and
+the optic is reusable everywhere else the field is touched (writes,
+`Var` updates, layer wiring), not just in this one lambda:
+
+```scala mdoc:silent
+case class Config(maxOrders: Int, currency: String)
+
+val maxOrdersL = lens[Config](_.maxOrders)
+val currencyL = lens[Config](_.currency)
+
+given CanGet[Config, Int] = maxOrdersL
+
+val limit: Int < Env[Config] = Env.focus[Config, Int]
+```
+
+```scala mdoc
+Env.run(Config(5, "EUR"))(limit).eval
+```
+
+The [Wiring with layers section](https://getkyo.io/latest/kyo-prelude/#wiring-with-layers)
+builds a `configLayer` and derives further layers from it with
+`Layer.from`. When the derived service is a *focus* of the aggregate,
+`Layer.focus` replaces the hand-written projection — same graph, same
+`Env.runLayer` resolution:
+
+```scala mdoc:silent
+val configLayer: Layer[Config, Any] =
+  Layer(Config(maxOrders = 10, currency = "USD"))
+
+val currencyLayer: Layer[String, Env[Config]] = {
+  given CanGet[Config, String] = currencyL
+  Layer.focus[Config, String]
+}
+```
+
+```scala mdoc
+Memo.run(Env.runLayer(configLayer, currencyLayer)(Env.get[String])).eval
 ```
 
 ## Var focus ops
