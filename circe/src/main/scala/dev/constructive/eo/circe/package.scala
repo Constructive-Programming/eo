@@ -63,8 +63,8 @@ package object circe:
       jsonBoolean = _ => emptyJsonVec,
       jsonNumber = _ => emptyJsonVec,
       jsonString = _ => emptyJsonVec,
-      jsonArray = PSVec.fromIterable,
-      jsonObject = obj => PSVec.fromIterable(obj.values),
+      jsonArray = PSVec.from,
+      jsonObject = obj => PSVec.from(obj.values),
     )
 
   private def rebuildJsonFromChildren(json: Json, vec: PSVec[Json]): Json =

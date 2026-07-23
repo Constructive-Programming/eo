@@ -114,7 +114,7 @@ class SchemesSpec extends Specification:
   // engine's per-node out-array, with positional weights that expose any mis-ordering.
   "fused hylo folds a WIDE node (3 child seeds), order-sensitive combine" >> {
     val expandWide: Int => PSVec[Int] =
-      n => if n <= 0 then PSVec.empty[Int] else PSVec.fromIterable(List(0, 0, 0))
+      n => if n <= 0 then PSVec.empty[Int] else PSVec.from(List(0, 0, 0))
     val combineWide: (Int, PSVec[Int]) => Int =
       (n, rs) => if n <= 0 then 1 else rs(0) + 10 * rs(1) + 100 * rs(2)
     // n=1 → three leaves (each 1) → 1 + 10 + 100 = 111

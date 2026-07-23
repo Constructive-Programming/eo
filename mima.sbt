@@ -6,6 +6,10 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
+//   next: `Affine` covariant in B; `Affine.Miss` drops its phantom B type
+//         parameter (now `Miss[A] <: Affine[A, Nothing]`) and `widenB` is
+//         deleted — retyping a miss is a plain upcast (source- and
+//         binary-breaking for direct `Miss`/`widenB` users).
 //   0.12: core Traversal constructors + Optional.readOnly/selectReadOnly
 //         return types narrowed to the new concrete `Traversal` class /
 //         `PickFold` (binary-breaking descriptor changes); `type

@@ -122,8 +122,7 @@ private[avro] object AvroFocus:
                 val writer: A => IndexedRecord = b =>
                   try
                     AvroWalk
-                      .rebuildPathArr(walked.parents, walked.parentsLen, path, codec.encode(b))
-                      .asInstanceOf[IndexedRecord]
+                      .rebuildRecordArr(walked.parents, walked.parentsLen, path, codec.encode(b))
                   catch case NonFatal(_) => record
                 Right((a, writer))
 
@@ -142,8 +141,7 @@ private[avro] object AvroFocus:
           walked.cur match
             case asRecord: IndexedRecord =>
               AvroWalk
-                .rebuildPathArr(walked.parents, walked.parentsLen, path, f(asRecord))
-                .asInstanceOf[IndexedRecord]
+                .rebuildRecordArr(walked.parents, walked.parentsLen, path, f(asRecord))
             case _ => record
 
     def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
@@ -160,8 +158,7 @@ private[avro] object AvroFocus:
             try
               val encoded = codec.encode(a)
               AvroWalk
-                .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
-                .asInstanceOf[IndexedRecord]
+                .rebuildRecordArr(walked.parents, walked.parentsLen, path, encoded)
             catch case NonFatal(_) => record
 
     def readImpl(record: IndexedRecord): Option[A] =
@@ -173,8 +170,7 @@ private[avro] object AvroFocus:
         case Right(walked) =>
           decodeOrFail(walked.cur, record)(a =>
             AvroWalk
-              .rebuildPathArr(walked.parents, walked.parentsLen, path, codec.encode(f(a)))
-              .asInstanceOf[IndexedRecord]
+              .rebuildRecordArr(walked.parents, walked.parentsLen, path, codec.encode(f(a)))
           )
 
     def transformIor(
@@ -188,8 +184,7 @@ private[avro] object AvroFocus:
             case asRecord: IndexedRecord =>
               Ior.Right(
                 AvroWalk
-                  .rebuildPathArr(walked.parents, walked.parentsLen, path, f(asRecord))
-                  .asInstanceOf[IndexedRecord]
+                  .rebuildRecordArr(walked.parents, walked.parentsLen, path, f(asRecord))
               )
             case _ =>
               Ior.Both(Chain.one(AvroFailure.NotARecord(terminalStep)), record)
@@ -212,8 +207,7 @@ private[avro] object AvroFocus:
               val encoded = codec.encode(a)
               Ior.Right(
                 AvroWalk
-                  .rebuildPathArr(walked.parents, walked.parentsLen, path, encoded)
-                  .asInstanceOf[IndexedRecord]
+                  .rebuildRecordArr(walked.parents, walked.parentsLen, path, encoded)
               )
             catch
               case NonFatal(t) =>
@@ -343,8 +337,7 @@ private[avro] object AvroFocus:
 
     private def rebuild(newParent: IndexedRecord, walked: AvroWalk.WalkRes): IndexedRecord =
       AvroWalk
-        .rebuildPathArr(walked.parents, walked.parentsLen, parentPath, newParent)
-        .asInstanceOf[IndexedRecord]
+        .rebuildRecordArr(walked.parents, walked.parentsLen, parentPath, newParent)
 
     def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
       // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays

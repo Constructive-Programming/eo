@@ -14,24 +14,24 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   *
   * Avro's runtime string type is `Utf8 <: CharSequence`; the walker uses `instanceof CharSequence`.
   *
-  * Two entry points: [[walkPath]] — legacy `(Any, Vector[AnyRef])` shape; [[walkPathArr]] —
-  * hot-path entry storing parents in a pre-allocated `Array[AnyRef]`. The latter eliminates
-  * `Right(...)` boxing, `Vector.:+`, and `Vector` materialisation; [[rebuildPathArr]] folds it
-  * backwards. The four `AvroFocus` hot paths (`modifyImpl` / `transformImpl` / `placeImpl` /
-  * `readImpl`) plus their Ior siblings use `walkPathArr`.
+  * Two entry points: [[walkPath]] — legacy `(Any, Vector[Any])` shape; [[walkPathArr]] — hot-path
+  * entry storing parents in a pre-allocated `Array[Any]`. The latter eliminates `Right(...)`
+  * boxing, `Vector.:+`, and `Vector` materialisation; [[rebuildPathArr]] folds it backwards. The
+  * four `AvroFocus` hot paths (`modifyImpl` / `transformImpl` / `placeImpl` / `readImpl`) plus
+  * their Ior siblings use `walkPathArr`.
   */
 private[avro] object AvroWalk:
 
   /** Walked-cursor state: current focus (Avro runtime values span `IndexedRecord` / `List` / `Map`
     * / `Utf8` / primitives), paired with parents Vector. Root-to-leaf ordered.
     */
-  type State = (Any, Vector[AnyRef])
+  type State = (Any, Vector[Any])
 
   /** Hot-path walk result. `parents` is sized to `path.length`; `parentsLen` counts filled slots
     * (`UnionBranch` steps don't push parents). Held through `AvroFocus` hooks and fed straight into
     * [[rebuildPathArr]].
     */
-  final class WalkRes(val cur: Any, val parents: Array[AnyRef], val parentsLen: Int)
+  final class WalkRes(val cur: Any, val parents: Array[Any], val parentsLen: Int)
 
   /** Legacy entry — Vector-shaped parents. Preserved for the non-hot callers; hot-path callers use
     * [[walkPathArr]].
@@ -54,7 +54,7 @@ private[avro] object AvroWalk:
       path: Array[PathStep],
   ): Either[AvroFailure, WalkRes] =
     if path.length == 0 then Right(new WalkRes(record, EmptyParents, 0))
-    else walkArrLoop(path, new Array[AnyRef](path.length), 0, 0, record)
+    else walkArrLoop(path, new Array[Any](path.length), 0, 0, record)
 
   /** Step machine for [[walkPathArr]] — advances `(i, parentsLen, cur)` through `path`, filling
     * `parents` in place. Failure short-circuits by returning `Left`; UnionBranch failures resolve
@@ -62,7 +62,7 @@ private[avro] object AvroWalk:
     */
   @tailrec private def walkArrLoop(
       path: Array[PathStep],
-      parents: Array[AnyRef],
+      parents: Array[Any],
       i: Int,
       parentsLen: Int,
       cur: Any,
@@ -88,7 +88,7 @@ private[avro] object AvroWalk:
                 else direct
               if viaUtf8 == null then Left(AvroFailure.PathMissing(step))
               else
-                parents(parentsLen) = map.asInstanceOf[AnyRef]
+                parents(parentsLen) = map
                 walkArrLoop(path, parents, i + 1, parentsLen + 1, viaUtf8)
             case _ =>
               Left(AvroFailure.NotARecord(step))
@@ -99,7 +99,7 @@ private[avro] object AvroWalk:
               val size = lst.size
               if idx < 0 || idx >= size then Left(AvroFailure.IndexOutOfRange(step, size))
               else
-                parents(parentsLen) = lst.asInstanceOf[AnyRef]
+                parents(parentsLen) = lst
                 walkArrLoop(path, parents, i + 1, parentsLen + 1, lst.get(idx))
             case _ =>
               Left(AvroFailure.NotAnArray(step))
@@ -143,7 +143,7 @@ private[avro] object AvroWalk:
                   case _ =>
                     walkArrLoop(path, parents, i + 1, parentsLen, cur)
 
-  private val EmptyParents: Array[AnyRef] = new Array[AnyRef](0)
+  private val EmptyParents: Array[Any] = new Array[Any](0)
 
   /** Recover the union schema's branch list. Walks backwards from `unionStepIdx - 1` to the most
     * recent `Field` step; the parent at that position carries the union field. `pIdx` cursor
@@ -153,7 +153,7 @@ private[avro] object AvroWalk:
   private def unionBranchesAtArr(
       path: Array[PathStep],
       unionStepIdx: Int,
-      parents: Array[AnyRef],
+      parents: Array[Any],
       parentsLen: Int,
   ): List[String] =
     @tailrec def loop(j: Int, pIdx: Int): List[String] =
@@ -188,7 +188,7 @@ private[avro] object AvroWalk:
     * Vector-shaped entry; hot-path callers use [[rebuildPathArr]].
     */
   def rebuildPath(
-      parents: Vector[AnyRef],
+      parents: Vector[Any],
       path: Array[PathStep],
       newLeaf: Any,
   ): Any =
@@ -201,7 +201,7 @@ private[avro] object AvroWalk:
     * skipped (matches the legacy `parents.zip(path).foldRight` shape).
     */
   def rebuildPathArr(
-      parents: Array[AnyRef],
+      parents: Array[Any],
       parentsLen: Int,
       path: Array[PathStep],
       newLeaf: Any,
@@ -211,6 +211,26 @@ private[avro] object AvroWalk:
       else loop(i - 1, rebuildStep(parents(i), path(i), child))
     loop(parentsLen - 1, newLeaf)
 
+  /** [[rebuildPath]] narrowed to the root record — every walk the callers rebuild through starts at
+    * an `IndexedRecord`, so the final splice yields one. The narrowing cast lives here, ONCE,
+    * instead of at every call site.
+    */
+  def rebuildRecord(
+      parents: Vector[Any],
+      path: Array[PathStep],
+      newLeaf: Any,
+  ): IndexedRecord =
+    rebuildPath(parents, path, newLeaf).asInstanceOf[IndexedRecord]
+
+  /** [[rebuildPathArr]] narrowed to the root record — see [[rebuildRecord]]. */
+  def rebuildRecordArr(
+      parents: Array[Any],
+      parentsLen: Int,
+      path: Array[PathStep],
+      newLeaf: Any,
+  ): IndexedRecord =
+    rebuildPathArr(parents, parentsLen, path, newLeaf).asInstanceOf[IndexedRecord]
+
   /** Splice `child` into `parent` at `step`. Dispatch:
     *   - `Field` on `IndexedRecord` — fresh record with `put` at the matching slot.
     *   - `Field` on `Map` — fresh `LinkedHashMap` with the entry replaced.
@@ -218,7 +238,7 @@ private[avro] object AvroWalk:
     *   - `UnionBranch` — passthrough (union value is the alternative directly).
     */
   def rebuildStep(
-      parent: AnyRef,
+      parent: Any,
       step: PathStep,
       child: Any,
   ): Any =

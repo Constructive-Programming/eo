@@ -75,8 +75,8 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
     // the slice read path stay exercised; categories from `eqPair` straddle all three
     // discrimination axes.
     Prop.forAll(eqPair) { (xs, ys) =>
-      val a = PSVec.fromIterable(xs)
-      val b = PSVec.fromIterable(-99 :: ys).slice(1, ys.length + 1)
+      val a = PSVec.from(xs)
+      val b = PSVec.from(-99 :: ys).slice(1, ys.length + 1)
       val eqOk = ((a == b) == (xs == ys)) && ((b == a) == (ys == xs))
       val hashOk = a != b || a.hashCode == b.hashCode
       eqOk && hashOk
@@ -89,14 +89,32 @@ class PSVecBoundarySpec extends Specification with ScalaCheck:
     // length-only hash. The hashCode CONTRACT doesn't promise inequality; this
     // deterministic witness pair hashes apart under the real polynomial hash, so it is
     // a canary for hash-collapse, not a contract claim.
-    val a = PSVec.fromIterable(List(1, 2))
-    val b = PSVec.fromIterable(List(3, 4))
+    val a = PSVec.from(List(1, 2))
+    val b = PSVec.from(List(3, 4))
     (a.hashCode == b.hashCode) must beFalse
+  }
+
+  "PSVec.from fast paths agree with the generic walk and are identity on PSVec" >> {
+    // covers: from(IterableOnce) shape agreement (order + size), from(Array) defensive copy
+    // (ref + primitive via Array.copyAs, and mutation-after-build isolation), from(PSVec) no-op.
+    val viaList = PSVec.from(List(1, 2, 3))
+    val viaVector = PSVec.from(Vector(1, 2, 3))
+    val refArr = Array("a", "b")
+    val viaRefArr = PSVec.from(refArr)
+    refArr(0) = "mutated"
+    val primArr = Array(1, 2, 3)
+    val viaPrimArr = PSVec.from(primArr)
+    primArr(0) = -1
+    (viaList must beEqualTo(viaVector))
+      .and(PSVec.from(List.empty[Int]) must beEqualTo(PSVec.empty[Int]))
+      .and(viaRefArr.toList must beEqualTo(List("a", "b")))
+      .and(viaPrimArr.toList must beEqualTo(List(1, 2, 3)))
+      .and(PSVec.from(viaList) must beTheSameAs(viaList))
   }
 
   "hashing a null-bearing PSVec is total" >> {
     // covers: PSVec.hashCode null guard (line 78) — a flipped or dropped guard NPEs on
     // null elements.
-    val withNull = PSVec.fromIterable(List("a", null, "b"))
+    val withNull = PSVec.from(List("a", null, "b"))
     withNull.hashCode must beEqualTo(withNull.hashCode)
   }

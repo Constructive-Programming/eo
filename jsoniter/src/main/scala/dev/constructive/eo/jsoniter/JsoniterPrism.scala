@@ -112,12 +112,12 @@ final class JsoniterPrism[A] private[jsoniter] (
 
   private def scan(bytes: Array[Byte]): Affine[X, A] =
     val span = JsonPathScanner.find(bytes, steps)
-    if !span.isHit then new Affine.Miss[X, A](bytes)
+    if !span.isHit then new Affine.Miss[X](bytes)
     else
       try
         val a = readFromSubArray(bytes, span.start, span.end)(using codec)
         new Affine.Hit[X, A]((bytes, span.start, span.end), a)
-      catch case scala.util.control.NonFatal(_) => new Affine.Miss[X, A](bytes)
+      catch case scala.util.control.NonFatal(_) => new Affine.Miss[X](bytes)
 
   private def splice(aff: Affine[X, A]): Array[Byte] =
     aff match
@@ -133,7 +133,7 @@ final class JsoniterPrism[A] private[jsoniter] (
         System.arraycopy(encoded, 0, out, start, encoded.length)
         System.arraycopy(src, end, out, start + encoded.length, tail)
         out
-      case m: Affine.Miss[X, A] => m.fst
+      case m: Affine.Miss[X] => m.fst
 
   // ---- Path widening (used by the macro extensions) ----------------
 

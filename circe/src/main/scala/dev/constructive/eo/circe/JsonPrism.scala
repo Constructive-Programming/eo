@@ -80,7 +80,7 @@ final class JsonPrism[A] private[circe] (
     */
   def to(json: Json): Affine[X, A] =
     focus.navigateForWrite(json) match
-      case Left(_)            => new Affine.Miss[X, A](json)
+      case Left(_)            => new Affine.Miss[X](json)
       case Right((a, writer)) => new Affine.Hit[X, A](writer, a)
 
   /** Rebuild: Hit applies the captured writer to the (possibly modified) focus; Miss returns the
@@ -88,8 +88,8 @@ final class JsonPrism[A] private[circe] (
     */
   def from(aff: Affine[X, A]): Json =
     aff match
-      case m: Affine.Miss[X, A] => m.fst
-      case h: Affine.Hit[X, A]  => h.snd(h.b)
+      case m: Affine.Miss[X]   => m.fst
+      case h: Affine.Hit[X, A] => h.snd(h.b)
 
   // ---- Read surface (single-focus specific) -------------------------
 

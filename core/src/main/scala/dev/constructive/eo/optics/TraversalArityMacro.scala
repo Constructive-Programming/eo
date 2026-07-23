@@ -28,11 +28,11 @@ private[optics] object TraversalArityMacro:
         type X = Unit
 
         def to(s: S): MultiFocus[PSVec][X, A] =
-          val arr = new Array[AnyRef](${ Expr(getters.length) })
+          val arr = new Array[Any](${ Expr(getters.length) })
           ${
             Expr.block(
               getters.zipWithIndex.map { (g, i) =>
-                '{ arr(${ Expr(i) }) = ${ Expr.betaReduce('{ $g(s) }) }.asInstanceOf[AnyRef] }
+                '{ arr(${ Expr(i) }) = ${ Expr.betaReduce('{ $g(s) }) } }
               },
               '{ () },
             )

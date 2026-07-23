@@ -78,22 +78,32 @@ final class JsonTraversal[A] private[circe] (
   // ---- Prefix walks -------------------------------------------------
 
   private def walkPrefixOpt(json: Json): Option[Vector[Json]] =
-    JsonWalk.walkPath(json, prefix).toOption.flatMap(_._1.asArray)
+    JsonWalk.readPath(json, prefix).toOption.flatMap(_.asArray)
 
   private def walkPrefixIor(
       json: Json
-  ): Either[Ior.Left[Chain[JsonFailure]], (Vector[Json], Vector[AnyRef])] =
+  ): Either[Ior.Left[Chain[JsonFailure]], Vector[Json]] =
     JsonWalk
-      .walkPath(json, prefix)
+      .readPath(json, prefix)
       .left
       .map(failure => Ior.Left(Chain.one(failure)))
-      .flatMap {
-        case (cur, parents) =>
-          cur
-            .asArray
-            .map(arr => (arr, parents))
-            .toRight(Ior.Left(Chain.one(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))))
+      .flatMap { cur =>
+        cur
+          .asArray
+          .toRight(Ior.Left(Chain.one(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))))
       }
+
+  /** Fused prefix walk + array splice — `elemUpdate` maps each element of the focused array; a
+    * non-array terminal aborts via miss.
+    */
+  private def spliceAtPrefix(
+      json: Json
+  )(mapArr: Vector[Json] => Vector[Json]): Either[JsonFailure, Json] =
+    JsonWalk.modifyPath(json, prefix) { cur =>
+      cur.asArray match
+        case Some(arr) => Json.fromValues(mapArr(arr))
+        case None      => JsonWalk.miss(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))
+    }
 
   // ---- *Unsafe surface — delegates to focus.modifyImpl etc. --------
 
@@ -106,17 +116,11 @@ final class JsonTraversal[A] private[circe] (
   override protected def placeImpl(json: Json, a: A): Json =
     mapAtPrefix(json)(elem => focus.placeImpl(elem, a))
 
-  /** Walk prefix, replace the focused array by mapping each element. Prefix miss → input. */
+  /** Walk prefix, replace the focused array by mapping each element — one fused walk. Prefix miss →
+    * input.
+    */
   private def mapAtPrefix(json: Json)(elemUpdate: Json => Json): Json =
-    JsonWalk
-      .walkPath(json, prefix)
-      .toOption
-      .flatMap { case (cur, parents) => cur.asArray.map(arr => (arr, parents)) }
-      .map {
-        case (arr, parents) =>
-          JsonWalk.rebuildPath(parents, prefix, Json.fromValues(arr.map(elemUpdate)))
-      }
-      .getOrElse(json)
+    spliceAtPrefix(json)(arr => arr.map(elemUpdate)).getOrElse(json)
 
   // ---- Default Ior surface — delegates to focus.modifyIor etc. -----
 
@@ -134,16 +138,18 @@ final class JsonTraversal[A] private[circe] (
       json: Json
   )(elemUpdate: Json => Ior[Chain[JsonFailure], Json]): Ior[Chain[JsonFailure], Json] =
     walkPrefixIor(json) match
-      case Left(l)               => l
-      case Right((arr, parents)) =>
+      case Left(l)    => l
+      case Right(arr) =>
         val (newArr, chain) = JsonTraversalAccumulator.mapElementsIor(arr, elemUpdate)
-        val newChild = JsonWalk.rebuildPath(parents, prefix, Json.fromValues(newArr))
+        // Second (read-free, allocation-free-per-hop) descent splices the mapped array back.
+        val newChild =
+          spliceAtPrefix(json)(_ => newArr).getOrElse(json)
         if chain.isEmpty then Ior.Right(newChild) else Ior.Both(chain, newChild)
 
   private def getAllIor(json: Json): Ior[Chain[JsonFailure], Vector[A]] =
     walkPrefixIor(json) match
-      case Left(l)         => l
-      case Right((arr, _)) => JsonTraversalAccumulator.collectIor(arr, focus.readIor)
+      case Left(l)    => l
+      case Right(arr) => JsonTraversalAccumulator.collectIor(arr, focus.readIor)
 
 object JsonTraversal:
 

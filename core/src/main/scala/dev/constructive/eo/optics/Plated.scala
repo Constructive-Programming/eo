@@ -42,13 +42,13 @@ trait Plated[S]:
     */
   def childrenVec(s: S): PSVec[S] = plate.to(s).foci
 
-  /** The immediate children as a **fresh `Array[AnyRef]` the caller may mutate in place**. The
-    * default copies (`childrenVec(s).toAnyRefArray`) so it is safe for any instance;
+  /** The immediate children as a **fresh `Array[Any]` the caller may mutate in place**. The default
+    * copies (`childrenVec(s).toAnyArray`) so it is safe for any instance;
     * [[Plated.fromChildrenVec]] overrides it to hand back the freshly-built backing array
     * copy-free. The recursion-scheme `cata` engine folds each child's result into this array in
     * place, reusing the one array instead of allocating a separate result accumulator per node.
     */
-  def childrenArray(s: S): Array[AnyRef] = childrenVec(s).toAnyRefArray
+  def childrenArray(s: S): Array[Any] = childrenVec(s).toAnyArray
 
   /** Reassemble `parent` with `children` swapped in (same arity / order) — the write-path
     * counterpart to [[childrenVec]]. Defaults to threading the carrier; [[Plated.fromChildren]] /
@@ -84,9 +84,9 @@ object Plated:
       override def childrenVec(s: S): PSVec[S] = childrenFn(s)
       // `childrenFn` must return a *freshly-allocated* vector (every shipped instance does —
       // `generics.plate` emits `unsafeWrap(new Array(...))`, circe / `fromChildren` go through
-      // `PSVec.fromIterable`, both fresh per call). `unsafeShareableArray` then hands back that
+      // `PSVec.from`, both fresh per call). `unsafeShareableArray` then hands back that
       // backing array copy-free, and [[childrenArray]]'s contract lets the cata engine mutate it.
-      override def childrenArray(s: S): Array[AnyRef] = childrenFn(s).unsafeShareableArray
+      override def childrenArray(s: S): Array[Any] = childrenFn(s).unsafeShareableArray
       override def rebuild(parent: S, kids: PSVec[S]): S = rebuildFn(parent, kids)
 
   /** Build a [[Plated]] from a `List`-shaped children view — the ergonomic hand-writing entry point
@@ -96,7 +96,7 @@ object Plated:
     */
   def fromChildren[S](children: S => List[S], rebuild: (S, List[S]) => S): Plated[S] =
     fromChildrenVec(
-      s => PSVec.fromIterable(children(s)),
+      s => PSVec.from(children(s)),
       (s, vec) => rebuild(s, vec.toList),
     )
 
@@ -127,10 +127,10 @@ object Plated:
       else if depth >= transformRecursionLimit then transformMachine(f)(s) // deep: go to the heap
       else
         val n = kids.length
-        val out = new Array[AnyRef](n)
+        val out = new Array[Any](n)
         @tailrec def fill(i: Int): Unit =
           if i < n then
-            out(i) = rec(kids(i), depth + 1).asInstanceOf[AnyRef]
+            out(i) = rec(kids(i), depth + 1)
             fill(i + 1)
         fill(0)
         f(P.rebuild(s, PSVec.unsafeWrap[S](out)))
@@ -142,19 +142,18 @@ object Plated:
     * child completes; leaves are applied in place.
     */
   private def transformMachine[S](f: S => S)(root: S)(using P: Plated[S]): S =
-    final class Frame(val node: S, val kids: PSVec[S], val out: Array[AnyRef], var i: Int)
+    final class Frame(val node: S, val kids: PSVec[S], val out: Array[Any], var i: Int)
     val stack = new ArrayDeque[Frame]()
     var ret: S = root // overwritten before any read (only read once a child has completed)
     def enter(s: S): Unit =
       val kids = P.childrenVec(s)
       if kids.isEmpty then ret = f(s)
-      else stack.push(new Frame(s, kids, new Array[AnyRef](kids.length), 0))
+      else stack.push(new Frame(s, kids, new Array[Any](kids.length), 0))
     enter(root)
     @tailrec def drive(): Unit =
       if !stack.isEmpty then
         val fr = stack.peek()
-        if fr.i > 0 then
-          fr.out(fr.i - 1) = ret.asInstanceOf[AnyRef] // stash the child just finished
+        if fr.i > 0 then fr.out(fr.i - 1) = ret // stash the child just finished
         if fr.i < fr.kids.length then
           val child = fr.kids(fr.i)
           fr.i += 1

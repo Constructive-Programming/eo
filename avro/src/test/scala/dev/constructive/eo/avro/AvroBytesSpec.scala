@@ -52,8 +52,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       val expectedPlace = toBinary(personRecord(p.copy(name = "Carol")), personSchema)
 
       val readOk = nameL.to(bytes) match
-        case h: Affine.Hit[nameL.X, String]  => h.b == p.name
-        case _: Affine.Miss[nameL.X, String] => false
+        case h: Affine.Hit[nameL.X, String] => h.b == p.name
+        case _: Affine.Miss[nameL.X]        => false
 
       val modifyOk = Arrays.equals(nameL.modify(_.toUpperCase)(bytes), expectedModify)
       val replaceOk = Arrays.equals(nameL.replace("Carol")(bytes), expectedPlace)
@@ -256,8 +256,8 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // the same wrong-branch payload as sliceBytes above, not just the sliceBytes call site.
     val toMissOk =
       codecPrism[Transaction].field(_.amount).union[Long].to(noneBytes) match
-        case _: Affine.Miss[?, ?] => true
-        case _                    => false
+        case _: Affine.Miss[?] => true
+        case _                 => false
     val sliceUnsafeMissOk =
       codecPrism[Transaction].field(_.amount).union[Long].sliceBytesUnsafe(noneBytes) === None
 

@@ -1,10 +1,23 @@
 package dev.constructive.eo
 
+import scala.collection.immutable.ArraySeq
 import scala.language.implicitConversions
 
+import cats.instances.arraySeq.given
+import cats.instances.list.given
+import cats.instances.vector.given
 import org.specs2.mutable.Specification
 
-import optics.{BijectionIso, GetReplaceLens, MendTearPrism, Optional, PickMendPrism}
+import data.PSVec
+import optics.{
+  BijectionIso,
+  GetReplaceLens,
+  Lens,
+  MendTearPrism,
+  Optional,
+  PickMendPrism,
+  Traversal
+}
 
 /** Dedicated coverage for the 21 fused `.andThen` overloads on the concrete optic subclasses
   * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`).
@@ -191,4 +204,68 @@ class FusedAndThenSpec extends Specification:
       .and(mtOk)
       .and(pmGrlOk)
       .and(optOk)
+  }
+
+  // covers: the 5 Traversal-producing fused overloads (Traversal.andThen(Traversal /
+  //   GetReplaceLens / SplitCombineLens), GetReplaceLens.andThen(Traversal),
+  //   SplitCombineLens.andThen(Traversal)) — the `: Traversal[…]` ascriptions are the compile-time
+  //   pin that the fused member fired (the generic member returns a bare `Optic`, which would not
+  //   conform); AND the streaming-fold agreement: the overridden member foldMap / headOption /
+  //   length / exists must agree with the materialized `to(s).foci` walk, under a NON-commutative
+  //   monoid (String concat) so focus ORDER is pinned too. Exercised on bare `each` over List
+  //   (fast path), ArraySeq (zero-copy path), Vector (generic collect path) and empty input;
+  //   composed lens∘each∘lens; nested each∘each; and selfChildren.
+  "Traversal fused .andThen returns the concrete class; streaming folds agree with to(s)" >> {
+    case class Box(items: List[Inner])
+
+    val itemsLens: GetReplaceLens[Box, Box, List[Inner], List[Inner]] =
+      new GetReplaceLens(_.items, (b, ls) => b.copy(items = ls))
+
+    def agree[S, A](t: Traversal[S, S, A, A], s: S)(f: A => String, p: A => Boolean) =
+      // Independent reference: materialize the foci THROUGH the carrier and walk the List.
+      val foci = t.to(s).foci.toList
+      (t.foldMap(f)(s) === foci.map(f).mkString)
+        .and(t.headOption(s) === foci.headOption)
+        .and(t.length(s) === foci.length)
+        .and(t.exists(p)(s) === foci.exists(p))
+
+    val inners = List(Inner(1, "a"), Inner(2, "b"), Inner(3, "c"))
+    val innerStr = (i: Inner) => s"${i.n}${i.tag}"
+
+    // ---- bare each: List fast path (+ empty), ArraySeq zero-copy path, Vector generic path ----
+    val eachL = Traversal.each[List, Inner]
+    val eachOk = agree(eachL, inners)(innerStr, _.n == 2)
+      .and(agree(eachL, List.empty[Inner])(innerStr, _ => true))
+      .and(agree(Traversal.each[ArraySeq, Inner], ArraySeq.from(inners))(innerStr, _.n == 2))
+      .and(agree(Traversal.each[Vector, Inner], inners.toVector)(innerStr, _.n == 2))
+
+    // ---- GetReplaceLens ∘ Traversal, then ∘ GetReplaceLens: the composed-chain shape ----
+    val lensThenEach: Traversal[Box, Box, Inner, Inner] = itemsLens.andThen(eachL)
+    val chain: Traversal[Box, Box, Int, Int] = itemsLens.andThen(eachL).andThen(innerLens)
+    val box = Box(inners)
+    val chainOk = agree(lensThenEach, box)(innerStr, _.n == 2)
+      .and(agree(chain, box)(_.toString, _ == 2))
+      .and(chain.modify(_ + 10)(box) === Box(inners.map(i => i.copy(n = i.n + 10))))
+
+    // ---- SplitCombineLens ∘ Traversal (macro-lens family, via Lens.first) ----
+    val firstThenEach: Traversal[(List[Inner], String), (List[Inner], String), Inner, Inner] =
+      Lens.first[List[Inner], String].andThen(eachL)
+    val scOk = agree(firstThenEach, (inners, "ctx"))(innerStr, _.n == 2)
+
+    // ---- Traversal ∘ Traversal: nested each ∘ each ----
+    val nested: Traversal[List[List[Inner]], List[List[Inner]], Inner, Inner] =
+      Traversal.each[List, List[Inner]].andThen(eachL)
+    val nestedOk =
+      agree(nested, List(inners.take(2), Nil, inners.drop(2)))(innerStr, _.n == 3)
+
+    // ---- selfChildren (streaming children fold) ----
+    val headTail: Traversal[List[Int], List[Int], List[Int], List[Int]] =
+      Traversal.selfChildren[List[Int]](
+        children = s => if s.isEmpty then PSVec.empty else PSVec.singleton(s.tail),
+        rebuild = (s, vec) => if s.isEmpty then s else s.head :: vec.head,
+      )
+    val selfOk = agree(headTail, List(1, 2, 3))(_.mkString("-"), _.length == 2)
+      .and(agree(headTail, Nil: List[Int])(_.mkString("-"), _ => true))
+
+    eachOk.and(chainOk).and(scOk).and(nestedOk).and(selfOk)
   }

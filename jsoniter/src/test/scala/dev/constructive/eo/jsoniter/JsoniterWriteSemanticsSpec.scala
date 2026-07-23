@@ -4,7 +4,6 @@ import scala.language.implicitConversions
 
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.optics.Traversal
 import java.util.Arrays

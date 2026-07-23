@@ -9,9 +9,9 @@ import compose.*
 import data.Affine
 
 /** Every `PickFold` miss is `Miss(())` with a phantom `B` — one shared instance serves all
-  * (re-typed per use via `widenB`, zero allocation on the miss path).
+  * (covariance retypes it per use, zero allocation on the miss path).
   */
-private val pickFoldMiss: Affine.Miss[(Unit, Unit), Nothing] = new Affine.Miss(())
+private val pickFoldMiss: Affine.Miss[(Unit, Unit)] = new Affine.Miss(())
 
 /** Concrete Optic subclass for the `AffineFold` family — the read-only 0-or-1-focus optic,
   * `Optic[S, Unit, A, Unit, Affine]`. Both `T` and the write-focus `B` are `Unit` (honestly
@@ -51,7 +51,7 @@ final class PickFold[S, A](val pick: S => Option[A])
   def to(s: S): Affine[X, A] =
     pick(s) match
       case Some(a) => new Affine.Hit[X, A]((), a)
-      case None    => pickFoldMiss.widenB[A]
+      case None    => pickFoldMiss
 
   def from(a: Affine[X, Unit]): Unit = ()
 

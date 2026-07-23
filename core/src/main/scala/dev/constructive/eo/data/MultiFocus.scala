@@ -56,6 +56,17 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
   def singletonTo(s: S): (X0, A)
   def singletonFrom(x: X0, b: B): T
 
+  /** Tuple-free [[singletonTo]] for the PSVec fast path — appends the leftover to `ysBuf` and the
+    * focus to `flatBuf` directly, exactly one element each; the caller pre-sizes both builders
+    * (`unsafeAppend` contract). Mirrors [[MultiFocusPSMaybeHit.collectTo]]. The default
+    * destructures [[singletonTo]]; bridges whose `singletonTo` would build the pair only for it to
+    * be torn straight back down (the `GetReplaceLens` bridge) override with a pair-free body.
+    */
+  def collectSingletonTo(s: S, ysBuf: ObjArrBuilder, flatBuf: ObjArrBuilder): Unit =
+    val (x, a) = singletonTo(s)
+    ysBuf.unsafeAppend(x)
+    flatBuf.unsafeAppend(a)
+
 /** Per-F O(n) builder. Carried as a typeclass because `MonoidK[F].combineK` has inconsistent
   * asymptotics across F (O(n²) on Vector, lossy on Option), so deriving `fromList` from
   * `Traverse[F] + MonoidK[F]` is asymptotically wrong on the carriers we care about.
@@ -63,7 +74,7 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
 private[eo] trait MultiFocusFromList[F[_]]:
   def fromList[A](xs: List[A]): F[A]
 
-  def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): F[A] =
+  def fromArraySlice[A](arr: Array[Any], from: Int, size: Int): F[A] =
     fromList(List.tabulate(size)(i => arr(from + i).asInstanceOf[A]))
 
 private[eo] object MultiFocusFromList:
@@ -71,7 +82,7 @@ private[eo] object MultiFocusFromList:
   given forList: MultiFocusFromList[List] with
     def fromList[A](xs: List[A]): List[A] = xs
 
-    override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): List[A] =
+    override def fromArraySlice[A](arr: Array[Any], from: Int, size: Int): List[A] =
       List.tabulate(size)(i => arr(from + i).asInstanceOf[A])
 
   given forOption: MultiFocusFromList[Option] with
@@ -87,7 +98,7 @@ private[eo] object MultiFocusFromList:
   given forVector: MultiFocusFromList[Vector] with
     def fromList[A](xs: List[A]): Vector[A] = xs.toVector
 
-    override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): Vector[A] =
+    override def fromArraySlice[A](arr: Array[Any], from: Int, size: Int): Vector[A] =
       Vector.tabulate(size)(i => arr(from + i).asInstanceOf[A])
 
   given forChain: MultiFocusFromList[Chain] with
@@ -103,15 +114,15 @@ private[eo] object MultiFocusFromList:
       case Nil      => PSVec.empty[A]
       case h :: Nil => PSVec.singleton[A](h)
       case _        =>
-        val arr = new Array[AnyRef](xs.size)
+        val arr = new Array[Any](xs.size)
         @tailrec def loop(i: Int, cur: List[A]): Unit =
           if cur.nonEmpty then
-            arr(i) = cur.head.asInstanceOf[AnyRef]
+            arr(i) = cur.head
             loop(i + 1, cur.tail)
         loop(0, xs)
         PSVec.unsafeWrap[A](arr)
 
-    override def fromArraySlice[A](arr: Array[AnyRef], from: Int, size: Int): PSVec[A] =
+    override def fromArraySlice[A](arr: Array[Any], from: Int, size: Int): PSVec[A] =
       size match
         case 0 => PSVec.empty[A]
         case 1 => PSVec.singleton[A](arr(from).asInstanceOf[A])
@@ -132,7 +143,7 @@ private[eo] trait MultiFocusPSMaybeHit[S, T, A, B]:
       flatBuf: ObjArrBuilder,
   ): Unit
 
-  def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T
+  def reconstructSingleton(y: Any, vys: PSVec[B], pos: Int, len: Int): T
 
 /** Instance home for [[MultiFocusK]] — the capability instances (`mfFunctor` / `mfFold` /
   * `mfTraverse`), the same-carrier composition kernels (`mfAssoc` and its Function1 / PSVec
@@ -244,7 +255,7 @@ object MultiFocusK:
     ): T =
       val Tr = Traverse[F]
       val ((xo, fxiSize), fd) = xd
-      val dArr: Array[AnyRef] = foldableToArray[F, D](fd)
+      val dArr: Array[Any] = foldableToArray[F, D](fd)
       inner match
         case is: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
           val (_, fb) = Tr.mapAccumulate(0, fxiSize) {
@@ -261,12 +272,12 @@ object MultiFocusK:
           }
           outer.from((xo, fb))
 
-  private def foldableToArray[F[_]: Foldable, D](fd: F[D]): Array[AnyRef] =
+  private def foldableToArray[F[_]: Foldable, D](fd: F[D]): Array[Any] =
     val n = Foldable[F].size(fd).toInt
-    val arr = new Array[AnyRef](n)
+    val arr = new Array[Any](n)
     var i = 0
     Foldable[F].foldLeft(fd, ()) { (_, d) =>
-      arr(i) = d.asInstanceOf[AnyRef]
+      arr(i) = d
       i += 1
     }
     arr
@@ -288,7 +299,9 @@ object MultiFocusK:
     * @group Instances
     */
   given mfAssocFunction1[X0, Xo, Xi]: AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
-    type Z = (Xo, Xi)
+    // The broadcast carrier's composed context is never read (both `composeFrom` destructures
+    // discard it), so it is Unit BY TYPE — no null-sentinel pair to cast.
+    type Z = Unit
 
     def composeTo[S, T, A, B, C, D](
         s: S,
@@ -299,7 +312,7 @@ object MultiFocusK:
       // Null sentinel works because `.modify` doesn't observe the focus value (spike Q1).
       val a: A = kO(null.asInstanceOf[X0])
       val (_, kI) = inner.to(a)
-      ((null.asInstanceOf[Xo], null.asInstanceOf[Xi]), kI)
+      ((), kI)
 
     def composeFrom[S, T, A, B, C, D](
         xd: MultiFocus[Function1[X0, *]][Z, D],
@@ -324,72 +337,107 @@ object MultiFocusK:
     type SndZ = AssocSndZ[Xo, Xi]
     type Z = SndZ
 
+    // `composeTo` is a small dispatcher over four private per-branch bodies, NOT one method —
+    // the monolithic body measured 432 bytecode bytes, past C2's 325-byte hot-inline ceiling
+    // (`FreqInlineSize`), so it failed to inline at EVERY call site ("hot method too big",
+    // PrintInlining 2026-07-23, PowerSeriesNestedBench). Split, the dispatcher inlines and each
+    // branch body sits under the ceiling, so per-site profiles can flatten the whole path —
+    // the same forwarder pattern JsoniterPrism.to/from documents.
+
     def composeTo[S, T, A, B, C, D](
         s: S,
         outer: Optic[S, T, A, B, MultiFocus[PSVec]] { type X = Xo },
         inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
     ): MultiFocus[PSVec][Z, C] =
       val (xo, va) = outer.to(s)
+      inner match
+        case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked => singletonTo(xo, va, ah)
+        case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked    => maybeHitTo(xo, va, mh)
+        case _ if va.length == 1                                => singleOuterTo(xo, va, inner)
+        case _                                                  => genericTo(xo, va, inner)
+
+    /** Always-hit fast path (mfSingleton): every call produces exactly one focus. */
+    private def singletonTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        ah: MultiFocusSingleton[A, B, C, D, Xi],
+    ): MultiFocus[PSVec][Z, C] =
       val n = va.length
       val ysBuf = new ObjArrBuilder(n)
-      inner match
-        case ah: MultiFocusSingleton[A, B, C, D, Xi] @unchecked =>
-          // Always-hit fast path (mfSingleton): every call produces exactly one focus.
-          val flatBuf = new ObjArrBuilder(n)
-          @tailrec def loop(i: Int): Unit =
-            if i < n then
-              val (xi, c) = ah.singletonTo(va(i))
-              ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
-              flatBuf.unsafeAppend(c.asInstanceOf[AnyRef])
-              loop(i + 1)
-          loop(0)
-          val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
-          (sndZ, flatBuf.freezeAsPSVec[C])
-        case mh: MultiFocusPSMaybeHit[A, B, C, D] @unchecked =>
-          // Maybe-hit fast path (Prism / Optional morphs).
-          val lenBuf = new IntArrBuilder(n)
-          val flatBuf = new ObjArrBuilder(n)
-          @tailrec def loop(i: Int): Unit =
-            if i < n then
-              mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
-              loop(i + 1)
-          loop(0)
-          val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-          (sndZ, flatBuf.freezeAsPSVec[C])
-        case _ =>
-          // Generic fallback: taken when `inner` is neither a `MultiFocusSingleton` (Lens bridge)
-          // nor a `MultiFocusPSMaybeHit` (Prism / Optional bridge) — i.e. a multi-focus inner such
-          // as `each` itself, or any composed `MultiFocus[PSVec]` optic. Reached on the common
-          // left-associated `lens.andThen(each)…` shape, so it is a real hot path, not merely a
-          // downstream escape hatch.
-          if n == 1 then
-            // Single outer focus (e.g. a Lens onto a collection field, then `each`): the inner's
-            // own focus vector IS the entire flat focus. Emit it zero-copy — no `flatBuf`, no
-            // grow, no O(n) `appendAllFromPSVec` copy. `composeFrom`'s generic branch reconstructs
-            // from a one-entry `lens` array + `vys.slice`, so this stays symmetric.
-            val (xi, vy) = inner.to(va(0))
-            ysBuf.unsafeAppend(xi.asInstanceOf[AnyRef])
-            val lenArr = new Array[Int](1)
-            lenArr(0) = vy.length
-            val sndZ = new AssocSndZ[Xo, Xi](xo, lenArr, ysBuf.freezeArr)
-            (sndZ, vy)
-          else
-            // `flatBuf`'s final size is the sum of the inners' cardinalities — unknown up front.
-            // Floor the capacity at `max(n, 16)`: `n` is a lower bound on the total, and the `16`
-            // keeps a small-`n`/high-fanout chain (e.g. `each.andThen(each)` over few-but-large
-            // sub-containers) from doubling *more* than the old default-capacity-16 builder did.
-            val lenBuf = new IntArrBuilder(n)
-            val flatBuf = new ObjArrBuilder(math.max(n, 16))
-            @tailrec def loop(i: Int): Unit =
-              if i < n then
-                val (xi, vy) = inner.to(va(i))
-                lenBuf.append(vy.length)
-                ysBuf.append(xi.asInstanceOf[AnyRef])
-                flatBuf.appendAllFromPSVec(vy)
-                loop(i + 1)
-            loop(0)
-            val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
-            (sndZ, flatBuf.freezeAsPSVec[C])
+      val flatBuf = new ObjArrBuilder(n)
+      @tailrec def loop(i: Int): Unit =
+        if i < n then
+          ah.collectSingletonTo(va(i), ysBuf, flatBuf)
+          loop(i + 1)
+      loop(0)
+      val sndZ = new AssocSndZ[Xo, Xi](xo, null, ysBuf.freezeArr)
+      (sndZ, flatBuf.freezeAsPSVec[C])
+
+    /** Maybe-hit fast path (Prism / Optional morphs). */
+    private def maybeHitTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        mh: MultiFocusPSMaybeHit[A, B, C, D],
+    ): MultiFocus[PSVec][Z, C] =
+      val n = va.length
+      val ysBuf = new ObjArrBuilder(n)
+      val lenBuf = new IntArrBuilder(n)
+      val flatBuf = new ObjArrBuilder(n)
+      @tailrec def loop(i: Int): Unit =
+        if i < n then
+          mh.collectTo(va(i), lenBuf, ysBuf, flatBuf)
+          loop(i + 1)
+      loop(0)
+      val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+      (sndZ, flatBuf.freezeAsPSVec[C])
+
+    /** Single outer focus (e.g. a Lens onto a collection field, then `each`): the inner's own focus
+      * vector IS the entire flat focus. Emit it zero-copy — no `flatBuf`, no grow, no O(n)
+      * `appendAllFromPSVec` copy. `composeFrom`'s generic branch reconstructs from a one-entry
+      * `lens` array + `vys.slice`, so this stays symmetric.
+      */
+    private def singleOuterTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+    ): MultiFocus[PSVec][Z, C] =
+      val ysBuf = new ObjArrBuilder(1)
+      val (xi, vy) = inner.to(va.head)
+      ysBuf.unsafeAppend(xi)
+      val lenArr = new Array[Int](1)
+      lenArr(0) = vy.length
+      val sndZ = new AssocSndZ[Xo, Xi](xo, lenArr, ysBuf.freezeArr)
+      (sndZ, vy)
+
+    /** Generic fallback: taken when `inner` is neither a `MultiFocusSingleton` (Lens bridge) nor a
+      * `MultiFocusPSMaybeHit` (Prism / Optional bridge) and the outer is multi-focus — i.e. a
+      * multi-focus inner such as `each` itself, or any composed `MultiFocus[PSVec]` optic. Reached
+      * on `each.andThen(each)` shapes, so it is a real hot path, not merely a downstream escape
+      * hatch.
+      */
+    private def genericTo[A, B, C, D](
+        xo: Xo,
+        va: PSVec[A],
+        inner: Optic[A, B, C, D, MultiFocus[PSVec]] { type X = Xi },
+    ): MultiFocus[PSVec][Z, C] =
+      val n = va.length
+      val ysBuf = new ObjArrBuilder(n)
+      // `flatBuf`'s final size is the sum of the inners' cardinalities — unknown up front.
+      // Floor the capacity at `max(n, 16)`: `n` is a lower bound on the total, and the `16`
+      // keeps a small-`n`/high-fanout chain (e.g. `each.andThen(each)` over few-but-large
+      // sub-containers) from doubling *more* than the old default-capacity-16 builder did.
+      val lenBuf = new IntArrBuilder(n)
+      val flatBuf = new ObjArrBuilder(math.max(n, 16))
+      @tailrec def loop(i: Int): Unit =
+        if i < n then
+          val (xi, vy) = inner.to(va(i))
+          lenBuf.append(vy.length)
+          ysBuf.append(xi)
+          flatBuf.appendAllFromPSVec(vy)
+          loop(i + 1)
+      loop(0)
+      val sndZ = new AssocSndZ[Xo, Xi](xo, lenBuf.freeze, ysBuf.freezeArr)
+      (sndZ, flatBuf.freezeAsPSVec[C])
 
     def composeFrom[S, T, A, B, C, D](
         xd: MultiFocus[PSVec][Z, D],
@@ -411,7 +459,7 @@ object MultiFocusK:
           @tailrec def loop(i: Int): Unit =
             if i < n then
               resultBuf.unsafeAppend(
-                ah.singletonFrom(ys(i).asInstanceOf[Xi], vys(i)).asInstanceOf[AnyRef]
+                ah.singletonFrom(ys(i).asInstanceOf[Xi], vys(i))
               )
               loop(i + 1)
           loop(0)
@@ -422,7 +470,7 @@ object MultiFocusK:
             if i < n then
               val len = lensArr(i)
               resultBuf.unsafeAppend(
-                mh.reconstructSingleton(ys(i), vys, offset, len).asInstanceOf[AnyRef]
+                mh.reconstructSingleton(ys(i), vys, offset, len)
               )
               loop(i + 1, offset + len)
           loop(0, 0)
@@ -435,7 +483,7 @@ object MultiFocusK:
               val len = lensArr(i)
               val y = ys(i).asInstanceOf[Xi]
               val chunk = vys.slice(offset, offset + len)
-              resultBuf.unsafeAppend(inner.from((y, chunk)).asInstanceOf[AnyRef])
+              resultBuf.unsafeAppend(inner.from((y, chunk)))
               loop(i + 1, offset + len)
           loop(0, 0)
       outer.from((sndZ.xo, resultBuf.freezeAsPSVec[B]))
@@ -448,7 +496,7 @@ object MultiFocusK:
   final private[eo] class AssocSndZ[Xo, Xi](
       val xo: Xo,
       val lens: Array[Int] | Null,
-      val ys: Array[AnyRef],
+      val ys: Array[Any],
   )
 
   // ------------------------------------------------------------------
@@ -469,8 +517,8 @@ object MultiFocusK:
       // Cartesian / singleton — T = List[B] preserved via List(b).
       (s: S) =>
         val (_, fa) = o.to(s)
-        val b: B = agg(fa.asInstanceOf[List[A]])
-        o.from((null.asInstanceOf[o.X], List(b)).asInstanceOf[(o.X, List[B])])
+        val b: B = agg(fa)
+        o.from((null.asInstanceOf[o.X], List(b)))
 
   /** Functor-broadcast aggregation — preserves F-shape via `map(_ => agg(fa))`; every focus
     * position receives the aggregate. Works for any `Functor[F]`; for List this is the
@@ -485,7 +533,7 @@ object MultiFocusK:
       (s: S) =>
         val (x, fa) = o.to(s)
         val b: C = agg(fa)
-        val fb: F[B] = F.map(fa)(_ => b.asInstanceOf[B])
+        val fb: F[B] = F.map(fa)(_ => ev(b))
         o.from((x, fb))
 
     /** The algebraic-lens universal for the map-shaped collects — `agg` sees the whole focus
@@ -647,19 +695,19 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[F]] =
       new Optic[S, T, A, B, MultiFocus[F]]:
-        // X = the Affine itself (miss recycled via widenB, both directions) rather than an
+        // X = the Affine itself (miss recycled via covariant retype, both directions) rather than an
         // unpacked Either[Fst, Snd] — same shape as `multifocusF2multifocus` below.
         type X = Affine[o.X, Unit]
         def to(s: S): (X, F[A]) =
           o.to(s) match
             case h: Affine.Hit[o.X, A] =>
               (new Affine.Hit[o.X, Unit](h.snd, ()), Applicative[F].pure(h.b))
-            case m: Affine.Miss[o.X, A] =>
-              (m.widenB[Unit], Alternative[F].empty[A])
+            case m: Affine.Miss[o.X] =>
+              (m, Alternative[F].empty[A])
         def from(pair: (X, F[B])): T =
           pair match
-            case (m: Affine.Miss[o.X, Unit] @unchecked, _) =>
-              o.from(m.widenB[B])
+            case (m: Affine.Miss[o.X] @unchecked, _) =>
+              o.from(m)
             case (h: Affine.Hit[o.X, Unit] @unchecked, fb) =>
               o.from(new Affine.Hit[o.X, B](h.snd, pickSingletonOrThrow(fb, "Affine")))
 
@@ -679,14 +727,20 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Tuple2]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       o match
-        case glr: optics.GetReplaceLens[?, ?, ?, ?] =>
-          val lens = glr.asInstanceOf[optics.GetReplaceLens[S, T, A, B]]
+        case lens: optics.GetReplaceLens[S, T, A, B] @unchecked =>
           new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusSingleton[S, T, A, B, S]:
             type X = S
             def to(s: S): (S, PSVec[A]) = (s, PSVec.singleton[A](lens.get(s)))
             def from(pair: (S, PSVec[B])): T = lens.enplace(pair._1, pair._2.head)
             def singletonTo(s: S): (S, A) = (s, lens.get(s))
             def singletonFrom(x: S, b: B): T = lens.enplace(x, b)
+            override def collectSingletonTo(
+                s: S,
+                ysBuf: ObjArrBuilder,
+                flatBuf: ObjArrBuilder,
+            ): Unit =
+              ysBuf.unsafeAppend(s)
+              flatBuf.unsafeAppend(lens.get(s))
         case _ =>
           new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusSingleton[S, T, A, B, o.X]:
             type X = o.X
@@ -726,13 +780,13 @@ object MultiFocusK:
           o.to(s) match
             case Left(x) =>
               lenBuf.unsafeAppend(0)
-              ysBuf.unsafeAppend(x.asInstanceOf[AnyRef])
+              ysBuf.unsafeAppend(x)
             case Right(a) =>
               lenBuf.unsafeAppend(1)
-              ysBuf.unsafeAppend(null.asInstanceOf[AnyRef])
-              flatBuf.unsafeAppend(a.asInstanceOf[AnyRef])
+              ysBuf.unsafeAppend(null)
+              flatBuf.unsafeAppend(a)
 
-        def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
+        def reconstructSingleton(y: Any, vys: PSVec[B], pos: Int, len: Int): T =
           if len == 0 then o.from(Left(y.asInstanceOf[o.X]))
           else o.from(Right(vys(pos)))
 
@@ -745,18 +799,18 @@ object MultiFocusK:
 
     def to[S, T, A, B](o: Optic[S, T, A, B, Affine]): Optic[S, T, A, B, MultiFocus[PSVec]] =
       new Optic[S, T, A, B, MultiFocus[PSVec]] with MultiFocusPSMaybeHit[S, T, A, B]:
-        // X = the Affine itself (miss recycled via widenB, both directions) — see
+        // X = the Affine itself (miss recycled via covariant retype, both directions) — see
         // `affine2multifocus`. The collectTo / reconstructSingleton buffer protocol below
         // is X-independent and keeps its unpacked fst / snd encoding.
         type X = Affine[o.X, Unit]
         def to(s: S): (X, PSVec[A]) =
           o.to(s) match
-            case m: Affine.Miss[o.X, A] => (m.widenB[Unit], PSVec.empty[A])
-            case h: Affine.Hit[o.X, A]  =>
+            case m: Affine.Miss[o.X]   => (m, PSVec.empty[A])
+            case h: Affine.Hit[o.X, A] =>
               (new Affine.Hit[o.X, Unit](h.snd, ()), PSVec.singleton[A](h.b))
         def from(pair: (X, PSVec[B])): T =
           pair match
-            case (m: Affine.Miss[o.X, Unit] @unchecked, _) => o.from(m.widenB[B])
+            case (m: Affine.Miss[o.X] @unchecked, _)       => o.from(m)
             case (h: Affine.Hit[o.X, Unit] @unchecked, vs) =>
               o.from(new Affine.Hit[o.X, B](h.snd, vs.head))
 
@@ -767,16 +821,16 @@ object MultiFocusK:
             flatBuf: ObjArrBuilder,
         ): Unit =
           o.to(s) match
-            case m: Affine.Miss[o.X, A] =>
+            case m: Affine.Miss[o.X] =>
               lenBuf.unsafeAppend(0)
-              ysBuf.unsafeAppend(m.fst.asInstanceOf[AnyRef])
+              ysBuf.unsafeAppend(m.fst)
             case h: Affine.Hit[o.X, A] =>
               lenBuf.unsafeAppend(1)
-              ysBuf.unsafeAppend(h.snd.asInstanceOf[AnyRef])
-              flatBuf.unsafeAppend(h.b.asInstanceOf[AnyRef])
+              ysBuf.unsafeAppend(h.snd)
+              flatBuf.unsafeAppend(h.b)
 
-        def reconstructSingleton(y: AnyRef, vys: PSVec[B], pos: Int, len: Int): T =
-          if len == 0 then o.from(new Affine.Miss[o.X, B](y.asInstanceOf[Fst[o.X]]))
+        def reconstructSingleton(y: Any, vys: PSVec[B], pos: Int, len: Int): T =
+          if len == 0 then o.from(new Affine.Miss[o.X](y.asInstanceOf[Fst[o.X]]))
           else o.from(new Affine.Hit[o.X, B](y.asInstanceOf[Snd[o.X]], vys(pos)))
 
   /** MultiFocus[F] → ModifyF. Uniform Modify widening for any `Functor[F]`.
@@ -887,10 +941,10 @@ object MultiFocusK:
         ((), read)
       def from(pair: (Unit, Int => A)): T =
         val k = pair._2
-        val arr = new Array[Object](size)
+        val arr = new Array[Any](size)
         @tailrec def loop(i: Int): Unit =
           if i < size then
-            arr(i) = k(i).asInstanceOf[Object]
+            arr(i) = k(i)
             loop(i + 1)
         loop(0)
         Tuple.fromArray(arr).asInstanceOf[T]
@@ -916,7 +970,7 @@ object MultiFocusK:
           o.from(Direct(pair._2(null.asInstanceOf[X0])))
 
   /** Reinterpret an Optional whose focus is an `F[A]` as a MultiFocus optic over the elements — the
-    * mirror of [[fromPrismF]] over the `Affine` miss / hit split (miss recycled via `widenB`, both
+    * mirror of [[fromPrismF]] over the `Affine` miss / hit split (miss recycled covariantly, both
     * directions).
     *
     * @group Constructors
@@ -928,14 +982,14 @@ object MultiFocusK:
       type X = Affine[opt.X, Unit]
       def to(s: S): (X, F[A]) =
         opt.to(s) match
-          case m: Affine.Miss[opt.X, F[A]] @unchecked =>
-            (m.widenB[Unit], MonoidK[F].empty[A])
+          case m: Affine.Miss[opt.X] @unchecked =>
+            (m, MonoidK[F].empty[A])
           case h: Affine.Hit[opt.X, F[A]] @unchecked =>
             (new Affine.Hit[opt.X, Unit](h.snd, ()), h.b)
       def from(pair: (X, F[B])): T =
         pair match
-          case (m: Affine.Miss[opt.X, Unit] @unchecked, _) =>
-            opt.from(m.widenB[F[B]])
+          case (m: Affine.Miss[opt.X] @unchecked, _) =>
+            opt.from(m)
           case (h: Affine.Hit[opt.X, Unit] @unchecked, fb) =>
             opt.from(new Affine.Hit[opt.X, F[B]](h.snd, fb))
 

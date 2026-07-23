@@ -94,7 +94,7 @@ object ModifyF:
           case l @ Left(_) => o.from(l.widenRight[B])
 
   /** Optional → ModifyF. Mirror of [[either2modify]] split across `Affine.Hit` / `Affine.Miss`;
-    * miss uses `widenB` instead of allocating a fresh `Miss`.
+    * miss passes through directly (`Miss` is `Affine[A, Nothing]`, covariance retypes it for free).
     *
     * @group Instances
     */
@@ -105,8 +105,8 @@ object ModifyF:
         o.to(s) match
           case h: Affine.Hit[o.X, A] =>
             o.from(new Affine.Hit[o.X, B](h.snd, f(h.b)))
-          case m: Affine.Miss[o.X, A] =>
-            o.from(m.widenB[B])
+          case m: Affine.Miss[o.X] =>
+            o.from(m)
 
   // MultiFocus[F] → ModifyF lives in `MultiFocus.scala` (`multifocus2modify`).
 
@@ -120,10 +120,14 @@ object ModifyF:
     * `inner.from` then `outer.from`, matching the deferred-modify semantic
     * `composedModify(c2d)(s) = outer.modify(inner.modify(c2d))(s)`.
     *
-    * The asInstanceOf casts coerce abstract `Fst[Xo] / Snd[Xo] / Fst[Xi] / Snd[Xi]` to the
-    * canonical `(S, A)` / `(A, C)` decomposition. Sound under the universal ModifyF convention,
-    * unsafe only for hand-built ModifyF optics that violate it — and there's no public API path to
-    * build such an optic.
+    * The three remaining asInstanceOf casts coerce abstract `Snd[Xo] / Fst[Xi] / Snd[Xi]` to the
+    * canonical `(S, A)` / `(A, C)` decomposition. Sound under the universal ModifyF convention
+    * (`type X = (S, A)` at every construction site — `coerceToModify` and `Modify.apply`), unsafe
+    * only for hand-built ModifyF optics that violate it — and there's no public API path to build
+    * such an optic. They are IRREDUCIBLE under the `AssociativeFunctor` SPI: the instance
+    * quantifies `Xo` / `Xi` independently of `composeTo`/`composeFrom`'s method-level `S..D`, so
+    * the convention's tie (`Snd[Xi] = C`, `Fst[Xi] = A`, `Snd[Xo] = A`) has no type-level channel.
+    * (The `Z` projections DO reduce — `Z` is a concrete Tuple2 — see `composeFrom`.)
     *
     * @group Instances
     */
@@ -143,7 +147,9 @@ object ModifyF:
         inner: optics.Optic[A, B, C, D, ModifyF] { type X = Xi },
         outer: optics.Optic[S, T, A, B, ModifyF] { type X = Xo },
     ): T =
-      val xo: Fst[Xo] = xd.modifier._1.asInstanceOf[Fst[Xo]]
-      val c2d: Snd[Xi] => D = xd.modifier._2.asInstanceOf[Snd[Xi] => D]
+      // `Z = (Fst[Xo], Snd[Xi])` is a concrete Tuple2 type, so `Fst[Z]` / `Snd[Z]` REDUCE —
+      // both projections are compiler-typed, no coercion.
+      val xo: Fst[Xo] = xd.modifier._1
+      val c2d: Snd[Xi] => D = xd.modifier._2
       val innerModify: A => B = a => inner.from(ModifyF((a.asInstanceOf[Fst[Xi]], c2d)))
       outer.from(ModifyF((xo, innerModify.asInstanceOf[Snd[Xo] => B])))

@@ -2,6 +2,7 @@ package dev.constructive.eo
 package data
 
 import scala.annotation.tailrec
+import scala.collection.immutable.ArraySeq
 
 import cats.{Applicative, Eval, Foldable, Functor, Traverse}
 
@@ -15,11 +16,29 @@ import cats.{Applicative, Eval, Foldable, Functor, Traverse}
   *
   * Equality is value-based across variants.
   */
-sealed trait PSVec[+B]:
+sealed trait PSVec[+B] extends IterableOnce[B]:
   def length: Int
 
   /** Indexed access. Unchecked: UB if `i < 0 || i >= length`. */
   def apply(i: Int): B
+
+  /** Index-walking iterator — the [[IterableOnce]] bridge (and what makes a PSVec acceptable
+    * anywhere a collection is). Hot paths stay on the index loops.
+    *
+    * Deliberately hand-rolled, NOT `Iterator.tabulate(length)(apply)` — BY MEASUREMENT (2026-07-22,
+    * -prof gc): the tabulate version regressed `JsoniterBench.jReadId` 48 → 72 B/op (+50%) — its
+    * lambda-capturing shape perturbs inlining enough to un-elide the generic `foldMap` closure in
+    * forks that merely LOAD this class. Do not re-simplify without re-measuring that bench.
+    */
+  def iterator: Iterator[B] = new collection.AbstractIterator[B]:
+    private var i = 0
+    def hasNext: Boolean = i < PSVec.this.length
+    def next(): B =
+      val b = apply(i)
+      i += 1
+      b
+
+  override def knownSize: Int = length
 
   /** Read the first element. Unchecked: UB if [[length]] == 0. */
   def head: B
@@ -32,27 +51,21 @@ sealed trait PSVec[+B]:
   /** Materialise as a `List` — the read-side bridge for `Plated.children` / `universe` and the
     * carriers (circe / avro) that reconstruct from an ordered sequence.
     */
-  def toList: List[B] =
-    val b = List.newBuilder[B]
-    val n = length
-    @tailrec def loop(i: Int): Unit =
-      if i < n then
-        b += apply(i)
-        loop(i + 1)
-    loop(0)
-    b.result()
+  def toList: List[B] = iterator.toList
 
-  /** Materialise as a fresh `Array[AnyRef]`. `Slice` overrides with `System.arraycopy` (intrinsic)
+  /** Materialise as a fresh `Array[Any]` (`Object[]` at runtime) — the erased storage currency of
+    * the carrier machinery (`ObjArrBuilder`, `mfAssocPSVec`, the schemes fold engine), which has no
+    * `ClassTag` to build typed arrays with. `Slice` overrides with `System.arraycopy` (intrinsic)
     * so the common rebuild path in `Traversal.pEach`'s `from` is one memcpy.
     */
-  def toAnyRefArray: Array[AnyRef]
+  def toAnyArray: Array[Any]
 
-  /** Like [[toAnyRefArray]] but MAY share the backing array zero-copy when a dense Slice covers its
+  /** Like [[toAnyArray]] but MAY share the backing array zero-copy when a dense Slice covers its
     * full range. Callers MUST treat the result as immutable. Used by consumers that also won't
     * mutate, e.g. [[optics.Traversal.pEach]]'s `from` → `ArraySeq.unsafeWrapArray`). Default is the
     * safe copy; only `Slice` overrides to share.
     */
-  def unsafeShareableArray: Array[AnyRef] = toAnyRefArray
+  def unsafeShareableArray: Array[Any] = toAnyArray
 
   override def equals(that: Any): Boolean = that match
     case other: PSVec[?] =>
@@ -78,9 +91,9 @@ sealed trait PSVec[+B]:
   override def toString(): String = toList.mkString("PSVec(", ", ", ")")
 
 /** Constructors for [[PSVec]] — the primary entry points are `empty`, `singleton`, and `unsafeWrap`
-  * (zero-copy from an `Array[AnyRef]`). The three `Slice` / `Single` / `Empty` subclasses are
-  * internal to the `dev.constructive.eo.data` package and stable across release lines only at the
-  * aggregate `PSVec` supertype level.
+  * (zero-copy from an `Array[Any]`). The three `Slice` / `Single` / `Empty` subclasses are internal
+  * to the `dev.constructive.eo.data` package and stable across release lines only at the aggregate
+  * `PSVec` supertype level.
   */
 object PSVec:
 
@@ -100,10 +113,10 @@ object PSVec:
       val n = fa.length
       if n == 0 then PSVec.empty[B]
       else
-        val arr = new Array[AnyRef](n)
+        val arr = new Array[Any](n)
         @tailrec def loop(i: Int): Unit =
           if i < n then
-            arr(i) = f(fa(i)).asInstanceOf[AnyRef]
+            arr(i) = f(fa(i))
             loop(i + 1)
         loop(0)
         PSVec.unsafeWrap[B](arr)
@@ -146,19 +159,19 @@ object PSVec:
       val n = fa.length
       if n == 0 then G.pure(PSVec.empty[B])
       else
-        @tailrec def loop(i: Int, acc: G[Array[AnyRef]]): G[Array[AnyRef]] =
+        @tailrec def loop(i: Int, acc: G[Array[Any]]): G[Array[Any]] =
           if i < n then
             val idx = i
             val gb = f(fa(idx))
             loop(
               i + 1,
               G.map2(acc, gb) { (a, b) =>
-                a(idx) = b.asInstanceOf[AnyRef]
+                a(idx) = b
                 a
               },
             )
           else acc
-        val acc = loop(0, G.pure(new Array[AnyRef](n)))
+        val acc = loop(0, G.pure(new Array[Any](n)))
         G.map(acc)(arr => PSVec.unsafeWrap[B](arr))
 
     def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
@@ -172,7 +185,7 @@ object PSVec:
   case object Empty extends PSVec[Nothing]:
     def length: Int = 0
 
-    override val toAnyRefArray: Array[AnyRef] = new Array[AnyRef](0)
+    override val toAnyArray: Array[Any] = new Array[Any](0)
 
     def apply(i: Int): Nothing =
       throw new IndexOutOfBoundsException(s"PSVec.Empty.apply($i)")
@@ -197,16 +210,16 @@ object PSVec:
       val hi = math.min(1, math.max(lo, until))
       if lo == 0 && hi == 1 then this else Empty
 
-    override def toAnyRefArray: Array[AnyRef] =
-      val a = new Array[AnyRef](1)
-      a(0) = b.asInstanceOf[AnyRef]
+    override def toAnyArray: Array[Any] =
+      val a = new Array[Any](1)
+      a(0) = b
       a
 
   /** Array-backed view with offset + length. [[slice]] is a pointer update over the shared backing
     * array — the zero-copy reassembly path `mfAssocPSVec` depends on.
     */
   final class Slice[+B] private[data] (
-      private[data] val arr: Array[AnyRef],
+      private[data] val arr: Array[Any],
       private[data] val offset: Int,
       val length: Int,
   ) extends PSVec[B]:
@@ -221,14 +234,14 @@ object PSVec:
       else if n == 1 then new Single[B](arr(offset + lo).asInstanceOf[B])
       else new Slice[B](arr, offset + lo, n)
 
-    override def toAnyRefArray: Array[AnyRef] =
-      val a = new Array[AnyRef](length)
+    override def toAnyArray: Array[Any] =
+      val a = new Array[Any](length)
       System.arraycopy(arr, offset, a, 0, length)
       a
 
-    override def unsafeShareableArray: Array[AnyRef] =
+    override def unsafeShareableArray: Array[Any] =
       if offset == 0 && length == arr.length then arr
-      else toAnyRefArray
+      else toAnyArray
 
   /** Zero-length shared vector. */
   def empty[B]: PSVec[B] = Empty
@@ -238,37 +251,66 @@ object PSVec:
 
   /** Two-element vector — builds the backing array directly, no `List` / `Iterable` intermediate.
     * The common arity for binary-tree children (recursion-scheme coalgebras, `Node(l, r)`), where
-    * `PSVec.of(l, r)` replaces the wasteful `fromIterable(List(l, r))`.
+    * `PSVec.of(l, r)` replaces the wasteful `from(List(l, r))`.
     */
   def of[B](b0: B, b1: B): PSVec[B] =
-    val a = new Array[AnyRef](2)
-    a(0) = b0.asInstanceOf[AnyRef]
-    a(1) = b1.asInstanceOf[AnyRef]
+    val a = new Array[Any](2)
+    a(0) = b0
+    a(1) = b1
     new Slice[B](a, 0, 2)
 
-  /** Wrap an `Array[AnyRef]` verbatim as a PSVec. Shares ownership with the caller. Returns the
-    * most specialised variant for the array's length so callers need not special-case empty /
-    * singleton themselves.
+  /** Wrap an `Array[Any]` verbatim as a PSVec. Shares ownership with the caller. Returns the most
+    * specialised variant for the array's length so callers need not special-case empty / singleton
+    * themselves.
     */
-  def unsafeWrap[B](arr: Array[AnyRef]): PSVec[B] =
+  def unsafeWrap[B](arr: Array[Any]): PSVec[B] =
     arr.length match
       case 0 => Empty
       case 1 => new Single[B](arr(0).asInstanceOf[B])
       case _ => new Slice[B](arr, 0, arr.length)
 
-  /** Build a PSVec from any `Iterable` — one backing-array allocation, specialised at length 0 / 1.
-    * The bridge for `Plated` carriers whose children arrive as a `List` / `Vector` / circe object
-    * values rather than already as a focus vector.
+  /** Build a PSVec from any collection. A PSVec passes through untouched; `ArraySeq.ofRef`'s
+    * backing array is aliased zero-copy (safe: ArraySeq is immutable and no PSVec operation mutates
+    * a wrapped array); every other shape collects through the stdlib `Iterator.toArray` (exact-fill
+    * when `knownSize` is known, `ArrayBuilder` otherwise), specialised at 0 / 1 by [[unsafeWrap]].
     */
-  def fromIterable[B](xs: Iterable[B]): PSVec[B] =
-    val n = xs.size
-    if n == 0 then Empty
-    else
-      val a = new Array[AnyRef](n)
-      val it = xs.iterator
-      @tailrec def loop(i: Int): Unit =
-        if it.hasNext then
-          a(i) = it.next().asInstanceOf[AnyRef]
-          loop(i + 1)
-      loop(0)
-      unsafeWrap(a)
+  def from[B](xs: IterableOnce[B]): PSVec[B] =
+    xs match
+      case v: PSVec[B @unchecked]    => v
+      case refArr: ArraySeq.ofRef[?] =>
+        unsafeWrap(refArr.unsafeArray.asInstanceOf[Array[Any]])
+      case list: List[?] =>
+        // Structural exact-size fill. List's `knownSize` is -1, so the generic branch pays
+        // `Iterator.toArray`'s grow-and-copy chain; the O(n) `length` pointer walk is cheaper —
+        // BY MEASUREMENT (TraversalBench.eoModify size=8, -prof gc: 608 vs 736 B/op, 2026-07-22).
+        val arr = new Array[Any](list.length)
+        @tailrec def fill(i: Int, rest: List[?]): Unit =
+          if rest.nonEmpty then
+            arr(i) = rest.head
+            fill(i + 1, rest.tail)
+        fill(0, list)
+        unsafeWrap(arr)
+      case _ =>
+        unsafeWrap(xs.iterator.toArray[Any])
+
+  /** Build a PSVec from an `Array` — one defensive copy (`Array.copyAs`: an intrinsic `arraycopy`
+    * for reference arrays, a boxing fill for primitive ones). The array is caller-owned and
+    * mutable, so it can NOT be aliased the way immutable `ArraySeq.ofRef`'s backing is. Also spares
+    * the `Predef.genericWrapArray` allocation the `IterableOnce` overload would force on an Array
+    * argument.
+    */
+  def from[B](arr: Array[B]): PSVec[B] =
+    unsafeWrap(Array.copyAs[Any](arr, arr.length))
+
+  /** [[from]] for any `Foldable` container, in fold order. An `IterableOnce`-backed container —
+    * PSVec itself included — routes through the structural overload (sound whenever the instance
+    * folds in iteration order, as every cats instance does); anything else collects through its own
+    * `foldLeft`.
+    */
+  def from[T[_]: Foldable, A](ta: T[A]): PSVec[A] =
+    ta match
+      case xs: IterableOnce[A @unchecked] => from(xs)
+      case _                              =>
+        val buf = new ObjArrBuilder(16)
+        Foldable[T].foldLeft(ta, ())((_, a) => { buf.append(a); () })
+        buf.freezeAsPSVec[A]

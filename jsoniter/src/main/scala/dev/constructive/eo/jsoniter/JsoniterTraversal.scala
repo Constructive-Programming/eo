@@ -21,9 +21,9 @@ import dev.constructive.eo.optics.Traversal
   *     span, 1:1 aligned with the foci (spans whose decode throws are dropped TOGETHER with their
   *     focus, so the write side can trust the pairing).
   *   - `to: Array[Byte] => (X, PSVec[A])` — runs [[JsonPathScanner.findAll]], decodes every span
-  *     via the codec into a single `Array[AnyRef]` allocation, wraps it as a PSVec. Spans whose
-  *     decode throws are silently dropped (matches the read semantic "fold the focuses that exist")
-  *     — and stay byte-untouched on write.
+  *     via the codec into a single `Array[Any]` allocation, wraps it as a PSVec. Spans whose decode
+  *     throws are silently dropped (matches the read semantic "fold the focuses that exist") — and
+  *     stay byte-untouched on write.
   *   - `from: ((X, PSVec[A])) => Array[Byte]` — encodes each focus via `writeToArray` and splices
   *     all spans back in a single pass (segments between spans are `arraycopy`d verbatim). A
   *     span↔foci length mismatch (an aggregate `from` after a shape-changing carrier op) passes the
@@ -141,7 +141,7 @@ object JsoniterTraversal:
     transparent inline def at(i: Int): Any =
       ${ JsoniterPrismMacro.atTraversalImpl[A]('o, 'i) }
 
-  /** Decode every span via the codec into a single `Array[AnyRef]`, tight-packing only on partial
+  /** Decode every span via the codec into a single `Array[Any]`, tight-packing only on partial
     * decode failure. A span whose decode throws is dropped together with its slot so spans↔foci
     * stay 1:1 for the write side. Returns the kept spans paired with the packed foci. `spans` must
     * be non-empty.
@@ -151,7 +151,7 @@ object JsoniterTraversal:
       spans: List[JsonPathScanner.Span],
   )(using codec: JsonValueCodec[A]): (List[JsonPathScanner.Span], PSVec[A]) =
     val n = spans.length
-    val arr = new Array[AnyRef](n)
+    val arr = new Array[Any](n)
     val keptSpans = List.newBuilder[JsonPathScanner.Span]
     val it = spans.iterator
     @tailrec def loop(written: Int): Int =
@@ -159,7 +159,7 @@ object JsoniterTraversal:
         val span = it.next()
         val next =
           try
-            arr(written) = readFromSubArray[A](bytes, span.start, span.end).asInstanceOf[AnyRef]
+            arr(written) = readFromSubArray[A](bytes, span.start, span.end)
             keptSpans += span
             written + 1
           catch case scala.util.control.NonFatal(_) => written
@@ -170,7 +170,7 @@ object JsoniterTraversal:
       if written == n then PSVec.unsafeWrap[A](arr)
       else if written == 0 then PSVec.empty[A]
       else
-        val tight = new Array[AnyRef](written)
+        val tight = new Array[Any](written)
         System.arraycopy(arr, 0, tight, 0, written)
         PSVec.unsafeWrap[A](tight)
     (keptSpans.result(), psv)

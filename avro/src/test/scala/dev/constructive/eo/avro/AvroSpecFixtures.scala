@@ -318,7 +318,7 @@ object AvroSpecFixtures:
     */
   def basketRoot(elems: Seq[AnyRef]): GenericRecord =
     val itemsField = basketSchema.getField("items")
-    val arr = new GenericData.Array[AnyRef](elems.size, itemsField.schema)
+    val arr = new GenericData.Array[Any](elems.size, itemsField.schema)
     elems.foreach(arr.add)
     val rec = new GenericData.Record(basketSchema)
     rec.put(basketSchema.getField("owner").pos, "Alice")

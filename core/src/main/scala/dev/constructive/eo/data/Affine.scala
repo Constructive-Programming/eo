@@ -31,7 +31,7 @@ type Snd[T] = T match
   * @tparam B
   *   focus type
   */
-sealed trait Affine[A, B]:
+sealed trait Affine[A, +B]:
   import Affine.*
 
   /** Monomorphic fold — pattern-match on Miss/Hit and run the matching branch.
@@ -40,8 +40,8 @@ sealed trait Affine[A, B]:
     *   output type
     */
   def fold[C](onMiss: Fst[A] => C, onHit: (Snd[A], B) => C): C = this match
-    case m: Miss[A, B] => onMiss(m.fst)
-    case h: Hit[A, B]  => onHit(h.snd, h.b)
+    case m: Miss[A]   => onMiss(m.fst)
+    case h: Hit[A, B] => onHit(h.snd, h.b)
 
   /** Fold both branches into a new `Affine[A, C]`. Dispatches via direct pattern match (no
     * intermediate Either).
@@ -53,8 +53,8 @@ sealed trait Affine[A, B]:
       f: Fst[A] => Affine[A, C],
       g: ((Snd[A], B)) => Affine[A, C],
   ): Affine[A, C] = this match
-    case m: Miss[A, B] => f(m.fst)
-    case h: Hit[A, B]  => g((h.snd, h.b))
+    case m: Miss[A]   => f(m.fst)
+    case h: Hit[A, B] => g((h.snd, h.b))
 
   /** Effectful traversal — runs `f` on the hit branch, passes the miss branch through via
     * `Applicative.pure`.
@@ -65,33 +65,30 @@ sealed trait Affine[A, B]:
     *   effect constructor
     */
   def aTraverse[C, G[_]: Applicative](f: B => G[C]): G[Affine[A, C]] = this match
-    case m: Miss[A, B] =>
-      Applicative[G].pure[Affine[A, C]](m.widenB[C])
+    case m: Miss[A] =>
+      Applicative[G].pure[Affine[A, C]](m)
     case h: Hit[A, B] =>
       Applicative[G].map(f(h.b))(c => new Hit[A, C](h.snd, c))
 
 /** Constructors and typeclass instances for [[Affine]]. */
 object Affine:
 
-  /** Miss-branch variant — no focus, stores `fst: Fst[A]` directly. `B` is phantom at runtime;
-    * callers re-typing across a phantom-B change should prefer [[widenB]] over `asInstanceOf`.
+  /** Miss-branch variant — no focus, stores `fst: Fst[A]` directly. There is no `B` parameter at
+    * all: a miss carries no focus, so it extends `Affine[A, Nothing]` and covariance retypes it
+    * across any focus change as a plain upcast — the old `widenB` cast helper is subsumed by the
+    * type system.
     */
-  final class Miss[A, B](val fst: Fst[A]) extends Affine[A, B]:
+  final class Miss[A](val fst: Fst[A]) extends Affine[A, Nothing]:
     override def toString(): String = s"Miss($fst)"
 
     override def equals(that: Any): Boolean = that match
-      case other: Miss[?, ?] => fst == other.fst
-      case _                 => false
+      case other: Miss[?] => fst == other.fst
+      case _              => false
 
     override def hashCode(): Int = fst.hashCode
 
-    /** Re-type this `Miss[A, B]` as `Miss[A, B2]` without allocating a new instance. Safe because
-      * `Miss` stores only `fst: Fst[A]` — the `B` parameter is phantom at the runtime shape.
-      */
-    inline def widenB[B2]: Miss[A, B2] = this.asInstanceOf[Miss[A, B2]]
-
   /** Hit-branch variant: focus present. Stores `snd` and `b` as direct fields. */
-  final class Hit[A, B](val snd: Snd[A], val b: B) extends Affine[A, B]:
+  final class Hit[A, +B](val snd: Snd[A], val b: B) extends Affine[A, B]:
     override def toString(): String = s"Hit($snd, $b)"
 
     override def equals(that: Any): Boolean = that match
@@ -108,8 +105,8 @@ object Affine:
   given map: ForgetfulFunctor[Affine] with
 
     def map[X, A, B](fa: Affine[X, A], f: A => B): Affine[X, B] = fa match
-      case m: Miss[X, A] => m.widenB[B]
-      case h: Hit[X, A]  => new Hit[X, B](h.snd, f(h.b))
+      case m: Miss[X]   => m
+      case h: Hit[X, A] => new Hit[X, B](h.snd, f(h.b))
 
   /** `ForgetfulFold[Affine]` — miss empty, hit runs `f` on the focus. Carrier-owned (like [[map]] /
     * [[traverse]]), so it resolves through Affine's companion with no import.
@@ -119,8 +116,8 @@ object Affine:
   given fold: ForgetfulFold[Affine] with
 
     def foldMap[X, A, M: Monoid](f: A => M, fa: Affine[X, A]): M = fa match
-      case _: Miss[X, A] => Monoid[M].empty
-      case h: Hit[X, A]  => f(h.b)
+      case _: Miss[X]   => Monoid[M].empty
+      case h: Hit[X, A] => f(h.b)
 
   /** `ForgetfulTraverse[Affine, Applicative]` — lifts a focus-level `A => G[B]` into an
     * `Affine[X, A] => G[Affine[X, B]]`. Unlocks `.modifyA` / `.all` / `.modifyF` on Affine- carrier
@@ -146,19 +143,19 @@ object Affine:
     // as the tag — it is already allocated, its B is phantom, and it can never be a Tuple2.
     type FstXi = (Snd[Xo], Fst[Xi])
     type SndXi = (Snd[Xo], Snd[Xi])
-    type Z = (Miss[Xo, Nothing] | FstXi, SndXi)
+    type Z = (Miss[Xo] | FstXi, SndXi)
 
     def composeTo[S, T, A, B, C, D](
         s: S,
         outer: Optic[S, T, A, B, Affine] { type X = Xo },
         inner: Optic[A, B, C, D, Affine] { type X = Xi },
     ): Affine[Z, C] = outer.to(s) match
-      case om: Miss[Xo, A] =>
-        new Miss[Z, C](om.widenB[Nothing])
+      case om: Miss[Xo] =>
+        new Miss[Z](om)
       case oh: Hit[Xo, A] =>
         inner.to(oh.b) match
-          case im: Miss[Xi, C] =>
-            new Miss[Z, C]((oh.snd, im.fst))
+          case im: Miss[Xi] =>
+            new Miss[Z]((oh.snd, im.fst))
           case ih: Hit[Xi, C] =>
             new Hit[Z, C]((oh.snd, ih.snd), ih.b)
 
@@ -167,12 +164,12 @@ object Affine:
         inner: Optic[A, B, C, D, Affine] { type X = Xi },
         outer: Optic[S, T, A, B, Affine] { type X = Xo },
     ): T = xd match
-      case m: Miss[Z, D] =>
+      case m: Miss[Z] =>
         m.fst match
-          case om: Miss[?, ?] =>
-            outer.from(om.asInstanceOf[Miss[Xo, Nothing]].widenB[B])
+          case om: Miss[Xo @unchecked] =>
+            outer.from(om)
           case fstXi: FstXi @unchecked =>
-            val b: B = inner.from(new Miss[Xi, D](fstXi._2))
+            val b: B = inner.from(new Miss[Xi](fstXi._2))
             outer.from(new Hit[Xo, B](fstXi._1, b))
       case h: Hit[Z, D] =>
         val pair = h.snd
@@ -198,8 +195,8 @@ object Affine:
 
         def from(a: Affine[X, B]): T =
           a match
-            case m: Miss[X, B] => m.fst
-            case h: Hit[X, B]  => o.from((h.snd, h.b))
+            case m: Miss[X]   => m.fst
+            case h: Hit[X, B] => o.from((h.snd, h.b))
 
   // Iso → Affine is handled by the low-priority `chainViaTuple2` fallback in
   // `LowPriorityComposerInstances`. No direct `Composer[Direct, Affine]` is shipped.
@@ -217,8 +214,8 @@ object Affine:
         def to(s: S): Affine[X, A] =
           o.to(s) match
             case Right(a) => new Hit[X, A](s, a)
-            case Left(x)  => new Miss[X, A](x)
+            case Left(x)  => new Miss[X](x)
         def from(xb: Affine[X, B]): T =
           xb match
-            case m: Miss[X, B] => o.from(Left(m.fst))
-            case h: Hit[X, B]  => o.from(Right(h.b))
+            case m: Miss[X]   => o.from(Left(m.fst))
+            case h: Hit[X, B] => o.from(Right(h.b))

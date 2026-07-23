@@ -90,21 +90,21 @@ class JsoniterPrismSpec extends Specification:
       JsoniterPrism.fromPath[Long]("$.payload.user.id")
 
     val hitOk = idP.to(sample) match
-      case h: Affine.Hit[idP.X, Long]  => h.b === 42L
-      case _: Affine.Miss[idP.X, Long] => false === true // expected Hit
+      case h: Affine.Hit[idP.X, Long] => h.b === 42L
+      case _: Affine.Miss[idP.X]      => false === true // expected Hit
 
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
       JsoniterPrism.fromPath[Long]("$.payload.user.missing")
     val missOk = absentP.to(sample) match
-      case m: Affine.Miss[absentP.X, Long] => m.fst === sample
-      case _: Affine.Hit[absentP.X, Long]  => false === true
+      case m: Affine.Miss[absentP.X]      => m.fst === sample
+      case _: Affine.Hit[absentP.X, Long] => false === true
 
     // Field 'email' is a String; decoding it as Long throws → Miss.
     val mistypedP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
       JsoniterPrism.fromPath[Long]("$.payload.user.email")
     val mistypedOk = mistypedP.to(sample) match
-      case _: Affine.Miss[mistypedP.X, Long] => true === true
-      case _: Affine.Hit[mistypedP.X, Long]  => false === true
+      case _: Affine.Miss[mistypedP.X]      => true === true
+      case _: Affine.Hit[mistypedP.X, Long] => false === true
 
     hitOk.and(missOk).and(mistypedOk)
   }

@@ -59,15 +59,15 @@ final class AvroBridge[A, B] private (
   def to(bytes: Array[Byte]): Affine[X, A] =
     AvroCodec.decodeValue(bytes)(using readCodec) match
       case Right(a)    => new Affine.Hit[X, A](bytes, a)
-      case l @ Left(_) => new Affine.Miss[X, A](l.widenRight)
+      case l @ Left(_) => new Affine.Miss[X](l.widenRight)
 
   /** Re-encode the migrated `B` under the `writeCodec`'s schema; a `Miss` passes its failure
     * through as the `Left` of [[AvroBridge.BridgedBytes]].
     */
   def from(aff: Affine[X, B]): BridgedBytes =
     aff match
-      case h: Affine.Hit[X, B]  => AvroCodec.encodeValue(h.b)(using writeCodec)
-      case m: Affine.Miss[X, B] => m.fst
+      case h: Affine.Hit[X, B] => AvroCodec.encodeValue(h.b)(using writeCodec)
+      case m: Affine.Miss[X]   => m.fst
 
   /** The reverse migration — reads `B` under the (old) write schema, migrates `B ⇒ A` via
     * `.modify`, and writes `A` under the (old) read schema. Just the two codecs swapped.

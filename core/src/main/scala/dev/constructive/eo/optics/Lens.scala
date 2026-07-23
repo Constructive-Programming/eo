@@ -152,6 +152,15 @@ class GetReplaceLens[S, T, A, B](
       reverseGet = (s, d) => enplace(s, ev(inner.mend(d))),
     )
 
+  /** Fused `Lens.andThen(Traversal)` — lifts this lens through the same `tuple2multifocusPSVec`
+    * bridge the `Morph`-routed generic extension uses and composes on the `MultiFocus[PSVec]`
+    * carrier, returning the concrete [[Traversal]] class so the composite keeps Traversal's fused
+    * inline `modify` / `replace` / `foldMap` members (the generic extensions pay a per-call
+    * parameterized-given instantiation — see the [[Traversal]] scaladoc).
+    */
+  def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
+    Traversal.composed(data.MultiFocusK.tuple2multifocusPSVec.to(this), inner)
+
   /** Fused `Lens.andThen(Optional)` — outer always hits, inner may miss. Result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     new Optional(
@@ -214,6 +223,12 @@ class SplitCombineLens[S, T, A, B, XA](
       ,
       combine = (x, d) => combine(x._1, inner.combine(x._2, d)),
     )
+
+  /** Fused `Lens.andThen(Traversal)` for the split-combine family — see
+    * [[GetReplaceLens.andThen(inner:Traversal)]].
+    */
+  def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
+    Traversal.composed(data.MultiFocusK.tuple2multifocusPSVec.to(this), inner)
 
 /** Monomorphic split-combine lens (`S = T`, `A = B`). The matched source / target lets the `to`
   * splitter double as the `T => (X, A)` evidence the mutation extensions need, so `place` /

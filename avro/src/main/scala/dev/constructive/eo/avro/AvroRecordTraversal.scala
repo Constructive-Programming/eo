@@ -67,7 +67,7 @@ final class AvroRecordTraversal[A] private[avro] (
     */
   private def walkPrefixIor(
       record: IndexedRecord
-  ): Either[Ior.Left[Chain[AvroFailure]], (JList[?], Vector[Any], Vector[AnyRef])] =
+  ): Either[Ior.Left[Chain[AvroFailure]], (JList[?], Vector[Any], Vector[Any])] =
     AvroWalk
       .walkPath(record, prefix)
       .left
@@ -116,7 +116,7 @@ final class AvroRecordTraversal[A] private[avro] (
         cur match
           case lst: JList[?] =>
             val newList = replaceArrayContents(lst, toVector(lst).map(elemUpdate))
-            AvroWalk.rebuildPath(parents, prefix, newList).asInstanceOf[IndexedRecord]
+            AvroWalk.rebuildRecord(parents, prefix, newList)
           case _ => record
 
   // The focus's per-record hooks expect an IndexedRecord. Per-element values inside an Avro array
@@ -176,7 +176,7 @@ final class AvroRecordTraversal[A] private[avro] (
         val (newArr, chain) = AvroTraversalAccumulator.mapElementsIor(arr, elemUpdate)
         val newList = replaceArrayContents(origList, newArr)
         val newRecord =
-          AvroWalk.rebuildPath(parents, prefix, newList).asInstanceOf[IndexedRecord]
+          AvroWalk.rebuildRecord(parents, prefix, newList)
         if chain.isEmpty then Ior.Right(newRecord) else Ior.Both(chain, newRecord)
 
   private def getAllIor(record: IndexedRecord): Ior[Chain[AvroFailure], Vector[A]] =

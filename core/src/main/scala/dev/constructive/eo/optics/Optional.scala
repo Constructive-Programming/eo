@@ -82,12 +82,12 @@ final class Optional[S, T, A, B](
   def to(s: S): Affine[X, A] =
     getOrModify(s) match
       case Right(a) => new Affine.Hit[X, A](s, a)
-      case Left(t)  => new Affine.Miss[X, A](t)
+      case Left(t)  => new Affine.Miss[X](t)
 
   def from(a: Affine[X, B]): T =
     a match
-      case h: Affine.Hit[X, B]  => reverseGet(h.snd, h.b)
-      case m: Affine.Miss[X, B] => m.fst
+      case h: Affine.Hit[X, B] => reverseGet(h.snd, h.b)
+      case m: Affine.Miss[X]   => m.fst
 
   /** Fused reads / writes — pattern-match `getOrModify` once, skipping the `Affine` carrier
     * round-trip the generic extensions perform.

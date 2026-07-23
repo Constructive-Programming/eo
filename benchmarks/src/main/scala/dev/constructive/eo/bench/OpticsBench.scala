@@ -193,6 +193,23 @@ class TraversalBench extends JmhDefaults:
   @Setup(Level.Iteration)
   def init(): Unit =
     lines = Domain.mkOrder(size).lines
+    nested = lines.grouped(8).toList
 
   @Benchmark def eoModify: List[LineItem] = eoEach.modify(li => li.copy(qty = li.qty + 1))(lines)
   @Benchmark def mModify: List[LineItem] = mEach.modify(li => li.copy(qty = li.qty + 1))(lines)
+
+  // Traversal-as-fold: sum `price` through the SAME optic used for writes — the read-only
+  // consumption path a user pays when holding one Traversal for both directions (the read-only
+  // Fold-family peer of this row is FoldBench.eoFoldPrices).
+  @Benchmark def eoFoldPrices: Double = eoEach.foldMap[Double](_.price)(lines)
+  @Benchmark def mFoldPrices: Double = mEach.foldMap[Double](_.price)(lines)
+
+  // Nested each∘each fold — tracks the composed-fold cost (the materialized `composeTo` walk;
+  // streaming this was measured +37% B/op and rejected, see `Traversal.composed`).
+  var nested: List[List[LineItem]] = uninitialized
+
+  val eoNested: EoTraversal[List[List[LineItem]], List[List[LineItem]], LineItem, LineItem] =
+    EoTraversal.each[List, List[LineItem]].andThen(eoEach)
+
+  @Benchmark def eoFoldNested: Double =
+    eoNested.foldMap[Double](_.price)(nested)

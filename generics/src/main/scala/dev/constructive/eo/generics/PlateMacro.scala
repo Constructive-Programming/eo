@@ -125,8 +125,8 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       case Nil      => '{ PSVec.empty[S] }
       case r :: Nil => '{ PSVec.singleton[S]($r) }
       case _        =>
-        val anyRefs: List[Expr[AnyRef]] = reads.map(r => '{ $r.asInstanceOf[AnyRef] })
-        '{ PSVec.unsafeWrap[S](scala.Array[AnyRef](${ Varargs(anyRefs) }*)) }
+        val anys: List[Expr[Any]] = reads
+        '{ PSVec.unsafeWrap[S](scala.Array[Any](${ Varargs(anys) }*)) }
 
   /** Reconstruct enum variant `V` (`<: S`) from `src` (its current value) and `vec` (the new
     * children, declaration order), upcast to `S`. Parameterless variants pass through.
