@@ -632,6 +632,12 @@ lazy val avroIntegration: Project = project
     // vulcan.Codec → AvroCodec bridge, issue #73) touches it, and its API surface *names*
     // `vulcan.Codec` — callers already depend on vulcan directly.
     libraryDependencies += vulcan % Optional,
+    // jsoniter-scala-core is Optional too, with a twist: only `dev.constructive.eo.avro.jsoniter`
+    // (the structural Avro → JSON-bytes bridge, `AvroJsoniter`) touches it, but the API surface is
+    // `Array[Byte]` — no jsoniter type is named. Callers of that sub-package must add
+    // jsoniter-scala-core themselves (the bridge renders through its `JsonWriter`); the package
+    // scaladoc says so. Optional keeps it off every other consumer's classpath.
+    libraryDependencies += jsoniterCore % Optional,
     libraryDependencies += discipline % Test,
   )
 
