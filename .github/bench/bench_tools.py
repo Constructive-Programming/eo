@@ -50,6 +50,8 @@ MODULE_BENCHES = {
     ],
     "schemes/": ["SchemesBench"],
     "generics/": ["GenericsBench"],
+    "zio/": ["ZioDiBench"],
+    "kyo/": ["KyoDiBench"],
 }
 
 FULL_TRIGGERS = ("core/", "benchmarks/", "build.sbt", "project/")
