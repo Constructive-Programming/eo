@@ -1,5 +1,7 @@
 package dev.constructive.eo.avro.jsoniter
 
+import dev.constructive.eo.avro.AvroCodec
+import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
@@ -98,3 +100,53 @@ class AvroJsoniterSpec extends Specification:
         new String(AvroJsoniter.avroToJson(rec), UTF_8)
     }
   }
+
+  // ---- valuePrism and its torn/mended diagonal family ----
+
+  val comboCodec = summon[AvroCodec[Combo]]
+  val combo = Combo("x", 9L, active = true)
+  def comboRec: IndexedRecord = comboCodec.encode(combo).asInstanceOf[IndexedRecord]
+
+  def str(bytes: Array[Byte]): String = new String(bytes, UTF_8)
+
+  "valuePrism" should {
+    "tear a generic value into a typed A; mend renders JSON bytes" in {
+      val p = AvroJsoniter.valuePrism[Combo]
+      (p.getOption(comboRec) === Some(combo))
+        .and(str(p.reverseGet(comboRec)) === str(AvroJsoniter.avroToJson(comboRec)))
+    }
+
+    "surrender the structural JSON-bytes view on a decode miss" in {
+      val rejecting = new AvroCodec[Combo]:
+        def schema = comboCodec.schema
+        def encode(c: Combo) = comboCodec.encode(c)
+        def decodeEither(any: Any) = Left(new RuntimeException("rejected"))
+      AvroJsoniter.valuePrism[Combo](using rejecting).tear(comboRec).left.map(str) ===
+        Left(str(AvroJsoniter.avroToJson(comboRec)))
+    }
+  }
+
+  "bytesPrism" should {
+    "tear typed off Avro bytes and mend typed back out as JSON bytes" in {
+      val bytes = toAvroBinary(comboRec)
+      val upper = comboCodec.encode(combo.copy(name = "X")).asInstanceOf[IndexedRecord]
+      (AvroJsoniter.bytesPrism[Combo].getOption(bytes) === Some(combo))
+        .and(
+          str(AvroJsoniter.bytesPrism[Combo].modify(_.copy(name = "X"))(bytes)) ===
+            str(AvroJsoniter.avroToJson(upper))
+        )
+    }
+  }
+
+  "recordPrism" should {
+    "tear typed off a resolved record and mend a record out as JSON bytes" in {
+      (AvroJsoniter.recordPrism[Combo].getOption(comboRec) === Some(combo))
+        .and(
+          str(AvroJsoniter.recordPrism[Combo].modify(_ => comboRec)(comboRec)) ===
+            str(AvroJsoniter.avroToJson(comboRec))
+        )
+    }
+  }
+
+/** Codec fixture at top level (kindlings derivation macro-facing convention). */
+case class Combo(name: String, size: Long, active: Boolean)

@@ -6,8 +6,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
   JsonValueCodec,
   JsonWriter
 }
-import dev.constructive.eo.avro.AvroBinaryCursor
-import dev.constructive.eo.optics.Getter
+import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec}
+import dev.constructive.eo.optics.{Getter, MendTearPrism, Prism}
 import java.nio.ByteBuffer
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
@@ -43,29 +43,73 @@ import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
   * Unions are resolved at the value level (the runtime value IS the branch), so dispatch on the
   * runtime type needs no union special-casing.
   *
+  * ==Codec diagonals==
+  *
+  * The typed prism family mirrors `AvroJson`'s, with [[JsoniterBytes]] in the `Json` slot: the
+  * fundamental diagonal [[valuePrism]] tears a generic runtime value into a typed `A` and mends any
+  * generic value out as JSON bytes; [[bytesPrism]] and [[recordPrism]] pre-compose its input slots
+  * via `tearFrom` / `mendFrom`. The [[AvroBytes]] / [[JsoniterBytes]] aliases (see the package
+  * object) keep the two `Array[Byte]` roles apart in the signatures.
+  *
   * ==Non-goals (deliberate)==
   *
   * Same as `AvroJson`: the bridge sees only the '''runtime''' Avro value, never the logical type —
   * an `Instant` stored as timestamp-millis renders as a JSON number, not an ISO-8601 string. And
-  * this bridge is '''render-only''': the strict JSON → record parse (the writable prism family)
-  * stays on the circe side, where a JSON AST exists to parse into. A JSON-bytes → Avro direction
-  * here would be a schema-directed `JsonReader` walk — add it when a client needs the write path
-  * without circe.
+  * the JSON side stays '''output-only''': `AvroJson.record`'s strict JSON → record parse has no
+  * counterpart here (it needs an AST to parse lawfully) — a schema-directed `JsonReader` walk could
+  * add it; until then the typed diagonals cover the write-back direction.
   *
+  * @groupname diagonal Codec diagonals (tearFrom / mendFrom of valuePrism)
+  * @groupprio diagonal 0
   * @groupname base Structural walk
-  * @groupprio base 0
+  * @groupprio base 1
   * @groupname optic Read optic (Avro bytes → JSON bytes)
-  * @groupprio optic 1
+  * @groupprio optic 2
   */
 object AvroJsoniter:
+
+  /** The fundamental codec diagonal — the prisms below are this one with their '''input''' slots
+    * pre-composed via `MendTearPrism.tearFrom` / `mendFrom`. Tears an Avro '''generic runtime
+    * value''' into a typed `A` via the codec's decode; a miss surrenders the '''structural
+    * JSON-bytes view''' of the value (the [[avroToJson]] walk generalised to any value) instead of
+    * the raw input, so a payload that is valid Avro but not a valid `A` still lands somewhere
+    * inspectable. The mend renders any generic value back as JSON bytes — the same structural walk.
+    * `AvroJson.valuePrism` with [[JsoniterBytes]] in the `Json` slot.
+    * @group diagonal
+    */
+  def valuePrism[A](using codec: AvroCodec[A]): MendTearPrism[Any, JsoniterBytes, A, Any] =
+    Prism.pPrism[Any, JsoniterBytes, A, Any](
+      value => codec.decodeEither(value).left.map(_ => valueToJson(value)),
+      valueToJson,
+    )
+
+  /** Typed-both-ways byte diagonal — tear Avro '''payload bytes''' ([[AvroBytes]]) into a typed
+    * `A`, mend `A` out as JSON bytes through the codec's encode, so
+    * `modify(f: A => A): AvroBytes => JsoniterBytes` works in one hop. The counterpart of
+    * `AvroJson.bytesPrism`; same parse contract as [[bytesToJson]] (position-based under
+    * `codec.schema`, no writer/reader resolution).
+    * @group diagonal
+    */
+  def bytesPrism[A](using codec: AvroCodec[A]): MendTearPrism[AvroBytes, JsoniterBytes, A, A] =
+    valuePrism[A].tearFrom(parse(codec.schema)).mendFrom(codec.encode)
+
+  /** Record-sourced diagonal — for streams already resolved to generic records (e.g. the output of
+    * `ConfluentWire.recordReader`): tear an `IndexedRecord` into a typed `A`, mend an
+    * `IndexedRecord` out as JSON bytes.
+    * @group diagonal
+    */
+  def recordPrism[A](using
+      AvroCodec[A]
+  ): MendTearPrism[IndexedRecord, JsoniterBytes, A, IndexedRecord] =
+    valuePrism[A].tearFrom((r: IndexedRecord) => r).mendFrom((r: IndexedRecord) => r)
 
   /** The whole substance of the bridge: the recursive structural walk of an Avro generic record,
     * rendered to UTF-8 JSON bytes via jsoniter's `JsonWriter`. Allocates no typed case class and no
     * AST; field order is the schema's field declaration order.
     * @group base
     */
-  def avroToJson(record: IndexedRecord): Array[Byte] =
-    writeToArray(record)(using recordCodec)
+  def avroToJson(record: IndexedRecord): JsoniterBytes =
+    valueToJson(record)
 
   /** The read optic: [[avroToJson]] composed onto a bytes → record read
     * [[dev.constructive.eo.optics.Getter]] — a total `Getter[Array[Byte], Array[Byte]]` from Avro
@@ -78,14 +122,31 @@ object AvroJsoniter:
     * [[avroToJson]].
     * @group optic
     */
-  def bytesToJson(schema: Schema): Getter[Array[Byte], Array[Byte]] =
+  def bytesToJson(schema: Schema): Getter[AvroBytes, JsoniterBytes] =
     new Getter(parseRecord(schema)).andThen(new Getter(avroToJson))
 
-  /** Parse Avro binary payload bytes to a generic `IndexedRecord` under `schema` — routed through
-    * `AvroBinaryCursor` like `AvroJson.parseRecord`, so the reader comes from the shared per-thread
-    * cache instead of a closure-held instance that every thread using the optic would share.
+  /** [[avroToJson]] generalised to any Avro generic runtime value — [[valuePrism]]'s mend and its
+    * tear's miss fallback.
     */
-  private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
+  private def valueToJson(value: Any): JsoniterBytes =
+    writeToArray[Any](value)(using anyCodec)
+
+  /** Position-based binary parse to a generic value under a single schema — [[bytesPrism]]'s
+    * `tearFrom`. Routed through `AvroBinaryCursor` like `AvroJson.parse`, so the reader comes from
+    * the shared per-thread cache instead of a closure-held instance that every thread using the
+    * optic would share.
+    */
+  private def parse(schema: Schema): AvroBytes => Any =
+    bytes =>
+      AvroBinaryCursor
+        .leaves
+        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+
+  /** Parse Avro binary payload bytes to a generic `IndexedRecord` under `schema` — the
+    * parse-to-generic-record step behind [[bytesToJson]]. Same shared per-thread reader cache as
+    * [[parse]].
+    */
+  private def parseRecord(schema: Schema): AvroBytes => IndexedRecord =
     bytes =>
       AvroBinaryCursor
         .records
@@ -94,11 +155,11 @@ object AvroJsoniter:
   /** Write-only `JsonValueCodec` hosting the walk — the adapter jsoniter's `writeToArray` needs.
     * The decode side is unreachable by construction (nothing in this object reads).
     */
-  private val recordCodec: JsonValueCodec[IndexedRecord] = new JsonValueCodec[IndexedRecord]:
-    def encodeValue(record: IndexedRecord, out: JsonWriter): Unit = writeRecord(record, out)
-    def decodeValue(in: JsonReader, default: IndexedRecord): IndexedRecord =
-      in.decodeError("AvroJsoniter is render-only; no JSON → record decode")
-    def nullValue: IndexedRecord = null.asInstanceOf[IndexedRecord]
+  private val anyCodec: JsonValueCodec[Any] = new JsonValueCodec[Any]:
+    def encodeValue(value: Any, out: JsonWriter): Unit = writeValue(value, out)
+    def decodeValue(in: JsonReader, default: Any): Any =
+      in.decodeError("AvroJsoniter renders only; no JSON → value decode")
+    def nullValue: Any = null.asInstanceOf[Any]
 
   private def writeRecord(record: IndexedRecord, out: JsonWriter): Unit =
     val fields = record.getSchema.getFields
