@@ -208,7 +208,7 @@ object AvroJsoniter:
     * the shared per-thread cache instead of a closure-held instance that every thread using the
     * optic would share.
     */
-  private def parse(schema: Schema): AvroBytes => Any =
+  private[jsoniter] def parse(schema: Schema): AvroBytes => Any =
     bytes =>
       AvroBinaryCursor
         .leaves
@@ -521,9 +521,7 @@ final private class AvroSliceFace(
       case m: Affine.Miss[X]           => m.fst
       case h: Affine.Hit[X, AvroBytes] =>
         try
-          val value = AvroBinaryCursor
-            .leaves
-            .read(h.b, 0, h.b.length, schema, schema, threadLocalStorage = true)
+          val value = AvroJsoniter.parse(schema)(h.b)
           rawPrism.from(new Affine.Hit[X, Array[Byte]](h.snd, AvroJsoniter.valueToJson(value)))
         // ponytail: silent pass-through on unparseable Avro bytes — from has no failure channel
         catch case NonFatal(_) => h.snd._1
