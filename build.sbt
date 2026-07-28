@@ -658,7 +658,12 @@ lazy val jsoniterIntegration: Project = project
     // same as circeIntegration.
     LocalProject("generics"),
     LocalProject("laws") % Test,
-    LocalProject("avroIntegration") % Test,
+    // Optional (was Test-only): the `dev.constructive.eo.jsoniter.avro` sub-package (the
+    // JSON-bytes → Avro-bytes `.avro` face, `JsoniterAvro`) names `AvroCodec` and reuses the
+    // `AvroBytes` / `JsoniterBytes` aliases from cats-eo-avro — callers of that sub-package
+    // already depend on cats-eo-avro directly. Optional keeps it off jsoniter-only classpaths;
+    // the Test half still serves the cross-format bridge spec.
+    LocalProject("avroIntegration") % Optional,
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
