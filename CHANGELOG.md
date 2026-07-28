@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-07-29
+
+### Added
+
+- **`AvroJsoniter` — structural Avro ↔ JSON-bytes bridge, no circe** (#85): the AST-free
+  sibling of `AvroJson` in `eo.avro.jsoniter`. Same structural walk and rendering conventions,
+  rendered straight to UTF-8 JSON bytes through jsoniter-scala's `JsonWriter` — no JSON AST or
+  typed value on the render path. Mirrors the full prism family (`valuePrism` / `bytesPrism` /
+  `recordPrism` / `record`) plus a strict schema-directed streaming parse for the reverse
+  direction.
+- **`.json` / `.avro` cursor faces on both bridges** (#85, #86): drill with the ordinary
+  `AvroPrism` cursor sugar and flip the document into JSON at the end (`.json` — whole-doc
+  reads/writes land in `JsoniterBytes` or `io.circe.Json`), or drill a JSON document with the
+  `JsoniterPrism` / `JsonPrism` sugar and convert the **focus** to Avro binary (`.avro`).
+  `AvroJsoniter.render[A]` / `AvroJson.render[A]` are the focus-as-standalone-JSON read
+  terminals. New dependency-free seams underneath: `JsoniterPrism.raw` and `JsonPrism.raw`
+  re-focus any drilled prism on its raw encoded slice.
+- **`cats-eo-zio` + `cats-eo-kyo` DI integration modules** (#84): environment slot lenses
+  (`ZEnvironment` / `TypeMap`), layer projection through `CanGet` (`focusLayer` /
+  `Layer.focus`), `Ref` / `Var` focus ops as one atomic `CanModify` pass, and opt-in capability
+  givens so `Exit` / `Maybe` / `Result` subjects satisfy generic capability demands. The ZIO
+  slot lens measures cheaper than hand-written access on every gc-profiled row.
+
+### Changed
+
+- `cats-eo-avro` now takes `cats-eo-circe` and `cats-eo-jsoniter` as `Optional` dependencies
+  (the faces name `JsonPrism` / `JsoniterPrism`); `cats-eo-jsoniter`'s avro back-reference is
+  gone in every scope. `AvroBytes` is hoisted to the `eo.avro` package object and used across
+  the bridges.
+
 ## [0.13.0] - 2026-07-23
 
 ### Added
