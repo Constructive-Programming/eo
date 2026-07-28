@@ -615,6 +615,10 @@ lazy val avroIntegration: Project = project
     // depends on cats-eo-jsoniter directly. Optional keeps it off avro-only classpaths. (The
     // reverse dep would be a cycle — see the jsoniterIntegration comment.)
     LocalProject("jsoniterIntegration") % Optional,
+    // Same doctrine for cats-eo-circe: the `dev.constructive.eo.avro.circe` cursor faces extend
+    // `JsonPrism` with the structural `.avro` face — callers of it already depend on cats-eo-circe
+    // directly. circe-core alone (below) still serves the AvroJson walk/prism surface.
+    LocalProject("circeIntegration") % Optional,
     LocalProject("laws") % Test,
   )
   .settings(commonSettings *)

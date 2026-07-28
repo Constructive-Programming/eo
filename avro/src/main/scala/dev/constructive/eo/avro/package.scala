@@ -48,6 +48,14 @@ import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
   */
 package object avro:
 
+  /** Avro '''binary payload''' bytes — the wire encoding under a writer schema. Same runtime type
+    * as any other `Array[Byte]`; the alias keeps the role visible in bridge signatures where a
+    * second byte-array or document type sits alongside (e.g.
+    * `bytesPrism[A]: MendTearPrism[AvroBytes, JsoniterBytes, A, A]` in `avro.jsoniter`, or the
+    * `.json` faces' `Optic[AvroBytes, Json, A, A, …]` in `avro.circe`).
+    */
+  type AvroBytes = Array[Byte]
+
   /** Root-level Prism from Avro to a native type `S`. Reads `S`'s schema off the in-scope
     * [[AvroCodec]]`[S]`. Alias for [[AvroPrism.codecPrism]] that reads more naturally when composed
     * with `.field`.

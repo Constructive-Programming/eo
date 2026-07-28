@@ -1,9 +1,12 @@
 package dev.constructive.eo.avro.circe
 
 import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 
-import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec}
-import dev.constructive.eo.optics.{Getter, MendTearPrism, Prism}
+import dev.constructive.eo.avro.{AvroBinaryCursor, AvroBytes, AvroCodec, AvroPrism, AvroTraversal}
+import dev.constructive.eo.circe.JsonPrism
+import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
+import dev.constructive.eo.optics.{Getter, MendTearPrism, Optic, Prism}
 import io.circe.Json
 import java.nio.ByteBuffer
 import org.apache.avro.Schema
@@ -75,6 +78,18 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   * These are the caller's concern (post-process the `Json`, or decode the typed value): the walk is
   * defined by the wire shape, not the intended semantic type.
   *
+  * ==Drilled cursors (`.json` and `.avro` faces)==
+  *
+  * The full `AvroPrism` cursor sugar — `.field(_.x)` / `.fields(...)` / `.at(i)` / `.union[B]` /
+  * `.each` / Dynamic selection — reaches this bridge through the [[json]] extensions on `AvroPrism`
+  * / `AvroTraversal` (drill first, flip last, like `.record`): reads yield the typed focus, writes
+  * render the whole modified document as `Json`. [[render]] is the focus-as-standalone-`Json`
+  * terminal for the read side. The reverse cursor is the [[avro]] extension on
+  * `dev.constructive.eo.circe.JsonPrism`: the drilled focus itself converts — subtree ↔ Avro
+  * binary, both directions the structural walks above. Same face family as
+  * `dev.constructive.eo.avro.jsoniter`, landing on the AST instead of bytes; the `.avro` face is
+  * why `cats-eo-circe` is a second `Optional` dependency next to circe-core.
+  *
   * @groupname prism Bidirectional prism (Json ↔ record)
   * @groupprio prism 0
   * @groupname diagonal Codec diagonals (tearFrom / mendFrom of valuePrism)
@@ -124,17 +139,17 @@ object AvroJson:
     * stream use the writer-schema overload of [[bytesPrism]] (or `ConfluentWire.resolvingBytes`).
     * @group diagonal
     */
-  def pPrism[A](using codec: AvroCodec[A]): MendTearPrism[Array[Byte], Json, A, IndexedRecord] =
+  def pPrism[A](using codec: AvroCodec[A]): MendTearPrism[AvroBytes, Json, A, IndexedRecord] =
     valuePrism[A]
       .tearFrom(AvroBinaryCursor.leaves.parser(codec.schema))
       .mendFrom((r: IndexedRecord) => r)
 
   /** Typed-both-ways byte diagonal — [[pPrism]] with the mend routed through the codec's encode, so
-    * `modify(f: A => A): Array[Byte] => Json` works in one hop with no generic record at the call
+    * `modify(f: A => A): AvroBytes => Json` works in one hop with no generic record at the call
     * site.
     * @group diagonal
     */
-  def bytesPrism[A](using codec: AvroCodec[A]): MendTearPrism[Array[Byte], Json, A, A] =
+  def bytesPrism[A](using codec: AvroCodec[A]): MendTearPrism[AvroBytes, Json, A, A] =
     valuePrism[A].tearFrom(AvroBinaryCursor.leaves.parser(codec.schema)).mendFrom(codec.encode)
 
   /** [[bytesPrism]] for a stream written under a '''different''' (but compatible) writer schema:
@@ -144,7 +159,7 @@ object AvroJson:
     */
   def bytesPrism[A](writer: Schema)(using
       codec: AvroCodec[A]
-  ): MendTearPrism[Array[Byte], Json, A, A] =
+  ): MendTearPrism[AvroBytes, Json, A, A] =
     valuePrism[A]
       .tearFrom(AvroBinaryCursor.leaves.parser(writer, codec.schema))
       .mendFrom(codec.encode)
@@ -163,7 +178,7 @@ object AvroJson:
     * writable prism.
     * @group diagonal
     */
-  def pRecord(schema: Schema): MendTearPrism[Array[Byte], Json, IndexedRecord, IndexedRecord] =
+  def pRecord(schema: Schema): MendTearPrism[AvroBytes, Json, IndexedRecord, IndexedRecord] =
     bytesPrism[IndexedRecord](using recordCodec(schema))
 
   /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
@@ -189,7 +204,7 @@ object AvroJson:
   /** Dispatch on the Avro runtime type. Order matters: structured / enum / fixed cases precede
     * `CharSequence` (`Utf8` is also a `CharSequence`).
     */
-  private def valueToJson(value: Any): Json = value match
+  private[circe] def valueToJson(value: Any): Json = value match
     case null             => Json.Null
     case r: IndexedRecord => avroToJson(r)
     // entry ITERATION order preserved: mapping through an intermediate scala Map would re-hash
@@ -238,7 +253,7 @@ object AvroJson:
   /** Schema-directed inverse of [[valueToJson]]: `None` is the prism miss. `Some(null)` is a
     * legitimate hit (a `null` schema / union branch).
     */
-  private def jsonToValue(json: Json, schema: Schema): Option[Any] =
+  private[circe] def jsonToValue(json: Json, schema: Schema): Option[Any] =
     schema.getType match
       case Schema.Type.RECORD => jsonToRecord(json, schema)
       case Schema.Type.UNION  =>
@@ -301,7 +316,7 @@ object AvroJson:
   /** The read optic: the base [[avroToJson]] composed onto a bytes → record read
     * [[dev.constructive.eo.optics.Getter]]. The parse step reads payload bytes to a generic
     * `IndexedRecord` (no typed decode), and eo's fused `Getter.andThen(Getter)` maps the structural
-    * walk over it, yielding a total `Getter[Array[Byte], Json]`.
+    * walk over it, yielding a total `Getter[AvroBytes, Json]`.
     *
     * The `schema` must be the exact writer schema the bytes were encoded under: the parse is
     * position-based and does no writer/reader resolution, so a mismatched schema silently misreads.
@@ -309,7 +324,121 @@ object AvroJson:
     * `ConfluentWire.resolvingBytes`) and walk the resolved record / bytes.
     * @group optic
     */
-  def bytesToJson(schema: Schema): Getter[Array[Byte], Json] =
+  def bytesToJson(schema: Schema): Getter[AvroBytes, Json] =
     new Getter(AvroBinaryCursor.records.parser(schema)).andThen(new Getter(avroToJson))
 
+  /** Focus-as-JSON terminal: render a typed focus as a standalone [[io.circe.Json]] through the
+    * codec's encode + the structural walk. Compose it after any drilled optic to read just the
+    * focused field as `Json`:
+    *
+    * {{{
+    *   codecPrism[Person].field(_.address).andThen(AvroJson.render[Address])
+    *     .getOption(avroBytes)                       // Option[Json] of the address alone
+    * }}}
+    *
+    * For the whole-document face (drilled writes included) use the [[json]] extension instead.
+    * @group optic
+    */
+  def render[A](using codec: AvroCodec[A]): Getter[A, Json] =
+    new Getter(a => valueToJson(codec.encode(a)))
+
 end AvroJson
+
+/** JSON-carried face of a drilled [[dev.constructive.eo.avro.AvroPrism]] — the circe sibling of the
+  * jsoniter module's `.json` face, byte-identical in shape but landing on the [[io.circe.Json]]
+  * AST: drill with the full cursor sugar (`.field(_.x)` / `.fields(...)` / `.at(i)` / `.union[B]` /
+  * Dynamic selection) and flip last, like `.record`:
+  *
+  * {{{
+  *   import dev.constructive.eo.avro.codecPrism
+  *   import dev.constructive.eo.avro.circe.*
+  *
+  *   codecPrism[Person].name.json.modify(_.toUpperCase)(avroBytes)  // Json of the WHOLE doc,
+  *                                                                  // name uppercased
+  * }}}
+  *
+  * Reads (`.getOption`) still yield the typed focus `A`; every write (`.modify` / `.replace`)
+  * rebuilds the record through the record face's single-walk writer and renders it via
+  * [[AvroJson.avroToJson]]. Routing through `.record` is what makes `.at(i)` navigable (index steps
+  * are unsupported by the byte-span locate) and gives single-walk writes. A path / branch / decode
+  * Miss renders the document unchanged; genuinely malformed bytes throw at the eager parse.
+  */
+extension [A](p: AvroPrism[A])
+
+  def json: Optic[AvroBytes, Json, A, A, Affine] =
+    Optic
+      .outerProfunctor[A, A, Affine]
+      .dimap(p.record)(AvroBinaryCursor.records.parser(p.rootSchemaCached))(AvroJson.avroToJson)
+
+/** JSON-carried face of a drilled [[dev.constructive.eo.avro.AvroTraversal]] — `.each`'s
+  * multi-focus counterpart of the prism extension above: `.foldMap` / `.exists` read the typed
+  * elements, `.modify` splices every element (byte face — the traversal's record face is the Ior
+  * surface, not an `Optic`) and renders the whole spliced document as `Json`.
+  */
+extension [A](t: AvroTraversal[A])
+
+  def json: Optic[AvroBytes, Json, A, A, MultiFocus[PSVec]] =
+    Optic
+      .outerProfunctor[A, A, MultiFocus[PSVec]]
+      .dimap(t)(identity[AvroBytes])(AvroJson.bytesToJson(t.rootSchemaCached).get)
+
+/** Avro-carried face of a drilled [[dev.constructive.eo.circe.JsonPrism]] — the reverse cursor,
+  * mirror of the jsoniter `.avro` face: drill a `Json` document with the circe cursor sugar
+  * (`.field(_.x)` / `.at(i)` / Dynamic selection) and flip last; the '''drilled focus itself''' is
+  * the unit of conversion:
+  *
+  * {{{
+  *   import dev.constructive.eo.circe.JsonPrism
+  *   import dev.constructive.eo.avro.circe.*
+  *
+  *   val nameA = JsonPrism[Person].name.avro       // Optic[Json, Json,
+  *                                                 //       AvroBytes, AvroBytes, Affine]
+  *   nameA.getOption(jsonDoc)                      // Some(Avro binary of the name alone)
+  *   nameA.replace(avroName)(jsonDoc)              // Json doc with the subtree spliced back
+  * }}}
+  *
+  * Both directions are structural, schema-directed (the `AvroCodec[A]` is schema evidence only — no
+  * typed `A` is ever materialised, matching `codecPrism`'s doctrine): reads take the focused
+  * subtree raw ([[dev.constructive.eo.circe.JsonPrism.raw]]) and run the strict parse
+  * [[AvroJson.jsonToValue]] before encoding to Avro binary — a subtree the schema does not pin is a
+  * '''Miss''', exactly like a path miss; writes parse the Avro binary to a generic value, render it
+  * with the structural walk, and splice the subtree back. A write whose Avro bytes do not parse
+  * under the schema passes the document through unchanged (`from` has no failure channel).
+  */
+extension [A](p: JsonPrism[A])
+
+  def avro(using codec: AvroCodec[A]): Optic[Json, Json, AvroBytes, AvroBytes, Affine] =
+    new JsonAvroFace(p.raw, codec.schema)
+
+/** Implementation of the `.avro` face: re-focuses the drilled prism on its raw subtree and converts
+  * subtree ↔ Avro binary at the seam. `Snd[X]` retains the ORIGINAL subtree alongside the
+  * sibling-preserving writer so a failed write can re-apply it (document unchanged) — unlike the
+  * jsoniter face's span seam, circe's writer-only seam has no other route back to the source.
+  */
+final private class JsonAvroFace(
+    private val rawPrism: JsonPrism[Json],
+    private val schema: Schema,
+) extends Optic[Json, Json, AvroBytes, AvroBytes, Affine]:
+
+  type X = (Json, (Json, Json => Json))
+
+  def to(json: Json): Affine[X, AvroBytes] =
+    rawPrism.to(json) match
+      case _: Affine.Miss[rawPrism.X]      => new Affine.Miss[X](json)
+      case h: Affine.Hit[rawPrism.X, Json] =>
+        AvroJson.jsonToValue(h.b, schema) match
+          case Some(value) =>
+            new Affine.Hit[X, AvroBytes]((h.b, h.snd), AvroBinaryCursor.writeDatum(value, schema))
+          case None => new Affine.Miss[X](json)
+
+  def from(aff: Affine[X, AvroBytes]): Json =
+    aff match
+      case m: Affine.Miss[X]           => m.fst
+      case h: Affine.Hit[X, AvroBytes] =>
+        val (slice, writer) = h.snd
+        try writer(AvroJson.valueToJson(AvroBinaryCursor.leaves.parser(schema)(h.b)))
+        // ponytail: silent pass-through on unparseable Avro bytes — from has no failure channel;
+        // re-applying the retained original subtree reproduces the document unchanged
+        catch case NonFatal(_) => writer(slice)
+
+end JsonAvroFace

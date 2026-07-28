@@ -105,6 +105,16 @@ final class JsonPrism[A] private[circe] (
     */
   inline def reverseGet(a: A): Json = focus.encoder(a)
 
+  /** Re-focus this prism on the '''raw `Json` subtree''': same path, same walk, but the focus is
+    * the focused node itself (identity codecs) — no typed decode ever runs. For a `.fields` prism
+    * the path addresses the PARENT node, so `raw` focuses that parent. The seam for format-level
+    * consumers that transform the subtree as a document of its own — e.g. the avro bridge's
+    * structural `.avro` face (`dev.constructive.eo.avro.circe`). Mirrors
+    * `dev.constructive.eo.jsoniter.JsoniterPrism.raw`.
+    */
+  def raw: JsonPrism[Json] =
+    new JsonPrism[Json](new JsonFocus.Leaf[Json](path, Encoder[Json], Decoder[Json]))
+
   /** Silent read — `None` on any parse / navigation / decode failure. */
   inline def getOptionUnsafe(input: Json | String): Option[A] =
     focus.readImpl(JsonFailure.parseInputUnsafe(input))

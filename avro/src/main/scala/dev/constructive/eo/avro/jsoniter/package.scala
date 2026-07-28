@@ -9,12 +9,11 @@ package dev.constructive.eo.avro
   */
 package object jsoniter:
 
-  /** Avro '''binary payload''' bytes — the wire encoding under a writer schema. Same runtime type
-    * as [[JsoniterBytes]]; the aliases keep the two `Array[Byte]` roles apart in the bridge's
-    * signatures (`bytesPrism[A]: MendTearPrism[AvroBytes, JsoniterBytes, A, A]` reads as Avro-in /
-    * JSON-out, where four bare `Array[Byte]`s would not).
+  /** Avro '''binary payload''' bytes — canonical definition hoisted to the
+    * [[dev.constructive.eo.avro]] package object (both bridges use it); re-aliased here so this
+    * package's signatures and `import …avro.jsoniter.*` users resolve it unchanged.
     */
-  type AvroBytes = Array[Byte]
+  type AvroBytes = dev.constructive.eo.avro.AvroBytes
 
   /** UTF-8 '''JSON document''' bytes as rendered by jsoniter-scala's `JsonWriter` — the bridge's
     * output side, playing the role `io.circe.Json` plays in `AvroJson`.
