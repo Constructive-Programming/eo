@@ -6,8 +6,9 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
   JsonValueCodec,
   JsonWriter
 }
-import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec}
-import dev.constructive.eo.optics.{Getter, MendTearPrism, Prism}
+import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec, AvroPrism, AvroTraversal}
+import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
+import dev.constructive.eo.optics.{Getter, MendTearPrism, Optic, Prism}
 import java.nio.ByteBuffer
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
@@ -50,6 +51,14 @@ import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
   * generic value out as JSON bytes; [[bytesPrism]] and [[recordPrism]] pre-compose its input slots
   * via `tearFrom` / `mendFrom`. The [[AvroBytes]] / [[JsoniterBytes]] aliases (see the package
   * object) keep the two `Array[Byte]` roles apart in the signatures.
+  *
+  * ==Drilled cursor (`.json` face)==
+  *
+  * The full `AvroPrism` cursor sugar — `.field(_.x)` / `.fields(...)` / `.at(i)` / `.union[B]` /
+  * `.each` / Dynamic selection — reaches this bridge through the [[json]] extensions on `AvroPrism`
+  * / `AvroTraversal` (drill first, flip last, like `.record`): reads yield the typed focus, writes
+  * render the whole modified document as JSON bytes. [[render]] is the focus-as-standalone-JSON
+  * terminal for the read side.
   *
   * ==Non-goals (deliberate)==
   *
@@ -125,6 +134,21 @@ object AvroJsoniter:
   def bytesToJson(schema: Schema): Getter[AvroBytes, JsoniterBytes] =
     new Getter(parseRecord(schema)).andThen(new Getter(avroToJson))
 
+  /** Focus-as-JSON terminal: render a typed focus as a '''standalone JSON document''' through the
+    * codec's encode + the structural walk. Compose it after any drilled optic to read just the
+    * focused field as JSON bytes:
+    *
+    * {{{
+    *   codecPrism[Person].field(_.address).andThen(AvroJsoniter.render[Address])
+    *     .getOption(avroBytes)                       // Option[JsoniterBytes] of the address alone
+    * }}}
+    *
+    * For the whole-document face (drilled writes included) use the [[json]] extension instead.
+    * @group optic
+    */
+  def render[A](using codec: AvroCodec[A]): Getter[A, JsoniterBytes] =
+    new Getter(a => valueToJson(codec.encode(a)))
+
   /** [[avroToJson]] generalised to any Avro generic runtime value — [[valuePrism]]'s mend and its
     * tear's miss fallback.
     */
@@ -143,10 +167,10 @@ object AvroJsoniter:
         .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
   /** Parse Avro binary payload bytes to a generic `IndexedRecord` under `schema` — the
-    * parse-to-generic-record step behind [[bytesToJson]]. Same shared per-thread reader cache as
-    * [[parse]].
+    * parse-to-generic-record step behind [[bytesToJson]] and the `.json` faces. Same shared
+    * per-thread reader cache as [[parse]].
     */
-  private def parseRecord(schema: Schema): AvroBytes => IndexedRecord =
+  private[jsoniter] def parseRecord(schema: Schema): AvroBytes => IndexedRecord =
     bytes =>
       AvroBinaryCursor
         .records
@@ -215,3 +239,45 @@ object AvroJsoniter:
     bytes
 
 end AvroJsoniter
+
+/** JSON-carried face of a drilled [[dev.constructive.eo.avro.AvroPrism]] — the prism's `.record`
+  * face with Avro bytes in and '''JSON document bytes out'''. Drill with the full cursor sugar
+  * (`.field(_.x)` / `.fields(...)` / `.at(i)` / `.union[B]` / Dynamic selection) and flip last:
+  *
+  * {{{
+  *   import dev.constructive.eo.avro.codecPrism
+  *   import dev.constructive.eo.avro.jsoniter.*
+  *
+  *   codecPrism[Person].name.json.modify(_.toUpperCase)(avroBytes)  // JsoniterBytes of the WHOLE
+  *                                                                  // doc, name uppercased
+  * }}}
+  *
+  * Reads (`.getOption`) still yield the typed focus `A`; every write (`.modify` / `.replace`)
+  * rebuilds the record through the record face's single-walk writer and renders it via
+  * [[AvroJsoniter.avroToJson]] — no byte splice, no re-parse. Routing through `.record` (rather
+  * than the byte-span face) is what makes `.at(i)` navigable here: index steps are unsupported by
+  * the byte-span locate but fine on the record walk. A path / branch / decode '''Miss''' renders
+  * the document unchanged; genuinely '''malformed bytes throw''' at the eager parse (the output
+  * format changes, so there is no byte-face-style silent pass-through). Implemented as
+  * `Optic.outerProfunctor.dimap`, so the generic capability surface applies at this terminal hop.
+  */
+extension [A](p: AvroPrism[A])
+
+  def json: Optic[AvroBytes, JsoniterBytes, A, A, Affine] =
+    Optic
+      .outerProfunctor[A, A, Affine]
+      .dimap(p.record)(AvroJsoniter.parseRecord(p.rootSchemaCached))(AvroJsoniter.avroToJson)
+
+/** JSON-carried face of a drilled [[dev.constructive.eo.avro.AvroTraversal]] — `.each`'s
+  * multi-focus counterpart of the prism extension above: `.foldMap` / `.all` read the typed
+  * elements, `.modify` splices every element (this one stays on the byte face — the traversal's
+  * record face is the Ior diagnostic surface, not an `Optic`) and renders the whole spliced
+  * document as JSON bytes. Reads on malformed bytes fold zero foci (byte-walk semantics); a write
+  * on them throws at the render.
+  */
+extension [A](t: AvroTraversal[A])
+
+  def json: Optic[AvroBytes, JsoniterBytes, A, A, MultiFocus[PSVec]] =
+    Optic
+      .outerProfunctor[A, A, MultiFocus[PSVec]]
+      .dimap(t)(identity[AvroBytes])(AvroJsoniter.bytesToJson(t.rootSchemaCached).get)

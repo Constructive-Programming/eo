@@ -1,6 +1,7 @@
 package dev.constructive.eo.avro.jsoniter
 
-import dev.constructive.eo.avro.AvroCodec
+import dev.constructive.eo.avro.{codecPrism, AvroCodec}
+import dev.constructive.eo.optics.Optic.*
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -16,6 +17,8 @@ import org.specs2.mutable.Specification
   * drift in either walk is visible.
   */
 class AvroJsoniterSpec extends Specification:
+
+  import AvroJsoniterSpec.given
 
   val schema: Schema = new Schema.Parser().parse(
     """{
@@ -148,5 +151,67 @@ class AvroJsoniterSpec extends Specification:
     }
   }
 
-/** Codec fixture at top level (kindlings derivation macro-facing convention). */
+  // ---- .json face: drilled cursor in, JSON document bytes out ----
+
+  val bagCodec = summon[AvroCodec[Bag]]
+  val bag = Bag("t", List(1, 2, 3))
+  def bagRec(b: Bag): IndexedRecord = bagCodec.encode(b).asInstanceOf[IndexedRecord]
+
+  ".json face" should {
+    "read the typed focus and modify the whole document out as JSON bytes" in {
+      val bytes = toAvroBinary(comboRec)
+      val p = codecPrism[Combo].field(_.name).json
+      val upper = comboCodec.encode(combo.copy(name = "X")).asInstanceOf[IndexedRecord]
+      (p.getOption(bytes) === Some("x"))
+        .and(str(p.modify(_.toUpperCase)(bytes)) === str(AvroJsoniter.avroToJson(upper)))
+    }
+
+    "drill via Dynamic selection and .fields" in {
+      val bytes = toAvroBinary(comboRec)
+      val nameAndActive = codecPrism[Combo].fields(_.name, _.active)
+      (codecPrism[Combo].name.json.getOption(bytes) === Some("x"))
+        .and(nameAndActive.json.getOption(bytes).map(_.toTuple) === Some(("x", true)))
+    }
+
+    ".at drills an element; .each folds and rewrites every element" in {
+      val bytes = toAvroBinary(bagRec(bag))
+      val bumped = bagRec(Bag("t", List(2, 3, 4)))
+      (codecPrism[Bag].field(_.items).at(1).json.getOption(bytes) === Some(2))
+        .and(
+          str(codecPrism[Bag].field(_.items).each.json.modify(_ + 1)(bytes)) ===
+            str(AvroJsoniter.avroToJson(bumped))
+        )
+    }
+
+    "a path miss renders the document unchanged" in {
+      val bytes = toAvroBinary(bagRec(bag))
+      str(codecPrism[Bag].field(_.items).at(9).json.replace(0)(bytes)) ===
+        str(AvroJsoniter.avroToJson(bagRec(bag)))
+    }
+
+    "render: read the drilled focus as a standalone JSON document" in {
+      codecPrism[Combo]
+        .field(_.name)
+        .andThen(AvroJsoniter.render[String])
+        .getOption(toAvroBinary(comboRec))
+        .map(str) === Some("\"x\"")
+    }
+  }
+
+object AvroJsoniterSpec:
+
+  /** NamedTuple codec for the `.fields(_.name, _.active)` focus — pre-derived at object scope
+    * (deriving inline inside the spec body trips a macro-expansion scoping error, same pattern as
+    * `AvroFieldsTraversalSpec`).
+    */
+  type NameActive = NamedTuple.NamedTuple[("name", "active"), (String, Boolean)]
+
+  given AvroEncoder[NameActive] = AvroEncoder.derived
+  given AvroDecoder[NameActive] = AvroDecoder.derived
+  given AvroSchemaFor[NameActive] = AvroSchemaFor.derived
+
+end AvroJsoniterSpec
+
+/** Codec fixtures at top level (kindlings derivation macro-facing convention). */
 case class Combo(name: String, size: Long, active: Boolean)
+case class Bag(tag: String, items: List[Int])
