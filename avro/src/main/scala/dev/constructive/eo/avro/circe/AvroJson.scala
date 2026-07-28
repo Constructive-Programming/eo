@@ -125,7 +125,9 @@ object AvroJson:
     * @group diagonal
     */
   def pPrism[A](using codec: AvroCodec[A]): MendTearPrism[Array[Byte], Json, A, IndexedRecord] =
-    valuePrism[A].tearFrom(parse(codec.schema)).mendFrom((r: IndexedRecord) => r)
+    valuePrism[A]
+      .tearFrom(AvroBinaryCursor.leaves.parser(codec.schema))
+      .mendFrom((r: IndexedRecord) => r)
 
   /** Typed-both-ways byte diagonal — [[pPrism]] with the mend routed through the codec's encode, so
     * `modify(f: A => A): Array[Byte] => Json` works in one hop with no generic record at the call
@@ -133,7 +135,7 @@ object AvroJson:
     * @group diagonal
     */
   def bytesPrism[A](using codec: AvroCodec[A]): MendTearPrism[Array[Byte], Json, A, A] =
-    valuePrism[A].tearFrom(parse(codec.schema)).mendFrom(codec.encode)
+    valuePrism[A].tearFrom(AvroBinaryCursor.leaves.parser(codec.schema)).mendFrom(codec.encode)
 
   /** [[bytesPrism]] for a stream written under a '''different''' (but compatible) writer schema:
     * the tear resolves writer → `codec.schema` (Avro schema resolution — field reordering,
@@ -143,7 +145,9 @@ object AvroJson:
   def bytesPrism[A](writer: Schema)(using
       codec: AvroCodec[A]
   ): MendTearPrism[Array[Byte], Json, A, A] =
-    valuePrism[A].tearFrom(parse(writer, codec.schema)).mendFrom(codec.encode)
+    valuePrism[A]
+      .tearFrom(AvroBinaryCursor.leaves.parser(writer, codec.schema))
+      .mendFrom(codec.encode)
 
   /** Record-sourced diagonal — for streams already resolved to generic records (e.g. the output of
     * `ConfluentWire.recordReader`): tear an `IndexedRecord` into a typed `A`, mend `A` out as
@@ -161,21 +165,6 @@ object AvroJson:
     */
   def pRecord(schema: Schema): MendTearPrism[Array[Byte], Json, IndexedRecord, IndexedRecord] =
     bytesPrism[IndexedRecord](using recordCodec(schema))
-
-  /** Position-based binary parse to a generic value under a single schema — the `tearFrom` behind
-    * the byte diagonals. Routed through [[AvroBinaryCursor.leaves]] (the module's single binary
-    * read), so the reader comes from the shared per-thread cache instead of a closure-held instance
-    * that every thread using the optic would share.
-    */
-  private def parse(schema: Schema): Array[Byte] => Any =
-    parse(schema, schema)
-
-  /** Writer → reader resolving parse (Avro schema resolution). */
-  private def parse(writer: Schema, reader: Schema): Array[Byte] => Any =
-    bytes =>
-      AvroBinaryCursor
-        .leaves
-        .read(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
 
   /** The trivial `AvroCodec[IndexedRecord]` that lets [[pRecord]] reuse the typed family. */
   private def recordCodec(schema0: Schema): AvroCodec[IndexedRecord] =
@@ -211,7 +200,7 @@ object AvroJson:
     case l: java.util.List[?]    => Json.fromValues(l.asScala.map(valueToJson))
     case e: GenericEnumSymbol[?] => Json.fromString(e.toString)
     case f: GenericFixed         => bytesFieldToJson(f.bytes)
-    case b: ByteBuffer           => bytesFieldToJson(byteBufferBytes(b))
+    case b: ByteBuffer           => bytesFieldToJson(AvroBinaryCursor.byteBufferBytes(b))
     case s: CharSequence         => Json.fromString(s.toString)
     case b: java.lang.Boolean    => Json.fromBoolean(b)
     case i: java.lang.Integer    => Json.fromLong(i.toLong)
@@ -223,13 +212,6 @@ object AvroJson:
   /** circe's `Encoder[Array[Byte]]` convention: a JSON array of signed byte values. */
   private def bytesFieldToJson(bytes: Array[Byte]): Json =
     Json.fromValues(bytes.map(b => Json.fromInt(b.toInt)))
-
-  /** Read a `ByteBuffer`'s remaining bytes without disturbing its position. */
-  private def byteBufferBytes(bb: ByteBuffer): Array[Byte] =
-    val dup = bb.duplicate()
-    val bytes = new Array[Byte](dup.remaining())
-    dup.get(bytes)
-    bytes
 
   // ---- Json → Avro (the prism's read side) ---------------------------
 
@@ -328,15 +310,6 @@ object AvroJson:
     * @group optic
     */
   def bytesToJson(schema: Schema): Getter[Array[Byte], Json] =
-    new Getter(parseRecord(schema)).andThen(new Getter(avroToJson))
-
-  /** Parse Avro binary payload bytes to a generic `IndexedRecord` under `schema` — the
-    * parse-to-generic-record step behind [[bytesToJson]].
-    */
-  private def parseRecord(schema: Schema): Array[Byte] => IndexedRecord =
-    bytes =>
-      AvroBinaryCursor
-        .records
-        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
+    new Getter(AvroBinaryCursor.records.parser(schema)).andThen(new Getter(avroToJson))
 
 end AvroJson

@@ -1,10 +1,11 @@
-package dev.constructive.eo.jsoniter
+package dev.constructive.eo.avro.jsoniter
 
 import scala.language.implicitConversions
 
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.avro.{codecPrism, AvroCodec}
+import dev.constructive.eo.jsoniter.JsoniterPrism
 import dev.constructive.eo.optics.Optic.*
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream

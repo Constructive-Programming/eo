@@ -334,6 +334,17 @@ private[avro] object AvroBinaryCursor:
         new GenericDatumReader[D](writer, reader)
           .read(null, DecoderFactory.get().binaryDecoder(bytes, from, len, null))
 
+    /** Whole-payload curried form of [[read]] (thread-local storage) — the parse step behind the
+      * bridges' byte optics (`AvroJson` / `AvroJsoniter` diagonals and `bytesToJson`), shared here
+      * so neither bridge holds its own wrapper.
+      */
+    def parser(writer: Schema, reader: Schema): Array[Byte] => D =
+      bytes => read(bytes, 0, bytes.length, writer, reader, threadLocalStorage = true)
+
+    /** Single-schema [[parser]] — no writer → reader resolution. */
+    def parser(schema: Schema): Array[Byte] => D =
+      parser(schema, schema)
+
   end DatumReaders
 
   /** Record-schema decodes: the `AvroCodec` root-payload helpers, `ConfluentWire`'s translating
@@ -357,6 +368,16 @@ private[avro] object AvroBinaryCursor:
     writer.write(datum, encoder)
     encoder.flush()
     out.toByteArray
+
+  /** Read a `ByteBuffer`'s remaining bytes without disturbing its position — how a `bytes` field
+    * arrives in the generic runtime model. Shared by the bridges' structural walks (`AvroJson` /
+    * `AvroJsoniter`).
+    */
+  private[avro] def byteBufferBytes(bb: java.nio.ByteBuffer): Array[Byte] =
+    val dup = bb.duplicate()
+    val bytes = new Array[Byte](dup.remaining())
+    dup.get(bytes)
+    bytes
 
   /** Decode the value slice addressed by `span` through `codec` — [[leaves]] under the span's
     * resolved schema, then the codec's Any→A side. Shared by [[AvroPrism]]'s `to` and
