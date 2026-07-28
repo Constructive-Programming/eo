@@ -148,7 +148,7 @@ object AvroJsoniter:
     * @group diagonal
     */
   def bytesPrism[A](using codec: AvroCodec[A]): MendTearPrism[AvroBytes, JsoniterBytes, A, A] =
-    valuePrism[A].tearFrom(parse(codec.schema)).mendFrom(codec.encode)
+    valuePrism[A].tearFrom(AvroBinaryCursor.leaves.parser(codec.schema)).mendFrom(codec.encode)
 
   /** Record-sourced diagonal — for streams already resolved to generic records (e.g. the output of
     * `ConfluentWire.recordReader`): tear an `IndexedRecord` into a typed `A`, mend an
@@ -180,7 +180,7 @@ object AvroJsoniter:
     * @group optic
     */
   def bytesToJson(schema: Schema): Getter[AvroBytes, JsoniterBytes] =
-    new Getter(parseRecord(schema)).andThen(new Getter(avroToJson))
+    new Getter(AvroBinaryCursor.records.parser(schema)).andThen(new Getter(avroToJson))
 
   /** Focus-as-JSON terminal: render a typed focus as a '''standalone JSON document''' through the
     * codec's encode + the structural walk. Compose it after any drilled optic to read just the
@@ -202,27 +202,6 @@ object AvroJsoniter:
     */
   private[jsoniter] def valueToJson(value: Any): JsoniterBytes =
     writeToArray[Any](value)(using anyCodec)
-
-  /** Position-based binary parse to a generic value under a single schema — [[bytesPrism]]'s
-    * `tearFrom`. Routed through `AvroBinaryCursor` like `AvroJson.parse`, so the reader comes from
-    * the shared per-thread cache instead of a closure-held instance that every thread using the
-    * optic would share.
-    */
-  private[jsoniter] def parse(schema: Schema): AvroBytes => Any =
-    bytes =>
-      AvroBinaryCursor
-        .leaves
-        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
-
-  /** Parse Avro binary payload bytes to a generic `IndexedRecord` under `schema` — the
-    * parse-to-generic-record step behind [[bytesToJson]] and the `.json` faces. Same shared
-    * per-thread reader cache as [[parse]].
-    */
-  private[jsoniter] def parseRecord(schema: Schema): AvroBytes => IndexedRecord =
-    bytes =>
-      AvroBinaryCursor
-        .records
-        .read(bytes, 0, bytes.length, schema, schema, threadLocalStorage = true)
 
   /** Write-only `JsonValueCodec` hosting the walk — the adapter jsoniter's `writeToArray` needs.
     * The decode side is unreachable by construction (nothing in this object reads).
@@ -261,7 +240,7 @@ object AvroJsoniter:
       out.writeArrayEnd()
     case e: GenericEnumSymbol[?] => out.writeVal(e.toString)
     case f: GenericFixed         => writeBytesField(f.bytes, out)
-    case b: ByteBuffer           => writeBytesField(byteBufferBytes(b), out)
+    case b: ByteBuffer           => writeBytesField(AvroBinaryCursor.byteBufferBytes(b), out)
     case s: CharSequence         => out.writeVal(s.toString)
     case b: java.lang.Boolean    => out.writeVal(b.booleanValue)
     case i: java.lang.Integer    => out.writeVal(i.intValue)
@@ -278,13 +257,6 @@ object AvroJsoniter:
     out.writeArrayStart()
     bytes.foreach(b => out.writeVal(b.toInt))
     out.writeArrayEnd()
-
-  /** Read a `ByteBuffer`'s remaining bytes without disturbing its position. */
-  private def byteBufferBytes(bb: ByteBuffer): Array[Byte] =
-    val dup = bb.duplicate()
-    val bytes = new Array[Byte](dup.remaining())
-    dup.get(bytes)
-    bytes
 
   // ---- JSON bytes → Avro (the strict streaming parse) ----------------
 
@@ -450,7 +422,7 @@ extension [A](p: AvroPrism[A])
   def json: Optic[AvroBytes, JsoniterBytes, A, A, Affine] =
     Optic
       .outerProfunctor[A, A, Affine]
-      .dimap(p.record)(AvroJsoniter.parseRecord(p.rootSchemaCached))(AvroJsoniter.avroToJson)
+      .dimap(p.record)(AvroBinaryCursor.records.parser(p.rootSchemaCached))(AvroJsoniter.avroToJson)
 
 /** JSON-carried face of a drilled [[dev.constructive.eo.avro.AvroTraversal]] — `.each`'s
   * multi-focus counterpart of the prism extension above: `.foldMap` / `.all` read the typed
@@ -521,7 +493,7 @@ final private class AvroSliceFace(
       case m: Affine.Miss[X]           => m.fst
       case h: Affine.Hit[X, AvroBytes] =>
         try
-          val value = AvroJsoniter.parse(schema)(h.b)
+          val value = AvroBinaryCursor.leaves.parser(schema)(h.b)
           rawPrism.from(new Affine.Hit[X, Array[Byte]](h.snd, AvroJsoniter.valueToJson(value)))
         // ponytail: silent pass-through on unparseable Avro bytes — from has no failure channel
         catch case NonFatal(_) => h.snd._1
