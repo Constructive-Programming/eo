@@ -1,6 +1,9 @@
 package dev.constructive.eo.avro.jsoniter
 
-import dev.constructive.eo.avro.{codecPrism, AvroCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import dev.constructive.eo.avro.{codecPrism, AvroBinaryCursor, AvroCodec}
+import dev.constructive.eo.jsoniter.JsoniterPrism
 import dev.constructive.eo.optics.Optic.*
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
@@ -198,6 +201,63 @@ class AvroJsoniterSpec extends Specification:
     }
   }
 
+  // ---- record(schema): the strict streaming JSON → record parse ----
+
+  def mutated(f: String => String): Array[Byte] =
+    f(str(AvroJsoniter.avroToJson(everything))).getBytes(UTF_8)
+
+  "record prism" should {
+    "getOption ∘ reverseGet reproduces a rendered document (every branch)" in {
+      val json = AvroJsoniter.avroToJson(everything)
+      val prism = AvroJsoniter.record(schema)
+      prism.getOption(json).map(r => str(prism.reverseGet(r))) === Some(str(json))
+    }
+
+    "miss on anything the schema does not pin" in {
+      val prism = AvroJsoniter.record(schema)
+      (prism.getOption(mutated(_.replace("{\"s\":", "{\"zzz\":1,\"s\":"))) === None) // extra key
+        .and(prism.getOption(mutated(_.replace("\"i\":42,", ""))) === None) // missing key
+        .and(prism.getOption(mutated(_.replace("\"i\":42", "\"i\":42.5"))) === None) // non-integral
+        .and(prism.getOption(mutated(_.replace("GREEN", "BLUE"))) === None) // not a symbol
+        .and(prism.getOption(mutated(_.replace("[1,-128]", "[1]"))) === None) // fixed length
+        .and(prism.getOption(mutated(_.replace("[0,-1]", "[0,200]"))) === None) // byte range
+        .and(
+          prism.getOption(mutated(_.replace("\"i\":42", "\"i\":42,\"i\":42"))) === None
+        ) // duplicate key
+        .and(prism.getOption(mutated(_.replace("\"s\":\"", "\"s\":9,\"x\":\""))) === None)
+    }
+  }
+
+  // ---- .avro face: the drilled focus is the unit of conversion ----
+
+  def comboJson: Array[Byte] = AvroJsoniter.avroToJson(comboRec)
+  def nameSchema: Schema = comboCodec.schema.getField("name").schema
+
+  ".avro face" should {
+    "read the drilled focus as its Avro binary encoding" in {
+      JsoniterPrism[Combo].field(_.name).avro.getOption(comboJson).map(_.toSeq) ===
+        Some(AvroBinaryCursor.writeDatum("x", nameSchema).toSeq)
+    }
+
+    "write Avro binary back as a JSON splice (structural, no typed value)" in {
+      val face = JsoniterPrism[Combo].field(_.name).avro
+      str(face.replace(AvroBinaryCursor.writeDatum("Z", nameSchema))(comboJson)) ===
+        str(comboJson).replace("\"x\"", "\"Z\"")
+    }
+
+    "drill via Dynamic selection" in {
+      JsoniterPrism[Combo].name.avro.getOption(comboJson).map(_.toSeq) ===
+        Some(AvroBinaryCursor.writeDatum("x", nameSchema).toSeq)
+    }
+
+    "miss when the slice does not parse under the focus schema" in {
+      val badSize = """{"name":"x","size":"oops","active":true}""".getBytes(UTF_8)
+      val face = JsoniterPrism[Combo].field(_.size).avro
+      (face.getOption(badSize) === None)
+        .and(str(face.modify(identity)(badSize)) === str(badSize))
+    }
+  }
+
 object AvroJsoniterSpec:
 
   /** NamedTuple codec for the `.fields(_.name, _.active)` focus — pre-derived at object scope
@@ -209,6 +269,11 @@ object AvroJsoniterSpec:
   given AvroEncoder[NameActive] = AvroEncoder.derived
   given AvroDecoder[NameActive] = AvroDecoder.derived
   given AvroSchemaFor[NameActive] = AvroSchemaFor.derived
+
+  // jsoniter codecs for the `.avro` face drilling (root + each drilled focus type)
+  given JsonValueCodec[Combo] = JsonCodecMaker.make
+  given JsonValueCodec[String] = JsonCodecMaker.make
+  given JsonValueCodec[Long] = JsonCodecMaker.make
 
 end AvroJsoniterSpec
 

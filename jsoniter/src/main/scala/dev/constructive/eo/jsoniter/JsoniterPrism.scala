@@ -2,7 +2,13 @@ package dev.constructive.eo.jsoniter
 
 import scala.language.dynamics
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromSubArray, writeToArray, JsonValueCodec}
+import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromSubArray,
+  writeToArray,
+  JsonReader,
+  JsonValueCodec,
+  JsonWriter
+}
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 
@@ -103,6 +109,15 @@ final class JsoniterPrism[A] private[jsoniter] (
     */
   def reverseGet(a: A): Array[Byte] = writeToArray(a)(using codec)
 
+  /** Re-focus this prism on the '''raw encoded slice''': same path, same span scan, but the focus
+    * is the focused value's own JSON bytes — captured verbatim on read (`readRawValAsBytes`),
+    * spliced verbatim on write (`writeRawVal`). No typed decode ever runs. The seam for
+    * format-level consumers that transform the slice as a document of its own — e.g. the avro
+    * bridge's structural `.avro` face (`dev.constructive.eo.avro.jsoniter`).
+    */
+  def raw: JsoniterPrism[Array[Byte]] =
+    new JsoniterPrism[Array[Byte]](steps)(using JsoniterPrism.rawCodec)
+
   /** Dynamic field sugar — `JsoniterPrism[Person].name` lowers to
     * `JsoniterPrism[Person].field(_.name)`. Compile-time checked against `A`'s case fields; the
     * field's `JsonValueCodec` is summoned at the call site.
@@ -152,6 +167,14 @@ final class JsoniterPrism[A] private[jsoniter] (
     new JsoniterTraversal[B](steps :+ PathStep.Wildcard)
 
 object JsoniterPrism:
+
+  /** Raw-slice codec behind [[JsoniterPrism.raw]]: decode captures the focused value's encoded
+    * bytes verbatim, encode splices them back verbatim.
+    */
+  private[jsoniter] val rawCodec: JsonValueCodec[Array[Byte]] = new JsonValueCodec[Array[Byte]]:
+    def decodeValue(in: JsonReader, default: Array[Byte]): Array[Byte] = in.readRawValAsBytes()
+    def encodeValue(bs: Array[Byte], out: JsonWriter): Unit = out.writeRawVal(bs)
+    def nullValue: Array[Byte] = null.asInstanceOf[Array[Byte]]
 
   /** Root-level Prism from a JSON byte buffer to a native type `A` — a `Prism[Array[Byte], A]`:
     * `to` decodes the WHOLE document via the codec (Miss when it doesn't decode as `A`), `from` /

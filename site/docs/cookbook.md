@@ -805,7 +805,7 @@ object — but for many branches per message, or fragment moves
 between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
 (no decode at all).
 
-**Source:** `AvroJsonBridgeSpec` (jsoniter module) and
+**Source:** `AvroJsonBridgeSpec` (avro module, `eo.avro.jsoniter`) and
 `AvroJsonBridgeBench` (benchmarks) in cats-eo.
 
 ### Re-usable laws for testing

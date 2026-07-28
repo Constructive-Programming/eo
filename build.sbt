@@ -610,6 +610,11 @@ lazy val avroIntegration: Project = project
   .dependsOn(
     LocalProject("core"),
     LocalProject("generics"),
+    // Optional: the `dev.constructive.eo.avro.jsoniter` sub-package extends `JsoniterPrism` with
+    // the structural `.avro` face — its API surface *names* JsoniterPrism, so any caller already
+    // depends on cats-eo-jsoniter directly. Optional keeps it off avro-only classpaths. (The
+    // reverse dep would be a cycle — see the jsoniterIntegration comment.)
+    LocalProject("jsoniterIntegration") % Optional,
     LocalProject("laws") % Test,
   )
   .settings(commonSettings *)
@@ -633,11 +638,16 @@ lazy val avroIntegration: Project = project
     // `vulcan.Codec` — callers already depend on vulcan directly.
     libraryDependencies += vulcan % Optional,
     // jsoniter-scala-core is Optional too, with a twist: only `dev.constructive.eo.avro.jsoniter`
-    // (the structural Avro → JSON-bytes bridge, `AvroJsoniter`) touches it, but the API surface is
-    // `Array[Byte]` — no jsoniter type is named. Callers of that sub-package must add
-    // jsoniter-scala-core themselves (the bridge renders through its `JsonWriter`); the package
-    // scaladoc says so. Optional keeps it off every other consumer's classpath.
+    // (the structural Avro ↔ JSON-bytes bridge, `AvroJsoniter`) touches it, but the walk/parse API
+    // surface is `Array[Byte]` — no jsoniter type is named. Callers of that sub-package must add
+    // jsoniter-scala-core themselves (the bridge reads/writes through `JsonReader`/`JsonWriter`);
+    // the package scaladoc says so. Optional keeps it off every other consumer's classpath. (The
+    // `.avro` face additionally names JsoniterPrism — covered by the jsoniterIntegration Optional
+    // project dep above.)
     libraryDependencies += jsoniterCore % Optional,
+    // jsoniter-scala-macros backs the cross-format bridge specs (JsonCodecMaker fixtures) that
+    // live here because the reverse project dep would be a cycle.
+    libraryDependencies += jsoniterMacros % Test,
     libraryDependencies += discipline % Test,
   )
 
@@ -658,12 +668,10 @@ lazy val jsoniterIntegration: Project = project
     // same as circeIntegration.
     LocalProject("generics"),
     LocalProject("laws") % Test,
-    // Optional (was Test-only): the `dev.constructive.eo.jsoniter.avro` sub-package (the
-    // JSON-bytes → Avro-bytes `.avro` face, `JsoniterAvro`) names `AvroCodec` and reuses the
-    // `AvroBytes` / `JsoniterBytes` aliases from cats-eo-avro — callers of that sub-package
-    // already depend on cats-eo-avro directly. Optional keeps it off jsoniter-only classpaths;
-    // the Test half still serves the cross-format bridge spec.
-    LocalProject("avroIntegration") % Optional,
+    // NO dependency on avroIntegration in EITHER scope: avroIntegration depends on THIS module
+    // (Optional, for the `dev.constructive.eo.avro.jsoniter` bridge faces), and sbt treats even a
+    // Test-scoped back-reference as a project cycle. The cross-format bridge specs live in
+    // avro/src/test instead.
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)

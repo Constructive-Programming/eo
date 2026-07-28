@@ -1,6 +1,11 @@
 package dev.constructive.eo.avro.jsoniter
 
+import scala.annotation.tailrec
+import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
+
 import com.github.plokhotnyuk.jsoniter_scala.core.{
+  readFromArrayReentrant,
   writeToArray,
   JsonReader,
   JsonValueCodec,
@@ -8,16 +13,17 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
 }
 import dev.constructive.eo.avro.{AvroBinaryCursor, AvroCodec, AvroPrism, AvroTraversal}
 import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
+import dev.constructive.eo.jsoniter.JsoniterPrism
 import dev.constructive.eo.optics.{Getter, MendTearPrism, Optic, Prism}
 import java.nio.ByteBuffer
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
+import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, IndexedRecord}
 
-/** Structural Avro → JSON-'''bytes''' bridge: render an Avro generic runtime value straight to a
-  * UTF-8 JSON byte array through jsoniter-scala's `JsonWriter`, '''without''' a typed case class —
-  * and without a JSON AST — in the middle. The AST-free sibling of
-  * `dev.constructive.eo.avro.circe.AvroJson`: same structural walk, same rendering conventions, but
-  * the output is `Array[Byte]` instead of `io.circe.Json`, so circe never touches the classpath.
+/** Structural Avro ↔ JSON-'''bytes''' bridge: move between Avro generic runtime values / payload
+  * bytes and UTF-8 JSON byte arrays through jsoniter-scala's streaming `JsonWriter` / `JsonReader`,
+  * '''without''' a typed case class — and without a JSON AST — in the middle. The AST-free sibling
+  * of `dev.constructive.eo.avro.circe.AvroJson`: same walks, same conventions both ways, but the
+  * JSON side is `Array[Byte]` instead of `io.circe.Json`, so circe never touches the classpath.
   * Lives inside `cats-eo-avro` with jsoniter-scala-core as an `Optional` dependency (the rendering
   * runs through its `JsonWriter`) — add `com.github.plokhotnyuk.jsoniter-scala:jsoniter-scala-core`
   * to use this package.
@@ -52,7 +58,7 @@ import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
   * via `tearFrom` / `mendFrom`. The [[AvroBytes]] / [[JsoniterBytes]] aliases (see the package
   * object) keep the two `Array[Byte]` roles apart in the signatures.
   *
-  * ==Drilled cursor (`.json` face)==
+  * ==Drilled cursors (`.json` and `.avro` faces)==
   *
   * The full `AvroPrism` cursor sugar — `.field(_.x)` / `.fields(...)` / `.at(i)` / `.union[B]` /
   * `.each` / Dynamic selection — reaches this bridge through the [[json]] extensions on `AvroPrism`
@@ -60,22 +66,64 @@ import org.apache.avro.generic.{GenericEnumSymbol, GenericFixed, IndexedRecord}
   * render the whole modified document as JSON bytes. [[render]] is the focus-as-standalone-JSON
   * terminal for the read side.
   *
+  * The reverse cursor is the [[avro]] extension on `JsoniterPrism`: drill a JSON document with the
+  * jsoniter sugar and the '''drilled focus itself''' converts — reads structurally parse the
+  * focused slice under the focus codec's schema and yield its Avro binary encoding, writes accept
+  * Avro binary, render it structurally, and splice the JSON slice back. Both directions are
+  * schema-directed walks; no typed value is ever materialised.
+  *
+  * ==Parsing conventions (JSON bytes → record)==
+  *
+  * [[record]]'s `getOption` (and the `.avro` face's read) is the '''strict''' schema-directed
+  * inverse — a streaming `JsonReader` walk, no AST — mirroring `AvroJson`'s parsing conventions: a
+  * record object's key set must equal the schema's field names exactly; `enum` requires a schema
+  * symbol; `fixed` the exact byte length; `bytes` / `fixed` the signed-byte-int array rendering; a
+  * `union` is matched '''first branch that parses wins''' (the branch slice is captured raw once
+  * and re-attempted per branch — a streaming reader cannot backtrack). Two deliberate
+  * strictness-only divergences from the AST parse: numeric syntax is token-level (`1.0` misses an
+  * `int` schema where circe's `toInt` accepts it), and a duplicate object key misses (circe's
+  * `JsonObject` silently de-duplicates before `AvroJson` ever sees it).
+  *
   * ==Non-goals (deliberate)==
   *
   * Same as `AvroJson`: the bridge sees only the '''runtime''' Avro value, never the logical type —
-  * an `Instant` stored as timestamp-millis renders as a JSON number, not an ISO-8601 string. And
-  * the JSON side stays '''output-only''': `AvroJson.record`'s strict JSON → record parse has no
-  * counterpart here (it needs an AST to parse lawfully) — a schema-directed `JsonReader` walk could
-  * add it; until then the typed diagonals cover the write-back direction.
+  * an `Instant` stored as timestamp-millis renders as a JSON number, not an ISO-8601 string.
   *
+  * @groupname prism Bidirectional prism (JSON bytes ↔ record)
+  * @groupprio prism 0
   * @groupname diagonal Codec diagonals (tearFrom / mendFrom of valuePrism)
-  * @groupprio diagonal 0
+  * @groupprio diagonal 1
   * @groupname base Structural walk
-  * @groupprio base 1
+  * @groupprio base 2
   * @groupname optic Read optic (Avro bytes → JSON bytes)
-  * @groupprio optic 2
+  * @groupprio optic 3
   */
 object AvroJsoniter:
+
+  /** The bidirectional bridge — `AvroJson.record` without the AST: a
+    * `Prism[JsoniterBytes, IndexedRecord]` for `schema`. Reading (`getOption` / `to`) is the strict
+    * schema-directed streaming parse — see ''Parsing conventions''; it misses (`Left` of the
+    * untouched JSON bytes) on anything the schema does not pin. Writing (`reverseGet`) is the total
+    * structural walk [[avroToJson]].
+    * @group prism
+    */
+  def record(
+      schema: Schema
+  ): MendTearPrism[JsoniterBytes, JsoniterBytes, IndexedRecord, IndexedRecord] =
+    Prism[Array[Byte], IndexedRecord](
+      json => jsonToRecord(json, schema).toRight(json),
+      avroToJson,
+    )
+
+  /** Strict schema-directed structural parse of a JSON document into a generic record —
+    * [[record]]'s `getOption`. `None` on anything the schema does not pin; no typed case class and
+    * no AST in the middle.
+    * @group prism
+    */
+  def jsonToRecord(json: JsoniterBytes, schema: Schema): Option[IndexedRecord] =
+    parseSlice(json, schema) match
+      case Some(r: IndexedRecord) => Some(r)
+      case _                      => None
 
   /** The fundamental codec diagonal — the prisms below are this one with their '''input''' slots
     * pre-composed via `MendTearPrism.tearFrom` / `mendFrom`. Tears an Avro '''generic runtime
@@ -149,10 +197,10 @@ object AvroJsoniter:
   def render[A](using codec: AvroCodec[A]): Getter[A, JsoniterBytes] =
     new Getter(a => valueToJson(codec.encode(a)))
 
-  /** [[avroToJson]] generalised to any Avro generic runtime value — [[valuePrism]]'s mend and its
-    * tear's miss fallback.
+  /** [[avroToJson]] generalised to any Avro generic runtime value — [[valuePrism]]'s mend, its
+    * tear's miss fallback, and the `.avro` face's write-side render.
     */
-  private def valueToJson(value: Any): JsoniterBytes =
+  private[jsoniter] def valueToJson(value: Any): JsoniterBytes =
     writeToArray[Any](value)(using anyCodec)
 
   /** Position-based binary parse to a generic value under a single schema — [[bytesPrism]]'s
@@ -238,6 +286,142 @@ object AvroJsoniter:
     dup.get(bytes)
     bytes
 
+  // ---- JSON bytes → Avro (the strict streaming parse) ----------------
+
+  /** Parse a JSON slice under `schema` into a generic Avro runtime value — `Some(null)` is a
+    * legitimate hit (a `null` schema / union branch), `None` the strict miss. Whole-slice
+    * strictness (no trailing input) comes from the read's end-of-input check.
+    *
+    * MUST be the reentrant read: [[readUnion]] recurses through here mid-parse, and the pooled
+    * `readFromArray` would hand the nested parse the OUTER call's thread-local reader, corrupting
+    * its position.
+    */
+  private[jsoniter] def parseSlice(json: Array[Byte], schema: Schema): Option[Any] =
+    try Some(readFromArrayReentrant[Any](json)(using new SchemaCodec(schema)))
+    catch case NonFatal(_) => None
+
+  /** Schema-directed `JsonValueCodec` — the adapter that lets `readFromArray` drive the
+    * [[readValue]] walk (and, symmetrically, `writeToArray` the [[writeValue]] walk).
+    */
+  final private class SchemaCodec(schema: Schema) extends JsonValueCodec[Any]:
+    def decodeValue(in: JsonReader, default: Any): Any = readValue(in, schema)
+    def encodeValue(value: Any, out: JsonWriter): Unit = writeValue(value, out)
+    def nullValue: Any = null.asInstanceOf[Any]
+
+  /** Schema-directed streaming inverse of [[writeValue]] — `in.decodeError` (an exception caught by
+    * [[parseSlice]]) is the strict miss.
+    */
+  private def readValue(in: JsonReader, schema: Schema): Any =
+    schema.getType match
+      case Schema.Type.RECORD => readRecord(in, schema)
+      case Schema.Type.UNION  => readUnion(in, schema)
+      case Schema.Type.ARRAY  => readArray(in, schema.getElementType)
+      case Schema.Type.MAP    => readMap(in, schema.getValueType)
+      case Schema.Type.ENUM   =>
+        // NB a null `default` makes jsoniter treat JSON null as a decode error — the strictness
+        // we want (null only ever matches a NULL schema / union branch)
+        val s = in.readString(null.asInstanceOf[String])
+        if schema.getEnumSymbols.contains(s) then new GenericData.EnumSymbol(schema, s)
+        else in.decodeError(s"not a symbol of ${schema.getFullName}")
+      case Schema.Type.FIXED =>
+        val bytes = readByteArray(in)
+        if bytes.length == schema.getFixedSize then new GenericData.Fixed(schema, bytes)
+        else in.decodeError(s"fixed ${schema.getFullName} needs ${schema.getFixedSize} bytes")
+      case Schema.Type.BYTES   => ByteBuffer.wrap(readByteArray(in))
+      case Schema.Type.STRING  => in.readString(null.asInstanceOf[String])
+      case Schema.Type.INT     => Int.box(in.readInt())
+      case Schema.Type.LONG    => Long.box(in.readLong())
+      case Schema.Type.FLOAT   => Float.box(in.readFloat())
+      case Schema.Type.DOUBLE  => Double.box(in.readDouble())
+      case Schema.Type.BOOLEAN => Boolean.box(in.readBoolean())
+      case Schema.Type.NULL    =>
+        // readNullOrError refuses a null default, so consume "null" against a sentinel and
+        // return the actual null the Avro model wants
+        if in.isNextToken('n'.toByte) then
+          in.readNullOrError(NullSentinel, "expected JSON null")
+          nullAny
+        else in.decodeError("expected JSON null")
+
+  private object NullSentinel
+
+  private def nullAny: Any = null.asInstanceOf[Any]
+
+  /** Strict exact-cover record parse: every key must be a schema field (any order), no duplicate,
+    * none missing.
+    */
+  private def readRecord(in: JsonReader, schema: Schema): IndexedRecord =
+    if !in.isNextToken('{'.toByte) then in.decodeError("expected JSON object")
+    val fields = schema.getFields
+    val rec = new GenericData.Record(schema)
+    val seen = new Array[Boolean](fields.size)
+    @tailrec def loop(count: Int): Int =
+      val field = schema.getField(in.readKeyAsString())
+      if (field eq null) || seen(field.pos) then
+        in.decodeError(s"not exactly the fields of ${schema.getFullName}")
+      seen(field.pos) = true
+      rec.put(field.pos, readValue(in, field.schema))
+      if in.isNextToken(','.toByte) then loop(count + 1) else count + 1
+    val count =
+      if in.isNextToken('}'.toByte) then 0
+      else
+        in.rollbackToken()
+        val n = loop(0)
+        if !in.isCurrentToken('}'.toByte) then in.objectEndOrCommaError()
+        n
+    if count != fields.size then
+      in.decodeError(s"expected exactly the ${fields.size} fields of ${schema.getFullName}")
+    rec
+
+  /** First branch that parses wins (mirrors `AvroJson`): the slice is captured raw ONCE, then each
+    * branch attempts it on a fresh reader — a streaming reader cannot backtrack across branches.
+    */
+  private def readUnion(in: JsonReader, schema: Schema): Any =
+    val raw = in.readRawValAsBytes()
+    schema.getTypes.asScala.iterator.map(parseSlice(raw, _)).collectFirst {
+      case Some(v) => v
+    } match
+      case Some(v) => v
+      case None    => in.decodeError("no union branch parses")
+
+  private def readArray(in: JsonReader, elem: Schema): java.util.ArrayList[Any] =
+    if !in.isNextToken('['.toByte) then in.decodeError("expected JSON array")
+    val list = new java.util.ArrayList[Any]()
+    if in.isNextToken(']'.toByte) then list
+    else
+      in.rollbackToken()
+      @tailrec def loop(): Unit =
+        list.add(readValue(in, elem))
+        if in.isNextToken(','.toByte) then loop()
+      loop()
+      if in.isCurrentToken(']'.toByte) then list else in.arrayEndOrCommaError()
+
+  private def readMap(in: JsonReader, value: Schema): java.util.LinkedHashMap[String, Any] =
+    if !in.isNextToken('{'.toByte) then in.decodeError("expected JSON object")
+    val map = new java.util.LinkedHashMap[String, Any]()
+    if in.isNextToken('}'.toByte) then map
+    else
+      in.rollbackToken()
+      @tailrec def loop(): Unit =
+        map.put(in.readKeyAsString(), readValue(in, value))
+        if in.isNextToken(','.toByte) then loop()
+      loop()
+      if in.isCurrentToken('}'.toByte) then map else in.objectEndOrCommaError()
+
+  /** Inverse of [[writeBytesField]]: a JSON array of signed byte ints (each integral, in
+    * `[-128, 127]` — `readByte` enforces both) back to raw bytes.
+    */
+  private def readByteArray(in: JsonReader): Array[Byte] =
+    if !in.isNextToken('['.toByte) then in.decodeError("expected JSON array of byte values")
+    if in.isNextToken(']'.toByte) then Array.emptyByteArray
+    else
+      in.rollbackToken()
+      val buf = scala.collection.mutable.ArrayBuffer.empty[Byte]
+      @tailrec def loop(): Unit =
+        buf += in.readByte()
+        if in.isNextToken(','.toByte) then loop()
+      loop()
+      if in.isCurrentToken(']'.toByte) then buf.toArray else in.arrayEndOrCommaError()
+
 end AvroJsoniter
 
 /** JSON-carried face of a drilled [[dev.constructive.eo.avro.AvroPrism]] — the prism's `.record`
@@ -281,3 +465,67 @@ extension [A](t: AvroTraversal[A])
     Optic
       .outerProfunctor[A, A, MultiFocus[PSVec]]
       .dimap(t)(identity[AvroBytes])(AvroJsoniter.bytesToJson(t.rootSchemaCached).get)
+
+/** Avro-carried face of a drilled [[dev.constructive.eo.jsoniter.JsoniterPrism]] — the reverse
+  * cursor: drill a JSON document with the full jsoniter sugar (`.field(_.x)` / `.at(i)` / Dynamic
+  * selection) and flip last; the '''drilled focus itself''' is the unit of conversion:
+  *
+  * {{{
+  *   import dev.constructive.eo.jsoniter.JsoniterPrism
+  *   import dev.constructive.eo.avro.jsoniter.*
+  *
+  *   val nameA = JsoniterPrism[Person].name.avro   // Optic[JsoniterBytes, JsoniterBytes,
+  *                                                 //       AvroBytes, AvroBytes, Affine]
+  *   nameA.getOption(jsonBytes)                    // Some(Avro binary of the name alone)
+  *   nameA.replace(avroName)(jsonBytes)            // JSON doc with the slice spliced back
+  * }}}
+  *
+  * Both directions are '''structural, schema-directed''' walks under the focus codec's schema (the
+  * `AvroCodec[A]` is schema evidence only — no typed `A` is ever materialised, matching
+  * `codecPrism`'s doctrine): reads capture the focused slice raw ([[JsoniterPrism.raw]]) and run
+  * the strict streaming parse (see ''Parsing conventions'' on [[AvroJsoniter]]) before encoding to
+  * Avro binary — a slice the schema does not pin is a '''Miss''', exactly like a path miss; writes
+  * parse the Avro binary to a generic value, render it as a JSON slice, and splice. A write whose
+  * Avro bytes do not parse under the schema passes the document through unchanged (`from` has no
+  * failure channel).
+  */
+extension [A](p: JsoniterPrism[A])
+
+  def avro(using
+      codec: AvroCodec[A]
+  ): Optic[JsoniterBytes, JsoniterBytes, AvroBytes, AvroBytes, Affine] =
+    new AvroSliceFace(p.raw, codec.schema)
+
+/** Implementation of the `.avro` face: re-focuses the drilled prism on its raw slice and converts
+  * slice ↔ Avro binary at the seam. The leftover `X` is the raw prism's own (source bytes + span),
+  * so writes splice without re-walking.
+  */
+final private class AvroSliceFace(
+    private val rawPrism: JsoniterPrism[Array[Byte]],
+    private val schema: Schema,
+) extends Optic[JsoniterBytes, JsoniterBytes, AvroBytes, AvroBytes, Affine]:
+
+  type X = rawPrism.X
+
+  def to(json: JsoniterBytes): Affine[X, AvroBytes] =
+    rawPrism.to(json) match
+      case m: Affine.Miss[X]             => new Affine.Miss[X](m.fst)
+      case h: Affine.Hit[X, Array[Byte]] =>
+        AvroJsoniter.parseSlice(h.b, schema) match
+          case Some(value) =>
+            new Affine.Hit[X, AvroBytes](h.snd, AvroBinaryCursor.writeDatum(value, schema))
+          case None => new Affine.Miss[X](h.snd._1)
+
+  def from(aff: Affine[X, AvroBytes]): JsoniterBytes =
+    aff match
+      case m: Affine.Miss[X]           => m.fst
+      case h: Affine.Hit[X, AvroBytes] =>
+        try
+          val value = AvroBinaryCursor
+            .leaves
+            .read(h.b, 0, h.b.length, schema, schema, threadLocalStorage = true)
+          rawPrism.from(new Affine.Hit[X, Array[Byte]](h.snd, AvroJsoniter.valueToJson(value)))
+        // ponytail: silent pass-through on unparseable Avro bytes — from has no failure channel
+        catch case NonFatal(_) => h.snd._1
+
+end AvroSliceFace
