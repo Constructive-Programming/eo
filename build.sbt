@@ -235,7 +235,12 @@ ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
               .withId(Some("setup-java-temurin-17"))
               .withName(Some("Setup Java (temurin@17)"))
               .withCond(Some("matrix.java == 'temurin@17'"))
-          case s => s
+          // Dependabot bumps (checkout v6→v7, coursier/setup-action v1→v3)
+          // that the plugin doesn't generate yet — same rationale as the
+          // githubWorkflowJobSetup checkout bump above.
+          case s =>
+            bumpActionVersion("actions", "checkout", "v7")
+              .andThen(bumpActionVersion("coursier", "setup-action", "v3"))(s)
         })
     else job
   }
