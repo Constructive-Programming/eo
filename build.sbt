@@ -842,6 +842,11 @@ lazy val docs: Project = project
     // it here so jsoniter.md mdoc blocks can derive `JsonValueCodec[A]` via
     // `JsonCodecMaker.make` against the live classpath.
     libraryDependencies += jsoniterMacros,
+    // kyo-schema is `Optional` on kyoIntegration (callers add it
+    // themselves); surface it plus the json codec here so kyo.md can
+    // document the `eo.kyo.schema` bridge against the live classpath.
+    libraryDependencies += kyoSchema,
+    libraryDependencies += kyoSchemaJson,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
