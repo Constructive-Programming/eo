@@ -40,9 +40,9 @@ are holding and what the other side expects:
 | an optic | a `Layer` in the wiring graph ([Wiring with layers](https://getkyo.io/latest/kyo-prelude/#wiring-with-layers)) | [`Layer.focus`](#kyo-docs-examples-through-optics) — the optic becomes the layer's wiring function |
 | an optic | a `TypeMap` for `Env.runAll` overrides | [`service` + `.andThen`](#the-service-lens) |
 | a `TypeMap`, `Maybe`, `Result`, or `Var` state | eo capability evidence (`CanGet[T, A]`, `CanModify[T, A]`, …) | [`import dev.constructive.eo.kyo.given`](#automatic-capability-givens) — no hand-written given |
-| a NamedTuple or case class | a kyo `Record` (or back) | [`Record.iso[T]`](#records-recordiso-and-recordlens) — a staged bijection |
-| a `Record[F]` | one field, optic-shaped | [`Record.lens[F]("name")`](#records-recordiso-and-recordlens) |
-| a kyo-schema `Schema[A]` / `Focus` | eo optics over values or encoded payloads | [the `eo.kyo.schema` bridge](#the-kyo-schema-bridge-eokyoschema) (optional dependency) |
+| a NamedTuple or case class | a kyo `Record` (or back) | [`Record.iso[T]`](#records-record-iso-and-record-lens) — a staged bijection |
+| a `Record[F]` | one field, optic-shaped | [`Record.lens[F]("name")`](#records-record-iso-and-record-lens) |
+| a kyo-schema `Schema[A]` / `Focus` | eo optics over values or encoded payloads | [the `eo.kyo.schema` bridge](#the-kyo-schema-bridge-eo-kyo-schema) (optional dependency) |
 
 ## The service lens
 

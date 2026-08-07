@@ -54,19 +54,19 @@ typeclass so user code summons one thing per type.
 
 ```scala mdoc:silent
 import dev.constructive.eo.avro.{AvroCodec, codecPrism}
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 
-case class Address(street: String, zip: Int)
-object Address:
-  given AvroEncoder[Address] = AvroEncoder.derived
-  given AvroDecoder[Address] = AvroDecoder.derived
-  given AvroSchemaFor[Address] = AvroSchemaFor.derived
-
-case class Person(name: String, age: Int, address: Address)
-object Person:
-  given AvroEncoder[Person] = AvroEncoder.derived
-  given AvroDecoder[Person] = AvroDecoder.derived
-  given AvroSchemaFor[Person] = AvroSchemaFor.derived
+// The ADTs — hosted at package level with their kindlings-derived
+// codec triplets (heavy derivation macros run in compiled sources,
+// not mdoc fences):
+//
+//   case class Address(street: String, zip: Int)
+//   object Address:
+//     given AvroEncoder[Address] = AvroEncoder.derived
+//     given AvroDecoder[Address] = AvroDecoder.derived
+//     given AvroSchemaFor[Address] = AvroSchemaFor.derived
+//
+//   case class Person(name: String, age: Int, address: Address)  // ditto
+import dev.constructive.eo.docs.avrodocs.{Address, Person}
 ```
 
 Construct a Prism to the root type, then drill into fields.
@@ -142,17 +142,11 @@ data, not schema-named fields — they keep their literal key.
 `.at(i)` drills into the `i`-th element of an Avro `array<T>`:
 
 ```scala mdoc:silent
-case class Order(name: String)
-object Order:
-  given AvroEncoder[Order] = AvroEncoder.derived
-  given AvroDecoder[Order] = AvroDecoder.derived
-  given AvroSchemaFor[Order] = AvroSchemaFor.derived
-
-case class Basket(owner: String, items: List[Order])
-object Basket:
-  given AvroEncoder[Basket] = AvroEncoder.derived
-  given AvroDecoder[Basket] = AvroDecoder.derived
-  given AvroSchemaFor[Basket] = AvroSchemaFor.derived
+// Same hosting pattern — derived codec triplets on both:
+//
+//   case class Order(name: String)
+//   case class Basket(owner: String, items: List[Order])
+import dev.constructive.eo.docs.avrodocs.{Basket, Order}
 ```
 
 ```scala mdoc
@@ -210,10 +204,11 @@ selector-order; the NamedTuple type reflects that. Arity must be
 ≥ 2 — use `.field(_.x)` for a single-field focus.
 
 ```scala mdoc:silent
-type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-given AvroEncoder[NameAge] = AvroEncoder.derived
-given AvroDecoder[NameAge] = AvroDecoder.derived
-given AvroSchemaFor[NameAge] = AvroSchemaFor.derived
+// Hosted alongside the ADTs (top-level givens, imported explicitly):
+//
+//   type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
+//   given AvroEncoder[NameAge] = AvroEncoder.derived   // + Decoder + SchemaFor
+import dev.constructive.eo.docs.avrodocs.given
 ```
 
 ```scala mdoc
@@ -244,11 +239,10 @@ demand a per-branch resolution step. cats-eo-avro spells this as
 `.union[Branch]`:
 
 ```scala mdoc:silent
-case class Transaction(id: String, amount: Option[Long])
-object Transaction:
-  given AvroEncoder[Transaction] = AvroEncoder.derived
-  given AvroDecoder[Transaction] = AvroDecoder.derived
-  given AvroSchemaFor[Transaction] = AvroSchemaFor.derived
+// Hosted with a derived codec triplet, like the ADTs above:
+//
+//   case class Transaction(id: String, amount: Option[Long])
+import dev.constructive.eo.docs.avrodocs.Transaction
 ```
 
 ```scala mdoc

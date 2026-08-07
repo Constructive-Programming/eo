@@ -101,9 +101,11 @@ ThisBuild / scalacOptions += "-Wunused:all"
 // machine intermittently trips: `derived timed out after 5000ms`) to 30s. One namespace per
 // kindlings module (circe / cats / avro derivation); read by kindlings 0.3.x's `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
-// NB this reaches REGULAR compilation only — mdoc's fence compiler never receives
-// `-Xmacro-settings` (verified: a 1ms override doesn't fire in fences), so kindlings
-// derivations shown in docs pages live in site/src samples.scala, not in mdoc fences.
+// NB this reaches REGULAR compilation only — mdoc's fence compiler ignores the
+// -Xmacro-settings that arrive via mdoc.properties (verified: a 1ms canary never fires
+// through that route). Fences get the budget through mdoc's OWN --scalac-options CLI
+// argument instead (`mdocExtraArguments` on the docs project, same canary fires there),
+// and the heaviest doc derivations are additionally hosted in site/src compiled samples.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30,catsDerivation.timeout=30,avroDerivation.timeout=30"
 ThisBuild / tlFatalWarnings := true
@@ -855,6 +857,17 @@ lazy val docs: Project = project
     // which already contains internal notes (`plans/`,
     // `solutions/`, `ci-secrets.md`) that Laika should not ingest.
     mdocIn := (ThisBuild / baseDirectory).value / "site" / "docs",
+    // The kindlings derivation budget for FENCES. mdoc's compiler ignores
+    // the -Xmacro-settings that reach it via mdoc.properties but honours
+    // its own --scalac-options argument (canary-verified both ways), so
+    // this is the only channel that stops "timed out after 5000ms" fence
+    // flakes on loaded machines — field-navigation macros (codecPrism)
+    // summon kindlings derivations at expansion even when the doc ADTs
+    // themselves are hosted in compiled samples.
+    mdocExtraArguments ++= Seq(
+      "--scalac-options",
+      "-Xmacro-settings:circeDerivation.timeout=60,catsDerivation.timeout=60,avroDerivation.timeout=60",
+    ),
     // mdoc variable substitutions — site pages can reference
     // `@VERSION@` to always display the current version.
     mdocVariables ++= Map(
