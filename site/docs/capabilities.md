@@ -113,7 +113,12 @@ pair from the strongest cats typeclass available on `F`:
   (`List`, `Vector`, `Option`, `Either[E, *]`, `Chain`, `Map[K, *]`, …);
 - `Functor[F]` without `Traverse` ⇒ a write-only `Modify` — `CanModify` only
   (`Function1[R, *]`, `Eval`, …);
-- `Foldable[F]` without `Traverse` ⇒ a `Fold` — `CanFold` only (`SortedSet`, …).
+- `Foldable[F]` without `Traverse` ⇒ a `Fold` — `CanFold` only (`SortedSet`, …);
+- `Applicative[F]` ⇒ `CanReverseGet` (`reverseGet = F.pure`) — a *direct* capability
+  given rather than a `Review` optic given, so it coexists with the element optics
+  above (the `CanReverseGet` optic derivation searches with `S`/`A` free, and a
+  `Review[F[A], A]` optic given would ambiguate against the `Traversal` on every
+  `Traverse ∧ Applicative` container).
 
 ```scala mdoc
 import dev.constructive.eo.*
@@ -121,17 +126,20 @@ import dev.constructive.eo.instances.given
 
 def bump[S](s: S)(using m: CanModify[S, Int]): S = m.modify(_ + 1)(s)
 
+def wrap[T](n: Int)(using r: CanReverseGet[T, Int]): T = r.reverseGet(n)
+
 bump(List(1, 2, 3))
 
 bump(Option(41))
+
+bump(wrap[List[Int]](41)) // build via pure, modify via the Traversal — same import
 ```
 
 The `NotGiven[Traverse[F]]` guards keep the [coherence rule](#coherence-one-optic-given-per-s-a)
 intact — the strongest class elects the single given. A container that is `Functor` and
 `Foldable` but not `Traverse` is the one shape that still gets two candidates: summon the
-optic you mean explicitly there. Deliberately absent: `Comonad` ⇒ Getter (`extract` + `map`
-is not a lawful Lens on any multi-position container) and `Applicative` ⇒ Review (lawful,
-but a second given per pair would break summoning for the families above).
+optic you mean explicitly there. Deliberately absent: `Comonad` ⇒ Getter — `extract` + `map`
+is not a lawful Lens on any multi-position container.
 
 ## When not to use capabilities
 
