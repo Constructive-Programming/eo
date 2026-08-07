@@ -105,36 +105,56 @@ issue entirely: take `CanGet[T, Json]` and let the library do this for you.)
 
 ## Cats containers as capability evidence
 
-Plain cats containers can satisfy capability demands with no hand-written optic:
-`import dev.constructive.eo.instances.given` derives one optic given per `(F[A], A)`
-pair from the strongest cats typeclass available on `F`:
+`dev.constructive.eo.instances` derives lawful optics from cats typeclasses — as
+**constructors, not givens**. A cats container admits several lawful optics at once
+(the whole-container traversal, a positional lens, a slot traversal, a grate), so no
+single one can be THE canonical given for its `(F[A], A)` pair. You pick the optic you
+mean and declare the given in your own scope — exactly the
+[coherence rule](#coherence-one-optic-given-per-s-a), with the choice where it belongs.
 
-- `Traverse[F]` ⇒ a `Traversal` over the elements — `CanModify` **and** `CanFold`
-  (`List`, `Vector`, `Option`, `Either[E, *]`, `Chain`, `Map[K, *]`, …);
-- `Functor[F]` without `Traverse` ⇒ a write-only `Modify` — `CanModify` only
-  (`Function1[R, *]`, `Eval`, …);
-- `Foldable[F]` without `Traverse` ⇒ a `Fold` — `CanFold` only (`SortedSet`, …).
+| cats class | constructor | optic | capabilities |
+|---|---|---|---|
+| `Traverse[F]` | `traverseEach` | `Traversal` over the elements | `CanModify` + `CanFold` |
+| `Functor[F]` | `functorModify` | write-only `Modify` (`= F.map`) | `CanModify` |
+| `Foldable[F]` | `foldableFold` | read-only `Fold` | `CanFold` |
+| `Bitraverse[F]` | `bitraverseFirst` / `Second` / `Both` | `Traversal` over one slot (or every `A` of an `F[A, A]`) | `CanModify` + `CanFold` |
+| `Representable[F]` | `representableLens(r)` | lawful `Lens` at ONE representation point | `CanGet` + `CanModify` + `CanFold` |
+| `Representable[F]` | `representableGrate` | whole-container grate (`Distributive` with a concrete index) | positional rebuilds |
+
+Two ways to turn a constructor into evidence — bind it as an optic given (the
+capability derivations do the rest), or skip optics entirely with a direct capability
+instance (the `Can*` traits are SAM-convertible):
 
 ```scala mdoc
 import dev.constructive.eo.*
-import dev.constructive.eo.instances.given
+import dev.constructive.eo.instances.*
+import dev.constructive.eo.optics.Traversal
 
 def bump[S](s: S)(using m: CanModify[S, Int]): S = m.modify(_ + 1)(s)
 
-bump(List(1, 2, 3))
+locally {
+  given Traversal[List[Int], List[Int], Int, Int] = traverseEach
+  bump(List(1, 2, 3))
+}
 
-bump(Option(41))
+locally {
+  given CanModify[Vector[Int], Int] = f => _.map(f) // direct instance, no optic
+  bump(Vector(1, 2))
+}
+
+// The positional Lens no element bridge can produce — one point of a function:
+val atK = representableLens[[x] =>> String => x, Int](using summon)("k")
+atK.replace(99)((_: String).length)("k")
+
+atK.replace(99)((_: String).length)("other") // siblings survive
 ```
 
-The `NotGiven[Traverse[F]]` guards keep the [coherence rule](#coherence-one-optic-given-per-s-a)
-intact — the strongest class elects the single given. A container that is `Functor` and
-`Foldable` but not `Traverse` is the one shape that still gets two candidates: summon the
-optic you mean explicitly there. Two bridges are left for the reader (the package scaladoc
-sketches both): `Applicative` ⇒ `CanReverseGet` — `pure` is `reverseGet`, but ship it as a
-*direct* capability given, not a `Review` optic given, or it ambiguates against the
-`Traversal` on every `Traverse ∧ Applicative` container — and the more interesting
-`Comonad`/Review dual: `extract` is a lawful direct `CanGet`, though `extract` + `map` is
-NOT a lawful Lens on any multi-position container.
+Two bridges are left for the reader (the package scaladoc sketches both):
+`Applicative` ⇒ `CanReverseGet` — `pure` is `reverseGet`, but ship it as a *direct*
+capability given, not a `Review` optic given, or it ambiguates against any element
+optic on the same container — and the more interesting `Comonad`/Review dual:
+`extract` is a lawful direct `CanGet`, though `extract` + `map` is NOT a lawful Lens
+on any multi-position container.
 
 ## When not to use capabilities
 

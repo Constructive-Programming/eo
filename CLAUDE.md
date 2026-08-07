@@ -16,7 +16,7 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 
 | Module | Directory | Artifact | Purpose |
 |--------|-----------|----------|---------|
-| `core` | `core/` | `cats-eo` | Hand-written optics and data structures; `eo.instances` derives capability-carrying optic givens from cats typeclasses (`Traverse` → Traversal, `Functor`-only → Modify, `Foldable`-only → Fold, `NotGiven[Traverse]`-guarded for one-given-per-pair coherence) |
+| `core` | `core/` | `cats-eo` | Hand-written optics and data structures; `eo.instances` derives optics from cats typeclasses as CONSTRUCTORS, not givens (`traverseEach`, `functorModify`, `foldableFold`, `bitraverseFirst/Second/Both`, `representableLens(r)` positional Lens, `representableGrate`) — clients declare their own givens (optic given or direct SAM `Can*` instance), since multiple lawful optics per `(F[A], A)` pair rule out a canonical one |
 | `laws` | `laws/` | `cats-eo-laws` | Discipline-style law definitions (reusable by downstream projects) |
 | `tests` | `tests/` | — (not published) | Law-based and behavioural test suites |
 | `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |
