@@ -10,6 +10,9 @@
 //         parameter (now `Miss[A] <: Affine[A, Nothing]`) and `widenB` is
 //         deleted — retyping a miss is a plain upcast (source- and
 //         binary-breaking for direct `Miss`/`widenB` users).
+//   0.15: additive (kyo Record optics + kyo-schema bridge incl.
+//         Structure.Value optics), but cats-eo-kyo now REQUIRES JDK 25
+//         (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 //   0.12: core Traversal constructors + Optional.readOnly/selectReadOnly
 //         return types narrowed to the new concrete `Traversal` class /
 //         `PickFold` (binary-breaking descriptor changes); `type
