@@ -105,7 +105,7 @@ issue entirely: take `CanGet[T, Json]` and let the library do this for you.)
 
 ## Cats containers as capability evidence
 
-`dev.constructive.eo.instances` derives lawful optics from cats typeclasses — as
+The optic companions derive lawful optics straight from cats typeclasses — as
 **constructors, not givens**. A cats container admits several lawful optics at once
 (the whole-container traversal, a positional lens, a slot traversal, a grate), so no
 single one can be THE canonical given for its `(F[A], A)` pair. You pick the optic you
@@ -114,12 +114,12 @@ mean and declare the given in your own scope — exactly the
 
 | cats class | constructor | optic | capabilities |
 |---|---|---|---|
-| `Traverse[F]` | `traverseEach` | `Traversal` over the elements | `CanModify` + `CanFold` |
-| `Functor[F]` | `functorModify` | write-only `Modify` (`= F.map`) | `CanModify` |
-| `Foldable[F]` | `foldableFold` | read-only `Fold` | `CanFold` |
-| `Bitraverse[F]` | `bitraverseFirst` / `Second` / `Both` | `Traversal` over one slot (or every `A` of an `F[A, A]`) | `CanModify` + `CanFold` |
-| `Representable[F]` | `representableLens(r)` | lawful `Lens` at ONE representation point | `CanGet` + `CanModify` + `CanFold` |
-| `Representable[F]` | `representableGrate` | whole-container grate (`Distributive` with a concrete index) | positional rebuilds |
+| `Traverse[F]` | `Traversal.each` | `Traversal` over the elements | `CanModify` + `CanFold` |
+| `Functor[F]` | `Modify.each` | write-only `Modify` (`= F.map`) | `CanModify` |
+| `Foldable[F]` | `Fold[F, A]` | read-only `Fold` | `CanFold` |
+| `Bitraverse[F]` | `Traversal.first` / `second` / `both` | `Traversal` over one slot (or every `A` of an `F[A, A]`) | `CanModify` + `CanFold` |
+| `Representable[F]` | `Lens.representable(r)` | lawful `Lens` at ONE representation point | `CanGet` + `CanModify` + `CanFold` |
+| `Representable[F]` | `MultiFocus.representable` | whole-container grate (`Distributive` with a concrete index) | positional rebuilds |
 
 Two ways to turn a constructor into evidence — bind it as an optic given (the
 capability derivations do the rest), or skip optics entirely with a direct capability
@@ -127,13 +127,12 @@ instance (the `Can*` traits are SAM-convertible):
 
 ```scala mdoc
 import dev.constructive.eo.*
-import dev.constructive.eo.instances.*
-import dev.constructive.eo.optics.Traversal
+import dev.constructive.eo.optics.{Lens, Traversal}
 
 def bump[S](s: S)(using m: CanModify[S, Int]): S = m.modify(_ + 1)(s)
 
 locally {
-  given Traversal[List[Int], List[Int], Int, Int] = traverseEach
+  given Traversal[List[Int], List[Int], Int, Int] = Traversal.each
   bump(List(1, 2, 3))
 }
 
@@ -142,14 +141,14 @@ locally {
   bump(Vector(1, 2))
 }
 
-// The positional Lens no element bridge can produce — one point of a function:
-val atK = representableLens[[x] =>> String => x, Int](using summon)("k")
+// The positional Lens no whole-container bridge can produce — one point of a function:
+val atK = Lens.representable[[x] =>> String => x, Int](using summon)("k")
 atK.replace(99)((_: String).length)("k")
 
 atK.replace(99)((_: String).length)("other") // siblings survive
 ```
 
-Two bridges are left for the reader (the package scaladoc sketches both):
+Two bridges are left for the reader:
 `Applicative` ⇒ `CanReverseGet` — `pure` is `reverseGet`, but ship it as a *direct*
 capability given, not a `Review` optic given, or it ambiguates against any element
 optic on the same container — and the more interesting `Comonad`/Review dual:
