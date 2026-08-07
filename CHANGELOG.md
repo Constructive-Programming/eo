@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-08-07
+
+### Added
+
+- **`Record.iso[T]` + `Record.lens[F]("name")` — kyo Records as optics** (#89): a quoted-macro
+  `BijectionIso` between a kyo `Record` and a Scala 3 NamedTuple OR case class, with no arity
+  ceiling (TupleXXL-backed above 22 fields), and per-field `GetReplaceLens`es via kyo's
+  `Fields.Have` evidence. Requires kyo `1.0.0-RC6` (string-keyed Records).
+- **`eo.kyo.schema` — optional kyo-schema bridge** (#89): kyo-schema is an `Optional`
+  dependency (avro/circe pattern — add it yourself). Three seams: the **Focus bridge** maps
+  kyo-schema's mode lattice onto eo carriers (`Focus.Id` → Lens, `Maybe` → Optional, `Chunk` →
+  Traversal); the **codec byte faces** `Schema[A].prism[C]` / `stringPrism[C]` are Prisms
+  between encoded payloads and `A` under any kyo codec (json, msgpack, protobuf, …); and
+  **`StructureValues`** ports the circe module's playbook to the untyped `Structure.Value`
+  tree — one constructor prism per case, sibling-preserving `field` / `at` / `key` navigation,
+  an `each` traversal, `Plated[Value]` whole-document rewrites, `variant(name)` sum navigation
+  (matches both the declared `VariantCase` spelling and the wrapper-record encoding RC6
+  actually emits — getkyo/kyo#1860), and `Schema[A].valuePrism`, the typed ↔ untyped face.
+
+### Changed
+
+- **`cats-eo-kyo` now requires JDK 25** (#89): kyo `1.0.0-RC5+` ships Java-25-only bytecode.
+  The module drops out of the root aggregate on older JVMs; the rest of eo keeps its JDK 17
+  floor. CI tests on 17, 21, and 25 (25 is the primary lane).
+- **`resultOptic` rebuilt on `Result.foldError`** (#89): the success prism for `Result[E, A]`
+  folds failures AND panics into the miss arm directly — no `Maybe` → `Option` hop.
+
+### Fixed
+
+- **Docs-site kindlings derivation timeouts** (#90): mdoc's fence compiler never receives
+  `-Xmacro-settings` from sbt properties; the budget now routes through mdoc's own
+  `--scalac-options` channel, and heavy declared derivations live in compiled sample sources.
+  The docs build drops from minutes (flaky) to ~30s (reliable).
+
 ## [0.14.0] - 2026-07-29
 
 ### Added
