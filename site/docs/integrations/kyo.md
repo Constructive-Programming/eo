@@ -43,6 +43,7 @@ are holding and what the other side expects:
 | a NamedTuple or case class | a kyo `Record` (or back) | [`Record.iso[T]`](#records-record-iso-and-record-lens) — a staged bijection |
 | a `Record[F]` | one field, optic-shaped | [`Record.lens[F]("name")`](#records-record-iso-and-record-lens) |
 | a kyo-schema `Schema[A]` / `Focus` | eo optics over values or encoded payloads | [the `eo.kyo.schema` bridge](#the-kyo-schema-bridge-eo-kyo-schema) (optional dependency) |
+| an untyped `Structure.Value` tree | navigation, rewrites, or a typed leaf — without decoding the spine | [`StructureValues` + `Schema.valuePrism`](#the-untyped-tree-structure-value) |
 
 ## The service lens
 
@@ -319,6 +320,74 @@ bridges: `get ∘ reverseGet` is the identity (the codec roundtrip law);
 `reverseGet ∘ get` re-encodes, so byte-level layout normalizes.
 Decoding consumes ONE value — trailing input is accepted on reads and
 dropped by rewrites.
+
+### The untyped tree: `Structure.Value`
+
+Every `Schema[A]` encodes to kyo's untyped `Structure.Value` tree
+before a codec turns it into bytes — kyo's answer to circe's `Json`,
+except one tree round-trips through **every** codec. `StructureValues`
+ports the [circe module's](circe.md) playbook to that tree: one
+constructor prism per `Value` case (`str`, `integer`, `decimal`,
+`record`, `sequence`, …), sibling-preserving `field`/`at`/`key`
+navigation, an `each` traversal, a `Plated[Value]` for whole-document
+rewrites — plus `variant(name)`, sum navigation circe has no analog
+for. And `Schema[A].valuePrism` is the typed ↔ untyped face beside
+`prism`/`stringPrism`: decode only the leaf you touch, leave the spine
+untyped.
+
+```scala mdoc:silent
+import dev.constructive.eo.kyo.schema.StructureValues.{*, given}
+
+val cartV = Structure.encode(cart)
+```
+
+```scala mdoc
+field("id").getOption(cartV)
+
+// Untyped spine, typed leaves — only KyoItem is ever decoded:
+Structure.decode[KyoCart](
+  field("items").andThen(each).andThen(Schema[KyoItem].valuePrism)
+    .modify(i => i.copy(price = i.price + 0.5))(cartV)
+)
+
+// Sum navigation on the untyped side:
+val shapeV = Structure.encode[KyoShape](KyoShape.Circle(2.5))
+variant("Circle").andThen(field("radius")).andThen(decimal).modify(_ * 2)(shapeV)
+```
+
+`Plated.transform` / `rewrite` / `universe` walk the whole tree, any
+schema, any depth:
+
+```scala mdoc
+import dev.constructive.eo.optics.Plated
+
+Plated.transform[Structure.Value] {
+  case Structure.Value.Str(s) => Structure.Value.Str(s.toUpperCase)
+  case other                  => other
+}(cartV)
+```
+
+And because kyo ships a public `Schema[Structure.Value]`, the
+[byte faces above](#codec-byte-faces) apply to the untyped tree
+itself — edit one field inside an encoded payload with **no typed
+value materialised**, under any codec:
+
+```scala mdoc
+val valueJsonP = summon[Schema[Structure.Value]].stringPrism[Json]
+
+valueJsonP.andThen(field("id")).andThen(str).modify(_.toUpperCase)(
+  Schema[KyoCart].stringPrism[Json].reverseGet(cart)
+)
+```
+
+One wire-format wart: RC6's `Structure.encode` spells a sum as a
+single-field wrapper record (`Record(Chunk(("Circle", payload)))`) and
+never emits the `Value.VariantCase` case declared for sums — kyo's own
+`Path.Variant` navigation matches only `VariantCase`, so it can't see
+the encoder's output
+([getkyo/kyo#1860](https://github.com/getkyo/kyo/issues/1860)).
+`variant(name)` accepts both spellings and rebuilds whichever it read,
+so it keeps working whichever way upstream resolves it.
 
 ## JDK requirement
 
