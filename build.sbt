@@ -97,10 +97,13 @@ ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 ThisBuild / scalafixDependencies +=
   "org.typelevel" %% "typelevel-scalafix" % "0.5.0"
 ThisBuild / scalacOptions += "-Wunused:all"
-// Raise kindlings' per-derivation macro-expansion budget from the 2s default (which a loaded CI
-// runner intermittently trips: `deriveAsObject timed out after 2000ms`) to 30s. One namespace per
+// Raise kindlings' per-derivation macro-expansion budget from its 5s default (which a loaded
+// machine intermittently trips: `derived timed out after 5000ms`) to 30s. One namespace per
 // kindlings module (circe / cats / avro derivation); read by kindlings 0.3.x's `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
+// NB this reaches REGULAR compilation only — mdoc's fence compiler never receives
+// `-Xmacro-settings` (verified: a 1ms override doesn't fire in fences), so kindlings
+// derivations shown in docs pages live in site/src samples.scala, not in mdoc fences.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30,catsDerivation.timeout=30,avroDerivation.timeout=30"
 ThisBuild / tlFatalWarnings := true

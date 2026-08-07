@@ -51,6 +51,47 @@ enum Result:
   case Ok(value: Int)
   case Err(reason: String)
 
+// ---- kindlings-derived codecs ---------------------------------------
+//
+// These givens expand kindlings' hearth-based derivation macros
+// (budgeted by `<ns>Derivation.timeout` in `-Xmacro-settings`). They
+// are hosted here rather than inside mdoc fences because mdoc's fence
+// compiler never receives `-Xmacro-settings` (verified: a 1ms override
+// doesn't reach the expansion), so fences always run on the kindlings
+// 5s default — which a loaded machine intermittently trips. Compiled
+// sources DO honour the flag, and zinc caches them, so docs builds
+// stop re-expanding these derivations altogether.
+
+import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
+import hearth.kindlings.circederivation.KindlingsCodecAsObject
+import io.circe.Codec
+
+final case class UserAddress(street: String, zip: Int)
+object UserAddress:
+  given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derived
+
+final case class SiteUser(name: String, address: UserAddress)
+object SiteUser:
+  given Codec.AsObject[SiteUser] = KindlingsCodecAsObject.derived
+
+final case class Item(name: String, price: Double)
+object Item:
+  given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
+
+final case class Basket(owner: String, items: Vector[Item])
+object Basket:
+  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
+
+final case class OrderEvent(orderId: String, customer: String, total: Double)
+object OrderEvent:
+  given AvroEncoder[OrderEvent] = AvroEncoder.derived
+  given AvroDecoder[OrderEvent] = AvroDecoder.derived
+  given AvroSchemaFor[OrderEvent] = AvroSchemaFor.derived
+
+final case class BalanceSheet(id: Long, owner: String, total: Double)
+object BalanceSheet:
+  given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derived
+
 // ---- kyo Record / kyo-schema samples --------------------------------
 //
 // Same hosting rule, two new reasons: `Record.iso[T]` on a case class
