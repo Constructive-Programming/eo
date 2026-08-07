@@ -4,7 +4,7 @@
 
 `cats-eo` — an Existential Optics library for Scala 3, built on top of
 [cats](https://typelevel.org/cats/). Scala `3.8.3` via sbt `1.12.9`
-(`project/build.properties`), runs on JDK 17 or JDK 21.
+(`project/build.properties`), runs on JDK 17, 21, or 25 — but the `kyo` module (and therefore the docs site) needs JDK 25; on older JVMs it drops out of the root aggregate.
 
 Human contributors: see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the
 day-one bootstrap. This file is the parallel guide for AI agents.
@@ -26,7 +26,7 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration; the `eo.avro.circe` sub-package is the structural Avro ↔ circe bridge (`AvroJson` + the `.json` / `.avro` cursor faces on `AvroPrism`/`JsonPrism`), `eo.avro.jsoniter` the AST-free Avro ↔ JSON-bytes twin (`AvroJsoniter` + the same faces on `JsoniterPrism`), and `eo.avro.vulcan` bridges `vulcan.Codec` → `AvroCodec` (`AvroVulcan`) — circe, cats-eo-circe, jsoniter-scala-core, cats-eo-jsoniter, and vulcan are `Optional` deps, callers add them themselves. NB avro depends on the circe/jsoniter MODULES (Optional); the reverse would be a project cycle, so the cross-format bridge specs live in `avro/src/test` |
 | `jsoniter` | `jsoniter/` | `cats-eo-jsoniter` | jsoniter-scala optic integration |
 | `zio` | `zio/` | `cats-eo-zio` | ZIO 2 DI integration: `ZEnvironment` service lens, capability-driven `Ref` focus ops, `ZLayer` projection through `CanGet` |
-| `kyo` | `kyo/` | `cats-eo-kyo` | Kyo DI integration (kyo-prelude only): `TypeMap` service lens, `Env.focus` / `Layer.focus`, `Var` focus ops. Module opts out of `-Yexplicit-nulls` (kyo's inline kernel isn't nulls-clean) |
+| `kyo` | `kyo/` | `cats-eo-kyo` | Kyo integration (kyo-prelude 1.0.0-RC6 — kyo RC5+ ships Java-25-only bytecode, so this module REQUIRES JDK 25 and leaves the root aggregate on older JVMs; CI's primary lane is 25): `TypeMap` service lens, `Env.focus` / `Layer.focus`, `Var` focus ops; `Record.iso[T]` (quoted macro, NamedTuple OR case class ↔ `Record`, no arity ceiling) + `Record.lens[F]("name")` field lenses via `Fields.Have`; the `eo.kyo.schema` sub-package bridges kyo-schema (`% Optional` — callers add it themselves, avro/circe pattern): `Focus` → Lens/Optional, `Schema.prism[Codec]` / `stringPrism` byte-face prisms, and `StructureValues` — optics over the untyped `Structure.Value` tree (constructor prisms, `field`/`at`/`key`/`each`/`variant` navigation, `Plated[Value]`, `Schema.valuePrism` typed↔untyped; `variant` accepts both the declared `VariantCase` spelling AND the single-field wrapper record RC6's encoder actually emits). Module opts out of `-Yexplicit-nulls` (kyo's inline kernel isn't nulls-clean) and `-Wconf`-silences kyo-schema-origin warnings |
 | `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
 
 The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,

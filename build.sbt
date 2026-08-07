@@ -29,18 +29,25 @@ ThisBuild / developers := List(
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
 // scalac side, `javacOptions --release 17` on the javac side). JDK 25+
-// no longer accepts `--release 8`, and our CI matrix tests only on 17
-// and 21 — so 17 is the honest floor. Downstream consumers on older
-// JDKs must use `cats-eo 0.1.x`-era artifacts compiled with a pre-25
-// toolchain.
+// no longer accepts `--release 8`, and our CI matrix tests 17 and 21 —
+// so 17 is the honest floor for every module EXCEPT `kyo`, which
+// overrides to 25 (kyo RC5+ is Java-25-only bytecode). Downstream
+// consumers on older JDKs must use `cats-eo 0.1.x`-era artifacts
+// compiled with a pre-25 toolchain.
 ThisBuild / tlJdkRelease := Some(17)
 
-// GitHub Actions matrix: JDK 17 (LTS) and JDK 21 (current LTS).
+// GitHub Actions matrix: JDK 25 FIRST — the head entry is the primary
+// JVM for the publish / site / dependency-submission jobs, and it must
+// be 25 because the kyo module (and the docs site that depends on it)
+// only builds there (kyo RC5+ ships Java-25-only bytecode). The 17
+// (LTS floor) and 21 (LTS) lanes still test every other module; the kyo
+// module leaves the aggregate on those JVMs (see `kyoBuildActive`).
 // Scala version comes from the scalaVersion ThisBuild setting
 // below via `crossScalaVersions`.
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / crossScalaVersions := Seq(scala3Version)
 ThisBuild / githubWorkflowJavaVersions := Seq(
+  JavaSpec.temurin("25"),
   JavaSpec.temurin("17"),
   JavaSpec.temurin("21"),
 )
@@ -94,9 +101,11 @@ ThisBuild / scalacOptions += "-Wunused:all"
 // machine intermittently trips: `derived timed out after 5000ms`) to 30s. One namespace per
 // kindlings module (circe / cats / avro derivation); read by kindlings 0.3.x's `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
-// NB this reaches REGULAR compilation only — mdoc's fence compiler never receives
-// `-Xmacro-settings` (verified: a 1ms override doesn't fire in fences), so kindlings
-// derivations shown in docs pages live in site/src samples.scala, not in mdoc fences.
+// NB this reaches REGULAR compilation only — mdoc's fence compiler ignores the
+// -Xmacro-settings that arrive via mdoc.properties (verified: a 1ms canary never fires
+// through that route). Fences get the budget through mdoc's OWN --scalac-options CLI
+// argument instead (`mdocExtraArguments` on the docs project, same canary fires there),
+// and the heaviest doc derivations are additionally hosted in site/src compiled samples.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30,catsDerivation.timeout=30,avroDerivation.timeout=30"
 ThisBuild / tlFatalWarnings := true
@@ -351,7 +360,30 @@ lazy val zioCore = Ziverge %% "zio" % "2.1.24"
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
 // above it, matching Kyo's own module-granularity doctrine.
-lazy val kyoPrelude = GetKyo %% "kyo-prelude" % "0.19.0"
+// NB kyo 1.0.0-RC5+ ships Java 25 bytecode (class file 69) wholesale, so
+// kyo's macro classes can only LOAD in a JDK 25+ compiler JVM. The kyo
+// module therefore builds on a 25 toolchain (`tlJdkRelease := 25` there)
+// and drops out of the root aggregate on older JVMs — see `kyoBuildActive`.
+val KyoVersion = "1.0.0-RC6"
+lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
+// kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
+// Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
+// its types, callers who want it add it themselves (avro/circe pattern).
+// The json codec artifact is test-only fuel for the byte-face prisms.
+lazy val kyoSchema = GetKyo %% "kyo-schema" % KyoVersion
+lazy val kyoSchemaJson = GetKyo %% "kyo-schema-json" % KyoVersion
+
+// kyo requires a Java 25 runtime (see the KyoVersion note): on older JVMs
+// the kyo module leaves the aggregate entirely — `sbt test` / `compile` /
+// scalafmt sweeps skip it, and the 17/21 CI lanes cover everything else.
+// The primary CI lane (and publish / site jobs) run JDK 25 with the whole
+// build; other modules keep emitting -release 17 bytecode regardless.
+val kyoBuildActive: Boolean =
+  sys
+    .props
+    .get("java.specification.version")
+    .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
+
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
@@ -444,17 +476,18 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
 lazy val root: Project = project
   .in(file("."))
   .aggregate(
-    core,
-    laws,
-    tests,
-    generics,
-    circeIntegration,
-    avroIntegration,
-    jsoniterIntegration,
-    zioIntegration,
-    kyoIntegration,
-    schemes,
-    schemesLaws,
+    (Seq[ProjectReference](
+      core,
+      laws,
+      tests,
+      generics,
+      circeIntegration,
+      avroIntegration,
+      jsoniterIntegration,
+      zioIntegration,
+      schemes,
+      schemesLaws,
+    ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
   )
   .settings(commonSettings *)
   .settings(
@@ -742,8 +775,18 @@ lazy val kyoIntegration: Project = project
     // opt-out; every other module keeps the flag.
     scalacOptions -= "-Yexplicit-nulls",
     Test / scalacOptions -= "-Yexplicit-nulls",
+    // Same phenomenon, different flag: kyo-schema's `Schema.derived` inline
+    // machinery re-typechecks its OWN sources inside our units and trips our
+    // -Werror on safe-init warnings kyo suppresses with flags we don't set.
+    // Silence by ORIGIN (kyo-schema source paths), keeping our code strict.
+    scalacOptions += "-Wconf:src=kyo-schema/.*:s",
+    // kyo 1.0.0-RC5+ is Java-25-only bytecode, so this artifact honestly
+    // targets 25 too (the ThisBuild floor stays 17 for every other module).
+    tlJdkRelease := Some(25),
     libraryDependencies += cats,
     libraryDependencies += kyoPrelude,
+    libraryDependencies += kyoSchema % Optional,
+    libraryDependencies += kyoSchemaJson % Test,
     libraryDependencies += discipline % Test,
   )
 
@@ -804,11 +847,27 @@ lazy val docs: Project = project
     // it here so jsoniter.md mdoc blocks can derive `JsonValueCodec[A]` via
     // `JsonCodecMaker.make` against the live classpath.
     libraryDependencies += jsoniterMacros,
+    // kyo-schema is `Optional` on kyoIntegration (callers add it
+    // themselves); surface it plus the json codec here so kyo.md can
+    // document the `eo.kyo.schema` bridge against the live classpath.
+    libraryDependencies += kyoSchema,
+    libraryDependencies += kyoSchemaJson,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
     // `solutions/`, `ci-secrets.md`) that Laika should not ingest.
     mdocIn := (ThisBuild / baseDirectory).value / "site" / "docs",
+    // The kindlings derivation budget for FENCES. mdoc's compiler ignores
+    // the -Xmacro-settings that reach it via mdoc.properties but honours
+    // its own --scalac-options argument (canary-verified both ways), so
+    // this is the only channel that stops "timed out after 5000ms" fence
+    // flakes on loaded machines — field-navigation macros (codecPrism)
+    // summon kindlings derivations at expansion even when the doc ADTs
+    // themselves are hosted in compiled samples.
+    mdocExtraArguments ++= Seq(
+      "--scalac-options",
+      "-Xmacro-settings:circeDerivation.timeout=60,catsDerivation.timeout=60,avroDerivation.timeout=60",
+    ),
     // mdoc variable substitutions — site pages can reference
     // `@VERSION@` to always display the current version.
     mdocVariables ++= Map(

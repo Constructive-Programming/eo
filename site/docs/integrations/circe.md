@@ -57,13 +57,17 @@ import io.circe.Codec
 import io.circe.syntax.*
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
-case class Address(street: String, zip: Int)
-object Address:
-  given Codec.AsObject[Address] = KindlingsCodecAsObject.derived
-
-case class Person(name: String, age: Int, address: Address)
-object Person:
-  given Codec.AsObject[Person] = KindlingsCodecAsObject.derived
+// The root ADTs — hosted at package level with kindlings-derived
+// codecs (their heavy derivations run in compiled sources, and the
+// smaller fence-local derivations below run under the raised mdoc
+// derivation budget):
+//
+//   case class Address(street: String, zip: Int)
+//   object Address:
+//     given Codec.AsObject[Address] = KindlingsCodecAsObject.derived
+//
+//   case class Person(name: String, age: Int, address: Address)  // ditto
+import dev.constructive.eo.docs.circedocs.{Address, Person}
 ```
 
 Construct a Prism to the root type, then drill into fields.
@@ -124,13 +128,11 @@ streetP.modifyUnsafe(_.toUpperCase)(stump).noSpacesSortKeys
 `.at(i)` drills into the `i`-th element of a JSON array:
 
 ```scala mdoc:silent
-case class Order(name: String)
-object Order:
-  given Codec.AsObject[Order] = KindlingsCodecAsObject.derived
-
-case class Basket(owner: String, items: Vector[Order])
-object Basket:
-  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
+// Same hosting pattern — kindlings-derived Codec.AsObject on both:
+//
+//   case class Order(name: String)
+//   case class Basket(owner: String, items: Vector[Order])
+import dev.constructive.eo.docs.circedocs.{Basket, Order}
 ```
 
 ```scala mdoc

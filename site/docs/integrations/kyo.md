@@ -40,6 +40,10 @@ are holding and what the other side expects:
 | an optic | a `Layer` in the wiring graph ([Wiring with layers](https://getkyo.io/latest/kyo-prelude/#wiring-with-layers)) | [`Layer.focus`](#kyo-docs-examples-through-optics) — the optic becomes the layer's wiring function |
 | an optic | a `TypeMap` for `Env.runAll` overrides | [`service` + `.andThen`](#the-service-lens) |
 | a `TypeMap`, `Maybe`, `Result`, or `Var` state | eo capability evidence (`CanGet[T, A]`, `CanModify[T, A]`, …) | [`import dev.constructive.eo.kyo.given`](#automatic-capability-givens) — no hand-written given |
+| a NamedTuple or case class | a kyo `Record` (or back) | [`Record.iso[T]`](#records-record-iso-and-record-lens) — a staged bijection |
+| a `Record[F]` | one field, optic-shaped | [`Record.lens[F]("name")`](#records-record-iso-and-record-lens) |
+| a kyo-schema `Schema[A]` / `Focus` | eo optics over values or encoded payloads | [the `eo.kyo.schema` bridge](#the-kyo-schema-bridge-eo-kyo-schema) (optional dependency) |
+| an untyped `Structure.Value` tree | navigation, rewrites, or a typed leaf — without decoding the spine | [`StructureValues` + `Schema.valuePrism`](#the-untyped-tree-structure-value) |
 
 ## The service lens
 
@@ -174,6 +178,224 @@ Var.runTuple(Db("jdbc:h2", 4))(update).eval
 
 `getFocusOption` (via `CanGetOption`) covers partial foci — Prism,
 Optional and AffineFold evidence.
+
+## Records: `Record.iso` and `Record.lens`
+
+Kyo's [`Record`](https://getkyo.io/latest/kyo-data/) is a string-keyed
+typed record — `Record["name" ~ String & "age" ~ Int]` — and a
+NamedTuple or case class of the same shape is the same data.
+`Record.iso[T]` names that bijection, and it is a **staged macro**: the
+expansion is exactly the code you would write by hand for the concrete
+shape (`("name" ~ t._1) & ("age" ~ t._2)` one way, `getField` reads
+under kyo's own `Fields.Have` evidence the other), so there is no
+runtime `Fields` machinery, no per-call iteration, and no arity
+ceiling — beyond 22 fields the named-tuple expansion rides the same
+`scala.runtime.Tuples` calls the stdlib's `Tuple#apply` compiles to.
+
+```scala mdoc:silent
+type PersonR = "name" ~ String & "age" ~ Int
+
+val personI = Record.iso[(name: String, age: Int)]
+```
+
+```scala mdoc
+personI.get((name = "Alice", age = 30)).name
+
+personI.reverseGet("name" ~ "Ada" & "age" ~ 36)
+```
+
+Case classes take the same call — the rebuild goes through the primary
+constructor (`new`, not `copy`), so enum cases work too, and generic
+case classes are fine at concrete instantiations. (`Customer` is a
+plain `case class Customer(name: String, age: Int)` hosted at package
+level — the macro's `new T(...)` needs top-level targets, the same
+rule as [the generics macros](../generics.md).)
+
+```scala mdoc:silent
+import dev.constructive.eo.docs.Customer
+
+val customerI = Record.iso[Customer]
+```
+
+```scala mdoc
+customerI.get(Customer("Grace", 45)).age
+```
+
+`Record.lens[F]("name")` focuses one field, GenLens-style — the focus
+type is inferred from the same `Fields.Have` evidence that types
+`record.name` itself, and the replace is kyo's right-biased `&` merge.
+It composes with the iso like any other eo optic, and serves
+capability-consuming code:
+
+```scala mdoc:silent
+val ageL = Record.lens[PersonR]("age")
+```
+
+```scala mdoc
+val ageInCustomer = customerI.andThen(ageL)
+
+ageInCustomer.modify(_ + 1)(Customer("Grace", 45))
+```
+
+`reverseGet ∘ get` is the identity; `get ∘ reverseGet` is kyo's
+`compact` — extra entries a widened record carries are dropped, not
+preserved. Field lenses are construction-only (no automatic givens):
+the field *name* is not part of the `(S, A)` capability key, so two
+same-typed fields would collide.
+
+## The kyo-schema bridge: `eo.kyo.schema`
+
+[kyo-schema](https://getkyo.io/latest/kyo-schema/) derives a `Schema[A]`
+carrying structure, validation, wire configuration, and codecs. The
+`dev.constructive.eo.kyo.schema` sub-package turns that machinery into
+eo optics. It is an **optional dependency** — `cats-eo-kyo` does not
+pull kyo-schema transitively; add it (and a codec artifact, here json)
+yourself:
+
+```scala
+libraryDependencies += "io.getkyo" %% "kyo-schema" % "1.0.0-RC6"
+libraryDependencies += "io.getkyo" %% "kyo-schema-json" % "1.0.0-RC6"
+```
+
+### Focus bridge
+
+kyo-schema's `Focus[Root, Value, Mode]` is its own schema-checked
+optic, behind a mode lattice — and each mode maps onto the matching eo
+carrier: `Focus.Id` (product paths) → **Lens**, `Maybe` (sum-variant
+paths) → **Optional**, `Chunk` (collection paths) → **Traversal**
+(kyo's `Chunk` IS a `Seq`, so the mode is a lens onto the collection
+slot composed with `Traversal.each`). Bridged optics compose with
+everything else on this page. (`KyoItem` / `KyoCart` / `KyoShape` are
+package-level ADTs with `derives Schema`.)
+
+```scala mdoc:silent
+import dev.constructive.eo.kyo.schema.*
+import dev.constructive.eo.docs.{KyoCart, KyoItem, KyoShape}
+
+val priceL = Schema[KyoItem].focus(_.price).lens
+val radiusO = Schema[KyoShape].focus(_.Circle.radius).toOptional
+val itemsT = Schema[KyoCart].foreach(_.items).traversal
+
+val cart = KyoCart("c-1", Vector(KyoItem("apple", 1.0), KyoItem("pear", 2.0)))
+```
+
+```scala mdoc
+priceL.modify(_ * 2)(KyoItem("apple", 1.0))
+
+radiusO.getOption(KyoShape.Circle(2.5))
+
+radiusO.replace(9.9)(KyoShape.Square(4.0)) // miss: passes through untouched
+
+itemsT.foldMap(_.price)(cart)
+
+itemsT.andThen(priceL).modify(_ + 0.5)(cart).items
+```
+
+### Codec byte faces
+
+`Schema[A].encode` / `decode` under any kyo codec (json, msgpack,
+protobuf, …) are exactly a Prism's two halves: `prism[C]` over the
+encoded `Span[Byte]`, `stringPrism[C]` over the encoded `String`.
+`decode`'s `Result` folds straight into the prism's `Either` tear —
+failures and panics are the miss arm, carrying the original input back
+losslessly. Compose with a bridged Focus lens to read/modify a field
+*inside an encoded payload* in one expression:
+
+```scala mdoc:silent
+val itemJsonP = Schema[KyoItem].stringPrism[Json]
+```
+
+```scala mdoc
+itemJsonP.reverseGet(KyoItem("apple", 1.0))
+
+itemJsonP.andThen(priceL).modify(_ * 10)("""{"name":"apple","price":1.0}""")
+
+itemJsonP.getOption("not json") // miss
+
+itemJsonP.modify(identity)("not json") // misses pass writes through untouched
+```
+
+Lawfulness caveats, same as the [avro](avro.md)/[circe](circe.md)
+bridges: `get ∘ reverseGet` is the identity (the codec roundtrip law);
+`reverseGet ∘ get` re-encodes, so byte-level layout normalizes.
+Decoding consumes ONE value — trailing input is accepted on reads and
+dropped by rewrites.
+
+### The untyped tree: `Structure.Value`
+
+Every `Schema[A]` encodes to kyo's untyped `Structure.Value` tree
+before a codec turns it into bytes — kyo's answer to circe's `Json`,
+except one tree round-trips through **every** codec. `StructureValues`
+ports the [circe module's](circe.md) playbook to that tree: one
+constructor prism per `Value` case (`str`, `integer`, `decimal`,
+`record`, `sequence`, …), sibling-preserving `field`/`at`/`key`
+navigation, an `each` traversal, a `Plated[Value]` for whole-document
+rewrites — plus `variant(name)`, sum navigation circe has no analog
+for. And `Schema[A].valuePrism` is the typed ↔ untyped face beside
+`prism`/`stringPrism`: decode only the leaf you touch, leave the spine
+untyped.
+
+```scala mdoc:silent
+import dev.constructive.eo.kyo.schema.StructureValues.{*, given}
+
+val cartV = Structure.encode(cart)
+```
+
+```scala mdoc
+field("id").getOption(cartV)
+
+// Untyped spine, typed leaves — only KyoItem is ever decoded:
+Structure.decode[KyoCart](
+  field("items").andThen(each).andThen(Schema[KyoItem].valuePrism)
+    .modify(i => i.copy(price = i.price + 0.5))(cartV)
+)
+
+// Sum navigation on the untyped side:
+val shapeV = Structure.encode[KyoShape](KyoShape.Circle(2.5))
+variant("Circle").andThen(field("radius")).andThen(decimal).modify(_ * 2)(shapeV)
+```
+
+`Plated.transform` / `rewrite` / `universe` walk the whole tree, any
+schema, any depth:
+
+```scala mdoc
+import dev.constructive.eo.optics.Plated
+
+Plated.transform[Structure.Value] {
+  case Structure.Value.Str(s) => Structure.Value.Str(s.toUpperCase)
+  case other                  => other
+}(cartV)
+```
+
+And because kyo ships a public `Schema[Structure.Value]`, the
+[byte faces above](#codec-byte-faces) apply to the untyped tree
+itself — edit one field inside an encoded payload with **no typed
+value materialised**, under any codec:
+
+```scala mdoc
+val valueJsonP = summon[Schema[Structure.Value]].stringPrism[Json]
+
+valueJsonP.andThen(field("id")).andThen(str).modify(_.toUpperCase)(
+  Schema[KyoCart].stringPrism[Json].reverseGet(cart)
+)
+```
+
+One wire-format wart: RC6's `Structure.encode` spells a sum as a
+single-field wrapper record (`Record(Chunk(("Circle", payload)))`) and
+never emits the `Value.VariantCase` case declared for sums — kyo's own
+`Path.Variant` navigation matches only `VariantCase`, so it can't see
+the encoder's output
+([getkyo/kyo#1860](https://github.com/getkyo/kyo/issues/1860)).
+`variant(name)` accepts both spellings and rebuilds whichever it read,
+so it keeps working whichever way upstream resolves it.
+
+## JDK requirement
+
+kyo `1.0.0-RC5+` ships Java-25-only bytecode, and macros execute
+inside the compiler's JVM — so **compiling or running against
+`cats-eo-kyo` requires JDK 25**, unlike the rest of eo (JDK 17 floor).
+In this repo the kyo module drops out of the root aggregate on older
+JVMs and CI runs a dedicated 25 lane.
 
 ## Automatic capability givens
 

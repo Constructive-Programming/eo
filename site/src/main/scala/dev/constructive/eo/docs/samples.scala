@@ -91,3 +91,19 @@ object OrderEvent:
 final case class BalanceSheet(id: Long, owner: String, total: Double)
 object BalanceSheet:
   given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derived
+
+// ---- kyo Record / kyo-schema samples --------------------------------
+//
+// Same hosting rule, two new reasons: `Record.iso[T]` on a case class
+// stages `new T(...)` (outer-accessor trap on fence-local classes), and
+// kyo's `Schema.derived` wants package-level ADTs too.
+
+import kyo.Schema
+
+final case class KyoItem(name: String, price: Double) derives Schema
+
+final case class KyoCart(id: String, items: Vector[KyoItem]) derives Schema
+
+enum KyoShape derives Schema:
+  case Circle(radius: Double)
+  case Square(side: Double)

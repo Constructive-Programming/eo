@@ -5,7 +5,7 @@ import scala.annotation.unused
 
 import _root_.kyo.*
 
-import optics.{GetReplaceLens, Lens, PickMendPrism, Prism}
+import optics.{GetReplaceLens, Lens, MendTearPrism, PickMendPrism, Prism}
 
 /** Kyo dependency-injection integration (kyo-prelude only — Env / Var / Layer / TypeMap; no
   * kyo-core IO).
@@ -94,7 +94,8 @@ given maybeOptic[A]: PickMendPrism[Maybe[A], A, A] =
   Prism.optional(_.toOption, Maybe.Present(_))
 
 /** Success prism given for `Result[E, A]` — the analogue of the zio module's `Exit` prism; failures
-  * and panics pass through writes untouched.
+  * and panics pass through writes untouched. `Result`'s inline `foldError` lands directly on the
+  * `Either` tear the [[optics.MendTearPrism]] carrier stores — no `Maybe`/`Option` hops.
   */
-given resultOptic[E, A]: PickMendPrism[Result[E, A], A, A] =
-  Prism.optional(_.toMaybe.toOption, Result.succeed)
+given resultOptic[E, A]: MendTearPrism[Result[E, A], Result[E, A], A, A] =
+  Prism[Result[E, A], A](r => r.foldError(Right(_), _ => Left(r)), Result.succeed)
