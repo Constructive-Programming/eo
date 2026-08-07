@@ -348,7 +348,14 @@ lazy val zioCore = Ziverge %% "zio" % "2.1.24"
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
 // above it, matching Kyo's own module-granularity doctrine.
-lazy val kyoPrelude = GetKyo %% "kyo-prelude" % "0.19.0"
+val KyoVersion = "1.0.0-RC6"
+lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
+// kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
+// Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
+// its types, callers who want it add it themselves (avro/circe pattern).
+// The json codec artifact is test-only fuel for the byte-face prisms.
+lazy val kyoSchema = GetKyo %% "kyo-schema" % KyoVersion
+lazy val kyoSchemaJson = GetKyo %% "kyo-schema-json" % KyoVersion
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
@@ -739,8 +746,15 @@ lazy val kyoIntegration: Project = project
     // opt-out; every other module keeps the flag.
     scalacOptions -= "-Yexplicit-nulls",
     Test / scalacOptions -= "-Yexplicit-nulls",
+    // Same phenomenon, different flag: kyo-schema's `Schema.derived` inline
+    // machinery re-typechecks its OWN sources inside our units and trips our
+    // -Werror on safe-init warnings kyo suppresses with flags we don't set.
+    // Silence by ORIGIN (kyo-schema source paths), keeping our code strict.
+    scalacOptions += "-Wconf:src=kyo-schema/.*:s",
     libraryDependencies += cats,
     libraryDependencies += kyoPrelude,
+    libraryDependencies += kyoSchema % Optional,
+    libraryDependencies += kyoSchemaJson % Test,
     libraryDependencies += discipline % Test,
   )
 
