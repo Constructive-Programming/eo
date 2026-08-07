@@ -389,17 +389,18 @@ leaf is materialised as `A`:
 
 ```scala mdoc:silent
 import dev.constructive.eo.circe.codecPrism
-import io.circe.Codec
 import io.circe.syntax.*
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 
-case class UserAddress(street: String, zip: Int)
-object UserAddress:
-  given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derived
-
-case class SiteUser(name: String, address: UserAddress)
-object SiteUser:
-  given Codec.AsObject[SiteUser] = KindlingsCodecAsObject.derived
+// The payload's case classes — hosted at package level in
+// dev.constructive.eo.docs with kindlings-derived codecs (heavy
+// derivation macros run in compiled sources, not mdoc fences):
+//
+//   case class UserAddress(street: String, zip: Int)
+//   object UserAddress:
+//     given Codec.AsObject[UserAddress] = KindlingsCodecAsObject.derived
+//
+//   case class SiteUser(name: String, address: UserAddress)   // ditto
+import dev.constructive.eo.docs.{SiteUser, UserAddress}
 
 val userStreet = codecPrism[SiteUser].address.street
 ```
@@ -433,13 +434,11 @@ only the focused leaf of each element is decoded. The `.each`
 step splits the Prism into a `JsonTraversal`:
 
 ```scala mdoc:silent
-case class Item(name: String, price: Double)
-object Item:
-  given Codec.AsObject[Item] = KindlingsCodecAsObject.derived
-
-case class Basket(owner: String, items: Vector[Item])
-object Basket:
-  given Codec.AsObject[Basket] = KindlingsCodecAsObject.derived
+// Same hosting pattern — kindlings-derived Codec.AsObject on both:
+//
+//   case class Item(name: String, price: Double)
+//   case class Basket(owner: String, items: Vector[Item])
+import dev.constructive.eo.docs.{Basket, Item}
 ```
 
 ```scala mdoc
@@ -672,16 +671,15 @@ materialised on either side:
 ```scala mdoc:silent
 import dev.constructive.eo.avro as eoavro
 import dev.constructive.eo.avro.AvroCodec
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
 import org.apache.avro.generic.{GenericDatumWriter, GenericRecord}
 import org.apache.avro.io.EncoderFactory
 
-case class OrderEvent(orderId: String, customer: String, total: Double)
-object OrderEvent:
-  given AvroEncoder[OrderEvent] = AvroEncoder.derived
-  given AvroDecoder[OrderEvent] = AvroDecoder.derived
-  given AvroSchemaFor[OrderEvent] = AvroSchemaFor.derived
+// Hosted in dev.constructive.eo.docs with kindlings-derived
+// AvroEncoder / AvroDecoder / AvroSchemaFor givens:
+//
+//   case class OrderEvent(orderId: String, customer: String, total: Double)
+import dev.constructive.eo.docs.OrderEvent
 
 // Stand-in for an inbound Kafka record: serialise an OrderEvent to
 // binary under the same schema the prism caches.
@@ -999,19 +997,20 @@ whole handler is a short pipeline: `decode → store → stamp →
 encode`.
 
 ```scala mdoc:silent
-import io.circe.{Codec, Json}
+import io.circe.Json
 import io.circe.syntax.*
 import io.circe.parser.decode
-import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import dev.constructive.eo.generics.lens
 
 // cats.Eval stands in for your effect type (cats-effect IO, ZIO,
 // Future…) — deferred, has map/flatMap, already on the classpath.
 import cats.Eval
 
-final case class BalanceSheet(id: Long, owner: String, total: Double)
-object BalanceSheet:
-  given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derived
+// Hosted in dev.constructive.eo.docs with a kindlings-derived
+// Codec.AsObject given:
+//
+//   final case class BalanceSheet(id: Long, owner: String, total: Double)
+import dev.constructive.eo.docs.BalanceSheet
 
 // One derived lens onto the id — no hand-written getter/setter, and
 // it works even though `id` shares the case class with two other fields.
