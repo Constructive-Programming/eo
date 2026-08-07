@@ -348,14 +348,20 @@ lazy val zioCore = Ziverge %% "zio" % "2.1.24"
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
 // above it, matching Kyo's own module-granularity doctrine.
-val KyoVersion = "1.0.0-RC6"
+// RC4, deliberately NOT RC5/RC6: kyo's 1.0.0-RC5+ artifacts ship Java 25
+// bytecode (class file 69) wholesale — their macro classes then fail to
+// LOAD in a 17/21 compiler JVM (`UnsupportedClassVersionError` at
+// expansion), which breaks every consumer below JDK 25. RC4 is Java 17
+// bytecode with the same redesigned string-keyed Record / Fields.Have /
+// Schema APIs. Revisit when kyo re-releases with a proper -release flag.
+val KyoVersion = "1.0.0-RC4"
 lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
 // kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
 // Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
 // its types, callers who want it add it themselves (avro/circe pattern).
-// The json codec artifact is test-only fuel for the byte-face prisms.
+// At RC4 the Json codec still lives inside kyo-schema itself (the
+// per-codec artifact split is RC6), so tests need no extra artifact.
 lazy val kyoSchema = GetKyo %% "kyo-schema" % KyoVersion
-lazy val kyoSchemaJson = GetKyo %% "kyo-schema-json" % KyoVersion
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
@@ -754,7 +760,6 @@ lazy val kyoIntegration: Project = project
     libraryDependencies += cats,
     libraryDependencies += kyoPrelude,
     libraryDependencies += kyoSchema % Optional,
-    libraryDependencies += kyoSchemaJson % Test,
     libraryDependencies += discipline % Test,
   )
 

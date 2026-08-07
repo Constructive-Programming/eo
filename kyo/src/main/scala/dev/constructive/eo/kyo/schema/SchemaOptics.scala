@@ -72,9 +72,14 @@ extension [A](self: Schema[A])
 
   /** [[prism(Schema)]]'s String face (UTF-8), `Schema[Person].stringPrism[Json]` — primarily useful
     * with textual codecs.
+    *
+    * The write side renders through `encode` + a UTF-8 decode rather than kyo's `encodeString`: the
+    * latter's zero-copy ASCII path reflects into `String`'s private constructor and throws
+    * `IllegalAccessException` on any modern JDK unless the caller adds
+    * `--add-opens java.base/java.lang` — a runtime flag this bridge refuses to require.
     */
   def stringPrism[C <: Codec](using C, Frame): MendTearPrism[String, String, A, A] =
     Prism[String, A](
       s => self.decodeString(s).foldError(Right(_), _ => Left(s)),
-      a => self.encodeString(a),
+      a => new String(self.encode(a).toArrayUnsafe, java.nio.charset.StandardCharsets.UTF_8),
     )
