@@ -115,7 +115,7 @@ mean and declare the given in your own scope — exactly the
 | cats class | constructor | optic | capabilities |
 |---|---|---|---|
 | `Traverse[F]` | `Traversal.each` | `Traversal` over the elements | `CanModify` + `CanFold` |
-| `Functor[F]` | `Modify.each` | write-only `Modify` (`= F.map`) | `CanModify` |
+| `Functor[F]` | `Modify.forFunctor` | write-only `Modify` (`= F.map`) | `CanModify` |
 | `Foldable[F]` | `Fold[F, A]` | read-only `Fold` | `CanFold` |
 | `Bitraverse[F]` | `Traversal.first` / `second` / `both` | `Traversal` over one slot (or every `A` of an `F[A, A]`) | `CanModify` + `CanFold` |
 | `Representable[F]` | `Lens.representable(r)` | lawful `Lens` at ONE representation point | `CanGet` + `CanModify` + `CanFold` |

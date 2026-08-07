@@ -16,7 +16,7 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 
 | Module | Directory | Artifact | Purpose |
 |--------|-----------|----------|---------|
-| `core` | `core/` | `cats-eo` | Hand-written optics and data structures; cats-typeclass bridges live as CONSTRUCTORS on the optic companions, not givens (`Traversal.each`/`first`/`second`/`both`, `Modify.each`/`pEach`, `Fold[F, A]`, `Lens.representable(r)` positional Lens, `MultiFocus.representable` grate) — clients declare their own givens (optic given or direct SAM `Can*` instance), since multiple lawful optics per `(F[A], A)` pair rule out a canonical one |
+| `core` | `core/` | `cats-eo` | Hand-written optics and data structures; cats-typeclass bridges live as CONSTRUCTORS on the optic companions, not givens (`Traversal.each`/`first`/`second`/`both`, `Modify.forFunctor`/`pForFunctor`, `Fold[F, A]`, `Lens.representable(r)` positional Lens, `MultiFocus.representable` grate) — clients declare their own givens (optic given or direct SAM `Can*` instance), since multiple lawful optics per `(F[A], A)` pair rule out a canonical one |
 | `laws` | `laws/` | `cats-eo-laws` | Discipline-style law definitions (reusable by downstream projects) |
 | `tests` | `tests/` | — (not published) | Law-based and behavioural test suites |
 | `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |

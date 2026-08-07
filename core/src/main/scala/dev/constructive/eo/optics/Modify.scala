@@ -41,14 +41,14 @@ object Modify:
     *
     * @group Constructors
     */
-  def each[F[_]: Functor, A]: Modify[F[A], F[A], A, A] =
-    pEach[F, A, A]
+  def forFunctor[F[_]: Functor, A]: Modify[F[A], F[A], A, A] =
+    pForFunctor[F, A, A]
 
-  /** Polymorphic counterpart to [[each]] — allows focus type change.
+  /** Polymorphic counterpart to [[forFunctor]] — allows focus type change.
     *
     * @group Constructors
     */
-  def pEach[F[_], A, B](using F: Functor[F]): Modify[F[A], F[B], A, B] =
+  def pForFunctor[F[_], A, B](using F: Functor[F]): Modify[F[A], F[B], A, B] =
     Modify(f => fa => F.map(fa)(f))
 
 /** Concrete Optic subclass for a write-only modifier. Stores the writer `modifyFn` directly (so the

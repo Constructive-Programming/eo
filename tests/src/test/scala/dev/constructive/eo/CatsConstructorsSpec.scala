@@ -39,14 +39,14 @@ class CatsConstructorsSpec extends Specification:
     }
   }
 
-  "Modify.each (Functor)" should {
+  "Modify.forFunctor" should {
     "modify Function1 results — Modify IS CanModify evidence" >> {
       val g: String => Int = _.length
-      bump(g)(using Modify.each[[x] =>> String => x, Int])("four") === 5
+      bump(g)(using Modify.forFunctor[[x] =>> String => x, Int])("four") === 5
     }
-    "change the focus type via pEach" >> {
+    "change the focus type via pForFunctor" >> {
       Modify
-        .pEach[[x] =>> String => x, Int, String]
+        .pForFunctor[[x] =>> String => x, Int, String]
         .modify(_.toString)((_: String).length)(
           "ab"
         ) === "2"

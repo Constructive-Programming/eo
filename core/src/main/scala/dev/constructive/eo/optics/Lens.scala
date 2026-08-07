@@ -42,7 +42,7 @@ object Lens:
     * index(fa)(r)`, and the write rebuilds via `tabulate` with every other position read back from
     * the original — siblings survive, all three Lens laws hold. A Lens into a function's value at a
     * point, or position `r` of any tabulated shape — the one optic no whole-container bridge
-    * ([[Traversal.each]], [[Modify.each]], [[data.MultiFocus.representable]]) can produce.
+    * ([[Traversal.each]], [[Modify.forFunctor]], [[data.MultiFocus.representable]]) can produce.
     *
     * Lawful provided `==` is meaningful on `Representation` (it keys the rebuild).
     *
