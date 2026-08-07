@@ -14,15 +14,21 @@ of N&sup2; hand-written `.andThen` overloads.
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo" % "0.14.0"
+libraryDependencies += "dev.constructive" %% "cats-eo" % "0.15.0"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %% "cats-eo-laws"     % "0.14.0" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "0.14.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-circe"    % "0.14.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-avro"     % "0.14.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "0.15.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "0.15.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.15.0" // JDK 25
 ```
 
-Requires Scala 3.8.x on JDK 17 or JDK 21.
+Requires Scala 3.8.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
+which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 
 ## 60-second tour
 
@@ -96,6 +102,22 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   traversal across Avro arrays.
 - [`AvroFieldsTraversal`](https://eo.constructive.dev/integrations/avro.html) —
   multi-field flavour of `AvroTraversal`.
+- [`JsoniterPrism`](https://eo.constructive.dev/integrations/jsoniter.html) —
+  AST-free JSON-bytes optic over jsoniter-scala, with the same cursor
+  sugar and `Ior` failure surface as `JsonPrism`.
+- [Recursion schemes](https://eo.constructive.dev/schemes.html) —
+  cata / ana / hylo and the full typed zoo (para, apo, histo, futu,
+  zygo, …) as composable optics (`cats-eo-schemes`, laws in
+  `cats-eo-schemes-laws`).
+- [ZIO integration](https://eo.constructive.dev/integrations/zio.html) —
+  `ZEnvironment` service lens, `Ref` focus ops, `ZLayer` projection
+  through `CanGet` (`cats-eo-zio`).
+- [Kyo integration](https://eo.constructive.dev/integrations/kyo.html) —
+  `TypeMap` service lens, `Env` / `Layer` / `Var` focus ops,
+  `Record.iso` / `Record.lens` for kyo Records, and the optional
+  kyo-schema bridge: `Focus` → optics, codec byte-face prisms, and
+  optics over the untyped `Structure.Value` tree (`cats-eo-kyo`,
+  JDK 25).
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do
@@ -105,8 +127,12 @@ for cats typeclasses.
 
 - Getting started: <https://eo.constructive.dev/getting-started.html>
 - Macro-derived optics (`generics`): <https://eo.constructive.dev/generics.html>
+- Recursion schemes (`schemes`): <https://eo.constructive.dev/schemes.html>
 - circe integration: <https://eo.constructive.dev/integrations/circe.html>
 - Avro integration: <https://eo.constructive.dev/integrations/avro.html>
+- jsoniter-scala integration: <https://eo.constructive.dev/integrations/jsoniter.html>
+- ZIO integration: <https://eo.constructive.dev/integrations/zio.html>
+- Kyo integration (Records, kyo-schema bridge): <https://eo.constructive.dev/integrations/kyo.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
 - Benchmarks vs Monocle: [`BENCHMARKS.md`](./BENCHMARKS.md) (generated
   each sweep; B/op is the comparable metric, ns/op is directional)
