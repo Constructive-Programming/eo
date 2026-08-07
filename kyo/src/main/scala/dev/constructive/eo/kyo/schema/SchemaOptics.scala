@@ -4,7 +4,7 @@ package schema
 
 import _root_.kyo.*
 
-import optics.{GetReplaceLens, Lens, Optional, PickMendPrism, Prism, Traversal}
+import optics.{GetReplaceLens, Lens, MendTearPrism, Optional, Prism, Traversal}
 
 /** kyo-schema integration (optional dependency — add `kyo-schema` yourself to use this
   * sub-package). Two seams:
@@ -59,12 +59,22 @@ extension [A](self: Schema[A])
 
   /** Prism between `C`-encoded bytes and `A`: `Schema[Person].prism[Json]`. Compose with a bridged
     * Focus lens to read/modify a field inside an encoded payload in one expression.
+    *
+    * `decode`'s `Result` folds straight into the `Either` tear the [[optics.MendTearPrism]] carrier
+    * stores — one inline `foldError` (failures AND panics are the miss arm, which carries the
+    * original input back losslessly), no `Maybe`/`Option` hops.
     */
-  def prism[C <: Codec](using C, Frame): PickMendPrism[Span[Byte], A, A] =
-    Prism.optional(bytes => self.decode(bytes).toMaybe.toOption, a => self.encode(a))
+  def prism[C <: Codec](using C, Frame): MendTearPrism[Span[Byte], Span[Byte], A, A] =
+    Prism[Span[Byte], A](
+      bytes => self.decode(bytes).foldError(Right(_), _ => Left(bytes)),
+      a => self.encode(a),
+    )
 
   /** [[prism(Schema)]]'s String face (UTF-8), `Schema[Person].stringPrism[Json]` — primarily useful
     * with textual codecs.
     */
-  def stringPrism[C <: Codec](using C, Frame): PickMendPrism[String, A, A] =
-    Prism.optional(s => self.decodeString(s).toMaybe.toOption, a => self.encodeString(a))
+  def stringPrism[C <: Codec](using C, Frame): MendTearPrism[String, String, A, A] =
+    Prism[String, A](
+      s => self.decodeString(s).foldError(Right(_), _ => Left(s)),
+      a => self.encodeString(a),
+    )
