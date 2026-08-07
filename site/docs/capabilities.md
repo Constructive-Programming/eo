@@ -103,6 +103,36 @@ Same-clause parameters resolve left to right, so the optic pins the carrier befo
 free: with more than one instance in scope it fails with a misleading error. (Or skip the
 issue entirely: take `CanGet[T, Json]` and let the library do this for you.)
 
+## Cats containers as capability evidence
+
+Plain cats containers can satisfy capability demands with no hand-written optic:
+`import dev.constructive.eo.instances.given` derives one optic given per `(F[A], A)`
+pair from the strongest cats typeclass available on `F`:
+
+- `Traverse[F]` ⇒ a `Traversal` over the elements — `CanModify` **and** `CanFold`
+  (`List`, `Vector`, `Option`, `Either[E, *]`, `Chain`, `Map[K, *]`, …);
+- `Functor[F]` without `Traverse` ⇒ a write-only `Modify` — `CanModify` only
+  (`Function1[R, *]`, `Eval`, …);
+- `Foldable[F]` without `Traverse` ⇒ a `Fold` — `CanFold` only (`SortedSet`, …).
+
+```scala mdoc
+import dev.constructive.eo.*
+import dev.constructive.eo.instances.given
+
+def bump[S](s: S)(using m: CanModify[S, Int]): S = m.modify(_ + 1)(s)
+
+bump(List(1, 2, 3))
+
+bump(Option(41))
+```
+
+The `NotGiven[Traverse[F]]` guards keep the [coherence rule](#coherence-one-optic-given-per-s-a)
+intact — the strongest class elects the single given. A container that is `Functor` and
+`Foldable` but not `Traverse` is the one shape that still gets two candidates: summon the
+optic you mean explicitly there. Deliberately absent: `Comonad` ⇒ Getter (`extract` + `map`
+is not a lawful Lens on any multi-position container) and `Applicative` ⇒ Review (lawful,
+but a second given per pair would break summoning for the families above).
+
 ## When not to use capabilities
 
 In a hot inner loop where the optic is statically known, call the concrete optic directly —
