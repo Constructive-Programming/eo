@@ -4,18 +4,18 @@ package schema
 
 import _root_.kyo.*
 
-import optics.{GetReplaceLens, Lens, Optional, PickMendPrism, Prism}
+import optics.{GetReplaceLens, Lens, Optional, PickMendPrism, Prism, Traversal}
 
 /** kyo-schema integration (optional dependency — add `kyo-schema` yourself to use this
   * sub-package). Two seams:
   *
   *   - '''Focus bridge''' — kyo-schema's `Focus[Root, Value, Mode]` stores plain
-  *     getter/setter/update functions behind a mode lattice, so the two single-focus modes map
-  *     directly onto eo carriers: [[lens(Focus)]] (`Focus.Id`, product paths) and
-  *     [[toOptional(Focus)]] (`Maybe`, sum-variant paths). Bridged optics compose with everything
-  *     else in eo — `Record` lenses, byte-face prisms below, capability-consuming APIs. `Chunk`
-  *     mode (collection paths) is not bridged: eo Traversals are `MultiFocus`-carrier based and
-  *     kyo's positional zip-set has no lawful mapping onto them yet.
+  *     getter/setter/update functions behind a mode lattice, and each mode maps onto the matching
+  *     eo carrier: [[lens(Focus)]] (`Focus.Id`, product paths), [[toOptional(Focus)]] (`Maybe`,
+  *     sum-variant paths), and [[traversal(Focus)]] (`Chunk`, collection paths — kyo's `Chunk` IS a
+  *     `Seq`, so the mode is a Lens onto the collection slot composed with `Traversal.each[Seq, E]`
+  *     under cats' stock `Traverse[Seq]`; no extra instances). Bridged optics compose with
+  *     everything else in eo — `Record` lenses, byte-face prisms below, capability-consuming APIs.
   *   - '''Codec byte faces''' — `Schema[A].encode` / `decode` under any kyo codec (json, msgpack,
   *     protobuf, …) are exactly a Prism's two halves: [[prism(Schema)]] over the encoded
   *     `Span[Byte]`, [[stringPrism(Schema)]] over the encoded `String`. `get ∘ reverseGet` is the
@@ -43,6 +43,17 @@ extension [R, V](self: Focus[R, V, Maybe])
       r => self.get(r).fold(Left(r))(Right(_)),
       (r, v) => self.update(r)(_ => v),
     )
+
+extension [R, E](self: Focus[R, E, Chunk])
+
+  /** The collection-path Focus as an eo Traversal — a Lens onto the `Chunk` slot (read as the `Seq`
+    * it already is, written back through `Chunk.from`) composed with `Traversal.each[Seq, E]`. eo
+    * Traversal writes are size-preserving by construction (element-wise `modify` / broadcast
+    * `replace`), which is exactly the regime where kyo's positional Chunk setter is lawful.
+    */
+  def traversal: Traversal[R, R, E, E] =
+    Lens[R, Seq[E]](r => self.get(r), (r, es) => self.set(r, Chunk.from(es)))
+      .andThen(Traversal.each[Seq, E])
 
 extension [A](self: Schema[A])
 

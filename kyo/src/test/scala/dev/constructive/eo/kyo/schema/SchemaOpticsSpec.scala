@@ -13,6 +13,9 @@ private enum ShapeS derives Schema:
   case Circle(radius: Double)
   case Square(side: Double)
 
+private case class ItemS(name: String, price: Double) derives Schema
+private case class OrderS(id: String, items: Vector[ItemS]) derives Schema
+
 class SchemaOpticsSpec extends Specification:
 
   val person = PersonS("Alice", 30)
@@ -41,6 +44,26 @@ class SchemaOpticsSpec extends Specification:
     "miss on the other variant" >> (radiusO.getOption(square) === None)
     "modify the matching variant" >> (radiusO.modify(_ * 2)(circle) === ShapeS.Circle(5.0))
     "pass writes through untouched on a miss" >> (radiusO.replace(9.9)(square) === square)
+  }
+
+  "Focus.traversal bridge (Chunk mode)" should {
+    val itemsT = Schema[OrderS].foreach(_.items).traversal
+    val order = OrderS("ord-1", Vector(ItemS("apple", 1.0), ItemS("pear", 2.0)))
+    "modify every element" >> {
+      itemsT.modify(i => i.copy(price = i.price * 2))(order) ===
+        OrderS("ord-1", Vector(ItemS("apple", 2.0), ItemS("pear", 4.0)))
+    }
+    "leave sibling fields untouched" >> (itemsT.replace(ItemS("x", 0.0))(order).id === "ord-1")
+    "no-op on an empty collection" >> {
+      val empty = OrderS("ord-2", Vector.empty)
+      itemsT.modify(i => i.copy(price = 9.9))(empty) === empty
+    }
+    "fold across the elements" >> (itemsT.foldMap(_.price)(order) === 3.0)
+    "drill into each element's field through andThen" >> {
+      val priceInOrder = itemsT.andThen(Schema[ItemS].focus(_.price).lens)
+      (priceInOrder.foldMap(identity)(order) === 3.0)
+        .and(priceInOrder.modify(_ + 0.5)(order).items.map(_.price) === Vector(1.5, 2.5))
+    }
   }
 
   "Schema.stringPrism (json face)" should {
