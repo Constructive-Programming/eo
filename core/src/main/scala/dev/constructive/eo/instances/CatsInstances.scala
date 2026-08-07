@@ -3,7 +3,7 @@ package instances
 
 import scala.util.NotGiven
 
-import cats.{Applicative, Foldable, Functor, Traverse}
+import cats.{Foldable, Functor, Traverse}
 
 import optics.{Fold, ForgetFold, Modify, Traversal}
 
@@ -22,14 +22,17 @@ import optics.{Fold, ForgetFold, Modify, Traversal}
   * both `Functor` and `Foldable` but no `Traverse` still gets two competing givens — summon the one
   * you mean explicitly there.
   *
-  * `Applicative[F]` additionally provides [[CanReverseGet]] (`reverseGet = F.pure`) — as a DIRECT
-  * capability given, not a `Review` optic given: [[CanReverseGet]]'s optic derivation searches with
-  * `S` and `A` free, so a `Review[F[A], A]` given would ambiguate against [[traverseEach]] on every
-  * `Traverse ∧ Applicative` container. The direct given sidesteps the optic search and coexists
-  * with the element optics above.
+  * Two bridges are left for the interested reader (declare them in your own scope):
   *
-  * Deliberately absent: `Comonad` ⇒ Getter (its `extract` + `map` pair is not a lawful Lens —
-  * `replace(get(s))(s) ≠ s` for any multi-position `F`).
+  *   - `Applicative[F]` ⇒ [[CanReverseGet]] — `pure` IS `reverseGet`. Ship it as a DIRECT
+  *     capability given (`given [F[_]: Applicative as F, A]: CanReverseGet[F[A], A] = F.pure`), not
+  *     a `Review[F[A], A]` optic given: [[CanReverseGet]]'s optic derivation searches with `S` and
+  *     `A` free, so the Review would ambiguate against [[traverseEach]] on every `Traverse ∧
+  *     Applicative` container — `List` and `Option`, exactly the types `pure` matters for.
+  *   - The more interesting dual: `Comonad[F]` and Review. `extract` is a lawful read (a direct
+  *     [[CanGet]]), and `coflatMap` opens the door to Grate-shaped positional rebuilds — but note
+  *     `extract` + `map` is NOT a lawful Lens (`replace(get(s))(s) ≠ s` on any multi-position `F`),
+  *     which is why neither ships here by default.
   */
 
 /** `Traverse[F]` elects the full [[optics.Traversal]] — element-wise modify, monoidal folds. */
@@ -53,9 +56,3 @@ given foldableFold[F[_], A](using
     ng: NotGiven[Traverse[F]],
 ): ForgetFold[F[A], F, A] =
   Fold[F, A]
-
-/** `Applicative[F]` is exactly a build: `reverseGet = F.pure`. Direct capability given (see the
-  * package note for why it must not be a `Review` optic given).
-  */
-given applicativePure[F[_], A](using F: Applicative[F]): CanReverseGet[F[A], A] =
-  a => F.pure(a)

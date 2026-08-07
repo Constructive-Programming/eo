@@ -38,21 +38,6 @@ class CatsInstancesSpec extends Specification:
     }
   }
 
-  "Applicative containers (direct CanReverseGet)" should {
-    def wrap[T](n: Int)(using r: CanReverseGet[T, Int]): T = r.reverseGet(n)
-    "build via pure" >> {
-      (wrap[List[Int]](1) === List(1))
-        .and(wrap[Option[Int]](1) === Some(1))
-        .and(wrap[Either[String, Int]](1) === Right(1))
-    }
-    "coexist with the element optics on the same container" >> {
-      // The whole point of the direct given: a Review OPTIC given would
-      // ambiguate the CanReverseGet derivation against traverseEach here.
-      (bump(wrap[List[Int]](41)) === List(42))
-        .and(total(wrap[Vector[Int]](6)) === 6)
-    }
-  }
-
   "Foldable-only containers (Fold)" should {
     "satisfy CanFold for SortedSet" >> (total(SortedSet(1, 2, 3)) === 6)
     "not silently pretend to CanModify" >> {
