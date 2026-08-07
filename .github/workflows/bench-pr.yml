@@ -126,7 +126,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 25 # kyoIntegration (KyoDiBench dep) targets JDK 25 since v0.15.0
           cache: sbt
 
       - name: Base run (${{ steps.plan.outputs.base }})
