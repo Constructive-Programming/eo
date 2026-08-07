@@ -29,18 +29,25 @@ ThisBuild / developers := List(
 
 // The minimum Java runtime we support (`-java-output-version 17` on the
 // scalac side, `javacOptions --release 17` on the javac side). JDK 25+
-// no longer accepts `--release 8`, and our CI matrix tests only on 17
-// and 21 — so 17 is the honest floor. Downstream consumers on older
-// JDKs must use `cats-eo 0.1.x`-era artifacts compiled with a pre-25
-// toolchain.
+// no longer accepts `--release 8`, and our CI matrix tests 17 and 21 —
+// so 17 is the honest floor for every module EXCEPT `kyo`, which
+// overrides to 25 (kyo RC5+ is Java-25-only bytecode). Downstream
+// consumers on older JDKs must use `cats-eo 0.1.x`-era artifacts
+// compiled with a pre-25 toolchain.
 ThisBuild / tlJdkRelease := Some(17)
 
-// GitHub Actions matrix: JDK 17 (LTS) and JDK 21 (current LTS).
+// GitHub Actions matrix: JDK 25 FIRST — the head entry is the primary
+// JVM for the publish / site / dependency-submission jobs, and it must
+// be 25 because the kyo module (and the docs site that depends on it)
+// only builds there (kyo RC5+ ships Java-25-only bytecode). The 17
+// (LTS floor) and 21 (LTS) lanes still test every other module; the kyo
+// module leaves the aggregate on those JVMs (see `kyoBuildActive`).
 // Scala version comes from the scalaVersion ThisBuild setting
 // below via `crossScalaVersions`.
 ThisBuild / scalaVersion := scala3Version
 ThisBuild / crossScalaVersions := Seq(scala3Version)
 ThisBuild / githubWorkflowJavaVersions := Seq(
+  JavaSpec.temurin("25"),
   JavaSpec.temurin("17"),
   JavaSpec.temurin("21"),
 )
@@ -348,20 +355,30 @@ lazy val zioCore = Ziverge %% "zio" % "2.1.24"
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
 // above it, matching Kyo's own module-granularity doctrine.
-// RC4, deliberately NOT RC5/RC6: kyo's 1.0.0-RC5+ artifacts ship Java 25
-// bytecode (class file 69) wholesale — their macro classes then fail to
-// LOAD in a 17/21 compiler JVM (`UnsupportedClassVersionError` at
-// expansion), which breaks every consumer below JDK 25. RC4 is Java 17
-// bytecode with the same redesigned string-keyed Record / Fields.Have /
-// Schema APIs. Revisit when kyo re-releases with a proper -release flag.
-val KyoVersion = "1.0.0-RC4"
+// NB kyo 1.0.0-RC5+ ships Java 25 bytecode (class file 69) wholesale, so
+// kyo's macro classes can only LOAD in a JDK 25+ compiler JVM. The kyo
+// module therefore builds on a 25 toolchain (`tlJdkRelease := 25` there)
+// and drops out of the root aggregate on older JVMs — see `kyoBuildActive`.
+val KyoVersion = "1.0.0-RC6"
 lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
 // kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
 // Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
 // its types, callers who want it add it themselves (avro/circe pattern).
-// At RC4 the Json codec still lives inside kyo-schema itself (the
-// per-codec artifact split is RC6), so tests need no extra artifact.
+// The json codec artifact is test-only fuel for the byte-face prisms.
 lazy val kyoSchema = GetKyo %% "kyo-schema" % KyoVersion
+lazy val kyoSchemaJson = GetKyo %% "kyo-schema-json" % KyoVersion
+
+// kyo requires a Java 25 runtime (see the KyoVersion note): on older JVMs
+// the kyo module leaves the aggregate entirely — `sbt test` / `compile` /
+// scalafmt sweeps skip it, and the 17/21 CI lanes cover everything else.
+// The primary CI lane (and publish / site jobs) run JDK 25 with the whole
+// build; other modules keep emitting -release 17 bytecode regardless.
+val kyoBuildActive: Boolean =
+  sys
+    .props
+    .get("java.specification.version")
+    .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
+
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
 
@@ -454,17 +471,18 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
 lazy val root: Project = project
   .in(file("."))
   .aggregate(
-    core,
-    laws,
-    tests,
-    generics,
-    circeIntegration,
-    avroIntegration,
-    jsoniterIntegration,
-    zioIntegration,
-    kyoIntegration,
-    schemes,
-    schemesLaws,
+    (Seq[ProjectReference](
+      core,
+      laws,
+      tests,
+      generics,
+      circeIntegration,
+      avroIntegration,
+      jsoniterIntegration,
+      zioIntegration,
+      schemes,
+      schemesLaws,
+    ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
   )
   .settings(commonSettings *)
   .settings(
@@ -757,9 +775,13 @@ lazy val kyoIntegration: Project = project
     // -Werror on safe-init warnings kyo suppresses with flags we don't set.
     // Silence by ORIGIN (kyo-schema source paths), keeping our code strict.
     scalacOptions += "-Wconf:src=kyo-schema/.*:s",
+    // kyo 1.0.0-RC5+ is Java-25-only bytecode, so this artifact honestly
+    // targets 25 too (the ThisBuild floor stays 17 for every other module).
+    tlJdkRelease := Some(25),
     libraryDependencies += cats,
     libraryDependencies += kyoPrelude,
     libraryDependencies += kyoSchema % Optional,
+    libraryDependencies += kyoSchemaJson % Test,
     libraryDependencies += discipline % Test,
   )
 
