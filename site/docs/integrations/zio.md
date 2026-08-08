@@ -14,7 +14,21 @@ wiring functions already have optic shapes:
   extension methods** ([`getFocus` / `updateFocus` /
   `setFocus`](#ref-focus-ops)) rather than a wrapped `Ref[A]` view —
   which is the doctrine anyway: consume via capability, construct via
-  optic.
+  optic. [`TRef` / `TMap` get the same ops](#stm-focus-ops) returning
+  `USTM`, so focused updates compose into one atomic transaction.
+
+Three **optional-dependency sub-packages** extend the same treatment
+across the ZIO ecosystem (add the artifact yourself — the
+avro/circe/kyo-schema pattern):
+
+- [`eo.zio.schema`](#the-zio-schema-bridge) — zio-schema's own
+  `AccessorBuilder` extension point filled in with eo optics, the
+  untyped `DynamicValue` navigation kit, and the `BinaryCodec` byte
+  face (JSON, protobuf, Avro, msgpack, thrift).
+- [`eo.zio.json`](#zio-json-optics) — the circe playbook on
+  `zio.json.ast.Json`, plus a `JsonCursor → Optional` bridge.
+- [`eo.zio.prelude`](#zvalidation-optics) — `ZValidation` success /
+  error-accumulation optics.
 
 ```scala
 libraryDependencies += "dev.constructive" %% "cats-eo-zio" % "@VERSION@"
@@ -30,6 +44,11 @@ are holding and what the other side expects:
 | an optic (`lens[AppConfig](_.db)`) | a `ZLayer` in the [dependency graph](https://zio.dev/reference/di/building-dependency-graph) | [`focusLayer`](#layer-projection) — the optic becomes the layer's wiring function |
 | an optic | an environment transformation ([overriding a dependency](https://zio.dev/reference/di/providing-different-implementation-of-a-service)) | [`service` + `.andThen`](#the-service-lens) handed to `provideSomeEnvironment` |
 | a `ZEnvironment`, `Exit`, or `Ref` of either | eo capability evidence (`CanGet[T, A]`, `CanModify[T, A]`, …) | [`import dev.constructive.eo.zio.given`](#automatic-capability-givens) — no hand-written given |
+| a `TRef` / `TMap` | focused updates that compose atomically | [STM focus ops](#stm-focus-ops) — each op is a `USTM` |
+| a `Schema[A]` | a Lens per field, a Prism per case, a Traversal per collection | [`makeAccessors(EoAccessorBuilder)`](#the-zio-schema-bridge) |
+| encoded bytes or a `DynamicValue` tree | a targeted edit with no full decode | [`codec.prism` / `schema.dynamicPrism` + `DynamicValues`](#the-zio-schema-bridge) |
+| a `zio.json.ast.Json` or a `JsonCursor` path | eo navigation / composition | [`JsonValues` + `cursor.optional`](#zio-json-optics) |
+| a `ZValidation` | success / accumulated-error optics | [`Validations`](#zvalidation-optics) |
 
 ## The service lens
 
@@ -142,6 +161,36 @@ Unsafe.unsafe(implicit u =>
 `getFocus` (via `CanGet`) and `getFocusOption` (via `CanGetOption`,
 for Prism / Optional / AffineFold evidence) complete the read side.
 
+## STM focus ops
+
+The same four ops exist on `TRef[S]` (and keyed `getFocusAt` /
+`updateFocusAt` on `TMap[K, V]`), returning `USTM` instead of `UIO`. That is
+the point, not a spelling difference: focused updates across
+*several* transactional references compose into ONE atomic
+transaction — something the `Ref` ops structurally cannot express:
+
+```scala mdoc
+import _root_.zio.stm.*
+
+val syncPools =
+  for
+    primary <- TRef.make(Db("a", 1)).commit
+    replica <- TRef.make(Db("b", 1)).commit
+    _       <- STM.atomically(
+                 primary.updateFocus[Int](_ + 9)(using poolL) *>
+                   replica.updateFocus[Int](_ + 9)(using poolL)
+               )
+    out     <- primary.get.commit
+  yield out
+
+Unsafe.unsafe(implicit u =>
+  Runtime.default.unsafe.run(syncPools).getOrThrowFiberFailure()
+)
+```
+
+On `TMap`, absent keys pass writes through untouched — no entry is
+invented, exactly the miss semantics of every partial optic in eo.
+
 ## Automatic capability givens
 
 ZIO's types can also provide eo capabilities *by themselves*. A
@@ -173,6 +222,137 @@ bump(Exit.fail("boom"): Exit[String, Int])
 
 Coherence rule as everywhere in eo: these are THE optic givens for
 their `(S, A)` pairs — don't declare competing ones.
+
+## Chunk element optics
+
+`Chunks.each` / `Chunks.at(i)` / `Chunks.eachNonEmpty` are the
+collection legs everything below stands on (`DynamicValue.Sequence`,
+zio-json arrays, and `BinaryCodec` payloads all speak `Chunk`). zio
+ships no cats instances — the orphan `Traverse[Chunk]` given belongs
+to zio-interop-cats — so these are **constructors** over private
+adapters, per the
+[constructor-not-given doctrine](../capabilities.md#cats-containers-as-capability-evidence):
+
+```scala mdoc
+import dev.constructive.eo.zio.Chunks
+
+Chunks.each[Int, Int].modify(_ + 1)(Chunk(1, 2, 3))
+
+Chunks.at[Int](1).replace(9)(Chunk(1, 2, 3))
+```
+
+## The zio-schema bridge
+
+`eo.zio.schema` (add `dev.zio %% "zio-schema"` yourself). zio-schema
+ships [`AccessorBuilder`](https://zio.dev/zio-schema/) — a first-class
+extension point where an optics library plugs itself in.
+`EoAccessorBuilder` fills it with eo optics: one call returns a fused
+Lens per record field, a Prism per enum case, a Traversal per
+collection, for any `Schema[A]`, no macros involved:
+
+```scala mdoc:silent
+import _root_.zio.schema.*
+import dev.constructive.eo.zio.schema.*
+
+case class Person(name: String, age: Int)
+object Person:
+  given schema: Schema[Person] = DeriveSchema.gen[Person]
+```
+
+```scala mdoc
+val personCC = Person.schema.asInstanceOf[Schema.CaseClass2[String, Int, Person]]
+val (personName, personAge) = personCC.makeAccessors(EoAccessorBuilder)
+
+personAge.modify(_ + 1)(Person("ada", 41))
+```
+
+`DynamicValues` is the navigation kit for the **untyped
+`DynamicValue` tree** — what any `Schema[A]` encodes to before a
+codec turns it into bytes, so one kit covers every wire format
+zio-schema speaks. Constructor prisms (`str`, `int`, `record`, …, and
+the generic `primitive(standardType)`), sibling-preserving `field` /
+`at` / `key` / `variant` navigation, an `each` traversal, and a
+`Plated` instance for whole-tree rewrites. `schema.dynamicPrism`
+crosses between the two worlds:
+
+```scala mdoc
+import dev.constructive.eo.zio.schema.DynamicValues
+
+val dyn = Person.schema.toDynamic(Person("ada", 41))
+
+DynamicValues.field("age").andThen(DynamicValues.int).modify(_ + 1)(dyn)
+  .toTypedValue(using Person.schema)
+```
+
+And the byte face: any `BinaryCodec[A]` — zio-schema-json,
+-protobuf, -avro, -msgpack, and -thrift all produce one — is a Prism
+between encoded bytes and `A`, with the usual byte-face laws
+(roundtrip identity one way, re-encode normalisation the other,
+misses pass through writes):
+
+```scala mdoc
+import _root_.zio.schema.codec.JsonCodec as ZJsonCodec
+
+val personCodec = ZJsonCodec.schemaBasedBinaryCodec[Person](using Person.schema)
+
+new String(
+  personCodec.prism.modify(p => p.copy(age = p.age + 1))(
+    personCodec.encode(Person("ada", 41))
+  ).toArray
+)
+```
+
+## zio-json optics
+
+`eo.zio.json` (add `dev.zio %% "zio-json"` yourself) is the circe
+playbook on `zio.json.ast.Json`: constructor prisms, `field` / `at` /
+`each` navigation, `Plated`, and `JsonValues.text` as the
+`String ↔ Json` on-ramp. Plus the seam circe has no analog for:
+zio-json's own `JsonCursor` is already a typed path, and
+`cursor.optional` turns any existing one into a sibling-preserving eo
+Optional — cursor-based codebases get eo composition without
+rewriting a path:
+
+```scala mdoc
+import _root_.zio.json.ast.{Json, JsonCursor}
+import dev.constructive.eo.zio.json.*
+import dev.constructive.eo.zio.json.JsonValues.text
+
+val doc = Json.Obj(
+  "name" -> Json.Str("ada"),
+  "tags" -> Json.Arr(Json.Str("a"), Json.Str("b")),
+)
+
+JsonValues.field("name").andThen(JsonValues.str).getOption(doc)
+
+JsonCursor.field("tags").isArray.element(1).optional.replace(Json.Str("B"))(doc)
+
+text.andThen(JsonValues.field("name")).andThen(JsonValues.str)
+  .modify(_.toUpperCase)("""{"name":"ada"}""")
+```
+
+`JsonCodec[A].stringPrism` is the typed wire face — the same shape as
+[`AvroJson`](avro.md) and the kyo byte faces.
+
+## ZValidation optics
+
+`eo.zio.prelude` (add `dev.zio %% "zio-prelude"` yourself — zio-schema
+already carries it transitively). `Validations.success` is an
+Optional, not a Prism: a prism-shaped write would have to invent a
+log and would drop the one already there. `Validations.eachFailure`
+traverses every accumulated error and is polymorphic in the error
+type, so error translation is ordinary `modify`:
+
+```scala mdoc
+import _root_.zio.prelude.Validation
+import dev.constructive.eo.zio.prelude.Validations
+
+Validations.success[Nothing, String, Int].modify(_ * 2)(Validation.succeed(21))
+
+Validations.eachFailure[Nothing, String, String, Unit].modify(_.toUpperCase)(
+  Validation.validate(Validation.fail("first"), Validation.fail("second")).map(_ => ())
+)
+```
 
 ## Effectful modify
 

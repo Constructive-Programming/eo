@@ -1,6 +1,7 @@
 package dev.constructive.eo
 package zio
 
+import _root_.zio.stm.{TMap, TRef, USTM}
 import _root_.zio.{Exit, Ref, Tag, Trace, UIO, URIO, ZEnvironment, ZIO, ZLayer}
 
 import optics.{GetReplaceLens, Lens, PickMendPrism, Prism}
@@ -69,6 +70,50 @@ extension [S](ref: Ref[S])
   /** Atomically overwrite the focus. */
   def setFocus[A](a: A)(using m: CanModify[S, A])(using Trace): UIO[Unit] =
     ref.update(m.replace(a))
+
+// ---- STM focus ops ------------------------------------------------------
+//
+// The same four ops on `TRef` (and keyed `-At` variants on `TMap`),
+// returning `USTM`: focused updates across SEVERAL transactional
+// references compose into ONE atomic transaction under
+// `STM.atomically` — something the `Ref` ops structurally cannot
+// express. They live in this file deliberately: same-name extension
+// groups only form one overload set when declared in the same scope,
+// and a separate file breaks `ref.updateFocus[String](f)(using myLens)`
+// at every import site.
+
+extension [S](ref: TRef[S])
+
+  /** Read the focus of the current value. */
+  def getFocus[A](using g: CanGet[S, A]): USTM[A] =
+    ref.get.map(g.get)
+
+  /** Read a partial focus (Prism / Optional / AffineFold evidence) of the current value. */
+  def getFocusOption[A](using g: CanGetOption[S, A]): USTM[Option[A]] =
+    ref.get.map(g.getOption)
+
+  /** Rewrite the focus — one `CanModify`, one `TRef.update` pass, atomic within the transaction. */
+  def updateFocus[A](f: A => A)(using m: CanModify[S, A]): USTM[Unit] =
+    ref.update(m.modify(f))
+
+  /** Overwrite the focus. */
+  def setFocus[A](a: A)(using m: CanModify[S, A]): USTM[Unit] =
+    ref.update(m.replace(a))
+
+extension [K, V](tmap: TMap[K, V])
+
+  /** Read the focus of the value at `k` — `None` when the key is absent. (Named `-At`, not
+    * `getFocus`: a keyed overload has a different parameter shape from the `Ref`/`TRef` ops, and
+    * mixed-shape extension overloads break explicit `(using myLens)` calls on ALL of them.)
+    */
+  def getFocusAt[A](k: K)(using g: CanGet[V, A]): USTM[Option[A]] =
+    tmap.get(k).map(_.map(g.get))
+
+  /** Rewrite the focus of the value at `k` — absent keys pass through untouched (no entry is
+    * created), present ones update in place.
+    */
+  def updateFocusAt[A](k: K)(f: A => A)(using m: CanModify[V, A]): USTM[Unit] =
+    tmap.updateWith(k)(_.map(m.modify(f))).unit
 
 // ---- automatic capability provision ------------------------------------
 //

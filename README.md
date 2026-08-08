@@ -110,8 +110,12 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   zygo, …) as composable optics (`cats-eo-schemes`, laws in
   `cats-eo-schemes-laws`).
 - [ZIO integration](https://eo.constructive.dev/integrations/zio.html) —
-  `ZEnvironment` service lens, `Ref` focus ops, `ZLayer` projection
-  through `CanGet` (`cats-eo-zio`).
+  `ZEnvironment` service lens, `Ref` / `TRef` / `TMap` focus ops,
+  `ZLayer` projection through `CanGet`, `Chunk` element optics, and
+  optional sub-packages for zio-schema (`AccessorBuilder` optics, the
+  untyped `DynamicValue` kit, `BinaryCodec` byte faces), zio-json
+  (AST optics + `JsonCursor` bridge), and zio-prelude (`ZValidation`)
+  (`cats-eo-zio`).
 - [Kyo integration](https://eo.constructive.dev/integrations/kyo.html) —
   `TypeMap` service lens, `Env` / `Layer` / `Var` focus ops,
   `Record.iso` / `Record.lens` for kyo Records, and the optional
