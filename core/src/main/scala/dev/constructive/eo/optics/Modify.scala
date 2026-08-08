@@ -35,20 +35,14 @@ object Modify:
   def apply[S, T, A, B](modify: (A => B) => S => T): Modify[S, T, A, B] =
     new Modify(modify)
 
-  /** Monomorphic write-only Modify over any `Functor[F]`: `modify = F.map` — the [[Traversal.each]]
-    * analog for containers that are mappable but not foldable into view (`Function1[R, *]`, `Eval`,
-    * …). `Modify` extends `CanModifyP` directly, so the result is capability evidence as-is.
+  /** Write-only Modify over any `Functor[F]`: `modify = F.map` — the [[Traversal.each]] analog for
+    * containers that are mappable but not foldable into view (`Function1[R, *]`, `Eval`, …).
+    * Polymorphic in the focus (`map` is); `Modify` extends `CanModifyP` directly, so the result is
+    * capability evidence as-is.
     *
     * @group Constructors
     */
-  def functor[F[_]: Functor, A]: Modify[F[A], F[A], A, A] =
-    pFunctor[F, A, A]
-
-  /** Polymorphic counterpart to [[functor]] — allows focus type change.
-    *
-    * @group Constructors
-    */
-  def pFunctor[F[_], A, B](using F: Functor[F]): Modify[F[A], F[B], A, B] =
+  def functor[F[_], A, B](using F: Functor[F]): Modify[F[A], F[B], A, B] =
     Modify(f => fa => F.map(fa)(f))
 
 /** Concrete Optic subclass for a write-only modifier. Stores the writer `modifyFn` directly (so the

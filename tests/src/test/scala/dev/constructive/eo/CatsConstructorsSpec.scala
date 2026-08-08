@@ -42,11 +42,11 @@ class CatsConstructorsSpec extends Specification:
   "Modify.functor" should {
     "modify Function1 results — Modify IS CanModify evidence" >> {
       val g: String => Int = _.length
-      bump(g)(using Modify.functor[[x] =>> String => x, Int])("four") === 5
+      bump(g)(using Modify.functor[[x] =>> String => x, Int, Int])("four") === 5
     }
-    "change the focus type via pFunctor" >> {
+    "change the focus type" >> {
       Modify
-        .pFunctor[[x] =>> String => x, Int, String]
+        .functor[[x] =>> String => x, Int, String]
         .modify(_.toString)((_: String).length)(
           "ab"
         ) === "2"
