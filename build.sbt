@@ -866,7 +866,9 @@ lazy val docs: Project = project
     // themselves are hosted in compiled samples.
     mdocExtraArguments ++= Seq(
       "--scalac-options",
-      "-Xmacro-settings:circeDerivation.timeout=60,catsDerivation.timeout=60,avroDerivation.timeout=60",
+      // 120s: the 60s budget still tripped intermittently inside cold-JVM
+      // pre-commit hook sessions (cookbook.md avro fences on a loaded box).
+      "-Xmacro-settings:circeDerivation.timeout=120,catsDerivation.timeout=120,avroDerivation.timeout=120",
     ),
     // mdoc variable substitutions — site pages can reference
     // `@VERSION@` to always display the current version.

@@ -38,6 +38,24 @@ object Lens:
   def apply[S, A](get: S => A, enplace: (S, A) => S) =
     pLens[S, S, A, A](get, enplace)
 
+  /** `Representable[F]` (`F[A] ≅ Representation => A`) as a lawful Lens into ONE position: `get =
+    * index(fa)(r)`, and the write rebuilds via `tabulate` with every other position read back from
+    * the original — siblings survive, all three Lens laws hold. A Lens into a function's value at a
+    * point, or position `r` of any tabulated shape — the one optic no whole-container bridge
+    * ([[Traversal.each]], [[Modify.functor]], [[data.MultiFocus.representable]]) can produce.
+    *
+    * Lawful provided `==` is meaningful on `Representation` (it keys the rebuild).
+    *
+    * @group Constructors
+    */
+  def representable[F[_], A](using
+      R: cats.Representable[F]
+  )(r: R.Representation): GetReplaceLens[F[A], F[A], A, A] =
+    Lens[F[A], A](
+      fa => R.index(fa)(r),
+      (fa, a) => R.tabulate(x => if x == r then a else R.index(fa)(x)),
+    )
+
   /** Curried variant — accepts `replace: A => S => S` instead of `(S, A) => S`.
     *
     * @group Constructors
