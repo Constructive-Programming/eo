@@ -3,7 +3,7 @@ package optics
 
 import scala.collection.immutable.ArraySeq
 
-import cats.{Monoid, MonoidK, Traverse}
+import cats.{Applicative, Bitraverse, Eval, Monoid, MonoidK, Traverse}
 
 import data.{MultiFocus, MultiFocusK, PSVec}
 
@@ -164,6 +164,60 @@ object Traversal:
     */
   def pEach[T[_]: Traverse, A, B]: Traversal[T[A], T[B], A, B] =
     new TraverseTraversal[T, A, B]
+
+  /** `Bitraverse[F]` Traversal over the FIRST slot — the second slot rides along untouched
+    * (`Either`'s left, `Tuple2._1`, `Ior`'s left, `Validated`'s invalid, …). Feeds [[pEach]] with a
+    * left-slot `Traverse` adapter over `bitraverse` / `bifoldLeft` / `bifoldRight`.
+    *
+    * @group Constructors
+    */
+  def first[F[_, _], A, B, C](using BT: Bitraverse[F]): Traversal[F[A, C], F[B, C], A, B] =
+    pEach[[x] =>> F[x, C], A, B](using
+      new Traverse[[x] =>> F[x, C]]:
+        def traverse[G[_]: Applicative, A1, B1](fa: F[A1, C])(f: A1 => G[B1]): G[F[B1, C]] =
+          BT.bitraverse(fa)(f, Applicative[G].pure)
+        def foldLeft[A1, B1](fa: F[A1, C], b: B1)(f: (B1, A1) => B1): B1 =
+          BT.bifoldLeft(fa, b)(f, (b1, _) => b1)
+        def foldRight[A1, B1](fa: F[A1, C], lb: Eval[B1])(
+            f: (A1, Eval[B1]) => Eval[B1]
+        ): Eval[B1] =
+          BT.bifoldRight(fa, lb)(f, (_, lb1) => lb1)
+    )
+
+  /** [[first]]'s twin over the SECOND slot (`Either`'s right, `Tuple2._2`, …).
+    *
+    * @group Constructors
+    */
+  def second[F[_, _], A, B, C](using BT: Bitraverse[F]): Traversal[F[C, A], F[C, B], A, B] =
+    pEach[[x] =>> F[C, x], A, B](using
+      new Traverse[[x] =>> F[C, x]]:
+        def traverse[G[_]: Applicative, A1, B1](fa: F[C, A1])(f: A1 => G[B1]): G[F[C, B1]] =
+          BT.bitraverse(fa)(Applicative[G].pure, f)
+        def foldLeft[A1, B1](fa: F[C, A1], b: B1)(f: (B1, A1) => B1): B1 =
+          BT.bifoldLeft(fa, b)((b1, _) => b1, f)
+        def foldRight[A1, B1](fa: F[C, A1], lb: Eval[B1])(
+            f: (A1, Eval[B1]) => Eval[B1]
+        ): Eval[B1] =
+          BT.bifoldRight(fa, lb)((_, lb1) => lb1, f)
+    )
+
+  /** `Bitraverse[F]` at a single element type, both slots — every `A` position of an `F[A, A]`
+    * (`Ior[A, A]`, `(A, A)`, `Validated[A, A]`): fold or rewrite all of them in one pass.
+    *
+    * @group Constructors
+    */
+  def both[F[_, _], A, B](using BT: Bitraverse[F]): Traversal[F[A, A], F[B, B], A, B] =
+    pEach[[x] =>> F[x, x], A, B](using
+      new Traverse[[x] =>> F[x, x]]:
+        def traverse[G[_]: Applicative, A1, B1](fa: F[A1, A1])(f: A1 => G[B1]): G[F[B1, B1]] =
+          BT.bitraverse(fa)(f, f)
+        def foldLeft[A1, B1](fa: F[A1, A1], b: B1)(f: (B1, A1) => B1): B1 =
+          BT.bifoldLeft(fa, b)(f, f)
+        def foldRight[A1, B1](fa: F[A1, A1], lb: Eval[B1])(
+            f: (A1, Eval[B1]) => Eval[B1]
+        ): Eval[B1] =
+          BT.bifoldRight(fa, lb)(f, f)
+    )
 
   /** Monomorphic self-traversal from an explicit immediate-children view — focuses the values of
     * `S` that are themselves `S` (the immediate sub-terms), with `S` itself as the leftover
