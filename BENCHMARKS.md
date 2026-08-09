@@ -8,7 +8,7 @@
 > directional** and not comparable across runs/VMs. The usual JMH
 > disclaimer applies: "the numbers below are just data".
 
-<sub>source_sha: `c5e5d2d70fbbe311b040f14a6f2f412d519b486c` · date: `2026-08-07` · jdk: `temurin-21` · runner: `ubuntu-22.04` · jmh_params: `-i 5 -wi 3 -f 3 -t 1 -foe true -prof gc -rf json` · profile: `sweep:-i5-wi3-f3-t1-gc`</sub>
+<sub>source_sha: `175706d88e62c7fae8ab8daec8ba09a616094467` · date: `2026-08-09` · jdk: `temurin-21` · runner: `ubuntu-22.04` · jmh_params: `-i 5 -wi 3 -f 3 -t 1 -foe true -prof gc -rf json` · profile: `sweep:-i5-wi3-f3-t1-gc`</sub>
 
 
 ## AffineFoldBench
@@ -17,550 +17,550 @@
 |---|---|---:|---:|---:|---:|
 | `GetOption_0` | `-` | 0.9 ± 0.0 | 0.9 ± 0.0 | 0.0 | 0.0 |
 | `GetOption_0_asAffineFold` | `-` | 0.9 ± 0.0 | — | 0.0 | — |
-| `GetOption_0_asOptional` | `-` | 2.2 ± 0.0 | — | 16.0 | — |
+| `GetOption_0_asOptional` | `-` | 2.3 ± 0.0 | — | 16.0 | — |
 | `GetOption_0_empty` | `-` | 0.9 ± 0.0 | 0.9 ± 0.0 | 0.0 | 0.0 |
-| `GetOption_3` | `-` | 15.3 ± 0.0 | 10.6 ± 0.0 | 16.0 | 0.0 |
-| `GetOption_6` | `-` | 29.3 ± 0.2 | 26.0 ± 1.2 | 16.0 | 0.0 |
-| `GetOption_loyalty` | `-` | 1.0 ± 0.0 | 1.0 ± 0.0 | 0.0 | 0.0 |
-| `GetOption_loyalty_empty` | `-` | 1.0 ± 0.0 | 1.0 ± 0.0 | 0.0 | 0.0 |
+| `GetOption_3` | `-` | 14.7 ± 0.1 | 9.7 ± 0.0 | 16.0 | 0.0 |
+| `GetOption_6` | `-` | 33.1 ± 1.1 | 25.0 ± 0.3 | 16.0 | 0.0 |
+| `GetOption_loyalty` | `-` | 1.1 ± 0.0 | 1.0 ± 0.0 | 0.0 | 0.0 |
+| `GetOption_loyalty_empty` | `-` | 1.0 ± 0.0 | 1.1 ± 0.0 | 0.0 | 0.0 |
 
 ## AvroBytesBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `GraftPayload` | `-` | 160.0 ± 2.0 | — | 720.0 | — |
-| `ModifyCountry` | `-` | 328.7 ± 9.9 | — | 3,200.0 | — |
-| `ModifyPartner` | `-` | 390.2 ± 4.8 | — | 3,256.0 | — |
-| `ReadCountry` | `-` | 181.9 ± 5.5 | — | 520.0 | — |
-| `ReadPartner` | `-` | 211.2 ± 3.4 | — | 480.0 | — |
-| `SliceGraftPayload` | `-` | 334.0 ± 6.0 | — | 1,192.0 | — |
-| `naiveModifyCountry` | `-` | 2,682.7 ± 12.9 | — | 7,616.0 | — |
-| `naiveModifyPartner` | `-` | 2,754.1 ± 22.3 | — | 7,536.0 | — |
-| `naivePassthroughPayload` | `-` | 4,074.6 ± 144.3 | — | 10,600.1 | — |
-| `naiveReadCountry` | `-` | 1,643.5 ± 19.6 | — | 4,256.0 | — |
-| `naiveReadPartner` | `-` | 1,731.1 ± 38.6 | — | 4,264.0 | — |
-| `prunedReadCountry` | `-` | 736.2 ± 10.0 | — | 1,976.0 | — |
-| `prunedReadPartner` | `-` | 533.0 ± 6.1 | — | 1,592.0 | — |
+| `GraftPayload` | `-` | 163.0 ± 2.2 | — | 720.0 | — |
+| `ModifyCountry` | `-` | 354.3 ± 10.4 | — | 3,200.0 | — |
+| `ModifyPartner` | `-` | 445.2 ± 11.9 | — | 3,266.7 | — |
+| `ReadCountry` | `-` | 173.2 ± 3.5 | — | 520.0 | — |
+| `ReadPartner` | `-` | 208.0 ± 8.6 | — | 480.0 | — |
+| `SliceGraftPayload` | `-` | 338.1 ± 8.9 | — | 1,192.0 | — |
+| `naiveModifyCountry` | `-` | 2,573.0 ± 4.4 | — | 7,616.0 | — |
+| `naiveModifyPartner` | `-` | 2,667.7 ± 25.3 | — | 7,536.0 | — |
+| `naivePassthroughPayload` | `-` | 3,963.4 ± 26.7 | — | 10,600.1 | — |
+| `naiveReadCountry` | `-` | 1,621.5 ± 10.3 | — | 4,256.0 | — |
+| `naiveReadPartner` | `-` | 1,751.2 ± 22.0 | — | 4,264.0 | — |
+| `prunedReadCountry` | `-` | 747.9 ± 11.9 | — | 1,976.0 | — |
+| `prunedReadPartner` | `-` | 561.6 ± 5.9 | — | 1,592.0 | — |
 
 ## AvroDecodeReuseBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `cachedDecodeRecord` | `-` | 410.5 ± 2.2 | — | 1,224.0 | — |
-| `confluentRecordReader` | `-` | 434.2 ± 2.8 | — | 1,560.0 | — |
-| `confluentRecordReaderFresh` | `-` | 1,370.7 ± 54.5 | — | 3,696.0 | — |
-| `freshDecodeRecord` | `-` | 1,370.3 ± 8.2 | — | 3,344.0 | — |
+| `cachedDecodeRecord` | `-` | 392.3 ± 0.8 | — | 1,224.0 | — |
+| `confluentRecordReader` | `-` | 412.7 ± 8.7 | — | 1,565.3 | — |
+| `confluentRecordReaderFresh` | `-` | 1,352.9 ± 40.5 | — | 3,696.0 | — |
+| `freshDecodeRecord` | `-` | 1,343.7 ± 11.3 | — | 3,344.0 | — |
 
 ## AvroJsonBridgeBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `ClickToAvro` | `-` | 3,190.7 ± 24.6 | — | 9,389.4 | — |
-| `ClickToJson` | `-` | 2,821.7 ± 37.6 | — | 3,978.7 | — |
-| `WideToAvro` | `-` | 774.2 ± 13.6 | — | 6,584.0 | — |
-| `WideToJson` | `-` | 611.8 ± 22.5 | — | 1,472.0 | — |
-| `naiveClickToAvro` | `-` | 1,404.2 ± 7.6 | — | 3,928.0 | — |
-| `naiveClickToJson` | `-` | 2,688.9 ± 64.3 | — | 4,696.0 | — |
-| `naiveWideToAvro` | `-` | 944.2 ± 5.3 | — | 3,504.0 | — |
-| `naiveWideToJson` | `-` | 1,865.3 ± 46.7 | — | 4,376.0 | — |
+| `ClickToAvro` | `-` | 3,101.5 ± 28.5 | — | 9,400.0 | — |
+| `ClickToJson` | `-` | 2,881.1 ± 58.9 | — | 3,984.0 | — |
+| `WideToAvro` | `-` | 955.6 ± 9.5 | — | 6,552.0 | — |
+| `WideToJson` | `-` | 676.7 ± 18.0 | — | 1,472.0 | — |
+| `naiveClickToAvro` | `-` | 1,473.9 ± 10.1 | — | 3,928.0 | — |
+| `naiveClickToJson` | `-` | 2,720.3 ± 25.4 | — | 4,696.0 | — |
+| `naiveWideToAvro` | `-` | 988.8 ± 40.8 | — | 3,504.0 | — |
+| `naiveWideToJson` | `-` | 1,854.9 ± 39.8 | — | 4,376.0 | — |
 
 ## AvroVulcanBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `decode_bridged` | `-` | 217.9 ± 3.0 | — | 880.0 | — |
-| `decode_native` | `-` | 19.7 ± 0.0 | — | 48.0 | — |
-| `decode_vulcanRaw` | `-` | 210.0 ± 0.4 | — | 880.0 | — |
-| `encode_bridged` | `-` | 233.4 ± 8.8 | — | 1,234.7 | — |
-| `encode_native` | `-` | 13.0 ± 0.1 | — | 56.0 | — |
-| `encode_vulcanRaw` | `-` | 233.9 ± 5.7 | — | 1,240.0 | — |
-| `fieldGet_bridged` | `-` | 95.6 ± 0.9 | — | 432.0 | — |
-| `fieldGet_native` | `-` | 97.3 ± 2.6 | — | 432.0 | — |
-| `rootGet_bridged` | `-` | 384.0 ± 4.5 | — | 1,472.0 | — |
-| `rootGet_native` | `-` | 172.4 ± 2.5 | — | 600.0 | — |
+| `decode_bridged` | `-` | 227.4 ± 7.2 | — | 880.0 | — |
+| `decode_native` | `-` | 18.6 ± 0.0 | — | 48.0 | — |
+| `decode_vulcanRaw` | `-` | 214.0 ± 1.2 | — | 880.0 | — |
+| `encode_bridged` | `-` | 265.1 ± 10.2 | — | 1,256.0 | — |
+| `encode_native` | `-` | 12.0 ± 0.1 | — | 56.0 | — |
+| `encode_vulcanRaw` | `-` | 263.3 ± 5.2 | — | 1,261.3 | — |
+| `fieldGet_bridged` | `-` | 96.2 ± 0.3 | — | 432.0 | — |
+| `fieldGet_native` | `-` | 96.7 ± 0.6 | — | 432.0 | — |
+| `rootGet_bridged` | `-` | 426.1 ± 6.2 | — | 1,472.0 | — |
+| `rootGet_native` | `-` | 173.9 ± 3.2 | — | 600.0 | — |
 
 ## CapsBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `foldMapCap` | `-` | 21.9 ± 0.0 | — | 0.0 | — |
-| `foldMapDerivedHeld` | `-` | 22.0 ± 0.0 | — | 0.0 | — |
+| `foldMapCap` | `-` | 22.3 ± 0.0 | — | 0.0 | — |
+| `foldMapDerivedHeld` | `-` | 22.2 ± 0.0 | — | 0.0 | — |
 | `foldMapDerivedPerCall` | `-` | 21.7 ± 0.0 | — | 0.0 | — |
-| `foldMapDirect` | `-` | 21.7 ± 0.1 | — | 0.0 | — |
+| `foldMapDirect` | `-` | 21.2 ± 0.0 | — | 0.0 | — |
 | `getCap` | `-` | 1.2 ± 0.0 | — | 0.0 | — |
 | `getDeepCap` | `-` | 1.6 ± 0.0 | — | 0.0 | — |
-| `getDeepDirect` | `-` | 1.4 ± 0.0 | — | 0.0 | — |
-| `getDerivedHeld` | `-` | 2.3 ± 0.0 | — | 0.0 | — |
+| `getDeepDirect` | `-` | 1.5 ± 0.0 | — | 0.0 | — |
+| `getDerivedHeld` | `-` | 2.4 ± 0.0 | — | 0.0 | — |
 | `getDerivedPerCall` | `-` | 1.6 ± 0.0 | — | 0.0 | — |
 | `getDirect` | `-` | 1.1 ± 0.0 | — | 0.0 | — |
 | `modifyCap` | `-` | 4.2 ± 0.0 | — | 40.0 | — |
-| `modifyDeepCap` | `-` | 31.6 ± 0.3 | — | 176.0 | — |
-| `modifyDeepDirect` | `-` | 37.7 ± 0.1 | — | 152.0 | — |
-| `modifyDerivedHeld` | `-` | 5.4 ± 0.0 | — | 40.0 | — |
-| `modifyDerivedPerCall` | `-` | 4.9 ± 0.1 | — | 40.0 | — |
-| `modifyDirect` | `-` | 4.0 ± 0.0 | — | 40.0 | — |
+| `modifyDeepCap` | `-` | 30.2 ± 0.2 | — | 176.0 | — |
+| `modifyDeepDirect` | `-` | 33.9 ± 0.3 | — | 152.0 | — |
+| `modifyDerivedHeld` | `-` | 5.2 ± 0.0 | — | 40.0 | — |
+| `modifyDerivedPerCall` | `-` | 4.5 ± 0.1 | — | 40.0 | — |
+| `modifyDirect` | `-` | 3.8 ± 0.0 | — | 40.0 | — |
 
 ## CompositionBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `buildLens1` | `-` | 5.5 ± 0.0 | — | 72.0 | — |
-| `buildLens3` | `-` | 21.8 ± 0.0 | — | 184.0 | — |
-| `buildLens6` | `-` | 40.4 ± 0.1 | — | 352.0 | — |
-| `buildLensOptional3` | `-` | 21.5 ± 0.2 | — | 184.0 | — |
+| `buildLens1` | `-` | 5.0 ± 0.1 | — | 72.0 | — |
+| `buildLens3` | `-` | 20.2 ± 0.1 | — | 184.0 | — |
+| `buildLens6` | `-` | 35.5 ± 0.6 | — | 352.0 | — |
+| `buildLensOptional3` | `-` | 17.1 ± 0.6 | — | 184.0 | — |
 | `reuseLeaf` | `-` | 2.9 ± 0.0 | — | 24.0 | — |
-| `reuseLens1` | `-` | 17.9 ± 0.4 | — | 40.0 | — |
-| `reuseLens3` | `-` | 49.3 ± 0.3 | — | 72.0 | — |
-| `reuseLens6` | `-` | 135.2 ± 0.3 | — | 120.0 | — |
-| `reuseLensOptional3` | `-` | 62.9 ± 0.5 | — | 160.0 | — |
+| `reuseLens1` | `-` | 16.4 ± 0.0 | — | 40.0 | — |
+| `reuseLens3` | `-` | 45.9 ± 0.1 | — | 72.0 | — |
+| `reuseLens6` | `-` | 131.8 ± 1.9 | — | 120.0 | — |
+| `reuseLensOptional3` | `-` | 58.2 ± 0.3 | — | 160.0 | — |
 
 ## FoldBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `FoldMap` | `size=512` | 4,345.7 ± 29.2 | 4,340.6 ± 123.7 | 14,080.7 | 14,080.7 |
-| `FoldMap` | `size=64` | 391.2 ± 2.8 | 382.0 ± 1.8 | 768.0 | 768.0 |
-| `FoldMap` | `size=8` | 21.0 ± 0.1 | 21.9 ± 0.0 | 0.0 | 0.0 |
-| `FoldPrices` | `size=512` | 3,118.6 ± 148.4 | 3,090.0 ± 32.9 | 12,312.5 | 12,312.5 |
-| `FoldPrices` | `size=64` | 371.9 ± 3.8 | 370.2 ± 0.4 | 1,560.0 | 1,560.0 |
-| `FoldPrices` | `size=8` | 47.9 ± 0.0 | 47.9 ± 0.1 | 216.0 | 216.0 |
+| `FoldMap` | `size=512` | 3,991.9 ± 10.3 | 3,980.9 ± 21.9 | 14,080.7 | 14,080.6 |
+| `FoldMap` | `size=64` | 371.0 ± 2.2 | 341.0 ± 0.7 | 768.0 | 768.0 |
+| `FoldMap` | `size=8` | 21.1 ± 0.0 | 22.6 ± 0.1 | 0.0 | 0.0 |
+| `FoldPrices` | `size=512` | 2,750.7 ± 5.1 | 2,771.8 ± 5.5 | 12,312.4 | 12,312.5 |
+| `FoldPrices` | `size=64` | 349.7 ± 2.3 | 350.2 ± 0.3 | 1,560.0 | 1,560.0 |
+| `FoldPrices` | `size=8` | 43.9 ± 0.2 | 44.3 ± 0.1 | 216.0 | 216.0 |
 
 ## GenericsBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `genLensGet` | `-` | 1.0 ± 0.0 | — | 0.0 | — |
-| `genLensModify` | `-` | 3.7 ± 0.1 | — | 24.0 | — |
-| `genPrismGetHit` | `-` | 2.3 ± 0.0 | — | 16.0 | — |
+| `genLensGet` | `-` | 1.1 ± 0.0 | — | 0.0 | — |
+| `genLensModify` | `-` | 3.6 ± 0.0 | — | 24.0 | — |
+| `genPrismGetHit` | `-` | 2.1 ± 0.0 | — | 16.0 | — |
 | `genPrismGetMiss` | `-` | 1.2 ± 0.0 | — | 0.0 | — |
-| `genPrismModifyHit` | `-` | 3.1 ± 0.0 | — | 24.0 | — |
+| `genPrismModifyHit` | `-` | 2.9 ± 0.0 | — | 24.0 | — |
 | `genPrismModifyMiss` | `-` | 1.2 ± 0.0 | — | 0.0 | — |
-| `handLensGet` | `-` | 1.0 ± 0.0 | — | 0.0 | — |
-| `handLensModify` | `-` | 2.9 ± 0.0 | — | 24.0 | — |
-| `handPrismGetHit` | `-` | 2.1 ± 0.0 | — | 16.0 | — |
+| `handLensGet` | `-` | 1.1 ± 0.0 | — | 0.0 | — |
+| `handLensModify` | `-` | 2.7 ± 0.0 | — | 24.0 | — |
+| `handPrismGetHit` | `-` | 2.0 ± 0.0 | — | 16.0 | — |
 | `handPrismGetMiss` | `-` | 1.1 ± 0.0 | — | 0.0 | — |
-| `handPrismModifyHit` | `-` | 3.0 ± 0.0 | — | 24.0 | — |
-| `handPrismModifyMiss` | `-` | 1.0 ± 0.0 | — | 0.0 | — |
-| `rawLensGet` | `-` | 0.7 ± 0.0 | — | 0.0 | — |
-| `rawLensModify` | `-` | 2.5 ± 0.0 | — | 24.0 | — |
-| `rawPrismGetHit` | `-` | 1.8 ± 0.0 | — | 16.0 | — |
-| `rawPrismModifyHit` | `-` | 2.2 ± 0.0 | — | 24.0 | — |
+| `handPrismModifyHit` | `-` | 2.8 ± 0.0 | — | 24.0 | — |
+| `handPrismModifyMiss` | `-` | 1.1 ± 0.0 | — | 0.0 | — |
+| `rawLensGet` | `-` | 0.6 ± 0.0 | — | 0.0 | — |
+| `rawLensModify` | `-` | 2.1 ± 0.0 | — | 24.0 | — |
+| `rawPrismGetHit` | `-` | 1.7 ± 0.0 | — | 16.0 | — |
+| `rawPrismModifyHit` | `-` | 2.1 ± 0.0 | — | 24.0 | — |
 
 ## GetterBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Get_0` | `-` | 1.0 ± 0.0 | 0.5 ± 0.0 | 0.0 | 0.0 |
-| `Get_3` | `-` | 18.3 ± 0.0 | 9.4 ± 0.5 | 0.0 | 0.0 |
-| `Get_6` | `-` | 32.2 ± 0.2 | 25.5 ± 0.2 | 0.0 | 0.0 |
+| `Get_0` | `-` | 0.9 ± 0.0 | 0.5 ± 0.0 | 0.0 | 0.0 |
+| `Get_3` | `-` | 16.4 ± 0.1 | 9.0 ± 0.7 | 0.0 | 0.0 |
+| `Get_6` | `-` | 34.9 ± 0.2 | 27.5 ± 2.0 | 0.0 | 0.0 |
 | `Get_orderId` | `-` | 0.9 ± 0.0 | 0.5 ± 0.0 | 0.0 | 0.0 |
 
 ## IsoBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Get` | `-` | 3.7 ± 0.0 | 3.9 ± 0.0 | 32.0 | 32.0 |
-| `ReverseGet` | `-` | 3.3 ± 0.0 | 3.2 ± 0.0 | 32.0 | 32.0 |
+| `Get` | `-` | 3.5 ± 0.0 | 3.7 ± 0.0 | 32.0 | 32.0 |
+| `ReverseGet` | `-` | 2.9 ± 0.0 | 3.0 ± 0.0 | 32.0 | 32.0 |
 
 ## JsoniterBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `cModifyId` | `size=512` | 433,558.9 ± 3,095.5 | — | 1,066,715.4 | — |
-| `cModifyId` | `size=64` | 56,179.6 ± 380.9 | — | 136,270.6 | — |
-| `cModifyId` | `size=8` | 9,212.5 ± 47.5 | — | 20,712.1 | — |
-| `cReadId` | `size=512` | 218,643.8 ± 566.7 | — | 797,934.2 | — |
-| `cReadId` | `size=64` | 28,323.9 ± 562.3 | — | 101,293.6 | — |
-| `cReadId` | `size=8` | 4,243.2 ± 43.9 | — | 15,568.0 | — |
-| `cReadStreet` | `size=512` | 219,504.2 ± 2,196.2 | — | 797,934.4 | — |
-| `cReadStreet` | `size=64` | 27,786.6 ± 184.1 | — | 101,293.4 | — |
-| `cReadStreet` | `size=8` | 4,271.9 ± 46.1 | — | 15,568.0 | — |
-| `cReplaceId` | `size=512` | 455,135.9 ± 36,692.7 | — | 1,066,679.6 | — |
-| `cReplaceId` | `size=64` | 55,694.3 ± 223.8 | — | 136,214.5 | — |
-| `cReplaceId` | `size=8` | 9,372.4 ± 157.6 | — | 20,640.1 | — |
-| `cSumPrices` | `size=512` | 354,744.3 ± 1,011.9 | — | 1,240,741.0 | — |
-| `cSumPrices` | `size=64` | 44,704.3 ± 1,347.6 | — | 157,033.5 | — |
-| `cSumPrices` | `size=8` | 6,402.4 ± 56.3 | — | 22,720.1 | — |
-| `jMiss` | `size=512` | 189.4 ± 4.7 | — | 0.1 | — |
-| `jMiss` | `size=64` | 187.3 ± 5.3 | — | 0.0 | — |
-| `jMiss` | `size=8` | 189.3 ± 4.7 | — | 0.0 | — |
-| `jModifyId` | `size=512` | 2,781.0 ± 36.3 | — | 41,920.8 | — |
-| `jModifyId` | `size=64` | 331.0 ± 2.4 | — | 5,328.0 | — |
-| `jModifyId` | `size=8` | 102.9 ± 2.7 | — | 992.0 | — |
-| `jReadId` | `size=512` | 37.4 ± 2.5 | — | 56.0 | — |
-| `jReadId` | `size=64` | 35.9 ± 0.4 | — | 48.0 | — |
-| `jReadId` | `size=8` | 39.1 ± 0.5 | — | 72.0 | — |
-| `jReadStreet` | `size=512` | 207.9 ± 2.8 | — | 128.1 | — |
-| `jReadStreet` | `size=64` | 208.3 ± 0.6 | — | 128.0 | — |
-| `jReadStreet` | `size=8` | 215.6 ± 6.4 | — | 144.0 | — |
-| `jReplaceId` | `size=512` | 2,749.3 ± 14.8 | — | 41,896.8 | — |
-| `jReplaceId` | `size=64` | 331.2 ± 7.3 | — | 5,304.0 | — |
-| `jReplaceId` | `size=8` | 99.0 ± 4.2 | — | 960.0 | — |
-| `jSumPrices` | `size=512` | 88,995.8 ± 742.2 | — | 63,664.3 | — |
-| `jSumPrices` | `size=64` | 10,895.6 ± 47.6 | — | 8,120.3 | — |
-| `jSumPrices` | `size=8` | 1,450.4 ± 10.3 | — | 1,176.0 | — |
+| `cModifyId` | `size=512` | 412,548.8 ± 4,799.5 | — | 1,066,721.6 | — |
+| `cModifyId` | `size=64` | 52,305.0 ± 399.3 | — | 136,269.9 | — |
+| `cModifyId` | `size=8` | 8,756.4 ± 66.6 | — | 20,712.1 | — |
+| `cReadId` | `size=512` | 212,532.3 ± 7,973.7 | — | 797,932.4 | — |
+| `cReadId` | `size=64` | 26,082.5 ± 260.5 | — | 101,291.7 | — |
+| `cReadId` | `size=8` | 4,172.9 ± 60.4 | — | 15,568.0 | — |
+| `cReadStreet` | `size=512` | 211,547.1 ± 2,010.3 | — | 797,932.2 | — |
+| `cReadStreet` | `size=64` | 27,230.6 ± 1,129.1 | — | 101,292.7 | — |
+| `cReadStreet` | `size=8` | 4,117.4 ± 53.2 | — | 15,568.0 | — |
+| `cReplaceId` | `size=512` | 408,118.5 ± 4,861.6 | — | 1,066,673.1 | — |
+| `cReplaceId` | `size=64` | 52,572.0 ± 271.1 | — | 136,213.7 | — |
+| `cReplaceId` | `size=8` | 8,765.0 ± 81.4 | — | 20,656.1 | — |
+| `cSumPrices` | `size=512` | 348,970.9 ± 1,536.5 | — | 1,240,739.3 | — |
+| `cSumPrices` | `size=64` | 43,446.0 ± 451.5 | — | 157,070.6 | — |
+| `cSumPrices` | `size=8` | 6,340.3 ± 52.8 | — | 22,720.1 | — |
+| `jMiss` | `size=512` | 176.2 ± 5.4 | — | 0.1 | — |
+| `jMiss` | `size=64` | 185.0 ± 2.9 | — | 0.0 | — |
+| `jMiss` | `size=8` | 176.8 ± 6.3 | — | 0.0 | — |
+| `jModifyId` | `size=512` | 3,238.2 ± 39.0 | — | 41,920.9 | — |
+| `jModifyId` | `size=64` | 407.7 ± 3.2 | — | 5,352.0 | — |
+| `jModifyId` | `size=8` | 106.7 ± 4.4 | — | 984.0 | — |
+| `jReadId` | `size=512` | 36.5 ± 2.5 | — | 48.0 | — |
+| `jReadId` | `size=64` | 38.1 ± 2.4 | — | 48.0 | — |
+| `jReadId` | `size=8` | 38.9 ± 4.4 | — | 48.0 | — |
+| `jReadStreet` | `size=512` | 196.5 ± 2.1 | — | 128.1 | — |
+| `jReadStreet` | `size=64` | 197.8 ± 1.0 | — | 128.0 | — |
+| `jReadStreet` | `size=8` | 196.3 ± 1.4 | — | 128.0 | — |
+| `jReplaceId` | `size=512` | 3,191.5 ± 17.7 | — | 41,896.9 | — |
+| `jReplaceId` | `size=64` | 396.7 ± 3.9 | — | 5,304.0 | — |
+| `jReplaceId` | `size=8` | 106.8 ± 2.7 | — | 960.0 | — |
+| `jSumPrices` | `size=512` | 86,443.0 ± 1,297.8 | — | 63,665.0 | — |
+| `jSumPrices` | `size=64` | 10,439.7 ± 92.3 | — | 8,120.3 | — |
+| `jSumPrices` | `size=8` | 1,474.0 ± 52.9 | — | 1,176.0 | — |
 
 ## KyoDiBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `EnvFocus` | `-` | 66.4 ± 1.1 | — | 312.0 | — |
-| `MapDrillModify` | `-` | 44.1 ± 0.1 | — | 216.0 | — |
+| `EnvFocus` | `-` | 65.0 ± 1.9 | — | 312.0 | — |
+| `MapDrillModify` | `-` | 41.1 ± 0.9 | — | 216.0 | — |
 | `MapGet` | `-` | 2.8 ± 0.0 | — | 0.0 | — |
-| `VarUpdateFocus` | `-` | 52.1 ± 1.2 | — | 200.0 | — |
-| `handEnvUse` | `-` | 63.3 ± 3.0 | — | 304.0 | — |
-| `handMapDrillModify` | `-` | 38.7 ± 0.2 | — | 216.0 | — |
-| `handMapGet` | `-` | 2.1 ± 0.0 | — | 0.0 | — |
-| `handVarUpdate` | `-` | 49.0 ± 0.2 | — | 184.0 | — |
+| `VarUpdateFocus` | `-` | 57.5 ± 4.7 | — | 200.0 | — |
+| `handEnvUse` | `-` | 65.3 ± 0.7 | — | 304.0 | — |
+| `handMapDrillModify` | `-` | 35.5 ± 0.3 | — | 216.0 | — |
+| `handMapGet` | `-` | 2.2 ± 0.0 | — | 0.0 | — |
+| `handVarUpdate` | `-` | 54.6 ± 4.8 | — | 184.0 | — |
 
 ## LensBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Get` | `-` | 1.0 ± 0.0 | 1.2 ± 0.0 | 0.0 | 0.0 |
-| `Modify` | `-` | 4.0 ± 0.0 | 4.4 ± 0.0 | 40.0 | 40.0 |
-| `ModifyDeep` | `-` | 37.8 ± 0.4 | 31.2 ± 0.4 | 152.0 | 176.0 |
-| `Replace` | `-` | 3.5 ± 0.0 | 3.4 ± 0.1 | 40.0 | 40.0 |
+| `Get` | `-` | 1.1 ± 0.0 | 1.3 ± 0.0 | 0.0 | 0.0 |
+| `Modify` | `-` | 3.8 ± 0.0 | 4.3 ± 0.0 | 40.0 | 40.0 |
+| `ModifyDeep` | `-` | 33.9 ± 0.1 | 31.0 ± 0.1 | 152.0 | 176.0 |
+| `Replace` | `-` | 3.2 ± 0.0 | 3.2 ± 0.0 | 40.0 | 40.0 |
 
 ## MultiFocusBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Fold_powerEach` | `size=1024` | 17,480.2 ± 1,417.8 | — | 43,036.5 | — |
-| `Fold_powerEach` | `size=256` | 3,698.3 ± 101.2 | — | 9,240.3 | — |
-| `Fold_powerEach` | `size=32` | 418.2 ± 5.8 | — | 920.0 | — |
-| `Fold_powerEach` | `size=4` | 79.8 ± 0.1 | — | 328.0 | — |
-| `Modify_multiFocus` | `size=1024` | 50,376.7 ± 287.0 | — | 331,119.8 | — |
-| `Modify_multiFocus` | `size=256` | 12,010.1 ± 57.5 | — | 76,112.8 | — |
-| `Modify_multiFocus` | `size=32` | 1,449.3 ± 19.5 | — | 8,600.0 | — |
-| `Modify_multiFocus` | `size=4` | 215.8 ± 1.7 | — | 1,336.0 | — |
-| `Modify_powerEach` | `size=1024` | 34,468.7 ± 4,318.9 | — | 115,176.9 | — |
-| `Modify_powerEach` | `size=256` | 8,895.7 ± 95.2 | — | 26,080.6 | — |
-| `Modify_powerEach` | `size=32` | 1,077.9 ± 12.8 | — | 3,152.0 | — |
-| `Modify_powerEach` | `size=4` | 191.7 ± 0.3 | — | 800.0 | — |
-| `naive_listMap` | `size=1024` | 8,596.3 ± 34.1 | — | 65,578.2 | — |
-| `naive_listMap` | `size=256` | 2,141.1 ± 8.6 | — | 16,424.1 | — |
-| `naive_listMap` | `size=32` | 245.9 ± 0.4 | — | 2,088.0 | — |
-| `naive_listMap` | `size=4` | 34.4 ± 0.1 | — | 296.0 | — |
-| `naive_sumQty` | `size=1024` | 5,090.4 ± 86.5 | — | 16,129.3 | — |
-| `naive_sumQty` | `size=256` | 976.4 ± 47.0 | — | 3,840.1 | — |
-| `naive_sumQty` | `size=32` | 75.1 ± 0.3 | — | 256.0 | — |
-| `naive_sumQty` | `size=4` | 8.5 ± 0.1 | — | 0.0 | — |
+| `Fold_powerEach` | `size=1024` | 14,707.3 ± 928.0 | — | 43,035.8 | — |
+| `Fold_powerEach` | `size=256` | 3,384.3 ± 30.7 | — | 9,240.2 | — |
+| `Fold_powerEach` | `size=32` | 402.5 ± 6.1 | — | 920.0 | — |
+| `Fold_powerEach` | `size=4` | 86.8 ± 0.5 | — | 328.0 | — |
+| `Modify_multiFocus` | `size=1024` | 50,529.5 ± 535.7 | — | 331,099.0 | — |
+| `Modify_multiFocus` | `size=256` | 11,443.6 ± 122.0 | — | 76,112.8 | — |
+| `Modify_multiFocus` | `size=32` | 1,407.8 ± 16.7 | — | 8,600.0 | — |
+| `Modify_multiFocus` | `size=4` | 232.3 ± 12.1 | — | 1,320.0 | — |
+| `Modify_powerEach` | `size=1024` | 35,233.3 ± 332.9 | — | 115,177.1 | — |
+| `Modify_powerEach` | `size=256` | 8,377.9 ± 22.9 | — | 26,080.6 | — |
+| `Modify_powerEach` | `size=32` | 1,042.4 ± 9.9 | — | 3,152.0 | — |
+| `Modify_powerEach` | `size=4` | 206.6 ± 11.5 | — | 800.0 | — |
+| `naive_listMap` | `size=1024` | 8,060.7 ± 42.4 | — | 65,578.1 | — |
+| `naive_listMap` | `size=256` | 2,036.4 ± 6.7 | — | 16,424.1 | — |
+| `naive_listMap` | `size=32` | 245.9 ± 0.9 | — | 2,088.0 | — |
+| `naive_listMap` | `size=4` | 33.0 ± 0.2 | — | 296.0 | — |
+| `naive_sumQty` | `size=1024` | 4,275.0 ± 37.0 | — | 16,129.1 | — |
+| `naive_sumQty` | `size=256` | 802.5 ± 37.7 | — | 3,840.1 | — |
+| `naive_sumQty` | `size=32` | 67.8 ± 1.5 | — | 256.0 | — |
+| `naive_sumQty` | `size=4` | 7.5 ± 0.0 | — | 0.0 | — |
 
 ## MultiFocusCollectBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `CollectList_listSum` | `-` | 68.7 ± 0.1 | — | 56.0 | — |
+| `CollectList_listSum` | `-` | 66.8 ± 0.3 | — | 56.0 | — |
 | `CollectMap_constSum` | `-` | 2.1 ± 0.0 | — | 0.0 | — |
-| `CollectMap_zipMean` | `-` | 193.0 ± 1.5 | — | 880.0 | — |
-| `Modify_multiFocusTuple3` | `-` | 17.0 ± 0.1 | — | 128.0 | — |
-| `Modify_multiFocusTuple6` | `-` | 27.1 ± 0.0 | — | 224.0 | — |
-| `naive_constSum` | `-` | 1.8 ± 0.0 | — | 16.0 | — |
-| `naive_listSum` | `-` | 40.4 ± 0.0 | — | 56.0 | — |
-| `naive_tuple3Rewrite` | `-` | 8.0 ± 0.0 | — | 96.0 | — |
-| `naive_tuple6Rewrite` | `-` | 14.4 ± 0.2 | — | 184.0 | — |
-| `naive_zipMeanBroadcast` | `-` | 167.4 ± 0.9 | — | 1,176.0 | — |
+| `CollectMap_zipMean` | `-` | 173.4 ± 1.9 | — | 880.0 | — |
+| `Modify_multiFocusTuple3` | `-` | 17.0 ± 0.0 | — | 128.0 | — |
+| `Modify_multiFocusTuple6` | `-` | 28.5 ± 0.1 | — | 224.0 | — |
+| `naive_constSum` | `-` | 1.7 ± 0.0 | — | 16.0 | — |
+| `naive_listSum` | `-` | 36.2 ± 0.1 | — | 56.0 | — |
+| `naive_tuple3Rewrite` | `-` | 7.1 ± 0.0 | — | 96.0 | — |
+| `naive_tuple6Rewrite` | `-` | 13.1 ± 0.1 | — | 184.0 | — |
+| `naive_zipMeanBroadcast` | `-` | 164.5 ± 0.2 | — | 1,176.0 | — |
 
 ## OpticBuildBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `build` | `-` | 47.8 ± 0.1 | — | 184.0 | — |
-| `buildAndUse` | `-` | 1,036.6 ± 24.2 | — | 2,816.0 | — |
-| `reuseUse` | `-` | 1,002.1 ± 13.8 | — | 2,672.0 | — |
+| `build` | `-` | 46.2 ± 0.4 | — | 184.0 | — |
+| `buildAndUse` | `-` | 1,125.1 ± 14.9 | — | 2,816.0 | — |
+| `reuseUse` | `-` | 1,062.2 ± 12.0 | — | 2,696.0 | — |
 
 ## OptionalBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Modify_0` | `-` | 23.1 ± 0.1 | 23.1 ± 0.3 | 112.0 | 112.0 |
+| `Modify_0` | `-` | 21.8 ± 0.1 | 21.6 ± 0.1 | 112.0 | 112.0 |
 | `Modify_0_empty` | `-` | 1.3 ± 0.0 | 1.4 ± 0.0 | 0.0 | 0.0 |
-| `Modify_3` | `-` | 62.7 ± 0.2 | 69.8 ± 0.7 | 160.0 | 304.0 |
-| `Modify_6` | `-` | 150.9 ± 1.6 | 116.1 ± 1.0 | 208.0 | 496.0 |
-| `Modify_loyalty` | `-` | 17.6 ± 0.3 | 17.5 ± 0.2 | 112.0 | 112.0 |
-| `Modify_loyalty_empty` | `-` | 1.4 ± 0.0 | 1.5 ± 0.0 | 0.0 | 0.0 |
-| `Replace_0` | `-` | 4.7 ± 0.1 | 3.7 ± 0.0 | 40.0 | 40.0 |
-| `Replace_loyalty` | `-` | 7.8 ± 0.0 | 7.4 ± 0.0 | 88.0 | 88.0 |
+| `Modify_3` | `-` | 58.7 ± 0.7 | 71.9 ± 0.7 | 160.0 | 304.0 |
+| `Modify_6` | `-` | 143.3 ± 0.7 | 120.9 ± 0.8 | 208.0 | 496.0 |
+| `Modify_loyalty` | `-` | 16.4 ± 0.1 | 16.6 ± 0.1 | 112.0 | 112.0 |
+| `Modify_loyalty_empty` | `-` | 1.3 ± 0.0 | 1.4 ± 0.0 | 0.0 | 0.0 |
+| `Replace_0` | `-` | 4.6 ± 0.0 | 3.6 ± 0.0 | 40.0 | 40.0 |
+| `Replace_loyalty` | `-` | 7.2 ± 0.0 | 7.1 ± 0.0 | 88.0 | 88.0 |
 
 ## OrderAvroBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `ModifyNames` | `size=512` | 36,227.9 ± 565.4 | — | 97,419.3 | — |
-| `ModifyNames` | `size=64` | 4,579.4 ± 57.4 | — | 13,605.5 | — |
-| `ModifyNames` | `size=8` | 608.9 ± 0.7 | — | 2,160.0 | — |
-| `ModifyStreet` | `size=512` | 130.0 ± 1.0 | — | 328.0 | — |
-| `ModifyStreet` | `size=64` | 130.9 ± 1.1 | — | 328.0 | — |
-| `ModifyStreet` | `size=8` | 130.8 ± 0.3 | — | 328.0 | — |
-| `ReadStreet` | `size=512` | 40.2 ± 0.2 | — | 88.0 | — |
-| `ReadStreet` | `size=64` | 40.4 ± 0.5 | — | 88.0 | — |
-| `ReadStreet` | `size=8` | 40.0 ± 0.1 | — | 88.0 | — |
-| `monocleModifyNames` | `size=512` | 102,125.9 ± 768.0 | — | 382,773.6 | — |
-| `monocleModifyNames` | `size=64` | 10,416.2 ± 528.9 | — | 39,848.4 | — |
-| `monocleModifyNames` | `size=8` | 1,424.5 ± 38.4 | — | 5,416.0 | — |
-| `monocleModifyStreet` | `size=512` | 58,038.8 ± 220.8 | — | 169,084.5 | — |
-| `monocleModifyStreet` | `size=64` | 7,220.5 ± 504.9 | — | 20,896.2 | — |
-| `monocleModifyStreet` | `size=8` | 969.0 ± 5.0 | — | 2,992.0 | — |
-| `monocleReadStreet` | `size=512` | 36,475.7 ± 310.6 | — | 69,792.6 | — |
-| `monocleReadStreet` | `size=64` | 4,712.7 ± 37.0 | — | 8,848.2 | — |
-| `monocleReadStreet` | `size=8` | 541.9 ± 1.8 | — | 1,208.0 | — |
-| `naiveModifyNames` | `size=512` | 72,244.5 ± 571.3 | — | 226,302.3 | — |
-| `naiveModifyNames` | `size=64` | 8,584.6 ± 587.0 | — | 27,920.3 | — |
-| `naiveModifyNames` | `size=8` | 1,133.4 ± 15.9 | — | 3,752.0 | — |
-| `naiveModifyStreet` | `size=512` | 57,986.9 ± 241.0 | — | 169,063.3 | — |
-| `naiveModifyStreet` | `size=64` | 7,558.8 ± 72.7 | — | 20,880.3 | — |
-| `naiveModifyStreet` | `size=8` | 965.5 ± 4.5 | — | 2,968.0 | — |
-| `naiveReadStreet` | `size=512` | 36,454.0 ± 309.4 | — | 69,792.0 | — |
-| `naiveReadStreet` | `size=64` | 4,706.8 ± 35.5 | — | 8,848.2 | — |
-| `naiveReadStreet` | `size=8` | 544.2 ± 6.7 | — | 1,208.0 | — |
+| `ModifyNames` | `size=512` | 34,904.2 ± 981.8 | — | 97,408.3 | — |
+| `ModifyNames` | `size=64` | 4,334.5 ± 226.3 | — | 12,576.2 | — |
+| `ModifyNames` | `size=8` | 598.0 ± 6.0 | — | 2,160.0 | — |
+| `ModifyStreet` | `size=512` | 121.5 ± 0.7 | — | 328.0 | — |
+| `ModifyStreet` | `size=64` | 120.9 ± 0.3 | — | 328.0 | — |
+| `ModifyStreet` | `size=8` | 121.4 ± 0.3 | — | 328.0 | — |
+| `ReadStreet` | `size=512` | 38.3 ± 0.2 | — | 88.0 | — |
+| `ReadStreet` | `size=64` | 38.2 ± 0.1 | — | 88.0 | — |
+| `ReadStreet` | `size=8` | 38.2 ± 0.1 | — | 88.0 | — |
+| `monocleModifyNames` | `size=512` | 101,109.9 ± 529.0 | — | 382,773.4 | — |
+| `monocleModifyNames` | `size=64` | 9,898.0 ± 507.9 | — | 39,848.3 | — |
+| `monocleModifyNames` | `size=8` | 1,479.2 ± 10.4 | — | 5,400.0 | — |
+| `monocleModifyStreet` | `size=512` | 55,743.7 ± 330.4 | — | 169,083.8 | — |
+| `monocleModifyStreet` | `size=64` | 7,022.0 ± 567.9 | — | 20,896.2 | — |
+| `monocleModifyStreet` | `size=8` | 986.8 ± 9.6 | — | 2,992.0 | — |
+| `monocleReadStreet` | `size=512` | 34,318.5 ± 222.7 | — | 69,791.1 | — |
+| `monocleReadStreet` | `size=64` | 4,410.8 ± 28.6 | — | 8,848.2 | — |
+| `monocleReadStreet` | `size=8` | 516.1 ± 1.9 | — | 1,208.0 | — |
+| `naiveModifyNames` | `size=512` | 68,964.0 ± 299.4 | — | 226,301.2 | — |
+| `naiveModifyNames` | `size=64` | 8,471.8 ± 690.6 | — | 27,928.3 | — |
+| `naiveModifyNames` | `size=8` | 1,157.4 ± 5.7 | — | 3,752.0 | — |
+| `naiveModifyStreet` | `size=512` | 55,648.1 ± 366.9 | — | 169,062.0 | — |
+| `naiveModifyStreet` | `size=64` | 7,276.7 ± 23.9 | — | 20,880.2 | — |
+| `naiveModifyStreet` | `size=8` | 994.9 ± 17.9 | — | 2,968.0 | — |
+| `naiveReadStreet` | `size=512` | 34,362.6 ± 202.6 | — | 69,790.3 | — |
+| `naiveReadStreet` | `size=64` | 4,080.8 ± 508.2 | — | 8,840.1 | — |
+| `naiveReadStreet` | `size=8` | 510.8 ± 1.4 | — | 1,208.0 | — |
 
 ## OrderCirceBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Names` | `size=512` | 231,002.2 ± 4,020.3 | — | 609,921.2 | — |
-| `Names` | `size=64` | 29,120.1 ± 533.4 | — | 78,779.1 | — |
-| `Names` | `size=8` | 4,018.2 ± 97.6 | — | 10,944.1 | — |
-| `NamesIor` | `size=512` | 249,411.7 ± 3,250.4 | — | 683,543.9 | — |
-| `NamesIor` | `size=64` | 31,856.9 ± 1,065.8 | — | 87,532.4 | — |
-| `NamesIor` | `size=8` | 4,164.4 ± 49.5 | — | 11,520.1 | — |
-| `Street` | `size=512` | 1,004.5 ± 14.2 | — | 2,720.8 | — |
-| `Street` | `size=64` | 1,017.9 ± 10.2 | — | 2,720.1 | — |
-| `Street` | `size=8` | 1,007.1 ± 16.2 | — | 2,720.0 | — |
-| `StreetIor` | `size=512` | 999.5 ± 15.6 | — | 2,736.8 | — |
-| `StreetIor` | `size=64` | 984.8 ± 5.5 | — | 2,736.1 | — |
-| `StreetIor` | `size=8` | 992.3 ± 11.7 | — | 2,736.0 | — |
-| `directNames` | `size=512` | 237,519.7 ± 3,789.9 | — | 613,990.4 | — |
-| `directNames` | `size=64` | 29,266.8 ± 2,092.7 | — | 77,197.4 | — |
-| `directNames` | `size=8` | 3,964.3 ± 59.3 | — | 10,688.1 | — |
-| `directStreet` | `size=512` | 1,002.8 ± 12.2 | — | 2,736.8 | — |
-| `directStreet` | `size=64` | 1,011.3 ± 11.2 | — | 2,736.1 | — |
-| `directStreet` | `size=8` | 1,012.1 ± 8.8 | — | 2,728.0 | — |
-| `hcursorNames` | `size=512` | 240,933.3 ± 9,031.7 | — | 609,889.1 | — |
-| `hcursorNames` | `size=64` | 28,537.1 ± 613.8 | — | 77,265.6 | — |
-| `hcursorNames` | `size=8` | 3,917.6 ± 25.7 | — | 10,768.1 | — |
-| `hcursorStreet` | `size=512` | 1,043.4 ± 8.1 | — | 3,032.8 | — |
-| `hcursorStreet` | `size=64` | 1,053.9 ± 23.4 | — | 3,032.1 | — |
-| `hcursorStreet` | `size=8` | 1,057.6 ± 8.2 | — | 3,032.0 | — |
-| `monocleNames` | `size=512` | 233,631.7 ± 9,241.6 | — | 1,121,770.3 | — |
-| `monocleNames` | `size=64` | 24,733.7 ± 106.6 | — | 132,747.3 | — |
-| `monocleNames` | `size=8` | 3,719.1 ± 78.0 | — | 19,509.4 | — |
-| `monocleStreet` | `size=512` | 181,477.0 ± 6,817.2 | — | 908,033.9 | — |
-| `monocleStreet` | `size=64` | 21,422.3 ± 96.1 | — | 113,804.6 | — |
-| `monocleStreet` | `size=8` | 3,134.9 ± 50.0 | — | 17,048.1 | — |
-| `naiveNames` | `size=512` | 195,192.9 ± 4,331.6 | — | 965,267.1 | — |
-| `naiveNames` | `size=64` | 23,213.6 ± 70.4 | — | 120,842.1 | — |
-| `naiveNames` | `size=8` | 3,273.0 ± 7.9 | — | 17,808.1 | — |
-| `naiveStreet` | `size=512` | 181,151.4 ± 5,953.7 | — | 908,025.7 | — |
-| `naiveStreet` | `size=64` | 21,453.2 ± 60.6 | — | 113,801.9 | — |
-| `naiveStreet` | `size=8` | 3,106.8 ± 13.8 | — | 17,045.4 | — |
+| `Names` | `size=512` | 252,746.4 ± 8,998.7 | — | 609,938.6 | — |
+| `Names` | `size=64` | 32,080.4 ± 941.1 | — | 78,779.4 | — |
+| `Names` | `size=8` | 4,525.0 ± 72.0 | — | 10,944.1 | — |
+| `NamesIor` | `size=512` | 273,828.6 ± 9,544.1 | — | 683,563.4 | — |
+| `NamesIor` | `size=64` | 35,178.0 ± 1,070.3 | — | 88,204.7 | — |
+| `NamesIor` | `size=8` | 4,646.9 ± 76.9 | — | 11,592.1 | — |
+| `Street` | `size=512` | 1,083.8 ± 12.4 | — | 2,720.9 | — |
+| `Street` | `size=64` | 1,074.9 ± 21.8 | — | 2,720.1 | — |
+| `Street` | `size=8` | 1,059.5 ± 18.1 | — | 2,720.0 | — |
+| `StreetIor` | `size=512` | 1,079.1 ± 18.5 | — | 2,736.9 | — |
+| `StreetIor` | `size=64` | 1,112.0 ± 26.1 | — | 2,736.1 | — |
+| `StreetIor` | `size=8` | 1,118.5 ± 62.5 | — | 2,736.0 | — |
+| `directNames` | `size=512` | 254,324.0 ± 6,784.1 | — | 614,003.8 | — |
+| `directNames` | `size=64` | 31,086.5 ± 169.8 | — | 77,719.4 | — |
+| `directNames` | `size=8` | 4,214.4 ± 46.0 | — | 10,688.1 | — |
+| `directStreet` | `size=512` | 1,066.7 ± 27.9 | — | 2,728.8 | — |
+| `directStreet` | `size=64` | 1,075.1 ± 16.7 | — | 2,728.1 | — |
+| `directStreet` | `size=8` | 1,077.7 ± 6.1 | — | 2,736.0 | — |
+| `hcursorNames` | `size=512` | 251,173.5 ± 3,386.2 | — | 614,001.3 | — |
+| `hcursorNames` | `size=64` | 30,880.7 ± 658.9 | — | 77,789.7 | — |
+| `hcursorNames` | `size=8` | 4,226.1 ± 101.8 | — | 10,768.1 | — |
+| `hcursorStreet` | `size=512` | 1,142.7 ± 15.9 | — | 3,032.9 | — |
+| `hcursorStreet` | `size=64` | 1,157.2 ± 4.8 | — | 3,032.1 | — |
+| `hcursorStreet` | `size=8` | 1,149.0 ± 24.4 | — | 3,032.0 | — |
+| `monocleNames` | `size=512` | 232,783.6 ± 3,282.8 | — | 1,121,764.4 | — |
+| `monocleNames` | `size=64` | 24,537.2 ± 749.2 | — | 132,409.2 | — |
+| `monocleNames` | `size=8` | 3,835.1 ± 49.8 | — | 19,472.1 | — |
+| `monocleStreet` | `size=512` | 186,066.5 ± 2,963.1 | — | 908,029.0 | — |
+| `monocleStreet` | `size=64` | 22,100.4 ± 203.3 | — | 113,804.6 | — |
+| `monocleStreet` | `size=8` | 3,285.8 ± 25.8 | — | 17,053.4 | — |
+| `naiveNames` | `size=512` | 198,900.4 ± 1,415.2 | — | 965,269.6 | — |
+| `naiveNames` | `size=64` | 23,551.0 ± 28.5 | — | 120,842.1 | — |
+| `naiveNames` | `size=8` | 3,475.3 ± 4.8 | — | 17,808.1 | — |
+| `naiveStreet` | `size=512` | 188,531.8 ± 2,719.7 | — | 908,030.7 | — |
+| `naiveStreet` | `size=64` | 22,008.3 ± 168.8 | — | 113,791.3 | — |
+| `naiveStreet` | `size=8` | 3,285.2 ± 12.6 | — | 17,045.4 | — |
 
 ## OrderJsoniterBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `ModifyStreet` | `size=512` | 3,098.8 ± 36.3 | — | 42,002.8 | — |
-| `ModifyStreet` | `size=64` | 528.2 ± 2.7 | — | 5,432.1 | — |
-| `ModifyStreet` | `size=8` | 303.1 ± 2.2 | — | 1,072.0 | — |
-| `ReadStreet` | `size=512` | 208.5 ± 3.0 | — | 109.5 | — |
-| `ReadStreet` | `size=64` | 211.7 ± 2.5 | — | 90.7 | — |
-| `ReadStreet` | `size=8` | 209.5 ± 3.9 | — | 109.3 | — |
-| `SumPrices` | `size=512` | 88,851.8 ± 709.4 | — | 63,716.3 | — |
-| `SumPrices` | `size=64` | 10,943.7 ± 58.5 | — | 8,121.3 | — |
-| `SumPrices` | `size=8` | 1,459.8 ± 7.7 | — | 1,176.0 | — |
-| `monocleModifyStreet` | `size=512` | 168,133.9 ± 774.2 | — | 333,545.1 | — |
-| `monocleModifyStreet` | `size=64` | 21,285.3 ± 560.8 | — | 30,082.1 | — |
-| `monocleModifyStreet` | `size=8` | 3,404.6 ± 34.4 | — | 4,664.1 | — |
-| `monocleReadStreet` | `size=512` | 96,597.4 ± 270.8 | — | 193,234.7 | — |
-| `monocleReadStreet` | `size=64` | 13,033.7 ± 1,335.7 | — | 24,705.3 | — |
-| `monocleReadStreet` | `size=8` | 1,885.6 ± 26.8 | — | 3,648.0 | — |
-| `monocleSumPrices` | `size=512` | 450,557.9 ± 4,180.7 | — | 1,190,770.5 | — |
-| `monocleSumPrices` | `size=64` | 16,774.7 ± 24.4 | — | 47,393.7 | — |
-| `monocleSumPrices` | `size=8` | 2,550.5 ± 38.8 | — | 6,632.1 | — |
-| `naiveModifyStreet` | `size=512` | 169,228.7 ± 2,176.2 | — | 333,504.0 | — |
-| `naiveModifyStreet` | `size=64` | 20,901.0 ± 182.9 | — | 30,058.1 | — |
-| `naiveModifyStreet` | `size=8` | 3,430.7 ± 64.6 | — | 4,640.1 | — |
-| `naiveReadStreet` | `size=512` | 97,156.6 ± 375.5 | — | 193,235.2 | — |
-| `naiveReadStreet` | `size=64` | 12,323.0 ± 95.9 | — | 24,705.3 | — |
-| `naiveReadStreet` | `size=8` | 1,930.1 ± 93.3 | — | 3,648.0 | — |
-| `naiveSumPrices` | `size=512` | 102,210.6 ± 764.1 | — | 230,127.5 | — |
-| `naiveSumPrices` | `size=64` | 12,786.9 ± 54.0 | — | 29,337.3 | — |
-| `naiveSumPrices` | `size=8` | 1,948.3 ± 10.5 | — | 4,248.0 | — |
-| `nativeReadStreet` | `size=512` | 37,463.3 ± 533.5 | — | 455.4 | — |
-| `nativeReadStreet` | `size=64` | 4,748.4 ± 29.6 | — | 424.5 | — |
-| `nativeReadStreet` | `size=8` | 865.9 ± 21.6 | — | 424.0 | — |
-| `nativeSumPrices` | `size=512` | 67,490.4 ± 275.0 | — | 86,275.0 | — |
-| `nativeSumPrices` | `size=64` | 8,337.3 ± 32.4 | — | 10,920.9 | — |
-| `nativeSumPrices` | `size=8` | 1,250.1 ± 16.1 | — | 1,512.0 | — |
+| `ModifyStreet` | `size=512` | 3,596.2 ± 51.2 | — | 42,003.2 | — |
+| `ModifyStreet` | `size=64` | 587.4 ± 2.6 | — | 5,432.1 | — |
+| `ModifyStreet` | `size=8` | 298.4 ± 4.2 | — | 1,072.0 | — |
+| `ReadStreet` | `size=512` | 202.8 ± 1.8 | — | 109.5 | — |
+| `ReadStreet` | `size=64` | 197.2 ± 4.5 | — | 128.0 | — |
+| `ReadStreet` | `size=8` | 204.1 ± 2.8 | — | 90.7 | — |
+| `SumPrices` | `size=512` | 86,733.6 ± 6,841.4 | — | 63,716.1 | — |
+| `SumPrices` | `size=64` | 10,934.9 ± 322.3 | — | 8,121.3 | — |
+| `SumPrices` | `size=8` | 1,445.8 ± 19.4 | — | 1,176.0 | — |
+| `monocleModifyStreet` | `size=512` | 163,550.3 ± 2,197.4 | — | 333,584.6 | — |
+| `monocleModifyStreet` | `size=64` | 19,861.5 ± 65.9 | — | 30,082.0 | — |
+| `monocleModifyStreet` | `size=8` | 3,281.4 ± 24.2 | — | 4,664.1 | — |
+| `monocleReadStreet` | `size=512` | 93,315.1 ± 218.4 | — | 193,231.9 | — |
+| `monocleReadStreet` | `size=64` | 12,748.9 ± 1,581.1 | — | 24,705.3 | — |
+| `monocleReadStreet` | `size=8` | 1,907.3 ± 21.4 | — | 3,648.0 | — |
+| `monocleSumPrices` | `size=512` | 459,834.2 ± 27,837.8 | — | 1,190,779.8 | — |
+| `monocleSumPrices` | `size=64` | 16,532.5 ± 48.0 | — | 47,377.7 | — |
+| `monocleSumPrices` | `size=8` | 2,574.7 ± 18.0 | — | 6,640.1 | — |
+| `naiveModifyStreet` | `size=512` | 162,821.0 ± 402.3 | — | 333,500.0 | — |
+| `naiveModifyStreet` | `size=64` | 19,838.8 ± 86.4 | — | 30,058.0 | — |
+| `naiveModifyStreet` | `size=8` | 3,313.1 ± 26.2 | — | 4,640.1 | — |
+| `naiveReadStreet` | `size=512` | 93,337.0 ± 1,439.6 | — | 193,231.9 | — |
+| `naiveReadStreet` | `size=64` | 12,010.2 ± 255.1 | — | 24,705.2 | — |
+| `naiveReadStreet` | `size=8` | 1,886.8 ± 11.2 | — | 3,648.0 | — |
+| `naiveSumPrices` | `size=512` | 97,473.9 ± 322.6 | — | 230,123.4 | — |
+| `naiveSumPrices` | `size=64` | 12,324.6 ± 59.8 | — | 29,337.3 | — |
+| `naiveSumPrices` | `size=8` | 1,976.9 ± 6.7 | — | 4,248.0 | — |
+| `nativeReadStreet` | `size=512` | 34,607.2 ± 221.4 | — | 452.7 | — |
+| `nativeReadStreet` | `size=64` | 4,418.7 ± 13.0 | — | 424.5 | — |
+| `nativeReadStreet` | `size=8` | 861.9 ± 20.7 | — | 424.0 | — |
+| `nativeSumPrices` | `size=512` | 63,439.9 ± 1,460.5 | — | 86,273.1 | — |
+| `nativeSumPrices` | `size=64` | 7,925.7 ± 18.6 | — | 10,920.9 | — |
+| `nativeSumPrices` | `size=8` | 1,177.0 ± 4.6 | — | 1,512.0 | — |
 
 ## PlatedBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `TransformDeep` | `n=4096` | 125,190.5 ± 302.2 | — | 624,387.1 | — |
-| `TransformDeep` | `n=512` | 12,232.9 ± 128.9 | — | 57,361.3 | — |
-| `TransformDeep` | `n=64` | 1,425.6 ± 4.9 | — | 7,184.0 | — |
-| `TransformExpr` | `n=4096` | 133,733.8 ± 1,455.2 | 178,108.0 ± 633.4 | 655,361.3 | 753,745.6 |
-| `TransformExpr` | `n=512` | 16,478.6 ± 47.3 | 16,156.5 ± 133.3 | 81,825.7 | 69,585.6 |
-| `TransformExpr` | `n=64` | 2,026.6 ± 11.5 | 2,722.7 ± 4.2 | 10,144.0 | 11,728.1 |
-| `UniverseDeep` | `n=4096` | 111,670.1 ± 4,777.4 | — | 786,585.3 | — |
-| `UniverseDeep` | `n=512` | 16,238.7 ± 384.5 | — | 98,377.7 | — |
-| `UniverseDeep` | `n=64` | 1,977.8 ± 38.1 | — | 12,360.0 | — |
-| `UniverseExpr` | `n=4096` | 103,034.7 ± 4,951.8 | 2,847,681.5 ± 208,254.6 | 786,387.0 | 4,687,748.8 |
-| `UniverseExpr` | `n=512` | 15,594.3 ± 64.4 | 178,939.3 ± 7,986.5 | 98,185.6 | 475,010.4 |
-| `UniverseExpr` | `n=64` | 1,920.2 ± 32.0 | 14,723.7 ± 103.1 | 12,168.0 | 45,424.3 |
-| `UniverseJson` | `n=4096` | 240,293.0 ± 2,953.4 | 3,122,211.4 ± 166,485.8 | 786,486.9 | 6,489,812.6 |
-| `UniverseJson` | `n=512` | 27,507.6 ± 158.7 | 196,459.1 ± 6,967.6 | 98,186.8 | 699,916.2 |
-| `UniverseJson` | `n=64` | 3,307.3 ± 47.8 | 18,448.8 ± 160.7 | 12,168.1 | 73,208.4 |
-| `visitorTransformDeep` | `n=4096` | 44,639.9 ± 655.2 | — | 163,888.5 | — |
-| `visitorTransformDeep` | `n=512` | 4,089.3 ± 87.8 | — | 20,496.4 | — |
-| `visitorTransformDeep` | `n=64` | 470.1 ± 4.1 | — | 2,576.0 | — |
-| `visitorTransformExpr` | `n=4096` | 69,325.2 ± 1,753.0 | — | 360,474.5 | — |
-| `visitorTransformExpr` | `n=512` | 8,414.9 ± 18.5 | — | 45,032.9 | — |
-| `visitorTransformExpr` | `n=64` | 1,068.4 ± 18.4 | — | 5,608.0 | — |
-| `visitorUniverseDeep` | `n=4096` | 59,312.3 ± 462.5 | — | 196,707.2 | — |
-| `visitorUniverseDeep` | `n=512` | 7,271.3 ± 47.5 | — | 24,632.7 | — |
-| `visitorUniverseDeep` | `n=64` | 825.5 ± 10.1 | — | 3,128.0 | — |
-| `visitorUniverseExpr` | `n=4096` | 55,085.6 ± 198.2 | — | 196,656.1 | — |
-| `visitorUniverseExpr` | `n=512` | 6,905.2 ± 19.4 | — | 24,584.7 | — |
-| `visitorUniverseExpr` | `n=64` | 826.3 ± 1.3 | — | 3,080.0 | — |
-| `visitorUniverseJson` | `n=4096` | 175,029.7 ± 29,105.4 | — | 461,991.4 | — |
-| `visitorUniverseJson` | `n=512` | 21,908.0 ± 264.2 | — | 40,954.2 | — |
-| `visitorUniverseJson` | `n=64` | 2,086.0 ± 51.0 | — | 4,088.0 | — |
+| `TransformDeep` | `n=4096` | 123,302.1 ± 1,081.2 | — | 624,385.7 | — |
+| `TransformDeep` | `n=512` | 11,667.9 ± 80.5 | — | 57,361.2 | — |
+| `TransformDeep` | `n=64` | 1,437.5 ± 3.8 | — | 7,184.0 | — |
+| `TransformExpr` | `n=4096` | 130,056.3 ± 1,345.3 | 168,247.3 ± 817.4 | 655,358.6 | 753,738.4 |
+| `TransformExpr` | `n=512` | 16,402.0 ± 109.8 | 15,473.1 ± 166.3 | 81,825.7 | 69,585.6 |
+| `TransformExpr` | `n=64` | 2,028.5 ± 4.6 | 2,572.9 ± 5.3 | 10,144.0 | 11,728.0 |
+| `UniverseDeep` | `n=4096` | 103,519.4 ± 5,439.8 | — | 786,579.3 | — |
+| `UniverseDeep` | `n=512` | 15,358.9 ± 45.9 | — | 98,377.6 | — |
+| `UniverseDeep` | `n=64` | 1,892.7 ± 4.8 | — | 12,360.0 | — |
+| `UniverseExpr` | `n=4096` | 97,266.4 ± 1,275.9 | 2,712,196.0 ± 119,657.9 | 786,382.8 | 4,687,650.6 |
+| `UniverseExpr` | `n=512` | 14,874.9 ± 61.3 | 182,862.0 ± 1,829.3 | 98,185.5 | 475,010.7 |
+| `UniverseExpr` | `n=64` | 1,825.5 ± 6.1 | 15,482.8 ± 1,081.2 | 12,168.0 | 45,424.3 |
+| `UniverseJson` | `n=4096` | 232,590.3 ± 1,852.9 | 2,893,478.4 ± 143,162.5 | 786,481.3 | 6,882,814.2 |
+| `UniverseJson` | `n=512` | 27,436.3 ± 180.1 | 203,679.7 ± 3,496.4 | 98,186.8 | 699,916.8 |
+| `UniverseJson` | `n=64` | 3,327.0 ± 4.6 | 19,536.2 ± 388.4 | 12,168.1 | 73,208.4 |
+| `visitorTransformDeep` | `n=4096` | 41,544.8 ± 125.3 | — | 163,886.2 | — |
+| `visitorTransformDeep` | `n=512` | 4,902.7 ± 27.0 | — | 20,496.5 | — |
+| `visitorTransformDeep` | `n=64` | 429.1 ± 4.3 | — | 2,576.0 | — |
+| `visitorTransformExpr` | `n=4096` | 63,926.0 ± 234.4 | — | 360,470.5 | — |
+| `visitorTransformExpr` | `n=512` | 7,594.4 ± 87.3 | — | 45,032.8 | — |
+| `visitorTransformExpr` | `n=64` | 989.6 ± 10.2 | — | 5,608.0 | — |
+| `visitorUniverseDeep` | `n=4096` | 58,620.0 ± 706.0 | — | 196,706.7 | — |
+| `visitorUniverseDeep` | `n=512` | 7,239.7 ± 23.4 | — | 24,632.7 | — |
+| `visitorUniverseDeep` | `n=64` | 829.3 ± 3.6 | — | 3,128.0 | — |
+| `visitorUniverseExpr` | `n=4096` | 53,863.7 ± 622.3 | — | 196,655.2 | — |
+| `visitorUniverseExpr` | `n=512` | 6,726.1 ± 25.2 | — | 24,584.7 | — |
+| `visitorUniverseExpr` | `n=64` | 817.4 ± 1.4 | — | 3,080.0 | — |
+| `visitorUniverseJson` | `n=4096` | 193,820.7 ± 4,250.3 | — | 469,789.1 | — |
+| `visitorUniverseJson` | `n=512` | 21,187.0 ± 74.6 | — | 40,954.2 | — |
+| `visitorUniverseJson` | `n=64` | 2,052.7 ± 81.1 | — | 4,760.0 | — |
 
 ## PowerSeriesBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Modify_powerEach` | `size=1024` | 13,477.5 ± 162.4 | — | 41,414.4 | — |
-| `Modify_powerEach` | `size=16` | 270.2 ± 2.3 | — | 1,088.0 | — |
-| `Modify_powerEach` | `size=256` | 3,278.5 ± 48.0 | — | 10,688.5 | — |
-| `Modify_powerEach` | `size=4` | 118.9 ± 0.2 | — | 608.0 | — |
-| `Modify_powerEach` | `size=4096` | 53,922.5 ± 931.3 | — | 164,375.8 | — |
-| `Modify_powerEach` | `size=64` | 848.2 ± 6.3 | — | 3,008.0 | — |
-| `monocle_powerEach` | `size=1024` | 57,005.3 ± 1,270.0 | — | 279,430.8 | — |
-| `monocle_powerEach` | `size=16` | 582.3 ± 12.4 | — | 3,736.0 | — |
-| `monocle_powerEach` | `size=256` | 21,229.2 ± 170.5 | — | 107,331.3 | — |
-| `monocle_powerEach` | `size=4` | 236.6 ± 3.2 | — | 1,176.0 | — |
-| `monocle_powerEach` | `size=4096` | 181,806.1 ± 1,080.1 | — | 967,848.0 | — |
-| `monocle_powerEach` | `size=64` | 2,116.9 ± 6.4 | — | 14,520.1 | — |
-| `naive_powerEach` | `size=1024` | 5,390.1 ± 11.5 | — | 28,730.6 | — |
-| `naive_powerEach` | `size=16` | 108.0 ± 0.2 | — | 504.0 | — |
-| `naive_powerEach` | `size=256` | 1,683.1 ± 11.7 | — | 7,224.3 | — |
-| `naive_powerEach` | `size=4` | 27.8 ± 0.3 | — | 168.0 | — |
-| `naive_powerEach` | `size=4096` | 21,526.8 ± 71.9 | — | 114,779.3 | — |
-| `naive_powerEach` | `size=64` | 421.3 ± 0.6 | — | 1,848.0 | — |
+| `Modify_powerEach` | `size=1024` | 12,524.8 ± 119.9 | — | 41,413.9 | — |
+| `Modify_powerEach` | `size=16` | 264.5 ± 1.0 | — | 1,088.0 | — |
+| `Modify_powerEach` | `size=256` | 3,082.7 ± 8.9 | — | 10,688.5 | — |
+| `Modify_powerEach` | `size=4` | 125.5 ± 0.5 | — | 608.0 | — |
+| `Modify_powerEach` | `size=4096` | 53,110.3 ± 1,637.5 | — | 164,374.5 | — |
+| `Modify_powerEach` | `size=64` | 825.4 ± 10.0 | — | 3,008.0 | — |
+| `monocle_powerEach` | `size=1024` | 59,147.0 ± 1,472.4 | — | 279,432.2 | — |
+| `monocle_powerEach` | `size=16` | 631.9 ± 3.4 | — | 3,736.0 | — |
+| `monocle_powerEach` | `size=256` | 21,822.8 ± 111.1 | — | 107,331.4 | — |
+| `monocle_powerEach` | `size=4` | 264.1 ± 4.9 | — | 1,176.0 | — |
+| `monocle_powerEach` | `size=4096` | 184,170.5 ± 1,041.0 | — | 967,851.9 | — |
+| `monocle_powerEach` | `size=64` | 2,089.2 ± 24.3 | — | 14,520.1 | — |
+| `naive_powerEach` | `size=1024` | 5,086.2 ± 12.3 | — | 28,730.4 | — |
+| `naive_powerEach` | `size=16` | 99.3 ± 0.7 | — | 504.0 | — |
+| `naive_powerEach` | `size=256` | 1,613.1 ± 1.9 | — | 7,224.3 | — |
+| `naive_powerEach` | `size=4` | 26.2 ± 0.1 | — | 168.0 | — |
+| `naive_powerEach` | `size=4096` | 20,239.8 ± 187.7 | — | 114,777.0 | — |
+| `naive_powerEach` | `size=64` | 398.2 ± 2.5 | — | 1,848.0 | — |
 
 ## PowerSeriesNestedBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Modify_nested` | `size=1024` | 73,365.5 ± 1,525.0 | — | 210,661.5 | — |
-| `Modify_nested` | `size=16` | 1,449.8 ± 7.9 | — | 4,768.1 | — |
-| `Modify_nested` | `size=256` | 18,709.4 ± 39.9 | — | 53,771.7 | — |
-| `Modify_nested` | `size=4` | 653.1 ± 9.8 | — | 2,240.0 | — |
-| `Modify_nested` | `size=64` | 4,835.6 ± 143.8 | — | 14,616.6 | — |
-| `monocle_nested` | `size=1024` | 235,858.7 ± 1,453.5 | — | 1,118,829.4 | — |
-| `monocle_nested` | `size=16` | 2,511.0 ± 129.9 | — | 15,776.1 | — |
-| `monocle_nested` | `size=256` | 89,716.5 ± 200.1 | — | 430,209.3 | — |
-| `monocle_nested` | `size=4` | 1,232.2 ± 137.9 | — | 5,568.0 | — |
-| `monocle_nested` | `size=64` | 8,733.2 ± 108.1 | — | 58,913.0 | — |
-| `naive_nested` | `size=1024` | 20,745.0 ± 432.3 | — | 115,069.8 | — |
-| `naive_nested` | `size=16` | 395.5 ± 10.6 | — | 2,136.0 | — |
-| `naive_nested` | `size=256` | 5,498.7 ± 40.2 | — | 29,019.5 | — |
-| `naive_nested` | `size=4` | 140.3 ± 4.3 | — | 792.0 | — |
-| `naive_nested` | `size=64` | 1,378.5 ± 17.6 | — | 7,512.2 | — |
+| `Modify_nested` | `size=1024` | 69,506.1 ± 6,809.7 | — | 210,678.5 | — |
+| `Modify_nested` | `size=16` | 1,498.8 ± 12.1 | — | 4,768.1 | — |
+| `Modify_nested` | `size=256` | 17,964.0 ± 72.6 | — | 53,824.7 | — |
+| `Modify_nested` | `size=4` | 700.0 ± 6.6 | — | 2,264.0 | — |
+| `Modify_nested` | `size=64` | 4,756.5 ± 37.0 | — | 14,664.5 | — |
+| `monocle_nested` | `size=1024` | 248,218.6 ± 2,769.4 | — | 1,118,851.9 | — |
+| `monocle_nested` | `size=16` | 2,857.6 ± 26.0 | — | 15,776.1 | — |
+| `monocle_nested` | `size=256` | 93,209.9 ± 1,377.9 | — | 430,210.4 | — |
+| `monocle_nested` | `size=4` | 1,381.8 ± 101.2 | — | 5,568.0 | — |
+| `monocle_nested` | `size=64` | 8,664.8 ± 75.4 | — | 58,896.9 | — |
+| `naive_nested` | `size=1024` | 19,433.1 ± 187.3 | — | 115,067.4 | — |
+| `naive_nested` | `size=16` | 367.6 ± 4.1 | — | 2,136.0 | — |
+| `naive_nested` | `size=256` | 5,211.1 ± 24.0 | — | 29,019.3 | — |
+| `naive_nested` | `size=4` | 127.8 ± 2.4 | — | 792.0 | — |
+| `naive_nested` | `size=64` | 1,328.1 ± 26.4 | — | 7,512.2 | — |
 
 ## PowerSeriesPrismBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Modify_sparse` | `size=128` | 1,436.1 ± 1.5 | — | 4,840.1 | — |
-| `Modify_sparse` | `size=2048` | 23,928.6 ± 459.8 | — | 104,700.0 | — |
-| `Modify_sparse` | `size=32` | 373.8 ± 6.5 | — | 1,381.3 | — |
-| `Modify_sparse` | `size=512` | 5,995.2 ± 11.7 | — | 24,809.6 | — |
-| `Modify_sparse` | `size=8` | 125.2 ± 0.2 | — | 520.0 | — |
-| `monocle_sparse` | `size=128` | 3,876.4 ± 45.9 | — | 27,808.2 | — |
-| `monocle_sparse` | `size=2048` | 97,345.4 ± 1,902.4 | — | 523,143.0 | — |
-| `monocle_sparse` | `size=32` | 984.3 ± 2.8 | — | 7,040.0 | — |
-| `monocle_sparse` | `size=512` | 31,819.1 ± 360.2 | — | 166,683.4 | — |
-| `monocle_sparse` | `size=8` | 285.3 ± 2.2 | — | 1,952.0 | — |
-| `naive_sparse` | `size=128` | 335.7 ± 0.7 | — | 1,568.0 | — |
-| `naive_sparse` | `size=2048` | 5,381.2 ± 20.3 | — | 24,612.5 | — |
-| `naive_sparse` | `size=32` | 86.4 ± 0.4 | — | 416.0 | — |
-| `naive_sparse` | `size=512` | 1,275.9 ± 11.1 | — | 6,176.4 | — |
-| `naive_sparse` | `size=8` | 25.9 ± 0.2 | — | 128.0 | — |
+| `Modify_sparse` | `size=128` | 1,348.9 ± 6.0 | — | 4,840.1 | — |
+| `Modify_sparse` | `size=2048` | 22,995.6 ± 438.8 | — | 104,699.0 | — |
+| `Modify_sparse` | `size=32` | 356.5 ± 3.7 | — | 1,384.0 | — |
+| `Modify_sparse` | `size=512` | 5,731.0 ± 15.7 | — | 24,809.6 | — |
+| `Modify_sparse` | `size=8` | 128.9 ± 1.5 | — | 520.0 | — |
+| `monocle_sparse` | `size=128` | 3,820.9 ± 11.9 | — | 27,808.2 | — |
+| `monocle_sparse` | `size=2048` | 106,646.6 ± 559.9 | — | 523,147.8 | — |
+| `monocle_sparse` | `size=32` | 1,085.2 ± 69.4 | — | 7,032.0 | — |
+| `monocle_sparse` | `size=512` | 33,482.8 ± 537.6 | — | 166,684.7 | — |
+| `monocle_sparse` | `size=8` | 332.2 ± 3.7 | — | 1,952.0 | — |
+| `naive_sparse` | `size=128` | 324.7 ± 3.3 | — | 1,568.0 | — |
+| `naive_sparse` | `size=2048` | 4,987.8 ± 21.7 | — | 24,612.3 | — |
+| `naive_sparse` | `size=32` | 83.2 ± 0.2 | — | 416.0 | — |
+| `naive_sparse` | `size=512` | 1,162.7 ± 3.6 | — | 6,176.3 | — |
+| `naive_sparse` | `size=8` | 25.2 ± 0.1 | — | 128.0 | — |
 
 ## PrismBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `GetOptionAbsent` | `-` | 0.9 ± 0.0 | 1.0 ± 0.0 | 0.0 | 0.0 |
-| `GetOptionPresent` | `-` | 0.9 ± 0.0 | 1.0 ± 0.0 | 0.0 | 0.0 |
-| `GetRightAbsent` | `-` | 1.1 ± 0.0 | 1.1 ± 0.0 | 0.0 | 0.0 |
-| `GetRightPresent` | `-` | 2.5 ± 0.0 | 2.6 ± 0.0 | 16.0 | 16.0 |
-| `ReverseGet` | `-` | 2.5 ± 0.0 | 2.7 ± 0.0 | 16.0 | 16.0 |
-| `RightReverseGet` | `-` | 2.5 ± 0.0 | 2.7 ± 0.0 | 16.0 | 16.0 |
+| `GetOptionAbsent` | `-` | 0.9 ± 0.0 | 1.1 ± 0.0 | 0.0 | 0.0 |
+| `GetOptionPresent` | `-` | 0.9 ± 0.0 | 1.1 ± 0.0 | 0.0 | 0.0 |
+| `GetRightAbsent` | `-` | 1.1 ± 0.0 | 1.2 ± 0.0 | 0.0 | 0.0 |
+| `GetRightPresent` | `-` | 2.3 ± 0.0 | 2.5 ± 0.1 | 16.0 | 16.0 |
+| `ReverseGet` | `-` | 2.4 ± 0.0 | 2.5 ± 0.0 | 16.0 | 16.0 |
+| `RightReverseGet` | `-` | 2.4 ± 0.0 | 2.5 ± 0.0 | 16.0 | 16.0 |
 
 ## ReviewBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
 | `ReverseGet_0` | `-` | 2.6 ± 0.0 | — | 24.0 | — |
-| `ReverseGet_3` | `-` | 21.2 ± 0.1 | — | 72.0 | — |
-| `ReverseGet_6` | `-` | 37.4 ± 0.0 | — | 120.0 | — |
-| `naiveBuild_0` | `-` | 2.4 ± 0.0 | — | 24.0 | — |
-| `naiveBuild_3` | `-` | 6.7 ± 0.1 | — | 72.0 | — |
-| `naiveBuild_6` | `-` | 11.2 ± 0.0 | — | 120.0 | — |
+| `ReverseGet_3` | `-` | 20.0 ± 0.1 | — | 72.0 | — |
+| `ReverseGet_6` | `-` | 34.4 ± 0.1 | — | 120.0 | — |
+| `naiveBuild_0` | `-` | 2.2 ± 0.0 | — | 24.0 | — |
+| `naiveBuild_3` | `-` | 6.4 ± 0.1 | — | 72.0 | — |
+| `naiveBuild_6` | `-` | 10.6 ± 0.1 | — | 120.0 | — |
 
 ## SchemesBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Ana` | `-` | 99,093.6 ± 1,108.0 | — | 589,712.7 | — |
-| `Cata` | `-` | 76,974.7 ± 965.5 | — | 197,568.5 | — |
-| `Hylo` | `-` | 86,151.9 ± 976.4 | — | 295,848.6 | — |
-| `drosteAna` | `-` | 45,531.9 ± 309.1 | — | 327,632.3 | — |
-| `drosteCata` | `-` | 41,277.1 ± 411.8 | — | 164,824.3 | — |
-| `drosteHylo` | `-` | 51,778.0 ± 96.5 | — | 328,640.4 | — |
-| `handAna` | `-` | 20,605.8 ± 524.9 | — | 163,816.1 | — |
-| `handCata` | `-` | 14,002.3 ± 28.5 | — | 0.1 | — |
-| `handHylo` | `-` | 10,193.7 ± 740.9 | — | 0.1 | — |
+| `Ana` | `-` | 105,319.3 ± 951.9 | — | 589,712.7 | — |
+| `Cata` | `-` | 78,883.6 ± 874.2 | — | 197,568.6 | — |
+| `Hylo` | `-` | 85,866.3 ± 542.6 | — | 295,848.6 | — |
+| `drosteAna` | `-` | 47,023.8 ± 549.0 | — | 327,632.3 | — |
+| `drosteCata` | `-` | 39,260.9 ± 228.8 | — | 164,824.3 | — |
+| `drosteHylo` | `-` | 64,585.0 ± 143.7 | — | 328,640.5 | — |
+| `handAna` | `-` | 19,312.9 ± 324.3 | — | 163,816.1 | — |
+| `handCata` | `-` | 13,014.2 ± 34.5 | — | 0.1 | — |
+| `handHylo` | `-` | 9,951.5 ± 655.6 | — | 0.1 | — |
 
 ## SetterBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `Modify_0` | `-` | 2.4 ± 0.0 | 2.4 ± 0.0 | 24.0 | 24.0 |
-| `Modify_3` | `-` | 12.8 ± 0.1 | 28.5 ± 0.4 | 72.0 | 168.0 |
-| `Modify_6` | `-` | 26.2 ± 0.2 | 58.7 ± 0.1 | 120.0 | 288.0 |
-| `Modify_orderId` | `-` | 3.3 ± 0.0 | 3.3 ± 0.0 | 40.0 | 40.0 |
+| `Modify_0` | `-` | 2.3 ± 0.0 | 2.3 ± 0.0 | 24.0 | 24.0 |
+| `Modify_3` | `-` | 11.7 ± 0.0 | 28.2 ± 0.4 | 72.0 | 168.0 |
+| `Modify_6` | `-` | 26.4 ± 0.1 | 64.6 ± 0.3 | 120.0 | 288.0 |
+| `Modify_orderId` | `-` | 3.1 ± 0.0 | 3.1 ± 0.0 | 40.0 | 40.0 |
 
 ## TraversalBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `FoldNested` | `size=512` | 5,395.0 ± 160.0 | — | 20,200.9 | — |
-| `FoldNested` | `size=64` | 570.4 ± 2.4 | — | 2,680.0 | — |
-| `FoldNested` | `size=8` | 57.2 ± 3.8 | — | 392.0 | — |
-| `FoldPrices` | `size=512` | 3,047.2 ± 31.4 | 30,533.8 ± 1,160.1 | 12,312.5 | 162,580.8 |
-| `FoldPrices` | `size=64` | 369.9 ± 0.4 | 2,161.5 ± 60.8 | 1,560.0 | 15,424.1 |
-| `FoldPrices` | `size=8` | 48.0 ± 0.4 | 285.6 ± 1.2 | 216.0 | 2,016.0 |
-| `Modify` | `size=512` | 8,167.5 ± 231.2 | 32,739.3 ± 647.1 | 36,897.3 | 176,925.0 |
-| `Modify` | `size=64` | 898.1 ± 0.6 | 1,788.7 ± 2.2 | 4,640.0 | 14,448.0 |
-| `Modify` | `size=8` | 103.7 ± 2.0 | 241.2 ± 2.2 | 608.0 | 1,936.0 |
+| `FoldNested` | `size=512` | 5,176.3 ± 143.0 | — | 20,200.8 | — |
+| `FoldNested` | `size=64` | 529.3 ± 22.1 | — | 2,648.0 | — |
+| `FoldNested` | `size=8` | 51.2 ± 0.7 | — | 328.0 | — |
+| `FoldPrices` | `size=512` | 2,798.5 ± 11.1 | 31,882.7 ± 449.0 | 12,312.4 | 162,581.1 |
+| `FoldPrices` | `size=64` | 351.6 ± 3.7 | 2,170.2 ± 11.6 | 1,560.0 | 15,424.1 |
+| `FoldPrices` | `size=8` | 44.3 ± 0.1 | 342.5 ± 2.1 | 216.0 | 2,016.0 |
+| `Modify` | `size=512` | 7,418.2 ± 132.9 | 33,118.9 ± 233.4 | 36,897.2 | 176,925.1 |
+| `Modify` | `size=64` | 861.3 ± 1.6 | 1,695.0 ± 9.0 | 4,640.0 | 14,448.0 |
+| `Modify` | `size=8` | 96.6 ± 0.2 | 288.7 ± 4.3 | 608.0 | 1,936.0 |
 
 ## ZioDiBench
 
 | Benchmark | params | eo ns/op | monocle ns/op | eo B/op | monocle B/op |
 |---|---|---:|---:|---:|---:|
-| `DrillGet` | `-` | 12.9 ± 0.0 | — | 0.0 | — |
-| `DrillModify` | `-` | 119.5 ± 0.3 | — | 528.0 | — |
-| `ServiceGet` | `-` | 5.6 ± 0.0 | — | 0.0 | — |
-| `ServiceReplace` | `-` | 83.1 ± 0.2 | — | 456.0 | — |
-| `handDrillGet` | `-` | 16.0 ± 0.1 | — | 120.0 | — |
-| `handDrillModify` | `-` | 105.8 ± 0.2 | — | 648.0 | — |
-| `handServiceGet` | `-` | 15.9 ± 0.1 | — | 120.0 | — |
-| `handServiceReplace` | `-` | 90.8 ± 6.7 | — | 576.0 | — |
+| `DrillGet` | `-` | 12.0 ± 0.1 | — | 0.0 | — |
+| `DrillModify` | `-` | 113.8 ± 0.5 | — | 528.0 | — |
+| `ServiceGet` | `-` | 5.1 ± 0.0 | — | 0.0 | — |
+| `ServiceReplace` | `-` | 81.6 ± 0.5 | — | 456.0 | — |
+| `handDrillGet` | `-` | 14.7 ± 0.2 | — | 120.0 | — |
+| `handDrillModify` | `-` | 106.1 ± 1.3 | — | 648.0 | — |
+| `handServiceGet` | `-` | 14.7 ± 0.1 | — | 120.0 | — |
+| `handServiceReplace` | `-` | 91.4 ± 3.9 | — | 576.0 | — |
 
