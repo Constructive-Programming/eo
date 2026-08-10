@@ -80,8 +80,14 @@ object StructureValues:
     Prism.optional({ case Value.MapEntries(es) => Some(es); case _ => None }, Value.MapEntries(_))
 
   /** Optional into a `Record` field by name — the other fields (and their order) survive writes.
-    * Misses (not a record, or no such field) pass through writes untouched. Schema-produced records
-    * carry unique names; if duplicates ever appear, reads take the first and writes update all.
+    * Misses (not a record, or no such field) pass through writes untouched.
+    *
+    * `Value.Record` is `Chunk`-backed, so duplicate names are representable even though
+    * schema-produced records carry unique ones. Reads AND writes both target the '''first''' match,
+    * which is what keeps this lawful on such records: a read-first/write-all optic fails
+    * `modify(identity)` (and so `OptionalLaws.modifyIdentity` / `SeamLaws.seamModifyIdentity`),
+    * because writing back the value it just read overwrites the twin as well. A write-all variant
+    * would be a Traversal, not an Optional.
     */
   def field(name: String): Optional[Value, Value, Value, Value] =
     Optional[Value, Value, Value, Value](
@@ -92,8 +98,45 @@ object StructureValues:
       },
       (s, b) =>
         s match
-          case Value.Record(fields) if fields.exists(_._1 == name) =>
-            Value.Record(fields.map((n, v) => if n == name then (n, b) else (n, v)))
+          case Value.Record(fields) =>
+            val i = fields.indexWhere(_._1 == name)
+            if i < 0 then s else Value.Record(fields.updated(i, (name, b)))
+          case other => other,
+    )
+
+  /** [[optics.At]]-style access to a `Record` field: the focus is the `Option[Value]` at `name`, so
+    * a write can '''create or delete''' the field — `Some(v)` updates the first occurrence
+    * (appending when absent), `None` removes it. [[field]] can do neither: its focus is the value,
+    * so an absent field is a miss and misses pass writes through.
+    *
+    * Partial only in "is this a record"; within one it is total, presence living in the focus (so
+    * `getOption` yields `Some(None)` for a record lacking the field). `None` removes '''every'''
+    * occurrence of a duplicated name, so a read after a delete cannot find a leftover twin.
+    *
+    * '''Lawful up to field ORDER, and no further.''' put-get, get-put and the miss contract hold
+    * unconditionally (checked by `NavigationTests` / `OptionalTests`), but put-put does NOT:
+    * deleting with `None` destroys the field's position, so a following `Some(v)` appends where a
+    * direct `Some(v)` would have updated in place. Deletion cannot preserve a position that no
+    * longer exists, so this is inherent to At-style access over an ORDERED record rather than a
+    * fixable defect — Monocle's `At` avoids it only because `Map` has no order. The zio kits'
+    * equivalents behave identically; there it is merely invisible, because a `ListMap` compares as
+    * a `Map` and zio-json's `Json.Obj.equals` normalises the left operand before comparing.
+    */
+  def atField(name: String): Optional[Value, Value, Option[Value], Option[Value]] =
+    Optional[Value, Value, Option[Value], Option[Value]](
+      {
+        case Value.Record(fields) => Right(fields.collectFirst { case (n, v) if n == name => v })
+        case other                => Left(other)
+      },
+      (s, ov) =>
+        s match
+          case Value.Record(fields) =>
+            val i = fields.indexWhere(_._1 == name)
+            ov match
+              case Some(v) =>
+                if i < 0 then Value.Record(fields :+ (name -> v))
+                else Value.Record(fields.updated(i, (name, v)))
+              case None => Value.Record(fields.filterNot(_._1 == name))
           case other => other,
     )
 
@@ -113,7 +156,11 @@ object StructureValues:
     )
 
   /** Optional into a `MapEntries` value by key (compared with `Value`'s structural equality) —
-    * reads take the first matching entry, writes update every matching entry, misses pass through.
+    * siblings and entry order survive writes, misses pass through.
+    *
+    * Reads AND writes both target the '''first''' matching entry: `MapEntries` is a `Chunk` of
+    * pairs, so structurally equal keys are representable (a whole-tree [[platedValue]] rewrite can
+    * even manufacture them), and read-first/write-all would break `modify(identity)` on such a map.
     */
   def key(k: Value): Optional[Value, Value, Value, Value] =
     Optional[Value, Value, Value, Value](
@@ -124,8 +171,9 @@ object StructureValues:
       },
       (s, b) =>
         s match
-          case Value.MapEntries(entries) if entries.exists(_._1 == k) =>
-            Value.MapEntries(entries.map((ek, ev) => if ek == k then (ek, b) else (ek, ev)))
+          case Value.MapEntries(entries) =>
+            val i = entries.indexWhere(_._1 == k)
+            if i < 0 then s else Value.MapEntries(entries.updated(i, (k, b)))
           case other => other,
     )
 

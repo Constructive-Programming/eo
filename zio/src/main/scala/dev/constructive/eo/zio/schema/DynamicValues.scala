@@ -123,6 +123,13 @@ object DynamicValues:
     * record it is total, because presence lives in the focus. `getOption` therefore returns
     * `Some(None)` for a record lacking the field — that nesting is the point, and it is what keeps
     * put-get lawful for inserts and deletes alike.
+    *
+    * One caveat, invisible to `==` here but real: deleting with `None` destroys the field's
+    * position, so a following `Some(v)` appends rather than restoring it in place. `ListMap`
+    * compares as a `Map`, i.e. order-insensitively, so put-put still HOLDS up to equality — but
+    * `.keys` order does change, which matters if the tree is about to be re-encoded. Inherent to
+    * At-style access over an ordered record (kyo's `StructureValues.atField` documents the same
+    * thing, where structural Chunk equality makes it observable).
     */
   def atField(
       name: String

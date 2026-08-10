@@ -87,6 +87,13 @@ object JsonValues:
     * `getOption` yields `Some(None)` for an object lacking the field). `None` removes '''every'''
     * occurrence of a duplicated key rather than just the first — that is what keeps put-get honest
     * on such documents: after a delete, a read must not find a leftover twin.
+    *
+    * One caveat, invisible to `==` here but real: deleting with `None` destroys the key's position,
+    * so a following `Some(v)` appends rather than restoring it in place. `Json.Obj.equals` is
+    * order-insensitive (it maps the left operand), so put-put still HOLDS up to equality — but the
+    * serialised key order does change. Inherent to At-style access over an ordered object; kyo's
+    * `StructureValues.atField` documents the same thing, where structural equality makes it
+    * visible.
     */
   def atField(name: String): Optional[Json, Json, Option[Json], Option[Json]] =
     Optional[Json, Json, Option[Json], Option[Json]](
