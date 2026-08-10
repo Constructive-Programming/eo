@@ -92,6 +92,16 @@ final case class BalanceSheet(id: Long, owner: String, total: Double)
 object BalanceSheet:
   given Codec.AsObject[BalanceSheet] = KindlingsCodecAsObject.derived
 
+/** The `.fields(_.name, _.age)` focus type for circe.md, and its codec. Hosted here for the reason
+  * above — as a fence it was the LAST kindlings derivation expanding on the 5s default, and it
+  * intermittently tripped the pre-commit docs build on a cold JVM while passing on a warm one.
+  * NamedTuple derivation is the slowest of these, so it is the one that had to move.
+  */
+type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
+
+object NameAgeCodec:
+  given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derived
+
 // ---- kyo Record / kyo-schema samples --------------------------------
 //
 // Same hosting rule, two new reasons: `Record.iso[T]` on a case class

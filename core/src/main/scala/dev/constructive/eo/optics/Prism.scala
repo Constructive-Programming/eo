@@ -216,6 +216,20 @@ final class MendTearPrism[S, T, A, B](
       innerWrite = (a, d) => inner.reverseGet(a, d),
     )
 
+  /** Fused `Prism.andThen(Traversal)` — a prism MISS contributes zero foci (so writes pass the
+    * source through) and a hit contributes the inner traversal's. Lifts through the same
+    * `either2multifocusPSVec` bridge the `Morph`-routed generic extension uses, but returns the
+    * concrete [[Traversal]] class, so the composite stays nameable as a `Traversal` val and keeps
+    * Traversal's fused `modify` / `replace` / streaming `foldMap` — the [[GetReplaceLens]] analog.
+    *
+    * Without this member, `prism.andThen(traversal)` typechecks but yields an anonymous
+    * `Optic[…, MultiFocus[PSVec]]`, which is why tree kits hand-rolled `each` through
+    * [[Traversal.selfChildren]] with a `case other => other` arm re-encoding the prism's miss
+    * branch by hand.
+    */
+  def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
+    Traversal.composed(data.MultiFocusK.either2multifocusPSVec.to(this), inner)
+
 /** Concrete Optic subclass for the `Option`-shaped Prism (`Prism.optional` / `Prism.pOptional`).
   * Stores `pick` and `mend` directly; the fused extensions pattern-match on `Option` so the hot
   * path never builds the intermediate `Either[S, A]` the generic `MendTearPrism` would.
@@ -293,3 +307,10 @@ final class PickMendPrism[S, A, B](
       pick = s => pick(s).map(inner.get),
       mend = d => mend(inner.reverseGet(d)),
     )
+
+  /** Fused `PickMend.andThen(Traversal)` — the [[MendTearPrism.andThen(Traversal)]] twin: a miss is
+    * zero foci (writes pass the source through), a hit is the inner traversal's foci, and the
+    * result is the concrete [[Traversal]] class rather than an anonymous `Optic`.
+    */
+  def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, S, C, D] =
+    Traversal.composed(data.MultiFocusK.either2multifocusPSVec.to(this), inner)
