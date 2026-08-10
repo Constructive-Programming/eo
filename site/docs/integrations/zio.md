@@ -387,6 +387,20 @@ def refresh(url: String): Task[String] = ???
 val refreshed: Db => Task[Db] = urlL.modifyF(refresh)
 ```
 
+What the module *does* own is the plumbing interop-cats can't give
+you: `Ref.Synchronized[S].updateFocusZIO(f)` runs an effectful rewrite
+**at the focus** while the ref is held, so the read-modify-write stays
+atomic — the thing `Ref` cannot express at all. It takes your
+`Applicative[ZIO[R, E, *]]` (hence no new dependency here) and
+`CanModifyA`, so it works through a lens, a prism (a miss means the
+effect never runs), or a traversal (one effect per focus, sequenced):
+
+```scala
+val ref: Ref.Synchronized[Db] = ???
+
+ref.updateFocusZIO(refresh)(using urlL, summon)
+```
+
 ## Overhead
 
 `ZioDiBench` pairs every op above (leaf service get/replace, drilled

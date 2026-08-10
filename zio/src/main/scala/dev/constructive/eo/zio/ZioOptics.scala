@@ -3,6 +3,7 @@ package zio
 
 import _root_.zio.stm.{TMap, TRef, USTM}
 import _root_.zio.{Exit, Ref, Tag, Trace, UIO, URIO, ZEnvironment, ZIO, ZLayer}
+import cats.Applicative
 
 import optics.{GetReplaceLens, Lens, PickMendPrism, Prism}
 
@@ -72,6 +73,28 @@ extension [S](ref: Ref[S])
   /** Atomically overwrite the focus. */
   def setFocus[A](a: A)(using m: CanModify[S, A])(using Trace): UIO[Unit] =
     ref.update(m.replace(a))
+
+/** Effectful focus rewrite inside a `Ref.Synchronized[S]` — `CanModifyA` routed through ZIO's own
+  * `updateZIO`, so the effect runs while the ref is held and the whole read-modify-write stays
+  * atomic (that is exactly what `Ref.Synchronized` adds over `Ref`, which cannot host an effectful
+  * update at all).
+  *
+  * The `Applicative` is YOURS to supply, which is why this needs no new dependency: the instance
+  * for `ZIO[R, E, *]` lives in [[https://github.com/zio/interop-cats zio-interop-cats]] (`import
+  * zio.interop.catz.*`), and this module deliberately declares none of its own — see the package
+  * note on effectful modify. What the module does own is this plumbing, which interop-cats cannot
+  * give you.
+  *
+  * `CanModifyA` is the affine/many-focus face, so this works for a lens, a prism (miss ⇒ the effect
+  * never runs), or a traversal (one effect per focus, sequenced left to right).
+  */
+extension [S](ref: Ref.Synchronized[S])
+
+  def updateFocusZIO[R, E, A](f: A => ZIO[R, E, A])(using
+      m: CanModifyA[S, A],
+      G: Applicative[[x] =>> ZIO[R, E, x]],
+  )(using Trace): ZIO[R, E, Unit] =
+    ref.updateZIO(m.modifyA[[x] =>> ZIO[R, E, x]](f))
 
 // ---- STM focus ops ------------------------------------------------------
 //
