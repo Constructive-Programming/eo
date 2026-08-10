@@ -383,6 +383,25 @@ rebuild), and `MultiFocus.representableAt` (representative-index
 variant). See [MultiFocus reference](multifocus.md) and
 [Cookbook → Recipe A](cookbook.md) for a worked example.
 
+`MultiFocus.zipWith(fa, fb)(f)` (and its pairing form `zip`) is the
+operation this shape exists for: because a Grate sees *every* focus
+while rebuilding, it can combine **two** structures pointwise — which
+a Traversal structurally cannot, since it visits one focus at a time
+with no access to a second container. Merging two configurations
+field-by-field is the everyday case:
+
+```scala mdoc
+import cats.instances.function.given
+import dev.constructive.eo.data.MultiFocus
+
+val defaults: Boolean => Int = b => if b then 1 else 2
+val overrides: Boolean => Int = b => if b then 10 else 20
+
+val merged = MultiFocus.zipWith(defaults, overrides)(_ + _)
+
+(merged(true), merged(false))
+```
+
 ### Kaleidoscope
 
 `MultiFocus[F]` for an `F` with `Apply` — the aggregating read: collapse
