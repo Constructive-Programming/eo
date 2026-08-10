@@ -342,10 +342,14 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[List[Box[Int]], List[Box[Int]], Int, Int, MultiFocus[PSVec]] = o_trav.andThen(i_lens)"
       ) must beTrue
     }
-    "trav ∘ prism → Optic" >> {
+    "trav ∘ prism → Traversal (fused member, nameable as the concrete class)" >> {
       typeChecks("o_trav.andThen(i_prism)") must beTrue // resolves with no expected type
       typeChecks(
         "val r: Optic[List[Box[Int]], List[Box[Int]], Int, Int, MultiFocus[PSVec]] = o_trav.andThen(i_prism)"
+      ) must beTrue
+      // Mirror of the prism ∘ trav cell: the filtering composition is a concrete Traversal now.
+      typeChecks(
+        "val r: optics.Traversal[List[Box[Int]], List[Box[Int]], Int, Int] = o_trav.andThen(i_prism)"
       ) must beTrue
     }
     "trav ∘ optional → Optic" >> {

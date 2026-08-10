@@ -226,6 +226,27 @@ circleP.modify(c => Shape.Circle(c.r * 2))(Shape.Square(2.0))
 For auto-derivation on enums / sealed traits / union types see
 `prism[S, A]` in [Generics](generics.md).
 
+Composed with a traversal in either direction, a prism *filters*:
+`traversal.andThen(prism)` visits only the elements that match, and
+`prism.andThen(traversal)` walks the inner structure only when the
+outer branch matches. Both return a concrete `Traversal`, so they stay
+nameable and on the fused path. The load-bearing law is that a miss is
+rebuilt untouched — never dropped, so length and order survive:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Traversal
+```
+
+```scala mdoc
+val circles = Traversal.each[List, Shape].andThen(circleP)
+
+val mixed = List(Shape.Circle(1.0), Shape.Square(2.0), Shape.Circle(3.0))
+
+circles.foldMap(_ => 1)(mixed) // two of the three elements match
+
+circles.modify(c => Shape.Circle(c.r * 10))(mixed) // the Square is still there
+```
+
 ## Affine
 
 The `Affine` carrier focuses a value that may or may not be present —
