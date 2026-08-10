@@ -41,8 +41,16 @@ object EoAccessorBuilder extends AccessorBuilder:
     optics.Prism.optional(term.deconstructOption, term.construct)
 
   /** Collection ⇒ eo Traversal — a Lens onto the `Chunk` slot (`toChunk` / `fromChunk`) composed
-    * with [[Chunks.each]]. eo Traversal writes are size- and shape-preserving by construction,
-    * which is the regime where `fromChunk ∘ toChunk` is the identity.
+    * with [[Chunks.each]].
+    *
+    * '''Lawful for sequence-like collections; conditionally lawful for `Set` / `Map`.''' eo's
+    * writes are element-wise, so the chunk handed to `fromChunk` always has the original length —
+    * but the law needs `toChunk ∘ fromChunk` to be the identity on THAT chunk, and
+    * `Schema.Set.fromChunk` dedupes while `Schema.Map.fromChunk` is last-wins. So for those two the
+    * traversal is lawful exactly when the update is '''injective''' (on elements for `Set`, on keys
+    * for `Map`); a colliding update silently drops entries, e.g. `Schema.set[Int]`'s traversal
+    * under `_ / 2` turns `Set(2, 3)` into `Set(1)`. `Schema.Sequence` / `NonEmptySequence` are
+    * unconditionally lawful (`toChunk ∘ fromChunk = id` there).
     */
   def makeTraversal[S, A](
       collection: Schema.Collection[S, A],

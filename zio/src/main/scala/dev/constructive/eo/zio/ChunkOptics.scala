@@ -33,19 +33,24 @@ object Chunks:
       (c, a) => if c.isDefinedAt(i) then c.updated(i, a) else c,
     )
 
-  private val chunkTraverse: Traverse[Chunk] = new Traverse[Chunk]:
+  private[zio] val chunkTraverse: Traverse[Chunk] = new Traverse[Chunk]:
     def traverse[G[_]: Applicative, A, B](fa: Chunk[A])(f: A => G[B]): G[Chunk[B]] =
       fa.foldLeft(Applicative[G].pure(Chunk.empty[B])) { (acc, a) =>
         Applicative[G].map2(acc, f(a))(_ :+ _)
       }
+    // Without this, cats derives `map` as `traverse[Id]` — i.e. the fold above, which allocates an
+    // append wrapper (plus a CAS) per element and yields a Concat tree. `Chunk.map` is one array
+    // pass, and `map` IS the traversal WRITE path (`TraverseTraversal.from` rebuilds through it).
+    override def map[A, B](fa: Chunk[A])(f: A => B): Chunk[B] = fa.map(f)
     def foldLeft[A, B](fa: Chunk[A], b: B)(f: (B, A) => B): B = fa.foldLeft(b)(f)
     def foldRight[A, B](fa: Chunk[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
       Foldable.iterateRight(fa, lb)(f)
 
-  private val nonEmptyChunkTraverse: Traverse[NonEmptyChunk] = new Traverse[NonEmptyChunk]:
+  private[zio] val nonEmptyChunkTraverse: Traverse[NonEmptyChunk] = new Traverse[NonEmptyChunk]:
     def traverse[G[_]: Applicative, A, B](fa: NonEmptyChunk[A])(f: A => G[B]): G[NonEmptyChunk[B]] =
       val head = Applicative[G].map(f(fa.head))(NonEmptyChunk.single)
       fa.tail.foldLeft(head)((acc, a) => Applicative[G].map2(acc, f(a))(_ :+ _))
+    override def map[A, B](fa: NonEmptyChunk[A])(f: A => B): NonEmptyChunk[B] = fa.map(f)
     def foldLeft[A, B](fa: NonEmptyChunk[A], b: B)(f: (B, A) => B): B = fa.toChunk.foldLeft(b)(f)
     def foldRight[A, B](fa: NonEmptyChunk[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
       Foldable.iterateRight(fa.toChunk, lb)(f)

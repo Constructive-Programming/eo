@@ -164,7 +164,8 @@ for Prism / Optional / AffineFold evidence) complete the read side.
 ## STM focus ops
 
 The same four ops exist on `TRef[S]` (and keyed `getFocusAt` /
-`updateFocusAt` on `TMap[K, V]`), returning `USTM` instead of `UIO`. That is
+`updateFocusAt` / `setFocusAt` on `TMap[K, V]`), returning `USTM`
+instead of `UIO`. That is
 the point, not a spelling difference: focused updates across
 *several* transactional references compose into ONE atomic
 transaction — something the `Ref` ops structurally cannot express:

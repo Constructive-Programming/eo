@@ -28,7 +28,9 @@ import optics.{GetReplaceLens, Lens, PickMendPrism, Prism}
   * untouched leftovers. Returns the fused `GetReplaceLens`, so `service[R, Config].andThen(dbUrlL)`
   * stays on the concrete hot path and carries the capability mixins.
   */
-def service[R, A >: R](using Tag[A]) =
+def service[R, A >: R](using
+    Tag[A]
+): GetReplaceLens[ZEnvironment[R], ZEnvironment[R], A, A] =
   Lens[ZEnvironment[R], A](_.get[A], (env, a) => env.update[A](_ => a))
 
 /** Read a focus out of the `S` service in the environment — `ZIO.serviceWith` routed through
@@ -102,9 +104,14 @@ extension [S](ref: TRef[S])
 
 extension [K, V](tmap: TMap[K, V])
 
-  /** Read the focus of the value at `k` — `None` when the key is absent. (Named `-At`, not
-    * `getFocus`: a keyed overload has a different parameter shape from the `Ref`/`TRef` ops, and
-    * mixed-shape extension overloads break explicit `(using myLens)` calls on ALL of them.)
+  /** Read the focus of the value at `k`. The `Option` is '''key absence''', not an optic miss —
+    * this op takes total `CanGet` evidence, so a present key always yields a focus. (A
+    * partial-optic variant would have to return `Option[Option[A]]` to keep the two apart, so it is
+    * deliberately omitted; compose the prism into the value type instead.)
+    *
+    * Named `-At`, not `getFocus`: a keyed overload has a different parameter shape from the
+    * `Ref`/`TRef` ops, and mixed-shape extension overloads break explicit `(using myLens)` calls on
+    * ALL of them.
     */
   def getFocusAt[A](k: K)(using g: CanGet[V, A]): USTM[Option[A]] =
     tmap.get(k).map(_.map(g.get))
@@ -114,6 +121,10 @@ extension [K, V](tmap: TMap[K, V])
     */
   def updateFocusAt[A](k: K)(f: A => A)(using m: CanModify[V, A]): USTM[Unit] =
     tmap.updateWith(k)(_.map(m.modify(f))).unit
+
+  /** Overwrite the focus of the value at `k` — absent keys pass through untouched. */
+  def setFocusAt[A](k: K, a: A)(using m: CanModify[V, A]): USTM[Unit] =
+    tmap.updateWith(k)(_.map(m.replace(a))).unit
 
 // ---- automatic capability provision ------------------------------------
 //

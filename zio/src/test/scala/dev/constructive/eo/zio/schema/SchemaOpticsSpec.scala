@@ -25,6 +25,7 @@ class SchemaOpticsSpec extends Specification:
   import DynamicValues.{*, given}
 
   val ada = PersonZ("ada", 41)
+  val adaDvOuter: DynamicValue = PersonZ.schema.toDynamic(ada)
 
   "EoAccessorBuilder" should {
     val cc = PersonZ.schema.asInstanceOf[Schema.CaseClass2[String, Int, PersonZ]]
@@ -41,12 +42,27 @@ class SchemaOpticsSpec extends Specification:
       (circleP.getOption(CircleZ(2.5)) === Some(CircleZ(2.5)))
         .and(circleP.getOption(SquareZ(1.0)) === None)
         .and(squareP.modify(s => SquareZ(s.s * 2))(SquareZ(3.0): ShapeZ) === SquareZ(6.0))
+        .and(circleP.reverseGet(CircleZ(2.0)) === (CircleZ(2.0): ShapeZ))
+        // write on a MISS passes the whole sum through untouched (the prism's mend half)
+        .and(squareP.modify(s => SquareZ(s.s * 2))(CircleZ(1.0): ShapeZ) === CircleZ(1.0))
     }
     "turn collections into traversals" >> {
       val seqSchema = Schema.list[Int].asInstanceOf[Schema.Sequence[List[Int], Int, ?]]
       val eachT = seqSchema.makeAccessors(EoAccessorBuilder)
       (eachT.modify(_ + 1)(List(1, 2, 3)) === List(2, 3, 4))
         .and(eachT.foldMap(identity)(List(1, 2, 3)) === 6)
+    }
+    "Set collections: lawful under an injective update, collapsing otherwise (documented caveat)" >> {
+      val setSchema = Schema.set[Int].asInstanceOf[Schema.Set[Int]]
+      val setT = setSchema.makeAccessors(EoAccessorBuilder)
+      (setT.modify(_ + 1)(Set(1, 2, 3)) === Set(2, 3, 4))
+        // `fromChunk` is `toSet`, so a colliding update drops entries — pinned, not fixed
+        .and(setT.modify(_ / 2)(Set(2, 3)) === Set(1))
+    }
+    "Map collections: entries survive a key-preserving update" >> {
+      val mapSchema = Schema.map[String, Int].asInstanceOf[Schema.Map[String, Int]]
+      val mapT = mapSchema.makeAccessors(EoAccessorBuilder)
+      mapT.modify((k, v) => (k, v * 2))(Map("a" -> 1, "b" -> 2)) === Map("a" -> 2, "b" -> 4)
     }
   }
 
@@ -84,6 +100,64 @@ class SchemaOpticsSpec extends Specification:
       )
       (out.toTypedValue(using PersonZ.schema) === Right(PersonZ("ADA", 41)))
         .and(Plated.universe[DynamicValue](dv).exists(double.getOption(_) == Some(2.5)) === true)
+    }
+  }
+
+  "DynamicValues: dictionaries, sets, indices" should {
+    val dict = Schema.map[String, Int].toDynamic(Map("a" -> 1, "b" -> 2))
+    val keyA = str.reverseGet("a")
+
+    "key: read, sibling-preserving write, miss pass-through" >> {
+      (key(keyA).andThen(int).getOption(dict) === Some(1))
+        .and(
+          key(keyA)
+            .andThen(int)
+            .modify(_ + 10)(dict)
+            .toTypedValue(using
+              Schema.map[String, Int]
+            ) === Right(Map("a" -> 11, "b" -> 2))
+        )
+        .and(key(str.reverseGet("zz")).replace(keyA)(dict) === dict)
+        .and(key(keyA).getOption(adaDvOuter) === None)
+    }
+    "key on a duplicate-key dictionary: first match only, write-back is identity" >> {
+      val dup = DynamicValues
+        .dictionary
+        .reverseGet(_root_.zio.Chunk(keyA -> int.reverseGet(1), keyA -> int.reverseGet(2)))
+      (key(keyA).getOption(dup) === Some(int.reverseGet(1)))
+        .and(
+          key(keyA).replace(int.reverseGet(9))(dup) === DynamicValues
+            .dictionary
+            .reverseGet(
+              _root_.zio.Chunk(keyA -> int.reverseGet(9), keyA -> int.reverseGet(2))
+            )
+        )
+        .and(key(keyA).modify(identity)(dup) === dup)
+    }
+    "at: in-range read/write, out-of-range pass-through" >> {
+      val seq = Schema.list[Int].toDynamic(List(1, 2, 3))
+      (at(1).andThen(int).getOption(seq) === Some(2))
+        .and(
+          at(1).andThen(int).modify(_ * 10)(seq).toTypedValue(using Schema.list[Int]) === Right(
+            List(1, 20, 3)
+          )
+        )
+        .and(at(9).replace(int.reverseGet(0))(seq) === seq)
+    }
+    "Plated reaches set elements and dictionary keys AND values" >> {
+      val sets = Schema.set[String].toDynamic(Set("a", "b"))
+      val upper = Plated.transform[DynamicValue](str.modify(_.toUpperCase))
+      (upper(sets).toTypedValue(using Schema.set[String]) === Right(Set("A", "B")))
+        .and(
+          upper(Schema.map[String, String].toDynamic(Map("k" -> "v")))
+            .toTypedValue(using Schema.map[String, String]) === Right(Map("K" -> "V"))
+        )
+    }
+    "record / sequence / long / bool prisms hit their case" >> {
+      (record.getOption(adaDvOuter).map(_.keys.toList) === Some(List("name", "age")))
+        .and(sequence.getOption(Schema.list[Int].toDynamic(List(1))).map(_.size) === Some(1))
+        .and(long.getOption(long.reverseGet(7L)) === Some(7L))
+        .and(bool.getOption(bool.reverseGet(true)) === Some(true))
     }
   }
 

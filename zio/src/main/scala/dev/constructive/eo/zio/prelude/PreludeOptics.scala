@@ -2,7 +2,6 @@ package dev.constructive.eo
 package zio
 package prelude
 
-import _root_.zio.NonEmptyChunk
 import _root_.zio.prelude.ZValidation
 import cats.{Applicative, Eval, Foldable, Traverse}
 
@@ -48,9 +47,14 @@ object Validations:
         fa match
           case ZValidation.Success(w, a)  => Applicative[G].pure(ZValidation.Success(w, a))
           case ZValidation.Failure(w, es) =>
-            val head = Applicative[G].map(f(es.head))(NonEmptyChunk.single)
-            val g = es.tail.foldLeft(head)((acc, e) => Applicative[G].map2(acc, f(e))(_ :+ _))
-            Applicative[G].map(g)(ZValidation.Failure(w, _))
+            // One source of truth for the NonEmptyChunk fold — see Chunks.nonEmptyChunkTraverse.
+            Applicative[G].map(Chunks.nonEmptyChunkTraverse.traverse(es)(f))(
+              ZValidation.Failure(w, _)
+            )
+      override def map[E, E2](fa: ZValidation[W, E, A])(f: E => E2): ZValidation[W, E2, A] =
+        fa match
+          case ZValidation.Success(w, a)  => ZValidation.Success(w, a)
+          case ZValidation.Failure(w, es) => ZValidation.Failure(w, es.map(f))
       def foldLeft[E, B](fa: ZValidation[W, E, A], b: B)(f: (B, E) => B): B =
         fa match
           case ZValidation.Success(_, _)  => b

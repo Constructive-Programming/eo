@@ -35,7 +35,25 @@ class ChunksSpec extends Specification:
     }
   }
 
+  "Chunks.each folds" should {
+    "agree with the traverse order (foldMap left-to-right, headOption first)" >> {
+      given Traversal[Chunk[String], Chunk[String], String, String] = Chunks.each
+      val f = summon[CanFold[Chunk[String], String]]
+      (f.foldMap(identity)(Chunk("a", "b", "c")) === "abc")
+        .and(f.headOption(Chunk("a", "b")) === Some("a"))
+        .and(f.length(Chunk("a", "b")) === 2)
+    }
+  }
+
   "Chunks.eachNonEmpty" should {
+    "handle the single-element edge (head-only, empty tail fold)" >> {
+      (Chunks.eachNonEmpty[Int, Int].modify(_ + 1)(NonEmptyChunk.single(1)) ===
+        NonEmptyChunk.single(2))
+        .and(Chunks.eachNonEmpty[Int, Int].foldMap(identity)(NonEmptyChunk.single(5)) === 5)
+    }
+    "fold every element" >> {
+      Chunks.eachNonEmpty[Int, Int].foldMap(identity)(NonEmptyChunk(1, 2, 3)) === 6
+    }
     "modify every element, non-emptiness surviving" >> {
       val nec = NonEmptyChunk(1, 2, 3)
       (Chunks.eachNonEmpty[Int, Int].modify(_ * 2)(nec) === NonEmptyChunk(2, 4, 6))

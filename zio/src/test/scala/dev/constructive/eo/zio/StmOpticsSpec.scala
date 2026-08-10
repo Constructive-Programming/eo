@@ -44,6 +44,19 @@ class StmOpticsSpec extends Specification:
     }
   }
 
+  "TRef.getFocusOption" should {
+    "read a partial focus — Some on a hit, None on a miss" >> {
+      import _root_.zio.Exit
+      val program = for
+        hit <- TRef.make(Exit.succeed(41)).commit
+        miss <- TRef.make(Exit.fail("boom"): Exit[String, Int]).commit
+        h <- hit.getFocusOption[Int].commit
+        m <- miss.getFocusOption[Int].commit
+      yield (h, m)
+      run(program) === ((Some(41), None))
+    }
+  }
+
   "TMap focus ops" should {
     "rewrite the focus at a present key, absent keys passing through" >> {
       val program = for
@@ -55,5 +68,15 @@ class StmOpticsSpec extends Specification:
         size <- m.size.commit
       yield (hit, miss, size)
       run(program) === ((Some("jdbc:h2"), None, 1))
+    }
+    "setFocusAt overwrites at a present key and no-ops on an absent one" >> {
+      val program = for
+        m <- TMap.make(("k", Db("jdbc:h2", 4))).commit
+        _ <- m.setFocusAt("k", 9).commit
+        _ <- m.setFocusAt("nope", 9).commit
+        v <- m.get("k").commit
+        size <- m.size.commit
+      yield (v, size)
+      run(program) === ((Some(Db("jdbc:h2", 9)), 1))
     }
   }
