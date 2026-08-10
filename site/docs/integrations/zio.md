@@ -335,6 +335,20 @@ text.andThen(JsonValues.field("name")).andThen(JsonValues.str)
 `JsonCodec[A].stringPrism` is the typed wire face — the same shape as
 [`AvroJson`](avro.md) and the kyo byte faces.
 
+Both kits also ship `atField(name)`, the [`At`](../optics.md)-shaped
+sibling of `field`: its focus is the `Option` at that name, so a write
+can **create or delete** the field, which `field` structurally cannot
+(its focus is the value, so an absent field is a miss and misses pass
+writes through). Within an object it is total — presence lives in the
+focus — so `getOption` yields `Some(None)` for an object lacking the
+field:
+
+```scala mdoc
+JsonValues.atField("nickname").replace(Some(Json.Str("ada")))(doc)
+
+JsonValues.atField("name").replace(None)(doc)
+```
+
 ## ZValidation optics
 
 `eo.zio.prelude` (add `dev.zio %% "zio-prelude"` yourself — zio-schema

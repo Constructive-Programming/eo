@@ -114,6 +114,31 @@ object DynamicValues:
           case other => other,
     )
 
+  /** [[optics.At]]-style access to a `Record` field: the focus is the `Option[DynamicValue]` at
+    * `name`, so a write can '''create or delete''' the field — `Some(v)` inserts (appending, when
+    * absent) or updates, `None` removes it. [[field]] structurally cannot do either: its focus is
+    * the value, so an absent field is a miss and a miss passes writes through.
+    *
+    * Partial only in "is this a record" (non-records are a miss and pass writes through); WITHIN a
+    * record it is total, because presence lives in the focus. `getOption` therefore returns
+    * `Some(None)` for a record lacking the field — that nesting is the point, and it is what keeps
+    * put-get lawful for inserts and deletes alike.
+    */
+  def atField(
+      name: String
+  ): Optional[DynamicValue, DynamicValue, Option[DynamicValue], Option[DynamicValue]] =
+    Optional[DynamicValue, DynamicValue, Option[DynamicValue], Option[DynamicValue]](
+      {
+        case DynamicValue.Record(_, vs) => Right(vs.get(name))
+        case other                      => Left(other)
+      },
+      (s, ov) =>
+        s match
+          case DynamicValue.Record(id, vs) =>
+            DynamicValue.Record(id, ov.fold(vs - name)(v => vs.updated(name, v)))
+          case other => other,
+    )
+
   /** Optional into a `Sequence` element by index — siblings survive writes, out-of-range or
     * non-sequence misses pass through.
     */

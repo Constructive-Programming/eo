@@ -78,6 +78,34 @@ object JsonValues:
           case other => other,
     )
 
+  /** [[optics.At]]-style access to an `Obj` field: the focus is the `Option[Json]` at `name`, so a
+    * write can '''create or delete''' the field — `Some(v)` updates the first occurrence (appending
+    * when absent), `None` removes it. [[field]] can do neither: its focus is the value, so an
+    * absent field is a miss and a miss passes writes through.
+    *
+    * Partial only in "is this an object"; within one it is total, presence living in the focus (so
+    * `getOption` yields `Some(None)` for an object lacking the field). `None` removes '''every'''
+    * occurrence of a duplicated key rather than just the first — that is what keeps put-get honest
+    * on such documents: after a delete, a read must not find a leftover twin.
+    */
+  def atField(name: String): Optional[Json, Json, Option[Json], Option[Json]] =
+    Optional[Json, Json, Option[Json], Option[Json]](
+      {
+        case Json.Obj(fields) => Right(fields.collectFirst { case (n, v) if n == name => v })
+        case other            => Left(other)
+      },
+      (s, ov) =>
+        s match
+          case Json.Obj(fields) =>
+            val i = fields.indexWhere(_._1 == name)
+            ov match
+              case Some(v) =>
+                if i < 0 then Json.Obj(fields :+ (name -> v))
+                else Json.Obj(fields.updated(i, (name, v)))
+              case None => Json.Obj(fields.filterNot(_._1 == name))
+          case other => other,
+    )
+
   /** Optional into an `Arr` element by index — siblings survive writes, out-of-range or non-array
     * misses pass through.
     */

@@ -84,6 +84,39 @@ class JsonOpticsSpec extends Specification:
     }
   }
 
+  "atField (create / update / delete)" should {
+    "insert an absent field, where `field` writes are a no-op" >> {
+      val out = atField("extra").replace(Some(Json.Num(9)))(doc)
+      (field("extra").getOption(out) === Some(Json.Num(9)))
+        .and(
+          obj.getOption(out).map(_.map(_._1).toList) ===
+            Some(List("name", "tags", "age", "extra"))
+        )
+        .and(field("extra").replace(Json.Num(9))(doc) === doc)
+    }
+    "update a present field and delete with None" >> {
+      (atField("name").replace(Some(Json.Str("gr")))(doc) === Json.Obj(
+        "name" -> Json.Str("gr"),
+        "tags" -> Json.Arr(Json.Str("a"), Json.Str("b")),
+        "age" -> Json.Num(41),
+      ))
+        .and(
+          obj.getOption(atField("name").replace(None)(doc)).map(_.map(_._1).toList) ===
+            Some(List("tags", "age"))
+        )
+    }
+    "delete EVERY occurrence of a duplicated key, so a read finds no twin" >> {
+      val dup = Json.Obj("k" -> Json.Num(1), "k" -> Json.Num(2), "keep" -> Json.Num(3))
+      val out = atField("k").replace(None)(dup)
+      (obj.getOption(out).map(_.map(_._1).toList) === Some(List("keep")))
+        .and(atField("k").getOption(out) === Some(None))
+    }
+    "read Some(None) on an object without the field, and miss on a non-object" >> {
+      (atField("nope").getOption(doc) === Some(None))
+        .and(atField("x").getOption(Json.Str("s")) === None)
+    }
+  }
+
   "Plated" should {
     "rewrite every string at any depth" >> {
       val out = Plated.transform[Json](j => str.modify(_.toUpperCase)(j))(doc)

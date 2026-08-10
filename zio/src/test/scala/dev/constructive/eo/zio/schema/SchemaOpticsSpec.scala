@@ -161,6 +161,32 @@ class SchemaOpticsSpec extends Specification:
     }
   }
 
+  "DynamicValues.atField (create / update / delete)" should {
+    val nine = int.reverseGet(9)
+
+    "insert a field that was absent — what `field` cannot do" >> {
+      val out = atField("extra").replace(Some(nine))(adaDvOuter)
+      (field("extra").andThen(int).getOption(out) === Some(9))
+        // the original fields survive, in order
+        .and(record.getOption(out).map(_.keys.toList) === Some(List("name", "age", "extra")))
+        .and(field("extra").replace(nine)(adaDvOuter) === adaDvOuter) // `field` write is a no-op
+    }
+    "update a present field" >> {
+      atField("age").replace(Some(nine))(adaDvOuter).toTypedValue(using PersonZ.schema) ===
+        Right(PersonZ("ada", 9))
+    }
+    "delete a field with None" >> {
+      val out = atField("age").replace(None)(adaDvOuter)
+      (record.getOption(out).map(_.keys.toList) === Some(List("name")))
+        .and(atField("age").getOption(out) === Some(None))
+    }
+    "read Some(None) for a record lacking the field, and miss on a non-record" >> {
+      (atField("nope").getOption(adaDvOuter) === Some(None))
+        .and(atField("x").getOption(nine) === None)
+        .and(atField("x").replace(Some(nine))(nine) === nine)
+    }
+  }
+
   "typed ↔ untyped and byte faces" should {
     "dynamicPrism roundtrips and composes inward" >> {
       val p = PersonZ.schema.dynamicPrism

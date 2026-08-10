@@ -128,6 +128,33 @@ class JsonValuesLawsSpec extends Specification with Discipline:
     .navigation,
   )
 
+  // atField's write can insert and delete, so its put-get covers strictly more than field's.
+  checkAll(
+    "Optional[Json] via atField",
+    new OptionalTests[Json, Option[Json]]:
+      val laws: OptionalLaws[Json, Option[Json]] = new OptionalLaws[Json, Option[Json]]:
+        val optional = JsonValues.atField("f")
+    .optional,
+  )
+
+  checkAll(
+    "Seam[Json] via atField",
+    new SeamTests[Json, Option[Json]]:
+      val laws: SeamLaws[Json, Option[Json]] = new SeamLaws[Json, Option[Json]]:
+        val optic = JsonValues.atField("f")
+        val eqv = eqJson
+    .seam,
+  )
+
+  checkAll(
+    "Navigation[Json] via atField",
+    new NavigationTests[Json, Option[Json]]:
+      val laws: NavigationLaws[Json, Option[Json]] = new NavigationLaws[Json, Option[Json]]:
+        val navigation = JsonValues.atField("f")
+        val eqv = eqJson
+    .navigation,
+  )
+
   checkAll(
     "Prism[Json, String] via str",
     new PrismTests[Json, String]:

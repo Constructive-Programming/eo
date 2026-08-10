@@ -183,6 +183,38 @@ class DynamicValuesLawsSpec extends Specification with Discipline:
     .navigation,
   )
 
+  // ---- atField: total WITHIN a record (presence lives in the Option focus), so put-get now
+  // covers inserts and deletes as well as updates ----
+
+  checkAll(
+    "Optional[DynamicValue] via atField",
+    new OptionalTests[DynamicValue, Option[DynamicValue]]:
+      val laws: OptionalLaws[DynamicValue, Option[DynamicValue]] =
+        new OptionalLaws[DynamicValue, Option[DynamicValue]]:
+          val optional = DynamicValues.atField("f")
+    .optional,
+  )
+
+  checkAll(
+    "Seam[DynamicValue] via atField",
+    new SeamTests[DynamicValue, Option[DynamicValue]]:
+      val laws: SeamLaws[DynamicValue, Option[DynamicValue]] =
+        new SeamLaws[DynamicValue, Option[DynamicValue]]:
+          val optic = DynamicValues.atField("f")
+          val eqv = eqDv
+    .seam,
+  )
+
+  checkAll(
+    "Navigation[DynamicValue] via atField",
+    new NavigationTests[DynamicValue, Option[DynamicValue]]:
+      val laws: NavigationLaws[DynamicValue, Option[DynamicValue]] =
+        new NavigationLaws[DynamicValue, Option[DynamicValue]]:
+          val navigation = DynamicValues.atField("f")
+          val eqv = eqDv
+    .navigation,
+  )
+
   // ---- constructor prisms ----
 
   checkAll(
