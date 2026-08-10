@@ -298,6 +298,12 @@ val Ziverge = "dev.zio"
 val GetKyo = "io.getkyo"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
+// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, and so far only
+// in `zioIntegration`: the zio module hand-writes `Traverse[Chunk]` / `Traverse[NonEmptyChunk]`
+// adapters (zio ships no cats instances), and `TraverseTraversal` reassembles foci through
+// `Functor.map` while collecting them in fold order — so map/traverse coherence is load-bearing for
+// write correctness, not just hygiene. Law-check the instances rather than eyeball them.
+lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.19.0"
@@ -774,6 +780,7 @@ lazy val zioIntegration: Project = project
     libraryDependencies += zioSchemaDerivation % Test,
     libraryDependencies += zioSchemaJson % Test,
     libraryDependencies += discipline % Test,
+    libraryDependencies += catsLaws % Test,
   )
 
 // Kyo DI integration, mirror of `zioIntegration` at kyo-prelude's
