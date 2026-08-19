@@ -413,6 +413,31 @@ private[avro] object AvroBinaryCursor:
     try Right(writeDatum(codec.encode(a), span.valueSchema))
     catch case NonFatal(t) => Left(t)
 
+  /** Decode step for FIELDS focuses — the read mirror of [[encodeFieldsOverlay]]. A `.fields(...)`
+    * span addresses the PARENT record, and the parent datum must NOT be handed to the NT codec
+    * whole: the NT's schema names need not match the parent's (issue #35) and its arity is a
+    * subset, so a direct decode misreads or fails. Instead: decode the parent slice, project the
+    * selected fields BY RESOLVED NAME into the NT sub-record (the same atomic [[AvroFocus.Fields]]
+    * `readFields` the record face uses), and decode that.
+    */
+  def decodeFieldsProjection[A](
+      bytes: Array[Byte],
+      span: BinarySpan,
+      fields: AvroFocus.Fields[A],
+  ): Either[Throwable, A] =
+    try
+      fields.decodeProjected(
+        records.read(
+          bytes,
+          span.valueStart,
+          span.end - span.valueStart,
+          span.valueSchema,
+          span.valueSchema,
+          threadLocalStorage = true,
+        )
+      )
+    catch case NonFatal(t) => Left(t)
+
   /** Encode step for FIELDS focuses — a `.fields(...)` span addresses the PARENT record, and the
     * NamedTuple's runtime record (selected fields, selector order) must NOT be written under the
     * parent schema: avro's `GenericDatumWriter` fetches datum fields by POSITION, so a partial

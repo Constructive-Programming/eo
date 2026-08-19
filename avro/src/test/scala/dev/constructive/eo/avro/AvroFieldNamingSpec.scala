@@ -50,9 +50,24 @@ object AvroFieldNamingSpec:
 
 end AvroFieldNamingSpec
 
+/** NT codec for the grouped bytes-face read, derived OUTSIDE the snake_case scope so the DEFAULT
+  * (identity) transform applies: the NT schema names (`landingPageId`, `clickId`) diverge from the
+  * parent's snake_case names, and the selection is reordered relative to the parent layout. The
+  * grouped read succeeds only if the bytes face projects the selected fields by resolved parent
+  * name (the record face's `readFields` semantics) — never by handing the whole parent datum to the
+  * NT codec.
+  */
+object AvroFieldNamingSpecNt:
+  type LpAndClick = NamedTuple.NamedTuple[("landingPageId", "clickId"), (Int, String)]
+  given AvroEncoder[LpAndClick] = AvroEncoder.derived
+  given AvroDecoder[LpAndClick] = AvroDecoder.derived
+  given AvroSchemaFor[LpAndClick] = AvroSchemaFor.derived
+end AvroFieldNamingSpecNt
+
 class AvroFieldNamingSpec extends Specification:
 
   import AvroFieldNamingSpec.*
+  import AvroFieldNamingSpecNt.{*, given}
 
   private val clickCodec = summon[AvroCodec[Click]]
   private val click = Click("abc", 7)
@@ -97,6 +112,12 @@ class AvroFieldNamingSpec extends Specification:
       Event("e1", Meta(43, "hot"))
     )
     readOk.and(writeOk)
+  }
+
+  "byte face: .fields(...) grouped read projects by schema name, not NT-codec name" >> {
+    codecPrism[Click].fields(_.landingPageId, _.clickId).getOption(clickBytes) must beSome(
+      (landingPageId = 7, clickId = "abc"): LpAndClick
+    )
   }
 
   ".fieldNamed escape hatch navigates by explicit schema name" >> {

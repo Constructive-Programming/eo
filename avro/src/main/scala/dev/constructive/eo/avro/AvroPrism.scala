@@ -132,7 +132,13 @@ final class AvroPrism[A] private[avro] (
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = true) match
       case Left(_)     => new Affine.Miss[X](bytes)
       case Right(span) =>
-        AvroBinaryCursor.decodeSlice(bytes, span, codec) match
+        val decoded = focus match
+          // A Fields span addresses the PARENT record — project the selected fields by resolved
+          // name before decoding (a whole-parent decode through the NT codec misreads or fails
+          // whenever the NT's names or arity diverge; see AvroBinaryCursor.decodeFieldsProjection).
+          case f: AvroFocus.Fields[A] => AvroBinaryCursor.decodeFieldsProjection(bytes, span, f)
+          case _: AvroFocus.Leaf[A]   => AvroBinaryCursor.decodeSlice(bytes, span, codec)
+        decoded match
           case Right(a) => new Affine.Hit[X, A]((bytes, span), a)
           case Left(_)  => new Affine.Miss[X](bytes)
 

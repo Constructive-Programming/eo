@@ -266,6 +266,20 @@ private[avro] object AvroFocus:
     /** Atomic read — succeeds only when ALL selected fields are present; missing fields accumulate
       * as `PathMissing`.
       */
+    /** Atomic read + decode off an already-resolved parent — the bytes-face counterpart of the
+      * `readFields`-then-decode sequence in [[navigateForWrite]]. [[AvroBinaryCursor]] hands in the
+      * parent it decoded from the located span; projecting here (never feeding the WHOLE parent
+      * datum to the NT codec) is what honours the resolved schema field names — the read mirror of
+      * `encodeFieldsOverlay`'s by-name overlay.
+      */
+    private[avro] def decodeProjected(parent: IndexedRecord): Either[Throwable, A] =
+      readFields(parent) match
+        case Left(chain) =>
+          Left(
+            AvroFailureException(chain.headOption.getOrElse(AvroFailure.PathMissing(terminalStep)))
+          )
+        case Right(sub) => codec.decodeEither(sub)
+
     private def readFields(parent: IndexedRecord): Either[Chain[AvroFailure], IndexedRecord] =
       val parentSchema = parent.getSchema
       val sub = new GenericData.Record(ntSchema)
