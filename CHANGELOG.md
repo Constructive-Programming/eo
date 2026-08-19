@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.1] - 2026-08-20
+
+### Fixed
+
+- **Bytes-face `.fields(...)` reads project the selected fields** — `AvroPrism.scan` handed the
+  WHOLE parent datum to the NamedTuple codec for a Fields focus, so any divergence between the NT
+  codec's schema and the parent layout (a codec name transform per issue #35, a schema-only extra
+  field, a reordered selection) made the grouped byte-face read decode garbage or Miss outright.
+  Fields focuses now route through `AvroBinaryCursor.decodeFieldsProjection`: decode the parent
+  slice, project the selected fields by RESOLVED schema name via the record face's atomic
+  `readFields`, then decode the projection — the read mirror of `encodeFieldsOverlay`. The record
+  face and the bytes-face write were already correct; regression-pinned in `AvroFieldNamingSpec`.
+
 ## [0.15.0] - 2026-08-07
 
 ### Added
