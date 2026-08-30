@@ -123,7 +123,7 @@ jobs:
 
       - name: Setup Java (temurin@21)
         if: steps.plan.outputs.skip == 'false'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 25 # kyoIntegration (KyoDiBench dep) targets JDK 25 since v0.15.0
