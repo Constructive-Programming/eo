@@ -558,3 +558,4 @@ B/op recorded against droste basic.
 - Related code: `core/.../data/Forget.scala`, `core/.../optics/Plated.scala` (`rewrite`),
   `schemes/.../Schemes.scala`, `schemes/.../samples/`, `benchmarks/.../SchemesBench.scala`
 - Baseline: droste `Basis`/`Project`/`Embed`/`Scatter`/`Gather`, `kernel.hylo`/`hyloM`
+- **Full bibliography (post-merge):** [docs/research/2026-06-15-typed-schemes-bibliography.md](../research/2026-06-15-typed-schemes-bibliography.md)

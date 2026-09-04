@@ -435,6 +435,10 @@ in the docs' space-honesty note).
 
 ## References
 
+- **Full bibliography:** [docs/research/2026-06-15-typed-schemes-bibliography.md](../research/2026-06-15-typed-schemes-bibliography.md)
+  — the anchor paper (O'Connor's Multiplate, arXiv:1103.2841) with its relevant
+  references and citations, the recursion-schemes canon, and the
+  Scala-ecosystem implementations, each mapped to this branch's claims.
 - arbo (`~/workspace/crypto/arbo`): `Calculator.scala`, `elgot/package.scala` — the
   real-world consumer this design must serve (`ElgotCoalgebraM`, `elgotM`, `micro`).
 - droste `algebras.scala` / `kernel.scala` (Gather/Scatter, `hyloM`).
