@@ -3,7 +3,7 @@ package optics
 
 import scala.annotation.tailrec
 
-import cats.{Eval, Traverse}
+import cats.Traverse
 
 import cats.Eval
 import java.util.ArrayDeque
