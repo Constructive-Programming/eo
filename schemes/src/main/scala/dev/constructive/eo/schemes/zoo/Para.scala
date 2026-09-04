@@ -28,12 +28,14 @@ final class Para[F[_], S, A](private[zoo] val alg: F[(S, A)] => A)(using
   type X = F[(S, A)]
 
   private val run: S => A =
-    Machines.foldLayered[F, S, A](
+    Machines.foldLayeredSlot[F, S, A](
       P.project,
-      (s, fa) =>
-        // pair each child's original subterm (re-projected) with its folded result, in order.
-        val it = F.toList(fa).iterator
-        alg(F.map(P.project(s))(sub => (sub, it.next()))),
+      (_, layer, slots) =>
+        // pair each child's original subterm with its folded result — positionally, off the
+        // layer the machine already expanded and its own slot buffer. No re-project, no
+        // per-node `List` (the C7 re-pin: the toList+re-project route cost ~+262k B/op on the
+        // 8 191-node fixture, pushing para past droste).
+        alg(Machines.rebuildLayerPaired(layer, slots)),
     )
 
   protected def read(s: S): A = run(s)

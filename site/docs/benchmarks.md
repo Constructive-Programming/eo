@@ -453,9 +453,9 @@ runner):
 | `drosteCata` | 164 824 | 1× |
 | `drosteHylo` | 328 641 | 1× |
 | `drosteAna`  | 327 632 | 1× |
-| `eoCata` | 361 385 | 2.2× |
-| `eoHylo` | 361 385 | 1.1× |
-| `eoAna`  | 524 193 | 1.6× |
+| `eoCata` | 361 386 | 2.2× |
+| `eoHylo` | 361 386 | 1.1× |
+| `eoAna`  | 524 194 | 1.6× |
 
 The residual constant vs droste is the stack-safety machinery (per-node child array +
 frames past depth 512) — droste's basic schemes are stack-*unsafe* naive recursion, and
@@ -472,23 +472,22 @@ As above, B/op is the trustworthy column; ns/op is directional.
 
 | Method | ns/op | B/op | B/op vs droste |
 |---|--:|--:|--:|
-| `eoPara`      | 183 747 |   557 945 | 0.50× |
-| `drostePara`  | 283 752 | 1 114 890 | 1× |
-| `eoApo`       | 195 677 |   655 249 | 0.57× |
-| `drosteApo`   | 293 721 | 1 146 674 | 1× |
-| `eoApoGraft`     |  35 |   224 | 0.88× |
-| `drosteApoGraft` |  46 |   256 | 1× |
-| `eoHisto`     | 191 617 |   557 969 | 1.24× |
-| `drosteHisto` | 103 420 |   448 705 | 1× |
-| `eoFutu`      | 188 749 |   655 249 | 1.43× |
-| `drosteFutu`  |  93 458 |   458 689 | 1× |
-| `eoCata`             | 172 428 | 361 385 | 2.19× |
-| `eoCataGenericRoute`  | 162 279 | 362 313 | 2.20× |
-| `drosteCata`          |  56 542 | 164 824 | 1× |
-| `eoHylo` | 180 767 | 361 385 | — |
-| `eoHyloM` | 303 295 | 820 298 | — |
-| `eoRefoldCross`  | — | 885 577 | — |
-| `eoRefoldManual` | 375 824 | 885 579 | — |
+| `eoPara`      | 505 572 |   557 947 | 0.50× |
+| `drostePara`  | 311 608 | 1 114 890 | 1× |
+| `eoApo`       | 291 684 |   655 250 | 0.68× |
+| `drosteApo`   | 577 488 |   969 860 | 1× |
+| `eoApoGraft`     |  63 |   280 | 1.17× |
+| `drosteApoGraft` |  85 |   240 | 1× |
+| `eoHisto`     | 246 582 |   557 970 | 1.54× |
+| `drosteHisto` |  78 207 |   361 409 | 1× |
+| `eoFutu`      | 279 162 |   655 250 | 1.25× |
+| `drosteFutu`  |  82 249 |   524 161 | 1× |
+| `eoCata`             | 311 624 | 361 386 | 2.19× |
+| `drosteCata`         |  53 295 | 164 824 | 1× |
+| `eoHylo`  | 311 923 | 361 386 | — |
+| `eoHyloM` | 379 135 | 820 299 | — |
+| `eoRefoldCross`  | 384 525 | 361 387 | — |
+| `eoRefoldManual` | 1 834 386 | 885 589 | — |
 
 Six results:
 

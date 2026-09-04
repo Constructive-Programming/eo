@@ -24,6 +24,7 @@ class GetterAndThenResolutionSpec extends Specification:
   val binTree = Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
 
   val leafSum: Getter[Bin, Int] = Getter[Bin, Int](leafSumFold)
+
   private def leafSumFold(s: Bin): Int = s match
     case Bin.Leaf(n)      => n
     case Bin.Branch(l, r) => leafSumFold(l) + leafSumFold(r)
@@ -43,7 +44,8 @@ class GetterAndThenResolutionSpec extends Specification:
   }
 
   "getter.andThen(writable lens inner) resolves via the trait's read-only member → rc.Out" >> {
-    val g = Getter[Doc, Bin](_.tree).andThen(treePick) // read-only inner, other carrier → trait overload
+    val g =
+      Getter[Doc, Bin](_.tree).andThen(treePick) // read-only inner, other carrier → trait overload
     (g.pick(Doc(7, "t", binTree)) === None)
       .and(g.pick(Doc(7, "t", Bin.Leaf(9))) === Some("leaf"))
   }

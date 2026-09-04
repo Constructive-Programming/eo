@@ -158,6 +158,24 @@ private[schemes] object Machines:
     * no recursive slots by definition); non-leaf reads narrow the slot union (every cell holds an
     * `R` by the time a layer is rebuilt).
     */
+  /** [[rebuildLayer]]'s paramorphic sibling: pair each original child `N` with its folded result
+    * from `out` (positional, `Foldable` order — which `Functor.map` matches for a lawful
+    * `Traverse`). The subterms come from the layer the machine already holds — no per-node
+    * re-`project` and no per-node `List` materialization (both cost ~82 B/node on the 8 191-node
+    * fixture — the `F.toList` route is what the dedup audit briefly shipped and the C7 re-pin
+    * caught: para regressed 557 945 → 1 409 788 B/op, past droste).
+    */
+  private[schemes] def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
+      F: Traverse[F]
+  ): F[(N, R)] =
+    if out.length == 0 then leafRecast(fn)
+    else
+      var i = -1
+      F.map(fn) { n =>
+        i += 1
+        (n, resultAt(out(i)))
+      }
+
   private[schemes] def rebuildLayer[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
   ): F[R] =
@@ -184,13 +202,23 @@ private[schemes] object Machines:
       expandOr: N => Either[R, F[N]],
       combine: (N, F[R]) => R,
   )(using F: Traverse[F]): R =
+    heapWalkSlot(root, expandOr, (n, layer, slots) => combine(n, rebuildLayer(layer, slots)))
+
+  /** [[heapWalk]] with the slot buffer threaded to the combine (the [[foldLayeredSlot]] cold path).
+    * Same walk; the 3-arg combine receives the already-filled slot buffer.
+    */
+  private def heapWalkSlot[F[_], N, R](
+      root: N,
+      expandOr: N => Either[R, F[N]],
+      combine: (N, F[N], Array[Slot[N, R]]) => R,
+  )(using F: Traverse[F]): R =
     @tailrec def loop(op: Op[N], pending: Pending[R], stack: List[Frame[F, N, R]]): R =
 
       transparent inline def descend(n: N): R = expandOr(n) match
         case Left(finished) => loop(Ascend, finished, stack) // graft: finished, by reference
         case Right(layer)   =>
           val slots = childrenSlots[F, N, R](layer)
-          if slots.length == 0 then loop(Ascend, combine(n, rebuildLayer(layer, slots)), stack)
+          if slots.length == 0 then loop(Ascend, combine(n, layer, slots), stack)
           else loop(childAt(slots(0)), NoResult, new Frame(n, layer, slots, 0) :: stack)
 
       transparent inline def bubble: R = stack match
@@ -199,7 +227,7 @@ private[schemes] object Machines:
           fr.slots(fr.next) = forced(pending) // overwrite the just-folded child's slot
           fr.next += 1
           if fr.next < fr.slots.length then loop(childAt(fr.slots(fr.next)), NoResult, stack)
-          else loop(Ascend, combine(fr.node, rebuildLayer(fr.layer, fr.slots)), rest)
+          else loop(Ascend, combine(fr.node, fr.layer, fr.slots), rest)
 
       op match
         case Ascend => bubble
@@ -218,9 +246,20 @@ private[schemes] object Machines:
       expand: N => F[N],
       combine: (N, F[R]) => R,
   )(using F: Traverse[F]): N => R =
+    foldLayeredSlot(expand, (n, layer, slots) => combine(n, rebuildLayer(layer, slots)))
+
+  /** [[foldLayered]] handing the combine the machine's raw pieces — the expanded layer and the
+    * already-filled slot buffer, WITHOUT pre-building `F[R]` (the subterm-retaining engines
+    * ([[zoo.Para]]) pair `layer` + `slots` via [[rebuildLayerPaired]] and never need the rebuilt
+    * layer; engines that do call [[rebuildLayer]] themselves). Same walk, same stack-safety.
+    */
+  private[schemes] def foldLayeredSlot[F[_], N, R](
+      expand: N => F[N],
+      combine: (N, F[N], Array[Slot[N, R]]) => R,
+  )(using F: Traverse[F]): N => R =
 
     def rec(n: N, depth: Int): R =
-      if depth >= OnStackLimit then heapWalk(n, m => Right(expand(m)), combine)
+      if depth >= OnStackLimit then heapWalkSlot(n, m => Right(expand(m)), combine)
       else
         val layer = expand(n)
         val slots = childrenSlots[F, N, R](layer)
@@ -228,7 +267,7 @@ private[schemes] object Machines:
         while i < slots.length do
           slots(i) = rec(childAt(slots(i)), depth + 1)
           i += 1
-        combine(n, rebuildLayer(layer, slots))
+        combine(n, layer, slots)
 
     n => rec(n, 0)
 
