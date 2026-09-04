@@ -80,7 +80,7 @@ citations of 1103.2841), and the canon the zoo's schemes come from.
   categorical dress. Cited in the plan's references (§4.10 achromatic variant).
 - Pickering, Gibbons, Wu, *Profunctor Optics: Modular Data Accessors* (Programming
   Journal 2017) — the profunctor reformulation of exactly O'Connor's theorem; the
-  "read-only-optics convention" the BiAffine carrier's sub-shape pinning cites.
+  "read-only-optics convention" the Affine build-seam carrier's sub-shape pinning cites.
 - Kiss, Pickering, Wu, *Generic deriving of generic traversals* (Haskell 2018) —
   deriving Traversal/Plate structure generically at compile time; the citation
   for `eo-generics`' derivation ambitions beyond Lens/Prism.
@@ -123,8 +123,8 @@ in one place.
   the fusion-law side conditions.
 - Gibbons, *Metamorphisms: streaming representation-changers* (SCP 2007) — meta.
 - ★ Hinze, Wu, Gibbons, *Unifying structured recursion schemes* (ICFP 2013) —
-  adjoint folds subsume comonadic folds; the matrix that BiAffine's
-  composition-matrix row targets.
+  adjoint folds subsume comonadic folds; the matrix that Affine's
+  composition row (worn build-side by the decorations) targets.
 - Hinze, Wu, *Histo- and dynamorphisms revisited* (WGP 2013) — histo/dyna/chrono
   details, dynamic-programming framing; grounds the space-honesty note on `Attr`.
 - Hinze, *Adjoint folds and unfolds — an extended study* (SCP 2013) — the
@@ -159,5 +159,5 @@ in one place.
   (fusion law → Capretta–Uustalu–Vene; paraLens lawfulness → O'Connor §2.2 +
   Riley).
 - This file is the long-form reference; update it when the follow-ups (elgot
-  port, BiAffine matrix row, higher-order decoration) land so the citations
+  port, Affine matrix row, higher-order decoration) land so the citations
   grow with the surface.

@@ -435,17 +435,23 @@ grep-verified and the one perf-relevant cut B/op-verified:
   `Plated`/`PSVec`-driven schemes (removed — the erased positional indexing
   made algebra arity slips a runtime error).
 
-- **`BiAffine` carrier in core — the build-seam decoration carrier.**
-  `data.BiAffine[A, B]` is `Affine`'s data shape worn on the build seam:
-  `Step(context, focus)` keeps going, `Done(payload)` means "this slot is
-  already finished — do not call the coalgebra" (apo grafts by reference,
-  futu unrolls a prebuilt layer). Ships the forgetful instances, the
-  `Graft` build-channel accessor, the **composition-matrix row**
-  (`BiAffine.assoc` same-carrier `andThen` — the build-side mirror of
-  `Affine.assoc`, `Done` ↔ `Miss` / `Step` ↔ `Hit`) and the cross-carrier
+- **`Affine` wears the build seam — the schemes' decoration carrier, no new carrier.**
+  The decoration machinery reuses `data.Affine` with its arms read on the build
+  seam: `Hit(context, focus)` keeps going, `Miss(payload)` means "this slot is
+  already finished — do not call the coalgebra" (apo grafts by reference, futu
+  unrolls a prebuilt layer). New in core: the `Graft[Affine]` build-channel
+  accessor (`done = Miss`, `step = Hit`) — the injection vocabulary the schemes'
+  build-side citizens construct and consume — plus the corresponding
+  graft-finality laws in `cats-eo-laws` (the finished arm is focus-free, inert
+  under `map`, and folds empty). Decoration composition rides Affine's own
+  composition row (`Affine.assoc` same-carrier `andThen`) and its cross-carrier
   bridges from `Tuple2` (Lens) and `Either` (Prism), so
   `lens.andThen(apoScatter)`-style compositions resolve. `Schemes.apoScatter`
-  exposes the `Left(s) → Done(s)` graft channel as a composable scatter optic.
+  exposes the `Left(s) → Miss(s)` graft channel as a composable scatter optic.
+  (An earlier draft shipped a separate `BiAffine` carrier with identical shape;
+  it was dropped pre-merge — the arms are isomorphic and the duplication bought
+  nothing. The `BiAffine` name is left free for a genuinely two-sided-failure
+  carrier if one is ever needed.)
 
 - **`Basis` in core; `Plated` derives from it.** `optics.Basis`
   (`Project[F, S]` / `Embed[F, S]`) — the pattern-functor correspondence the

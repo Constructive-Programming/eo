@@ -157,8 +157,8 @@ recursion; the `Plated.fromBasis` derivation is its recursive face, and the recu
 
 The decorated schemes are **one sum/product symmetry**, shipped as named optic citizens —
 `final class`es in `zoo` carrying their parts, so composition and fusion (`ana.cross(cata)`)
-resolve against the concrete types. Their decorations are consumed natively by the engine on the
-`BiAffine` carrier (see below):
+resolve against the concrete types. Their decorations are consumed natively by the engine on
+`Affine`'s arms worn on the build seam (see below):
 
 | scheme | decoration | shape |
 |---|---|---|
@@ -309,16 +309,17 @@ val countedLeafSum = Schemes.hyloM[Counted, BinF, Int, Int](
 countedLeafSum.get(6).run(0) // (service calls, leaf sum) — one fused pass
 ```
 
-### The BiAffine carrier
+### The build-seam carrier is `Affine`
 
-The decoration machinery's carrier is new in core: **`BiAffine`** — `Affine`'s data shape worn on
-the *build* seam. `Step(context, focus)` keeps going; `Done(payload)` means "this slot is already
+The decoration machinery needs no new carrier: it rides **`Affine`** with its arms read on the
+*build* seam — `Hit(context, focus)` keeps going; `Miss(payload)` means "this slot is already
 finished — do not call the coalgebra" (apo grafts a finished subtree, futu unrolls a prebuilt
-layer). Its laws are the graft-finality and round-trip equations in `cats-eo-laws`. The
-composition-matrix row is shipped: `BiAffine.assoc` (same-carrier `andThen` — `Done` ↔ `Miss`,
-`Step` ↔ `Hit`) plus the cross-carrier bridges from `Tuple2` (Lens) and `Either` (Prism), so
+layer). The build-channel injection vocabulary is the `Graft[Affine]` instance (`done = Miss`,
+`step = Hit`), and its laws are the graft-finality and round-trip equations in `cats-eo-laws`.
+Affine's own composition row covers decoration composition: `Affine.assoc` (same-carrier
+`andThen`) plus the cross-carrier bridges from `Tuple2` (Lens) and `Either` (Prism), so
 `lens.andThen(apoScatter)`-style compositions resolve; `Schemes.apoScatter` exposes the
-`Left(s) → Done(s)` graft channel as a composable scatter optic. On the scheme side,
+`Left(s) → Miss(s)` graft channel as a composable scatter optic. On the scheme side,
 `elgot`/`coelgot` (the answer-level short-circuit and seed-reading refolds) are shipped citizens,
 and `meta`/`metaChrono` complete the non-fusing fold→unfold quadrant.
 

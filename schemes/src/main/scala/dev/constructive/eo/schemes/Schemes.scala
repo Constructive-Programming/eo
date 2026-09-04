@@ -3,7 +3,7 @@ package schemes
 
 import cats.{~>, Monad, Traverse}
 
-import data.{BiAffine, MultiFocus}
+import data.{Affine, MultiFocus}
 import optics.{GetReplaceLens, Lens, Optic}
 import optics.Optic.get
 import zoo.*
@@ -145,12 +145,12 @@ object Schemes:
   def apo[F[_], A, S](coalg: A => F[Either[S, A]])(using Traverse[F], Embed[F, S]): Apo[F, A, S] =
     new Apo[F, A, S](coalg)
 
-  /** [[apo]]'s per-slot residual worn on the [[data.BiAffine]] build seam — a composable *scatter*
+  /** [[apo]]'s per-slot residual worn on the [[data.Affine]] build seam — a composable *scatter*
     * optic (`Left(s) → Done(s)` the O(1) graft, `Right(a) → Step((), a)` keep unfolding). `X = (S,
-    * Unit)`. Composes via [[data.BiAffine.assoc]] and the [[data.BiAffine.either2biaffine]] bridge;
-    * it is the carried decoration [[apo]]'s engine itself drives (see [[zoo.Apo]]).
+    * Unit)`. Composes via [[data.Affine.assoc]] and the [[data.Affine.either2affine]] bridge; it is
+    * the carried decoration [[apo]]'s engine itself drives (see [[zoo.Apo]]).
     */
-  def apoScatter[S, A]: Optic[Either[S, A], Unit, A, Unit, BiAffine] { type X = (S, Unit) } =
+  def apoScatter[S, A]: Optic[Either[S, A], Unit, A, Unit, Affine] { type X = (S, Unit) } =
     Apo.scatter[S, A]
 
   /** Futumorphism — a multi-layer unfold `coalg: A => F[Coattr[F, A]]` ([[zoo.Futu]], `X = Coattr`,
