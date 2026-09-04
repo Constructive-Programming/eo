@@ -11,8 +11,8 @@ import schemes.samples.{Bin, BinF}
 import schemes.zoo.{Attr, Coattr}
 
 /** The chronomorphism, and its **fuse efficiency**: `chrono` is `hylo` at the universal indices —
-  * `futu.cross(histo)` (build through the free monad [[Coattr]], fold through the cofree comonad
-  * [[Attr]]) — and like `hylo` it fuses, building **no intermediate `S`**.
+  * `futu.cross(histo)` (build through the free monad `Coattr`, fold through the cofree comonad
+  * `Attr`) — and like `hylo` it fuses, building **no intermediate `S`**.
   *
   *   - chrono law: the fused `futu.cross(histo)` equals the materialising `histo.get ∘
   *     futu.reverseGet`, and equals [[Schemes.chrono]].
