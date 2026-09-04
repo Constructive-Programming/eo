@@ -63,6 +63,6 @@ object Apo:
     new Optic[Either[S, A], Unit, A, Unit, Affine]:
       type X = (S, Unit)
       def to(e: Either[S, A]): Affine[X, A] = e match
-        case Left(s)  => new Affine.Miss[X, A](s)
+        case Left(s)  => new Affine.Miss[X](s)
         case Right(a) => new Affine.Hit[X, A]((), a)
       def from(b: Affine[X, Unit]): Unit = ()
