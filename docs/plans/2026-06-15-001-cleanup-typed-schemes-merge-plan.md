@@ -12,11 +12,13 @@ origin: thread request (kryptt): read the anchor paper, build the bibliography,
 ## State of the branch (2026-06-15)
 
 `feat/typed-recursion-schemes` (49 commits over `origin/main`, PR #24) ships the
-typed zoo as existential-indexed optics: the `BiAffine` carrier in core,
+typed zoo as existential-indexed optics: `Graft[Affine]` — Affine's arms worn
+on the build seam — as the decoration carrier in core,
 `Attr`/`Coattr` decorations, the `Schemes` citizens (cata/para/histo/zygo/mutu,
 ana/apo/futu/cozygo/comutu, fused hylo/dyna/codyna/chrono/elgot/coelgot, meta/
 metaChrono, prepro/postpro, the M-family), `paraLens`, the `Plated`↔`Basis`
-bridge, and the `BiAffine.assoc` matrix row. Tests pass on both JDKs; the plan's
+bridge, and `Affine.assoc` carrying the decoration composition row (the draft
+`BiAffine` clone was dropped pre-merge per review — the arms are isomorphic). Tests pass on both JDKs; the plan's
 stages 1–7 are implemented; the two open brainstorm spikes
 (`elgot-seam-sketch` — PASS, `existential-x-is-the-decoration` — substrate
 landed, follow-ups listed) are recorded.
@@ -86,7 +88,7 @@ referenced nowhere.
 ### C4. CHANGELOG section for the schemes work
 
 `CHANGELOG.md` has no mention of the schemes module (the branch changes the
-public surface: new `schemes` artifact, new core `BiAffine`/`Graft`/`Basis`).
+public surface: new `schemes` artifact, new core `Graft[Affine]`/`Basis`).
 Add the 0.1.x section entries per the repo's changelog conventions before merge,
 so the release notes don't get written from memory later.
 
@@ -104,11 +106,11 @@ consistent — they were updated in the refactor commits; the page was not).
 PR #24's body still describes the U6 Eval-era decisions and the old
 `cataF`/`anaF`/`hyloF` names; the branch has since rebased onto main's renamed
 surface (`cata`/`ana`/`hylo` typed path) and grown the zoo, `paraLens`, the
-M-family re-carrier, and the BiAffine bridges. Rewrite the description as:
+M-family re-carrier, and the `Affine`-carried decoration bridges. Rewrite the description as:
 thesis (schemes as optics indexed by their existential X), what ships, the
 fused-vs-materializing law, benchmark deltas vs droste, and the follow-ups
 (elgot port per the PASSed seam sketch; the X-existential spike items;
-BiAffine matrix row). Link the bibliography for reviewers who want the papers.
+Affine matrix row). Link the bibliography for reviewers who want the papers.
 
 ### C7. (non-blocking) `benchmarks` numbers in docs
 
@@ -140,6 +142,6 @@ decision, needs kryptt) → 6. C7 (last, at the merge candidate).
 - elgot/coelgot `Decor` values + `Calculator.selection` port (seam sketch PASSed;
   additive follow-up per decision 11).
 - The existential-X spike items (para-as-Lens beyond `paraLens`, memoized
-  refolds, honest hylo X-parameter, BiAffine matrix row 12→13).
+  refolds, honest hylo X-parameter, Affine matrix row 12→13).
 - Persistent-state M-engine for non-linear Ms; Accessor-into-M capability;
   cats-free interop.
