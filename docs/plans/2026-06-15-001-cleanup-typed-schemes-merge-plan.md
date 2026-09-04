@@ -1,7 +1,7 @@
 ---
 title: "cleanup: typed recursion schemes merge-readiness (bibliography + rough edges)"
 type: cleanup
-status: open
+status: in-progress (C1, C3, C5 done 2026-06-15; C8 found during C1)
 date: 2026-06-15
 origin: thread request (kryptt): read the anchor paper, build the bibliography,
   plan the cleanup so PR #24 can merge
@@ -50,7 +50,7 @@ bibliography consolidates them.
 
 ## Cleanup items (merge-blocking first)
 
-### C1. Fix `site/docs/schemes.md` — it teaches a retired API (blocks `docs/mdoc`, CI red)
+### C1. ✅ DONE (2026-06-15). Fix `site/docs/schemes.md` — it taught a retired API (blocked `docs/mdoc`, CI red)
 
 `mdoc` reports 10 errors, all API drift between the doc and the shipped surface:
 
@@ -72,7 +72,7 @@ link target exists; the warnings pre-date and are informational).
 touched) gets one line pointing at the new bibliography file, so the branch's
 citations live in exactly one place. No claims change.
 
-### C3. `schemes-laws/` is an empty directory tracked in the tree
+### C3. ✅ DONE (kryptt's call: delete; recreate when D5 law specs get a module). `schemes-laws/` was an empty untracked directory tree
 
 `git ls-files schemes-laws` is empty; the directory exists on disk with no
 sources. Either (a) delete it, or (b) if the plan's D5 law specs
@@ -90,7 +90,7 @@ public surface: new `schemes` artifact, new core `BiAffine`/`Graft`/`Basis`).
 Add the 0.1.x section entries per the repo's changelog conventions before merge,
 so the release notes don't get written from memory later.
 
-### C5. Doc/code contradiction: "referenced nowhere" claims in `schemes.md`
+### C5. ✅ DONE with C1. Doc/code contradiction: "referenced nowhere" claims in `schemes.md`
 
 `schemes.md` says "the named values dispatch to native engine routes" and
 describes `Gather/Scatter` as public — both stale vs. the concrete-citizen
@@ -117,6 +117,17 @@ once after C1 so the "before/after pin" rows reflect the final merged state
 (the plan's merge-gate pins: `cataF`/`hyloF` before/after, ana-gap-not-worsened,
 fusion no-intermediate-S). The pins passed in CI at 56685dfa; re-confirm at the
 merge candidate commit.
+
+### C8. (new, found during C1) `Getter.andThen` is 3-way ambiguous for Direct-carried scheme citizens
+
+`site/docs/schemes.md`'s lens-composition example — `Getter[Doc, Bin](deepTree.get).andThen(cata)`
+— fails to compile: for a Direct-carried citizen (`Optic[A, Unit, C, Unit, Direct]`), **three**
+`Getter` overloads all apply — `andThenReadAny` (any inner carrier), the re-homed read-only-inner
+override (`inner.T = Unit`), and the trait's same-carrier inline (`outer.F = inner.F = Direct`) —
+and dotty calls it a tie. The doc now teaches the unambiguous function-composition spelling, but
+core should decide: re-home or drop one of the three (the repo's "overload-set discipline" per the
+`Getter` precedent), and pin resolution with a spec. Until then, `getter.andThen(schemeCitizen)`
+is a compile-error trap for users.
 
 ## Sequencing
 
