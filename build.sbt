@@ -298,6 +298,12 @@ val Ziverge = "dev.zio"
 val GetKyo = "io.getkyo"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
+// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, and so far only
+// in `zioIntegration`: the zio module hand-writes `Traverse[Chunk]` / `Traverse[NonEmptyChunk]`
+// adapters (zio ships no cats instances), and `TraverseTraversal` reassembles foci through
+// `Functor.map` while collecting them in fold order — so map/traverse coherence is load-bearing for
+// write correctness, not just hygiene. Law-check the instances rather than eyeball them.
+lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
 lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.19.0"
@@ -362,6 +368,19 @@ lazy val commonsLang3 = "org.apache.commons" % "commons-lang3" % "3.18.0"
 // integrates with. Compile-scope there: the module's whole API names
 // ZIO types.
 lazy val zioCore = Ziverge %% "zio" % "2.1.24"
+// zio-schema / zio-json / zio-prelude — Optional in `cats-eo-zio`: only
+// the `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages name
+// their types, callers who want a seam add its artifact themselves (the
+// avro/circe/kyo-schema pattern). All three pin zio 2.1.19–2.1.21
+// transitively; the module's direct 2.1.24 wins within the 2.1.x line.
+// Derivation + the json codec artifact are test-only fuel (DeriveSchema
+// fixtures, a concrete BinaryCodec for the byte-face prisms).
+val ZioSchemaVersion = "1.7.5"
+lazy val zioSchema = Ziverge %% "zio-schema" % ZioSchemaVersion
+lazy val zioSchemaDerivation = Ziverge %% "zio-schema-derivation" % ZioSchemaVersion
+lazy val zioSchemaJson = Ziverge %% "zio-schema-json" % ZioSchemaVersion
+lazy val zioJson = Ziverge %% "zio-json" % "0.7.44"
+lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC41"
 // kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
@@ -755,7 +774,13 @@ lazy val zioIntegration: Project = project
     name := "cats-eo-zio",
     libraryDependencies += cats,
     libraryDependencies += zioCore,
+    libraryDependencies += zioSchema % Optional,
+    libraryDependencies += zioJson % Optional,
+    libraryDependencies += zioPrelude % Optional,
+    libraryDependencies += zioSchemaDerivation % Test,
+    libraryDependencies += zioSchemaJson % Test,
     libraryDependencies += discipline % Test,
+    libraryDependencies += catsLaws % Test,
   )
 
 // Kyo DI integration, mirror of `zioIntegration` at kyo-prelude's
@@ -858,6 +883,15 @@ lazy val docs: Project = project
     // document the `eo.kyo.schema` bridge against the live classpath.
     libraryDependencies += kyoSchema,
     libraryDependencies += kyoSchemaJson,
+    // Same for the zio side: zio-schema / zio-json / zio-prelude are
+    // `Optional` on zioIntegration; surface them (plus derivation and
+    // the json BinaryCodec artifact) so zio.md can document the
+    // `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages.
+    libraryDependencies += zioSchema,
+    libraryDependencies += zioSchemaDerivation,
+    libraryDependencies += zioSchemaJson,
+    libraryDependencies += zioJson,
+    libraryDependencies += zioPrelude,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,

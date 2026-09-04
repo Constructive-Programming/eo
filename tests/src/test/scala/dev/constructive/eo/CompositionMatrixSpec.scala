@@ -221,10 +221,15 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[Box[Box[Int]], Box[Box[Int]], Int, Int, Affine] = o_prism.andThen(i_optional)"
       ) must beTrue
     }
-    "prism ∘ trav → Optic" >> {
+    "prism ∘ trav → Traversal (fused member, nameable as the concrete class)" >> {
       typeChecks("o_prismL.andThen(i_trav)") must beTrue // resolves with no expected type
       typeChecks(
         "val r: Optic[Box[List[Int]], Box[List[Int]], Int, Int, MultiFocus[PSVec]] = o_prismL.andThen(i_trav)"
+      ) must beTrue
+      // The point of the fused member: the composite is a `Traversal` val, not an anonymous
+      // `Optic`, so it keeps Traversal's fused members and composes onward on the hot path.
+      typeChecks(
+        "val r: optics.Traversal[Box[List[Int]], Box[List[Int]], Int, Int] = o_prismL.andThen(i_trav)"
       ) must beTrue
     }
     "prism ∘ getter → AffineFold" >> {
@@ -337,10 +342,14 @@ class CompositionMatrixSpec extends Specification:
         "val r: Optic[List[Box[Int]], List[Box[Int]], Int, Int, MultiFocus[PSVec]] = o_trav.andThen(i_lens)"
       ) must beTrue
     }
-    "trav ∘ prism → Optic" >> {
+    "trav ∘ prism → Traversal (fused member, nameable as the concrete class)" >> {
       typeChecks("o_trav.andThen(i_prism)") must beTrue // resolves with no expected type
       typeChecks(
         "val r: Optic[List[Box[Int]], List[Box[Int]], Int, Int, MultiFocus[PSVec]] = o_trav.andThen(i_prism)"
+      ) must beTrue
+      // Mirror of the prism ∘ trav cell: the filtering composition is a concrete Traversal now.
+      typeChecks(
+        "val r: optics.Traversal[List[Box[Int]], List[Box[Int]], Int, Int] = o_trav.andThen(i_prism)"
       ) must beTrue
     }
     "trav ∘ optional → Optic" >> {

@@ -61,6 +61,66 @@ class StructureOpticsSpec extends Specification:
       .replace(Value.Null)(Value.Str("x")) === Value.Str("x"))
   }
 
+  "field / key on duplicate names (Record and MapEntries are Chunk-backed)" should {
+    val dupRec = Value.Record(Chunk("k" -> Value.Integer(1L), "k" -> Value.Integer(2L)))
+    val dupMap = Value.MapEntries(
+      Chunk(Value.Str("k") -> Value.Integer(1L), Value.Str("k") -> Value.Integer(2L))
+    )
+
+    "read the first match and write ONLY it" >> {
+      (field("k").getOption(dupRec) === Some(Value.Integer(1L)))
+        .and(
+          field("k").replace(Value.Integer(9L))(dupRec) === Value.Record(
+            Chunk("k" -> Value.Integer(9L), "k" -> Value.Integer(2L))
+          )
+        )
+    }
+    "satisfy write-back-what-you-read (the law write-all broke)" >> {
+      (field("k").modify(identity)(dupRec) === dupRec)
+        .and(key(Value.Str("k")).modify(identity)(dupMap) === dupMap)
+    }
+    "key: first match only, sibling entry surviving" >> {
+      key(Value.Str("k")).replace(Value.Integer(9L))(dupMap) === Value.MapEntries(
+        Chunk(Value.Str("k") -> Value.Integer(9L), Value.Str("k") -> Value.Integer(2L))
+      )
+    }
+  }
+
+  "atField (create / update / delete)" should {
+    "insert an absent field, where `field` writes are a no-op" >> {
+      val out = atField("extra").replace(Some(Value.Integer(9L)))(personV)
+      (field("extra").getOption(out) === Some(Value.Integer(9L)))
+        .and(record.getOption(out).map(_.map(_._1)) === Some(Chunk("name", "age", "extra")))
+        .and(field("extra").replace(Value.Integer(9L))(personV) === personV)
+    }
+    "update in place, keeping field order" >> {
+      val out = atField("name").replace(Some(Value.Str("Bob")))(personV)
+      (field("name").getOption(out) === Some(Value.Str("Bob")))
+        .and(record.getOption(out).map(_.map(_._1)) === Some(Chunk("name", "age")))
+    }
+    "delete with None, removing every duplicate" >> {
+      val dup = Value.Record(Chunk("k" -> Value.Integer(1L), "k" -> Value.Integer(2L)))
+      (record.getOption(atField("name").replace(None)(personV)).map(_.map(_._1)) ===
+        Some(Chunk("age")))
+        .and(atField("k").replace(None)(dup) === Value.Record(Chunk.empty))
+    }
+    "read Some(None) for a record lacking the field, miss on a non-record" >> {
+      (atField("nope").getOption(personV) === Some(None))
+        .and(atField("x").getOption(Value.Str("s")) === None)
+        .and(atField("x").replace(Some(Value.Null))(Value.Str("s")) === Value.Str("s"))
+    }
+    // The documented limit: put-put holds only up to field ORDER, because a delete destroys the
+    // position a later insert would have to restore. Pinned so the semantics are a decision.
+    "delete-then-insert APPENDS (put-put holds only up to order)" >> {
+      val deleted = atField("name").replace(None)(personV)
+      val reinserted = atField("name").replace(Some(Value.Str("Alice")))(deleted)
+      val direct = atField("name").replace(Some(Value.Str("Alice")))(personV)
+      (record.getOption(reinserted).map(_.map(_._1)) === Some(Chunk("age", "name")))
+        .and(record.getOption(direct).map(_.map(_._1)) === Some(Chunk("name", "age")))
+        .and(reinserted !== direct)
+    }
+  }
+
   "at" should {
     val seq = Value.Sequence(Chunk(Value.Str("a"), Value.Str("b")))
     "get by index" >> (at(1).getOption(seq) === Some(Value.Str("b")))
