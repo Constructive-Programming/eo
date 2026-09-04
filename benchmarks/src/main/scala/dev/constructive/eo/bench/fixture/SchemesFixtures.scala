@@ -72,8 +72,7 @@ object SchemesFixtures:
   // ----- eo TYPED algebras (over the pattern functor BinF via Basis/Traverse) ----------------
 
   /** Typed cata algebra — the leaf-sum, pattern-matching `BinF`'s named constructors. */
-  val eoTypedSum: BinF[Int] => Int =
-    { case BinF.LeafF(v) => v; case BinF.NodeF(l, r) => l + r }
+  val eoTypedSum: BinF[Int] => Int = { case BinF.LeafF(v) => v; case BinF.NodeF(l, r) => l + r }
 
   /** Typed coalgebra (the single fused `Seed => F[Seed]` shape) — builds the perfect binary tree.
     */
@@ -81,8 +80,7 @@ object SchemesFixtures:
     if d <= 0 then BinF.LeafF(1) else BinF.NodeF(d - 1, d - 1)
 
   /** Typed fused-hylo algebra — folds to `Int` directly, never building a `Bin`. */
-  val eoTypedHyloAlg: BinF[Int] => Int =
-    { case BinF.LeafF(_) => 1; case BinF.NodeF(l, r) => l + r }
+  val eoTypedHyloAlg: BinF[Int] => Int = { case BinF.LeafF(_) => 1; case BinF.NodeF(l, r) => l + r }
 
   // ----- hand-wired recursion (the baseline you'd write without either lib) --
 
@@ -113,8 +111,9 @@ object SchemesFixtures:
 
   // para: the same leaf-sum with subterms IGNORED — measures pure decoration
   // overhead (eo pairs subterms from the walked nodes; droste re-embeds each).
-  val eoParaAlg: BinF[(Bin, Int)] => Int =
-    { case BinF.LeafF(v) => v; case BinF.NodeF((_, l), (_, r)) => l + r }
+  val eoParaAlg: BinF[(Bin, Int)] => Int = {
+    case BinF.LeafF(v) => v; case BinF.NodeF((_, l), (_, r)) => l + r
+  }
 
   val drosteParaAlg: RAlgebra[Fix[BinF], BinF, Int] = RAlgebra {
     case BinF.LeafF(v)              => v
@@ -130,8 +129,9 @@ object SchemesFixtures:
   }
 
   // histo, heads only: the course-of-value bookkeeping cost.
-  val eoHistoAlg: BinF[EoAttr[BinF, Int]] => Int =
-    { case BinF.LeafF(v) => v; case BinF.NodeF(l, r) => l.head + r.head }
+  val eoHistoAlg: BinF[EoAttr[BinF, Int]] => Int = {
+    case BinF.LeafF(v) => v; case BinF.NodeF(l, r) => l.head + r.head
+  }
 
   val drosteHistoAlg: CVAlgebra[BinF, Int] = CVAlgebra {
     case BinF.LeafF(v)    => v
@@ -147,4 +147,3 @@ object SchemesFixtures:
     if d <= 0 then BinF.LeafF(1)
     else BinF.NodeF(DCoattr.pure(d - 1), DCoattr.pure(d - 1))
   }
-
