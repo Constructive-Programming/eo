@@ -122,7 +122,6 @@ class SchemesBench extends JmhDefaults:
 
   // ----- the M path at Id: the tailRecM-lifted machine's per-event floor ------
 
-  val eoHyloMRunner = Schemes.hyloM[cats.Id, BinF, Int, Int](eoTypedCoalg, fa =>
-    eoTypedHyloAlg(fa))
+  val eoHyloMRunner = Schemes.hyloM[cats.Id, BinF, Int, Int](eoTypedCoalg, fa => eoTypedHyloAlg(fa))
 
   @Benchmark def eoHyloM: Int = eoHyloMRunner.get(Depth)
