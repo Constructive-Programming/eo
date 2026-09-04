@@ -11,7 +11,7 @@ constructors** (compile-time arity safety, no positional indexing):
 | `ana`  | `Review[S, Seed]` | build an `S` from a seed |
 | `hylo` | `Getter[Seed, A]` (**fused** — no intermediate `S`) | unfold-and-fold in one pass |
 | `para` / `apo` / `histo` / `futu` | the zoo (below) | decorated folds / unfolds |
-| `cataM` / `anaM` / `hyloM` | `Forget[M]`-carried | effectful steps in a `Monad[M]` |
+| `cataM` / `anaM` / `hyloM` | `.get`/`.reverseGet` yield `M[…]` | effectful steps in a `Monad[M]` |
 
 Everything runs on one stack-safe, post-order machine family (heap-stacked past depth
 512, not JVM-call-stacked) — safe to depths a hand-written recursion would overflow,
@@ -69,11 +69,9 @@ val binTree: Bin = Bin.Branch(Bin.Leaf(1), Bin.Branch(Bin.Leaf(2), Bin.Leaf(3)))
 typed `BinF[A]`** — `l` and `r` are `A`, by name, no positional indexing:
 
 ```scala mdoc:silent
-val sumLeavesF: Getter[Bin, Int] =
-  Schemes.cata[BinF, Bin, Int] { (_, folded) =>
-    folded match
-      case BinF.LeafF(n)      => n
-      case BinF.BranchF(l, r) => l + r
+val sumLeavesF = Schemes.cata[BinF, Bin, Int] {
+    case BinF.LeafF(n)      => n
+    case BinF.BranchF(l, r) => l + r
   }
 ```
 
@@ -92,13 +90,12 @@ val buildBin = Schemes.ana[BinF, Int, Bin] { n =>
 }
 
 // fused: count the leaves directly, building no Bin
-val countLeavesF: Getter[Int, Int] =
-  Schemes.hylo[BinF, Int, Int](
+val countLeavesF = Schemes.hylo[BinF, Int, Int](
     coalg = n => if n <= 0 then BinF.LeafF(1) else BinF.BranchF(0, n - 1),
-    alg = (_, folded) =>
-      folded match
-        case BinF.LeafF(_)      => 1
-        case BinF.BranchF(l, r) => l + r,
+    alg = {
+      case BinF.LeafF(_)      => 1
+      case BinF.BranchF(l, r) => l + r
+    },
   )
 ```
 
@@ -108,25 +105,24 @@ countLeavesF.get(3)                    // same count, fused — no Bin materiali
 countLeavesF.get(1000000)              // stack-safe: the heap machine, O(depth) heap
 ```
 
-`cata` and `hylo` are **`Getter`s** (forward reads) and `ana` is a **`Review`** (its build-only
-dual), so they compose with the rest of the optic algebra: `cata`/`hylo` via `andThen`, and the
+`cata` and `hylo` are **Getter-shaped** (forward reads over the `Direct` carrier) and `ana` is
+**Review-shaped** (its build-only dual), so they compose with the rest of the optic algebra: `cata`/`hylo` via `andThen`, and the
 build⇄read refold via `ana.cross(cata)` (the materializing `ana(…).cross(cata(…))` equals the fused
 `hylo` for a pure algebra — the hylo law). They run on
 a **`< 512`-on-stack / heap-`ArrayDeque` machine** (no `cats.Eval`
 trampoline) — your `Traverse[F]` is used only per *layer* (any lawful instance works), so they are
 stack-safe to depths a hand-written recursion would overflow and allocate close to droste (see the
-[benchmarks](benchmarks.md)). **Choosing a path:** reach for `cata`/`ana`/`hylo` (default) when you
-want zero
-boilerplate; reach for `cata`/`ana`/`hylo` when you want the algebra to be type-checked against
-named constructors. Deriving `Project`/`Embed` from the `S`↔`F` correspondence is future work; today
-they are hand-written (as above).
+[benchmarks](benchmarks.md)). The typed path is the only path — the earlier untyped
+`Plated`-driven spelling was removed once this one subsumed it (see the note at the bottom of this
+page). Deriving `Project`/`Embed` from the `S`↔`F` correspondence is future work; today they are
+hand-written (as above).
 
 ### Composing with lenses
 
-Because the schemes are `Getter`s, they slot into a lens pipeline. Compose a **lens chain** to
-focus a recursive field buried in a record, then fold it with the scheme. Read-only optics compose
-`Getter`-to-`Getter`, so wrap the lens's read in a `Getter` (or just read at the leaf,
-`cata(alg).get(lens.get(record))`) — the same composed lens still *writes* the field back:
+Because the schemes read through `.get`, they slot into a lens pipeline. Compose a **lens chain**
+to focus a recursive field buried in a record, then fold it with the scheme — wrap the composite
+read in a `Getter` so it stays a reusable optic (the same composed lens still *writes* the field
+back):
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Lens
@@ -138,8 +134,8 @@ val innerL = Lens[Doc, Inner](_.inner, (d, i) => d.copy(inner = i))
 val treeL  = Lens[Inner, Bin](_.tree, (i, t) => i.copy(tree = t))
 val deepTree = innerL.andThen(treeL) // Lens[Doc, Bin] — lens composition
 
-// wrap the composed lens's read in a Getter, then andThen the scheme → reusable Getter[Doc, Int]
-val docLeafSum = Getter[Doc, Bin](deepTree.get).andThen(sumLeavesF)
+// read through the composed lens, fold with the scheme, wrap as a Getter → reusable optic
+val docLeafSum = Getter[Doc, Int](doc => sumLeavesF.get(deepTree.get(doc)))
 
 val record = Doc(1, Inner("x", binTree))
 ```
@@ -150,35 +146,38 @@ deepTree.replace(Bin.Leaf(0))(record) // the SAME composed lens writes the field
 ```
 
 The single peel/glue layer is also available on its own as `Schemes.fLayer[F, S]`, an
-`Optic[S, S, S, S, Forget[F]]` (`to = project`, `from = embed`) — the typed analogue of `Plated`'s
-`plate` for one layer. Given a `Foldable[F]` it reads a node's immediate foci via `.foldMap`. It is
-primarily the proof that a typed `F` is an optic carrier; the recursive schemes drive `project`/
-`embed` themselves rather than composing `fLayer`.
+`Optic[S, S, S, S, MultiFocus[F]]` (`to = project`, `from = embed`) — the typed analogue of
+`Plated`'s `plate` for one layer. It composes with the rest of core on the shared carrier: read a
+node's immediate foci via `.foldMap` (`Foldable[F]`), rewrite them via `.modify`/`.replace`
+(`Functor[F]`), or effect over them via `.modifyA`/`.all` (`Traverse[F]`). It is one layer, not the
+recursion; the `Plated.fromBasis` derivation is its recursive face, and the recursive schemes drive
+`project`/`embed` themselves rather than composing `fLayer`.
 
 ## The zoo: para / apo / histo / futu
 
-The decorated schemes are **one sum/product symmetry**, and eo ships it as a vocabulary of
-*decoration optics* (the `Gather`/`Scatter` family, worn on the new `BiAffine` carrier — see below):
+The decorated schemes are **one sum/product symmetry**, shipped as named optic citizens —
+`final class`es in `zoo` carrying their parts, so composition and fusion (`ana.cross(cata)`)
+resolve against the concrete types. Their decorations are consumed natively by the engine on the
+`BiAffine` carrier (see below):
 
-| scheme | decoration | shape | `Gather`/`Scatter` value |
-|---|---|---|---|
-| cata / ana | none | — | `Gather.cata` / `Scatter.ana` |
-| **para** | child slots carry the original subterms | product | (native only) |
-| **apo** | child slots may graft a finished subtree | sum | (native only) |
-| **histo** | full decorated history per child (`Attr`) | iterated product | `Gather.histo` |
-| **futu** | multiple layers per step (`Coattr`) | iterated sum | `Scatter.futu` |
-| zygo / dyna / … | user-written `Gather`/`Scatter` values | — | (yours — example below) |
+| scheme | decoration | shape |
+|---|---|---|
+| cata / ana | none (`X = Nothing` / `S`) | the forgetful base |
+| **para** | child slots carry the original subterms | product |
+| **apo** | child slots may graft a finished subtree | sum |
+| **histo** | full decorated history per child (`Attr`) | iterated product |
+| **futu** | multiple layers per step (`Coattr`) | iterated sum |
+| zygo / mutu / cozygo / comutu / dyna / chrono / elgot / … | auxiliary carriers between the towers | see the scaladocs |
 
 `para` pairs each child slot with its **original subterm** — taken from the nodes the machine
 already walks, with no per-node re-`embed`:
 
 ```scala mdoc:silent
 // count branches whose left child is a leaf — needs the subterm, not just the result
-val leftLeafBranches = Schemes.para[BinF, Bin, Int] { (_, layer) =>
-  layer match
-    case BinF.LeafF(_) => 0
-    case BinF.BranchF((ls, l), (_, r)) =>
-      l + r + (ls match { case Bin.Leaf(_) => 1; case _ => 0 })
+val leftLeafBranches = Schemes.para[BinF, Bin, Int] {
+  case BinF.LeafF(_) => 0
+  case BinF.BranchF((ls, l), (_, r)) =>
+    l + r + (ls match { case Bin.Leaf(_) => 1; case _ => 0 })
 }
 ```
 
@@ -211,14 +210,13 @@ O(n) `Attr` cells):
 import dev.constructive.eo.schemes.zoo.{Attr, Coattr}
 
 // add each branch's grandchildren-through-history to its result
-val withGrand = Schemes.histo[BinF, Bin, Int] { (_, layer) =>
-  layer match
-    case BinF.LeafF(n) => n
-    case BinF.BranchF(l, r) =>
-      def grand(a: Attr[BinF, Int]): Int = a.tail match
-        case BinF.LeafF(_)        => 0
-        case BinF.BranchF(gl, gr) => gl.head + gr.head
-      l.head + r.head + grand(l) + grand(r)
+val withGrand = Schemes.histo[BinF, Bin, Int] {
+  case BinF.LeafF(n) => n
+  case BinF.BranchF(l, r) =>
+    def grand(a: Attr[BinF, Int]): Int = a.tail match
+      case BinF.LeafF(_)        => 0
+      case BinF.BranchF(gl, gr) => gl.head + gr.head
+    l.head + r.head + grand(l) + grand(r)
 }
 ```
 
@@ -245,8 +243,8 @@ hylo law).
 ```scala mdoc:silent
 val zooExpand: Int => BinF[Int] = n =>
   if n <= 1 then BinF.LeafF(1) else BinF.BranchF(n / 2, n - n / 2)
-val zooSum: (Bin, BinF[Int]) => Int = (_, fa) =>
-  fa match { case BinF.LeafF(n) => n; case BinF.BranchF(l, r) => l + r }
+val zooSum: BinF[Int] => Int =
+  { case BinF.LeafF(n) => n; case BinF.BranchF(l, r) => l + r }
 
 val fusedLeafSum = Schemes.ana[BinF, Int, Bin](zooExpand).cross(Schemes.cata(zooSum))
 ```
@@ -255,35 +253,31 @@ val fusedLeafSum = Schemes.ana[BinF, Int, Bin](zooExpand).cross(Schemes.cata(zoo
 fusedLeafSum.get(6)
 ```
 
-### Write your own decoration: zygo as a `Gather` value
+### A decorated fold with a helper: `zygo`
 
-The generality that droste exposes as `gcata`/`gana` lives here as the **public `Gather`/`Scatter` decoration optics**:
-a decoration is an optic over the `BiAffine` carrier (fold side: `from` = *gather*; unfold side:
-`to` = *scatter*, `from` on `Step` = the seed-injecting unit). A zygomorphism — the algebra
-consults a helper fold alongside each child's result — is a user-written gather value, consumed
-by the same `cata(decor)(galg)` driver as the named members:
+The generality droste exposes as `gcata`/`gana` lives here as **named citizens between the
+towers**. A zygomorphism — the main algebra consults an auxiliary algebra alongside each child's
+result — is one constructor: the helper algebra, then the main algebra reading `(helper, main)`
+per child. (`para` is exactly `zygo` at `B = S` with the helper `embed`; `mutu` generalises to
+two mutually-recursive algebras.)
 
 ```scala mdoc:silent
-import dev.constructive.eo.schemes.zoo.Gather
-
-def zygo[B](helper: BinF[B] => B): Gather[BinF, (B, Int), Int] =
-  new Gather[BinF, (B, Int), Int]:
-    def gather(layer: BinF[(B, Int)], a: Int): (B, Int) =
-      (helper(summon[Traverse[BinF]].map(layer)(_._1)), a)
-
 val leafCount: BinF[Int] => Int =
   { case BinF.LeafF(_) => 1; case BinF.BranchF(l, r) => l + r }
 
-// sum, with the helper count available at every branch
-val sumWithCount = Schemes.cata[BinF, Bin, (Int, Int), Int](zygo(leafCount)) { (_, layer) =>
-  layer match
-    case BinF.LeafF(n)                  => n
-    case BinF.BranchF((_, l), (cr, r)) => l + r + 0 * cr // helper in scope per child
+// leaf sum, where every branch also sees its children's helper results
+val sumWithCount = Schemes.zygo[BinF, Bin, Int, Int](leafCount) {
+  case BinF.LeafF(n)                  => n
+  case BinF.BranchF((cl, l), (cr, r)) => l + r + cl * cr
 }
 ```
 
-User-written values run the generic decoration route (one decoration dispatch + `Step` per
-node); the named values dispatch to native engine routes.
+```scala mdoc
+sumWithCount.get(binTree)
+```
+
+The named citizens dispatch to native engine routes — the decoration is consumed inside the
+machine, not as a per-node optic dispatch.
 
 ### Effectful steps: `cataM` / `anaM` / `hyloM`
 
@@ -291,11 +285,10 @@ When producing a layer is itself effectful — fetching a node's children from a
 `arbo` Calculator shape — the M-generic drivers run the same machine **lifted through
 `Monad[M].tailRecM`** (one `M`-action per node event; stack-safety rides on M's `tailRecM`;
 supported Ms are single-pass and *linear* — a branching/replaying `M` like `List` is documented
-unsupported). Results are `Forget[M]`-carried `FoldM` citizens consumed via `.run`;
-`anaM.andThen(cataM)` is the materialising effectful hylo (Kleisli `flatMap` — `M[S]` built, then
-folded), with `Schemes.hyloM` the fused one-pass spelling. (On the M rung the effect only fits the
-Kleisli read slot, so both `cataM` and `anaM` are `FoldM`s composed by `andThen` — the pure rung's
-`Review`/`Getter` `cross` duality collapses into Kleisli arrows here.)
+unsupported). `cataM` reads via `.get: S => M[A]` and `anaM` builds via
+`.reverseGet: Seed => M[S]`; `hyloM` is the **fused** effectful refold — one single-pass machine,
+no intermediate `S` built (the materialising pair `cataM(alg).get(anaM(coalg).reverseGet(seed))`
+agrees with it — the `M = Id` cross-architecture pin in the spec).
 
 ```scala mdoc:silent
 import cats.data.State
@@ -305,26 +298,29 @@ type Counted[T] = State[Int, T] // counts service calls, arbo's GetSellOptions s
 def fetchLayer(n: Int): Counted[BinF[Int]] =
   State(calls => (calls + 1, zooExpand(n)))
 
-val countedLeafSum =
-  Schemes
-    .anaM[Counted, BinF, Int, Bin](fetchLayer)
-    .andThen(Schemes.cataM[Counted, BinF, Bin, Int]((s, fa) => State.pure(zooSum(s, fa))))
+// fused: each node's layer is fetched in M and folded immediately — one pass, no Bin built
+val countedLeafSum = Schemes.hyloM[Counted, BinF, Int, Int](
+  fetchLayer,
+  fa => State.pure(zooSum(fa)),
+)
 ```
 
 ```scala mdoc
-countedLeafSum.run(6).run(0).value // (service calls, leaf sum) — one fused pass
+countedLeafSum.get(6).run(0) // (service calls, leaf sum) — one fused pass
 ```
 
 ### The BiAffine carrier
 
-The decoration optics' carrier is new in core: **`BiAffine`** — `Affine`'s data shape worn on the *build*
-seam. `Step(context, focus)` keeps going; `Done(payload)` means "this slot is already finished —
-do not call the coalgebra" (apo grafts a finished subtree, futu unrolls a prebuilt layer). Its
-laws are the graft-finality and round-trip equations in `cats-eo-laws`. Composition here is
-scoped to the shipped seams — the `ana.cross(cata)` refold (pure) and `FoldM.andThen` (M-path),
-plus the fused `hylo`/`hyloM` drivers;
-BiAffine's full composition-matrix row is follow-up work, as are the elgot/coelgot decorations
-(the answer-level short-circuit, which the M machine's internals are already shaped for).
+The decoration machinery's carrier is new in core: **`BiAffine`** — `Affine`'s data shape worn on
+the *build* seam. `Step(context, focus)` keeps going; `Done(payload)` means "this slot is already
+finished — do not call the coalgebra" (apo grafts a finished subtree, futu unrolls a prebuilt
+layer). Its laws are the graft-finality and round-trip equations in `cats-eo-laws`. The
+composition-matrix row is shipped: `BiAffine.assoc` (same-carrier `andThen` — `Done` ↔ `Miss`,
+`Step` ↔ `Hit`) plus the cross-carrier bridges from `Tuple2` (Lens) and `Either` (Prism), so
+`lens.andThen(apoScatter)`-style compositions resolve; `Schemes.apoScatter` exposes the
+`Left(s) → Done(s)` graft channel as a composable scatter optic. On the scheme side,
+`elgot`/`coelgot` (the answer-level short-circuit and seed-reading refolds) are shipped citizens,
+and `meta`/`metaChrono` complete the non-fusing fold→unfold quadrant.
 
 ---
 
