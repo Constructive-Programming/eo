@@ -504,7 +504,6 @@ lazy val root: Project = project
       jsoniterIntegration,
       zioIntegration,
       schemes,
-      schemesLaws,
     ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
   )
   .settings(commonSettings *)
@@ -593,24 +592,6 @@ lazy val schemes: Project = project
     // (rather than shrinking them) and preserves parallel execution.
     Test / fork := true,
     Test / javaOptions += "-Xss8m",
-  )
-
-// Discipline-style laws for the recursion-scheme module. Lives outside
-// `laws` because the statements quantify over `schemes` types (Coalg,
-// cata / ana / hylo) and `laws` sits upstream of `schemes` in the build
-// graph. First citizen is the hylo fusion law; more scheme laws are
-// expected to land here (para / apo / histo fusion, cata-compose, ...).
-lazy val schemesLaws: Project = project
-  .in(file("schemes-laws"))
-  .dependsOn(LocalProject("schemes"))
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
-  .settings(
-    name := "cats-eo-schemes-laws",
-    libraryDependencies += cats,
-    libraryDependencies += disciplineCore,
-    libraryDependencies += scalacheck,
-    libraryDependencies += discipline % Test,
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,
@@ -1123,7 +1104,6 @@ addCommandAlias(
     "project laws; stryker; " +
     "project generics; stryker; " +
     "project schemes; stryker; " +
-    "project schemesLaws; stryker; " +
     "project circeIntegration; stryker; " +
     "project avroIntegration; stryker; " +
     "project jsoniterIntegration; stryker; " +
