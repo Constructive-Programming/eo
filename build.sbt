@@ -215,11 +215,16 @@ ThisBuild / githubWorkflowGeneratedDownloadSteps ~= { steps =>
 
 // sbt-typelevel 0.8.x still generates `actions/checkout@v6`; we run @v7
 // (Dependabot's bump). `githubWorkflowCheck` enforces ci.yml == the
-// generated output, so pin v7 at the source — in the shared job setup —
-// rather than hand-editing the YAML (which the check would reject). Drop
-// this once the plugin ships a release that generates checkout@v7.
+// generated output, so pin newer refs at the source — in the shared job
+// setup — rather than hand-editing the YAML (which the check would
+// reject). Same story for `actions/setup-java`: the plugin pins @v5,
+// we run @v6. Drop these once the plugin ships a release that
+// generates the newer versions upstream — see
+// https://github.com/typelevel/sbt-typelevel/releases.
 ThisBuild / githubWorkflowJobSetup ~= { steps =>
-  steps.map(bumpActionVersion("actions", "checkout", "v7"))
+  steps
+    .map(bumpActionVersion("actions", "checkout", "v7"))
+    .map(bumpActionVersion("actions", "setup-java", "v6"))
 }
 
 ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
@@ -243,7 +248,8 @@ ThisBuild / githubWorkflowAddedJobs ~= { jobs =>
         .withJavas(List(JavaSpec.temurin("17")))
         .withSteps(job.steps.map {
           case s: WorkflowStep.Use if s.id.exists(_.startsWith("setup-java")) =>
-            s.withParams(s.params.updated("java-version", "17"))
+            s.withRef(UseRef.Public("actions", "setup-java", "v6"))
+              .withParams(s.params.updated("java-version", "17"))
               .withId(Some("setup-java-temurin-17"))
               .withName(Some("Setup Java (temurin@17)"))
               .withCond(Some("matrix.java == 'temurin@17'"))
