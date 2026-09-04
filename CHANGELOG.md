@@ -413,6 +413,53 @@ grep-verified and the one perf-relevant cut B/op-verified:
 
 ### Added
 
+- **`cats-eo-schemes` — typed recursion schemes as composable optics.** A new
+  module whose citizens are optics over a user-supplied **pattern functor**
+  `F[_]` (+ `Traverse[F]`) and a hand-written `Basis` (`Project[F, S]` /
+  `Embed[F, S]`): `cata` (Getter-shaped fold), `ana` (Review-shaped unfold),
+  and the **fused** `hylo` (builds no intermediate `S`), plus the materialising
+  `ana.cross(cata)` spelling (the hylo law pins the two as equal for a pure
+  algebra). The **decoration zoo** refines each tower rung by its existential
+  index — `para` (subterm-retaining, product), `apo` (O(1) subtree graft, sum),
+  `histo` (course-of-value over the cofree `Attr`), `futu` (multi-layer unfold
+  over the free `Coattr`), plus `zygo` / `mutu` / `cozygo` / `comutu` between
+  the towers, the fused `dyna` / `codyna` / `chrono` / `elgot` / `coelgot`
+  refolds, `meta` / `metaChrono` (the non-fusing fold→unfold seam), and
+  `prepro` / `postpro` (the natural-transformation axis). The **effectful
+  `*M` family** (`cataM` / `paraM` / `histoM` / `anaM` / `apoM` / `futuM` /
+  `hyloM` / `chronoM`) runs the same machine lifted through
+  `Monad[M].tailRecM` (single-pass, linear `M` contract). `paraLens` promotes
+  the paramorphism to a lawful `Lens` (caller-supplied coherent put). All
+  schemes run on one stack-safe `< 512`-on-stack / heap-`ArrayDeque` engine,
+  tested to 10⁶ depth; the typed path replaces the earlier untyped
+  `Plated`/`PSVec`-driven schemes (removed — the erased positional indexing
+  made algebra arity slips a runtime error).
+
+- **`Affine` wears the build seam — the schemes' decoration carrier, no new carrier.**
+  The decoration machinery reuses `data.Affine` with its arms read on the build
+  seam: `Hit(context, focus)` keeps going, `Miss(payload)` means "this slot is
+  already finished — do not call the coalgebra" (apo grafts by reference, futu
+  unrolls a prebuilt layer). New in core: the `Graft[Affine]` build-channel
+  accessor (`done = Miss`, `step = Hit`) — the injection vocabulary the schemes'
+  build-side citizens construct and consume — plus the corresponding
+  graft-finality laws in `cats-eo-laws` (the finished arm is focus-free, inert
+  under `map`, and folds empty). Decoration composition rides Affine's own
+  composition row (`Affine.assoc` same-carrier `andThen`) and its cross-carrier
+  bridges from `Tuple2` (Lens) and `Either` (Prism), so
+  `lens.andThen(apoScatter)`-style compositions resolve. `Schemes.apoScatter`
+  exposes the `Left(s) → Miss(s)` graft channel as a composable scatter optic.
+  (An earlier draft shipped a separate `BiAffine` carrier with identical shape;
+  it was dropped pre-merge — the arms are isomorphic and the duplication bought
+  nothing. The `BiAffine` name is left free for a genuinely two-sided-failure
+  carrier if one is ever needed.)
+
+- **`Basis` in core; `Plated` derives from it.** `optics.Basis`
+  (`Project[F, S]` / `Embed[F, S]`) — the pattern-functor correspondence the
+  schemes drive — moves into `cats-eo-core`, and `Plated.fromBasis` derives a
+  `Plated[S]` from it, the schemes↔`Plated` bridge (`PlatedBridgeSpec` pins
+  `embed ∘ project` coherence and universe/transform agreement with `cata`).
+
+
 - **`Getter`s now compose with `Getter`s via `andThen`.** `g1.andThen(g2)` reads
   `s => g2.get(g1.get(s))` and yields a `Getter`, matching how `Iso` / `Lens`
   compose through their fused subclasses. `Getter.apply` now returns a concrete
