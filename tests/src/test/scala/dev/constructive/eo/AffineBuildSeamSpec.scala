@@ -24,21 +24,22 @@ class AffineBuildSeamSpec extends Specification:
     new Optic[Int, Int, Int, Int, Affine]:
       type X = TX
       def to(w: Int): Affine[X, Int] =
-        if w < 0 then new Miss[X, Int](w)
+        if w < 0 then new Miss[X](w)
         else new Hit[X, Int](List(w), w)
       def from(xb: Affine[X, Int]): Int = xb match
-        case d: Miss[X, Int] => d.fst
-        case s: Hit[X, Int]  => s.b
+        case d: Miss[X]     => d.fst
+        case s: Hit[X, Int] => s.b
 
-  "Miss.widenB is allocation-free (reference-equal result)" in {
-    val d = new Miss[TX, Int](5)
-    (d.widenB[String].asInstanceOf[AnyRef] eq d.asInstanceOf[AnyRef]) === true
+  "Miss re-typing across a focus change is an allocation-free upcast" in {
+    val d: Miss[TX] = new Miss[TX](5)
+    val widened: Affine[TX, String] = d // Miss[A] :> Affine[A, Nothing] = Affine[A, String]
+    (widened.asInstanceOf[AnyRef] eq d.asInstanceOf[AnyRef]) === true
   }
 
   "a full Affine build-seam citizen" should {
 
     "treat Miss as final: from(Miss(w)) == w" in {
-      (toy.from(new Miss[TX, Int](-7)) === -7).and(toy.from(new Miss[TX, Int](42)) === 42)
+      (toy.from(new Miss[TX](-7)) === -7).and(toy.from(new Miss[TX](42)) === 42)
     }
 
     "round-trip the Hit arm: from(to(w)) == w" in {
@@ -58,10 +59,10 @@ class AffineBuildSeamSpec extends Specification:
       new Optic[Int, Int, Int, Int, Affine]:
         type X = TX
         def to(w: Int): Affine[X, Int] =
-          if w % 2 == 0 then new Miss[X, Int](w) else new Hit[X, Int](List(w), w)
+          if w % 2 == 0 then new Miss[X](w) else new Hit[X, Int](List(w), w)
         def from(xb: Affine[X, Int]): Int = xb match
-          case d: Miss[X, Int] => d.fst
-          case s: Hit[X, Int]  => s.b
+          case d: Miss[X]     => d.fst
+          case s: Hit[X, Int] => s.b
 
     val composed = toy.andThen(innerToy)
 

@@ -3,9 +3,7 @@ package optics
 
 import scala.annotation.tailrec
 
-import cats.Traverse
-
-import cats.Eval
+import cats.{Eval, Traverse}
 import java.util.ArrayDeque
 
 import data.{ModifyF, MultiFocus, PSVec}

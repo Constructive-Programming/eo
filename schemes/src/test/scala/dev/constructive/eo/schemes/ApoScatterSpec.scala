@@ -8,7 +8,6 @@ import org.specs2.mutable.Specification
 import data.Affine
 import optics.Optic
 import optics.Optic.* // reverseGet
-
 import schemes.samples.{Bin, BinF}
 
 /** apo re-carriered onto [[data.Affine]]: its per-slot residual is now [[Schemes.apoScatter]], a
@@ -34,7 +33,7 @@ class ApoScatterSpec extends Specification:
     new Optic[Int, Unit, Int, Unit, Affine]:
       type X = (Int, Unit)
       def to(n: Int): Affine[X, Int] =
-        if n < 0 then new Affine.Miss[X, Int](n) else new Affine.Hit[X, Int]((), n)
+        if n < 0 then new Affine.Miss[X](n) else new Affine.Hit[X, Int]((), n)
       def from(b: Affine[X, Unit]): Unit = ()
 
   private val composed = sc.andThen(innerToy)

@@ -8,7 +8,6 @@ import cats.~>
 import org.specs2.mutable.Specification
 
 import optics.Optic.* // get, reverseGet
-
 import schemes.samples.{Bin, BinF}
 
 /** Behaviour + degeneration spec for the schemes that complete the two index towers and the

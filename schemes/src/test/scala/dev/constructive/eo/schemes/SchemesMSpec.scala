@@ -8,7 +8,6 @@ import cats.{Eval, Id}
 import org.specs2.mutable.Specification
 
 import optics.Optic.* // get, reverseGet
-
 import schemes.samples.{Bin, BinF}
 import schemes.zoo.{Attr, Coattr}
 

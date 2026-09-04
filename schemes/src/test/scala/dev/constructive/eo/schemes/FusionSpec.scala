@@ -6,7 +6,6 @@ import scala.language.implicitConversions
 import org.specs2.mutable.Specification
 
 import optics.Optic.* // get, reverseGet
-
 import schemes.samples.{Bin, BinF}
 
 /** The thesis, as an executable proof: **hylo is the fusion of ana and cata**, automatic from the

@@ -8,7 +8,6 @@ import org.specs2.mutable.Specification
 import data.MultiFocus
 import optics.{Getter, Optic}
 import optics.Optic.* // get, readOnly, reverseGet, foldMap, modify, andThen
-
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 
 /** Behaviour spec for the node-blind recursion-scheme spine (`cata` / `ana` / `hylo`) and `fLayer`.

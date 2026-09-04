@@ -6,7 +6,6 @@ import scala.language.implicitConversions
 import org.specs2.mutable.Specification
 
 import optics.Optic.* // get, reverseGet
-
 import schemes.samples.{Bin, BinF, Rose, RoseF}
 import schemes.zoo.{Attr, Coattr}
 

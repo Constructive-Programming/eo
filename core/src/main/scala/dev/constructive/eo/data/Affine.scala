@@ -237,4 +237,4 @@ object Affine:
     */
   given graft: Graft[Affine] with
     def done[X, B](fst: Fst[X]): Affine[X, B] = new Miss[X](fst)
-    def step[X, B](snd: Snd[X], b: B): Affine[X, B] = new Hit[X](snd, b)
+    def step[X, B](snd: Snd[X], b: B): Affine[X, B] = new Hit[X, B](snd, b)
