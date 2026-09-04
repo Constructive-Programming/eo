@@ -120,15 +120,9 @@ class SchemesBench extends JmhDefaults:
   @Benchmark def eoRefoldCross: Int = eoRefoldCrossG.get(Depth)
   @Benchmark def eoRefoldManual: Int = eoCataG.get(eoAnaR.reverseGet(Depth))
 
-  // ----- generic decoration route (user-written Gather, no identity fast path) --
-
-  val eoCataGenericG = Schemes.cata[BinF, Bin, Int, Int](userIdGather)(eoTypedSum)
-
-  @Benchmark def eoCataGenericRoute: Int = eoCataGenericG.get(eoTree)
-
   // ----- the M path at Id: the tailRecM-lifted machine's per-event floor ------
 
-  val eoHyloMRunner =
-    Schemes.hyloM[cats.Id, BinF, Int, Int](d => eoTypedCoalg(d), (s, fa) => eoTypedHyloAlg(s, fa))
+  val eoHyloMRunner = Schemes.hyloM[cats.Id, BinF, Int, Int](eoTypedCoalg, fa =>
+    eoTypedHyloAlg(fa))
 
-  @Benchmark def eoHyloM: Int = eoHyloMRunner.run(Depth)
+  @Benchmark def eoHyloM: Int = eoHyloMRunner.get(Depth)
