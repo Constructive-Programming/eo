@@ -12,7 +12,7 @@ import schemes.samples.{Bin, BinF}
 // scheme Lens.
 final case class Box(t: Bin)
 
-/** Step 3: [[Schemes.paraLens]] — the paramorphism promoted to a writable [[Lens]]. `get` is a
+/** Step 3: [[Schemes.paraLens]] — the paramorphism promoted to a writable `Lens`. `get` is a
   * subterm-retaining fold; `enplace` is the caller-supplied coherent put. The point of the spike: a
   * recursion scheme that is a genuine, lawful Lens, composing with core's Lenses.
   *

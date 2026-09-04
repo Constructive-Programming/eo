@@ -13,9 +13,9 @@ import zoo.*
   *
   * ==The thesis==
   *
-  * A recursion scheme is an [[Optic]] over the [[dev.constructive.eo.data.Direct]] carrier whose
-  * existential `X` is the *index* of the recursion — what the scheme retains — and **the (co)free
-  * (co)monads are the universal indices**:
+  * A recursion scheme is an [[dev.constructive.eo.optics.Optic]] over the
+  * [[dev.constructive.eo.data.Direct]] carrier whose existential `X` is the *index* of the
+  * recursion — what the scheme retains — and **the (co)free (co)monads are the universal indices**:
   *
   * | scheme     | `X`                             | index                                         |
   * |:-----------|:--------------------------------|:----------------------------------------------|
@@ -48,7 +48,7 @@ import zoo.*
   * [[ana]] is a build (`Review`-shaped) and [[cata]] a node-blind fold (`Getter`-shaped); the
   * build⇄read seam `ana.cross(cata)` (definitionally `ana.reverse.andThen(cata)`) **fuses** — the
   * citizens keep their `coalg`/`alg` alive — into [[zoo.Hylo]], building *no intermediate `S`*. The
-  * [[FusionSpec]] pins the hylo law and witnesses the deforestation (the fused refold never calls
+  * `FusionSpec` pins the hylo law and witnesses the deforestation (the fused refold never calls
   * `project`/`embed`).
   *
   * The **fold→unfold** seam `cata.meta(ana)` is the direction-dual ([[meta]], the metamorphism),
@@ -76,7 +76,7 @@ object Schemes:
     * whose foci are the node's immediate children `F[S]`.
     *
     * Because it now rides the same carrier as [[dev.constructive.eo.optics.Plated.plate]] and
-    * [[dev.constructive.eo.optics.Traversal.each]], it composes with the rest of core: read the
+    * `dev.constructive.eo.optics.Traversal.each`, it composes with the rest of core: read the
     * immediate foci via `.foldMap` (`Foldable[F]`), rewrite them via `.modify` / `.replace`
     * (`Functor[F]`), or effect over them via `.modifyA` / `.all` (`Traverse[F]`) — the read+write
     * upgrade over the former read-only `Forget[F]` spelling. It is one layer, not the recursion;

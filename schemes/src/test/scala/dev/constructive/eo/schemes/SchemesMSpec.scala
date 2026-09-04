@@ -13,7 +13,7 @@ import schemes.samples.{Bin, BinF}
 import schemes.zoo.{Attr, Coattr}
 
 /** Behaviour spec for the monadic (`*M`) scheme family — [[Schemes.cataM]] / `paraM` / `histoM` /
-  * `anaM` / `apoM` / `futuM` / `hyloM` / `chronoM`, all riding [[Machines.foldLayeredM]].
+  * `anaM` / `apoM` / `futuM` / `hyloM` / `chronoM`, all riding `Machines.foldLayeredM`.
   *
   * Two anchors per scheme:
   *
