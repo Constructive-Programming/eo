@@ -19,7 +19,8 @@ import org.specs2.mutable.Specification
   *   - Nested-path selectors (`_.a.b`).
   *   - Unknown field name.
   *   - Duplicate selectors.
-  *   - NamedTuple AvroCodec unreachable (no given `AvroCodec[NT]` in scope).
+  *   - NamedTuple `AvroCodec` underivable — a selected field's type has no `AvroSchemaFor` and
+  *     kindlings' derivation bottoms out on it.
   *
   * '''2026-04-29 consolidation.''' 8 → 1 named composite block; every D10 row still asserts.
   */
@@ -34,7 +35,8 @@ class FieldsMacroErrorSpec extends Specification:
   //   unknown field -> "'nope' is not a field of" + "Known fields:",
   //   duplicate selectors -> "duplicate field selector 'name'" + "positions 0, 1",
   //   non-case-class parent -> "has no case fields",
-  //   NamedTuple codec unreachable -> "no given AvroCodec" or kindlings schema-derivation diagnostic
+  //   NamedTuple codec unreachable -> kindlings' underivable-leaf diagnostic naming `Opaque`,
+  //     and NOTHING else (see the row's comment — issue #96)
   "`.fields` D10 catalogue: every row's exact diagnostic surfaces" >> {
     val empty = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
@@ -103,18 +105,29 @@ class FieldsMacroErrorSpec extends Specification:
     // kindlings typeclasses) are derivable. The macro asks for `AvroCodec[NamedTuple[("a","b"),
     // (Int, Opaque)]]`; `AvroCodec.derived` chains into kindlings' `AvroEncoder` /
     // `AvroDecoder` / `AvroSchemaFor`, kindlings' schema-derivation walks the NT's field types,
-    // and bottoms out on `Opaque`. Either the cats-eo-side or the kindlings-side diagnostic is
-    // acceptable here.
+    // and bottoms out on `Opaque`. That underivable-leaf report — naming `Opaque` — is the ONLY
+    // diagnostic this row accepts.
+    //
+    // WHY `forall`, NOT `exists` (issue #96): this row used to be an `exists` over a three-way
+    // disjunction, which accepted the row as long as ONE error matched and said nothing about the
+    // rest. Under the pre-#96 `*:` cons-chain NamedTuple spelling, hearth's NamedTuple-construction
+    // crash ("wrong number of arguments at inlining … expected: 0, found: 2" plus "a reference to
+    // method decode_…$macro$N was used outside the scope where it was defined") could have ridden
+    // along unnoticed. It happens not to, for THIS fixture — kindlings' schema rule bottoms out on
+    // `Opaque` before the constructor is ever reached, so the row passed identically before and
+    // after the fix — but a negative test that tolerates unrelated macro crashes is a negative test
+    // waiting to absorb one. `forall` closes that: any stray macro-expansion error fails the row.
+    // The positive witness for #96 itself is `NamedTupleSpellingSpec`.
     val noCodec = typeCheckErrors("""
         import dev.constructive.eo.avro.codecPrism
         import dev.constructive.eo.avro.FieldsMacroErrorSpec.NoCodec
         codecPrism[NoCodec].fields(_.a, _.b)
       """)
-    val noCodecOk = noCodec.exists(e =>
-      e.message.contains("no given AvroCodec") ||
-        e.message.contains("was not handled by any schema derivation rule") ||
-        e.message.contains("AvroSchemaFor[dev.constructive.eo.avro.FieldsMacroErrorSpec.Opaque]")
-    )
+    val noCodecOk =
+      noCodec.nonEmpty && noCodec.forall(e =>
+        e.message.contains("was not handled by any schema derivation rule") &&
+          e.message.contains("FieldsMacroErrorSpec.Opaque")
+      )
 
     (emptyOk === true)
       .and(singleOk === true)

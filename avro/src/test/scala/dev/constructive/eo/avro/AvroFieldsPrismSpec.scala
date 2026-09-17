@@ -127,9 +127,15 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   // covers: buildSubRecord's per-index projection loop — rewrite the projected NamedTuple
   //   sub-record directly (no codec decode/encode) and splice back; the untouched selected
   //   field (`age`) passes through the projection unchanged.
-  //   NOTE: uses the Person shape because a second differently-shaped .fields expansion in one
-  //   file trips an AvroPrismMacro hoisting bug ("reference to decode_String$macro$N outside
-  //   the scope where it was defined"); surfaced by this run, tracked separately.
+  //   NOTE (corrected, issue #96): an earlier note here blamed "a second differently-shaped
+  //   .fields expansion in one file" for a macro hoisting bug ("reference to
+  //   decode_String$macro$N outside the scope where it was defined"). That was a misreading —
+  //   the number and shape of expansions per file is irrelevant. The real discriminator was
+  //   given availability: this file declares `AvroCodec[NameAge]` (see the companion), so the
+  //   Person shape resolved, and any OTHER shape fell through to kindlings' auto-derivation,
+  //   which could not construct the macro's `*:`-spelled NamedTuple. Fixed at the source in
+  //   `MacroSelectors.tupleTypeOf`; `NamedTupleSpellingSpec` carries two differently-shaped
+  //   given-free expansions in one file as the standing witness.
   "AvroFieldsPrism .record.transform / transformUnsafe: sub-record rewrite splices back, sibling survives" >> {
     val record = personRecord(Person("alice", 30))
     val L = codecPrism[Person].fields(_.name, _.age).record
