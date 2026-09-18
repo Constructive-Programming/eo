@@ -158,10 +158,17 @@ final class AvroTraversal[A] private[avro] (
   private[avro] def widenSuffix[B](
       scalaName: String,
       declIdx: Int,
+      caseNames: List[String],
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
     widenSuffixStep[B](
       PathStep.Field(
-        AvroWalk.fieldNameAt(suffixParentRecord, scalaName, declIdx, "AvroTraversal.field")
+        AvroWalk.fieldNameAt(
+          suffixParentRecord,
+          scalaName,
+          declIdx,
+          caseNames,
+          "AvroTraversal.field",
+        )
       )
     )
 
@@ -171,6 +178,7 @@ final class AvroTraversal[A] private[avro] (
   private[avro] def widenSuffixNamed[B](
       schemaName: String
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
+    AvroWalk.requireFieldIn(suffixParentRecord, schemaName, "AvroTraversal.fieldNamed")
     widenSuffixStep[B](PathStep.Field(schemaName))
 
   /** The record schema the per-element suffix currently points at: walk the prefix to the array
@@ -219,10 +227,11 @@ final class AvroTraversal[A] private[avro] (
   private[avro] def toFieldsTraversal[B](
       scalaNames: Array[String],
       declIdxs: Array[Int],
+      caseNames: List[String],
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
     val parent = suffixParentRecord
     val resolved = Array.tabulate(scalaNames.length)(i =>
-      AvroWalk.fieldNameAt(parent, scalaNames(i), declIdxs(i), "AvroTraversal.fields")
+      AvroWalk.fieldNameAt(parent, scalaNames(i), declIdxs(i), caseNames, "AvroTraversal.fields")
     )
     new AvroTraversal[B](
       prefix,
@@ -242,8 +251,9 @@ object AvroTraversal:
     )(using codecB: AvroCodec[B]): AvroTraversal[B] =
       ${ AvroPrismMacro.fieldTraversalImpl[A, B]('t, 'selector, 'codecB) }
 
-  /** `.fieldNamed[B]("schema_name")` — drill by EXPLICIT schema field name (issue #35 escape
-    * hatch), the traversal counterpart of [[AvroPrism.fieldNamed]].
+  /** `.fieldNamed[B]("schema_name")` — drill by EXPLICIT schema field name, the traversal
+    * counterpart of [[AvroPrism.fieldNamed]], and checked against the element record the same way
+    * (issue #95).
     */
   extension [A](t: AvroTraversal[A])
 
