@@ -45,7 +45,7 @@ full table.
 
 The codec backend is
 [kindlings-avro-derivation](https://github.com/MateuszKubuszok/kindlings-avro-derivation)
-0.1.2, which pins apache-avro 1.12.1. cats-eo-avro wraps the
+0.3.2, which pins apache-avro 1.12.2. cats-eo-avro wraps the
 kindlings `AvroEncoder[A]` / `AvroDecoder[A]` / `AvroSchemaFor[A]`
 triplet in a single [`AvroCodec[A]`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/main/scala/dev/constructive/eo/avro/AvroCodec.scala)
 typeclass so user code summons one thing per type.
@@ -255,12 +255,48 @@ inside the selection under the Scala package namespace, which an
 enclosing union will refuse. Name the codec (or drill with
 `.field`) in that case.
 
-The auto-derived route covers **2 to 22** selectors. At 23 or more
-there is no `TupleN` spelling left — the NamedTuple's value tuple
-*is* a `*:` cons chain — and the derivation backend this project
-pins (kindlings 0.3.0 / hearth 0.4.0) cannot construct one, in
-either the derived or the hand-written form. Split a wider
-selection into several `.fields` covers.
+**The 22-selector ceiling is gone.** Up to 22 selectors the
+NamedTuple's value tuple is spelled `TupleN` and the derivation
+backend builds it with that tuple's constructor; at 23 or more there
+is no `TupleN` spelling left — the value tuple *is* a `*:` cons
+chain — and kindlings ≥ 0.3.2 / hearth ≥ 0.4.2 build that through
+`Tuple.fromArray`. (Earlier pins could not, which is why this page
+documented a 22-selector ceiling until the 0.4.2 / 0.3.2 bump.)
+
+That does **not** mean "no ceiling". Two limits remain, and the
+second one will bite you long before the first:
+
+*The hard limit is 254 selectors.* `.fields` selects from a case
+class, and the JVM caps a parameter list at 254 slots, so a
+255-field case class does not compile at all — `Platform
+restriction: a parameter list's length cannot exceed 254`, raised
+on the case class itself, before `.fields` is ever reached. 254 is
+therefore permanent, not a backend detail.
+
+*The practical limit is your compiler's stack.* The derivation
+recurses per field, so the reachable arity is set by `-Xss` on the
+compile thread. Measured on the same probe, varying only `-Xss`:
+
+| `-Xss`  | where it comes from            | derived | overflowed |
+|---------|--------------------------------|---------|------------|
+| `1m`    | JVM default                     | 32      | 36         |
+| `2m`    | —                               | 66      | 100        |
+| `4m`    | sbt's own launcher default      | 150     | 254        |
+| `8m`    | this repo's `.jvmopts`          | 254     | — (hard limit reached) |
+
+This repo sets `-Xss8m`, which is why its own suites reach 254 —
+but **the published artifact cannot carry a `-Xss` for you**. On a
+default 1 MB compile thread a wide `.fields` starts overflowing
+between 32 and 36 selectors, barely past the old ceiling. If you
+hit a `StackOverflowError` while widening a cover, raise `-Xss` in
+*your* build before concluding the cover is too wide.
+
+Compile *time* is the third cost: the derivation grows
+superlinearly in arity, so a wide cover may also want a higher
+`-Xmacro-settings:avroDerivation.timeout` — note the **unit
+suffix**, e.g. `=30s`. kindlings parses that value with a regex
+that requires `ms`/`s`/`m`; a bare `=30` does not match and is
+silently discarded, leaving the 5 s default in force.
 
 ```scala mdoc
 val nameAge = codecPrism[Person].fields(_.name, _.age)

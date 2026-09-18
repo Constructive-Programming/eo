@@ -17,8 +17,8 @@ import org.apache.avro.io.DecoderFactory
   * `get` decodes, its `reverseGet` / `place` encodes). Forcing every call site to thread two
   * `using` parameters is noisy. `AvroCodec[A]` is the project-internal shorthand.
   *
-  * Why not vulcan? Vulcan 1.13.x pins apache-avro 1.11.5; kindlings-avro-derivation 0.1.2 pins
-  * 1.12.1. cats-eo-avro chose kindlings + avro 1.12 because it lines up with the rest of the
+  * Why not vulcan? Vulcan 1.13.x pins apache-avro 1.11.5; kindlings-avro-derivation 0.3.2 pins
+  * 1.12.2. cats-eo-avro chose kindlings + avro 1.12 because it lines up with the rest of the
   * ecosystem moving forward, and the typeclass surface is simpler (no `Either[AvroError, A]`
   * threading on every call — kindlings' decoders throw on failure, which the prism layer wraps into
   * [[AvroFailure]]).

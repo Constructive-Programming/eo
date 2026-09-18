@@ -234,7 +234,7 @@ advises**. Operator runbook: `.github/bench/README.md`.
 
 `generics/` is a separate sub-project that synthesises boilerplate
 optics at compile time, built on top of Mateusz Kubuszok's
-[`com.kubuszok:hearth_3:0.3.0`](https://github.com/MateuszKubuszok/hearth)
+[`com.kubuszok:hearth_3:0.4.2`](https://github.com/MateuszKubuszok/hearth)
 macro-commons library. Two entry points so far:
 
 ```scala
