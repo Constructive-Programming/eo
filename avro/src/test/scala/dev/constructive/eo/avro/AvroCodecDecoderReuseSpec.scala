@@ -1,12 +1,14 @@
 package dev.constructive.eo.avro
 
+import scala.language.implicitConversions
+
 import java.io.ByteArrayInputStream
 import java.util.concurrent.ConcurrentLinkedQueue
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord, IndexedRecord}
 import org.apache.avro.io.DecoderFactory
 import org.scalacheck.Gen
-import org.scalacheck.Prop.forAll
+import org.scalacheck.Prop.forAllNoShrink
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
@@ -18,7 +20,9 @@ import org.specs2.mutable.Specification
   *      false` opt-out — must produce a record equal to the OLD fresh-allocation reference decode
   *      (reproduced verbatim in [[freshDecode]]), across writer→reader evolution (field dropped,
   *      added-with-default, reordered, promoted) and union-typed payloads. This is the load-bearing
-  *      correctness guard: a wrong decode in a serde library corrupts every consumer.
+  *      correctness guard: a wrong decode in a serde library corrupts every consumer. The evolution
+  *      shapes are DATA ([[reuseScenarios]]) rather than one example each, so every shape is put
+  *      through both entry points.
   *   2. '''Thread-safe + non-aliased.''' Concurrent decodes on many threads stay correct, and a
   *      record decoded earlier on a thread is never mutated by a later decode on that thread (fresh
   *      datum, no `Utf8`/bytes aliasing).
@@ -93,81 +97,96 @@ class AvroCodecDecoderReuseSpec extends Specification with ScalaCheck:
     yield AvroSpecFixtures.Transaction(id, amount)
 
   // ---- 1. Byte-identical decode vs the fresh-allocation reference ----
+  //
+  // Seven near-identical properties collapsed into one: they differed ONLY in the (generator,
+  // writer schema, reader schema) triple and in which entry point they called, so the triple is
+  // now data and both entry points — the thread-local cache and the `threadLocalStorage = false`
+  // opt-out — are checked on every scenario instead of one each.
 
-  "non-resolved decodeRecord matches the fresh reference decode (WriterEvent)" >> forAll(
-    genWriterEvent
-  ) { e =>
-    val bytes = binaryOf(e)
-    AvroCodec
-      .decodeRecord(bytes, writerSchema)
-      .exists(_ == freshDecode(bytes, writerSchema, writerSchema))
-  }
+  /** One writer→reader shape. `extra` is a scenario-specific sanity check on the reference decode,
+    * so a scenario can assert that the evolution it names really happened.
+    */
+  final private case class Reuse(
+      name: String,
+      bytes: Gen[Array[Byte]],
+      writer: Schema,
+      reader: Schema,
+      extra: IndexedRecord => Boolean,
+  )
 
-  "non-resolved decodeRecord matches the fresh reference decode (union payload)" >> forAll(
-    genTransaction
-  ) { t =>
-    val bytes = binaryOf(t)
-    AvroCodec
-      .decodeRecord(bytes, transactionSchema)
-      .exists(_ == freshDecode(bytes, transactionSchema, transactionSchema))
-  }
+  private def always: IndexedRecord => Boolean = _ => true
 
-  "resolved decode matches the fresh reference (WriterEvent→ReaderEvent, field dropped)" >> forAll(
-    genWriterEvent
-  ) { e =>
-    val bytes = binaryOf(e)
-    AvroCodec
-      .decodeResolvedRecord(bytes, writerSchema, readerEventSchema)
-      .exists(_ == freshDecode(bytes, writerSchema, readerEventSchema))
-  }
-
-  "resolved decode matches the fresh reference (fields reordered, resolved by name)" >> forAll(
-    genReorderWriter
-  ) { w =>
-    val bytes = binaryOf(w)
-    AvroCodec
-      .decodeResolvedRecord(bytes, reorderWriterSchema, reorderReaderSchema)
-      .exists(_ == freshDecode(bytes, reorderWriterSchema, reorderReaderSchema))
-  }
-
-  "resolved decode matches the fresh reference (int→long promotion)" >> forAll(genPromoteWriter) {
-    w =>
-      val bytes = binaryOf(w)
-      AvroCodec
-        .decodeResolvedRecord(bytes, promoteWriterSchema, promoteReaderSchema)
-        .exists(_ == freshDecode(bytes, promoteWriterSchema, promoteReaderSchema))
-  }
-
-  "resolved decode matches the fresh reference (field added with default)" >> forAll(genId) { id =>
+  private val addWriterBytes: Gen[Array[Byte]] = genId.map { id =>
     val rec = new GenericData.Record(addWriterSchema)
     rec.put("id", id)
-    val bytes = AvroSpecFixtures.toBinary(rec, addWriterSchema)
-    val cached = AvroCodec.decodeResolvedRecord(bytes, addWriterSchema, addReaderSchema)
-    val reference = freshDecode(bytes, addWriterSchema, addReaderSchema)
-    // Sanity: the reader default really did materialise, so this is a live added-field case.
-    val defaultApplied = reference.get(addReaderSchema.getField("note").pos).toString == "n/a"
-    cached.exists(_ == reference) && defaultApplied
+    AvroSpecFixtures.toBinary(rec, addWriterSchema)
   }
 
-  // ---- 2. threadLocalStorage = false opt-out (fresh allocation per call) ----
+  private val reuseScenarios: List[Reuse] = List(
+    Reuse("non-resolved", genWriterEvent.map(binaryOf(_)), writerSchema, writerSchema, always),
+    Reuse(
+      "non-resolved, union payload",
+      genTransaction.map(binaryOf(_)),
+      transactionSchema,
+      transactionSchema,
+      always,
+    ),
+    Reuse(
+      "field dropped",
+      genWriterEvent.map(binaryOf(_)),
+      writerSchema,
+      readerEventSchema,
+      always,
+    ),
+    Reuse(
+      "fields reordered, resolved by name",
+      genReorderWriter.map(binaryOf(_)),
+      reorderWriterSchema,
+      reorderReaderSchema,
+      always,
+    ),
+    Reuse(
+      "int→long promotion",
+      genPromoteWriter.map(binaryOf(_)),
+      promoteWriterSchema,
+      promoteReaderSchema,
+      always,
+    ),
+    // The reader default must really materialise, else this is not a live added-field case.
+    Reuse(
+      "field added with default",
+      addWriterBytes,
+      addWriterSchema,
+      addReaderSchema,
+      r => r.get(addReaderSchema.getField("note").pos).toString == "n/a",
+    ),
+  )
 
-  "resolved decode with threadLocalStorage = false matches the fresh reference decode" >> forAll(
-    genWriterEvent
-  ) { e =>
-    val bytes = binaryOf(e)
-    AvroBinaryCursor
-      .records
-      .read(
-        bytes,
-        0,
-        bytes.length,
-        writerSchema,
-        readerEventSchema,
-        threadLocalStorage = false,
-      ) == freshDecode(bytes, writerSchema, readerEventSchema)
-  }
+  private val genScenario: Gen[(Reuse, Array[Byte])] =
+    Gen.oneOf(reuseScenarios).flatMap(s => s.bytes.map(b => (s, b)))
 
-  // ---- 3. Concurrent + non-aliased ----
+  "every decode entry point reproduces the fresh-allocation reference, on every evolution shape" >>
+    forAllNoShrink(genScenario) { (scenario, bytes) =>
+      val reference = freshDecode(bytes, scenario.writer, scenario.reader)
+      val cached =
+        if scenario.writer == scenario.reader then AvroCodec.decodeRecord(bytes, scenario.writer)
+        else AvroCodec.decodeResolvedRecord(bytes, scenario.writer, scenario.reader)
+      val uncached = AvroBinaryCursor
+        .records
+        .read(
+          bytes,
+          0,
+          bytes.length,
+          scenario.writer,
+          scenario.reader,
+          threadLocalStorage = false,
+        )
+      (cached.exists(_ == reference) && (uncached == reference) && scenario.extra(
+        reference
+      )) :| scenario.name
+    }
+
+  // ---- 2. Concurrent + non-aliased ----
 
   "concurrent decodes across threads are correct and never alias an earlier record" >> {
     val events = (0 until 8).map(i => WriterEvent(s"id-$i", i)).toVector

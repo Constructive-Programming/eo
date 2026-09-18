@@ -93,14 +93,23 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     codecPrism[FullName].getOption(out) === Some(FullName("Jane", "Smith"))
   }
 
-  // covers: per-element .each.fields byte write (was: every element silently kept)
-  "byte-face .each.fields: per-element multi-field write applies to every element" >> {
+  // covers: per-element .each.fields byte write (was: every element silently kept), on BOTH array
+  //   framings — canonical goes through the splice path, blocked additionally through the reframe
+  //   path, and the by-name field overlay has to survive either. Two examples that differed only
+  //   in how the same basket was framed.
+  "byte-face .each.fields: per-element multi-field write, canonical and blocked framing" >> {
     val basket = Basket("ann", List(Order("tea", 2.5, 1), Order("mate", 4.0, 2)))
     val bytes = toBinary(basketRecord(basket), basketSchema)
+    val blocked = toBlockedBinary(basketRecord(basket), basketSchema)
     val T = codecPrism[Basket].items.each.fields(_.name, _.price)
-    val out = T.modify(nt => (name = nt.name.toUpperCase, price = nt.price * 2))(bytes)
-    codecPrism[Basket].getOption(out) === Some(
+    val doubled = T.modify(nt => (name = nt.name.toUpperCase, price = nt.price * 2))(bytes)
+    val bumped = T.modify(nt => (name = nt.name.toUpperCase, price = nt.price + 1.0))(blocked)
+    (codecPrism[Basket].getOption(doubled) === Some(
       Basket("ann", List(Order("TEA", 5.0, 1), Order("MATE", 8.0, 2)))
+    )).and(
+      codecPrism[Basket].getOption(bumped) === Some(
+        Basket("ann", List(Order("TEA", 3.5, 1), Order("MATE", 5.0, 2)))
+      )
     )
   }
 
@@ -201,19 +210,63 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     totalOk.and(namesOk)
   }
 
-  // ---- Post-re-review combination axes (reframe × overlay × union) -----
+  /** A CANONICAL (positive-count) array framing that is nonetheless MULTI-BLOCK — spec-legal, and
+    * the only shape that separates an in-place splice from a whole-region re-frame. Every other
+    * fixture here is single-block, where a re-frame reproduces the input byte-for-byte and the two
+    * write paths are indistinguishable. Collapsing two blocks into one costs a count byte, so the
+    * re-frame is visible in the payload LENGTH while the decoded value is unchanged.
+    */
+  private def multiBlockBasket(owner: String, items: List[Order]): Array[Byte] =
+    val out = new ByteArrayOutputStream()
+    def put(bs: Array[Byte]): Unit = out.write(bs, 0, bs.length)
+    def block(bs: List[Array[Byte]]): Unit =
+      put(AvroBinaryCursor.zigZagLong(bs.length.toLong))
+      bs.foreach(put)
+    put(AvroBinaryCursor.writeDatum(owner, basketSchema.getField("owner").schema))
+    val (head, last) = items
+      .map(o => AvroBinaryCursor.writeDatum(summon[AvroCodec[Order]].encode(o), orderSchema))
+      .splitAt(items.length - 1)
+    block(head)
+    block(last)
+    put(AvroBinaryCursor.zigZagLong(0L))
+    out.toByteArray
 
-  // covers: .each.fields on a NON-canonical array — the reframe path AND the by-name field
-  //   overlay together (each individually pinned above; this exercises the combination)
-  "byte-face .each.fields on blocked framing: reframe + overlay both apply" >> {
-    val basket = Basket("ann", List(Order("tea", 2.5, 1), Order("mate", 4.0, 2)))
-    val blocked = toBlockedBinary(basketRecord(basket), basketSchema)
-    val T = codecPrism[Basket].items.each.fields(_.name, _.price)
-    val out = T.modify(nt => (name = nt.name.toUpperCase, price = nt.price + 1.0))(blocked)
-    codecPrism[Basket].getOption(out) === Some(
-      Basket("ann", List(Order("TEA", 3.5, 1), Order("MATE", 5.0, 2)))
-    )
+  // covers: AvroTraversal.scala:119 the no-op guard (`active.isEmpty || arity mismatch`),
+  //   AvroTraversal.scala:125 the canonical-splice vs re-frame write split,
+  //   AvroBinaryCursor.scala:143 the initial canonical flag threaded through the block walk
+  //
+  // These are BYTE-level assertions on purpose. Every write below decodes to the right value
+  // under every mutation of the three guards above — the Optional-law property block at the foot
+  // of this file quantifies over decoded values and cannot see any of it. What changes is the
+  // FRAMING: a payload that arrives blocked and leaves canonical, or arrives multi-block and
+  // leaves single-block, is a rewrite of bytes the caller never asked us to touch.
+  "array FRAMING survives a write: a no-op touches no byte, a splice touches only the focus" >> {
+    // (a) NOTHING is focused (every element is on the other union branch) under NON-canonical
+    // framing. The write must be the identity on the bytes, not a canonical re-frame.
+    val cardsOnly = Ledger("ann", List(Card("4111"), Card("4222")))
+    val blocked = toBlockedBinary(ledgerRecord(cardsOnly), ledgerSchema)
+    val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
+    val noFociOk =
+      (Arrays.equals(blocked, toBinary(ledgerRecord(cardsOnly), ledgerSchema)) === false)
+        .and(cashT.foldMap(List(_))(blocked) === Nil)
+        .and(Arrays.equals(cashT.modify(c => Cash(c.amount + 1L))(blocked), blocked) === true)
+
+    // (b) CANONICAL multi-block framing plus a length-preserving edit: the splice happens in
+    // place and the block structure is left exactly as it arrived.
+    val items = List(Order("tea", 2.5, 1), Order("mate", 4.0, 2), Order("cola", 1.0, 3))
+    val multi = multiBlockBasket("ann", items)
+    val framingOk =
+      (Arrays.equals(multi, toBinary(basketRecord(Basket("ann", items)), basketSchema)) === false)
+        .and(codecPrism[Basket].getOption(multi) === Some(Basket("ann", items)))
+
+    val spliced = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(multi)
+    val upper = multiBlockBasket("ann", items.map(o => o.copy(name = o.name.toUpperCase)))
+    val spliceOk = (spliced.length === multi.length).and(Arrays.equals(spliced, upper) === true)
+
+    noFociOk.and(framingOk).and(spliceOk)
   }
+
+  // ---- Post-re-review combination axes (reframe × overlay × union) -----
 
   // covers: Fields focus UNDER a .union step — the union index re-synthesis (from branchOrdinal)
   //   and the by-name parent overlay interacting on both faces
@@ -236,51 +289,33 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
   }
 
   // covers: per-element .each.union[Branch] — narrows every element to one union alternative,
-  //   folding the elements that ARE that branch and leaving the others untouched. Exercises the
-  //   element-level branch-index re-synthesis in reframeArray under blocked framing (canonical
-  //   framing goes through spliceAll's index re-synth, already covered by graft tests).
-  "byte-face .each.union[Branch] on blocked framing: per-element branch focus reframes" >> {
-    val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
-    val blocked = toBlockedBinary(ledgerRecord(ledger), ledgerSchema)
-    val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
-
-    // Read: only the Cash-branch elements fold in, in order.
-    val readOk = cashT.foldMap(List(_))(blocked) === List(Cash(100L), Cash(250L))
-    // Write: Cash elements bumped, the Card element rides through untouched.
-    val out = cashT.modify(c => Cash(c.amount + 1L))(blocked)
-    val writeOk = codecPrism[Ledger].getOption(out) === Some(
-      Ledger("ann", List(Cash(101L), Card("4111"), Cash(251L)))
-    )
-    readOk.and(writeOk)
-  }
-
-  // covers: .each.union[Branch] on canonical framing too — the spliceAll index re-synth path for
-  //   per-element union foci
-  "byte-face .each.union[Branch] on canonical framing: per-element branch focus splices" >> {
-    val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
-    val bytes = toBinary(ledgerRecord(ledger), ledgerSchema)
-    val out = codecPrism[Ledger]
-      .field(_.entries)
-      .each
-      .union[Cash]
-      .modify(c => Cash(c.amount * 2))(
-        bytes
-      )
-    codecPrism[Ledger].getOption(out) === Some(
-      Ledger("ann", List(Cash(200L), Card("4111"), Cash(500L)))
-    )
-  }
-
-  // covers: .each.union[Branch] on the RECORD face — the same per-element branch narrowing
-  //   through the parsed walk (Ior surface), Cash elements modified, Card untouched
-  ".each.union[Branch] record face: per-element branch modify, non-branch elements ride through" >> {
+  //   folding the elements that ARE that branch and leaving the others untouched. ONE fixture and
+  //   ONE optic across all three carriers, because the three used to be three examples that
+  //   differed only in which carrier the same Ledger was handed to: blocked framing exercises the
+  //   element-level branch-index re-synthesis in reframeArray, canonical framing exercises
+  //   spliceAll's, and the record face the parsed Ior walk.
+  "the .each.union[Branch] per-element focus: blocked framing, canonical framing, record face" >> {
     val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
     val rec = ledgerRecord(ledger)
-    val T = codecPrism[Ledger].field(_.entries).each.union[Cash].record
-    T.modifyUnsafe(c => Cash(c.amount + 5L))(rec) match
+    val blocked = toBlockedBinary(rec, ledgerSchema)
+    val bytes = toBinary(rec, ledgerSchema)
+    val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
+    val recordOut = cashT.record.modifyUnsafe(c => Cash(c.amount + 5L))(rec) match
       case out: IndexedRecord =>
-        codecPrism[Ledger].getOption(toBinary(out.asInstanceOf[GenericRecord], ledgerSchema)) ===
-          Some(Ledger("ann", List(Cash(105L), Card("4111"), Cash(255L))))
+        codecPrism[Ledger].getOption(toBinary(out.asInstanceOf[GenericRecord], ledgerSchema))
+
+    // Read: only the Cash-branch elements fold in, in order.
+    (cashT.foldMap(List(_))(blocked) === List(Cash(100L), Cash(250L)))
+      // Write, blocked: Cash elements bumped, the Card element rides through untouched.
+      .and(
+        codecPrism[Ledger].getOption(cashT.modify(c => Cash(c.amount + 1L))(blocked)) ===
+          Some(Ledger("ann", List(Cash(101L), Card("4111"), Cash(251L))))
+      )
+      .and(
+        codecPrism[Ledger].getOption(cashT.modify(c => Cash(c.amount * 2))(bytes)) ===
+          Some(Ledger("ann", List(Cash(200L), Card("4111"), Cash(500L))))
+      )
+      .and(recordOut === Some(Ledger("ann", List(Cash(105L), Card("4111"), Cash(255L)))))
   }
 
   // covers: Long.MinValue block count (negates to itself) is a structured parse failure, not a

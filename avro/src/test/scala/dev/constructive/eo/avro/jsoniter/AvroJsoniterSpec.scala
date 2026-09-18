@@ -213,6 +213,19 @@ class AvroJsoniterSpec extends Specification:
       prism.getOption(json).map(r => str(prism.reverseGet(r))) === Some(str(json))
     }
 
+    // The first six arms are VALUE faults — the key set is right and only a leaf is wrong.
+    //
+    // The last five are STRUCTURE faults, and each one is deliberately COUNT-PRESERVING, because
+    // `readRecord`'s trailing arity check (`count != fields.size`) otherwise refuses the document
+    // for an unrelated reason and masks the clause actually under test. The earlier duplicate-key
+    // arm (`"i":42` appended, 14 keys against 13 fields) was exactly that: it passed on the arity
+    // clause, so the duplicate detector itself was never exercised. Replacing a SIBLING key with a
+    // repeat of `i` keeps the count at 13 and leaves the `seen` scan as the only refusal.
+    //
+    // covers: AvroJsoniter.scala:331 `(field eq null) || seen(field.pos)` and its `||`,
+    //   AvroJsoniter.scala:333 `seen(field.pos) = true`,
+    //   AvroJsoniter.scala:341 the record's objectEndOrCommaError,
+    //   AvroJsoniter.scala:368 / 380 / 395 the array / map / byte-array end-or-comma refusals
     "miss on anything the schema does not pin" in {
       val prism = AvroJsoniter.record(schema)
       (prism.getOption(mutated(_.replace("{\"s\":", "{\"zzz\":1,\"s\":"))) === None) // extra key
@@ -221,10 +234,23 @@ class AvroJsoniterSpec extends Specification:
         .and(prism.getOption(mutated(_.replace("GREEN", "BLUE"))) === None) // not a symbol
         .and(prism.getOption(mutated(_.replace("[1,-128]", "[1]"))) === None) // fixed length
         .and(prism.getOption(mutated(_.replace("[0,-1]", "[0,200]"))) === None) // byte range
-        .and(
-          prism.getOption(mutated(_.replace("\"i\":42", "\"i\":42,\"i\":42"))) === None
-        ) // duplicate key
         .and(prism.getOption(mutated(_.replace("\"s\":\"", "\"s\":9,\"x\":\""))) === None)
+        .and(
+          prism.getOption(mutated(_.replace("\"l\":9007199254740993", "\"i\":42"))) === None
+        ) // duplicate key, count-preserving: 13 keys, `i` twice, `l` unset
+        .and(
+          prism.getOption(mutated(_.replace("{\"v\":7}", "{\"v\":7]"))) === None
+        ) // nested record closed with `]`
+        .and(
+          prism.getOption(mutated(_.replace("\"arr\":[1,2]", "\"arr\":[1,2}"))) === None
+        ) // array closed with `}`
+        .and(
+          prism.getOption(mutated(_.replace("\"map\":{\"k\":\"v\"}", "\"map\":{\"k\":\"v\"]"))) ===
+            None
+        ) // map closed with `]`
+        .and(
+          prism.getOption(mutated(_.replace("\"by\":[0,-1]", "\"by\":[0,-1}"))) === None
+        ) // bytes array closed with `}`
     }
   }
 

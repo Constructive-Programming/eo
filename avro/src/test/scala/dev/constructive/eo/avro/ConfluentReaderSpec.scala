@@ -110,44 +110,26 @@ class ConfluentReaderSpec extends Specification:
   // covers: strict frame contract — an unframed payload raises NotConfluentFramed rather than
   //   silently direct-decoding (which could accidentally succeed on corrupt bytes and yield
   //   garbage); the hook is never consulted. Mixed-topic callers opt into their own fallback by
-  //   catching this and decoding directly (AvroCodec.decodeValue).
-  "reader: unframed bytes raise NotConfluentFramed in F, hook never consulted" >> {
+  //   catching this and decoding directly (AvroCodec.decodeValue). `recordReader` shares the
+  //   contract verbatim, so the two entry points are one example over one predicate — and the
+  //   two payload shapes (valid-but-unframed Avro, and short garbage) are swapped between them.
+  private def framedRefusal(r: Res[Any]): Boolean = r match
+    case Left(e: AvroFailureException) =>
+      e.failure match
+        case AvroFailure.NotConfluentFramed(_) => true
+        case _                                 => false
+    case _ => false
+
+  "reader / recordReader: unframed bytes raise NotConfluentFramed in F, hook never consulted" >> {
     val boom: Int => Res[Schema] = _ => Left(new AssertionError("hook must not be called"))
     val raw = AvroSpecFixtures.toBinaryValue(
       summon[AvroCodec[ReaderEvent]].encode(ReaderEvent("e-3")),
       readerSchema,
     )
-    ConfluentWire.reader[Res, ReaderEvent](boom)(raw) match
-      case Left(e: AvroFailureException) =>
-        (e.failure match
-          case AvroFailure.NotConfluentFramed(_) => true
-          case _                                 => false
-        ) === true
-      case other =>
-        org
-          .specs2
-          .execute
-          .Failure(
-            s"expected Left(AvroFailureException(NotConfluentFramed)), got $other"
-          ): org.specs2.execute.Result
-  }
-
-  // covers: recordReader shares the strict frame contract
-  "recordReader: unframed bytes raise NotConfluentFramed in F" >> {
-    val boom: Int => Res[Schema] = _ => Left(new AssertionError("hook must not be called"))
-    ConfluentWire.recordReader[Res](boom, readerSchema)(Array[Byte](1, 2, 3)) match
-      case Left(e: AvroFailureException) =>
-        (e.failure match
-          case AvroFailure.NotConfluentFramed(_) => true
-          case _                                 => false
-        ) === true
-      case other =>
-        org
-          .specs2
-          .execute
-          .Failure(
-            s"expected Left(AvroFailureException(NotConfluentFramed)), got $other"
-          ): org.specs2.execute.Result
+    val viaReader = ConfluentWire.reader[Res, ReaderEvent](boom)(raw)
+    val viaRecord = ConfluentWire.recordReader[Res](boom, readerSchema)(Array[Byte](1, 2, 3))
+    (framedRefusal(viaReader).aka(s"reader gave $viaReader") must beTrue)
+      .and(framedRefusal(viaRecord).aka(s"recordReader gave $viaRecord") must beTrue)
   }
 
   "reader: incompatible reader (field absent from writer, no default) raises ResolveFailed in F" >> {
@@ -197,35 +179,25 @@ class ConfluentReaderSpec extends Specification:
     readOk.and(writeOk)
   }
 
-  "reader: fields MOVED (reordered writer→reader) resolve by name, not position" >> {
-    val ws = summon[AvroCodec[ReorderWriter]].schema
+  /** Frame `a` under id 7 and hand `reader` a registry that knows only that id. */
+  private def readFramed[A, B](a: A)(using wc: AvroCodec[A], rc: AvroCodec[B]): Res[B] =
     val reg: Int => Res[Schema] =
-      case 7  => Right(ws)
+      case 7  => Right(wc.schema)
       case id => Left(new NoSuchElementException(s"no schema for id $id"))
-    val bytes = ConfluentWire.attach(
-      7,
-      AvroSpecFixtures.toBinaryValue(
-        summon[AvroCodec[ReorderWriter]].encode(ReorderWriter("x", 42, true)),
-        ws,
-      ),
+    ConfluentWire.reader[Res, B](reg)(
+      ConfluentWire.attach(7, AvroSpecFixtures.toBinaryValue(wc.encode(a), wc.schema))
     )
-    // gamma/alpha/beta land on the right reader fields despite the flipped declaration order.
-    ConfluentWire.reader[Res, ReorderReader](reg)(bytes) === Right(ReorderReader(true, "x", 42))
-  }
 
-  "reader: a field whose TYPE CHANGED (int writer → long reader) is promoted, siblings intact" >> {
-    val ws = summon[AvroCodec[PromoteWriter]].schema
-    val reg: Int => Res[Schema] =
-      case 7  => Right(ws)
-      case id => Left(new NoSuchElementException(s"no schema for id $id"))
-    val bytes = ConfluentWire.attach(
-      7,
-      AvroSpecFixtures.toBinaryValue(
-        summon[AvroCodec[PromoteWriter]].encode(PromoteWriter("n", 42)),
-        ws,
-      ),
-    )
-    ConfluentWire.reader[Res, PromoteReader](reg)(bytes) === Right(PromoteReader("n", 42L))
+  // Two evolution shapes, one entry point and one registry rig: `reader` resolves by NAME, so a
+  // flipped declaration order must not move a value, and an int writer field must widen into a
+  // long reader field with its siblings intact.
+  "reader: MOVED fields resolve by name and a PROMOTED field widens, siblings intact" >> {
+    (readFramed[ReorderWriter, ReorderReader](ReorderWriter("x", 42, true)) ===
+      Right(ReorderReader(true, "x", 42)))
+      .and(
+        readFramed[PromoteWriter, PromoteReader](PromoteWriter("n", 42)) ===
+          Right(PromoteReader("n", 42L))
+      )
   }
 
   "resolving Prism: read across a MOVED-field schema, modify, re-frame back to the reader shape" >> {

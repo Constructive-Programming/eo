@@ -207,33 +207,39 @@ class AvroJsonSpec extends Specification with ScalaCheck:
       .and(envPrism.getOption(Json.fromString("not an object")) === None)
   }
 
-  // covers: enum symbol / fixed length / bytes shape parse both ways
-  "record prism: enum, bytes and fixed round-trip and reject malformed leaves" >> {
+  // covers: enum symbol / fixed length / bytes shape, in BOTH directions and in every refusal —
+  //   the render conventions (enum -> fromString, bytes and fixed -> arrays of signed byte ints),
+  //   the prism round-trip back, and the three malformed leaves. One schema and one value: the
+  //   render example and the round-trip example used to build two near-identical three-leaf
+  //   fixtures, and the render half now asserts the WHOLE document rather than three lookups.
+  "enum, bytes and fixed leaves: rendering, round-trip, and every malformed rejection" >> {
     val schema = new Schema.Parser().parse(
-      """{"type":"record","name":"LeavesRT","namespace":"dev.constructive.eo.avro.circe.test","fields":[
-        |  {"name":"color","type":{"type":"enum","name":"ColorRT","symbols":["RED","GREEN"]}},
+      """{"type":"record","name":"Leaves","namespace":"dev.constructive.eo.avro.circe.test","fields":[
+        |  {"name":"color","type":{"type":"enum","name":"Color","symbols":["RED","GREEN"]}},
         |  {"name":"blob","type":"bytes"},
-        |  {"name":"tag","type":{"type":"fixed","name":"TagRT","size":3}}
+        |  {"name":"tag","type":{"type":"fixed","name":"Tag","size":3}}
         |]}""".stripMargin
     )
+    val record = new GenericData.Record(schema)
+    record.put("color", new GenericData.EnumSymbol(schema.getField("color").schema, "GREEN"))
+    record.put("blob", java.nio.ByteBuffer.wrap(Array[Byte](1, -2, 3)))
+    record.put("tag", new GenericData.Fixed(schema.getField("tag").schema, Array[Byte](-1, 0, 127)))
+
     val prism = AvroJson.record(schema)
     val json = Json.obj(
       "color" -> Json.fromString("GREEN"),
-      "blob" -> Json.arr(Json.fromInt(1), Json.fromInt(-2)),
+      "blob" -> Json.arr(Json.fromInt(1), Json.fromInt(-2), Json.fromInt(3)),
       "tag" -> Json.arr(Json.fromInt(-1), Json.fromInt(0), Json.fromInt(127)),
     )
-    (prism.getOption(json).map(prism.reverseGet) === Some(json))
-      .and(
-        prism.getOption(json.mapObject(_.add("color", Json.fromString("BLUE")))) === None
-      )
+    (AvroJson.avroToJson(record) === json)
+      .and(prism.getOption(json).map(prism.reverseGet) === Some(json))
+      .and(prism.getOption(json.mapObject(_.add("color", Json.fromString("BLUE")))) === None)
       .and(
         prism.getOption(
           json.mapObject(_.add("tag", Json.arr(Json.fromInt(1), Json.fromInt(2))))
         ) === None
       )
-      .and(
-        prism.getOption(json.mapObject(_.add("blob", Json.arr(Json.fromInt(200))))) === None
-      )
+      .and(prism.getOption(json.mapObject(_.add("blob", Json.arr(Json.fromInt(200))))) === None)
   }
 
   // ---- valuePrism and its torn/mended diagonal family ----
@@ -309,34 +315,6 @@ class AvroJsonSpec extends Specification with ScalaCheck:
     wrec.put("active", combo.active)
 
     AvroJson.bytesPrism[Combo](writer).getOption(binary(wrec, writer)) === Some(combo)
-  }
-
-  // ---- Leaf renderings with no source coverage in the property schema
-
-  // covers: enum → fromString; bytes (ByteBuffer) → array of signed byte ints; fixed → same
-  "enum, bytes and fixed leaf renderings" >> {
-    val schema = new Schema.Parser().parse(
-      """{"type":"record","name":"Leaves","namespace":"dev.constructive.eo.avro.circe.test","fields":[
-        |  {"name":"color","type":{"type":"enum","name":"Color","symbols":["RED","GREEN"]}},
-        |  {"name":"blob","type":"bytes"},
-        |  {"name":"tag","type":{"type":"fixed","name":"Tag","size":3}}
-        |]}""".stripMargin
-    )
-    val record = new GenericData.Record(schema)
-    record.put("color", new GenericData.EnumSymbol(schema.getField("color").schema, "GREEN"))
-    record.put("blob", java.nio.ByteBuffer.wrap(Array[Byte](1, -2, 3)))
-    record.put("tag", new GenericData.Fixed(schema.getField("tag").schema, Array[Byte](-1, 0, 127)))
-
-    val json = AvroJson.avroToJson(record)
-    (json.asObject.flatMap(_("color")) === Some(Json.fromString("GREEN")))
-      .and(
-        json.asObject.flatMap(_("blob")) ===
-          Some(Json.arr(Json.fromInt(1), Json.fromInt(-2), Json.fromInt(3)))
-      )
-      .and(
-        json.asObject.flatMap(_("tag")) ===
-          Some(Json.arr(Json.fromInt(-1), Json.fromInt(0), Json.fromInt(127)))
-      )
   }
 
 end AvroJsonSpec

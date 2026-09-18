@@ -75,65 +75,47 @@ class AvroFieldNamingSpec extends Specification:
   private val clickBytes =
     toBinary(clickCodec.encode(click).asInstanceOf[GenericRecord], clickCodec.schema)
 
-  "the fixture really uses a divergent (snake_case) schema name" >> {
-    // Guards the whole spec: if the codec stopped transforming, these fixtures would prove nothing.
+  // The four byte-face examples (fixture guard, `.field` read, `.field` modify, `selectDynamic`)
+  // were one code path with one fixture, so they are one example. The leading clause is the
+  // tripwire: if the codec stopped transforming, nothing below would prove anything.
+  "byte face: the derived schema really diverges, and .field / selectDynamic both resolve it" >> {
+    val modified = codecPrism[Click].field(_.clickId).modify(_.toUpperCase)(clickBytes)
     (clickCodec.schema.getField("clickId") must beNull)
       .and(clickCodec.schema.getField("click_id") must not(beNull))
+      .and(codecPrism[Click].field(_.clickId).getOption(clickBytes) must beSome("abc"))
+      .and(codecPrism[Click].clickId.getOption(clickBytes) must beSome("abc"))
+      .and(codecPrism[Click].getOption(modified) must beSome(Click("ABC", 7)))
   }
 
-  "byte face: .field(_.clickId).getOption resolves click_id (issue #35 repro)" >> {
-    codecPrism[Click].field(_.clickId).getOption(clickBytes) must beSome("abc")
-  }
-
-  "byte face: .modify round-trips through the snake_case field" >> {
-    val out = codecPrism[Click].field(_.clickId).modify(_.toUpperCase)(clickBytes)
-    codecPrism[Click].getOption(out) must beSome(Click("ABC", 7))
-  }
-
-  "byte face: selectDynamic sugar resolves the schema name too" >> {
-    codecPrism[Click].clickId.getOption(clickBytes) must beSome("abc")
-  }
-
-  "record face: read + modify resolve the schema name" >> {
+  "record face and a nested descent resolve the same snake_case names" >> {
     val rec = clickCodec.encode(click).asInstanceOf[GenericRecord]
-    val readOk = codecPrism[Click].field(_.landingPageId).record.getOption(rec) must beSome(7)
-    val modified = codecPrism[Click].field(_.landingPageId).record.modifyUnsafe(_ + 1)(rec)
-    val modOk = clickCodec.decodeEither(modified) must beRight(Click("abc", 8))
-    readOk.and(modOk)
-  }
-
-  "nested record: .field(_.meta).field(_.performanceSourceId) descends under snake_case" >> {
-    val ev = Event("e1", Meta(42, "hot"))
+    val bumped = codecPrism[Click].field(_.landingPageId).record.modifyUnsafe(_ + 1)(rec)
     val evCodec = summon[AvroCodec[Event]]
+    val ev = Event("e1", Meta(42, "hot"))
     val bytes = toBinary(evCodec.encode(ev).asInstanceOf[GenericRecord], evCodec.schema)
-    val optic = codecPrism[Event].field(_.meta).field(_.performanceSourceId)
-    val readOk = optic.getOption(bytes) must beSome(42)
-    val writeOk = codecPrism[Event].getOption(optic.modify(_ + 1)(bytes)) must beSome(
-      Event("e1", Meta(43, "hot"))
-    )
-    readOk.and(writeOk)
+    val nested = codecPrism[Event].field(_.meta).field(_.performanceSourceId)
+    (codecPrism[Click].field(_.landingPageId).record.getOption(rec) must beSome(7))
+      .and(clickCodec.decodeEither(bumped) must beRight(Click("abc", 8)))
+      .and(nested.getOption(bytes) must beSome(42))
+      .and(
+        codecPrism[Event].getOption(nested.modify(_ + 1)(bytes)) must beSome(
+          Event("e1", Meta(43, "hot"))
+        )
+      )
   }
 
+  // Not folded into the block above: this is the ONE shape in the module where the focus codec's
+  // own field names diverge from the parent's, so the grouped read is only correct if the bytes
+  // face projects by RESOLVED PARENT name rather than handing the parent datum to the NT codec.
   "byte face: .fields(...) grouped read projects by schema name, not NT-codec name" >> {
     codecPrism[Click].fields(_.landingPageId, _.clickId).getOption(clickBytes) must beSome(
       (landingPageId = 7, clickId = "abc"): LpAndClick
     )
   }
 
-  ".fieldNamed escape hatch navigates by explicit schema name" >> {
-    codecPrism[Click].fieldNamed[String]("click_id").getOption(clickBytes) must beSome("abc")
-  }
-
-  // This example used to assert `None` — "a bad explicit .fieldNamed misses, it does not corrupt".
-  // That PINNED the defect (issue #95): a silent miss on a name the reader schema never carried,
-  // decided at run time although the schema was available at construction. It is now a refusal.
-  "a bad explicit .fieldNamed is refused at construction, not missed at runtime" >> {
-    codecPrism[Click].fieldNamed[String]("no_such_field") must
-      throwAn[IllegalArgumentException].like {
-        case e =>
-          (e.getMessage must contain("click_id, landing_page_id"))
-            .and(e.getMessage must contain("no field of that name"))
-      }
-  }
+  // `.fieldNamed`'s two verdicts — a name the schema HAS builds and reads, a name it LACKS is
+  // refused at construction (issue #95, which used to be a silent runtime miss) — are pinned on a
+  // divergent-name fixture by `AvroNominalResolutionSpec`, with strictly more of the refusal
+  // message asserted than the duplicate that used to live here.
 
 end AvroFieldNamingSpec
