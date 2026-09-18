@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`.field(_.x)` no longer targets the wrong schema field when the codec's schema is not
+  positionally 1:1 with the case class** (#95): resolution was `fields.get(declIdx).name` and
+  nothing else — the field's NAME, its TYPE and the record's ARITY were never consulted. Sound for
+  every kindlings-derived codec (1:1 by construction), unsound for a hand-written or `vulcan.Codec`
+  field list, which can add a computed column, drop one, or reorder. On those, `.field(_.b)` against
+  a schema `{a, computed, b, c}` read and wrote `computed`, producing **valid Avro bytes with wrong
+  content** — and no law could see it, because a mis-targeted optic is a perfectly lawful `Optional`
+  onto the wrong field. The same resolver backs `.fields`, `selectDynamic`, `.each.field` and
+  `.each.fields`, so all six sites were affected. Resolution now tries a NAME rung first, and only
+  when the codec has named the WHOLE case-field list onto distinct schema fields (total and
+  injective, exact or up to `_`/`-`/`.` and case); otherwise it abstains and declaration position
+  decides exactly as before — which is what keeps every name-transform codec (issue #35's
+  population) resolving correctly. Still construction-time only: zero per-operation cost.
+
+### Changed
+
+- **Behaviour change, avro**: a hand-written codec that PERMUTES the Scala names (writes case field
+  `a` into a schema field literally named `b`, and vice versa) resolved correctly by position and
+  now resolves by name, i.e. wrongly. No name transform can produce that shape — a transform is a
+  function of the name alone — but a hand-written field list can. Use `.fieldNamed` there.
+- **Recompile, do not re-jar**: the avro resolution signatures are `private[avro]`, but
+  `transparent inline` bakes the accessor into CALLER bytecode, so downstream projects must
+  recompile against this release rather than swapping the jar.
+
+### Known limitations
+
+Three codec shapes are still resolved to the wrong schema field, unchanged from 0.15.1 and pinned
+as executable examples in `ResolutionResidualSpec`: a field list that both renames beyond
+recognition and reorders; a schema column that bears a case field's name but holds a different
+value (a derived public id, a stale legacy column); and two columns whose names normalise alike.
+`.fieldNamed("schema_name")` reaches all of them.
+
 ## [0.15.1] - 2026-08-20
 
 ### Fixed

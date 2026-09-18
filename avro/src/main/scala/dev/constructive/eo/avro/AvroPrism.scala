@@ -42,15 +42,38 @@ import org.apache.avro.Schema
   *     drilled-prism given is the evidence that instantiates their `T` at `Array[Byte]`. See the
   *     docs page's migration recipe for the runnable shape.
   *
-  * '''Field navigation honours the SCHEMA field name (issue #35).''' `.field(_.x)` (and `.fields`,
-  * `selectDynamic`, the traversal siblings) resolve the case-class field `x` to whatever schema
-  * field the codec actually emitted for it — under any name transform (kindlings snake / kebab /
-  * custom `transformFieldNames`, or a vulcan per-field override map) — by DECLARATION POSITION: the
-  * i-th case field maps to the i-th schema field, read back out of the cached schema at
-  * construction time (zero per-operation cost). The rare hand-written codec whose schema field
-  * ORDER diverges from declaration order needs [[AvroPrism.fieldNamed]]`("schema_name")` to
-  * navigate by the explicit schema name instead. Map keys are data, not schema-named fields, and
-  * keep their literal key.
+  * '''Field navigation honours the SCHEMA field name (issues #35, #95).''' `.field(_.x)` — and
+  * equally `.fields(...)`, `selectDynamic` and the `.each.field` / `.each.fields` traversal
+  * siblings, which all share one resolver — maps the case-class field `x` to whatever schema field
+  * the codec actually emitted for it. Resolution happens ONCE, at prism construction, off the
+  * cached schema (zero per-operation cost), by two rungs:
+  *
+  *   1. '''By NAME, all-or-nothing.''' If EVERY case field of the parent maps to a DISTINCT schema
+  *      field — exactly, or uniquely up to `_` / `-` / `.` and case — then the codec has named the
+  *      whole correspondence and `x`'s answer is read off that map. Partial or colliding coverage
+  *      is treated as no signal at all and the rung abstains for every field, because one lucky
+  *      name match on a schema whose OTHER columns are legacy is how a working call site gets
+  *      re-aimed at the wrong column.
+  *   1. '''By DECLARATION POSITION''' — the i-th case field is the i-th schema field. This is where
+  *      a name transform lands (a kindlings snake-case config, a custom `transformFieldNames`, a
+  *      vulcan per-field override map), because a transform REMOVES the literal Scala name by
+  *      construction, so rung 1 cannot have fired.
+  *
+  * '''The positional rung is only right when the codec's schema is positionally 1:1 with the case
+  * class.''' Kindlings-derived codecs are, by construction. A hand-written or `vulcan.Codec` field
+  * list need not be: a COMPUTED/derived schema column, a dropped field, or a reordered field list
+  * all break it. The name rung recovers most of that population; what it cannot recover is a field
+  * list that both renames beyond recognition AND reorders (equal arity, no name hit) — that
+  * resolves by position, silently, and is wrong. Two more shapes stay wrong for the same reason: a
+  * schema column that BEARS a case field's name but HOLDS a different value (a derived public id, a
+  * stale legacy column), and two columns whose names normalise alike. Navigate all of them with
+  * [[AvroPrism.fieldNamed]]`("schema_name")`, which bypasses resolution entirely and is itself
+  * checked against the schema; `ResolutionResidualSpec` pins each shape's exact behaviour.
+  *
+  * Behaviour change against 0.15.1, for the release notes: a hand-written codec that PERMUTES the
+  * Scala names (writes case field `a` into a schema field literally named `b`, and vice versa)
+  * resolved correctly by position and now resolves by name, i.e. wrongly. No name transform can
+  * produce that shape. Map keys are data, not schema-named fields, and keep their literal key.
   *
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *

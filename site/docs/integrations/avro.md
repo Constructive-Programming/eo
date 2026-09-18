@@ -122,20 +122,54 @@ streetP.record.modifyUnsafe(_.toUpperCase)(stump).asInstanceOf[GenericRecord].ge
 
 ## Field navigation is by SCHEMA name — `.fieldNamed` is the escape hatch
 
-`.field(_.x)` (and the `.fields(...)` / dynamic-sugar siblings)
-resolve the case-class field `x` to whatever schema field the codec
-actually emitted for it — by declaration position: the i-th case
-field maps to the i-th schema field, read off the cached schema at
-construction time, at zero per-operation cost. That makes
-navigation robust under any field-name transform — a kindlings
-snake / kebab / custom `transformFieldNames` config, or a vulcan
-per-field override map — so a renamed schema field is never a miss
-cause on a derived codec. The one shape position resolution cannot
-handle is a hand-written codec whose schema field **order**
-diverges from case-class declaration order: there, drill with
-`.fieldNamed[B]("schema_name")`, which navigates by the explicit
-schema name and bypasses position resolution entirely. Map keys are
-data, not schema-named fields — they keep their literal key.
+`.field(_.x)` — and equally `.fields(...)`, the dynamic sugar and
+the `.each.field` traversal siblings, which all share one resolver —
+maps the case-class field `x` to whatever schema field the codec
+actually emitted for it. Resolution happens once, at prism
+construction, off the cached schema, at zero per-operation cost, by
+two rungs:
+
+1. **By name, all-or-nothing.** If every case field of the parent
+   maps to a distinct schema field — exactly, or uniquely up to
+   `_` / `-` / `.` and case — the codec has named the whole
+   correspondence, so `x`'s answer is read off that map. Partial or
+   colliding coverage is treated as no signal and the rung abstains
+   for every field: one lucky match on a schema whose other columns
+   are legacy is how a working call site gets re-aimed at the wrong
+   column.
+2. **By declaration position** — the i-th case field is the i-th
+   schema field. This is where a name transform lands (a kindlings
+   snake-case or custom `transformFieldNames` config, a vulcan
+   per-field override map), because a transform removes the literal
+   Scala name by construction.
+
+The positional rung is right exactly when the codec's schema is
+**positionally 1:1** with the case class. Kindlings-derived codecs
+are, by construction. A hand-written or `vulcan.Codec` field list
+need not be — a computed/derived column, a dropped field or a
+reordered list all break it — and before the name rung existed
+every `.field(_.x)` from the divergence onward read and wrote the
+**wrong slot**, silently, on both faces.
+
+What the name rung still cannot see, and where you must reach for
+`.fieldNamed[B]("schema_name")` (which bypasses resolution entirely
+and is itself checked against the schema):
+
+- a field list that both renames beyond recognition **and**
+  reorders — equal arity, no name hit;
+- a schema column that *bears* a case field's name but *holds* a
+  different value (a derived public id, a stale legacy column);
+- two columns whose names normalise alike (`userId_` and
+  `user_id`), which is ambiguity, hence no signal.
+
+Behaviour change in this release: a hand-written codec that
+*permutes* the Scala names (writes case field `a` into a schema
+field literally named `b`, and vice versa) resolved correctly by
+position and now resolves by name, i.e. wrongly. No name transform
+can produce that shape; a hand-written field list can.
+
+Map keys are data, not schema-named fields — they keep their
+literal key.
 
 ## Array indexing
 

@@ -151,13 +151,13 @@ object FpPlain:
 
 end FpPlain
 
-/** The false-positive tripwire for schema-field resolution (issue #95). 28 cells, each a
-  * legitimate call site that behaves CORRECTLY on published 0.15.1; the whole safety argument for
-  * changing the resolver is that this scorecard does not move.
+/** The false-positive tripwire for schema-field resolution (issue #95). 28 cells, each a legitimate
+  * call site that behaves CORRECTLY on published 0.15.1; the whole safety argument for changing the
+  * resolver is that this scorecard does not move.
   *
-  * Verdicts are scored against SLOT TRUTH — which schema slot a write actually touched — so a
-  * write that lands on the wrong column is distinguishable from one that lands on the right column
-  * and leaves a derived sibling stale.
+  * Verdicts are scored against SLOT TRUTH — which schema slot a write actually touched — so a write
+  * that lands on the wrong column is distinguishable from one that lands on the right column and
+  * leaves a derived sibling stale.
   *
   * One cell is expected to change: `hatch-record-probe-absent`, where `.fieldNamed` on a name the
   * reader schema does not carry used to return `None` at runtime and is now refused at
