@@ -14,6 +14,14 @@ trait CanGetOption[S, A]:
 
 object CanGetOption:
 
+  /** Partial-read fanout — the pair is present iff BOTH legs hit. Trivially lawful (no write path).
+    * The partial-read counterpart of [[CanGet.zip]]; pairs Prism / Optional / AffineFold reads.
+    */
+  extension [S, A](self: CanGetOption[S, A])
+
+    def zip[C](that: CanGetOption[S, C]): CanGetOption[S, (A, C)] =
+      s => self.getOption(s).flatMap(a => that.getOption(s).map(c => (a, c)))
+
   /** Derive from any optic in scope whose carrier can partially read. Optic before gate in the same
     * using clause — see [[CanGet]] for the SIP-64 ordering rationale.
     */
