@@ -181,6 +181,8 @@ exercised at run time by the suite stryker runs.
 | `circe` | 35 | 0 | 3 | 15 | 0 | 66.0% | 92.1% |  |
 | `avro` | 283 | 0 | 57 | 34 | 6 | 75.7% | 83.2% | Scores fine (~2 min): the old "forked test-runner fails to initialise" caveat no longer reproduces. Its no-coverage mutants are `AvroPrismMacro` quoted-macro bodies — compile-time only, like `generics`. |
 | `jsoniter` | 321 | 4 | 77 | 0 | 0 | 80.8% | 80.8% | Mutates clean end to end (0 compile errors): the old `PathParser.parseField` 64 KB method-size caveat no longer reproduces. |
+| `zio` | 0 | 0 | 0 | 0 | 0 | n/a | n/a | No mutants exist to score: the module is ZEnvironment / ZLayer / `Ref` wiring that delegates straight into ZIO's own API, with no operator, literal or branch for a mutator to change. `n/a`, not 0% — nothing to mutate is not a score of zero. |
+| `kyo` | 20 | 0 | 4 | 28 | 0 | 38.5% | 83.3% | The no-coverage block is all `RecordIsoMacro`: quoted-macro code that expands at compile time, so like `generics` its mutants leave no runtime footprint. The covered score is the one that reads the hand-written optics. |
 
 <!-- END GENERATED: mutation -->
 
@@ -191,16 +193,24 @@ per module), after the survivor-killing pass of the same day, measured:
 `circe` 44 K / 6 S, `jsoniter` 328 K / 4 T / 58 S, `avro` 391 K / 78 S,
 `generics` 0 K / 86 NC.
 
-Two modules in the `mutationAll` alias have never had a row here:
+The two effect-system integrations are the newest rows in that table, and both
+need reading with care — neither number means what it looks like:
 
-- **`zio`** — **0 mutants exist**. The module is pure optic construction: no
-  conditional, no arithmetic, no boolean literal for stryker to mutate. Its
-  score is `n/a`, not 0 % — there is no pool.
-- **`kyo`** — scores 83.3 % *covered* (20/24 on `schema/StructureOptics.scala`;
-  everything else is `RecordIsoMacro`, compile-time only), but only once the
-  single-method `extension` block in that file is **braced**: re-printed by
-  stryker4s, a significant-indentation `extension` clause loses its method to
-  column 0 and the whole file stops compiling, aborting the module.
+- **`zio`** scores `n/a`, **not 0 %**. Stryker generates *zero* mutants for it:
+  the module is `ZEnvironment` / `ZLayer` / `Ref` wiring that delegates straight
+  into ZIO's own API, with no conditional, arithmetic or boolean literal for a
+  mutator to change. A module that offers a mutator nothing to change has not
+  failed a test-quality bar — it has no bar to fail, and there is no pool to
+  take a percentage of. (`n/a` is also what stryker's own console prints here.)
+- **`kyo`**'s low *total* score is a macro artefact, not a coverage hole: every
+  one of its no-coverage mutants is in `RecordIsoMacro`, quoted-macro code that
+  expands at compile time — the same structural reason `generics` scores 0 %.
+  The *covered* column, 83.3 % (20/24, all on `schema/StructureOptics.scala`),
+  is the one that describes the hand-written optics. It scores at all only
+  because the single-method `extension` block in that file is now **braced**:
+  re-printed by stryker4s, a significant-indentation `extension` clause loses
+  its method to column 0 and the whole file stops compiling, aborting the
+  module.
 
 
 ### Known equivalent mutants

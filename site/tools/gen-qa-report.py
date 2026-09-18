@@ -48,6 +48,11 @@ FAMILIES = [
 ]
 
 # Modules stryker mutates. value = (on-disk module dir, human label, note).
+# The FIRST element is the DIRECTORY, not the sbt project id — `latest_report`
+# globs `<dir>/target/stryker4s-report/*/report.json`. Several ids differ from
+# their directory (`circeIntegration` → `circe/`, `zioIntegration` → `zio/`,
+# `schemesLaws` → `schemes-laws/`); use the directory here and the id in the
+# `mutationAll` alias / quality.yml loop.
 # The note is the Notes-column annotation; for modules that can't be scored it
 # doubles as the "why" shown when no report.json exists. If a report later
 # appears, its numbers take over and the note still annotates the row — so a
@@ -63,6 +68,8 @@ MUTATION_MODULES = [
     ("circe", "circe", ""),
     ("avro", "avro", "Scores fine (~2 min): the old \"forked test-runner fails to initialise\" caveat no longer reproduces. Its no-coverage mutants are `AvroPrismMacro` quoted-macro bodies — compile-time only, like `generics`."),
     ("jsoniter", "jsoniter", "Mutates clean end to end (0 compile errors): the old `PathParser.parseField` 64 KB method-size caveat no longer reproduces."),
+    ("zio", "zio", "No mutants exist to score: the module is ZEnvironment / ZLayer / `Ref` wiring that delegates straight into ZIO's own API, with no operator, literal or branch for a mutator to change. `n/a`, not 0% — nothing to mutate is not a score of zero."),
+    ("kyo", "kyo", "The no-coverage block is all `RecordIsoMacro`: quoted-macro code that expands at compile time, so like `generics` its mutants leave no runtime footprint. The covered score is the one that reads the hand-written optics."),
 ]
 
 
@@ -206,8 +213,18 @@ def gen_mutation() -> str:
         detected = killed + timeout
         scored = detected + survived + nocov
         covered = detected + survived
-        total_score = f"{100.0 * detected / scored:.1f}%" if scored else "—"
-        cov_score = f"{100.0 * detected / covered:.1f}%" if covered else "—"
+        if scored:
+            total_score = f"{100.0 * detected / scored:.1f}%"
+            # All-NoCoverage modules (`generics`) do have mutants, they are just
+            # never executed: total score 0%, covered score undefined.
+            cov_score = f"{100.0 * detected / covered:.1f}%" if covered else "—"
+        else:
+            # A report exists but stryker generated NO mutants at all (excluding
+            # Ignored ones). There is nothing to score, which is emphatically not
+            # a score of zero — printing 0.0% here would read as a test-quality
+            # failure for a module that offers a mutator no purchase. stryker's
+            # own console prints `n/a%` in this case; match it.
+            total_score = cov_score = "n/a"
         rows.append(
             f"| `{label}` | {killed} | {timeout} | {survived} | {nocov} | {cerr} | "
             f"{total_score} | {cov_score} | {note} |"
