@@ -42,6 +42,14 @@ class AvroWalkSpec extends Specification:
     fields.add(new Schema.Field("amount", unionSchema, null, null))
     Schema.createRecord("MaybeLong", null, "eo.avro.test", false, fields)
 
+  /** Schema for `record Outer { MaybeLong inner; }` — a union two records deep, which is what
+    * separates the branch-list recovery's `pIdx >= 0` cursor guard from a `pIdx == 0` one.
+    */
+  private val outerSchema: Schema =
+    val fields = new ArrayList[Schema.Field]()
+    fields.add(new Schema.Field("inner", maybeLongSchema, null, null))
+    Schema.createRecord("Outer", null, "eo.avro.test", false, fields)
+
   private val colorSchema: Schema =
     Schema.createEnum("Color", null, "eo.avro.test", Arrays.asList("RED", "GREEN", "BLUE"))
 
@@ -129,23 +137,57 @@ class AvroWalkSpec extends Specification:
     negOne.and(atSize)
   }
 
-  // covers: walk into a map<string> entry by key returns the entry value
-  "Map walk: by string key" >> {
-    val tags = new LinkedHashMap[String, String]()
-    tags.put("env", "prod")
-    tags.put("region", "us")
-    val record = buildRecord(taggedMapSchema)("tags" -> tags)
+  /** A `map<string>` record put through the binary codec — which is the ONLY way to get the key
+    * shape production code actually sees. `GenericDatumReader` decodes map keys as
+    * [[org.apache.avro.util.Utf8]], so `asMap.get(name: String)` misses every entry and only the
+    * `direct == null` Utf8 retry finds them. A hand-built `LinkedHashMap[String, _]` cannot
+    * exercise that retry at all.
+    */
+  private def tagsRecord(keys: List[String]): IndexedRecord =
+    val m = new LinkedHashMap[String, String]()
+    keys.foreach(k => m.put(k, s"v-$k"))
+    buildRecord(taggedMapSchema)("tags" -> m)
 
-    AvroWalk.walkPath(record, Array(PathStep.Field("tags"), PathStep.Field("env"))) match
-      case Right((cur, _)) => cur.toString === "prod"
-      case other           =>
-        org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
+  private def decodedTags(keys: List[String]): IndexedRecord =
+    fromBinaryValue(toBinaryValue(tagsRecord(keys), taggedMapSchema), taggedMapSchema)
+      .asInstanceOf[IndexedRecord]
+
+  private def tagAt(rec: IndexedRecord, key: String): Either[AvroFailure, String] =
+    AvroWalk
+      .walkPath(rec, Array(PathStep.Field("tags"), PathStep.Field(key)))
+      .map((c, _) => String.valueOf(c))
+
+  // covers: walk a map<string> entry by key on a hand-built String-keyed map,
+  //   walk a map<string> entry by key on the Utf8-keyed map a DECODE produces (the Utf8 retry),
+  //   an absent key surfaces PathMissing at map sizes 0 / 1 / 2 / 5 — both present and absent
+  //     probes occur at every size, so neither arm of the retry can be dropped silently
+  "Map walk: by string key, over hand-built and decoded (Utf8-keyed) maps at sizes 0/1/2/5" >> {
+    val handBuilt = tagAt(tagsRecord(List("env", "region")), "env") === Right("v-env")
+
+    val keyPool = List("env", "region", "zone", "tier", "shard", "cell")
+    val disagreements =
+      for
+        size <- List(0, 1, 2, 5)
+        present = keyPool.take(size)
+        decoded = decodedTags(present)
+        probe <- keyPool
+        want =
+          if present.contains(probe) then Right(s"v-$probe")
+          else Left(AvroFailure.PathMissing(PathStep.Field(probe)))
+        got = tagAt(decoded, probe)
+        if want != got
+      yield s"size=$size probe=$probe want=$want got=$got"
+
+    handBuilt.and(disagreements === List.empty[String])
   }
 
   // covers: union branch matching resolves "long" alt to its long value,
   //   mismatched union branch ("string" on long) surfaces UnionResolutionFailed,
+  //   a null payload against the "null" branch resolves to a null focus,
+  //   the diagnostic's declared-branch list at depth 2 (parents cursor > 0),
+  //   the diagnostic degrades to Nil when the recovered Field step names a non-union,
   //   terminalOf returns Field("") for empty, last step otherwise
-  "Union walk + terminalOf: long-alt resolution, branch mismatch, terminalOf endpoints" >> {
+  "Union walk + terminalOf: long-alt resolution, branch mismatch, null branch, diagnostics, terminalOf endpoints" >> {
     val record = buildRecord(maybeLongSchema)("amount" -> java.lang.Long.valueOf(42L))
 
     val longOk = AvroWalk.walkPath(
@@ -168,11 +210,46 @@ class AvroWalkSpec extends Specification:
           .execute
           .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
 
+    // A null payload matches the "null" branch and nothing else — the one branch name for which a
+    // null focus is the CORRECT answer rather than a resolution failure.
+    val nullBranchOk = AvroWalk
+      .walkPath(
+        buildRecord(maybeLongSchema)("amount" -> null.asInstanceOf[Object]),
+        Array(PathStep.Field("amount"), PathStep.UnionBranch("null")),
+      )
+      .map((cur, _) => cur == null) === Right(true)
+
+    // The diagnostic's PAYLOAD, not just its constructor: the declared alternative list is
+    // recovered by walking back to the nearest Field step. A union two records deep leaves the
+    // parents cursor at 1, so a cursor guard that only accepts 0 silently reports "no branches".
+    val deepBranchesOk = AvroWalk.walkPath(
+      buildRecord(outerSchema)("inner" -> record),
+      Array(PathStep.Field("inner"), PathStep.Field("amount"), PathStep.UnionBranch("string")),
+    ) === Left(
+      AvroFailure.UnionResolutionFailed(List("null", "long"), PathStep.UnionBranch("string"))
+    )
+
+    // ... and when the recovered Field step names something that is NOT a union (an array reached
+    // through an Index step), the diagnostic degrades to an EMPTY list. Asking a non-union schema
+    // for its alternatives throws an AvroRuntimeException straight out of the walk.
+    val people2: GenericData.Array[GenericRecord] =
+      buildArray(personSchema, Vector(personRecord(Person("Alice", 30))))
+    val nonUnionParentOk = AvroWalk.walkPath(
+      buildRecord(wrapperSchema)("people" -> people2),
+      Array(PathStep.Field("people"), PathStep.Index(0), PathStep.UnionBranch("string")),
+    ) === Left(AvroFailure.UnionResolutionFailed(Nil, PathStep.UnionBranch("string")))
+
     val terminalEmpty = AvroWalk.terminalOf(Array.empty[PathStep]) === PathStep.Field("")
     val terminalLast =
       AvroWalk.terminalOf(Array(PathStep.Field("a"), PathStep.Index(2))) === PathStep.Index(2)
 
-    longOk.and(mismatchOk).and(terminalEmpty).and(terminalLast)
+    longOk
+      .and(mismatchOk)
+      .and(nullBranchOk)
+      .and(deepBranchesOk)
+      .and(nonUnionParentOk)
+      .and(terminalEmpty)
+      .and(terminalLast)
   }
 
   // covers: enum value resolves its full-name union branch,
