@@ -513,19 +513,27 @@ private[avro] object AvroWalk:
     * An empty `caseNames` (a NamedTuple parent, which has no case fields) abstains too.
     */
   private def totalNominalIndex(record: Schema, caseNames: List[String], declIdx: Int): Int =
-    if caseNames.isEmpty || declIdx < 0 || declIdx >= caseNames.size then -1
+    val arity = caseNames.size
+    // A total, injective map needs at least as many schema fields as case fields — a free
+    // precondition that skips the whole scan for the codec that drops a field.
+    if arity == 0 || declIdx < 0 || declIdx >= arity || arity > record.getFields.size then -1
     else
-      val out = new Array[Int](caseNames.size)
-      @tailrec def loop(i: Int, rest: List[String], seen: Set[Int]): Boolean =
+      val out = new Array[Int](arity)
+      // Injectivity by scanning the filled prefix of `out` rather than a `Set[Int]`: this runs once
+      // per drilled hop at construction, over a case-field list that is a handful of entries, and a
+      // Set here costs a boxed Integer and a new Set node per field.
+      @tailrec def seen(j: Int, idx: Int): Boolean =
+        j < 0 || (out(j) != idx && seen(j - 1, idx))
+      @tailrec def loop(i: Int, rest: List[String]): Boolean =
         rest match
           case Nil    => true
           case n :: t =>
             val idx = nominalIndex(record, n)
-            if idx < 0 || seen.contains(idx) then false
+            if idx < 0 || !seen(i - 1, idx) then false
             else
               out(i) = idx
-              loop(i + 1, t, seen + idx)
-      if loop(0, caseNames, Set.empty) then out(declIdx) else -1
+              loop(i + 1, t)
+      if loop(0, caseNames) then out(declIdx) else -1
 
   /** Position of the schema field naming `scalaName` — exactly, else uniquely up to separators and
     * case. `-1` when no field matches or when more than one does: an ambiguous signal is no signal.
