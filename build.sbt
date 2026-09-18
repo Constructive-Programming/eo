@@ -312,53 +312,73 @@ lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // functor + Fix encoding). Benchmark-only; never a published dependency.
 lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
 // kindlings 0.3.x (all three) ship a configurable macro-expansion timeout
-// (`DerivationTimeout`, default 5s) and pull hearth 0.4.0 + kindlings-derivation-commons.
+// (`DerivationTimeout`, default 5s) and pull hearth 0.4.2 + kindlings-derivation-commons.
 // We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30`
 // (see the `ThisBuild / scalacOptions` above) so a loaded CI runner stops tripping the old
 // hardcoded 2s budget (the recurring `deriveAsObject timed out after 2000ms` flake).
+// The setting keys and namespaces are unchanged at 0.3.2 (`DerivationTimeout` is
+// byte-identical to 0.3.0); 0.3.1 added an OPT-IN `<ns>.policy.enabled` key under the same
+// namespace whose default (`always-allowed`) is exactly the 0.3.0 behaviour, so we set none.
 // NB kindlings fully-qualifies derived Avro record names (namespace = enclosing path) —
-// established in 0.2.0, unchanged in 0.3.x.
-lazy val hearth = Kubuszok %% "hearth" % "0.4.0"
-lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.3.0"
-lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.3.0"
-lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.0"
+// established in 0.2.0, unchanged in 0.3.x (re-verified against 0.3.2: derived schema text
+// for a NamedTuple focus is byte-identical to 0.3.0 on the <= 22 path).
+//
+// hearth 0.4.2 is what breaks the 23-element tuple ceiling for `.fields(...)`:
+// `SyntheticNamedTupleConstructor.unsafeApply` gained an arity dispatch (hearth #313/#314,
+// landed in 0.4.1) — `case 0 => EmptyTuple`, `case n if n < 23 => new TupleN(...)`,
+// `case _ => Tuple.fromArray(Array[Object](...))`. 0.4.0 unconditionally called the
+// underlying tuple type's primary constructor, which for the `*:` cons chain a >22-ary
+// NamedTuple must be spelled as takes ZERO value params ("expected: 0, found: 23").
+// The `n < 23` boundary is why `MacroSelectors.tupleTypeOf` must KEEP spelling TupleN at
+// arity <= 22 and a cons chain only above it: a cons chain still fails below 23 on 0.4.2.
+lazy val hearth = Kubuszok %% "hearth" % "0.4.2"
+lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.3.2"
+lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.3.2"
+lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.2"
 lazy val circe = Circe %% "circe-core" % "0.14.16"
-// vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.1 pin
+// vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.2 pin
 // below wins on the compile classpath, and as an Optional dep vulcan forces
 // nothing downstream anyway.
 lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.13.0"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
-// Pin apache-avro 1.12.1 explicitly even though kindlings-avro-derivation
+// Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
 // `GenericData` / `Schema` directly on the hot path.
-lazy val avro = ApacheAvro % "avro" % "1.12.1"
-// Force jackson to 2.21.5 — `apache-avro 1.12.1` brings `jackson-databind
-// 2.20.0` (and `jackson-core`) transitively, inside the CVE-affected
-// `>= 2.19.0, < 2.21.5` range (four GHSA dependabot alerts: two
+// The version tracks what kindlings-avro-derivation 0.3.2 depends on (1.12.2;
+// 0.3.0 depended on 1.12.1). Keeping the old 1.12.1 here would have turned a
+// visibility pin into a silent DOWNGRADE of the transitive, so it moves with it.
+lazy val avro = ApacheAvro % "avro" % "1.12.2"
+// Force jackson to 2.22.1 — `apache-avro` brings `jackson-databind` (and
+// `jackson-core`) transitively, and 1.12.1 brought 2.20.0, inside the
+// CVE-affected `>= 2.19.0, < 2.21.5` range (four GHSA dependabot alerts: two
 // PolymorphicTypeValidator/allowlist bypasses, an InetSocketAddress SSRF, and
 // a @JsonIgnoreProperties case-insensitive bypass). 2.21.5 was the first
-// release patched against all four. Do NOT bump to 2.22.0: it REGRESSED the
-// @JsonIgnoreProperties case-insensitive fix (CVE-2026-54515, dependabot
-// alert #7; re-fixed only in the unreleased 2.22.1) — the 0.6.1 bulk Steward
-// upgrade briefly did, re-opening the alert. `.scala-steward.conf` pins the
-// 2.21.x series; lift both pins together once 2.22.1 is on Central.
+// release patched against all four; 2.22.0 REGRESSED the @JsonIgnoreProperties
+// case-insensitive fix (CVE-2026-54515, dependabot alert #7) and 2.22.1 re-fixed
+// it. 2.22.1 has since shipped to Central, and avro 1.12.2's parent POM raises
+// `jackson-bom` 2.20.0 -> 2.22.1 — so the old 2.21.5 override would now DOWNGRADE
+// jackson-core/-databind while leaving jackson-annotations (not overridden) at
+// 2.22, splitting the BOM. The pin therefore lifts to 2.22.1, exactly the version
+// avro 1.12.2 resolves: still a regression floor, no longer a shift, and never
+// 2.22.0. `.scala-steward.conf` tracks the same series bound.
 // Overrides apply via
 // `commonSettings.dependencyOverrides` across every module so any future
 // jackson-pulling transitive (e.g. a kindlings bump) inherits the safe
 // versions automatically. eo never enables polymorphic/default typing, so the
 // PTV bypasses aren't reachable here — this just keeps the dep tree clean.
-lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.21.5"
-lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.21.5"
-// Floor commons-lang3 at 3.18.0 — `apache-avro 1.12.1 -> commons-compress
-// 1.28.0` brings it transitively, and every release below 3.18.0 is in the
+lazy val jacksonCore = FasterXmlJackson % "jackson-core" % "2.22.1"
+lazy val jacksonDatabind = FasterXmlJackson % "jackson-databind" % "2.22.1"
+// Floor commons-lang3 at 3.20.0 — `apache-avro -> commons-compress 1.28.0`
+// brings it transitively, and every release below 3.18.0 is in the
 // CVE-2025-48924 range (uncontrolled recursion on long inputs; dependabot
-// alert #1). commons-compress 1.28.0 already resolves 3.18.0, so this is a
-// regression floor rather than a live bump — pinned via
+// alert #1). avro 1.12.2's parent POM resolves 3.20.0 (1.12.1 resolved 3.18.0),
+// so the floor moves up with it rather than downgrading the transitive — it stays
+// a regression floor rather than a live bump. Pinned via
 // `commonSettings.dependencyOverrides` (same mechanism as jackson) so a future
 // avro/commons-compress shuffle can't reintroduce a vulnerable version, and the
 // submitted dependency graph shows the safe version unambiguously.
-lazy val commonsLang3 = "org.apache.commons" % "commons-lang3" % "3.18.0"
+lazy val commonsLang3 = "org.apache.commons" % "commons-lang3" % "3.20.0"
 // jsoniter-scala — high-perf JSON codec (~5–10× circe on hot paths).
 // Used by `eo-jsoniter` to back byte-cursor JSON optics that decode
 // directly from `Array[Byte]` without allocating a runtime AST. The
@@ -429,8 +449,8 @@ lazy val commonSettings = Seq(
   // library's code and the warning is a Hearth-side concern rather
   // than a cats-eo bug.
   Test / scalacOptions += "-Wconf:src=.*/cats-derivation/.*:silent",
-  // Pin jackson-core + jackson-databind at the CVE-patched 2.21.5 and floor
-  // commons-lang3 at 3.18.0 across every module — see the `jacksonCore` /
+  // Pin jackson-core + jackson-databind at the CVE-patched 2.22.1 and floor
+  // commons-lang3 at 3.20.0 across every module — see the `jacksonCore` /
   // `jacksonDatabind` / `commonsLang3` defs above.
   dependencyOverrides ++= Seq(jacksonCore, jacksonDatabind, commonsLang3),
 )
