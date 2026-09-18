@@ -28,9 +28,9 @@ import org.specs2.mutable.Specification
   *
   * Every other in-repo `.fields` spec hand-declares its own `AvroCodec[NamedTuple[…]]` given
   * (spelled `TupleN`, because that is what a human writes), which short-circuits kindlings' NT rule
-  * — which is exactly why CI never saw this. '''This file deliberately declares no NamedTuple
-  * given at all''': every `.fields` / `lens` row below drives the auto-derivation path a user with
-  * no hand-written given gets.
+  * — which is exactly why CI never saw this. '''This file deliberately declares no NamedTuple given
+  * at all''': every `.fields` / `lens` row below drives the auto-derivation path a user with no
+  * hand-written given gets.
   *
   * It also carries two '''differently-shaped''' `.fields` expansions in one file (arity 2 and arity
   * 3), which refutes the earlier "a second differently-shaped `.fields` expansion in one file trips
