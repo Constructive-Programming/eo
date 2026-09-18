@@ -103,6 +103,33 @@ object AvroSpecFixtures:
     */
   lazy val transactionSchema: Schema = summon[AvroCodec[Transaction]].schema
 
+  /** Two union branches with IDENTICAL field shapes and different names. `TwinA(100)` and
+    * `TwinB(100)` encode to the same bytes, so a union walk that TOLERATES a branch mismatch
+    * decodes the wrong branch SUCCESSFULLY instead of refusing — silent wrong data rather than a
+    * failure. Every other union fixture here mismatches into a decode error, which any `isLeft` /
+    * `=== None` assertion cannot tell apart from a correct refusal.
+    */
+  sealed trait Twin
+
+  object Twin:
+
+    given AvroEncoder[Twin] = AvroEncoder.derived
+    given AvroDecoder[Twin] = AvroDecoder.derived
+    given AvroSchemaFor[Twin] = AvroSchemaFor.derived
+
+    given AvroEncoder[TwinA] = AvroEncoder.derived
+    given AvroDecoder[TwinA] = AvroDecoder.derived
+    given AvroSchemaFor[TwinA] = AvroSchemaFor.derived
+
+    given AvroEncoder[TwinB] = AvroEncoder.derived
+    given AvroDecoder[TwinB] = AvroDecoder.derived
+    given AvroSchemaFor[TwinB] = AvroSchemaFor.derived
+
+  case class TwinA(v: Long) extends Twin
+  case class TwinB(v: Long) extends Twin
+
+  lazy val twinSchema: Schema = summon[AvroCodec[Twin]].schema
+
   /** Sealed-trait sum used by the `.union[Branch]` happy-path tests. Mirrors the probe ADT — two
     * record-shaped subclasses, deliberately top-level so the kindlings macros aren't tripped by
     * outer accessors.

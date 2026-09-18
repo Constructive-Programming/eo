@@ -382,4 +382,133 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       .and(AvroBinaryCursor.zigZagInt(Int.MinValue).length === 5)
   }
 
+  // ---- byte-cursor refusal identities -------------------------------------
+  //
+  // Every row below asserts WHICH `AvroFailure` comes back, never `isLeft`. That is the whole
+  // point: each of these guards, when removed, lets the cursor run on into the Avro runtime, which
+  // throws, which `locateFrom` catches and reports as `BinaryParseFailed`. A `Left` either way —
+  // so an `isLeft` assertion pins nothing, and the structured diagnostic the `.record` face
+  // publishes silently degrades to "parse failed".
+  //
+  // Called at the `AvroBinaryCursor` seam (`private[avro]`, same package) rather than through a
+  // prism: several rows need a path the public drilling macros refuse to build, and the strictness
+  // flag is not reachable from the surface at all.
+  //
+  // covers: AvroBinaryCursor.scala:558 Field step against a non-record schema,
+  //   AvroBinaryCursor.scala:568 UnionBranch step against a non-union schema,
+  //   AvroBinaryCursor.scala:684 declaredBranches' non-union guard,
+  //   AvroBinaryCursor.scala:675 branchOrdinalOf's end-of-alternatives guard,
+  //   AvroBinaryCursor.scala:572 the `requested < 0` refusal under the LENIENT policy,
+  //   AvroBinaryCursor.scala:126 locateElements' non-array terminal,
+  //   AvroBinaryCursor.scala:125 locateElements' strict-union prefix policy
+  "AvroBinaryCursor.locate: each refusal reports its OWN AvroFailure, not BinaryParseFailed" >> {
+    val txBytes = toBinary(transactionRecord(Transaction("t-1", Some(42L))), transactionSchema)
+    val txNullBytes = toBinary(transactionRecord(Transaction("t-2", None)), transactionSchema)
+    val personBytes = toBinary(personRecord(Person("Alice", 30)), personSchema)
+    val basketBytes =
+      toBinary(basketRecord(Basket("ann", List(Order("tea", 2.5, 1)))), basketSchema)
+
+    def field(n: String) = PathStep.Field(n)
+    def branch(n: String) = PathStep.UnionBranch(n)
+    def at(bytes: Array[Byte], schema: Schema, strict: Boolean, steps: PathStep*) =
+      AvroBinaryCursor.locate(bytes, schema, steps.toArray, strictTerminalUnion = strict)
+
+    // A Field step whose parent schema is a union, not a record.
+    val notARecord = at(txBytes, transactionSchema, true, field("amount"), field("x")) ===
+      Left(AvroFailure.NotARecord(field("x")))
+
+    // A UnionBranch step whose parent schema is a plain string — and the diagnostic's branch list
+    // must degrade to Nil rather than interrogating the non-union for alternatives.
+    val notAUnion = at(personBytes, personSchema, true, field("name"), branch("string")) ===
+      Left(AvroFailure.UnionResolutionFailed(Nil, branch("string")))
+
+    // A branch name that is not declared: the ordinal scan must run off the end and report -1
+    // rather than indexing past the alternative list. Both policies refuse, and they must refuse
+    // for THIS reason — the lenient row is the one that separates the `requested < 0` guard from
+    // the runtime-vs-requested comparison downstream of it.
+    val unknownBranch = branch("eo.avro.test.NotDeclared")
+    val declared = Left(AvroFailure.UnionResolutionFailed(List("null", "long"), unknownBranch))
+    val unknownStrict =
+      at(txBytes, transactionSchema, true, field("amount"), unknownBranch) === declared
+    val unknownLenient =
+      at(txBytes, transactionSchema, false, field("amount"), unknownBranch) === declared
+
+    // locateElements: a prefix that resolves to a string, not an array.
+    val notAnArray = AvroBinaryCursor.locateElements(
+      basketBytes,
+      basketSchema,
+      Array(PathStep.Field("owner")),
+      Array.empty[PathStep],
+    ) === Left(AvroFailure.NotAnArray(PathStep.Field("owner")))
+
+    // locateElements resolves its PREFIX strictly: a union prefix whose runtime branch is `null`
+    // must fail as a branch mismatch, not be tolerated into a "terminal is not an array".
+    val elementsPrefixStrict = AvroBinaryCursor.locateElements(
+      txNullBytes,
+      transactionSchema,
+      Array(PathStep.Field("amount"), PathStep.UnionBranch("long")),
+      Array.empty[PathStep],
+    ) === Left(
+      AvroFailure.UnionResolutionFailed(List("null", "long"), PathStep.UnionBranch("long"))
+    )
+
+    notARecord
+      .and(notAUnion)
+      .and(unknownStrict)
+      .and(unknownLenient)
+      .and(notAnArray)
+      .and(elementsPrefixStrict)
+  }
+
+  // The union-branch POLICY, at both levels of the byte face. Both halves are invisible to every
+  // other assertion in this module: the payloads still decode, and the decoded values are right.
+  //
+  // covers: AvroBinaryCursor.scala:589 the terminal-vs-interior union split,
+  //   AvroPrism.scala:157 the byte-face read's strict terminal-union resolution
+  "byte-face union policy: an interior step does not anchor the span, a mismatch does not decode" >> {
+    // An interior union step must NOT anchor the returned span — the span belongs to the step the
+    // path ends on. Every observable downstream of a mis-anchored span (`getOption`, `.modify`)
+    // still round-trips, because the span still opens on a decodable value; only `valueSchema`
+    // gives it away.
+    val envelope = WireEnvelope("e-1", 7L, Cash(100L), "note")
+    val envBytes = toBinary(envelopeRecord(envelope), envelopeSchema)
+    val cashName = summon[AvroCodec[Cash]].schema.getFullName
+
+    val interiorOk = AvroBinaryCursor
+      .locate(
+        envBytes,
+        envelopeSchema,
+        Array(PathStep.Field("payment"), PathStep.UnionBranch(cashName), PathStep.Field("amount")),
+        strictTerminalUnion = true,
+      )
+      .map(_.valueSchema.getType) === Right(Schema.Type.LONG)
+
+    // ... and the READ resolves its terminal union strictly. `TwinA` and `TwinB` encode
+    // identically, so a lenient read does not fail: it DECODES the other branch and hands back a
+    // well-formed value of the wrong type. The lenient policy is correct for graft/write only.
+    val twinBytes = toBinaryValue(summon[AvroCodec[TwinA]].encode(TwinA(100L)), twinSchema)
+    val sameBranch =
+      AvroPrism.codecPrism[Twin].union[TwinA].getOption(twinBytes) === Some(TwinA(100L))
+    val crossBranch = AvroPrism.codecPrism[Twin].union[TwinB].getOption(twinBytes) === None
+
+    interiorOk.and(sameBranch).and(crossBranch)
+  }
+
+  // covers: AvroTraversal.scala:193 — `.each`'s per-element drilling resolves its prefix to an
+  //   ARRAY or refuses loudly. The public `.each` macro rejects a non-array focus at COMPILE time,
+  //   so this guard is only reachable by constructing the traversal at the internal seam — which
+  //   is exactly what a future drilling entry point would do.
+  "AvroTraversal: drilling through a non-array prefix throws IllegalArgumentException" >> {
+    val leaf = new AvroFocus.Leaf[String](Array.empty[PathStep], summon[AvroCodec[String]])
+    val bogus = new AvroTraversal[String](Array(PathStep.Field("name")), leaf, personSchema)
+
+    val thrown =
+      try
+        bogus.widenSuffixNamed[String]("whatever")
+        "no throw"
+      catch case e: IllegalArgumentException => e.getMessage
+
+    thrown must contain("prefix does not point at an array")
+  }
+
 end AvroBytesSpec
