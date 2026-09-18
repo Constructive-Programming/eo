@@ -520,6 +520,29 @@ private[avro] object AvroWalk:
     *
     * An empty `caseNames` (a NamedTuple parent, which has no case fields) abstains too.
     *
+    * '''Per case field, two rungs, and the order matters.''' The EXACT name first, through Avro's
+    * own per-record name hash: O(1), allocation-free, and the only rung an identity-named codec
+    * ever reaches — it neither builds nor consults an index. Only a miss consults the normalised
+    * index (issue #103), which is built once per record schema and cached, rather than re-scanning
+    * every schema field per case field.
+    *
+    * The index is resolved ONCE per resolution and threaded through the remaining case fields. Per
+    * case field it would be a `ConcurrentHashMap` probe and a throwaway lookup key EACH — at arity
+    * 66, 66 probes and 66 keys that all answer with the same map — which is the very multiplier
+    * issue #103 set out to remove, merely moved one level down. Threaded as a recursion parameter
+    * and not hoisted above the loop, because that would make the identity-named codec pay for an
+    * index it never reads.
+    *
+    * What the miss path pays INSTEAD of the scan, stated because it is a real regression and the
+    * repo's benchmark doctrine gates on bytes: [[normalisedName]] materialises a `String`, so a
+    * resolution that misses the exact-name hash allocates ~104 B per case field where the pairwise
+    * cursor walk it replaced allocated nothing (measured, snake_cased: 24 -> 256 B at n=2, 280 ->
+    * 7,168 B at n=66, the residue being the `out` array both shapes allocate). That is the
+    * deliberate trade — ~490 us of CPU per resolution for ~7 KB of nursery at n=66 — and it is per
+    * OPERATION, not per construction, for a `def`-shaped optic. Closing it would mean probing the
+    * index by a cursor-computed hash of the normalised name and confirming the candidate with an
+    * allocation-free pairwise comparison: a larger change than issue #103.
+    *
     * `private[avro]` only so `NominalResolutionParitySpec` can diff every verdict of this function
     * against the frozen pre-index implementation it was rewritten from (issue #103).
     */
@@ -539,42 +562,29 @@ private[avro] object AvroWalk:
       // Set here costs a boxed Integer and a new Set node per field.
       @tailrec def seen(j: Int, idx: Int): Boolean =
         j < 0 || (out(j) != idx && seen(j - 1, idx))
-      @tailrec def loop(i: Int, rest: List[String]): Boolean =
+      // `index` is the normalised index once some case field has needed it, `null` until then.
+      @tailrec def loop(i: Int, rest: List[String], index: JMap[String, Integer] | Null): Boolean =
         rest match
           case Nil    => true
           case n :: t =>
-            val idx = nominalIndex(record, n)
-            if idx < 0 || !seen(i - 1, idx) then false
+            val exact = record.getField(n)
+            if exact != null then
+              val idx = exact.pos
+              if !seen(i - 1, idx) then false
+              else
+                out(i) = idx
+                loop(i + 1, t, index)
             else
-              out(i) = idx
-              loop(i + 1, t)
-      if loop(0, caseNames) then out(declIdx) else -1
-
-  /** Position of the schema field naming `scalaName` — exactly, else uniquely up to separators and
-    * case. `-1` when no field matches or when more than one does: an ambiguous signal is no signal.
-    *
-    * Two rungs, and the order matters: the EXACT name first, through Avro's own per-record name
-    * hash, which is O(1) and allocates nothing — the identity-named codec never reaches any of the
-    * machinery below. Only a miss consults the normalised index (issue #103), which is built once
-    * per record schema and cached, rather than re-scanning every schema field per case field.
-    *
-    * What the miss path pays INSTEAD of the scan, stated because it is a real regression and the
-    * repo's benchmark doctrine gates on bytes: [[normalisedName]] materialises a `String`, so a
-    * resolution that misses the exact-name hash allocates ~128 B per case field where the pairwise
-    * cursor walk it replaced allocated nothing (measured: 24 -> 280 B at n=2, 280 -> 8,728 B at
-    * n=66). That is the deliberate trade — ~490 us of CPU per resolution for ~8 KB of nursery at
-    * n=66 — and it is per OPERATION, not per construction, for a `def`-shaped optic. Closing it
-    * would mean probing the index by a cursor-computed hash of the normalised name and confirming
-    * the candidate with an allocation-free pairwise comparison: a larger change than issue #103.
-    */
-  private def nominalIndex(record: Schema, scalaName: String): Int =
-    val exact = record.getField(scalaName)
-    if exact != null then exact.pos
-    else
-      val hit = normalisedNameIndex(record).get(normalisedName(scalaName))
-      // A key present with `Ambiguous` is the same verdict the scan produced on its SECOND hit:
-      // more than one schema field normalises to this name, so the signal is no signal.
-      if hit == null then -1 else hit.intValue
+              val here = if index != null then index else normalisedNameIndex(record)
+              val hit = here.get(normalisedName(n))
+              // A key present with `Ambiguous` is the same verdict the scan produced on its SECOND
+              // hit: more than one schema field normalises to this name, so the signal is no signal.
+              val idx = if hit == null then -1 else hit.intValue
+              if idx < 0 || !seen(i - 1, idx) then false
+              else
+                out(i) = idx
+                loop(i + 1, t, here)
+      if loop(0, caseNames, null) then out(declIdx) else -1
 
   /** `_` / `-` / `.` stripped and everything lower-cased: the canonical form under which
     * `landingPageId`, `landing_page_id`, `LANDING_PAGE_ID` and `landing-page-id` are one name.
