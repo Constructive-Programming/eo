@@ -197,7 +197,24 @@ object StructureValues:
 
 end StructureValues
 
-extension [A](self: Schema[A])
+// Braced body, against the significant-indentation house style, on purpose.
+// stryker4s 0.20.3 re-prints every mutated file through scalameta, and a
+// SINGLE-METHOD significant-indentation `extension` clause comes back as the
+// one-line form `extension [A](self: Schema[A]) def valuePrism …`. The method's
+// leading Scaladoc is replayed verbatim between the two, which forces a newline
+// and lands `def` in column 0: the clause is left with no extension method
+// ('Extension without extension methods') and `A` / `self` fall out of scope, so
+// the file stops compiling and `project kyoIntegration; stryker` aborts with
+// UnableToFixCompilerErrorsException before it can score anything. With braces
+// the printer emits `extension (…) { … }` and the newline is harmless.
+//
+// Hoisting the Scaladoc above `extension` also dodges it (that is why the avro /
+// circe / jsoniter clauses have never tripped), but it detaches the doc from the
+// method it documents. Braces keep the doc where it belongs and are robust to
+// anything else that might force a newline. Verified bytecode-identical: the
+// only class-file deltas are the LineNumberTable shift and the TASTY checksum.
+// Revert when stryker4s fixes the re-print.
+extension [A](self: Schema[A]) {
 
   /** Prism between the untyped `Structure.Value` tree and `A` — the typed ↔ untyped face beside
     * [[prism(Schema)]] (bytes) and [[stringPrism(Schema)]] (String), built on the public
@@ -215,3 +232,5 @@ extension [A](self: Schema[A])
       v => Structure.decode[A](v).foldError(Right(_), _ => Left(v)),
       a => Structure.encode(a),
     )
+
+}
