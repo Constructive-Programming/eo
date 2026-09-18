@@ -48,9 +48,12 @@ FAMILIES = [
 ]
 
 # Modules stryker mutates. value = (on-disk module dir, human label, note).
-# The note is the Notes-column caveat; for modules that can't be scored it
+# The note is the Notes-column annotation; for modules that can't be scored it
 # doubles as the "why" shown when no report.json exists. If a report later
-# appears, its numbers take over and the note still annotates the row.
+# appears, its numbers take over and the note still annotates the row — so a
+# note that claims a module is unscoreable MUST be retired here once numbers
+# land, or the page contradicts its own table (that is how the avro/jsoniter
+# "not scored" caveats survived months of real reports).
 MUTATION_MODULES = [
     ("core", "core", "Scored against the cross-module suite in `tests/`, task-borrowed into core's Test scope by `mutationAll`."),
     ("laws", "laws", "Borrowed `tests/` suite; the negative fixtures in `UnlawfulFixturesSpec` keep the law-weakening mutants dead — see prose."),
@@ -58,8 +61,8 @@ MUTATION_MODULES = [
     ("schemes", "schemes", ""),
     ("schemes-laws", "schemes-laws", "Recursion-scheme laws (hylo fusion so far; more expected). Like `laws`, mutating it probes whether the law spec notices a corrupted law."),
     ("circe", "circe", ""),
-    ("avro", "avro", "Not scored: stryker's forked test-runner fails to initialise in the sandbox (the specs pass under plain `sbt test`)."),
-    ("jsoniter", "jsoniter", "Not scored: instrumenting `PathParser.parseField` blows the JVM 64 KB method-size limit — one giant byte-cursor method, un-mutatable in place."),
+    ("avro", "avro", "Scores fine (~2 min): the old \"forked test-runner fails to initialise\" caveat no longer reproduces. Its no-coverage mutants are `AvroPrismMacro` quoted-macro bodies — compile-time only, like `generics`."),
+    ("jsoniter", "jsoniter", "Mutates clean end to end (0 compile errors): the old `PathParser.parseField` 64 KB method-size caveat no longer reproduces."),
 ]
 
 

@@ -51,12 +51,21 @@ class ContainerOpticsSpec extends Specification with CheckAllHelpers:
       .and(second.replace(9)(Vector(1, 2, 3)) === Vector(1, 9, 3))
       .and(second.replace(9)(Vector(1)) === Vector(1))
       .and(second.getOption(Vector.empty[Int]) === None)
+      // covers: Index.scala:37 — the setter's own `s.isDefinedAt(i)` guard. The
+      // `.replace` above cannot reach it: Optional#modify returns getOrModify's
+      // `Left(t)` directly and never calls the stored reverseGet. Forced to `true`
+      // this line throws IndexOutOfBoundsException.
+      .and(second.reverseGet(Vector(1), 9) === Vector(1))
   }
 
   "Index (map): hit writes existing key; missing key passes through — no insert" >> {
     val port = Index[String, Int]("port")
     (port.replace(8080)(Map("port" -> 80)) === Map("port" -> 8080))
       .and(port.replace(8080)(Map("host" -> 1)) === Map("host" -> 1))
+      // covers: Index.scala:55 — the map setter's own `m.contains(k)` guard, same
+      // unreachable-from-`.replace` argument. Forced to `true` this line INSERTS,
+      // which is exactly what the scaladoc promises it will not do.
+      .and(port.reverseGet(Map("host" -> 1), 8080) === Map("host" -> 1))
   }
 
   "At: Some upserts (insert AND update), None deletes; get is total" >> {

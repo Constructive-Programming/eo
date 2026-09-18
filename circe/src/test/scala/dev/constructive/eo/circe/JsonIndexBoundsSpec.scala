@@ -2,31 +2,47 @@ package dev.constructive.eo.circe
 
 import scala.language.implicitConversions
 
-import cats.data.Ior
 import io.circe.syntax.*
-import org.specs2.mutable.Specification
+import org.scalacheck.Gen
+import org.scalacheck.Prop.forAll
+import org.specs2.ScalaCheck
 
-/** Index-bounds discrimination for the array walk: the existing specs exercise out-of-range-high on
-  * a 1-element array and index 0 on non-arrays, but never a SUCCESSFUL walk at indices 0 and >0 of
-  * one array, nor a negative index — so operator mutants on the `idx < 0 || idx >= arr.length`
-  * check survived.
+/** Index-bounds discrimination for the array walk.
+  *
+  * `JsonWalk` carries TWO copies of `idx < 0 || idx >= arr.length` — one in `readPath`, one in
+  * `modifyPath`. The previous version of this spec drove only `.modify(…)`, so every operator
+  * mutant on the `readPath` copy survived. The property below drives the read, the Ior write and
+  * the silent write from one index, against an oracle DERIVED from the backing `Vector` rather than
+  * hard-coded, so a guard that mis-fires is caught whichever direction it mis-fires in.
   */
-class JsonIndexBoundsSpec extends Specification:
+class JsonIndexBoundsSpec extends JsonSpecBase with ScalaCheck:
 
   import JsonSpecFixtures.*
 
-  // covers: JsonWalk.walkStep Index bounds (JsonWalk.scala:62), every operator variant —
-  // `idx < 0` weakened to `> 0` breaks at(1), to `<= 0` breaks at(0); a weakened
-  // `idx >= length` lets at(3)/at(-1) walk off the array.
-  "indices 0 and 1 read their elements; -1 and length fail IndexOutOfRange" >> {
-    val basket = Basket("Alice", Vector(Order("A"), Order("B"), Order("C"))).asJson
-    def run(i: Int) = codecPrism[Basket].items.at(i).modify(identity)(basket)
-    val valid = (run(0), run(1)) match
-      case (Ior.Right(_), Ior.Right(_)) => true
-      case _                            => false
-    def oob(i: Int) = run(i) match
-      case Ior.Both(chain, _) =>
-        chain.headOption.get == JsonFailure.IndexOutOfRange(PathStep.Index(i), 3)
-      case _ => false
-    (valid, oob(-1), oob(3)) must beEqualTo((true, true, true))
+  // covers: JsonWalk.scala:56 readPath Index bounds, every operator variant (:20 `→false`,
+  //   :24 `<`→`<=`, :24 `<`→`==`, :28 `||`→`&&`, :35 `>=`→`>`, :35 `>=`→`==`) and the
+  //   already-covered twin at JsonWalk.scala:81 (modifyPath).
+  //   Range -2..5 against a FIXED size-3 array straddles all five discriminating classes:
+  //   i<0, i=0 (low boundary), 0<i<3, i=3 (exactly length), i>3 (strictly past length).
+  //   i=3 alone kills `>=`→`>`; i>=4 alone kills `>=`→`==`; i=0 alone kills both `<` variants.
+  "read / Ior write / silent write agree with the Vector oracle at every index class" >> {
+    val items = Vector(Order("A"), Order("B"), Order("C"))
+    val basket: Json = Basket("Alice", items).asJson
+    forAll(Gen.chooseNum(-2, 5)) { (i: Int) =>
+      val p = codecPrism[Basket].items.at(i)
+      val hit = i >= 0 && i < items.length
+      val oor: JsonFailure = JsonFailure.IndexOutOfRange(PathStep.Index(i), items.length)
+
+      val read: Ior[Chain[JsonFailure], Order] = p.get(basket)
+      val expectedRead: Ior[Chain[JsonFailure], Order] =
+        if hit then Ior.Right(items(i)) else Ior.Left(Chain.one(oor))
+
+      val write: Ior[Chain[JsonFailure], Json] = p.modify(identity)(basket)
+      val expectedWrite: Ior[Chain[JsonFailure], Json] =
+        if hit then Ior.Right(basket) else Ior.Both(Chain.one(oor), basket)
+
+      val silent: Json = p.modifyUnsafe(identity)(basket)
+
+      (read == expectedRead) && (write == expectedWrite) && (silent == basket)
+    }
   }

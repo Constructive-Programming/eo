@@ -14,6 +14,11 @@ import org.specs2.mutable.Specification
   *
   * '''2026-04-29 consolidation.''' 5 → 1 named block. Each case's fire + message-projection is
   * still witnessed; the spec frame collapses.
+  *
+  * '''2026-09-18 consolidation.''' The `IndexOutOfRange` fire scenario is dropped: `at(5)` on a
+  * one-element array is one point of what [[JsonIndexBoundsSpec]]'s oracle property now asserts
+  * over the whole index range, against an expectation derived from the backing `Vector`. Verified
+  * by a mutation re-run — no mutant flipped Killed → Survived.
   */
 class JsonFailureSpec extends Specification:
 
@@ -25,8 +30,8 @@ class JsonFailureSpec extends Specification:
   //   NotAnObject.message contains "expected JSON object";
   //   NotAnArray fires when parent is not a JSON array for an Index step,
   //   NotAnArray.message contains "expected JSON array";
-  //   IndexOutOfRange fires when index past end of array (Ior.Both with size in chain),
-  //   IndexOutOfRange.message contains "size=N";
+  //   IndexOutOfRange.message contains "size=N" (its FIRE scenario is subsumed by
+  //     JsonIndexBoundsSpec's oracle property — every out-of-range index class, not one constant);
   //   DecodeFailed fires when leaf Json doesn't decode (Ior.Left with DecodeFailed in chain)
   "JsonFailure: every case fires from a triggering input + message-projection holds" >> {
     // ---- PathMissing ----
@@ -62,12 +67,10 @@ class JsonFailureSpec extends Specification:
     val naMessageOk = naFailure.message must contain("expected JSON array")
 
     // ---- IndexOutOfRange ----
-    val basket = Basket("Alice", Vector(Order("X")))
-    val iorResult = codecPrism[Basket].items.at(5).modify(identity)(basket.asJson)
-    val iorFireOk = iorResult match
-      case Ior.Both(chain, _) =>
-        chain.headOption.get === JsonFailure.IndexOutOfRange(PathStep.Index(5), 1)
-      case _ => ko(s"expected Ior.Both, got $iorResult")
+    // The FIRE scenario moved to JsonIndexBoundsSpec's oracle property, which asserts the exact
+    // `Ior.Both(Chain.one(IndexOutOfRange(Index(i), size)), json)` for every out-of-range index
+    // class (negative, == length, > length) instead of the single hard-coded `at(5)` here. Only
+    // the message projection — which that property does not look at — stays.
     val iorFailure: JsonFailure = JsonFailure.IndexOutOfRange(PathStep.Index(7), 3)
     val iorMessageOk = iorFailure.message must contain("size=3")
 
@@ -91,7 +94,6 @@ class JsonFailureSpec extends Specification:
       .and(noMessageOk)
       .and(naFireOk)
       .and(naMessageOk)
-      .and(iorFireOk)
       .and(iorMessageOk)
       .and(dfFireOk)
   }
