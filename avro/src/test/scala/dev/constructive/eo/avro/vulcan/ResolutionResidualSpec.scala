@@ -180,12 +180,16 @@ class ResolutionResidualSpec extends Specification:
     val acctBytes = encodeBytes(Acct("U-REAL", 10L))
     val compBytes = encodeBytes(Comp("A0", "B0", "C0"))
     (codecPrism[RPair].fieldNamed[String]("alpha_name").getOption(rpairBytes) must beSome("ALPHA0"))
-      .and(codecPrism[Doc].fieldNamed[String]("raw_ident").getOption(docBytes) must beSome("REAL-ID"))
+      .and(
+        codecPrism[Doc].fieldNamed[String]("raw_ident").getOption(docBytes) must beSome("REAL-ID")
+      )
       .and(
         codecPrism[Acct].fieldNamed[String]("user_ident").getOption(acctBytes) must beSome("U-REAL")
       )
       // `Comp.b` is genuinely not stored, so no name reaches it — the hatch cannot invent data.
-      .and(codecPrism[Comp].fieldNamed[String]("x_digest").getOption(compBytes) must beSome("A0/B0"))
+      .and(
+        codecPrism[Comp].fieldNamed[String]("x_digest").getOption(compBytes) must beSome("A0/B0")
+      )
   }
 
 end ResolutionResidualSpec

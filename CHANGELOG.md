@@ -22,6 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   injective, exact or up to `_`/`-`/`.` and case); otherwise it abstains and declaration position
   decides exactly as before — which is what keeps every name-transform codec (issue #35's
   population) resolving correctly. Still construction-time only: zero per-operation cost.
+- **`.fieldNamed("typo")` is refused at construction instead of silently missing at runtime**
+  (#95): the explicit-schema-name escape hatch appended the literal with no schema lookup at all,
+  although the schema was in hand, so a typo — or the Scala field name passed where the schema name
+  was meant — read `None` and wrote the payload back unchanged while reporting success. That is the
+  same failure class the hatch exists to avoid, and it is what every "navigate by explicit schema
+  name with `.fieldNamed`" error message points at. Map parents are carved out: `.fieldNamed` is
+  also how a map KEY is addressed, and an absent key is data. Feature-detecting a RECORD field is
+  still available via `codec.schema.getField(name)`.
 
 ### Changed
 

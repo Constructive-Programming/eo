@@ -98,14 +98,16 @@ import org.apache.avro.Schema
   *     `.replace` onto a span whose current value doesn't decode as `A` — or a `.union[B]` focus
   *     sitting on a different runtime branch — is a Miss pass-through. [[graftBytes]] is the
   *     decode-free write (and the only one that can SWITCH union branches).
-  *   - '''The payload must be encoded under exactly this prism's reader schema.''' The byte walk
-  *     performs no writer/reader schema resolution: structurally drifted payloads Miss silently,
-  *     and a same-typed field REORDER between writer and reader is undetectable from the bytes —
-  *     the walk reads the wrong field with full confidence. Confluent-framed payloads are handled
-  *     by composing [[ConfluentWire.confluent]] (a byte Prism that strips the header, resolves the
-  *     writer schema, and fingerprint-gates) BEFORE this optic — `confluent.andThen(thisWalk)`;
-  *     past a fingerprint mismatch a mixed-schema topic still needs a resolving decode (the record
-  *     face with the right schema per payload).
+  *   - '''The payload must be encoded under exactly this prism's reader schema.''' This is about
+  *     PAYLOAD drift — a name absent from the READER schema is a construction-time refusal on both
+  *     `.field` and `.fieldNamed`, not a runtime miss. The byte walk performs no writer/reader
+  *     schema resolution: structurally drifted payloads Miss silently, and a same-typed field
+  *     REORDER between writer and reader is undetectable from the bytes — the walk reads the wrong
+  *     field with full confidence. Confluent-framed payloads are handled by composing
+  *     [[ConfluentWire.confluent]] (a byte Prism that strips the header, resolves the writer
+  *     schema, and fingerprint-gates) BEFORE this optic — `confluent.andThen(thisWalk)`; past a
+  *     fingerprint mismatch a mixed-schema topic still needs a resolving decode (the record face
+  *     with the right schema per payload).
   *   - Dynamic field sugar is shadowed by real members: an Avro field named like a member of this
   *     class (`record`, `field`, `at`, `union`, `each`, `fields`, …) must be drilled with the
   *     explicit `.field(_.record)` form.
@@ -292,6 +294,7 @@ final class AvroPrism[A] private[avro] (
   private[avro] def widenPathNamed[B](schemaName: String)(using
       codecB: AvroCodec[B]
   ): AvroPrism[B] =
+    AvroWalk.requireFieldNamed(rootSchemaCached, path, schemaName, "AvroPrism.fieldNamed")
     widenPathStep[B](PathStep.Field(schemaName))
 
   /** Extend by an array-index step. Used by [[at]]. */
@@ -373,10 +376,16 @@ object AvroPrism:
     )(using codecB: AvroCodec[B]): AvroPrism[B] =
       ${ AvroPrismMacro.fieldImpl[A, B]('o, 'selector, 'codecB) }
 
-  /** `.fieldNamed[B]("schema_name")` — drill by the EXPLICIT schema field name, bypassing position
-    * resolution. The escape hatch (issue #35) for a hand-written codec whose schema field order
-    * diverges from case-class declaration order; the common (derived / order-preserving) codecs
-    * need `.field(_.x)` instead, which resolves the name for you.
+  /** `.fieldNamed[B]("schema_name")` — drill by the EXPLICIT schema field name, bypassing
+    * resolution entirely. The escape hatch for a hand-written codec the resolver cannot read (a
+    * field list that both renames beyond recognition and reorders, a column bearing another field's
+    * name, two columns normalising alike); the common (derived / order-preserving /
+    * name-transformed) codecs need `.field(_.x)` instead, which resolves the name for you.
+    *
+    * The name is CHECKED against the schema it will be looked up in, at construction (issue #95): a
+    * name the record does not carry throws rather than Missing silently at runtime. A MAP parent is
+    * carved out — `.fieldNamed` is also how a map KEY is addressed, and an absent key is data, not
+    * a mistake. To feature-detect a RECORD field, ask the schema: `codec.schema.getField(name)`.
     */
   extension [A](o: AvroPrism[A])
 
