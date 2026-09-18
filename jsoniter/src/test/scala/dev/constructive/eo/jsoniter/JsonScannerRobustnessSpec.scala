@@ -248,6 +248,24 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     // unquoted key / missing colon — findFieldValueLoop quote/colon guards (lines 168, 173)
     ("""{a:1,"target":2}""", List(PathStep.Field("target"))),
     ("""{"a" 1,"target":2}""", List(PathStep.Field("target"))),
+    // covers: 78:12, 85:12, 108:12, 113:12, 118:12 — a step applied to a NON-container value must
+    // Miss even when the bytes that follow spell a valid member/element. Dropping the container
+    // check makes `find` resolve `$.target` to `2` and `$[0]` / `$[*]` to `"target"`.
+    ("""1"target":2""", List(PathStep.Field("target"))),
+    ("""1"target":2""", List(PathStep.Index(0))),
+    ("""1"target":2""", List(PathStep.Wildcard)),
+    // covers: 240:41 — with the digit-range `&&` flipped to `||` every byte starts a number, so
+    // skipValue resolves the missing value to the zero-length Span(5,5) instead of -1.
+    ("""{"a":}""", List(PathStep.Field("a"))),
+    // covers: 168:8, 168:29, 173:8 — findFieldValueLoop's key-shape and colon guards, with the
+    // bytes laid out so the mis-parse lands exactly on the probed key: in `{Xk0":1}` a dropped
+    // quote check makes skipString find the CLOSING quote, so the compared key IS `k0`.
+    ("""{Xk0":1}""", List(PathStep.Field("k0"))),
+    ("""{"k0"1 2}""", List(PathStep.Field("k0"))),
+    // covers: 254:8, 258:8 — the skipObjectLoop twins of the two rows above, nested inside a value
+    // that must be skipped over on the way to a later member.
+    ("""{"a":{Xk0":1}, "target":2}""", List(PathStep.Field("target"))),
+    ("""{"a":{"k0"1 2}, "target":2}""", List(PathStep.Field("target"))),
   )
 
   "malformed number/object inputs never throw, resolve to Miss on both surfaces" >> {
