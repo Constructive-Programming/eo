@@ -157,10 +157,8 @@ class JsonPrismSpec extends Specification with ScalaCheck:
   // covers: at(i) on root-level Vector modify the i-th element + leave siblings byte-identical,
   //   at(i) on nested Basket.items modifies the right element + leaves others alone,
   //   nested at(i) getOptionUnsafe returns the element,
-  //   *Unsafe out-of-range index leaves input unchanged,
-  //   default-Ior out-of-range surfaces Ior.Both(IndexOutOfRange, inputJson),
-  //   *Unsafe negative index leaves input unchanged
-  "at(i) on Vector focus: index modify + sibling preservation + OOR / negative index handling" >> {
+  //   (out-of-range / negative index: see JsonIndexBoundsSpec's oracle property)
+  "at(i) on Vector focus: index modify + sibling preservation" >> {
     val orders = Vector(Order("A"), Order("B"), Order("C"))
     val json = orders.asJson
     val outAt1 = codecPrism[Vector[Order]].at(1).name.modifyUnsafe(_.toUpperCase)(json)
@@ -175,21 +173,6 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     val r3 = outNested ===
       basket.copy(items = Vector(Order("X".toUpperCase), Order("Y"))).asJson
     val r4 = codecPrism[Basket].items.at(1).getOptionUnsafe(basket.asJson) === Some(Order("Y"))
-
-    // ---- OOR / negative index branches ----
-    val basket1 = Basket(owner = "Alice", items = Vector(Order("X")))
-    val json1 = basket1.asJson
-    val unsafeOOR =
-      codecPrism[Basket].items.at(5).name.modifyUnsafe(_.toUpperCase)(json1) === json1
-    val defaultOOR = codecPrism[Basket].items.at(5).name.modify(_.toUpperCase)(json1) match
-      case Ior.Both(chain, out) =>
-        (out === json1)
-          .and(chain.length === 1L)
-          .and(chain.headOption.get === JsonFailure.IndexOutOfRange(PathStep.Index(5), 1))
-      case _ => org.specs2.execute.Failure("expected Ior.Both"): org.specs2.execute.Result
-    val negIndex =
-      codecPrism[Basket].items.at(-1).name.modifyUnsafe(_.toUpperCase)(basket.asJson) ===
-        basket.asJson
 
     // ---- .each Unsafe surface (absorbed) ----
     // covers: .each modifyUnsafe applies to every element, transformUnsafe applies to each
@@ -228,9 +211,6 @@ class JsonPrismSpec extends Specification with ScalaCheck:
     r1.and(r2)
       .and(r3)
       .and(r4)
-      .and(unsafeOOR)
-      .and(defaultOOR)
-      .and(negIndex)
       .and(rEach1)
       .and(rEach2)
       .and(rEach3)
