@@ -334,15 +334,16 @@ private[avro] object AvroWalk:
     loop(0)
     fresh
 
-  // ---- Schema-name resolution (issue #35) ----------------------------
+  // ---- Schema-name resolution (issues #35, #95) ----------------------
   //
   // Field navigation must honour the schema's field name, not the raw Scala field name: a codec
-  // built with a name transform (kindlings snake/kebab/custom) or vulcan overrides emits schema
-  // fields whose names differ from the case-class fields. The `.field(_.x)` macros know `x`'s
-  // DECLARATION index; these helpers walk the cached schema at prism-construction time and read
-  // back the actual schema field name at that position, so the stored PathStep.Field carries the
-  // schema name and the (unchanged) runtime walkers hit it. Resolution is construction-time only —
-  // zero per-operation cost.
+  // built with a name transform (a kindlings snake-case or custom config) or vulcan overrides emits
+  // schema fields whose names differ from the case-class fields. The `.field(_.x)` macros know
+  // `x`'s DECLARATION index AND the parent's whole case-field list; these helpers walk the cached
+  // schema at prism-construction time and read back the actual schema field name — by NAME when the
+  // codec named the whole case-field list (issue #95), else by that declaration position (issue
+  // #35). The stored PathStep.Field carries the schema name and the (unchanged) runtime walkers hit
+  // it. Resolution is construction-time only — zero per-operation cost.
 
   /** Walk `root` along `steps` and return the terminal schema, or a diagnostic. The Field steps
     * carry already-resolved schema names, so `getField` hits; UnionBranch unwraps to the branch,

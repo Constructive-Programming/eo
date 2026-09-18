@@ -13,10 +13,10 @@ import org.apache.avro.generic.GenericRecord
   * population the position-resolution design (issue #35) silently mis-targets.
   *
   * This is the standing gap these fixtures close: every fixture in `AvroSpecFixtures` is
-  * kindlings-derived, hence 1:1 by construction, so no existing example could have seen the
-  * hazard. `vulcan.Codec` is the realistic carrier for the divergent shapes: `Codec.record`'s field
-  * list names each schema field independently of the case field it accesses, so order, arity and
-  * naming can all diverge — and the bridge (`AvroVulcan.codec`) can recover none of it.
+  * kindlings-derived, hence 1:1 by construction, so no existing example could have seen the hazard.
+  * `vulcan.Codec` is the realistic carrier for the divergent shapes: `Codec.record`'s field list
+  * names each schema field independently of the case field it accesses, so order, arity and naming
+  * can all diverge — and the bridge (`AvroVulcan.codec`) can recover none of it.
   *
   * Evidence rule for every fixture: the payload is produced by the codec ITSELF, so the value in
   * schema field `f` is by construction whatever the codec decided to write there. That makes SLOT
