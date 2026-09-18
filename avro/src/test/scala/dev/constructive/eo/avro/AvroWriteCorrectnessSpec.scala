@@ -201,6 +201,62 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     totalOk.and(namesOk)
   }
 
+  /** A CANONICAL (positive-count) array framing that is nonetheless MULTI-BLOCK — spec-legal, and
+    * the only shape that separates an in-place splice from a whole-region re-frame. Every other
+    * fixture here is single-block, where a re-frame reproduces the input byte-for-byte and the two
+    * write paths are indistinguishable. Collapsing two blocks into one costs a count byte, so the
+    * re-frame is visible in the payload LENGTH while the decoded value is unchanged.
+    */
+  private def multiBlockBasket(owner: String, items: List[Order]): Array[Byte] =
+    val out = new ByteArrayOutputStream()
+    def put(bs: Array[Byte]): Unit = out.write(bs, 0, bs.length)
+    def block(bs: List[Array[Byte]]): Unit =
+      put(AvroBinaryCursor.zigZagLong(bs.length.toLong))
+      bs.foreach(put)
+    put(AvroBinaryCursor.writeDatum(owner, basketSchema.getField("owner").schema))
+    val (head, last) = items
+      .map(o => AvroBinaryCursor.writeDatum(summon[AvroCodec[Order]].encode(o), orderSchema))
+      .splitAt(items.length - 1)
+    block(head)
+    block(last)
+    put(AvroBinaryCursor.zigZagLong(0L))
+    out.toByteArray
+
+  // covers: AvroTraversal.scala:119 the no-op guard (`active.isEmpty || arity mismatch`),
+  //   AvroTraversal.scala:125 the canonical-splice vs re-frame write split,
+  //   AvroBinaryCursor.scala:143 the initial canonical flag threaded through the block walk
+  //
+  // These are BYTE-level assertions on purpose. Every write below decodes to the right value
+  // under every mutation of the three guards above — the Optional-law property block at the foot
+  // of this file quantifies over decoded values and cannot see any of it. What changes is the
+  // FRAMING: a payload that arrives blocked and leaves canonical, or arrives multi-block and
+  // leaves single-block, is a rewrite of bytes the caller never asked us to touch.
+  "array FRAMING survives a write: a no-op touches no byte, a splice touches only the focus" >> {
+    // (a) NOTHING is focused (every element is on the other union branch) under NON-canonical
+    // framing. The write must be the identity on the bytes, not a canonical re-frame.
+    val cardsOnly = Ledger("ann", List(Card("4111"), Card("4222")))
+    val blocked = toBlockedBinary(ledgerRecord(cardsOnly), ledgerSchema)
+    val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
+    val noFociOk =
+      (Arrays.equals(blocked, toBinary(ledgerRecord(cardsOnly), ledgerSchema)) === false)
+        .and(cashT.foldMap(List(_))(blocked) === Nil)
+        .and(Arrays.equals(cashT.modify(c => Cash(c.amount + 1L))(blocked), blocked) === true)
+
+    // (b) CANONICAL multi-block framing plus a length-preserving edit: the splice happens in
+    // place and the block structure is left exactly as it arrived.
+    val items = List(Order("tea", 2.5, 1), Order("mate", 4.0, 2), Order("cola", 1.0, 3))
+    val multi = multiBlockBasket("ann", items)
+    val framingOk =
+      (Arrays.equals(multi, toBinary(basketRecord(Basket("ann", items)), basketSchema)) === false)
+        .and(codecPrism[Basket].getOption(multi) === Some(Basket("ann", items)))
+
+    val spliced = codecPrism[Basket].items.each.name.modify(_.toUpperCase)(multi)
+    val upper = multiBlockBasket("ann", items.map(o => o.copy(name = o.name.toUpperCase)))
+    val spliceOk = (spliced.length === multi.length).and(Arrays.equals(spliced, upper) === true)
+
+    noFociOk.and(framingOk).and(spliceOk)
+  }
+
   // ---- Post-re-review combination axes (reframe × overlay × union) -----
 
   // covers: .each.fields on a NON-canonical array — the reframe path AND the by-name field
