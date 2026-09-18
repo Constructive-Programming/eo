@@ -30,6 +30,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name with `.fieldNamed`" error message points at. Map parents are carved out: `.fieldNamed` is
   also how a map KEY is addressed, and an absent key is data. Feature-detecting a RECORD field is
   still available via `codec.schema.getField(name)`.
+- **A nested selector `.field(_.a.b)` is now a compile error** (#95): the selector parser shared by
+  every cursor macro matched `Lambda(_, Select(_, name))` with ANY receiver, so `_.inner.y` parsed
+  as the bare name `y` and the macro resolved it on the PARENT. Where the parent carries a field of
+  that name — and a record holding a nested record often does — the result was a well-typed,
+  perfectly lawful optic aimed at the wrong field: silent corruption on a 1:1, derived codec, with
+  no schema divergence involved, and the macros' own "nested paths … chain them" abort unreachable
+  for exactly the shape it was written for. A single-hop selector naming something that is not a
+  case field of the parent (a no-arg `def`) is now a compile error too, instead of a literal field
+  name that misses at runtime. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
+  (eo-circe) and `JsoniterPrism` / `JsoniterTraversal` (eo-jsoniter) all share the parser, so all
+  six surfaces are covered.
 
 ### Changed
 

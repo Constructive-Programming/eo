@@ -29,10 +29,11 @@ object JsonPrismMacro:
       report.errorAndAbort(
         "JsonPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + "Nested paths are not yet supported inside a single call;\n"
-          + "chain them: `_.field(_.a).field(_.b)`.\n"
+          + "chain them: `.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A]("JsonPrism.field", name)
 
     '{
       $parent.widenPath[B](${ Expr(name) })(using $encB, $decB)
@@ -94,9 +95,12 @@ object JsonPrismMacro:
     val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "JsonTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
+          + "Nested paths are not yet supported inside a single call;\n"
+          + "chain them: `.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A]("JsonTraversal.field", name)
 
     '{
       $parent.widenSuffix[B](${ Expr(name) })(using $encB, $decB)
