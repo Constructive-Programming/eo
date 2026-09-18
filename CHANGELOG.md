@@ -7,76 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-
-- **`.field(_.x)` no longer targets the wrong schema field when the codec's schema is not
-  positionally 1:1 with the case class** (#95): resolution was `fields.get(declIdx).name` and
-  nothing else — the field's NAME, its TYPE and the record's ARITY were never consulted. Sound for
-  every kindlings-derived codec (1:1 by construction), unsound for a hand-written or `vulcan.Codec`
-  field list, which can add a computed column, drop one, or reorder. On those, `.field(_.b)` against
-  a schema `{a, computed, b, c}` read and wrote `computed`, producing **valid Avro bytes with wrong
-  content** — and no law could see it, because a mis-targeted optic is a perfectly lawful `Optional`
-  onto the wrong field. The same resolver backs `.fields`, `selectDynamic`, `.each.field` and
-  `.each.fields`, so all six sites were affected. Resolution now tries a NAME rung first, and only
-  when the codec has named the WHOLE case-field list onto distinct schema fields (total and
-  injective, exact or up to `_`/`-`/`.` and case); otherwise it abstains and declaration position
-  decides exactly as before — which is what keeps every name-transform codec (issue #35's
-  population) resolving correctly. Still construction-time only: zero per-operation cost.
-- **`.fieldNamed("typo")` is refused at construction instead of silently missing at runtime**
-  (#95): the explicit-schema-name escape hatch appended the literal with no schema lookup at all,
-  although the schema was in hand, so a typo — or the Scala field name passed where the schema name
-  was meant — read `None` and wrote the payload back unchanged while reporting success. That is the
-  same failure class the hatch exists to avoid, and it is what every "navigate by explicit schema
-  name with `.fieldNamed`" error message points at. Map parents are carved out: `.fieldNamed` is
-  also how a map KEY is addressed, and an absent key is data. Feature-detecting a RECORD field is
-  still available via `codec.schema.getField(name)`.
-- **A nested selector `.field(_.a.b)` is now a compile error** (#95): the selector parser shared by
-  every cursor macro matched `Lambda(_, Select(_, name))` with ANY receiver, so `_.inner.y` parsed
-  as the bare name `y` and the macro resolved it on the PARENT. Where the parent carries a field of
-  that name — and a record holding a nested record often does — the result was a well-typed,
-  perfectly lawful optic aimed at the wrong field: silent corruption on a 1:1, derived codec, with
-  no schema divergence involved, and the macros' own "nested paths … chain them" abort unreachable
-  for exactly the shape it was written for. A single-hop selector naming something that is not a
-  case field of the parent (a no-arg `def`) is now a compile error too, instead of a literal field
-  name that misses at runtime. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
-  (eo-circe) and `JsoniterPrism` / `JsoniterTraversal` (eo-jsoniter) all share the parser, so all
-  six surfaces are covered.
-- **Schema-field name resolution is linear in the record's field count, not quadratic** (#103): the
-  nominal rung above called a per-case-field lookup that, on an exact-name MISS, linear-scanned
-  every schema field with no early exit — it has to see a second match to call a name ambiguous. So
-  a drilled hop cost `arity x fields.size x nameLength`, and it was charged to exactly the codecs
-  the rung exists for, since a name transform (`withSnakeCaseFieldNames`, a custom
-  `transformFieldNames`, a `vulcan.Codec` rename map) guarantees the miss; an identity-named codec
-  answers from Avro's own name hash and never scanned. Measured on a 66-field snake_cased record:
-  **486 us -> 8.8 us per resolution**, with the n -> 2n cost ratio falling from 3.97 (quadratic) to
-  2.2 (linear). Resolution now builds one normalised-name index per record schema in a single pass
-  and caches it under the schema's REFERENCE identity behind weak keys, so a k-hop chain into one
-  record builds it once and a `def`-shaped optic — which re-resolves per operation — stops paying
-  per operation. The doctrine is untouched: `NominalResolutionParitySpec` diffs every verdict of the
-  new rung against the frozen pre-index implementation over 151,515 synthetic
-  (schema x case-name-list) pairs plus every fixture behind the #95 suites, and the diff is empty.
-  The exact-name fast path is unchanged and still allocation-free — an identity-named codec
-  neither builds nor consults an index, and its per-resolution allocation is byte-identical before
-  and after (24 / 64 / 152 / 280 B at n=2 / 12 / 33 / 66, all of it the `out` array). The index is
-  resolved ONCE per resolution and threaded through the case fields, not re-fetched per field:
-  per-field it would be a `ConcurrentHashMap` probe and a throwaway lookup key each, which is the
-  same multiplier this issue removes, merely one level down. Two costs are traded for the time,
-  both on the transformed path only and both measured with
-  `com.sun.management.ThreadMXBean.getThreadAllocatedBytes`: the normalised key is a materialised
-  `String`, so a resolution that misses the exact-name hash now allocates **~104 B per case field**
-  where the pairwise cursor walk it replaces allocated nothing (24 -> 256 B at n=2, 280 ->
-  7,168 B at n=66 per resolution); and building the index makes the FIRST resolution against a 1-2
-  field record **slower** (n=1 ~+250 ns, n=2 ~+100 ns, once per schema), with the crossover at n=3
-  and a 1.5x / 4.6x / 24x cold win at n=4 / 12 / 66.
-- **The cached name index is handed out as an unmodifiable view** (#103): `private[avro]` is a
-  Scala-only fence and the cached index is a process-wide singleton per schema, so returning the
-  live `HashMap` meant one in-module `put` could silently corrupt field resolution for that schema
-  for the life of the JVM. The wrapper, not the backing map, is what the cache stores, so the wrap
-  costs one allocation per schema rather than one per lookup and repeated lookups still hand back
-  the same instance.
+## [0.16.0] - 2026-09-18
 
 ### Added
 
+- **`cats-eo-zio` grows the ZIO-ecosystem seams** (#92): the kyo-expansion playbook replayed
+  across ZIO. `Chunks.each` / `at` / `eachNonEmpty` are the collection legs, built as
+  constructors over PRIVATE `Traverse` adapters (the orphan given belongs to zio-interop-cats).
+  Three `% Optional` sub-packages follow the avro/circe pattern — the caller adds the artifact:
+  **`eo.zio.schema`** fills zio-schema's own `AccessorBuilder` extension point with
+  `EoAccessorBuilder` (a Lens per record field, a Prism per enum case, a Traversal per
+  collection, no macros on our side), adds `DynamicValues` — the untyped-tree kit over
+  `DynamicValue` (constructor prisms, a generic `primitive(st)`, `field` / `at` / `key` /
+  `variant` / `each` navigation, `Plated`) — plus `schema.dynamicPrism` typed ↔ untyped and
+  `BinaryCodec.prism`, one byte face covering json / protobuf / avro / msgpack / thrift;
+  **`eo.zio.json`** ports the circe playbook to `zio.json.ast.Json` (`JsonValues` prisms,
+  navigation, `Plated`, a `text` String ↔ Json face, `JsonCodec.stringPrism`) and bridges
+  zio-json's own typed paths through `JsonCursor.optional`; **`eo.zio.prelude`** adds
+  `Validations.success` (an `Optional`, not a Prism — a prism-shaped write would drop the log)
+  and `eachFailure`, an error-polymorphic traversal over the accumulated `NonEmptyChunk`.
+  `TRef` / `TMap` focus ops return `USTM`, so focused updates across several transactional
+  references compose into ONE atomic transaction — something the `Ref` ops structurally cannot
+  express; the `TMap` ops are named `-At` because mixed-shape extension overloads break explicit
+  `(using myLens)` calls.
+- **Optic constructors from cats typeclasses, on the optic companions** (#91): `Traversal.each`
+  (`Traverse`), `Traversal.first` / `second` / `both` (`Bitraverse` slot traversals over Either,
+  Tuple2, Ior, Validated), `Modify.functor` (`Functor` — write-only, because `map` alone cannot
+  read), `Fold[F, A]` (`Foldable`), `Lens.representable(r)` (a lawful positional Lens at one
+  representation point: tabulate to rebuild, siblings read back from the original) and
+  `MultiFocus.representable`. They are CONSTRUCTORS, not givens: a cats container admits several
+  lawful optics at once over the same `(F[A], A)` pair, so no single one can be canonical —
+  clients declare their own given (bind a constructor, or write a direct SAM `Can*` instance).
+  The `Comonad` ⇒ Getter and `Applicative` ⇒ Review bridges are deliberately absent and the
+  package scaladoc says why.
 - **`.fields(...)` no longer stops at 22 selectors** (#96): the macro-synthesised
   `NamedTuple` focus no longer has a *spelling* ceiling. Up to 22 selectors the value tuple is spelled
   `scala.TupleN` and hearth builds it with that tuple's constructor; at 23 and above the value
@@ -144,6 +107,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Recompile, do not re-jar**: the avro resolution signatures are `private[avro]`, but
   `transparent inline` bakes the accessor into CALLER bytecode, so downstream projects must
   recompile against this release rather than swapping the jar.
+
+### Fixed
+
+- **`.field(_.x)` no longer targets the wrong schema field when the codec's schema is not
+  positionally 1:1 with the case class** (#95): resolution was `fields.get(declIdx).name` and
+  nothing else — the field's NAME, its TYPE and the record's ARITY were never consulted. Sound for
+  every kindlings-derived codec (1:1 by construction), unsound for a hand-written or `vulcan.Codec`
+  field list, which can add a computed column, drop one, or reorder. On those, `.field(_.b)` against
+  a schema `{a, computed, b, c}` read and wrote `computed`, producing **valid Avro bytes with wrong
+  content** — and no law could see it, because a mis-targeted optic is a perfectly lawful `Optional`
+  onto the wrong field. The same resolver backs `.fields`, `selectDynamic`, `.each.field` and
+  `.each.fields`, so all six sites were affected. Resolution now tries a NAME rung first, and only
+  when the codec has named the WHOLE case-field list onto distinct schema fields (total and
+  injective, exact or up to `_`/`-`/`.` and case); otherwise it abstains and declaration position
+  decides exactly as before — which is what keeps every name-transform codec (issue #35's
+  population) resolving correctly. Still construction-time only: zero per-operation cost.
+- **`.fieldNamed("typo")` is refused at construction instead of silently missing at runtime**
+  (#95): the explicit-schema-name escape hatch appended the literal with no schema lookup at all,
+  although the schema was in hand, so a typo — or the Scala field name passed where the schema name
+  was meant — read `None` and wrote the payload back unchanged while reporting success. That is the
+  same failure class the hatch exists to avoid, and it is what every "navigate by explicit schema
+  name with `.fieldNamed`" error message points at. Map parents are carved out: `.fieldNamed` is
+  also how a map KEY is addressed, and an absent key is data. Feature-detecting a RECORD field is
+  still available via `codec.schema.getField(name)`.
+- **A nested selector `.field(_.a.b)` is now a compile error** (#95): the selector parser shared by
+  every cursor macro matched `Lambda(_, Select(_, name))` with ANY receiver, so `_.inner.y` parsed
+  as the bare name `y` and the macro resolved it on the PARENT. Where the parent carries a field of
+  that name — and a record holding a nested record often does — the result was a well-typed,
+  perfectly lawful optic aimed at the wrong field: silent corruption on a 1:1, derived codec, with
+  no schema divergence involved, and the macros' own "nested paths … chain them" abort unreachable
+  for exactly the shape it was written for. A single-hop selector naming something that is not a
+  case field of the parent (a no-arg `def`) is now a compile error too, instead of a literal field
+  name that misses at runtime. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
+  (eo-circe) and `JsoniterPrism` / `JsoniterTraversal` (eo-jsoniter) all share the parser, so all
+  six surfaces are covered.
+- **Schema-field name resolution is linear in the record's field count, not quadratic** (#103): the
+  nominal rung above called a per-case-field lookup that, on an exact-name MISS, linear-scanned
+  every schema field with no early exit — it has to see a second match to call a name ambiguous. So
+  a drilled hop cost `arity x fields.size x nameLength`, and it was charged to exactly the codecs
+  the rung exists for, since a name transform (`withSnakeCaseFieldNames`, a custom
+  `transformFieldNames`, a `vulcan.Codec` rename map) guarantees the miss; an identity-named codec
+  answers from Avro's own name hash and never scanned. Measured on a 66-field snake_cased record:
+  **486 us -> 8.8 us per resolution**, with the n -> 2n cost ratio falling from 3.97 (quadratic) to
+  2.2 (linear). Resolution now builds one normalised-name index per record schema in a single pass
+  and caches it under the schema's REFERENCE identity behind weak keys, so a k-hop chain into one
+  record builds it once and a `def`-shaped optic — which re-resolves per operation — stops paying
+  per operation. The doctrine is untouched: `NominalResolutionParitySpec` diffs every verdict of the
+  new rung against the frozen pre-index implementation over 151,515 synthetic
+  (schema x case-name-list) pairs plus every fixture behind the #95 suites, and the diff is empty.
+  The exact-name fast path is unchanged and still allocation-free — an identity-named codec
+  neither builds nor consults an index, and its per-resolution allocation is byte-identical before
+  and after (24 / 64 / 152 / 280 B at n=2 / 12 / 33 / 66, all of it the `out` array). The index is
+  resolved ONCE per resolution and threaded through the case fields, not re-fetched per field:
+  per-field it would be a `ConcurrentHashMap` probe and a throwaway lookup key each, which is the
+  same multiplier this issue removes, merely one level down. Two costs are traded for the time,
+  both on the transformed path only and both measured with
+  `com.sun.management.ThreadMXBean.getThreadAllocatedBytes`: the normalised key is a materialised
+  `String`, so a resolution that misses the exact-name hash now allocates **~104 B per case field**
+  where the pairwise cursor walk it replaces allocated nothing (24 -> 256 B at n=2, 280 ->
+  7,168 B at n=66 per resolution); and building the index makes the FIRST resolution against a 1-2
+  field record **slower** (n=1 ~+250 ns, n=2 ~+100 ns, once per schema), with the crossover at n=3
+  and a 1.5x / 4.6x / 24x cold win at n=4 / 12 / 66.
+- **The cached name index is handed out as an unmodifiable view** (#103): `private[avro]` is a
+  Scala-only fence and the cached index is a process-wide singleton per schema, so returning the
+  live `HashMap` meant one in-module `put` could silently corrupt field resolution for that schema
+  for the life of the JVM. The wrapper, not the backing map, is what the cache stores, so the wrap
+  costs one allocation per schema rather than one per lookup and repeated lookups still hand back
+  the same instance.
+- **`.fields(...)` compiles without a user-written `AvroCodec[NamedTuple[...]]` in scope** (#97):
+  the macro spelled BOTH halves of the synthesised `NamedTuple` as a `*:` cons chain. That is
+  `=:=` the `TupleN` spelling, so it type-checked — but hearth builds a sub-23 arity NamedTuple
+  by calling the value tuple's primary constructor, and `*:` declares no value parameters, so
+  any third-party derivation that had to BUILD the tuple (kindlings' decoder rule, reached
+  through `AvroCodec.derived`) died at expansion with `wrong number of arguments at inlining`.
+  It only ever worked because a hand-written given short-circuited the derivation.
+  `LensMacro.namedTupleTypeOf` carried the identical pattern for the macro-lens focus and
+  complement; both now route through the shared `MacroSelectors.tupleTypeOf`. The spellings are
+  the same type, so existing user-written givens keep matching.
 
 ### Known limitations
 
@@ -787,5 +828,6 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/Constructive-Programming/eo/compare/v0.15.1...v0.16.0
 [0.1.0]: https://github.com/Constructive-Programming/eo/releases/tag/v0.1.0
