@@ -337,7 +337,7 @@ class AvroWalkSpec extends Specification:
   //   consulted, proving the -1 branch short-circuits before that)
   "AvroWalk.resolveFieldName: declIdx < 0 short-circuits to the literal scalaName" >> {
     val stringSchema = Schema.create(Schema.Type.STRING)
-    AvroWalk.resolveFieldName(stringSchema, Array.empty, "literalName", -1, "test") ===
+    AvroWalk.resolveFieldName(stringSchema, Array.empty, "literalName", -1, Nil, "test") ===
       "literalName"
   }
 
@@ -347,13 +347,13 @@ class AvroWalkSpec extends Specification:
     val stringSchema = Schema.create(Schema.Type.STRING)
     val nonRecordThrows =
       try
-        AvroWalk.fieldNameAt(stringSchema, "x", 0, "test")
+        AvroWalk.fieldNameAt(stringSchema, "x", 0, Nil, "test")
         false
       catch case _: IllegalArgumentException => true
 
     val outOfRangeThrows =
       try
-        AvroWalk.fieldNameAt(personSchema, "x", 99, "test")
+        AvroWalk.fieldNameAt(personSchema, "x", 99, Nil, "test")
         false
       catch case _: IllegalArgumentException => true
 

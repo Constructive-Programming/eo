@@ -241,16 +241,24 @@ final class AvroPrism[A] private[avro] (
   // ---- Path widening (used by macro extensions) ---------------------
 
   /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. `scalaName` is the
-    * case-class field name and `declIdx` its declaration index; the actual schema field name (which
-    * may differ under a snake/kebab/custom transform or vulcan overrides) is resolved off the
-    * cached schema by position — see [[AvroWalk.resolveFieldName]] (issue #35).
+    * case-class field name, `declIdx` its declaration index and `caseNames` the parent's whole
+    * case-field list; the actual schema field name (which may differ under a snake/custom transform
+    * or vulcan overrides) is resolved off the cached schema by the name-then-position rule — see
+    * [[AvroWalk.fieldNameAt]] (issues #35 and #95).
     */
-  private[avro] def widenPath[B](scalaName: String, declIdx: Int)(using
+  private[avro] def widenPath[B](scalaName: String, declIdx: Int, caseNames: List[String])(using
       codecB: AvroCodec[B]
   ): AvroPrism[B] =
     widenPathStep[B](
       PathStep.Field(
-        AvroWalk.resolveFieldName(rootSchemaCached, path, scalaName, declIdx, "AvroPrism.field")
+        AvroWalk.resolveFieldName(
+          rootSchemaCached,
+          path,
+          scalaName,
+          declIdx,
+          caseNames,
+          "AvroPrism.field",
+        )
       )
     )
 
@@ -289,9 +297,10 @@ final class AvroPrism[A] private[avro] (
   private[avro] def toFieldsPrism[B](
       scalaNames: Array[String],
       declIdxs: Array[Int],
+      caseNames: List[String],
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
     new AvroPrism[B](
-      new AvroFocus.Fields[B](path, resolveFieldNames(scalaNames, declIdxs), codecB),
+      new AvroFocus.Fields[B](path, resolveFieldNames(scalaNames, declIdxs, caseNames), codecB),
       rootSchemaCached,
     )
 
@@ -301,6 +310,7 @@ final class AvroPrism[A] private[avro] (
   private def resolveFieldNames(
       scalaNames: Array[String],
       declIdxs: Array[Int],
+      caseNames: List[String],
   ): Array[String] =
     Array.tabulate(scalaNames.length)(i =>
       AvroWalk.resolveFieldName(
@@ -308,6 +318,7 @@ final class AvroPrism[A] private[avro] (
         path,
         scalaNames(i),
         declIdxs(i),
+        caseNames,
         "AvroPrism.fields",
       )
     )
