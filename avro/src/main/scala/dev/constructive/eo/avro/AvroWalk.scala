@@ -435,7 +435,13 @@ private[avro] object AvroWalk:
     *
     * '''Known residual''': a codec that both renames beyond recognition AND reorders (equal arity,
     * no name hit) still resolves by position, and is still wrong — nothing about the names or the
-    * shape can see it. Use [[AvroPrism.fieldNamed]] there.
+    * shape can see it. Use [[AvroPrism.fieldNamed]] there. Nothing SCHEMA-DERIVED can close it
+    * either — not the record's name, not its parsing fingerprint: the residual pair is two renamed,
+    * swapped columns of the same physical type within ONE record, so both candidate readings carry
+    * the same fullname and the same fingerprint by construction, and a schema-derived value sees
+    * only one of the two operands the comparison would need. The only mechanism that reaches this
+    * class is the differential codec probe (issue #100) — encoding a discriminating value through
+    * the codec and reading which slot moved.
     *
     * '''Known behaviour change''': a codec that PERMUTES the Scala names (writes case field `a`
     * into a schema field literally named `b`, and vice versa) resolved correctly by position and
@@ -551,6 +557,15 @@ private[avro] object AvroWalk:
     * hash, which is O(1) and allocates nothing — the identity-named codec never reaches any of the
     * machinery below. Only a miss consults the normalised index (issue #103), which is built once
     * per record schema and cached, rather than re-scanning every schema field per case field.
+    *
+    * What the miss path pays INSTEAD of the scan, stated because it is a real regression and the
+    * repo's benchmark doctrine gates on bytes: [[normalisedName]] materialises a `String`, so a
+    * resolution that misses the exact-name hash allocates ~128 B per case field where the pairwise
+    * cursor walk it replaced allocated nothing (measured: 24 -> 280 B at n=2, 280 -> 8,728 B at
+    * n=66). That is the deliberate trade — ~490 us of CPU per resolution for ~8 KB of nursery at
+    * n=66 — and it is per OPERATION, not per construction, for a `def`-shaped optic. Closing it
+    * would mean probing the index by a cursor-computed hash of the normalised name and confirming
+    * the candidate with an allocation-free pairwise comparison: a larger change than issue #103.
     */
   private def nominalIndex(record: Schema, scalaName: String): Int =
     val exact = record.getField(scalaName)
@@ -597,6 +612,11 @@ private[avro] object AvroWalk:
     * the population the nominal rung exists for, since an identity-named codec was already right
     * positionally. Collision detection is preserved and merely MOVED: a key already present while
     * BUILDING is the same signal the scan's second hit produced, seen once instead of per query.
+    *
+    * Not free at every size: building the index costs more than the scan it replaces on a ONE- or
+    * TWO-field record, so the FIRST resolution against such a schema is measurably slower (~+250 ns
+    * at n=1, ~+100 ns at n=2, once per schema, amortised over every later hop). The crossover is at
+    * n=3; by n=66 the first resolution is ~24x faster and every later one ~57x.
     *
     * `private[avro]` only so the differential harness can compare cache instances directly.
     */

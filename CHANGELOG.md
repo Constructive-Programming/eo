@@ -41,6 +41,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   name that misses at runtime. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
   (eo-circe) and `JsoniterPrism` / `JsoniterTraversal` (eo-jsoniter) all share the parser, so all
   six surfaces are covered.
+- **Schema-field name resolution is linear in the record's field count, not quadratic** (#103): the
+  nominal rung above called a per-case-field lookup that, on an exact-name MISS, linear-scanned
+  every schema field with no early exit — it has to see a second match to call a name ambiguous. So
+  a drilled hop cost `arity x fields.size x nameLength`, and it was charged to exactly the codecs
+  the rung exists for, since a name transform (`withSnakeCaseFieldNames`, a custom
+  `transformFieldNames`, a `vulcan.Codec` rename map) guarantees the miss; an identity-named codec
+  answers from Avro's own name hash and never scanned. Measured on a 66-field snake_cased record:
+  **486 us -> 8.8 us per resolution**, with the n -> 2n cost ratio falling from 3.97 (quadratic) to
+  2.2 (linear). Resolution now builds one normalised-name index per record schema in a single pass
+  and caches it under the schema's REFERENCE identity behind weak keys, so a k-hop chain into one
+  record builds it once and a `def`-shaped optic — which re-resolves per operation — stops paying
+  per operation. The doctrine is untouched: `NominalResolutionParitySpec` diffs every verdict of the
+  new rung against the frozen pre-index implementation over 151,515 synthetic
+  (schema x case-name-list) pairs plus every fixture behind the #95 suites, and the diff is empty.
+  The exact-name fast path is unchanged and still allocation-free — an identity-named codec
+  neither builds nor consults an index. Two costs are traded for the time, both on the transformed
+  path only and both measured: the normalised key is a materialised `String`, so a resolution that
+  misses the exact-name hash now allocates **~128 B per case field** where the pairwise cursor walk
+  it replaces allocated nothing (24 -> 280 B at n=2, 280 -> 8,728 B at n=66 per resolution); and
+  building the index makes the FIRST resolution against a 1-2 field record **slower** (n=1
+  ~+250 ns, n=2 ~+100 ns, once per schema), with the crossover at n=3 and a 1.5x / 4.6x / 24x cold
+  win at n=4 / 12 / 66.
 
 ### Changed
 
