@@ -98,7 +98,7 @@ object JsoniterPrismMacro:
       selector: Expr[A => B],
   )(using q: Quotes): String =
     import quotes.reflect.*
-    MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
+    val name = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         s"$who: selector must be a single-field accessor like `_.fieldName`.\n"
           + "Nested paths are not yet supported inside a single call;\n"
@@ -106,6 +106,8 @@ object JsoniterPrismMacro:
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A](who, name)
+    name
 
   /** Shared backbone for the Dynamic sugar — name validation + field lookup live in the shared
     * `MacroSelectors.caseFieldType` (eo-generics); this stub owns the `JsonValueCodec` summon.

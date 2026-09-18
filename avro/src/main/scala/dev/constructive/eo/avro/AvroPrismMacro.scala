@@ -25,10 +25,11 @@ object AvroPrismMacro:
       report.errorAndAbort(
         "AvroPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + "Nested paths are not yet supported inside a single call;\n"
-          + "chain them: `_.field(_.a).field(_.b)`.\n"
+          + "chain them: `.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A]("AvroPrism.field", name)
 
     '{
       $parent.widenPath[B](
@@ -209,9 +210,12 @@ object AvroPrismMacro:
     val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "AvroTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
+          + "Nested paths are not yet supported inside a single call;\n"
+          + "chain them: `.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A]("AvroTraversal.field", name)
 
     '{
       $parent.widenSuffix[B](

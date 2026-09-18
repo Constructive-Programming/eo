@@ -1,5 +1,6 @@
 package dev.constructive.eo.generics
 
+import scala.annotation.tailrec
 import scala.quoted.*
 
 /** Quote-context selector-AST helpers shared between [[LensMacro]] and the `JsonPrismMacro` /
@@ -8,21 +9,56 @@ import scala.quoted.*
   */
 object MacroSelectors:
 
-  /** Loose variant of [[extractSingleFieldName]] — strips `Inlined` / `Typed` wrappers around the
-    * lambda AND around its `Select` body, and does NOT require the `Select` receiver to be the bare
-    * lambda parameter. Used by the cursor macros' `.field(_.x)` sugar, whose selectors are always
-    * single-hop but may arrive wrapped. Kept distinct from [[extractSingleFieldName]] (which
-    * rejects nested chains by construction) so callers that need the strict form still have it.
+  /** Wrapper-tolerant variant of [[extractSingleFieldName]] for the cursor macros' `.field(_.x)`
+    * sugar: it strips `Inlined` / `Typed` around the lambda, around its `Select` body, AND around
+    * the `Select`'s RECEIVER, which the strict form does not.
+    *
+    * '''Receiver-is-the-lambda-parameter is load-bearing (issue #95).''' This used to match
+    * `Lambda(_, Select(_, name))` with ANY receiver, so a nested path `_.inner.y` —
+    * `Select(Select(Ident(_), "inner"), "y")` — parsed as the single name `"y"` and every cursor
+    * macro then resolved `y` on the PARENT. On a record that happens to carry a field of that name
+    * (and an inner record always might) the result is a well-typed, perfectly lawful optic aimed at
+    * the wrong field: silent corruption with no schema divergence involved, and the macros' own
+    * "nested paths … chain them" abort unreachable for exactly the shape it was written for.
+    * Rejecting the nested receiver here makes that abort fire.
     */
   def extractFieldName(using Quotes)(t: quotes.reflect.Term): Option[String] =
     import quotes.reflect.*
-    t match
-      case Inlined(_, _, inner)                      => extractFieldName(inner)
-      case Typed(inner, _)                           => extractFieldName(inner)
-      case Lambda(_, Select(_, name))                => Some(name)
-      case Lambda(_, Inlined(_, _, Select(_, name))) => Some(name)
-      case Lambda(_, Typed(Select(_, name), _))      => Some(name)
-      case _                                         => None
+    @tailrec def unwrap(term: Term): Term =
+      term match
+        case Inlined(_, _, inner) => unwrap(inner)
+        case Typed(inner, _)      => unwrap(inner)
+        case other                => other
+    unwrap(t) match
+      case Lambda(_, body) =>
+        unwrap(body) match
+          case Select(receiver, name) =>
+            unwrap(receiver) match
+              case Ident(_) => Some(name)
+              case _        => None
+          case _ => None
+      case _ => None
+
+  /** Abort unless `name` is a case field of `A`.
+    *
+    * The other half of the cursor macros' selector rung (issue #95): a single-hop selector naming
+    * something that is not a case field — `_.hashCode`, or a no-arg method on the case class — used
+    * to be passed through as a LITERAL field name and become a runtime miss on the wire format. The
+    * declaration index the resolvers ask for comes back `-1` for exactly those, and `-1` is also
+    * the legitimate "this parent has no case fields" signal, so the two cannot be told apart
+    * downstream. They are told apart here instead.
+    *
+    * Skipped when `A` has no case fields at all (a NamedTuple parent, say), which is the shape the
+    * literal-name fallback exists for.
+    */
+  def requireCaseField[A: Type](using Quotes)(who: String, name: String): Unit =
+    import quotes.reflect.*
+    val known = TypeRepr.of[A].typeSymbol.caseFields.map(_.name)
+    if known.nonEmpty && !known.contains(name) then
+      report.errorAndAbort(
+        s"$who: '$name' is not a case field of ${Type.show[A]}."
+          + s" Known fields: ${known.mkString(", ")}."
+      )
 
   /** The single element type of a Scala collection type `A` (via its `Iterable` base type), or
     * abort with a `who`-tagged error. Shared by the cursor macros' `.at` / `.each` sugar.
