@@ -512,7 +512,11 @@ private[avro] object AvroWalk:
     *
     * An empty `caseNames` (a NamedTuple parent, which has no case fields) abstains too.
     */
-  private def totalNominalIndex(record: Schema, caseNames: List[String], declIdx: Int): Int =
+  private[avro] def totalNominalIndex(
+      record: Schema,
+      caseNames: List[String],
+      declIdx: Int,
+  ): Int =
     val arity = caseNames.size
     // A total, injective map needs at least as many schema fields as case fields — a free
     // precondition that skips the whole scan for the codec that drops a field.
