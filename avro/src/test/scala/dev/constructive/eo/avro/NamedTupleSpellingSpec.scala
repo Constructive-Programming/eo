@@ -19,12 +19,14 @@ import org.specs2.mutable.Specification
   *   - `String *: Int *: EmptyTuple` (a `*:` cons chain), and
   *   - `(String, Int)` (i.e. `scala.Tuple2[String, Int]`)
   *
-  * — but only the second is constructible by hearth's `SyntheticNamedTupleConstructor`, which for
-  * arity &lt; 23 emits `new <Values-primary-constructor>(args…)`. For the cons spelling that is
+  * — but only the second is constructible by hearth's `SyntheticNamedTupleConstructor` below arity
+  * 23, where it emits `new <Values-primary-constructor>(args…)`. For the cons spelling that is
   * `new *:(a, b)`, and `*:` declares no value parameters, so any third-party derivation that
   * '''builds''' the NamedTuple (kindlings' `AvroDecoderHandleAsNamedTupleRule`) blows up with
   * `wrong number of arguments at inlining … expected: 0, found: N` plus a secondary
-  * `a reference to method decode_…$macro$N was used outside the scope where it was defined`.
+  * `a reference to method decode_…$macro$N was used outside the scope where it was defined`. That
+  * `n < 23` branch is unchanged in hearth 0.4.2 — only arity '''>= 23''' gained a `Tuple.fromArray`
+  * path — so the TupleN spelling stays mandatory at 2..22, permanently.
   *
   * Every other in-repo `.fields` spec hand-declares its own `AvroCodec[NamedTuple[…]]` given
   * (spelled `TupleN`, because that is what a human writes), which short-circuits kindlings' NT rule
@@ -136,31 +138,72 @@ class NamedTupleSpellingSpec extends Specification:
         org.specs2.execute.Failure(s"complement round-trip failed: $t"): org.specs2.execute.Result
   }
 
-  // ---- the known arity ceiling (pins CURRENT behaviour) -----------------
+  // ---- above the old arity ceiling (was a pinned failure) ---------------
 
   // covers: at 23+ selectors there IS no `TupleN` spelling — `(A, …, A)` with 23 components IS
-  //   the `*:` cons chain — so the fix above cannot reach that far, and hearth 0.4.0 (shipped by
-  //   kindlings-avro-derivation 0.3.0, this project's pin) still fails to construct it.
-  //
-  //   This row PINS the ceiling rather than leaving it a silent gap. hearth 0.4.2 / kindlings
-  //   0.3.2 route every arity through `Tuple.fromArray` and would make it compile; when this
-  //   project bumps kindlings, THIS TEST WILL FAIL — that failure is the signal to delete the
-  //   row and the ceiling note in the `.fields` scaladoc, not a regression.
-  "`.fields` at arity 23: still unsupported on kindlings 0.3.0 / hearth 0.4.0 (documented ceiling)" >> {
-    val wide = typeCheckErrors("""
-        import dev.constructive.eo.avro.codecPrism
-        import dev.constructive.eo.avro.NamedTupleSpellingSpec.Wide23
-        codecPrism[Wide23].fields(
-          _.f01, _.f02, _.f03, _.f04, _.f05, _.f06, _.f07, _.f08,
-          _.f09, _.f10, _.f11, _.f12, _.f13, _.f14, _.f15, _.f16,
-          _.f17, _.f18, _.f19, _.f20, _.f21, _.f22, _.f23,
-        )
+  //   the `*:` cons chain — so the TupleN spelling above cannot reach that far. This used to be
+  //   a pinned FAILURE (hearth 0.4.0 emitted `new *:(args…)` and `*:` takes no value params).
+  //   hearth 0.4.2's `SyntheticNamedTupleConstructor` routes arity >= 23 through
+  //   `Tuple.fromArray` instead, so the row is now the positive assertion its own note asked for.
+  //   Still given-free, like every other row here — this is the auto-derivation path.
+  //   The wide end of the surface (mixed field types, un-selected siblings, reference identity)
+  //   is covered separately by `WideFieldsArityCeilingSpec`.
+  "`.fields` at arity 23: compiles and round-trips on hearth 0.4.2 (ceiling broken)" >> {
+    val record = wide23Record
+    val L = codecPrism[Wide23]
+      .fields(
+        _.f01,
+        _.f02,
+        _.f03,
+        _.f04,
+        _.f05,
+        _.f06,
+        _.f07,
+        _.f08,
+        _.f09,
+        _.f10,
+        _.f11,
+        _.f12,
+        _.f13,
+        _.f14,
+        _.f15,
+        _.f16,
+        _.f17,
+        _.f18,
+        _.f19,
+        _.f20,
+        _.f21,
+        _.f22,
+        _.f23,
+      )
+      .record
+
+    L.getOptionUnsafe(record) match
+      case Some(nt) =>
+        // `Tuple.fromArray` builds a TupleXXL, NOT a TupleN — the branch that fixed this.
+        (nt.asInstanceOf[AnyRef].getClass.getName === "scala.runtime.TupleXXL")
+          .and(nt.f01 === "a01")
+          .and(nt.f23 === "a23")
+      case None =>
+        org.specs2.execute.Failure("expected Some(namedTuple)"): org.specs2.execute.Result
+  }
+
+  // covers: hearth 0.4.2's fix is scoped to arity >= 23 ONLY — its `n < 23` branch still emits
+  //   `new <Values-primary-constructor>(args…)`, which for a cons chain is the value-parameterless
+  //   `new *:(a, b)`. So `MacroSelectors.tupleTypeOf`'s "TupleN at <= 22, cons fold above" split is
+  //   a PERMANENT requirement of the hearth contract, not a workaround the bump makes redundant:
+  //   collapsing it to a uniform cons fold would re-break every `.fields` call of arity 2..22.
+  //   This row is the executable proof, so a future simplification pass fails loudly.
+  "a cons-spelled NamedTuple below arity 23 is still unconstructible (the TupleN branch is permanent)" >> {
+    val errs = typeCheckErrors("""
+        import hearth.kindlings.avroderivation.AvroDecoder
+        type ConsNT =
+          NamedTuple.NamedTuple["a" *: "b" *: EmptyTuple, String *: String *: EmptyTuple]
+        val d: AvroDecoder[ConsNT] = AvroDecoder.derived
       """)
 
-    (wide.nonEmpty === true)
-      .and(
-        wide.exists(_.message.contains("too many arguments for constructor *:")) === true
-      )
+    (errs.nonEmpty === true)
+      .and(errs.exists(_.message.contains("*:")) === true)
   }
 
   // ---- helpers ----------------------------------------------------------
@@ -193,7 +236,9 @@ object NamedTupleSpellingSpec:
   def skuRecord(s: Sku): GenericRecord =
     summon[AvroCodec[Sku]].encode(s).asInstanceOf[GenericRecord]
 
-  /** 23 fields — one past the last arity that has a `TupleN` spelling. */
+  /** 23 fields — one past the last arity that has a `TupleN` spelling, so `.fields` over all of
+    * them is spelled as a `*:` cons chain and built by hearth's `Tuple.fromArray` branch.
+    */
   case class Wide23(
       f01: String,
       f02: String,
@@ -225,6 +270,37 @@ object NamedTupleSpellingSpec:
     given AvroEncoder[Wide23] = AvroEncoder.derived
     given AvroDecoder[Wide23] = AvroDecoder.derived
     given AvroSchemaFor[Wide23] = AvroSchemaFor.derived
+
+  lazy val wide23Record: GenericRecord =
+    summon[AvroCodec[Wide23]]
+      .encode(
+        Wide23(
+          "a01",
+          "a02",
+          "a03",
+          "a04",
+          "a05",
+          "a06",
+          "a07",
+          "a08",
+          "a09",
+          "a10",
+          "a11",
+          "a12",
+          "a13",
+          "a14",
+          "a15",
+          "a16",
+          "a17",
+          "a18",
+          "a19",
+          "a20",
+          "a21",
+          "a22",
+          "a23",
+        )
+      )
+      .asInstanceOf[GenericRecord]
 
   // Deliberately NO `given AvroCodec[NamedTuple[…]]` anywhere in this file — see the class
   // scaladoc. Adding one would silently restore the pre-fix pass.
