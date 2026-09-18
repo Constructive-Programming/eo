@@ -367,7 +367,15 @@ object AvroPrism:
     transparent inline def each: Any =
       ${ AvroPrismMacro.eachImpl[A]('o) }
 
-  /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields. */
+  /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields.
+    *
+    * The `AvroCodec` for the synthesised NamedTuple is summoned at the call site; with no
+    * hand-written given in scope it auto-derives through kindlings. That works for '''2 to 22'''
+    * selectors. At 23 or more, Scala has no `TupleN` spelling left — the focus type IS a `*:` cons
+    * chain — and kindlings 0.3.0 / hearth 0.4.0 cannot construct one, so the call fails to compile
+    * with `too many arguments for constructor *:`. Chain two `.fields` covers, or drill with
+    * `.field`, until the dependency moves to hearth ≥ 0.4.2. (Issue #96.)
+    */
   extension [A](o: AvroPrism[A])
 
     transparent inline def fields(inline selectors: (A => Any)*): Any =

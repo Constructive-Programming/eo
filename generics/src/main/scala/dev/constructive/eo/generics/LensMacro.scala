@@ -317,16 +317,19 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
 
         '{ BijectionIso[S, S, focus, focus]($get, $reverseGet) }
 
-  /** Build `NamedTuple[Names, Values]` `TypeRepr` from a list of (name, type) pairs. */
+  /** Build `NamedTuple[Names, Values]` `TypeRepr` from a list of (name, type) pairs.
+    *
+    * Both halves go through [[MacroSelectors.tupleTypeOf]], so they come out spelled `TupleN` (not
+    * as a `*:` cons chain) up to arity 22 — the spelling a third-party derivation asked for a codec
+    * over the focus or the complement can actually CONSTRUCT. See issue #96 and `tupleTypeOf`'s
+    * scaladoc for the hearth mechanics.
+    */
   private def namedTupleTypeOf(names: List[String], tpes: List[TypeRepr]): TypeRepr =
     val namesTpe =
-      names.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
-        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
-      }
-    val valuesTpe =
-      tpes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
+      MacroSelectors.tupleTypeOf(using quotes)(
+        names.map(n => ConstantType(StringConstant(n)): TypeRepr)
+      )
+    val valuesTpe = MacroSelectors.tupleTypeOf(using quotes)(tpes)
     TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
 
   /** Shared prelude for [[buildMultiLens]] / [[buildMultiIso]] — `(sTpe, allFieldSyms,

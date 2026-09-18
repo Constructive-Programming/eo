@@ -108,6 +108,35 @@ object MacroSelectors:
     }
     (name, cases.indexWhere(_.name == name), aTpe.memberType(fieldSym).widen)
 
+  /** Build the tuple type carrying `ts` — `scala.TupleN[T1, …, Tn]` up to arity 22, a `*:` cons
+    * chain above it.
+    *
+    * '''Why the spelling matters (issue #96).''' `T1 *: T2 *: EmptyTuple` and `(T1, T2)` are `=:=`,
+    * so for type-checking either will do. They are NOT interchangeable for a downstream macro that
+    * has to '''construct''' a value of the type: hearth's `SyntheticNamedTupleConstructor` (behind
+    * kindlings' `NamedTuple` derivation rules, and hence behind `AvroCodec.derived` for a `.fields`
+    * focus) emits `new <primaryConstructor>(args…)` for arity &lt; 23 — which for the cons spelling
+    * is `new *:(a, b)`, and `*:` declares no value parameters. Every derivation over a
+    * macro-synthesised NamedTuple then died with `wrong number of arguments at inlining … (): (T1,
+    * T2), expected: 0, found: 2`. Emitting what a human would have written keeps them working, and
+    * costs nothing: user-written givens over the `TupleN` spelling still match either way.
+    *
+    * Above arity 22 there is no `TupleN` to reach for — `(A, …, A)` with 23 components already
+    * '''is''' the cons chain — so the fallback is forced, and the hazard survives for consumers on
+    * hearth &lt; 0.4.2 (which routes that range through `Tuple.fromArray` instead).
+    */
+  def tupleTypeOf(using
+      q: Quotes
+  )(ts: List[q.reflect.TypeRepr]): q.reflect.TypeRepr =
+    import quotes.reflect.*
+    if ts.isEmpty then TypeRepr.of[EmptyTuple]
+    else if ts.sizeIs <= 22 then
+      Symbol.requiredClass(s"scala.Tuple${ts.size}").typeRef.appliedTo(ts)
+    else
+      ts.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
+        TypeRepr.of[*:].appliedTo(List(t, acc))
+      }
+
   /** Validate a `.fields(_.a, _.b, …)` varargs selector list against `A`'s case-class schema and
     * synthesise the SELECTOR-order NamedTuple type: arity ≥ 2, single-hop selectors only, known
     * fields, no duplicates. Returns the selected names (selector order), their declaration indices
@@ -181,14 +210,10 @@ object MacroSelectors:
     }
     val selectorTypes: List[TypeRepr] = selectorSyms.map(sym => aTpe.memberType(sym))
 
+    // TupleN spelling on both halves — see `tupleTypeOf` (issue #96).
     val namesTpe: TypeRepr =
-      selectedNames.foldRight(TypeRepr.of[EmptyTuple]) { (n, acc) =>
-        TypeRepr.of[*:].appliedTo(List(ConstantType(StringConstant(n)), acc))
-      }
-    val valuesTpe: TypeRepr =
-      selectorTypes.foldRight(TypeRepr.of[EmptyTuple]) { (t, acc) =>
-        TypeRepr.of[*:].appliedTo(List(t, acc))
-      }
+      tupleTypeOf(selectedNames.map(n => ConstantType(StringConstant(n)): TypeRepr))
+    val valuesTpe: TypeRepr = tupleTypeOf(selectorTypes)
     val ntTpe: TypeRepr =
       TypeRepr.of[scala.NamedTuple.NamedTuple].appliedTo(List(namesTpe, valuesTpe))
 

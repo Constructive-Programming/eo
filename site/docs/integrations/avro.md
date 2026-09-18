@@ -211,6 +211,23 @@ selector-order; the NamedTuple type reflects that. Arity must be
 import dev.constructive.eo.docs.avrodocs.given
 ```
 
+Naming the NamedTuple codec like that is **optional** — with no
+given in scope the macro's summon auto-derives one through
+kindlings. Declaring it is still worth it when several `.fields`
+covers share a shape (one derivation instead of one per call
+site), or when the selection reaches a `union`-shaped slot: a
+kindlings-derived NamedTuple codec re-derives every *named* type
+inside the selection under the Scala package namespace, which an
+enclosing union will refuse. Name the codec (or drill with
+`.field`) in that case.
+
+The auto-derived route covers **2 to 22** selectors. At 23 or more
+there is no `TupleN` spelling left — the NamedTuple's value tuple
+*is* a `*:` cons chain — and the derivation backend this project
+pins (kindlings 0.3.0 / hearth 0.4.0) cannot construct one, in
+either the derived or the hand-written form. Split a wider
+selection into several `.fields` covers.
+
 ```scala mdoc
 val nameAge = codecPrism[Person].fields(_.name, _.age)
 
