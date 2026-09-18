@@ -29,6 +29,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The one thing in this workflow that IS a gate. `NominalResolutionCostSpec`'s
+  # three ratio assertions — 2n/n and 4n/n over the schema's field count, and
+  # snake/identity — are armed only by `-Deo.costGate=true`, and this is the lane
+  # that arms them (issue #103). They are a clock, and the push/PR test matrix is
+  # three JDK jobs on shared runners where project policy says a nanosecond is
+  # +/-15-50%, so leaving them there would gate every diff in the repo on someone
+  # else's noisy neighbour. The spec's cost table prints on every lane either way.
+  #
+  # A SEPARATE JOB, not a step in `report`, for two reasons: a timing flake must
+  # not abort the coverage and mutation sweep and cost this tag its QA artifacts,
+  # and a runner doing nothing else is the only place a ratio of wall-clock
+  # numbers means anything. It also never sees scoverage-instrumented bytecode,
+  # which would make any timing meaningless.
+  cost:
+    name: Nominal resolution cost gate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      SBT_OPTS: "-Xmx4g -Xss8m -Dsbt.color=false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Setup Java (temurin@25)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: sbt
+
+      - name: Cost ratios (armed)
+        run: sbt -batch -Deo.costGate=true "avroIntegration/testOnly *NominalResolutionCostSpec"
+
   report:
     name: Coverage + mutation
     runs-on: ubuntu-22.04

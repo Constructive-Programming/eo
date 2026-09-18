@@ -51,6 +51,33 @@ object NominalCostFixtures:
   /** Keeps the measured results reachable so nothing under test folds away. */
   val sink: AtomicLong = new AtomicLong(0L)
 
+  /** Is the WALL-CLOCK gate armed? `-Deo.costGate=true` arms it; it is disarmed by default.
+    *
+    * Disarmed means disarmed for the `Test (temurin@17 / @21 / @25)` matrix that gates every push
+    * and every PR, and that is the point. Those are shared GitHub runners, and this project's
+    * standing rule is that a nanosecond on a shared box is +/-15-50% — only B/op and within-run
+    * ratios are load-bearing — which is why timing claims live in the JMH bench pipeline and not in
+    * `sbt test`. A ratio of two timings taken in one interleaved run is the least noisy thing a
+    * clock can give, and it is still a clock: the 2n/n bound of 3.0 sits only 39% above the
+    * measured 2.16, so one contended window on one of the three JDK lanes reds the whole matrix for
+    * a reason that has nothing to do with the diff under test.
+    *
+    * Armed in
+    * [[https://github.com/Constructive-Programming/eo/blob/main/.github/workflows/quality.yml quality.yml]],
+    * which runs on release tags and on demand — the same lane, and for the same reason, as the
+    * coverage and mutation reports: expensive, noise-sensitive checks worth having at release time
+    * and not worth a flaky red on every push. The gate is not weakened there; it is the same
+    * assertion, run where a clock means something.
+    */
+  val costGateArmed: Boolean =
+    java.lang.Boolean.parseBoolean(sys.props.getOrElse("eo.costGate", "false"))
+
+  /** Why a gated example skipped, printed in the specs2 output so the exclusion is VISIBLE rather
+    * than a quietly absent assertion.
+    */
+  val costGateDisarmed: String =
+    "wall-clock gate disarmed: re-run with -Deo.costGate=true (quality.yml arms it on release tags)"
+
   /** Nanoseconds per resolution, MIN over `reps` passes of `iters` resolutions.
     *
     * Min and not mean: this box is noisy (project policy — ns/op here is +/-15-50%, only within-run
