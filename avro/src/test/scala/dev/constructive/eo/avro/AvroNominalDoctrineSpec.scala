@@ -21,6 +21,16 @@ import org.specs2.mutable.Specification
   * implementation: parity against a frozen copy of the code cannot detect a wrong doctrine, which
   * is exactly the #104 failure mode.
   *
+  * That is the division of labour with [[NominalResolutionOracle]] and
+  * `vulcan.NominalResolutionParitySpec`, which #107 added alongside its index rewrite. That oracle
+  * is the OLD ALGORITHM frozen verbatim, and its spec asks "does the cached-index rung still agree
+  * with the scan it replaced" — a refactor gate, which cannot fire if the algorithm was already
+  * resolving to the wrong field. This one asks "does the rung agree with what the rung is FOR", and
+  * is written without reading the implementation. Both are wanted: #107's rewrite deleted
+  * `sameFieldName` and the fuzzy per-field scan outright, and the fact that this doctrine oracle
+  * still agrees cell for cell is the evidence that the rewrite preserved the CONTRACT and not just
+  * the code path.
+  *
   * The corpus is an exhaustive enumeration rather than a `Gen`: the discriminating cells are
   * threshold cells (a duplicate resolution landing on slot 0, a fuzzy ambiguity whose FIRST hit is
   * at index 0 versus at index >= 1, `declIdx` exactly equal to the schema's field count) that a
@@ -30,11 +40,14 @@ import org.specs2.mutable.Specification
   * throw loudly"` example, which tested `declIdx = 99` against a 2-field schema — a cell where the
   * `>=` guard and a `>` mutant agree.
   *
-  * covers: AvroWalk.scala:543 `if exact != null` (exact-beats-normalised fast path),
-  * AvroWalk.scala:526 `j < 0` and `&&` in the injectivity scan, AvroWalk.scala:549
-  * `if found >= 0 then -1` (ambiguity => abstain), AvroWalk.scala:572 the char inequality in
-  * `sameFieldName`, AvroWalk.scala:519 the four disjuncts of the all-or-nothing precondition,
-  * AvroWalk.scala:459 `declIdx >= fields.size` at the exact boundary
+  * covers (against post-#107 `AvroWalk`, which replaced the fuzzy per-field scan with
+  * `normalisedName` + a cached `normalisedNameIndex`): `if exact != null` in `totalNominalIndex`
+  * (exact-beats-normalised fast path), `j < 0` and the `&&` in its `seen` injectivity scan, the
+  * `idx < 0` verdict on a `null` or `Ambiguous` index hit (ambiguity => abstain), the char
+  * classification and `Character.toLowerCase` in `normalisedName`, the four disjuncts of the
+  * all-or-nothing precondition, and `declIdx >= fields.size` in `fieldNameAt` at the exact
+  * boundary. Line numbers are deliberately not quoted: the pre-#107 ones this spec was written
+  * against are already gone.
   */
 class AvroNominalDoctrineSpec extends Specification:
 
