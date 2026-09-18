@@ -30,16 +30,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   references compose into ONE atomic transaction — something the `Ref` ops structurally cannot
   express; the `TMap` ops are named `-At` because mixed-shape extension overloads break explicit
   `(using myLens)` calls.
-- **Optic constructors from cats typeclasses, on the optic companions** (#91): `Traversal.each`
-  (`Traverse`), `Traversal.first` / `second` / `both` (`Bitraverse` slot traversals over Either,
-  Tuple2, Ior, Validated), `Modify.functor` (`Functor` — write-only, because `map` alone cannot
-  read), `Fold[F, A]` (`Foldable`), `Lens.representable(r)` (a lawful positional Lens at one
-  representation point: tabulate to rebuild, siblings read back from the original) and
-  `MultiFocus.representable`. They are CONSTRUCTORS, not givens: a cats container admits several
-  lawful optics at once over the same `(F[A], A)` pair, so no single one can be canonical —
-  clients declare their own given (bind a constructor, or write a direct SAM `Can*` instance).
-  The `Comonad` ⇒ Getter and `Applicative` ⇒ Review bridges are deliberately absent and the
-  package scaladoc says why.
+- **Two core compositions the ZIO tree kits needed and the zoo could not name** (#92), both in
+  `cats-eo` itself. **`MultiFocus.zipWith(fa, fb)(f)`** — and its `zip` pairing case — combines two
+  containers POINTWISE, which is a Grate's reason for existing and the one operation
+  `MultiFocus.representable` made possible but never exposed. A `Traversal` structurally cannot
+  express it: it visits one focus at a time with no access to a second structure, and neither can
+  `modify`. `Representable[F]` is exactly what makes it total — read both containers as index
+  functions and tabulate their pointwise combination, so there is no shape to mismatch and every
+  representation point exists in both; `zipWith(fa, fa)(f) == F.map(fa)(a => f(a, a))`. And the
+  **fused `Prism.andThen(Traversal)` / `PickMend.andThen(Traversal)` overloads, with their
+  `Traversal.andThen(Prism)` mirror** — the filtering composition, `traversal.andThen(shapePrism)`
+  being "every element that is a Circle". A prism MISS contributes ZERO foci (its element is
+  rebuilt untouched from the prism's leftover) and a hit contributes the inner traversal's. The
+  generic `Morph`-routed extension already typechecked, but yielded an anonymous
+  `Optic[…, MultiFocus[PSVec]]` — not nameable as a `Traversal` val, and without Traversal's fused
+  `modify` / `replace` / streaming `foldMap`. That is why the untyped-tree kits had been
+  hand-rolling `each` through `Traversal.selfChildren` with a `case other => other` arm
+  re-encoding the prism's miss branch by hand.
+- **Optic constructors from cats typeclasses, on the optic companions** (#91): three new bridges —
+  `Traversal.first` / `second` / `both` (`Bitraverse` slot traversals over Either, Tuple2, Ior,
+  Validated), `Modify.functor` (`Functor` — write-only, because `map` alone cannot read) and
+  `Lens.representable(r)` (a lawful positional Lens at one representation point: tabulate to
+  rebuild, siblings read back from the original — the one optic no whole-container bridge can
+  produce). They join the bridges cats-eo already shipped and did not change here —
+  `Traversal.each` (`Traverse`), `Fold[F, A]` (`Foldable`) and `MultiFocus.representable`
+  (`Representable`) — so the companions now carry the set as one surface. New and old alike are
+  CONSTRUCTORS, not givens: a cats container admits several lawful optics at once over the same
+  `(F[A], A)` pair, so no single one can be canonical — clients declare their own given (bind a
+  constructor, or write a direct SAM `Can*` instance). The `Comonad` ⇒ Getter and `Applicative` ⇒
+  Review bridges are deliberately absent; the
+  [Capabilities](https://eo.constructive.dev/capabilities.html) page
+  (`site/docs/capabilities.md`) says why — they are left as exercises, and `Applicative` in
+  particular belongs as a direct `CanReverseGet` given rather than a `Review` optic given.
 - **`.fields(...)` no longer stops at 22 selectors** (#96): the macro-synthesised
   `NamedTuple` focus no longer has a *spelling* ceiling. Up to 22 selectors the value tuple is spelled
   `scala.TupleN` and hearth builds it with that tuple's constructor; at 23 and above the value
