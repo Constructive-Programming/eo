@@ -14,8 +14,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`cats-eo-zio` grows the ZIO-ecosystem seams** (#92): the kyo-expansion playbook replayed
   across ZIO. `Chunks.each` / `at` / `eachNonEmpty` are the collection legs, built as
   constructors over PRIVATE `Traverse` adapters (the orphan given belongs to zio-interop-cats).
-  Three `% Optional` sub-packages follow the avro/circe pattern — the caller adds the artifact:
-  **`eo.zio.schema`** fills zio-schema's own `AccessorBuilder` extension point with
+  Three `% Optional` sub-packages follow the avro/circe pattern — the caller adds the artifact,
+  and this release names which: `dev.zio %% zio-schema % 1.7.5`, `dev.zio %% zio-json % 0.7.44`,
+  `dev.zio %% zio-prelude % 1.0.0-RC41`. All three pin zio `2.1.19`–`2.1.21` transitively and the
+  module's own direct `2.1.24` wins within the 2.1.x line, so adding one does not drag the runtime
+  backwards. **`eo.zio.schema`** fills zio-schema's own `AccessorBuilder` extension point with
   `EoAccessorBuilder` (a Lens per record field, a Prism per enum case, a Traversal per
   collection, no macros on our side), adds `DynamicValues` — the untyped-tree kit over
   `DynamicValue` (constructor prisms, a generic `primitive(st)`, `field` / `at` / `key` /
@@ -29,7 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `TRef` / `TMap` focus ops return `USTM`, so focused updates across several transactional
   references compose into ONE atomic transaction — something the `Ref` ops structurally cannot
   express; the `TMap` ops are named `-At` because mixed-shape extension overloads break explicit
-  `(using myLens)` calls.
+  `(using myLens)` calls. On the `Ref` side, **`Ref.Synchronized.updateFocusZIO`** adds the one op a
+  plain `Ref` structurally cannot host — an EFFECTFUL focus rewrite — by routing `CanModifyA`
+  through ZIO's own `updateZIO`, so the effect runs while the ref is held and the whole
+  read-modify-write stays atomic. `CanModifyA` is the affine/many-focus face, so it covers a lens, a
+  prism (a miss means the effect never runs) and a traversal (one effect per focus, sequenced left
+  to right). The `Applicative[ZIO[R, E, *]]` is YOURS to supply — it lives in zio-interop-cats, and
+  this module still declares no effect instances of its own.
 - **Two core compositions the ZIO tree kits needed and the zoo could not name** (#92), both in
   `cats-eo` itself. **`MultiFocus.zipWith(fa, fb)(f)`** — and its `zip` pairing case — combines two
   containers POINTWISE, which is a Grate's reason for existing and the one operation
@@ -47,6 +56,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `modify` / `replace` / streaming `foldMap`. That is why the untyped-tree kits had been
   hand-rolling `each` through `Traversal.selfChildren` with a `case other => other` arm
   re-encoding the prism's miss branch by hand.
+- **`cats-eo-laws` gains a law family for navigation optics** (#92): `NavigationLaws[S, A]` plus the
+  `NavigationTests[S, A]` discipline rule set (`"Navigation"`). Every untyped-tree kit ships the
+  same `field(name)` / `at(i)` / `key(k)` / `variant(name)` shape and promises the same contract,
+  which no existing suite states — so each kit re-asserted it by hand, and drift between them is
+  exactly how a bug survives in one kit after being fixed in another. Two equations on top of
+  `OptionalLaws` / `SeamLaws`. **put-get**: `OptionalLaws` deliberately omits it (Monocle parity),
+  but for a KEYED navigation optic it is the law that pins WHICH occurrence a write targets — an
+  optic that reads the first duplicate key and writes all of them satisfies it, one that reads the
+  first and writes the LAST does not. **A write through a miss is the identity**: every kit
+  documents "misses pass writes through untouched" and nothing checked it, so a carrier that
+  INVENTS the missing node — appending an absent field, growing a sequence to reach an
+  out-of-range index — went unnoticed, which is the real hazard for any kit tempted to make `field`
+  an upsert. Run them on a DRILLED optic and with a generator that actually produces misses; with
+  hits only the second law is vacuous. Equality is injected for the same reason `SeamLaws` injects
+  it — some carriers' `S` has no lawful universal `==`, and some have one that is not even
+  reflexive (zio-json's `Json.Obj` maps the left operand before comparing). Registered here by the
+  kyo `StructureValues`, zio `DynamicValues` and zio `JsonValues` suites; published so downstream
+  kits can register it too, which is the whole point of hosting it in `cats-eo-laws` rather than in
+  one module's tests.
+- **`atField` — At-style create/delete access, in all three untyped-tree kits** (#92):
+  `StructureValues.atField` (kyo `Structure.Value`), `DynamicValues.atField` (zio-schema
+  `DynamicValue`) and `JsonValues.atField` (zio-json `Json`). The focus is the `Option[…]` AT the
+  name, so a write can create or delete: `Some(v)` updates the first occurrence and appends when
+  absent, `None` removes every occurrence (every one, so a read after a delete cannot find a
+  leftover twin). `field` structurally cannot do either — its focus is the value, so an absent
+  field is a MISS and misses pass writes through. Partial only in "is this a record / object";
+  within one it is total, presence living in the focus, so `getOption` yields `Some(None)` for a
+  record lacking the field. **Lawful up to field ORDER, and no further** — this is stated rather
+  than glossed. put-get, get-put and the miss contract hold unconditionally, but put-put does NOT:
+  `replace(None)` destroys the field's position, so a following `Some(v)` appends where a direct
+  `Some(v)` would have updated in place. Deletion cannot preserve a position that no longer exists,
+  so it is inherent to At-style access over an ORDERED record — Monocle's `At` escapes it only
+  because `Map` has no order. The kyo kit registers `NavigationTests` for `atField` and
+  deliberately NOT `SeamTests`, whose `seamReplaceOverwrite` IS put-put and which the generator
+  falsifies on sight — `Record((f, …), (k0, …))`, `None` then `Some(Integer(-510))`: same fields,
+  different ORDER. The zio twins register `OptionalTests` / `SeamTests` / `NavigationTests` and
+  pass all three, but only because their equalities ignore order (a `ListMap` compares as a `Map`,
+  `Json.Obj.equals` normalises the left operand) — the BEHAVIOUR is identical there and only the
+  visibility differs. If you re-encode a tree after a delete-then-insert, expect the key order to
+  have moved.
 - **Optic constructors from cats typeclasses, on the optic companions** (#91): three new bridges —
   `Traversal.first` / `second` / `both` (`Bitraverse` slot traversals over Either, Tuple2, Ior,
   Validated), `Modify.functor` (`Functor` — write-only, because `map` alone cannot read) and
@@ -84,6 +133,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Behaviour change, `cats-eo-kyo`: `StructureValues.field` and `key` now write the FIRST match,
+  not every match** (#92). Both read the first match and always did; the write used to update
+  EVERY entry with that name (`fields.map((n, v) => if n == name then (n, b) else (n, v))`) and now
+  updates only the one the read found (`indexWhere` + `updated`). Schema-produced records carry
+  unique names, but `Value.Record` and `Value.MapEntries` are `Chunk`-backed, so duplicates are
+  representable — and a whole-tree `platedValue` rewrite can even manufacture equal map keys. On
+  such a value the old read-first/write-all pairing broke `modify(identity)`: writing back the
+  value it had just read overwrote the twin as well, failing `OptionalLaws.modifyIdentity` and
+  `SeamLaws.seamModifyIdentity`. This is a lawfulness fix, not a preference — a write-all optic is
+  a Traversal, not an `Optional`, and these are `Optional`s. If you were relying on the old
+  behaviour to fan a value out across duplicate names, reach for a traversal instead.
 - **Dependency bump**: hearth `0.4.0` → `0.4.2` and kindlings-{avro,cats,circe}-derivation
   `0.3.0` → `0.3.2` — the releases that carry the NamedTuple arity fix above (hearth #313/#314,
   landed in 0.4.1). Transitively: apache-avro `1.12.1` → `1.12.2` (the explicit pin moves with it
@@ -161,7 +221,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no schema divergence involved, and the macros' own "nested paths … chain them" abort unreachable
   for exactly the shape it was written for. A single-hop selector naming something that is not a
   case field of the parent (a no-arg `def`) is now a compile error too, instead of a literal field
-  name that misses at runtime. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
+  name that misses at runtime — that half is the new `MacroSelectors.requireCaseField`, which the
+  resolvers need because the declaration index comes back `-1` both for "not a case field" and for
+  the legitimate "this parent has no case fields at all", so the two can only be told apart at the
+  selector. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
   (eo-circe) and `JsoniterPrism` / `JsoniterTraversal` (eo-jsoniter) all share the parser, so all
   six surfaces are covered.
 - **Schema-field name resolution is linear in the record's field count, not quadratic** (#103): the
