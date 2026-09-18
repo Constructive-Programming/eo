@@ -68,7 +68,7 @@ MUTATION_MODULES = [
     ("circe", "circe", ""),
     ("avro", "avro", "Scores fine (~2 min): the old \"forked test-runner fails to initialise\" caveat no longer reproduces. Its no-coverage mutants are `AvroPrismMacro` quoted-macro bodies — compile-time only, like `generics`."),
     ("jsoniter", "jsoniter", "Mutates clean end to end (0 compile errors): the old `PathParser.parseField` 64 KB method-size caveat no longer reproduces."),
-    ("zio", "zio", "No mutants exist to score: the module is ZEnvironment / ZLayer / `Ref` wiring that delegates straight into ZIO's own API, with no operator, literal or branch for a mutator to change. `n/a`, not 0% — nothing to mutate is not a score of zero."),
+    ("zio", "zio", ""),
     ("kyo", "kyo", "The no-coverage block is all `RecordIsoMacro`: quoted-macro code that expands at compile time, so like `generics` its mutants leave no runtime footprint. The covered score is the one that reads the hand-written optics."),
 ]
 
