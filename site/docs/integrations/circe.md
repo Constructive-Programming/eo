@@ -184,9 +184,17 @@ A hand-written codec works just as well. Miss it and the `.fields`
 macro aborts at compile time, naming the import and dependency in
 its hint:
 
-```scala mdoc:silent
+```scala
 type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
 given Codec.AsObject[NameAge] = KindlingsCodecAsObject.derived
+```
+
+```scala mdoc:silent
+// Compiled in site/src (see samples.scala) rather than expanded here: mdoc
+// fences never receive the project's -Xmacro-settings, so this NamedTuple
+// derivation ran on kindlings' 5s default and intermittently timed out on a
+// cold JVM. The code above is what you would write.
+import dev.constructive.eo.docs.NameAgeCodec.given
 ```
 
 ```scala mdoc

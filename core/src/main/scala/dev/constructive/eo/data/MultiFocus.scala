@@ -901,6 +901,35 @@ object MultiFocusK:
       def to(fa: F[A]): (Unit, F.Representation => A) = ((), F.index(fa))
       def from(pair: (Unit, F.Representation => A)): F[A] = F.tabulate(pair._2)
 
+  /** Pointwise ZIP of two containers — a Grate's reason for existing, and the one operation
+    * [[representable]] made possible but never exposed.
+    *
+    * A Grate is `((F[A] => A) => B) => F[B]`: unlike a Traversal it can see EVERY focus at once
+    * while rebuilding, which is exactly what combining two structures needs. `Traversal` cannot
+    * express this — it visits one focus at a time with no access to a second structure — and
+    * neither can `modify`. Here the shape is concrete: read both containers as index functions and
+    * tabulate their pointwise combination.
+    *
+    * Lawful for any `Representable[F]` (no shape to mismatch — every representation point exists in
+    * both), and `zipWith(fa, fa)(f) == F.map(fa)(a => f(a, a))`.
+    *
+    * @example
+    *   {{{
+    *   // Two configurations merged field-by-field:
+    *   val merged = MultiFocus.zipWith(defaults, overrides)((d, o) => o.orElse(d))
+    *   }}}
+    *
+    * @group Constructors
+    */
+  def zipWith[F[_], A, B, C](fa: F[A], fb: F[B])(f: (A, B) => C)(using F: Representable[F]): F[C] =
+    val ia = F.index(fa)
+    val ib = F.index(fb)
+    F.tabulate(r => f(ia(r), ib(r)))
+
+  /** [[zipWith]]'s pairing special case — the `F[(A, B)]` product of two containers. */
+  def zip[F[_], A, B](fa: F[A], fb: F[B])(using Representable[F]): F[(A, B)] =
+    zipWith(fa, fb)((a, b) => (a, b))
+
   /** Representable-indexed variant with explicit representative index. The `repr0` argument is
     * unused at runtime (rebuild operates pointwise via `F.tabulate`); preserved for API parity and
     * to leave the door open for a future `.lead` accessor.

@@ -226,6 +226,27 @@ circleP.modify(c => Shape.Circle(c.r * 2))(Shape.Square(2.0))
 For auto-derivation on enums / sealed traits / union types see
 `prism[S, A]` in [Generics](generics.md).
 
+Composed with a traversal in either direction, a prism *filters*:
+`traversal.andThen(prism)` visits only the elements that match, and
+`prism.andThen(traversal)` walks the inner structure only when the
+outer branch matches. Both return a concrete `Traversal`, so they stay
+nameable and on the fused path. The load-bearing law is that a miss is
+rebuilt untouched — never dropped, so length and order survive:
+
+```scala mdoc:silent
+import dev.constructive.eo.optics.Traversal
+```
+
+```scala mdoc
+val circles = Traversal.each[List, Shape].andThen(circleP)
+
+val mixed = List(Shape.Circle(1.0), Shape.Square(2.0), Shape.Circle(3.0))
+
+circles.foldMap(_ => 1)(mixed) // two of the three elements match
+
+circles.modify(c => Shape.Circle(c.r * 10))(mixed) // the Square is still there
+```
+
 ## Affine
 
 The `Affine` carrier focuses a value that may or may not be present —
@@ -382,6 +403,25 @@ where every position is rebuilt the same way. The factories are
 rebuild), and `MultiFocus.representableAt` (representative-index
 variant). See [MultiFocus reference](multifocus.md) and
 [Cookbook → Recipe A](cookbook.md) for a worked example.
+
+`MultiFocus.zipWith(fa, fb)(f)` (and its pairing form `zip`) is the
+operation this shape exists for: because a Grate sees *every* focus
+while rebuilding, it can combine **two** structures pointwise — which
+a Traversal structurally cannot, since it visits one focus at a time
+with no access to a second container. Merging two configurations
+field-by-field is the everyday case:
+
+```scala mdoc
+import cats.instances.function.given
+import dev.constructive.eo.data.MultiFocus
+
+val defaults: Boolean => Int = b => if b then 1 else 2
+val overrides: Boolean => Int = b => if b then 10 else 20
+
+val merged = MultiFocus.zipWith(defaults, overrides)(_ + _)
+
+(merged(true), merged(false))
+```
 
 ### Kaleidoscope
 

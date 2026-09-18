@@ -353,7 +353,21 @@ Structure.decode[KyoCart](
 // Sum navigation on the untyped side:
 val shapeV = Structure.encode[KyoShape](KyoShape.Circle(2.5))
 variant("Circle").andThen(field("radius")).andThen(decimal).modify(_ * 2)(shapeV)
+
+// `atField` focuses the Option at a name, so a write can CREATE or DELETE
+// the field — `field` can do neither (its miss passes writes through):
+atField("note").replace(Some(Structure.Value.Str("gift")))(cartV)
+
+atField("id").replace(None)(cartV)
 ```
+
+`field` and `key` target the '''first''' matching name — `Record` and
+`MapEntries` are `Chunk`-backed, so duplicates are representable, and
+read-first/write-all would break `modify(identity)` on such a tree.
+`atField` is lawful up to field **order** and no further: deleting
+destroys the position, so a later insert appends rather than restoring
+it in place. That is inherent to At-style access over an ordered record
+— Monocle's `At` sidesteps it only because `Map` has no order.
 
 `Plated.transform` / `rewrite` / `universe` walk the whole tree, any
 schema, any depth:
