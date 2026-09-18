@@ -310,6 +310,11 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .affine,
   )
 
+  // ----- Affine build-seam laws ------------------------------------
+  // The decoration vocabulary of the recursion-scheme zoo lives on Affine's
+  // arms (Miss = finished, Hit = keep going — see Graft[Affine]); the
+  // graft-channel coherences ride the same AffineTests rule set above.
+
   // ----- ModifyF carrier laws -------------------------------------
 
   checkAll(

@@ -71,6 +71,25 @@ final class Getter[S, A](read: S => A)
   ): rc.Out[S, C] =
     rc.compose(this, inner)
 
+  /** Fused `Getter.andThen(Direct-carried read-only citizen)` — the C8 tie-breaker. The schemes'
+    * zoo citizens (`cata`/`ana`/`hylo` via `ReadScheme`/`BuildScheme`) are `Optic[…, Unit, …, Unit,
+    * Direct]` — simultaneously matching the any-carrier member, the re-homed read-only override,
+    * and the trait's same-carrier `inline andThen`; for that argument dotty called those three a
+    * draw (each wins on one of signature specificity / owner derivation / same-carrier matching;
+    * the fused `andThen(Getter)` does not apply — citizens are not statically `Getter`). This
+    * member's parameter type pins the full citizen shape (`inner.T = Unit`, `inner.B = Unit`,
+    * carrier `Direct`), making it strictly the most specific in the set, so it wins outright — and
+    * it returns the concrete `Getter` (what `ReadCompose.totalTotal` would produce) rather than a
+    * bare `Optic`, so ascribed compositions (`val g: Getter[Doc, Int] = …`) type-check. The
+    * `DummyImplicit` keeps its parameter-list shape comparable with the other overloads (all term +
+    * using), which is what lets the specificity comparison run at all.
+    */
+  @annotation.targetName("andThenDirectReadOnly")
+  inline def andThen[C, D](inner: Optic[A, Unit, C, Unit, Direct])(using
+      scala.DummyImplicit
+  ): Getter[S, C] =
+    new Getter(s => inner.to(get(s)).value)
+
 /** Constructor for `Getter` — read-only single-focus optic, backed by `Direct` with `T = B = Unit`.
   * `.get(s)` is the only meaningful operation; the write path is vestigial.
   *
