@@ -6,8 +6,9 @@ import org.scalacheck.{Gen, Prop}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-/** Grammar-sweep and robustness specs for [[JsonPathScanner]] — truncation-safety across every
-  * prefix of a generated document, literal/number/object/array skip grammars, and `findAll` fan-out
+/** Grammar-sweep and robustness specs for [[JsonPathScanner]] — a structural scanner property that
+  * checks every prefix of a generated document against a model (absolute spans, in-bounds spans,
+  * prefix/full agreement), plus literal/number/object/array skip grammars and `findAll` fan-out
   * over mixed steps. Complements [[JsoniterPrismSpec]] / [[JsoniterTraversalSpec]], which exercise
   * the optic-level surface rather than the scanner's byte-level dispatch. See per-block `covers`
   * comments for `JsonPathScanner.scala` line ranges targeted.
@@ -19,76 +20,159 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
   private def text(b: Array[Byte], span: JsonPathScanner.Span): String =
     new String(b.slice(span.start, span.end), "UTF-8")
 
-  // ----- 1: truncation safety -------------------------------------------
+  // ----- 1: structural scanner property ----------------------------------
 
-  private def genValue(depth: Int): Gen[String] =
-    val leaves = Gen.oneOf(
-      Gen.const("true"),
-      Gen.const("false"),
-      Gen.const("null"),
-      Gen.choose(-100, 100).map(_.toString),
-      Gen.oneOf("a", "bb", "").map(s => s""""$s""""),
-    )
-    if depth <= 0 then leaves
+  /** A generated document together with the rendered text of its top-level children. Carrying the
+    * children lets the oracle state what each top-level step MUST resolve to without re-parsing —
+    * an absolute check that a purely differential prefix-vs-full oracle cannot make, because a
+    * uniformly-wrong scanner agrees with itself.
+    */
+  final private case class DocModel(text: String, kind: Char, kids: List[String])
+
+  private val genLeaf: Gen[String] = Gen.oneOf(
+    Gen.const("true"),
+    Gen.const("false"),
+    Gen.const("null"),
+    Gen.choose(-100, 100).map(_.toString),
+    Gen.oneOf("a", "bb", "").map(s => s""""$s""""),
+  )
+
+  // Child counts are frequency-weighted rather than uniform so the two structural boundaries both
+  // occur often: 0 children puts `{}` / `[]` in VALUE position (the empty-container fast paths at
+  // JsonPathScanner 130/159/206/245), >= 2 children force a sibling to be SKIPPED before the
+  // target is reached (the find*Loop / skip*Loop advance arms).
+  private val genKidCount: Gen[Int] = Gen.frequency((2, 0), (3, 1), (3, 2), (2, 3))
+
+  // Members and elements are joined with ", " — the space after the comma is load-bearing: it is
+  // the only way a prefix cut can leave `skipObjectLoop` at a position whose whitespace run reaches
+  // end-of-input (line 264 advances to `np + 1` without a skipWs, unlike line 181).
+  private def genModel(depth: Int): Gen[DocModel] =
+    val leaf = genLeaf.map(DocModel(_, 'l', Nil))
+    if depth <= 0 then leaf
     else
+      val kids = genKidCount.flatMap(n => Gen.listOfN(n, genModel(depth - 1).map(_.text)))
       Gen.oneOf(
-        leaves,
-        Gen
-          .choose(0, 3)
-          .flatMap(n => Gen.listOfN(n, genValue(depth - 1)))
-          .map(_.mkString("[", ",", "]")),
-        Gen
-          .choose(0, 3)
-          .flatMap(n => Gen.listOfN(n, genValue(depth - 1)))
-          .map(vs => vs.zipWithIndex.map((v, i) => s""""k$i":$v""").mkString("{", ",", "}")),
+        leaf,
+        kids.map(ks => DocModel(ks.mkString("[", ", ", "]"), 'a', ks)),
+        kids.map(ks =>
+          DocModel(
+            ks.zipWithIndex.map((v, i) => s""""k$i":$v""").mkString("{", ", ", "}"),
+            'o',
+            ks,
+          )
+        ),
       )
-
-  private val genDoc: Gen[String] = genValue(3)
 
   private val repPaths: List[List[PathStep]] = List(
     Nil,
     List(PathStep.Field("k0")),
+    List(PathStep.Field("k1")),
     List(PathStep.Index(0)),
     List(PathStep.Wildcard),
     List(PathStep.Field("k0"), PathStep.Index(1)),
   )
 
-  "find/findAll never throw on any prefix of a generated document" >> {
-    // covers: every skip*/find* function in JsonPathScanner.scala — a mid-document cut must
-    // resolve to Miss/partial-Nil at any byte boundary, never an exception (bounds checks at
-    // lines 142/166/226/260/278/300/etc).
-    Prop.forAll(genDoc) { doc =>
-      val docBytes = bytes(doc)
-      @tailrec def loop(len: Int): Boolean =
-        if len > docBytes.length then true
+  /** Absolute oracle: what the scanner must return for the WHOLE document, stated from the model
+    * rather than from a second run of the scanner.
+    */
+  private def absoluteViolations(model: DocModel, full: Array[Byte]): List[String] =
+    val root = JsonPathScanner.find(full, Nil)
+    val rootV =
+      if root == JsonPathScanner.Span(0, full.length) then Nil
+      else List(s"root: $root != Span(0,${full.length})")
+    val kidV = model.kind match
+      case 'o' =>
+        val hits = model.kids.zipWithIndex.flatMap { (kid, i) =>
+          val sp = JsonPathScanner.find(full, List(PathStep.Field(s"k$i")))
+          if sp.isHit && text(full, sp) == kid then Nil else List(s"$$.k$i -> $sp, want '$kid'")
+        }
+        val absent = JsonPathScanner.find(full, List(PathStep.Field("zz")))
+        hits ::: (if absent.isHit then List(s"$$.zz -> $absent, want Miss") else Nil)
+      case 'a' =>
+        val hits = model.kids.zipWithIndex.flatMap { (kid, i) =>
+          val sp = JsonPathScanner.find(full, List(PathStep.Index(i)))
+          if sp.isHit && text(full, sp) == kid then Nil else List(s"$$[$i] -> $sp, want '$kid'")
+        }
+        val oob = List(model.kids.length, -1)
+          .filter(i => JsonPathScanner.find(full, List(PathStep.Index(i))).isHit)
+          .map(i => s"$$[$i] hit, want Miss")
+        val starTexts =
+          JsonPathScanner.findAll(full, List(PathStep.Wildcard)).map(s => text(full, s))
+        val starV =
+          if starTexts == model.kids then Nil else List(s"$$[*] -> $starTexts, want ${model.kids}")
+        hits ::: oob ::: starV
+      case _ =>
+        val f = JsonPathScanner.find(full, List(PathStep.Field("k0")))
+        val i = JsonPathScanner.find(full, List(PathStep.Index(0)))
+        (if f.isHit then List(s"leaf $$.k0 -> $f, want Miss") else Nil) :::
+          (if i.isHit then List(s"leaf $$[0] -> $i, want Miss") else Nil)
+    rootV ::: kidV
+
+  /** Bounds + differential oracle over every prefix `full.take(len)`, `len` enumerated exhaustively
+    * so byte-exact cuts (the last byte of a literal, the space after a comma) are straddled by
+    * construction rather than sampled.
+    *
+    *   - bounds: every returned span satisfies `0 <= start <= end <= len`, on BOTH surfaces.
+    *   - R1: a prefix hit is a truncation of the full hit (same start, end no further).
+    *   - R2: when the full span fits entirely inside the prefix, the prefix answer IS the full
+    *     answer. (The converse — "must be a Miss otherwise" — is false: the scanner is permissive
+    *     about truncated numbers, so `{"k0":12` resolves `$.k0` to the Hit `1`.)
+    *   - R3: `findAll` agrees on every span that ends strictly inside the prefix.
+    */
+  private def prefixViolations(full: Array[Byte]): List[String] =
+    repPaths.flatMap { p =>
+      val sf = JsonPathScanner.find(full, p)
+      val af = JsonPathScanner.findAll(full, p)
+      @tailrec def loop(len: Int, acc: List[String]): List[String] =
+        if len > full.length then acc
         else
-          val prefix = docBytes.take(len)
-          val stepsOk = repPaths.forall { p =>
-            scala.util.Try(JsonPathScanner.find(prefix, p)).isSuccess &&
-            scala.util.Try(JsonPathScanner.findAll(prefix, p)).isSuccess
-          }
-          if !stepsOk then false else loop(len + 1)
-      loop(0)
+          val pre = full.take(len)
+          val sp = JsonPathScanner.find(pre, p)
+          val ap = JsonPathScanner.findAll(pre, p)
+          val spans = (if sp.isHit then List(sp) else Nil) ::: ap
+          val v1 =
+            if spans.forall(s => s.start >= 0 && s.start <= s.end && s.end <= len) then Nil
+            else List(s"bounds len=$len p=$p sp=$sp ap=$ap")
+          val v2 =
+            if !sp.isHit || (sf.isHit && sp.start == sf.start && sp.end <= sf.end) then Nil
+            else List(s"R1 len=$len p=$p sp=$sp sf=$sf")
+          val v3 =
+            if !(sf.isHit && sf.end <= len) || sp == sf then Nil
+            else List(s"R2 len=$len p=$p sp=$sp sf=$sf")
+          val v4 =
+            if ap.filter(_.end < len) == af.filter(_.end < len) then Nil
+            else List(s"R3 len=$len p=$p ap=$ap af=$af")
+          loop(len + 1, v4 ::: v3 ::: v2 ::: v1 ::: acc)
+      loop(0, Nil)
+    }
+
+  "scanner: absolute spans, in-bounds spans, and prefix/full agreement at every cut" >> {
+    // covers: JsonPathScanner.scala 104:12 (walkAll pushes a Span(pos,-1)), 245:8 + 245:14
+    // (skipObject's `{}` fast path), 254:29 (skipObjectLoop's `||` un-short-circuited at
+    // end-of-input), 348:28 + 348:48 (`matches` width guard) — plus every skip*/find* bounds guard
+    // the previous `Try(...).isSuccess` oracle could only observe as "did not throw". An exception
+    // now fails the property directly, so the no-throw guarantee is kept for free.
+    Prop.forAll(genModel(3)) { model =>
+      val full = bytes(model.text)
+      val all = absoluteViolations(model, full) ::: prefixViolations(full)
+      Prop.propBoolean(all.isEmpty) :| all.take(3).mkString(" | ")
     }
   }
 
   // ----- 2: literal sweep -------------------------------------------------
 
+  // Valid and truncated literals are reached by the section-1 generator (literal leaves, every
+  // prefix); a CORRUPTED interior byte is not a prefix of any well-formed document, so these rows
+  // stay as pinned examples.
   private val literalCases: List[(String, Boolean)] = List(
-    ("""{"a":true,"b":1}""", true),
-    ("""{"a":false,"b":1}""", true),
-    ("""{"a":null,"b":1}""", true),
-    ("""{"a":tru""", false),
-    ("""{"a":fals""", false),
-    ("""{"a":nul""", false),
     ("""{"a":txue,"b":1}""", false),
     ("""{"a":falze,"b":1}""", false),
     ("""{"a":nudl,"b":1}""", false),
     ("""{"a":true ,"b":1}trailing""", true),
   )
 
-  "literal skip: true/false/null valid/truncated/wrong-char/trailing, never throws" >> {
-    // covers: skipLiteral dispatch + width checks (lines 312-317).
+  "literal skip: wrong-char literals Miss, whitespace-before-comma and trailing bytes Hit" >> {
+    // covers: skipLiteral dispatch + width checks (lines 303-309).
     val allOk = literalCases.forall {
       case (doc, expectHit) =>
         val r = scala.util.Try(JsonPathScanner.find(bytes(doc), List(PathStep.Field("b"))))
@@ -99,16 +183,18 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
 
   // ----- 3: number-format sweep -------------------------------------------
 
+  // "e" / "E" with no exponent digits: malformed, but the scanner is documented as permissive and
+  // must not derail — it is what forces the exponent-sign guard (line 323) to be read.
   private val numberGen: Gen[String] =
     for
       sign <- Gen.oneOf("", "-")
       intPart <- Gen.oneOf("0", "7", "123")
       frac <- Gen.oneOf("", ".5", ".0")
-      exp <- Gen.oneOf("", "e1", "e+1", "e-1", "E2", "E+2", "E-2")
+      exp <- Gen.oneOf("", "e1", "e+1", "e-1", "E2", "E+2", "E-2", "e", "E")
     yield s"$sign$intPart$frac$exp"
 
   "number skip: sign/fraction/exponent grammar sweep — $.after always Hits" >> {
-    // covers: skipNumber sign/frac/exponent-sign branches (lines 322-334).
+    // covers: skipNumber sign/frac/exponent-sign branches (lines 314-326), incl. 323:12.
     Prop.forAll(numberGen) { num =>
       val doc = bytes(s"""{"n":$num,"after":1}""")
       JsonPathScanner.find(doc, List(PathStep.Field("after"))).isHit
@@ -150,11 +236,11 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     }
   }
 
-  // Malformed or truncated scalar/object inputs that must resolve to a no-throw Miss.
-  // (Missing-]/-array truncation is already exercised by the section-1 truncation property,
-  // which drives k0[idx] into every prefix of a generated array — skipArray + findArray guards.)
+  // Malformed inputs a document generator cannot produce: each has broken syntax whose bytes
+  // nonetheless spell a resolvable member/element, so the mis-parse a dropped guard causes lands
+  // exactly on the probed path instead of being rejected by a later guard.
   private val malformedNoThrowCases: List[(String, List[PathStep])] = List(
-    // truncated numbers — skipNumber/skipDigits end-of-buffer guards (lines 322-338)
+    // truncated numbers — skipNumber/skipDigits end-of-buffer guards (lines 314-331)
     ("""{"n":1e+""", List(PathStep.Field("after"))),
     ("""{"n":1.""", List(PathStep.Field("after"))),
     ("""{"n":-""", List(PathStep.Field("after"))),
@@ -164,11 +250,13 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     ("""{"a" 1,"target":2}""", List(PathStep.Field("target"))),
   )
 
-  "malformed number/object inputs never throw, resolve to Miss" >> {
+  "malformed number/object inputs never throw, resolve to Miss on both surfaces" >> {
     val allOk = malformedNoThrowCases.forall {
       case (doc, path) =>
-        val r = scala.util.Try(JsonPathScanner.find(bytes(doc), path))
-        r.isSuccess && !r.get.isHit
+        val b = bytes(doc)
+        val one = scala.util.Try(JsonPathScanner.find(b, path))
+        val many = scala.util.Try(JsonPathScanner.findAll(b, path))
+        one.isSuccess && !one.get.isHit && many.isSuccess && many.get.isEmpty
     }
     allOk must beTrue
   }
@@ -184,7 +272,7 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     List((0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2), (5, 0), (5, 2), (5, 4), (5, 5), (5, -1))
 
   "array scan: length x index sweep — Hit iff 0<=idx<len, correct span; $.after Hits (skipArray)" >> {
-    // covers: findArrayElementLoop (lines 220-234), skipArray (lines 276-292).
+    // covers: findArrayElementLoop (lines 212-226), skipArray (lines 268-284).
     Prop.forAll(Gen.oneOf(arraySwScenarios)) {
       case (len, idx) =>
         val doc = buildArrayDoc(len)
@@ -227,21 +315,9 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
 
   // ----- 8: small pinned examples --------------------------------------------
 
-  "small examples: root Nil-path, negative number, unterminated string, key-length mismatch" >> {
-    // covers: find() start boundary (lines 49-51), skipNumber '-' branch (line 323), skipString
-    // unterminated guard (line 308), stringEqualsAscii length guard (lines 197-198).
-    val root = bytes("""{"a":1}""")
-    val rootHit = JsonPathScanner.find(root, Nil).isHit must beTrue
-
-    val neg = bytes("""{"x":-5,"y":1}""")
-    val negHit = JsonPathScanner.find(neg, List(PathStep.Field("y"))).isHit must beTrue
-
-    val unterminated = bytes("""{"a":"oops""")
-    val untermR = scala.util.Try(JsonPathScanner.find(unterminated, List(PathStep.Field("a"))))
-    val untermOk = (untermR.isSuccess must beTrue).and(untermR.get.isHit must beFalse)
-
+  "small example: a key-length mismatch must not match" >> {
+    // covers: stringEqualsAscii length guard (line 197). The generator's keys and probes are all
+    // two bytes wide, so the length half of that guard never fires with a mismatch under it.
     val lenMismatch = bytes("""{"ab":1,"target":2}""")
-    val lenOk = JsonPathScanner.find(lenMismatch, List(PathStep.Field("abc"))).isHit must beFalse
-
-    rootHit.and(negHit).and(untermOk).and(lenOk)
+    JsonPathScanner.find(lenMismatch, List(PathStep.Field("abc"))).isHit must beFalse
   }
