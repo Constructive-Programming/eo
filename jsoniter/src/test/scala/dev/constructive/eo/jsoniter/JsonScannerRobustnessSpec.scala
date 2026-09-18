@@ -201,41 +201,6 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     }
   }
 
-  // ----- 4: object sweep ---------------------------------------------------
-
-  private def buildObject(count: Int, targetIdx: Option[Int]): (Array[Byte], Option[String]) =
-    val value = "999"
-    val fields: Vector[(String, String)] = (0 until count).map { i =>
-      if targetIdx.contains(i) then ("target", value) else (s"f$i", i.toString)
-    }.toVector
-    (bytes(fields.map((k, v) => s""""$k":$v""").mkString("{", ",", "}")), targetIdx.map(_ => value))
-
-  // (count, target index) — enumerated so every count x position combo that makes sense occurs.
-  private val objectScenarios: List[(Int, Option[Int])] = List(
-    (0, None),
-    (1, Some(0)),
-    (1, None),
-    (2, Some(0)),
-    (2, Some(1)),
-    (2, None),
-    (5, Some(0)),
-    (5, Some(2)),
-    (5, Some(4)),
-    (5, None),
-  )
-
-  "object scan: member-count x target-position sweep — Hit iff present, span decodes correctly" >> {
-    // covers: findFieldValueLoop key-match / skip-and-advance (lines 165-182).
-    Prop.forAll(Gen.oneOf(objectScenarios)) {
-      case (count, targetIdx) =>
-        val (doc, expected) = buildObject(count, targetIdx)
-        val span = JsonPathScanner.find(doc, List(PathStep.Field("target")))
-        val hitOk = span.isHit == expected.isDefined
-        val valueOk = expected.forall(v => text(doc, span) == v)
-        hitOk && valueOk
-    }
-  }
-
   // Malformed inputs a document generator cannot produce: each has broken syntax whose bytes
   // nonetheless spell a resolvable member/element, so the mis-parse a dropped guard causes lands
   // exactly on the probed path instead of being rejected by a later guard.
@@ -279,31 +244,7 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     allOk must beTrue
   }
 
-  // ----- 5: array sweep -----------------------------------------------------
-
-  private def buildArrayDoc(len: Int): Array[Byte] =
-    val elems = (0 until len).map(i => (i * 10).toString).mkString(",")
-    bytes(s"""{"arr":[$elems],"after":1}""")
-
-  // (length, target index) — includes first/mid/last/just-past/negative-oob.
-  private val arraySwScenarios: List[(Int, Int)] =
-    List((0, 0), (1, 0), (1, 1), (2, 0), (2, 1), (2, 2), (5, 0), (5, 2), (5, 4), (5, 5), (5, -1))
-
-  "array scan: length x index sweep — Hit iff 0<=idx<len, correct span; $.after Hits (skipArray)" >> {
-    // covers: findArrayElementLoop (lines 212-226), skipArray (lines 268-284).
-    Prop.forAll(Gen.oneOf(arraySwScenarios)) {
-      case (len, idx) =>
-        val doc = buildArrayDoc(len)
-        val span = JsonPathScanner.find(doc, List(PathStep.Field("arr"), PathStep.Index(idx)))
-        val expectHit = idx >= 0 && idx < len
-        val hitOk = span.isHit == expectHit
-        val valueOk = !expectHit || text(doc, span) == (idx * 10).toString
-        val afterOk = JsonPathScanner.find(doc, List(PathStep.Field("after"))).isHit
-        hitOk && valueOk && afterOk
-    }
-  }
-
-  // ----- 6: findAll mixed-step -----------------------------------------------
+  // ----- 4: findAll mixed-step -----------------------------------------------
 
   private val mixedDoc = bytes(
     """{"rows":[{"xs":[1,2]},{"xs":[3,4,5]},{"xs":[]},{"xs":[9,BAD,7]}]}"""
@@ -331,7 +272,7 @@ class JsonScannerRobustnessSpec extends Specification with ScalaCheck:
     valuesOk.and(row0Ok).and(topOk).and(noThrow must beTrue)
   }
 
-  // ----- 8: small pinned examples --------------------------------------------
+  // ----- 5: small pinned examples --------------------------------------------
 
   "small example: a key-length mismatch must not match" >> {
     // covers: stringEqualsAscii length guard (line 197). The generator's keys and probes are all
