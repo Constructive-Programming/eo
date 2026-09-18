@@ -413,14 +413,22 @@ object AvroPrism:
   /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields.
     *
     * The `AvroCodec` for the synthesised NamedTuple is summoned at the call site; with no
-    * hand-written given in scope it auto-derives through kindlings. There is no arity ceiling: up
-    * to 22 selectors the focus is spelled `TupleN` and hearth builds it with that tuple's
+    * hand-written given in scope it auto-derives through kindlings. The 22-selector ceiling is
+    * gone: up to 22 selectors the focus is spelled `TupleN` and hearth builds it with that tuple's
     * constructor; at 23 and above the focus type IS a `*:` cons chain, which hearth ≥ 0.4.2 builds
     * through `Tuple.fromArray` instead. (Both spellings are needed — hearth's constructor branch
-    * below 23 cannot build a cons chain, and there is no `TupleN` above 22.) Wide selections cost
-    * compile time rather than correctness: the derivation is quadratic-ish in arity, and a very
-    * wide record may want a larger `-Xss` or a higher `-Xmacro-settings:avroDerivation.timeout`.
-    * (Issue #96.)
+    * below 23 cannot build a cons chain, and there is no `TupleN` above 22.)
+    *
+    * That is not the same as "unbounded". `.fields` selects from a case class, so '''254 selectors
+    * is a hard, permanent ceiling''' — the JVM caps a parameter list at 254 slots and a 255-field
+    * case class does not compile at all. Well below that, the binding limit is the compiler
+    * thread's stack, because the derivation recurses per field: measured, `-Xss1m` (the JVM
+    * default) tops out around 32 selectors, `-Xss4m` around 150, and `-Xss8m` — what this repo's
+    * `.jvmopts` sets — reaches 254. A downstream build gets none of that automatically, so raise
+    * `-Xss` there before concluding a cover is too wide. Compile time is the third cost: the
+    * derivation grows superlinearly in arity, so a wide cover may also want a higher
+    * `-Xmacro-settings:avroDerivation.timeout=30s` — the unit suffix is required, a bare integer is
+    * silently ignored. (Issue #96.)
     */
   extension [A](o: AvroPrism[A])
 

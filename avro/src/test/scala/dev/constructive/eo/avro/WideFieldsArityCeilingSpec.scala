@@ -29,12 +29,24 @@ import org.specs2.mutable.Specification
   * wide, mixed-primitive cover — the `fromArray` branch boxes every element to `Object`, so a
   * homogeneous `String` probe would not have exercised the unboxing on the way back out).
   *
-  * There is no new '''arity''' ceiling above 23: a cons-chain NamedTuple was verified to derive and
-  * round-trip up to arity 512. What binds above ~200 is resource budget, not arity — the compiler
-  * thread's `-Xss` (this build sets `-Xss8m` in `.jvmopts`, good past arity 400) and kindlings'
-  * macro-expansion budget (`-Xmacro-settings:avroDerivation.timeout=30`, build.sbt). Neither is a
-  * language-level limit, so neither is pinned as a compile-time negative here; raise the budget if
-  * a genuinely enormous record ever times out.
+  * The bump removes the '''spelling''' ceiling, not every ceiling. Two limits remain and are
+  * deliberately NOT pinned as compile-time negatives here, because neither is a property of eo:
+  *
+  *   - '''254 selectors, hard and permanent.''' `.fields` selects from a case class and the JVM
+  *     caps a parameter list at 254 slots, so a 255-field case class fails to compile on its own
+  *     ("Platform restriction: a parameter list's length cannot exceed 254") before `.fields` is
+  *     reached. Measured: 254 compiles, 255 does not.
+  *   - '''The compiler thread's `-Xss`, which binds far lower.''' The derivation recurses per
+  *     field. Measured on a full-cover `.fields` probe, varying only `-Xss`: 1m (the JVM default)
+  *     derives 32 and overflows at 36; 2m derives 66, overflows at 100; 4m (sbt's launcher default)
+  *     derives 150, overflows at 254; 8m — what this repo's `.jvmopts` sets, and the only reason
+  *     these suites reach 254 — derives 254. A DOWNSTREAM consumer inherits none of that: the
+  *     published artifact cannot carry an `-Xss`.
+  *
+  * Compile time is the third cost — the derivation grows superlinearly in arity, so a very wide
+  * cover may want a higher `-Xmacro-settings:avroDerivation.timeout=30s` (build.sbt). Note the
+  * '''unit suffix''': kindlings parses that value with a regex requiring `ms`/`s`/`m`, and a bare
+  * integer is silently discarded, leaving the 5s default in force.
   */
 class WideFieldsArityCeilingSpec extends Specification:
 
