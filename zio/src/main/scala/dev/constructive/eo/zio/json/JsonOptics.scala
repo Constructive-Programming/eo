@@ -167,7 +167,17 @@ object JsonValues:
 
 end JsonValues
 
-extension [To <: Json](self: JsonCursor[?, To])
+// Braced body, against the significant-indentation house style, on purpose - the
+// same stryker4s 0.20.3 re-print hazard that `kyo/schema/StructureOptics.scala`
+// documents at length. A SINGLE-METHOD significant-indentation `extension` clause
+// comes back from scalameta as the one-line form, and the method's leading
+// Scaladoc is replayed verbatim between the two: the forced newline lands `def` in
+// column 0, the clause is left with no extension method, and the file stops
+// compiling - so `project zioIntegration; stryker` aborts with
+// UnableToFixCompilerErrorsException before scoring a single mutant. Braces make
+// the body a `Term.Block`, the printer emits the braced form, and the newline is
+// harmless. Bytecode-identical. Revert when stryker4s fixes the re-print.
+extension [To <: Json](self: JsonCursor[?, To]) {
 
   /** The cursor as a sibling-preserving eo Optional — reads via zio-json's own `Json.get`, writes
     * by rebuilding exactly the spine the cursor describes. A cursor that misses (wrong shape,
@@ -182,6 +192,8 @@ extension [To <: Json](self: JsonCursor[?, To])
       j => j.get(self).fold(_ => Left(j), Right(_)),
       (j, b) => writeSteps(cursorSteps(self, Nil), j, b).getOrElse(j),
     )
+
+}
 
 /** The cursor's steps root-first — `JsonCursor` is parent-linked (leaf outermost), so the chain is
   * reversed with a `@tailrec` accumulator before the descent.
@@ -222,7 +234,8 @@ private def writeSteps(steps: List[JsonCursor[?, ?]], node: Json, b: Json): Opti
       else None
     case _ :: rest => writeSteps(rest, node, b) // Identity mid-chain (unreachable: stripped above)
 
-extension [A](self: JsonCodec[A])
+// Braced for the same stryker4s re-print reason as the clause above.
+extension [A](self: JsonCodec[A]) {
 
   /** Prism between JSON text and `A` — encode/decode as the two halves, the same laws and caveats
     * as every byte face (roundtrip identity one way, re-encode normalisation the other, misses pass
@@ -233,3 +246,5 @@ extension [A](self: JsonCodec[A])
       s => self.decodeJson(s).fold(_ => Left(s), Right(_)),
       a => self.encodeJson(a, None).toString,
     )
+
+}

@@ -129,7 +129,14 @@ jobs:
             "project laws" stryker \
             || echo "::warning title=stryker::mutation run failed for laws (see log / quality-assurance.md notes)"
           echo "::endgroup::"
-          for p in generics schemes circeIntegration avroIntegration jsoniterIntegration; do
+          # Keep this list in step with the `mutationAll` alias in build.sbt and
+          # with MUTATION_MODULES in site/tools/gen-qa-report.py: a module missing
+          # here produces no report.json, so its row on the QA page silently falls
+          # back to dashes (or, worse, keeps whatever a developer's local run left
+          # behind). These are sbt PROJECT IDS, which differ from the directory
+          # names the generator globs.
+          for p in generics schemes schemesLaws circeIntegration avroIntegration \
+                   jsoniterIntegration zioIntegration kyoIntegration; do
             echo "::group::stryker $p"
             sbt -batch "set ThisBuild/tlFatalWarnings := false" "project $p" stryker \
               || echo "::warning title=stryker::mutation run failed for $p (see log / quality-assurance.md notes)"

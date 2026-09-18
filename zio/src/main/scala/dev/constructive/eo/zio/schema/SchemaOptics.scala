@@ -60,7 +60,17 @@ object EoAccessorBuilder extends AccessorBuilder:
       .Lens[S, Chunk[A]](collection.toChunk, (_, ch) => collection.fromChunk(ch))
       .andThen(Chunks.each[A, A])
 
-extension [A](self: Schema[A])
+// Braced body, against the significant-indentation house style, on purpose - the
+// same stryker4s 0.20.3 re-print hazard that `kyo/schema/StructureOptics.scala`
+// documents at length. A SINGLE-METHOD significant-indentation `extension` clause
+// comes back from scalameta as the one-line form, and the method's leading
+// Scaladoc is replayed verbatim between the two: the forced newline lands `def` in
+// column 0, the clause is left with no extension method, and the file stops
+// compiling - so `project zioIntegration; stryker` aborts with
+// UnableToFixCompilerErrorsException before scoring a single mutant. Braces make
+// the body a `Term.Block`, the printer emits the braced form, and the newline is
+// harmless. Bytecode-identical. Revert when stryker4s fixes the re-print.
+extension [A](self: Schema[A]) {
 
   /** Prism between the untyped `DynamicValue` tree and `A` — the typed ↔ untyped face. A failed
     * `toTypedValue` is a miss carrying the original tree back losslessly; decode-then-encode
@@ -74,7 +84,10 @@ extension [A](self: Schema[A])
       a => self.toDynamic(a),
     )
 
-extension [A](self: BinaryCodec[A])
+}
+
+// Braced for the same stryker4s re-print reason as the clause above.
+extension [A](self: BinaryCodec[A]) {
 
   /** Prism between `self`-encoded bytes and `A` — `JsonCodec.schemaBasedBinaryCodec[A].prism`
     * reads/rewrites a typed value inside an encoded payload; compose outward with byte transports,
@@ -85,3 +98,5 @@ extension [A](self: BinaryCodec[A])
       bytes => self.decode(bytes).fold(_ => Left(bytes), Right(_)),
       a => self.encode(a),
     )
+
+}
