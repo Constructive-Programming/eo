@@ -22,6 +22,6 @@ jobs:
     name: Launch Scala Steward
     runs-on: ubuntu-22.04
     steps:
-      - uses: scala-steward-org/scala-steward-action@v2.92.0
+      - uses: scala-steward-org/scala-steward-action@v2.96.0
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
