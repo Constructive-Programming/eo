@@ -124,8 +124,16 @@ class AvroFieldNamingSpec extends Specification:
     codecPrism[Click].fieldNamed[String]("click_id").getOption(clickBytes) must beSome("abc")
   }
 
-  "a bad explicit .fieldNamed misses (None), it does not corrupt" >> {
-    codecPrism[Click].fieldNamed[String]("no_such_field").getOption(clickBytes) must beNone
+  // This example used to assert `None` — "a bad explicit .fieldNamed misses, it does not corrupt".
+  // That PINNED the defect (issue #95): a silent miss on a name the reader schema never carried,
+  // decided at run time although the schema was available at construction. It is now a refusal.
+  "a bad explicit .fieldNamed is refused at construction, not missed at runtime" >> {
+    codecPrism[Click].fieldNamed[String]("no_such_field") must
+      throwAn[IllegalArgumentException].like {
+        case e =>
+          (e.getMessage must contain("click_id, landing_page_id"))
+            .and(e.getMessage must contain("no field of that name"))
+      }
   }
 
 end AvroFieldNamingSpec

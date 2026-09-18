@@ -282,13 +282,18 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // `codecPrism` no longer takes an explicit schema (the reader schema always matches the
     // codec's). To exercise the walker on a ROOT schema that drifted from the codec — bytes under a
     // narrower schema than `Person`'s — build the prism directly with the internal constructor.
-    val ageOnlyPrism =
-      new AvroPrism[Person](
-        new AvroFocus.Leaf[Person](Array.empty[PathStep], summon[AvroCodec[Person]]),
+    // `.fieldNamed("name")` would now be REFUSED at construction (issue #95 — the hatch checks the
+    // name against the schema it will be looked up in), so the drilled path is stored directly.
+    val namePathPrism =
+      new AvroPrism[String](
+        new AvroFocus.Leaf[String](
+          Array[PathStep](PathStep.Field("name")),
+          summon[AvroCodec[String]],
+        ),
         ageOnlySchema,
       )
     val missingOk =
-      ageOnlyPrism.fieldNamed[String]("name").sliceBytes(ageOnlyBytes) match
+      namePathPrism.sliceBytes(ageOnlyBytes) match
         case Left(failure) =>
           failure === AvroFailure.PathMissing(PathStep.Field("name"))
         case other =>

@@ -42,15 +42,38 @@ import org.apache.avro.Schema
   *     drilled-prism given is the evidence that instantiates their `T` at `Array[Byte]`. See the
   *     docs page's migration recipe for the runnable shape.
   *
-  * '''Field navigation honours the SCHEMA field name (issue #35).''' `.field(_.x)` (and `.fields`,
-  * `selectDynamic`, the traversal siblings) resolve the case-class field `x` to whatever schema
-  * field the codec actually emitted for it — under any name transform (kindlings snake / kebab /
-  * custom `transformFieldNames`, or a vulcan per-field override map) — by DECLARATION POSITION: the
-  * i-th case field maps to the i-th schema field, read back out of the cached schema at
-  * construction time (zero per-operation cost). The rare hand-written codec whose schema field
-  * ORDER diverges from declaration order needs [[AvroPrism.fieldNamed]]`("schema_name")` to
-  * navigate by the explicit schema name instead. Map keys are data, not schema-named fields, and
-  * keep their literal key.
+  * '''Field navigation honours the SCHEMA field name (issues #35, #95).''' `.field(_.x)` — and
+  * equally `.fields(...)`, `selectDynamic` and the `.each.field` / `.each.fields` traversal
+  * siblings, which all share one resolver — maps the case-class field `x` to whatever schema field
+  * the codec actually emitted for it. Resolution happens ONCE, at prism construction, off the
+  * cached schema (zero per-operation cost), by two rungs:
+  *
+  *   1. '''By NAME, all-or-nothing.''' If EVERY case field of the parent maps to a DISTINCT schema
+  *      field — exactly, or uniquely up to `_` / `-` / `.` and case — then the codec has named the
+  *      whole correspondence and `x`'s answer is read off that map. Partial or colliding coverage
+  *      is treated as no signal at all and the rung abstains for every field, because one lucky
+  *      name match on a schema whose OTHER columns are legacy is how a working call site gets
+  *      re-aimed at the wrong column.
+  *   1. '''By DECLARATION POSITION''' — the i-th case field is the i-th schema field. This is where
+  *      a name transform lands (a kindlings snake-case config, a custom `transformFieldNames`, a
+  *      vulcan per-field override map), because a transform REMOVES the literal Scala name by
+  *      construction, so rung 1 cannot have fired.
+  *
+  * '''The positional rung is only right when the codec's schema is positionally 1:1 with the case
+  * class.''' Kindlings-derived codecs are, by construction. A hand-written or `vulcan.Codec` field
+  * list need not be: a COMPUTED/derived schema column, a dropped field, or a reordered field list
+  * all break it. The name rung recovers most of that population; what it cannot recover is a field
+  * list that both renames beyond recognition AND reorders (equal arity, no name hit) — that
+  * resolves by position, silently, and is wrong. Two more shapes stay wrong for the same reason: a
+  * schema column that BEARS a case field's name but HOLDS a different value (a derived public id, a
+  * stale legacy column), and two columns whose names normalise alike. Navigate all of them with
+  * [[AvroPrism.fieldNamed]]`("schema_name")`, which bypasses resolution entirely and is itself
+  * checked against the schema; `ResolutionResidualSpec` pins each shape's exact behaviour.
+  *
+  * Behaviour change against 0.15.1, for the release notes: a hand-written codec that PERMUTES the
+  * Scala names (writes case field `a` into a schema field literally named `b`, and vice versa)
+  * resolved correctly by position and now resolves by name, i.e. wrongly. No name transform can
+  * produce that shape. Map keys are data, not schema-named fields, and keep their literal key.
   *
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *
@@ -75,14 +98,16 @@ import org.apache.avro.Schema
   *     `.replace` onto a span whose current value doesn't decode as `A` — or a `.union[B]` focus
   *     sitting on a different runtime branch — is a Miss pass-through. [[graftBytes]] is the
   *     decode-free write (and the only one that can SWITCH union branches).
-  *   - '''The payload must be encoded under exactly this prism's reader schema.''' The byte walk
-  *     performs no writer/reader schema resolution: structurally drifted payloads Miss silently,
-  *     and a same-typed field REORDER between writer and reader is undetectable from the bytes —
-  *     the walk reads the wrong field with full confidence. Confluent-framed payloads are handled
-  *     by composing [[ConfluentWire.confluent]] (a byte Prism that strips the header, resolves the
-  *     writer schema, and fingerprint-gates) BEFORE this optic — `confluent.andThen(thisWalk)`;
-  *     past a fingerprint mismatch a mixed-schema topic still needs a resolving decode (the record
-  *     face with the right schema per payload).
+  *   - '''The payload must be encoded under exactly this prism's reader schema.''' This is about
+  *     PAYLOAD drift — a name absent from the READER schema is a construction-time refusal on both
+  *     `.field` and `.fieldNamed`, not a runtime miss. The byte walk performs no writer/reader
+  *     schema resolution: structurally drifted payloads Miss silently, and a same-typed field
+  *     REORDER between writer and reader is undetectable from the bytes — the walk reads the wrong
+  *     field with full confidence. Confluent-framed payloads are handled by composing
+  *     [[ConfluentWire.confluent]] (a byte Prism that strips the header, resolves the writer
+  *     schema, and fingerprint-gates) BEFORE this optic — `confluent.andThen(thisWalk)`; past a
+  *     fingerprint mismatch a mixed-schema topic still needs a resolving decode (the record face
+  *     with the right schema per payload).
   *   - Dynamic field sugar is shadowed by real members: an Avro field named like a member of this
   *     class (`record`, `field`, `at`, `union`, `each`, `fields`, …) must be drilled with the
   *     explicit `.field(_.record)` form.
@@ -241,16 +266,24 @@ final class AvroPrism[A] private[avro] (
   // ---- Path widening (used by macro extensions) ---------------------
 
   /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. `scalaName` is the
-    * case-class field name and `declIdx` its declaration index; the actual schema field name (which
-    * may differ under a snake/kebab/custom transform or vulcan overrides) is resolved off the
-    * cached schema by position — see [[AvroWalk.resolveFieldName]] (issue #35).
+    * case-class field name, `declIdx` its declaration index and `caseNames` the parent's whole
+    * case-field list; the actual schema field name (which may differ under a snake/custom transform
+    * or vulcan overrides) is resolved off the cached schema by the name-then-position rule — see
+    * [[AvroWalk.fieldNameAt]] (issues #35 and #95).
     */
-  private[avro] def widenPath[B](scalaName: String, declIdx: Int)(using
+  private[avro] def widenPath[B](scalaName: String, declIdx: Int, caseNames: List[String])(using
       codecB: AvroCodec[B]
   ): AvroPrism[B] =
     widenPathStep[B](
       PathStep.Field(
-        AvroWalk.resolveFieldName(rootSchemaCached, path, scalaName, declIdx, "AvroPrism.field")
+        AvroWalk.resolveFieldName(
+          rootSchemaCached,
+          path,
+          scalaName,
+          declIdx,
+          caseNames,
+          "AvroPrism.field",
+        )
       )
     )
 
@@ -261,6 +294,7 @@ final class AvroPrism[A] private[avro] (
   private[avro] def widenPathNamed[B](schemaName: String)(using
       codecB: AvroCodec[B]
   ): AvroPrism[B] =
+    AvroWalk.requireFieldNamed(rootSchemaCached, path, schemaName, "AvroPrism.fieldNamed")
     widenPathStep[B](PathStep.Field(schemaName))
 
   /** Extend by an array-index step. Used by [[at]]. */
@@ -289,9 +323,10 @@ final class AvroPrism[A] private[avro] (
   private[avro] def toFieldsPrism[B](
       scalaNames: Array[String],
       declIdxs: Array[Int],
+      caseNames: List[String],
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
     new AvroPrism[B](
-      new AvroFocus.Fields[B](path, resolveFieldNames(scalaNames, declIdxs), codecB),
+      new AvroFocus.Fields[B](path, resolveFieldNames(scalaNames, declIdxs, caseNames), codecB),
       rootSchemaCached,
     )
 
@@ -301,6 +336,7 @@ final class AvroPrism[A] private[avro] (
   private def resolveFieldNames(
       scalaNames: Array[String],
       declIdxs: Array[Int],
+      caseNames: List[String],
   ): Array[String] =
     Array.tabulate(scalaNames.length)(i =>
       AvroWalk.resolveFieldName(
@@ -308,6 +344,7 @@ final class AvroPrism[A] private[avro] (
         path,
         scalaNames(i),
         declIdxs(i),
+        caseNames,
         "AvroPrism.fields",
       )
     )
@@ -339,10 +376,16 @@ object AvroPrism:
     )(using codecB: AvroCodec[B]): AvroPrism[B] =
       ${ AvroPrismMacro.fieldImpl[A, B]('o, 'selector, 'codecB) }
 
-  /** `.fieldNamed[B]("schema_name")` — drill by the EXPLICIT schema field name, bypassing position
-    * resolution. The escape hatch (issue #35) for a hand-written codec whose schema field order
-    * diverges from case-class declaration order; the common (derived / order-preserving) codecs
-    * need `.field(_.x)` instead, which resolves the name for you.
+  /** `.fieldNamed[B]("schema_name")` — drill by the EXPLICIT schema field name, bypassing
+    * resolution entirely. The escape hatch for a hand-written codec the resolver cannot read (a
+    * field list that both renames beyond recognition and reorders, a column bearing another field's
+    * name, two columns normalising alike); the common (derived / order-preserving /
+    * name-transformed) codecs need `.field(_.x)` instead, which resolves the name for you.
+    *
+    * The name is CHECKED against the schema it will be looked up in, at construction (issue #95): a
+    * name the record does not carry throws rather than Missing silently at runtime. A MAP parent is
+    * carved out — `.fieldNamed` is also how a map KEY is addressed, and an absent key is data, not
+    * a mistake. To feature-detect a RECORD field, ask the schema: `codec.schema.getField(name)`.
     */
   extension [A](o: AvroPrism[A])
 

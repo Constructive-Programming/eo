@@ -25,13 +25,18 @@ object AvroPrismMacro:
       report.errorAndAbort(
         "AvroPrism.field: selector must be a single-field accessor like `_.fieldName`.\n"
           + "Nested paths are not yet supported inside a single call;\n"
-          + "chain them: `_.field(_.a).field(_.b)`.\n"
+          + "chain them: `.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A]("AvroPrism.field", name)
 
     '{
-      $parent.widenPath[B](${ Expr(name) }, ${ Expr(declIndexOf[A](name)) })(using $codecB)
+      $parent.widenPath[B](
+        ${ Expr(name) },
+        ${ Expr(declIndexOf[A](name)) },
+        ${ Expr(caseNamesOf[A]) },
+      )(using $codecB)
     }
 
   /** Drives `codecPrism[Person].name`. Looks `name` up on `A`'s schema, summons `AvroCodec[B]`,
@@ -45,7 +50,13 @@ object AvroPrismMacro:
       "AvroPrism selectDynamic",
       nameE,
     ) { [b] => (name: String, declIdx: Int, codecB: Expr[AvroCodec[b]]) =>
-      '{ $parent.widenPath[b](${ Expr(name) }, ${ Expr(declIdx) })(using $codecB) }
+      '{
+        $parent.widenPath[b](
+          ${ Expr(name) },
+          ${ Expr(declIdx) },
+          ${ Expr(caseNamesOf[A]) },
+        )(using $codecB)
+      }
     }
 
   /** Macro for `.at(i)`. Verifies `A <: Iterable`, extracts the element type, summons the codec,
@@ -199,12 +210,19 @@ object AvroPrismMacro:
     val name: String = MacroSelectors.extractFieldName(selector.asTerm).getOrElse {
       report.errorAndAbort(
         "AvroTraversal.field: selector must be a single-field accessor like `_.fieldName`.\n"
+          + "Nested paths are not yet supported inside a single call;\n"
+          + "chain them: `.field(_.a).field(_.b)`.\n"
           + s"Got: ${selector.asTerm.show}"
       )
     }
+    MacroSelectors.requireCaseField[A]("AvroTraversal.field", name)
 
     '{
-      $parent.widenSuffix[B](${ Expr(name) }, ${ Expr(declIndexOf[A](name)) })(using $codecB)
+      $parent.widenSuffix[B](
+        ${ Expr(name) },
+        ${ Expr(declIndexOf[A](name)) },
+        ${ Expr(caseNamesOf[A]) },
+      )(using $codecB)
     }
 
   /** Traversal counterpart to [[atImpl]] — extends the suffix by an array index. */
@@ -235,7 +253,14 @@ object AvroPrismMacro:
           namesExpr: Expr[Array[String]],
           declIdxsExpr: Expr[Array[Int]],
           codecNT: Expr[AvroCodec[nt]],
-      ) => '{ $parent.toFieldsPrism[nt]($namesExpr, $declIdxsExpr)(using $codecNT) }
+      ) =>
+        '{
+          $parent.toFieldsPrism[nt](
+            $namesExpr,
+            $declIdxsExpr,
+            ${ Expr(caseNamesOf[A]) },
+          )(using $codecNT)
+        }
     }
 
   /** Traversal counterpart to [[fieldsImpl]]. */
@@ -248,7 +273,14 @@ object AvroPrismMacro:
           namesExpr: Expr[Array[String]],
           declIdxsExpr: Expr[Array[Int]],
           codecNT: Expr[AvroCodec[nt]],
-      ) => '{ $parent.toFieldsTraversal[nt]($namesExpr, $declIdxsExpr)(using $codecNT) }
+      ) =>
+        '{
+          $parent.toFieldsTraversal[nt](
+            $namesExpr,
+            $declIdxsExpr,
+            ${ Expr(caseNamesOf[A]) },
+          )(using $codecNT)
+        }
     }
 
   /** Traversal counterpart to [[selectFieldImpl]] — drives Dynamic sugar by extending the suffix.
@@ -261,7 +293,13 @@ object AvroPrismMacro:
       "AvroTraversal selectDynamic",
       nameE,
     ) { [b] => (name: String, declIdx: Int, codecB: Expr[AvroCodec[b]]) =>
-      '{ $parent.widenSuffix[b](${ Expr(name) }, ${ Expr(declIdx) })(using $codecB) }
+      '{
+        $parent.widenSuffix[b](
+          ${ Expr(name) },
+          ${ Expr(declIdx) },
+          ${ Expr(caseNamesOf[A]) },
+        )(using $codecB)
+      }
     }
 
   /** Shared backbone for [[fieldsImpl]] / [[fieldsTraversalImpl]] — validation + SELECTOR-order
@@ -317,6 +355,15 @@ object AvroPrismMacro:
   private def declIndexOf[A: Type](name: String)(using q: Quotes): Int =
     import quotes.reflect.*
     TypeRepr.of[A].typeSymbol.caseFields.indexWhere(_.name == name)
+
+  /** `A`'s case-field names in declaration order (`Nil` when `A` isn't a case class — a NamedTuple
+    * parent, say). Emitted as a compile-time literal list beside the declaration index so
+    * construction-time resolution can check whether the codec's schema names the WHOLE case-field
+    * list before it trusts any one of them (issue #95). `Nil` abstains, leaving position in charge.
+    */
+  private def caseNamesOf[A: Type](using q: Quotes): List[String] =
+    import quotes.reflect.*
+    TypeRepr.of[A].typeSymbol.caseFields.map(_.name)
 
   /** Summon `AvroCodec[B]` with a caller-supplied error message. */
   private def summonCodec[B: Type](

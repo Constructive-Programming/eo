@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`.field(_.x)` no longer targets the wrong schema field when the codec's schema is not
+  positionally 1:1 with the case class** (#95): resolution was `fields.get(declIdx).name` and
+  nothing else — the field's NAME, its TYPE and the record's ARITY were never consulted. Sound for
+  every kindlings-derived codec (1:1 by construction), unsound for a hand-written or `vulcan.Codec`
+  field list, which can add a computed column, drop one, or reorder. On those, `.field(_.b)` against
+  a schema `{a, computed, b, c}` read and wrote `computed`, producing **valid Avro bytes with wrong
+  content** — and no law could see it, because a mis-targeted optic is a perfectly lawful `Optional`
+  onto the wrong field. The same resolver backs `.fields`, `selectDynamic`, `.each.field` and
+  `.each.fields`, so all six sites were affected. Resolution now tries a NAME rung first, and only
+  when the codec has named the WHOLE case-field list onto distinct schema fields (total and
+  injective, exact or up to `_`/`-`/`.` and case); otherwise it abstains and declaration position
+  decides exactly as before — which is what keeps every name-transform codec (issue #35's
+  population) resolving correctly. Still construction-time only: zero per-operation cost.
+- **`.fieldNamed("typo")` is refused at construction instead of silently missing at runtime**
+  (#95): the explicit-schema-name escape hatch appended the literal with no schema lookup at all,
+  although the schema was in hand, so a typo — or the Scala field name passed where the schema name
+  was meant — read `None` and wrote the payload back unchanged while reporting success. That is the
+  same failure class the hatch exists to avoid, and it is what every "navigate by explicit schema
+  name with `.fieldNamed`" error message points at. Map parents are carved out: `.fieldNamed` is
+  also how a map KEY is addressed, and an absent key is data. Feature-detecting a RECORD field is
+  still available via `codec.schema.getField(name)`.
+- **A nested selector `.field(_.a.b)` is now a compile error** (#95): the selector parser shared by
+  every cursor macro matched `Lambda(_, Select(_, name))` with ANY receiver, so `_.inner.y` parsed
+  as the bare name `y` and the macro resolved it on the PARENT. Where the parent carries a field of
+  that name — and a record holding a nested record often does — the result was a well-typed,
+  perfectly lawful optic aimed at the wrong field: silent corruption on a 1:1, derived codec, with
+  no schema divergence involved, and the macros' own "nested paths … chain them" abort unreachable
+  for exactly the shape it was written for. A single-hop selector naming something that is not a
+  case field of the parent (a no-arg `def`) is now a compile error too, instead of a literal field
+  name that misses at runtime. `AvroPrism` / `AvroTraversal`, `JsonPrism` / `JsonTraversal`
+  (eo-circe) and `JsoniterPrism` / `JsoniterTraversal` (eo-jsoniter) all share the parser, so all
+  six surfaces are covered.
+
+### Changed
+
+- **Behaviour change, avro**: a hand-written codec that PERMUTES the Scala names (writes case field
+  `a` into a schema field literally named `b`, and vice versa) resolved correctly by position and
+  now resolves by name, i.e. wrongly. No name transform can produce that shape — a transform is a
+  function of the name alone — but a hand-written field list can. Use `.fieldNamed` there.
+- **Recompile, do not re-jar**: the avro resolution signatures are `private[avro]`, but
+  `transparent inline` bakes the accessor into CALLER bytecode, so downstream projects must
+  recompile against this release rather than swapping the jar.
+
+### Known limitations
+
+Three codec shapes are still resolved to the wrong schema field, unchanged from 0.15.1 and pinned
+as executable examples in `ResolutionResidualSpec`: a field list that both renames beyond
+recognition and reorders; a schema column that bears a case field's name but holds a different
+value (a derived public id, a stale legacy column); and two columns whose names normalise alike.
+`.fieldNamed("schema_name")` reaches all of them.
+
 ## [0.15.1] - 2026-08-20
 
 ### Fixed

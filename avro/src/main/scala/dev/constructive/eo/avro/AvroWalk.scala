@@ -334,15 +334,16 @@ private[avro] object AvroWalk:
     loop(0)
     fresh
 
-  // ---- Schema-name resolution (issue #35) ----------------------------
+  // ---- Schema-name resolution (issues #35, #95) ----------------------
   //
   // Field navigation must honour the schema's field name, not the raw Scala field name: a codec
-  // built with a name transform (kindlings snake/kebab/custom) or vulcan overrides emits schema
-  // fields whose names differ from the case-class fields. The `.field(_.x)` macros know `x`'s
-  // DECLARATION index; these helpers walk the cached schema at prism-construction time and read
-  // back the actual schema field name at that position, so the stored PathStep.Field carries the
-  // schema name and the (unchanged) runtime walkers hit it. Resolution is construction-time only —
-  // zero per-operation cost.
+  // built with a name transform (a kindlings snake-case or custom config) or vulcan overrides emits
+  // schema fields whose names differ from the case-class fields. The `.field(_.x)` macros know
+  // `x`'s DECLARATION index AND the parent's whole case-field list; these helpers walk the cached
+  // schema at prism-construction time and read back the actual schema field name — by NAME when the
+  // codec named the whole case-field list (issue #95), else by that declaration position (issue
+  // #35). The stored PathStep.Field carries the schema name and the (unchanged) runtime walkers hit
+  // it. Resolution is construction-time only — zero per-operation cost.
 
   /** Walk `root` along `steps` and return the terminal schema, or a diagnostic. The Field steps
     * carry already-resolved schema names, so `getField` hits; UnionBranch unwraps to the branch,
@@ -379,10 +380,9 @@ private[avro] object AvroWalk:
               case other             => Left(s"step $i: expected an array/map but found $other")
     loop(0, root)
 
-  /** The schema field name for the case-class field at declaration index `declIdx` inside the
-    * record reached by [[schemaAt]]`(root, parentPath)`. Position resolution: the i-th case field
-    * maps to the i-th schema field, honouring any codec name transform (identity / snake / kebab /
-    * custom / vulcan overrides), because the name is read back OUT of the schema.
+  /** The schema field name for the case-class field `scalaName` — declaration index `declIdx` among
+    * the case fields `caseNames` — inside the record reached by [[schemaAt]]`(root, parentPath)`.
+    * See [[fieldNameAt]] for the resolution rule.
     *
     * `declIdx < 0` (index undeterminable — a non-case-class parent such as a NamedTuple) falls back
     * to the literal `scalaName`, preserving the pre-#35 behaviour for those parents. Every other
@@ -395,6 +395,7 @@ private[avro] object AvroWalk:
       parentPath: Array[PathStep],
       scalaName: String,
       declIdx: Int,
+      caseNames: List[String],
       who: String,
   ): String =
     if declIdx < 0 then scalaName
@@ -406,12 +407,46 @@ private[avro] object AvroWalk:
               + " Navigate by explicit schema name with .fieldNamed(\"<name>\")."
           )
         case Right(parent) =>
-          fieldNameAt(parent, scalaName, declIdx, who)
+          fieldNameAt(parent, scalaName, declIdx, caseNames, who)
 
-  /** Schema field name at declaration index `declIdx` of `record` (which must be a RECORD). Split
-    * out so [[AvroTraversal]] can resolve against an element record it computed itself.
+  /** Schema field name for case field `scalaName` (declaration index `declIdx` among `caseNames`)
+    * in `record`, which must be a RECORD. Split out so [[AvroTraversal]] can resolve against an
+    * element record it computed itself.
+    *
+    * '''Two rungs, tried in order (issue #95).'''
+    *
+    *   1. NOMINAL, all-or-nothing. If EVERY case field in `caseNames` maps to a DISTINCT schema
+    *      field — exactly, or uniquely up to `_`/`-`/`.` and case — then the codec has told us the
+    *      whole correspondence and `declIdx`'s answer is read off that map. Partial or colliding
+    *      coverage is no signal at all: the rung abstains for every field rather than trusting one
+    *      lucky match (see [[totalNominalIndex]] for why the per-field form is unsound).
+    *   1. POSITIONAL (issue #35): the i-th case field is the i-th schema field. This is the rung a
+    *      name transform lands on — `withSnakeCaseFieldNames`, a custom `transformFieldNames`, a
+    *      vulcan override map — because a transform REMOVES the literal Scala name by construction,
+    *      so rung 1 cannot have fired. It is also the only rung that can be wrong, and it is right
+    *      exactly when the codec's schema is positionally 1:1 with the case class.
+    *
+    * Nominal before positional is safe precisely because the two rungs see disjoint populations.
+    * What nominal DOES see is the codec whose schema is not positionally 1:1 — a computed/derived
+    * schema field, a dropped one, a reordered hand-written or `vulcan.Codec` field list — where
+    * position silently targets the wrong slot and produces valid wire bytes with wrong content.
+    *
+    * '''Known residual''': a codec that both renames beyond recognition AND reorders (equal arity,
+    * no name hit) still resolves by position, and is still wrong — nothing about the names or the
+    * shape can see it. Use [[AvroPrism.fieldNamed]] there.
+    *
+    * '''Known behaviour change''': a codec that PERMUTES the Scala names (writes case field `a`
+    * into a schema field literally named `b`, and vice versa) resolved correctly by position and
+    * now resolves by name, i.e. wrongly. No name transform can produce that shape — a transform is
+    * a function of the name alone — but a hand-written field list can.
     */
-  def fieldNameAt(record: Schema, scalaName: String, declIdx: Int, who: String): String =
+  def fieldNameAt(
+      record: Schema,
+      scalaName: String,
+      declIdx: Int,
+      caseNames: List[String],
+      who: String,
+  ): String =
     if record.getType != Schema.Type.RECORD then
       throw new IllegalArgumentException(
         s"$who('$scalaName'): parent focus is a ${record.getType}, not a record."
@@ -419,15 +454,124 @@ private[avro] object AvroWalk:
       )
     else
       val fields = record.getFields
-      if declIdx >= fields.size then
+      val nominal = totalNominalIndex(record, caseNames, declIdx)
+      if nominal >= 0 then fields.get(nominal).name
+      else if declIdx >= fields.size then
         throw new IllegalArgumentException(
           s"$who('$scalaName'): case field #$declIdx has no matching schema field —"
             + s" record '${record.getFullName}' has ${fields.size} field(s): "
             + fields.asScala.map(_.name).mkString(", ")
+            + s", none named '$scalaName'"
             + ". For a reordered hand-written codec, navigate by explicit schema name with"
             + " .fieldNamed(\"<name>\")."
         )
       else fields.get(declIdx).name
+
+  /** Validate an EXPLICIT schema field name — the `.fieldNamed` escape hatch — against the record
+    * it will be looked up in, at CONSTRUCTION time. Without this a typo, or the Scala name passed
+    * where the schema name was meant, is a runtime SILENT MISS: reads return `None` and writes pass
+    * the payload through unchanged while reporting success. That is precisely the failure class the
+    * hatch exists to avoid, and the schema was in hand all along.
+    *
+    * Deliberately silent in two cases. A MAP parent: `.fieldNamed` is also how a map KEY is
+    * addressed, and keys are data, not schema fields — a key absent from the payload is an ordinary
+    * `None`, and feature-detecting one is legitimate. An unresolvable parent path: the walk already
+    * reports that at runtime, and refusing here would change the meaning of a prism deliberately
+    * built against a drifted root schema.
+    */
+  def requireFieldNamed(
+      root: Schema,
+      parentPath: Array[PathStep],
+      schemaName: String,
+      who: String,
+  ): Unit =
+    schemaAt(root, parentPath) match
+      case Right(parent) => requireFieldIn(parent, schemaName, who)
+      case Left(_)       => ()
+
+  /** [[requireFieldNamed]] against an already-resolved parent record — the traversal's entry. */
+  def requireFieldIn(parent: Schema, schemaName: String, who: String): Unit =
+    if parent.getType == Schema.Type.RECORD && parent.getField(schemaName) == null then
+      throw new IllegalArgumentException(
+        s"$who('$schemaName'): record '${parent.getFullName}' has no field of that name — "
+          + parent.getFields.asScala.map(_.name).mkString(", ")
+          + ". `.fieldNamed` takes the SCHEMA field name; for the case-class field name use"
+          + " .field(_.x)."
+      )
+
+  /** ALL-OR-NOTHING nominal resolution: the schema-field position for the case field at `declIdx`,
+    * or `-1` to abstain and let position decide.
+    *
+    * The per-field form of this rung — "does THIS case field's name appear in the schema?" — is
+    * unsound, and measurably so: a schema field can bear a name that resembles a DIFFERENT case
+    * field. `FpVisit(userId, user)` against legacy columns `{uid, user_id}` writes `userId` into
+    * `uid`, and a per-field rung matches `userId` against `user_id` and re-aims a currently-correct
+    * call site at the wrong column. Requiring the WHOLE case-field list to map to DISTINCT schema
+    * fields (total and injective) before trusting any single answer removes that class: `user`
+    * matches nothing, the map is not total, the rung abstains, position stays right.
+    *
+    * An empty `caseNames` (a NamedTuple parent, which has no case fields) abstains too.
+    */
+  private def totalNominalIndex(record: Schema, caseNames: List[String], declIdx: Int): Int =
+    val arity = caseNames.size
+    // A total, injective map needs at least as many schema fields as case fields — a free
+    // precondition that skips the whole scan for the codec that drops a field.
+    if arity == 0 || declIdx < 0 || declIdx >= arity || arity > record.getFields.size then -1
+    else
+      val out = new Array[Int](arity)
+      // Injectivity by scanning the filled prefix of `out` rather than a `Set[Int]`: this runs once
+      // per drilled hop at construction, over a case-field list that is a handful of entries, and a
+      // Set here costs a boxed Integer and a new Set node per field.
+      @tailrec def seen(j: Int, idx: Int): Boolean =
+        j < 0 || (out(j) != idx && seen(j - 1, idx))
+      @tailrec def loop(i: Int, rest: List[String]): Boolean =
+        rest match
+          case Nil    => true
+          case n :: t =>
+            val idx = nominalIndex(record, n)
+            if idx < 0 || !seen(i - 1, idx) then false
+            else
+              out(i) = idx
+              loop(i + 1, t)
+      if loop(0, caseNames) then out(declIdx) else -1
+
+  /** Position of the schema field naming `scalaName` — exactly, else uniquely up to separators and
+    * case. `-1` when no field matches or when more than one does: an ambiguous signal is no signal.
+    */
+  private def nominalIndex(record: Schema, scalaName: String): Int =
+    val exact = record.getField(scalaName)
+    if exact != null then exact.pos
+    else
+      val fields = record.getFields
+      @tailrec def loop(i: Int, found: Int): Int =
+        if i >= fields.size then found
+        else if sameFieldName(fields.get(i).name, scalaName) then
+          if found >= 0 then -1 else loop(i + 1, i)
+        else loop(i + 1, found)
+      loop(0, -1)
+
+  /** `a` and `b` name the same field up to `_` / `-` / `.` and case: `landingPageId`,
+    * `landing_page_id`, `LANDING_PAGE_ID` and `landing-page-id` all match. Two cursors rather than
+    * two normalised copies — this runs once per candidate schema field per drilled hop, at
+    * construction time, and has no business allocating.
+    *
+    * NOT a transform inverter: it recognises only the letter-preserving transform family, which is
+    * exactly why an unrecognised transform falls through to the positional rung (issue #35) instead
+    * of being guessed at.
+    */
+  private def sameFieldName(a: String, b: String): Boolean =
+    @tailrec def skip(s: String, i: Int): Int =
+      if i >= s.length then i
+      else
+        val c = s.charAt(i)
+        if c == '_' || c == '-' || c == '.' then skip(s, i + 1) else i
+    @tailrec def loop(i: Int, j: Int): Boolean =
+      val x = skip(a, i)
+      val y = skip(b, j)
+      if x >= a.length || y >= b.length then x >= a.length && y >= b.length
+      else if Character.toLowerCase(a.charAt(x)) != Character.toLowerCase(b.charAt(y)) then false
+      else loop(x + 1, y + 1)
+    loop(0, 0)
 
   /** Union-branch name for a runtime value. Schema-driven where possible — the named leaves
     * (records, enums, fixed) answer with their schema's FULL name, matching how union branches are
