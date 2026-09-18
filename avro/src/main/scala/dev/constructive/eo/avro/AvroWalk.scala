@@ -467,6 +467,38 @@ private[avro] object AvroWalk:
         )
       else fields.get(declIdx).name
 
+  /** Validate an EXPLICIT schema field name — the `.fieldNamed` escape hatch — against the record
+    * it will be looked up in, at CONSTRUCTION time. Without this a typo, or the Scala name passed
+    * where the schema name was meant, is a runtime SILENT MISS: reads return `None` and writes pass
+    * the payload through unchanged while reporting success. That is precisely the failure class the
+    * hatch exists to avoid, and the schema was in hand all along.
+    *
+    * Deliberately silent in two cases. A MAP parent: `.fieldNamed` is also how a map KEY is
+    * addressed, and keys are data, not schema fields — a key absent from the payload is an ordinary
+    * `None`, and feature-detecting one is legitimate. An unresolvable parent path: the walk already
+    * reports that at runtime, and refusing here would change the meaning of a prism deliberately
+    * built against a drifted root schema.
+    */
+  def requireFieldNamed(
+      root: Schema,
+      parentPath: Array[PathStep],
+      schemaName: String,
+      who: String,
+  ): Unit =
+    schemaAt(root, parentPath) match
+      case Right(parent) => requireFieldIn(parent, schemaName, who)
+      case Left(_)       => ()
+
+  /** [[requireFieldNamed]] against an already-resolved parent record — the traversal's entry. */
+  def requireFieldIn(parent: Schema, schemaName: String, who: String): Unit =
+    if parent.getType == Schema.Type.RECORD && parent.getField(schemaName) == null then
+      throw new IllegalArgumentException(
+        s"$who('$schemaName'): record '${parent.getFullName}' has no field of that name — "
+          + parent.getFields.asScala.map(_.name).mkString(", ")
+          + ". `.fieldNamed` takes the SCHEMA field name; for the case-class field name use"
+          + " .field(_.x)."
+      )
+
   /** ALL-OR-NOTHING nominal resolution: the schema-field position for the case field at `declIdx`,
     * or `-1` to abstain and let position decide.
     *

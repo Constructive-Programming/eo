@@ -161,4 +161,34 @@ class AvroNominalResolutionSpec extends Specification:
       .and(after("beta_name") === "BETA0")
   }
 
+  // ---- the `.fieldNamed` escape hatch is itself checked -------------
+  // Every error message and every doc paragraph above points at `.fieldNamed`. It appended the
+  // literal with NO schema lookup at all, although the schema was in hand, so a typo — or the Scala
+  // name passed where the schema name was meant — read `None` and wrote the payload back unchanged
+  // while reporting success. That is the same silent-miss class the hatch exists to avoid.
+
+  ".fieldNamed with a name the schema lacks is refused at construction, not missed at runtime" >> {
+    codecPrism[Three].fieldNamed[String]("nope") must
+      throwAn[IllegalArgumentException].like {
+        case e =>
+          (e.getMessage must contain("a, computed, b, c"))
+            .and(e.getMessage must contain("AvroPrism.fieldNamed"))
+            .and(e.getMessage must contain(".field(_.x)"))
+      }
+  }
+
+  ".fieldNamed on a traversal suffix is checked against the element record" >> {
+    codecPrism[Basket].field(_.items).each.fieldNamed[String]("nope") must
+      throwAn[IllegalArgumentException].like {
+        case e =>
+          (e.getMessage must contain("c, x, y"))
+            .and(e.getMessage must contain("AvroTraversal.fieldNamed"))
+      }
+  }
+
+  ".fieldNamed with a name the schema HAS still builds, and reaches the residuals" >> {
+    val bytes = encodeBytes(Pair("ALPHA0", "BETA0"))
+    codecPrism[Pair].fieldNamed[String]("beta").getOption(bytes) must beSome("BETA0")
+  }
+
 end AvroNominalResolutionSpec

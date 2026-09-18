@@ -353,9 +353,13 @@ class ResolutionFalsePositiveSpec extends Specification:
     verdicts.collect { case (id, "SILENT-MISS") => id }.toList === Nil
   }
 
-  "every cell keeps the verdict it had on published 0.15.1" >> {
+  "the ONLY verdict change against 0.15.1 is the `.fieldNamed` existence check" >> {
     (verdicts.size === 28)
-      .and(verdicts.collect { case (id, v) if v != "CORRECT" => id }.toList === Nil)
+      .and(
+        verdicts.collect { case (id, v) if v != "CORRECT" => id }.toList ===
+          List("hatch-record-probe-absent")
+      )
+      .and(verdicts("hatch-record-probe-absent") === "LOUD-REFUSAL")
   }
 
 end ResolutionFalsePositiveSpec

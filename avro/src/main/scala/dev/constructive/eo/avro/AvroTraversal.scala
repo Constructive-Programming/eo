@@ -178,6 +178,7 @@ final class AvroTraversal[A] private[avro] (
   private[avro] def widenSuffixNamed[B](
       schemaName: String
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
+    AvroWalk.requireFieldIn(suffixParentRecord, schemaName, "AvroTraversal.fieldNamed")
     widenSuffixStep[B](PathStep.Field(schemaName))
 
   /** The record schema the per-element suffix currently points at: walk the prefix to the array
@@ -250,8 +251,9 @@ object AvroTraversal:
     )(using codecB: AvroCodec[B]): AvroTraversal[B] =
       ${ AvroPrismMacro.fieldTraversalImpl[A, B]('t, 'selector, 'codecB) }
 
-  /** `.fieldNamed[B]("schema_name")` — drill by EXPLICIT schema field name (issue #35 escape
-    * hatch), the traversal counterpart of [[AvroPrism.fieldNamed]].
+  /** `.fieldNamed[B]("schema_name")` — drill by EXPLICIT schema field name, the traversal
+    * counterpart of [[AvroPrism.fieldNamed]], and checked against the element record the same way
+    * (issue #95).
     */
   extension [A](t: AvroTraversal[A])
 
