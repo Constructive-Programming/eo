@@ -4,7 +4,16 @@ import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
 import dev.constructive.eo.widenRight
-import java.util.{ArrayList, LinkedHashMap, List as JList, Map as JMap}
+import java.lang.ref.{ReferenceQueue, WeakReference}
+import java.util.concurrent.ConcurrentHashMap
+import java.util.{
+  ArrayList,
+  Collections as JCollections,
+  HashMap as JHashMap,
+  LinkedHashMap,
+  List as JList,
+  Map as JMap
+}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, IndexedRecord}
 
@@ -433,7 +442,13 @@ private[avro] object AvroWalk:
     *
     * '''Known residual''': a codec that both renames beyond recognition AND reorders (equal arity,
     * no name hit) still resolves by position, and is still wrong — nothing about the names or the
-    * shape can see it. Use [[AvroPrism.fieldNamed]] there.
+    * shape can see it. Use [[AvroPrism.fieldNamed]] there. Nothing SCHEMA-DERIVED can close it
+    * either — not the record's name, not its parsing fingerprint: the residual pair is two renamed,
+    * swapped columns of the same physical type within ONE record, so both candidate readings carry
+    * the same fullname and the same fingerprint by construction, and a schema-derived value sees
+    * only one of the two operands the comparison would need. The only mechanism that reaches this
+    * class is the differential codec probe (issue #100) — encoding a discriminating value through
+    * the codec and reading which slot moved.
     *
     * '''Known behaviour change''': a codec that PERMUTES the Scala names (writes case field `a`
     * into a schema field literally named `b`, and vice versa) resolved correctly by position and
@@ -511,8 +526,38 @@ private[avro] object AvroWalk:
     * matches nothing, the map is not total, the rung abstains, position stays right.
     *
     * An empty `caseNames` (a NamedTuple parent, which has no case fields) abstains too.
+    *
+    * '''Per case field, two rungs, and the order matters.''' The EXACT name first, through Avro's
+    * own per-record name hash: O(1), allocation-free, and the only rung an identity-named codec
+    * ever reaches — it neither builds nor consults an index. Only a miss consults the normalised
+    * index (issue #103), which is built once per record schema and cached, rather than re-scanning
+    * every schema field per case field.
+    *
+    * The index is resolved ONCE per resolution and threaded through the remaining case fields. Per
+    * case field it would be a `ConcurrentHashMap` probe and a throwaway lookup key EACH — at arity
+    * 66, 66 probes and 66 keys that all answer with the same map — which is the very multiplier
+    * issue #103 set out to remove, merely moved one level down. Threaded as a recursion parameter
+    * and not hoisted above the loop, because that would make the identity-named codec pay for an
+    * index it never reads.
+    *
+    * What the miss path pays INSTEAD of the scan, stated because it is a real regression and the
+    * repo's benchmark doctrine gates on bytes: [[normalisedName]] materialises a `String`, so a
+    * resolution that misses the exact-name hash allocates ~104 B per case field where the pairwise
+    * cursor walk it replaced allocated nothing (measured, snake_cased: 24 -> 256 B at n=2, 280 ->
+    * 7,168 B at n=66, the residue being the `out` array both shapes allocate). That is the
+    * deliberate trade — ~490 us of CPU per resolution for ~7 KB of nursery at n=66 — and it is per
+    * OPERATION, not per construction, for a `def`-shaped optic. Closing it would mean probing the
+    * index by a cursor-computed hash of the normalised name and confirming the candidate with an
+    * allocation-free pairwise comparison: a larger change than issue #103.
+    *
+    * `private[avro]` only so `NominalResolutionParitySpec` can diff every verdict of this function
+    * against the frozen pre-index implementation it was rewritten from (issue #103).
     */
-  private def totalNominalIndex(record: Schema, caseNames: List[String], declIdx: Int): Int =
+  private[avro] def totalNominalIndex(
+      record: Schema,
+      caseNames: List[String],
+      declIdx: Int,
+  ): Int =
     val arity = caseNames.size
     // A total, injective map needs at least as many schema fields as case fields — a free
     // precondition that skips the whole scan for the codec that drops a field.
@@ -524,54 +569,174 @@ private[avro] object AvroWalk:
       // Set here costs a boxed Integer and a new Set node per field.
       @tailrec def seen(j: Int, idx: Int): Boolean =
         j < 0 || (out(j) != idx && seen(j - 1, idx))
-      @tailrec def loop(i: Int, rest: List[String]): Boolean =
+      // `index` is the normalised index once some case field has needed it, `null` until then.
+      @tailrec def loop(i: Int, rest: List[String], index: JMap[String, Integer] | Null): Boolean =
         rest match
           case Nil    => true
           case n :: t =>
-            val idx = nominalIndex(record, n)
-            if idx < 0 || !seen(i - 1, idx) then false
+            val exact = record.getField(n)
+            if exact != null then
+              val idx = exact.pos
+              if !seen(i - 1, idx) then false
+              else
+                out(i) = idx
+                loop(i + 1, t, index)
             else
-              out(i) = idx
-              loop(i + 1, t)
-      if loop(0, caseNames) then out(declIdx) else -1
+              val here = if index != null then index else normalisedNameIndex(record)
+              val hit = here.get(normalisedName(n))
+              // A key present with `Ambiguous` is the same verdict the scan produced on its SECOND
+              // hit: more than one schema field normalises to this name, so the signal is no signal.
+              val idx = if hit == null then -1 else hit.intValue
+              if idx < 0 || !seen(i - 1, idx) then false
+              else
+                out(i) = idx
+                loop(i + 1, t, here)
+      if loop(0, caseNames, null) then out(declIdx) else -1
 
-  /** Position of the schema field naming `scalaName` — exactly, else uniquely up to separators and
-    * case. `-1` when no field matches or when more than one does: an ambiguous signal is no signal.
-    */
-  private def nominalIndex(record: Schema, scalaName: String): Int =
-    val exact = record.getField(scalaName)
-    if exact != null then exact.pos
-    else
-      val fields = record.getFields
-      @tailrec def loop(i: Int, found: Int): Int =
-        if i >= fields.size then found
-        else if sameFieldName(fields.get(i).name, scalaName) then
-          if found >= 0 then -1 else loop(i + 1, i)
-        else loop(i + 1, found)
-      loop(0, -1)
-
-  /** `a` and `b` name the same field up to `_` / `-` / `.` and case: `landingPageId`,
-    * `landing_page_id`, `LANDING_PAGE_ID` and `landing-page-id` all match. Two cursors rather than
-    * two normalised copies — this runs once per candidate schema field per drilled hop, at
-    * construction time, and has no business allocating.
+  /** `_` / `-` / `.` stripped and everything lower-cased: the canonical form under which
+    * `landingPageId`, `landing_page_id`, `LANDING_PAGE_ID` and `landing-page-id` are one name.
+    *
+    * Lower-casing CHARACTER BY CHARACTER (`Character.toLowerCase`), not `String.toLowerCase`: the
+    * latter is locale-sensitive and can change a string's LENGTH (`U+0130` maps to two chars), so
+    * it would not agree with the pairwise cursor comparison this replaces. Per-char keeps the
+    * normalised key exactly as discriminating as the old `sameFieldName` walk.
     *
     * NOT a transform inverter: it recognises only the letter-preserving transform family, which is
     * exactly why an unrecognised transform falls through to the positional rung (issue #35) instead
     * of being guessed at.
     */
-  private def sameFieldName(a: String, b: String): Boolean =
-    @tailrec def skip(s: String, i: Int): Int =
-      if i >= s.length then i
-      else
-        val c = s.charAt(i)
-        if c == '_' || c == '-' || c == '.' then skip(s, i + 1) else i
-    @tailrec def loop(i: Int, j: Int): Boolean =
-      val x = skip(a, i)
-      val y = skip(b, j)
-      if x >= a.length || y >= b.length then x >= a.length && y >= b.length
-      else if Character.toLowerCase(a.charAt(x)) != Character.toLowerCase(b.charAt(y)) then false
-      else loop(x + 1, y + 1)
-    loop(0, 0)
+  private def normalisedName(name: String): String =
+    val out = new java.lang.StringBuilder(name.length)
+    @tailrec def go(i: Int): Unit =
+      if i < name.length then
+        val c = name.charAt(i)
+        if c != '_' && c != '-' && c != '.' then out.append(Character.toLowerCase(c)): Unit
+        go(i + 1)
+    go(0)
+    out.toString
+
+  /** The ambiguity sentinel stored in a [[normalisedNameIndex]] — two or more schema fields share
+    * one normalised name, so no case field may resolve through it.
+    */
+  private val Ambiguous: Integer = Integer.valueOf(-1)
+
+  /** `normalisedName(field) -> field position`, or [[Ambiguous]] where two schema fields collide —
+    * ONE O(n) pass over the record's fields, cached per schema (issue #103).
+    *
+    * What this replaces: a linear scan of every schema field, per case field, per drilled hop, with
+    * no early exit (the scan had to see a second match to call it ambiguous). That is
+    * `arity x fields.size x nameLength` for every codec under a name transform — which is exactly
+    * the population the nominal rung exists for, since an identity-named codec was already right
+    * positionally. Collision detection is preserved and merely MOVED: a key already present while
+    * BUILDING is the same signal the scan's second hit produced, seen once instead of per query.
+    *
+    * Not free at every size: building the index costs more than the scan it replaces on a ONE- or
+    * TWO-field record, so the FIRST resolution against such a schema is measurably slower (~+250 ns
+    * at n=1, ~+100 ns at n=2, once per schema, amortised over every later hop). The crossover is at
+    * n=3; by n=66 the first resolution is ~24x faster and every later one ~57x.
+    *
+    * What is handed back is an UNMODIFIABLE view, and the view — not the backing map — is what the
+    * cache stores, so the wrap is paid once per schema rather than per lookup. `private[avro]` is a
+    * Scala-only fence: the method is PUBLIC in bytecode, and the value is a process-wide singleton
+    * per schema, so handing out the live `HashMap` would let one careless in-module (or reflective)
+    * `put` corrupt field resolution for that schema for the life of the JVM — silently, since every
+    * later caller would read the corrupted entry as if the index had been built that way.
+    *
+    * `private[avro]` only so the differential harness can compare cache instances directly.
+    */
+  private[avro] def normalisedNameIndex(record: Schema): JMap[String, Integer] =
+    val cached = nameIndexCache.get(new SchemaQuery(record))
+    if cached != null then cached
+    else
+      val fields = record.getFields
+      val built = new JHashMap[String, Integer](Math.max(4, fields.size * 2))
+      @tailrec def fill(i: Int): Unit =
+        if i < fields.size then
+          val key = normalisedName(fields.get(i).name)
+          // `put`, then demote to Ambiguous on a collision: the FIRST writer's position is
+          // irrelevant once a second field claims the key — both are unreachable through it.
+          val prior = built.put(key, Integer.valueOf(i))
+          if prior != null then built.put(key, Ambiguous): Unit
+          fill(i + 1)
+      fill(0)
+      val view = JCollections.unmodifiableMap(built)
+      // Drain first: a purge costs nothing on the hot path because it only runs on a cache MISS,
+      // which is once per schema for the lifetime of that schema.
+      purgeStaleIndexKeys()
+      val raced = nameIndexCache.putIfAbsent(new SchemaWeakKey(record, staleIndexKeys), view)
+      if raced == null then view else raced
+
+  /** Weak, IDENTITY-keyed side table behind [[normalisedNameIndex]].
+    *
+    * Identity and not `Schema` itself as the key: `Schema.equals` is deep-structural (a record
+    * compares every field, recursively) and `Schema` is MUTABLE — `addProp` resets its cached hash
+    * — so a structural key pays a deep compare per lookup and can lose an entry when a schema is
+    * annotated after insertion. Reference identity is O(1), stable, and is the right granularity
+    * anyway: the index depends on nothing but this object's field names.
+    *
+    * Not Avro's own per-schema property storage, which was the obvious slot to reach for first: a
+    * prop is part of `Schema.equals`, of `toString`, and of the JSON and canonical forms, so
+    * parking a cache there would change what the schema SERIALISES AS. Refuted, hence the side
+    * table.
+    *
+    * WEAK keys and not a bounded cache: schemas are typically module-level and live forever, in
+    * which case both are equivalent — but a caller that builds schemas dynamically (a registry
+    * client resolving writer schemas per message) would either leak them forever under a strong map
+    * or thrash under a bound. Weak keys make the entry's lifetime the schema's own. The VALUE holds
+    * no reference back to the schema (only `String` keys copied out of the field names), so an
+    * entry is genuinely collectable.
+    */
+  private val nameIndexCache: ConcurrentHashMap[SchemaId, JMap[String, Integer]] =
+    new ConcurrentHashMap[SchemaId, JMap[String, Integer]]()
+
+  /** Cleared [[SchemaWeakKey]]s awaiting removal from [[nameIndexCache]]. */
+  private val staleIndexKeys: ReferenceQueue[Schema] = new ReferenceQueue[Schema]()
+
+  /** Evict the entries whose schema has been collected. Runs on a cache MISS only. */
+  private def purgeStaleIndexKeys(): Unit =
+    @tailrec def drain(): Unit =
+      val stale = staleIndexKeys.poll()
+      if stale != null then
+        nameIndexCache.remove(stale.asInstanceOf[SchemaId]): Unit
+        drain()
+    drain()
+
+  /** Identity-hashing key face: a live query key and a stored weak key must hash and compare alike.
+    */
+  sealed private trait SchemaId:
+
+    /** The schema this key stands for, or `null` once a weak key's referent is collected. */
+    def schemaRef: Schema | Null
+
+    def idHash: Int
+
+    final override def hashCode(): Int = idHash
+
+    final override def equals(other: Any): Boolean =
+      other match
+        case that: SchemaId =>
+          // Identity FIRST so a cleared weak key can still be removed by the purge — its referent
+          // is gone, so the reference comparison below would refuse to match even itself.
+          (this eq that) || {
+            val mine = schemaRef
+            mine != null && (mine eq that.schemaRef)
+          }
+        case _ => false
+
+  end SchemaId
+
+  /** Throwaway lookup key — a plain object, so a cache HIT costs no `WeakReference` registration.
+    */
+  final private class SchemaQuery(record: Schema) extends SchemaId:
+    val schemaRef: Schema = record
+    val idHash: Int = System.identityHashCode(record)
+
+  /** The stored key: weak, so the entry dies with the schema. */
+  final private class SchemaWeakKey(record: Schema, queue: ReferenceQueue[Schema])
+      extends WeakReference[Schema](record, queue),
+        SchemaId:
+    val idHash: Int = System.identityHashCode(record)
+    def schemaRef: Schema | Null = get()
 
   /** Union-branch name for a runtime value. Schema-driven where possible — the named leaves
     * (records, enums, fixed) answer with their schema's FULL name, matching how union branches are
