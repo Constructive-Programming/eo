@@ -6,7 +6,14 @@ import scala.jdk.CollectionConverters.*
 import dev.constructive.eo.widenRight
 import java.lang.ref.{ReferenceQueue, WeakReference}
 import java.util.concurrent.ConcurrentHashMap
-import java.util.{ArrayList, HashMap as JHashMap, LinkedHashMap, List as JList, Map as JMap}
+import java.util.{
+  ArrayList,
+  Collections as JCollections,
+  HashMap as JHashMap,
+  LinkedHashMap,
+  List as JList,
+  Map as JMap
+}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, IndexedRecord}
 
@@ -628,6 +635,13 @@ private[avro] object AvroWalk:
     * at n=1, ~+100 ns at n=2, once per schema, amortised over every later hop). The crossover is at
     * n=3; by n=66 the first resolution is ~24x faster and every later one ~57x.
     *
+    * What is handed back is an UNMODIFIABLE view, and the view — not the backing map — is what the
+    * cache stores, so the wrap is paid once per schema rather than per lookup. `private[avro]` is a
+    * Scala-only fence: the method is PUBLIC in bytecode, and the value is a process-wide singleton
+    * per schema, so handing out the live `HashMap` would let one careless in-module (or reflective)
+    * `put` corrupt field resolution for that schema for the life of the JVM — silently, since every
+    * later caller would read the corrupted entry as if the index had been built that way.
+    *
     * `private[avro]` only so the differential harness can compare cache instances directly.
     */
   private[avro] def normalisedNameIndex(record: Schema): JMap[String, Integer] =
@@ -645,11 +659,12 @@ private[avro] object AvroWalk:
           if prior != null then built.put(key, Ambiguous): Unit
           fill(i + 1)
       fill(0)
+      val view = JCollections.unmodifiableMap(built)
       // Drain first: a purge costs nothing on the hot path because it only runs on a cache MISS,
       // which is once per schema for the lifetime of that schema.
       purgeStaleIndexKeys()
-      val raced = nameIndexCache.putIfAbsent(new SchemaWeakKey(record, staleIndexKeys), built)
-      if raced == null then built else raced
+      val raced = nameIndexCache.putIfAbsent(new SchemaWeakKey(record, staleIndexKeys), view)
+      if raced == null then view else raced
 
   /** Weak, IDENTITY-keyed side table behind [[normalisedNameIndex]].
     *
