@@ -14,17 +14,17 @@ of N&sup2; hand-written `.andThen` overloads.
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo" % "0.15.0"
+libraryDependencies += "dev.constructive" %% "cats-eo" % "0.16.0"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "0.15.0" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "0.15.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "0.15.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "0.15.0" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "0.15.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.15.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.15.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.15.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.15.0" // JDK 25
+libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "0.16.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "0.16.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "0.16.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "0.16.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "0.16.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.16.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.16.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.16.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.16.0" // JDK 25
 ```
 
 Requires Scala 3.8.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
