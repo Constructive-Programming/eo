@@ -75,8 +75,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   costs one allocation per schema rather than one per lookup and repeated lookups still hand back
   the same instance.
 
+### Added
+
+- **`.fields(...)` no longer stops at 22 selectors** (#96): the macro-synthesised
+  `NamedTuple` focus has no arity ceiling any more. Up to 22 selectors the value tuple is spelled
+  `scala.TupleN` and hearth builds it with that tuple's constructor; at 23 and above the value
+  tuple *is* a `*:` cons chain, and hearth 0.4.2 builds that through `Tuple.fromArray`. Before,
+  hearth 0.4.0 called the cons chain's primary constructor — which takes no value parameters — so
+  every 23+-selector `.fields` failed to compile with `wrong number of arguments at inlining …
+  expected: 0, found: N`. Verified end-to-end (derive, encode, decode, positional read-back) at
+  arity 23 and at arity 40 with mixed field types, since the `Tuple.fromArray` path boxes every
+  element to `Object`. Both spellings remain load-bearing: hearth's sub-23 branch still cannot
+  build a cons chain, so `MacroSelectors.tupleTypeOf` keeps emitting `TupleN` below 23
+  permanently. What a very wide selection costs is compile time, not correctness — the derivation
+  grows superlinearly in arity, so past a few hundred fields raise `-Xss` and
+  `-Xmacro-settings:avroDerivation.timeout` before splitting the cover.
+
 ### Changed
 
+- **Dependency bump**: hearth `0.4.0` → `0.4.2` and kindlings-{avro,cats,circe}-derivation
+  `0.3.0` → `0.3.2` — the releases that carry the NamedTuple arity fix above (hearth #313/#314,
+  landed in 0.4.1). Transitively: apache-avro `1.12.1` → `1.12.2` (the explicit pin moves with it
+  rather than silently downgrading the transitive), jackson-core/-databind `2.21.5` → `2.22.1`,
+  jackson-annotations `2.21` → `2.22`, commons-lang3 `3.18.0` → `3.20.0`, slf4j-api `2.0.17` →
+  `2.0.18`. The jackson force-pin lifts to 2.22.1 — the release that re-fixed CVE-2026-54515,
+  which 2.22.0 had regressed, and the version avro 1.12.2's parent BOM resolves — so the override
+  stays a regression floor instead of becoming a downgrade that splits the jackson BOM. The
+  commons-lang3 floor lifts to 3.20.0 for the same reason. No derived Avro schema text changed:
+  record names, field names and field order are byte-identical across the bump (the 216-example
+  avro suite, including every naming and union spec, passes unmodified).
 - **Behaviour change, avro**: a hand-written codec that PERMUTES the Scala names (writes case field
   `a` into a schema field literally named `b`, and vice versa) resolved correctly by position and
   now resolves by name, i.e. wrongly. No name transform can produce that shape — a transform is a

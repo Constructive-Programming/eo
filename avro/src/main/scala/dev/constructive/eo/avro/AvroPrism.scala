@@ -413,11 +413,14 @@ object AvroPrism:
   /** `.fields(_.a, _.b, ...)` — focus a NamedTuple over selected fields.
     *
     * The `AvroCodec` for the synthesised NamedTuple is summoned at the call site; with no
-    * hand-written given in scope it auto-derives through kindlings. That works for '''2 to 22'''
-    * selectors. At 23 or more, Scala has no `TupleN` spelling left — the focus type IS a `*:` cons
-    * chain — and kindlings 0.3.0 / hearth 0.4.0 cannot construct one, so the call fails to compile
-    * with `too many arguments for constructor *:`. Chain two `.fields` covers, or drill with
-    * `.field`, until the dependency moves to hearth ≥ 0.4.2. (Issue #96.)
+    * hand-written given in scope it auto-derives through kindlings. There is no arity ceiling: up
+    * to 22 selectors the focus is spelled `TupleN` and hearth builds it with that tuple's
+    * constructor; at 23 and above the focus type IS a `*:` cons chain, which hearth ≥ 0.4.2 builds
+    * through `Tuple.fromArray` instead. (Both spellings are needed — hearth's constructor branch
+    * below 23 cannot build a cons chain, and there is no `TupleN` above 22.) Wide selections cost
+    * compile time rather than correctness: the derivation is quadratic-ish in arity, and a very
+    * wide record may want a larger `-Xss` or a higher `-Xmacro-settings:avroDerivation.timeout`.
+    * (Issue #96.)
     */
   extension [A](o: AvroPrism[A])
 

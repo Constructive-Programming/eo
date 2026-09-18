@@ -173,7 +173,7 @@ object JsonPrismMacro:
             + s" Derive one via `given Codec.AsObject[${Type.show[nt]}] ="
             + " KindlingsCodecAsObject.derived`"
             + " (`import hearth.kindlings.circederivation.KindlingsCodecAsObject`,"
-            + " dependency `\"com.kubuszok\" %% \"kindlings-circe-derivation\" % \"0.3.0\"`),"
+            + " dependency `\"com.kubuszok\" %% \"kindlings-circe-derivation\" % \"0.3.2\"`),"
             + " or provide one manually."
         )
         val namesExpr: Expr[Array[String]] =

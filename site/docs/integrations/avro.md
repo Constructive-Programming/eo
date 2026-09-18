@@ -45,7 +45,7 @@ full table.
 
 The codec backend is
 [kindlings-avro-derivation](https://github.com/MateuszKubuszok/kindlings-avro-derivation)
-0.1.2, which pins apache-avro 1.12.1. cats-eo-avro wraps the
+0.3.2, which pins apache-avro 1.12.2. cats-eo-avro wraps the
 kindlings `AvroEncoder[A]` / `AvroDecoder[A]` / `AvroSchemaFor[A]`
 triplet in a single [`AvroCodec[A]`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/main/scala/dev/constructive/eo/avro/AvroCodec.scala)
 typeclass so user code summons one thing per type.
@@ -255,12 +255,19 @@ inside the selection under the Scala package namespace, which an
 enclosing union will refuse. Name the codec (or drill with
 `.field`) in that case.
 
-The auto-derived route covers **2 to 22** selectors. At 23 or more
-there is no `TupleN` spelling left — the NamedTuple's value tuple
-*is* a `*:` cons chain — and the derivation backend this project
-pins (kindlings 0.3.0 / hearth 0.4.0) cannot construct one, in
-either the derived or the hand-written form. Split a wider
-selection into several `.fields` covers.
+The auto-derived route has **no arity ceiling**. Up to 22 selectors
+the NamedTuple's value tuple is spelled `TupleN` and the derivation
+backend builds it with that tuple's constructor; at 23 or more there
+is no `TupleN` spelling left — the value tuple *is* a `*:` cons
+chain — and kindlings ≥ 0.3.2 / hearth ≥ 0.4.2 build that through
+`Tuple.fromArray`. (Earlier pins could not, which is why this page
+documented a 22-selector ceiling until the 0.4.2 / 0.3.2 bump.)
+
+What a very wide selection costs is *compile time*, not
+correctness: the derivation grows superlinearly in arity, so a
+record wide enough to feel it wants a larger compiler stack
+(`-Xss`) and a higher
+`-Xmacro-settings:avroDerivation.timeout` before it wants a split.
 
 ```scala mdoc
 val nameAge = codecPrism[Person].fields(_.name, _.age)
