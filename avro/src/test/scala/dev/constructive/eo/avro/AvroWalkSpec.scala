@@ -341,23 +341,8 @@ class AvroWalkSpec extends Specification:
       "literalName"
   }
 
-  // covers: fieldNameAt on a non-record schema throws IllegalArgumentException,
-  //   fieldNameAt with declIdx past the field count throws IllegalArgumentException
-  "AvroWalk.fieldNameAt: non-record parent and out-of-range declIdx both throw loudly" >> {
-    val stringSchema = Schema.create(Schema.Type.STRING)
-    val nonRecordThrows =
-      try
-        AvroWalk.fieldNameAt(stringSchema, "x", 0, Nil, "test")
-        false
-      catch case _: IllegalArgumentException => true
-
-    val outOfRangeThrows =
-      try
-        AvroWalk.fieldNameAt(personSchema, "x", 99, Nil, "test")
-        false
-      catch case _: IllegalArgumentException => true
-
-    (nonRecordThrows === true).and(outOfRangeThrows === true)
-  }
+  // `fieldNameAt`'s own arms — non-record parent, every `declIdx` boundary including the
+  // `declIdx == fields.size` cell this file's old example missed — now live in
+  // `AvroNominalDoctrineSpec`, which checks them exhaustively against a declarative oracle.
 
 end AvroWalkSpec
