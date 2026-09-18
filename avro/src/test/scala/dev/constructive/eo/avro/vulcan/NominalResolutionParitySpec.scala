@@ -178,8 +178,9 @@ class NominalResolutionParitySpec extends Specification:
   }
 
   "injectivity is checked across the WHOLE case-field list" >> {
-    // `a` and `_a`... would both want slot 0 were `A` absent; with two case fields aimed at one
-    // schema field the rung abstains ENTIRELY — the loser does not merely lose.
+    // Case fields `ab` and `aB` normalise to the same key, and that key names ONE schema field,
+    // `a_b`: two case fields aimed at one slot, so the map is not injective. The rung then abstains
+    // for EVERY field — the second case field does not merely lose slot 0 to the first.
     val r = record(List("a_b", "b"))
     (AvroWalk.totalNominalIndex(r, List("ab", "aB"), 0) === -1)
       .and(AvroWalk.totalNominalIndex(r, List("ab", "aB"), 1) === -1)
