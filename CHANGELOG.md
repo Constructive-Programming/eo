@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`cats-eo-avro`: the derived whole-record builder — `AvroVulcan.recordBuilder` (#95)**:
+  `A ⇒ GenericData.Record`, leaf by leaf, at hand-built cost with zero hand-maintained lines. The
+  macro walks `A`'s case fields at expansion into a plain runtime `RecordShape` IR and emits ONE
+  assembly call; construction resolves every case field's schema slot by NAME (all-or-nothing, the
+  #105 doctrine via a new total `AvroWalk.recordSlots` rung) and validates every arm against the
+  schema it writes into — so `toRecord` is pure positional puts. Per field: primitives put the value
+  itself, nested case classes RECURSE into a sub-record level (the piece the positional builder the
+  filer benchmarked and rejected lacked — theirs re-entered `Codec[Sub].encode`, keeping vulcan's
+  per-sub-record composition, which measured 7.5x time / 16.9x allocation on the real nested
+  ClickInfo), `None` puts null exactly as vulcan's `OptionCodec`, and everything else (enums, bytes,
+  logical types, collections, sums, value classes) falls back to the field type's own
+  `vulcan.Codec` — summoned at the derivation site, so a missing leaf codec is a compile error
+  naming the field. Construction is TOTAL (`Exception | WholeRecordBuilder[A]`; `AvroWalk.recordSlots`
+  returns the failure instead of throwing), self-recursive case classes terminate through the runtime
+  level chain, and the one documented difference from `codec.encode` is schema-only columns
+  (computed/derived fields keep their in-record default — the hand-built `.put` contract,
+  round-trip-safe through the codec's decode). `WholeRecordBuilder.asAvroCodec` installs it as an
+  `AvroCodec.encode` in one line (`given AvroCodec[ClickInfo] =
+  clickBuilder.fold(e => throw e, _.asAvroCodec)`), keeping drilled `.field` reads and
+  `codecPrism[...].record.reverseGet` on the same fast path. The bridge also gains the doctrine's
+  shape overall: `AvroVulcan.codec` is two forms — `codec(schema)` (total; schema in hand) and
+  `codec[A]: Either[Exception, AvroCodec[A]]` (resolves from the codec) — with no naked throws on
+  any construction path; the opt-in given stays the one documented eager-failure site. Allocation
+  gate: `benchmarks` `ClickRecordBench` (66-leaf nested ClickInfo) — derived 744 B/op vs hand-built
+  768 vs the rejected positional 23,912 vs full codec 28,408.
+
 ## [0.16.0] - 2026-09-18
 
 ### Added

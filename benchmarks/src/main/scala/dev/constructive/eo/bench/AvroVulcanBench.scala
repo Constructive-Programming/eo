@@ -50,7 +50,10 @@ object AvroVulcanImpls:
     }
 
   val nativeCodec: AvroCodec[Hit] = summon[AvroCodec[Hit]]
-  val bridgedCodec: AvroCodec[Hit] = AvroVulcan.codec[Hit](using vulcanCodec)
+
+  val bridgedCodec: AvroCodec[Hit] =
+    AvroVulcan.codec[Hit](using vulcanCodec).fold(e => throw e, identity)
+
   val vulcanSchema: Schema = bridgedCodec.schema
 
   val hit: Hit = Hit("ada", 42L, active = true)

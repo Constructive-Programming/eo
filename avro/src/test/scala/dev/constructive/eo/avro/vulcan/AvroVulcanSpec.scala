@@ -2,8 +2,8 @@ package dev.constructive.eo.avro.vulcan
 
 import scala.language.implicitConversions
 
-import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
+import _root_.vulcan.Codec as VCodec
 import dev.constructive.eo.avro.circe.AvroJson
 import dev.constructive.eo.avro.{codecPrism, AvroCodec}
 import org.apache.avro.generic.IndexedRecord
@@ -24,12 +24,18 @@ class AvroVulcanSpec extends Specification:
   "AvroVulcan.codec" should {
 
     "round-trip encode → decodeEither through the bridged codec" in {
-      val bridged = AvroVulcan.codec[Combo]
-      bridged.decodeEither(bridged.encode(original)) must beRight(original)
+      AvroVulcan.codec[Combo] match
+        case Right(bridged) => bridged.decodeEither(bridged.encode(original)) must beRight(original)
+        case Left(e)        => ko(e.getMessage)
     }
 
     "surface decode failures as Left, never throw" in {
-      AvroVulcan.codec[Combo].decodeEither("not a record") must beLeft
+      AvroVulcan.codec[Combo].map(_.decodeEither("not a record")) must beRight(beLeft)
+    }
+
+    "bridge under an EXPLICIT schema — the total form" in {
+      val bridged = AvroVulcan.codec(summon[VCodec[Combo]].schema.toOption.get)
+      bridged.decodeEither(bridged.encode(original)) must beRight(original)
     }
   }
 

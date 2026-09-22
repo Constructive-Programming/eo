@@ -593,6 +593,100 @@ private[avro] object AvroWalk:
                 loop(i + 1, t, here)
       if loop(0, caseNames, null) then out(declIdx) else -1
 
+  /** ALL-OR-NOTHING slot resolution for a whole-record builder level (issue #95's builder).
+    *
+    * The same two rungs as [[totalNominalIndex]] per case field — the EXACT name first, through
+    * Avro's own per-record hash (O(1), allocation-free), then the cached normalised index (issue
+    * #103) — but the verdict is INVERTED. [[totalNominalIndex]] resolves ONE drilled hop and
+    * abstains to the positional rung when the case-field list doesn't map: there, a
+    * positionally-1:1 codec is already correct and must not be re-aimed. A BUILDER has no
+    * currently-correct fallback — it writes fresh slots from scratch — so a positional guess would
+    * be exactly the silent corruption the nominal rung exists to prevent, and the only safe verdict
+    * is TOTAL (every case field resolves) and INJECTIVE (no two case fields claim one schema
+    * column). Any miss or collision comes back as the [[IllegalArgumentException]] the caller
+    * throws, naming the field, the record and its field list — construction-time, before any record
+    * is built.
+    *
+    * Schema-only fields (computed/derived columns the case class doesn't hold) are deliberately NOT
+    * a failure — the case-field list must map INTO the schema, not ONTO it — and keep their
+    * in-record value: `GenericData.Record(schema)` zero-fills unwritten slots, so a nullable
+    * computed column serialises as null and a required one fails loudly at write time. That is the
+    * same contract a hand-built `.put` builder has, which is the point.
+    *
+    * `private[avro]` so the builder machinery resolves through this one implementation of the
+    * doctrine rather than duplicating [[normalisedName]].
+    */
+  private[avro] def recordSlots(
+      record: Schema,
+      caseNames: List[String],
+      who: String,
+  ): Exception | Array[Int] =
+    val out = new Array[Int](caseNames.size)
+    val names = caseNames.toArray
+    // Injectivity by scanning the filled prefix of `out` rather than a `Set[Int]`, as in
+    // [[totalNominalIndex]]: this runs once per builder construction over the level's fields,
+    // and a Set here costs a boxed Integer and a new Set node per field.
+    @tailrec def seen(j: Int, idx: Int): Boolean =
+      j < 0 || (out(j) != idx && seen(j - 1, idx))
+    // The name of the earlier case field that already claimed `idx` (the prefix is filled).
+    @tailrec def earlierClaimant(j: Int, idx: Int): String =
+      if out(j) == idx then names(j) else earlierClaimant(j - 1, idx)
+    // The first failing case field with its reason, or none. `index` is the normalised index
+    // once some case field has needed it, `null` until then — threaded as a recursion parameter
+    // exactly as in [[totalNominalIndex]], so the identity-named codec never builds an index.
+    @tailrec def loop(
+        i: Int,
+        rest: List[String],
+        index: JMap[String, Integer] | Null,
+    ): None.type | (String, String) =
+      rest match
+        case Nil    => None
+        case n :: t =>
+          val exact = record.getField(n)
+          val resolved: Integer | Null =
+            if exact != null then Integer.valueOf(exact.pos)
+            else
+              val here = if index != null then index else normalisedNameIndex(record)
+              here.get(normalisedName(n))
+          resolved match
+            case null =>
+              (n, "does not name a schema field")
+            case ambiguous if ambiguous.intValue < 0 =>
+              (
+                n,
+                "matches more than one schema field up to `_`/`-`/`.`/case normalisation",
+              )
+            case idxVal =>
+              val idx = idxVal.intValue
+              if !seen(i - 1, idx) then
+                (
+                  n,
+                  s"collides with case field '${earlierClaimant(i - 1, idx)}' — both resolve to"
+                    + s" schema position $idx",
+                )
+              else
+                out(i) = idx
+                loop(i + 1, t, index)
+    if record.getType != Schema.Type.RECORD then
+      IllegalArgumentException(
+        s"$who: the schema is a ${record.getType}, not a record — a whole-record builder mirrors"
+          + " case fields onto record fields; use the codec for non-record shapes."
+      )
+    else
+      loop(0, caseNames, null) match
+        case None     => out
+        case (n, why) =>
+          val fields = record.getFields
+          IllegalArgumentException(
+            s"$who: case field '$n' $why — record '${record.getFullName}' fields: "
+              + fields.asScala.map(_.name).mkString(", ")
+              + ". A whole-record builder resolves EVERY case field by NAME (exact first, then up to"
+              + " `_`/`-`/`.`/case, all-or-nothing over the whole case-field list); schema-only fields"
+              + " (computed columns) are fine and keep their schema default, but a case field must"
+              + " exist and claim one column. If the codec renames or drops this field, encode"
+              + " through the codec (or keep the hand-built builder) for this type instead."
+          )
+
   /** `_` / `-` / `.` stripped and everything lower-cased: the canonical form under which
     * `landingPageId`, `landing_page_id`, `LANDING_PAGE_ID` and `landing-page-id` are one name.
     *
