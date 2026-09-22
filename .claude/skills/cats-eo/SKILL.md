@@ -114,15 +114,17 @@ import dev.constructive.eo.data.Affine.given
 import dev.constructive.eo.jsoniter.JsoniterPrism
 
 given JsonValueCodec[Long] = JsonCodecMaker.make
-val idP = JsoniterPrism[Long]("$.payload.user.id")
+// fromPath returns Either — a path is DATA, and there is no throwing twin.
+val idP = JsoniterPrism.fromPath[Long]("$.payload.user.id")
+  .fold(msg => sys.error(msg), identity)   // unwrap once; literal path here
 
 idP.foldMap(identity[Long])(bytes)   // ~50 ns/op (16× eo-circe)
 idP.replace(99L)(bytes)              // ~100 ns/op (14× eo-circe)
 ```
 
-Wildcards `[*]` route through `JsoniterTraversal[A]`. Path subset is
-`$`, `$.foo`, `$[i]`, `$[*]`, dotted chains; no filters / recursive
-descent.
+Wildcards `[*]` route through `JsoniterTraversal.fromPath[A]` (same
+`Either`). Path subset is `$`, `$.foo`, `$[i]`, `$[*]`, dotted chains;
+no filters / recursive descent.
 
 ### A6. Avro record edit
 

@@ -174,14 +174,22 @@ object AvroJsonBridgeBench:
   given JsonValueCodec[ClickPayload] = JsonCodecMaker.make
   given JsonValueCodec[String] = JsonCodecMaker.make
 
+  /** Literal-path prism for the HARNESS: a `Left` on a literal path in this file is a broken
+    * benchmark definition, so fail fast (library callers handle the `Either` instead).
+    */
+  private def jsonPrism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
+    JsoniterPrism
+      .fromPath[A](path)
+      .fold(msg => throw new IllegalArgumentException(s"bench path '$path': $msg"), identity)
+
   /** Avro-side scalar branch not already in [[ConversionDomain]]. */
   val conversionIdPrism = codecPrism[WideConversion].field(_.conversionId)
 
   /** JSON-side byte optics — branch codecs only. */
-  val clickJson = JsoniterPrism.fromPath[ClickPayload]("$.click")
-  val partnerJson = JsoniterPrism.fromPath[String]("$.partner")
-  val conversionIdJson = JsoniterPrism.fromPath[String]("$.conversionId")
-  val countryJson = JsoniterPrism.fromPath[String]("$.country")
+  val clickJson = jsonPrism[ClickPayload]("$.click")
+  val partnerJson = jsonPrism[String]("$.partner")
+  val conversionIdJson = jsonPrism[String]("$.conversionId")
+  val countryJson = jsonPrism[String]("$.country")
 
   /** Static output templates. Placeholders are VALID encodings of their branch types (the Affine
     * write decodes the current focus before splicing), built once from the naive codecs so the

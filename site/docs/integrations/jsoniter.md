@@ -60,23 +60,38 @@ shape is fixed at compile time and you care about throughput.
 
 A `JsoniterPrism[A]` focuses a single value at a JSONPath inside an
 `Array[Byte]`. Construct it with the path string + a
-`JsonValueCodec[A]` in scope:
+`JsonValueCodec[A]` in scope — and note that the constructor returns
+`Either[String, JsoniterPrism[A]]`: a path is DATA (a config value, a
+CLI argument, a registry lookup), so an unparseable one is a value you
+handle, not an exception you catch. There is deliberately no throwing
+twin.
+
+Every path on this page is a literal, so the examples unwrap once
+(a `Left` here would be a typo in the page itself) and use the prism:
 
 ```scala mdoc:silent
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 
-import dev.constructive.eo.jsoniter.JsoniterPrism
+import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
 import dev.constructive.eo.optics.Optic.*
 
 given JsonValueCodec[Long]   = JsonCodecMaker.make
 given JsonValueCodec[String] = JsonCodecMaker.make
 
+// Page helpers for LITERAL paths. Application code handles the Either
+// instead (e.g. `fromPath[Long](raw).fold(handle, use)`).
+def prism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
+  JsoniterPrism.fromPath[A](path).fold(msg => throw new IllegalArgumentException(msg), identity)
+
+def traversal[A](path: String)(using JsonValueCodec[A]): JsoniterTraversal[A] =
+  JsoniterTraversal.fromPath[A](path).fold(msg => throw new IllegalArgumentException(msg), identity)
+
 val sample: Array[Byte] =
   """{"payload":{"user":{"id":42,"email":"alice@example.com"}}}""".getBytes("UTF-8")
 
-val idP    = JsoniterPrism.fromPath[Long]("$.payload.user.id")
-val emailP = JsoniterPrism.fromPath[String]("$.payload.user.email")
+val idP    = prism[Long]("$.payload.user.id")
+val emailP = prism[String]("$.payload.user.email")
 ```
 
 ### Reading
@@ -92,7 +107,7 @@ idP.foldMap(identity[Long])(sample)
 emailP.foldMap(identity[String])(sample)
 
 // Miss: path doesn't resolve, returns Monoid.empty
-val absentP = JsoniterPrism.fromPath[Long]("$.payload.user.absent")
+val absentP = prism[Long]("$.payload.user.absent")
 absentP.foldMap(identity[Long])(sample)
 ```
 
@@ -164,7 +179,8 @@ JsoniterPrism[Person].headOption(aliceBytes)                // whole-document de
 
 Every drilled cursor is the same `JsoniterPrism` the string-path
 factory builds — `JsoniterPrism[Person].address.street` and
-`JsoniterPrism.fromPath[String]("$.address.street")` are the identical optic.
+`JsoniterPrism.fromPath[String]("$.address.street")` (the `Either`-returning
+constructor above) are the identical optic.
 Each step needs a `JsonValueCodec` for its focus type in scope; when
 you don't want to derive codecs for intermediate types you never
 decode, use the string-path factory, which needs only the leaf codec.
@@ -227,7 +243,7 @@ After — byte holder + field prisms with **leaf codecs only**
 val userBytes: Array[Byte] =
   """{"id":7,"email":"a@x.org","plan":"free"}""".getBytes("UTF-8")
 
-val planP = JsoniterPrism.fromPath[String]("$.plan")
+val planP = prism[String]("$.plan")
 ```
 
 ```scala mdoc
@@ -314,12 +330,10 @@ uniformly with the rest of cats-eo's traversal machinery.
 ```scala mdoc:silent
 import cats.instances.int.given
 
-import dev.constructive.eo.jsoniter.JsoniterTraversal
-
 val cart: Array[Byte] =
   """{"cart":{"items":[1,2,3,4,5,6,7,8,9,10]}}""".getBytes("UTF-8")
 
-val itemsT = JsoniterTraversal[Long]("$.cart.items[*]")
+val itemsT = traversal[Long]("$.cart.items[*]")
 ```
 
 ```scala mdoc
@@ -341,6 +355,14 @@ set together with their span and stay byte-untouched:
 ```scala mdoc
 new String(itemsT.modify(_ * 10)(cart), "UTF-8")
 ```
+
+The two failure directions are deliberately asymmetric, because
+`Optic.from` is total by type — a write has nowhere to report a
+failure. A decode failure DROPS the element from the focus set; an
+ENCODE failure keeps that element's ORIGINAL bytes while its siblings
+are written, so a partially applied write still reports success. Read
+first (`foldMap` / `getAll`) when you need to know which elements were
+really there.
 
 ## JSONPath subset
 
@@ -415,12 +437,12 @@ per-element reassembly, no Composer hop required.
 
 | Task                                                  | Use                       |
 |-------------------------------------------------------|---------------------------|
-| Read one scalar from a JSON byte buffer, no AST       | `JsoniterPrism.fromPath[A]("$.path")`            |
+| Read one scalar from a JSON byte buffer, no AST       | `JsoniterPrism.fromPath[A]("$.path")` (`Either`)  |
 | Same, compile-time checked against the case-class schema | `JsoniterPrism[S].field(_.x)` / `JsoniterPrism[S].x` |
 | Decode / encode the whole document (`Prism[Array[Byte], A]`) | `JsoniterPrism[A]`                  |
 | Replace a `JsonCodecMaker` model with bytes + optics  | [migration recipe](#migrating-a-jsoncodecmaker-model-optics-as-evidence) |
-| Write one scalar back into a JSON byte buffer         | `JsoniterPrism.fromPath[A]("$.path").replace(b)(bytes)` |
-| Sum / count over an array on the wire                 | `JsoniterTraversal[A]("$.path[*]").foldMap(...)` |
+| Write one scalar back into a JSON byte buffer         | `JsoniterPrism.fromPath[A]("$.path")` → `.replace(b)(bytes)` |
+| Sum / count over an array on the wire                 | `JsoniterTraversal.fromPath[A]("$.path[*]")` → `.foldMap(...)` |
 | Drill into dynamic shapes (no codec for surrounding)  | eo-circe `codecPrism[…]` — different module |
 | Edit deeply through `[*]` on the wire                 | Phase-3 (not yet shipped); fall through to eo-circe today |
 | Chain a JSON traversal with a Scala collection traversal | `JsoniterTraversal[A].andThen(Traversal.each[F, A])` |

@@ -21,6 +21,8 @@ final case class CursorBasket(items: List[CursorItem], total: Double)
   * consume-via-capability seam: a `JsoniterPrism` given serves the derived `CanGetOption` /
   * `CanModify` evidence.
   */
+import JsoniterPathFixtures.{prism, traversal}
+
 class JsoniterCursorSpec extends Specification:
 
   given JsonValueCodec[String] = JsonCodecMaker.make
@@ -67,7 +69,7 @@ class JsoniterCursorSpec extends Specification:
 
   "field drilling ≡ string-path prism, on read and write" >> {
     val typed = JsoniterPrism[CursorPerson].field(_.address).field(_.street)
-    val pathed = JsoniterPrism.fromPath[String]("$.address.street")
+    val pathed = prism[String]("$.address.street")
     (typed.headOption(personBytes) === Some("main st"))
       .and(typed.headOption(personBytes) === pathed.headOption(personBytes))
       .and(str(typed.replace("elm st")(personBytes)) === str(pathed.replace("elm st")(personBytes)))
@@ -101,7 +103,7 @@ class JsoniterCursorSpec extends Specification:
     (secondP.headOption(basketBytes) === Some(CursorItem("b", 2.5)))
       .and(
         secondP.headOption(basketBytes) ===
-          JsoniterPrism.fromPath[CursorItem]("$.items[1]").headOption(basketBytes)
+          prism[CursorItem]("$.items[1]").headOption(basketBytes)
       )
   }
 
@@ -114,7 +116,7 @@ class JsoniterCursorSpec extends Specification:
       .and(pricesT.foldMap(_ => 1)(basketBytes) === 3)
       .and(
         str(pricesT.modify(_ * 2)(basketBytes)) ===
-          str(JsoniterTraversal[Double]("$.items[*].price").modify(_ * 2)(basketBytes))
+          str(traversal[Double]("$.items[*].price").modify(_ * 2)(basketBytes))
       )
   }
 

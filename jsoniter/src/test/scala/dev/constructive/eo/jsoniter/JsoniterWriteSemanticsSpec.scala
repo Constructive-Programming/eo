@@ -23,6 +23,8 @@ import org.specs2.mutable.Specification
   *   - same-carrier composition (`JsoniterTraversal[List[A]].andThen(Traversal.each)`) is
   *     write-capable end to end — the review flagged it as advertised-but-untested.
   */
+import JsoniterPathFixtures.{prism, traversal}
+
 class JsoniterWriteSemanticsSpec extends Specification:
 
   given JsonValueCodec[Double] = JsonCodecMaker.make
@@ -37,7 +39,7 @@ class JsoniterWriteSemanticsSpec extends Specification:
   //   outside the span (the sibling and its spacing) survive verbatim.
   "modify(identity) canonicalises the focused slice; bytes outside the span are untouched" >> {
     val nonCanonical = bytes("""{"id":1e0,  "name":"x"}""")
-    val idP = JsoniterPrism.fromPath[Double]("$.id")
+    val idP = prism[Double]("$.id")
     val out = idP.modify(identity[Double])(nonCanonical)
     (str(out) === """{"id":1.0,  "name":"x"}""")
       .and(Arrays.equals(out, nonCanonical) === false)
@@ -47,7 +49,7 @@ class JsoniterWriteSemanticsSpec extends Specification:
   //   the write passes through by reference (the documented template precondition)
   "replace onto an undecodable current focus: Miss pass-through by reference" >> {
     val template = bytes("""{"id":{},"name":"x"}""")
-    val idP = JsoniterPrism.fromPath[Double]("$.id")
+    val idP = prism[Double]("$.id")
     ((idP.replace(9.5)(template) eq template) === true)
       .and(
         str(idP.replace(9.5)(bytes("""{"id":0.0,"name":"x"}"""))) ===
@@ -61,7 +63,7 @@ class JsoniterWriteSemanticsSpec extends Specification:
   "JsoniterTraversal[List[A]].andThen(Traversal.each): composed read and write" >> {
     import cats.instances.long.given
     val doc = bytes("""{"rows":[[1,2],[3]],"tag":"t"}""")
-    val rowsT = JsoniterTraversal[List[Long]]("$.rows[*]")
+    val rowsT = traversal[List[Long]]("$.rows[*]")
     val comp = rowsT.andThen(Traversal.each[List, Long])
 
     val readOk = comp.foldMap(identity[Long])(doc) === 6L
