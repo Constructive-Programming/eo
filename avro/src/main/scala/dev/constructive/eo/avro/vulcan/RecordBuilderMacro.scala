@@ -11,7 +11,7 @@ import dev.constructive.eo.avro.vulcan.WholeRecordBuilder.{
   OptionKind,
   RecordKind,
   RecordShape,
-  SelfKind,
+  SelfKind
 }
 import org.apache.avro.Schema
 

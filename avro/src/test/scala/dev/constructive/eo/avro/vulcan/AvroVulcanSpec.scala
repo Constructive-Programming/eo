@@ -2,8 +2,8 @@ package dev.constructive.eo.avro.vulcan
 
 import scala.language.implicitConversions
 
-import cats.syntax.all.*
 import _root_.vulcan.Codec as VCodec
+import cats.syntax.all.*
 import dev.constructive.eo.avro.circe.AvroJson
 import dev.constructive.eo.avro.{codecPrism, AvroCodec}
 import org.apache.avro.generic.IndexedRecord

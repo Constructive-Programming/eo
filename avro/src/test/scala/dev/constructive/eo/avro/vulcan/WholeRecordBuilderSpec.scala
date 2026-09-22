@@ -1,11 +1,10 @@
 package dev.constructive.eo.avro.vulcan
 
-import java.time.Instant
-
 import scala.language.implicitConversions
 
 import _root_.vulcan.Codec as VCodec
 import dev.constructive.eo.avro.{codecPrism, AvroCodec}
+import java.time.Instant
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericRecord
 import org.specs2.mutable.Specification

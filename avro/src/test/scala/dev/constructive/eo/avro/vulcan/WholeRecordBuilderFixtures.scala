@@ -1,9 +1,8 @@
 package dev.constructive.eo.avro.vulcan
 
-import java.time.Instant
-
-import cats.syntax.all.*
 import _root_.vulcan.Codec as VCodec
+import cats.syntax.all.*
+import java.time.Instant
 
 // ---- Top-level so the vulcan record codecs and the derived builders see plain classfiles. ----
 

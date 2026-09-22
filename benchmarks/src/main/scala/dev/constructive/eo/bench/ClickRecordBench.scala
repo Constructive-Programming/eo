@@ -20,23 +20,23 @@ import org.apache.avro.generic.GenericData
   * arms differ ONLY in mechanism:
   *
   *   - '''vulcanFull''' — the full `vulcan.Codec[ClickInfo].encode` (the pre-#95 baseline): pays
-  *     vulcan's per-field composition (FreeApplicative analyze, Either + Chain per field, put-by-name
-  *     hash probe) once per field PER LEVEL.
+  *     vulcan's per-field composition (FreeApplicative analyze, Either + Chain per field,
+  *     put-by-name hash probe) once per field PER LEVEL.
   *   - '''positional''' — the whole-record builder over held per-field leaf codecs the filer
   *     implemented and REJECTED: positional puts of `leafCodec.encode(value)`, nested sub-records
   *     through `subCodec.encode` — strips ONE level of composition (the outermost shell) and keeps
   *     paying the rest, which is what measured 7.5x time / 16.9x allocation on their real shape.
   *   - '''hand''' — the leaf-by-leaf `.put(pos, value)` builder the filer hand-maintains today: one
   *     line per leaf across every nesting level.
-  *   - '''derived''' — `AvroVulcan.recordBuilder[ClickInfo]`: the compile-time-derived builder — the
-  *     hand-built shape with no hand-maintained lines (recursive sub-record levels, primitive bulk
-  *     as positional puts).
+  *   - '''derived''' — `AvroVulcan.recordBuilder[ClickInfo]`: the compile-time-derived builder —
+  *     the hand-built shape with no hand-maintained lines (recursive sub-record levels, primitive
+  *     bulk as positional puts).
   *   - '''derivedThroughPrism''' — `codecPrism[ClickInfo].record.reverseGet` over the derived codec
   *     (`asAvroCodec`): the eo-idiomatic surface at the call site, which is how the filer wires it.
   *
-  * '''B/op (`-prof gc`) is the gate; ns/op advises''' (project doctrine, and these boxes are noisy).
-  * The gate the filer set: derived ≈ hand (both put raw values; String-emitting, Utf8 materialises
-  * at serialise time), positional ≈ vulcan-per-sub-record.
+  * '''B/op (`-prof gc`) is the gate; ns/op advises''' (project doctrine, and these boxes are
+  * noisy). The gate the filer set: derived ≈ hand (both put raw values; String-emitting, Utf8
+  * materialises at serialise time), positional ≈ vulcan-per-sub-record.
   */
 object ClickRecordImpls:
 
@@ -52,6 +52,7 @@ object ClickRecordImpls:
   )
 
   object Geo:
+
     given VCodec[Geo] = VCodec.record(name = "Geo", namespace = "dev.constructive.eo.bench") { fb =>
       (
         fb("country", _.country),
@@ -78,6 +79,7 @@ object ClickRecordImpls:
   )
 
   object UserAgentInfo:
+
     given VCodec[UserAgentInfo] = VCodec.record(
       name = "UserAgentInfo",
       namespace = "dev.constructive.eo.bench",
@@ -110,6 +112,7 @@ object ClickRecordImpls:
   )
 
   object PostClick:
+
     given VCodec[PostClick] = VCodec.record(
       name = "PostClick",
       namespace = "dev.constructive.eo.bench",
@@ -153,6 +156,7 @@ object ClickRecordImpls:
   )
 
   object Ivt:
+
     given VCodec[Ivt] = VCodec.record(
       name = "Ivt",
       namespace = "dev.constructive.eo.bench",
@@ -195,6 +199,7 @@ object ClickRecordImpls:
   )
 
   object MavenEntities:
+
     given VCodec[MavenEntities] = VCodec.record(
       name = "MavenEntities",
       namespace = "dev.constructive.eo.bench",
@@ -230,6 +235,7 @@ object ClickRecordImpls:
   )
 
   object ClickInfo:
+
     given VCodec[ClickInfo] = VCodec.record(
       name = "ClickInfo",
       namespace = "dev.constructive.eo.bench",
@@ -281,8 +287,26 @@ object ClickRecordImpls:
       "cpc",
     ),
     ivt = Ivt(
-      false, false, false, true, false, 87, 1, 0, 2, 0,
-      0, 1, 0, 0, 3, 0, 42L, "v2", "acme", "clean",
+      false,
+      false,
+      false,
+      true,
+      false,
+      87,
+      1,
+      0,
+      2,
+      0,
+      0,
+      1,
+      0,
+      0,
+      3,
+      0,
+      42L,
+      "v2",
+      "acme",
+      "clean",
     ),
     mavenEntities = MavenEntities(
       12,
@@ -311,13 +335,13 @@ object ClickRecordImpls:
     */
   final class PositionalBuilder(schema: org.apache.avro.Schema):
     private val cString = VCodec.string
-    private val cLong   = VCodec.long
-    private val cBool   = VCodec.boolean
-    private val cGeo    = summon[VCodec[Geo]]
-    private val cUa     = summon[VCodec[UserAgentInfo]]
-    private val cPc     = summon[VCodec[PostClick]]
-    private val cIvt    = summon[VCodec[Ivt]]
-    private val cMaven  = summon[VCodec[MavenEntities]]
+    private val cLong = VCodec.long
+    private val cBool = VCodec.boolean
+    private val cGeo = summon[VCodec[Geo]]
+    private val cUa = summon[VCodec[UserAgentInfo]]
+    private val cPc = summon[VCodec[PostClick]]
+    private val cIvt = summon[VCodec[Ivt]]
+    private val cMaven = summon[VCodec[MavenEntities]]
 
     private def enc[A](c: VCodec[A], a: A): Any = c.encode(a).fold(e => throw e.throwable, identity)
 
@@ -342,6 +366,7 @@ object ClickRecordImpls:
 
   /** The hand-maintained builder: one line per leaf, every level, raw values. */
   final class HandBuilder(schema: org.apache.avro.Schema):
+
     def toRecord(a: ClickInfo): GenericData.Record =
       val r = new GenericData.Record(schema)
       r.put(0, a.clickId)
@@ -445,7 +470,7 @@ object ClickRecordImpls:
 
   val vulcanCodec: VCodec[ClickInfo] = summon[VCodec[ClickInfo]]
   val positional: PositionalBuilder = PositionalBuilder(schema)
-  val hand: HandBuilder             = HandBuilder(schema)
+  val hand: HandBuilder = HandBuilder(schema)
 
   /** The derived builder (construction unwrapped — the once-cost is not the hot path). */
   val derived: WholeRecordBuilder[ClickInfo] =
