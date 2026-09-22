@@ -5,9 +5,9 @@ import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 /** Test-only unwrappers for the jsoniter path constructors.
   *
   * `JsoniterPrism.fromPath` / `JsoniterTraversal.fromPath` return `Either[String, …]` — a path is
-  * DATA, and application callers handle the message (that is the whole point of the signature).
-  * The specs here build optics from LITERAL paths, so a `Left` can only be a typo in the test
-  * itself: unwrap once, failing with the parser's own diagnostic.
+  * DATA, and application callers handle the message (that is the whole point of the signature). The
+  * specs here build optics from LITERAL paths, so a `Left` can only be a typo in the test itself:
+  * unwrap once, failing with the parser's own diagnostic.
   */
 private[jsoniter] object JsoniterPathFixtures:
 

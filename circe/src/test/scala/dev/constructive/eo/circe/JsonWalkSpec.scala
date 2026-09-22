@@ -9,10 +9,10 @@ import io.circe.syntax.*
   * `modifyPath` used to abort a miss by throwing a private `ControlThrowable` caught in the same
   * method (`miss`), because `f: Json => Json` had no way to say "stop". It now returns
   * [[JsonWalk.WalkResult]] — `JsonFailure | Json`, a union rather than an `Either` so the splice
-  * frames box nothing — and the walk neither throws nor catches. These examples pin what that bought
-  * and what it must not lose: the failure travels as a VALUE (no partial rebuild is observable), `f`
-  * runs only on a successful walk, and a throwable raised by user code propagates instead of being
-  * mistaken for a miss.
+  * frames box nothing — and the walk neither throws nor catches. These examples pin what that
+  * bought and what it must not lose: the failure travels as a VALUE (no partial rebuild is
+  * observable), `f` runs only on a successful walk, and a throwable raised by user code propagates
+  * instead of being mistaken for a miss.
   */
 class JsonWalkSpec extends JsonSpecBase:
 
