@@ -32,9 +32,9 @@ import org.apache.avro.Schema
   *     codec is a compile error pointing at the exact field.
   *
   * Because the emitted value is plain data, everything schema-dependent (slot resolution, arm
-  * validation) happens at builder construction in [[WholeRecordBuilder.derive]] — ordinary
-  * testable Scala, no staged code. The whole classification lives in [[builderImpl]] as local defs
-  * under ONE `Quotes`: `TypeRepr` / `Symbol` are path-dependent on the Quotes instance, so a
+  * validation) happens at builder construction in [[WholeRecordBuilder.derive]] — ordinary testable
+  * Scala, no staged code. The whole classification lives in [[builderImpl]] as local defs under ONE
+  * `Quotes`: `TypeRepr` / `Symbol` are path-dependent on the Quotes instance, so a
   * `(using Quotes)`-taking helper called from inside a quote would type against a different path.
   */
 object RecordBuilderMacro:
@@ -49,7 +49,9 @@ object RecordBuilderMacro:
   /** Entry: `AvroVulcan.recordBuilder[A]`. Requires a case class `A` (sums encode through their
     * codec, not a builder) and the in-scope `vulcan.Codec[A]` whose schema the builder writes.
     */
-  def builderImpl[A: Type](codec: Expr[VCodec[A]])(using Quotes): Expr[Exception | WholeRecordBuilder[A]] =
+  def builderImpl[A: Type](codec: Expr[VCodec[A]])(using
+      Quotes
+  ): Expr[Exception | WholeRecordBuilder[A]] =
     import quotes.reflect.*
 
     def recordShapeOf(
@@ -89,7 +91,11 @@ object RecordBuilderMacro:
               if isCaseClass(tt) then
                 ancestors.indexOf(tsym) match
                   case -1 =>
-                    '{ RecordKind(${ recordShapeOf(tt, s"$who → $name", tsym :: ancestors, depth + 1) }) }
+                    '{
+                      RecordKind(${
+                        recordShapeOf(tt, s"$who → $name", tsym :: ancestors, depth + 1)
+                      })
+                    }
                   case d => '{ SelfKind(${ Expr(d) }) }
               else summonLeafCodec(name, tt, who)
             case st => '{ DirectKind(${ schemaTypeExpr(st) }) }
@@ -116,7 +122,7 @@ object RecordBuilderMacro:
         case Schema.Type.FLOAT   => '{ Schema.Type.FLOAT }
         case Schema.Type.DOUBLE  => '{ Schema.Type.DOUBLE }
         case Schema.Type.STRING  => '{ Schema.Type.STRING }
-        case other =>
+        case other               =>
           report.errorAndAbort(
             s"RecordBuilderMacro: internal — unhandled direct schema type $other"
           )
@@ -124,14 +130,14 @@ object RecordBuilderMacro:
     def isCaseClass(t: TypeRepr): Boolean =
       val sym = t.typeSymbol
       sym.isClassDef && sym.flags.is(Flags.Case) && !sym.flags.is(Flags.Sealed)
-        && !sym.flags.is(Flags.Module) && !(t <:< TypeRepr.of[AnyVal])
+      && !sym.flags.is(Flags.Module) && !(t <:< TypeRepr.of[AnyVal])
 
     def summonLeafCodec(name: String, t: TypeRepr, who: String): Expr[Kind] =
       t.asType match
         case '[x] =>
           Expr.summon[VCodec[x]] match
             case Some(codecE) => '{ CodecKind(${ codecE }.asInstanceOf[VCodec[Any]]) }
-            case None =>
+            case None         =>
               report.errorAndAbort(
                 s"$who: field '$name' of type ${Type.show[x]} has no given vulcan.Codec in scope."
                   + " The builder fast-paths Boolean/Int/Long/Float/Double/String leaves and nested"
@@ -151,14 +157,16 @@ object RecordBuilderMacro:
     // Total: the codec's schema failure and the assembly failure both come back as the union's
     // Exception half (the vulcan error wrapped, its own throwable as the cause).
     '{
-      ${ codec }.schema.fold(
-        e =>
-          IllegalArgumentException(
-            ${ Expr(who) } + ": the vulcan codec's schema did not resolve",
-            e.throwable,
-          ),
-        schema => WholeRecordBuilder.derive[A](schema, $shape, ${ Expr(who) }),
-      )
+      ${ codec }
+        .schema
+        .fold(
+          e =>
+            IllegalArgumentException(
+              ${ Expr(who) } + ": the vulcan codec's schema did not resolve",
+              e.throwable,
+            ),
+          schema => WholeRecordBuilder.derive[A](schema, $shape, ${ Expr(who) }),
+        )
     }.asExprOf[Exception | WholeRecordBuilder[A]]
 
 end RecordBuilderMacro

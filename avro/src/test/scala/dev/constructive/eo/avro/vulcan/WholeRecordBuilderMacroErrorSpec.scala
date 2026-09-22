@@ -28,5 +28,3 @@ class WholeRecordBuilderMacroErrorSpec extends Specification:
     )
     errs.exists(_.message.contains("is not a case class")) must beTrue
   }
-
-

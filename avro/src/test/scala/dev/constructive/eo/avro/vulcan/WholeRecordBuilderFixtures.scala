@@ -11,6 +11,7 @@ enum TrafficClass:
   case Organic, Paid, Social, Referral
 
 object TrafficClass:
+
   given VCodec[TrafficClass] = VCodec.enumeration(
     name = "TrafficClass",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -19,17 +20,25 @@ object TrafficClass:
     decode = symbol => Right(TrafficClass.valueOf(symbol)),
   )
 
-final case class Geo(country: String, region: String, city: String, latitude: Double, longitude: Double)
+final case class Geo(
+    country: String,
+    region: String,
+    city: String,
+    latitude: Double,
+    longitude: Double
+)
 
 object Geo:
-  given VCodec[Geo] = VCodec.record(name = "Geo", namespace = "dev.constructive.eo.avro.vulcan") { fb =>
-    (
-      fb("country", _.country),
-      fb("region", _.region),
-      fb("city", _.city),
-      fb("latitude", _.latitude),
-      fb("longitude", _.longitude),
-    ).mapN(Geo.apply)
+
+  given VCodec[Geo] = VCodec.record(name = "Geo", namespace = "dev.constructive.eo.avro.vulcan") {
+    fb =>
+      (
+        fb("country", _.country),
+        fb("region", _.region),
+        fb("city", _.city),
+        fb("latitude", _.latitude),
+        fb("longitude", _.longitude),
+      ).mapN(Geo.apply)
   }
 
 final case class UserAgentInfo(
@@ -43,6 +52,7 @@ final case class UserAgentInfo(
 )
 
 object UserAgentInfo:
+
   given VCodec[UserAgentInfo] = VCodec.record(
     name = "UserAgentInfo",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -71,6 +81,7 @@ final case class PostClick(
 )
 
 object PostClick:
+
   given VCodec[PostClick] = VCodec.record(
     name = "PostClick",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -113,6 +124,7 @@ final case class Ivt(
 )
 
 object Ivt:
+
   given VCodec[Ivt] = VCodec.record(
     name = "Ivt",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -154,6 +166,7 @@ final case class MavenEntities(
 )
 
 object MavenEntities:
+
   given VCodec[MavenEntities] = VCodec.record(
     name = "MavenEntities",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -189,6 +202,7 @@ final case class ClickInfo(
 )
 
 object ClickInfo:
+
   given VCodec[ClickInfo] = VCodec.record(
     name = "ClickInfo",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -213,6 +227,7 @@ object ClickInfo:
 final case class Reordered(alpha: Int, beta: String)
 
 object Reordered:
+
   given VCodec[Reordered] = VCodec.record(
     name = "Reordered",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -224,6 +239,7 @@ object Reordered:
 final case class Snakey(userId: Int, userName: String)
 
 object Snakey:
+
   given VCodec[Snakey] = VCodec.record(
     name = "Snakey",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -237,13 +253,14 @@ object Snakey:
 final case class WithComputed(base: Int)
 
 object WithComputed:
+
   given VCodec[WithComputed] = VCodec.record(
     name = "WithComputed",
     namespace = "dev.constructive.eo.avro.vulcan",
   ) { fb =>
     // `derived` is a schema-only column: nullable (the accessor's Option summons the union codec),
     // so the builder's null default stays decodable and round-trips.
-    (fb("base", _.base), fb("derived", (c: WithComputed) => (Some(c.base * 2): Option[Int])))
+    (fb("base", _.base), fb("derived", (c: WithComputed) => Some(c.base * 2): Option[Int]))
       .mapN((base, _) => WithComputed(base))
   }
 
@@ -253,6 +270,7 @@ final class NoCodecLeaf(val s: String)
 final case class WithNoCodec(name: String, opaque: NoCodecLeaf)
 
 object WithNoCodec:
+
   // The ROOT codec exists; the case-class field `opaque` has none — the macro must be the one to
   // refuse it.
   given VCodec[WithNoCodec] = VCodec.record(
@@ -268,6 +286,7 @@ object WithNoCodec:
 final case class Renamed(alpha: Int, beta: String)
 
 object Renamed:
+
   given VCodec[Renamed] = VCodec.record(
     name = "Renamed",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -279,6 +298,7 @@ object Renamed:
 final case class OptMismatch(x: Option[Int])
 
 object OptMismatch:
+
   given VCodec[OptMismatch] = VCodec.record(
     name = "OptMismatch",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -290,6 +310,7 @@ object OptMismatch:
 final case class FlatInner(v: Int)
 
 object FlatInner:
+
   given VCodec[FlatInner] = VCodec.record(
     name = "FlatInner",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -300,6 +321,7 @@ object FlatInner:
 final case class RecMis(inner: FlatInner)
 
 object RecMis:
+
   given VCodec[RecMis] = VCodec.record(
     name = "RecMis",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -311,6 +333,7 @@ object RecMis:
 final case class LongField(x: Long)
 
 object LongField:
+
   given VCodec[LongField] = VCodec.record(
     name = "LongField",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -322,6 +345,7 @@ object LongField:
 final case class Ambig(USERID: Int, other: String)
 
 object Ambig:
+
   given VCodec[Ambig] = VCodec.record(
     name = "Ambig",
     namespace = "dev.constructive.eo.avro.vulcan",
@@ -334,6 +358,7 @@ object Ambig:
 final case class Collide(aCol: Int, a_col: Int)
 
 object Collide:
+
   given VCodec[Collide] = VCodec.record(
     name = "Collide",
     namespace = "dev.constructive.eo.avro.vulcan",

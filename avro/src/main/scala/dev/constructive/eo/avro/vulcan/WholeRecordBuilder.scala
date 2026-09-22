@@ -16,11 +16,11 @@ import org.apache.avro.generic.GenericData
   * FIELD, per LEVEL: a `FreeApplicative.analyze`, an `Either` + `Chain.one` per field, and a
   * `put(name, value)` hash probe — and a nested sub-record field redoes all of it inside
   * `Codec[Sub].encode`, which is what the filer measured as ~384–468 B/field on their real
-  * ClickInfo. A hand-built `.put(pos, value)` builder avoids all of it but costs one hand-maintained
-  * line per leaf — the exact complaint the filer opened the issue with.
+  * ClickInfo. A hand-built `.put(pos, value)` builder avoids all of it but costs one
+  * hand-maintained line per leaf — the exact complaint the filer opened the issue with.
   *
-  * '''What a derived builder is.''' [[AvroVulcan.recordBuilder]] walks `A`'s case fields at
-  * COMPILE time (the [[WholeRecordBuilder.RecordShape]] IR) and emits one runtime assembly call;
+  * '''What a derived builder is.''' [[AvroVulcan.recordBuilder]] walks `A`'s case fields at COMPILE
+  * time (the [[WholeRecordBuilder.RecordShape]] IR) and emits one runtime assembly call;
   * construction resolves every case field's schema slot by NAME (all-or-nothing, issue #105's
   * doctrine) and validates every arm against the schema it will write into — so `toRecord` itself
   * is nothing but positional puts: `new GenericData.Record(schema)`, then per field either the
@@ -133,7 +133,11 @@ object WholeRecordBuilder:
     * case field names no schema column, two case fields claim one, or an arm disagrees with its
     * schema field's shape. Never throws.
     */
-  def derive[A](schema: Schema, shape: RecordShape, who: String): Exception | WholeRecordBuilder[A] =
+  def derive[A](
+      schema: Schema,
+      shape: RecordShape,
+      who: String
+  ): Exception | WholeRecordBuilder[A] =
     if schema.getType != Schema.Type.RECORD then
       IllegalArgumentException(
         s"$who: the codec's schema is a ${schema.getType}, not a record — the builder mirrors a case"
@@ -148,7 +152,7 @@ object WholeRecordBuilder:
     * `SelfKind` arm captures the level being built), then sealed — `buildLevel` seals only on
     * success, so `build` never sees the empty arrays.
     */
-  private[avro] final class RecordLevel(
+  final private[avro] class RecordLevel(
       val schema: Schema,
       val parent: RecordLevel | Null,
   ):
@@ -181,36 +185,38 @@ object WholeRecordBuilder:
         u.plan.put(r, product.productElement(u.decl))
         putUnusual(product, r, i + 1)
 
-  private[avro] final case class DirectSlot(slot: Int, decl: Int)
-  private[avro] final case class UnusualSlot(decl: Int, plan: FieldPlan)
+  final private[avro] case class DirectSlot(slot: Int, decl: Int)
+  final private[avro] case class UnusualSlot(decl: Int, plan: FieldPlan)
 
   /** One non-primitive arm of a record level: how `toRecord` turns the field's value into the datum
     * it puts at `slot`. `put` receives the value as erased `Any` (the case field's value, already
     * boxed by `productElement`), so a level dispatches without per-type closures.
     */
-  private[avro] sealed trait FieldPlan:
+  sealed private[avro] trait FieldPlan:
     def slot: Int
     def put(r: GenericData.Record, value: Any): Unit
 
-  private[avro] final case class DirectPlan(slot: Int) extends FieldPlan:
+  final private[avro] case class DirectPlan(slot: Int) extends FieldPlan:
     def put(r: GenericData.Record, value: Any): Unit = r.put(slot, value)
 
   /** `None` → null (vulcan's `OptionCodec`), `Some(v)` → the inner arm. The option field owns ONE
     * schema slot; both branches put there.
     */
-  private[avro] final case class OptionPlan(slot: Int, inner: FieldPlan) extends FieldPlan:
+  final private[avro] case class OptionPlan(slot: Int, inner: FieldPlan) extends FieldPlan:
+
     def put(r: GenericData.Record, value: Any): Unit =
       value match
         case None    => r.put(slot, null)
         case Some(v) => inner.put(r, v)
 
-  private[avro] final case class SubRecordPlan(slot: Int, sub: RecordLevel) extends FieldPlan:
+  final private[avro] case class SubRecordPlan(slot: Int, sub: RecordLevel) extends FieldPlan:
     def put(r: GenericData.Record, value: Any): Unit = r.put(slot, sub.build(value))
 
   /** The field type's own codec — resolved once at construction; encode errors throw (eo's total
     * encode convention, matching [[AvroVulcan.codec]]).
     */
-  private[avro] final case class CodecPlan(slot: Int, codec: VCodec[Any]) extends FieldPlan:
+  final private[avro] case class CodecPlan(slot: Int, codec: VCodec[Any]) extends FieldPlan:
+
     def put(r: GenericData.Record, value: Any): Unit =
       r.put(slot, codec.encode(value).fold(e => throw e.throwable, identity))
 
@@ -230,7 +236,7 @@ object WholeRecordBuilder:
         // The first arm failure short-circuits the level; the shell is discarded with it.
         @tailrec def each(i: Int, rest: List[FieldShape]): Exception | Null =
           rest match
-            case Nil => null
+            case Nil    => null
             case f :: t =>
               planFor(f.kind, slots(i), f.name, fields.get(slots(i)).schema, level, who) match
                 case e: Exception  => e
@@ -284,8 +290,8 @@ object WholeRecordBuilder:
         else
           val innerSchema = if schema.getTypes.size == 2 then nonNullBranch(schema) else schema
           innerPlanFor(innerKind, slot, name, innerSchema, schema, level, who) match
-            case e: Exception      => e
-            case inner: FieldPlan  => OptionPlan(slot, inner)
+            case e: Exception     => e
+            case inner: FieldPlan => OptionPlan(slot, inner)
 
   /** The inner arm of an `OptionPlan`. Primitive / nested-record inners require a 2-branch nullable
     * pair (they write the non-null branch's shape); codec / self / nested-option inners consume no
@@ -395,7 +401,7 @@ object WholeRecordBuilder:
     else
       level.parent match
         case p: RecordLevel => climb(p, depth - 1)
-        case null =>
+        case null           =>
           IllegalStateException(
             s"whole-record builder: self-reference depth $depth exceeds the level chain —"
               + " internal invariant broken"

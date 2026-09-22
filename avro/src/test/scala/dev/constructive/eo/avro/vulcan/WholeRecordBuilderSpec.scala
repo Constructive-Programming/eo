@@ -18,14 +18,14 @@ import org.specs2.mutable.Specification
   */
 class WholeRecordBuilderSpec extends Specification:
 
-  /** Unwrap a construction that the suite asserts SUCCEEDS (the refusal cases assert the other
-    * half below).
+  /** Unwrap a construction that the suite asserts SUCCEEDS (the refusal cases assert the other half
+    * below).
     */
   private def built[A](r: Exception | WholeRecordBuilder[A]): WholeRecordBuilder[A] = r match
     case b: WholeRecordBuilder[A] => b
     case e: Exception             => sys.error(e.getMessage)
 
-  private val vraw    = summon[VCodec[ClickInfo]]
+  private val vraw = summon[VCodec[ClickInfo]]
   private val builder = built(AvroVulcan.recordBuilder[ClickInfo])
 
   private val rich = ClickInfo(
@@ -56,8 +56,26 @@ class WholeRecordBuilderSpec extends Specification:
       )
     ),
     ivt = Ivt(
-      true, false, false, true, false, 87, 1, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 42L, "v2", "acme", "clean",
+      true,
+      false,
+      false,
+      true,
+      false,
+      87,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      42L,
+      "v2",
+      "acme",
+      "clean",
     ),
     mavenEntities = MavenEntities(
       Array[Byte](1, 2, 3),
@@ -86,7 +104,10 @@ class WholeRecordBuilderSpec extends Specification:
       val derived: Array[Byte] =
         AvroCodec.encodeRecord(builder.toRecord(rich), builder.schema).toOption.get
       val coded: Array[Byte] =
-        AvroCodec.encodeRecord(vraw.encode(rich).toOption.get, vraw.schema.toOption.get).toOption.get
+        AvroCodec
+          .encodeRecord(vraw.encode(rich).toOption.get, vraw.schema.toOption.get)
+          .toOption
+          .get
       derived.toSeq must beEqualTo(coded.toSeq)
     }
 
@@ -96,11 +117,15 @@ class WholeRecordBuilderSpec extends Specification:
     }
 
     "leave the schema-only computed column at its default while the codec fills it — and still round-trip" in {
-      val b   = built(AvroVulcan.recordBuilder[WithComputed])
-      val c   = summon[VCodec[WithComputed]]
+      val b = built(AvroVulcan.recordBuilder[WithComputed])
+      val c = summon[VCodec[WithComputed]]
       val rec = b.toRecord(WithComputed(21))
       rec.get("derived") must beNull
-      c.encode(WithComputed(21)).toOption.get.asInstanceOf[GenericRecord].get("derived") must beEqualTo(
+      c.encode(WithComputed(21))
+        .toOption
+        .get
+        .asInstanceOf[GenericRecord]
+        .get("derived") must beEqualTo(
         Int.box(42)
       )
       c.decode(rec, c.schema.toOption.get).toOption.get must beEqualTo(WithComputed(21))
@@ -144,10 +169,13 @@ class WholeRecordBuilderSpec extends Specification:
         val next =
           Schema.createUnion(Schema.create(Schema.Type.NULL), rec)
         rec.setFields(
-          java.util.List.of(
-            new Schema.Field("value", Schema.create(Schema.Type.INT)),
-            new Schema.Field("next", next),
-          )
+          java
+            .util
+            .List
+            .of(
+              new Schema.Field("value", Schema.create(Schema.Type.INT)),
+              new Schema.Field("next", next),
+            )
         )
         rec
       val shape = WholeRecordBuilder.RecordShape(
@@ -164,7 +192,7 @@ class WholeRecordBuilderSpec extends Specification:
         ),
       )
       WholeRecordBuilder.derive[Node](nodeSchema, shape, "spec[Node]") match
-        case e: Exception => sys.error(e.getMessage)
+        case e: Exception                => sys.error(e.getMessage)
         case b: WholeRecordBuilder[Node] =>
           val rec = b.toRecord(Node(1, Some(Node(2, Some(Node(3, None))))))
           rec.get("value") must beEqualTo(Int.box(1))
@@ -181,31 +209,31 @@ class WholeRecordBuilderSpec extends Specification:
     "refuse a case field renamed beyond normalisation, naming field and record" in {
       AvroVulcan.recordBuilder[Renamed] match
         case e: IllegalArgumentException =>
-          e.getMessage must (contain("'beta'") and contain("does not name a schema field"))
-        case e: Exception              => ko(e.getMessage)
+          e.getMessage must (contain("'beta'").and(contain("does not name a schema field")))
+        case e: Exception                   => ko(e.getMessage)
         case _: WholeRecordBuilder[Renamed] => ko("expected a construction refusal")
     }
 
     "refuse an Option case field over a non-nullable column" in {
       AvroVulcan.recordBuilder[OptMismatch] match
-        case e: IllegalArgumentException    => e.getMessage must contain("not a null-union")
-        case e: Exception              => ko(e.getMessage)
+        case e: IllegalArgumentException        => e.getMessage must contain("not a null-union")
+        case e: Exception                       => ko(e.getMessage)
         case _: WholeRecordBuilder[OptMismatch] => ko("expected a construction refusal")
     }
 
     "refuse a case-class field whose column is not a record" in {
       AvroVulcan.recordBuilder[RecMis] match
         case e: IllegalArgumentException =>
-          e.getMessage must (contain("needs a RECORD schema field") and contain("is a STRING"))
-        case e: Exception              => ko(e.getMessage)
+          e.getMessage must (contain("needs a RECORD schema field").and(contain("is a STRING")))
+        case e: Exception                  => ko(e.getMessage)
         case _: WholeRecordBuilder[RecMis] => ko("expected a construction refusal")
     }
 
     "refuse a LONG case field over an INT column (never widens silently)" in {
       AvroVulcan.recordBuilder[LongField] match
         case e: IllegalArgumentException =>
-          e.getMessage must (contain("needs a LONG schema field") and contain("is a INT"))
-        case e: Exception              => ko(e.getMessage)
+          e.getMessage must (contain("needs a LONG schema field").and(contain("is a INT")))
+        case e: Exception                     => ko(e.getMessage)
         case _: WholeRecordBuilder[LongField] => ko("expected a construction refusal")
     }
 
@@ -213,7 +241,7 @@ class WholeRecordBuilderSpec extends Specification:
       AvroVulcan.recordBuilder[Ambig] match
         case e: IllegalArgumentException =>
           e.getMessage must contain("matches more than one schema field")
-        case e: Exception              => ko(e.getMessage)
+        case e: Exception                 => ko(e.getMessage)
         case _: WholeRecordBuilder[Ambig] => ko("expected a construction refusal")
     }
 
@@ -221,7 +249,7 @@ class WholeRecordBuilderSpec extends Specification:
       AvroVulcan.recordBuilder[Collide] match
         case e: IllegalArgumentException =>
           e.getMessage must contain("collides with case field 'aCol'")
-        case e: Exception              => ko(e.getMessage)
+        case e: Exception                   => ko(e.getMessage)
         case _: WholeRecordBuilder[Collide] => ko("expected a construction refusal")
     }
   }
