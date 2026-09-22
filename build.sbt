@@ -263,9 +263,10 @@ ThisBuild / githubWorkflowJobSetup ~= { steps =>
         cond = s.cond,
       )
       Seq(s.withParams(s.params - "cache"), cacheStep)
-    case s: WorkflowStep.Sbt
-        if s.cond.exists(_.contains("outputs.cache-hit == 'false'")) =>
-      val rewired = s.cond.get
+    case s: WorkflowStep.Sbt if s.cond.exists(_.contains("outputs.cache-hit == 'false'")) =>
+      val rewired = s
+        .cond
+        .get
         .replace("setup-java-", "coursier-cache-")
         .replace("outputs.cache-hit == 'false'", "outputs.cache-hit != 'true'")
       Seq(s.withCond(Some(rewired)))
