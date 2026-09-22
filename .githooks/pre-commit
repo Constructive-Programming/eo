@@ -3,6 +3,8 @@
 #
 # Covered:
 #   * scalafmtCheckAll   — formatting matches .scalafmt.conf across all modules
+#   * scalafmtSbtCheck   — ditto for the build's *.sbt files (mirrors CI's
+#     'Check formatting' step, which checks them separately)
 #   * benchmarks/scalafmtCheck — ditto for benchmarks/ (outside the root aggregate)
 #   * scalafixAll --check — scalafix rules in .scalafix.conf are clean
 #   * docs/mdoc          — every `scala mdoc` fence in site/docs/*.md compiles
@@ -23,4 +25,4 @@ else
 fi
 
 echo "[pre-commit] running scalafmtCheckAll + benchmarks/scalafmtCheck + scalafixAll --check + docs/mdoc + docs/laikaSite ..."
-sbt -no-colors 'scalafmtCheckAll; benchmarks/scalafmtCheck; benchmarks/Test/scalafmtCheck; scalafixAll --check; docs/mdoc; docs/laikaSite'
+sbt -no-colors 'scalafmtCheckAll; scalafmtSbtCheck; benchmarks/scalafmtCheck; benchmarks/Test/scalafmtCheck; scalafixAll --check; docs/mdoc; docs/laikaSite'
