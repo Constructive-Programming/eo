@@ -831,13 +831,81 @@ import dev.constructive.eo.avro.vulcan.given
 val countL = codecPrism[ClickInfo].field(_.count)
 ```
 
-or, named and explicit,
-`given AvroCodec[ClickInfo] = AvroVulcan.codec`. The schema is
-resolved once at construction (an invalid vulcan schema fails at
-the `given` site, not on the first record); encode errors throw
-(eo's `encode` is total — an encode failure under a matching
-schema is a codec-definition bug); decode errors surface as
-`Left` like every other `AvroCodec`.
+The bridge comes in two shapes. `AvroVulcan.codec(schema)` is
+total — the schema is already in hand, nothing is resolved. The
+given-backed `AvroVulcan.codec[A]` resolves the schema from the
+codec and can fail, so it returns
+`Either[Exception, AvroCodec[A]]`; the opt-in given is the one
+site with no failure channel (a summon must produce a codec), so
+a schema that will not resolve fails eagerly at the given site.
+Encode errors throw (eo's `encode` is total — an encode failure
+under a matching schema is a codec-definition bug); decode
+errors surface as `Left` like every other `AvroCodec`.
+
+### The whole-record builder — `AvroVulcan.recordBuilder`
+
+Building a fresh `GenericData.Record` from a typed value on a
+hot path used to be a choice between two costs: the full
+`codec[A].encode` — vulcan's per-field composition, per level,
+measured at ~384–468 B/field on wide records — or a hand-built
+`.put(pos, value)` builder, fast but one hand-maintained line
+per leaf (issue #95). `recordBuilder[A]` derives the hand-built
+shape at compile time:
+
+```scala
+val clickBuilder = AvroVulcan.recordBuilder[ClickInfo]
+// Exception | WholeRecordBuilder[ClickInfo] — construction is
+// total. A case field no schema column answers for, two case
+// fields claiming one column, or an arm that disagrees with its
+// schema field's shape comes back as the Exception half,
+// naming the field and the record, before any record is built.
+
+given AvroCodec[ClickInfo] =
+  clickBuilder.fold(e => throw e, _.asAvroCodec)
+```
+
+`toRecord` is pure positional puts. Every case field's schema
+slot is resolved by NAME at construction — all-or-nothing, the
+same doctrine the drill-down optics resolve with — so the hot
+path never touches a hash lookup. Per field, classified from
+the case class at expansion:
+
+- Boolean / Int / Long / Float / Double / String — the value
+  itself is the Avro datum;
+- a nested case class — a sub-record level built by the same
+  rule against the field's own record schema (self-recursive
+  case classes resolve through the runtime level chain, so
+  they terminate);
+- `Option[X]` — `None` puts null exactly as vulcan's own
+  `OptionCodec`; `Some(v)` recurses;
+- everything else — enums, bytes, logical types, collections,
+  sums, value classes — the field type's own `vulcan.Codec`,
+  summoned at the derivation site; a missing leaf codec is a
+  compile error pointing at the field.
+
+The recursion is the point. A positional builder over held
+per-field leaf codecs strips only the OUTERMOST shell of
+vulcan's composition and keeps paying it inside every nested
+`subCodec.encode` — measured on the issue's real ClickInfo as a
+7.5x time / 16.9x allocation regression against the hand-built
+builder, because most of its ~50 leaf fields live in five
+nested sub-records. The derived builder expands every nested
+case class the same way a hand-built one would, so its
+allocation is hand-built-equal — `benchmarks`'
+`ClickRecordBench` measures all the arms side by side, and
+B/op is the gate.
+
+Two documented differences from `codec[A].encode`. A
+schema-only column (a computed/derived field your case class
+does not hold) keeps its in-record default instead of being
+computed — identical to what a hand-built `.put` builder does,
+and round-trip-safe through the codec's own decode; a REQUIRED
+schema-only column then fails at write time, which is the same
+contract the hand-built builder has. And the builder requires
+every case field to name a schema column (exact, or uniquely up
+to `_`/`-`/`.`/case): a codec that renames or drops a case
+field has no silent positional fallback here by design — keep
+the hand-built builder (or the codec) for that type.
 
 vulcan is an `Optional` dependency of `cats-eo-avro` — add it to
 your own build to use this sub-package; avro-only users never

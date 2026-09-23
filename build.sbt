@@ -232,9 +232,46 @@ ThisBuild / githubWorkflowGeneratedDownloadSteps ~= { steps =>
 // generates the newer versions upstream — see
 // https://github.com/typelevel/sbt-typelevel/releases.
 ThisBuild / githubWorkflowJobSetup ~= { steps =>
-  steps
+  val bumped = steps
     .map(bumpActionVersion("actions", "checkout", "v7"))
     .map(bumpActionVersion("actions", "setup-java", "v6"))
+
+  // Explicit coursier/ivy/boot caching instead of setup-java's `cache: sbt`:
+  // that preset only SAVES on a primary-key miss, so anything the jobs fetch
+  // after a key was minted (scalafix-cli when a check step lands, Steward
+  // bumps, ...) is re-downloaded from Central on every later run — and one
+  // flaky fetch fails the job (PR #116: `scalafix-cli_3.8.4:0.14.7` flaked
+  // twice while main's identical step stayed green). restore-keys keep the
+  // chain warm across key changes, and actions/cache saves on every
+  // non-exact-key run, so the cache refreshes instead of fossilising.
+  bumped.flatMap {
+    case s: WorkflowStep.Use if s.id.exists(_.startsWith("setup-java-")) =>
+      val javaId = s.id.get.stripPrefix("setup-java-")
+      val cacheStep = WorkflowStep.Use(
+        UseRef.Public("actions", "cache", "v4"),
+        params = Map(
+          "path" -> Seq(
+            "~/.cache/coursier",
+            "~/.ivy2/cache",
+            "~/.sbt",
+          ).mkString("\n"),
+          "key" -> "${{ runner.os }}-sbt-${{ hashFiles('**/*.sbt', 'project/build.properties', 'project/**/*.scala') }}",
+          "restore-keys" -> "${{ runner.os }}-sbt-",
+        ),
+        id = Some(s"coursier-cache-$javaId"),
+        name = Some("Cache coursier + ivy + sbt boot"),
+        cond = s.cond,
+      )
+      Seq(s.withParams(s.params - "cache"), cacheStep)
+    case s: WorkflowStep.Sbt if s.cond.exists(_.contains("outputs.cache-hit == 'false'")) =>
+      val rewired = s
+        .cond
+        .get
+        .replace("setup-java-", "coursier-cache-")
+        .replace("outputs.cache-hit == 'false'", "outputs.cache-hit != 'true'")
+      Seq(s.withCond(Some(rewired)))
+    case other => Seq(other)
+  }
 }
 
 ThisBuild / githubWorkflowAddedJobs ~= { jobs =>

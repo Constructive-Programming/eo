@@ -123,7 +123,16 @@ jobs:
         with:
           distribution: temurin
           java-version: 25 # kyoIntegration (KyoDiBench dep) targets JDK 25 since v0.15.0
-          cache: sbt
+      - name: Cache coursier + ivy + sbt boot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.ivy2/cache
+            ~/.sbt
+          key: ${{ runner.os }}-sbt-${{ hashFiles('**/*.sbt', 'project/build.properties', 'project/**/*.scala') }}
+          restore-keys: |
+            ${{ runner.os }}-sbt-
 
       - name: Run full JMH sweep
         if: steps.ctx.outputs.skip == 'false'

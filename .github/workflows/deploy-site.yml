@@ -69,7 +69,16 @@ jobs:
         with:
           distribution: temurin
           java-version: 25
-          cache: sbt
+      - name: Cache coursier + ivy + sbt boot
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.ivy2/cache
+            ~/.sbt
+          key: ${{ runner.os }}-sbt-${{ hashFiles('**/*.sbt', 'project/build.properties', 'project/**/*.scala') }}
+          restore-keys: |
+            ${{ runner.os }}-sbt-
 
       - name: Build site
         run: sbt 'docs/tlSite; unidocs/unidoc'
