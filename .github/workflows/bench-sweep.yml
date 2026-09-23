@@ -58,8 +58,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  JMH_PROFILE: "sweep:-i5-wi3-f3-t1-gc"
-  JMH_FLAGS: "-i 5 -wi 3 -f 3 -t 1 -foe true -prof gc -rf json"
+  # Pinned allocation ergonomics — see bench-pr.yml: adaptive TLAB sizing
+  # makes B/op count environment-dependent retire waste; -XX:-ResizeTLAB +
+  # a fixed heap made the flagged families' A/A B/op deterministic.
+  JMH_PROFILE: "sweep:-i5-wi3-f3-t1-gc-rt1g"
+  JMH_FLAGS: "-i 5 -wi 3 -f 3 -t 1 -foe true -prof gc -rf json -jvmArgsAppend -XX:-ResizeTLAB -jvmArgsAppend -Xms1g -jvmArgsAppend -Xmx1g"
 
 jobs:
   sweep:

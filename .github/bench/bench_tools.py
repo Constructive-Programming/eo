@@ -487,8 +487,11 @@ def noise_report(deltas_list: list[dict]) -> str:
         )
     lines += [
         "",
-        "B/op max should be ~0. If it isn't, the reduced profile has too "
-        "little warmup for C2/escape analysis — bump `-wi` before any gate.",
+        "B/op max should be ~0. If it isn't: pin the fork JVM's allocation "
+        "ergonomics first (-jvmArgsAppend -XX:-ResizeTLAB plus a fixed "
+        "-Xms/-Xmx — adaptive TLAB sizing makes B/op count "
+        "environment-dependent retire waste), then bump `-wi` before any "
+        "gate.",
     ]
     return "\n".join(lines)
 
