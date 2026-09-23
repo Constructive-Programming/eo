@@ -6,18 +6,22 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
-//   next: (a) jsoniter's string-path constructors keep the failure in the type
+//   0.17: (a) jsoniter's string-path constructors keep the failure in the type
 //         — `JsoniterPrism.fromPath` / `JsoniterTraversal.fromPath` return
 //         `Either[String, _]`, the throwing `fromPath` is gone, and
 //         `JsoniterTraversal.apply(path)` with it (source- and binary-
 //         breaking; build from a path via `fromPath` and handle the `Left`).
-//         (b) `Affine` covariant in B; `Affine.Miss` drops its phantom B type
-//         parameter (now `Miss[A] <: Affine[A, Nothing]`) and `widenB` is
-//         deleted — retyping a miss is a plain upcast (source- and
-//         binary-breaking for direct `Miss`/`widenB` users).
+//         (b) avro's `AvroVulcan.codec[A]` (the `using`-form) returns
+//         `Either[Exception, AvroCodec[A]]`; the old total form is
+//         `codec(schema)` (source- and binary-breaking for direct callers;
+//         the opt-in given is unchanged).
 //   0.15: additive (kyo Record optics + kyo-schema bridge incl.
 //         Structure.Value optics), but cats-eo-kyo now REQUIRES JDK 25
 //         (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
+//   0.13: `Affine` covariant in B; `Affine.Miss` drops its phantom B type
+//         parameter (now `Miss[A] <: Affine[A, Nothing]`) and `widenB` is
+//         deleted — retyping a miss is a plain upcast (source- and
+//         binary-breaking for direct `Miss`/`widenB` users).
 //   0.12: core Traversal constructors + Optional.readOnly/selectReadOnly
 //         return types narrowed to the new concrete `Traversal` class /
 //         `PickFold` (binary-breaking descriptor changes); `type

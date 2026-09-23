@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-23
+
+**Binary-breaking: recompile against this release.** Two public signatures changed shape —
+`cats-eo-jsoniter`'s string-path constructors now return `Either[String, …]`, and
+`cats-eo-avro`'s `AvroVulcan.codec[A]` (the `using`-form) now returns
+`Either[Exception, AvroCodec[A]]` — so jars built against 0.16.x fail at runtime against this
+one. Both carry their migration under Changed.
+
 ### Added
 
 - **`cats-eo-avro`: the derived whole-record builder — `AvroVulcan.recordBuilder` (#95)**:
@@ -45,6 +53,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `JsoniterTraversal.apply(path)`; a path-free root prism is still `JsoniterPrism[A]`. Migration:
   `JsoniterTraversal[A](path)` → `JsoniterTraversal.fromPath[A](path)`, then handle the `Left`
   (`JsoniterPrism.fromPath[A](path)` likewise).
+
+- **`cats-eo-avro`: `AvroVulcan.codec` is two forms now** (source- and binary-breaking for the
+  `using`-form). `codec(schema)` is total — the schema is in hand, nothing resolves, nothing can
+  fail; `codec[A]` resolves the schema from the in-scope `vulcan.Codec` and returns
+  `Either[Exception, AvroCodec[A]]` instead of throwing at construction, so the failure is a
+  value at the call site like every other construction failure in this module. Migration:
+  `AvroVulcan.codec[A]` → `AvroVulcan.codec[A].map(…)`, or hand it a schema you already hold via
+  `codec(schema)`. Unchanged in shape: the opt-in `import dev.constructive.eo.avro.vulcan.given`,
+  which still yields a total `AvroCodec[A]` and is now named as the one eager-failure site (a
+  given must produce a value, so an unresolvable schema fails there).
 
 - **`cats-eo-circe`'s fused JSON write walk no longer uses a control-flow exception.**
   `JsonWalk.modifyPath` takes `f: Json => WalkResult` (`JsonFailure | Json` — a union, not an
@@ -964,6 +982,7 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Constructive-Programming/eo/compare/v0.15.1...v0.16.0
 [0.1.0]: https://github.com/Constructive-Programming/eo/releases/tag/v0.1.0

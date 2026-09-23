@@ -8,7 +8,7 @@ val scala3Version = "3.8.4"
 // inherits them.
 
 // Breaking-change history per 0.x minor lives in mima.sbt.
-ThisBuild / tlBaseVersion := "0.16"
+ThisBuild / tlBaseVersion := "0.17"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
