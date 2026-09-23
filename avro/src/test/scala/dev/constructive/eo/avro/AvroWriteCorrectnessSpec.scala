@@ -113,6 +113,42 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     )
   }
 
+  // ---- F3: ENCODE failure on the written value (audit class C) ---------
+  //
+  // docs/research/2026-09-22-exception-audit.md, class C: `Optic.from` is total by type, so a write
+  // whose NEW value can't be encoded has nowhere to put the failure. Pinned here as INTENDED
+  // (the destination is the failure-typed write carrier — issue #117, audit doc class C):
+  // the silent tier passes the record through and reports success, while the Ior twin carries it
+  // as `DecodeFailed` (both directions funnel through `AvroFocus.decodeOrFail`).
+  "record write: an encoder that throws on the NEW value passes the record through (silent + Ior)" >> {
+    // A local given shadows the derived String codec AT THIS CALL SITE — the shape a real
+    // schema/value mismatch produces: the current focus decodes, the new value refuses to encode.
+    given boomCodec: AvroCodec[String] = new AvroCodec[String]:
+      val schema: Schema = Schema.create(Schema.Type.STRING)
+      def encode(a: String): Any = throw new IllegalStateException("encode boom")
+      def decodeEither(any: Any): Either[Throwable, String] = Right(String.valueOf(any))
+
+    val rec = personRecord(Person("Alice", 30))
+    // The same codec DECODES fine — so the pass-through below is the ENCODE refusing, not a read miss.
+    val decodes = codecPrism[Person].field(_.name).record.getOptionUnsafe(rec)
+    val silent = codecPrism[Person].field(_.name).record.replace("Bob")(rec)
+    val ior = codecPrism[Person].field(_.name).record.place("Bob")(rec)
+
+    val diagnosed = ior.fold(
+      _ => false,
+      _ => false,
+      (chain, out) =>
+        (out eq rec) && chain.toList.exists {
+          case AvroFailure.DecodeFailed(_, _) => true
+          case _                              => false
+        },
+    )
+
+    (decodes === Some("Alice"))
+      .and((silent eq rec) must beTrue)
+      .and(diagnosed must beTrue)
+  }
+
   // ---- F2: .record.replace ---------------------------------------------
 
   // covers: the record face's replace preserves siblings (was: generic extension routed through

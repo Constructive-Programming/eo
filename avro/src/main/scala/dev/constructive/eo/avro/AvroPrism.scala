@@ -98,6 +98,14 @@ import org.apache.avro.Schema
   *     `.replace` onto a span whose current value doesn't decode as `A` — or a `.union[B]` focus
   *     sitting on a different runtime branch — is a Miss pass-through. [[graftBytes]] is the
   *     decode-free write (and the only one that can SWITCH union branches).
+  *   - '''A write that fails to ENCODE the new value is a silent pass-through''' (`from` is total
+  *     by type — there is nowhere in `Optic.from` to put the failure). The payload comes back
+  *     byte-uncanonicalised but otherwise UNCHANGED, and the call reports success. This is
+  *     deliberate-but-unsatisfying and is pinned by `AvroWriteCorrectnessSpec`; the record face's
+  *     [[AvroRecordPrism]] `*Ior` members are where such a failure is visible (as
+  *     [[AvroFailure.DecodeFailed]] — the encode is funnelled through the same `decodeOrFail`
+  *     seam). See `docs/research/2026-09-22-exception-audit.md` (class C) for why the fix is a
+  *     failure-typed write carrier rather than a local `throw` — tracked as issue #117.
   *   - '''The payload must be encoded under exactly this prism's reader schema.''' This is about
   *     PAYLOAD drift — a name absent from the READER schema is a construction-time refusal on both
   *     `.field` and `.fieldNamed`, not a runtime miss. The byte walk performs no writer/reader

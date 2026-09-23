@@ -35,6 +35,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   gate: `benchmarks` `ClickRecordBench` (66-leaf nested ClickInfo) — derived 744 B/op vs hand-built
   768 vs the rejected positional 23,912 vs full codec 28,408.
 
+### Changed
+
+- **`cats-eo-jsoniter`: the string-path constructors now keep the failure in the type**
+  (source- and binary-breaking). `JsoniterPrism.fromPath` and
+  `JsoniterTraversal.fromPath` return `Either[String, …]` — a JSONPath is DATA (a config file,
+  a CLI argument, a registry lookup), so an unparseable one is a value you handle rather than
+  an exception you catch. The throwing `JsoniterPrism.fromPath` is **removed**, and with it
+  `JsoniterTraversal.apply(path)`; a path-free root prism is still `JsoniterPrism[A]`. Migration:
+  `JsoniterTraversal[A](path)` → `JsoniterTraversal.fromPath[A](path)`, then handle the `Left`
+  (`JsoniterPrism.fromPath[A](path)` likewise).
+
+- **`cats-eo-circe`'s fused JSON write walk no longer uses a control-flow exception.**
+  `JsonWalk.modifyPath` takes `f: Json => WalkResult` (`JsonFailure | Json` — a union, not an
+  `Either`, so no splice frame boxes anything) and short-circuits on the failure arm; the private
+  `ControlThrowable` non-local exit (`MissSignal` / `miss`) is gone, and `JsonFocus` /
+  `JsonTraversal` return their failures instead of raising them. No public behaviour change, and
+  no allocation cost: measured on the depth-3 `OrderCirceBench.eoStreet` write shape, the hit
+  path is unchanged at 1080 B/op and the miss path drops 80 → 40 B/op (the old design allocated a
+  `MissSignal` Throwable). Full inventory and verdicts for the rest of the tree:
+  `docs/research/2026-09-22-exception-audit.md`; the write-side silent pass-through that the same
+  audit pins as intended behaviour is tracked as
+  [#117](https://github.com/Constructive-Programming/eo/issues/117).
+
 ## [0.16.0] - 2026-09-18
 
 ### Added

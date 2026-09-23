@@ -65,8 +65,8 @@ import dev.constructive.eo.optics.Optic
   *
   * Each drilled step needs a `JsonValueCodec` for its focus type in scope (derive leaf codecs via
   * `JsonCodecMaker.make` from `jsoniter-scala-macros`, which callers add themselves). To skip
-  * intermediate codecs entirely, use the string-path factory:
-  * `JsoniterPrism.fromPath[String]("\$.a.b")` needs only the leaf codec.
+  * intermediate codecs entirely, use the string-path factory — `JsoniterPrism.fromPath[String]`
+  * needs only the leaf codec, and returns the prism in an `Either` (a path is data).
   *
   * '''Laws & preconditions''' (normative):
   *
@@ -78,6 +78,11 @@ import dev.constructive.eo.optics.Optic
   *   - '''Writes require a decodable current focus''': the Affine `to` decodes eagerly, so
   *     `.replace` onto a span whose current value doesn't decode as `A` is a Miss pass-through —
   *     template placeholders must be VALID encodings of the focus type.
+  *   - '''A write that fails to ENCODE the new value is a silent pass-through''' (`from` is total
+  *     by type — there is nowhere in `Optic.from` to put the failure). On a drilled prism the
+  *     original slice survives and the call reports success. Pinned by `JsoniterPrismWriteSpec`;
+  *     see `docs/research/2026-09-22-exception-audit.md` (class C) for the carrier-level fix,
+  *     tracked as issue #117.
   *   - Only the ROOT prism ([[JsoniterPrism.apply]], empty path) is additionally a lawful
   *     full-cover Prism: there [[reverseGet]] is a genuine build and `to` misses only on
   *     undecodable input.
@@ -187,35 +192,37 @@ object JsoniterPrism:
   def apply[A](using JsonValueCodec[A]): JsoniterPrism[A] =
     fromSteps(Nil)
 
-  /** Build a read-write Prism over a JSON byte buffer at the given JSONPath.
-    *
-    * Throws `IllegalArgumentException` if the path string is not parseable. Path syntax: `$`,
-    * dotted field names (`$.foo.bar`), array indices (`$[0]`). See [[PathParser]] for the full
-    * grammar.
+  /** Build a read-write Prism over a JSON byte buffer at the given JSONPath — the ONLY string-path
+    * constructor, and it keeps the failure in the type. An unparseable path, or one carrying a
+    * `[*]` wildcard (a [[JsoniterTraversal]] shape), comes back as `Left(message)`: a path is DATA
+    * (a config value, a CLI argument, a registry lookup), so there is no throwing twin to reach
+    * for. Path syntax: `$`, dotted field names (`$.foo.bar`), array indices (`$[0]`). See
+    * [[PathParser]] for the full grammar; [[apply]] is the path-free root constructor.
     *
     * @example
     *   {{{
     * import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
     * given codec: JsonValueCodec[Long] = JsonCodecMaker.make
     *
-    * val idP = JsoniterPrism.fromPath[Long]("\$.payload.user.id")
+    * val idP: Either[String, JsoniterPrism[Long]] =
+    *   JsoniterPrism.fromPath[Long]("$.payload.user.id")
     * val bytes: Array[Byte] = ...
-    * idP.foldMap(identity)(bytes)  // Long, no AST allocation
+    * idP.map(_.foldMap(identity)(bytes))   // Either[String, Long], no AST allocation
     *   }}}
     *
-    * @group Optics
+    * @group Constructors
     */
   def fromPath[A](path: String)(using
       codec: JsonValueCodec[A]
-  ): JsoniterPrism[A] =
-    val steps = PathParser.parse(path) match
-      case Right(s) => s
-      case Left(e)  => throw new IllegalArgumentException(s"invalid JSONPath '$path': $e")
-    if steps.contains(PathStep.Wildcard) then
-      throw new IllegalArgumentException(
-        s"JsoniterPrism path '$path' contains '[*]' — use JsoniterTraversal for wildcard paths"
-      )
-    fromSteps(steps)
+  ): Either[String, JsoniterPrism[A]] =
+    PathParser.parse(path) match
+      case Right(steps) =>
+        if steps.contains(PathStep.Wildcard) then
+          Left(
+            s"JsoniterPrism path '$path' contains '[*]' — use JsoniterTraversal for wildcard paths"
+          )
+        else Right(fromSteps[A](steps))
+      case Left(e) => Left(s"invalid JSONPath '$path': $e")
 
   /** Build a Prism from an already-parsed step list — useful for reusing a parsed path across
     * multiple optics, or when constructing programmatically.

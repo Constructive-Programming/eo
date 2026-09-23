@@ -5,6 +5,8 @@ import scala.language.dynamics
 import cats.data.{Chain, Ior}
 import io.circe.{Decoder, Encoder, Json}
 
+import JsonWalk.{getOrElse, WalkResult}
+
 /** Multi-focus counterpart to [[JsonPrism]]: walks the JSON to some array, then applies the focus
   * update to every element. Two pieces: `prefix: Array[PathStep]` (root-to-array, walked once) and
   * `focus: JsonFocus[A]` (per-element). The Leaf-vs-Fields split lives in `focus`.
@@ -94,15 +96,15 @@ final class JsonTraversal[A] private[circe] (
       }
 
   /** Fused prefix walk + array splice — `elemUpdate` maps each element of the focused array; a
-    * non-array terminal aborts via miss.
+    * non-array terminal fails the walk.
     */
   private def spliceAtPrefix(
       json: Json
-  )(mapArr: Vector[Json] => Vector[Json]): Either[JsonFailure, Json] =
+  )(mapArr: Vector[Json] => Vector[Json]): WalkResult =
     JsonWalk.modifyPath(json, prefix) { cur =>
       cur.asArray match
         case Some(arr) => Json.fromValues(mapArr(arr))
-        case None      => JsonWalk.miss(JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix)))
+        case None      => JsonFailure.NotAnArray(JsonWalk.terminalOf(prefix))
     }
 
   // ---- *Unsafe surface — delegates to focus.modifyImpl etc. --------

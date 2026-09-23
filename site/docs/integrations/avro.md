@@ -94,6 +94,15 @@ surface. The `*Unsafe` variants ship the silent-pass-through hot
 path used by Kafka consumers that have measured and don't want
 the diagnostic allocation.
 
+That split also covers a write whose NEW value cannot be encoded.
+`Optic.from` is total by type, so there is nowhere to put the failure:
+the silent tier (`replace`, `*Unsafe`) leaves the record unchanged and
+reports success, while the Ior tier carries it as
+`AvroFailure.DecodeFailed` — the encode runs through the same
+decoder/encoder seam, so the case name is the seam's, not the codec's.
+If a write must not silently no-op, take the Ior tier and inspect the
+chain.
+
 Other operations (all the silent escape hatches):
 
 ```scala mdoc

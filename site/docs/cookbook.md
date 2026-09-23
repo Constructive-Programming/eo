@@ -761,9 +761,13 @@ import dev.constructive.eo.jsoniter.JsoniterPrism
 given JsonValueCodec[String] = JsonCodecMaker.make
 
 // One byte optic per format, same focus type. Drilled once,
-// reused for every message.
+// reused for every message. (`JsoniterPrism.fromPath` returns an
+// `Either` — a path is data; the literal below is unwrapped here.)
 val customerAvro = eoavro.codecPrism[OrderEvent].customer
-val customerJson = JsoniterPrism.fromPath[String]("$.customer")
+val customerJson =
+  JsoniterPrism
+    .fromPath[String]("$.customer")
+    .fold(msg => throw new IllegalArgumentException(msg), identity)
 
 // The JSON side's output skeleton. Placeholders must be VALID
 // encodings of the branch type — the splice write decodes the

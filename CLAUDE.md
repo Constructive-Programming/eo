@@ -337,6 +337,18 @@ no XML, no `finalize`):
   gate has more than one instance. `CapsMatrixSpec` pins this for the
   capability companions.
 
+- **No exceptions as control flow.** A failure is a value: return
+  `Either`/`Ior`/`Option`, or miss through the carrier. `throw` is legitimate
+  in exactly three places — (1) converting a third-party throwing API into a
+  structured failure at ONE boundary (`AvroCodec`, `AvroBinaryCursor`'s
+  `*Uncaught` split — the catch *is* the design there), (2) a fail-fast
+  argument check at optic-construction time, (3) an unreachable invariant
+  guard. Never `throw` to signal an ordinary miss, and never catch a
+  throwable just to decide control flow. The full inventory, verdict per
+  site, and the open write-side decision live in
+  [`docs/research/2026-09-22-exception-audit.md`](./docs/research/2026-09-22-exception-audit.md)
+  — read it before adding a `throw` or a `catch NonFatal` to `src/main`.
+
 ## Metals MCP (stdio)
 
 `metals-mcp` (new in v1.6.7) is registered as a project-local MCP server in

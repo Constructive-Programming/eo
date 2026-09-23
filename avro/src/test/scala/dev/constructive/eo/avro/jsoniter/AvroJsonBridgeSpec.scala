@@ -47,13 +47,21 @@ class AvroJsonBridgeSpec extends Specification:
 
   private def str(b: Array[Byte]): String = new String(b, "UTF-8")
 
+  /** Literal-path prism: `JsoniterPrism.fromPath` returns `Either` (a path is data), and a `Left`
+    * here can only be a typo in this spec — fail the example with the parser's own message.
+    */
+  private def prism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
+    JsoniterPrism
+      .fromPath[A](path)
+      .fold(msg => throw new AssertionError(s"test path '$path': $msg"), identity)
+
   "Avro bytes → JSON bytes: branch moves across formats with zero root constructions" >> {
     val env = Envelope("env-7", Click("https://x.example/a?b=1", 42L), "keep-me")
     val avroBytes = BridgeFixtures.toAvroBinary(env)
 
     // The two byte optics, one per format. Drilled once, reusable across payloads.
     val clickAvro = codecPrism[Envelope].field(_.click)
-    val clickJson = JsoniterPrism.fromPath[Click]("$.click")
+    val clickJson = prism[Click]("$.click")
 
     // The click placeholder must be a VALID Click encoding — the Affine write decodes the
     // current focus before splicing (a Hit carries the span AND the decoded value).
@@ -87,7 +95,7 @@ class AvroJsonBridgeSpec extends Specification:
     val avroBytes = BridgeFixtures.toAvroBinary(env)
 
     val idAvro = codecPrism[Envelope].field(_.id)
-    val idJson = JsoniterPrism.fromPath[String]("$.envelopeId")
+    val idJson = prism[String]("$.envelopeId")
     val template: Array[Byte] = """{"envelopeId":"","v":1}""".getBytes("UTF-8")
 
     BridgeFixtures.rootDecodes.set(0)
@@ -107,7 +115,7 @@ class AvroJsonBridgeSpec extends Specification:
     val jsonBytes: Array[Byte] =
       """{"click":{"url":"https://json.example/in","ts":77},"meta":"x"}""".getBytes("UTF-8")
 
-    val clickJson = JsoniterPrism.fromPath[Click]("$.click")
+    val clickJson = prism[Click]("$.click")
     val clickAvro = codecPrism[Envelope].field(_.click)
 
     BridgeFixtures.rootDecodes.set(0)

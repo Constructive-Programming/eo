@@ -37,6 +37,11 @@ import dev.constructive.eo.optics.Traversal
   * hold up to canonical re-encoding of the focused slices, and writes need decodable current
   * focuses.
   *
+  * '''Write-side failure is per-element and silent''': a focus whose ENCODE throws keeps its
+  * ORIGINAL bytes while its siblings are written, so a partially applied write is reported as
+  * success (`from` is total by type). Pinned by `JsoniterTraversalWriteSpec`; the carrier-level fix
+  * is `docs/research/2026-09-22-exception-audit.md` (class C), tracked as issue #117.
+  *
   * Typed drilling continues past the wildcard, mirroring eo-circe's `JsonTraversal`:
   * `JsoniterPrism[Basket].field(_.items).each.field(_.price)` focuses `price` of every element.
   * Each step is compile-time checked against the case-class schema and appends to the path.
@@ -91,32 +96,34 @@ final class JsoniterTraversal[A] private[jsoniter] (
 
 object JsoniterTraversal:
 
-  /** Build a read-write Traversal over a JSON byte buffer at the given JSONPath. The path MAY
-    * contain `[*]` wildcard steps (without them, this collapses to a single-or-zero-focus Traversal
-    * that still uses the MultiFocus[PSVec] carrier — fine, just narrower).
-    *
-    * Throws `IllegalArgumentException` if the path string is not parseable.
+  /** Build a read-write Traversal over a JSON byte buffer at the given JSONPath — the ONLY
+    * string-path constructor, and it keeps the failure in the type. The path MAY contain `[*]`
+    * wildcard steps (without them, this collapses to a single-or-zero-focus Traversal that still
+    * uses the MultiFocus[PSVec] carrier — fine, just narrower). An unparseable path comes back as
+    * `Left(message)`: a path is DATA, so there is no throwing twin to reach for.
     *
     * @example
     *   {{{
     * import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
     * given codec: JsonValueCodec[Long] = JsonCodecMaker.make
     *
-    * val itemsT = JsoniterTraversal[Long]("\$.cart.items[*]")
+    * val itemsT: Either[String, JsoniterTraversal[Long]] =
+    *   JsoniterTraversal.fromPath[Long]("$.cart.items[*]")
     * val bytes: Array[Byte] = ...
-    * itemsT.foldMap(identity[Long])(bytes)  // Long — sum of all items, zero AST allocation
-    * itemsT.modify(_ * 10)(bytes)           // Array[Byte] — every item spliced in place
+    * itemsT.map(_.foldMap(identity[Long])(bytes))  // Either[String, Long], zero AST allocation
+    * itemsT.map(_.modify(_ * 10)(bytes))           // Either[String, Array[Byte]], spliced in place
     *   }}}
     *
-    * @group Optics
+    * @group Constructors
     */
-  def apply[A](path: String)(using
+  def fromPath[A](path: String)(using
       codec: JsonValueCodec[A]
-  ): JsoniterTraversal[A] =
-    val steps = PathParser.parse(path) match
-      case Right(s) => s
-      case Left(e)  => throw new IllegalArgumentException(s"invalid JSONPath '$path': $e")
-    fromSteps(steps)
+  ): Either[String, JsoniterTraversal[A]] =
+    PathParser
+      .parse(path)
+      .map(steps => fromSteps[A](steps))
+      .left
+      .map(e => s"invalid JSONPath '$path': $e")
 
   /** Build a Traversal from an already-parsed step list.
     *

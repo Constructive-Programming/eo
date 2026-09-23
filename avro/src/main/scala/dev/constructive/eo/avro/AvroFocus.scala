@@ -78,8 +78,11 @@ sealed abstract private[avro] class AvroFocus[A]:
     * captures a `BinarySpan`.
     *
     * `Left` on navigate/decode failure. The returned writer catches encode/rebuild failures and
-    * returns the original `record` unchanged — the Optic `from` has no failure channel; diagnostics
-    * live on the Ior member surface.
+    * returns the original `record` unchanged — the Optic `from` has no failure channel. That silent
+    * pass-through is INTENDED for now, and pinned by `AvroWriteCorrectnessSpec`; the destination is
+    * the failure-typed write carrier (issue #117; `docs/research/2026-09-22-exception-audit.md`,
+    * class C). Diagnostics live on the Ior member surface, which surfaces an encode failure as
+    * [[AvroFailure.DecodeFailed]] because both directions funnel through [[decodeOrFail]].
     */
   def navigateForWrite(record: IndexedRecord): Either[AvroFailure, (A, A => IndexedRecord)]
 

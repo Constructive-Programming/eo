@@ -6,7 +6,12 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
-//   next: `Affine` covariant in B; `Affine.Miss` drops its phantom B type
+//   next: (a) jsoniter's string-path constructors keep the failure in the type
+//         — `JsoniterPrism.fromPath` / `JsoniterTraversal.fromPath` return
+//         `Either[String, _]`, the throwing `fromPath` is gone, and
+//         `JsoniterTraversal.apply(path)` with it (source- and binary-
+//         breaking; build from a path via `fromPath` and handle the `Left`).
+//         (b) `Affine` covariant in B; `Affine.Miss` drops its phantom B type
 //         parameter (now `Miss[A] <: Affine[A, Nothing]`) and `widenB` is
 //         deleted — retyping a miss is a plain upcast (source- and
 //         binary-breaking for direct `Miss`/`widenB` users).

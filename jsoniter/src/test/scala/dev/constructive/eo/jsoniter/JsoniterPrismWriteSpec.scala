@@ -20,6 +20,8 @@ import org.specs2.mutable.Specification
   * `.modify` / `.replace` light up via `ForgetfulFunctor[Affine]` (in `Affine.given`); no new
   * typeclass shipping needed — the splice lives in the optic's `from` closure.
   */
+import JsoniterPathFixtures.prism
+
 class JsoniterPrismWriteSpec extends Specification:
 
   given longCodec: JsonValueCodec[Long] = JsonCodecMaker.make
@@ -34,14 +36,14 @@ class JsoniterPrismWriteSpec extends Specification:
 
   "JsoniterPrism .replace: same-length scalar — splices, surrounding bytes preserved" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.id")
+      prism[Long]("$.payload.user.id")
     val out = idP.replace(99L)(sample)
     str(out) === """{"payload":{"user":{"id":99,"email":"alice@example.com"},"items":[1,2,3]}}"""
   }
 
   "JsoniterPrism .replace: longer scalar — array grows, surrounding bytes preserved" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.id")
+      prism[Long]("$.payload.user.id")
     val out = idP.replace(1234567L)(sample)
     str(
       out
@@ -50,35 +52,35 @@ class JsoniterPrismWriteSpec extends Specification:
 
   "JsoniterPrism .replace: shorter scalar — array shrinks, surrounding bytes preserved" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.id")
+      prism[Long]("$.payload.user.id")
     val out = idP.replace(7L)(sample)
     str(out) === """{"payload":{"user":{"id":7,"email":"alice@example.com"},"items":[1,2,3]}}"""
   }
 
   "JsoniterPrism .replace on String — quotes preserved" >> {
     val emailP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-      JsoniterPrism.fromPath[String]("$.payload.user.email")
+      prism[String]("$.payload.user.email")
     val out = emailP.replace("bob@x.org")(sample)
     str(out) === """{"payload":{"user":{"id":42,"email":"bob@x.org"},"items":[1,2,3]}}"""
   }
 
   "JsoniterPrism .modify: transforms focus via codec round-trip" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.id")
+      prism[Long]("$.payload.user.id")
     val out = idP.modify(_ * 10)(sample)
     str(out) === """{"payload":{"user":{"id":420,"email":"alice@example.com"},"items":[1,2,3]}}"""
   }
 
   "JsoniterPrism .replace: miss path — write-back is no-op" >> {
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.absent")
+      prism[Long]("$.payload.user.absent")
     val out = absentP.replace(99L)(sample)
     out.toSeq === sample.toSeq
   }
 
   "JsoniterPrism: round-trip — read after write yields the new value" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.id")
+      prism[Long]("$.payload.user.id")
     val written = idP.replace(99L)(sample)
     idP.to(written) match
       case h: Affine.Hit[idP.X, Long] => h.b === 99L
@@ -87,9 +89,9 @@ class JsoniterPrismWriteSpec extends Specification:
 
   "JsoniterPrism .modify(identity): byte-equivalent output for canonical encodings" >> {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.user.id")
+      prism[Long]("$.payload.user.id")
     val emailP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-      JsoniterPrism.fromPath[String]("$.payload.user.email")
+      prism[String]("$.payload.user.email")
 
     (idP.modify(identity[Long])(sample).toSeq === sample.toSeq)
       .and(emailP.modify(identity[String])(sample).toSeq === sample.toSeq)
@@ -97,7 +99,7 @@ class JsoniterPrismWriteSpec extends Specification:
 
   "JsoniterPrism .replace at array index — splices the indexed element" >> {
     val secondP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      JsoniterPrism.fromPath[Long]("$.payload.items[1]")
+      prism[Long]("$.payload.items[1]")
     val out = secondP.replace(20L)(sample)
     str(out) === """{"payload":{"user":{"id":42,"email":"alice@example.com"},"items":[1,20,3]}}"""
   }

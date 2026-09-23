@@ -19,6 +19,8 @@ import org.specs2.mutable.Specification
   * The write-back splice surface (`.modify` re-encoding each element into the buffer) is covered by
   * `JsoniterTraversalWriteSpec`.
   */
+import JsoniterPathFixtures.traversal
+
 class JsoniterTraversalSpec extends Specification:
 
   given longCodec: JsonValueCodec[Long] = JsonCodecMaker.make
@@ -58,11 +60,11 @@ class JsoniterTraversalSpec extends Specification:
     import cats.instances.long.given
 
     val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      JsoniterTraversal[Long]("$.items[*]")
+      traversal[Long]("$.items[*]")
     val emptyT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      JsoniterTraversal[Long]("$.empty[*]")
+      traversal[Long]("$.empty[*]")
     val missingT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      JsoniterTraversal[Long]("$.absent[*]")
+      traversal[Long]("$.absent[*]")
 
     (itemsT.foldMap(identity[Long])(sample) === 15L) // 1+2+3+4+5
       .and(emptyT.foldMap(identity[Long])(sample) === 0L)
@@ -71,7 +73,7 @@ class JsoniterTraversalSpec extends Specification:
 
   "JsoniterTraversal: from is identity in phase-1.5 (returns the original bytes)" >> {
     val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      JsoniterTraversal[Long]("$.items[*]")
+      traversal[Long]("$.items[*]")
     itemsT.from(itemsT.to(sample)) === sample
   }
 
@@ -80,10 +82,26 @@ class JsoniterTraversalSpec extends Specification:
     // Mixed array — a string element among integers will fail Long decode and get dropped.
     val mixed = bytes("""{"vals":[1,"oops",3,4]}""")
     val valsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      JsoniterTraversal[Long]("$.vals[*]")
+      traversal[Long]("$.vals[*]")
     valsT.foldMap(identity[Long])(mixed) === 8L // 1 + 3 + 4 (the "oops" String drops)
   }
 
-  "JsoniterPrism: rejects wildcard paths at construction (cross-check)" >> {
-    JsoniterPrism.fromPath[Long]("$.items[*]") must throwAn[IllegalArgumentException]
+  "JsoniterPrism: wildcard paths come back as Left (cross-check)" >> {
+    JsoniterPrism.fromPath[Long]("$.items[*]") must
+      beLeft(
+        "JsoniterPrism path '$.items[*]' contains '[*]' — use JsoniterTraversal for wildcard paths"
+      )
+  }
+
+  // covers: JsoniterTraversal.scala fromPath — the ONLY string-path constructor keeps the failure
+  //   in the type, and a good path still builds the optic.
+  "JsoniterTraversal: fromPath reports a bad path as Left, never as a throw" >> {
+    import cats.instances.long.given
+
+    val malformed = JsoniterTraversal.fromPath[Long]("$.items[*")
+    val good = JsoniterTraversal.fromPath[Long]("$.items[*]")
+
+    (malformed must beLeft("invalid JSONPath '$.items[*': expected ']' after '*' at position 9"))
+      .and(good.isRight must beTrue)
+      .and(good.toOption.get.foldMap(identity[Long])(sample) === 15L)
   }

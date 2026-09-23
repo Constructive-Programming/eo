@@ -27,21 +27,36 @@ object DomainJsoniter:
 
   // ---- EO jsoniter optics (JSONPath) --------------------------------
 
+  /** Literal-path constructors for the HARNESS. `JsoniterPrism.fromPath` /
+    * `JsoniterTraversal.fromPath` return `Either` (a path is data); the paths below are literals in
+    * this file, so a `Left` is a broken benchmark definition and failing fast is the right answer.
+    * (Library callers handle the message instead — that is the point of the signature.)
+    */
+  private def prism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
+    JsoniterPrism
+      .fromPath[A](path)
+      .fold(msg => throw new IllegalArgumentException(s"bench path '$path': $msg"), identity)
+
+  private def traversal[A](path: String)(using JsonValueCodec[A]): JsoniterTraversal[A] =
+    JsoniterTraversal
+      .fromPath[A](path)
+      .fold(msg => throw new IllegalArgumentException(s"bench path '$path': $msg"), identity)
+
   /** depth-1 scalar `$.id` (`Long`) — read / replace / modify vehicle. */
   val idPrism: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    JsoniterPrism.fromPath[Long]("$.id")
+    prism[Long]("$.id")
 
   /** depth-3 scalar `$.customer.address.street` (`String`). */
   val streetPrism: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-    JsoniterPrism.fromPath[String]("$.customer.address.street")
+    prism[String]("$.customer.address.street")
 
   /** a deliberately-absent path `$.customer.absent` — the honest "miss" stress test. */
   val absentPrism: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    JsoniterPrism.fromPath[Long]("$.customer.absent")
+    prism[Long]("$.customer.absent")
 
   /** array fold `$.lines[*].price` (`Double`). */
   val pricesTraversal: Optic[Array[Byte], Array[Byte], Double, Double, MultiFocus[PSVec]] =
-    JsoniterTraversal[Double]("$.lines[*].price")
+    traversal[Double]("$.lines[*].price")
 
   // ---- hand-rolled partial-scan codecs ------------------------------
 
