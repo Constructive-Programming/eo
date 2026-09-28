@@ -7,7 +7,14 @@ import java.io.{ByteArrayOutputStream, InputStream}
 import java.util.{Arrays, HashMap, List as JList}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, IndexedRecord}
-import org.apache.avro.io.{BinaryData, BinaryDecoder, Decoder, DecoderFactory, EncoderFactory}
+import org.apache.avro.io.{
+  BinaryData,
+  BinaryDecoder,
+  BinaryEncoder,
+  Decoder,
+  DecoderFactory,
+  EncoderFactory
+}
 
 /** Internal byte-offset locator behind [[AvroPrism]]'s byte-carried optic (`to`/`from`) and its
   * slice/graft surface.
@@ -357,17 +364,64 @@ private[avro] object AvroBinaryCursor:
     */
   private[avro] val leaves = new DatumReaders[Any]
 
+  /** Per-thread reusable binary-write plumbing — [[writeDatum]]'s engine, the write mirror of the
+    * [[DatumReaders]] reader cache + [[binaryDecoderCache]] decoder on the read side (issue #119).
+    *
+    * '''Why cache at all:''' every whole-record and leaf write funnels through [[writeDatum]]. Its
+    * first form allocated a fresh `ByteArrayOutputStream` (32-byte start — a multi-KB payload
+    * reallocates and copies its buffer a dozen times on the way up), a fresh `GenericDatumWriter`,
+    * and a fresh `BufferedBinaryEncoder` (2 KB internal buffer) on EVERY call. Measured on a
+    * 15-field record with an all-`Option` nested record and an 18-branch union (245 B output):
+    * 2,928 B/op of write-side plumbing against a 392 B/op reused-plumbing floor and 397 B/op for a
+    * hand-written direct-to-encoder writer — the plumbing, not `GenericDatumWriter` dispatch, is
+    * the bulk of the allocation gap reported in issue #119 over hand-written producers.
+    *
+    * '''Rebind, not rebuild:''' `EncoderFactory.binaryEncoder(out, reuse)` reconfigures a
+    * `BufferedBinaryEncoder` in place — position reset to 0, same 2 KB buffer (only replaced when
+    * the factory buffer size changes) — so steady-state writes allocate exactly the returned
+    * `toByteArray` result. The writer cache is keyed per `Schema` like the read cache is keyed per
+    * schema pair; `GenericDatumWriter` is mutable and NOT thread-safe, hence the `ThreadLocal` —
+    * the same reason [[DatumReaders.cache]] exists.
+    *
+    * '''Lifetime caveat (same as [[DatumReaders]]):''' the writer map has no eviction — it grows by
+    * one entry per distinct schema written on the thread. Producers write one schema repeatedly, so
+    * this is the intended shape; dynamically-built schemas on a huge pool would instead want fresh
+    * writers per call, which is exactly what the pre-#119 form did.
+    */
+  final private class DatumWriters:
+
+    private val out = new ByteArrayOutputStream(4096)
+    private var encoder: BinaryEncoder = EncoderFactory.get().binaryEncoder(out, null)
+    private val cache = new HashMap[Schema, GenericDatumWriter[Any]]()
+
+    /** Encode `datum` (of `schema` shape) to a fresh, detached `Array[Byte]`. Safe against a
+      * mid-write throw by ordering, not by state: `out` is reset at the START of every encode and
+      * the previous result was already copied out by `toByteArray`, so dirty bytes from an aborted
+      * write are never observable.
+      */
+    def write(datum: Any, schema: Schema): Array[Byte] =
+      out.reset()
+      encoder = EncoderFactory.get().binaryEncoder(out, encoder)
+      cache
+        .computeIfAbsent(schema, s => new GenericDatumWriter[Any](s))
+        .write(datum, encoder)
+      encoder.flush()
+      out.toByteArray
+
+  end DatumWriters
+
+  /** One [[DatumWriters]] plumbing set per writing thread — see its scaladoc for why reuse is
+    * thread-local.
+    */
+  private val writeCache: ThreadLocal[DatumWriters] =
+    ThreadLocal.withInitial(() => new DatumWriters)
+
   /** THE module's binary write — [[DatumReaders.read]]'s mirror: encode an `Any`-shaped `datum`
-    * under `schema` to its binary wire form. Fresh writer/encoder per call: `GenericDatumWriter`
-    * carries no resolution state worth caching.
+    * under `schema` to its binary wire form. Delegates to the per-thread [[DatumWriters]] plumbing
+    * (issue #119); the returned array is always freshly copied.
     */
   private[avro] def writeDatum(datum: Any, schema: Schema): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val writer = new GenericDatumWriter[Any](schema)
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    writer.write(datum, encoder)
-    encoder.flush()
-    out.toByteArray
+    writeCache.get().write(datum, schema)
 
   /** Read a `ByteBuffer`'s remaining bytes without disturbing its position — how a `bytes` field
     * arrives in the generic runtime model. Shared by the bridges' structural walks (`AvroJson` /

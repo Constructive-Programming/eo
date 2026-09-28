@@ -42,6 +42,7 @@ import sys
 MODULE_BENCHES = {
     "avro/": [
         "AvroBytesBench",
+        "AvroEncodeRouteBench",
         "AvroJsonBridgeBench",
         "AvroVulcanBench",
         "OrderAvroBench",
