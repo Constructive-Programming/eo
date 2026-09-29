@@ -479,4 +479,56 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     codecPrism[FullName].field(_.first).getOption(bytes) === Some("Doe")
   }
 
+  // ---- reused write plumbing (issue #119) -----------------------------
+
+  // covers: writeDatum's per-thread reused ByteArrayOutputStream / BinaryEncoder /
+  //   GenericDatumWriter is safe on the three axes reuse introduces:
+  //   (a) RETENTION — a result array handed to the caller is never disturbed by later writes on
+  //       the same thread (every result is copied out by toByteArray); note the byte-face optic
+  //       contracts already promise freshly-returned arrays.
+  //   (b) ABORTED WRITE — a datum/schema mismatch throws mid-encode (surfaced as Left); the
+  //       dirty buffer it leaves behind must never leak into the next write's bytes.
+  //   (c) THREAD ISOLATION — the plumbing is ThreadLocal, so concurrent writers interleave
+  //       freely and every thread's bytes equal the single-writer golden bytes.
+  "reused write plumbing: retention, aborted write, thread isolation (issue #119)" >> {
+    val pc = summon[AvroCodec[Person]]
+    val p = Person("Alice", 42)
+    val q = Person("Bob", 404)
+
+    def encode(x: Person): Array[Byte] =
+      AvroCodec.encodeValue(x)(using pc).getOrElse(throw new RuntimeException("encode failed"))
+
+    val goldenP = encode(p)
+    val goldenQ = encode(q)
+    val snapshotP = goldenP.clone()
+    val snapshotQ = goldenQ.clone()
+
+    // 200 interleaved writes on THIS thread must not disturb the two retained results.
+    (1 to 200).foreach { n => encode(if n % 2 == 0 then p else q); () }
+    val churnOk = Arrays.equals(goldenP, snapshotP) && Arrays.equals(goldenQ, snapshotQ)
+
+    val aborted = AvroCodec.encodeRecord("definitely not a record", pc.schema)
+    val cleanAfterAbort = Arrays.equals(goldenP, encode(p))
+
+    val results = new java.util.concurrent.ConcurrentLinkedQueue[Boolean]()
+    val writers = (1 to 8).toList.map { _ =>
+      val t = new Thread(() =>
+        (1 to 50).foreach { n =>
+          val x = if n % 2 == 0 then p else q
+          val golden = if n % 2 == 0 then goldenP else goldenQ
+          results.add(Arrays.equals(golden, encode(x)))
+        }
+      )
+      t.start()
+      t
+    }
+    writers.foreach(_.join())
+
+    (aborted.isLeft === true)
+      .and(churnOk === true)
+      .and(cleanAfterAbort === true)
+      .and(results.size() === 400)
+      .and(results.contains(false) === false)
+  }
+
 end AvroWriteCorrectnessSpec
