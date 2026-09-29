@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-09-29
+
+### Fixed
+
+- **`cats-eo-avro`: the binary write path stopped rebuilding its own plumbing on every
+  call (#119)**: `writeDatum` — the single choke point behind `AvroCodec.encodeValue` /
+  `encodeRecord`, the leaf-span splice writes, the `.fields` overlay and both bridge
+  writes — allocated a fresh `ByteArrayOutputStream` (32-byte start, so a multi-KB
+  payload reallocates and copies a dozen times on the way up), a fresh
+  `GenericDatumWriter` and a fresh `BufferedBinaryEncoder` (with its 2 KB buffer) on
+  EVERY call. The report measured the derived encode route at 1.4–1.7× a hand-written
+  direct-`BinaryEncoder` writer and 9–18% more allocated; an attribution decomposition
+  of the route (method and numbers in
+  `docs/research/2026-09-29-issue-119-avro-encode-attribution.md`) splits the cost: the
+  TIME gap is kindlings' generic-record tree plus `GenericDatumWriter` dispatch —
+  inherent to going through the datum model, and only a kindlings-side streaming
+  derivation (`A => Encoder => Unit`, the encode twin of #95's builder question) can
+  close it — but most of the ALLOCATION gap was this per-call churn: 2,928 B/op of
+  plumbing against a 392 B/op reused floor on a 245 B fixture record. The write side now
+  mirrors what the read side has done for a while: one per-thread `DatumWriters` holds a
+  reusable buffer, a `BufferedBinaryEncoder` re-bound in place via
+  `EncoderFactory.binaryEncoder(out, reuse)`, and a schema-keyed writer map —
+  `ThreadLocal` because `GenericDatumWriter` is mutable and not thread-safe, exactly the
+  `DatumReaders` reasoning and the same no-eviction caveat. Wire bytes are unchanged (the
+  module's exact-bytes specs pin them; old and new forms verified byte-identical), and
+  results stay freshly copied — retained-array survival under 200 same-thread writes,
+  recovery after an aborted mid-write, and 8-thread concurrent encode are pinned in
+  `AvroWriteCorrectnessSpec`. Full eo route: 3,456 → 904 B/op on the fixture; `benchmarks`
+  gains `AvroEncodeRouteBench`, keeping the four routes permanently comparable under
+  `-prof gc`.
+
 ## [0.17.0] - 2026-09-23
 
 **Binary-breaking: recompile against this release.** Two public signatures changed shape —
@@ -982,7 +1013,8 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.17.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.18.0...HEAD
+[0.18.0]: https://github.com/Constructive-Programming/eo/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Constructive-Programming/eo/compare/v0.15.1...v0.16.0
 [0.1.0]: https://github.com/Constructive-Programming/eo/releases/tag/v0.1.0
