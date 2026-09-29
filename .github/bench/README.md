@@ -51,9 +51,15 @@ entries, and the unit tests pin the semantics.
 
 1. Dispatch **Benchmark A/B** with `mode=aa` (same ref twice) at least 3
    times; each posts a noise report to the run summary and artifact.
-2. B/op floor must be ~0. If it isn't, the reduced profile has too little
-   warmup for C2/escape analysis — raise `-wi` in `JMH_FLAGS` /
-   `JMH_PROFILE` in bench-pr.yml and recalibrate.
+2. B/op floor must be ~0. If it isn't: first pin the fork JVM's
+   allocation ergonomics — adaptive TLAB sizing makes `gc.alloc.rate.norm`
+   count environment-dependent retire waste (measured on PR #116:
+   ±78-81% A/A swings on `PlatedBench.visitorUniverseJson n=4096`
+   unpinned, ±0.0% with `-jvmArgsAppend -XX:-ResizeTLAB` plus a fixed
+   `-Xms`/`-Xmx`; fork counts do NOT fix it — `-f 3` unpinned still
+   swung ±11-41%). Then raise `-wi` in `JMH_FLAGS` / `JMH_PROFILE` in
+   bench-pr.yml and recalibrate. Changing the flags changes the profile —
+   see step 4.
 3. Commit `.github/bench/thresholds.json`, e.g.
    `{"bop_regression_pct": 1.0, "bop_min_delta_bytes": 16}` — quantile
    data from the reports, not guesses.

@@ -54,8 +54,16 @@ env:
   # The measurement profile. thresholds.json is calibrated against exactly
   # this string — change it and the gate reverts to advisory until an A/A
   # recalibration (delete thresholds.json in the same PR).
-  JMH_PROFILE: "pr:-i3-wi2-f1-t1-gc"
-  JMH_FLAGS: "-i 3 -wi 2 -f 1 -t 1 -foe true -prof gc -rf json"
+  #
+  # Pinned allocation ergonomics (-XX:-ResizeTLAB + fixed heap): adaptive
+  # TLAB sizing makes gc.alloc.rate.norm count environment-dependent retire
+  # waste — PR #116 measured A/A swings of +78-81% B/op on
+  # PlatedBench.visitorUniverseJson n=4096 across identical-source runs;
+  # pinning took the same A/A to ±0.0%. Forks don't fix it (measured: -f 3
+  # unpinned still ±11-41% — it is per-invocation environment state, not
+  # per-fork sampling noise).
+  JMH_PROFILE: "pr:-i3-wi2-f1-t1-gc-rt1g"
+  JMH_FLAGS: "-i 3 -wi 2 -f 1 -t 1 -foe true -prof gc -rf json -jvmArgsAppend -XX:-ResizeTLAB -jvmArgsAppend -Xms1g -jvmArgsAppend -Xmx1g"
 
 jobs:
   bench-ab:
