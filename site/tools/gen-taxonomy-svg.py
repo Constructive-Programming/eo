@@ -15,6 +15,10 @@ focus axis). Write-only families keep a real `from`, so each sits directly
 below the read-write cell(s) whose build half it is. The middle layer is the
 FULL focus x source grid — every cell is shipped or scoped to the
 failure-typed-build (BiAffine) plan; no accidental holes.
+
+The three planes are emitted back-to-front — write/build-only, then read-write,
+then read-only — because the viewer sits above the stack: where two planes
+overlap in the projection, the nearer (higher-capability) one must paint last.
 """
 import math, os
 
@@ -95,45 +99,56 @@ for (i, j) in [(0, 0), (3, 3)]:
     x1, y1 = pt(i, j, BOT)
     parts.append(f'<line class="drop" x1="{x0:.1f}" y1="{y0:.1f}" x2="{x1:.1f}" y2="{y1:.1f}"/>')
 
+# ---------- layer bodies ----------
+# Each layer is a full plane, stacked along the capability axis with the viewer above
+# the stack: the read-only plane is nearest, the write/build-only plane farthest. SVG
+# paints in document order, so the three bodies are collected separately and emitted
+# back-to-front once they are all built — read-only LAST, so its near edge stays in
+# front of the layers below it instead of being covered by them.
+ro_layer, rw_layer, bo_layer = [], [], []
+
 # ---------- TOP layer: read-only — bars spanning the source axis ----------
 # B = Unit (terminal, not Nothing): the vestigial `from` is vacuously satisfied at
 # every source nature, so each read-only family holds the whole source axis — the
 # dual of Modify spanning the focus axis below.
 for i, name in enumerate(['Getter', 'AffineFold', 'Fold']):
-    parts.append(tile(i, 0, TOP, 'ro', vspan=3))
-    parts.append(label(i, 0, TOP, name, 'B = Unit' if i == 1 else None, vspan=3))
+    ro_layer.append(tile(i, 0, TOP, 'ro', vspan=3))
+    ro_layer.append(label(i, 0, TOP, name, 'B = Unit' if i == 1 else None, vspan=3))
 
 # ---------- MIDDLE layer: read-write (full grid: u = focus nature, v = source nature) ----------
 # u index: 0 → total, 1 → fallible, 2 → multiple
 # v index: 0 → total, 1 → contextual, 2 → fallible
-parts.append(tile(0, 0, MID, 'rw'))
-parts.append(label(0, 0, MID, 'Iso', None))
-parts.append(tile(0, 1, MID, 'rw'))
-parts.append(label(0, 1, MID, 'Lens', None))
-parts.append(tile(1, 0, MID, 'rw'))
-parts.append(label(1, 0, MID, 'Prism', None))
-parts.append(tile(1, 1, MID, 'rw'))
-parts.append(label(1, 1, MID, 'Optional', 'Affine carrier'))
-parts.append(tile(2, 0, MID, 'rw', vspan=2))
-parts.append(label(2, 0, MID, 'Traversal', 'fixed/Grate: total · each: contextual', vspan=2))
+rw_layer.append(tile(0, 0, MID, 'rw'))
+rw_layer.append(label(0, 0, MID, 'Iso', None))
+rw_layer.append(tile(0, 1, MID, 'rw'))
+rw_layer.append(label(0, 1, MID, 'Lens', None))
+rw_layer.append(tile(1, 0, MID, 'rw'))
+rw_layer.append(label(1, 0, MID, 'Prism', None))
+rw_layer.append(tile(1, 1, MID, 'rw'))
+rw_layer.append(label(1, 1, MID, 'Optional', 'Affine carrier'))
+rw_layer.append(tile(2, 0, MID, 'rw', vspan=2))
+rw_layer.append(label(2, 0, MID, 'Traversal', 'fixed/Grate: total · each: contextual', vspan=2))
 # fallible-source row — the failure-typed-build (BiAffine) plan
-parts.append(tile(0, 2, MID, 'plan', dash=True))
-parts.append(label(0, 2, MID, 'fallible write', 'planned', cls='plan-t'))
-parts.append(tile(1, 2, MID, 'plan', dash=True))
-parts.append(label(1, 2, MID, 'BiAffine', 'planned', cls='plan-t'))
-parts.append(tile(2, 2, MID, 'plan', dash=True))
-parts.append(label(2, 2, MID, 'fallible each', 'planned', cls='plan-t'))
+rw_layer.append(tile(0, 2, MID, 'plan', dash=True))
+rw_layer.append(label(0, 2, MID, 'fallible write', 'planned', cls='plan-t'))
+rw_layer.append(tile(1, 2, MID, 'plan', dash=True))
+rw_layer.append(label(1, 2, MID, 'BiAffine', 'planned', cls='plan-t'))
+rw_layer.append(tile(2, 2, MID, 'plan', dash=True))
+rw_layer.append(label(2, 2, MID, 'fallible each', 'planned', cls='plan-t'))
 
 # ---------- BOTTOM layer: write/build-only — a FULL plane (from is real, to is vestigial) ----------
 # Each cell sits directly below the read-write cell(s) whose build half it is.
-parts.append(tile(0, 0, BOT, 'bo', uspan=2))
-parts.append(label(0, 0, BOT, 'Review', "Iso's and Prism's build half — mend is total", uspan=2))
-parts.append(tile(2, 0, BOT, 'bo'))
-parts.append(label(2, 0, BOT, 'Unfold', None))
-parts.append(tile(0, 1, BOT, 'mod', uspan=3))
-parts.append(label(0, 1, BOT, 'Modify', 'the contextual write half — focus-agnostic', uspan=3))
-parts.append(tile(0, 2, BOT, 'plan', dash=True, uspan=3))
-parts.append(label(0, 2, BOT, 'fallible build', 'planned', cls='plan-t', uspan=3))
+bo_layer.append(tile(0, 0, BOT, 'bo', uspan=2))
+bo_layer.append(label(0, 0, BOT, 'Review', "Iso's and Prism's build half — mend is total", uspan=2))
+bo_layer.append(tile(2, 0, BOT, 'bo'))
+bo_layer.append(label(2, 0, BOT, 'Unfold', None))
+bo_layer.append(tile(0, 1, BOT, 'mod', uspan=3))
+bo_layer.append(label(0, 1, BOT, 'Modify', 'the contextual write half — focus-agnostic', uspan=3))
+bo_layer.append(tile(0, 2, BOT, 'plan', dash=True, uspan=3))
+bo_layer.append(label(0, 2, BOT, 'fallible build', 'planned', cls='plan-t', uspan=3))
+
+# emit back-to-front: write/build-only, then read-write, then read-only in front
+parts += bo_layer + rw_layer + ro_layer
 
 # ---------- axis arrows + labels ----------
 def arrow(x0, y0, x1, y1):
