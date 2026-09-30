@@ -891,6 +891,15 @@ object MultiFocusK:
     * on `from((_, k))` materialise via `F.tabulate(k)`. The `.modify(f)` round-trip is exactly
     * `F.map(fa)(f)`.
     *
+    * Position is a read-time argument, never a property of the optic: the index is supplied per
+    * call by the `.at(i)` extension (`g.at(i)(fa) == F.index(fa)(i)`), and `Representable` has no
+    * canonical `Representation` to hand a constructor anyway — `Function1[Boolean, *]` has no
+    * privileged `Boolean`, and `Function1[Nothing, *]` has no index at all. So this factory takes
+    * no representative index, and the built optic carries none: `X = Unit`, and the whole
+    * index-parametric read lives in the focus bundle. (Pre-0.19 a second name,
+    * `representableAt(F)(repr0)`, took exactly such an index; it built this same optic — see the
+    * changelog for the removal.)
+    *
     * @group Constructors
     */
   def representable[F[_], A](using
@@ -929,21 +938,6 @@ object MultiFocusK:
   /** [[zipWith]]'s pairing special case — the `F[(A, B)]` product of two containers. */
   def zip[F[_], A, B](fa: F[A], fb: F[B])(using Representable[F]): F[(A, B)] =
     zipWith(fa, fb)((a, b) => (a, b))
-
-  /** Representable-indexed variant with explicit representative index. The `repr0` argument is
-    * unused at runtime (rebuild operates pointwise via `F.tabulate`); preserved for API parity and
-    * to leave the door open for a future `.lead` accessor.
-    *
-    * @group Constructors
-    */
-  def representableAt[F[_], A](F: Representable[F])(
-      repr0: F.Representation
-  ): Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]] =
-    val _ = repr0
-    new Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]:
-      type X = Unit
-      def to(fa: F[A]): (Unit, F.Representation => A) = ((), F.index(fa))
-      def from(pair: (Unit, F.Representation => A)): F[A] = F.tabulate(pair._2)
 
   /** Polymorphic homogeneous-tuple Function1-shaped factory. `to(t) = ((), i => t._i)`,
     * `from((_, k))` materialises via `Tuple.fromArray(Array.tabulate(size)(i => k(i)))`.

@@ -2,7 +2,7 @@ package dev.constructive.eo
 
 import scala.language.implicitConversions
 
-import cats.Representable
+import cats.{Functor, Representable}
 import cats.instances.function.given
 import dev.constructive.eo.compose.*
 import org.scalacheck.Prop.forAll
@@ -19,7 +19,8 @@ import optics.Optic.*
   *
   *   - `MultiFocus.representable` over a Naperian Function1 (formerly
   *     `Grate.apply[F: Representable]`)
-  *   - `MultiFocus.representableAt` with explicit lead index (formerly `Grate.at`)
+  *   - the `.at(i)` read surface standing in for the retired `representableAt` / `Grate.at`
+  *     construction-time index, pinned against `F.index` on a permuted `Representable`
   *   - `MultiFocus.tuple[T <: Tuple, A]` (formerly `Grate.tuple`)
   *   - `forgetful2multifocusFunction1` Iso → MultiFocus[Function1] bridge (formerly
   *     `forgetful2grate`)
@@ -115,31 +116,66 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
     idOk && rotOk
   }
 
-  // covers: MultiFocus.representableAt — explicit-lead variant — modify-at-position and
-  //   replace-broadcast both round-trip through the per-position read;
-  //   MultiFocus[Function1].at(i) — typeclass-gated `.at(i: F.Representation)` read surface
-  //   uses Representable[Function1[X0, *]] to read the focus at a chosen position (Q2 deliverable)
-  "MultiFocus.representableAt + .at(i): Representable-indexed factory + position read" >> {
+  // A second Grate `Representable`, over a container whose index ORDER is a permutation of its
+  // field order — so "index 0" and "first field" are different questions and a privileged / lead
+  // position has nowhere to hide. Lawful: `Representable` asks for `index` / `tabulate` to be
+  // mutually inverse, never for the index order to follow the declaration order.
+  enum Slot:
+    case S0, S1, S2
+
+  case class Tri[A](a: A, b: A, c: A)
+
+  given triFunctor: Functor[Tri] with
+    def map[A, B](fa: Tri[A])(f: A => B): Tri[B] = Tri(f(fa.a), f(fa.b), f(fa.c))
+
+  given triRepresentable: Representable.Aux[Tri, Slot] = new Representable[Tri]:
+    type Representation = Slot
+    def F: Functor[Tri] = triFunctor
+
+    def index[A](fa: Tri[A]): Slot => A =
+      case Slot.S0 => fa.c
+      case Slot.S1 => fa.a
+      case Slot.S2 => fa.b
+
+    def tabulate[A](f: Slot => A): Tri[A] = Tri(f(Slot.S1), f(Slot.S2), f(Slot.S0))
+
+  // covers: MultiFocus.representable + .at(i) — position is a READ-time argument
+  //   (`g.at(i)(fa) == F.index(fa)(i)`; the typeclass-gated read surface that replaced
+  //   `representableAt`'s construction-time index), pinned against `F.index` / the instance's own
+  //   `map` for two `Representable`s, the second permuted; modify / replace stay pointwise — the
+  //   property a lead-sampling rebuild would break (witnessed negatively by UnlawfulFixturesSpec)
+  "MultiFocus.representable + .at(i): position read is index-parametric, modify stays pointwise" >> {
     val F = summon[Representable[[a] =>> Boolean => a]]
-    val gTrue: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
-      MultiFocus.representableAt[[a] =>> Boolean => a, Int](F)(true)
-    val gFalse: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
-      MultiFocus.representableAt[[a] =>> Boolean => a, Int](F)(false)
+    val g: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
+      MultiFocus.representable[[a] =>> Boolean => a, Int]
 
     val fn: Boolean => Int = b => if b then 42 else 7
-    val doubled = gTrue.modify(_ * 2)(fn)
+    val doubled = g.modify(_ * 2)(fn)
     val modOk = (doubled(true) === 84).and(doubled(false) === 14)
 
     val fn2: Boolean => Int = b => if b then 1 else 2
-    val flat = gFalse.replace(99)(fn2)
+    val flat = g.replace(99)(fn2)
     val replOk = (flat(true) === 99).and(flat(false) === 99)
 
-    val g: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
-      MultiFocus.representable[[a] =>> Boolean => a, Int]
     val readFn: Boolean => Int = b => if b then 100 else 200
-    val readOk = (g.at(true)(readFn) === 100).and(g.at(false)(readFn) === 200)
+    val readOk = (g.at(true)(readFn) === F.index(readFn)(true))
+      .and(g.at(false)(readFn) === F.index(readFn)(false))
 
-    modOk.and(replOk).and(readOk)
+    // Permuted instance: the optic must follow the INSTANCE's index order (S0 is the THIRD field),
+    // and its write must stay pointwise — a rebuild that sampled one index would make every Slot
+    // equal, so `modify` would stop agreeing with the instance's own `map`.
+    val T = summon[Representable[Tri]]
+    val gt: Optic[Tri[Int], Tri[Int], Int, Int, MultiFocus[Function1[Slot, *]]] =
+      MultiFocus.representable[Tri, Int](using T)
+    val tri = Tri(1, 2, 3) // S0 -> 3, S1 -> 1, S2 -> 2
+    val triRead = (gt.at(Slot.S0)(tri) === 3)
+      .and(gt.at(Slot.S1)(tri) === 1)
+      .and(gt.at(Slot.S2)(tri) === 2)
+    val triWrite = (gt.modify(_ * 10)(tri) === triFunctor.map(tri)(_ * 10))
+      .and(gt.replace(0)(tri) === T.tabulate(_ => 0))
+    val triOk = triRead.and(triWrite)
+
+    modOk.and(replOk).and(readOk).and(triOk)
   }
 
   // covers: MultiFocus.tuple .andThen MultiFocus.tuple — same-carrier composition exercises

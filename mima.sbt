@@ -6,6 +6,12 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
+//   0.19: core `MultiFocus.representableAt` removed — the `repr0` argument
+//         never reached the built optic (the factory tabulates pointwise, so
+//         the index is a read-time argument, not a property of the optic),
+//         and `MultiFocus.representable` already built the identical carrier.
+//         Read a position with the `.at(i)` extension instead (source- and
+//         binary-breaking for direct callers; the replacement is one line).
 //   0.17: (a) jsoniter's string-path constructors keep the failure in the type
 //         — `JsoniterPrism.fromPath` / `JsoniterTraversal.fromPath` return
 //         `Either[String, _]`, the throwing `fromPath` is gone, and

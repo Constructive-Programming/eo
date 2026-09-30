@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **core: `MultiFocus.representableAt`** — the `repr0` argument was unobservable by
+  construction. The Grate encoding's focus is the whole bundle `F.Representation => A`
+  (`X = Unit`) and the write is a pointwise `F.tabulate`, so the index never reached the
+  built optic and two calls with different indices were the same optic — the factory was
+  `MultiFocus.representable` plus a parameter nothing could read. It is removed rather
+  than deprecated, matching the 0.x line's dead-surface policy (see
+  [`mima.sbt`](./mima.sbt) for the break list): **source- and binary-breaking** for
+  direct callers. Migrate by dropping the parameter — `MultiFocus.representable[F, A]`
+  builds the same optic — and read a position with the `.at(i)` extension, which takes
+  the index per call (`g.at(i)(fa) == F.index(fa)(i)`) and so subsumes the
+  construction-time one. Pinned by `MultiFocusFunction1Spec` (read / write agreement with
+  the instance's own `index` and `map` on two `Representable`s, one of them permuted) and
+  the negative fixture in `UnlawfulFixturesSpec` (a lead-sampling rebuild — the
+  parameter's only conceivable real semantics — fails `MultiFocusLaws.modifyIdentity`).
+
 ## [0.18.0] - 2026-09-29
 
 ### Fixed
