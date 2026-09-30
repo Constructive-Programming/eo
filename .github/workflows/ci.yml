@@ -366,31 +366,11 @@ jobs:
           modules-ignore: cats-eo-docs_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
 
-  validate-steward:
-    name: Validate Steward Config
-    strategy:
-      matrix:
-        os: [ubuntu-22.04]
-        java: [temurin@17]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - name: Checkout current branch (fast)
-        uses: actions/checkout@v7
-
-      - name: Setup Java (temurin@17)
-        id: setup-java-temurin-17
-        if: matrix.java == 'temurin@17'
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - uses: coursier/setup-action@v3
-        with:
-          apps: scala-steward
-
-      - run: scala-steward validate-repo-config .scala-steward.conf
-
+  # NOTE: the sbt-github-actions-generated `validate-steward` job was removed
+  # here by hand as part of the Scala Steward → Dependabot migration (Dependabot
+  # now covers sbt). It will be dropped again by the next `sbt
+  # githubWorkflowGenerate`: sbt-typelevel only emits the job when
+  # .scala-steward.conf exists, and that file is gone.
   site:
     name: Generate Site
     strategy:
