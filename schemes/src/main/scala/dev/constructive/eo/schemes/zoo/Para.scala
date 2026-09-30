@@ -17,9 +17,10 @@ import cats.Traverse
   * conditional, not free. This citizen ships the unconditionally-sound read; the writable put is a
   * scoped follow-up rather than an asserted capability.
   *
-  * Subterms are recovered by re-`project`ing each node (one extra peel per node) and zipping with
-  * the children's results in `Foldable` order — sound for any lawful `Traverse`. Stack-safe (the
-  * [[Machines.foldLayered]] machine).
+  * Subterms come from the layer the machine already expanded — each child is paired
+  * with its folded result positionally, in `Foldable` order (sound for any lawful `Traverse`),
+  * so there is no per-node re-`project` and no per-node `List`. Stack-safe (the
+  * [[Machines.foldLayeredPaired]] machine).
   */
 final class Para[F[_], S, A](private[zoo] val alg: F[(S, A)] => A)(using
     F: Traverse[F],
@@ -28,14 +29,6 @@ final class Para[F[_], S, A](private[zoo] val alg: F[(S, A)] => A)(using
   type X = F[(S, A)]
 
   private val run: S => A =
-    Machines.foldLayeredSlot[F, S, A](
-      P.project,
-      (_, layer, slots) =>
-        // pair each child's original subterm with its folded result — positionally, off the
-        // layer the machine already expanded and its own slot buffer. No re-project, no
-        // per-node `List` (the C7 re-pin: the toList+re-project route cost ~+262k B/op on the
-        // 8 191-node fixture, pushing para past droste).
-        alg(Machines.rebuildLayerPaired(layer, slots)),
-    )
+    Machines.foldLayeredPaired[F, S, A](P.project, (_, paired) => alg(paired))
 
   protected def read(s: S): A = run(s)

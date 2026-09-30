@@ -160,12 +160,12 @@ private[schemes] object Machines:
     */
   /** [[rebuildLayer]]'s paramorphic sibling: pair each original child `N` with its folded result
     * from `out` (positional, `Foldable` order — which `Functor.map` matches for a lawful
-    * `Traverse`). The subterms come from the layer the machine already holds — no per-node
-    * re-`project` and no per-node `List` materialization (both cost ~82 B/node on the 8 191-node
-    * fixture — the `F.toList` route is what the dedup audit briefly shipped and the C7 re-pin
-    * caught: para regressed 557 945 → 1 409 788 B/op, past droste).
+    * `Traverse`). The subterms come from the layer the machine already holds, so there is no
+    * per-node re-`project` and no per-node `List` — [[zoo.Para]]'s route, and what keeps
+    * it at half droste's B/op. `private`: it takes the raw slot buffer, which must not leave
+    * this file.
     */
-  private[schemes] def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
+  private def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
   ): F[(N, R)] =
     if out.length == 0 then leafRecast(fn)
@@ -248,12 +248,25 @@ private[schemes] object Machines:
   )(using F: Traverse[F]): N => R =
     foldLayeredSlot(expand, (n, layer, slots) => combine(n, rebuildLayer(layer, slots)))
 
-  /** [[foldLayered]] handing the combine the machine's raw pieces — the expanded layer and the
-    * already-filled slot buffer, WITHOUT pre-building `F[R]` (the subterm-retaining engines
-    * ([[zoo.Para]]) pair `layer` + `slots` via [[rebuildLayerPaired]] and never need the rebuilt
-    * layer; engines that do call [[rebuildLayer]] themselves). Same walk, same stack-safety.
+  /** [[foldLayered]]'s subterm-retaining sibling — the combine receives the node's own layer with
+    * each child **paired with its folded result** (`F[(N, R)]`): [[zoo.Para]]'s shape, whose algebra
+    * reads the original subterm alongside the recursion result. Same walk, same stack-safety, and
+    * allocation-identical to [[foldLayered]] bar the pairs themselves — the pairing reads the layer
+    * the machine already expanded (no per-node re-`project`, no per-node `List`).
     */
-  private[schemes] def foldLayeredSlot[F[_], N, R](
+  private[schemes] def foldLayeredPaired[F[_], N, R](
+      expand: N => F[N],
+      combine: (N, F[(N, R)]) => R,
+  )(using F: Traverse[F]): N => R =
+    foldLayeredSlot(expand, (n, layer, slots) => combine(n, rebuildLayerPaired(layer, slots)))
+
+  /** The slot-level core both the [[foldLayered]] and [[foldLayeredPaired]] drivers run on: the
+    * combine sees the expanded layer plus the already-filled slot buffer, so it can rebuild either
+    * the results layer ([[rebuildLayer]]) or the paired layer ([[rebuildLayerPaired]]) without the
+    * engine pre-building the one it does not want. `private` — the raw `Slot` buffer must not leave
+    * this file (the drivers above are the typed surface).
+    */
+  private def foldLayeredSlot[F[_], N, R](
       expand: N => F[N],
       combine: (N, F[N], Array[Slot[N, R]]) => R,
   )(using F: Traverse[F]): N => R =
