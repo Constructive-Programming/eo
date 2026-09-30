@@ -9,10 +9,10 @@ import schemes.samples.{Bin, BinF}
 /** Pins [[Schemes.para]]'s *route*, not just its result: the retained subterms must come off the
   * layer the machine already peeled, so a para fold peels each node **exactly once**.
   *
-  * The alternative — recovering the subterms by re-`project`ing each node (or materializing
-  * each node's children into a `List`) — peels every node twice and allocates an extra layer
-  * per node on top of the `List`; that is the regression this spec exists to catch (on the
-  * 8 191-node benchmark fixture it costs ~2x para's allocation, past droste's `zoo.para`).
+  * The alternative — recovering the subterms by re-`project`ing each node (or materializing each
+  * node's children into a `List`) — peels every node twice and allocates an extra layer per node on
+  * top of the `List`; that is the regression this spec exists to catch (on the 8 191-node benchmark
+  * fixture it costs ~2x para's allocation, past droste's `zoo.para`).
   */
 class ParaRouteSpec extends Specification:
 

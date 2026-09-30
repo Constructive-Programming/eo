@@ -161,9 +161,8 @@ private[schemes] object Machines:
   /** [[rebuildLayer]]'s paramorphic sibling: pair each original child `N` with its folded result
     * from `out` (positional, `Foldable` order — which `Functor.map` matches for a lawful
     * `Traverse`). The subterms come from the layer the machine already holds, so there is no
-    * per-node re-`project` and no per-node `List` — [[zoo.Para]]'s route, and what keeps
-    * it at half droste's B/op. `private`: it takes the raw slot buffer, which must not leave
-    * this file.
+    * per-node re-`project` and no per-node `List` — [[zoo.Para]]'s route, and what keeps it at half
+    * droste's B/op. `private`: it takes the raw slot buffer, which must not leave this file.
     */
   private def rebuildLayerPaired[F[_], N, R](fn: F[N], out: Array[Slot[N, R]])(using
       F: Traverse[F]
@@ -249,10 +248,11 @@ private[schemes] object Machines:
     foldLayeredSlot(expand, (n, layer, slots) => combine(n, rebuildLayer(layer, slots)))
 
   /** [[foldLayered]]'s subterm-retaining sibling — the combine receives the node's own layer with
-    * each child **paired with its folded result** (`F[(N, R)]`): [[zoo.Para]]'s shape, whose algebra
-    * reads the original subterm alongside the recursion result. Same walk, same stack-safety, and
-    * allocation-identical to [[foldLayered]] bar the pairs themselves — the pairing reads the layer
-    * the machine already expanded (no per-node re-`project`, no per-node `List`).
+    * each child **paired with its folded result** (`F[(N, R)]`): [[zoo.Para]]'s shape, whose
+    * algebra reads the original subterm alongside the recursion result. Same walk, same
+    * stack-safety, and allocation-identical to [[foldLayered]] bar the pairs themselves — the
+    * pairing reads the layer the machine already expanded (no per-node re-`project`, no per-node
+    * `List`).
     */
   private[schemes] def foldLayeredPaired[F[_], N, R](
       expand: N => F[N],

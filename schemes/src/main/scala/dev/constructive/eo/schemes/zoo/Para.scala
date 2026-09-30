@@ -17,10 +17,10 @@ import cats.Traverse
   * conditional, not free. This citizen ships the unconditionally-sound read; the writable put is a
   * scoped follow-up rather than an asserted capability.
   *
-  * Subterms come from the layer the machine already expanded — each child is paired
-  * with its folded result positionally, in `Foldable` order (sound for any lawful `Traverse`),
-  * so there is no per-node re-`project` and no per-node `List`. Stack-safe (the
-  * [[Machines.foldLayeredPaired]] machine).
+  * Subterms come from the layer the machine already expanded — each child is paired with its folded
+  * result positionally, in `Foldable` order (sound for any lawful `Traverse`), so there is no
+  * per-node re-`project` and no per-node `List`. Stack-safe (the [[Machines.foldLayeredPaired]]
+  * machine).
   */
 final class Para[F[_], S, A](private[zoo] val alg: F[(S, A)] => A)(using
     F: Traverse[F],
