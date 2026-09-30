@@ -2,8 +2,8 @@ package dev.constructive.eo
 
 import scala.language.implicitConversions
 
-import cats.{Functor, Representable}
 import cats.instances.function.given
+import cats.{Functor, Representable}
 import dev.constructive.eo.compose.*
 import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck

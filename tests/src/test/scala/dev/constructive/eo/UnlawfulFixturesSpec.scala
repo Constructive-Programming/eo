@@ -1,7 +1,7 @@
 package dev.constructive.eo
 
-import cats.{Functor, Representable}
 import cats.instances.function.given
+import cats.{Functor, Representable}
 import org.specs2.mutable.Specification
 
 import optics.{AffineFold, Optic, PickFold}
