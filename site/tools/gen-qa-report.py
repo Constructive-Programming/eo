@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Regenerate the data tables on site/docs/quality-assurance.md.
 
-Three tables, each written between a `<!-- BEGIN GENERATED: <id> -->` /
-`<!-- END GENERATED: <id> -->` marker pair so the hand-authored prose around
+Three tables, each written between a `<!-- BEGIN GENERATED: <id> -->` / `<!-- END GENERATED: <id> -->` marker pair so the hand-authored prose around
+
 them is preserved:
 
   - matrix   : the composition matrix as a pass (✓) / fail (✗) map, parsed
@@ -10,6 +10,11 @@ them is preserved:
                the single source of truth — every `typeChecks(...) must beTrue`
                is a cell that composes, every `must beFalse` a void-by-design
                cell).
+  - grate    : the same pass/fail projection restricted to the Grate sub-shape
+               (`MultiFocus[Function1[X0, *]]`), parsed from
+               tests/.../GrateShapeSpec.scala. The main grid is carrier-level:
+               its `trav` / `fold` rows describe `MultiFocus[PSVec]`, so the
+               Naperian sub-shape needs its own table rather than a footnote.
   - coverage : per-package statement % and branch % with their BC/SC ratio,
                computed from the scoverage AGGREGATE report by counting
                <statement> elements directly (matches scoverage's own
@@ -38,6 +43,12 @@ PAGE = os.path.join(ROOT, "site", "docs", "quality-assurance.md")
 SPEC = os.path.join(
     ROOT, "tests", "src", "test", "scala", "dev", "constructive", "eo",
     "CompositionMatrixSpec.scala",
+)
+
+# The Grate (Naperian Function1) sub-shape's own grid.
+GRATE_SPEC = os.path.join(
+    ROOT, "tests", "src", "test", "scala", "dev", "constructive", "eo",
+    "GrateShapeSpec.scala",
 )
 
 # Outer/inner family order — matches the spec's row order and the optics.md
@@ -89,10 +100,13 @@ def splice(page: str, marker: str, body: str) -> str:
 # --------------------------------------------------------------------------
 # matrix
 # --------------------------------------------------------------------------
-def gen_matrix() -> str:
-    src = open(SPEC, encoding="utf-8").read()
-    # Cell titles read `"<outer> ∘ <inner> ..." >>`; the verdict is the first
-    # `typeChecks("...andThen...") must beTrue|beFalse` inside the cell block.
+def parse_cells(spec: str) -> dict:
+    """Parse one spec file into `{(outer, inner): composes}`.
+
+    Cell titles read `"<outer> ∘ <inner> ..." >>`; the verdict is the first
+    `typeChecks("...andThen...") must beTrue|beFalse` inside the cell block.
+    """
+    src = open(spec, encoding="utf-8").read()
     cell_re = re.compile(r'"(\w+)\s*∘\s*(\w+)[^"]*"\s*>>')
     verdict_re = re.compile(r"must\s+(beTrue|beFalse)")
     cells = {}
@@ -104,6 +118,18 @@ def gen_matrix() -> str:
         v = verdict_re.search(block)
         if v:
             cells[(outer, inner)] = v.group(1) == "beTrue"
+    return cells
+
+
+def cell(ok) -> str:
+    """Render one parsed verdict; `None` (no cell in the spec) is `·`."""
+    if ok is None:
+        return "·"
+    return "✓" if ok else "✗"
+
+
+def gen_matrix() -> str:
+    cells = parse_cells(SPEC)
 
     head = "| outer ∘ inner | " + " | ".join(FAMILIES) + " |"
     sep = "|" + "---|" * (len(FAMILIES) + 1)
@@ -127,7 +153,60 @@ def gen_matrix() -> str:
         f"[optic taxonomy](optics.md); ✗ does not compile (void by design — "
         f"building through a read-only optic, reading through a write-only one, "
         f"etc.). {n_pass} composing / {n_fail} void cells, pinned by "
-        f"`CompositionMatrixSpec`.*"
+        f"`CompositionMatrixSpec`.*\n"
+        f"\n*✓ is a **typing claim**: the chain resolves with no expected-type "
+        f"ascription and no `given` imports, landing at the family shown. It does "
+        f"not say the composite is *behaved* — runtime semantics are pinned by "
+        f"behaviour specs (`MultiFocusFunction1Spec` for the Grate carrier's "
+        f"composition rules). The grid is also carrier-level: `trav` and `fold` "
+        f"describe `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`); "
+        f"the other shipped MultiFocus sub-shape has its own table below.*"
+    )
+    return "\n".join(rows) + "\n" + legend
+
+
+# --------------------------------------------------------------------------
+# grate
+# --------------------------------------------------------------------------
+def gen_grate() -> str:
+    """The Grate sub-shape's footprint, in the two directions that matter.
+
+    Rows are the same families as the main grid plus `grate`; the two columns are
+    "family as the outer, grate as the inner" and its mirror. `grate ∘ grate` is
+    the same cell in both columns.
+    """
+    cells = parse_cells(GRATE_SPEC)
+    rows = [
+        "| family `f` | `f` ∘ grate | grate ∘ `f` |",
+        "|---|---|---|",
+    ]
+    n_pass = n_fail = n_missing = 0
+    for f in [*FAMILIES, "grate"]:
+        inner_ok = cells.get((f, "grate"))
+        outer_ok = cells.get(("grate", f))
+        for ok in (inner_ok, outer_ok):
+            if ok is None:
+                n_missing += 1
+            elif ok:
+                n_pass += 1
+            else:
+                n_fail += 1
+        rows.append(f"| **{f}** | {cell(inner_ok)} | {cell(outer_ok)} |")
+    legend = (
+        f"\n*Same ✓ / ✗ meaning as the grid above, restricted to the Grate "
+        f"sub-shape (`MultiFocus[Function1[X0, *]]`, the Naperian factories "
+        f"`MultiFocus.tuple` / `representable` / `representableAt` / `apply`): "
+        f"{n_pass} composing / {n_fail} void cells, pinned by `GrateShapeSpec`"
+        + (f" — {n_missing} cell(s) missing.\n" if n_missing else ".\n")
+        + f"The ✗ cells are structural, not missing plumbing: a Lens / Traversal "
+        f"write-back would have to pick one focus out of a Naperian bundle "
+        f"(`Foldable[Function1[X0, *]]`: no instance, and no lawful one — a "
+        f"function's codomain is not enumerable); a Prism / Optional miss would "
+        f"need `Alternative[Function1[X0, *]]` (`empty` has no value to return); a "
+        f"Getter / AffineFold / Fold read-collapse would have to enumerate that "
+        f"codomain. `trav` / `fold` in this table mean the *other* MultiFocus "
+        f"sub-shape across the seam — cross-`F` composition needs a per-`F` "
+        f"natural transformation and is a documented workaround.*"
     )
     return "\n".join(rows) + "\n" + legend
 
@@ -240,6 +319,7 @@ def main() -> int:
     page = open(PAGE, encoding="utf-8").read()
     out = page
     out = splice(out, "matrix", gen_matrix())
+    out = splice(out, "grate", gen_grate())
     out = splice(out, "coverage", gen_coverage())
     out = splice(out, "mutation", gen_mutation())
     if out == page:

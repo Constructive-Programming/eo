@@ -11,6 +11,7 @@ import org.specs2.mutable.Specification
 
 import data.MultiFocus
 import data.MultiFocus.at
+import optics.Iso
 import optics.Optic
 import optics.Optic.*
 
@@ -25,13 +26,17 @@ import optics.Optic.*
   *   - `forgetful2multifocusFunction1` Iso → MultiFocus[Function1] bridge (formerly
   *     `forgetful2grate`)
   *   - The new typeclass-gated `.at(i: F.Representation)` extension method (Q2 surface)
-  *   - Same-carrier `.andThen(grate)` exercising `mfAssocFunction1.composeFrom` (formerly
-  *     `grateAssoc.composeFrom`)
+  *   - The `mfAssocFunction1` composition rules: the broadcast branch (an Iso inner, `grate ∘ iso`)
+  *     rewrites every position from its own focus, the bundle branch (`iso ∘ grate`) takes the
+  *     whole rebuild. See the two composition blocks below.
   *
   * Replaces the deleted `GrateSpec` + `GrateCoverageSpec`. The block count is preserved 1:1 so the
   * top-level spec count doesn't regress.
   */
 class MultiFocusFunction1Spec extends Specification with ScalaCheck:
+
+  /** Fixture for the non-tuple Grate sources: a function of a boxed focus. */
+  case class Box[A](a: A)
 
   // covers: modify applies the function pointwise at every slot (Function1 shape),
   // replace broadcasts the constant to every slot, modify identity is identity (G1),
@@ -92,7 +97,6 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
   // iso.andThen(MultiFocus.tuple) with non-trivial bijection. Exercises the absorbed
   // forgetful2grate via `forgetful2multifocusFunction1`.
   "Composer[Direct, MultiFocus[Function1[Int, *]]]: identity iso and bijection compose cleanly" >> {
-    import optics.Iso
     val triple = MultiFocus.tuple[(Int, Int, Int), Int]
 
     val idIso = Iso[(Int, Int, Int), (Int, Int, Int), (Int, Int, Int), (Int, Int, Int)](
@@ -178,9 +182,57 @@ class MultiFocusFunction1Spec extends Specification with ScalaCheck:
     modOk.and(replOk).and(readOk).and(triOk)
   }
 
-  // covers: MultiFocus.tuple .andThen MultiFocus.tuple — same-carrier composition exercises
-  // mfAssocFunction1.composeFrom (the absorbed grateAssoc.composeFrom).
-  "MultiFocus.tuple.andThen(MultiFocus.tuple) — same-carrier composition through mfAssocFunction1" >> {
+  // covers: the mfAssocFunction1 BROADCAST branch — `grate ∘ iso` must rewrite every position from
+  // its own written focus. Regression for the pre-fix collapse, which sampled the outer's rebuild
+  // once and broadcast the result: read of a doubled (10,20,30) gave 20,20,20 (not 20,40,60) and
+  // `modify(_ + 1)` gave (11,11,11). `tuple` / `representable` / `apply` are the three shipped
+  // tabulating Grate factories — all three are pinned here because all three were affected.
+  "grate ∘ iso positions: tuple / representable / apply rebuild each slot from its own focus" >> {
+    val shift = Iso[Int, Int, Int, Int](_ + 1000, _ - 1000)
+
+    val tupleIso = MultiFocus.tuple[(Int, Int, Int), Int].andThen(shift)
+    val tupleRead =
+      (tupleIso.at(0)((10, 20, 30)) === 1010)
+        .and(tupleIso.at(1)((10, 20, 30)) === 1020)
+        .and(tupleIso.at(2)((10, 20, 30)) === 1030)
+    val tupleModify = tupleIso.modify(_ + 1)((10, 20, 30)) === ((11, 21, 31))
+    val tupleReplaced = tupleIso.replace(7)((10, 20, 30))
+    val tupleReplace =
+      (tupleIso.at(0)(tupleReplaced) === 7).and(tupleIso.at(2)(tupleReplaced) === 7)
+
+    val repIso = MultiFocus.representable[Function1[Int, *], Int].andThen(shift)
+    val repSource: Int => Int = i => i * 10
+    val repRead = (repIso.at(0)(repSource) === 1000).and(repIso.at(2)(repSource) === 1020)
+    val repWritten = repIso.modify(_ + 1)(repSource)
+    val repWrite = (repWritten(0) === 1).and(repWritten(1) === 11).and(repWritten(2) === 21)
+
+    val appliedIso = MultiFocus
+      .apply[Function1[Int, *], Box[Int]]
+      .andThen(Iso[Box[Int], Box[Int], Int, Int](_.a, Box(_)))
+    val appliedSource: Int => Box[Int] = i => Box(i * 10)
+    val appliedWritten = appliedIso.modify(_ + 1)(appliedSource)
+    val appliedWrite = (appliedWritten(0) === Box(1)).and(appliedWritten(2) === Box(21))
+
+    tupleRead.and(tupleModify).and(tupleReplace).and(repRead).and(repWrite).and(appliedWrite)
+  }
+
+  // covers: the mfAssocFunction1 BUNDLE branch read rule — the inner's bundle is read at the index
+  // the outer's element came from (the diagonal), not re-read from index 0. The write stays
+  // bundle-level for a bundle inner: its `from` consumes the whole rebuild once.
+  "grate ∘ grate reads the diagonal: element i of the outer's bundle at index i" >> {
+    val composed = MultiFocus
+      .apply[Function1[Int, *], Int => Int]
+      .andThen(MultiFocus.apply[Function1[Int, *], Int])
+    val source: Int => (Int => Int) = i => j => i * 100 + j
+
+    (composed.at(0)(source) === 0)
+      .and(composed.at(1)(source) === 101)
+      .and(composed.at(2)(source) === 202)
+  }
+
+  // covers: MultiFocus.tuple's own write surface (modify per slot, replace broadcast). NOT a
+  // `.andThen` case: same-carrier F1 composition is pinned by the two blocks above.
+  "MultiFocus.tuple: modify per slot / replace broadcast" >> {
     val outer: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
       MultiFocus.tuple[(Int, Int), Int]
     val doubled = outer.modify(_ * 2)((10, 20))
