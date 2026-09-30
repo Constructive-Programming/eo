@@ -95,7 +95,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
 ThisBuild / semanticdbEnabled := true
 ThisBuild / semanticdbVersion := scalafixSemanticdb.revision
 ThisBuild / scalafixDependencies +=
-  "org.typelevel" %% "typelevel-scalafix" % "0.5.0"
+  "org.typelevel" %% "typelevel-scalafix" % "0.6.0"
 ThisBuild / scalacOptions += "-Wunused:all"
 // Raise kindlings' per-derivation macro-expansion budget from its 5s default (which a loaded
 // machine intermittently trips: `derived timed out after 5000ms`) to 30s. One namespace per
@@ -352,7 +352,7 @@ lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
-lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.19.0"
+lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.20.0"
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
@@ -388,7 +388,7 @@ lazy val circe = Circe %% "circe-core" % "0.14.16"
 // vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.2 pin
 // below wins on the compile classpath, and as an Optional dep vulcan forces
 // nothing downstream anyway.
-lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.13.0"
+lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.0"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
@@ -443,7 +443,7 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 // zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `cats-eo-zio`
 // integrates with. Compile-scope there: the module's whole API names
 // ZIO types.
-lazy val zioCore = Ziverge %% "zio" % "2.1.24"
+lazy val zioCore = Ziverge %% "zio" % "2.1.26"
 // zio-schema / zio-json / zio-prelude — Optional in `cats-eo-zio`: only
 // the `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages name
 // their types, callers who want a seam add its artifact themselves (the
@@ -456,7 +456,7 @@ lazy val zioSchema = Ziverge %% "zio-schema" % ZioSchemaVersion
 lazy val zioSchemaDerivation = Ziverge %% "zio-schema-derivation" % ZioSchemaVersion
 lazy val zioSchemaJson = Ziverge %% "zio-schema-json" % ZioSchemaVersion
 lazy val zioJson = Ziverge %% "zio-json" % "0.7.44"
-lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC41"
+lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC48"
 // kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
@@ -465,7 +465,7 @@ lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC41"
 // kyo's macro classes can only LOAD in a JDK 25+ compiler JVM. The kyo
 // module therefore builds on a 25 toolchain (`tlJdkRelease := 25` there)
 // and drops out of the root aggregate on older JVMs — see `kyoBuildActive`.
-val KyoVersion = "1.0.0-RC6"
+val KyoVersion = "1.0.0-RC7"
 lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
 // kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
 // Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
@@ -485,8 +485,8 @@ val kyoBuildActive: Boolean =
     .get("java.specification.version")
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
-lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.38.17"
-lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.38.17"
+lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
+lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it

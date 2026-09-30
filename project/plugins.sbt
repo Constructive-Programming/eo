@@ -15,12 +15,13 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // test deps), so every mutant comes back NoCoverage; switching the
 // current project first makes specs2 visible. 0.20.x auto-derives the
 // Scala 3 dialect from scalaVersion.
-addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "0.20.3")
+// 0.20.4 fixed multi-module invocation; the `project <m>; stryker` workaround still works.
+addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "0.20.4")
 
 // Format check gate for CI (`sbt scalafmtCheckAll scalafmtSbtCheck`
 // in the workflow). The project ships a `.scalafmt.conf` pinned to
 // 3.x; sbt-scalafmt honours that pin automatically.
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.6")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")
 
 // `sbt-typelevel-ci-release` wires the Sonatype Central Portal flow
 // (post-June-2025 OSSRH sunset): derives the version from git tags,
@@ -29,7 +30,7 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.6")
 // `sbt-typelevel-mima` dependency so binary-compat checks run on
 // every CI build from 0.1.1 onward (0.1.0 has no previous version
 // to compare against; see `mima.sbt`).
-addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.6")
+addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.7")
 
 // `sbt-typelevel-settings` contributes the curated scalac flag set
 // (`-deprecation -feature -unchecked -Wunused:... -Wvalue-discard`,
@@ -37,7 +38,7 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.6")
 // in CI via `tlFatalWarnings`. Not transitively brought in by
 // `-ci-release`, so we add it explicitly — without it each module is
 // responsible for its own scalacOptions.
-addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.6")
+addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.7")
 
 // `sbt-scalafix` wires Scalafix into the build (`sbt scalafixAll`,
 // `sbt scalafixAll --check`). Pinned to the same minor as the
@@ -50,13 +51,13 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.6")
 // trailing comma. scalafix fully owns imports (sorting, grouping, and now
 // trailing commas), so scalafmt is set to `trailingCommas = keep`
 // (.scalafmt.conf) to stay out of import formatting — the two no longer fight.
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.7")
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.9")
 
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
 // configured from build.sbt. Pinned to the same 0.8.5 family as
 // ci-release so they share plugin transitive versions.
-addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.6")
+addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.7")
 
 // `unused-code-plugin` from xuwei-k contributes the `WarnUnusedCode` /
 // `ErrorUnusedCode` / `RemoveUnusedCode` Scalafix `SyntacticRule`s,
