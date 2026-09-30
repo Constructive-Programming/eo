@@ -1,10 +1,12 @@
 # MultiFocus
 
-`MultiFocus[F][X, A] = (X, F[A])` is cats-eo's multi-focus carrier: a
-structural leftover `X` paired with an `F`-shaped bundle of foci. A
-single carrier, specialised through the type parameter `F`, backs
-every optic that focuses more than one value at once — traversals,
-grates, algebraic lenses, and aggregating (Kaleidoscope) reads.
+`MultiFocus[F][X, A] = (X, focus half)` is cats-eo's multi-focus
+carrier: a structural leftover `X` paired with a *focus half* that is
+either the carrier's own `F[A]` or an *index-free* bundle — one value,
+known without consulting an index. A single carrier, specialised through
+the type parameter `F`, backs every optic that focuses more than one
+value at once — traversals, grates, algebraic lenses, and aggregating
+(Kaleidoscope) reads.
 
 What you get: the optic's surface is exactly the intersection of cats's
 typeclass hierarchy on `F` with what the generic carrier body supports.
@@ -37,11 +39,75 @@ container — so they live as a single carrier rather than five. See
 [Historical landmarks](#historical-landmarks) for that consolidation
 and its measured payoff.
 
+## Index-free vs tabulating bundles
+
+The Grate sub-shape is where two *different* optics meet on the same
+type. A **broadcast** optic (an Iso reshaped through
+`forgetful2multifocusFunction1`) holds one focus and reads it at
+whatever index you like; a **tabulating** optic (`MultiFocus.tuple`,
+`representable`) reads a real position. Both are
+`Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]`, so the carrier says
+which is which *per bundle*:
+
+| Bundle | Built by | `.broadcast` | `.foci` |
+|--------|----------|--------------|---------|
+| index-free | a broadcast optic's `to`, `MultiFocus.broadcast`, a composition whose write collapsed | `Some(value)` | the constant `_ => value` |
+| tabulating | every other factory | `None` | the tabulation itself |
+
+```scala mdoc:silent
+import dev.constructive.eo.data.MultiFocus
+
+val indexFree = MultiFocus.broadcast[Boolean, Unit, String]((), "v")
+```
+
+```scala mdoc
+(indexFree.broadcast, indexFree.foci(true), indexFree.foci(false))
+```
+
+Because the shape lives in the *data*, it survives `map` / `collectWith`
+/ `andThen`, and `mfAssocFunction1` reads it alongside the optic-level
+witness it already had (`Function1BroadcastOptic`): a bundle says whether
+*this value* is index-free, the class says whether *this optic* builds one
+value per position, and the two agree wherever they overlap. Consequences
+observable at a composite's boundary:
+
+- **Read** — an index-free outer is read once and its value handed to
+the inner; a tabulating outer is read per index. Neither invents an
+index.
+- **Write** — a composite whose read was index-free hands the outer an
+index-free half, so the outer's rebuild never samples a closure; a
+composite whose outer is tabulating writes each position its own value
+(`MultiFocus.tuple.andThen(isoShim).modify(f)` reaches every slot with
+its own `f`).
+- **Two tabulating sides advance together.** `MultiFocus.tuple` ∘
+`MultiFocus.tuple` reads one position per index (the shared index set
+cannot address `(outer position, inner position)` pairs), and its write
+is the exact inverse of that read whenever the focus type is stable —
+`modify` / `replace` / `set` leave every position it did not address
+untouched. A write that *changes* the focus type has no way to put the
+unread positions back and falls back to writing each addressed position;
+`Optic.andThen` tells the kernel which case it is, at compile time — by
+mixing `Optic.SameFocus` into the composite it builds, which is where a
+stability fact belongs: on the optic, not in the composition algebra.
+
+`.foci` stays total for both shapes — the index-free case carries its
+`F[A]` image — so consumers that only want "the focus vector" are
+unchanged; `.broadcast` is for consumers that would otherwise have to
+invent an index. The representation behind them is internal: the two
+handles above are the whole public surface.
+
+Every read that needs an index is supplied a real one — the bridge's
+`from` reads at the `RepresentativeIndex[X0]` witness it was handed (see
+[the Grate sub-shape](quality-assurance.md#the-grate-sub-shape)) — and no
+operation invents a value it does not have: every write is handed the
+leftover (and, for a composite, the inner reads) that its own read
+produced, including the collapsing `List` aggregate.
+
 ## The general flexibility win
 
-`MultiFocus[F][X, A] = (X, F[A])` is **just a pair**. The carrier
-ships no typeclass machinery of its own; it inherits whatever `F`
-brings.
+`MultiFocus[F][X, A] = (X, focus half)` is **just a pair**. The
+carrier ships no typeclass machinery of its own; it inherits whatever
+`F` brings.
 
 That distinguishes cats-eo's encoding from monolithic-carrier
 alternatives — Monocle's per-family classes (`Lens`, `Prism`,
@@ -271,35 +337,34 @@ specialised by `F`:
   `cats.data.Chain`. Singleton fast-path via `MultiFocusSingleton`
   (so morphed Lenses skip the per-element `F.pure` round-trip).
 - **`mfAssocFunction1`** — the absorbed-Grate sub-shape's body for
-  `F = Function1[X0, *]`. `Z = Xo` — the kernel threads the *outer's*
-  leftover from `composeTo` into `composeFrom`, so the outer's own
-  `from` receives what its own `to` produced — and the rebuild is a
-  closure-on-closure, no per-element accumulator. Lights up for
-  `MultiFocus.representable`, `MultiFocus.tuple`, and
-  `MultiFocus.apply`. The inner decides how a
-  bundle is written, and there are exactly two cases:
-  - a **broadcast inner** — the `Iso → MultiFocus[Function1]` bridge
-    and anything composed from it, witnessed by the
-    `Function1BroadcastOptic` it produces (`private[eo]`) — holds exactly
-    one focus, so its write is composed *per index*: position `i` is
-    built from the written focus `i` (`broadcastFrom`). That is what
-    makes `grate ∘ iso` rewrite every position instead of collapsing
-    onto position 0. Its *read* needs no special case: `to` broadcasts
-    the focus, so the kernel reads the bundle at whatever index it
-    wants. That optic's own `from` is the one place the library has to
-    read a bundle it did not build, so the bridge is handed a
-    `RepresentativeIndex[X0]` at construction and reads there — a real
-    index, never a sentinel (see
-    [the Grate sub-shape](quality-assurance.md#the-grate-sub-shape)).
-  - a **bundle inner** — everything else, e.g. `MultiFocus.apply` as
-    the inner — has a bundle-level `from`, so it consumes the whole
-    write bundle once and the outer receives the constant rebuild of
-    that single result.
+  `F = Function1[X0, *]`. `Z = AssocF1Z[Xo]` — the outer's leftover plus
+  the inner reads the composite's read observed (leftover, read bundle,
+  shape), so the outer's own `from` receives what its own `to` produced
+  and a composite inner reads *its* context back. Reads are per index in
+  every shape: the inner's bundle is read at the same index its element
+  came from. The write has three cases, and the rebuild is a
+  closure-on-closure in all of them:
 
-  Reads are per index in both cases: the inner's bundle is read at the
-  same index its element came from. Rebuilds that ignore their argument
-  entirely (the fixed-arity `Traversal.{two,three,four}` era) behave
-  identically under either rule.- **`mfAssocPSVec`** — the absorbed-PowerSeries body for `F = PSVec`.
+  - a **broadcast inner** — the `Iso → MultiFocus[Function1]` bridge and
+    anything composed from it, witnessed by the `Function1BroadcastOptic`
+    it produces (`private[eo]`) — holds exactly one focus, so its write is
+    composed *per index*: position `i` is built from the written focus `i`
+    (`broadcastFrom`). That is what makes `grate ∘ iso` rewrite every
+    position instead of collapsing onto position 0. Its own `from` is the
+    one place the library has to read a bundle it did not build, so the
+    bridge is handed a `RepresentativeIndex[X0]` at construction and reads
+    there — a real index, never a sentinel (see
+    [the Grate sub-shape](quality-assurance.md#the-grate-sub-shape)).
+  - an **index-free bundle** — the carrier says so itself
+    ([below](#index-free-vs-tabulating-bundles)) — collapses to one value
+    that the outer rebuilds with, handed back as an index-free half.
+  - a **tabulating ∘ tabulating** composite (e.g. `MultiFocus.tuple` on
+    both sides) advances both sides together, so its read is a diagonal;
+    the write is the exact inverse of that read whenever the inner optic
+    says its read and write types coincide (`Optic.SameFocus`, carried by
+    the monomorphic factories and mixed into every `andThen` composite),
+    and a per-position value write otherwise.
+- **`mfAssocPSVec`** — the absorbed-PowerSeries body for `F = PSVec`.
   Parallel-array `AssocSndZ` leftover (saves the per-element Tuple2
   the generic body would build). AlwaysHit fast-path via
   `MultiFocusSingleton`, MaybeHit fast-path via

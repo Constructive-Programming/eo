@@ -267,7 +267,7 @@ object Traversal:
     new Traversal[S, S, S, S]:
       type X = S
       def to(s: S): MultiFocus[PSVec][X, S] = MultiFocus(s, children(s))
-      def from(pair: MultiFocus[PSVec][X, S]): S = rebuild(pair.context, pair.foci)
+      def from(mf: MultiFocus[PSVec][X, S]): S = rebuild(mf.context, mf.foci)
 
       // Streaming read path: fold the children vector directly, skipping the carrier wrapper.
       override def foldMap[M](f: S => M)(s: S)(using Monoid[M]): M =
@@ -344,8 +344,8 @@ final class TraverseTraversal[T[_]: Traverse, A, B] extends Traversal[T[A], T[B]
   def to(ta: T[A]): MultiFocus[PSVec][X, A] =
     MultiFocus(ta, PSVec.from(ta))
 
-  def from(pair: MultiFocus[PSVec][X, B]): T[B] =
-    val (xo, vec) = (pair.context, pair.foci)
+  def from(mf: MultiFocus[PSVec][X, B]): T[B] =
+    val (xo, vec) = (mf.context, mf.foci)
     xo match
       case _: ArraySeq[?] =>
         // `unsafeShareableArray` returns the Slice's backing array when it densely covers

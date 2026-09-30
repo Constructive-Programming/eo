@@ -63,9 +63,9 @@ final class JsoniterTraversal[A] private[jsoniter] (
       val (keptSpans, psv) = JsoniterTraversal.decodeSpans[A](bytes, spans)
       MultiFocus((bytes, keptSpans), psv)
 
-  def from(pair: MultiFocus[PSVec][X, A]): Array[Byte] =
-    val (bytes, spans) = pair.context
-    val foci = pair.foci
+  def from(mf: MultiFocus[PSVec][X, A]): Array[Byte] =
+    val (bytes, spans) = mf.context
+    val foci = mf.foci
     if spans.isEmpty || spans.length != foci.length then bytes
     else
       // Encode each focus; an element whose encode throws keeps its original bytes.

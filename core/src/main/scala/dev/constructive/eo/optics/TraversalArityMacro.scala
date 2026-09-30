@@ -39,8 +39,8 @@ private[optics] object TraversalArityMacro:
           }
           MultiFocus((), PSVec.unsafeWrap[A](arr))
 
-        def from(pair: MultiFocus[PSVec][X, B]): T =
-          ${ applyReverse(List.tabulate(getters.length)(i => '{ pair.foci(${ Expr(i) }) })) }
+        def from(mf: MultiFocus[PSVec][X, B]): T =
+          ${ applyReverse(List.tabulate(getters.length)(i => '{ mf.foci(${ Expr(i) }) })) }
     }
 
   def twoImpl[S: Type, T: Type, A: Type, B: Type](
