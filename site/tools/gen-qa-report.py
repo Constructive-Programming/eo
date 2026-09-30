@@ -195,9 +195,17 @@ def gen_grate() -> str:
     legend = (
         f"\n*Same ✓ / ✗ meaning as the grid above, restricted to the Grate "
         f"sub-shape (`MultiFocus[Function1[X0, *]]`, the Naperian factories "
-        f"`MultiFocus.tuple` / `representable` / `representableAt` / `apply`): "
+        f"`MultiFocus.tuple` / `representable` / `apply`): "
         f"{n_pass} composing / {n_fail} void cells, pinned by `GrateShapeSpec`"
         + (f" — {n_missing} cell(s) missing.\n" if n_missing else ".\n")
+        + f"The inbound `iso` cell needs a `RepresentativeIndex` for the grate's "
+        f"index type — shipped off the companion for every index type the "
+        f"factories fix with a canonical value (`Int` / `Boolean` / `Unit` / "
+        f"singletons), so the grid stays import-free; a grate over an "
+        f"algebraic index needs `given RepresentativeIndex[X] = "
+        f"RepresentativeIndex.at(v)` in scope, and an uninhabited index type "
+        f"gets no instance — the bridge refuses rather than reading a bundle at "
+        f"an index that cannot exist. "
         + f"The ✗ cells are structural, not missing plumbing: a Lens / Traversal "
         f"write-back would have to pick one focus out of a Naperian bundle "
         f"(`Foldable[Function1[X0, *]]`: no instance, and no lawful one — a "

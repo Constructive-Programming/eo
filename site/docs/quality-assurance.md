@@ -69,7 +69,7 @@ ascription, that spec goes red.
 `trav` and `fold` in the grid above mean `MultiFocus[PSVec]` — the `Traversal`
 class, `each`, `Plated`. The other shipped `MultiFocus` sub-shape is the
 **Grate** (`MultiFocus[Function1[X0, *]]`, built by `MultiFocus.tuple` /
-`representable` / `representableAt` / `apply`), and its footprint is much
+`representable` / `apply`), and its footprint is much
 narrower: a single-focus outer's write-back would have to *pick* one focus out
 of a Naperian bundle, and a read-collapse would have to *enumerate* a function's
 codomain. Neither is available, so the single-focus families are void against it
@@ -97,8 +97,8 @@ in both directions.
 | **unfold** | ✗ | ✗ |
 | **grate** | ✓ | ✓ |
 
-*Same ✓ / ✗ meaning as the grid above, restricted to the Grate sub-shape (`MultiFocus[Function1[X0, *]]`, the Naperian factories `MultiFocus.tuple` / `representable` / `representableAt` / `apply`): 6 composing / 18 void cells, pinned by `GrateShapeSpec`.
-The ✗ cells are structural, not missing plumbing: a Lens / Traversal write-back would have to pick one focus out of a Naperian bundle (`Foldable[Function1[X0, *]]`: no instance, and no lawful one — a function's codomain is not enumerable); a Prism / Optional miss would need `Alternative[Function1[X0, *]]` (`empty` has no value to return); a Getter / AffineFold / Fold read-collapse would have to enumerate that codomain. `trav` / `fold` in this table mean the *other* MultiFocus sub-shape across the seam — cross-`F` composition needs a per-`F` natural transformation and is a documented workaround.*
+*Same ✓ / ✗ meaning as the grid above, restricted to the Grate sub-shape (`MultiFocus[Function1[X0, *]]`, the Naperian factories `MultiFocus.tuple` / `representable` / `apply`): 6 composing / 18 void cells, pinned by `GrateShapeSpec`.
+The inbound `iso` cell needs a `RepresentativeIndex` for the grate's index type — shipped off the companion for every index type the factories fix with a canonical value (`Int` / `Boolean` / `Unit` / singletons), so the grid stays import-free; a grate over an algebraic index needs `given RepresentativeIndex[X] = RepresentativeIndex.at(v)` in scope, and an uninhabited index type gets no instance — the bridge refuses rather than reading a bundle at an index that cannot exist. The ✗ cells are structural, not missing plumbing: a Lens / Traversal write-back would have to pick one focus out of a Naperian bundle (`Foldable[Function1[X0, *]]`: no instance, and no lawful one — a function's codomain is not enumerable); a Prism / Optional miss would need `Alternative[Function1[X0, *]]` (`empty` has no value to return); a Getter / AffineFold / Fold read-collapse would have to enumerate that codomain. `trav` / `fold` in this table mean the *other* MultiFocus sub-shape across the seam — cross-`F` composition needs a per-`F` natural transformation and is a documented workaround.*
 
 <!-- END GENERATED: grate -->
 

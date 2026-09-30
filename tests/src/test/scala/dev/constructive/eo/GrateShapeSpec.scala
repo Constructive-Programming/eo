@@ -7,7 +7,7 @@ package dev.constructive.eo
 //  `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`). The
 //  other shipped MultiFocus sub-shape — the Grate, i.e.
 //  `MultiFocus[Function1[X0, *]]` over the Naperian factories
-//  (`MultiFocus.tuple` / `representable` / `representableAt` / `apply`)
+//  (`MultiFocus.tuple` / `representable` / `apply`)
 //  — has a materially NARROWER composition footprint. This spec pins it,
 //  so the QA page can show it and a future bridge cannot silently move a
 //  cell.
@@ -22,6 +22,14 @@ package dev.constructive.eo
 //      the codomain: no lawful fold
 //    - cross-`F` MultiFocus composition (PSVec ∘ Function1) needs a per-`F`
 //      natural transformation: documented workaround only
+//    - the inbound `iso ∘ grate` cell resolves through
+//      `Composer[Direct, MultiFocus[Function1[X0, *]]]`, which asks for a
+//      `RepresentativeIndex[X0]` — the index its product's own `from` reads a
+//      bundle at. `Int` / `Boolean` / `Unit` / singleton index types resolve
+//      off that companion (still no imports), which is every index type these
+//      fixtures use; an algebraic index needs a local `given`, and an
+//      uninhabited one does not bridge at all. See
+//      `docs/research/2026-09-30-grate-witness-index.md`.
 //  Same doctrine as CompositionMatrixSpec: no expected-type ascription and
 //  no `given` imports — a cell that starts needing either goes red.
 // =====================================================================
@@ -40,14 +48,21 @@ object GrateFixtures:
   val o_iso = Iso[Box[Int => Int], Box[Int => Int], Int => Int, Int => Int](_.a, Box(_))
   val o_lens = Lens[Box[Int => Int], Int => Int](_.a, (s, m) => Box(m))
   val o_prism = Prism[Box[Int => Int], Int => Int](b => Right(b.a), Box(_))
+
   val o_optional =
-    Optional[Box[Int => Int], Box[Int => Int], Int => Int, Int => Int](b => Right(b.a), sb => Box(sb._2))
+    Optional[Box[Int => Int], Box[Int => Int], Int => Int, Int => Int](
+      b => Right(b.a),
+      sb => Box(sb._2)
+    )
+
   val o_trav = Traversal.each[List, Int => Int]
   val o_getter = Getter[Box[Int => Int], Int => Int](_.a)
   val o_affold = AffineFold[Box[Int => Int], Int => Int](b => Some(b.a))
   val o_fold = Fold[List, Int => Int]
+
   val o_modify =
     Modify[Box[Int => Int], Box[Int => Int], Int => Int, Int => Int](f => b => Box(f(b.a)))
+
   val o_review = Review[Box[Int => Int], Int => Int](Box(_))
   val o_unfold = Unfold((xs: List[Int => Int]) => Box(xs.head))
   val i_grate = MultiFocus.apply[Function1[Int, *], Int]
