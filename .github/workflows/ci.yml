@@ -366,11 +366,6 @@ jobs:
           modules-ignore: cats-eo-docs_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
 
-  # NOTE: the sbt-github-actions-generated `validate-steward` job was removed
-  # here by hand as part of the Scala Steward → Dependabot migration (Dependabot
-  # now covers sbt). It will be dropped again by the next `sbt
-  # githubWorkflowGenerate`: sbt-typelevel only emits the job when
-  # .scala-steward.conf exists, and that file is gone.
   site:
     name: Generate Site
     strategy:
