@@ -356,7 +356,7 @@ lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.20.0"
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
-lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.9.0-M3"
+lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.10.0"
 // kindlings 0.3.x (all three) ship a configurable macro-expansion timeout
 // (`DerivationTimeout`, default 5s) and pull hearth 0.4.2 + kindlings-derivation-commons.
 // We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30s`
