@@ -21,7 +21,6 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `tests` | `tests/` | — (not published) | Law-based and behavioural test suites |
 | `generics` | `generics/` | `cats-eo-generics` | Auto-derivation of Lens/Prism via Scala 3 quoted macros |
 | `schemes` | `schemes/` | `cats-eo-schemes` | Recursion schemes (cata/ana/hylo) as composable optics |
-| `schemesLaws` | `schemes-laws/` | `cats-eo-schemes-laws` | Laws for the recursion schemes (hylo fusion so far; more expected) — separate from `laws` because they quantify over `schemes` types |
 | `circe` | `circe/` | `cats-eo-circe` | `Plated[Json]` and circe optic integration |
 | `avro` | `avro/` | `cats-eo-avro` | Apache Avro optic integration; the `eo.avro.circe` sub-package is the structural Avro ↔ circe bridge (`AvroJson` + the `.json` / `.avro` cursor faces on `AvroPrism`/`JsonPrism`), `eo.avro.jsoniter` the AST-free Avro ↔ JSON-bytes twin (`AvroJsoniter` + the same faces on `JsoniterPrism`), and `eo.avro.vulcan` bridges `vulcan.Codec` → `AvroCodec` (`AvroVulcan`) — circe, cats-eo-circe, jsoniter-scala-core, cats-eo-jsoniter, and vulcan are `Optional` deps, callers add them themselves. NB avro depends on the circe/jsoniter MODULES (Optional); the reverse would be a project cycle, so the cross-format bridge specs live in `avro/src/test` |
 | `jsoniter` | `jsoniter/` | `cats-eo-jsoniter` | jsoniter-scala optic integration |
@@ -30,7 +29,7 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `benchmarks` | `benchmarks/` | — (not published) | JMH benchmarks vs Monocle (not part of root aggregate) |
 
 The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
-`schemesLaws`, `circe`, `avro`, `jsoniter`, `zio`, and `kyo`. `sbt compile` and `sbt test`
+`circe`, `avro`, `jsoniter`, `zio`, and `kyo`. `sbt compile` and `sbt test`
 cover those; benchmarks must be invoked explicitly (see below).
 
 ## Toolchain
@@ -140,7 +139,7 @@ Key facts, all the hard-won kind:
   module-scoped task form reads `loadedTestFrameworks` from the
   aggregating root project (no test deps), so specs2 is invisible and
   *every* mutant comes back `NoCoverage`. The `mutationAll` alias uses the
-  project-switch form across core, laws, generics, schemes, schemesLaws,
+  project-switch form across core, laws, generics, schemes,
   circe, avro, jsoniter.
 - **It's a report, not a gate** (`strykerThresholdsBreak := 0`): a low
   score never fails the build.

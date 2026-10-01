@@ -3,6 +3,7 @@ package data
 
 import cats.{Applicative, Monoid}
 
+import accessor.Graft
 import forgetful.*
 import compose.*
 import optics.Optic
@@ -25,6 +26,10 @@ type Snd[T] = T match
   * At every constructor site `A` is a concrete `Tuple2` (so `Fst[A]` / `Snd[A]` reduce); when
   * carried through an `Optic[…, Affine]` existential, `A` is abstract and the match types stay
   * inert.
+  *
+  * Affine is also the **build-seam** decoration carrier (see [[Affine.graft]]): `Miss` = the slot
+  * is finished (no coalgebra call), `Hit` = keep going. Same data shape both ways — no separate
+  * carrier is needed.
   *
   * @tparam A
   *   existential leftover tuple
@@ -219,3 +224,17 @@ object Affine:
           xb match
             case m: Miss[X]   => o.from(Left(m.fst))
             case h: Hit[X, B] => o.from(Right(h.b))
+
+  /** `Graft[Affine]` — the build-channel injection vocabulary, reading Affine's arms on its *build*
+    * seam: [[Miss]] is the arm where the engine does not call the coalgebra for the slot (an apo
+    * graft places the payload by reference; a futu unroll expands a prebuilt layer — "finished"),
+    * [[Hit]] the keep-going arm (focus alongside its one-layer leftover context). This is the
+    * decoration vocabulary the recursion-scheme zoo's build-side citizens (`apo`'s scatter,
+    * `futu`'s unroll) construct and consume; the payload *meaning* of `done` is pinned per optic
+    * value via the existential `X` (`Fst[X]`), not here.
+    *
+    * @group Instances
+    */
+  given graft: Graft[Affine] with
+    def done[X, B](fst: Fst[X]): Affine[X, B] = new Miss[X](fst)
+    def step[X, B](snd: Snd[X], b: B): Affine[X, B] = new Hit[X, B](snd, b)

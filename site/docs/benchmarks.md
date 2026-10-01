@@ -434,6 +434,95 @@ spine). Closing the last ~2–3× would mean fusing the recursion into the `plat
 macro — but that emits a *function*, not an `Optic`, which would break the
 `.andThen` composition `everywhere` relies on, so it's deliberately not done.
 
+## Recursion schemes — the typed path vs droste and hand-written
+
+`SchemesBench` measures the typed recursion schemes (`cata` / `ana` / `hylo` and the
+zoo — the `foldLayered` machine family, stack-safe to 10⁶ nodes) against
+[droste](https://github.com/higherkindness/droste) and hand-written recursion over a
+perfect binary `Bin` tree (8 191 nodes). An earlier untyped `PSVec` path was **removed**
+once the typed path subsumed it (its erased positional indexing made algebra arity slips
+a runtime error — the exact thing the typed path fixes).
+
+Core rows (CI runs 27398242244 + 27445302118, 2026-06-12/13, re-pinned at the merge candidate on
+temurin@21 — every eo core row byte-identical to that sweep within ±2):
+
+| Method | B/op | vs droste (B/op) |
+|---|--:|--:|
+| `handCata` / `handHylo` |       0 | — |
+| `handAna`  | 163 816 | — |
+| `drosteCata` | 164 824 | 1× |
+| `drosteHylo` | 328 641 | 1× |
+| `drosteAna`  | 327 632 | 1× |
+| `eoCata` | 361 386 | 2.2× |
+| `eoHylo` | 361 386 | 1.1× |
+| `eoAna`  | 524 194 | 1.6× |
+
+The residual constant vs droste is the stack-safety machinery (per-node child array +
+frames past depth 512) — droste's basic schemes are stack-*unsafe* naive recursion, and
+the hand baselines are the irreducible floor. The zoo, grafting, fusion, and M-path
+numbers follow.
+
+### The zoo — para / apo / histo / futu, grafting, fusion, and the M path
+
+The same `SchemesBench` workload (depth-12 perfect binary tree, 8 191 nodes) through the
+decorated schemes — eo's typed zoo (`para` / `apo` / `histo` / `futu`) against
+`droste.scheme.zoo` — plus the routes that pin the driver's design decisions: the monadic
+machine at `cats.Id` and the fused `cross` against the materialising manual pair. B/op only:
+it is the gate metric, and ns/op on a shared runner is advisory (see **Reproducing**).
+
+| Method | B/op | B/op vs droste |
+|---|--:|--:|
+| `eoPara`      |   557 947 | 0.50× |
+| `drostePara`  | 1 114 890 | 1× |
+| `eoApo`       |   655 250 | 0.68× |
+| `drosteApo`   |   969 860 | 1× |
+| `eoApoGraft`     |   280 | 1.17× |
+| `drosteApoGraft` |   240 | 1× |
+| `eoHisto`     |   557 970 | 1.54× |
+| `drosteHisto` |   361 409 | 1× |
+| `eoFutu`      |   655 250 | 1.25× |
+| `drosteFutu`  |   524 161 | 1× |
+| `eoCata`             | 361 386 | 2.19× |
+| `drosteCata`         | 164 824 | 1× |
+| `eoHylo`  | 361 386 | — |
+| `eoHyloM` | 820 299 | — |
+| `eoRefoldCross`  | 361 387 | — |
+| `eoRefoldManual` | 885 589 | — |
+
+Zoo rows were re-pinned at the merge candidate on temurin@21; `eoRefoldCross` measures the fused
+`cross` overload rather than the materialising spelling the 2026-06-12/13 sweep recorded, and the
+droste zoo rows were re-measured (the third-party baseline's boxing-heavy `histo` / `futu` paths are
+JVM-sensitive). The eo rows other than `eoRefoldCross` reproduce that sweep to within rounding.
+
+Five results:
+- **`para` halves droste's allocation; `apo` comes in at ~0.7×.** eo decorates on the same array
+  machine as `cata`/`ana`, pairing each child's original subterm with its folded result off the
+  layer the machine already expanded — no per-node re-`project`, no per-node `List`. droste's zoo
+  re-embeds each subterm (para) and re-allocates the `Either` spine (apo), landing at 1 114 890
+  vs 557 947, and 969 860 vs 655 250 B/op.
+- **Grafting is O(1) on both — parity, with a guarantee.** The graft bench embeds a prebuilt
+  8 191-node subtree in one `apo` step: both land flat at a couple hundred B/op (280 vs 240),
+  because droste's `zoo.apo` `R` *is* the fixed point, so its `Left(fix)` also embeds by
+  reference. eo's differentiator here is not speed but the **law-shaped `eq` guarantee** that
+  the grafted subtree is embedded untouched; the O(graft) re-walk contrast applies to generic
+  `distApo`-style decoration routes, not to droste's native `zoo.apo`.
+- **`histo` / `futu` trail droste by ~1.3–1.5× B/op — the price of stack-safety.** The remaining
+  gap is the stack-safe machine's per-node child array; droste's zoo recursion is naive
+  call-stack recursion (stack-*unsafe*), so it pays no machine bookkeeping — and overflows on
+  the deep inputs eo's machine clears.
+- **`eoHyloM` is the tailRecM per-event floor.** The monadic machine at `cats.Id` costs
+  820 299 B/op vs 361 386 for `hylo` (~2.3×) — that delta is the `tailRecM` step-event
+  wrapping, the price of arbitrary-monad algebras. Two optimisation rounds got here:
+  1 606 586 → 929 472 (leaf-inline combine + merged events + sentinel op encoding) →
+  820 298 B/op (run 27445302118, 2026-06-13: typed `bubbled` continuation replacing the
+  per-leaf casting closure) — a cumulative **−49%**.
+- **`ana.cross(cata)` fuses — no intermediate `S`.** The citizens carry fused `cross` overloads
+  (`Ana.cross(cata): Hylo`, `Ana.cross(histo): Dyna`, `Futu.cross(histo): Chrono`,
+  `Futu.cross(cata): Codyna`), so the refold spelling builds no intermediate tree: `eoRefoldCross`
+  is byte-identical to `hylo` (361 387 vs 361 386 B/op). The materialising spelling survives as the
+  hand-written `eoRefoldManual` `cata.get(ana.reverseGet(…))` (885 589 B/op) — the deliberate
+  contrast the table keeps.
+
 ## Reproducing
 
 The integration tables are produced by the **Benchmarks** CI workflow
