@@ -28,7 +28,7 @@ multi-focus job:
 |-----------|-----|---------------|
 | **`AlgLens[F]`** | `F: Functor / Foldable / Traverse` | Algebraic ("classifier") lenses — a focus computed as a fold / classification over the structure, broadcast back on write. |
 | **Kaleidoscope** | `F: Apply` | Aggregating reads and batch-relative rewrites — `.collectWith` / `.collectMap` / `.collectList`. |
-| **Grate** | `Function1[X0, *]` | Uniform rewrite across a fixed shape — homogeneous tuples and Naperian / representable containers (`MultiFocus.tuple` / `representable` / `representableAt`). |
+| **Grate** | `Function1[X0, *]` | Uniform rewrite across a fixed shape — homogeneous tuples and Naperian / representable containers (`MultiFocus.tuple` / `representable`); reads land on a position with `.at(i)`. |
 | **PowerSeries** | `PSVec` | Element-wise traversal of a collection with downstream `.andThen` composition — the `Traversal.each` carrier; carries the hand-tuned `mfAssocPSVec` fast paths (`MultiFocusSingleton` for Lens morphs, `MultiFocusPSMaybeHit` for Prism / Optional). |
 | **`FixedTraversal[N]`** | `PSVec` | Fixed-arity traversal — the `Traversal.{two,three,four}` factories tabulate their known arity into the PowerSeries carrier, so they compose like `each`. |
 
@@ -395,10 +395,15 @@ on the worktree branch that landed it:
   See [`docs/research/2026-04-28-multifocus-unification.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/research/2026-04-28-multifocus-unification.md).
 - **Grate fold** — the lead-position field's empirical dead-code
   deletion; +20% perf on `Grate.modify`; absorbed factories ship
-  as `MultiFocus.representable` / `MultiFocus.representableAt` /
-  `MultiFocus.tuple`. The spike's research doc was lost in
+  as `MultiFocus.representable` / `MultiFocus.tuple`. The spike's research doc was lost in
   consolidation; the surviving evidence is the carrier-doc
   comment in `MultiFocus.scala` and the absorbed factory code.
+  The field's last remnant — the `repr0` parameter of the
+  `representable` variant that shipped alongside (v1's `Grate.at`,
+  later `MultiFocus.representableAt`) — was retired once
+  `.at(i)` made position a read-time argument: it never reached
+  the built optic, so two calls with different indices were the
+  same optic. See the changelog.
 - **PowerSeries fold** — `Snd[A]` match-type vestige eliminated;
   `mfAssocPSVec` preserves the parallel-array `AssocSndZ`
   representation and both `MultiFocusSingleton` /
@@ -448,9 +453,6 @@ def fromOptionalF[F: MonoidK, S, T, A, B](
 
 // Absorbed-Grate factories — F = Function1[F.Representation, *]
 def representable[F: Representable, A]
-  : Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
-
-def representableAt[F, A](F: Representable[F])(repr0: F.Representation)
   : Optic[F[A], F[A], A, A, MultiFocus[Function1[F.Representation, *]]]
 
 // Absorbed-Grate.tuple — F = Function1[Int, *]

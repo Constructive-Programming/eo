@@ -398,10 +398,11 @@ ownerAllPhonesMobile.modify(!_)(Owner(List(
 `MultiFocus[Function1[X0, *]]` — a uniform rewrite across a fixed
 shape: homogeneous tuples and Naperian / representable containers,
 where every position is rebuilt the same way. The factories are
-`MultiFocus.tuple[T <: Tuple, A]` (homogeneous-tuple uniform rewrite),
-`MultiFocus.representable[F: Representable, A]` (arbitrary Naperian
-rebuild), and `MultiFocus.representableAt` (representative-index
-variant). See [MultiFocus reference](multifocus.md) and
+`MultiFocus.tuple[T <: Tuple, A]` (homogeneous-tuple uniform rewrite)
+and `MultiFocus.representable[F: Representable, A]` (arbitrary
+Naperian rebuild); a read lands on a chosen position with the
+`.at(i)` extension, which takes the `Representable` index per call.
+See [MultiFocus reference](multifocus.md) and
 [Cookbook → Recipe A](cookbook.md) for a worked example.
 
 `MultiFocus.zipWith(fa, fb)(f)` (and its pairing form `zip`) is the
