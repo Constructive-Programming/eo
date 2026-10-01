@@ -3,7 +3,9 @@
 changelog:
   exclude:
     authors:
-      - scala-steward
+      # Scala Steward is retired (dependabot.yml now covers sbt); keep bot
+      # PRs out of the auto-generated release notes.
+      - dependabot[bot]
   categories:
     - title: "⚠️ Breaking changes"
       labels:
