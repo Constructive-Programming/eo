@@ -16,7 +16,7 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // current project first makes specs2 visible. 0.20.x auto-derives the
 // Scala 3 dialect from scalaVersion.
 // 0.20.4 fixed multi-module invocation; the `project <m>; stryker` workaround still works.
-addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "0.20.4")
+addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "1.1.1")
 
 // Format check gate for CI (`sbt scalafmtCheckAll scalafmtSbtCheck`
 // in the workflow). The project ships a `.scalafmt.conf` pinned to
