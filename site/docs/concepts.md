@@ -74,7 +74,7 @@ this optic have?"
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
-| `MultiFocus[F]` | `(X, F[A])` — pair leftover with an `F`-wrapped focus vector | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each`; `Function1[Int, *]` ⇒ `Traversal.{two,three,four}` and `MultiFocus.tuple` / `representable`); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
+| `MultiFocus[F]` | `(X, focus half)` — pair leftover with an `F`-wrapped focus vector, or with one index-free focus value | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each` and `Traversal.{two,three,four}`; `Function1[Int, *]` ⇒ `MultiFocus.tuple` / `representable` plus the Iso broadcast shim); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
 | `Forget[F]`     | `F[A]` — an `F`-layer with no leftover         | `Fold` (read-only, `F: Foldable`), `Unfold` (build-only, `embed: F[B] => T`) |
 | `ModifyF`       | `(Fst[X], Snd[X] => A)`                        | `Modify`               |
 
@@ -237,8 +237,8 @@ exercise) and the restricted `MultiFocus[F] → Forget[F]`
 `MultiFocus[F]` covers five v1 carriers (`AlgLens[F]`,
 `Kaleidoscope`, `Grate`, `PowerSeries`, `FixedTraversal[N]`) post-
 fold; sub-shapes are selected by the choice of `F` (e.g.
-`MultiFocus[PSVec]` for `Traversal.each`,
-`MultiFocus[Function1[Int, *]]` for `Traversal.{two,three,four}` and
+`MultiFocus[PSVec]` for `Traversal.each` and
+`Traversal.{two,three,four}`; `MultiFocus[Function1[Int, *]]` for
 `MultiFocus.tuple` / `representable`).
 
 ## Why the existential encoding suits an eager language

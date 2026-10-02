@@ -479,8 +479,8 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
         type X = String
         def to(n: Int): MultiFocus[Option][X, Int] =
           MultiFocus(s"tag-$n", Option.when(n < 1000)(n + 1))
-        def from(pair: MultiFocus[Option][X, Int]): Int =
-          pair.foci.fold(pair.context.length)(_ * 100 + pair.context.length)
+        def from(mf: MultiFocus[Option][X, Int]): Int =
+          mf.foci.fold(mf.context.length)(_ * 100 + mf.context.length)
     val composed = lifted.andThen(inner2)
     val composedOk =
       (composed.modify(identity)(5) === 5113).and(composed.modify(identity)(-2) === -1)

@@ -2,7 +2,7 @@ package dev.constructive.eo
 package optics
 
 import scala.annotation.{nowarn, targetName}
-import scala.compiletime.summonInline
+import scala.compiletime.{summonFrom, summonInline}
 
 import cats.arrow.Profunctor
 import cats.syntax.functor.*
@@ -68,6 +68,11 @@ trait Optic[S, T, A, B, F[_, _]]:
     * Cross-carrier composition (Lens → Optional, Lens → Traversal, …) goes through the
     * `Morph`-summoning overload of this same method.
     *
+    * The composite also carries [[SameFocus]] (mixed in below, with whatever `C =:= D` evidence
+    * this call site has), so a kernel whose write cannot be inverted from the bundle alone can look
+    * the fact up on the inner optic it is handed. Stability is a property of the optic's own type
+    * pair, so it rides on the optic — the composition algebra stays unaware of it.
+    *
     * @example
     *   {{{
     * case class Address(street: String)
@@ -79,8 +84,13 @@ trait Optic[S, T, A, B, F[_, _]]:
   @nowarn("id=E197")
   inline def andThen[C, D](o: Optic[A, B, C, D, F]): Optic[S, T, C, D, F] =
     val af = summonInline[AssociativeFunctor[F, self.X, o.X]]
-    new Optic:
+    val same: Option[C =:= D] = summonFrom {
+      case ev: (C =:= D) => Some(ev)
+      case _             => None
+    }
+    new Optic with Optic.SameFocus[C, D, F]:
       type X = af.Z
+      def sameFocus: Option[C =:= D] = same
       def to(s: S): F[X, C] = af.composeTo(s, self, o)
       def from(xd: F[X, D]): T = af.composeFrom(xd, o, self)
 
@@ -145,6 +155,35 @@ trait Optic[S, T, A, B, F[_, _]]:
   * missing feature. `CompositionMatrixSpec` pins the full matrix.
   */
 object Optic:
+
+  /** Focus-stability witness carried by an optic whose focus types coincide (`C =:= D`).
+    *
+    * It exists for kernels whose composite read cannot be inverted from the write bundle alone: the
+    * `Function1`-shaped one reads ONE position per index, so composing two tabulating optics
+    * (`MultiFocus.tuple` ∘ `MultiFocus.tuple`) leaves each inner structure's off-diagonal out of
+    * the composite's focus vector, and putting those values back needs a `C => D` — which exists
+    * exactly when `C =:= D`. Handing that fact to the kernel through the composition algebra would
+    * put one carrier's problem in every carrier's contract; it rides on the optic instead, like
+    * [[data.Function1BroadcastOptic]] (which says *this optic writes one value per position*) —
+    * this one says *this optic's write types coincide with its read types*.
+    *
+    * [[Optic.andThen]] mixes it into every composite it builds, with whatever `C =:= D` evidence
+    * that call site has, and the monomorphic factories (`MultiFocus.representable`,
+    * `MultiFocus.tuple`, `MultiFocus.apply`) mix it in with `Some(…)` directly, so a kernel that is
+    * handed an inner optic can look the fact up on it.
+    *
+    * `None` is a real answer, not a failure: a polymorphic optic (`MultiFocus.pApply`, a Lens whose
+    * `S ≠ T`) cannot put a read value back into a write bundle, and kernels keep their lossy
+    * default for it.
+    *
+    * @group Operations
+    */
+  trait SameFocus[C, D, F[_, _]]:
+
+    /** `Some` carries the evidence that this optic's read and write types coincide; `None` says
+      * they may not.
+      */
+    def sameFocus: Option[C =:= D]
 
   /** The identity optic — `S` is its own focus and modification has no effect. Carrier is
     * [[data.Direct]] (no leftover). Returns the concrete [[BijectionIso]] (not an anonymous

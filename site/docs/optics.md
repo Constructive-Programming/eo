@@ -345,9 +345,12 @@ treatment, with the read-only-direction story, lives in
 
 ## MultiFocus
 
-`MultiFocus[F][X, A] = (X, F[A])` — a structural leftover paired with
-an `F`-shaped bundle of foci. It is the carrier for every optic that
-focuses more than one value at once; the surface lights up by the
+`MultiFocus[F][X, A] = (X, focus half)` — a structural leftover paired
+with a focus half that is either the carrier's own `F[A]` or one
+*index-free* value, known without consulting an index (see
+[MultiFocus → Index-free vs tabulating bundles](multifocus.md#index-free-vs-tabulating-bundles)).
+It is the carrier for every optic that focuses more than one value at
+once; the surface lights up by the
 typeclasses `F` admits (`.modify` for `Functor`, `.foldMap` for
 `Foldable`, `.modifyA` for `Traverse`, `.at(i)` for `Representable`,
 `.collectMap` / `.collectList` for aggregation, and same-carrier
