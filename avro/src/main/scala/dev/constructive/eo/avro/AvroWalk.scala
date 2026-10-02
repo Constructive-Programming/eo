@@ -582,7 +582,16 @@ private[avro] object AvroWalk:
                 out(i) = idx
                 loop(i + 1, t, index)
             else
-              val here = if index != null then index else normalisedNameIndex(record)
+              // A `match` on the null sentinel rather than `if index != null`: stryker4s's
+              // `ConditionalExpression` mutant replaces an `if` condition with `true`/`false`, which
+              // would drop the flow narrowing and leave `index` typed `JMap[String, Integer] | Null`,
+              // so `here.get(...)` stops compiling and the mutant dies as a compile error instead of
+              // being exercised (issue #115). A match has no condition to replace. Writing the guard
+              // as `if … then index.nn` fixes the mutant too, but the guard already narrows `index`,
+              // so the compiler reports E216 "Unnecessary .nn" and `-Werror` rejects it.
+              val here: JMap[String, Integer] = index match
+                case null => normalisedNameIndex(record)
+                case m    => m
               val hit = here.get(normalisedName(n))
               // A key present with `Ambiguous` is the same verdict the scan produced on its SECOND
               // hit: more than one schema field normalises to this name, so the signal is no signal.
@@ -646,7 +655,11 @@ private[avro] object AvroWalk:
           val resolved: Integer | Null =
             if exact != null then Integer.valueOf(exact.pos)
             else
-              val here = if index != null then index else normalisedNameIndex(record)
+              // Same explicit-nulls / stryker `ConditionalExpression` hazard as in [[totalNominalIndex]]:
+              // a `match` keeps the null-narrowing unmutatable and the non-null type explicit.
+              val here: JMap[String, Integer] = index match
+                case null => normalisedNameIndex(record)
+                case m    => m
               here.get(normalisedName(n))
           resolved match
             case null =>
