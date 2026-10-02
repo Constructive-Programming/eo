@@ -386,7 +386,7 @@ no change to the suite. Do not read such a delta as a regression.
 ```sh
 # Statement / branch coverage (cross-module aggregate):
 SBT_OPTS="-Xmx6g" sbt coverageAll
-#   → target/scala-3.8.3/scoverage-report/  (HTML + scoverage.xml)
+#   → target/scala-3.9.0/scoverage-report/  (HTML + scoverage.xml)
 
 # Mutation testing across the runtime-logic modules:
 SBT_OPTS="-Xmx6g" sbt mutationAll
@@ -400,8 +400,9 @@ python3 site/tools/gen-qa-report.py --check     # CI: non-zero if stale
 Both aliases relax the always-on `-Werror` (`tlFatalWarnings`) first, since
 instrumented sources can surface `-Wunused` warnings; the larger heap is
 because the `set` reapply re-evaluates the Laika docs settings. Mutation runs
-with `project <m>; stryker` (not `<m>/stryker`) so specs2 is visible to the
-test runner — see
+use `project <m>; stryker`; the module-scoped `<m>/stryker` form works too
+(upstream fixed it in 0.20.4 — before that it resolved `loadedTestFrameworks`
+from the aggregating root project and marked every mutant `NoCoverage`) — see
 [`project/plugins.sbt`](https://github.com/Constructive-Programming/eo/blob/main/project/plugins.sbt).
 
 The [`quality.yml`](https://github.com/Constructive-Programming/eo/blob/main/.github/workflows/quality.yml)

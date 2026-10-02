@@ -127,7 +127,7 @@ jobs:
           distribution: temurin
           java-version: 25 # kyoIntegration (KyoDiBench dep) targets JDK 25 since v0.15.0
       - name: Cache coursier + ivy + sbt boot
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier

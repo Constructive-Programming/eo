@@ -14,9 +14,9 @@ canonical reference and stays current with what CI runs.
 
 In short, you need:
 
-- JDK 17 or JDK 21 (Temurin is fine).
-- `sbt` 1.12.x.
-- Scala 3.8.x (matches `project/build.properties`).
+- JDK 17 or JDK 21 (Temurin is fine) — JDK 25 for the `kyo` module and the docs site.
+- `sbt` 1.13.x (the launcher boots the version pinned in `project/build.properties`).
+- Scala 3.9.x (pinned as `scala3Version` in `build.sbt`).
 - `scalafmt` 3.11.x (honours the pin in `.scalafmt.conf`).
 
 Clone the repo, then optionally enable the project git hooks so your
