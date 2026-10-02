@@ -248,7 +248,7 @@ ThisBuild / githubWorkflowJobSetup ~= { steps =>
     case s: WorkflowStep.Use if s.id.exists(_.startsWith("setup-java-")) =>
       val javaId = s.id.get.stripPrefix("setup-java-")
       val cacheStep = WorkflowStep.Use(
-        UseRef.Public("actions", "cache", "v4"),
+        UseRef.Public("actions", "cache", "v6"),
         params = Map(
           "path" -> Seq(
             "~/.cache/coursier",
