@@ -52,7 +52,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-25
         if: matrix.java == 'temurin@25'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -76,7 +76,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-17
         if: matrix.java == 'temurin@17'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -100,7 +100,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-21
         if: matrix.java == 'temurin@21'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -177,7 +177,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-25
         if: matrix.java == 'temurin@25'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -201,7 +201,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-17
         if: matrix.java == 'temurin@17'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -225,7 +225,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-21
         if: matrix.java == 'temurin@21'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -299,7 +299,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-25
         if: matrix.java == 'temurin@25'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -323,7 +323,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-17
         if: matrix.java == 'temurin@17'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -347,7 +347,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-21
         if: matrix.java == 'temurin@21'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -393,7 +393,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-25
         if: matrix.java == 'temurin@25'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -417,7 +417,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-17
         if: matrix.java == 'temurin@17'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
@@ -441,7 +441,7 @@ jobs:
       - name: Cache coursier + ivy + sbt boot
         id: coursier-cache-temurin-21
         if: matrix.java == 'temurin@21'
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/coursier
