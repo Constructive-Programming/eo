@@ -136,6 +136,21 @@ with a read-only side), and the `ReverseAccessor`-gated build-collapse
 [Concepts → Composition lattice](concepts.md#composition-lattice) for
 the carrier-level bridge graph.
 
+The grid is **carrier-level**, and two of its families are sub-shape
+families: `Traversal` is `MultiFocus[PSVec]` (`each`, `Plated`), while
+the Grate rides `MultiFocus[Function1[X0, *]]` (`MultiFocus.tuple` /
+`representable` / `apply`) and composes with far fewer families — it is
+void against every single-focus family in both directions, because its
+write-back cannot pick one focus out of a Naperian bundle and its read
+side cannot enumerate a function's codomain. The pinned footprint is
+[QA → The Grate sub-shape](quality-assurance.md#the-grate-sub-shape);
+the rationale is under
+[MultiFocus → Composition limits](multifocus.md#composition-limits).
+Also note what a ✓ asserts: that the chain *type-checks* — no import,
+no ascription — not that the composite is behaved. Behaviour is pinned
+by the specs (`MultiFocusFunction1Spec` for the Grate carrier's
+composition rules).
+
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic}
 import dev.constructive.eo.optics.Optic.*

@@ -246,7 +246,7 @@ rejected** rather than absent — see
 | Bridge | Composer | `F` constraints | Notes |
 |--------|----------|-----------------|-------|
 | `Iso → MF[F]` | `forgetful2multifocus` | `Applicative + Foldable` | Broadcasts the Iso's `S => A` to a singleton `F[A]`. |
-| `Iso → MF[Function1[X0, *]]` | `forgetful2multifocusFunction1` | (none — Function1 carrier) | Direct broadcast; lights up `Iso → Traversal.{two,three,four}` and `Iso → MultiFocus.representable / tuple`. |
+| `Iso → MF[Function1[X0, *]]` | `forgetful2multifocusFunction1` | `RepresentativeIndex[X0]` | Direct broadcast; lights up `Iso → Traversal.{two,three,four}` and `Iso → MultiFocus.representable / tuple`. The index is the bridge's *read* position, not a write index — see [the Grate sub-shape](quality-assurance.md#the-grate-sub-shape). |
 | `Lens → MF[F]` | `tuple2multifocus` | `Applicative + Foldable` | Mixes in `MultiFocusSingleton` so the same-carrier `mfAssoc` fast-path fires. Alongside `tuple2multifocusPSVec` for the `F = PSVec` specialisation. |
 | `Prism → MF[F]` | `either2multifocus` | `Alternative + Foldable` | Miss branch produces `MonoidK[F].empty`. PSVec specialisation: `either2multifocusPSVec`. |
 | `Optional → MF[F]` | `affine2multifocus` | `Alternative + Foldable` | Same shape as Prism. PSVec specialisation: `affine2multifocusPSVec`. |
@@ -271,11 +271,35 @@ specialised by `F`:
   `cats.data.Chain`. Singleton fast-path via `MultiFocusSingleton`
   (so morphed Lenses skip the per-element `F.pure` round-trip).
 - **`mfAssocFunction1`** — the absorbed-Grate sub-shape's body for
-  `F = Function1[X0, *]`. `Z = (Xo, Xi)`; the rebuild is a
+  `F = Function1[X0, *]`. `Z = Xo` — the kernel threads the *outer's*
+  leftover from `composeTo` into `composeFrom`, so the outer's own
+  `from` receives what its own `to` produced — and the rebuild is a
   closure-on-closure, no per-element accumulator. Lights up for
   `MultiFocus.representable`, `MultiFocus.tuple`, and
-  `Traversal.{two,three,four}`.
-- **`mfAssocPSVec`** — the absorbed-PowerSeries body for `F = PSVec`.
+  `MultiFocus.apply`. The inner decides how a
+  bundle is written, and there are exactly two cases:
+  - a **broadcast inner** — the `Iso → MultiFocus[Function1]` bridge
+    and anything composed from it, witnessed by the
+    `Function1BroadcastOptic` it produces (`private[eo]`) — holds exactly
+    one focus, so its write is composed *per index*: position `i` is
+    built from the written focus `i` (`broadcastFrom`). That is what
+    makes `grate ∘ iso` rewrite every position instead of collapsing
+    onto position 0. Its *read* needs no special case: `to` broadcasts
+    the focus, so the kernel reads the bundle at whatever index it
+    wants. That optic's own `from` is the one place the library has to
+    read a bundle it did not build, so the bridge is handed a
+    `RepresentativeIndex[X0]` at construction and reads there — a real
+    index, never a sentinel (see
+    [the Grate sub-shape](quality-assurance.md#the-grate-sub-shape)).
+  - a **bundle inner** — everything else, e.g. `MultiFocus.apply` as
+    the inner — has a bundle-level `from`, so it consumes the whole
+    write bundle once and the outer receives the constant rebuild of
+    that single result.
+
+  Reads are per index in both cases: the inner's bundle is read at the
+  same index its element came from. Rebuilds that ignore their argument
+  entirely (the fixed-arity `Traversal.{two,three,four}` era) behave
+  identically under either rule.- **`mfAssocPSVec`** — the absorbed-PowerSeries body for `F = PSVec`.
   Parallel-array `AssocSndZ` leftover (saves the per-element Tuple2
   the generic body would build). AlwaysHit fast-path via
   `MultiFocusSingleton`, MaybeHit fast-path via
@@ -353,11 +377,34 @@ structurally absent: `Function1[X0, *]` lacks `Foldable` /
 `Alternative`, so the constraint set on `tuple2multifocus[F:
 Applicative: Foldable]` (and the Prism / Optional variants) doesn't
 fire for the Naperian carrier. The Iso bridge
-`forgetful2multifocusFunction1` carries no constraint — it's the
-only inbound for the absorbed-Grate sub-shape — so chains of the
-form `iso.andThen(MultiFocus.tuple[...])` work, but
-`lens.andThen(grate)` does not. (`Traversal.two/three/four` are
-unaffected: they ride `MultiFocus[PSVec]` and compose freely.)
+`forgetful2multifocusFunction1` is the only inbound for the
+absorbed-Grate sub-shape — so chains of the form
+`iso.andThen(MultiFocus.tuple[...])` work, but `lens.andThen(grate)`
+does not — and it now asks for a `RepresentativeIndex[X0]` for the
+grate's index type. That witness exists off the companion for every
+index type the shipped factories fix with a canonical value (`Int`
+for `tuple`, `Boolean`, `Unit`, singletons), so those chains stay
+import-free; a grate over an algebraic or phantom index needs a
+`given RepresentativeIndex[X] = RepresentativeIndex.at(v)` in scope,
+and an *uninhabited* index type has none to give, so the bridge
+refuses it. The witness is only read by a bridged optic's own `from`
+(a position it must pick but never observes on the shipped paths); a
+`grate ∘ iso` composition still rebuilds every position from its own
+focus. (`Traversal.two/three/four` are unaffected: they ride
+`MultiFocus[PSVec]` and compose freely.)
+
+The constraint gap is not a missing instance, it is arithmetic: a Lens
+write-back would have to *pick* one `B` out of an `X0 => B` bundle
+(`Foldable` can't enumerate a function's codomain, hence no lawful
+instance), and a Prism / Optional miss would need
+`Alternative[Function1[X0, *]]`, i.e. an `X0 => A` for a type with no
+`A` to return. The same wall blocks the read-collapse: a Getter /
+AffineFold / Fold over every position would have to enumerate the
+codomain. So the Naperian sub-shape composes only with `Iso`, `Modify`,
+and itself — the full pinned grid, cell by cell, is
+[QA → The Grate sub-shape](quality-assurance.md#the-grate-sub-shape)
+(`GrateShapeSpec`) with the composed behaviour pinned by
+`MultiFocusFunction1Spec`.
 
 ## Worked examples
 
@@ -458,6 +505,9 @@ def representable[F: Representable, A]
 // Absorbed-Grate.tuple — F = Function1[Int, *]
 def tuple[T <: Tuple, A](using ValueOf[Tuple.Size[T]], Tuple.Union[T] <:< A)
   : Optic[T, T, A, A, MultiFocus[Function1[Int, *]]]
+
+// Index witness — what the Iso → MF[Function1[X0, *]] bridge reads at
+def at[X0](i: X0): RepresentativeIndex[X0]   // `data.RepresentativeIndex.at`
 ```
 
 `Traversal.each[T, A]` and `Traversal.{two,three,four}` are shipped

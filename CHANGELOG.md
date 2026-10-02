@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`cats-eo`: `data.RepresentativeIndex[X0]` — the Grate bridge's index becomes a real value.**
+  A `MultiFocus[Function1[X0, *]]` bundle is an `X0 => A`, and one place in the library has to read
+  a bundle it did not build: the `Direct → MultiFocus[Function1[X0, *]]` bridge's product
+  (`Function1BroadcastOptic.from`), whose carrier stores only `Unit`. That read was a
+  `null.asInstanceOf[X0]` sentinel guarded by a documented constant-bundle contract; it is now a
+  caller-supplied index. `RepresentativeIndex` ships canonical instances for the index types the
+  Grate factories fix with one (`Int` → `0` for `MultiFocus.tuple` and `apply` over
+  `Function1[Int, *]`, `Boolean` → `false`, `Unit` → `()`) plus any singleton type via `ValueOf`, and
+  `RepresentativeIndex.at(i)` for everything else.
+
+### Changed
+
+- **`cats-eo`: `forgetful2multifocusFunction1` now asks for a `RepresentativeIndex[X0]`** (source-
+  breaking for index types with no instance). `iso.andThen(MultiFocus.tuple[...])` and the other
+  `Iso → MultiFocus[Function1[...]]` chains are unaffected — the witness resolves off
+  `RepresentativeIndex`'s companion with no import — but a grate over an algebraic index type now
+  needs `given RepresentativeIndex[X] = RepresentativeIndex.at(v)` in scope, and an uninhabited
+  index type (`Function1[Nothing, *]`, a phantom slot) no longer bridges at all: there is no index
+  to witness, so the read that has no answer is refused instead of forged. Nothing observable
+  changes on the composition paths — the witness is read only by a bridged optic's own `from`, which
+  every shipped path calls with a constant bundle, and `grate ∘ iso` still rebuilds per index
+  through `broadcastFrom`. The two remaining `unobserved` stand-ins are existential leftovers (an
+  inner optic's leftover in `mfAssocFunction1`'s bundle branch, `collectList`'s own) and are
+  documented as such; neither is an index, and neither can be reached by a single value.
+  Rationale, measurements and the alternative designs:
+  [`docs/research/2026-09-30-grate-witness-index.md`](./docs/research/2026-09-30-grate-witness-index.md).
+
 ### Removed
 
 - **core: `MultiFocus.representableAt`** — the `repr0` argument was unobservable by

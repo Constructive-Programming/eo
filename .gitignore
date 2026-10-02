@@ -7,6 +7,8 @@
 !.claude/skills/
 # Compound-engineering tooling scratch (ce-review summaries, etc.)
 .context/
+# Lavish Editor review artifacts (agent-generated HTML review surfaces)
+.lavish/
 .envrc
 .envrc.local
 .idea/

@@ -6,6 +6,15 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
+//   0.19: the `Iso → MultiFocus[Function1[X0, *]]` bridge
+//         (`forgetful2multifocusFunction1`) now requires
+//         `data.RepresentativeIndex[X0]` — the index its product's own `from`
+//         reads a bundle at, where a `null` sentinel used to stand in. `Int` /
+//         `Boolean` / `Unit` / singleton indices resolve off the companion
+//         (unchanged call sites), any other index type needs a local `given`
+//         or `RepresentativeIndex.at(v)`, and an uninhabited index type no
+//         longer bridges (source-breaking for direct references to the given,
+//         and for chains over an index type with no instance).
 //   0.19: core `MultiFocus.representableAt` removed — the `repr0` argument
 //         never reached the built optic (the factory tabulates pointwise, so
 //         the index is a read-time argument, not a property of the optic),

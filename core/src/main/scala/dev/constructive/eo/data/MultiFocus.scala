@@ -67,6 +67,78 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
     ysBuf.unsafeAppend(x)
     flatBuf.unsafeAppend(a)
 
+/** Stand-in for a value of a type that the `Function1` kernel never lets anyone observe. Two call
+  * sites need one, and both stand in for an **existential leftover the write path discards** rather
+  * than for something anyone could have computed:
+  *
+  *   - the **inner optic's leftover** in `mfAssocFunction1` — the kernel threads the OUTER's
+  *     leftover through `Z`, so the inner's has no producer on the write path; every shipped
+  *     `MultiFocus[Function1]` optic ignores its leftover on the write side, which is what makes
+  *     that direction bundle-level.
+  *   - the **optic's own leftover** in `collectList` — the aggregation builds a fresh singleton
+  *     `List(b)` and never sees the leftover it discards.
+  *
+  * Neither is an **index**: an index into a broadcast bundle is now a real value, supplied by
+  * [[RepresentativeIndex]] and stored on [[Function1BroadcastOptic]], because that read *is*
+  * observable and the index has to come from somewhere. What is left here is per-position data
+  * whose only producer is the read side — an index witness cannot stand in for it, and neither can
+  * any single value, since a leftover may differ at every index.
+  *
+  * `inline` is load-bearing: `null.asInstanceOf[Int]` is `0` at a call site with a primitive
+  * leftover type, while a non-inlined generic method would box and unbox the `null` into an NPE.
+  * The invariant is "unobserved", not "unobservable" — if a future F1 optic observes its own
+  * leftover on `from`, this is the line to revisit (see
+  * `docs/research/2026-04-23-code-quality-review.md`, finding 4).
+  */
+private[eo] inline def unobserved[A]: A = null.asInstanceOf[A]
+
+/** The `Direct → MultiFocus[Function1[X0, *]]` bridge's product — a constant-broadcast optic whose
+  * bundle is one focus, broadcast to every index ([[MultiFocusK.forgetful2multifocusFunction1]]).
+  *
+  * The type is itself the witness `mfAssocFunction1` matches on, because the carrier alone cannot
+  * say how a write bundle should be read. THIS optic has exactly one value to build, so a bundle
+  * has to be sampled position by position to stay positional — while a *bundle* carrier (e.g.
+  * `MultiFocus.apply` as the inner) consumes the whole bundle once.
+  *
+  * Only the write half needs a hook for that. The read half does not: `to` broadcasts the single
+  * focus across the whole index space, so the kernel can simply read the bundle at the index it
+  * wants. [[broadcastFrom]] exists because the write direction has no such trick — one value in,
+  * one value out can only be expressed per index.
+  *
+  * The `at` index is the same story from the other side: this optic's own `from` must read a bundle
+  * it did not build, so it is given a real index at construction ([[RepresentativeIndex]]) rather
+  * than inventing one. `at` is read there and nowhere else.
+  *
+  * A `final class` storing the source optic directly — NOT an abstract member pair — for the same
+  * composed-dispatch reason documented on [[optics.Getter]] / [[optics.Review]].
+  */
+final private[eo] class Function1BroadcastOptic[S, T, A, B, X0](
+    o: Optic[S, T, A, B, Direct],
+    at: X0,
+) extends Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]:
+  // `Unit`: a broadcast read has no leftover to hand the rebuild — the new focus travels in the
+  // bundle (the carrier's second component), and there is no miss to pass through. `Nothing` (the
+  // `Getter` / `Review` / `Unfold` choice) is unavailable: `from` must really build a `T`.
+  type X = Unit
+
+  /** Build the target from a single written focus — the write half of the broadcast, one value per
+    * position. The kernel's per-index write path.
+    */
+  def broadcastFrom(b: B): T = o.from(Direct(b))
+
+  def to(s: S): MultiFocus[Function1[X0, *]][X, A] = MultiFocus((), (_: X0) => o.to(s).value)
+
+  /** '''Constant-bundle contract.''' `at` is correct because every bundle that reaches this method
+    * on a shipped path is constant: `modify` / `replace` / `collect*` map this optic's own
+    * broadcast, and `mfAssocFunction1`'s bundle branch hands a `.from` its rebuild as a constant
+    * function. The kernel does NOT come through here at all — `mfAssocFunction1` recognises the
+    * product and writes per index through [[broadcastFrom]]. Given a *varying* bundle by hand, this
+    * reads position `at` — a defined answer, not a forged one, and the caller's to choose through
+    * [[RepresentativeIndex]].
+    */
+  def from(fb: MultiFocus[Function1[X0, *]][X, B]): T =
+    broadcastFrom(MultiFocusK.foci(fb)(at))
+
 /** Per-F O(n) builder. Carried as a typeclass because `MonoidK[F].combineK` has inconsistent
   * asymptotics across F (O(n²) on Vector, lossy on Option), so deriving `fromList` from
   * `Traverse[F] + MonoidK[F]` is asymptotically wrong on the carriers we care about.
@@ -292,36 +364,50 @@ object MultiFocusK:
 
   /** Function1-shaped same-carrier composition — the grate-absorbed case. The general [[mfAssoc]]
     * requires `Traverse[F]` + `MultiFocusFromList[F]`; `Function1[X0, *]` admits neither, so this
-    * instance composes the rebuild closures directly. The outer rebuild is a constant broadcast —
-    * sound because every shipped outer (iso-morphed, tuple-built) rebuilds via broadcast anyway.
+    * instance composes the rebuild closures directly.
+    *
+    * The READ side needs no special case: it reads the inner's bundle at the index the outer's
+    * element came from (`kC(i) = inner.to(kO(i))._2(i)`), which a [[Function1BroadcastOptic]]
+    * answers with its broadcast focus and a bundle carrier with element `i` — so element `i` is
+    * read at `i` in both shapes rather than element 0's bundle being reused.
+    *
+    * The WRITE side does need one, because the two shapes disagree about what a bundle means. A
+    * broadcast inner builds exactly ONE value, so it is written per index (`kB(i) =
+    * inner.broadcastFrom(kD(i))`); handing it the per-position bundle through `from` would sample
+    * one index and rebuild every position from that single value — the collapse `grate ∘ iso` used
+    * to have. A bundle inner's `from` is a bundle-level rebuild, so it consumes the whole write
+    * bundle once and the outer receives the constant rebuild of that single result.
+    *
     * See `docs/research/2026-04-29-fixedtraversal-fold-spike.md`.
     *
     * @group Instances
     */
   given mfAssocFunction1[X0, Xo, Xi]: AssociativeFunctor[MultiFocus[Function1[X0, *]], Xo, Xi] with
-    // The broadcast carrier's composed context is never read (both `composeFrom` destructures
-    // discard it), so it is Unit BY TYPE — no null-sentinel pair to cast.
-    type Z = Unit
+    // `Z = Xo`: the kernel threads the OUTER's leftover from `composeTo` into `composeFrom`, so
+    // the outer's own `from` gets the value its own `to` produced — no stand-in needed. The
+    // inner's leftover has no producer on this path; see [[unobserved]].
+    type Z = Xo
 
     def composeTo[S, T, A, B, C, D](
         s: S,
         outer: Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] { type X = Xo },
         inner: Optic[A, B, C, D, MultiFocus[Function1[X0, *]]] { type X = Xi },
     ): MultiFocus[Function1[X0, *]][Z, C] =
-      val (_, kO) = outer.to(s)
-      // Null sentinel works because `.modify` doesn't observe the focus value (spike Q1).
-      val a: A = kO(null.asInstanceOf[X0])
-      val (_, kI) = inner.to(a)
-      ((), kI)
+      val (xo, kO) = outer.to(s)
+      (xo, (i: X0) => inner.to(kO(i))._2(i))
 
     def composeFrom[S, T, A, B, C, D](
         xd: MultiFocus[Function1[X0, *]][Z, D],
         inner: Optic[A, B, C, D, MultiFocus[Function1[X0, *]]] { type X = Xi },
         outer: Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] { type X = Xo },
     ): T =
-      val (_, kD) = xd
-      val b: B = inner.from((null.asInstanceOf[Xi], kD))
-      outer.from((null.asInstanceOf[Xo], (_: X0) => b))
+      val (xo, kD) = xd
+      inner match
+        case bc: Function1BroadcastOptic[A, B, C, D, X0] @unchecked =>
+          outer.from((xo, (i: X0) => bc.broadcastFrom(kD(i))))
+        case _ =>
+          val b: B = inner.from((unobserved[Xi], kD))
+          outer.from((xo, (_: X0) => b))
 
   /** PSVec-specialised same-carrier composition. Where the generic [[mfAssoc]] body builds two
     * intermediate List accumulators + materialises via `fromList`, this body writes directly into
@@ -514,11 +600,12 @@ object MultiFocusK:
 
     def collectList(agg: List[A] => B)(using ev: S =:= List[A], ev2: T =:= List[B]): S => T =
       val _ = (ev, ev2)
-      // Cartesian / singleton — T = List[B] preserved via List(b).
+      // Cartesian / singleton — T = List[B] preserved via List(b). The leftover is not threaded by
+      // this aggregation (the rebuilt optic ignores it); see [[unobserved]].
       (s: S) =>
         val (_, fa) = o.to(s)
         val b: B = agg(fa)
-        o.from((null.asInstanceOf[o.X], List(b)))
+        o.from((unobserved[o.X], List(b)))
 
   /** Functor-broadcast aggregation — preserves F-shape via `map(_ => agg(fa))`; every focus
     * position receives the aggregate. Works for any `Functor[F]`; for List this is the
@@ -898,7 +985,9 @@ object MultiFocusK:
     * no representative index, and the built optic carries none: `X = Unit`, and the whole
     * index-parametric read lives in the focus bundle. (Pre-0.19 a second name,
     * `representableAt(F)(repr0)`, took exactly such an index; it built this same optic — see the
-    * changelog for the removal.)
+    * changelog for the removal.) The one reader that cannot take its index per call — the inbound
+    * Iso bridge's own `from`, which is handed the whole bundle by the kernel and has no caller to
+    * ask — is given a [[RepresentativeIndex]] at construction instead (see that type's doc).
     *
     * @group Constructors
     */
@@ -974,23 +1063,34 @@ object MultiFocusK:
 
   /** Iso ↪ MultiFocus[Function1[X0, *]] — the Iso side of the grate-shaped surface. Iso's forward
     * `to: S => A` is broadcast to the constant rebuild `_ => a`; the reverse reads the rebuild at
-    * any X0 (null sentinel — sound because no shipped rebuild observes its argument; see the
-    * fixedtraversal-fold spike doc).
+    * the [[RepresentativeIndex]] witness the bridge was built with.
+    *
+    * '''Constant-bundle contract.''' The witness read is sound only while the bundle it is handed
+    * is constant — true for direct use (`modify` / `replace` map a constant rebuild, so the
+    * read-at-`at` and the written value agree) and for `mfAssocFunction1`'s broadcast branch, which
+    * routes a singleton bundle per position. It is NOT sound for an arbitrary varying bundle, which
+    * is why the product is a [[Function1BroadcastOptic]]: the kernel recognises it and composes the
+    * write per index (`broadcastFrom`) rather than passing a per-position bundle through `from`.
+    * The read side needs no such hook — `to` already broadcasts the single focus, so the kernel
+    * just reads the bundle at the index it wants. See the fixedtraversal-fold spike doc.
+    *
+    * The `using` clause is the cost side of that contract: the index has to come from the caller's
+    * scope, because this `Composer` has none to give and a forged index is exactly what the witness
+    * removes. Index types with a canonical value (`Int`, `Boolean`, `Unit`, singletons) resolve
+    * import-free off [[RepresentativeIndex]]; anything else needs a local `given` or an explicit
+    * `RepresentativeIndex.at`. An uninhabited index type gets no instance — the bridge refuses
+    * rather than reading a bundle at a value that cannot exist.
     *
     * @group Instances
     */
-  given forgetful2multifocusFunction1[X0]: Composer[Direct, MultiFocus[Function1[X0, *]]] with
+  given forgetful2multifocusFunction1[X0](using
+      ri: RepresentativeIndex[X0]
+  ): Composer[Direct, MultiFocus[Function1[X0, *]]] with
 
     def to[S, T, A, B](
         o: Optic[S, T, A, B, Direct]
     ): Optic[S, T, A, B, MultiFocus[Function1[X0, *]]] =
-      new Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]:
-        type X = Unit
-        def to(s: S): (Unit, X0 => A) =
-          val a = o.to(s).value
-          ((), (_: X0) => a)
-        def from(pair: (Unit, X0 => B)): T =
-          o.from(Direct(pair._2(null.asInstanceOf[X0])))
+      new Function1BroadcastOptic[S, T, A, B, X0](o, ri.index)
 
   /** Reinterpret an Optional whose focus is an `F[A]` as a MultiFocus optic over the elements — the
     * mirror of [[fromPrismF]] over the `Affine` miss / hit split (miss recycled covariantly, both
