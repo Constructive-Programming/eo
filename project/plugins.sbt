@@ -9,14 +9,21 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // at release rather than as a per-PR gate (see `mutationAll` in
 // build.sbt and site/docs/quality-assurance.md).
 // Stryker runs each module's OWN `Test / test` against that module's
-// mutants. NB: invoke it as `project <module>; stryker`, NOT
-// `<module>/stryker` — the module-scoped task form resolves
-// `loadedTestFrameworks` from the aggregating root project (which has no
-// test deps), so every mutant comes back NoCoverage; switching the
-// current project first makes specs2 visible. 0.20.x auto-derives the
-// Scala 3 dialect from scalaVersion.
-// 0.20.4 fixed multi-module invocation; the `project <m>; stryker` workaround still works.
-addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "0.20.4")
+// mutants. This build invokes it as `project <module>; stryker` (see
+// `mutationAll` in build.sbt and the quality.yml release sweep).
+// Upstream fixed the multi-module invocation in 0.20.4 by scoping the
+// task to the invoking project, so `<module>/stryker` is correct too on
+// 1.x; the current-project form is kept because the alias switches
+// projects anyway and the borrowed-tests `set` lines are expressed with
+// `project <m>;` as well. Before 0.20.4 the module-scoped form resolved
+// `loadedTestFrameworks` from the aggregating root project (no test
+// deps), so every mutant came back NoCoverage.
+// The Scala 3 dialect is still auto-derived from scalaVersion. Bumped
+// 0.20.4 → 1.1.1: v1 has no removed or renamed features, the sbt
+// setting keys used in build.sbt (`strykerReporters`,
+// `strykerExcludedMutations`, `strykerThresholdsBreak`) are unchanged,
+// and 1.x requires sbt >= 1.11.2 (we run 1.13.0).
+addSbtPlugin("io.stryker-mutator" % "sbt-stryker4s" % "1.1.1")
 
 // Format check gate for CI (`sbt scalafmtCheckAll scalafmtSbtCheck`
 // in the workflow). The project ships a `.scalafmt.conf` pinned to
