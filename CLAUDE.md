@@ -3,8 +3,8 @@
 ## Project
 
 `cats-eo` — an Existential Optics library for Scala 3, built on top of
-[cats](https://typelevel.org/cats/). Scala `3.8.3` via sbt `1.12.9`
-(`project/build.properties`), runs on JDK 17, 21, or 25 — but the `kyo` module (and therefore the docs site) needs JDK 25; on older JVMs it drops out of the root aggregate.
+[cats](https://typelevel.org/cats/). Scala `3.9.0` (the `scala3Version` pin in
+`build.sbt`) via sbt `1.13.0` (`project/build.properties`), runs on JDK 17, 21, or 25 — but the `kyo` module (and therefore the docs site) needs JDK 25; on older JVMs it drops out of the root aggregate.
 
 Human contributors: see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the
 day-one bootstrap. This file is the parallel guide for AI agents.
@@ -44,7 +44,7 @@ curl -fLo /usr/local/bin/cs \
   https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz \
   && gunzip -f /usr/local/bin/cs && chmod +x /usr/local/bin/cs
 
-# A recent JVM (sbt 1.12 supports JDK 17 and JDK 21)
+# A recent JVM (the project runs on JDK 17, 21, or 25; `kyo` needs 25)
 cs java --jvm temurin:21 --setup        # writes JAVA_HOME into ~/.profile
 
 # Scala dev tools
@@ -54,10 +54,10 @@ cs install --install-dir /usr/local/bin sbt scala scalafmt scalafix metals metal
 After `cs java --setup`, open a fresh shell (or `source ~/.profile`) so
 `JAVA_HOME` is on your PATH.
 
-Installed versions in this environment: `sbt 1.12.9`, `scala-runner 1.12.4`
-(Scala `3.8.3` by default, matching the project), `scalafmt 3.11.0` (honours
-the `version` pin in `.scalafmt.conf`), `scalafix 0.14.6`, `metals 1.6.7`,
-`metals-mcp 1.6.7`.
+Installed versions in this environment: `sbt 1.12.9` (the launcher script — it
+boots the sbt version pinned in `project/build.properties`), `scala-runner
+1.12.4`, `scalafmt 3.11.0` (honours the `version` pin in `.scalafmt.conf`),
+`scalafix 0.14.6`, `metals 1.6.7`, `metals-mcp 1.6.7`.
 
 ### Day-to-day commands
 
@@ -136,12 +136,12 @@ SBT_OPTS="-Xmx6g" sbt mutationAll
 
 Key facts, all the hard-won kind:
 
-- **Invoke as `project <m>; stryker`, NOT `<m>/stryker`.** The
-  module-scoped task form reads `loadedTestFrameworks` from the
-  aggregating root project (no test deps), so specs2 is invisible and
-  *every* mutant comes back `NoCoverage`. The `mutationAll` alias uses the
+- **Invoke as `project <m>; stryker`** — the `mutationAll` alias uses the
   project-switch form across core, laws, generics, schemes, schemesLaws,
-  circe, avro, jsoniter.
+  circe, avro, jsoniter, zio, kyo. The module-scoped `<m>/stryker` form works
+  again since 0.20.4; before that it resolved `loadedTestFrameworks` from the
+  aggregating root project (no test deps), so specs2 was invisible and
+  *every* mutant came back `NoCoverage`.
 - **It's a report, not a gate** (`strykerThresholdsBreak := 0`): a low
   score never fails the build.
 - **`core` and `laws` are scored against the `tests/` suite via

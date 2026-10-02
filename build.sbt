@@ -1176,10 +1176,10 @@ addCommandAlias(
 )
 
 // Mutation testing across the published modules (tests/benchmarks/docs
-// aren't published). Uses the `project <m>; stryker` form, NOT
-// `<m>/stryker`: see the plugins.sbt note — the module-scoped task reads
-// `loadedTestFrameworks` from the empty root project and marks every
-// mutant NoCoverage.
+// aren't published). Uses the `project <m>; stryker` form — the alias
+// switches projects anyway, and the borrowed-tests `set` lines below are
+// expressed against those switches. (The `<m>/stryker` form works too
+// since 0.20.4; see the plugins.sbt note.)
 //
 // The `set` lines borrow the `tests` module's compiled suite into core's
 // and laws' Test scopes so their mutants get killed by the behavioural
