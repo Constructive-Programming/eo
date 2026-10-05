@@ -182,10 +182,26 @@ factory's rebuild is identity on the written-back `F[B]`.
 listMF.collectList(_.sum)(List(1, 2, 3, 4))
 ```
 
-`MultiFocus[List]`-only, produces `List(agg(fa))` — a one-element
-output regardless of input length. Reproduces the v1
-`Reflector[List]`'s cartesian-singleton choice at the call site
-without a typeclass.
+`MultiFocus[List]`-only: passes the singleton focus vector
+`List(agg(bundle.foci))` to reconstruction, preserving the context
+returned by the read. The generic `MultiFocus.apply[List, A]` /
+`pApply[List, A, B]` factories reconstruct by identity, so their
+source-level output is a singleton regardless of input length.
+Other optics produce a singleton source only when their reconstruction
+supports that shape change; `S = List[A]` and `T = List[B]` alone do
+not guarantee it.
+
+Preserved context can retain source structure. For example,
+`MultiFocus.apply[List, Int].andThen(Lens[Int, Int](identity, (_, b) => b))`
+reconstructs `Nil` from an empty source, even though the supplied focus
+vector is `List(0)` for `_.sum`. A lawful Prism that matches `0 :: tail`
+and rebuilds by prepending `0` retains a miss unchanged; on a hit,
+`collectList(_.sum)(List(0, 1, 2))` rebuilds `List(0, 3)`, not
+`List(3)`. The singleton guarantee is about the vector passed to
+reconstruction, not the reconstructed source.
+
+This reproduces the v1 `Reflector[List]`'s cartesian-singleton choice
+at the call site without a typeclass.
 
 ### `.at(i)` — `Representable[F]`
 

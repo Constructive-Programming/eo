@@ -67,22 +67,20 @@ private[eo] trait MultiFocusSingleton[S, T, A, B, X0]:
     ysBuf.unsafeAppend(x)
     flatBuf.unsafeAppend(a)
 
-/** Stand-in for a value of a type that the `Function1` kernel never lets anyone observe. Two call
-  * sites need one, and both stand in for an **existential leftover the write path discards** rather
-  * than for something anyone could have computed:
+/** Stand-in for a value of a type that the `Function1` kernel never lets anyone observe. The one
+  * call site stands in for an **existential leftover the write path discards**:
   *
   *   - the **inner optic's leftover** in `mfAssocFunction1` — the kernel threads the OUTER's
   *     leftover through `Z`, so the inner's has no producer on the write path; every shipped
   *     `MultiFocus[Function1]` optic ignores its leftover on the write side, which is what makes
   *     that direction bundle-level.
-  *   - the **optic's own leftover** in `collectList` — the aggregation builds a fresh singleton
-  *     `List(b)` and never sees the leftover it discards.
   *
-  * Neither is an **index**: an index into a broadcast bundle is now a real value, supplied by
+  * It is not an **index**: an index into a broadcast bundle is a real value, supplied by
   * [[RepresentativeIndex]] and stored on [[Function1BroadcastOptic]], because that read *is*
   * observable and the index has to come from somewhere. What is left here is per-position data
   * whose only producer is the read side — an index witness cannot stand in for it, and neither can
-  * any single value, since a leftover may differ at every index.
+  * any single value, since a leftover may differ at every index. (`.collectList` does NOT need a
+  * stand-in: it hands `from` the leftover its own read produced — see that extension.)
   *
   * `inline` is load-bearing: `null.asInstanceOf[Int]` is `0` at a call site with a primitive
   * leftover type, while a non-inlined generic method would box and unbox the `null` into an NPE.
@@ -591,21 +589,29 @@ object MultiFocusK:
   // picks (see the carrier doc above).
   // ------------------------------------------------------------------
 
-  /** Singleton / cartesian aggregation, List-specific — collapses the whole focus list to ONE
-    * aggregated element: the result list has length 1 regardless of the focus count.
-    * Shape-changing, which is exactly what no `Functor`-based combinator can express; the
+  /** Singleton / cartesian aggregation, List-specific — passes `List(agg(bundle.foci))` to
+    * reconstruction with the context preserved from the read. The supplied focus vector has length
+    * 1 regardless of the original focus count; the reconstructed source need not.
+    *
+    * The generic [[apply]] / [[pApply]] List factories rebuild by identity, so their output is a
+    * singleton. Other reconstructions may retain structure: an empty composite can rebuild `Nil`,
+    * and a Prism miss stays unchanged while a hit rebuilds around the singleton focus vector. The
+    * `S =:= List[A]` / `T =:= List[B]` constraints do not guarantee singleton output.
+    *
+    * This changes the focus vector's shape, which no `Functor`-based combinator can express; the
     * length-preserving alternatives are [[collectMap]] / [[collectWith]].
     */
   extension [S, T, A, B](o: Optic[S, T, A, B, MultiFocus[List]])
 
     def collectList(agg: List[A] => B)(using ev: S =:= List[A], ev2: T =:= List[B]): S => T =
       val _ = (ev, ev2)
-      // Cartesian / singleton — T = List[B] preserved via List(b). The leftover is not threaded by
-      // this aggregation (the rebuilt optic ignores it); see [[unobserved]].
+      // Cartesian / singleton — T = List[B] preserved via List(b). The collapse replaces the whole
+      // focus vector, so no *new* leftover can be derived for it; the one the read produced is the
+      // right thing to hand back, and it is the only thing that works for an optic whose `from`
+      // reads its own leftover.
       (s: S) =>
-        val (_, fa) = o.to(s)
-        val b: B = agg(fa)
-        o.from((unobserved[o.X], List(b)))
+        val bundle = o.to(s)
+        o.from((bundle.context, List(agg(bundle.foci))))
 
   /** Functor-broadcast aggregation — preserves F-shape via `map(_ => agg(fa))`; every focus
     * position receives the aggregate. Works for any `Functor[F]`; for List this is the
