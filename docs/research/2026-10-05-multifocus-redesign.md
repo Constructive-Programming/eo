@@ -109,6 +109,15 @@ Searched every module for `MultiFocus` / grate usage:
 
 ## 5. Phased path
 
+0. *(done)* Phase-1 prototype landed on this branch as a standalone commit: `data/Glass.scala`
+   (`IndexedGlass` + `Aux` + the `Context = Unit` `Grate` alias + an equational composition
+   proof in scaladoc) and `GlassSpec` — round trips on arbitrary generated tabulations,
+   three-level associativity, type-changing composition through a **non-inline** generic helper
+   (the hole the witness design could not close), permuted / empty / Unit / NaN / signed-zero
+   indexes, and the explicit full-grid-vs-diagonal semantic statement. Open items before
+   integration: Unit-context normalization (`andThen` keeps `(Ctx, I => Unit)`, so `Grate` is
+   not yet composition-closed), and benchmarks — lazy composition repeats inner splits and
+   allocates contexts; full-grid and diagonal workloads must not be compared as equivalent.
 1. Prototype A standalone (new file, e.g. `data/Grate.scala` or a spike package), not in
    #129. Port `tuple` / `representable` / `apply`-equivalents to `IndexedGlass` constructors.
 2. Prove the split/rebuild and full-grid composition laws against arbitrary tabulations,
