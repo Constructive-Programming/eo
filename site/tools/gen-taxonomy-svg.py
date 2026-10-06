@@ -127,7 +127,7 @@ rw_layer.append(label(1, 0, MID, 'Prism', None))
 rw_layer.append(tile(1, 1, MID, 'rw'))
 rw_layer.append(label(1, 1, MID, 'Optional', 'Affine carrier'))
 rw_layer.append(tile(2, 0, MID, 'rw', vspan=2))
-rw_layer.append(label(2, 0, MID, 'Traversal', 'fixed/Grate: total · each: contextual', vspan=2))
+rw_layer.append(label(2, 0, MID, 'Grate / Traversal', 'Grate: total · Traversal: contextual', vspan=2))
 # fallible-source row — the failure-typed-build (BiAffine) plan
 rw_layer.append(tile(0, 2, MID, 'plan', dash=True))
 rw_layer.append(label(0, 2, MID, 'fallible write', 'planned', cls='plan-t'))

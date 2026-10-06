@@ -494,7 +494,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   case class AdultOptCarrier(p: AdultPerson)
 
-  // ----- Prism / Optional / Traversal / MultiFocus.tuple / MultiFocus.representable → ModifyF
+  // ----- Prism / Optional / Traversal / generic MultiFocus → ModifyF
   //
   // 2026-04-29 consolidation: 2 ModifyF-themed blocks → 1 composite. Both witness the
   // canonical "lift into ModifyF + .modify byte-for-byte agrees with the source carrier".
@@ -506,8 +506,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   Either Prism lifts into ModifyF and preserves hit/miss,
   //   Affine Optional lifts into ModifyF and preserves hit/miss,
   //   PowerSeries (MultiFocus[PSVec]) Traversal lifts into ModifyF and applies f to every focus,
-  //   MultiFocus.tuple lifts into ModifyF and rebroadcasts via per-slot rebuild,
-  //   MultiFocus.representable over Representable[Function1[Boolean, *]] lifts identically
+  //   MultiFocus.apply over a Boolean-indexed function container lifts pointwise
   "Lens/Prism/Optional → MultiFocus[List] + → ModifyF: cross-carrier lifts (one composite block)" >> {
     // ---- → MultiFocus[List] half (absorbed standalone test) ----
     val fstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
@@ -564,18 +563,9 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       (psLifted.modify(_ * 10)(List(1, 2, 3)) === List(10, 20, 30))
         .and(psLifted.modify(_ * 10)(Nil) === Nil)
 
-    val tupleMF: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
-      MultiFocus.tuple[(Int, Int, Int), Int]
-    val tupleLifted: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, data.ModifyF] =
-      summon[Composer[MultiFocus[Function1[Int, *]], data.ModifyF]].to(tupleMF)
-    val tupleOk =
-      (tupleLifted.modify(_ + 1)((10, 20, 30)) === ((11, 21, 31)))
-        .and(tupleLifted.modify(_ * 2)((1, 2, 3)) === ((2, 4, 6)))
-        .and(tupleLifted.modify(identity[Int])((7, 8, 9)) === ((7, 8, 9)))
-
     import cats.instances.function.given
     val fnMF: Optic[Boolean => Int, Boolean => Int, Int, Int, MultiFocus[Function1[Boolean, *]]] =
-      MultiFocus.representable[[a] =>> Boolean => a, Int]
+      MultiFocus.apply[[a] =>> Boolean => a, Int]
     val fnLifted: Optic[Boolean => Int, Boolean => Int, Int, Int, data.ModifyF] =
       summon[Composer[MultiFocus[Function1[Boolean, *]], data.ModifyF]].to(fnMF)
     val srcFn: Boolean => Int = b => if b then 100 else 200
@@ -589,7 +579,6 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(eitherOk)
       .and(affineOk)
       .and(psOk)
-      .and(tupleOk)
       .and(fnOk)
   }
 

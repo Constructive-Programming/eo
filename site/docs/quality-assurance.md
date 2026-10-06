@@ -8,9 +8,9 @@ reflect that, in roughly increasing cost-to-fool order:
    compile time, exactly which optic families compose with which (and at what
    strength), and which combinations are deliberately rejected. A regression
    that loosened or broke the lattice fails to compile.
-2. **Sub-shape grids** — the matrix is carrier-level, so the two
-   `MultiFocus` sub-shapes that behave differently get their own pinned table:
-   [the Grate footprint](#the-grate-sub-shape) below.
+2. **Fixed-index footprint** — IndexedGlass uses dedicated full-grid
+   composition, not the classical carrier seams. Its pinned
+   [footprint](#the-indexedglass-footprint) is separate.
 3. **Discipline law suites** — `cats-eo-laws` defines the optic and typeclass
    laws; `cats-eo-tests` and the integration modules run them against concrete
    instances.
@@ -60,23 +60,26 @@ ascription, that spec goes red.
 
 *✓ composes import-free at the strength shown in the [optic taxonomy](optics.md); ✗ does not compile (void by design — building through a read-only optic, reading through a write-only one, etc.). 87 composing / 34 void cells, pinned by `CompositionMatrixSpec`.*
 
-*✓ is a **typing claim**: the chain resolves with no expected-type ascription and no `given` imports, landing at the family shown. It does not say the composite is *behaved* — runtime semantics are pinned by behaviour specs (`MultiFocusFunction1Spec` for the Grate carrier's composition rules). The grid is also carrier-level: `trav` and `fold` describe `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`); the other shipped MultiFocus sub-shape has its own table below.*
+*✓ is a **typing claim**: the chain resolves with no expected-type ascription and no `given` imports, landing at the family shown. It does not say the composite is *behaved* — runtime semantics are pinned by behaviour specs (`MultiFocusCrossFamilySpec` for the container carrier's composition rules). The grid is also carrier-level: `trav` and `fold` describe `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`); the fixed-index `IndexedGlass` prototype has its own table below.*
 
 <!-- END GENERATED: matrix -->
 
-### The Grate sub-shape
+### The IndexedGlass footprint
 
-`trav` and `fold` in the grid above mean `MultiFocus[PSVec]` — the `Traversal`
-class, `each`, `Plated`. The other shipped `MultiFocus` sub-shape is the
-**Grate** (`MultiFocus[Function1[X0, *]]`, built by `MultiFocus.tuple` /
-`representable` / `apply`), and its footprint is much
-narrower: a single-focus outer's write-back would have to *pick* one focus out
-of a Naperian bundle, and a read-collapse would have to *enumerate* a function's
-codomain. Neither is available, so the single-focus families are void against it
-in both directions.
+`trav` and `fold` in the grid above mean `MultiFocus[PSVec]` — the
+Traversal container carrier. IndexedGlass instead extends `Optic`
+over `Glass[I] = [X, A] =>> (context: X, values: I => A)` with
+existential residual `X`. The `IndexedGlass.Grate` alias fixes `X = Unit`.
+Its dedicated `andThen` uses product indexes, but no generic
+classical-family bridges or `AssociativeFunctor[Glass[I]]` are
+installed. Rejected seams describe today's API, not a proof that
+every possible explicit bridge is structurally impossible.
+The supported `glass.andThen(modify)` direction uses the existing
+writable-outer `Optic` extension, not a Glass Composer bridge;
+`modify.andThen(glass)` is not supported.
 
 <p align="center">
-  <a href="multifocus.md#grate">MultiFocus reference → Grate</a> ·
+  <a href="optics.md#indexedglass">IndexedGlass reference</a> ·
   <a href="multifocus.md#composition-limits">Composition limits</a>
 </p>
 
@@ -84,7 +87,7 @@ in both directions.
 
 | family `f` | `f` ∘ grate | grate ∘ `f` |
 |---|---|---|
-| **iso** | ✓ | ✓ |
+| **iso** | ✗ | ✗ |
 | **lens** | ✗ | ✗ |
 | **prism** | ✗ | ✗ |
 | **optional** | ✗ | ✗ |
@@ -92,23 +95,24 @@ in both directions.
 | **getter** | ✗ | ✗ |
 | **affold** | ✗ | ✗ |
 | **fold** | ✗ | ✗ |
-| **modify** | ✓ | ✓ |
+| **modify** | ✗ | ✓ |
 | **review** | ✗ | ✗ |
 | **unfold** | ✗ | ✗ |
 | **grate** | ✓ | ✓ |
 
-*Same ✓ / ✗ meaning as the grid above, restricted to the Grate sub-shape (`MultiFocus[Function1[X0, *]]`, the Naperian factories `MultiFocus.tuple` / `representable` / `apply`): 6 composing / 18 void cells, pinned by `GrateShapeSpec`.
-The inbound `iso` cell needs a `RepresentativeIndex` for the grate's index type — shipped off the companion for every index type the factories fix with a canonical value (`Int` / `Boolean` / `Unit` / singletons), so the grid stays import-free; a grate over an algebraic index needs `given RepresentativeIndex[X] = RepresentativeIndex.at(v)` in scope, and an uninhabited index type gets no instance — the bridge refuses rather than reading a bundle at an index that cannot exist. The ✗ cells are structural, not missing plumbing: a Lens / Traversal write-back would have to pick one focus out of a Naperian bundle (`Foldable[Function1[X0, *]]`: no instance, and no lawful one — a function's codomain is not enumerable); a Prism / Optional miss would need `Alternative[Function1[X0, *]]` (`empty` has no value to return); a Getter / AffineFold / Fold read-collapse would have to enumerate that codomain. `trav` / `fold` in this table mean the *other* MultiFocus sub-shape across the seam — cross-`F` composition needs a per-`F` natural transformation and is a documented workaround.*
+*The fixed-index `IndexedGlass` prototype, constructed with `IndexedGlass.representable`: 3 composing / 21 void cells, pinned by `GrateShapeSpec`.
+Full-grid glass composition retains both index axes; it does not sample a representative coordinate or compare indexes. An Iso can be constructed explicitly with `IndexedGlass.iso`, which has a `Unit` index; this is not an automatic bridge from the classical Iso family. A ✗ cell records the current API's unsupported seam, not a proof that such an optic cannot exist. Runtime round trips, polymorphic writes and reassociated nested grids are exercised by `GlassSpec`.*
 
 <!-- END GENERATED: grate -->
 
-The two tables answer different questions: the grid says which *families*
-compose, this table says which of them reach the Naperian sub-shape. Cell
+The two tables answer different questions: the grid covers classical
+composition, while this table records the current IndexedGlass seams. Cell
 verdicts come from [`GrateShapeSpec`](https://github.com/Constructive-Programming/eo/blob/main/tests/src/test/scala/dev/constructive/eo/GrateShapeSpec.scala)
-(compile-level, same no-import / no-ascription doctrine) and the *behaviour* of
-the cells that do compose is pinned by
-[`MultiFocusFunction1Spec`](https://github.com/Constructive-Programming/eo/blob/main/core/src/test/scala/dev/constructive/eo/MultiFocusFunction1Spec.scala)
-— because a ✓ here only promises that the chain type-checks.
+(compile-level); runtime evidence comes from
+[`GlassSpec`](https://github.com/Constructive-Programming/eo/blob/main/core/src/test/scala/dev/constructive/eo/GlassSpec.scala):
+round trips, arbitrary tabulations, full-grid writes and reassociated
+composition. Passing tests are evidence, not universal proof of the
+constructor laws. Unit-context composition normalization remains open.
 
 ## Coverage
 

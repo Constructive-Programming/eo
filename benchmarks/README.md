@@ -114,8 +114,16 @@ EO JSON backends, where there is no Monocle analog.
 | `PowerSeriesBench`       | `Lens → Traversal.each[ArraySeq, Phone] → Lens` over `Person.phones` (sweeps 4/16/64/256/1024/4096) | `MLens.andThen(MTraversal.fromTraverse).andThen(MLens)`. |
 | `PowerSeriesNestedBench` | 5-hop `Company → List[Dept] → ArraySeq[Emp] → Boolean` (sweeps 4/16/64/256/1024 × 4-dept fanout) | Monocle 5-hop `Lens→Traversal→Lens→Traversal→Lens`. |
 | `PowerSeriesPrismBench`  | `Traversal.each[ArraySeq, Result] → Prism[Result, Int]` on a 50/50 Ok/Err mix (sweeps 8/32/128/512/2048) | Monocle `Traversal.andThen(Prism)`. |
-| `MultiFocusBench`        | `MultiFocus[List]` (`fromLensF`) vs `MultiFocus[PSVec]` (`Traversal.each`) on the same `Lens → List/each → Lens` chain (sweeps 4/32/256/1024) | None. The unified carrier that absorbed the v1 AlgLens/Kaleidoscope/Grate/PowerSeries families. |
-| `MultiFocusCollectBench` | `collectMap` (ZipList mean / `Const` sum), `collectList` (cartesian-singleton), and `MultiFocus.tuple` 3-/6-slot modifies | None. Carrier-level reduction / broadcast machinery. |
+| `MultiFocusBench`        | `MultiFocus[List]` (`fromLensF`) vs `MultiFocus[PSVec]` (`Traversal.each`) on the same `Lens → List/each → Lens` chain (sweeps 4/32/256/1024) | None. Container traversal carrier. |
+| `MultiFocusCollectBench` | `collectMap` (ZipList mean / `Const` sum) and identity-backed List `collectList` (singleton focus vector) | None. Container reduction / broadcast machinery. |
+
+Fixed-index workloads now use IndexedGlass: its product-index
+composition visits the full grid, not the removed Function1 kernel's
+shared-index diagonal. Historical diagonal timings are not equivalent
+workloads. General Glass retains residual `X`; `IndexedGlass.Grate`
+specializes `X = Unit`, and Unit-context composition normalization
+remains open. `collectList` only guarantees a singleton written focus
+vector; shape/count-coupled reconstruction can reject that change.
 | `JsoniterBench`         | Cross-EO: `eo-jsoniter` (byte-walk) vs `eo-circe` (AST) read/write at depths 3/4, miss path, `[*]` fold-sum, and `replace`/`modify` writes | None. The two EO JSON backends head-to-head on the same bytes. |
 
 All micro-benches share the same shape: a paired `eoXxx` / `mXxx` method per metric, so the generated JMH report shows them side-by-side in one table.

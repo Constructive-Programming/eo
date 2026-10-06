@@ -252,51 +252,43 @@ By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 
 ### Compute aggregations
 
-A `Lens` sees one value; a `Traversal` sees many but only lets you
-map over them. `MultiFocus[F]` is the optic for the jobs in between:
-rewrite *every* slot of a fixed-shape record with one function, or
-fold the focused values into a summary and scatter it back across
-them. The two recipes below are the prototypical jobs; the
-[MultiFocus reference](multifocus.md) carries the design story (it
-unifies five separate optics from v1 into this one carrier).
+A `Lens` sees one value; a `Traversal` visits a container's elements.
+`IndexedGlass` addresses a fixed index space, while `MultiFocus[F]`
+supports container traversal and aggregation. The two recipes below
+show that distinction; see the [MultiFocus reference](multifocus.md).
 
-#### Recipe A — Adjust every channel of a colour at once
+#### Recipe A — Adjust a fixed-index configuration
 
-**Why:** you have a fixed-shape record of same-typed fields — the
-R, G, B of a colour, the x/y/z of a vector, the left/right of a
-stereo frame — and you want to hit *all* of them with one function.
-There's no collection to traverse and no reason to write three
-`.copy` calls: focus the whole tuple and rewrite every slot
-uniformly, or fill them all with a constant.
+**Why:** a Boolean-indexed configuration has a setting for each
+coordinate. Read one, rewrite each with its index visible, or fill
+the whole space without enumerating or comparing indexes.
 
 ```scala mdoc:silent
-import cats.instances.function.given  // Functor[Function1[Int, *]] for .modify
+import cats.Representable
+import cats.instances.function.given
+import dev.constructive.eo.data.IndexedGlass
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 
-// Three colour channels — each a Double in [0.0, 1.0].
-val rgbMF = MultiFocus.tuple[(Double, Double, Double), Double]
+val readerRepr = summon[Representable.Aux[[a] =>> Boolean => a, Boolean]]
+val configGlass = IndexedGlass.representable[[a] =>> Boolean => a, Double, Double](readerRepr)
+val config: Boolean => Double = b => if b then 0.5 else 0.2
 ```
 
 ```scala mdoc
-val violet = (0.5, 0.0, 0.5)
-
-// Brighten all three channels uniformly: the same function runs at
-// every slot.
-rgbMF.modify(c => (c * 1.4).min(1.0))(violet)
-
-// Replace every slot with the same constant — the broadcast pattern.
-rgbMF.replace(0.0)(violet)
+configGlass.at(true)(config)
+val adjustedConfig = configGlass.modify((i, c) => if i then c * 1.4 else c)(config)
+(adjustedConfig(false), adjustedConfig(true))
+val zeroConfig = configGlass.replace(0.0)(config)
+(zeroConfig(false), zeroConfig(true))
 ```
 
-`.modify` runs the same function at every slot; `.replace(b)` fills
-every slot with `b`. This is the *Grate* shape of `MultiFocus`
-([details](multifocus.md#sub-shapes)), and it works over any
-fixed-arity homogeneous structure, not just tuples. One caveat: the
-tuple/Grate shape is map-only — when you need an *effectful*
-per-slot rewrite (`.modifyA[G]`), reach for a collection-backed
-`MultiFocus.apply[List, A]` instead.
+This representable constructor returns `IndexedGlass.Grate`, the
+`X = Unit` specialization. Other glasses retain residual context.
+Nested `andThen` uses product indexes to address the full grid;
+Unit-context normalization and generic classical-family seams remain
+open. For effectful per-element rewrites, use container traversal.
 
 **Source:** Penner — *Grate: yet another optic*,
 <https://chrispenner.ca/posts/grate>.
@@ -356,9 +348,11 @@ val stdDev   = math.sqrt(variance)
   lands in every position. Reach for it when a downstream step needs
   the aggregate *alongside* the originals (share-of-total, a
   normalisation baseline).
-- `.collectList(agg: List[A] => B)` produces a single-element result
-  regardless of input length. Reach for it when you just want the
-  summary.
+- `.collectList(agg: List[A] => B)` supplies a singleton focus vector
+  to reconstruction with the observed context. This identity-backed
+  `readingsMF` returns a singleton List, but other optics can preserve
+  surrounding structure or reject a shape/count mismatch. It is not
+  a general promise of a single-element source.
 - `.collectWith(agg: F[A] => A => B)` is the general map-shaped
   collect — the aggregate sees the batch once and the returned
   function runs per position, so batch-relative rewrites

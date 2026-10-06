@@ -6,6 +6,13 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
+//   Unreleased: remove the legacy MultiFocus Function1 Grate kernel, tuple /
+//         representable factories, zip / zipWith, and Direct bridge, together
+//         with RepresentativeIndex. IndexedGlass is the fixed-index replacement;
+//         composition addresses the full product grid, not the old diagonal.
+//         Source- and binary-breaking for callers of the removed APIs. Container
+//         MultiFocus and Traversal APIs are retained.
+//
 //   0.19: the `Iso → MultiFocus[Function1[X0, *]]` bridge
 //         (`forgetful2multifocusFunction1`) now requires
 //         `data.RepresentativeIndex[X0]` — the index its product's own `from`

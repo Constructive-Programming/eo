@@ -27,11 +27,10 @@ import optics.Optic.*
   *     expectation rather than a re-statement of the optic's own definition.
   *   - The *outbound* direction is swept too: every writable provenance projected into `ModifyF`
   *     (writes and laws must match the source optic), the polymorphic factory with a type-changing
-  *     write, the `Function1` (Grate) tuple, and the read-only `Forget[List]` escape over a
+  *     write, the generic `Function1` container, and the read-only `Forget[List]` escape over a
   *     `Fold`-sourced optic (available on the `T = Unit` shape).
-  *   - The `Function1` (Grate) sub-shape has its own sweep in core's
-  *     `MultiFocusFunction1CompositionSpec`: its only inbound family is `Direct`, since `Lens` /
-  *     `Prism` / `Optional` → `Function1` is structurally absent.
+  *   - Fixed-index full-grid rebuilding is tested separately as `IndexedGlass`, with no implicit
+  *     cross-family bridges.
   */
 class MultiFocusCrossFamilySpec extends Specification with ScalaCheck:
 
@@ -301,16 +300,17 @@ class MultiFocusCrossFamilySpec extends Specification with ScalaCheck:
     }
   }
 
-  // covers: the Function1 (Grate) sub-shape into ModifyF — the absorbed-Grate carrier's outbound
-  // direction, paired with the tabulating factory that builds it.
-  "outbound — ModifyF projection of the Function1 (Grate) tuple: writes match the source" >> {
-    val grate: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
-      MultiFocus.tuple[(Int, Int, Int), Int]
-    val lifted: Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, ModifyF] =
-      summon[Composer[MultiFocus[Function1[Int, *]], ModifyF]].to(grate)
-    forAll { (a: Int, b: Int, c: Int) =>
-      lifted.modify(_ + 1)((a, b, c)) == grate.modify(_ + 1)((a, b, c)) &&
-      lifted.replace(0)((a, b, c)) == grate.replace(0)((a, b, c))
+  // Generic Functor projection remains lawful for a function container; this is not a
+  // tabulating Grate factory or a dedicated Function1 composition kernel.
+  "outbound — generic Function1 container projection preserves pointwise writes" >> {
+    val container = MultiFocus.apply[Function1[Boolean, *], Int]
+    val lifted = summon[Composer[MultiFocus[Function1[Boolean, *]], ModifyF]].to(container)
+    forAll { (a: Int, b: Int) =>
+      val source: Boolean => Int = i => if i then a else b
+      List(false, true).forall(i =>
+        lifted.modify(_ + 1)(source)(i) == container.modify(_ + 1)(source)(i) &&
+          lifted.replace(0)(source)(i) == container.replace(0)(source)(i),
+      )
     }
   }
 

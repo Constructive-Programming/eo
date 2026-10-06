@@ -119,9 +119,13 @@ mean and declare the given in your own scope — exactly the
 | `Foldable[F]` | `Fold[F, A]` | read-only `Fold` | `CanFold` |
 | `Bitraverse[F]` | `Traversal.first` / `second` / `both` | `Traversal` over one slot (or every `A` of an `F[A, A]`) | `CanModify` + `CanFold` |
 | `Representable[F]` | `Lens.representable(r)` | lawful `Lens` at ONE representation point | `CanGet` + `CanModify` + `CanFold` |
-| `Representable[F]` | `MultiFocus.representable` | whole-container grate (`Distributive` with a concrete index) | positional rebuilds |
+| `Representable[F]` | `IndexedGlass.representable(r)` | fixed-index tabulation with `X = Unit` | full-grid rebuilds; dedicated indexed operations, not generic capability seams |
 
-Two ways to turn a constructor into evidence — bind it as an optic given (the
+IndexedGlass has dedicated indexed operations; its inclusion above
+does not imply generic `Can*` derivations or classical-family composition
+bridges. Unit-context composition normalization remains open.
+
+For the capability-backed constructors, two ways to turn one into evidence — bind it as an optic given (the
 capability derivations do the rest), or skip optics entirely with a direct capability
 instance (the `Can*` traits are SAM-convertible):
 

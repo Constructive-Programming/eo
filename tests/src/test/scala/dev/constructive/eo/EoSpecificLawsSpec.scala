@@ -78,21 +78,6 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     doubleIso.morph[Tuple2],
   )
 
-  // covers: Morph from MultiFocus[Function1[Int, *]] → ModifyF on a tuple-shaped MultiFocus
-  // (the absorbed Grate). The `multifocus2modify` Composer widens any MultiFocus-carrier optic to
-  // the Modify API. The MorphLaws.A1 check pins down that the lifted ModifyF's `.modify(f)(s)`
-  // produces the same `T` as the original MultiFocus's `.modify(f)(s)` — the whole structural
-  // soundness of the bridge in one law.
-  val tuple2MultiFocusFnForMorph
-      : Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
-    MultiFocus.tuple[(Int, Int), Int]
-
-  checkAllMorphPreservesModifyFor[(Int, Int), Int, MultiFocus[Function1[Int, *]], ModifyF](
-    "MultiFocus.tuple[(Int,Int)].morph[ModifyF] preserves modify (I1)",
-    tuple2MultiFocusFnForMorph,
-    tuple2MultiFocusFnForMorph.morph[ModifyF],
-  )
-
   // covers: Morph from MultiFocus[List] → ModifyF on a List-shaped MultiFocus.
   //
   // The `Composer[MultiFocus[F], ModifyF]` (`multifocus2modify`, MultiFocus.scala) widens any

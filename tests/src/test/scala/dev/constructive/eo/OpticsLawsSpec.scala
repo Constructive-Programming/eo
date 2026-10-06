@@ -339,17 +339,6 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         MultiFocus((x, x), PSVec.unsafeWrap[Int](arr))
     )
 
-  // ----- MultiFocus[Function1[Int, *]] carrier laws ----------------
-  // The legacy FixedTraversal[N] per-arity law sweep is now redundant:
-  // `Traversal.{two,three,four}` ride `MultiFocus[PSVec]` (covered by the PSVec
-  // blocks below and `FixedArityTraversalSpec`'s composition sweep), leaving
-  // `MultiFocus.tuple` as the sole `MultiFocus[Function1[Int, *]]` inhabitant.
-  //
-  // No carrier-level discipline block is added for `MultiFocus[Function1[Int, *]]`
-  // because structural `==` on functions is reference equality — exactly the
-  // problem ModifyF had. The functor laws are instead witnessed extensionally by
-  // `MultiFocusFunction1Spec` (G1/G2 on `MultiFocus.tuple`, the same carrier).
-
   // ----- Carrier type-class laws via representative fixtures ------
   //
   // Uses the same Arbitrary givens as the carrier-specific law blocks
@@ -579,44 +568,32 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     headOptional,
   )
 
-  // ----- MultiFocus[Function1[Int, *]]: tuple-indexed (absorbed Grate) ----
-  //
-  // Two fixtures — homogeneous tuples of arity 2 and 3, both via
-  // `MultiFocus.tuple[T <: Tuple, A]` (the absorbed Grate.tuple). The three
-  // load-bearing laws (modify-identity, compose-modify, replace-idempotent
-  // — formerly G1/G2/G3 from GrateLaws) are checked inline as `forAll`
-  // props because `MultiFocusTests` requires `S =:= F[A]`, which doesn't
-  // hold for the tuple-shaped factory (S = TupleN, F = Function1[Int, *],
-  // so F[A] ≠ S). Same coverage as the deleted GrateTests.
-
-  val tuple2MultiFocus: Optic[(Int, Int), (Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
-    MultiFocus.tuple[(Int, Int), Int]
-
-  val tuple3MultiFocus
-      : Optic[(Int, Int, Int), (Int, Int, Int), Int, Int, MultiFocus[Function1[Int, *]]] =
-    MultiFocus.tuple[(Int, Int, Int), Int]
-
-  // covers: MultiFocus.tuple[(Int, Int)] G1 modify-identity, G2 compose-modify, G3
-  //   replace-idempotent (the formerly-Grate trio at arity 2),
-  //   MultiFocus.tuple[(Int, Int, Int)] G1, G2, G3 (the same trio at arity 3)
-  // MultiFocusTests requires S =:= F[A], which doesn't hold for the tuple-shape factory
-  // (S = TupleN, F = Function1[Int, *], so F[A] ≠ S), so the laws are checked inline as
-  // forAlls. This composite block witnesses both arities in one property sweep.
-  "MultiFocus.tuple at arity 2 + 3: G1 modify-id / G2 compose-modify / G3 replace-idempotent" >> forAll {
-    (s2: (Int, Int), s3: (Int, Int, Int), f: Int => Int, g: Int => Int, a: Int) =>
-      val a2g1 = tuple2MultiFocus.modify(identity[Int])(s2) == s2
-      val a2g2 = tuple2MultiFocus.modify(g)(tuple2MultiFocus.modify(f)(s2)) ==
-        tuple2MultiFocus.modify(f.andThen(g))(s2)
-      val a2g3 = tuple2MultiFocus.replace(a)(tuple2MultiFocus.replace(a)(s2)) ==
-        tuple2MultiFocus.replace(a)(s2)
-
-      val a3g1 = tuple3MultiFocus.modify(identity[Int])(s3) == s3
-      val a3g2 = tuple3MultiFocus.modify(g)(tuple3MultiFocus.modify(f)(s3)) ==
-        tuple3MultiFocus.modify(f.andThen(g))(s3)
-      val a3g3 = tuple3MultiFocus.replace(a)(tuple3MultiFocus.replace(a)(s3)) ==
-        tuple3MultiFocus.replace(a)(s3)
-
-      a2g1 && a2g2 && a2g3 && a3g1 && a3g2 && a3g3
+  // covers: IndexedGlass full-grid modify identity/composition, replace idempotence,
+  // and both round trips, checked extensionally at ALL four coordinates, not the diagonal.
+  "IndexedGlass full-grid laws (including off-diagonal writes)" >> forAll {
+    (a: Int, b: Int, c: Int, d: Int, f: Int => Int, g: Int => Int, replacement: Int) =>
+      type Row[A] = Boolean => A
+      val r = summon[cats.Representable[Row]]
+      val grid = data
+        .IndexedGlass
+        .representable[Row, Row[Int], Row[Int]](r)
+        .andThen(data.IndexedGlass.representable[Row, Int, Int](r))
+      val source: Row[Row[Int]] = i => j => if i then if j then d else c else if j then b else a
+      val arbitrary: ((Boolean, Boolean)) => Int = ij => source(ij._2)(ij._1)
+      val bundle = grid.to(source)
+      val rebuilt = grid.from((context = bundle.context, values = arbitrary))
+      val twice = grid.modify((_, n) => g(n))(grid.modify((_, n) => f(n))(source))
+      val once = grid.modify((_, n) => g(f(n)))(source)
+      List(false, true).forall(i =>
+        List(false, true).forall(j =>
+          grid.modify((_, n) => n)(source)(i)(j) == source(i)(j) &&
+            twice(i)(j) == once(i)(j) &&
+            grid.replace(replacement)(grid.replace(replacement)(source))(i)(j) ==
+            grid.replace(replacement)(source)(i)(j) &&
+            grid.from(bundle)(i)(j) == source(i)(j) &&
+            grid.to(rebuilt).values((i, j)) == arbitrary((i, j)),
+        ),
+      )
   }
 
   // ----- MultiFocus: List + ZipList + Const fixtures --------------

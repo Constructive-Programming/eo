@@ -1,5 +1,13 @@
 # Grate index witness — supplying the index instead of forging it
 
+**Superseded (2026-10-05).** This records the historical shared-index
+design. The approved redesign removes `RepresentativeIndex` and the
+legacy Function1-based MultiFocus Grate machinery; see
+[the redesign decision](2026-10-05-multifocus-redesign.md).
+Its `collectList` discussion predates observed-context reconstruction:
+the current contract supplies a singleton focus vector, not a guaranteed
+singleton source, and shape/count-coupled composites can reject it.
+
 **Question.** `MultiFocus[Function1[X0, *]]` (the Grate carrier) has exactly one read that no rule of
 the type system can serve: `Function1BroadcastOptic.from` must turn a written bundle `X0 => B` back
 into a `T`, and its own carrier stores only `Unit`. Baseline `81a53d3d`

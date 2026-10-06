@@ -8,7 +8,7 @@ comparative design) into that decision record.
 
 ## 1. What one carrier is actually carrying
 
-`MultiFocus[F]` is two contracts wearing one name:
+The legacy `MultiFocus[F]` carried two different contracts:
 
 - **Variable-shape containers** (`List`, `PSVec`, `Option`, …): a flattened focus vector +
   per-focus counts; composition records leftovers and re-slices. This half is coherent, and
@@ -29,57 +29,62 @@ The precise holes (each pinned by a failing probe, each reproduced against #127'
 | C | grouping observable across a type-changing intermediate | partial restoration at different levels |
 | D | `==` on an arbitrary `X0` is not a coordinate identity (NaN, ±0.0, finer observations) | equality-based slot addressing is not well-defined on `X0 => A` |
 
-None of A–D is fixable inside `Optic[S, T, A, B, MultiFocus[Function1[X0, *]]]`: the type
-`X0 => A` composes only by sharing `X0` or by comparing against it. That is the consolidation
-finding: a rewrite, not another witness.
+The old shared-index kernel lost independent nested coordinates.
+These probes do not establish that every evidence- or continuation-based
+encoding inside Optic is impossible. The approved redesign instead
+retains independent axes explicitly, removing the need for the old
+diagonal restoration machinery.
 
-## 2. The shape that dissolves all four
+## 2. The full-grid replacement shape
 
-Give nested composition the **product index**, and give the optic a split/rebuild algebra:
+Give nested composition the **product index**, using the existing `Optic.to` / `from` algebra:
 
 ```scala
-trait IndexedGlass[S, T, A, B, I]:
-  type Context
-  def split(s: S): (Context, I => A)
-  def rebuild(context: Context, values: I => B): T
+type Glass[I] = [X, A] =>> (context: X, values: I => A)
+
+trait IndexedGlass[S, T, A, B, I] extends Optic[S, T, A, B, Glass[I]]:
+  outer =>
 
   def andThen[C, D, J](inner: IndexedGlass[A, B, C, D, J]):
       IndexedGlass[S, T, C, D, (I, J)] {
-        type Context = (this.Context, I => inner.Context)
+        type X = (outer.X, I => inner.X)
       }
 ```
 
 ```text
-split:   focus (i, j) = inner.split(outerRead(i)).focus(j)   -- the FULL grid, not a diagonal
-rebuild: outer.rebuild(x, i => inner.rebuild(contexts(i), j => written(i, j)))
+to:   focus (i, j) = inner.to(outerRead(i)).values(j)   -- the FULL grid, not a diagonal
+from: outer.from((context = x, values = i =>
+        inner.from((context = contexts(i), values = j => written((i, j))))))
 ```
 
-- **A gone**: every nested coordinate is read and addressed; nothing off-diagonal needs
-  restoring.
-- **B/C gone**: no equality evidence exists at all, so no route or grouping can change
-  behaviour; polymorphic writes replace the whole grid without `C =:= D`.
-- **D gone**: nothing compares an index to anything; the written grid is consumed at every
-  coordinate.
+- The product index represents every nested coordinate; no off-diagonal
+  restoration is needed.
+- Polymorphic writes consume the whole grid without `C =:= D` or
+  index equality. Groupings agree after index and context reassociation
+  for lawful components.
+- Hostile-index and non-inline-helper tests exercise the original probes.
+  They are runtime evidence, not universal proof for arbitrary user constructors.
 
 Honesty items:
 
-- In general this is an **indexed Glass** (context-carrying), not a classical Grate; the
-  Grate `((F[A] => A) => B) => F[B]` is recovered when `Context = Unit`. `zipWith` degrades
-  when the residual context is not Unit — an advisor-confirmed limit.
+- In general this is an **indexed Glass** with residual `X`, not a
+  context-free Grate. `IndexedGlass.Grate` is the `X = Unit` alias.
+  Context-sensitive zip/collect operations are not installed; selecting
+  a residual context when combining sources needs a separate design.
 - **Semantics change, deliberately**: `tuple ∘ tuple` `replace(9)` goes from diagonal
-  `((9,2),(3,9))` to full-grid `((9,9),(9,9))`, and `modify(identity)` is the identity by
-  construction. A migration must name this, not discover it.
+  `((9,2),(3,9))` to full-grid `((9,9),(9,9))`. Identity modification
+  follows from lawful component round trips. A migration must name this change.
 - Composition cannot ride today's `AssociativeFunctor` (it fixes one carrier); it needs a
   dedicated method first.
-- Proof obligations: split-after-rebuild on **arbitrary** tabulations (not only ones a
-  `split` produced); associativity up to the coordinate reassociation `(I, J, K)`; no cache
+- Proof obligations: `to` after `from` on **arbitrary** bundles (not only ones
+  `to` produced); associativity up to coordinate and context reassociation; no cache
   of derived context may break the round trip.
 
 ## 3. Options considered
 
 | Option | Verdict |
 |--------|---------|
-| **A. Product-index `IndexedGlass` + Unit-context Grate specialization** | **Recommended.** Only candidate that makes behaviour type-expressible with zero new user-facing givens (`Representable` passed explicitly or off the companion as today). |
+| **A. Product-index `IndexedGlass` + Unit-context Grate specialization** | **Approved.** Keeps independent axes explicit without new user-facing witnesses; `Representable` is passed explicitly. |
 | B. Graded path types (`Then[Axis[I], Axis[J]]`) as the optic parameter | Only worth it as an optional static façade over A if index ergonomics demand it; grades alone fix nothing and can be claimed falsely. |
 | C. Split lawful-diagonal vs explicitly-lossy constructors in the current carrier | Compatibility band-aid; diagonal restore still needs coordinate identity (D survives). Not the architecture. |
 | D. A `Tabulate`/bundle value type | Packaging for A, not an alternative; a bare reader comonad needs monoidal indexes we do not have. |
@@ -107,40 +112,50 @@ Searched every module for `MultiFocus` / grate usage:
 - Keep list: MF1–MF5 law suite, cross-family battery, `collectList` context corrections, PSVec
   / generic kernels.
 
-## 5. Phased path
+## 5. Approved implementation and migration
 
-0. *(done)* Phase-1 prototype landed on this branch as a standalone commit: `data/Glass.scala`
-   (`IndexedGlass` + `Aux` + the `Context = Unit` `Grate` alias + an equational composition
-   proof in scaladoc) and `GlassSpec` — round trips on arbitrary generated tabulations,
-   three-level associativity, type-changing composition through a **non-inline** generic helper
-   (the hole the witness design could not close), permuted / empty / Unit / NaN / signed-zero
-   indexes, and the explicit full-grid-vs-diagonal semantic statement. Open items before
-   integration: Unit-context normalization (`andThen` keeps `(Ctx, I => Unit)`, so `Grate` is
-   not yet composition-closed), and benchmarks — lazy composition repeats inner splits and
-   allocates contexts; full-grid and diagonal workloads must not be compared as equivalent.
-1. Prototype A standalone (new file, e.g. `data/Grate.scala` or a spike package), not in
-   #129. Port `tuple` / `representable` / `apply`-equivalents to `IndexedGlass` constructors.
-2. Prove the split/rebuild and full-grid composition laws against arbitrary tabulations,
-   three-level associativity, and the hostile index cases (empty, singleton, permuted,
-   NaN, ±0.0).
-3. Land full-grid composition as the grate; keep the diagonal behaviour only behind an
-   explicitly named legacy combinator if users need it.
-4. Delete the F1 runtime-dispatch machinery once nothing references it.
-5. #129 disposition: split the variable-shape corrections (`collectList` real context,
-   observed leftovers, cross-family suite) into their own PR; the broadcast-sum + witness
-   half is superseded by this re-design.
+The approved scope removes the legacy Function1-based Grate branch,
+not List/PSVec container traversal or aggregation. There is no retained
+diagonal compatibility combinator. Historical witness-index and broadcast
+proposals are superseded.
 
-## 6. Open questions for the developer
+`data/Glass.scala` is the implementation source of truth:
+`IndexedGlass` extends `Optic`, with carrier
+`Glass[I] = [X, A] =>> (context: X, values: I => A)` and existential
+`X`. All construction and composition use only `to` / `from`.
+There is no separate `Context`, `GlassK`, or split/rebuild alias.
 
-1. Is nested `andThen` intended to mean **all nested coordinates** (full-grid) or to retain
-   diagonal selection? (Everything else follows.)
-2. Name: is `Glass`/`IndexedGlass` acceptable in the public vocabulary, with `Grate` reserved
-   for the `Context = Unit` specialization?
-3. Accept `(I, Unit)` index normalization deferred (result indices carry unit axes initially)?
-4. Must hand-written `Optic[_, _, _, _, MultiFocus[Function1[I, *]]]` instances remain
-   source-compatible, or is deleting the carrier in 0.x acceptable (MiMa is off anyway)?
-5. Law citations: which published Grate law source should the docs align to (Monocle
-   attribution currently unverified)?
+Constructors are `representable(r)`, `iso`, `unit`, and `apply`.
+Operations are `at`, indexed `modify`, `replace`, and dedicated
+product-index `andThen`. A tuple macro and top-level Grate companion
+are not provided. Generic classical-family bridges and a same-index
+`AssociativeFunctor[Glass[I]]` are not installed.
+The writable-outer `Optic` extension supports a write-only Modify
+inner; that positive seam is not a Glass Composer bridge.
+
+`GlassSpec` exercises arbitrary tabulation round trips, three-level
+reassociation, type-changing composition through a non-inline helper,
+and permuted / empty / Unit / NaN / signed-zero indexes. The equational
+composition argument assumes lawful source and target algebras; the
+trait does not enforce those constructor obligations.
+
+The container-side `collectList` correction remains: reconstruct with
+the observed context and a singleton focus vector. This is not a promise
+of a singleton source, and count-coupled composites can reject the
+cardinality change.
+
+## 6. Remaining design questions
+
+- Unit-context normalization: generic `andThen` retains
+  `(outer.X, I => inner.X)`, including `(Unit, I => Unit)` when both
+  inputs are Grates. The `X = Unit` alias is not yet composition-closed.
+- Unit axes remain in product indexes; index/context reassociation is
+  not literal type equality.
+- Lazy composition derives inner contexts per outer index without
+  enumeration or memoization. Benchmark the resulting full-grid work
+  separately from historical diagonal workloads.
+- Law-source attribution remains unresolved; do not attribute this API
+  or law names to an unverified Monocle implementation.
 
 ### Related
 

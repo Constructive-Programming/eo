@@ -7,11 +7,16 @@
 > diagonal restore addresses positions with `==`, which is not a coordinate identity for `Double`
 > (a write at `NaN` is silently dropped; signed zeros collide). All four root problems —
 > diagonal read, erased evidence, observable grouping, index equality — trace to the carrier
-> sharing one index type between nested optics, and none is fixable inside it. The decision and
+> sharing one index type in the old kernel; the probes do not rule out every possible
+> evidence/continuation encoding. The decision and
 > the replacement design (product-indexed `IndexedGlass`, full-grid composition) are in
 > [`2026-10-05-multifocus-redesign.md`](./2026-10-05-multifocus-redesign.md). What survives from
 > this spike is the variable-shape side: the `collectList` real-context fix and the
 > cross-family runtime battery, which shipped without any of the grate machinery.
+
+The surviving `collectList` correction preserves observed context and
+supplies a singleton focus vector, not a guaranteed singleton source.
+Shape/count-coupled composites can reject the cardinality mismatch.
 
 Branch: `spike/grate-broadcast-sum`, a single commit on `origin/main` @
 52671355 (the commit that landed the *optic-class* answer: `Z = Xo`,

@@ -1,5 +1,12 @@
 # MultiFocus[F] unification — research spike
 
+**Historical scope.** The container traversal/aggregation consolidation
+survives. The later Function1-based Grate branch is superseded by
+[IndexedGlass](2026-10-05-multifocus-redesign.md). Historical `collectList`
+singleton descriptions apply to identity reconstruction; the current
+operation supplies a singleton focus vector with observed context, and
+shape/count-coupled composites may reject a cardinality mismatch.
+
 Branch: `spike/multifocus-unification`
 Worktree: `.claude/worktrees/agent-a157fb83b45b4567d`
 Head at writing: see `git log -1` on the branch.
