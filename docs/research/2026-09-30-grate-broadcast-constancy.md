@@ -9,7 +9,7 @@
 > diagonal read, erased evidence, observable grouping, index equality — trace to the carrier
 > sharing one index type in the old kernel; the probes do not rule out every possible
 > evidence/continuation encoding. The decision and
-> the replacement design (product-indexed `IndexedGlass`, full-grid composition) are in
+> the replacement design (product-indexed `Indexed`, full-grid composition) are in
 > [`2026-10-05-multifocus-redesign.md`](./2026-10-05-multifocus-redesign.md). What survives from
 > this spike is the variable-shape side: the `collectList` real-context fix and the
 > cross-family runtime battery, which shipped without any of the grate machinery.

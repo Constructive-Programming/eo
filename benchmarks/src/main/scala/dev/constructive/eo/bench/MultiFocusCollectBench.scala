@@ -4,7 +4,8 @@ package bench
 import cats.data.{Const, ZipList}
 import cats.{Functor, Representable}
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
-import dev.constructive.eo.data.{IndexedGlass, MultiFocus}
+import dev.constructive.eo.data.MultiFocus
+import dev.constructive.eo.optics.Indexed
 import dev.constructive.eo.optics.Optic
 import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
@@ -12,7 +13,7 @@ import org.openjdk.jmh.annotations.*
 /** `MultiFocus` aggregator (`collect*`) and indexed tuple benches — split out of the former
   * `MultiFocusBench` junk drawer (plan 009, Phase 3).
   *
-  * These exercise container reduction/broadcast (`collectMap` / `collectList`) and `IndexedGlass`
+  * These exercise container reduction/broadcast (`collectMap` / `collectList`) and `Indexed`
   * fixed-index rebuilding, against hand-rolled baselines with zero carrier allocation and zero
   * Composer dispatch:
   *
@@ -22,7 +23,7 @@ import org.openjdk.jmh.annotations.*
   *     reduce to a retag — pure carrier + dispatch overhead.
   *   - **List cartesian-singleton** via `collectList`: v1 `Reflector[List]` semantics —
   *     `List(agg(fa))` regardless of input length.
-  *   - **`IndexedGlass` 3-/6-slot modify**: lawful finite-index tuple tabulation and rebuild.
+  *   - **`Indexed` 3-/6-slot modify**: lawful finite-index tuple tabulation and rebuild.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -79,14 +80,14 @@ class MultiFocusCollectBench extends JmhDefaults:
   @Benchmark def naive_listSum: List[Int] =
     List(listData.sum)
 
-  // ----- IndexedGlass: tuple3 / tuple6 modify -----
+  // ----- Indexed: tuple3 / tuple6 modify -----
   private val tripleMF =
-    IndexedGlass.representable[TupleRepresentables.Triple, Double, Double](
+    Indexed.representable[TupleRepresentables.Triple, Double, Double](
       TupleRepresentables.triple
     )
 
   private val sextupleMF =
-    IndexedGlass.representable[TupleRepresentables.Sextuple, Double, Double](
+    Indexed.representable[TupleRepresentables.Sextuple, Double, Double](
       TupleRepresentables.sextuple
     )
 

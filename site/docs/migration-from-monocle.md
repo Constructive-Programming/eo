@@ -233,7 +233,7 @@ express through other means or leave to dedicated libraries:
   [Recursion schemes](schemes.md).
 - **MultiFocus shapes** — container traversal, aggregation, and
   algebraic lenses; see [MultiFocus](multifocus.md). Fixed-index
-  full-grid rewrites instead use [IndexedGlass](optics.md#indexedglass).
+  full-grid rewrites instead use [Indexed](optics.md#indexed).
 - **Full-cover macro upgrade** — `lens[S](_.a, _.b, ...)` in one
   varargs call; when the selectors cover every field the result
   upgrades to a `BijectionIso` automatically (a shape Monocle

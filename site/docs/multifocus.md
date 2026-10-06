@@ -6,7 +6,7 @@ aggregation carrier: a structural leftover `X` paired with an
 containers supply mapping, folding, and traversal operations.
 
 Fixed-index tabulations have a separate home:
-[IndexedGlass](optics.md#indexedglass), the full-grid successor to the
+[Indexed](optics.md#indexed), the full-grid successor to the
 legacy Function1-based Grate. They are not a MultiFocus sub-shape.
 
 ## Sub-shapes
@@ -177,25 +177,28 @@ an arbitrary target.
 Different containers need an explicit relationship to convert focus
 vectors; no generic `F[A] => G[A]` exists. The same-container
 `Forget[F]` escape does not supply that relationship.
-No generic classical-family bridges to `Glass[I]` are installed, and
-there is no `AssociativeFunctor[Glass[I]]`:
-[IndexedGlass](optics.md#indexedglass) uses product-index `andThen`.
+No generic classical-family bridges to `GlassF[I]` are installed, and
+there is no `AssociativeFunctor[GlassF[I]]`:
+[Indexed](indexed.md) uses product-index `andThen`.
 Its writable-outer `Optic` extension also accepts a write-only `Modify`
 inner, without introducing a generic Glass Composer bridge.
 
 ## Worked examples
 
 The [Cookbook](cookbook.md) shows container aggregation, batch-relative
-rewrites, and an IndexedGlass Boolean-reader example. For chains that
+rewrites, and an `Indexed` Boolean-reader example. For chains that
 continue through collections, use `Traversal.each` / `pEach`, including
 `Lens → each → Lens` and recursive `Plated` traversals.
+
+For full-grid rewrites and metadata-preserving reconstruction, see
+[Indexed: Grates and Glasses](indexed.md).
 
 ## Historical landmarks
 
 The original consolidation brought AlgLens, Kaleidoscope, PowerSeries,
 fixed traversals, and Function1-based Grate under MultiFocus. The
 Function1 branch was subsequently removed: a shared index represented
-only a diagonal of nested tabulations. IndexedGlass now represents
+only a diagonal of nested tabulations. `Indexed` now represents
 the full grid with a product index and retains an existential context.
 Historical research describes the earlier encoding, not the current API.
 
@@ -208,6 +211,6 @@ Historical research describes the earlier encoding, not the current API.
 - `Traversal.each` / `pEach`, `two` / `three` / `four`: PSVec-backed
   container traversals.
 
-Fixed-index constructors instead live on `IndexedGlass`:
+Fixed-index constructors instead live on `Indexed`:
 `representable(r)`, `iso`, `unit`, and `apply`. There is no top-level
 `Grate` constructor companion.

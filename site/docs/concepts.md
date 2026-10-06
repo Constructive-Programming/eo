@@ -75,7 +75,7 @@ this optic have?"
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `MultiFocus[F]` | `(X, F[A])` — leftover and container focus vector | container traversal and aggregation; `PSVec` backs `Traversal.each` and `two` / `three` / `four` — see [MultiFocus](multifocus.md) |
-| `Glass[I]` | `(context: X, values: I => A)` — leftover and fixed-index tabulation | [IndexedGlass](optics.md#indexedglass); `IndexedGlass.Grate` specializes `X = Unit` |
+| `GlassF[I]` | `(context: X, values: I => A)` — leftover and fixed-index tabulation | [Indexed](indexed.md); `Indexed.Grate` specializes `X = Unit` |
 | `Forget[F]`     | `F[A]` — an `F`-layer with no leftover         | `Fold` (read-only, `F: Foldable`), `Unfold` (build-only, `embed: F[B] => T`) |
 | `ModifyF`       | `(Fst[X], Snd[X] => A)`                        | `Modify`               |
 
@@ -236,7 +236,7 @@ exercise) and the restricted `MultiFocus[F] → Forget[F]`
 (the `T = Unit` read-only escape). Chains otherwise reach it via
 `Fold` / `Unfold` at construction time.
 `MultiFocus[F]` retains the container traversal and aggregation
-branches of the historical consolidation. IndexedGlass also extends
+branches of the historical consolidation. `Indexed` also extends
 `Optic`, but changes the index under composition to `(I, J)` and
 the existential context to `(outer.X, I => inner.X)`. It therefore
 uses its own `andThen`, not a same-carrier `AssociativeFunctor`.

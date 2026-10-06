@@ -9,8 +9,8 @@ import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
-import data.{Glass, IndexedGlass}
-import optics.Optic
+import data.GlassF
+import optics.{Indexed, Optic}
 
 object GlassFixtures:
   type Pair[A] = (A, A)
@@ -23,11 +23,11 @@ object GlassFixtures:
     def index[A](fa: Pair[A]): Boolean => A = i => if i then fa._2 else fa._1
     def tabulate[A](f: Boolean => A): Pair[A] = (f(false), f(true))
 
-  def pair[A, B]: IndexedGlass.Grate[Pair[A], Pair[B], A, B, Boolean] =
-    IndexedGlass.representable[Pair, A, B](pairRepresentation)
+  def pair[A, B]: Indexed.Grate[Pair[A], Pair[B], A, B, Boolean] =
+    Indexed.representable[Pair, A, B](pairRepresentation)
 
-  def tagged[A, B]: IndexedGlass.Aux[Tagged[A], Tagged[B], A, B, Boolean, String] =
-    IndexedGlass[Tagged[A], Tagged[B], A, B, Boolean, String](s =>
+  def tagged[A, B]: Indexed.Aux[Tagged[A], Tagged[B], A, B, Boolean, String] =
+    Indexed[Tagged[A], Tagged[B], A, B, Boolean, String](s =>
       (s._1, pairRepresentation.index(s._2)),
     )((context, values) => (context, pairRepresentation.tabulate(values)))
 
@@ -179,13 +179,13 @@ class GlassSpec extends Specification with ScalaCheck:
   "Type-changing intermediate and final writes are full-grid and route/grouping independent" >> {
     val outer = pair[Pair[Int], Pair[String]]
     val inner = pair[Int, String]
-    val toStringFocus = IndexedGlass.iso[Int, String, Int, Long](identity)(_.toString)
+    val toStringFocus = Indexed.iso[Int, String, Int, Long](identity)(_.toString)
     val left = outer.andThen(inner).andThen(toStringFocus)
     val right = outer.andThen(inner.andThen(toStringFocus))
     // A non-inline generic helper has no same-focus evidence, and needs none.
     def compose[S, T, A, B, C, D, I, J](
-        o: IndexedGlass[S, T, A, B, I],
-        in: IndexedGlass[A, B, C, D, J],
+        o: Indexed[S, T, A, B, I],
+        in: Indexed[A, B, C, D, J],
     ) = o.andThen(in)
     val generic = compose(outer, inner)
     val source = ((1, 2), (3, 4))
@@ -203,8 +203,8 @@ class GlassSpec extends Specification with ScalaCheck:
   }
 
   "Representable keeps a permuted index order, including when nested" >> {
-    val g = IndexedGlass.representable[Tri, Int, Int](permutedRepresentation)
-    val nested = IndexedGlass
+    val g = Indexed.representable[Tri, Int, Int](permutedRepresentation)
+    val nested = Indexed
       .representable[Tri, Pair[Int], Pair[Int]](permutedRepresentation)
       .andThen(pair[Int, Int])
     forAll { (a: Int, b: Int, c: Int, written: Slot => Int) =>
@@ -219,10 +219,11 @@ class GlassSpec extends Specification with ScalaCheck:
   }
 
   "Iso and Unit specializations have one coordinate and compose in either direction" >> {
-    val single = IndexedGlass.unit[Int, Int]
-    val iso = IndexedGlass.iso[(String, Int), (String, Int), (Int, String), (Int, String)](s =>
-      (s._2, s._1),
-    )(a => (a._2, a._1))
+    val single = Indexed.unit[Int, Int]
+    val iso =
+      Indexed.iso[(String, Int), (String, Int), (Int, String), (Int, String)](s => (s._2, s._1))(
+        a => (a._2, a._1)
+      )
     val source = ("kept", 2)
     val (context, values) = iso.to(source)
     iso.from((context = context, values = values)) must beEqualTo(source)
@@ -231,13 +232,13 @@ class GlassSpec extends Specification with ScalaCheck:
     single.at(())(3) must beEqualTo(3)
     single.from((context = (), values = (_: Unit) => 9)) must beEqualTo(9)
     pair[Int, Int].andThen(single).modify((_, n) => n + 1)((1, 2)) must beEqualTo((2, 3))
-    IndexedGlass
+    Indexed
       .unit[Pair[Int], Pair[Int]]
       .andThen(pair[Int, Int])
       .modify((_, n) => n + 1)((1, 2)) must beEqualTo((2, 3))
     typeChecks("""
-      import dev.constructive.eo.data.IndexedGlass
-      val g: IndexedGlass.Grate[Int, String, Int, String, Unit] = IndexedGlass.unit[Int, String]
+      import dev.constructive.eo.optics.Indexed
+      val g: Indexed.Grate[Int, String, Int, String, Unit] = Indexed.unit[Int, String]
       val result: String = g.replace("ok")(1)
     """) must beTrue
   }
@@ -245,8 +246,8 @@ class GlassSpec extends Specification with ScalaCheck:
   "Empty and singleton index spaces require no inhabitant or representative witness" >> {
     type Empty[A] = Nothing => A
     type Single[A] = Unit => A
-    val empty = IndexedGlass.representable[Empty, Int, Int](summon[Representable[Empty]])
-    val single = IndexedGlass.representable[Single, Int, Int](summon[Representable[Single]])
+    val empty = Indexed.representable[Empty, Int, Int](summon[Representable[Empty]])
+    val single = Indexed.representable[Single, Int, Int](summon[Representable[Single]])
     val source: Empty[Int] = identity[Nothing]
     val written: Empty[Int] = identity[Nothing]
     val (context, values) = empty.to(source)
@@ -256,7 +257,7 @@ class GlassSpec extends Specification with ScalaCheck:
     val readAgain = empty.to(empty.from((context = (), values = written)))
     readAgain.context must beEqualTo(())
     val emptyInner = pair[Empty[Int], Empty[Int]].andThen(empty)
-    val emptyOuter = IndexedGlass
+    val emptyOuter = Indexed
       .representable[Empty, Pair[Int], Pair[Int]](summon[Representable[Empty]])
       .andThen(pair[Int, Int])
     emptyInner.to(emptyInner.replace(9)((source, rewritten))).context._1 must beEqualTo(())
@@ -265,13 +266,13 @@ class GlassSpec extends Specification with ScalaCheck:
     val (sc, sv) = single.to(fn)
     single.from((context = sc, values = sv))(()) must beEqualTo(42)
     single.to(single.from((context = (), values = (_: Unit) => 9))).values(()) must beEqualTo(9)
-    single.andThen(IndexedGlass.unit[Int, Int]).at(((), ()))(fn) must beEqualTo(42)
+    single.andThen(Indexed.unit[Int, Int]).at(((), ()))(fn) must beEqualTo(42)
   }
 
   "Double indexes preserve NaN and signed-zero observations with no coordinate-equality machinery" >> {
     type Doubles[A] = Double => A
-    val g = IndexedGlass.representable[Doubles, Int, Int](summon[Representable[Doubles]])
-    val nested = IndexedGlass
+    val g = Indexed.representable[Doubles, Int, Int](summon[Representable[Doubles]])
+    val nested = Indexed
       .representable[Doubles, Doubles[Int], Doubles[Int]](
         summon[Representable[Doubles]],
       )
@@ -303,9 +304,9 @@ class GlassSpec extends Specification with ScalaCheck:
     nested.at((Double.NaN, Double.NaN))(fn) must beEqualTo(707)
   }
 
-  "IndexedGlass is a member of the Optic family — widens to the carrier, dispatches capabilities" >> {
+  "Indexed is a member of the Optic family — widens to the carrier, dispatches capabilities" >> {
     val concrete = pair[Int, Int]
-    val widened: Optic[Pair[Int], Pair[Int], Int, Int, Glass[Boolean]] = concrete
+    val widened: Optic[Pair[Int], Pair[Int], Int, Int, GlassF[Boolean]] = concrete
     // `ForgetfulFunctor`'s companion gives the shared `.modify` / `.replace`
     // extensions — a plain `A => B` rewrites every coordinate pointwise, context untouched.
     widened.modify(_ + 1)((1, 2)) must beEqualTo((2, 3))

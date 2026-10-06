@@ -16,9 +16,9 @@ trait ForgetfulFunctor[F[_, _]]:
 object ForgetfulFunctor:
 
   /** Glass tabulations map pointwise; the leftover stays unchanged. */
-  given glass[I]: ForgetfulFunctor[data.Glass[I]] with
+  given glass[I]: ForgetfulFunctor[data.GlassF[I]] with
 
-    def map[X, A, B](fa: data.Glass[I][X, A], f: A => B): data.Glass[I][X, B] =
+    def map[X, A, B](fa: data.GlassF[I][X, A], f: A => B): data.GlassF[I][X, B] =
       (context = fa.context, values = (i: I) => f(fa.values(i)))
 
   /** Direct `Tuple2` — the hot Lens `.modify` / `.replace` path relies on skipping the

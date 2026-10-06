@@ -57,10 +57,10 @@ How to read it:
   totally but rebuilds contextually; Prism reads fallibly but mends
   totally; Optional is fallible-focus, contextual-source (the
   `Affine` carrier). At multiple focus, context-free
-  `IndexedGlass.Grate` rebuilds *totally* via tabulation, while
+  `Indexed.Grate` rebuilds *totally* via tabulation, while
   container Traversal (`MultiFocus[PSVec]`, including `two` / `three` /
   `four`) rebuilds *contextually*, keeping its structural skeleton.
-  General IndexedGlass can also retain nontrivial residual `X`.
+  General `Indexed` can also retain nontrivial residual `X`.
 - The **bottom layer** is write/build-only — but unlike the top
   layer it is a **full plane**, not a rail: a write-only optic's
   `from` is real (only its `to` is vestigial), so both axes still
@@ -86,7 +86,7 @@ How to read it:
 
 `Affine` is the carrier shared by `Optional` (read and write) and
 `AffineFold` (read-only). `MultiFocus[F]` is the container multi-focus
-carrier; fixed-index IndexedGlass uses `Glass[I]` instead.
+carrier; fixed-index `Indexed` uses `GlassF[I]` instead.
 `Forget[F]` is the one-way many carrier shared by
 `Fold` (read-only) and `Unfold` (build-only).
 
@@ -137,9 +137,9 @@ with a read-only side), and the `ReverseAccessor`-gated build-collapse
 the carrier-level bridge graph.
 
 The grid is **carrier-level**: `Traversal` is `MultiFocus[PSVec]`
-(`each`, `Plated`). IndexedGlass uses `Glass[I]` and dedicated
+(`each`, `Plated`). `Indexed` uses `GlassF[I]` and dedicated
 product-index composition; its classical-family bridges are not
-installed. See [QA → The IndexedGlass footprint](quality-assurance.md#the-indexedglass-footprint).
+installed. See [QA → The Indexed footprint](quality-assurance.md#the-indexed-footprint).
 A ✓ asserts that a chain type-checks without import or ascription,
 not a universal proof of its runtime laws. Behaviour tests provide
 separate evidence.
@@ -423,14 +423,15 @@ read side folds/classifies, the write side broadcasts back. The
 a single-focus optic over an `F[A]` focus into this shape. See the
 [MultiFocus reference](multifocus.md).
 
-## IndexedGlass
+## Indexed
 
 The full-grid successor to the legacy Function1-based Grate is an
-ordinary `Optic` with a fixed-index carrier:
+ordinary `Optic` with a fixed-index carrier. The trait and companion live
+in `optics/Indexed.scala`; the carrier remains in `data/Glass.scala`:
 
 ```scala
-type Glass[I] = [X, A] =>> (context: X, values: I => A)
-trait IndexedGlass[S, T, A, B, I] extends Optic[S, T, A, B, Glass[I]]
+type GlassF[I] = [X, A] =>> (context: X, values: I => A)
+trait Indexed[S, T, A, B, I] extends Optic[S, T, A, B, GlassF[I]]
 ```
 
 The existential `X` is residual context. The only decomposition and
@@ -438,13 +439,17 @@ reconstruction operations are `Optic.to` / `from`. A lawful monomorphic
 glass round-trips both sources and arbitrary context/tabulation bundles,
 pointwise over the index.
 
+See [Indexed: Grates and Glasses](indexed.md) for runnable examples of
+environment-dependent settings, full-grid updates, type-changing writes,
+and reconstruction that preserves per-row metadata.
+
 ```scala mdoc:silent
 import cats.Representable
 import cats.instances.function.given
-import dev.constructive.eo.data.IndexedGlass
+import dev.constructive.eo.optics.Indexed
 
 val booleanReader = summon[Representable.Aux[[a] =>> Boolean => a, Boolean]]
-val paymentGlass = IndexedGlass.representable[[a] =>> Boolean => a, Int, Int](booleanReader)
+val paymentGlass = Indexed.representable[[a] =>> Boolean => a, Int, Int](booleanReader)
 val payment: Boolean => Int = b => if b then 100 else 0
 ```
 
@@ -467,11 +472,11 @@ rather than only the old shared-index diagonal. `modify` sees the index,
 `replace` fills the whole grid, and `at` reads one coordinate without
 requiring index equality.
 
-`IndexedGlass.Grate` is the `X = Unit` alias. General Glass retains
+`Indexed.Grate` is the `X = Unit` alias. General Glass retains
 residual context and is not interchangeable with a context-free Grate.
 Unit-context composition normalization remains open: composing two
 Grates currently retains `(Unit, I => Unit)`.
-There is no `AssociativeFunctor[Glass[I]]` or generic classical-family
+There is no `AssociativeFunctor[GlassF[I]]` or generic classical-family
 bridge installed; use dedicated product-index `andThen`, not the
 classical composition matrix as a promise of Glass seams.
 The existing writable-outer `Optic` extension does support a write-only

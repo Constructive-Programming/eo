@@ -95,7 +95,9 @@ library's core habit: [Capabilities](capabilities.md).
   [composition matrix](optics.md#composition-matrix).
 - [MultiFocus](multifocus.md) — container traversal and aggregation;
   typeclass-gated capabilities and composability profile. Fixed-index
-  tabulations use [IndexedGlass](optics.md#indexedglass).
+  tabulations use [Indexed](indexed.md).
+- [Indexed: Grates and Glasses](indexed.md) — environment-dependent
+  settings, full-grid updates, and reconstruction that preserves row metadata.
 - [Generics](generics.md) — the `lens[S](_.field)` and
   `prism[S, A]` macros, backed by Hearth.
 - [Circe integration](integrations/circe.md) — `JsonPrism` / `JsonTraversal`,

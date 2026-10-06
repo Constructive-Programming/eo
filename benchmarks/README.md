@@ -117,10 +117,10 @@ EO JSON backends, where there is no Monocle analog.
 | `MultiFocusBench`        | `MultiFocus[List]` (`fromLensF`) vs `MultiFocus[PSVec]` (`Traversal.each`) on the same `Lens → List/each → Lens` chain (sweeps 4/32/256/1024) | None. Container traversal carrier. |
 | `MultiFocusCollectBench` | `collectMap` (ZipList mean / `Const` sum) and identity-backed List `collectList` (singleton focus vector) | None. Container reduction / broadcast machinery. |
 
-Fixed-index workloads now use IndexedGlass: its product-index
+Fixed-index workloads now use `Indexed`: its product-index
 composition visits the full grid, not the removed Function1 kernel's
 shared-index diagonal. Historical diagonal timings are not equivalent
-workloads. General Glass retains residual `X`; `IndexedGlass.Grate`
+workloads. General Glass retains residual `X`; `Indexed.Grate`
 specializes `X = Unit`, and Unit-context composition normalization
 remains open. `collectList` only guarantees a singleton written focus
 vector; shape/count-coupled reconstruction can reject that change.

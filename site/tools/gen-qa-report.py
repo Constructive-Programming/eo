@@ -10,7 +10,7 @@ them is preserved:
                the single source of truth — every `typeChecks(...) must beTrue`
                is a cell that composes, every `must beFalse` a void-by-design
                cell).
-  - grate    : the same pass/fail projection for the fixed-index IndexedGlass
+  - grate    : the same pass/fail projection for the fixed-index Indexed
                prototype, parsed from tests/.../GrateShapeSpec.scala. The main
                grid's `trav` / `fold` rows describe MultiFocus[PSVec], not
                fixed-index full-grid composition.
@@ -44,7 +44,7 @@ SPEC = os.path.join(
     "CompositionMatrixSpec.scala",
 )
 
-# The fixed-index IndexedGlass prototype's own grid.
+# The fixed-index Indexed prototype's own grid.
 GRATE_SPEC = os.path.join(
     ROOT, "tests", "src", "test", "scala", "dev", "constructive", "eo",
     "GrateShapeSpec.scala",
@@ -159,7 +159,7 @@ def gen_matrix() -> str:
         f"behaviour specs (`MultiFocusCrossFamilySpec` for the container carrier's "
         f"composition rules). The grid is also carrier-level: `trav` and `fold` "
         f"describe `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`); "
-        f"the fixed-index `IndexedGlass` prototype has its own table below.*"
+        f"the fixed-index `Indexed` prototype has its own table below.*"
     )
     return "\n".join(rows) + "\n" + legend
 
@@ -192,13 +192,13 @@ def gen_grate() -> str:
                 n_fail += 1
         rows.append(f"| **{f}** | {cell(inner_ok)} | {cell(outer_ok)} |")
     legend = (
-        f"\n*The fixed-index `IndexedGlass` prototype, constructed with "
-        f"`IndexedGlass.representable`: "
+        f"\n*The fixed-index `Indexed` prototype, constructed with "
+        f"`Indexed.representable`: "
         f"{n_pass} composing / {n_fail} void cells, pinned by `GrateShapeSpec`"
         + (f" — {n_missing} cell(s) missing.\n" if n_missing else ".\n")
         + f"Full-grid glass composition retains both index axes; it does not sample "
         f"a representative coordinate or compare indexes. An Iso can be constructed "
-        f"explicitly with `IndexedGlass.iso`, which has a `Unit` index; this is not "
+        f"explicitly with `Indexed.iso`, which has a `Unit` index; this is not "
         f"an automatic bridge from the classical Iso family. A ✗ cell records the "
         f"current API's unsupported seam, not a proof that such an optic cannot "
         f"exist. Runtime round trips, polymorphic writes and reassociated nested "

@@ -40,13 +40,13 @@ diagonal restoration machinery.
 Give nested composition the **product index**, using the existing `Optic.to` / `from` algebra:
 
 ```scala
-type Glass[I] = [X, A] =>> (context: X, values: I => A)
+type GlassF[I] = [X, A] =>> (context: X, values: I => A)
 
-trait IndexedGlass[S, T, A, B, I] extends Optic[S, T, A, B, Glass[I]]:
+trait Indexed[S, T, A, B, I] extends Optic[S, T, A, B, GlassF[I]]:
   outer =>
 
-  def andThen[C, D, J](inner: IndexedGlass[A, B, C, D, J]):
-      IndexedGlass[S, T, C, D, (I, J)] {
+  def andThen[C, D, J](inner: Indexed[A, B, C, D, J]):
+      Indexed[S, T, C, D, (I, J)] {
         type X = (outer.X, I => inner.X)
       }
 ```
@@ -68,7 +68,7 @@ from: outer.from((context = x, values = i =>
 Honesty items:
 
 - In general this is an **indexed Glass** with residual `X`, not a
-  context-free Grate. `IndexedGlass.Grate` is the `X = Unit` alias.
+  context-free Grate. `Indexed.Grate` is the `X = Unit` alias.
   Context-sensitive zip/collect operations are not installed; selecting
   a residual context when combining sources needs a separate design.
 - **Semantics change, deliberately**: `tuple ∘ tuple` `replace(9)` goes from diagonal
@@ -84,7 +84,7 @@ Honesty items:
 
 | Option | Verdict |
 |--------|---------|
-| **A. Product-index `IndexedGlass` + Unit-context Grate specialization** | **Approved.** Keeps independent axes explicit without new user-facing witnesses; `Representable` is passed explicitly. |
+| **A. Product-index `Indexed` + Unit-context Grate specialization** | **Approved.** Keeps independent axes explicit without new user-facing witnesses; `Representable` is passed explicitly. |
 | B. Graded path types (`Then[Axis[I], Axis[J]]`) as the optic parameter | Only worth it as an optional static façade over A if index ergonomics demand it; grades alone fix nothing and can be claimed falsely. |
 | C. Split lawful-diagonal vs explicitly-lossy constructors in the current carrier | Compatibility band-aid; diagonal restore still needs coordinate identity (D survives). Not the architecture. |
 | D. A `Tabulate`/bundle value type | Packaging for A, not an alternative; a bare reader comonad needs monoidal indexes we do not have. |
@@ -119,9 +119,11 @@ not List/PSVec container traversal or aggregation. There is no retained
 diagonal compatibility combinator. Historical witness-index and broadcast
 proposals are superseded.
 
-`data/Glass.scala` is the implementation source of truth:
-`IndexedGlass` extends `Optic`, with carrier
-`Glass[I] = [X, A] =>> (context: X, values: I => A)` and existential
+`optics/Indexed.scala` defines the `Indexed` trait and companion;
+`data/Glass.scala` defines its carrier. Import the optic from
+`dev.constructive.eo.optics.Indexed`; no compatibility alias is provided.
+`Indexed` extends `Optic`, with carrier
+`GlassF[I] = [X, A] =>> (context: X, values: I => A)` and existential
 `X`. All construction and composition use only `to` / `from`.
 There is no separate `Context`, `GlassK`, or split/rebuild alias.
 
@@ -129,7 +131,7 @@ Constructors are `representable(r)`, `iso`, `unit`, and `apply`.
 Operations are `at`, indexed `modify`, `replace`, and dedicated
 product-index `andThen`. A tuple macro and top-level Grate companion
 are not provided. Generic classical-family bridges and a same-index
-`AssociativeFunctor[Glass[I]]` are not installed.
+`AssociativeFunctor[GlassF[I]]` are not installed.
 The writable-outer `Optic` extension supports a write-only Modify
 inner; that positive seam is not a Glass Composer bridge.
 

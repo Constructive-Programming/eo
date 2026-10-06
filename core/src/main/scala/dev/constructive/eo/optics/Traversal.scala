@@ -278,8 +278,8 @@ object Traversal:
     * result composes like any other traversal — past `each`, a Lens, a Prism, or another
     * fixed-arity hop. `reverse` sees only the (modified) foci: the constructor is full-cover, so
     * any leftover context of `S` must be rebuilt by `reverse` itself (drill with a Lens first when
-    * there are sibling fields). For fixed-index full-grid rebuilding, see
-    * [[data.IndexedGlass.representable]] with a lawful `Representable` for the tuple shape.
+    * there are sibling fields). For fixed-index full-grid rebuilding, see [[Indexed.representable]]
+    * with a lawful `Representable` for the tuple shape.
     *
     * The tabulating subclass is macro-generated per CALL SITE (see [[TraversalArityMacro]]): each
     * site keeps its own monomorphic `to` / `from` bodies, and literal selector / reverse lambdas

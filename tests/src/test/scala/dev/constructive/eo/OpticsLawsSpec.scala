@@ -568,16 +568,16 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     headOptional,
   )
 
-  // covers: IndexedGlass full-grid modify identity/composition, replace idempotence,
+  // covers: Indexed full-grid modify identity/composition, replace idempotence,
   // and both round trips, checked extensionally at ALL four coordinates, not the diagonal.
-  "IndexedGlass full-grid laws (including off-diagonal writes)" >> forAll {
+  "Indexed full-grid laws (including off-diagonal writes)" >> forAll {
     (a: Int, b: Int, c: Int, d: Int, f: Int => Int, g: Int => Int, replacement: Int) =>
       type Row[A] = Boolean => A
       val r = summon[cats.Representable[Row]]
-      val grid = data
-        .IndexedGlass
+      val grid = optics
+        .Indexed
         .representable[Row, Row[Int], Row[Int]](r)
-        .andThen(data.IndexedGlass.representable[Row, Int, Int](r))
+        .andThen(optics.Indexed.representable[Row, Int, Int](r))
       val source: Row[Row[Int]] = i => j => if i then if j then d else c else if j then b else a
       val arbitrary: ((Boolean, Boolean)) => Int = ij => source(ij._2)(ij._1)
       val bundle = grid.to(source)

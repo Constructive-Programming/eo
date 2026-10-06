@@ -8,7 +8,7 @@
 //
 //   Unreleased: remove the legacy MultiFocus Function1 Grate kernel, tuple /
 //         representable factories, zip / zipWith, and Direct bridge, together
-//         with RepresentativeIndex. IndexedGlass is the fixed-index replacement;
+//         with RepresentativeIndex. Indexed is the fixed-index replacement;
 //         composition addresses the full product grid, not the old diagonal.
 //         Source- and binary-breaking for callers of the removed APIs. Container
 //         MultiFocus and Traversal APIs are retained.

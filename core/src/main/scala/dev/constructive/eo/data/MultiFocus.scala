@@ -22,7 +22,7 @@ import optics.Optic
   *
   * The default is the first; List users wanting the singleton collapse can compose `_.headOption`
   * downstream or call `collectList` explicitly. Full-grid indexed rebuilding belongs to
-  * [[IndexedGlass]], not this container carrier.
+  * [[optics.Indexed]], not this container carrier.
   *
   * @tparam F
   *   classifier shape — operation requirements:

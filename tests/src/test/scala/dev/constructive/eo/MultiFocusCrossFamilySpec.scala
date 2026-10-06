@@ -29,7 +29,7 @@ import optics.Optic.*
   *     (writes and laws must match the source optic), the polymorphic factory with a type-changing
   *     write, the generic `Function1` container, and the read-only `Forget[List]` escape over a
   *     `Fold`-sourced optic (available on the `T = Unit` shape).
-  *   - Fixed-index full-grid rebuilding is tested separately as `IndexedGlass`, with no implicit
+  *   - Fixed-index full-grid rebuilding is tested separately as `Indexed`, with no implicit
   *     cross-family bridges.
   */
 class MultiFocusCrossFamilySpec extends Specification with ScalaCheck:

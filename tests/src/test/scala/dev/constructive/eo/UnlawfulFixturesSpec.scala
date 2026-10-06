@@ -22,7 +22,7 @@ import laws.data.ModifyFLaws
   * See site/docs/quality-assurance.md ("Mutation testing" caveats) for the full story.
   *
   * The last fixture is a *semantic* one rather than a mutation-killing one: it pins the rebuild
-  * shape of a broken IndexedGlass algebra (sample ONE written focus at a lead index, rebuild every
+  * shape of a broken Indexed algebra (sample ONE written focus at a lead index, rebuild every
   * position from it), so the pointwise-tabulation property is known to discriminate that shape
   * rather than merely to pass.
   */
@@ -73,7 +73,7 @@ class UnlawfulFixturesSpec extends Specification:
     laws.functorComposition(1, _.length, _ + 1, _ + 1, "abc") must beFalse
   }
 
-  "IndexedGlass round-trip probe rejects a lead-sampling rebuild" >> {
+  "Indexed round-trip probe rejects a lead-sampling rebuild" >> {
     // A deliberately broken algebra collapses both positions to its lead.
     // This negative control ensures the full-grid identity probe detects that collapse.
     case class Dup[A](a: A, b: A)
@@ -85,12 +85,12 @@ class UnlawfulFixturesSpec extends Specification:
       def index[A](fa: Dup[A]): Boolean => A = if _ then fa.a else fa.b
       def tabulate[A](f: Boolean => A): Dup[A] = Dup(f(true), f(false))
 
-    val leadSampling = data
-      .IndexedGlass
+    val leadSampling = optics
+      .Indexed
       .apply[Dup[Int], Dup[Int], Int, Int, Boolean, Unit](fa => ((), dupRepresentable.index(fa)))(
         (_, values) => Dup(values(true), values(true))
       )
-    val lawful = data.IndexedGlass.representable[Dup, Int, Int](dupRepresentable)
+    val lawful = optics.Indexed.representable[Dup, Int, Int](dupRepresentable)
     val source = Dup(1, 2)
     (leadSampling.from(leadSampling.to(source)) == source) must beFalse
     (lawful.from(lawful.to(source)) == source) must beTrue

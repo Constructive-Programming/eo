@@ -3,10 +3,10 @@ package dev.constructive.eo
 // =====================================================================
 //  The Grate sub-shape grid — the companion to CompositionMatrixSpec.
 //
-//  IndexedGlass is the full-grid successor, not a MultiFocus sub-shape.
+//  Indexed is the full-grid successor, not a MultiFocus sub-shape.
 //  No cross-family Composer bridges are installed. The generic writable-outer
 //  extension still supports a write-only Modify inner. Explicitly constructing an
-//  IndexedGlass.iso supplies a lawful Unit axis; it is not an implicit widening.
+//  Indexed.iso supplies a lawful Unit axis; it is not an implicit widening.
 //  Keep the explicit cell labels so the QA generator can report verified seams.
 //  Same doctrine as CompositionMatrixSpec: no expected-type ascription and
 //  no `given` imports — a cell that starts needing either goes red.
@@ -19,7 +19,7 @@ import cats.instances.function.*
 import org.specs2.mutable.Specification
 
 import optics.*
-import data.{Direct, Glass, IndexedGlass, ModifyF, MultiFocus}
+import data.{Direct, GlassF, ModifyF, MultiFocus}
 import compose.{AssociativeFunctor, Composer}
 
 object GrateFixtures:
@@ -47,12 +47,12 @@ object GrateFixtures:
   val o_review = Review[Box[Int => Int], Int => Int](Box(_))
   val o_unfold = Unfold((xs: List[Int => Int]) => Box(xs.head))
   val functionR = summon[Representable.Aux[Function1[Int, *], Int]]
-  val i_grate = IndexedGlass.representable[Function1[Int, *], Int, Int](functionR)
+  val i_grate = Indexed.representable[Function1[Int, *], Int, Int](functionR)
 
   // Row direction: the Grate as outer, inners sourced on its focus.
-  val g_box = IndexedGlass.representable[Function1[Int, *], Box[Int], Box[Int]](functionR)
-  val g_list = IndexedGlass.representable[Function1[Int, *], List[Int], List[Int]](functionR)
-  val g_fun = IndexedGlass.representable[Function1[Int, *], Int => Int, Int => Int](functionR)
+  val g_box = Indexed.representable[Function1[Int, *], Box[Int], Box[Int]](functionR)
+  val g_list = Indexed.representable[Function1[Int, *], List[Int], List[Int]](functionR)
+  val g_fun = Indexed.representable[Function1[Int, *], Int => Int, Int => Int](functionR)
 
   val i_iso = Iso[Box[Int], Box[Int], Int, Int](_.a, Box(_))
   val i_lens = Lens[Box[Int], Int](_.a, (s, m) => Box(m))
@@ -142,13 +142,13 @@ class GrateShapeSpec extends Specification:
   }
 
   "Full-grid glass — grate ∘ grate (product index)" >> {
-    "grate ∘ grate → Glass[(Int, Int)]" >> {
+    "grate ∘ grate → GlassF[(Int, Int)]" >> {
       typeChecks("g_fun.andThen(i_grate)") must beTrue
     }
   }
 
   "Full-grid composition retains the concrete product index" >> {
-    val composed: Optic[Int => Int => Int, Int => Int => Int, Int, Int, Glass[(Int, Int)]] =
+    val composed: Optic[Int => Int => Int, Int => Int => Int, Int, Int, GlassF[(Int, Int)]] =
       g_fun.andThen(i_grate)
     composed.to(i => j => i + j).values((2, 3)) must beEqualTo(5)
   }
@@ -162,5 +162,5 @@ class GrateShapeSpec extends Specification:
   "Retired Function1 routing stays absent" >> {
     typeChecks("summon[AssociativeFunctor[MultiFocus[Function1[Int, *]], Unit, Unit]]") must beFalse
     typeChecks("summon[Composer[Direct, MultiFocus[Function1[Int, *]]]]") must beFalse
-    typeChecks("summon[Composer[Glass[Int], ModifyF]]") must beFalse
+    typeChecks("summon[Composer[GlassF[Int], ModifyF]]") must beFalse
   }

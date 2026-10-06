@@ -34,6 +34,7 @@ If you arrive with a task rather than an optic in mind, start here:
 | update only the matching elements of a collection           | [Visit through arbitrary structure](#visit-through-arbitrary-structure) |
 | fold several fields into one number                         | [Isolate what you need](#isolate-what-you-need) |
 | rewrite every slot of a fixed shape, or summarise a batch   | [Compute aggregations](#compute-aggregations) |
+| update an off-diagonal grid coordinate or preserve row labels | [Indexed: Grates and Glasses](indexed.md) |
 | change a field deep in JSON without decoding the payload    | [Edit JSON without decoding](#edit-json-without-decoding) |
 | depend on a relationship instead of a data type             | [Require the optic, not the type](#require-the-optic-not-the-type) |
 | ask for the weakest capability a function needs             | [Depend only on what's needed](#depend-only-on-what-s-needed) |
@@ -253,7 +254,7 @@ By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 ### Compute aggregations
 
 A `Lens` sees one value; a `Traversal` visits a container's elements.
-`IndexedGlass` addresses a fixed index space, while `MultiFocus[F]`
+`Indexed` addresses a fixed index space, while `MultiFocus[F]`
 supports container traversal and aggregation. The two recipes below
 show that distinction; see the [MultiFocus reference](multifocus.md).
 
@@ -266,13 +267,13 @@ the whole space without enumerating or comparing indexes.
 ```scala mdoc:silent
 import cats.Representable
 import cats.instances.function.given
-import dev.constructive.eo.data.IndexedGlass
+import dev.constructive.eo.optics.Indexed
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 
 val readerRepr = summon[Representable.Aux[[a] =>> Boolean => a, Boolean]]
-val configGlass = IndexedGlass.representable[[a] =>> Boolean => a, Double, Double](readerRepr)
+val configGlass = Indexed.representable[[a] =>> Boolean => a, Double, Double](readerRepr)
 val config: Boolean => Double = b => if b then 0.5 else 0.2
 ```
 
@@ -284,11 +285,15 @@ val zeroConfig = configGlass.replace(0.0)(config)
 (zeroConfig(false), zeroConfig(true))
 ```
 
-This representable constructor returns `IndexedGlass.Grate`, the
+This representable constructor returns `Indexed.Grate`, the
 `X = Unit` specialization. Other glasses retain residual context.
 Nested `andThen` uses product indexes to address the full grid;
 Unit-context normalization and generic classical-family seams remain
 open. For effectful per-element rewrites, use container traversal.
+
+For nested environment/channel settings, type-changing writes, and
+labelled sensor grids that retain per-row metadata, continue with
+[Indexed: Grates and Glasses](indexed.md).
 
 **Source:** Penner — *Grate: yet another optic*,
 <https://chrispenner.ca/posts/grate>.
