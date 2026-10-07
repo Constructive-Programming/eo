@@ -219,16 +219,22 @@ reminder that "the numbers below are just data".
 Three hand-written workflows (NOT in the generated ci.yml) automate this:
 `bench-pr.yml` posts a same-VM A/B delta comment on PRs touching
 benchmark-mapped paths (reduced profile, `perf:full` label escalates,
-same-repo PRs only); `bench-sweep.yml` runs the nightly-if-changed /
+same-repo PRs only). It runs on the default branch after successful PR CI,
+not as a check on the PR head; read-only measurement and trusted comment
+publication use separate jobs. Manual dispatch from `main` with `pr=<number>`
+reruns A/B, or `mode=aa` calibrates the default branch. `bench-sweep.yml`
+runs the nightly-if-changed /
 release-tag full sweep, appends `bench/series.jsonl` on gh-pages, renders
 the chart, bot-commits `BENCHMARKS.md` (generated — never hand-edit), and
-attaches results to releases. All logic lives in
-`.github/bench/bench_tools.py` (stdlib-only, unit-tested — run
+attaches results to releases. Logic lives in
+`.github/bench/bench_tools.py` and `.github/bench/pr_bench.py`
+(stdlib-only, unit-tested — run
 `python3 -m unittest discover .github/bench`); the path→bench mapping is
 its `MODULE_BENCHES` dict (import-derived; `core/` or harness changes ⇒
-full suite). Doctrine: **B/op gates (only once
+full suite). Doctrine: **B/op warns against calibrated thresholds (once
 `.github/bench/thresholds.json` exists, set from A/A calibration), ns/op
-advises**. Operator runbook: `.github/bench/README.md`.
+advises; PR benchmark comments never gate merges**.
+Operator runbook: `.github/bench/README.md`.
 
 ### Auto-derivation: `eo-generics`
 

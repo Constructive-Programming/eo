@@ -187,12 +187,14 @@ class CommentMd(unittest.TestCase):
         self.assertNotIn("<script>", md)
         self.assertNotIn("](http://x)", md)
 
-    def test_gate_violation_banner(self):
+    def test_threshold_violation_banner_is_informational(self):
         base = load([jmh_entry(FQN, 100, bop=40)])
         head = load([jmh_entry(FQN, 100, bop=80)])
         d = bt.diff(base, head, {}, {"bop_regression_pct": 2.0, "bop_min_delta_bytes": 16})
         md = bt.comment_md(d, None)
         self.assertIn("🚨", md)
+        self.assertIn("exceeds calibrated threshold", md)
+        self.assertNotIn("B/op gate", md)
 
 
 class BenchmarksMd(unittest.TestCase):

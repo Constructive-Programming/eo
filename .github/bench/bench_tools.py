@@ -291,7 +291,7 @@ def comment_md(deltas: dict | None, failure: str | None) -> str:
 
     if deltas["gate"]["enabled"] and deltas["gate"]["violations"]:
         lines += [
-            "### 🚨 B/op gate: "
+            "### 🚨 B/op regression exceeds calibrated threshold: "
             + ", ".join(esc(v) for v in deltas["gate"]["violations"]),
             "",
         ]
