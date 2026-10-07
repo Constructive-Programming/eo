@@ -68,7 +68,8 @@ from: outer.from((context = x, values = i =>
 Honesty items:
 
 - In general this is an **indexed Glass** with residual `X`, not a
-  context-free Grate. `Indexed.Grate` is the `X = Unit` alias.
+  context-free Grate. `Indexed.Grate[S, A, I]` is the monomorphic `X = Unit`
+  alias; `Indexed.PGrate[S, T, A, B, I]` is the polymorphic counterpart.
   Context-sensitive zip/collect operations are not installed; selecting
   a residual context when combining sources needs a separate design.
 - **Semantics change, deliberately**: `tuple ∘ tuple` `replace(9)` goes from diagonal
@@ -127,7 +128,8 @@ proposals are superseded.
 `X`. All construction and composition use only `to` / `from`.
 There is no separate `Context`, `GlassK`, or split/rebuild alias.
 
-Constructors are `representable(r)`, `iso`, `unit`, and `apply`.
+Constructors are `representable(r)` (monomorphic), `representableP(r)`
+(polymorphic), `iso`, `unit`, and `apply`.
 Operations are `at`, indexed `modify`, `replace`, and dedicated
 product-index `andThen`. A tuple macro and top-level Grate companion
 are not provided. Generic classical-family bridges and a same-index

@@ -3,10 +3,9 @@ package bench
 
 import cats.data.{Const, ZipList}
 import cats.{Functor, Representable}
-import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 import dev.constructive.eo.data.MultiFocus
-import dev.constructive.eo.optics.Indexed
-import dev.constructive.eo.optics.Optic
+import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
+import dev.constructive.eo.optics.{Indexed, Optic}
 import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
 
@@ -82,12 +81,12 @@ class MultiFocusCollectBench extends JmhDefaults:
 
   // ----- Indexed: tuple3 / tuple6 modify -----
   private val tripleMF =
-    Indexed.representable[TupleRepresentables.Triple, Double, Double](
+    Indexed.representable[TupleRepresentables.Triple, Double](
       TupleRepresentables.triple
     )
 
   private val sextupleMF =
-    Indexed.representable[TupleRepresentables.Sextuple, Double, Double](
+    Indexed.representable[TupleRepresentables.Sextuple, Double](
       TupleRepresentables.sextuple
     )
 

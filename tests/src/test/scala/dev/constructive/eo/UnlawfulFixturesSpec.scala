@@ -90,7 +90,7 @@ class UnlawfulFixturesSpec extends Specification:
       .apply[Dup[Int], Dup[Int], Int, Int, Boolean, Unit](fa => ((), dupRepresentable.index(fa)))(
         (_, values) => Dup(values(true), values(true))
       )
-    val lawful = optics.Indexed.representable[Dup, Int, Int](dupRepresentable)
+    val lawful = optics.Indexed.representable[Dup, Int](dupRepresentable)
     val source = Dup(1, 2)
     (leadSampling.from(leadSampling.to(source)) == source) must beFalse
     (lawful.from(lawful.to(source)) == source) must beTrue

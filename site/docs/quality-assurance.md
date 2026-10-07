@@ -69,7 +69,8 @@ ascription, that spec goes red.
 `trav` and `fold` in the grid above mean `MultiFocus[PSVec]` — the
 Traversal container carrier. `Indexed` instead extends `Optic`
 over `GlassF[I] = [X, A] =>> (context: X, values: I => A)` with
-existential residual `X`. The `Indexed.Grate` alias fixes `X = Unit`.
+existential residual `X`. `Indexed.Grate` fixes `X = Unit` for monomorphic
+optics; `Indexed.PGrate` does the same for polymorphic optics.
 Its dedicated `andThen` uses product indexes, but no generic
 classical-family bridges or `AssociativeFunctor[GlassF[I]]` are
 installed. Rejected seams describe today's API, not a proof that

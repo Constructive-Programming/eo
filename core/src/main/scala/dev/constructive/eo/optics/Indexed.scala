@@ -113,7 +113,10 @@ object Indexed:
     * index. Generic `andThen` retains its product context even when both inputs have `Unit`
     * context; no context-erasing coercion is installed in this prototype.
     */
-  type Grate[S, T, A, B, I] = Aux[S, T, A, B, I, Unit]
+  type PGrate[S, T, A, B, I] = Aux[S, T, A, B, I, Unit]
+
+  /** Monomorphic context-free specialization. */
+  type Grate[S, A, I] = PGrate[S, S, A, A, I]
 
   /** User-written `to` / `from` algebra. The caller is responsible for the laws stated on
     * [[Indexed]].
@@ -131,17 +134,21 @@ object Indexed:
   /** A cats `Representable` supplies precisely the two inverse tabulation operations needed here.
     * Passed explicitly so its path-dependent `Representation` is retained without another given.
     */
-  def representable[F[_], A, B](r: Representable[F]): Grate[F[A], F[B], A, B, r.Representation] =
+  def representableP[F[_], A, B](r: Representable[F]): PGrate[F[A], F[B], A, B, r.Representation] =
     apply[F[A], F[B], A, B, r.Representation, Unit](fa => ((), r.index(fa)))((_, values) =>
       r.tabulate(values),
     )
+
+  /** Monomorphic tabulation, retaining the supplied instance's index type. */
+  def representable[F[_], A](r: Representable[F]): Grate[F[A], A, r.Representation] =
+    representableP[F, A, A](r)
 
   /** An Iso has one coordinate, not a broadcast over an arbitrary (possibly empty) index. The
     * functions must be inverse in the monomorphic case, or have matching target-side inverses in
     * the polymorphic case.
     */
-  def iso[S, T, A, B](forward: S => A)(backward: B => T): Grate[S, T, A, B, Unit] =
+  def iso[S, T, A, B](forward: S => A)(backward: B => T): PGrate[S, T, A, B, Unit] =
     apply[S, T, A, B, Unit, Unit](s => ((), _ => forward(s)))((_, values) => backward(values(())))
 
   /** Identity algebra on a single `Unit` coordinate, including type-changing writes. */
-  def unit[A, B]: Grate[A, B, A, B, Unit] = iso[A, B, A, B](identity)(identity)
+  def unit[A, B]: PGrate[A, B, A, B, Unit] = iso[A, B, A, B](identity)(identity)

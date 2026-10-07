@@ -47,12 +47,12 @@ object GrateFixtures:
   val o_review = Review[Box[Int => Int], Int => Int](Box(_))
   val o_unfold = Unfold((xs: List[Int => Int]) => Box(xs.head))
   val functionR = summon[Representable.Aux[Function1[Int, *], Int]]
-  val i_grate = Indexed.representable[Function1[Int, *], Int, Int](functionR)
+  val i_grate = Indexed.representable[Function1[Int, *], Int](functionR)
 
   // Row direction: the Grate as outer, inners sourced on its focus.
-  val g_box = Indexed.representable[Function1[Int, *], Box[Int], Box[Int]](functionR)
-  val g_list = Indexed.representable[Function1[Int, *], List[Int], List[Int]](functionR)
-  val g_fun = Indexed.representable[Function1[Int, *], Int => Int, Int => Int](functionR)
+  val g_box = Indexed.representable[Function1[Int, *], Box[Int]](functionR)
+  val g_list = Indexed.representable[Function1[Int, *], List[Int]](functionR)
+  val g_fun = Indexed.representable[Function1[Int, *], Int => Int](functionR)
 
   val i_iso = Iso[Box[Int], Box[Int], Int, Int](_.a, Box(_))
   val i_lens = Lens[Box[Int], Int](_.a, (s, m) => Box(m))

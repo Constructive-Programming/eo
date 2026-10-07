@@ -34,7 +34,7 @@ If you arrive with a task rather than an optic in mind, start here:
 | update only the matching elements of a collection           | [Visit through arbitrary structure](#visit-through-arbitrary-structure) |
 | fold several fields into one number                         | [Isolate what you need](#isolate-what-you-need) |
 | rewrite every slot of a fixed shape, or summarise a batch   | [Compute aggregations](#compute-aggregations) |
-| update an off-diagonal grid coordinate or preserve row labels | [Indexed: Grates and Glasses](indexed.md) |
+| update a grid coordinate or preserve device labels           | [Indexed: Grates and Glasses](indexed.md) |
 | change a field deep in JSON without decoding the payload    | [Edit JSON without decoding](#edit-json-without-decoding) |
 | depend on a relationship instead of a data type             | [Require the optic, not the type](#require-the-optic-not-the-type) |
 | ask for the weakest capability a function needs             | [Depend only on what's needed](#depend-only-on-what-s-needed) |
@@ -260,29 +260,47 @@ show that distinction; see the [MultiFocus reference](multifocus.md).
 
 #### Recipe A — Adjust a fixed-index configuration
 
-**Why:** a Boolean-indexed configuration has a setting for each
+**Why:** an environment-indexed configuration has a path for each
 coordinate. Read one, rewrite each with its index visible, or fill
 the whole space without enumerating or comparing indexes.
 
 ```scala mdoc:silent
 import cats.Representable
 import cats.instances.function.given
+import java.nio.file.Path
 import dev.constructive.eo.optics.Indexed
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 
-val readerRepr = summon[Representable.Aux[[a] =>> Boolean => a, Boolean]]
-val configGlass = Indexed.representable[[a] =>> Boolean => a, Double, Double](readerRepr)
-val config: Boolean => Double = b => if b then 0.5 else 0.2
+enum Env:
+  case Dev, Prod
+
+val readerRepr = summon[Representable.Aux[[a] =>> Env => a, Env]]
+val configGlass = Indexed.representable[[a] =>> Env => a, Path](readerRepr)
+val config: Env => Path =
+  case Env.Prod => Path.of("/opt/app/")
+  case Env.Dev  => Path.of("/dev/app/0292103")
 ```
 
 ```scala mdoc
-configGlass.at(true)(config)
-val adjustedConfig = configGlass.modify((i, c) => if i then c * 1.4 else c)(config)
-(adjustedConfig(false), adjustedConfig(true))
-val zeroConfig = configGlass.replace(0.0)(config)
-(zeroConfig(false), zeroConfig(true))
+configGlass.at(Env.Dev)(config)
+val adjustedConfig = configGlass.modify((env, path) =>
+  if env == Env.Dev then path.resolve("logs") else path
+)(config)
+(adjustedConfig(Env.Dev), adjustedConfig(Env.Prod))
+val replacePath = Path.of("/")
+val replacedConfig = configGlass.replace(replacePath)(config)
+(replacedConfig(Env.Dev), replacedConfig(Env.Prod))
+```
+
+```scala mdoc:silent
+require(configGlass.at(Env.Dev)(config) == Path.of("/dev/app/0292103"))
+require(configGlass.at(Env.Prod)(config) == Path.of("/opt/app/"))
+require(adjustedConfig(Env.Dev) == config(Env.Dev).resolve("logs"))
+require(adjustedConfig(Env.Prod) == config(Env.Prod))
+require(replacedConfig(Env.Dev) == replacePath)
+require(replacedConfig(Env.Prod) == replacePath)
 ```
 
 This representable constructor returns `Indexed.Grate`, the

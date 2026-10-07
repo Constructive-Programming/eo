@@ -12,11 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
   `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
   The carrier remains in `data/Glass.scala`; no compatibility alias is provided.
-  Constructors `representable(r)`, `iso`, `unit`, and `apply` use the
+  Constructors `representable(r)` / `representableP(r)`, `iso`, `unit`, and `apply` use the
   existing `to` / `from` algebra. Indexed `modify`, `at`, `replace`,
   and product-index `andThen` address the full nested grid rather than
-  the legacy shared-index diagonal. `Indexed.Grate` is the
-  `X = Unit` alias; general glasses retain residual context.
+  the legacy shared-index diagonal. `Indexed.Grate[S, A, I]` and
+  `Indexed.PGrate[S, T, A, B, I]` are the monomorphic and polymorphic
+  `X = Unit` aliases; general glasses retain residual context.
   Unit-context composition normalization and generic classical-family
   bridges remain open; no top-level Grate companion is provided.
 

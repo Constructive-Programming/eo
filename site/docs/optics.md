@@ -449,7 +449,7 @@ import cats.instances.function.given
 import dev.constructive.eo.optics.Indexed
 
 val booleanReader = summon[Representable.Aux[[a] =>> Boolean => a, Boolean]]
-val paymentGlass = Indexed.representable[[a] =>> Boolean => a, Int, Int](booleanReader)
+val paymentGlass = Indexed.representable[[a] =>> Boolean => a, Int](booleanReader)
 val payment: Boolean => Int = b => if b then 100 else 0
 ```
 
@@ -461,8 +461,9 @@ val cleared = paymentGlass.replace(0)(payment)
 (cleared(false), cleared(true))
 ```
 
-Constructors are `representable(r)` (explicit cats witness, retaining
-its representation type), `iso` (one Unit coordinate), `unit`
+Constructors are `representable[F, A](r)` (monomorphic, retaining
+the explicit cats witness's representation type),
+`representableP[F, A, B](r)` (type-changing), `iso` (one Unit coordinate), `unit`
 (identity), and `apply` (user-written decomposition/reconstruction).
 No tuple macro or top-level `Grate` companion is provided.
 
@@ -472,7 +473,8 @@ rather than only the old shared-index diagonal. `modify` sees the index,
 `replace` fills the whole grid, and `at` reads one coordinate without
 requiring index equality.
 
-`Indexed.Grate` is the `X = Unit` alias. General Glass retains
+`Indexed.Grate[S, A, I]` is the monomorphic `X = Unit` alias;
+`Indexed.PGrate[S, T, A, B, I]` is its polymorphic counterpart. General Glass retains
 residual context and is not interchangeable with a context-free Grate.
 Unit-context composition normalization remains open: composing two
 Grates currently retains `(Unit, I => Unit)`.

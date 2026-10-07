@@ -576,8 +576,8 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
       val r = summon[cats.Representable[Row]]
       val grid = optics
         .Indexed
-        .representable[Row, Row[Int], Row[Int]](r)
-        .andThen(optics.Indexed.representable[Row, Int, Int](r))
+        .representable[Row, Row[Int]](r)
+        .andThen(optics.Indexed.representable[Row, Int](r))
       val source: Row[Row[Int]] = i => j => if i then if j then d else c else if j then b else a
       val arbitrary: ((Boolean, Boolean)) => Int = ij => source(ij._2)(ij._1)
       val bundle = grid.to(source)

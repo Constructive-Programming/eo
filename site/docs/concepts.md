@@ -75,7 +75,7 @@ this optic have?"
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
 | `MultiFocus[F]` | `(X, F[A])` — leftover and container focus vector | container traversal and aggregation; `PSVec` backs `Traversal.each` and `two` / `three` / `four` — see [MultiFocus](multifocus.md) |
-| `GlassF[I]` | `(context: X, values: I => A)` — leftover and fixed-index tabulation | [Indexed](indexed.md); `Indexed.Grate` specializes `X = Unit` |
+| `GlassF[I]` | `(context: X, values: I => A)` — leftover and fixed-index tabulation | [Indexed](indexed.md); `Indexed.Grate` and `Indexed.PGrate` specialize `X = Unit` for monomorphic and polymorphic optics respectively |
 | `Forget[F]`     | `F[A]` — an `F`-layer with no leftover         | `Fold` (read-only, `F: Foldable`), `Unfold` (build-only, `embed: F[B] => T`) |
 | `ModifyF`       | `(Fst[X], Snd[X] => A)`                        | `Modify`               |
 

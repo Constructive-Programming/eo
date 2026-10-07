@@ -119,7 +119,7 @@ mean and declare the given in your own scope — exactly the
 | `Foldable[F]` | `Fold[F, A]` | read-only `Fold` | `CanFold` |
 | `Bitraverse[F]` | `Traversal.first` / `second` / `both` | `Traversal` over one slot (or every `A` of an `F[A, A]`) | `CanModify` + `CanFold` |
 | `Representable[F]` | `Lens.representable(r)` | lawful `Lens` at ONE representation point | `CanGet` + `CanModify` + `CanFold` |
-| `Representable[F]` | `Indexed.representable(r)` | fixed-index tabulation with `X = Unit` | full-grid rebuilds; dedicated indexed operations, not generic capability seams |
+| `Representable[F]` | `Indexed.representable(r)` / `representableP(r)` | fixed-index tabulation with `X = Unit`, monomorphic / polymorphic | full-grid rebuilds; dedicated indexed operations, not generic capability seams |
 
 `Indexed` has dedicated indexed operations; its inclusion above
 does not imply generic `Can*` derivations or classical-family composition

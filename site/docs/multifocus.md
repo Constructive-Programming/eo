@@ -186,7 +186,7 @@ inner, without introducing a generic Glass Composer bridge.
 ## Worked examples
 
 The [Cookbook](cookbook.md) shows container aggregation, batch-relative
-rewrites, and an `Indexed` Boolean-reader example. For chains that
+rewrites, and an `Indexed` environment-to-path example. For chains that
 continue through collections, use `Traversal.each` / `pEach`, including
 `Lens → each → Lens` and recursive `Plated` traversals.
 
@@ -212,5 +212,5 @@ Historical research describes the earlier encoding, not the current API.
   container traversals.
 
 Fixed-index constructors instead live on `Indexed`:
-`representable(r)`, `iso`, `unit`, and `apply`. There is no top-level
+`representable(r)` / `representableP(r)`, `iso`, `unit`, and `apply`. There is no top-level
 `Grate` constructor companion.

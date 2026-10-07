@@ -79,7 +79,8 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   (`.collectMap` / `.collectList`).
 - [`Indexed`](https://eo.constructive.dev/optics.html#indexed) —
   fixed-index tabulations with residual context and full-grid product-index
-  composition; `Indexed.Grate` is the `X = Unit` specialization.
+  composition; `Indexed.Grate` / `PGrate` specialize `X = Unit` for
+  monomorphic / polymorphic optics.
 - [`Review`](https://eo.constructive.dev/optics.html#review) — the
   reverse-only half of a `Prism`; build, never observe.
 - [`Unfold`](https://eo.constructive.dev/optics.html#unfold) — the
