@@ -231,9 +231,9 @@ express through other means or leave to dedicated libraries:
   compose into ordinary optic pipelines. Monocle prefers to leave
   recursion schemes to dedicated libraries (droste); see
   [Recursion schemes](schemes.md).
-- **MultiFocus shapes** — Grate-style fixed-shape rewrites,
-  Kaleidoscope aggregation, algebraic lenses; see
-  [MultiFocus](multifocus.md).
+- **MultiFocus shapes** — container traversal, aggregation, and
+  algebraic lenses; see [MultiFocus](multifocus.md). Fixed-index
+  full-grid rewrites instead use [Indexed](optics.md#indexed).
 - **Full-cover macro upgrade** — `lens[S](_.a, _.b, ...)` in one
   varargs call; when the selectors cover every field the result
   upgrades to a `BijectionIso` automatically (a shape Monocle

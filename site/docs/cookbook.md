@@ -34,6 +34,7 @@ If you arrive with a task rather than an optic in mind, start here:
 | update only the matching elements of a collection           | [Visit through arbitrary structure](#visit-through-arbitrary-structure) |
 | fold several fields into one number                         | [Isolate what you need](#isolate-what-you-need) |
 | rewrite every slot of a fixed shape, or summarise a batch   | [Compute aggregations](#compute-aggregations) |
+| update a grid coordinate or preserve device labels           | [Indexed: Grates and Glasses](indexed.md) |
 | change a field deep in JSON without decoding the payload    | [Edit JSON without decoding](#edit-json-without-decoding) |
 | depend on a relationship instead of a data type             | [Require the optic, not the type](#require-the-optic-not-the-type) |
 | ask for the weakest capability a function needs             | [Depend only on what's needed](#depend-only-on-what-s-needed) |
@@ -252,51 +253,65 @@ By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 
 ### Compute aggregations
 
-A `Lens` sees one value; a `Traversal` sees many but only lets you
-map over them. `MultiFocus[F]` is the optic for the jobs in between:
-rewrite *every* slot of a fixed-shape record with one function, or
-fold the focused values into a summary and scatter it back across
-them. The two recipes below are the prototypical jobs; the
-[MultiFocus reference](multifocus.md) carries the design story (it
-unifies five separate optics from v1 into this one carrier).
+A `Lens` sees one value; a `Traversal` visits a container's elements.
+`Indexed` addresses a fixed index space, while `MultiFocus[F]`
+supports container traversal and aggregation. The two recipes below
+show that distinction; see the [MultiFocus reference](multifocus.md).
 
-#### Recipe A — Adjust every channel of a colour at once
+#### Recipe A — Adjust a fixed-index configuration
 
-**Why:** you have a fixed-shape record of same-typed fields — the
-R, G, B of a colour, the x/y/z of a vector, the left/right of a
-stereo frame — and you want to hit *all* of them with one function.
-There's no collection to traverse and no reason to write three
-`.copy` calls: focus the whole tuple and rewrite every slot
-uniformly, or fill them all with a constant.
+**Why:** an environment-indexed configuration has a path for each
+coordinate. Read one, rewrite each with its index visible, or fill
+the whole space without enumerating or comparing indexes.
 
 ```scala mdoc:silent
-import cats.instances.function.given  // Functor[Function1[Int, *]] for .modify
+import cats.Representable
+import cats.instances.function.given
+import java.nio.file.Path
+import dev.constructive.eo.optics.Indexed
 import dev.constructive.eo.data.MultiFocus
 import dev.constructive.eo.data.MultiFocus.given
 import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
 
-// Three colour channels — each a Double in [0.0, 1.0].
-val rgbMF = MultiFocus.tuple[(Double, Double, Double), Double]
+enum Env:
+  case Dev, Prod
+
+val readerRepr = summon[Representable.Aux[[a] =>> Env => a, Env]]
+val configGlass = Indexed.representable[[a] =>> Env => a, Path](readerRepr)
+val config: Env => Path =
+  case Env.Prod => Path.of("/opt/app/")
+  case Env.Dev  => Path.of("/dev/app/0292103")
 ```
 
 ```scala mdoc
-val violet = (0.5, 0.0, 0.5)
-
-// Brighten all three channels uniformly: the same function runs at
-// every slot.
-rgbMF.modify(c => (c * 1.4).min(1.0))(violet)
-
-// Replace every slot with the same constant — the broadcast pattern.
-rgbMF.replace(0.0)(violet)
+configGlass.at(Env.Dev)(config)
+val adjustedConfig = configGlass.modify((env, path) =>
+  if env == Env.Dev then path.resolve("logs") else path
+)(config)
+(adjustedConfig(Env.Dev), adjustedConfig(Env.Prod))
+val replacePath = Path.of("/")
+val replacedConfig = configGlass.replace(replacePath)(config)
+(replacedConfig(Env.Dev), replacedConfig(Env.Prod))
 ```
 
-`.modify` runs the same function at every slot; `.replace(b)` fills
-every slot with `b`. This is the *Grate* shape of `MultiFocus`
-([details](multifocus.md#sub-shapes)), and it works over any
-fixed-arity homogeneous structure, not just tuples. One caveat: the
-tuple/Grate shape is map-only — when you need an *effectful*
-per-slot rewrite (`.modifyA[G]`), reach for a collection-backed
-`MultiFocus.apply[List, A]` instead.
+```scala mdoc:silent
+require(configGlass.at(Env.Dev)(config) == Path.of("/dev/app/0292103"))
+require(configGlass.at(Env.Prod)(config) == Path.of("/opt/app/"))
+require(adjustedConfig(Env.Dev) == config(Env.Dev).resolve("logs"))
+require(adjustedConfig(Env.Prod) == config(Env.Prod))
+require(replacedConfig(Env.Dev) == replacePath)
+require(replacedConfig(Env.Prod) == replacePath)
+```
+
+This representable constructor returns `Indexed.Grate`, the
+`X = Unit` specialization. Other glasses retain residual context.
+Nested `andThen` uses product indexes to address the full grid;
+Unit-context normalization and generic classical-family seams remain
+open. For effectful per-element rewrites, use container traversal.
+
+For nested environment/channel settings, type-changing writes, and
+labelled sensor grids that retain per-row metadata, continue with
+[Indexed: Grates and Glasses](indexed.md).
 
 **Source:** Penner — *Grate: yet another optic*,
 <https://chrispenner.ca/posts/grate>.
@@ -356,9 +371,11 @@ val stdDev   = math.sqrt(variance)
   lands in every position. Reach for it when a downstream step needs
   the aggregate *alongside* the originals (share-of-total, a
   normalisation baseline).
-- `.collectList(agg: List[A] => B)` produces a single-element result
-  regardless of input length. Reach for it when you just want the
-  summary.
+- `.collectList(agg: List[A] => B)` supplies a singleton focus vector
+  to reconstruction with the observed context. This identity-backed
+  `readingsMF` returns a singleton List, but other optics can preserve
+  surrounding structure or reject a shape/count mismatch. It is not
+  a general promise of a single-element source.
 - `.collectWith(agg: F[A] => A => B)` is the general map-shaped
   collect — the aggregate sees the batch once and the returned
   function runs per position, so batch-relative rewrites

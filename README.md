@@ -77,9 +77,10 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   classifier-shaped update where the whole `F[A]` is visible (adaptive
   KNN, one-vs-rest), plus Kaleidoscope-style aggregation universals
   (`.collectMap` / `.collectList`).
-- [`Grate`](https://eo.constructive.dev/optics.html#grate) — the
-  dual of `Lens`; lifts a function on the focus to a function on the
-  whole structure.
+- [`Indexed`](https://eo.constructive.dev/optics.html#indexed) —
+  fixed-index tabulations with residual context and full-grid product-index
+  composition; `Indexed.Grate` / `PGrate` specialize `X = Unit` for
+  monomorphic / polymorphic optics.
 - [`Review`](https://eo.constructive.dev/optics.html#review) — the
   reverse-only half of a `Prism`; build, never observe.
 - [`Unfold`](https://eo.constructive.dev/optics.html#unfold) — the

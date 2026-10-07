@@ -10,11 +10,10 @@ them is preserved:
                the single source of truth — every `typeChecks(...) must beTrue`
                is a cell that composes, every `must beFalse` a void-by-design
                cell).
-  - grate    : the same pass/fail projection restricted to the Grate sub-shape
-               (`MultiFocus[Function1[X0, *]]`), parsed from
-               tests/.../GrateShapeSpec.scala. The main grid is carrier-level:
-               its `trav` / `fold` rows describe `MultiFocus[PSVec]`, so the
-               Naperian sub-shape needs its own table rather than a footnote.
+  - grate    : the same pass/fail projection for the fixed-index Indexed
+               prototype, parsed from tests/.../GrateShapeSpec.scala. The main
+               grid's `trav` / `fold` rows describe MultiFocus[PSVec], not
+               fixed-index full-grid composition.
   - coverage : per-package statement % and branch % with their BC/SC ratio,
                computed from the scoverage AGGREGATE report by counting
                <statement> elements directly (matches scoverage's own
@@ -45,7 +44,7 @@ SPEC = os.path.join(
     "CompositionMatrixSpec.scala",
 )
 
-# The Grate (Naperian Function1) sub-shape's own grid.
+# The fixed-index Indexed prototype's own grid.
 GRATE_SPEC = os.path.join(
     ROOT, "tests", "src", "test", "scala", "dev", "constructive", "eo",
     "GrateShapeSpec.scala",
@@ -157,10 +156,10 @@ def gen_matrix() -> str:
         f"\n*✓ is a **typing claim**: the chain resolves with no expected-type "
         f"ascription and no `given` imports, landing at the family shown. It does "
         f"not say the composite is *behaved* — runtime semantics are pinned by "
-        f"behaviour specs (`MultiFocusFunction1Spec` for the Grate carrier's "
+        f"behaviour specs (`MultiFocusCrossFamilySpec` for the container carrier's "
         f"composition rules). The grid is also carrier-level: `trav` and `fold` "
         f"describe `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`); "
-        f"the other shipped MultiFocus sub-shape has its own table below.*"
+        f"the fixed-index `Indexed` prototype has its own table below.*"
     )
     return "\n".join(rows) + "\n" + legend
 
@@ -169,7 +168,7 @@ def gen_matrix() -> str:
 # grate
 # --------------------------------------------------------------------------
 def gen_grate() -> str:
-    """The Grate sub-shape's footprint, in the two directions that matter.
+    """The fixed-index prototype's footprint, in the two directions that matter.
 
     Rows are the same families as the main grid plus `grate`; the two columns are
     "family as the outer, grate as the inner" and its mirror. `grate ∘ grate` is
@@ -193,28 +192,17 @@ def gen_grate() -> str:
                 n_fail += 1
         rows.append(f"| **{f}** | {cell(inner_ok)} | {cell(outer_ok)} |")
     legend = (
-        f"\n*Same ✓ / ✗ meaning as the grid above, restricted to the Grate "
-        f"sub-shape (`MultiFocus[Function1[X0, *]]`, the Naperian factories "
-        f"`MultiFocus.tuple` / `representable` / `apply`): "
+        f"\n*The fixed-index `Indexed` prototype, constructed with "
+        f"`Indexed.representable`: "
         f"{n_pass} composing / {n_fail} void cells, pinned by `GrateShapeSpec`"
         + (f" — {n_missing} cell(s) missing.\n" if n_missing else ".\n")
-        + f"The inbound `iso` cell needs a `RepresentativeIndex` for the grate's "
-        f"index type — shipped off the companion for every index type the "
-        f"factories fix with a canonical value (`Int` / `Boolean` / `Unit` / "
-        f"singletons), so the grid stays import-free; a grate over an "
-        f"algebraic index needs `given RepresentativeIndex[X] = "
-        f"RepresentativeIndex.at(v)` in scope, and an uninhabited index type "
-        f"gets no instance — the bridge refuses rather than reading a bundle at "
-        f"an index that cannot exist. "
-        + f"The ✗ cells are structural, not missing plumbing: a Lens / Traversal "
-        f"write-back would have to pick one focus out of a Naperian bundle "
-        f"(`Foldable[Function1[X0, *]]`: no instance, and no lawful one — a "
-        f"function's codomain is not enumerable); a Prism / Optional miss would "
-        f"need `Alternative[Function1[X0, *]]` (`empty` has no value to return); a "
-        f"Getter / AffineFold / Fold read-collapse would have to enumerate that "
-        f"codomain. `trav` / `fold` in this table mean the *other* MultiFocus "
-        f"sub-shape across the seam — cross-`F` composition needs a per-`F` "
-        f"natural transformation and is a documented workaround.*"
+        + f"Full-grid glass composition retains both index axes; it does not sample "
+        f"a representative coordinate or compare indexes. An Iso can be constructed "
+        f"explicitly with `Indexed.iso`, which has a `Unit` index; this is not "
+        f"an automatic bridge from the classical Iso family. A ✗ cell records the "
+        f"current API's unsupported seam, not a proof that such an optic cannot "
+        f"exist. Runtime round trips, polymorphic writes and reassociated nested "
+        f"grids are exercised by `GlassSpec`.*"
     )
     return "\n".join(rows) + "\n" + legend
 

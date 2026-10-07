@@ -9,49 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **`cats-eo`: `data.RepresentativeIndex[X0]` — the Grate bridge's index becomes a real value.**
-  A `MultiFocus[Function1[X0, *]]` bundle is an `X0 => A`, and one place in the library has to read
-  a bundle it did not build: the `Direct → MultiFocus[Function1[X0, *]]` bridge's product
-  (`Function1BroadcastOptic.from`), whose carrier stores only `Unit`. That read was a
-  `null.asInstanceOf[X0]` sentinel guarded by a documented constant-bundle contract; it is now a
-  caller-supplied index. `RepresentativeIndex` ships canonical instances for the index types the
-  Grate factories fix with one (`Int` → `0` for `MultiFocus.tuple` and `apply` over
-  `Function1[Int, *]`, `Boolean` → `false`, `Unit` → `()`) plus any singleton type via `ValueOf`, and
-  `RepresentativeIndex.at(i)` for everything else.
+- **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
+  `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
+  The carrier remains in `data/Glass.scala`; no compatibility alias is provided.
+  Constructors `representable(r)` / `representableP(r)`, `iso`, `unit`, and `apply` use the
+  existing `to` / `from` algebra. Indexed `modify`, `at`, `replace`,
+  and product-index `andThen` address the full nested grid rather than
+  the legacy shared-index diagonal. `Indexed.Grate[S, A, I]` and
+  `Indexed.PGrate[S, T, A, B, I]` are the monomorphic and polymorphic
+  `X = Unit` aliases; general glasses retain residual context.
+  Unit-context composition normalization and generic classical-family
+  bridges remain open; no top-level Grate companion is provided.
 
-### Changed
+### Fixed
 
-- **`cats-eo`: `forgetful2multifocusFunction1` now asks for a `RepresentativeIndex[X0]`** (source-
-  breaking for index types with no instance). `iso.andThen(MultiFocus.tuple[...])` and the other
-  `Iso → MultiFocus[Function1[...]]` chains are unaffected — the witness resolves off
-  `RepresentativeIndex`'s companion with no import — but a grate over an algebraic index type now
-  needs `given RepresentativeIndex[X] = RepresentativeIndex.at(v)` in scope, and an uninhabited
-  index type (`Function1[Nothing, *]`, a phantom slot) no longer bridges at all: there is no index
-  to witness, so the read that has no answer is refused instead of forged. Nothing observable
-  changes on the composition paths — the witness is read only by a bridged optic's own `from`, which
-  every shipped path calls with a constant bundle, and `grate ∘ iso` still rebuilds per index
-  through `broadcastFrom`. The two remaining `unobserved` stand-ins are existential leftovers (an
-  inner optic's leftover in `mfAssocFunction1`'s bundle branch, `collectList`'s own) and are
-  documented as such; neither is an index, and neither can be reached by a single value.
-  Rationale, measurements and the alternative designs:
-  [`docs/research/2026-09-30-grate-witness-index.md`](./docs/research/2026-09-30-grate-witness-index.md).
+- **core: `MultiFocus[List].collectList` preserves observed context.**
+  It passes a singleton focus vector to reconstruction instead of an
+  invented leftover. This is not a guarantee of a singleton reconstructed
+  source: structure and miss branches can remain, and shape/count-coupled
+  composites can reject cardinality mismatch.
 
 ### Removed
 
-- **core: `MultiFocus.representableAt`** — the `repr0` argument was unobservable by
-  construction. The Grate encoding's focus is the whole bundle `F.Representation => A`
-  (`X = Unit`) and the write is a pointwise `F.tabulate`, so the index never reached the
-  built optic and two calls with different indices were the same optic — the factory was
-  `MultiFocus.representable` plus a parameter nothing could read. It is removed rather
-  than deprecated, matching the 0.x line's dead-surface policy (see
-  [`mima.sbt`](./mima.sbt) for the break list): **source- and binary-breaking** for
-  direct callers. Migrate by dropping the parameter — `MultiFocus.representable[F, A]`
-  builds the same optic — and read a position with the `.at(i)` extension, which takes
-  the index per call (`g.at(i)(fa) == F.index(fa)(i)`) and so subsumes the
-  construction-time one. Pinned by `MultiFocusFunction1Spec` (read / write agreement with
-  the instance's own `index` and `map` on two `Representable`s, one of them permuted) and
-  the negative fixture in `UnlawfulFixturesSpec` (a lead-sampling rebuild — the
-  parameter's only conceivable real semantics — fails `MultiFocusLaws.modifyIdentity`).
+- **core: legacy Function1-based Grate API from MultiFocus** —
+  `tuple`, `representable` / `representableAt`, `zip` / `zipWith`,
+  the Function1 composition/broadcast machinery, and `RepresentativeIndex`.
+  The earlier unreleased witness-index approach is superseded by
+  Indexed. This is a source-breaking redesign, not a rename with
+  equivalent diagonal semantics. List/PSVec container traversal and
+  aggregation, including fixed-arity Traversal constructors, remain.
 
 ## [0.18.0] - 2026-09-29
 

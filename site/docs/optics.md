@@ -56,11 +56,11 @@ How to read it:
   accidental holes. Iso is total in both focus and source; Lens reads
   totally but rebuilds contextually; Prism reads fallibly but mends
   totally; Optional is fallible-focus, contextual-source (the
-  `Affine` carrier). Traversal spans **both** source natures at
-  multiple focus: the fixed-shape/Grate flavour
-  (`MultiFocus[Function1]`, `Traversal.{two,three,four}`) rebuilds
-  *totally* via `tabulate`, while `each` (`MultiFocus[PSVec]`)
-  rebuilds *contextually*, keeping the structural skeleton.
+  `Affine` carrier). At multiple focus, context-free
+  `Indexed.Grate` rebuilds *totally* via tabulation, while
+  container Traversal (`MultiFocus[PSVec]`, including `two` / `three` /
+  `four`) rebuilds *contextually*, keeping its structural skeleton.
+  General `Indexed` can also retain nontrivial residual `X`.
 - The **bottom layer** is write/build-only — but unlike the top
   layer it is a **full plane**, not a rail: a write-only optic's
   `from` is real (only its `to` is vestigial), so both axes still
@@ -85,9 +85,9 @@ How to read it:
   ([`docs/brainstorms/2026-06-10-failure-typed-build-biaffine.md`](https://github.com/Constructive-Programming/eo/blob/main/docs/brainstorms/2026-06-10-failure-typed-build-biaffine.md)).
 
 `Affine` is the carrier shared by `Optional` (read and write) and
-`AffineFold` (read-only). `MultiFocus[F]` is the multi-focus carrier;
-its sub-shapes (PowerSeries, Grate, Kaleidoscope, `AlgLens[F]`) are
-selected by `F`. `Forget[F]` is the one-way many carrier shared by
+`AffineFold` (read-only). `MultiFocus[F]` is the container multi-focus
+carrier; fixed-index `Indexed` uses `GlassF[I]` instead.
+`Forget[F]` is the one-way many carrier shared by
 `Fold` (read-only) and `Unfold` (build-only).
 
 ### Composition matrix
@@ -136,20 +136,13 @@ with a read-only side), and the `ReverseAccessor`-gated build-collapse
 [Concepts → Composition lattice](concepts.md#composition-lattice) for
 the carrier-level bridge graph.
 
-The grid is **carrier-level**, and two of its families are sub-shape
-families: `Traversal` is `MultiFocus[PSVec]` (`each`, `Plated`), while
-the Grate rides `MultiFocus[Function1[X0, *]]` (`MultiFocus.tuple` /
-`representable` / `apply`) and composes with far fewer families — it is
-void against every single-focus family in both directions, because its
-write-back cannot pick one focus out of a Naperian bundle and its read
-side cannot enumerate a function's codomain. The pinned footprint is
-[QA → The Grate sub-shape](quality-assurance.md#the-grate-sub-shape);
-the rationale is under
-[MultiFocus → Composition limits](multifocus.md#composition-limits).
-Also note what a ✓ asserts: that the chain *type-checks* — no import,
-no ascription — not that the composite is behaved. Behaviour is pinned
-by the specs (`MultiFocusFunction1Spec` for the Grate carrier's
-composition rules).
+The grid is **carrier-level**: `Traversal` is `MultiFocus[PSVec]`
+(`each`, `Plated`). `Indexed` uses `GlassF[I]` and dedicated
+product-index composition; its classical-family bridges are not
+installed. See [QA → The Indexed footprint](quality-assurance.md#the-indexed-footprint).
+A ✓ asserts that a chain type-checks without import or ascription,
+not a universal proof of its runtime laws. Behaviour tests provide
+separate evidence.
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.{Lens, Optic}
@@ -346,10 +339,10 @@ treatment, with the read-only-direction story, lives in
 ## MultiFocus
 
 `MultiFocus[F][X, A] = (X, F[A])` — a structural leftover paired with
-an `F`-shaped bundle of foci. It is the carrier for every optic that
-focuses more than one value at once; the surface lights up by the
+an `F`-shaped container of foci. It backs traversal and aggregation;
+the surface lights up by the
 typeclasses `F` admits (`.modify` for `Functor`, `.foldMap` for
-`Foldable`, `.modifyA` for `Traverse`, `.at(i)` for `Representable`,
+`Foldable`, `.modifyA` for `Traverse`,
 `.collectMap` / `.collectList` for aggregation, and same-carrier
 `.andThen`). The sub-shapes below are just different `F`s.
 
@@ -408,45 +401,18 @@ ownerAllPhonesMobile.modify(!_)(Owner(List(
 )))
 ```
 
-### Grate
-
-`MultiFocus[Function1[X0, *]]` — a uniform rewrite across a fixed
-shape: homogeneous tuples and Naperian / representable containers,
-where every position is rebuilt the same way. The factories are
-`MultiFocus.tuple[T <: Tuple, A]` (homogeneous-tuple uniform rewrite)
-and `MultiFocus.representable[F: Representable, A]` (arbitrary
-Naperian rebuild); a read lands on a chosen position with the
-`.at(i)` extension, which takes the `Representable` index per call.
-See [MultiFocus reference](multifocus.md) and
-[Cookbook → Recipe A](cookbook.md) for a worked example.
-
-`MultiFocus.zipWith(fa, fb)(f)` (and its pairing form `zip`) is the
-operation this shape exists for: because a Grate sees *every* focus
-while rebuilding, it can combine **two** structures pointwise — which
-a Traversal structurally cannot, since it visits one focus at a time
-with no access to a second container. Merging two configurations
-field-by-field is the everyday case:
-
-```scala mdoc
-import cats.instances.function.given
-import dev.constructive.eo.data.MultiFocus
-
-val defaults: Boolean => Int = b => if b then 1 else 2
-val overrides: Boolean => Int = b => if b then 10 else 20
-
-val merged = MultiFocus.zipWith(defaults, overrides)(_ + _)
-
-(merged(true), merged(false))
-```
-
 ### Kaleidoscope
 
-`MultiFocus[F]` for an `F` with `Apply` — the aggregating read: collapse
+`MultiFocus[F]` for an `F` with `Functor` — aggregation: collapse
 every focus to a single value with `.collectMap` (Functor-broadcast)
 or `.collectList` (List cartesian). Reach for it when you want to read
 the foci out as one summary rather than rewrite them in place. See
 [MultiFocus reference](multifocus.md) and
 [Cookbook → Recipe B](cookbook.md).
+
+`collectList` supplies a singleton **focus vector** with observed
+context, not a guaranteed singleton source. Shape/count-coupled
+composites can reject a cardinality mismatch.
 
 ### `AlgLens[F]`
 
@@ -456,6 +422,68 @@ read side folds/classifies, the write side broadcasts back. The
 `MultiFocus.fromLensF` / `fromPrismF` / `fromOptionalF` factories lift
 a single-focus optic over an `F[A]` focus into this shape. See the
 [MultiFocus reference](multifocus.md).
+
+## Indexed
+
+The full-grid successor to the legacy Function1-based Grate is an
+ordinary `Optic` with a fixed-index carrier. The trait and companion live
+in `optics/Indexed.scala`; the carrier remains in `data/Glass.scala`:
+
+```scala
+type GlassF[I] = [X, A] =>> (context: X, values: I => A)
+trait Indexed[S, T, A, B, I] extends Optic[S, T, A, B, GlassF[I]]
+```
+
+The existential `X` is residual context. The only decomposition and
+reconstruction operations are `Optic.to` / `from`. A lawful monomorphic
+glass round-trips both sources and arbitrary context/tabulation bundles,
+pointwise over the index.
+
+See [Indexed: Grates and Glasses](indexed.md) for runnable examples of
+environment-dependent settings, full-grid updates, type-changing writes,
+and reconstruction that preserves per-row metadata.
+
+```scala mdoc:silent
+import cats.Representable
+import cats.instances.function.given
+import dev.constructive.eo.optics.Indexed
+
+val booleanReader = summon[Representable.Aux[[a] =>> Boolean => a, Boolean]]
+val paymentGlass = Indexed.representable[[a] =>> Boolean => a, Int](booleanReader)
+val payment: Boolean => Int = b => if b then 100 else 0
+```
+
+```scala mdoc
+paymentGlass.at(true)(payment)
+val adjusted = paymentGlass.modify((i, a) => if i then a + 1 else a)(payment)
+(adjusted(false), adjusted(true))
+val cleared = paymentGlass.replace(0)(payment)
+(cleared(false), cleared(true))
+```
+
+Constructors are `representable[F, A](r)` (monomorphic, retaining
+the explicit cats witness's representation type),
+`representableP[F, A, B](r)` (type-changing), `iso` (one Unit coordinate), `unit`
+(identity), and `apply` (user-written decomposition/reconstruction).
+No tuple macro or top-level `Grate` companion is provided.
+
+`andThen` composes indexes `I` and `J` into `(I, J)`, with context
+`(outer.X, I => inner.X)`. Every nested coordinate participates,
+rather than only the old shared-index diagonal. `modify` sees the index,
+`replace` fills the whole grid, and `at` reads one coordinate without
+requiring index equality.
+
+`Indexed.Grate[S, A, I]` is the monomorphic `X = Unit` alias;
+`Indexed.PGrate[S, T, A, B, I]` is its polymorphic counterpart. General Glass retains
+residual context and is not interchangeable with a context-free Grate.
+Unit-context composition normalization remains open: composing two
+Grates currently retains `(Unit, I => Unit)`.
+There is no `AssociativeFunctor[GlassF[I]]` or generic classical-family
+bridge installed; use dedicated product-index `andThen`, not the
+classical composition matrix as a promise of Glass seams.
+The existing writable-outer `Optic` extension does support a write-only
+`Modify` inner (`glass.andThen(modify)`); this is not a Glass Composer
+bridge, and the reverse direction is not supported.
 
 ## Single direction
 
@@ -850,10 +878,8 @@ so the standard `Optic.andThen` resolves transparently.
 these factories tabulate their (construction-time-known) arity straight
 into `MultiFocus[PSVec]`, so they compose exactly like `each`: past a
 Lens, a Prism, another traversal, in both directions
-(`FixedArityTraversalSpec` pins the sweep). The
-`MultiFocus[Function1[Int, *]]` Grate sub-shape — and its
-narrower Iso-only inbound story — now belongs to `MultiFocus.tuple`
-alone.
+(`FixedArityTraversalSpec` pins the sweep). These container traversals
+are unaffected by removal of the legacy Function1-based Grate.
 
 The authoritative cell-by-cell record is
 [`CompositionMatrixSpec`](https://github.com/Constructive-Programming/eo/blob/main/tests/src/test/scala/dev/constructive/eo/CompositionMatrixSpec.scala)

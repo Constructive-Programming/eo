@@ -3,43 +3,24 @@ package dev.constructive.eo
 // =====================================================================
 //  The Grate sub-shape grid — the companion to CompositionMatrixSpec.
 //
-//  CompositionMatrixSpec's `trav` / `fold` rows describe
-//  `MultiFocus[PSVec]` (the `Traversal` class, `each`, `Plated`). The
-//  other shipped MultiFocus sub-shape — the Grate, i.e.
-//  `MultiFocus[Function1[X0, *]]` over the Naperian factories
-//  (`MultiFocus.tuple` / `representable` / `apply`)
-//  — has a materially NARROWER composition footprint. This spec pins it,
-//  so the QA page can show it and a future bridge cannot silently move a
-//  cell.
-//
-//  Why the ✗ cells are structural, not missing plumbing:
-//    - a Lens / Traversal write-back would have to pick one focus out of a
-//      Naperian bundle => needs `Foldable[Function1[X0, *]]`: no instance
-//      (and no lawful one — a function's codomain is not enumerable)
-//    - a Prism / Optional miss would need `Alternative[Function1[X0, *]]`
-//      (`empty`, i.e. `X0 => A` with no `A`): impossible
-//    - a Getter / AffineFold / Fold read-collapse would have to enumerate
-//      the codomain: no lawful fold
-//    - cross-`F` MultiFocus composition (PSVec ∘ Function1) needs a per-`F`
-//      natural transformation: documented workaround only
-//    - the inbound `iso ∘ grate` cell resolves through
-//      `Composer[Direct, MultiFocus[Function1[X0, *]]]`, which asks for a
-//      `RepresentativeIndex[X0]` — the index its product's own `from` reads a
-//      bundle at. `Int` / `Boolean` / `Unit` / singleton index types resolve
-//      off that companion (still no imports), which is every index type these
-//      fixtures use; an algebraic index needs a local `given`, and an
-//      uninhabited one does not bridge at all. See
-//      `docs/research/2026-09-30-grate-witness-index.md`.
+//  Indexed is the full-grid successor, not a MultiFocus sub-shape.
+//  No cross-family Composer bridges are installed. The generic writable-outer
+//  extension still supports a write-only Modify inner. Explicitly constructing an
+//  Indexed.iso supplies a lawful Unit axis; it is not an implicit widening.
+//  Keep the explicit cell labels so the QA generator can report verified seams.
 //  Same doctrine as CompositionMatrixSpec: no expected-type ascription and
 //  no `given` imports — a cell that starts needing either goes red.
 // =====================================================================
 
 import scala.compiletime.testing.typeChecks
 
+import cats.Representable
+import cats.instances.function.*
 import org.specs2.mutable.Specification
 
 import optics.*
-import data.MultiFocus
+import data.{Direct, GlassF, ModifyF, MultiFocus}
+import compose.{AssociativeFunctor, Composer}
 
 object GrateFixtures:
   case class Box[A](a: A)
@@ -65,12 +46,13 @@ object GrateFixtures:
 
   val o_review = Review[Box[Int => Int], Int => Int](Box(_))
   val o_unfold = Unfold((xs: List[Int => Int]) => Box(xs.head))
-  val i_grate = MultiFocus.apply[Function1[Int, *], Int]
+  val functionR = summon[Representable.Aux[Function1[Int, *], Int]]
+  val i_grate = Indexed.representable[Function1[Int, *], Int](functionR)
 
   // Row direction: the Grate as outer, inners sourced on its focus.
-  val g_box = MultiFocus.apply[Function1[Int, *], Box[Int]]
-  val g_list = MultiFocus.apply[Function1[Int, *], List[Int]]
-  val g_fun = MultiFocus.apply[Function1[Int, *], Int => Int]
+  val g_box = Indexed.representable[Function1[Int, *], Box[Int]](functionR)
+  val g_list = Indexed.representable[Function1[Int, *], List[Int]](functionR)
+  val g_fun = Indexed.representable[Function1[Int, *], Int => Int](functionR)
 
   val i_iso = Iso[Box[Int], Box[Int], Int, Int](_.a, Box(_))
   val i_lens = Lens[Box[Int], Int](_.a, (s, m) => Box(m))
@@ -80,7 +62,7 @@ object GrateFixtures:
   val i_affold = AffineFold[Box[Int], Int](b => Some(b.a))
   val i_modify = Modify[Box[Int], Box[Int], Int, Int](f => b => Box(f(b.a)))
   val i_review = Review[Box[Int], Int](Box(_))
-  val i_unfold = Unfold((xs: List[Box[Int]]) => Box(xs.head))
+  val i_unfold = Unfold((xs: List[Int]) => Box(xs.head))
   val i_each = Traversal.each[List, Int]
   val i_fold = Fold[List, Int]
 
@@ -88,8 +70,8 @@ class GrateShapeSpec extends Specification:
   import GrateFixtures.*
 
   "Grate sub-shape — family ∘ grate (the Grate as inner)" >> {
-    "iso ∘ grate → MultiFocus[Function1[Int, *]]" >> {
-      typeChecks("o_iso.andThen(i_grate)") must beTrue
+    "iso ∘ grate must not compile" >> {
+      typeChecks("o_iso.andThen(i_grate)") must beFalse
     }
     "lens ∘ grate must not compile" >> {
       typeChecks("o_lens.andThen(i_grate)") must beFalse
@@ -112,8 +94,8 @@ class GrateShapeSpec extends Specification:
     "fold ∘ grate must not compile" >> {
       typeChecks("o_fold.andThen(i_grate)") must beFalse
     }
-    "modify ∘ grate → ModifyF" >> {
-      typeChecks("o_modify.andThen(i_grate)") must beTrue
+    "modify ∘ grate must not compile" >> {
+      typeChecks("o_modify.andThen(i_grate)") must beFalse
     }
     "review ∘ grate must not compile" >> {
       typeChecks("o_review.andThen(i_grate)") must beFalse
@@ -124,8 +106,8 @@ class GrateShapeSpec extends Specification:
   }
 
   "Grate sub-shape — grate ∘ family (the Grate as outer)" >> {
-    "grate ∘ iso → MultiFocus[Function1[Int, *]]" >> {
-      typeChecks("g_box.andThen(i_iso)") must beTrue
+    "grate ∘ iso must not compile" >> {
+      typeChecks("g_box.andThen(i_iso)") must beFalse
     }
     "grate ∘ lens must not compile" >> {
       typeChecks("g_box.andThen(i_lens)") must beFalse
@@ -159,8 +141,26 @@ class GrateShapeSpec extends Specification:
     }
   }
 
-  "Grate sub-shape — grate ∘ grate (same carrier)" >> {
-    "grate ∘ grate → MultiFocus[Function1[Int, *]]" >> {
+  "Full-grid glass — grate ∘ grate (product index)" >> {
+    "grate ∘ grate → GlassF[(Int, Int)]" >> {
       typeChecks("g_fun.andThen(i_grate)") must beTrue
     }
+  }
+
+  "Full-grid composition retains the concrete product index" >> {
+    val composed: Optic[Int => Int => Int, Int => Int => Int, Int, Int, GlassF[(Int, Int)]] =
+      g_fun.andThen(i_grate)
+    composed.to(i => j => i + j).values((2, 3)) must beEqualTo(5)
+  }
+
+  "The writable-outer Modify seam rewrites each represented value" >> {
+    val rewritten = g_box.andThen(i_modify).modify(_ + 1)((i: Int) => Box(i))
+    rewritten(2) must beEqualTo(Box(3))
+    rewritten(9) must beEqualTo(Box(10))
+  }
+
+  "Retired Function1 routing stays absent" >> {
+    typeChecks("summon[AssociativeFunctor[MultiFocus[Function1[Int, *]], Unit, Unit]]") must beFalse
+    typeChecks("summon[Composer[Direct, MultiFocus[Function1[Int, *]]]]") must beFalse
+    typeChecks("summon[Composer[GlassF[Int], ModifyF]]") must beFalse
   }

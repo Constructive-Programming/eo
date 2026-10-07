@@ -74,7 +74,8 @@ this optic have?"
 | `Tuple2`        | `(X, A)` — both halves always present          | `Lens`                 |
 | `Either`        | `Either[X, A]` — branch present or absent      | `Prism`                |
 | `Affine`        | `Either[Fst[X], (Snd[X], A)]`                  | `Optional`, `AffineFold` |
-| `MultiFocus[F]` | `(X, F[A])` — pair leftover with an `F`-wrapped focus vector | unified successor of `AlgLens[F]` + `Kaleidoscope` + `Grate` + `PowerSeries` + `FixedTraversal[N]`; sub-shapes selected by `F` (`PSVec` ⇒ `Traversal.each`; `Function1[Int, *]` ⇒ `Traversal.{two,three,four}` and `MultiFocus.tuple` / `representable`); `.collectMap` / `.collectList` Kaleidoscope universals — see [MultiFocus](multifocus.md) |
+| `MultiFocus[F]` | `(X, F[A])` — leftover and container focus vector | container traversal and aggregation; `PSVec` backs `Traversal.each` and `two` / `three` / `four` — see [MultiFocus](multifocus.md) |
+| `GlassF[I]` | `(context: X, values: I => A)` — leftover and fixed-index tabulation | [Indexed](indexed.md); `Indexed.Grate` and `Indexed.PGrate` specialize `X = Unit` for monomorphic and polymorphic optics respectively |
 | `Forget[F]`     | `F[A]` — an `F`-layer with no leftover         | `Fold` (read-only, `F: Foldable`), `Unfold` (build-only, `embed: F[B] => T`) |
 | `ModifyF`       | `(Fst[X], Snd[X] => A)`                        | `Modify`               |
 
@@ -234,12 +235,13 @@ singleton pick closes the build side, which `Unfold` chains
 exercise) and the restricted `MultiFocus[F] → Forget[F]`
 (the `T = Unit` read-only escape). Chains otherwise reach it via
 `Fold` / `Unfold` at construction time.
-`MultiFocus[F]` covers five v1 carriers (`AlgLens[F]`,
-`Kaleidoscope`, `Grate`, `PowerSeries`, `FixedTraversal[N]`) post-
-fold; sub-shapes are selected by the choice of `F` (e.g.
-`MultiFocus[PSVec]` for `Traversal.each`,
-`MultiFocus[Function1[Int, *]]` for `Traversal.{two,three,four}` and
-`MultiFocus.tuple` / `representable`).
+`MultiFocus[F]` retains the container traversal and aggregation
+branches of the historical consolidation. `Indexed` also extends
+`Optic`, but changes the index under composition to `(I, J)` and
+the existential context to `(outer.X, I => inner.X)`. It therefore
+uses its own `andThen`, not a same-carrier `AssociativeFunctor`.
+No generic classical-family Glass bridges are installed, and
+Unit-context composition normalization remains open.
 
 ## Why the existential encoding suits an eager language
 

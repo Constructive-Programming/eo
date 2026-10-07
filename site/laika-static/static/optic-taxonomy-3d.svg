@@ -60,8 +60,8 @@
 <text class="fam" x="481.0" y="473.0">Optional</text>
 <text class="sub" x="481.0" y="493.0">Affine carrier</text>
 <polygon class="rw" points="384.0,592.0 481.0,648.0 675.0,536.0 578.0,480.0"/>
-<text class="fam" x="529.5" y="557.0">Traversal</text>
-<text class="sub" x="529.5" y="577.0">fixed/Grate: total · each: contextual</text>
+<text class="fam" x="529.5" y="557.0">Grate / Traversal</text>
+<text class="sub" x="529.5" y="577.0">Grate: total · Traversal: contextual</text>
 <polygon class="plan" points="384.0,368.0 481.0,424.0 578.0,368.0 481.0,312.0" stroke-dasharray="6 5"/>
 <text class="plan-t" x="481.0" y="361.0">fallible write</text>
 <text class="sub" x="481.0" y="381.0">planned</text>

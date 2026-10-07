@@ -15,8 +15,8 @@ import org.openjdk.jmh.annotations.*
   * "Lens over a List field" traversal shape; `naive_*` is the hand-rolled `copy` + `List.map`
   * baseline.
   *
-  * The aggregator (`collect*`) and `MultiFocus.tuple` benches that used to share this file now live
-  * in [[MultiFocusCollectBench]]; the duplicate ArraySeq PSVec path (identical to
+  * The aggregator (`collect*`) and indexed tuple benches that used to share this file now live in
+  * [[MultiFocusCollectBench]]; the duplicate ArraySeq PSVec path (identical to
   * [[PowerSeriesBench]]) was dropped — see plan 009, Phase 3.
   */
 @State(Scope.Benchmark)

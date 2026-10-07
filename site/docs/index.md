@@ -93,10 +93,11 @@ library's core habit: [Capabilities](capabilities.md).
 - [Optics reference](optics.md) — one section per family, with
   runnable examples and the compiler-pinned 11-family
   [composition matrix](optics.md#composition-matrix).
-- [MultiFocus](multifocus.md) — the unified successor of five v1
-  carriers (`AlgLens[F]`, `Kaleidoscope`, `Grate`, `PowerSeries`,
-  `FixedTraversal[N]`); typeclass-gated capability matrix and
-  composability profile.
+- [MultiFocus](multifocus.md) — container traversal and aggregation;
+  typeclass-gated capabilities and composability profile. Fixed-index
+  tabulations use [Indexed](indexed.md).
+- [Indexed: Grates and Glasses](indexed.md) — environment-dependent
+  settings, full-grid updates, and reconstruction that preserves row metadata.
 - [Generics](generics.md) — the `lens[S](_.field)` and
   `prism[S, A]` macros, backed by Hearth.
 - [Circe integration](integrations/circe.md) — `JsonPrism` / `JsonTraversal`,
