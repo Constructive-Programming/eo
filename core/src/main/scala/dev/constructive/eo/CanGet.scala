@@ -17,6 +17,17 @@ trait CanGet[S, A]:
 
 object CanGet:
 
+  /** Read fanout — pair two reads on the same `S`. Trivially lawful (no write path, hence no
+    * disjointness obligation, unlike the writeable [[optics.Optic.zip]] / [[CanModifyP.zip]]). This
+    * is `&&&` on the two `get` functions. An extension (not a trait member) so that on a value that
+    * is also `CanModifyP`, the more-specific read-modify-write [[CanModifyP.zip]] is chosen
+    * instead.
+    */
+  extension [S, A](self: CanGet[S, A])
+
+    def zip[C](that: CanGet[S, C]): CanGet[S, (A, C)] =
+      s => (self.get(s), that.get(s))
+
   /** Derive from any optic in scope whose carrier can always read. The optic parameter precedes the
     * gate typeclass in the same using clause deliberately: same-clause resolution runs left to
     * right, so the optic pins the carrier `F` before `Accessor[F]` is searched. (A context bound
