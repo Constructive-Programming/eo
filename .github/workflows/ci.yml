@@ -114,10 +114,10 @@ jobs:
         run: sbt +update
 
       - name: Check formatting
-        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck benchmarks/scalafmtCheck demoUplcJvm/scalafmtCheckAll demoUplcJvmValidators/scalafmtCheckAll
+        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck benchmarks/scalafmtCheck demoUplcJvm/scalafmtCheckAll demoUplcJvmValidators/scalafmtCheckAll demoUplcJvmBench/scalafmtCheckAll
 
       - name: Check scalafix
-        run: sbt '++ ${{ matrix.scala }}' 'scalafixAll --check' 'demoUplcJvm/scalafixAll --check' 'demoUplcJvmValidators/scalafixAll --check'
+        run: sbt '++ ${{ matrix.scala }}' 'scalafixAll --check' 'demoUplcJvm/scalafixAll --check' 'demoUplcJvmValidators/scalafixAll --check' 'demoUplcJvmBench/scalafixAll --check'
 
       - name: Check that workflows are up to date
         run: sbt githubWorkflowCheck
@@ -134,15 +134,15 @@ jobs:
         run: sbt '++ ${{ matrix.scala }}' doc
 
       - name: Test UPLC → JVM demo (differential vs Scalus CEK)
-        run: sbt '++ ${{ matrix.scala }}' demoUplcJvm/test
+        run: sbt '++ ${{ matrix.scala }}' demoUplcJvm/test demoUplcJvmBench/Jmh/compile
 
       - name: Make target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))
-        run: mkdir -p jsoniter/target benchmarks/target kyo/target target circe/target zio/target unidocs/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target core/target demos/uplc-jvm/target project/target
+        run: mkdir -p jsoniter/target benchmarks/target kyo/target target demos/uplc-jvm-bench/target circe/target zio/target unidocs/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target core/target demos/uplc-jvm/target project/target
 
       - name: Compress target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))
-        run: tar cf targets.tar jsoniter/target benchmarks/target kyo/target target circe/target zio/target unidocs/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target core/target demos/uplc-jvm/target project/target
+        run: tar cf targets.tar jsoniter/target benchmarks/target kyo/target target demos/uplc-jvm-bench/target circe/target zio/target unidocs/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target core/target demos/uplc-jvm/target project/target
 
       - name: Upload target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))

@@ -34,6 +34,10 @@ table, and for the ratios everywhere, the signal holds.
 > sub-nanosecond truth. See [Reproducing](#reproducing) and
 > [`benchmarks/README.md`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md).
 
+The [UPLC → JVM demo](demos/uplc-jvm.md) has its own JMH suite — the Scalus CEK
+machine against the class files the demo compiles — reported on its page, not
+here.
+
 For the trend over time, the nightly sweep pipeline records every full run:
 the **[benchmark history chart](https://constructive-programming.github.io/eo/bench/index.html)** plots B/op and ns/op per benchmark
 across sweeps, and the latest full table is generated into

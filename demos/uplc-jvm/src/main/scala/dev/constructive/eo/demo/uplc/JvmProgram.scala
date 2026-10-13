@@ -57,7 +57,80 @@ object PrimOp:
   * converted (each captures exactly its free variables, in [[SourceProgram.captures]] order),
   * locals allocated to slots, every boxing / unboxing explicit. `methods(0)` is the entry point.
   */
-final case class JvmProgram(source: SourceProgram, methods: Vector[JvmMethod])
+final case class JvmProgram(source: SourceProgram, methods: Vector[JvmMethod]):
+
+  /** Renders every method as pseudo-code: slots, captures, boxing and fast paths spelled out. */
+  def show: String = methods.map(JvmProgram.method).mkString("\n")
+
+object JvmProgram:
+
+  private def method(m: JvmMethod): String =
+    val header = m.kind match
+      case MethodKind.Entry                     => "entry():"
+      case MethodKind.LambdaBody(origin, arity) =>
+        val params = (1 to arity).map(p => s"s$p").mkString(", ")
+        s"m${m.id}(env, $params):   // lambda chain at UPLC node $origin"
+      case MethodKind.ThunkBody(origin) => s"m${m.id}(env):   // delay at UPLC node $origin"
+    s"$header\n  ${block(m.body, 1)}"
+
+  private def pad(indent: Int): String = "  " * indent
+
+  private def rep(r: Rep): String = r match
+    case Rep.Obj   => "Value"
+    case Rep.Int   => "BigInt"
+    case Rep.Bool  => "Boolean"
+    case Rep.Bytes => "ByteString"
+    case Rep.Str   => "String"
+
+  private def list(cs: Vector[Code], indent: Int): String = cs.map(expr(_, indent)).mkString(", ")
+
+  /** A statement position: bindings render as one line each. */
+  private def block(c: Code, indent: Int): String = c match
+    case Code.Bind(slot, rhs, body) =>
+      s"s$slot: ${rep(rhs.rep)} = ${expr(rhs, indent)}\n${pad(indent)}${block(body, indent)}"
+    case other => expr(other, indent)
+
+  private def expr(c: Code, indent: Int): String = c match
+    case Code.Local(slot, _)      => s"s$slot"
+    case Code.Captured(i)         => s"env[$i]"
+    case Code.Literal(i, Rep.Obj) => s"K[$i]"
+    case Code.Literal(i, r)       => s"KU[$i]: ${rep(r)}"
+    case Code.BoolLit(b)          => b.toString
+    case Code.Box(inner, _)       => s"box(${expr(inner, indent)})"
+    case Code.Unbox(inner, to)    => s"unbox[${rep(to)}](${expr(inner, indent)})"
+    case bind: Code.Bind => s"{\n${pad(indent + 1)}${block(bind, indent + 1)}\n${pad(indent)}}"
+    case Code.If(cond, t, f, _) =>
+      s"if ${expr(cond, indent)} then ${block(t, indent + 1)}\n${pad(indent)}else ${block(f, indent + 1)}"
+    case Code.IntSwitch(scrut, cases, _) =>
+      val arms =
+        cases.zipWithIndex.map((b, k) => s"${pad(indent + 1)}case $k => ${block(b, indent + 2)}")
+      s"switch ${expr(scrut, indent)}\n${arms.mkString("\n")}"
+    case Code.MakeLambda(m, _, arity, caps) =>
+      s"closure(m$m, arity $arity, env [${list(caps, indent)}])"
+    case Code.MakeThunk(m, _, caps) => s"thunk(m$m, env [${list(caps, indent)}])"
+    case Code.Apply(f, a)           => s"apply(${expr(f, indent)}, ${expr(a, indent)})"
+    case Code.Spread(args, f)       => s"applyAll(${expr(f, indent)}, [${list(args, indent)}])"
+    case Code.Force(inner)          => s"force(${expr(inner, indent)})"
+    case Code.Invoke(m, _, closure, args) =>
+      s"m$m(envOf(${expr(closure, indent)}), ${list(args, indent)})"
+    case Code.CallBody(m, _, caps, args) => s"m$m([${list(caps, indent)}], ${list(args, indent)})"
+    case Code.Prim(op, args)             => s"${op.method}(${list(args, indent)})"
+    case Code.Delegate(fun, args)        => s"scalus.${fun.toString}(${list(args, indent)})"
+    case Code.BuiltinValue(fun)          => s"builtin(${fun.toString})"
+    case Code.Choose(fun, scrut, branches, _) =>
+      val arms =
+        branches.zipWithIndex.map((b, k) => s"${pad(indent + 1)}case $k => ${block(b, indent + 2)}")
+      s"choose ${fun.toString}(${expr(scrut, indent)})\n${arms.mkString("\n")}"
+    case Code.Construct(tag, args)      => s"constr $tag(${list(args, indent)})"
+    case Code.CaseOf(scrut, arms, _, _) =>
+      val shown = arms.zipWithIndex.map {
+        case (Arm.Value(v), k) =>
+          s"${pad(indent + 1)}case $k => applyAll(${expr(v, indent + 2)}, fields)"
+        case (Arm.Direct(l), k) =>
+          s"${pad(indent + 1)}case $k => m${l.method}(env [${list(l.captures, indent + 2)}], fields…)"
+      }
+      s"case ${expr(scrut, indent)}\n${shown.mkString("\n")}"
+    case Code.Fail(reason, _) => s"fail(\"$reason\")"
 
 enum MethodKind:
 

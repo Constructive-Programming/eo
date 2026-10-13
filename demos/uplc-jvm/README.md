@@ -110,15 +110,27 @@ Every generated class also goes through ASM's bytecode verifier.
 
 ```sh
 sbt demoUplcJvm/test
-sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo"   # walkthrough + rough timing
+sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo"   # the round trip, stage by stage
+sbt "demoUplcJvmBench/Jmh/run -prof gc"                             # JMH: CEK vs generated class
 demos/uplc-jvm/scripts/refresh-conformance.sh [plutus-tag]          # re-vendor the suite
 ```
 
-`Demo` prints a validator's typed expression and times its validation through
-both evaluators. On a development container the Fibonacci validator (`fib(400)`)
-took ~0.45 ms per run on the CEK machine and ~0.045 ms through the generated
-class. That is a single-threaded loop, not a JMH benchmark: read it as an order
-of magnitude.
+`Demo` prints the round trip stage by stage: UPLC text, the typed expression
+(A), the lowered code (B), the class file (T), and the discharged result next to
+the CEK machine's. Pass a directory to also write the class file there for
+`javap`.
+
+## Benchmarks
+
+`demos/uplc-jvm-bench` is a JMH project (outside the root aggregate and the
+library's nightly sweep): the CEK machine against the generated class for every
+validator, the Fibonacci puzzle at growing `n`, and what translation itself
+costs. The numbers and how they were taken are on the
+[docs page](../../site/docs/demos/uplc-jvm.md#benchmarks).
+
+```sh
+sbt "demoUplcJvmBench/Jmh/run -prof gc"
+```
 
 ## Prior art
 

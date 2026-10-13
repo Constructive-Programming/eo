@@ -4,9 +4,7 @@ import dev.constructive.eo.demo.uplc.Oracle.Verdict
 import dev.constructive.eo.demo.uplc.validators.*
 import org.specs2.execute.Result
 import org.specs2.mutable.Specification
-import scalus.cardano.onchain.plutus.prelude.{List as PList, Option as POption}
-import scalus.cardano.onchain.plutus.v1.Value
-import scalus.cardano.onchain.plutus.v2.TxOut
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{Builtins, ByteString, Data}
@@ -24,38 +22,14 @@ import scalus.uplc.{Constant, PlutusV3, Term}
   */
 class ValidatorSpec extends Specification:
 
-  // Key and script hashes are 28 bytes, transaction ids 32.
-  private def hash(size: Int, byte: Int) = ByteString.fill(size, byte.toByte)
-  private val alice = PubKeyHash(hash(28, 0xa1))
-  private val bob = PubKeyHash(hash(28, 0xb0))
-  private val carol = PubKeyHash(hash(28, 0xca))
-
-  private val ownRef = TxOutRef(TxId(hash(32, 0x01)), 0)
+  import Parties.{alice, bob, carol}
 
   private def context(
       datum: Data,
       redeemer: Data,
       signatories: Seq[PubKeyHash] = Nil,
       validRange: Interval = Interval.always,
-  ): Data =
-    val ownInput = TxInInfo(
-      ownRef,
-      TxOut(
-        Address(Credential.ScriptCredential(hash(28, 0x5c)), POption.None),
-        Value.lovelace(10_000_000),
-      ),
-    )
-    ScriptContext(
-      txInfo = TxInfo(
-        inputs = PList(ownInput),
-        fee = 188021,
-        validRange = validRange,
-        signatories = PList.from(signatories),
-        id = TxId(hash(32, 0xfe)),
-      ),
-      redeemer = redeemer,
-      scriptInfo = ScriptInfo.SpendingScript(ownRef, POption.Some(datum)),
-    ).toData
+  ): Data = Contexts.spending(datum, redeemer, signatories, validRange)
 
   /** CIP-117: a V3 script validates iff it evaluates to unit. */
   private def validates(term: Term): Boolean = term match
@@ -145,8 +119,7 @@ class ValidatorSpec extends Specification:
     }
 
     "Fibonacci (integer recursion)" >> {
-      def fib(n: Int): BigInt =
-        (1 to n).foldLeft((BigInt(0), BigInt(1)))((p, _) => (p._2, p._1 + p._2))._1
+      import Scenarios.fib
       "accepts: fib(30)" >> {
         check(fibonacci, context(fib(30).toData, BigInt(30).toData), accept = true)
       }

@@ -67,6 +67,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "benchmarks/scalafmtCheck",
       "demoUplcJvm/scalafmtCheckAll",
       "demoUplcJvmValidators/scalafmtCheckAll",
+      "demoUplcJvmBench/scalafmtCheckAll",
     ),
     name = Some("Check formatting"),
   ),
@@ -75,6 +76,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "scalafixAll --check",
       "demoUplcJvm/scalafixAll --check",
       "demoUplcJvmValidators/scalafixAll --check",
+      "demoUplcJvmBench/scalafixAll --check",
     ),
     name = Some("Check scalafix"),
   ),
@@ -84,7 +86,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
 // crypto bindings, bouncycastle, borer, upickle, monocle), so `sbt test` and
 // the pre-push hook stay lean; CI runs its differential suite as its own step.
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
-  List("demoUplcJvm/test"),
+  List("demoUplcJvm/test", "demoUplcJvmBench/Jmh/compile"),
   name = Some("Test UPLC → JVM demo (differential vs Scalus CEK)"),
 )
 
@@ -1208,6 +1210,23 @@ lazy val demoUplcJvmValidators: Project = project
     publish / skip := true,
     libraryDependencies += scalus,
     addCompilerPlugin("org.scalus" % "scalus-plugin" % ScalusVersion cross CrossVersion.full),
+  )
+
+// JMH benchmarks for the demo: the CEK machine against the generated class, and what the
+// translation itself costs. Kept apart from `benchmarks/` so the nightly sweep and
+// BENCHMARKS.md stay about the library; results are reported on the demo's docs page.
+// Run with `sbt "demoUplcJvmBench/Jmh/run -prof gc"`.
+lazy val demoUplcJvmBench: Project = project
+  .in(file("demos/uplc-jvm-bench"))
+  .enablePlugins(JmhPlugin)
+  .dependsOn(
+    LocalProject("demoUplcJvm"),
+    LocalProject("demoUplcJvmValidators"),
+  )
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-demo-uplc-jvm-bench",
+    publish / skip := true,
   )
 
 // Single source of truth for the JMH invocation (the config that the per-class
