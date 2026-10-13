@@ -22,14 +22,14 @@ class OpticSpec extends Specification:
       case Code.MakeThunk(_, _, cs)     => cs.flatMap(go)
       case Code.Apply(f, a)             => go(f) ++ go(a)
       case Code.Force(x)                => go(x)
-      case Code.Invoke(_, _, f, as)     => go(f) ++ as.flatMap(go)
-      case Code.CallBody(_, _, cs, as)  => cs.flatMap(go) ++ as.flatMap(go)
+      case Code.Invoke(_, f, as)        => go(f) ++ as.flatMap(go)
+      case Code.CallBody(_, cs, as)     => cs.flatMap(go) ++ as.flatMap(go)
       case Code.Spread(as, f)           => as.flatMap(go) ++ go(f)
-      case Code.Prim(_, as)             => as.flatMap(go)
+      case Code.Prim(_, as, _)          => as.flatMap(go)
       case Code.Delegate(_, as)         => as.flatMap(go)
       case Code.Choose(_, s, bs, _)     => go(s) ++ bs.flatMap(go)
       case Code.Construct(_, as)        => as.flatMap(go)
-      case Code.CaseOf(s, arms, _, _)   =>
+      case Code.CaseOf(s, arms)         =>
         go(s) ++ arms.flatMap {
           case Arm.Value(v)  => go(v)
           case Arm.Direct(l) => go(l)

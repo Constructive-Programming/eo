@@ -1,34 +1,29 @@
 package dev.constructive.eo.demo.uplc
 
-import scalus.uplc.{Constant, DefaultFun, DefaultUni}
+import scalus.uplc.{Constant, DefaultFun, DefaultUni, TypeScheme}
 
-/** Static types reconstructed for an untyped UPLC term — the "hybrid" in hybrid typing.
-  *
-  * The four scalar types are what the typer can prove locally: constants, saturated builtins with a
-  * monomorphic result, `let`-bound values of those, and conditionals whose branches agree. They get
-  * an unboxed JVM representation. `Dyn` is everything else (functions, constructors, data, lists,
-  * values flowing through lambda parameters) and lives in the uniform boxed representation.
-  * `Bottom` types `error`, so a branch that can only fail does not widen its sibling.
+/** A static type reconstructed for an untyped UPLC term — the "hybrid" in hybrid typing: the Plutus
+  * builtin type the typer could prove locally (constants, saturated builtins with a monomorphic
+  * result, `let`-bound values of those, conditionals whose branches agree), or `None` for
+  * everything else (functions, constructors, values flowing through lambda parameters). Integers,
+  * booleans, bytestrings and strings get an unboxed JVM representation; every other value lives in
+  * the uniform boxed one.
   */
-enum Ty:
-  case Integer, ByteString, String, Bool, Dyn, Bottom
-
-  def join(that: Ty): Ty =
-    if this == that then this
-    else if this == Ty.Bottom then that
-    else if that == Ty.Bottom then this
-    else Ty.Dyn
+type Ty = Option[DefaultUni]
 
 object Ty:
 
-  def ofUni(uni: DefaultUni): Ty = uni match
-    case DefaultUni.Integer    => Ty.Integer
-    case DefaultUni.ByteString => Ty.ByteString
-    case DefaultUni.String     => Ty.String
-    case DefaultUni.Bool       => Ty.Bool
-    case _                     => Ty.Dyn
+  def of(t: TypeScheme): Ty = t match
+    case TypeScheme.Type(uni) => Some(uni)
+    case _                    => None
 
-  def ofConstant(c: Constant): Ty = ofUni(c.tpe)
+  /** What the branches of a conditional agree on. A branch that can only fail does not widen its
+    * siblings.
+    */
+  def join(branches: List[Expr]): Ty =
+    branches.filterNot(_.fails).map(_.ty).distinct match
+      case List(t) => t
+      case _       => None
 
 /** A — the typed, re-sugared program: UPLC read back as a Scala-like expression tree.
   *
@@ -71,7 +66,9 @@ enum Expr:
   case CallKnown(fn: Ref, origin: Int, args: List[Expr])
 
   case Force(body: Expr)
-  case Lit(index: Int, value: Constant)
+
+  /** The constant at UPLC node `node`. */
+  case Lit(node: Int, value: Constant)
 
   /** An unsaturated builtin used as a value. */
   case BuiltinRef(fun: DefaultFun)
@@ -94,11 +91,14 @@ enum Expr:
     case Call(_, _, t)      => t
     case Choose(_, _, _, t) => t
     case Match(_, _, t)     => t
-    case Lit(_, c)          => Ty.ofConstant(c)
-    case Fail | Unbound(_)  => Ty.Bottom
-    case Lambda(_, _, _) | Delayed(_, _) | Apply(_, _) | Spread(_, _) | CallKnown(_, _, _) |
-        Force(_) | BuiltinRef(_) | Construct(_, _) =>
-      Ty.Dyn
+    case Lit(_, c)          => Some(c.tpe)
+    case _                  => None
+
+  /** Can only fail: `error`, an unbound variable, or a `let` whose body is one of those. */
+  def fails: Boolean = this match
+    case Fail | Unbound(_)  => true
+    case Let(_, _, body, _) => body.fails
+    case _                  => false
 
   /** Renders the expression as Scala-like source — for humans; nothing parses it back. */
   def show: String = Expr.block(this, 0, 0)
@@ -106,21 +106,15 @@ enum Expr:
 object Expr:
 
   private def scalaType(ty: Ty): String = ty match
-    case Ty.Integer    => "BigInt"
-    case Ty.ByteString => "ByteString"
-    case Ty.String     => "String"
-    case Ty.Bool       => "Boolean"
-    case Ty.Dyn        => "Value"
-    case Ty.Bottom     => "Nothing"
+    case Some(DefaultUni.Integer)    => "BigInt"
+    case Some(DefaultUni.ByteString) => "ByteString"
+    case Some(DefaultUni.String)     => "String"
+    case Some(DefaultUni.Bool)       => "Boolean"
+    case _                           => "Value"
 
   private def pad(indent: Int): String = "  " * indent
 
   private def name(depth: Int, index: Int): String = s"v${depth - index}"
-
-  /** UPLC spells builtins in camelCase (`addInteger`); Scalus' enum cases are capitalised. */
-  private def builtin(fun: DefaultFun): String =
-    val n = fun.toString
-    n.take(1).toLowerCase + n.drop(1)
 
   private def constant(c: Constant): String = c match
     case Constant.Integer(v)    => v.toString
@@ -152,7 +146,7 @@ object Expr:
     case Ref(i, _)  => name(depth, i)
     case Unbound(i) => s"<unbound $i>"
     case Lit(_, c)  => constant(c)
-    case BuiltinRef(fun) => s"builtin.${builtin(fun)}"
+    case BuiltinRef(fun) => s"builtin.${Semantics.name(fun)}"
     case Fail            => "error()"
 
     case Lambda(_, params, body) =>
@@ -164,12 +158,13 @@ object Expr:
     case Spread(as, fn)       => s"${render(fn, depth, indent)}(${args(as, depth, indent)})"
     case CallKnown(fn, _, as) => s"${render(fn, depth, indent)}(${args(as, depth, indent)})"
     case Force(body)          => s"${render(body, depth, indent)}.force"
-    case Call(fun, as, _)     => s"${builtin(fun)}(${args(as, depth, indent)})"
+    case Call(fun, as, _)     => s"${Semantics.name(fun)}(${args(as, depth, indent)})"
     case Construct(tag, as)   => s"Constr$tag(${args(as, depth, indent)})"
     case Choose(DefaultFun.IfThenElse, cond, List(t, f), _) => ifThenElse(cond, t, f, depth, indent)
-    case Match(cond, List(f, t), _) if cond.ty == Ty.Bool   => ifThenElse(cond, t, f, depth, indent)
-    case Choose(fun, scrut, branches, _)                    =>
-      s"${builtin(fun)}(${render(scrut, depth, indent)})(${args(branches, depth, indent + 1)})"
+    case Match(cond, List(f, t), _) if cond.ty.contains(DefaultUni.Bool) =>
+      ifThenElse(cond, t, f, depth, indent)
+    case Choose(fun, scrut, branches, _) =>
+      s"${Semantics.name(fun)}(${render(scrut, depth, indent)})(${args(branches, depth, indent + 1)})"
     case Match(scrut, branches, _) =>
       val arms = branches.zipWithIndex.map {
         case (b, k) =>

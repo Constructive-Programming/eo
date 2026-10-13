@@ -2,6 +2,7 @@ package dev.constructive.eo.demo.uplc
 
 import dev.constructive.eo.demo.uplc.validators.{CompiledValidators, Scenarios}
 import java.nio.file.{Files, Paths}
+import scalus.uplc.eval.Result
 import scalus.uplc.{DeBruijn, DeBruijnedProgram, Program}
 
 /** The round trip, stage by stage — what the docs page (`site/docs/demos/uplc-jvm.md`) shows.
@@ -65,8 +66,8 @@ object Demo:
   private def compare(flat: Array[Byte], classFile: Array[Byte]): Unit =
     val cek = Semantics.vm.evaluateDeBruijnedTerm(DeBruijnedProgram.fromFlatEncoded(flat).term)
     Exec.run(classFile) match
-      case Exec.Outcome.Success(t, _) =>
+      case Result.Success(t, _, _, _) =>
         println(s"\nrun + discharge: ${DeBruijn.fromDeBruijnTerm(t).show}")
         println(s"CEK machine:     ${cek.show}")
         println(s"α-equal:         ${t.α_==(DeBruijn.deBruijnTerm(cek))}")
-      case Exec.Outcome.Failure(reason, _) => println(s"\nrun failed: $reason")
+      case Result.Failure(e, _, _, _) => println(s"\nrun failed: ${e.getMessage}")

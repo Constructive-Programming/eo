@@ -132,8 +132,8 @@ arrives as:
 (program 1.1.0 [(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)])
 ```
 
-`iso.get` decodes the flat bytes and reads them back as a typed, Scala-like
-expression:
+`iso.get` decodes the flat bytes into Scalus' own `Term` tree and reads it back
+as a typed, Scala-like expression:
 
 ```scala
 val v0: BigInt = 6
@@ -162,8 +162,10 @@ dynamic application and runs exactly as the machine would run it.
 
 **Hybrid typing.** UPLC is untyped, yet most of a program's scalars are provable
 locally — constants, typed builtin results, `let`s of those, branches that
-agree. They get Scala types (`BigInt`, `Boolean`, `ByteString`, `String`) and an
-unboxed JVM representation. Everything else — functions, constructors, `Data`,
+agree. A type is a Scalus `DefaultUni`, and a builtin's signature is Scalus' own
+`TypeScheme` for it. Integers, booleans, bytestrings and strings get Scala types
+(`BigInt`, `Boolean`, `ByteString`, `String`) and an unboxed JVM
+representation. Everything else — functions, constructors, `Data`,
 whatever flows through a lambda parameter — is a `Value`: a boxed Scalus
 `Constant` or a runtime closure.
 
@@ -219,38 +221,40 @@ decoded.
   moves to a method of its own (the JVM caps a method at 64 KB of bytecode).
 
 For the small program, B is one method; `KU` is the class's table of unboxed
-constants:
+constants, indexed by UPLC node:
 
 ```
 entry():
-  s0: BigInt = KU[0]: BigInt
+  s0: BigInt = KU[14]: BigInt
   s1: BigInt = multiplyInteger(s0, s0)
   box(addInteger(s0, s1))
 ```
 
 ### Back: JVM code to a class file (`reverseGet`)
 
-`iso.reverseGet` writes one class file with [ASM](https://asm.ow2.io): a static
-method per lambda chain and `delay`, a `lookupswitch` per call arity for closure
-dispatch, and the flat program itself, embedded as string constants. Here is the
-small program's `entry` method from `javap -c` (constant-pool references
-shortened, comments added):
+`iso.reverseGet` writes one class file with
+[Cojen Maker](https://github.com/cojen/Maker): the emitter writes each B node
+as a variable and calls runtime methods by name, and the library picks the
+overload, decides what lives in a local and what stays on the operand stack, and
+computes the stack maps. The class has a static method per lambda chain and
+`delay`, a switch per call arity for closure dispatch, and the flat program
+itself, embedded as Base64 string constants. Here is the small program's `entry`
+method from `javap -c` (constant-pool references shortened, comments added):
 
 ```
-public static java.lang.Object entry();
+private static java.lang.Object entry();
    0: getstatic     KU                  // the class's unboxed constants
-   3: iconst_0
-   4: aaload
-   5: checkcast     scala/math/BigInt
-   8: astore_0                          // v0 = 6
-   9: aload_0
+   3: bipush        14                  // the constant at UPLC node 14
+   5: aaload
+   6: checkcast     scala/math/BigInt
+   9: astore_0                          // v0 = 6
   10: aload_0
-  11: invokestatic  Rt.multiplyInteger  // (BigInt, BigInt) => BigInt
-  14: astore_1                          // v1 = v0 * v0
-  15: aload_0
-  16: aload_1
+  11: aload_0
+  12: invokestatic  Rt.multiplyInteger  // (BigInt, BigInt) => BigInt
+  15: aload_0                           // v1 = v0 * v0 never needs a local
+  16: swap
   17: invokestatic  Rt.addInteger       // (BigInt, BigInt) => BigInt
-  20: invokestatic  Rt.boxInteger       // the one box, at the result
+  20: invokestatic  Rt.box              // the one box, at the result
   23: areturn
 ```
 
@@ -291,9 +295,11 @@ arguments untouched (`ifThenElse`, `chooseList`, `chooseUnit`, `chooseData`,
 | validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and translated with the context applied |
 | compiler paths | one hand-written program per path, error paths included, a 20 000-deep `let` chain | all agree |
 
-Every generated class also passes ASM's bytecode verifier, and each conformance
-case's `.expected` file pins whether it should succeed or fail — so the harness
-cannot pass by having both evaluators fail everything.
+The JVM's own verifier checks every generated class as it is loaded, and each
+conformance case's `.expected` file pins whether it should succeed or fail — so
+the harness cannot pass by having both evaluators fail everything. Both sides
+report in Scalus' types: the generated code fails with a `MachineError`, as the
+CEK machine does, and `Exec.run` returns an evaluation `Result`.
 
 ## Benchmarks
 
@@ -312,7 +318,7 @@ accept it before anything is timed):
 Average time per operation in **µs (lower is better)**, error = 99.9 %
 confidence half-width; allocation per operation from `-prof gc`
 (`gc.alloc.rate.norm`). Measured on a 4-vCPU Intel Xeon (2.1 GHz) container,
-OpenJDK 21.0.12, Scalus 1.3.0; three forks, 5 × 1 s measurement after 3 × 1 s
+OpenJDK 21.0.12, Scalus 1.3.0, Cojen Maker 2.8.4; three forks, 5 × 1 s measurement after 3 × 1 s
 warm-up (5 × 2 s for the Fibonacci scaling runs, whose slow operations took
 longer to reach steady state). A shared container is not a quiet benchmark
 machine: read the ratios, not the absolute values.
@@ -321,17 +327,17 @@ machine: read the ratios, not the absolute values.
 
 | validator | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 4.65 ± 0.31 | 1.62 ± 0.24 | **2.9×** | 13.2 KB | 5.4 KB |
-| `preimage` | 6.31 ± 0.28 | 2.19 ± 0.15 | **2.9×** | 17.8 KB | 7.4 KB |
-| `timeLock` | 6.29 ± 0.30 | 2.34 ± 0.14 | **2.7×** | 17.7 KB | 7.8 KB |
-| `multisig` | 14.2 ± 4.0 | 3.98 ± 0.23 | **3.6×** | 37.5 KB | 13.2 KB |
-| `fibonacci` | 30.8 ± 3.1 | 1.56 ± 0.09 | **19.7×** | 76.9 KB | 5.4 KB |
-| `htlc` | 8.44 ± 0.30 | 3.39 ± 0.30 | **2.5×** | 22.9 KB | 10.5 KB |
+| `helloOwner` | 4.70 ± 0.24 | 1.49 ± 0.09 | **3.2×** | 13.2 KB | 5.4 KB |
+| `preimage` | 6.44 ± 0.25 | 2.19 ± 0.18 | **2.9×** | 17.8 KB | 7.5 KB |
+| `timeLock` | 6.16 ± 0.30 | 2.21 ± 0.13 | **2.8×** | 17.7 KB | 7.8 KB |
+| `multisig` | 13.4 ± 1.0 | 3.93 ± 0.25 | **3.4×** | 37.4 KB | 13.1 KB |
+| `fibonacci` | 30.6 ± 1.7 | 1.52 ± 0.07 | **20.1×** | 76.9 KB | 5.4 KB |
+| `htlc` | 8.41 ± 0.54 | 3.20 ± 0.16 | **2.6×** | 23.0 KB | 10.5 KB |
 
 Most validators spend their time decoding the script context — `unConstrData`,
 `headList`, `sndPair` and friends. Those builtins run the same Scalus code in
 both evaluators, so compilation saves only the interpretation *around* them:
-**2.5–3.6×**, with 2–3× less allocation. Where the work is the script's own
+**2.6–3.4×**, with 2–3× less allocation. Where the work is the script's own
 logic, interpretation is most of the cost, and typed fast paths and direct calls
 remove it: the Fibonacci puzzle (`n = 30`) validates **~20×** faster and
 allocates 14× less.
@@ -340,33 +346,36 @@ allocates 14× less.
 
 | `n` | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |
 |--:|--:|--:|--:|--:|--:|
-| 10 | 11.6 ± 0.7 | 1.14 ± 0.11 | **10.2×** | 31.8 KB | 3.8 KB |
-| 100 | 90.4 ± 4.6 | 3.56 ± 0.21 | **25.4×** | 235.1 KB | 12.2 KB |
-| 1000 | 966.0 ± 61.2 | 52.6 ± 3.1 | **18.4×** | 2,575.5 KB | 185.6 KB |
+| 10 | 12.5 ± 0.5 | 1.08 ± 0.06 | **11.6×** | 31.8 KB | 3.8 KB |
+| 100 | 89.5 ± 4.8 | 3.45 ± 0.10 | **25.9×** | 235.1 KB | 12.2 KB |
+| 1000 | 976.8 ± 73.9 | 52.1 ± 2.2 | **18.8×** | 2,502.3 KB | 185.6 KB |
 
-The speed-up grows from 10× to 25× as fixed per-validation costs (building the
+The speed-up grows from 12× to 26× as fixed per-validation costs (building the
 script's closures, decoding the context) are amortised over more recursion. At
 `n = 1000` the integers reach ~700 bits; `BigInt` arithmetic — identical in both
-evaluators — takes a larger share of the time, and the speed-up settles at ~18×.
+evaluators — takes a larger share of the time, and the speed-up settles at ~19×.
 
 ### What translation costs
 
 | validator | flat UPLC (S) | class file (T) | translate (µs) | translate + load (µs) | break-even (validations) |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 147 B | 4,672 B | 72.9 ± 5.6 | 388.9 ± 67.3 | 128 |
-| `preimage` | 184 B | 5,349 B | 106.0 ± 17.9 | 460.8 ± 80.5 | 112 |
-| `timeLock` | 181 B | 5,424 B | 90.9 ± 7.8 | 431.7 ± 79.4 | 109 |
-| `multisig` | 200 B | 6,003 B | 109.5 ± 8.6 | 532.0 ± 89.0 | 52 |
-| `fibonacci` | 124 B | 4,305 B | 60.3 ± 7.4 | 315.3 ± 42.9 | 11 |
-| `htlc` | 307 B | 7,619 B | 149.4 ± 8.0 | 640.2 ± 126.7 | 127 |
+| `helloOwner` | 147 B | 5,158 B | 220.4 ± 24.3 | 767.8 ± 97.7 | 239 |
+| `preimage` | 184 B | 5,640 B | 292.8 ± 31.2 | 944.0 ± 99.1 | 222 |
+| `timeLock` | 181 B | 6,110 B | 352.0 ± 41.0 | 950.6 ± 130.4 | 241 |
+| `multisig` | 200 B | 6,446 B | 341.9 ± 74.9 | 997.0 ± 103.4 | 106 |
+| `fibonacci` | 124 B | 4,423 B | 162.3 ± 22.8 | 681.4 ± 112.8 | 23 |
+| `htlc` | 307 B | 9,859 B | 584.8 ± 50.6 | 1,343.0 ± 76.8 | 258 |
 
 `translate` is the optic (`iso.modify(Lower.lower)`), measured warm;
 `translate + load` adds defining the class, verifying it, and running its static
-initialiser, which re-decodes the embedded program. Loading dominates. The
-break-even column divides `translate + load` by the time each validation saves:
-a script must be validated **~10–130 times** before compiling it pays for itself.
-That fits scripts that run over and over — a node re-validating the same
-reference scripts, an emulator, a test-suite — rather than one-off evaluation.
+initialiser, which re-decodes the embedded program. Loading is two thirds of the
+total. Translating costs roughly 3× what it did with a raw-ASM emitter twice the
+size: Cojen Maker's conveniences (resolving calls by reflection, allocating
+locals) are paid at translation time, once per script. The break-even column
+divides `translate + load` by the time each validation saves: a script must be
+validated **~25–260 times** before compiling it pays for itself. That fits
+scripts that run over and over — a node re-validating the same reference
+scripts, an emulator, a test-suite — rather than one-off evaluation.
 
 Reproduce with `sbt "demoUplcJvmBench/Jmh/run -prof gc"`.
 

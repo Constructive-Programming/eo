@@ -1,424 +1,228 @@
 package dev.constructive.eo.demo.uplc
 
-import java.lang.reflect.Modifier
-import org.objectweb.asm.Opcodes.*
-import org.objectweb.asm.{ClassWriter, Label, MethodVisitor, Type}
+import scala.collection.mutable
 
-/** B ⇒ T: writes the lowered program as ONE class file.
+import dev.constructive.eo.demo.uplc.runtime.{Dispatch, ProgramInfo}
+import java.util.Base64
+import org.cojen.maker.{ClassMaker, MethodMaker, Variable}
+
+/** B ⇒ T: writes the lowered program as ONE class file, with [Cojen
+  * Maker](https://github.com/cojen/Maker): code is written against variables and method names; the
+  * library resolves overloads, allocates locals and computes the stack maps.
   *
   * {{{
   * public final class UplcProgram implements runtime.Dispatch {
   *   static final ProgramInfo INFO;   // the flat program, embedded and re-decoded at class init
-  *   static final Object[] K, KU;     // its constants, boxed / unboxed
+  *   static final Object[] K, KU;     // its constants by node id, boxed / unboxed
   *   static final UplcProgram INSTANCE;
-  *   public static Object entry();                      // the program
+  *   private static Object entry();                     // the program
   *   private static Object m<i>(Object[] env, Object…); // one per lambda chain / delay
   *   public Object call0/1/2/N(int id, Object[] env, …) // closure dispatch: switch on id
   * }
   * }}}
   *
-  * The flat program travels inside the class (as Latin-1 string constants), so the class file is a
+  * The flat program travels inside the class (as Base64 string constants), so the class file is a
   * self-contained artifact: the runtime needs it to map closures back to source terms.
   */
 object Emit:
 
-  val ClassName = "dev/constructive/eo/demo/uplc/generated/UplcProgram"
-  private val Runtime = "dev/constructive/eo/demo/uplc/runtime/"
-  private val Rt = Runtime + "Rt"
-  private val Dispatch = Runtime + "Dispatch"
-  private val Info = Runtime + "ProgramInfo"
-  private val InfoDesc = s"L$Info;"
-  private val ObjArr = "[Ljava/lang/Object;"
-  private val Obj = "java/lang/Object"
+  val ClassName = "dev.constructive.eo.demo.uplc.generated.UplcProgram"
 
-  /** Descriptor of each `Rt` entry point, read off the compiled runtime so it cannot drift. */
-  private lazy val rtDescriptors: Map[String, String] =
-    Class
-      .forName("dev.constructive.eo.demo.uplc.runtime.Rt")
-      .getMethods
-      .iterator
-      .filter(m => Modifier.isStatic(m.getModifiers))
-      .map(m => m.getName -> Type.getMethodDescriptor(m))
-      .toMap
+  /** The runtime's entry points, called through `Rt`'s static forwarders. */
+  private lazy val Rt: Class[?] = Class.forName("dev.constructive.eo.demo.uplc.runtime.Rt")
 
-  /** Largest constant-pool string chunk: 16k chars ≤ 32k bytes of modified UTF-8 (limit 65535). */
-  private val Chunk = 16384
+  private val Obj = classOf[AnyRef]
+  private val Objs = classOf[Array[AnyRef]]
+
+  /** Largest constant-pool string is 65535 bytes; Base64 text is one byte per char. */
+  private val Chunk = 65535
 
   def classFile(program: JvmProgram): Array[Byte] =
-    val cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS):
-      // Every reference type the generated code merges is either identical on both paths or
-      // `Object`; never load classes to find out.
-      override def getCommonSuperClass(a: String, b: String): String = Obj
-    cw.visit(V17, ACC_PUBLIC | ACC_FINAL | ACC_SUPER, ClassName, null, Obj, Array(Dispatch))
-    for (name, desc) <- List(
-        "INFO" -> InfoDesc,
-        "K" -> ObjArr,
-        "KU" -> ObjArr,
-        "INSTANCE" -> s"L$ClassName;"
-      )
-    do cw.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, name, desc, null, null).visitEnd()
+    val cm = ClassMaker.beginExternal(ClassName).public_().final_().implement(classOf[Dispatch])
+    cm.addField(classOf[ProgramInfo], "INFO").private_().static_().final_()
+    cm.addField(Objs, "K").private_().static_().final_()
+    cm.addField(Objs, "KU").private_().static_().final_()
+    cm.addField(cm, "INSTANCE").public_().static_().final_()
+    cm.addConstructor().public_().invokeSuperConstructor()
+    staticInit(cm, program.source.flat)
 
-    staticInit(cw, program.source.flat)
-    constructor(cw)
-    program.methods.foreach(m => new MethodEmitter(cw, m).emit())
-    dispatch(cw, program.methods)
-    accessors(cw, program.methods.head)
-    cw.visitEnd()
-    cw.toByteArray
+    // Declared before any body is written, so bodies can call each other by name.
+    val makers =
+      program.methods.map(m => cm.addMethod(Obj, name(m), params(m)*).private_().static_())
+    program.methods.zip(makers).foreach((m, mm) => new Body(mm).emit(m.body))
 
-  private def methodName(m: JvmMethod): String = m.kind match
+    val lambdas = program.methods.collect {
+      case m @ JvmMethod(_, MethodKind.LambdaBody(_, arity), _) => (m, arity)
+    }
+    val thunks =
+      program.methods.collect { case m @ JvmMethod(_, MethodKind.ThunkBody(_), _) => (m, 0) }
+    def ofArity(n: Int) = lambdas.filter(_._2 == n)
+    dispatch(cm, "call0", Nil, thunks)((_, _) => Nil)
+    dispatch(cm, "call1", List(Obj), ofArity(1))((mm, _) => List(mm.param(2)))
+    dispatch(cm, "call2", List(Obj, Obj), ofArity(2))((mm, _) => List(mm.param(2), mm.param(3)))
+    dispatch(cm, "callN", List(Objs), lambdas)((mm, arity) =>
+      (0 until arity).map(mm.param(2).aget(_))
+    )
+
+    val run = cm.addMethod(Obj, "run").public_()
+    run.return_(run.invoke("entry"))
+    val info = cm.addMethod(classOf[ProgramInfo], "info").public_()
+    info.return_(info.field("INFO"))
+    cm.finishBytes()
+
+  private def name(m: JvmMethod): String = m.kind match
     case MethodKind.Entry => "entry"
     case _                => s"m${m.id}"
 
-  private def push(mv: MethodVisitor, n: Int): Unit =
-    if n >= -1 && n <= 5 then mv.visitInsn(ICONST_0 + n)
-    else if n >= Byte.MinValue && n <= Byte.MaxValue then mv.visitIntInsn(BIPUSH, n)
-    else if n >= Short.MinValue && n <= Short.MaxValue then mv.visitIntInsn(SIPUSH, n)
-    else mv.visitLdcInsn(Integer.valueOf(n))
+  private def params(m: JvmMethod): List[Class[?]] = m.kind match
+    case MethodKind.Entry                => Nil
+    case MethodKind.LambdaBody(_, arity) => Objs :: List.fill(arity)(Obj)
+    case MethodKind.ThunkBody(_)         => List(Objs)
 
-  private def rt(mv: MethodVisitor, name: String): Unit =
-    mv.visitMethodInsn(INVOKESTATIC, Rt, name, rtDescriptors(name), false)
+  private def staticInit(cm: ClassMaker, flat: Array[Byte]): Unit =
+    val mm = cm.addClinit()
+    val chunks = Base64.getEncoder.encodeToString(flat).grouped(Chunk).toVector
+    val parts = mm.new_(classOf[Array[String]], chunks.size)
+    chunks.zipWithIndex.foreach((chunk, i) => parts.aset(i, chunk))
+    val info = mm.`var`(classOf[ProgramInfo]).invoke("fromChunks", parts)
+    mm.field("INFO").set(info)
+    mm.field("K").set(info.invoke("boxed"))
+    mm.field("KU").set(info.invoke("unboxed"))
+    mm.field("INSTANCE").set(mm.new_(cm)): Unit
 
-  private def staticInit(cw: ClassWriter, flat: Array[Byte]): Unit =
-    val mv = cw.visitMethod(ACC_STATIC, "<clinit>", "()V", null, null)
-    mv.visitCode()
-    val text = String(flat.map(b => (b & 0xff).toChar))
-    val chunks = text.grouped(Chunk).toVector
-    push(mv, chunks.size)
-    mv.visitTypeInsn(ANEWARRAY, "java/lang/String")
-    chunks.zipWithIndex.foreach { (chunk, i) =>
-      mv.visitInsn(DUP)
-      push(mv, i)
-      mv.visitLdcInsn(chunk)
-      mv.visitInsn(AASTORE)
+  /** `callK(int id, Object[] env, …)`: a switch from method id to closure body. `args` loads the
+    * target's arguments, given its arity.
+    */
+  private def dispatch(
+      cm: ClassMaker,
+      name: String,
+      extra: List[Class[?]],
+      targets: Vector[(JvmMethod, Int)]
+  )(
+      args: (MethodMaker, Int) => Seq[Variable]
+  ): Unit =
+    val mm = cm.addMethod(Obj, name, (classOf[Int] :: Objs :: extra)*).public_()
+    val labels = targets.map(_ => mm.label())
+    val default = mm.label()
+    mm.param(0).switch_(default, targets.map(_._1.id).toArray, labels*)
+    targets.zip(labels).foreach {
+      case ((m, arity), label) =>
+        label.here()
+        mm.return_(mm.invoke(Emit.name(m), (mm.param(1) +: args(mm, arity))*))
     }
-    rt(mv, "loadProgram")
-    mv.visitFieldInsn(PUTSTATIC, ClassName, "INFO", InfoDesc)
-    for (field, getter) <- List("K" -> "boxed", "KU" -> "unboxed") do
-      mv.visitFieldInsn(GETSTATIC, ClassName, "INFO", InfoDesc)
-      mv.visitMethodInsn(INVOKEVIRTUAL, Info, getter, s"()$ObjArr", false)
-      mv.visitFieldInsn(PUTSTATIC, ClassName, field, ObjArr)
-    mv.visitTypeInsn(NEW, ClassName)
-    mv.visitInsn(DUP)
-    mv.visitMethodInsn(INVOKESPECIAL, ClassName, "<init>", "()V", false)
-    mv.visitFieldInsn(PUTSTATIC, ClassName, "INSTANCE", s"L$ClassName;")
-    mv.visitInsn(RETURN)
-    mv.visitMaxs(0, 0)
-    mv.visitEnd()
+    default.here()
+    mm.`var`(Rt).invoke("badDispatch", mm.param(0)).throw_()
 
-  private def constructor(cw: ClassWriter): Unit =
-    val mv = cw.visitMethod(ACC_PUBLIC, "<init>", "()V", null, null)
-    mv.visitCode()
-    mv.visitVarInsn(ALOAD, 0)
-    mv.visitMethodInsn(INVOKESPECIAL, Obj, "<init>", "()V", false)
-    mv.visitInsn(RETURN)
-    mv.visitMaxs(0, 0)
-    mv.visitEnd()
+  /** Writes one method body. Each [[Code]] node becomes a variable holding its value; the order the
+    * nodes are visited in is the order their code runs in.
+    */
+  final private class Body(mm: MethodMaker):
 
-  /** `Dispatch.run()` / `Dispatch.info()`: how the runtime reaches the class without reflection. */
-  private def accessors(cw: ClassWriter, entry: JvmMethod): Unit =
-    val run = cw.visitMethod(ACC_PUBLIC, "run", "()Ljava/lang/Object;", null, null)
-    run.visitCode()
-    run.visitMethodInsn(INVOKESTATIC, ClassName, methodName(entry), entry.descriptor, false)
-    run.visitInsn(ARETURN)
-    run.visitMaxs(0, 0)
-    run.visitEnd()
-    val info = cw.visitMethod(ACC_PUBLIC, "info", s"()$InfoDesc", null, null)
-    info.visitCode()
-    info.visitFieldInsn(GETSTATIC, ClassName, "INFO", InfoDesc)
-    info.visitInsn(ARETURN)
-    info.visitMaxs(0, 0)
-    info.visitEnd()
+    private val rt = mm.`var`(Rt)
 
-  /** `callK(int id, Object[] env, …)`: a `lookupswitch` from method id to closure body. */
-  private def dispatch(cw: ClassWriter, methods: Vector[JvmMethod]): Unit =
-    def lambdas(p: Int => Boolean) = methods.filter {
-      case JvmMethod(_, MethodKind.LambdaBody(_, a), _) => p(a)
-      case _                                            => false
-    }
-    val thunks = methods.filter(_.kind.isInstanceOf[MethodKind.ThunkBody])
-    // (name, descriptor, targets, how to push the target's arguments)
-    val tables: List[(String, String, Vector[JvmMethod], (MethodVisitor, JvmMethod) => Unit)] =
-      List(
-        ("call0", s"(I$ObjArr)Ljava/lang/Object;", thunks, (_, _) => ()),
-        (
-          "call1",
-          s"(I${ObjArr}Ljava/lang/Object;)Ljava/lang/Object;",
-          lambdas(_ == 1),
-          (mv, _) => mv.visitVarInsn(ALOAD, 3),
-        ),
-        (
-          "call2",
-          s"(I${ObjArr}Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;",
-          lambdas(_ == 2),
-          (mv, _) =>
-            mv.visitVarInsn(ALOAD, 3)
-            mv.visitVarInsn(ALOAD, 4),
-        ),
-        (
-          "callN",
-          s"(I$ObjArr$ObjArr)Ljava/lang/Object;",
-          lambdas(_ => true),
-          (mv, m) =>
-            val arity = m.kind match
-              case MethodKind.LambdaBody(_, a) => a
-              case _                           => 0
-            (0 until arity).foreach { i =>
-              mv.visitVarInsn(ALOAD, 3)
-              push(mv, i)
-              mv.visitInsn(AALOAD)
-            },
-        ),
-      )
-    tables.foreach { (name, desc, targets, args) =>
-      val mv = cw.visitMethod(ACC_PUBLIC, name, desc, null, null)
-      mv.visitCode()
-      val labels = targets.map(_ => new Label)
-      val default = new Label
-      mv.visitVarInsn(ILOAD, 1)
-      mv.visitLookupSwitchInsn(default, targets.map(_.id).toArray, labels.toArray)
-      targets.zip(labels).foreach { (m, label) =>
-        mv.visitLabel(label)
-        mv.visitVarInsn(ALOAD, 2)
-        args(mv, m)
-        mv.visitMethodInsn(INVOKESTATIC, ClassName, methodName(m), m.descriptor, false)
-        mv.visitInsn(ARETURN)
+    private val locals =
+      mutable.HashMap.from[Int, Variable]((0 until mm.paramCount).map(i => i -> mm.param(i)))
+
+    def emit(body: Code): Unit = mm.return_(code(body))
+
+    extension (v: Variable) private def :=(value: Variable): Unit = v.set(value): Unit
+
+    private def objects(items: Vector[Code]): Variable =
+      val array = mm.new_(Objs, items.size)
+      items.zipWithIndex.foreach((item, i) => array.aset(i, code(item)))
+      array
+
+    private def env(captures: Vector[Code]): Variable =
+      if captures.isEmpty then rt.invoke("noCaptures") else objects(captures)
+
+    /** Branch `i` for `index == i`; any other index is a compiler bug. */
+    private def select[A](index: Variable, arms: Vector[A], rep: Rep)(
+        arm: (A, Variable) => Unit
+    ): Variable =
+      val result = mm.`var`(rep.jvm)
+      val end = mm.label()
+      val default = mm.label()
+      val labels = arms.map(_ => mm.label())
+      index.switch_(default, arms.indices.toArray, labels*)
+      arms.zip(labels).foreach { (a, label) =>
+        label.here()
+        arm(a, result)
+        end.goto_()
       }
-      mv.visitLabel(default)
-      mv.visitVarInsn(ILOAD, 1)
-      rt(mv, "badDispatch")
-      mv.visitInsn(ATHROW)
-      mv.visitMaxs(0, 0)
-      mv.visitEnd()
-    }
+      default.here()
+      rt.invoke("badDispatch", -1).throw_()
+      end.here()
+      result
 
-  /** Emits one method's body. */
-  final private class MethodEmitter(cw: ClassWriter, method: JvmMethod):
-
-    private val access = method.kind match
-      case MethodKind.Entry => ACC_PUBLIC | ACC_STATIC
-      case _                => ACC_PRIVATE | ACC_STATIC
-
-    private val mv = cw.visitMethod(access, methodName(method), method.descriptor, null, null)
-
-    def emit(): Unit =
-      mv.visitCode()
-      code(method.body)
-      mv.visitInsn(ARETURN)
-      mv.visitMaxs(0, 0)
-      mv.visitEnd()
-
-    private def internalName(rep: Rep): String = rep match
-      case Rep.Int   => "scala/math/BigInt"
-      case Rep.Bytes => "scalus/uplc/builtin/ByteString"
-      case Rep.Str   => "java/lang/String"
-      case _         => Obj
-
-    private def boxName(rep: Rep): String = rep match
-      case Rep.Int   => "Integer"
-      case Rep.Bool  => "Bool"
-      case Rep.Bytes => "Bytes"
-      case Rep.Str   => "String"
-      case Rep.Obj   => throw new IllegalArgumentException("Obj is already boxed")
-
-    private def objects(items: Vector[Code]): Unit =
-      push(mv, items.size)
-      mv.visitTypeInsn(ANEWARRAY, Obj)
-      items.zipWithIndex.foreach { (item, i) =>
-        mv.visitInsn(DUP)
-        push(mv, i)
-        code(item)
-        mv.visitInsn(AASTORE)
-      }
-
-    private def env(captures: Vector[Code]): Unit =
-      if captures.isEmpty then rt(mv, "noCaptures") else objects(captures)
-
-    private def table(cases: Vector[Code]): Unit =
-      val end = new Label
-      val default = new Label
-      val labels = cases.map(_ => new Label)
-      mv.visitTableSwitchInsn(0, cases.size - 1, default, labels*)
-      cases.zip(labels).foreach { (c, label) =>
-        mv.visitLabel(label)
-        code(c)
-        mv.visitJumpInsn(GOTO, end)
-      }
-      mv.visitLabel(default)
-      push(mv, -1)
-      rt(mv, "badDispatch")
-      mv.visitInsn(ATHROW)
-      mv.visitLabel(end)
-
-    private def invokeBody(id: Int, arity: Int): Unit =
-      val desc = "(" + ObjArr + "Ljava/lang/Object;" * arity + ")Ljava/lang/Object;"
-      mv.visitMethodInsn(INVOKESTATIC, ClassName, s"m$id", desc, false)
-
-    private def code(c: Code): Unit = c match
-      case Code.Local(slot, rep) =>
-        mv.visitVarInsn(if rep == Rep.Bool then ILOAD else ALOAD, slot)
-
-      case Code.Captured(i) =>
-        mv.visitVarInsn(ALOAD, 0)
-        push(mv, i)
-        mv.visitInsn(AALOAD)
-
-      case Code.Literal(ordinal, rep) =>
-        mv.visitFieldInsn(GETSTATIC, ClassName, if rep == Rep.Obj then "K" else "KU", ObjArr)
-        push(mv, ordinal)
-        mv.visitInsn(AALOAD)
-        if rep != Rep.Obj then mv.visitTypeInsn(CHECKCAST, internalName(rep))
-
-      case Code.BoolLit(b) => mv.visitInsn(if b then ICONST_1 else ICONST_0)
-
-      case Code.Box(inner, from) =>
-        code(inner)
-        rt(mv, "box" + boxName(from))
-
-      case Code.Unbox(inner, to) =>
-        code(inner)
-        rt(mv, "un" + boxName(to))
-
-      case Code.Bind(slot, rhs, body) =>
-        code(rhs)
-        mv.visitVarInsn(if rhs.rep == Rep.Bool then ISTORE else ASTORE, slot)
+    private def code(c: Code): Variable = c match
+      case Code.Local(slot, _)         => locals(slot)
+      case Code.Captured(i)            => locals(0).aget(i)
+      case Code.Literal(node, Rep.Obj) => mm.field("K").aget(node)
+      case Code.Literal(node, rep)     => mm.field("KU").aget(node).cast(rep.jvm)
+      case Code.BoolLit(b)             => mm.`var`(classOf[Boolean]).set(b)
+      case Code.Box(inner, _)          => rt.invoke("box", code(inner))
+      case Code.Unbox(inner, to)       => rt.invoke(s"un$to", code(inner))
+      case Code.Bind(slot, rhs, body)  =>
+        locals(slot) = code(rhs)
         code(body)
 
-      case Code.If(cond, whenTrue, whenFalse, _) =>
-        val otherwise = new Label
-        val end = new Label
-        code(cond)
-        mv.visitJumpInsn(IFEQ, otherwise)
-        code(whenTrue)
-        mv.visitJumpInsn(GOTO, end)
-        mv.visitLabel(otherwise)
-        code(whenFalse)
-        mv.visitLabel(end)
+      case Code.If(cond, whenTrue, whenFalse, rep) =>
+        val result = mm.`var`(rep.jvm)
+        code(cond).ifTrue(() => result := code(whenTrue), () => result := code(whenFalse))
+        result
 
       case Code.IntSwitch(scrut, cases, rep) =>
-        code(scrut)
-        push(mv, cases.size)
-        rt(mv, "integerCaseIndex")
-        if cases.isEmpty then
-          mv.visitInsn(POP)
-          code(Code.Fail("unreachable: empty integer case", rep))
-        else table(cases)
+        val index = rt.invoke("integerCaseIndex", code(scrut), cases.size)
+        select(index, cases, rep)((c, result) => result := code(c))
 
       case Code.MakeLambda(id, origin, arity, captures) =>
-        mv.visitFieldInsn(GETSTATIC, ClassName, "INSTANCE", s"L$ClassName;")
-        push(mv, id)
-        push(mv, origin)
-        push(mv, arity)
-        env(captures)
-        rt(mv, "lambda")
-
+        rt.invoke("lambda", mm.field("INSTANCE"), id, origin, arity, env(captures))
       case Code.MakeThunk(id, origin, captures) =>
-        mv.visitFieldInsn(GETSTATIC, ClassName, "INSTANCE", s"L$ClassName;")
-        push(mv, id)
-        push(mv, origin)
-        env(captures)
-        rt(mv, "thunk")
+        rt.invoke("thunk", mm.field("INSTANCE"), id, origin, env(captures))
 
-      case Code.Apply(fn, arg) =>
-        code(fn)
-        code(arg)
-        rt(mv, "apply")
-
+      case Code.Apply(fn, arg)   => rt.invoke("apply", code(fn), code(arg))
       case Code.Spread(args, fn) =>
-        objects(args)
-        code(fn)
-        rt(mv, "spread")
+        val values = objects(args)
+        rt.invoke("applyAll", code(fn), values)
+      case Code.Force(inner) => rt.invoke("force", code(inner))
 
-      case Code.Force(inner) =>
-        code(inner)
-        rt(mv, "force")
+      case Code.Invoke(id, closure, args) =>
+        val closureEnv = rt.invoke("envOf", code(closure))
+        mm.invoke(s"m$id", (closureEnv +: args.map(code))*)
+      case Code.CallBody(id, captures, args) =>
+        val bodyEnv = env(captures)
+        mm.invoke(s"m$id", (bodyEnv +: args.map(code))*)
 
-      case Code.Invoke(id, arity, closure, args) =>
-        code(closure)
-        rt(mv, "envOf")
-        args.foreach(code)
-        invokeBody(id, arity)
+      case Code.Prim(fun, args, _)  => rt.invoke(Semantics.name(fun), args.map(code)*)
+      case Code.Delegate(fun, args) => rt.invoke("call", fun.ordinal, objects(args))
+      case Code.BuiltinValue(fun)   => rt.invoke("builtin", fun.ordinal)
 
-      case Code.CallBody(id, arity, captures, args) =>
-        env(captures)
-        args.foreach(code)
-        invokeBody(id, arity)
+      case Code.Choose(fun, scrut, branches, rep) =>
+        val index = rt.invoke("chooseIndex", fun.ordinal, code(scrut))
+        select(index, branches, rep)((c, result) => result := code(c))
 
-      case Code.Prim(op, args) =>
-        args.foreach(code)
-        rt(mv, op.method)
+      case Code.Construct(tag, args) => rt.invoke("construct", tag, objects(args))
 
-      case Code.Delegate(fun, args) =>
-        push(mv, fun.ordinal)
-        objects(args)
-        rt(mv, "call")
+      case Code.CaseOf(scrut, arms) =>
+        val value = code(scrut)
+        val index = rt.invoke("caseIndex", value, arms.size)
+        val fields = rt.invoke("caseFields", value)
+        select(index, arms, Rep.Obj) {
+          case (Arm.Value(branch), result) => result := rt.invoke("applyAll", code(branch), fields)
+          case (Arm.Direct(lam), result)   =>
+            // The field count matches the chain's arity: call its body method directly.
+            fields
+              .alength()
+              .ifEq(
+                lam.arity,
+                () =>
+                  val args = (0 until lam.arity).map(i => fields.aget(i))
+                  result := mm.invoke(s"m${lam.method}", (env(lam.captures) +: args)*)
+                ,
+                () => result := rt.invoke("applyAll", code(lam), fields),
+              )
+        }
 
-      case Code.BuiltinValue(fun) =>
-        push(mv, fun.ordinal)
-        rt(mv, "builtin")
-
-      case Code.Choose(fun, scrut, branches, _) =>
-        push(mv, fun.ordinal)
-        code(scrut)
-        rt(mv, "chooseIndex")
-        table(branches)
-
-      case Code.Construct(tag, args) =>
-        mv.visitLdcInsn(java.lang.Long.valueOf(tag))
-        objects(args)
-        rt(mv, "construct")
-
-      case Code.CaseOf(scrut, arms, scrutSlot, fieldsSlot) =>
-        code(scrut)
-        mv.visitVarInsn(ASTORE, scrutSlot)
-        mv.visitVarInsn(ALOAD, scrutSlot)
-        push(mv, arms.size)
-        rt(mv, "caseIndex")
-        mv.visitVarInsn(ALOAD, scrutSlot)
-        rt(mv, "caseFields")
-        mv.visitVarInsn(ASTORE, fieldsSlot)
-        val end = new Label
-        val default = new Label
-        val labels = arms.map(_ => new Label)
-        if arms.isEmpty then
-          mv.visitInsn(POP)
-          code(Code.Fail("unreachable: case without branches", Rep.Obj))
-        else
-          mv.visitTableSwitchInsn(0, arms.size - 1, default, labels*)
-          arms.zip(labels).foreach { (arm, label) =>
-            mv.visitLabel(label)
-            arm match
-              case Arm.Value(value) =>
-                code(value)
-                mv.visitVarInsn(ALOAD, fieldsSlot)
-                rt(mv, "applyAll")
-              case Arm.Direct(lam) =>
-                val generic = new Label
-                mv.visitVarInsn(ALOAD, fieldsSlot)
-                mv.visitInsn(ARRAYLENGTH)
-                push(mv, lam.arity)
-                mv.visitJumpInsn(IF_ICMPNE, generic)
-                env(lam.captures)
-                (0 until lam.arity).foreach { i =>
-                  mv.visitVarInsn(ALOAD, fieldsSlot)
-                  push(mv, i)
-                  mv.visitInsn(AALOAD)
-                }
-                invokeBody(lam.method, lam.arity)
-                mv.visitJumpInsn(GOTO, end)
-                mv.visitLabel(generic)
-                code(lam)
-                mv.visitVarInsn(ALOAD, fieldsSlot)
-                rt(mv, "applyAll")
-            mv.visitJumpInsn(GOTO, end)
-          }
-          mv.visitLabel(default)
-          push(mv, -1)
-          rt(mv, "badDispatch")
-          mv.visitInsn(ATHROW)
-        mv.visitLabel(end)
-
-      case Code.Fail(reason, _) =>
-        mv.visitLdcInsn(reason)
-        rt(mv, "fail")
-        mv.visitInsn(ATHROW)
+      case Code.Fail(reason, rep) =>
+        rt.invoke("fail", reason).throw_()
+        mm.`var`(rep.jvm) // unreachable; stands for the value the failed expression never has

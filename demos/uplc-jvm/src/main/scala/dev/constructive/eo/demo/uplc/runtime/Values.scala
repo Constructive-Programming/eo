@@ -43,10 +43,3 @@ final class Partial(
 
 /** `constr tag fields`. */
 final class ConstrV(val tag: Long, val fields: Array[AnyRef])
-
-/** An evaluation failure — UPLC `error`, a builtin rejecting its arguments, a type mismatch.
-  *
-  * This is the generated code's abort: it unwinds to `Exec.run`, the one place it is caught and
-  * turned into a `Failure` outcome. It carries no stack trace — it is a result, not a bug.
-  */
-final class UplcFailure(reason: String) extends RuntimeException(reason, null, false, false)

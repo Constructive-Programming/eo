@@ -2,7 +2,7 @@ package dev.constructive.eo.demo.uplc
 
 import scala.collection.mutable
 
-import scalus.uplc.{Constant, DefaultFun}
+import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
 /** A ⇒ B: lowers the typed expression to JVM-shaped code — the `f` in `iso.modify(f)`.
   *
@@ -13,12 +13,18 @@ import scalus.uplc.{Constant, DefaultFun}
   *   - Representation selection. Typed values stay unboxed (`BigInt`, `boolean`, `ByteString`,
   *     `String`) in locals and on the stack and are boxed only where they meet dynamic code;
   *     builtins with a typed fast path become direct static calls.
-  *   - Slot allocation. `let` binders live in JVM locals; nothing is ever re-used, so each slot has
-  *     one type and the verifier's frame merges stay trivial.
+  *   - Local numbering. `let` binders live in numbered locals of their method.
   */
 object Lower:
 
   def lower(program: TypedProgram): JvmProgram = new Lowering(program.source).run(program.body)
+
+  /** Builtins with a typed fast path: those the runtime's `Rt` defines a method for, under the
+    * builtin's UPLC name, on the unboxed representations of the builtin's (Scalus) type.
+    */
+  val fastPaths: Set[DefaultFun] =
+    val defined = runtime.Rt.getClass.getMethods.iterator.map(_.getName).toSet
+    DefaultFun.values.iterator.filter(f => defined(Semantics.name(f))).toSet
 
 private enum Loc:
   case InLocal(slot: Int, rep: Rep)
@@ -27,7 +33,7 @@ private enum Loc:
   /** Bound in the program but not captured by this method — never referenced from it. */
   case Absent
 
-/** Slot allocator for one method, which also counts the expression nodes inlined into it. */
+/** Local numbering for one method, which also counts the expression nodes inlined into it. */
 final private class Frame(private var next: Int):
 
   var size: Int = 0
@@ -96,13 +102,8 @@ final private class Lowering(source: SourceProgram):
     case Expr.Fail          => Code.Fail("error", Rep.Obj)
     case Expr.BuiltinRef(f) => Code.BuiltinValue(f)
 
-    case Expr.Lit(ordinal, value) =>
-      value match
-        case Constant.Bool(b)       => Code.BoolLit(b)
-        case Constant.Integer(_)    => Code.Literal(ordinal, Rep.Int)
-        case Constant.ByteString(_) => Code.Literal(ordinal, Rep.Bytes)
-        case Constant.String(_)     => Code.Literal(ordinal, Rep.Str)
-        case _                      => Code.Literal(ordinal, Rep.Obj)
+    case Expr.Lit(_, Constant.Bool(b)) => Code.BoolLit(b)
+    case Expr.Lit(node, value)         => Code.Literal(node, Rep.of(Some(value.tpe)))
 
     case Expr.Lambda(origin, params, body) => makeLambda(origin, params.size, body, scope)
     case Expr.Delayed(origin, body)        => makeThunk(origin, body, scope)
@@ -117,7 +118,7 @@ final private class Lowering(source: SourceProgram):
         val params = Vector.tabulate[Loc](rhss.size)(p => Loc.InLocal(1 + p, Rep.Obj))
         val code = coerce(expr(body, inner ++ params, new Frame(1 + rhss.size)), Rep.Obj)
         methods(id) = Some(JvmMethod(id, MethodKind.LambdaBody(origin, rhss.size), code))
-        Code.CallBody(id, rhss.size, loads, rhss.map(coerce(_, Rep.Obj)).toVector)
+        Code.CallBody(id, loads, rhss.map(coerce(_, Rep.Obj)).toVector)
       else
         val bound = rhss.map(rhs => (frame.alloc(), rhs))
         val inner = scope ++ bound.map((slot, rhs) => Loc.InLocal(slot, rhs.rep))
@@ -134,28 +135,27 @@ final private class Lowering(source: SourceProgram):
     case Expr.CallKnown(fn, origin, args) =>
       Code.Invoke(
         lambdaMethods(origin),
-        args.size,
         load(scope, fn.index),
-        args.map(obj(_, scope, frame)).toVector,
+        args.map(obj(_, scope, frame)).toVector
       )
 
-    case Expr.Call(fun, args, _) =>
-      PrimOp.table.get(fun) match
-        case Some(op) =>
-          Code.Prim(op, args.zip(op.args).map((a, rep) => as(a, rep, scope, frame)).toVector)
-        case None => Code.Delegate(fun, args.map(obj(_, scope, frame)).toVector)
+    case Expr.Call(fun, args, _) if Lower.fastPaths(fun) =>
+      val (argTys, result) = Semantics.signature(fun)
+      val ops = args.zip(argTys).map((a, t) => as(a, Rep.of(t), scope, frame))
+      Code.Prim(fun, ops.toVector, Rep.of(result))
+    case Expr.Call(fun, args, _) => Code.Delegate(fun, args.map(obj(_, scope, frame)).toVector)
 
     case Expr.Choose(fun, scrut, branches, ty) =>
       val rep = Rep.of(ty)
       val arms = branches.map(as(_, rep, scope, frame)).toVector
-      if fun == DefaultFun.IfThenElse && scrut.ty == Ty.Bool then
+      if fun == DefaultFun.IfThenElse && scrut.ty.contains(DefaultUni.Bool) then
         Code.If(as(scrut, Rep.Bool, scope, frame), arms(0), arms(1), rep)
       else Code.Choose(fun, obj(scrut, scope, frame), arms, rep)
 
     case Expr.Construct(tag, args) => Code.Construct(tag, args.map(obj(_, scope, frame)).toVector)
 
     case Expr.Match(scrut, branches, ty) =>
-      if Semantics.caseOnBuiltins && scrut.ty == Ty.Bool then
+      if Semantics.caseOnBuiltins && scrut.ty.contains(DefaultUni.Bool) then
         val rep = Rep.of(ty)
         val cond = as(scrut, Rep.Bool, scope, frame)
         branches.map(as(_, rep, scope, frame)) match
@@ -168,7 +168,7 @@ final private class Lowering(source: SourceProgram):
               cond,
               Code.Fail("case on a boolean needs 1 or 2 branches", rep)
             )
-      else if Semantics.caseOnBuiltins && scrut.ty == Ty.Integer then
+      else if Semantics.caseOnBuiltins && scrut.ty.contains(DefaultUni.Integer) then
         val rep = Rep.of(ty)
         Code.IntSwitch(
           as(scrut, Rep.Int, scope, frame),
@@ -182,7 +182,7 @@ final private class Lowering(source: SourceProgram):
             Arm.Direct(makeLambda(origin, params.size, body, scope))
           case other => Arm.Value(obj(other, scope, frame))
         }
-        Code.CaseOf(s, arms.toVector, frame.alloc(), frame.alloc())
+        Code.CaseOf(s, arms.toVector)
 
   /** The capture loads for a closure rooted at `origin`, and the scope its body sees them in. */
   private def closureScope(origin: Int, scope: Vector[Loc]): (Vector[Code], Vector[Loc]) =

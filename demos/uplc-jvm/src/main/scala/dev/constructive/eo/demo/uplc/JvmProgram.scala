@@ -1,61 +1,34 @@
 package dev.constructive.eo.demo.uplc
 
-import scalus.uplc.DefaultFun
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.{DefaultFun, DefaultUni}
 
-/** JVM representation of a value on the operand stack or in a local.
+/** JVM representation of a value in a local or on the stack.
   *
   * `Obj` is the uniform boxed representation every UPLC value can take: a Scalus `Constant` for
   * constants, a runtime closure / thunk / partial builtin / constructor object otherwise. The
-  * others are the unboxed representations of the typer's scalar types.
+  * others are the unboxed representations of the four scalar types.
   */
-enum Rep(val descriptor: String):
-  case Obj extends Rep("Ljava/lang/Object;")
-  case Int extends Rep("Lscala/math/BigInt;")
-  case Bool extends Rep("Z")
-  case Bytes extends Rep("Lscalus/uplc/builtin/ByteString;")
-  case Str extends Rep("Ljava/lang/String;")
+enum Rep(val jvm: Class[?]):
+  case Obj extends Rep(classOf[AnyRef])
+  case Int extends Rep(classOf[BigInt])
+  case Bool extends Rep(classOf[Boolean])
+  case Bytes extends Rep(classOf[ByteString])
+  case Str extends Rep(classOf[String])
 
 object Rep:
 
   def of(ty: Ty): Rep = ty match
-    case Ty.Integer         => Rep.Int
-    case Ty.Bool            => Rep.Bool
-    case Ty.ByteString      => Rep.Bytes
-    case Ty.String          => Rep.Str
-    case Ty.Dyn | Ty.Bottom => Rep.Obj
-
-/** A typed fast path: a builtin compiled to a direct static call on unboxed operands. */
-final case class PrimOp(method: String, args: List[Rep], result: Rep)
-
-object PrimOp:
-
-  private def int2(m: String, r: Rep) = PrimOp(m, List(Rep.Int, Rep.Int), r)
-  private def bytes2(m: String, r: Rep) = PrimOp(m, List(Rep.Bytes, Rep.Bytes), r)
-
-  val table: Map[DefaultFun, PrimOp] = Map(
-    DefaultFun.AddInteger -> int2("addInteger", Rep.Int),
-    DefaultFun.SubtractInteger -> int2("subtractInteger", Rep.Int),
-    DefaultFun.MultiplyInteger -> int2("multiplyInteger", Rep.Int),
-    DefaultFun.DivideInteger -> int2("divideInteger", Rep.Int),
-    DefaultFun.QuotientInteger -> int2("quotientInteger", Rep.Int),
-    DefaultFun.RemainderInteger -> int2("remainderInteger", Rep.Int),
-    DefaultFun.ModInteger -> int2("modInteger", Rep.Int),
-    DefaultFun.EqualsInteger -> int2("equalsInteger", Rep.Bool),
-    DefaultFun.LessThanInteger -> int2("lessThanInteger", Rep.Bool),
-    DefaultFun.LessThanEqualsInteger -> int2("lessThanEqualsInteger", Rep.Bool),
-    DefaultFun.AppendByteString -> bytes2("appendByteString", Rep.Bytes),
-    DefaultFun.EqualsByteString -> bytes2("equalsByteString", Rep.Bool),
-    DefaultFun.LessThanByteString -> bytes2("lessThanByteString", Rep.Bool),
-    DefaultFun.LessThanEqualsByteString -> bytes2("lessThanEqualsByteString", Rep.Bool),
-    DefaultFun.LengthOfByteString -> PrimOp("lengthOfByteString", List(Rep.Bytes), Rep.Int),
-    DefaultFun.IndexByteString -> PrimOp("indexByteString", List(Rep.Bytes, Rep.Int), Rep.Int),
-    DefaultFun.AppendString -> PrimOp("appendString", List(Rep.Str, Rep.Str), Rep.Str),
-    DefaultFun.EqualsString -> PrimOp("equalsString", List(Rep.Str, Rep.Str), Rep.Bool),
-  )
+    case Some(DefaultUni.Integer)    => Rep.Int
+    case Some(DefaultUni.Bool)       => Rep.Bool
+    case Some(DefaultUni.ByteString) => Rep.Bytes
+    case Some(DefaultUni.String)     => Rep.Str
+    case _                           => Rep.Obj
 
 /** B — the lowered program, shaped for the JVM: one static method per closure body, closures
   * converted (each captures exactly its free variables, in [[SourceProgram.captures]] order),
-  * locals allocated to slots, every boxing / unboxing explicit. `methods(0)` is the entry point.
+  * `let`s bound to numbered locals, every boxing / unboxing explicit. `methods(0)` is the entry
+  * point.
   */
 final case class JvmProgram(source: SourceProgram, methods: Vector[JvmMethod]):
 
@@ -107,22 +80,22 @@ object JvmProgram:
       s"switch ${expr(scrut, indent)}\n${arms.mkString("\n")}"
     case Code.MakeLambda(m, _, arity, caps) =>
       s"closure(m$m, arity $arity, env [${list(caps, indent)}])"
-    case Code.MakeThunk(m, _, caps) => s"thunk(m$m, env [${list(caps, indent)}])"
-    case Code.Apply(f, a)           => s"apply(${expr(f, indent)}, ${expr(a, indent)})"
-    case Code.Spread(args, f)       => s"applyAll(${expr(f, indent)}, [${list(args, indent)}])"
-    case Code.Force(inner)          => s"force(${expr(inner, indent)})"
-    case Code.Invoke(m, _, closure, args) =>
+    case Code.MakeThunk(m, _, caps)    => s"thunk(m$m, env [${list(caps, indent)}])"
+    case Code.Apply(f, a)              => s"apply(${expr(f, indent)}, ${expr(a, indent)})"
+    case Code.Spread(args, f)          => s"applyAll(${expr(f, indent)}, [${list(args, indent)}])"
+    case Code.Force(inner)             => s"force(${expr(inner, indent)})"
+    case Code.Invoke(m, closure, args) =>
       s"m$m(envOf(${expr(closure, indent)}), ${list(args, indent)})"
-    case Code.CallBody(m, _, caps, args) => s"m$m([${list(caps, indent)}], ${list(args, indent)})"
-    case Code.Prim(op, args)             => s"${op.method}(${list(args, indent)})"
-    case Code.Delegate(fun, args)        => s"scalus.${fun.toString}(${list(args, indent)})"
-    case Code.BuiltinValue(fun)          => s"builtin(${fun.toString})"
+    case Code.CallBody(m, caps, args) => s"m$m([${list(caps, indent)}], ${list(args, indent)})"
+    case Code.Prim(fun, args, _)      => s"${Semantics.name(fun)}(${list(args, indent)})"
+    case Code.Delegate(fun, args)     => s"scalus.${fun.toString}(${list(args, indent)})"
+    case Code.BuiltinValue(fun)       => s"builtin(${fun.toString})"
     case Code.Choose(fun, scrut, branches, _) =>
       val arms =
         branches.zipWithIndex.map((b, k) => s"${pad(indent + 1)}case $k => ${block(b, indent + 2)}")
       s"choose ${fun.toString}(${expr(scrut, indent)})\n${arms.mkString("\n")}"
-    case Code.Construct(tag, args)      => s"constr $tag(${list(args, indent)})"
-    case Code.CaseOf(scrut, arms, _, _) =>
+    case Code.Construct(tag, args) => s"constr $tag(${list(args, indent)})"
+    case Code.CaseOf(scrut, arms)  =>
       val shown = arms.zipWithIndex.map {
         case (Arm.Value(v), k) =>
           s"${pad(indent + 1)}case $k => applyAll(${expr(v, indent + 2)}, fields)"
@@ -134,7 +107,7 @@ object JvmProgram:
 
 enum MethodKind:
 
-  /** `static Object run()` — evaluates the whole program. */
+  /** `static Object entry()` — evaluates the whole program. */
   case Entry
 
   /** `static Object lam(Object[] env, Object p1, …, Object pn)` — body of a lambda chain. */
@@ -143,13 +116,7 @@ enum MethodKind:
   /** `static Object thunk(Object[] env)` — body of a `delay`. */
   case ThunkBody(origin: Int)
 
-final case class JvmMethod(id: Int, kind: MethodKind, body: Code):
-
-  def descriptor: String = kind match
-    case MethodKind.Entry                => "()Ljava/lang/Object;"
-    case MethodKind.LambdaBody(_, arity) =>
-      "([Ljava/lang/Object;" + "Ljava/lang/Object;" * arity + ")Ljava/lang/Object;"
-    case MethodKind.ThunkBody(_) => "([Ljava/lang/Object;)Ljava/lang/Object;"
+final case class JvmMethod(id: Int, kind: MethodKind, body: Code)
 
 /** How a dynamic `case` hands its fields to a branch. */
 enum Arm:
@@ -164,13 +131,16 @@ enum Arm:
 
 /** One node of lowered code. Each knows the representation it leaves on the stack. */
 enum Code:
+  /** Local `slot` of the method. In a closure body 0 is the captured environment and the parameters
+    * follow; `let`-bound values come after them.
+    */
   case Local(slot: Int, slotRep: Rep)
 
   /** `env[index]` of the enclosing closure body. */
   case Captured(index: Int)
 
-  /** Constant number `index` of the program, boxed (`Obj`) or unboxed. */
-  case Literal(index: Int, literalRep: Rep)
+  /** The constant at UPLC node `node`, boxed (`Obj`) or unboxed. */
+  case Literal(node: Int, literalRep: Rep)
 
   case BoolLit(value: Boolean)
   case Box(code: Code, from: Rep)
@@ -195,12 +165,13 @@ enum Code:
   /** Direct call of a known lambda chain's body method, reusing the environment of the closure
     * value `closure` evaluates to.
     */
-  case Invoke(method: Int, arity: Int, closure: Code, args: Vector[Code])
+  case Invoke(method: Int, closure: Code, args: Vector[Code])
 
   /** Direct call of an outlined `let` body: `method(env = captures, args…)`. */
-  case CallBody(method: Int, arity: Int, captures: Vector[Code], args: Vector[Code])
+  case CallBody(method: Int, captures: Vector[Code], args: Vector[Code])
 
-  case Prim(op: PrimOp, args: Vector[Code])
+  /** A typed fast path: the builtin as a static call on unboxed operands. */
+  case Prim(fun: DefaultFun, args: Vector[Code], resultRep: Rep)
 
   /** A saturated builtin call through the runtime (native selector or Scalus delegation). */
   case Delegate(fun: DefaultFun, args: Vector[Code])
@@ -212,8 +183,8 @@ enum Code:
 
   case Construct(tag: Long, args: Vector[Code])
 
-  /** Dynamic `case`: `scrutSlot` holds the scrutinee, `fieldsSlot` its fields. */
-  case CaseOf(scrutinee: Code, arms: Vector[Arm], scrutSlot: Int, fieldsSlot: Int)
+  /** Dynamic `case`: the runtime picks the branch and hands it the scrutinee's fields. */
+  case CaseOf(scrutinee: Code, arms: Vector[Arm])
 
   /** Evaluation failure (UPLC `error`, or a scrutinee no branch can take). */
   case Fail(reason: String, resultRep: Rep)
@@ -226,10 +197,10 @@ enum Code:
     case Bind(_, _, body)   => body.rep
     case If(_, _, _, r)     => r
     case IntSwitch(_, _, r) => r
-    case Prim(op, _)        => op.result
+    case Prim(_, _, r)      => r
     case Choose(_, _, _, r) => r
     case Fail(_, r)         => r
     case Captured(_) | Box(_, _) | MakeLambda(_, _, _, _) | MakeThunk(_, _, _) | Apply(_, _) |
-        Spread(_, _) | Force(_) | Invoke(_, _, _, _) | CallBody(_, _, _, _) | Delegate(_, _) |
-        BuiltinValue(_) | Construct(_, _) | CaseOf(_, _, _, _) =>
+        Spread(_, _) | Force(_) | Invoke(_, _, _) | CallBody(_, _, _) | Delegate(_, _) |
+        BuiltinValue(_) | Construct(_, _) | CaseOf(_, _) =>
       Rep.Obj

@@ -2,10 +2,7 @@ package dev.constructive.eo.demo.uplc
 
 import scala.util.control.NonFatal
 
-import java.io.{PrintWriter, StringWriter}
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.util.CheckClassAdapter
-import scalus.uplc.eval.{CekMachine, NoBudgetSpender, NoLogger}
+import scalus.uplc.eval.{CekMachine, NoBudgetSpender, NoLogger, Result}
 import scalus.uplc.{Constant, DeBruijnedProgram, Term}
 
 /** The differential harness: one flat program, two evaluators, one verdict. */
@@ -27,34 +24,22 @@ object Oracle:
     try Right(Exec.onLargeStack(machine.evaluateTerm(applied)))
     catch case NonFatal(e) => Left(s"${e.getClass.getSimpleName}: ${e.getMessage}")
 
-  /** ASM's bytecode verifier over a generated class; empty when it is well-formed. */
-  def verify(classFile: Array[Byte]): String =
-    val out = new StringWriter
-    CheckClassAdapter.verify(
-      new ClassReader(classFile),
-      getClass.getClassLoader,
-      false,
-      new PrintWriter(out)
-    )
-    out.toString
-
   enum Verdict:
     case BothSucceed(term: Term)
     case BothFail(jvm: String, cek: String)
     case Disagree(detail: String)
 
-  /** Runs `flat` (applied to `args`) through the generated class and the CEK machine. */
+  /** Runs `flat` (applied to `args`) through the generated class and the CEK machine. A class the
+    * JVM's verifier rejects fails the comparison with a `VerifyError`.
+    */
   def compare(flat: Array[Byte], args: Seq[Constant] = Nil): Verdict =
-    val classFile = UplcJvm.translate(flat)
-    val problems = verify(classFile)
-    if problems.nonEmpty then Verdict.Disagree(s"class file fails verification:\n$problems")
-    else
-      (Exec.run(classFile, args), cek(flat, args)) match
-        case (Exec.Outcome.Success(jvm, _), Right(expected)) =>
-          if jvm.α_==(expected) then Verdict.BothSucceed(jvm)
-          else Verdict.Disagree(s"JVM: ${jvm.show}\nCEK: ${expected.show}")
-        case (Exec.Outcome.Failure(jvm, _), Left(expected)) => Verdict.BothFail(jvm, expected)
-        case (Exec.Outcome.Success(jvm, _), Left(expected)) =>
-          Verdict.Disagree(s"JVM succeeded with ${jvm.show}\nCEK failed: $expected")
-        case (Exec.Outcome.Failure(jvm, _), Right(expected)) =>
-          Verdict.Disagree(s"JVM failed: $jvm\nCEK succeeded with ${expected.show}")
+    (Exec.run(UplcJvm.translate(flat), args), cek(flat, args)) match
+      case (Result.Success(jvm, _, _, _), Right(expected)) =>
+        if jvm.α_==(expected) then Verdict.BothSucceed(jvm)
+        else Verdict.Disagree(s"JVM: ${jvm.show}\nCEK: ${expected.show}")
+      case (Result.Failure(jvm, _, _, _), Left(expected)) =>
+        Verdict.BothFail(jvm.getMessage, expected)
+      case (Result.Success(jvm, _, _, _), Left(expected)) =>
+        Verdict.Disagree(s"JVM succeeded with ${jvm.show}\nCEK failed: $expected")
+      case (Result.Failure(jvm, _, _, _), Right(expected)) =>
+        Verdict.Disagree(s"JVM failed: ${jvm.getMessage}\nCEK succeeded with ${expected.show}")

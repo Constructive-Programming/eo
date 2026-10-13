@@ -4,14 +4,14 @@ import scala.annotation.tailrec
 
 import dev.constructive.eo.demo.uplc.Semantics
 import scalus.uplc.builtin.{Builtins as B, ByteString, Data}
-import scalus.uplc.eval.{Logger, NoLogger}
+import scalus.uplc.eval.{Logger, MachineError, NoLogger}
 import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
-/** The static entry points generated code calls (`INVOKESTATIC Rt.…`).
+/** The static entry points generated code calls (`Rt.…`, by name — the emitter lets Cojen Maker
+  * resolve the overload from the argument types).
   *
-  * Names are unique — the emitter resolves each one's descriptor by name off this class. Anything
-  * that can fail as a matter of UPLC semantics throws [[UplcFailure]]; anything else that throws is
-  * a bug in the compiler and is left to surface as one.
+  * Anything that can fail as a matter of UPLC semantics throws Scalus' `MachineError`, as the CEK
+  * machine does; anything else that throws is a bug in the compiler and is left to surface as one.
   */
 object Rt:
 
@@ -22,9 +22,7 @@ object Rt:
   /** The trace log of the evaluation running on the current thread. */
   val logs: ThreadLocal[Logger] = ThreadLocal.withInitial(() => NoLogger)
 
-  def loadProgram(chunks: Array[String]): ProgramInfo = ProgramInfo.fromChunks(chunks)
-
-  def fail(reason: String): RuntimeException = new UplcFailure(reason)
+  def fail(reason: String): RuntimeException = new MachineError(reason)
 
   def badDispatch(id: Int): RuntimeException =
     new IllegalStateException(s"generated code reached an impossible dispatch target ($id)")
@@ -37,17 +35,17 @@ object Rt:
     case c: ConstrV  => s"constructor ${c.tag}"
     case other       => other.getClass.getName
 
-  private def mismatch(expected: String, v: AnyRef): UplcFailure =
-    new UplcFailure(s"expected $expected, got ${describe(v)}")
+  private def mismatch(expected: String, v: AnyRef): MachineError =
+    new MachineError(s"expected $expected, got ${describe(v)}")
 
-  // ---- representation changes -------------------------------------------------------------
+  // ---- representation changes: `box`, and `un<Rep>` for each unboxed `Rep` -------------------
 
-  def boxInteger(v: BigInt): AnyRef = Constant.Integer(v)
-  def boxBool(b: Boolean): AnyRef = if b then True else False
-  def boxBytes(b: ByteString): AnyRef = Constant.ByteString(b)
-  def boxString(s: String): AnyRef = Constant.String(s)
+  def box(v: BigInt): AnyRef = Constant.Integer(v)
+  def box(b: Boolean): AnyRef = if b then True else False
+  def box(b: ByteString): AnyRef = Constant.ByteString(b)
+  def box(s: String): AnyRef = Constant.String(s)
 
-  def unInteger(v: AnyRef): BigInt = v match
+  def unInt(v: AnyRef): BigInt = v match
     case Constant.Integer(i) => i
     case _                   => throw mismatch("an integer", v)
 
@@ -59,14 +57,14 @@ object Rt:
     case Constant.ByteString(b) => b
     case _                      => throw mismatch("a bytestring", v)
 
-  def unString(v: AnyRef): String = v match
+  def unStr(v: AnyRef): String = v match
     case Constant.String(s) => s
     case _                  => throw mismatch("a string", v)
 
   // ---- typed fast paths: the very functions Scalus' CardanoBuiltins wraps -------------------
 
   private def nonZero(fun: String, d: BigInt): BigInt =
-    if d == 0 then throw new UplcFailure(s"$fun: division by zero") else d
+    if d == 0 then throw new MachineError(s"$fun: division by zero") else d
 
   def addInteger(a: BigInt, b: BigInt): BigInt = B.addInteger(a, b)
   def subtractInteger(a: BigInt, b: BigInt): BigInt = B.subtractInteger(a, b)
@@ -94,7 +92,7 @@ object Rt:
 
   def indexByteString(b: ByteString, i: BigInt): BigInt =
     if i < 0 || i >= b.size then
-      throw new UplcFailure(s"indexByteString: index $i out of bounds for length ${b.size}")
+      throw new MachineError(s"indexByteString: index $i out of bounds for length ${b.size}")
     else B.indexByteString(b, i)
 
   def appendString(a: String, b: String): String = B.appendString(a, b)
@@ -123,7 +121,7 @@ object Rt:
           case 2 => l.code.call2(l.id, l.env, l.applied(0), a)
           case _ => l.code.callN(l.id, l.env, l.applied :+ a)
     case p: Partial => BuiltinCalls.feed(p, Some(a))
-    case other      => throw new UplcFailure(s"cannot apply ${describe(other)}")
+    case other      => throw new MachineError(s"cannot apply ${describe(other)}")
 
   /** `f a1 … an`. A lambda chain takes as many arguments as it still needs in one call — partial
     * applications in between would have no observable effect — and the result takes the rest.
@@ -158,13 +156,10 @@ object Rt:
           case other => go(apply(other, args(from)), from + 1)
     go(f, 0)
 
-  /** `case (constr k a1 … an) [… f …]` with an unknown `f`: the fields were evaluated first. */
-  def spread(args: Array[AnyRef], f: AnyRef): AnyRef = applyAll(f, args)
-
   def force(v: AnyRef): AnyRef = v match
     case t: Thunk   => t.code.call0(t.id, t.env)
     case p: Partial => BuiltinCalls.feed(p, None)
-    case other      => throw new UplcFailure(s"cannot force ${describe(other)}")
+    case other      => throw new MachineError(s"cannot force ${describe(other)}")
 
   // ---- builtins -----------------------------------------------------------------------------
 
@@ -194,8 +189,8 @@ object Rt:
 
   def construct(tag: Long, fields: Array[AnyRef]): AnyRef = new ConstrV(tag, fields)
 
-  private def noBranch(what: String, branches: Int): UplcFailure =
-    new UplcFailure(s"case: no branch for $what among $branches")
+  private def noBranch(what: String, branches: Int): MachineError =
+    new MachineError(s"case: no branch for $what among $branches")
 
   /** The branch a `case` takes — the CEK machine's `FrameCases` rules, including PV11 casing on
     * builtin values.
@@ -207,7 +202,7 @@ object Rt:
         throw noBranch(s"constructor ${java.lang.Long.toUnsignedString(c.tag)}", branches)
       else c.tag.toInt
     case c: Constant if Semantics.caseOnBuiltins => constantCaseIndex(c, branches)
-    case other => throw new UplcFailure(s"case on ${describe(other)}")
+    case other => throw new MachineError(s"case on ${describe(other)}")
 
   private def constantCaseIndex(c: Constant, n: Int): Int = c match
     case Constant.Integer(i) => integerCaseIndex(i, n)
@@ -227,7 +222,7 @@ object Rt:
       d match
         case Data.Constr(tag, _) if tag >= 0 && tag < n => tag.toInt
         case _                                          => throw noBranch("data", n)
-    case other => throw new UplcFailure(s"case on constant of type ${other.tpe}")
+    case other => throw new MachineError(s"case on constant of type ${other.tpe}")
 
   /** The values a `case` branch is applied to, in order. */
   def caseFields(scrut: AnyRef): Array[AnyRef] = scrut match

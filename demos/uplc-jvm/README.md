@@ -35,39 +35,47 @@ program: *running `translate(s)` gives what the CEK machine gives for `s`*.
 ## Pipeline
 
 ```
-flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ──Lower──▶ B: Code ──Emit (ASM)──▶ class file
-             (pre-order node ids,        (re-sugaring,       (closure conversion,
-              shared with the runtime)    hybrid typing)       slots, boxing)
+flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ──Lower──▶ B: Code ──Emit (Cojen Maker)──▶ class file
+             (Scalus Terms, pre-order    (re-sugaring,       (closure conversion,
+              ids shared with runtime)    hybrid typing)       locals, boxing)
 ```
 
-- **`SourceProgram`** numbers every UPLC node in pre-order. That numbering is
-  the contract between compile time and run time: a closure carries only its
-  node id; the class embeds the flat program and re-decodes it, so a result can
-  be *discharged* back to a UPLC term exactly as the CEK machine does.
+- **`SourceProgram`** is Scalus' own decoded `Term` tree with every node
+  numbered in pre-order. That numbering is the contract between compile time and
+  run time: a closure carries only its node id; the class embeds the flat
+  program and re-decodes it, so a result can be *discharged* back to a UPLC
+  term exactly as the CEK machine does.
 - **`Typer`** (S ⇒ A) recognises what UPLC compilers emit for constructs UPLC
   lacks, using rewrites that are exact under CEK evaluation order: `let`
   (immediately applied lambda chains), `if` (forced `ifThenElse` over delayed
   branches, and the other selector builtins), saturated builtin calls, direct
   calls of `let`-bound functions and of `let`-bound forced builtins, the
   `case (constr 0 args…) [f]` multi-argument call, `force (delay t)`.
-- **Hybrid typing.** Integers, booleans, bytestrings and strings get unboxed
-  representations (`BigInt`, `boolean`, `ByteString`, `String`) wherever the
-  typer can prove them — constants, typed builtin results, `let`s of those,
-  agreeing branches. Everything else — functions, constructors, `Data`, values
-  that flow through lambda parameters — is a boxed Scalus `Constant` or a
-  runtime closure. Boxing happens only where the two meet.
+- **Hybrid typing.** A static type is a Scalus `DefaultUni`, and builtin
+  signatures are Scalus' own `TypeScheme`s. Integers, booleans, bytestrings and
+  strings get unboxed representations (`BigInt`, `boolean`, `ByteString`,
+  `String`) wherever the typer can prove them — constants, typed builtin
+  results, `let`s of those, agreeing branches. Everything else — functions,
+  constructors, `Data`, values that flow through lambda parameters — is a boxed
+  Scalus `Constant` or a runtime closure. Boxing happens only where the two
+  meet.
 - **`Lower`** (A ⇒ B) converts closures (each captures exactly its free
   variables, in the order `SourceProgram.captures` fixes for both sides),
-  allocates locals, inserts box/unbox, picks typed fast paths, and moves a `let`
+  numbers locals, inserts box/unbox, picks typed fast paths, and moves a `let`
   body into its own method once a method nears the JVM's 64 KB limit.
-- **`Emit`** (B ⇒ T) writes one class: a static method per lambda chain /
-  `delay`, a `lookupswitch` closure dispatcher, and the flat program as string
-  constants.
+- **`Emit`** (B ⇒ T) writes one class with
+  [Cojen Maker](https://github.com/cojen/Maker), which takes code written
+  against variables and method names and resolves overloads, allocates locals
+  and computes stack maps itself. The class holds a static method per lambda
+  chain / `delay`, a switch per call arity for closure dispatch, and the flat
+  program as Base64 string constants.
 - **Runtime** (`runtime/`): closures, partial builtins, constructors, `case`
   dispatch (including PV11 casing on builtin values), discharge. Builtins with a
   typed fast path call the same `scalus.uplc.builtin.Builtins` functions
   Scalus' own `CardanoBuiltins` wraps; the five selector builtins run natively;
-  every other builtin is delegated to Scalus' implementation.
+  every other builtin is delegated to Scalus' implementation. Failures are
+  Scalus' `MachineError`, and `Exec.run` returns Scalus' evaluation `Result` —
+  the types the CEK machine reports with.
 
 ## Correctness
 
@@ -96,7 +104,8 @@ runtime both read it from there.
   composition yields the identical class file) and evidence that hybrid typing
   fires on real validator code.
 
-Every generated class also goes through ASM's bytecode verifier.
+The JVM's bytecode verifier checks every generated class when `Exec.load`
+defines it.
 
 ## Scope
 
@@ -104,7 +113,7 @@ Every generated class also goes through ASM's bytecode verifier.
   Out-of-budget rejections, which the ledger applies, are a natural next step.
 - Generated code recurses on the JVM stack where the CEK machine uses the heap,
   so `Exec` runs evaluations on a thread with a 512 MB stack.
-- Traces are collected (`Exec.Outcome.logs`) but not compared.
+- Traces are collected (`Result.logs`) but not compared.
 
 ## Running it
 
@@ -136,5 +145,5 @@ sbt "demoUplcJvmBench/Jmh/run -prof gc"
 
 Scalus has its own experimental JIT (`scalus-uplc-jit-compiler`, built on
 Scala 3 staging). This demo is independent of it: its point is the shape —
-one optic from bytes to bytes, a typed intermediate form you can inspect, ASM
-for the class file — and a differential harness that keeps it honest.
+one optic from bytes to bytes, a typed intermediate form you can inspect — and
+a differential harness that keeps it honest.

@@ -1,5 +1,7 @@
 package dev.constructive.eo.demo.uplc
 
+import scala.annotation.tailrec
+
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.builtin.platform
 import scalus.uplc.eval.PlutusVM
@@ -32,32 +34,21 @@ object Semantics:
   /** Scalus' implementation of a builtin — what generated code delegates to. */
   def runtime(fun: DefaultFun): BuiltinRuntime = runtimes(fun.ordinal)
 
-  /** The force/argument shape of a builtin, and the type of its saturated result. */
-  def signature(fun: DefaultFun): Signature = signatures(fun.ordinal)
+  /** A builtin's type. Builtins are prenex-polymorphic: `numTypeVars` forces, then `arity`
+    * arguments, and the builtin runs when the last of them arrives.
+    */
+  def scheme(fun: DefaultFun): TypeScheme = runtime(fun).typeScheme
 
-  private lazy val signatures: IArray[Signature] =
-    IArray.from(DefaultFun.values.iterator.map(f => Signature.of(runtime(f).typeScheme)))
+  /** The argument types and the result type of a builtin, past its forces. */
+  def signature(fun: DefaultFun): (List[Ty], Ty) =
+    @tailrec
+    def go(t: TypeScheme, args: List[Ty]): (List[Ty], Ty) = t match
+      case TypeScheme.All(_, rest)     => go(rest, args)
+      case TypeScheme.Arrow(arg, rest) => go(rest, Ty.of(arg) :: args)
+      case result                      => (args.reverse, Ty.of(result))
+    go(scheme(fun), Nil)
 
-/** One step a builtin consumes before it runs: a `force` (type instantiation) or an argument. */
-enum Step:
-  case Force, Arg
-
-final case class Signature(steps: List[Step], result: Ty):
-  def arity: Int = steps.count(_ == Step.Arg)
-
-object Signature:
-
-  def of(scheme: TypeScheme): Signature = scheme match
-    case TypeScheme.All(_, rest) =>
-      val tail = of(rest)
-      tail.copy(steps = Step.Force :: tail.steps)
-    case TypeScheme.Arrow(_, rest) =>
-      val tail = of(rest)
-      tail.copy(steps = Step.Arg :: tail.steps)
-    case TypeScheme.Type(uni) => Signature(Nil, Ty.ofUni(uni))
-    case _                    => Signature(Nil, Ty.Dyn)
-
-  /** True once a builtin with this remaining scheme has everything it needs and runs. */
-  def saturated(scheme: TypeScheme): Boolean = scheme match
-    case _: TypeScheme.All | _: TypeScheme.Arrow => false
-    case _                                       => true
+  /** The UPLC spelling of a builtin (`addInteger`); Scalus' enum cases are capitalised. */
+  def name(fun: DefaultFun): String =
+    val n = fun.toString
+    n.take(1).toLowerCase + n.drop(1)

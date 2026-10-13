@@ -3,6 +3,7 @@ package dev.constructive.eo.demo.uplc
 import dev.constructive.eo.demo.uplc.Oracle.Verdict
 import org.specs2.mutable.Specification
 import scalus.cardano.ledger.Word64
+import scalus.uplc.eval.Result
 import scalus.uplc.{Constant, DeBruijn, DefaultFun, NamedDeBruijn, Program, ProgramFlatCodec, Term}
 
 /** Hand-written programs, one per compilation path, each checked against the CEK machine. */
@@ -167,7 +168,7 @@ class CompilerSpec extends Specification:
     val classFile =
       UplcJvm.translate(flat("(program 1.1.0 (lam x [(builtin addInteger) x (con integer 1)]))"))
     Exec.run(classFile, List(Constant.Integer(41))) must beLike {
-      case Exec.Outcome.Success(t, _) =>
+      case Result.Success(t, _, _, _) =>
         (t.α_==(Term.Const(Constant.Integer(42)))) must beTrue
     }
   }
