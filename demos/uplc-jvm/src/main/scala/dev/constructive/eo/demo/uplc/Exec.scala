@@ -1,0 +1,72 @@
+package dev.constructive.eo.demo.uplc
+
+import dev.constructive.eo.demo.uplc.runtime.{Discharge, Dispatch, Rt, UplcFailure}
+import java.util.concurrent.{ExecutionException, FutureTask}
+import scalus.uplc.builtin.Data
+import scalus.uplc.eval.Log
+import scalus.uplc.{Constant, Term}
+
+/** Runs a class file produced by [[UplcJvm]]. */
+object Exec:
+
+  enum Outcome:
+
+    /** The program's value, discharged to a de Bruijn term (comparable with the CEK's by `α_==`).
+      */
+    case Success(term: Term, logs: Vector[String])
+
+    case Failure(reason: String, logs: Vector[String])
+
+    def isSuccess: Boolean = this.isInstanceOf[Success]
+
+  /** Generated code recurses on the JVM stack where the CEK machine uses the heap, so evaluations
+    * run on a dedicated thread with a large stack.
+    */
+  private val StackSize = 512L * 1024 * 1024
+
+  final private class DefiningLoader(parent: ClassLoader) extends ClassLoader(parent):
+
+    def define(bytes: Array[Byte]): Class[?] =
+      defineClass(Emit.ClassName.replace('/', '.'), bytes, 0, bytes.length)
+
+  /** Defines the class in a fresh loader (one per load: the class name is fixed). */
+  def load(classFile: Array[Byte]): Dispatch =
+    new DefiningLoader(getClass.getClassLoader)
+      .define(classFile)
+      .getField("INSTANCE")
+      .get(null)
+      .asInstanceOf[Dispatch]
+
+  /** Evaluates the program, then applies the resulting value to `args` — the way the ledger applies
+    * a validator to its script context, and the same order the CEK machine follows for
+    * `[[program] arg]`.
+    */
+  def run(classFile: Array[Byte], args: Seq[Constant] = Nil): Outcome = onLargeStack {
+    val log = new Log
+    Rt.logs.set(log)
+    def logs = log.getLogs.toVector
+    try
+      val program = load(classFile)
+      val value = args.foldLeft(program.run())((f, a) => Rt.apply(f, a))
+      Outcome.Success(Discharge(value, program.info()), logs)
+    catch
+      // The generated code's one abort, and the one place it is caught.
+      case f: UplcFailure        => Outcome.Failure(f.getMessage, logs)
+      case _: StackOverflowError => Outcome.Failure("JVM stack exhausted", logs)
+    finally Rt.logs.remove()
+  }
+
+  /** Plutus V3 validation (CIP-117): the script applied to its context must succeed with unit. */
+  def validate(classFile: Array[Byte], scriptContext: Data): Either[String, Vector[String]] =
+    run(classFile, List(Constant.Data(scriptContext))) match
+      case Outcome.Success(Term.Const(Constant.Unit, _), logs) => Right(logs)
+      case Outcome.Success(other, _)  => Left(s"script returned a non-unit value: ${other.show}")
+      case Outcome.Failure(reason, _) => Left(reason)
+
+  private[uplc] def onLargeStack[A](body: => A): A =
+    val task = new FutureTask[A](() => body)
+    val thread = new Thread(null, task, "uplc-jvm", StackSize)
+    thread.start()
+    thread.join()
+    try task.get()
+    catch case e: ExecutionException => throw e.getCause

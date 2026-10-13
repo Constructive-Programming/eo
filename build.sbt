@@ -65,13 +65,27 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "scalafmtCheckAll",
       "scalafmtSbtCheck",
       "benchmarks/scalafmtCheck",
+      "demoUplcJvm/scalafmtCheckAll",
+      "demoUplcJvmValidators/scalafmtCheckAll",
     ),
     name = Some("Check formatting"),
   ),
   WorkflowStep.Sbt(
-    List("scalafixAll --check"),
+    List(
+      "scalafixAll --check",
+      "demoUplcJvm/scalafixAll --check",
+      "demoUplcJvmValidators/scalafixAll --check",
+    ),
     name = Some("Check scalafix"),
   ),
+)
+
+// The UPLC → JVM demo sits outside the root aggregate (Scalus drags in JNI
+// crypto bindings, bouncycastle, borer, upickle, monocle), so `sbt test` and
+// the pre-push hook stay lean; CI runs its differential suite as its own step.
+ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
+  List("demoUplcJvm/test"),
+  name = Some("Test UPLC → JVM demo (differential vs Scalus CEK)"),
 )
 
 // -------------------------------------------------------------------
@@ -1148,6 +1162,52 @@ lazy val benchmarks: Project = project
     // JMH class can `JsonCodecMaker.make` directly without a separate
     // codec module.
     libraryDependencies += jsoniterMacros,
+  )
+
+// -------------------------------------------------------------------
+// Demo: a UPLC (Cardano Plutus Core) → JVM bytecode compiler whose spine is
+// one eo `Iso[Array[Byte], Array[Byte], Expr, JvmProgram]` — flat UPLC in,
+// class file out, `iso.modify(Lower.lower)` is the translator. Correctness
+// is differential: every program runs through the generated class AND the
+// Scalus CEK machine, and the two results must agree. Unpublished and OUT of
+// the root aggregate (see the CI step above); run with `sbt demoUplcJvm/test`.
+// -------------------------------------------------------------------
+lazy val ScalusVersion = "1.3.0"
+lazy val scalus = "org.scalus" %% "scalus" % ScalusVersion
+lazy val AsmVersion = "9.11"
+lazy val asm = "org.ow2.asm" % "asm" % AsmVersion
+lazy val asmUtil = "org.ow2.asm" % "asm-util" % AsmVersion
+
+lazy val demoUplcJvm: Project = project
+  .in(file("demos/uplc-jvm"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("demoUplcJvmValidators") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-demo-uplc-jvm",
+    publish / skip := true,
+    libraryDependencies += scalus,
+    libraryDependencies += asm,
+    // CheckClassAdapter: every generated class is run through ASM's
+    // bytecode verifier in the suite, not just loaded.
+    libraryDependencies += asmUtil % Test,
+    libraryDependencies += discipline % Test,
+  )
+
+// On-chain validators written in Scala and compiled to UPLC by the Scalus
+// compiler plugin — the second half of the demo's oracle corpus. Isolated in
+// its own module so the plugin (and the Scalus-flavoured Scala it accepts)
+// never touches the compiler's own sources.
+lazy val demoUplcJvmValidators: Project = project
+  .in(file("demos/uplc-jvm-validators"))
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-demo-uplc-jvm-validators",
+    publish / skip := true,
+    libraryDependencies += scalus,
+    addCompilerPlugin("org.scalus" % "scalus-plugin" % ScalusVersion cross CrossVersion.full),
   )
 
 // Single source of truth for the JMH invocation (the config that the per-class
