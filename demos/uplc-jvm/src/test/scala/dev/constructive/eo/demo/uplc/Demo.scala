@@ -22,14 +22,14 @@ object Demo:
       "[(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)]"
     section("A small program, all the way round", letArithmetic)
     val script = parse(letArithmetic)
-    val typed = UplcJvm.typed.get(script)
-    println(s"\ntyped.get:\n${typed.body.show}")
+    val typed = UplcJvm.toTyped.get(script)
+    println(s"\ntoTyped.get:\n${typed.body.show}")
     val cls = UplcJvm.lowering.get(typed)
     println(s"\nlowering.get, the method `run`:\n${bytecode(cls, "run")}")
-    val classFile = UplcJvm.writing.get(cls)
-    println(s"\nwriting.get: ${classFile.bytes.length} bytes of class file")
+    val classFile = UplcJvm.compiling.get(cls)
+    println(s"\ncompiling.get: ${classFile.bytes.length} bytes of class file")
     println(
-      s"and back — classFile.reverseGet(that) == script: ${UplcJvm.classFile.reverseGet(classFile) == script}"
+      s"and back — toBytecode.reverseGet(that) == script: ${UplcJvm.toBytecode.reverseGet(classFile) == script}"
     )
     args
       .headOption
@@ -39,11 +39,11 @@ object Demo:
     // A program whose value is a closure: it comes back as a term, captures substituted.
     val closure = "[(lam x (lam y x)) (con integer 5)]"
     section("A closure comes back as a term", closure)
-    compare(parse(closure), UplcJvm.classFile.get(parse(closure)))
+    compare(parse(closure), UplcJvm.toBytecode.get(parse(closure)))
 
     section("A Scalus-compiled validator, read back (Fibonacci)", "")
     val fib = CborScript.of(CompiledValidators.fibonacci.program)
-    println(s"${fib.bytes.length} bytes of script\n\n${UplcJvm.typed.get(fib).body.show}")
+    println(s"${fib.bytes.length} bytes of script\n\n${UplcJvm.toTyped.get(fib).body.show}")
     println(s"\n${shape(fib)}")
 
     section("Every validator", "")
@@ -56,9 +56,9 @@ object Demo:
 
   /** Sizes: script bytes, closure body methods in the class, class-file bytes. */
   private def shape(script: CborScript): String =
-    val cls = UplcJvm.bytecode.get(script)
+    val cls = UplcJvm.toJvmClass.get(script)
     val bodies = cls.tree.methods.asScala.count(_.name.startsWith("m"))
-    val classFile = UplcJvm.writing.get(cls).bytes.length
+    val classFile = UplcJvm.compiling.get(cls).bytes.length
     f"script ${script.bytes.length}%4d bytes   class: $bodies%2d closure bodies   class file ${classFile}%5d bytes"
 
   /** One method of a class, as ASM prints bytecode. */

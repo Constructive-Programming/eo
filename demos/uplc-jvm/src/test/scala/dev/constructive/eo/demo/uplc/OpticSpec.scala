@@ -24,25 +24,25 @@ class OpticSpec extends Specification with Discipline:
   private val scripts = script("[(lam x (lam y x)) (con integer 5)]") :: validators
 
   given Arbitrary[CborScript] = Arbitrary(Gen.oneOf(scripts))
-  given Arbitrary[TypedProgram] = Arbitrary(Gen.oneOf(scripts).map(UplcJvm.typed.get))
-  given Arbitrary[JvmClassScript] = Arbitrary(Gen.oneOf(scripts).map(UplcJvm.classFile.get))
+  given Arbitrary[TypedProgram] = Arbitrary(Gen.oneOf(scripts).map(UplcJvm.toTyped.get))
+  given Arbitrary[JvmClassScript] = Arbitrary(Gen.oneOf(scripts).map(UplcJvm.toBytecode.get))
 
   private def isoTests[S, A](optic: Iso[S, A]) =
     new IsoTests[S, A]:
       val laws = new IsoLaws[S, A]:
         val iso = optic
 
-  checkAll("UplcJvm.typed: CborScript ≅ TypedProgram", isoTests(UplcJvm.typed).iso)
-  checkAll("UplcJvm.classFile: CborScript ≅ JvmClassScript", isoTests(UplcJvm.classFile).iso)
+  checkAll("UplcJvm.toTyped: CborScript ≅ TypedProgram", isoTests(UplcJvm.toTyped).iso)
+  checkAll("UplcJvm.toBytecode: CborScript ≅ JvmClassScript", isoTests(UplcJvm.toBytecode).iso)
 
   "typed reads UPLC back as a typed Scala-like expression" >> {
-    val a = UplcJvm.typed.get(script("[(lam x [(builtin multiplyInteger) x x]) (con integer 7)]"))
+    val a = UplcJvm.toTyped.get(script("[(lam x [(builtin multiplyInteger) x x]) (con integer 7)]"))
     a.body.show must beEqualTo("val v0: BigInt = 7\nmultiplyInteger(v0, v0)")
   }
 
   /** Every method call in the lowered class, as `Owner.name`. */
   private def calls(script: CborScript): Vector[String] =
-    val methods = UplcJvm.bytecode.get(script).tree.methods.asScala.toVector
+    val methods = UplcJvm.toJvmClass.get(script).tree.methods.asScala.toVector
     methods.flatMap(_.instructions.iterator.asScala.collect {
       case m: MethodInsnNode                              => s"${m.owner.split('/').last}.${m.name}"
       case j: JumpInsnNode if j.getOpcode == Opcodes.IFEQ => "if"

@@ -29,7 +29,7 @@ abstract class ScriptState:
   def prepare(): Unit =
     val s = scenario
     applied = (s.script.program $ s.context).deBruijnedProgram
-    val classFile = UplcJvm.classFile.get(CborScript.of(s.script.program))
+    val classFile = UplcJvm.toBytecode.get(CborScript.of(s.script.program))
     compiled = Exec.load(classFile)
     context = Constant.Data(s.context)
     // Both evaluators must accept the transaction, or the timings compare different work.
@@ -90,6 +90,6 @@ class TranslateBench:
   def prepare(): Unit =
     script = CborScript.of(Scenarios.accepting.find(_.name == validator).get.script.program)
 
-  @Benchmark def translate: JvmClassScript = UplcJvm.classFile.get(script)
+  @Benchmark def translate: JvmClassScript = UplcJvm.toBytecode.get(script)
 
-  @Benchmark def translateAndLoad: Dispatch = Exec.load(UplcJvm.classFile.get(script))
+  @Benchmark def translateAndLoad: Dispatch = Exec.load(UplcJvm.toBytecode.get(script))

@@ -22,7 +22,7 @@ object Ty:
       case List(t) => t
       case _       => None
 
-/** A — the typed, re-sugared program: UPLC read back as a Scala-like expression tree.
+/** The typed, re-sugared program: UPLC read back as a Scala-like expression tree.
   *
   * The typer recognises the idioms UPLC compilers (Plinth, Scalus, Aiken, …) emit for constructs
   * UPLC lacks — `let` as an immediately applied lambda, `if` as a forced `ifThenElse` over delayed

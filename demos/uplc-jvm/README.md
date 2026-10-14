@@ -10,13 +10,13 @@ import dev.constructive.eo.demo.uplc.*
 
 val script = CborScript.of(program)            // or CborScript.parse(bytes): Either[String, CborScript]
 
-UplcJvm.typed: Iso[CborScript, TypedProgram]   // the program as a typed, Scala-like expression
-UplcJvm.bytecode: Iso[CborScript, JvmClass]    // its JVM class, in memory (ASM's class tree)
-UplcJvm.classFile: Iso[CborScript, JvmClassScript]
+UplcJvm.toTyped: Iso[CborScript, TypedProgram]  // the program as a typed, Scala-like expression
+UplcJvm.toJvmClass: Iso[CborScript, JvmClass]   // its JVM class, in memory (ASM's class tree)
+UplcJvm.toBytecode: Iso[CborScript, JvmClassScript]
 
-val classFile = UplcJvm.classFile.get(script)  // the compiler
-UplcJvm.classFile.reverseGet(classFile)        // == script: the class carries its script
-Exec.validate(classFile, scriptContext)        // Right(traces) | Left(reason), CIP-117
+val classFile = UplcJvm.toBytecode.get(script)  // the compiler
+UplcJvm.toBytecode.reverseGet(classFile)        // == script: the class carries its script
+Exec.validate(classFile, scriptContext)         // Right(traces) | Left(reason), CIP-117
 ```
 
 The three optics a caller wants all start at the script as the ledger stores it,
@@ -24,14 +24,14 @@ and each is a chain of the compiler's stages:
 
 ```
 CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
-           typed          lowering    writing
+           toTyped        lowering   compiling
 ```
 
 | type | what it is |
 |---|---|
 | `CborScript` | a script as the ledger stores it: the flat-encoded program in a CBOR bytestring (opaque, over Scalus' `ByteString`) |
 | `TypedProgram` | the program read back as a typed, Scala-like expression tree |
-| `JvmClass` | the script's JVM class in memory — [ASM](https://asm.ow2.io)'s `ClassNode`, inspectable before it is a file (opaque; only the compiler and `writing.reverseGet` make one) |
+| `JvmClass` | the script's JVM class in memory — [ASM](https://asm.ow2.io)'s `ClassNode`, inspectable before it is a file (opaque; only the compiler and `UplcJvm.decompile` make one) |
 | `JvmClassScript` | a class file the compiler wrote (opaque, over Scalus' `ByteString`) |
 
 Every stage keeps the script it came from: a typed program its source, a class
@@ -39,7 +39,7 @@ the script itself, embedded in its constants. So each arrow can be walked back,
 and each optic is a lawful iso on what the compiler produces — there and back is
 the identity, both ways. The suite checks those laws with cats-eo's own
 `IsoTests`, and checks the round trips on every program it compiles. The other
-property that matters is the commuting square: *running `classFile.get(s)`
+property that matters is the commuting square: *running `toBytecode.get(s)`
 gives what the CEK machine gives for `s`*.
 
 ## Pipeline
@@ -55,7 +55,7 @@ CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram
   run time: a closure carries only its node id; the class embeds the script
   and re-decodes it, so a result can be *discharged* back to a UPLC term
   exactly as the CEK machine does.
-- **`Typer`** (`typed.get`) recognises what UPLC compilers emit for constructs UPLC
+- **`Typer`** (`toTyped.get`) recognises what UPLC compilers emit for constructs UPLC
   lacks, using rewrites that are exact under CEK evaluation order: `let`
   (immediately applied lambda chains), `if` (forced `ifThenElse` over delayed
   branches, and the other selector builtins), saturated builtin calls, direct
@@ -81,8 +81,8 @@ CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram
   static method per lambda chain / `delay`, a switch per call arity for closure
   dispatch, and the script as Base64 string constants — what
   `lowering.reverseGet` reads back.
-- **`writing`** is ASM's `ClassWriter` (it computes the stack map frames) one
-  way and `ClassReader` the other. A class file survives being read and written
+- **`compiling`** is ASM's `ClassWriter` (`UplcJvm.compile`, which computes the
+  stack map frames) one way and `ClassReader` (`UplcJvm.decompile`) the other. A class file survives being read and written
   again byte for byte, because the generated code has no unreachable
   instructions: an expression that can only fail is never followed by code.
 - **Runtime** (`runtime/`): closures, partial builtins, constructors, `case`
@@ -105,8 +105,8 @@ runtime both read it from there.
 
 `sbt demoUplcJvm/test` runs the suites below. Every program any of them runs is
 also checked for the round trips: its script comes back out of its class
-(`classFile.reverseGet`), and its class file survives ASM reading and writing it
-again (`writing`).
+(`toBytecode.reverseGet`), and its class file survives ASM reading and writing it
+again (`compiling`).
 
 - **`ConformanceSpec`** — the Plutus conformance suite (plutus `1.63.0.0`,
   vendored under `src/test/resources/plutus-conformance`, see its `SOURCE.md`).
@@ -122,7 +122,7 @@ again (`writing`).
   applied.
 - **`CompilerSpec`** — one hand-written program per compilation path, error
   paths included, plus a 20 000-deep `let` chain.
-- **`OpticSpec`** — the iso laws of `typed` and `classFile`, with cats-eo-laws'
+- **`OpticSpec`** — the iso laws of `toTyped` and `toBytecode`, with cats-eo-laws'
   `IsoTests`, and evidence that hybrid typing fires on real validator code.
 
 The JVM's bytecode verifier checks every generated class when `Exec.load`
@@ -145,9 +145,9 @@ sbt "demoUplcJvmBench/Jmh/run -prof gc"                             # JMH: CEK v
 demos/uplc-jvm/scripts/refresh-conformance.sh [plutus-tag]          # re-vendor the suite
 ```
 
-`Demo` prints the round trip stage by stage: UPLC text, the typed expression
-(A), the lowered bytecode (B, as ASM prints it), the class file (T), and the
-discharged result next to the CEK machine's. Pass a directory to also write the
+`Demo` prints the round trip stage by stage: UPLC text, the typed expression,
+the lowered bytecode (as ASM prints it), the class file, and the discharged
+result next to the CEK machine's. Pass a directory to also write the
 class file there for `javap`.
 
 ## Benchmarks

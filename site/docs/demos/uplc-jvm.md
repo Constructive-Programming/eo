@@ -16,7 +16,7 @@ embeds the script in its constants — so every arrow can be walked back:
 
 ```
 CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
-           typed          lowering    writing
+           toTyped        lowering   compiling
 ```
 
 | type | what it is |
@@ -34,13 +34,13 @@ are compositions of the stages with `andThen`:
 ```scala
 import dev.constructive.eo.demo.uplc.*
 
-val typed: Iso[CborScript, TypedProgram] = UplcJvm.typed
-val bytecode: Iso[CborScript, JvmClass] = UplcJvm.typed.andThen(UplcJvm.lowering)
-val classFile: Iso[CborScript, JvmClassScript] = bytecode.andThen(UplcJvm.writing)
+val toTyped: Iso[CborScript, TypedProgram] = UplcJvm.toTyped
+val toJvmClass: Iso[CborScript, JvmClass] = UplcJvm.toTyped.andThen(UplcJvm.lowering)
+val toBytecode: Iso[CborScript, JvmClassScript] = toJvmClass.andThen(UplcJvm.compiling)
 
 val script = CborScript.of(validator.program)  // or CborScript.parse(onChainBytes)
-val compiled = classFile.get(script)            // the compiler
-classFile.reverseGet(compiled) == script        // the class hands its script back
+val compiled = toBytecode.get(script)           // the compiler
+toBytecode.reverseGet(compiled) == script       // the class hands its script back
 Exec.validate(compiled, scriptContext)          // Right(traces) | Left(reason)
 ```
 
@@ -49,11 +49,11 @@ Two properties follow from the shape, and the suite checks both.
 **The laws hold.** Each optic is a lawful iso on what the compiler produces:
 there and back is the identity, both ways — `reverseGet(get(s)) == s`, and
 `get(reverseGet(a)) == a` for every `a` the compiler made. The suite checks
-`typed` and `classFile` with cats-eo's own `IsoTests`, and checks the round trips
+`toTyped` and `toBytecode` with cats-eo's own `IsoTests`, and checks the round trips
 on every program it compiles, the 943 conformance programs included.
 
 **The square commutes.** The semantic property is the one a round trip can't
-see: *running `classFile.get(s)` gives what a reference evaluator gives for
+see: *running `toBytecode.get(s)` gives what a reference evaluator gives for
 `s`*. The demo checks exactly that, against the Scalus CEK machine, for every
 program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)).
 
@@ -62,7 +62,7 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 <div class="uplc-roundtrip" style="max-width: 780px; margin: 1.5em auto;">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" width="100%" role="img" aria-labelledby="uplc-rt-title uplc-rt-desc" style="font-family: inherit;">
 <title id="uplc-rt-title">The UPLC to JVM round trip</title>
-<desc id="uplc-rt-desc">Top row, the optics: a script goes through typed to a typed expression, through lowering to its JVM class in memory, and through writing to a class file; each arrow is an iso, walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
+<desc id="uplc-rt-desc">Top row, the optics: a script goes through toTyped to a typed expression, through lowering to its JVM class in memory, and through compiling to a class file; each arrow is an iso, walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
 <defs><marker id="uplc-rt-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--primary-color);"/></marker></defs>
 <rect x="6" y="24" width="768" height="100" rx="14" style="fill: none; stroke: var(--primary-medium); stroke-dasharray: 6 5;"/>
 <text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo isos · CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript</text>
@@ -74,7 +74,7 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 <text x="280" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">typed expr</text>
 <text x="280" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">TypedProgram</text>
 <rect x="400" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
-<text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">bytecode</text>
+<text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">JVM class</text>
 <text x="470" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">JvmClass</text>
 <rect x="620" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="690" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">class file</text>
@@ -94,11 +94,11 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 </g>
 <g style="font-size: 12px; fill: var(--primary-color);">
 <line x1="162" y1="74" x2="206" y2="74" marker-start="url(#uplc-rt-arrow)" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
-<text x="184" y="66" text-anchor="middle">typed</text>
+<text x="184" y="66" text-anchor="middle" style="font-size: 11px;">toTyped</text>
 <line x1="352" y1="74" x2="396" y2="74" marker-start="url(#uplc-rt-arrow)" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
 <text x="374" y="66" text-anchor="middle" style="font-size: 11px;">lowering</text>
 <line x1="542" y1="74" x2="616" y2="74" marker-start="url(#uplc-rt-arrow)" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
-<text x="579" y="66" text-anchor="middle">writing</text>
+<text x="579" y="66" text-anchor="middle">compiling</text>
 <line x1="690" y1="110" x2="690" y2="226" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
 <text x="698" y="173" text-anchor="start">load + run</text>
 <line x1="618" y1="264" x2="544" y2="264" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
@@ -120,7 +120,7 @@ The listings in this section are printed, verbatim, by the demo's walkthrough
 sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo [dir-for-the-class-file]"
 ```
 
-### Forth: a script to a typed expression (`typed`)
+### Forth: a script to a typed expression (`toTyped`)
 
 UPLC has no `let`, no `if` and no multi-argument call; compilers encode them in
 lambdas, `delay`/`force` and builtins. `let x = 6 in let y = x * x in x + y`
@@ -130,9 +130,9 @@ arrives as:
 (program 1.1.0 [(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)])
 ```
 
-`typed.get` decodes the script into Scalus' own `Term` tree and reads it back as
-a typed, Scala-like expression; `typed.reverseGet` is the script it was read
-from:
+`toTyped.get` decodes the script into Scalus' own `Term` tree and reads it back
+as a typed, Scala-like expression; `toTyped.reverseGet` is the script it was
+read from:
 
 ```scala
 val v0: BigInt = 6
@@ -261,10 +261,11 @@ table of constants, indexed by UPLC node:
 The constant is unboxed once, the arithmetic is Scalus' own, and the one box is
 at the result.
 
-### Bytecode to a class file, and back (`writing`)
+### To a class file, and back (`compiling`)
 
-`writing.get` hands the class's tree to ASM's `ClassWriter`, which computes the
-stack map frames and serialises it; `writing.reverseGet` is ASM's `ClassReader`.
+`compiling.get` (`UplcJvm.compile`) hands the class's tree to ASM's
+`ClassWriter`, which computes the stack map frames and serialises it;
+`compiling.reverseGet` (`UplcJvm.decompile`) is ASM's `ClassReader`.
 The class has a static method per lambda chain and `delay`, a switch per call
 arity for closure dispatch, and the script, re-decoded by the static initialiser.
 A class file survives being read and written again byte for byte because the
@@ -273,8 +274,8 @@ is never applied, and a call whose argument can only fail after nothing but
 values is that failure — so ASM has no dead code to blank out:
 
 ```
-writing.get: 1841 bytes of class file
-and back — classFile.reverseGet(that) == script: true
+compiling.get: 1841 bytes of class file
+and back — toBytecode.reverseGet(that) == script: true
 ```
 
 ### And back again: values to UPLC terms
@@ -313,7 +314,7 @@ file survives ASM reading and writing it again — on:
 | Plutus conformance | the [`plutus-conformance`](https://github.com/IntersectMBO/plutus/tree/1.63.0.0/plutus-conformance) UPLC evaluation cases, plutus `1.63.0.0` (vendored) | **943 / 943** evaluation cases agree; 55 parser-only tests and 1 program with no flat encoding skipped |
 | validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and compiled with the context applied |
 | compiler paths | one hand-written program per path, error paths included, a 20 000-deep `let` chain | all agree |
-| iso laws | cats-eo-laws' `IsoTests` for `typed` and `classFile`, over every validator and a program whose value is a closure | both laws hold, both ways |
+| iso laws | cats-eo-laws' `IsoTests` for `toTyped` and `toBytecode`, over every validator and a program whose value is a closure | both laws hold, both ways |
 
 The JVM's own verifier checks every generated class as it is loaded, and each
 conformance case's `.expected` file pins whether it should succeed or fail — so
@@ -398,7 +399,7 @@ settles at ~21×.
 | `fibonacci` | 126 B | 4,339 B | 68.9 ± 6.5 | 337.1 ± 45.1 | 10 |
 | `htlc` | 310 B | 6,662 B | 172.2 ± 16.6 | 666.2 ± 79.6 | 82 |
 
-`translate` is `classFile.get`, measured warm; `translate + load` adds defining
+`translate` is `toBytecode.get`, measured warm; `translate + load` adds defining
 the class, verifying it, and running its static initialiser, which re-decodes the
 embedded script. Loading is three quarters of
 the total. Most of `translate` is ASM's `ClassWriter` computing stack map frames;

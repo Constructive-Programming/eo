@@ -42,11 +42,11 @@ object Oracle:
     * JVM's verifier rejects fails the comparison with a `VerifyError`.
     */
   def compare(script: CborScript, args: Seq[Constant] = Nil): Verdict =
-    val classFile = UplcJvm.classFile.get(script)
+    val classFile = UplcJvm.toBytecode.get(script)
     // The optics' laws, on every program: the script comes back out of its class, and the class
     // file survives ASM reading it and writing it again.
-    if UplcJvm.classFile.reverseGet(classFile) != script ||
-      UplcJvm.writing.get(UplcJvm.writing.reverseGet(classFile)) != classFile
+    if UplcJvm.toBytecode.reverseGet(classFile) != script ||
+      UplcJvm.compile(UplcJvm.decompile(classFile)) != classFile
     then Verdict.Disagree("the class file does not round-trip")
     else compare(classFile, script, args)
 

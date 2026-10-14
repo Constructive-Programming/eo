@@ -8,11 +8,10 @@ import scalus.uplc.{DeBruijnedProgram, Term}
 /** A decoded script — Scalus' own `Term` tree — numbered in PRE-ORDER.
   *
   * The numbering is the contract between compile time and run time. The compiler stamps node ids
-  * into the typed expression (A) and from there into the generated class; the runtime re-decodes
-  * the same script (it is embedded in the class) and gets the same numbering back. A closure
-  * therefore only has to carry an `Int` to be turned back into its source term — which is what
-  * discharging a result (and comparing it with the CEK machine's) needs. Constants are looked up by
-  * node id too.
+  * into the typed expression and from there into the generated class; the runtime re-decodes the
+  * same script (it is embedded in the class) and gets the same numbering back. A closure therefore
+  * only has to carry an `Int` to be turned back into its source term — which is what discharging a
+  * result (and comparing it with the CEK machine's) needs. Constants are looked up by node id too.
   *
   * Every node gets an id: the node itself first, then its children left to right (`LamAbs` body;
   * `Apply` function then argument; `Constr` arguments; `Case` scrutinee then branches). A lambda

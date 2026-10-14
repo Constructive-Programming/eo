@@ -41,7 +41,7 @@ object CborScript:
       Base64.getEncoder.encodeToString(script.bytes).grouped(65535).toSeq
 
 /** A class file this compiler wrote for a script: its JVM code, and the script itself. Only the
-  * compiler makes one ([[UplcJvm.classFile]]), and the script comes back out of it.
+  * compiler makes one ([[UplcJvm.toBytecode]]), and the script comes back out of it.
   */
 opaque type JvmClassScript = ByteString
 
@@ -53,7 +53,8 @@ object JvmClassScript:
   extension (classFile: JvmClassScript) def bytes: Array[Byte] = classFile.bytes
 
 /** A script's JVM class in memory — ASM's class tree, as the compiler builds it or as ASM reads it
-  * back from the class file. Only those two make one, so it always embeds its script.
+  * back from the class file ([[UplcJvm.decompile]]). Only those two make one, so it always embeds
+  * its script.
   */
 opaque type JvmClass = ClassNode
 
