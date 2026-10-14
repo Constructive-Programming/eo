@@ -8,8 +8,8 @@ import org.objectweb.asm.{ClassReader, ClassWriter}
   * it:
   *
   * {{{
-  *   CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript
-  *              typed          lowering     writing
+  *   CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
+  *              typed          lowering    writing
   * }}}
   *
   * Every stage keeps the script it came from — a typed program its source, a class the script
@@ -25,27 +25,27 @@ object UplcJvm:
     Iso(script => Typer.typeProgram(SourceProgram.decode(script)), _.script)
 
   /** Typed expression ≅ bytecode: lower; back, type the script the class embeds. */
-  val lowering: Iso[TypedProgram, ClassNode] =
-    Iso(Lower.lower, node => typed.get(Lower.script(node)))
+  val lowering: Iso[TypedProgram, JvmClass] =
+    Iso(Lower.lower, cls => typed.get(Lower.script(cls)))
 
   /** Bytecode ≅ class file: ASM writes the class, computing its stack map frames, and reads it
     * back. Every reference type generated code merges is the same on both paths or `Object`, so no
     * class is loaded to find a common one.
     */
-  val writing: Iso[ClassNode, JvmClassScript] = Iso(write, read)
+  val writing: Iso[JvmClass, JvmClassScript] = Iso(write, read)
 
-  val bytecode: Iso[CborScript, ClassNode] = typed.andThen(lowering)
+  val bytecode: Iso[CborScript, JvmClass] = typed.andThen(lowering)
 
   /** The compiler, and its inverse on the classes it writes. */
   val classFile: Iso[CborScript, JvmClassScript] = bytecode.andThen(writing)
 
-  private def write(node: ClassNode): JvmClassScript =
+  private def write(cls: JvmClass): JvmClassScript =
     val writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES):
       override def getCommonSuperClass(a: String, b: String): String = "java/lang/Object"
-    node.accept(writer)
+    cls.tree.accept(writer)
     JvmClassScript(writer.toByteArray)
 
-  private def read(classFile: JvmClassScript): ClassNode =
-    val node = new ClassNode
-    new ClassReader(classFile.bytes).accept(node, ClassReader.SKIP_FRAMES)
-    node
+  private def read(classFile: JvmClassScript): JvmClass =
+    val tree = new ClassNode
+    new ClassReader(classFile.bytes).accept(tree, ClassReader.SKIP_FRAMES)
+    JvmClass(tree)

@@ -4,7 +4,8 @@ import scala.annotation.tailrec
 
 import scalus.uplc.{DefaultFun, DefaultUni, Term}
 
-/** S ⇒ A: reads a decoded UPLC program back as a typed, Scala-like [[Expr]], walking it by node id.
+/** `UplcJvm.typed.get`: reads a decoded UPLC program back as a typed, Scala-like [[Expr]], walking
+  * it by node id.
   *
   * Every rewrite here is an exact equivalence under the CEK machine's evaluation order — they only
   * remove steps that cannot be observed (building a closure that is immediately applied, delaying a

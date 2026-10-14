@@ -11,7 +11,7 @@ import dev.constructive.eo.demo.uplc.*
 val script = CborScript.of(program)            // or CborScript.parse(bytes): Either[String, CborScript]
 
 UplcJvm.typed: Iso[CborScript, TypedProgram]   // the program as a typed, Scala-like expression
-UplcJvm.bytecode: Iso[CborScript, ClassNode]   // its bytecode, as ASM's in-memory class
+UplcJvm.bytecode: Iso[CborScript, JvmClass]    // its JVM class, in memory (ASM's class tree)
 UplcJvm.classFile: Iso[CborScript, JvmClassScript]
 
 val classFile = UplcJvm.classFile.get(script)  // the compiler
@@ -23,15 +23,15 @@ The three optics a caller wants all start at the script as the ledger stores it,
 and each is a chain of the compiler's stages:
 
 ```
-CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript
-           typed          lowering     writing
+CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
+           typed          lowering    writing
 ```
 
 | type | what it is |
 |---|---|
 | `CborScript` | a script as the ledger stores it: the flat-encoded program in a CBOR bytestring (opaque, over Scalus' `ByteString`) |
 | `TypedProgram` | the program read back as a typed, Scala-like expression tree |
-| `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class — inspectable before it is a file |
+| `JvmClass` | the script's JVM class in memory — [ASM](https://asm.ow2.io)'s `ClassNode`, inspectable before it is a file (opaque; only the compiler and `writing.reverseGet` make one) |
 | `JvmClassScript` | a class file the compiler wrote (opaque, over Scalus' `ByteString`) |
 
 Every stage keeps the script it came from: a typed program its source, a class
@@ -45,7 +45,7 @@ gives what the CEK machine gives for `s`*.
 ## Pipeline
 
 ```
-CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram ──Lower──▶ ClassNode ──ClassWriter──▶ JvmClassScript
+CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram ──Lower──▶ JvmClass ──ClassWriter──▶ JvmClassScript
              (Scalus Terms, pre-order    (re-sugaring,           (closure conversion,      (stack map
               ids shared with runtime)    hybrid typing)           boxing, direct calls)     frames)
 ```

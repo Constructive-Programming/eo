@@ -4,7 +4,6 @@ import scala.jdk.CollectionConverters.*
 
 import dev.constructive.eo.demo.uplc.validators.{CompiledValidators, Scenarios}
 import java.nio.file.{Files, Paths}
-import org.objectweb.asm.tree.ClassNode
 import org.objectweb.asm.util.{Textifier, TraceMethodVisitor}
 import scalus.uplc.eval.Result
 import scalus.uplc.{DeBruijn, DeBruijnedProgram}
@@ -23,14 +22,14 @@ object Demo:
       "[(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)]"
     section("A small program, all the way round", letArithmetic)
     val script = parse(letArithmetic)
-    val typed = UplcJvm.typed.get(script) //            S ⇒ A
-    println(s"\nA — typed.get:\n${typed.body.show}")
-    val lowered = UplcJvm.lowering.get(typed) //         A ⇒ B
-    println(s"\nB — lowering.get, the method `run`:\n${bytecode(lowered, "run")}")
-    val classFile = UplcJvm.writing.get(lowered) //      B ⇒ T
-    println(s"\nT — writing.get: ${classFile.bytes.length} bytes of class file")
+    val typed = UplcJvm.typed.get(script)
+    println(s"\ntyped.get:\n${typed.body.show}")
+    val cls = UplcJvm.lowering.get(typed)
+    println(s"\nlowering.get, the method `run`:\n${bytecode(cls, "run")}")
+    val classFile = UplcJvm.writing.get(cls)
+    println(s"\nwriting.get: ${classFile.bytes.length} bytes of class file")
     println(
-      s"and back — classFile.reverseGet(T) == S: ${UplcJvm.classFile.reverseGet(classFile) == script}"
+      s"and back — classFile.reverseGet(that) == script: ${UplcJvm.classFile.reverseGet(classFile) == script}"
     )
     args
       .headOption
@@ -44,10 +43,10 @@ object Demo:
 
     section("A Scalus-compiled validator, read back (Fibonacci)", "")
     val fib = CborScript.of(CompiledValidators.fibonacci.program)
-    println(s"S: ${fib.bytes.length} bytes of script\n\n${UplcJvm.typed.get(fib).body.show}")
+    println(s"${fib.bytes.length} bytes of script\n\n${UplcJvm.typed.get(fib).body.show}")
     println(s"\n${shape(fib)}")
 
-    section("Every validator: S and T", "")
+    section("Every validator", "")
     Scenarios
       .accepting
       .foreach(s => println(f"${s.name}%-11s ${shape(CborScript.of(s.script.program))}"))
@@ -55,17 +54,22 @@ object Demo:
   private def section(title: String, uplc: String): Unit =
     println(s"\n=== $title ===\n${if uplc.isEmpty then "" else s"\n(program 1.1.0 $uplc)"}")
 
-  /** S, B and T sizes: script bytes, closure body methods, class-file bytes. */
+  /** Sizes: script bytes, closure body methods in the class, class-file bytes. */
   private def shape(script: CborScript): String =
-    val lowered = UplcJvm.bytecode.get(script)
-    val bodies = lowered.methods.asScala.count(_.name.startsWith("m"))
-    val classFile = UplcJvm.writing.get(lowered).bytes.length
-    f"S: ${script.bytes.length}%5d bytes   B: $bodies%3d closure bodies   T: $classFile%6d bytes"
+    val cls = UplcJvm.bytecode.get(script)
+    val bodies = cls.tree.methods.asScala.count(_.name.startsWith("m"))
+    val classFile = UplcJvm.writing.get(cls).bytes.length
+    f"script ${script.bytes.length}%4d bytes   class: $bodies%2d closure bodies   class file ${classFile}%5d bytes"
 
-  /** One method of B, as ASM prints bytecode. */
-  private def bytecode(node: ClassNode, method: String): String =
+  /** One method of a class, as ASM prints bytecode. */
+  private def bytecode(cls: JvmClass, method: String): String =
     val text = new Textifier
-    node.methods.asScala.filter(_.name == method).foreach(_.accept(new TraceMethodVisitor(text)))
+    cls
+      .tree
+      .methods
+      .asScala
+      .filter(_.name == method)
+      .foreach(_.accept(new TraceMethodVisitor(text)))
     text.getText.asScala.mkString
 
   private def parse(uplc: String): CborScript = Oracle.script(uplc)

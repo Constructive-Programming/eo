@@ -1168,7 +1168,7 @@ lazy val benchmarks: Project = project
 
 // -------------------------------------------------------------------
 // Demo: a UPLC (Cardano Plutus Core) → JVM bytecode compiler built from eo isos,
-// CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript — the script in, a class
+// CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript — the script in, a class
 // file out, and the class hands its script back. Correctness
 // is differential: every program runs through the generated class AND the
 // Scalus CEK machine, and the two results must agree. Unpublished and OUT of

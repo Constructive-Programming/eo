@@ -42,7 +42,7 @@ class OpticSpec extends Specification with Discipline:
 
   /** Every method call in the lowered class, as `Owner.name`. */
   private def calls(script: CborScript): Vector[String] =
-    val methods = UplcJvm.bytecode.get(script).methods.asScala.toVector
+    val methods = UplcJvm.bytecode.get(script).tree.methods.asScala.toVector
     methods.flatMap(_.instructions.iterator.asScala.collect {
       case m: MethodInsnNode                              => s"${m.owner.split('/').last}.${m.name}"
       case j: JumpInsnNode if j.getOpcode == Opcodes.IFEQ => "if"

@@ -42,8 +42,8 @@ object Rep:
 
   def of(jvm: Class[?]): Option[Rep] = values.find(_.jvm == jvm)
 
-/** A ⇒ B: lowers the typed expression to JVM bytecode — the `f` in `iso.modify(f)`. B is ASM's own
-  * in-memory class, `ClassNode`:
+/** Lowers a typed program to its [[JvmClass]] — `UplcJvm.lowering.get`, written straight into ASM's
+  * class tree:
   *
   * {{{
   * public final class UplcProgram implements runtime.Dispatch {
@@ -69,11 +69,13 @@ object Lower:
 
   val ClassName = "dev/constructive/eo/demo/uplc/generated/UplcProgram"
 
-  def lower(program: TypedProgram): ClassNode = new Lowering(program.source).run(program.body)
+  def lower(program: TypedProgram): JvmClass = JvmClass(
+    new Lowering(program.source).run(program.body)
+  )
 
   /** The script a class embeds: the string constants its static initialiser assembles. */
-  def script(node: ClassNode): CborScript =
-    val init = node.methods.asScala.filter(_.name == "<clinit>")
+  def script(cls: JvmClass): CborScript =
+    val init = cls.tree.methods.asScala.filter(_.name == "<clinit>")
     CborScript.fromChunks(init.flatMap(_.instructions.asScala).collect {
       case ldc: LdcInsnNode if ldc.cst.isInstanceOf[String] => ldc.cst.toString
     })

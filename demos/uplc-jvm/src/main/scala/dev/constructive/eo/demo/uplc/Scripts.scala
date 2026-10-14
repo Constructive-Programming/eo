@@ -3,11 +3,13 @@ package dev.constructive.eo.demo.uplc
 import scala.util.Try
 
 import java.util.Base64
+import org.objectweb.asm.tree.ClassNode
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.{DeBruijnedProgram, Program}
 
-// The two byte encodings at the ends of the compiler. Both are Scalus' `ByteString` underneath —
-// bytes with value equality, so the optics' round-trip laws can compare them with `==`.
+// What the compiler's optics focus on, besides the typed program. The two byte encodings at its ends
+// are Scalus' `ByteString` underneath — bytes with value equality, so the optics' round-trip laws
+// can compare them with `==`.
 
 /** A Plutus script as the ledger stores it: the flat-encoded program, wrapped in a CBOR bytestring.
   * Every value is well formed: one comes from a Scalus `Program`, or from bytes
@@ -49,3 +51,17 @@ object JvmClassScript:
     ByteString.unsafeFromArray(classFile)
 
   extension (classFile: JvmClassScript) def bytes: Array[Byte] = classFile.bytes
+
+/** A script's JVM class in memory — ASM's class tree, as the compiler builds it or as ASM reads it
+  * back from the class file. Only those two make one, so it always embeds its script.
+  */
+opaque type JvmClass = ClassNode
+
+object JvmClass:
+
+  private[uplc] def apply(tree: ClassNode): JvmClass = tree
+
+  /** ASM's tree, to read — printing or inspecting the bytecode; the optics assume it is not
+    * changed.
+    */
+  extension (cls: JvmClass) def tree: ClassNode = cls

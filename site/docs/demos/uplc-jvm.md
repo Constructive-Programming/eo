@@ -15,15 +15,15 @@ the script it came from — the typed program holds its source, and the class
 embeds the script in its constants — so every arrow can be walked back:
 
 ```
-CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript
-           typed          lowering     writing
+CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
+           typed          lowering    writing
 ```
 
 | type | what it is |
 |---|---|
 | `CborScript` | a script as the ledger stores it: the flat-encoded program in a CBOR bytestring |
 | `TypedProgram` | the program read back as a typed, Scala-like expression |
-| `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class |
+| `JvmClass` | the script's JVM class in memory: [ASM](https://asm.ow2.io)'s `ClassNode` |
 | `JvmClassScript` | a class file the compiler wrote |
 
 `CborScript` and `JvmClassScript` are opaque types over Scalus' `ByteString`, so
@@ -35,7 +35,7 @@ are compositions of the stages with `andThen`:
 import dev.constructive.eo.demo.uplc.*
 
 val typed: Iso[CborScript, TypedProgram] = UplcJvm.typed
-val bytecode: Iso[CborScript, ClassNode] = UplcJvm.typed.andThen(UplcJvm.lowering)
+val bytecode: Iso[CborScript, JvmClass] = UplcJvm.typed.andThen(UplcJvm.lowering)
 val classFile: Iso[CborScript, JvmClassScript] = bytecode.andThen(UplcJvm.writing)
 
 val script = CborScript.of(validator.program)  // or CborScript.parse(onChainBytes)
@@ -62,10 +62,10 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 <div class="uplc-roundtrip" style="max-width: 780px; margin: 1.5em auto;">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" width="100%" role="img" aria-labelledby="uplc-rt-title uplc-rt-desc" style="font-family: inherit;">
 <title id="uplc-rt-title">The UPLC to JVM round trip</title>
-<desc id="uplc-rt-desc">Top row, the optics: a script goes through typed to a typed expression, through lowering to bytecode (an ASM ClassNode), and through writing to a class file; each arrow is an iso, walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
+<desc id="uplc-rt-desc">Top row, the optics: a script goes through typed to a typed expression, through lowering to its JVM class in memory, and through writing to a class file; each arrow is an iso, walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
 <defs><marker id="uplc-rt-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--primary-color);"/></marker></defs>
 <rect x="6" y="24" width="768" height="100" rx="14" style="fill: none; stroke: var(--primary-medium); stroke-dasharray: 6 5;"/>
-<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo isos · CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript</text>
+<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo isos · CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript</text>
 <g style="font-size: 14px;">
 <rect x="20" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="90" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">script</text>
@@ -75,7 +75,7 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 <text x="280" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">TypedProgram</text>
 <rect x="400" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">bytecode</text>
-<text x="470" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">ClassNode</text>
+<text x="470" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">JvmClass</text>
 <rect x="620" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="690" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">class file</text>
 <text x="690" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">JvmClassScript</text>
@@ -263,7 +263,7 @@ at the result.
 
 ### Bytecode to a class file, and back (`writing`)
 
-`writing.get` hands the `ClassNode` to ASM's `ClassWriter`, which computes the
+`writing.get` hands the class's tree to ASM's `ClassWriter`, which computes the
 stack map frames and serialises it; `writing.reverseGet` is ASM's `ClassReader`.
 The class has a static method per lambda chain and `delay`, a switch per call
 arity for closure dispatch, and the script, re-decoded by the static initialiser.
@@ -273,8 +273,8 @@ is never applied, and a call whose argument can only fail after nothing but
 values is that failure — so ASM has no dead code to blank out:
 
 ```
-T — writing.get: 1841 bytes of class file
-and back — classFile.reverseGet(T) == S: true
+writing.get: 1841 bytes of class file
+and back — classFile.reverseGet(that) == script: true
 ```
 
 ### And back again: values to UPLC terms
