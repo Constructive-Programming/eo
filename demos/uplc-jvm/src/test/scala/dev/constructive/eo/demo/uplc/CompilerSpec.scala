@@ -3,23 +3,19 @@ package dev.constructive.eo.demo.uplc
 import dev.constructive.eo.demo.uplc.Oracle.Verdict
 import org.specs2.mutable.Specification
 import scalus.cardano.ledger.Word64
-import scalus.uplc.eval.Result
-import scalus.uplc.{Constant, DeBruijn, DefaultFun, NamedDeBruijn, Program, ProgramFlatCodec, Term}
+import scalus.uplc.{Constant, DeBruijn, DefaultFun, NamedDeBruijn, Program, Term}
 
 /** Hand-written programs, one per compilation path, each checked against the CEK machine. */
 class CompilerSpec extends Specification:
-
-  private def flat(uplc: String): Array[Byte] =
-    Program.parseUplc(s"(program 1.1.0 $uplc)").fold(e => sys.error(e), p => p.flatEncoded)
 
   private def term(uplc: String): Term =
     DeBruijn.deBruijnTerm(Program.parseUplc(s"(program 1.1.0 $uplc)").fold(sys.error, _.term))
 
   private def agrees(program: Term | String, expected: Option[String]) =
-    val bytes = program match
-      case t: Term   => ProgramFlatCodec.unsafeEncodeFlat(Program((1, 1, 0), t))
-      case s: String => flat(s)
-    Oracle.compare(bytes) must beLike {
+    val script = program match
+      case t: Term   => Oracle.script(t)
+      case s: String => Oracle.script(s)
+    Oracle.compare(script) must beLike {
       case Verdict.BothSucceed(t) if expected.nonEmpty => t.α_==(term(expected.get)) must beTrue
       case Verdict.BothFail(_, _) if expected.isEmpty  => ok
     }
@@ -121,13 +117,6 @@ class CompilerSpec extends Specification:
     Exec.onLargeStack(agrees(program, Some("(con integer 20000)")))
   }
 
-  "the compiled script can be applied after loading, like a validator" >> {
-    val classFile = UplcJvm.translate(flat("(lam x [(builtin addInteger) x (con integer 1)])"))
-    Exec.run(classFile, List(Constant.Integer(41))) must beLike {
-      case Result.Success(t, _, _, _) => t.α_==(term("(con integer 42)")) must beTrue
-    }
-  }
-
   "malformed bytes are rejected as a value, not an exception" >> {
-    UplcJvm.compile(Array[Byte](1, 2, 3)) must beLeft
+    CborScript.parse(Array[Byte](1, 2, 3)) must beLeft
   }

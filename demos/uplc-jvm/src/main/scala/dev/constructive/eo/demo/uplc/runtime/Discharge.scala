@@ -19,20 +19,14 @@ object Discharge:
     case c: ConstrV => Term.Constr(Word64(c.tag), c.fields.iterator.map(apply(_, info)).toList)
     case l: Lam     =>
       // A partially applied chain is its inner lambda, the first `k` parameters bound to the
-      // values applied so far (innermost = the last one applied).
+      // values applied so far (innermost = the last one applied); a `delay` is its own node.
       val k = l.applied.length
       val captures = info.source.captures(l.origin)
       substitute(
         info.source.nodes(l.origin + k),
         j =>
           if j <= k then Some(apply(l.applied(k - j), info))
-          else slot(captures, j - k).map(i => apply(l.env(i), info)),
-      )
-    case t: Thunk =>
-      val captures = info.source.captures(t.origin)
-      substitute(
-        info.source.nodes(t.origin),
-        j => slot(captures, j).map(i => apply(t.env(i), info))
+          else Some(captures.indexOf(j - k)).filter(_ >= 0).map(i => apply(l.env(i), info)),
       )
     case p: Partial =>
       p.trail.foldLeft[Term](Term.Builtin(p.fun)) {
@@ -40,8 +34,6 @@ object Discharge:
         case (acc, Some(a)) => Term.Apply(acc, apply(a, info))
       }
     case other => throw new IllegalStateException(s"not a UPLC value: $other")
-
-  private def slot(captures: IArray[Int], index: Int) = Some(captures.indexOf(index)).filter(_ >= 0)
 
   /** Replaces the variables free in `term` that `lookup` resolves; the rest stay (open terms). */
   private def substitute(term: Term, lookup: Int => Option[Term]): Term =

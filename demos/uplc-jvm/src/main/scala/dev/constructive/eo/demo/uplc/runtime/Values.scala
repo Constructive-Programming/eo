@@ -18,7 +18,8 @@ trait Dispatch:
 // constant), or one of the classes below.
 
 /** A lambda chain of `arity` parameters rooted at source node `origin`, with `applied` of them
-  * already supplied (a partial application of a curried chain is still one object).
+  * already supplied (a partial application of a curried chain is still one object) — or, with no
+  * parameters, `delay body`.
   */
 final class Lam(
     val code: Dispatch,
@@ -28,9 +29,6 @@ final class Lam(
     val env: Array[AnyRef],
     val applied: Array[AnyRef],
 )
-
-/** `delay body`, rooted at source node `origin`. */
-final class Thunk(val code: Dispatch, val id: Int, val origin: Int, val env: Array[AnyRef])
 
 /** A builtin that has not yet received all of its forces and arguments. `scheme` is what it still
   * expects; `trail` records what it got (innermost last) so it can be discharged.

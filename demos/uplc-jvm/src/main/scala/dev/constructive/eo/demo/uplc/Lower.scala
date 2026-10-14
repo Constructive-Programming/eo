@@ -2,12 +2,12 @@ package dev.constructive.eo.demo.uplc
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.jdk.CollectionConverters.*
 
 import dev.constructive.eo.demo.uplc.runtime.{Dispatch, ProgramInfo}
-import java.util.Base64
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.commons.InstructionAdapter
-import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.tree.{ClassNode, LdcInsnNode}
 import org.objectweb.asm.{Label, MethodVisitor, Type}
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.{Constant, DefaultFun, DefaultUni}
@@ -70,6 +70,13 @@ object Lower:
   val ClassName = "dev/constructive/eo/demo/uplc/generated/UplcProgram"
 
   def lower(program: TypedProgram): ClassNode = new Lowering(program.source).run(program.body)
+
+  /** The script a class embeds: the string constants its static initialiser assembles. */
+  def script(node: ClassNode): CborScript =
+    val init = node.methods.asScala.filter(_.name == "<clinit>")
+    CborScript.fromChunks(init.flatMap(_.instructions.asScala).collect {
+      case ldc: LdcInsnNode if ldc.cst.isInstanceOf[String] => ldc.cst.toString
+    })
 
   // Descriptors and internal names, made once: ASM hashes every string it is handed.
   private[uplc] val Obj = Rep.Obj.asm
@@ -175,11 +182,9 @@ final private class Lowering(source: SourceProgram):
     g.visitMaxs(0, 0)
     g.visitEnd()
 
-  /** Loads the embedded program and its constants (Base64: one constant-pool byte per char), and
-    * creates `INSTANCE`.
-    */
+  /** Loads the embedded script and its constants, and creates `INSTANCE`. */
   private def staticInit(using g: Gen): Unit =
-    objects(Base64.getEncoder.encodeToString(source.flat).grouped(65535).toSeq)(g.aconst(_))
+    objects(source.script.chunks)(g.aconst(_))
     g.invokestatic(info, "fromChunks", Type.getMethodDescriptor(Info, Objs), false)
     g.dup()
     g.putstatic(ClassName, "INFO", Info.getDescriptor)

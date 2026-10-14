@@ -5,11 +5,11 @@ import scala.collection.mutable
 
 import scalus.uplc.{DeBruijnedProgram, Term}
 
-/** A decoded flat UPLC program — Scalus' own `Term` tree — numbered in PRE-ORDER.
+/** A decoded script — Scalus' own `Term` tree — numbered in PRE-ORDER.
   *
   * The numbering is the contract between compile time and run time. The compiler stamps node ids
   * into the typed expression (A) and from there into the generated class; the runtime re-decodes
-  * the same flat bytes (they are embedded in the class) and gets the same numbering back. A closure
+  * the same script (it is embedded in the class) and gets the same numbering back. A closure
   * therefore only has to carry an `Int` to be turned back into its source term — which is what
   * discharging a result (and comparing it with the CEK machine's) needs. Constants are looked up by
   * node id too.
@@ -21,7 +21,7 @@ import scalus.uplc.{DeBruijnedProgram, Term}
   * subtree.
   */
 final class SourceProgram private (
-    val flat: Array[Byte],
+    val script: CborScript,
     val nodes: IArray[Term],
     val depths: IArray[Int],
     sizes: IArray[Int],
@@ -54,12 +54,9 @@ final class SourceProgram private (
 
 object SourceProgram:
 
-  /** Decodes flat bytes. Throws whatever Scalus' decoder throws on malformed input — callers that
-    * cannot vouch for their bytes go through [[UplcJvm.compile]], the one place that converts it.
-    */
-  def decode(flat: Array[Byte]): SourceProgram =
+  def decode(script: CborScript): SourceProgram =
     // Every node takes at least its 4-bit tag in the flat encoding: a bound on the node count.
-    val bound = flat.length * 2 + 1
+    val bound = script.bytes.length * 2 + 1
     val (nodes, depths, sizes) =
       (new Array[Term](bound), new Array[Int](bound), new Array[Int](bound))
 
@@ -79,9 +76,9 @@ object SourceProgram:
       sizes(id) = next - id
       next
 
-    val n = number(DeBruijnedProgram.fromFlatEncoded(flat).term, 0, 0)
+    val n = number(DeBruijnedProgram.fromCbor(script.bytes).term, 0, 0)
     def first[A](a: Array[A]) = IArray.unsafeFromArray(a.take(n))
-    new SourceProgram(flat.clone(), first(nodes), first(depths), first(sizes))
+    new SourceProgram(script, first(nodes), first(depths), first(sizes))
 
 /** Free de Bruijn indices of a term, relative to the term's own position, ascending. */
 object FreeVars:

@@ -36,11 +36,11 @@ class ConformanceSpec extends Specification:
       Program.parseUplc(read(file)) match
         case Left(e)        => Skipped(s"Scalus cannot parse it: ${e.linesIterator.nextOption()}")
         case Right(program) =>
-          Try(program.flatEncoded).toEither match
-            case Left(e)     => Skipped(s"no flat encoding: ${e.getMessage}")
-            case Right(flat) =>
+          Try(CborScript.of(program)).toEither match
+            case Left(e)       => Skipped(s"no flat encoding: ${e.getMessage}")
+            case Right(script) =>
               val expectFailure = expected == "evaluation failure"
-              Oracle.compare(flat) match
+              Oracle.compare(script) match
                 case Verdict.Disagree(detail)                => failure(detail)
                 case Verdict.BothSucceed(t) if expectFailure =>
                   failure(s"both evaluators succeeded with ${t.show}, the suite expects failure")

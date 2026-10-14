@@ -1,51 +1,61 @@
-# UPLC → JVM bytecode, as one eo `Iso`
+# UPLC → JVM bytecode, as eo isos
 
 A compiler from Untyped Plutus Core (UPLC, the language Cardano smart contracts
-run in) to JVM class files, built around a single cats-eo optic. Correctness is
+run in) to JVM class files, built from cats-eo optics. Correctness is
 established differentially: every program runs through the generated class AND
 through the [Scalus](https://scalus.org) CEK machine, and the two must agree.
 
 ```scala
 import dev.constructive.eo.demo.uplc.*
 
-//            S             T             A             B
-UplcJvm.iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode]
+val script = CborScript.of(program)            // or CborScript.parse(bytes): Either[String, CborScript]
 
-val classFile = UplcJvm.translate(flatScript)  // = UplcJvm.iso.modify(Lower.lower)
-UplcJvm.iso.get(flatScript).body.show          // A, rendered as Scala-like code
-UplcJvm.onChain.modify(Lower.lower)(cbor)      // cborScript andThen iso: on-chain CBOR in
+UplcJvm.typed: Iso[CborScript, TypedProgram]   // the program as a typed, Scala-like expression
+UplcJvm.bytecode: Iso[CborScript, ClassNode]   // its bytecode, as ASM's in-memory class
+UplcJvm.classFile: Iso[CborScript, JvmClassScript]
+
+val classFile = UplcJvm.classFile.get(script)  // the compiler
+UplcJvm.classFile.reverseGet(classFile)        // == script: the class carries its script
 Exec.validate(classFile, scriptContext)        // Right(traces) | Left(reason), CIP-117
 ```
 
-| | type | what it is |
-|---|---|---|
-| `S` | `Array[Byte]` | a flat-encoded UPLC program |
-| `A` | `TypedProgram` | the program read back as a typed, Scala-like expression tree |
-| `B` | `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class — inspectable before it is a file |
-| `T` | `Array[Byte]` | one self-contained class file |
+The three optics a caller wants all start at the script as the ledger stores it,
+and each is a chain of the compiler's stages:
 
-`get` decodes and types (S ⇒ A), `reverseGet` writes the class file (B ⇒ T), and the
-compiler is `modify` with the lowering `A ⇒ B`. The optic fixes both ends; the
-function you run through it is replaceable — put an optimiser in front of
-`Lower.lower` and nothing else changes. The iso is polymorphic (`S`/`T` and
-`A`/`B` differ), so the round-trip laws of a monomorphic iso do not apply; the
-law that matters is the commuting square the test-suite checks for every
-program: *running `translate(s)` gives what the CEK machine gives for `s`*.
+```
+CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript
+           typed          lowering     writing
+```
+
+| type | what it is |
+|---|---|
+| `CborScript` | a script as the ledger stores it: the flat-encoded program in a CBOR bytestring (opaque, over Scalus' `ByteString`) |
+| `TypedProgram` | the program read back as a typed, Scala-like expression tree |
+| `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class — inspectable before it is a file |
+| `JvmClassScript` | a class file the compiler wrote (opaque, over Scalus' `ByteString`) |
+
+Every stage keeps the script it came from: a typed program its source, a class
+the script itself, embedded in its constants. So each arrow can be walked back,
+and each optic is a lawful iso on what the compiler produces — there and back is
+the identity, both ways. The suite checks those laws with cats-eo's own
+`IsoTests`, and checks the round trips on every program it compiles. The other
+property that matters is the commuting square: *running `classFile.get(s)`
+gives what the CEK machine gives for `s`*.
 
 ## Pipeline
 
 ```
-flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ──Lower──▶ B: ClassNode ──ClassWriter──▶ class file
-             (Scalus Terms, pre-order    (re-sugaring,       (closure conversion,      (stack map
-              ids shared with runtime)    hybrid typing)       boxing, direct calls)     frames)
+CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram ──Lower──▶ ClassNode ──ClassWriter──▶ JvmClassScript
+             (Scalus Terms, pre-order    (re-sugaring,           (closure conversion,      (stack map
+              ids shared with runtime)    hybrid typing)           boxing, direct calls)     frames)
 ```
 
 - **`SourceProgram`** is Scalus' own decoded `Term` tree with every node
   numbered in pre-order. That numbering is the contract between compile time and
-  run time: a closure carries only its node id; the class embeds the flat
-  program and re-decodes it, so a result can be *discharged* back to a UPLC
-  term exactly as the CEK machine does.
-- **`Typer`** (S ⇒ A) recognises what UPLC compilers emit for constructs UPLC
+  run time: a closure carries only its node id; the class embeds the script
+  and re-decodes it, so a result can be *discharged* back to a UPLC term
+  exactly as the CEK machine does.
+- **`Typer`** (`typed.get`) recognises what UPLC compilers emit for constructs UPLC
   lacks, using rewrites that are exact under CEK evaluation order: `let`
   (immediately applied lambda chains), `if` (forced `ifThenElse` over delayed
   branches, and the other selector builtins), saturated builtin calls, direct
@@ -63,15 +73,18 @@ flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ─�
   functions, constructors, `Data`, values that flow through lambda parameters —
   is a boxed Scalus `Constant` or a runtime closure. Boxing happens only where
   the two meet.
-- **`Lower`** (A ⇒ B) writes bytecode straight into ASM's tree with
+- **`Lower`** (`lowering.get`) writes bytecode straight into ASM's tree with
   asm-commons' `InstructionAdapter`. It converts closures (each captures exactly
   its free variables, in the order `SourceProgram.captures` fixes for both
   sides), inserts box/unbox, calls builtins directly, and moves a `let` body into
   its own method once a method nears the JVM's 64 KB limit. The class holds a
   static method per lambda chain / `delay`, a switch per call arity for closure
-  dispatch, and the flat program as Base64 string constants.
-- **`reverseGet`** (B ⇒ T) is ASM's `ClassWriter`: it computes the stack map
-  frames and writes the class file.
+  dispatch, and the script as Base64 string constants — what
+  `lowering.reverseGet` reads back.
+- **`writing`** is ASM's `ClassWriter` (it computes the stack map frames) one
+  way and `ClassReader` the other. A class file survives being read and written
+  again byte for byte, because the generated code has no unreachable
+  instructions: an expression that can only fail is never followed by code.
 - **Runtime** (`runtime/`): closures, partial builtins, constructors, `case`
   dispatch (including PV11 casing on builtin values), discharge. A saturated
   builtin is a plain JVM call of the function Scalus' own `CardanoBuiltins`
@@ -90,7 +103,10 @@ The semantics are pinned in `Semantics.scala`: Plutus V3 at protocol version 11
 runs the Plutus conformance suite under. The oracle and the generated code's
 runtime both read it from there.
 
-`sbt demoUplcJvm/test` runs:
+`sbt demoUplcJvm/test` runs the suites below. Every program any of them runs is
+also checked for the round trips: its script comes back out of its class
+(`classFile.reverseGet`), and its class file survives ASM reading and writing it
+again (`writing`).
 
 - **`ConformanceSpec`** — the Plutus conformance suite (plutus `1.63.0.0`,
   vendored under `src/test/resources/plutus-conformance`, see its `SOURCE.md`).
@@ -102,13 +118,12 @@ runtime both read it from there.
   Scalus plugin (`demos/uplc-jvm-validators`: owner + greeting, hash preimage,
   time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC), each with accepting and
   rejecting V3 script contexts. Every script is checked twice: compiled once
-  from its CBOR form and applied to the context at run time, and translated
-  with the context applied.
+  and applied to the context at run time, and compiled with the context
+  applied.
 - **`CompilerSpec`** — one hand-written program per compilation path, error
   paths included, plus a 20 000-deep `let` chain.
-- **`OpticSpec`** — the optic's shape (`translate` is `iso.modify`, the CBOR
-  composition yields the identical class file) and evidence that hybrid typing
-  fires on real validator code.
+- **`OpticSpec`** — the iso laws of `typed` and `classFile`, with cats-eo-laws'
+  `IsoTests`, and evidence that hybrid typing fires on real validator code.
 
 The JVM's bytecode verifier checks every generated class when `Exec.load`
 defines it.

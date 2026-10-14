@@ -22,7 +22,6 @@ abstract class ScriptState:
   protected def scenario: Scenario
 
   var applied: DeBruijnedProgram = uninitialized
-  var flat: Array[Byte] = uninitialized
   var compiled: Dispatch = uninitialized
   var context: Constant = uninitialized
 
@@ -30,12 +29,12 @@ abstract class ScriptState:
   def prepare(): Unit =
     val s = scenario
     applied = (s.script.program $ s.context).deBruijnedProgram
-    flat = s.script.program.flatEncoded
-    compiled = Exec.load(UplcJvm.translate(flat))
+    val classFile = UplcJvm.classFile.get(CborScript.of(s.script.program))
+    compiled = Exec.load(classFile)
     context = Constant.Data(s.context)
     // Both evaluators must accept the transaction, or the timings compare different work.
     val accepted =
-      cek == Term.Const(Constant.Unit) && Exec.validate(UplcJvm.translate(flat), s.context).isRight
+      cek == Term.Const(Constant.Unit) && Exec.validate(classFile, s.context).isRight
     require(accepted, s"${s.name}: an evaluator rejects the benchmark transaction")
 
   @Benchmark def cek: Term = Semantics.vm.evaluateScript(applied, NoBudgetSpender, NoLogger)
@@ -85,12 +84,12 @@ class TranslateBench:
   @Param(Array("helloOwner", "preimage", "timeLock", "multisig", "fibonacci", "htlc"))
   var validator: String = uninitialized
 
-  var flat: Array[Byte] = uninitialized
+  var script: CborScript = uninitialized
 
   @Setup(Level.Trial)
   def prepare(): Unit =
-    flat = Scenarios.accepting.find(_.name == validator).get.script.program.flatEncoded
+    script = CborScript.of(Scenarios.accepting.find(_.name == validator).get.script.program)
 
-  @Benchmark def translate: Array[Byte] = UplcJvm.translate(flat)
+  @Benchmark def translate: JvmClassScript = UplcJvm.classFile.get(script)
 
-  @Benchmark def translateAndLoad: Dispatch = Exec.load(UplcJvm.translate(flat))
+  @Benchmark def translateAndLoad: Dispatch = Exec.load(UplcJvm.classFile.get(script))

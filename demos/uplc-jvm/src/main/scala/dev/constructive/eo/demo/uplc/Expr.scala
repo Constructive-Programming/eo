@@ -30,7 +30,9 @@ object Ty:
   * Bruijn indices; nodes that can become runtime closures keep the pre-order id (`origin`) of the
   * UPLC node they came from, so a closure can be discharged back to source.
   */
-final case class TypedProgram(source: SourceProgram, body: Expr)
+final case class TypedProgram private[uplc] (script: CborScript, body: Expr)(
+    val source: SourceProgram
+)
 
 final case class Binding(name: String, rhs: Expr)
 
@@ -87,6 +89,11 @@ enum Expr:
     case Match(_, _, t)     => t
     case Lit(_, c)          => Some(c.tpe)
     case _                  => None
+
+  /** Evaluating it cannot fail and has no effect. */
+  def isValue: Boolean = this match
+    case Ref(_, _) | Lit(_, _) | Lambda(_, _, _) | Delayed(_, _) | BuiltinRef(_) => true
+    case _                                                                       => false
 
   /** Can only fail: `error`, an unbound variable, or a `let` whose body is one of those. */
   def fails: Boolean = this match

@@ -2,85 +2,83 @@
 
 > **A demo, not a module.** The code lives in
 > [`demos/uplc-jvm`](https://github.com/Constructive-Programming/eo/tree/main/demos/uplc-jvm)
-> and is not published. It shows what a single optic buys a real program: a
+> and is not published. It shows what optics buy a real program: a
 > compiler from Untyped Plutus Core (UPLC) — the language Cardano smart
 > contracts run in — to JVM class files, checked against the
 > [Scalus](https://scalus.org) CEK machine on every program it compiles.
 
-## The idea: a compiler is an optic
+## The idea: a compiler is a chain of isos
 
-An `Iso[S, T, A, B]` is two functions, `get: S => A` and `reverseGet: B => T`,
-and nothing requires `S` to equal `T` or `A` to equal `B`. Pick the four types
-like this:
+A compiler is usually a function: script in, class file out. It becomes an
+isomorphism as soon as its output remembers its input. Here every stage keeps
+the script it came from — the typed program holds its source, and the class
+embeds the script in its constants — so every arrow can be walked back:
 
-| | type | what it is |
-|---|---|---|
-| `S` | `Array[Byte]` | a flat-encoded UPLC program |
-| `A` | `TypedProgram` | the program read back as a typed, Scala-like expression |
-| `B` | `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class |
-| `T` | `Array[Byte]` | one self-contained class file |
+```
+CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript
+           typed          lowering     writing
+```
 
-and `modify(f) = reverseGet ∘ f ∘ get` is a compiler whenever `f: A => B` is a
-lowering:
+| type | what it is |
+|---|---|
+| `CborScript` | a script as the ledger stores it: the flat-encoded program in a CBOR bytestring |
+| `TypedProgram` | the program read back as a typed, Scala-like expression |
+| `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class |
+| `JvmClassScript` | a class file the compiler wrote |
+
+`CborScript` and `JvmClassScript` are opaque types over Scalus' `ByteString`, so
+the two byte encodings can't be swapped by accident, and the round-trip laws can
+compare them with `==`. The optics a caller wants all start at the script, and
+are compositions of the stages with `andThen`:
 
 ```scala
 import dev.constructive.eo.demo.uplc.*
 
-UplcJvm.iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode]
+val typed: Iso[CborScript, TypedProgram] = UplcJvm.typed
+val bytecode: Iso[CborScript, ClassNode] = UplcJvm.typed.andThen(UplcJvm.lowering)
+val classFile: Iso[CborScript, JvmClassScript] = bytecode.andThen(UplcJvm.writing)
 
-val translate: Array[Byte] => Array[Byte] = UplcJvm.iso.modify(Lower.lower)
-
-Exec.validate(translate(script), scriptContext)   // Right(traces) | Left(reason)
+val script = CborScript.of(validator.program)  // or CborScript.parse(onChainBytes)
+val compiled = classFile.get(script)            // the compiler
+classFile.reverseGet(compiled) == script        // the class hands its script back
+Exec.validate(compiled, scriptContext)          // Right(traces) | Left(reason)
 ```
 
-Three things follow from the shape.
+Two properties follow from the shape, and the suite checks both.
 
-**The ends are fixed; the middle is a function.** Decoding and typing live in
-`get`, writing the class file in `reverseGet`. Anything `TypedProgram => ClassNode`
-can run through the optic, so an optimisation pass is a function composed in
-front of the lowering — `iso.modify(optimise andThen Lower.lower)` — and
-neither end changes.
+**The laws hold.** Each optic is a lawful iso on what the compiler produces:
+there and back is the identity, both ways — `reverseGet(get(s)) == s`, and
+`get(reverseGet(a)) == a` for every `a` the compiler made. The suite checks
+`typed` and `classFile` with cats-eo's own `IsoTests`, and checks the round trips
+on every program it compiles, the 943 conformance programs included.
 
-**It composes like any other optic.** Scripts on chain are flat bytes wrapped in
-a CBOR bytestring. Unwrapping them is another polymorphic iso, and `andThen`
-yields a single optic from on-chain bytes to class files:
-
-```scala
-val cborScript: BijectionIso[Array[Byte], Array[Byte], Array[Byte], Array[Byte]] =
-  Iso(cbor => Cbor.decode(cbor).to[Array[Byte]].value, classFile => classFile)
-
-val onChain = cborScript.andThen(UplcJvm.iso)       // CBOR in, class file out
-onChain.modify(Lower.lower)(script.cborEncoded)    // the same class file as translate(flat)
-```
-
-**The law is a commuting square.** A polymorphic iso has no round-trip law to
-check: with `S ≠ T` there is nothing to round-trip to. The property that matters
-is semantic — *running `translate(s)` gives what a reference evaluator gives for
-`s`* — and the demo checks exactly that, against the Scalus CEK machine, for
-every program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)).
+**The square commutes.** The semantic property is the one a round trip can't
+see: *running `classFile.get(s)` gives what a reference evaluator gives for
+`s`*. The demo checks exactly that, against the Scalus CEK machine, for every
+program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)).
 
 ## Back and forth
 
 <div class="uplc-roundtrip" style="max-width: 780px; margin: 1.5em auto;">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" width="100%" role="img" aria-labelledby="uplc-rt-title uplc-rt-desc" style="font-family: inherit;">
 <title id="uplc-rt-title">The UPLC to JVM round trip</title>
-<desc id="uplc-rt-desc">Top row, the optic: flat UPLC bytes go through iso.get to a typed expression, through Lower.lower to bytecode (an ASM ClassNode), and through iso.reverseGet to a class file. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
+<desc id="uplc-rt-desc">Top row, the optics: a script goes through typed to a typed expression, through lowering to bytecode (an ASM ClassNode), and through writing to a class file; each arrow is an iso, walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
 <defs><marker id="uplc-rt-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--primary-color);"/></marker></defs>
 <rect x="6" y="24" width="768" height="100" rx="14" style="fill: none; stroke: var(--primary-medium); stroke-dasharray: 6 5;"/>
-<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">one eo Iso · the compiler is iso.modify(Lower.lower)</text>
+<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo isos · CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript</text>
 <g style="font-size: 14px;">
 <rect x="20" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
-<text x="90" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">S · flat UPLC</text>
-<text x="90" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">Array[Byte]</text>
+<text x="90" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">script</text>
+<text x="90" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">CborScript</text>
 <rect x="210" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
-<text x="280" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">A · typed expr</text>
+<text x="280" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">typed expr</text>
 <text x="280" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">TypedProgram</text>
 <rect x="400" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
-<text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">B · bytecode</text>
+<text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">bytecode</text>
 <text x="470" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">ClassNode</text>
 <rect x="620" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
-<text x="690" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">T · class file</text>
-<text x="690" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">Array[Byte]</text>
+<text x="690" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">class file</text>
+<text x="690" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">JvmClassScript</text>
 <rect x="20" y="230" width="140" height="68" rx="8" style="fill: var(--bg-color); stroke: var(--component-border);"/>
 <text x="90" y="256" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">UPLC term</text>
 <text x="90" y="278" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">CEK result</text>
@@ -95,12 +93,12 @@ every program in its test-suite ([Correctness](#correctness-the-cek-machine-as-o
 <text x="690" y="278" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">closure, constant, …</text>
 </g>
 <g style="font-size: 12px; fill: var(--primary-color);">
-<line x1="162" y1="74" x2="206" y2="74" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
-<text x="184" y="66" text-anchor="middle">get</text>
-<line x1="352" y1="74" x2="396" y2="74" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
-<text x="374" y="66" text-anchor="middle">lower</text>
-<line x1="542" y1="74" x2="616" y2="74" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
-<text x="579" y="66" text-anchor="middle">reverseGet</text>
+<line x1="162" y1="74" x2="206" y2="74" marker-start="url(#uplc-rt-arrow)" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
+<text x="184" y="66" text-anchor="middle">typed</text>
+<line x1="352" y1="74" x2="396" y2="74" marker-start="url(#uplc-rt-arrow)" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
+<text x="374" y="66" text-anchor="middle" style="font-size: 11px;">lowering</text>
+<line x1="542" y1="74" x2="616" y2="74" marker-start="url(#uplc-rt-arrow)" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
+<text x="579" y="66" text-anchor="middle">writing</text>
 <line x1="690" y1="110" x2="690" y2="226" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
 <text x="698" y="173" text-anchor="start">load + run</text>
 <line x1="618" y1="264" x2="544" y2="264" marker-end="url(#uplc-rt-arrow)" style="stroke: var(--primary-color); stroke-width: 1.6;"/>
@@ -122,7 +120,7 @@ The listings in this section are printed, verbatim, by the demo's walkthrough
 sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo [dir-for-the-class-file]"
 ```
 
-### Forth: bytes to a typed expression (`get`)
+### Forth: a script to a typed expression (`typed`)
 
 UPLC has no `let`, no `if` and no multi-argument call; compilers encode them in
 lambdas, `delay`/`force` and builtins. `let x = 6 in let y = x * x in x + y`
@@ -132,8 +130,9 @@ arrives as:
 (program 1.1.0 [(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)])
 ```
 
-`iso.get` decodes the flat bytes into Scalus' own `Term` tree and reads it back
-as a typed, Scala-like expression:
+`typed.get` decodes the script into Scalus' own `Term` tree and reads it back as
+a typed, Scala-like expression; `typed.reverseGet` is the script it was read
+from:
 
 ```scala
 val v0: BigInt = 6
@@ -194,7 +193,7 @@ val v4: Value = {
   val v6: Value = sndPair(unConstrData(v5))
   val v7: Value = unConstrData(headList(dropList(2, v6)))
   fstPair(v7) match
-    case 0 => error()(3)
+    case 0 => error()
     case 1 => if equalsInteger(Constr0(unIData(headList(tailList(v6))), 0, 1) match
         case 0 => v4, unIData({
         val v8: Value = unConstrData(headList(tailList(sndPair(v7))))
@@ -217,11 +216,11 @@ a value the typer cannot see into (`v4(v4)`, a partial application), so it stays
 a dynamic `case` — fields first, then the branch — exactly as the machine runs
 it.
 
-### Down: lowering (`A ⇒ B`)
+### Down: lowering (`lowering`)
 
-`Lower.lower` is the function the optic is run with. It writes bytecode
-straight into ASM's tree (`ClassNode`, with asm-commons' `InstructionAdapter`)
-and makes the JVM decisions on the way:
+`lowering.get` (`Lower.lower`) writes bytecode straight into ASM's tree
+(`ClassNode`, with asm-commons' `InstructionAdapter`) and makes the JVM
+decisions on the way:
 
 - **Closure conversion.** Each lambda chain or `delay` becomes a static method;
   a closure captures exactly its free variables, in an order fixed by the
@@ -234,8 +233,10 @@ and makes the JVM decisions on the way:
   `invokestatic`s of their body methods.
 - **Method size.** Once a method has inlined enough code, the next `let` body
   moves to a method of its own (the JVM caps a method at 64 KB of bytecode).
+- **The script, embedded.** The static initialiser holds the script as Base64
+  string constants; `lowering.reverseGet` reads them back out of the class.
 
-For the small program, B is one method, as ASM prints it; `K` is the class's
+For the small program, the method `run` is all there is, as ASM prints it; `K` is the class's
 table of constants, indexed by UPLC node:
 
 ```
@@ -260,13 +261,21 @@ table of constants, indexed by UPLC node:
 The constant is unboxed once, the arithmetic is Scalus' own, and the one box is
 at the result.
 
-### Back: bytecode to a class file (`reverseGet`)
+### Bytecode to a class file, and back (`writing`)
 
-`iso.reverseGet` hands the `ClassNode` to ASM's `ClassWriter`, which computes
-the stack map frames and serialises it. The class has a static method per lambda
-chain and `delay`, a switch per call arity for closure dispatch, and the flat
-program itself, embedded as Base64 string constants and re-decoded by the static
-initialiser.
+`writing.get` hands the `ClassNode` to ASM's `ClassWriter`, which computes the
+stack map frames and serialises it; `writing.reverseGet` is ASM's `ClassReader`.
+The class has a static method per lambda chain and `delay`, a switch per call
+arity for closure dispatch, and the script, re-decoded by the static initialiser.
+A class file survives being read and written again byte for byte because the
+generated code has no unreachable instructions — a function that can only fail
+is never applied, and a call whose argument can only fail after nothing but
+values is that failure — so ASM has no dead code to blank out:
+
+```
+T — writing.get: 1841 bytes of class file
+and back — classFile.reverseGet(T) == S: true
+```
 
 ### And back again: values to UPLC terms
 
@@ -295,13 +304,16 @@ used as values, run Scalus' own CEK meanings (`BuiltinRuntime`); a meaning that
 hands back one of its arguments (`ifThenElse`, `chooseList`, …) hands back the
 closure or constructor it was given.
 
-`sbt demoUplcJvm/test` checks the commuting square on:
+`sbt demoUplcJvm/test` checks the commuting square — and, on every program it
+compiles, the round trips: the script comes back out of its class, and the class
+file survives ASM reading and writing it again — on:
 
 | suite | what | result |
 |---|---|---|
 | Plutus conformance | the [`plutus-conformance`](https://github.com/IntersectMBO/plutus/tree/1.63.0.0/plutus-conformance) UPLC evaluation cases, plutus `1.63.0.0` (vendored) | **943 / 943** evaluation cases agree; 55 parser-only tests and 1 program with no flat encoding skipped |
-| validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and translated with the context applied |
+| validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and compiled with the context applied |
 | compiler paths | one hand-written program per path, error paths included, a 20 000-deep `let` chain | all agree |
+| iso laws | cats-eo-laws' `IsoTests` for `typed` and `classFile`, over every validator and a program whose value is a closure | both laws hold, both ways |
 
 The JVM's own verifier checks every generated class as it is loaded, and each
 conformance case's `.expected` file pins whether it should succeed or fail — so
@@ -320,7 +332,7 @@ accept it before anything is timed):
   its context, with no budget accounting (`NoBudgetSpender`). The generated code
   meters nothing either; with the restricting budget spender the ledger uses,
   the CEK machine would do a little more work per step.
-- **generated class** — translated and loaded once, in setup. Each operation
+- **generated class** — compiled and loaded once, in setup. Each operation
   evaluates the script and applies it to the context.
 
 Average time per operation in **µs (lower is better)**, error = 99.9 %
@@ -377,18 +389,18 @@ settles at ~21×.
 
 ### What translation costs
 
-| validator | flat UPLC (S) | class file (T) | translate (µs) | translate + load (µs) | break-even (validations) |
+| validator | script | class file | translate (µs) | translate + load (µs) | break-even (validations) |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 147 B | 4,565 B | 80.8 ± 9.9 | 380.8 ± 58.7 | 81 |
-| `preimage` | 184 B | 5,035 B | 124.3 ± 44.1 | 468.3 ± 64.5 | 72 |
-| `timeLock` | 181 B | 5,109 B | 113.5 ± 52.3 | 431.6 ± 47.9 | 65 |
-| `multisig` | 200 B | 6,238 B | 148.3 ± 13.3 | 628.4 ± 47.6 | 46 |
-| `fibonacci` | 124 B | 4,347 B | 68.9 ± 6.5 | 337.1 ± 45.1 | 10 |
-| `htlc` | 307 B | 6,666 B | 172.2 ± 16.6 | 666.2 ± 79.6 | 82 |
+| `helloOwner` | 149 B | 4,557 B | 80.8 ± 9.9 | 380.8 ± 58.7 | 81 |
+| `preimage` | 186 B | 5,023 B | 124.3 ± 44.1 | 468.3 ± 64.5 | 72 |
+| `timeLock` | 183 B | 5,097 B | 113.5 ± 52.3 | 431.6 ± 47.9 | 65 |
+| `multisig` | 202 B | 6,230 B | 148.3 ± 13.3 | 628.4 ± 47.6 | 46 |
+| `fibonacci` | 126 B | 4,339 B | 68.9 ± 6.5 | 337.1 ± 45.1 | 10 |
+| `htlc` | 310 B | 6,662 B | 172.2 ± 16.6 | 666.2 ± 79.6 | 82 |
 
-`translate` is the optic (`iso.modify(Lower.lower)`), measured warm;
-`translate + load` adds defining the class, verifying it, and running its static
-initialiser, which re-decodes the embedded program. Loading is three quarters of
+`translate` is `classFile.get`, measured warm; `translate + load` adds defining
+the class, verifying it, and running its static initialiser, which re-decodes the
+embedded script. Loading is three quarters of
 the total. Most of `translate` is ASM's `ClassWriter` computing stack map frames;
 lowering straight into ASM's tree keeps the rest small, and translation costs
 what the demo's first, raw-ASM emitter did — about a third of what a version

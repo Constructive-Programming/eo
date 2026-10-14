@@ -20,7 +20,7 @@ object Typer:
   val MaxChain = 200
 
   def typeProgram(source: SourceProgram): TypedProgram =
-    TypedProgram(source, new Typing(source).expr(0, Vector.empty))
+    TypedProgram(source.script, new Typing(source).expr(0, Vector.empty))(source)
 
 /** What a binder is statically known to hold. */
 private enum Known:
@@ -63,7 +63,8 @@ final private class Typing(source: SourceProgram):
     case Term.Const(value, _)   => Expr.Lit(n, value)
     case Term.Builtin(fun, _)   => Expr.BuiltinRef(fun)
     case Term.Error(_)          => Expr.Fail
-    case Term.Constr(tag, _, _) => Expr.Construct(tag.value, children(n).map(expr(_, scope)))
+    case Term.Constr(tag, _, _) =>
+      strict(children(n).map(expr(_, scope)))(Expr.Construct(tag.value, _))
     case Term.Case(scrut, _, _) =>
       val s :: branches = children(n): @unchecked
       scrut match
@@ -189,11 +190,20 @@ final private class Typing(source: SourceProgram):
       case Expr.Lambda(origin, params, _) => Known.Lambda(origin, params.size)
       case other                          => forced(other, 0)
 
-  /** Applies the remaining links dynamically, in order. */
+  /** Arguments evaluated in order: one that can only fail, after nothing but values, is the whole
+    * expression — nothing observable runs before it, and nothing after.
+    */
+  private def strict(args: List[Expr])(build: List[Expr] => Expr): Expr =
+    args.dropWhile(_.isValue).headOption.filter(_.fails).getOrElse(build(args))
+
+  /** Applies the remaining links dynamically, in order. A function that can only fail is evaluated
+    * before anything it is applied to, which then never runs.
+    */
   private def rest(acc: Expr, links: List[Link], scope: Vector[Binder]): Expr =
     links.foldLeft(acc) {
-      case (f, Link.Arg(a)) => Expr.Apply(f, expr(a, scope))
-      case (f, Link.Frc)    => Expr.Force(f)
+      case (f, _) if f.fails => f
+      case (f, Link.Arg(a))  => Expr.Apply(f, expr(a, scope))
+      case (f, Link.Frc)     => Expr.Force(f)
     }
 
   private def builtinSpine(fun: DefaultFun, links: List[Link], scope: Vector[Binder]): Expr =
@@ -217,8 +227,10 @@ final private class Typing(source: SourceProgram):
         val choose = Expr.Choose(fun, expr(args.head, scope), branches, Ty.join(branches))
         rest(choose, after.tail, scope)
       else
-        val es = args.map(expr(_, scope))
-        val ty =
-          if fun == DefaultFun.IfThenElse then Ty.join(es.drop(1))
-          else Semantics.result(fun, es.map(_.ty))
-        rest(Expr.Call(fun, es, ty), after, scope)
+        val call = strict(args.map(expr(_, scope))) { es =>
+          val ty =
+            if fun == DefaultFun.IfThenElse then Ty.join(es.drop(1))
+            else Semantics.result(fun, es.map(_.ty))
+          Expr.Call(fun, es, ty)
+        }
+        rest(call, after, scope)

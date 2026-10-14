@@ -81,13 +81,6 @@ object Rt:
 
   def unListData(d: Data): AnyRef = DataList(d.asInstanceOf[Data.List].values)
 
-  def chooseList(l: AnyRef, ifNil: AnyRef, ifCons: AnyRef): AnyRef =
-    if nullList(l) then ifNil else ifCons
-
-  def trace(message: String, a: AnyRef): AnyRef =
-    logs.get.log(message)
-    a
-
   /** A runtime value as the Scalus constant it stands for. */
   def constant(v: AnyRef): AnyRef = v match
     case DataList(elems) => Constant.List(DefaultUni.Data, elems.toScalaList.map(Constant.Data(_)))
@@ -99,8 +92,7 @@ object Rt:
 
   /** A lambda chain of `arity` parameters, or a `delay` when there are none. */
   def closure(code: Dispatch, id: Int, origin: Int, arity: Int, env: Array[AnyRef]): AnyRef =
-    if arity == 0 then new Thunk(code, id, origin, env)
-    else new Lam(code, id, origin, arity, env, Empty)
+    new Lam(code, id, origin, arity, env, Empty)
 
   /** The environment of a `let`-bound closure, for a direct call of its body method. */
   def envOf(closure: AnyRef): Array[AnyRef] = closure.asInstanceOf[Lam].env
@@ -118,15 +110,15 @@ object Rt:
     * applications in between would have no observable effect — and the result takes the rest.
     */
   def applyAll(f: AnyRef, args: Array[AnyRef]): AnyRef = f match
-    case l: Lam if l.applied.length == 0 && l.arity == args.length => enter(l, args)
-    case _                                                         => applyAll(f, args, 0)
+    case l: Lam if l.applied.length == 0 && l.arity == args.length && l.arity > 0 => enter(l, args)
+    case _ => applyAll(f, args, 0)
 
   @tailrec
   private def applyAll(f: AnyRef, args: Array[AnyRef], from: Int): AnyRef =
     if from == args.length then f
     else
       f match
-        case l: Lam =>
+        case l: Lam if l.arity > 0 =>
           val had = l.applied.length
           val take = math.min(l.arity - had, args.length - from)
           val all = Arrays.copyOf(l.applied, had + take)
@@ -139,9 +131,9 @@ object Rt:
         case other      => throw fail(s"cannot apply ${other.getClass.getSimpleName}")
 
   def force(v: AnyRef): AnyRef = v match
-    case t: Thunk   => t.code.call0(t.id, t.env)
-    case p: Partial => feed(p, None)
-    case other      => throw fail(s"cannot force ${other.getClass.getSimpleName}")
+    case t: Lam if t.arity == 0 => t.code.call0(t.id, t.env)
+    case p: Partial             => feed(p, None)
+    case other                  => throw fail(s"cannot force ${other.getClass.getSimpleName}")
 
   // ---- builtins as values, and builtins without a direct implementation --------------------------
 

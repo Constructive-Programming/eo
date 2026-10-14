@@ -1,66 +1,51 @@
 package dev.constructive.eo.demo.uplc
 
-import scala.util.Try
-
-import dev.constructive.eo.optics.{BijectionIso, Iso}
-import io.bullet.borer.Cbor
-import org.objectweb.asm.ClassWriter
+import dev.constructive.eo.optics.Iso
 import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.{ClassReader, ClassWriter}
 
-/** A UPLC → JVM bytecode compiler as ONE eo optic.
+/** A UPLC → JVM bytecode compiler as eo optics, all starting from the script as the ledger stores
+  * it:
   *
   * {{{
-  *   S = Array[Byte]   flat-encoded UPLC program
-  *   A = TypedProgram  the program read back as a typed, Scala-like expression
-  *   B = ClassNode     JVM bytecode, as ASM's in-memory class
-  *   T = Array[Byte]   a class file
+  *   CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript
+  *              typed          lowering     writing
   * }}}
   *
-  * `get` decodes and types (S ⇒ A), `reverseGet` writes a class file (B ⇒ T), and the compiler is
-  * `iso.modify(Lower.lower)`: the optic fixes the two ends, the lowering is the function you run
-  * through it. Swap in another `A ⇒ B` — an optimiser before `Lower.lower`, an instrumenting
-  * lowering — and the ends stay put.
-  *
-  * The Iso is polymorphic (`S`/`T` and `A`/`B` differ), so the round-trip laws of a monomorphic iso
-  * do not apply. What must hold instead is the commuting square the test-suite checks for every
-  * program: running the class file gives what the Scalus CEK machine gives for the flat program.
+  * Every stage keeps the script it came from — a typed program its source, a class the script
+  * itself, embedded in its constants — so every arrow can be walked back, and each is a lawful iso
+  * on what the compiler produces: going there and back is the identity, both ways. [[typed]],
+  * [[bytecode]] and [[classFile]] are the views a caller asks for; `classFile.get` is the compiler,
+  * and `classFile.reverseGet` hands back the script a class was compiled from.
   */
 object UplcJvm:
 
-  val iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode] =
-    Iso[Array[Byte], Array[Byte], TypedProgram, ClassNode](
-      flat => Typer.typeProgram(SourceProgram.decode(flat)),
-      classFile,
-    )
+  /** Script ≅ typed expression: decode and type; back, the script the program was read from. */
+  val typed: Iso[CborScript, TypedProgram] =
+    Iso(script => Typer.typeProgram(SourceProgram.decode(script)), _.script)
 
-  /** ASM writes the class and computes its stack map frames. Every reference type generated code
-    * merges is the same on both paths or `Object`, so no class is loaded to find a common one.
+  /** Typed expression ≅ bytecode: lower; back, type the script the class embeds. */
+  val lowering: Iso[TypedProgram, ClassNode] =
+    Iso(Lower.lower, node => typed.get(Lower.script(node)))
+
+  /** Bytecode ≅ class file: ASM writes the class, computing its stack map frames, and reads it
+    * back. Every reference type generated code merges is the same on both paths or `Object`, so no
+    * class is loaded to find a common one.
     */
-  private def classFile(node: ClassNode): Array[Byte] =
+  val writing: Iso[ClassNode, JvmClassScript] = Iso(write, read)
+
+  val bytecode: Iso[CborScript, ClassNode] = typed.andThen(lowering)
+
+  /** The compiler, and its inverse on the classes it writes. */
+  val classFile: Iso[CborScript, JvmClassScript] = bytecode.andThen(writing)
+
+  private def write(node: ClassNode): JvmClassScript =
     val writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES):
       override def getCommonSuperClass(a: String, b: String): String = "java/lang/Object"
     node.accept(writer)
-    writer.toByteArray
+    JvmClassScript(writer.toByteArray)
 
-  /** Flat UPLC ⇒ class file. Defined on well-formed flat programs; use [[compile]] otherwise. */
-  val translate: Array[Byte] => Array[Byte] = iso.modify(Lower.lower)
-
-  /** Scripts as the ledger stores them: the flat bytes wrapped in a CBOR bytestring. Composed in
-    * front of [[iso]] with `andThen`, it gives an optic from CBOR scripts straight to class files.
-    */
-  val cborScript: BijectionIso[Array[Byte], Array[Byte], Array[Byte], Array[Byte]] =
-    Iso[Array[Byte], Array[Byte], Array[Byte], Array[Byte]](
-      cbor => Cbor.decode(cbor).to[Array[Byte]].value,
-      classFile => classFile,
-    )
-
-  val onChain: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode] =
-    cborScript.andThen(iso)
-
-  /** Checked entry point for bytes of unknown provenance. Scalus' flat decoder throws on malformed
-    * input; this is the one place that is turned into a value.
-    */
-  def compile(flat: Array[Byte]): Either[String, Array[Byte]] =
-    Try(SourceProgram.decode(flat)).toEither match
-      case Left(e)  => Left(s"not a flat UPLC program: ${e.getMessage}")
-      case Right(_) => Right(translate(flat))
+  private def read(classFile: JvmClassScript): ClassNode =
+    val node = new ClassNode
+    new ClassReader(classFile.bytes).accept(node, ClassReader.SKIP_FRAMES)
+    node

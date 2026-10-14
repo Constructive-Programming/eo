@@ -1167,9 +1167,9 @@ lazy val benchmarks: Project = project
   )
 
 // -------------------------------------------------------------------
-// Demo: a UPLC (Cardano Plutus Core) → JVM bytecode compiler whose spine is
-// one eo `Iso[Array[Byte], Array[Byte], TypedProgram, ClassNode]` — flat UPLC in,
-// class file out, `iso.modify(Lower.lower)` is the translator. Correctness
+// Demo: a UPLC (Cardano Plutus Core) → JVM bytecode compiler built from eo isos,
+// CborScript ≅ TypedProgram ≅ ClassNode ≅ JvmClassScript — the script in, a class
+// file out, and the class hands its script back. Correctness
 // is differential: every program runs through the generated class AND the
 // Scalus CEK machine, and the two results must agree. Unpublished and OUT of
 // the root aggregate (see the CI step above); run with `sbt demoUplcJvm/test`.
@@ -1185,6 +1185,8 @@ lazy val demoUplcJvm: Project = project
   .in(file("demos/uplc-jvm"))
   .dependsOn(
     LocalProject("core"),
+    // IsoTests: the suite checks the optics' round-trip laws with the library's own rule set.
+    LocalProject("laws") % Test,
     LocalProject("demoUplcJvmValidators") % Test,
   )
   .settings(commonSettings *)
