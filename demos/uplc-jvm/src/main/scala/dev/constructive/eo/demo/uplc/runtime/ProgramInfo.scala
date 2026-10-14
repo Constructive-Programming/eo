@@ -15,6 +15,6 @@ final class ProgramInfo(val source: SourceProgram):
 
 object ProgramInfo:
 
-  /** Reassembles the script a class embeds as string chunks. */
-  def fromChunks(chunks: Array[AnyRef]): ProgramInfo =
-    new ProgramInfo(SourceProgram.decode(CborScript.fromChunks(chunks.map(_.toString))))
+  /** Reassembles the script a class stores as string constants (`CborScript.asConstants`). */
+  def fromConstants(constants: Array[AnyRef]): ProgramInfo =
+    new ProgramInfo(SourceProgram.decode(CborScript.fromConstants(constants.map(_.toString))))

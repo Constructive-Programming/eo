@@ -156,12 +156,13 @@ object Rt:
     * — returns it, and it is swapped back.
     */
   def call(ordinal: Int, args: Array[AnyRef]): AnyRef =
-    val in = args.map[CekValue](constant(_) match
-      case c: Constant => CekValue.VCon(c)
-      case _           => CekValue.VDelay(Term.Error(), ArraySeq.empty))
-    Semantics
-      .runtime(DefaultFun.fromOrdinal(ordinal))
-      .f(logs.get, ArraySeq.unsafeWrapArray(in)) match
+    val in = args
+      .iterator
+      .map[CekValue](constant(_) match
+        case c: Constant => CekValue.VCon(c)
+        case _           => CekValue.VDelay(Term.Error(), ArraySeq.empty))
+      .toVector
+    Semantics.runtime(DefaultFun.fromOrdinal(ordinal)).f(logs.get, in) match
       case CekValue.VCon(c) => c
       case other            => args(in.indexWhere(_ eq other))
 

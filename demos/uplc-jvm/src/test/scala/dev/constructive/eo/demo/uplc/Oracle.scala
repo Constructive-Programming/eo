@@ -9,13 +9,18 @@ import scalus.uplc.{Constant, DeBruijnedProgram, Program, ProgramFlatCodec, Term
 /** The differential harness: one script, two evaluators, one verdict. */
 object Oracle:
 
-  def script(uplc: String): CborScript =
-    CborScript.of(Program.parseUplc(s"(program 1.1.0 $uplc)").fold(e => sys.error(e), identity))
+  /** A program the suite knows has a flat encoding; anything else fails the test. */
+  def script(program: Program): CborScript = CborScript.of(program).fold(sys.error, identity)
 
-  /** A de Bruijn term as it is: Scalus' encoder would re-derive its indices from names. */
+  def script(uplc: String): CborScript =
+    script(Program.parseUplc(s"(program 1.1.0 $uplc)").fold(sys.error, identity))
+
+  /** A de Bruijn term as it is, open ones included: Scalus' only encoder that keeps a term's
+    * indices, rather than deriving them from names, is the unchecked `unsafeEncodeFlat`.
+    */
   def script(term: Term): CborScript =
     val flat = ProgramFlatCodec.unsafeEncodeFlat(Program((1, 1, 0), term))
-    CborScript.parse(Cbor.encode(flat).toByteArray).toOption.get
+    CborScript.parse(Cbor.encode(flat).toByteArray).fold(sys.error, identity)
 
   /** What the Scalus CEK machine makes of a script (then applied to `args`). */
   def cek(script: CborScript, args: Seq[Constant] = Nil): Either[String, Term] =

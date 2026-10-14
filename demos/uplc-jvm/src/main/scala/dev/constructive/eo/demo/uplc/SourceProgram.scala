@@ -26,15 +26,11 @@ final class SourceProgram private (
     sizes: IArray[Int],
 ):
 
-  /** The ids of node `n`'s children, in order. */
+  /** The ids of node `n`'s children, in order: each starts where the one before it ends, until the
+    * end of `n`'s subtree.
+    */
   def children(n: Int): List[Int] =
-    val count = nodes(n) match
-      case _: Term.LamAbs | _: Term.Force | _: Term.Delay => 1
-      case _: Term.Apply                                  => 2
-      case Term.Constr(_, args, _)                        => args.size
-      case Term.Case(_, cases, _)                         => 1 + cases.size
-      case _                                              => 0
-    List.iterate(n + 1, count)(c => c + sizes(c))
+    List.unfold(n + 1)(c => Option.when(c < n + sizes(n))((c, c + sizes(c))))
 
   private val captureCache = TrieMap.empty[Int, IArray[Int]]
 
@@ -54,50 +50,36 @@ final class SourceProgram private (
 object SourceProgram:
 
   def decode(script: CborScript): SourceProgram =
-    // Every node takes at least its 4-bit tag in the flat encoding: a bound on the node count.
-    val bound = script.bytes.length * 2 + 1
-    val (nodes, depths, sizes) =
-      (new Array[Term](bound), new Array[Int](bound), new Array[Int](bound))
+    // A subtree's nodes, binder depths and subtree sizes in pre-order, ahead of the `count` nodes
+    // after it: a right fold over the children.
+    type Numbered = (List[Term], List[Int], List[Int], Int)
+    def number(term: Term, depth: Int, rest: Numbered): Numbered =
+      val inner = if term.isInstanceOf[Term.LamAbs] then depth + 1 else depth
+      val (ns, ds, ss, count) = subterms(term).foldRight(rest)(number(_, inner, _))
+      (term :: ns, depth :: ds, (count - rest._4 + 1) :: ss, count + 1)
+    val (nodes, depths, sizes, _) =
+      number(DeBruijnedProgram.fromCbor(script.bytes).term, 0, (Nil, Nil, Nil, 0))
+    new SourceProgram(script, IArray.from(nodes), IArray.from(depths), IArray.from(sizes))
 
-    /** Numbers `term` and its subtree from `id` on; returns the next free id. */
-    def number(term: Term, depth: Int, id: Int): Int =
-      nodes(id) = term
-      depths(id) = depth
-      val next = term match
-        case Term.LamAbs(_, body, _)    => number(body, depth + 1, id + 1)
-        case Term.Apply(fn, arg, _)     => number(arg, depth, number(fn, depth, id + 1))
-        case Term.Force(body, _)        => number(body, depth, id + 1)
-        case Term.Delay(body, _)        => number(body, depth, id + 1)
-        case Term.Constr(_, args, _)    => args.foldLeft(id + 1)((i, a) => number(a, depth, i))
-        case Term.Case(scrut, cases, _) =>
-          cases.foldLeft(number(scrut, depth, id + 1))((i, c) => number(c, depth, i))
-        case _: Term.Var | _: Term.Const | _: Term.Builtin | _: Term.Error => id + 1
-      sizes(id) = next - id
-      next
-
-    val n = number(DeBruijnedProgram.fromCbor(script.bytes).term, 0, 0)
-    def first[A](a: Array[A]) = IArray.unsafeFromArray(a.take(n))
-    new SourceProgram(script, first(nodes), first(depths), first(sizes))
+  /** A term's immediate subterms, in the order they are numbered. */
+  def subterms(term: Term): List[Term] = term match
+    case Term.LamAbs(_, body, _)                                       => List(body)
+    case Term.Apply(fn, arg, _)                                        => List(fn, arg)
+    case Term.Force(body, _)                                           => List(body)
+    case Term.Delay(body, _)                                           => List(body)
+    case Term.Constr(_, args, _)                                       => args
+    case Term.Case(scrut, cases, _)                                    => scrut :: cases
+    case _: Term.Var | _: Term.Const | _: Term.Builtin | _: Term.Error => Nil
 
 /** Free de Bruijn indices of a term, relative to the term's own position, ascending. */
 object FreeVars:
 
+  // Into one mutable set: an immutable set per subterm makes translation slower.
   def of(term: Term): Vector[Int] =
     val acc = mutable.TreeSet.empty[Int]
-
     def go(t: Term, binders: Int): Unit = t match
-      case Term.Var(name, _)    => if name.index > binders then acc += name.index - binders
-      case Term.LamAbs(_, b, _) => go(b, binders + 1)
-      case Term.Apply(f, a, _)  =>
-        go(f, binders)
-        go(a, binders)
-      case Term.Force(b, _)        => go(b, binders)
-      case Term.Delay(b, _)        => go(b, binders)
-      case Term.Constr(_, args, _) => args.foreach(go(_, binders))
-      case Term.Case(s, cases, _)  =>
-        go(s, binders)
-        cases.foreach(go(_, binders))
-      case _: Term.Const | _: Term.Builtin | _: Term.Error => ()
-
+      case Term.Var(name, _)       => if name.index > binders then acc += name.index - binders
+      case Term.LamAbs(_, body, _) => go(body, binders + 1)
+      case _                       => SourceProgram.subterms(t).foreach(go(_, binders))
     go(term, 0)
     acc.toVector

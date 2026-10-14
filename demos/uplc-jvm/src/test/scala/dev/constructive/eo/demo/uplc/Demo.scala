@@ -42,14 +42,14 @@ object Demo:
     compare(parse(closure), UplcJvm.toBytecode.get(parse(closure)))
 
     section("A Scalus-compiled validator, read back (Fibonacci)", "")
-    val fib = CborScript.of(CompiledValidators.fibonacci.program)
+    val fib = Oracle.script(CompiledValidators.fibonacci.program)
     println(s"${fib.bytes.length} bytes of script\n\n${UplcJvm.toTyped.get(fib).body.show}")
     println(s"\n${shape(fib)}")
 
     section("Every validator", "")
     Scenarios
       .accepting
-      .foreach(s => println(f"${s.name}%-11s ${shape(CborScript.of(s.script.program))}"))
+      .foreach(s => println(f"${s.name}%-11s ${shape(Oracle.script(s.script.program))}"))
 
   private def section(title: String, uplc: String): Unit =
     println(s"\n=== $title ===\n${if uplc.isEmpty then "" else s"\n(program 1.1.0 $uplc)"}")

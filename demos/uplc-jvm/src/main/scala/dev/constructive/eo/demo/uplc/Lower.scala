@@ -4,6 +4,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.jdk.CollectionConverters.*
 
+import cats.syntax.traverse.*
 import dev.constructive.eo.demo.uplc.runtime.{Dispatch, ProgramInfo}
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.commons.InstructionAdapter
@@ -76,7 +77,7 @@ object Lower:
   /** The script a class embeds: the string constants its static initialiser assembles. */
   def script(cls: JvmClass): CborScript =
     val init = cls.tree.methods.asScala.filter(_.name == "<clinit>")
-    CborScript.fromChunks(init.flatMap(_.instructions.asScala).collect {
+    CborScript.fromConstants(init.flatMap(_.instructions.asScala).collect {
       case ldc: LdcInsnNode if ldc.cst.isInstanceOf[String] => ldc.cst.toString
     })
 
@@ -102,11 +103,11 @@ object Lower:
   final case class Direct(owner: String, name: String, desc: String, args: List[Rep], result: Rep)
 
   private[uplc] val direct: IArray[Option[Direct]] = IArray.from(DefaultFun.values.map { f =>
-    Semantics.direct(f).map { m =>
-      val reps = m.getParameterTypes.toList.map(Rep.of(_).get)
-      val owner = Type.getInternalName(m.getDeclaringClass)
-      Direct(owner, m.getName, desc(m), reps, Rep.of(m.getReturnType).get)
-    }
+    for
+      m <- Semantics.direct(f)
+      args <- m.getParameterTypes.toList.traverse(Rep.of)
+      result <- Rep.of(m.getReturnType)
+    yield Direct(Type.getInternalName(m.getDeclaringClass), m.getName, desc(m), args, result)
   })
 
   /** `m<id>(Object[] env, Object × arity)`. */
@@ -186,8 +187,8 @@ final private class Lowering(source: SourceProgram):
 
   /** Loads the embedded script and its constants, and creates `INSTANCE`. */
   private def staticInit(using g: Gen): Unit =
-    objects(source.script.chunks)(g.aconst(_))
-    g.invokestatic(info, "fromChunks", Type.getMethodDescriptor(Info, Objs), false)
+    objects(source.script.asConstants)(g.aconst(_))
+    g.invokestatic(info, "fromConstants", Type.getMethodDescriptor(Info, Objs), false)
     g.dup()
     g.putstatic(ClassName, "INFO", Info.getDescriptor)
     g.invokevirtual(info, "constants", Type.getMethodDescriptor(Objs), false)

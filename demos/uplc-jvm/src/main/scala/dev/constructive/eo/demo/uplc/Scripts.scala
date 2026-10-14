@@ -12,14 +12,20 @@ import scalus.uplc.{DeBruijnedProgram, Program}
 // can compare them with `==`.
 
 /** A Plutus script as the ledger stores it: the flat-encoded program, wrapped in a CBOR bytestring.
-  * Every value is well formed: one comes from a Scalus `Program`, or from bytes
-  * [[CborScript.parse]] has checked.
+  * Every value is well formed: [[CborScript.of]] encoded it, or [[CborScript.parse]] checked it.
   */
 opaque type CborScript = ByteString
 
 object CborScript:
 
-  def of(program: Program): CborScript = ByteString.unsafeFromArray(program.cborEncoded)
+  /** A Scalus program, flat-encoded. Scalus' encoder throws on a program it cannot encode — one
+    * with a free variable; this is the one place that becomes a value.
+    */
+  def of(program: Program): Either[String, CborScript] =
+    Try(ByteString.fromArray(program.cborEncoded))
+      .toEither
+      .left
+      .map(e => s"no flat encoding: ${e.getMessage}")
 
   /** Bytes of unknown provenance. Scalus' decoder throws on malformed input; this is the one place
     * that becomes a value.
@@ -29,15 +35,20 @@ object CborScript:
       case Left(e)  => Left(s"not a CBOR-wrapped flat UPLC script: ${e.getMessage}")
       case Right(_) => Right(ByteString.fromArray(cbor))
 
-  /** The script a compiled class embeds, from the Base64 chunks [[chunks]] cut it into. */
-  private[uplc] def fromChunks(chunks: Iterable[String]): CborScript =
-    ByteString.unsafeFromArray(Base64.getDecoder.decode(chunks.mkString))
+  /** The script back from the string constants [[asConstants]] stored it in. */
+  private[uplc] def fromConstants(constants: Iterable[String]): CborScript =
+    ByteString.fromArray(Base64.getDecoder.decode(constants.mkString))
 
   extension (script: CborScript)
     def bytes: Array[Byte] = script.bytes
 
-    /** Base64, one constant-pool byte per char, in chunks a class-file string constant can hold. */
-    private[uplc] def chunks: Seq[String] =
+    /** The script as class-file string constants. A compiled class carries the script it was
+      * compiled from — that is how `lowering` walks back, and what the runtime re-decodes to turn
+      * results back into terms. A class file has no byte-array constants, so the script is stored
+      * as text: Base64, whose characters take one byte each in a class file, cut into pieces of at
+      * most 65535 characters, the most one string constant holds.
+      */
+    private[uplc] def asConstants: Seq[String] =
       Base64.getEncoder.encodeToString(script.bytes).grouped(65535).toSeq
 
 /** A class file this compiler wrote for a script: its JVM code, and the script itself. Only the
@@ -47,8 +58,7 @@ opaque type JvmClassScript = ByteString
 
 object JvmClassScript:
 
-  private[uplc] def apply(classFile: Array[Byte]): JvmClassScript =
-    ByteString.unsafeFromArray(classFile)
+  private[uplc] def apply(classFile: Array[Byte]): JvmClassScript = ByteString.fromArray(classFile)
 
   extension (classFile: JvmClassScript) def bytes: Array[Byte] = classFile.bytes
 

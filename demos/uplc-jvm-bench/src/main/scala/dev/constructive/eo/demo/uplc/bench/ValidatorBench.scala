@@ -8,7 +8,10 @@ import dev.constructive.eo.demo.uplc.validators.{Scenario, Scenarios}
 import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
 import scalus.uplc.eval.{NoBudgetSpender, NoLogger}
-import scalus.uplc.{Constant, DeBruijnedProgram, Term}
+import scalus.uplc.{Constant, DeBruijnedProgram, Program, Term}
+
+/** A validator's script: it has a flat encoding, or the setup fails. */
+def script(program: Program): CborScript = CborScript.of(program).fold(sys.error, identity)
 
 /** Shared state: one accepting transaction, ready for both evaluators.
   *
@@ -29,7 +32,7 @@ abstract class ScriptState:
   def prepare(): Unit =
     val s = scenario
     applied = (s.script.program $ s.context).deBruijnedProgram
-    val classFile = UplcJvm.toBytecode.get(CborScript.of(s.script.program))
+    val classFile = UplcJvm.toBytecode.get(script(s.script.program))
     compiled = Exec.load(classFile)
     context = Constant.Data(s.context)
     // Both evaluators must accept the transaction, or the timings compare different work.
@@ -88,7 +91,7 @@ class TranslateBench:
 
   @Setup(Level.Trial)
   def prepare(): Unit =
-    script = CborScript.of(Scenarios.accepting.find(_.name == validator).get.script.program)
+    script = bench.script(Scenarios.accepting.find(_.name == validator).get.script.program)
 
   @Benchmark def translate: JvmClassScript = UplcJvm.toBytecode.get(script)
 

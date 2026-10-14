@@ -1,7 +1,6 @@
 package dev.constructive.eo.demo.uplc
 
 import scala.jdk.CollectionConverters.*
-import scala.util.Try
 
 import dev.constructive.eo.demo.uplc.Oracle.Verdict
 import java.nio.charset.StandardCharsets.UTF_8
@@ -36,8 +35,8 @@ class ConformanceSpec extends Specification:
       Program.parseUplc(read(file)) match
         case Left(e)        => Skipped(s"Scalus cannot parse it: ${e.linesIterator.nextOption()}")
         case Right(program) =>
-          Try(CborScript.of(program)).toEither match
-            case Left(e)       => Skipped(s"no flat encoding: ${e.getMessage}")
+          CborScript.of(program) match
+            case Left(e)       => Skipped(e)
             case Right(script) =>
               val expectFailure = expected == "evaluation failure"
               Oracle.compare(script) match

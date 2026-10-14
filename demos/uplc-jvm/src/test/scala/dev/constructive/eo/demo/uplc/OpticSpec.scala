@@ -20,7 +20,7 @@ class OpticSpec extends Specification with Discipline:
   /** A program whose value is a closure, and every validator. The differential suites check the
     * round trips on every program they run (`Oracle.compare`), the conformance suite's included.
     */
-  private val validators = Scenarios.accepting.map(s => CborScript.of(s.script.program))
+  private val validators = Scenarios.accepting.map(s => script(s.script.program))
   private val scripts = script("[(lam x (lam y x)) (con integer 5)]") :: validators
 
   given Arbitrary[CborScript] = Arbitrary(Gen.oneOf(scripts))
@@ -70,7 +70,7 @@ class OpticSpec extends Specification with Discipline:
       (code.count(_ == "if") must beEqualTo(1)).and(code.count(_ == "Rt.closure") must beEqualTo(0))
     }
     "finds direct builtin calls, direct closure calls and branches in Scalus-compiled validators" >> {
-      val code = Scenarios.accepting.flatMap(s => calls(CborScript.of(s.script.program)))
+      val code = Scenarios.accepting.flatMap(s => calls(script(s.script.program)))
       (code.count(_.startsWith("AbstractBuiltins.")) must beGreaterThan(0))
         .and(code.count(_ == "Rt.envOf") must beGreaterThan(0))
         .and(code.count(c => c == "if" || c == "Rt.chooseIndex") must beGreaterThan(0))

@@ -274,7 +274,7 @@ is never applied, and a call whose argument can only fail after nothing but
 values is that failure — so ASM has no dead code to blank out:
 
 ```
-compiling.get: 1841 bytes of class file
+compiling.get: 1844 bytes of class file
 and back — toBytecode.reverseGet(that) == script: true
 ```
 
@@ -334,7 +334,8 @@ accept it before anything is timed):
   meters nothing either; with the restricting budget spender the ledger uses,
   the CEK machine would do a little more work per step.
 - **generated class** — compiled and loaded once, in setup. Each operation
-  evaluates the script and applies it to the context.
+  evaluates the script and applies it to the context. The compiler does no
+  optimisation ([Limits](#limits)): the same operations run, as JVM code.
 
 Average time per operation in **µs (lower is better)**, error = 99.9 %
 confidence half-width; allocation per operation from `-prof gc`
@@ -392,22 +393,25 @@ settles at ~21×.
 
 | validator | script | class file | translate (µs) | translate + load (µs) | break-even (validations) |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 149 B | 4,557 B | 80.8 ± 9.9 | 380.8 ± 58.7 | 81 |
-| `preimage` | 186 B | 5,023 B | 124.3 ± 44.1 | 468.3 ± 64.5 | 72 |
-| `timeLock` | 183 B | 5,097 B | 113.5 ± 52.3 | 431.6 ± 47.9 | 65 |
-| `multisig` | 202 B | 6,230 B | 148.3 ± 13.3 | 628.4 ± 47.6 | 46 |
-| `fibonacci` | 126 B | 4,339 B | 68.9 ± 6.5 | 337.1 ± 45.1 | 10 |
-| `htlc` | 310 B | 6,662 B | 172.2 ± 16.6 | 666.2 ± 79.6 | 82 |
+| `helloOwner` | 149 B | 4,560 B | 85.9 ± 5.1 | 382.8 ± 47.3 | 82 |
+| `preimage` | 186 B | 5,026 B | 109.6 ± 12.2 | 481.2 ± 59.9 | 74 |
+| `timeLock` | 183 B | 5,100 B | 115.4 ± 7.6 | 437.5 ± 55.4 | 66 |
+| `multisig` | 202 B | 6,233 B | 153.3 ± 10.9 | 634.5 ± 46.9 | 47 |
+| `fibonacci` | 126 B | 4,342 B | 72.9 ± 2.9 | 349.4 ± 36.3 | 10 |
+| `htlc` | 310 B | 6,665 B | 187.5 ± 13.9 | 714.5 ± 88.7 | 88 |
 
 `translate` is `toBytecode.get`, measured warm; `translate + load` adds defining
 the class, verifying it, and running its static initialiser, which re-decodes the
 embedded script. Loading is three quarters of
 the total. Most of `translate` is ASM's `ClassWriter` computing stack map frames;
 lowering straight into ASM's tree keeps the rest small, and translation costs
-what the demo's first, raw-ASM emitter did — about a third of what a version
-built on a higher-level bytecode library (Cojen Maker) cost. The break-even
-column divides `translate + load` by the time each validation saves: a script
-must be validated **~10–80 times** before compiling it pays for itself. That
+within ~10% of what the demo's first, raw-ASM emitter did — about a third of
+what a version built on a higher-level bytecode library (Cojen Maker) cost.
+Decoding the script is a few microseconds of it: the numbering is a pure fold
+over Scalus' `Term` tree, 2–3× slower than writing into arrays, and paid once
+per class. The break-even column divides `translate + load` by the time each
+validation saves: a script must be validated **~10–90 times** before compiling
+it pays for itself. That
 fits scripts that run over and over — a node re-validating the same reference
 scripts, an emulator, a test-suite — rather than one-off evaluation.
 
@@ -415,6 +419,14 @@ Reproduce with `sbt "demoUplcJvmBench/Jmh/run -prof gc"`.
 
 ## Limits
 
+- **No optimisation.** The compiler translates; it does not optimise. There is
+  no constant folding, inlining, dead-code elimination, common-subexpression
+  elimination, specialisation or tail-call elimination: every operation the
+  program performs still happens at run time, in the order the CEK machine
+  performs it. What the typer recognises — `let`, `if`, known calls — are
+  encodings it reads back, not changes to the program. The speed-ups above come
+  from the translation alone: JVM bytecode under the JIT, with values unboxed
+  and calls made directly where the types allow.
 - **No budget metering.** Results and failures are compared, execution budgets
   are not, so an out-of-budget script — which the ledger rejects — is accepted
   here. Metering the same machine-step costs the CEK machine charges is the

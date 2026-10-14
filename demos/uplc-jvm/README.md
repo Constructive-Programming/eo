@@ -130,6 +130,13 @@ defines it.
 
 ## Scope
 
+- **No optimisation.** The compiler translates, it does not optimise: no
+  constant folding, inlining, dead-code elimination, common-subexpression
+  elimination, specialisation or tail-call elimination. Every operation the
+  program performs still happens at run time, in the CEK machine's order; the
+  typer's rewrites read encodings back, they don't change the program. The
+  speed-ups come from running as JVM bytecode under the JIT, with values
+  unboxed and calls made directly where the types allow.
 - Results and failures are compared; **execution budgets are not metered**.
   Out-of-budget rejections, which the ledger applies, are a natural next step.
 - Generated code recurses on the JVM stack where the CEK machine uses the heap,

@@ -20,8 +20,8 @@ import scalus.uplc.{Constant, Term}
 class ValidatorSpec extends Specification:
 
   private def check(s: Scenario): Result =
-    val classFile = UplcJvm.toBytecode.get(CborScript.of(s.script.program))
-    val verdict = Oracle.compare(CborScript.of(s.script.program $ s.context))
+    val classFile = UplcJvm.toBytecode.get(Oracle.script(s.script.program))
+    val verdict = Oracle.compare(Oracle.script(s.script.program $ s.context))
     // CIP-117: a V3 script validates iff it evaluates to unit.
     val oracleAccepts = verdict match
       case Verdict.BothSucceed(Term.Const(Constant.Unit, _)) => true
