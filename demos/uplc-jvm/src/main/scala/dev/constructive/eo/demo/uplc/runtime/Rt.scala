@@ -13,9 +13,11 @@ import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term, TypeScheme}
 /** The static entry points generated code calls (`Rt.…`).
   *
   * An evaluation fails by throwing: a `MachineError` from here, whatever Scalus' builtins throw, a
-  * `ClassCastException` where an ill-typed program meets a cast. `Exec.run` is the one place that
-  * is caught — any exception escaping an evaluation is its failure, as on the CEK machine. A
-  * compiler bug throws an `AssertionError`, which is not.
+  * `ClassCastException` where an ill-typed program meets a cast. It is the JVM's zero-cost way out
+  * of every frame at once: a result that could be a failure would need a check after every call.
+  * `Exec.run` is the one place it is caught and becomes a value — any exception escaping an
+  * evaluation is its failure, as on the CEK machine. A compiler bug throws an `AssertionError`,
+  * which is not.
   */
 object Rt:
 
@@ -26,7 +28,12 @@ object Rt:
   private val True: AnyRef = Constant.Bool(true)
   private val False: AnyRef = Constant.Bool(false)
 
-  def fail(reason: String): Throwable = new MachineError(reason)
+  /** Stackless: the trace would cost more than evaluating a validator (~1.3 µs), and the failure is
+    * an outcome of the program, not a fault of the JVM code.
+    */
+  def fail(reason: String): Throwable = new MachineError(reason):
+    override def fillInStackTrace(): Throwable = this
+
   def noCaptures(): Array[AnyRef] = Empty
 
   // ---- representations: `box<Rep>` and `un<Rep>` for each unboxed `Rep` ------------------------

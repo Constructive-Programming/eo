@@ -1,5 +1,7 @@
 package dev.constructive.eo.demo.uplc
 
+import scala.util.{Failure, Success, Try}
+
 import dev.constructive.eo.demo.uplc.runtime.{Discharge, Dispatch, ProgramInfo, Rt}
 import java.util.concurrent.{ExecutionException, FutureTask}
 import scalus.cardano.ledger.ExUnits
@@ -39,18 +41,19 @@ object Exec:
     */
   def run(classFile: Array[Byte], args: Seq[Constant] = Nil): Result = onLargeStack {
     val log = new Log
-    Rt.logs.set(log)
-    def logs = log.getLogs.toList
-    def failure(e: Throwable) = Result.Failure(e, ExUnits.zero, Map.empty, logs)
     val (program, info) = loaded(classFile)
-    try
-      val value = args.foldLeft(program.run())((f, a) => Rt.apply(f, a))
-      Result.Success(Discharge(value, info), ExUnits.zero, Map.empty, logs)
-    catch
-      // An evaluation's one way out on failure (see `Rt`), and the one place it is caught.
-      case e: Exception          => failure(e)
-      case _: StackOverflowError => failure(new MachineError("JVM stack exhausted"))
-    finally Rt.logs.remove()
+    Rt.logs.set(log)
+    // An evaluation's one way out on failure (see `Rt`), and the one place it becomes a value.
+    val outcome = Try(args.foldLeft(program.run())(Rt.apply))
+    Rt.logs.remove()
+    val logs = log.getLogs.toList
+    outcome match
+      case Success(value) => Result.Success(Discharge(value, info), ExUnits.zero, Map.empty, logs)
+      case Failure(bug: AssertionError) => throw bug // a compiler bug is not the program's failure
+      case Failure(e)                   =>
+        val error =
+          if e.isInstanceOf[StackOverflowError] then MachineError("JVM stack exhausted") else e
+        Result.Failure(error, ExUnits.zero, Map.empty, logs)
   }
 
   /** Plutus V3 validation (CIP-117): the script applied to its context must succeed with unit. */

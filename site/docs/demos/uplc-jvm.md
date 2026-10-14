@@ -354,6 +354,14 @@ self-recursive function compiled to direct calls on unboxed integers, validates
 **~63×** faster. Against the demo's first, raw-ASM version (same harness, an
 earlier run), validation is **2.9–7.1×** faster.
 
+Rejecting a transaction costs about what accepting one does (0.5–1.6 µs for the
+rejecting transactions in the test-suite). A failure leaves the generated code
+as a `MachineError` thrown without a stack trace — capturing one cost ~1.3 µs,
+more than validating — and `Exec.run` turns it into Scalus' `Result.Failure`.
+Returning a result value from every call instead would need a check after each
+one: measured, that leaves validation as fast and makes translation 20–35%
+slower.
+
 ### Scaling with the work: the Fibonacci puzzle
 
 | `n` | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |

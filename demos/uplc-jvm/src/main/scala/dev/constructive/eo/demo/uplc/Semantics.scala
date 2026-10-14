@@ -7,6 +7,7 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.builtin.platform
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.{BuiltinRuntime, CardanoBuiltins, DefaultFun, DefaultUni, TypeScheme}
+import scalus.utils.Utils
 
 /** The single Plutus semantics this demo targets — Plutus V3 at protocol version 11 ("van Rossem"),
   * builtin semantics variant E, the same configuration Scalus 1.3.0 runs the Plutus conformance
@@ -82,6 +83,4 @@ object Semantics:
     else on(Class.forName("dev.constructive.eo.demo.uplc.runtime.Rt")).orElse(on(Builtins.getClass))
 
   /** The UPLC spelling of a builtin (`addInteger`); Scalus' enum cases are capitalised. */
-  def name(fun: DefaultFun): String =
-    val n = fun.toString
-    n.take(1).toLowerCase + n.drop(1)
+  def name(fun: DefaultFun): String = Utils.lowerFirst(fun.toString)

@@ -1,5 +1,6 @@
 package dev.constructive.eo.demo.uplc
 
+import scalus.compiler.sir.PrettyPrinter
 import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
 /** A static type reconstructed for an untyped UPLC term — the "hybrid" in hybrid typing: the Plutus
@@ -109,14 +110,6 @@ object Expr:
 
   private def name(depth: Int, index: Int): String = s"v${depth - index}"
 
-  private def constant(c: Constant): String = c match
-    case Constant.Integer(v)    => v.toString
-    case Constant.Bool(b)       => b.toString
-    case Constant.String(s)     => "\"" + s + "\""
-    case Constant.ByteString(b) => s"hex\"${b.toHex}\""
-    case Constant.Unit          => "()"
-    case other                  => other.toString
-
   /** A statement position (top level, a body, a branch): a `let` renders as its statements. */
   private def block(e: Expr, depth: Int, indent: Int): String = e match
     case Let(_, bindings, body, _) =>
@@ -138,7 +131,7 @@ object Expr:
     case let: Let   => s"{\n${pad(indent + 1)}${block(let, depth, indent + 1)}\n${pad(indent)}}"
     case Ref(i, _)  => name(depth, i)
     case Unbound(i) => s"<unbound $i>"
-    case Lit(_, c)  => constant(c)
+    case Lit(_, c)  => PrettyPrinter.prettyValue(c).render(100)
     case BuiltinRef(fun) => s"builtin.${Semantics.name(fun)}"
     case Fail            => "error()"
 
