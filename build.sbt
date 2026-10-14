@@ -536,10 +536,11 @@ lazy val commonSettings = Seq(
 // method (box elim, null-check folding, dead-code elim, copy
 // propagation) and touches neither TASTy nor call boundaries, so
 // downstream binary-compat checks see nothing. `-opt-inline` DOES cross
-// method/class boundaries and is reserved for [[scala3CoreSettings]]
-// only, with the `<sources>` scope so nothing from cats / JDK is baked
-// into our jar (a future cats release can't be invalidated by stale
-// inline copies). Laws / generics / circe stay on `-opt` only.
+// method/class boundaries, so it is scoped to this library's own
+// packages, `dev.constructive.eo.**`: nothing from cats / the JDK / the
+// Scala library is baked into our jars (a future cats release can't be
+// invalidated by stale inline copies), while one eo module may inline
+// another's code, as all of them are released together.
 //
 // `-Yretain-trees` keeps full ASTs in published TASTy so downstream
 // callers' `inline def` expansions can see through our bodies.
@@ -555,6 +556,7 @@ lazy val commonSettings = Seq(
 lazy val scala3LibrarySettings = Seq(
   scalacOptions ++= Seq(
     "-opt", // method-local JVM bytecode optimizer
+    "-opt-inline:dev.constructive.eo.**", // inline across methods, from eo's own code only
     "-Yretain-trees", // downstream `inline def` / macros see our bodies
     "-Wsafe-init", // catch `val` init-order bugs in companion objects
     "-Yexplicit-nulls", // non-nullable reference types by default
@@ -566,19 +568,6 @@ lazy val scala3LibrarySettings = Seq(
     // interaction.
     "-Wconf:msg=Missing symbol position:silent",
   )
-)
-
-// Pure library modules with no dependency on another artifact's
-// internals can additionally enable `-opt-inline:<sources>` — inlines
-// only between files compiled together in the current sub-project,
-// leaving external libraries untouched so their future bug-fixes keep
-// flowing through. Applied to `core/` only; `circeIntegration/`
-// deliberately omits it (crosses into circe, where we must NOT bake
-// internals). `generics/` also omits it — inlining across macro
-// expansions is both unnecessary and risks leaking compiler-internals
-// into user bytecode.
-lazy val scala3CoreSettings = scala3LibrarySettings ++ Seq(
-  scalacOptions += "-opt-inline:<sources>"
 )
 
 // Macro-bearing modules additionally enable `-Xcheck-macros` so
@@ -613,7 +602,7 @@ lazy val root: Project = project
 lazy val core: Project = project
   .in(file("core"))
   .settings(commonSettings *)
-  .settings(scala3CoreSettings *)
+  .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo",
     libraryDependencies += cats,
@@ -1176,7 +1165,7 @@ lazy val benchmarks: Project = project
 // -------------------------------------------------------------------
 lazy val ScalusVersion = "1.3.0"
 lazy val scalus = "org.scalus" %% "scalus" % ScalusVersion
-// B is ASM's own in-memory class (asm-tree); asm-commons' InstructionAdapter writes it.
+// JvmClass is ASM's own in-memory class (asm-tree); asm-commons' InstructionAdapter writes it.
 lazy val AsmVersion = "9.11"
 lazy val asmCommons = "org.ow2.asm" % "asm-commons" % AsmVersion
 lazy val asmUtil = "org.ow2.asm" % "asm-util" % AsmVersion
@@ -1195,9 +1184,14 @@ lazy val demoUplcJvm: Project = project
     publish / skip := true,
     libraryDependencies += scalus,
     libraryDependencies += asmCommons,
-    // Textifier: the walkthrough prints B as bytecode.
+    // Textifier: the walkthrough prints a JvmClass as bytecode.
     libraryDependencies += asmUtil % Test,
     libraryDependencies += discipline % Test,
+    // Unpublished, so the optimizer may inline from anything on the classpath (Scalus, ASM,
+    // cats, eo) — except Scala's own library: inlining it into the runtime makes `Rt.force` too
+    // big for the JIT to inline, and the short validations ran 12-27% slower (measured with the
+    // demo's JMH benches; everything else inlined measures neutral to ~5% faster).
+    scalacOptions ++= Seq("-opt", "-opt-inline:**,!scala.**"),
   )
 
 // On-chain validators written in Scala and compiled to UPLC by the Scalus

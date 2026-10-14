@@ -340,7 +340,8 @@ accept it before anything is timed):
 Average time per operation in **µs (lower is better)**, error = 99.9 %
 confidence half-width; allocation per operation from `-prof gc`
 (`gc.alloc.rate.norm`). Measured on a 4-vCPU Intel Xeon (2.1 GHz) container,
-OpenJDK 21.0.12, Scalus 1.3.0, ASM 9.11; three forks, 5 × 1 s measurement after 3 × 1 s
+OpenJDK 21.0.12, Scalus 1.3.0, ASM 9.11, the demo built with `-opt
+-opt-inline:**,!scala.**`; three forks, 5 × 1 s measurement after 3 × 1 s
 warm-up (5 × 2 s for the Fibonacci scaling runs, whose slow operations took
 longer to reach steady state). A shared container is not a quiet benchmark
 machine: read the ratios, not the absolute values.
@@ -349,23 +350,23 @@ machine: read the ratios, not the absolute values.
 
 | validator | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 5.01 ± 0.23 | 0.32 ± 0.01 | **15.7×** | 13.3 KB | 1.0 KB |
-| `preimage` | 7.11 ± 0.56 | 0.63 ± 0.04 | **11.3×** | 17.8 KB | 1.7 KB |
-| `timeLock` | 6.96 ± 0.67 | 0.33 ± 0.02 | **20.9×** | 17.7 KB | 0.9 KB |
-| `multisig` | 14.6 ± 0.9 | 1.07 ± 0.10 | **13.6×** | 37.4 KB | 2.7 KB |
-| `fibonacci` | 34.2 ± 2.0 | 0.54 ± 0.03 | **63.2×** | 76.8 KB | 1.7 KB |
-| `htlc` | 9.27 ± 0.85 | 1.16 ± 0.05 | **8.0×** | 23.0 KB | 2.9 KB |
+| `helloOwner` | 4.57 ± 0.14 | 0.29 ± 0.01 | **15.7×** | 13.3 KB | 1.0 KB |
+| `preimage` | 6.29 ± 0.35 | 0.55 ± 0.02 | **11.4×** | 17.8 KB | 1.7 KB |
+| `timeLock` | 6.42 ± 0.48 | 0.29 ± 0.01 | **22.1×** | 17.7 KB | 0.8 KB |
+| `multisig` | 13.3 ± 0.5 | 0.93 ± 0.05 | **14.4×** | 37.4 KB | 2.6 KB |
+| `fibonacci` | 31.5 ± 1.3 | 0.48 ± 0.02 | **65.6×** | 76.9 KB | 1.7 KB |
+| `htlc` | 8.37 ± 0.49 | 1.02 ± 0.04 | **8.2×** | 23.0 KB | 2.9 KB |
 
 Most validators spend their time decoding the script context — `unConstrData`,
 `headList`, `sndPair` and friends. The CEK machine runs each one as a builtin
 meaning over CEK values, and `unConstrData` turns a constructor's whole field
 list into constants. The generated class calls the functions those meanings
 wrap directly, reads `Data` lazily — only the fields a script touches become
-constants — and matches constructor tags with JVM switches: **8–21×** faster,
-with 8–20× less allocation. Where the work is the script's own logic,
+constants — and matches constructor tags with JVM switches: **8–22×** faster,
+with 8–22× less allocation. Where the work is the script's own logic,
 interpretation is nearly all of the cost: the Fibonacci puzzle (`n = 30`), a
 self-recursive function compiled to direct calls on unboxed integers, validates
-**~63×** faster. Against the demo's first, raw-ASM version (same harness, an
+**~66×** faster. Against the demo's first, raw-ASM version (same harness, an
 earlier run), validation is **2.9–7.1×** faster.
 
 Rejecting a transaction costs about what accepting one does (0.5–1.6 µs for the
@@ -380,37 +381,37 @@ slower.
 
 | `n` | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |
 |--:|--:|--:|--:|--:|--:|
-| 10 | 15.3 ± 1.6 | 0.27 ± 0.02 | **56.7×** | 31.8 KB | 0.9 KB |
-| 100 | 106.0 ± 5.4 | 2.03 ± 0.15 | **52.3×** | 235.2 KB | 5.8 KB |
-| 1000 | 1,045.1 ± 45.2 | 49.8 ± 3.4 | **21.0×** | 2,356.0 KB | 143.9 KB |
+| 10 | 11.9 ± 0.6 | 0.25 ± 0.01 | **47.7×** | 31.8 KB | 0.9 KB |
+| 100 | 92.7 ± 3.0 | 1.87 ± 0.09 | **49.6×** | 235.1 KB | 5.8 KB |
+| 1000 | 923.3 ± 78.6 | 42.3 ± 1.4 | **21.8×** | 2,356.0 KB | 143.9 KB |
 
 The generated code does almost nothing but arithmetic, so the speed-up stays
-above 50× until the integers grow: at `n = 1000` they reach ~700 bits, `BigInt`
+near 50× until the integers grow: at `n = 1000` they reach ~700 bits, `BigInt`
 addition — identical in both evaluators — is most of the time, and the speed-up
-settles at ~21×.
+settles at ~22×.
 
 ### What translation costs
 
 | validator | script | class file | translate (µs) | translate + load (µs) | break-even (validations) |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 149 B | 4,560 B | 85.9 ± 5.1 | 382.8 ± 47.3 | 82 |
-| `preimage` | 186 B | 5,026 B | 109.6 ± 12.2 | 481.2 ± 59.9 | 74 |
-| `timeLock` | 183 B | 5,100 B | 115.4 ± 7.6 | 437.5 ± 55.4 | 66 |
-| `multisig` | 202 B | 6,233 B | 153.3 ± 10.9 | 634.5 ± 46.9 | 47 |
-| `fibonacci` | 126 B | 4,342 B | 72.9 ± 2.9 | 349.4 ± 36.3 | 10 |
-| `htlc` | 310 B | 6,665 B | 187.5 ± 13.9 | 714.5 ± 88.7 | 88 |
+| `helloOwner` | 149 B | 4,560 B | 81.0 ± 5.4 | 344.6 ± 43.8 | 81 |
+| `preimage` | 186 B | 5,026 B | 99.8 ± 6.9 | 415.5 ± 52.0 | 72 |
+| `timeLock` | 183 B | 5,100 B | 97.6 ± 5.0 | 413.9 ± 39.2 | 68 |
+| `multisig` | 202 B | 6,233 B | 136.2 ± 11.0 | 569.1 ± 47.3 | 46 |
+| `fibonacci` | 126 B | 4,342 B | 65.9 ± 4.0 | 314.6 ± 32.8 | 10 |
+| `htlc` | 310 B | 6,665 B | 168.9 ± 10.0 | 622.4 ± 48.2 | 85 |
 
 `translate` is `toBytecode.get`, measured warm; `translate + load` adds defining
 the class, verifying it, and running its static initialiser, which re-decodes the
 embedded script. Loading is three quarters of
 the total. Most of `translate` is ASM's `ClassWriter` computing stack map frames;
 lowering straight into ASM's tree keeps the rest small, and translation costs
-within ~10% of what the demo's first, raw-ASM emitter did — about a third of
+about what the demo's first, raw-ASM emitter did — about a third of
 what a version built on a higher-level bytecode library (Cojen Maker) cost.
 Decoding the script is a few microseconds of it: the numbering is a pure fold
 over Scalus' `Term` tree, 2–3× slower than writing into arrays, and paid once
 per class. The break-even column divides `translate + load` by the time each
-validation saves: a script must be validated **~10–90 times** before compiling
+validation saves: a script must be validated **~10–85 times** before compiling
 it pays for itself. That
 fits scripts that run over and over — a node re-validating the same reference
 scripts, an emulator, a test-suite — rather than one-off evaluation.
@@ -419,11 +420,13 @@ Reproduce with `sbt "demoUplcJvmBench/Jmh/run -prof gc"`.
 
 ## Limits
 
-- **No optimisation.** The compiler translates; it does not optimise. There is
-  no constant folding, inlining, dead-code elimination, common-subexpression
-  elimination, specialisation or tail-call elimination: every operation the
-  program performs still happens at run time, in the order the CEK machine
-  performs it. What the typer recognises — `let`, `if`, known calls — are
+- **No optimisation.** The compiler translates UPLC; it does not optimise it.
+  There is no constant folding, inlining, dead-code elimination,
+  common-subexpression elimination, specialisation or tail-call elimination:
+  every operation the program performs still happens at run time, in the order
+  the CEK machine performs it. (The demo's own Scala code is another matter: it
+  is built with Scala 3's bytecode optimizer, `-opt`, inlining from everything
+  but the Scala library.) What the typer recognises — `let`, `if`, known calls — are
   encodings it reads back, not changes to the program. The speed-ups above come
   from the translation alone: JVM bytecode under the JIT, with values unboxed
   and calls made directly where the types allow.
