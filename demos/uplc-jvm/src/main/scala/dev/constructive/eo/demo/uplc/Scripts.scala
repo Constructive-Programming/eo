@@ -10,8 +10,8 @@ import scalus.uplc.{DeBruijnedProgram, Program}
 // bytes with value equality, so the optics' round-trip laws can compare them with `==`.
 
 /** A Plutus script as the ledger stores it: the flat-encoded program, wrapped in a CBOR bytestring.
-  * Every value is well formed: one comes from a Scalus `Program`, or from bytes [[CborScript.parse]]
-  * has checked.
+  * Every value is well formed: one comes from a Scalus `Program`, or from bytes
+  * [[CborScript.parse]] has checked.
   */
 opaque type CborScript = ByteString
 
