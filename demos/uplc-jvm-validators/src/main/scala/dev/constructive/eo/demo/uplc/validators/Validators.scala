@@ -22,12 +22,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 @Compile
 object HelloOwner extends Validator:
 
-  override inline def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef,
-  ): Unit =
+  override inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit =
     val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
     require(tx.signatories.contains(owner), "Must be signed")
     require(redeemer.to[String] == "Hello, World!", "Invalid redeemer")
@@ -36,12 +31,7 @@ object HelloOwner extends Validator:
 @Compile
 object Preimage extends Validator:
 
-  override inline def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef,
-  ): Unit =
+  override inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit =
     val (hash, pkh) = datum.getOrFail("Expected datum").to[(ByteString, ByteString)]
     val preimage = redeemer.toByteString
     tx.signatories.find(_.hash == pkh).orFail("Not signed")
@@ -53,12 +43,7 @@ case class Lock(beneficiary: PubKeyHash, deadline: PosixTime) derives FromData, 
 @Compile
 object TimeLock extends Validator:
 
-  override inline def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef,
-  ): Unit =
+  override inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit =
     val lock = datum.getOrFail("No datum").to[Lock]
     require(tx.isSignedBy(lock.beneficiary), "Not signed by beneficiary")
     require(tx.validFromOrFail("No lower bound") >= lock.deadline, "Too early")
@@ -69,12 +54,7 @@ case class Quorum(signers: List[PubKeyHash], required: BigInt) derives FromData,
 @Compile
 object Multisig extends Validator:
 
-  override inline def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef,
-  ): Unit =
+  override inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit =
     val quorum = datum.getOrFail("No datum").to[Quorum]
     val signed =
       quorum.signers.foldLeft(BigInt(0))((n, key) => if tx.isSignedBy(key) then n + 1 else n)
@@ -87,40 +67,26 @@ object Fibonacci extends Validator:
   def fib(n: BigInt, a: BigInt, b: BigInt): BigInt =
     if n <= 0 then a else fib(n - 1, b, a + b)
 
-  override inline def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef,
-  ): Unit =
+  override inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit =
     val n = redeemer.to[BigInt]
     val expected = datum.getOrFail("No datum").to[BigInt]
     require(fib(n, 0, 1) == expected, "Wrong answer")
 
-case class Contract(
-    committer: PubKeyHash,
-    receiver: PubKeyHash,
-    hash: ByteString,
-    timeout: PosixTime,
-) derives FromData,
+case class Contract(owner: PubKeyHash, receiver: PubKeyHash, hash: ByteString, timeout: PosixTime)
+    derives FromData,
       ToData
 
 enum HtlcAction derives FromData, ToData:
   case Claim(preimage: ByteString)
   case Refund
 
-/** Hash-time-locked contract: the receiver claims with the preimage before the timeout, the
-  * committer refunds after it.
+/** Hash-time-locked contract: the receiver claims with the preimage before the timeout, the owner
+  * refunds after it.
   */
 @Compile
 object Htlc extends Validator:
 
-  override inline def spend(
-      datum: Option[Data],
-      redeemer: Data,
-      tx: TxInfo,
-      ownRef: TxOutRef,
-  ): Unit =
+  override inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ref: TxOutRef): Unit =
     val contract = datum.getOrFail("No datum").to[Contract]
     redeemer.to[HtlcAction] match
       case HtlcAction.Claim(preimage) =>
@@ -128,7 +94,7 @@ object Htlc extends Validator:
         require(tx.validToOrFail("No upper bound") <= contract.timeout, "Too late")
         require(sha2_256(preimage) == contract.hash, "Wrong preimage")
       case HtlcAction.Refund =>
-        require(tx.isSignedBy(contract.committer), "Not signed by committer")
+        require(tx.isSignedBy(contract.owner), "Not signed by owner")
         require(tx.validFromOrFail("No lower bound") > contract.timeout, "Too early")
 
 /** The compiled scripts, ready to be applied to a script context. */

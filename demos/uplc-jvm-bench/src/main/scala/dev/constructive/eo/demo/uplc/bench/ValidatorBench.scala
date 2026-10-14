@@ -34,14 +34,9 @@ abstract class ScriptState:
     compiled = Exec.load(UplcJvm.translate(flat))
     context = Constant.Data(s.context)
     // Both evaluators must accept the transaction, or the timings compare different work.
-    require(
-      Semantics.vm.evaluateScript(applied, NoBudgetSpender, NoLogger) == Term.Const(Constant.Unit),
-      s"${s.name}: the CEK machine rejects the benchmark transaction",
-    )
-    require(
-      Exec.validate(UplcJvm.translate(flat), s.context).isRight,
-      s"${s.name}: the generated class rejects the benchmark transaction",
-    )
+    val accepted =
+      cek == Term.Const(Constant.Unit) && Exec.validate(UplcJvm.translate(flat), s.context).isRight
+    require(accepted, s"${s.name}: an evaluator rejects the benchmark transaction")
 
   @Benchmark def cek: Term = Semantics.vm.evaluateScript(applied, NoBudgetSpender, NoLogger)
 

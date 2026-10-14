@@ -14,9 +14,10 @@ import scalus.uplc.{Constant, Term}
 object Discharge:
 
   def apply(value: AnyRef, info: ProgramInfo): Term = value match
-    case c: Constant => Term.Const(c)
-    case c: ConstrV  => Term.Constr(Word64(c.tag), c.fields.iterator.map(apply(_, info)).toList)
-    case l: Lam      =>
+    case c: Constant                              => Term.Const(c)
+    case lazyData @ (_: DataList | _: ConstrPair) => apply(Rt.constant(lazyData), info)
+    case c: ConstrV => Term.Constr(Word64(c.tag), c.fields.iterator.map(apply(_, info)).toList)
+    case l: Lam     =>
       // A partially applied chain is its inner lambda, the first `k` parameters bound to the
       // values applied so far (innermost = the last one applied).
       val k = l.applied.length
@@ -40,9 +41,7 @@ object Discharge:
       }
     case other => throw new IllegalStateException(s"not a UPLC value: $other")
 
-  private def slot(captures: IArray[Int], index: Int): Option[Int] =
-    val i = captures.indexOf(index)
-    if i < 0 then None else Some(i)
+  private def slot(captures: IArray[Int], index: Int) = Some(captures.indexOf(index)).filter(_ >= 0)
 
   /** Replaces the variables free in `term` that `lookup` resolves; the rest stay (open terms). */
   private def substitute(term: Term, lookup: Int => Option[Term]): Term =

@@ -9,7 +9,7 @@ through the [Scalus](https://scalus.org) CEK machine, and the two must agree.
 import dev.constructive.eo.demo.uplc.*
 
 //            S             T             A             B
-UplcJvm.iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, JvmProgram]
+UplcJvm.iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode]
 
 val classFile = UplcJvm.translate(flatScript)  // = UplcJvm.iso.modify(Lower.lower)
 UplcJvm.iso.get(flatScript).body.show          // A, rendered as Scala-like code
@@ -21,10 +21,10 @@ Exec.validate(classFile, scriptContext)        // Right(traces) | Left(reason), 
 |---|---|---|
 | `S` | `Array[Byte]` | a flat-encoded UPLC program |
 | `A` | `TypedProgram` | the program read back as a typed, Scala-like expression tree |
-| `B` | `JvmProgram` | JVM-shaped code: static methods, local slots, explicit boxing |
+| `B` | `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class — inspectable before it is a file |
 | `T` | `Array[Byte]` | one self-contained class file |
 
-`get` decodes and types (S ⇒ A), `reverseGet` emits bytecode (B ⇒ T), and the
+`get` decodes and types (S ⇒ A), `reverseGet` writes the class file (B ⇒ T), and the
 compiler is `modify` with the lowering `A ⇒ B`. The optic fixes both ends; the
 function you run through it is replaceable — put an optimiser in front of
 `Lower.lower` and nothing else changes. The iso is polymorphic (`S`/`T` and
@@ -35,9 +35,9 @@ program: *running `translate(s)` gives what the CEK machine gives for `s`*.
 ## Pipeline
 
 ```
-flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ──Lower──▶ B: Code ──Emit (Cojen Maker)──▶ class file
-             (Scalus Terms, pre-order    (re-sugaring,       (closure conversion,
-              ids shared with runtime)    hybrid typing)       locals, boxing)
+flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ──Lower──▶ B: ClassNode ──ClassWriter──▶ class file
+             (Scalus Terms, pre-order    (re-sugaring,       (closure conversion,      (stack map
+              ids shared with runtime)    hybrid typing)       boxing, direct calls)     frames)
 ```
 
 - **`SourceProgram`** is Scalus' own decoded `Term` tree with every node
@@ -50,32 +50,38 @@ flat bytes ──decode──▶ SourceProgram ──Typer──▶ A: Expr ─�
   (immediately applied lambda chains), `if` (forced `ifThenElse` over delayed
   branches, and the other selector builtins), saturated builtin calls, direct
   calls of `let`-bound functions and of `let`-bound forced builtins, the
-  `case (constr 0 args…) [f]` multi-argument call, `force (delay t)`.
+  `case (constr k args…) [… f …]` multi-argument call, `force (delay t)`, and
+  recursion tied by self-application (`let f = λself … in … [f f] …`, which
+  Scalus emits for recursive functions) — its calls become direct calls too.
 - **Hybrid typing.** A static type is a Scalus `DefaultUni`, and builtin
-  signatures are Scalus' own `TypeScheme`s. Integers, booleans, bytestrings and
-  strings get unboxed representations (`BigInt`, `boolean`, `ByteString`,
-  `String`) wherever the typer can prove them — constants, typed builtin
-  results, `let`s of those, agreeing branches. Everything else — functions,
-  constructors, `Data`, values that flow through lambda parameters — is a boxed
-  Scalus `Constant` or a runtime closure. Boxing happens only where the two
-  meet.
-- **`Lower`** (A ⇒ B) converts closures (each captures exactly its free
-  variables, in the order `SourceProgram.captures` fixes for both sides),
-  numbers locals, inserts box/unbox, picks typed fast paths, and moves a `let`
-  body into its own method once a method nears the JVM's 64 KB limit.
-- **`Emit`** (B ⇒ T) writes one class with
-  [Cojen Maker](https://github.com/cojen/Maker), which takes code written
-  against variables and method names and resolves overloads, allocates locals
-  and computes stack maps itself. The class holds a static method per lambda
-  chain / `delay`, a switch per call arity for closure dispatch, and the flat
-  program as Base64 string constants.
+  signatures are Scalus' own `TypeScheme`s: a polymorphic builtin's result type
+  is the scheme instantiated at its arguments' types, so `fstPair (unConstrData
+  d)` is an `integer` and a `case` on it is a JVM switch. Integers, booleans,
+  bytestrings and strings get unboxed representations (`BigInt`, `boolean`,
+  `ByteString`, `String`) wherever the typer can prove them — constants, typed
+  builtin results, `let`s of those, agreeing branches. Everything else —
+  functions, constructors, `Data`, values that flow through lambda parameters —
+  is a boxed Scalus `Constant` or a runtime closure. Boxing happens only where
+  the two meet.
+- **`Lower`** (A ⇒ B) writes bytecode straight into ASM's tree with
+  asm-commons' `InstructionAdapter`. It converts closures (each captures exactly
+  its free variables, in the order `SourceProgram.captures` fixes for both
+  sides), inserts box/unbox, calls builtins directly, and moves a `let` body into
+  its own method once a method nears the JVM's 64 KB limit. The class holds a
+  static method per lambda chain / `delay`, a switch per call arity for closure
+  dispatch, and the flat program as Base64 string constants.
+- **`reverseGet`** (B ⇒ T) is ASM's `ClassWriter`: it computes the stack map
+  frames and writes the class file.
 - **Runtime** (`runtime/`): closures, partial builtins, constructors, `case`
-  dispatch (including PV11 casing on builtin values), discharge. Builtins with a
-  typed fast path call the same `scalus.uplc.builtin.Builtins` functions
-  Scalus' own `CardanoBuiltins` wraps; the five selector builtins run natively;
-  every other builtin is delegated to Scalus' implementation. Failures are
-  Scalus' `MachineError`, and `Exec.run` returns Scalus' evaluation `Result` —
-  the types the CEK machine reports with.
+  dispatch (including PV11 casing on builtin values), discharge. A saturated
+  builtin is a plain JVM call of the function Scalus' own `CardanoBuiltins`
+  wraps (`scalus.uplc.builtin.Builtins`), on unboxed values where its signature
+  allows. The list and pair builtins are runtime natives that read `Data` lazily:
+  `unConstrData` / `unListData` do not convert a whole field list to constants,
+  only the elements read. Every other builtin — and any builtin used as a value
+  — runs Scalus' CEK meaning (`BuiltinRuntime`). Failures are Scalus'
+  `MachineError`, and `Exec.run` returns Scalus' evaluation `Result` — the types
+  the CEK machine reports with.
 
 ## Correctness
 
@@ -125,9 +131,9 @@ demos/uplc-jvm/scripts/refresh-conformance.sh [plutus-tag]          # re-vendor 
 ```
 
 `Demo` prints the round trip stage by stage: UPLC text, the typed expression
-(A), the lowered code (B), the class file (T), and the discharged result next to
-the CEK machine's. Pass a directory to also write the class file there for
-`javap`.
+(A), the lowered bytecode (B, as ASM prints it), the class file (T), and the
+discharged result next to the CEK machine's. Pass a directory to also write the
+class file there for `javap`.
 
 ## Benchmarks
 

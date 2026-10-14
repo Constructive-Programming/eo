@@ -1,237 +1,212 @@
 package dev.constructive.eo.demo.uplc.runtime
 
 import scala.annotation.tailrec
+import scala.collection.immutable.ArraySeq
 
 import dev.constructive.eo.demo.uplc.Semantics
-import scalus.uplc.builtin.{Builtins as B, ByteString, Data}
-import scalus.uplc.eval.{Logger, MachineError, NoLogger}
-import scalus.uplc.{Constant, DefaultFun, DefaultUni}
+import java.util.Arrays
+import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.eval.{CekValue, Logger, MachineError, NoLogger}
+import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term, TypeScheme}
 
-/** The static entry points generated code calls (`Rt.…`, by name — the emitter lets Cojen Maker
-  * resolve the overload from the argument types).
+/** The static entry points generated code calls (`Rt.…`).
   *
-  * Anything that can fail as a matter of UPLC semantics throws Scalus' `MachineError`, as the CEK
-  * machine does; anything else that throws is a bug in the compiler and is left to surface as one.
+  * An evaluation fails by throwing: a `MachineError` from here, whatever Scalus' builtins throw, a
+  * `ClassCastException` where an ill-typed program meets a cast. `Exec.run` is the one place that
+  * is caught — any exception escaping an evaluation is its failure, as on the CEK machine. A
+  * compiler bug throws an `AssertionError`, which is not.
   */
 object Rt:
+
+  /** The trace log of the evaluation running on the current thread. */
+  val logs: ThreadLocal[Logger] = ThreadLocal.withInitial(() => NoLogger)
 
   private val Empty: Array[AnyRef] = Array.empty
   private val True: AnyRef = Constant.Bool(true)
   private val False: AnyRef = Constant.Bool(false)
 
-  /** The trace log of the evaluation running on the current thread. */
-  val logs: ThreadLocal[Logger] = ThreadLocal.withInitial(() => NoLogger)
-
-  def fail(reason: String): RuntimeException = new MachineError(reason)
-
-  def badDispatch(id: Int): RuntimeException =
-    new IllegalStateException(s"generated code reached an impossible dispatch target ($id)")
-
-  private[runtime] def describe(v: AnyRef): String = v match
-    case c: Constant => s"constant of type ${c.tpe}"
-    case _: Lam      => "a lambda"
-    case _: Thunk    => "a delayed term"
-    case p: Partial  => s"a partially applied ${p.fun}"
-    case c: ConstrV  => s"constructor ${c.tag}"
-    case other       => other.getClass.getName
-
-  private def mismatch(expected: String, v: AnyRef): MachineError =
-    new MachineError(s"expected $expected, got ${describe(v)}")
-
-  // ---- representation changes: `box`, and `un<Rep>` for each unboxed `Rep` -------------------
-
-  def box(v: BigInt): AnyRef = Constant.Integer(v)
-  def box(b: Boolean): AnyRef = if b then True else False
-  def box(b: ByteString): AnyRef = Constant.ByteString(b)
-  def box(s: String): AnyRef = Constant.String(s)
-
-  def unInt(v: AnyRef): BigInt = v match
-    case Constant.Integer(i) => i
-    case _                   => throw mismatch("an integer", v)
-
-  def unBool(v: AnyRef): Boolean = v match
-    case Constant.Bool(b) => b
-    case _                => throw mismatch("a boolean", v)
-
-  def unBytes(v: AnyRef): ByteString = v match
-    case Constant.ByteString(b) => b
-    case _                      => throw mismatch("a bytestring", v)
-
-  def unStr(v: AnyRef): String = v match
-    case Constant.String(s) => s
-    case _                  => throw mismatch("a string", v)
-
-  // ---- typed fast paths: the very functions Scalus' CardanoBuiltins wraps -------------------
-
-  private def nonZero(fun: String, d: BigInt): BigInt =
-    if d == 0 then throw new MachineError(s"$fun: division by zero") else d
-
-  def addInteger(a: BigInt, b: BigInt): BigInt = B.addInteger(a, b)
-  def subtractInteger(a: BigInt, b: BigInt): BigInt = B.subtractInteger(a, b)
-  def multiplyInteger(a: BigInt, b: BigInt): BigInt = B.multiplyInteger(a, b)
-  def divideInteger(a: BigInt, b: BigInt): BigInt = B.divideInteger(a, nonZero("divideInteger", b))
-
-  def quotientInteger(a: BigInt, b: BigInt): BigInt =
-    B.quotientInteger(a, nonZero("quotientInteger", b))
-
-  def remainderInteger(a: BigInt, b: BigInt): BigInt =
-    B.remainderInteger(a, nonZero("remainderInteger", b))
-
-  def modInteger(a: BigInt, b: BigInt): BigInt = B.modInteger(a, nonZero("modInteger", b))
-  def equalsInteger(a: BigInt, b: BigInt): Boolean = B.equalsInteger(a, b)
-  def lessThanInteger(a: BigInt, b: BigInt): Boolean = B.lessThanInteger(a, b)
-  def lessThanEqualsInteger(a: BigInt, b: BigInt): Boolean = B.lessThanEqualsInteger(a, b)
-  def appendByteString(a: ByteString, b: ByteString): ByteString = B.appendByteString(a, b)
-  def equalsByteString(a: ByteString, b: ByteString): Boolean = B.equalsByteString(a, b)
-  def lessThanByteString(a: ByteString, b: ByteString): Boolean = B.lessThanByteString(a, b)
-
-  def lessThanEqualsByteString(a: ByteString, b: ByteString): Boolean =
-    B.lessThanEqualsByteString(a, b)
-
-  def lengthOfByteString(b: ByteString): BigInt = B.lengthOfByteString(b)
-
-  def indexByteString(b: ByteString, i: BigInt): BigInt =
-    if i < 0 || i >= b.size then
-      throw new MachineError(s"indexByteString: index $i out of bounds for length ${b.size}")
-    else B.indexByteString(b, i)
-
-  def appendString(a: String, b: String): String = B.appendString(a, b)
-  def equalsString(a: String, b: String): Boolean = B.equalsString(a, b)
-
-  // ---- closures -----------------------------------------------------------------------------
-
+  def fail(reason: String): Throwable = new MachineError(reason)
   def noCaptures(): Array[AnyRef] = Empty
 
-  def lambda(code: Dispatch, id: Int, origin: Int, arity: Int, env: Array[AnyRef]): AnyRef =
-    new Lam(code, id, origin, arity, env, Empty)
+  // ---- representations: `box<Rep>` and `un<Rep>` for each unboxed `Rep` ------------------------
 
-  def thunk(code: Dispatch, id: Int, origin: Int, env: Array[AnyRef]): AnyRef =
-    new Thunk(code, id, origin, env)
+  def boxInt(v: BigInt): AnyRef = Constant.Integer(v)
+  def boxBool(b: Boolean): AnyRef = if b then True else False
+  def boxBytes(b: ByteString): AnyRef = Constant.ByteString(b)
+  def boxStr(s: String): AnyRef = Constant.String(s)
+  def boxData(d: Data): AnyRef = Constant.Data(d)
+  def unInt(v: AnyRef): BigInt = v.asInstanceOf[Constant.Integer].value
+  def unBool(v: AnyRef): Boolean = v.asInstanceOf[Constant.Bool].value
+  def unBytes(v: AnyRef): ByteString = v.asInstanceOf[Constant.ByteString].value
+  def unStr(v: AnyRef): String = v.asInstanceOf[Constant.String].value
+  def unData(v: AnyRef): Data = v.asInstanceOf[Constant.Data].value
+
+  // ---- list and pair builtins: the CEK meanings, unwrapped, and lazy over `Data` -----------------
+
+  def headList(l: AnyRef): AnyRef = l match
+    case DataList(PList.Cons(head, _)) => Constant.Data(head)
+    case _                             => l.asInstanceOf[Constant.List].value.head
+
+  def tailList(l: AnyRef): AnyRef = l match
+    case DataList(PList.Cons(_, tail)) => DataList(tail)
+    case c: Constant.List              => c.copy(value = c.value.tail)
+
+  def nullList(l: AnyRef): Boolean = l match
+    case DataList(elems) => elems.isEmpty
+    case _               => l.asInstanceOf[Constant.List].value.isEmpty
+
+  def dropList(n: BigInt, l: AnyRef): AnyRef = l match
+    case DataList(elems)  => DataList(elems.drop(n))
+    case c: Constant.List => c.copy(value = c.value.drop(n.max(0).min(Int.MaxValue).toInt))
+
+  def fstPair(p: AnyRef): AnyRef = p match
+    case ConstrPair(tag, _) => Constant.Integer(tag)
+    case _                  => p.asInstanceOf[Constant.Pair].a
+
+  def sndPair(p: AnyRef): AnyRef = p match
+    case ConstrPair(_, fields) => DataList(fields)
+    case _                     => p.asInstanceOf[Constant.Pair].b
+
+  def unConstrData(d: Data): AnyRef =
+    val c = d.asInstanceOf[Data.Constr]
+    ConstrPair(c.constr, c.args)
+
+  def unListData(d: Data): AnyRef = DataList(d.asInstanceOf[Data.List].values)
+
+  def chooseList(l: AnyRef, ifNil: AnyRef, ifCons: AnyRef): AnyRef =
+    if nullList(l) then ifNil else ifCons
+
+  def trace(message: String, a: AnyRef): AnyRef =
+    logs.get.log(message)
+    a
+
+  /** A runtime value as the Scalus constant it stands for. */
+  def constant(v: AnyRef): AnyRef = v match
+    case DataList(elems) => Constant.List(DefaultUni.Data, elems.toScalaList.map(Constant.Data(_)))
+    case ConstrPair(tag, args) =>
+      Constant.Pair(Constant.Integer(tag), constant(DataList(args)).asInstanceOf[Constant])
+    case other => other
+
+  // ---- closures ----------------------------------------------------------------------------------
+
+  /** A lambda chain of `arity` parameters, or a `delay` when there are none. */
+  def closure(code: Dispatch, id: Int, origin: Int, arity: Int, env: Array[AnyRef]): AnyRef =
+    if arity == 0 then new Thunk(code, id, origin, env)
+    else new Lam(code, id, origin, arity, env, Empty)
 
   /** The environment of a `let`-bound closure, for a direct call of its body method. */
   def envOf(closure: AnyRef): Array[AnyRef] = closure.asInstanceOf[Lam].env
 
   def apply(f: AnyRef, a: AnyRef): AnyRef = f match
-    case l: Lam =>
-      if l.applied.length + 1 < l.arity then
-        new Lam(l.code, l.id, l.origin, l.arity, l.env, l.applied :+ a)
-      else
-        l.arity match
-          case 1 => l.code.call1(l.id, l.env, a)
-          case 2 => l.code.call2(l.id, l.env, l.applied(0), a)
-          case _ => l.code.callN(l.id, l.env, l.applied :+ a)
-    case p: Partial => BuiltinCalls.feed(p, Some(a))
-    case other      => throw new MachineError(s"cannot apply ${describe(other)}")
+    case l: Lam if l.arity == 1 => l.code.call1(l.id, l.env, a)
+    case _                      => applyAll(f, Array(a))
+
+  private def enter(l: Lam, args: Array[AnyRef]): AnyRef = l.arity match
+    case 1 => l.code.call1(l.id, l.env, args(0))
+    case 2 => l.code.call2(l.id, l.env, args(0), args(1))
+    case _ => l.code.callN(l.id, l.env, args)
 
   /** `f a1 … an`. A lambda chain takes as many arguments as it still needs in one call — partial
     * applications in between would have no observable effect — and the result takes the rest.
     */
-  def applyAll(f: AnyRef, args: Array[AnyRef]): AnyRef =
-    @tailrec
-    def go(acc: AnyRef, from: Int): AnyRef =
-      if from == args.length then acc
-      else
-        acc match
-          case l: Lam =>
-            val needed = l.arity - l.applied.length
-            val available = args.length - from
-            if available < needed then
-              new Lam(
-                l.code,
-                l.id,
-                l.origin,
-                l.arity,
-                l.env,
-                l.applied ++ args.slice(from, args.length)
-              )
-            else
-              val full =
-                if l.applied.isEmpty && from == 0 && needed == args.length then args
-                else l.applied ++ args.slice(from, from + needed)
-              val result = l.arity match
-                case 1 => l.code.call1(l.id, l.env, full(0))
-                case 2 => l.code.call2(l.id, l.env, full(0), full(1))
-                case _ => l.code.callN(l.id, l.env, full)
-              go(result, from + needed)
-          case other => go(apply(other, args(from)), from + 1)
-    go(f, 0)
+  def applyAll(f: AnyRef, args: Array[AnyRef]): AnyRef = f match
+    case l: Lam if l.applied.length == 0 && l.arity == args.length => enter(l, args)
+    case _                                                         => applyAll(f, args, 0)
+
+  @tailrec
+  private def applyAll(f: AnyRef, args: Array[AnyRef], from: Int): AnyRef =
+    if from == args.length then f
+    else
+      f match
+        case l: Lam =>
+          val had = l.applied.length
+          val take = math.min(l.arity - had, args.length - from)
+          val all = Arrays.copyOf(l.applied, had + take)
+          System.arraycopy(args, from, all, had, take)
+          val next =
+            if had + take < l.arity then new Lam(l.code, l.id, l.origin, l.arity, l.env, all)
+            else enter(l, all)
+          applyAll(next, args, from + take)
+        case p: Partial => applyAll(feed(p, Some(args(from))), args, from + 1)
+        case other      => throw fail(s"cannot apply ${other.getClass.getSimpleName}")
 
   def force(v: AnyRef): AnyRef = v match
     case t: Thunk   => t.code.call0(t.id, t.env)
-    case p: Partial => BuiltinCalls.feed(p, None)
-    case other      => throw new MachineError(s"cannot force ${describe(other)}")
+    case p: Partial => feed(p, None)
+    case other      => throw fail(s"cannot force ${other.getClass.getSimpleName}")
 
-  // ---- builtins -----------------------------------------------------------------------------
+  // ---- builtins as values, and builtins without a direct implementation --------------------------
 
-  def builtin(ordinal: Int): AnyRef = BuiltinCalls.start(DefaultFun.fromOrdinal(ordinal))
+  def builtin(ordinal: Int): AnyRef =
+    val fun = DefaultFun.fromOrdinal(ordinal)
+    new Partial(fun, Semantics.scheme(fun), Vector.empty, Vector.empty)
 
+  /** One more force (`None`) or argument (`Some`) for a partial builtin; runs it once saturated. */
+  private def feed(p: Partial, step: Option[AnyRef]): AnyRef =
+    val next = (p.scheme, step) match
+      case (TypeScheme.All(_, rest), None)      => rest
+      case (TypeScheme.Arrow(_, rest), Some(_)) => rest
+      case _ => throw fail(s"${p.fun}: a force and an argument in the wrong order")
+    val args = step.fold(p.args)(p.args :+ _)
+    if next.numTypeVars + next.arity > 0 then new Partial(p.fun, next, args, p.trail :+ step)
+    else call(p.fun.ordinal, args.toArray)
+
+  /** A builtin by Scalus' CEK meaning, on CEK values. A value that is not a constant goes in as a
+    * stand-in of its own: a meaning rejects it as it would the closure it replaces, or — a selector
+    * — returns it, and it is swapped back.
+    */
   def call(ordinal: Int, args: Array[AnyRef]): AnyRef =
-    BuiltinCalls.run(DefaultFun.fromOrdinal(ordinal), args)
+    val in = args.map[CekValue](constant(_) match
+      case c: Constant => CekValue.VCon(c)
+      case _           => CekValue.VDelay(Term.Error(), ArraySeq.empty))
+    Semantics
+      .runtime(DefaultFun.fromOrdinal(ordinal))
+      .f(logs.get, ArraySeq.unsafeWrapArray(in)) match
+      case CekValue.VCon(c) => c
+      case other            => args(in.indexWhere(_ eq other))
 
-  /** Which delayed branch a selector builtin picks. */
-  def chooseIndex(ordinal: Int, scrut: AnyRef): Int = DefaultFun.fromOrdinal(ordinal) match
-    case DefaultFun.IfThenElse => if unBool(scrut) then 0 else 1
-    case DefaultFun.ChooseList =>
-      scrut match
-        case Constant.List(_, xs) => if xs.isEmpty then 0 else 1
-        case _                    => throw mismatch("a list", scrut)
-    case DefaultFun.ChooseUnit =>
-      scrut match
-        case Constant.Unit => 0
-        case _             => throw mismatch("unit", scrut)
-    case DefaultFun.ChooseData =>
-      scrut match
-        case Constant.Data(d) => BuiltinCalls.dataIndex(d)
-        case _                => throw mismatch("data", scrut)
-    case other => throw new IllegalStateException(s"$other is not a selector")
+  /** Which of its `n` delayed branches a selector builtin picks: its CEK meaning, on their indices.
+    */
+  def chooseIndex(ordinal: Int, scrut: AnyRef, n: Int): Int =
+    unInt(call(ordinal, scrut +: Array.tabulate[AnyRef](n)(i => Constant.Integer(i)))).toInt
 
-  // ---- constructors and case ----------------------------------------------------------------
+  // ---- constructors and case ---------------------------------------------------------------------
 
   def construct(tag: Long, fields: Array[AnyRef]): AnyRef = new ConstrV(tag, fields)
 
-  private def noBranch(what: String, branches: Int): MachineError =
-    new MachineError(s"case: no branch for $what among $branches")
+  private def noBranch(what: String, branches: Int): Throwable =
+    fail(s"case: no branch for $what among $branches")
 
   /** The branch a `case` takes — the CEK machine's `FrameCases` rules, including PV11 casing on
     * builtin values.
     */
-  def caseIndex(scrut: AnyRef, branches: Int): Int = scrut match
+  def caseIndex(scrut: AnyRef, n: Int): Int = scrut match
     case c: ConstrV =>
       // An unsigned Word64 tag above Int.MaxValue can index no branch list.
-      if java.lang.Long.compareUnsigned(c.tag, Int.MaxValue.toLong) > 0 || c.tag >= branches then
-        throw noBranch(s"constructor ${java.lang.Long.toUnsignedString(c.tag)}", branches)
+      if java.lang.Long.compareUnsigned(c.tag, n.toLong) >= 0 then
+        throw noBranch(s"constructor ${java.lang.Long.toUnsignedString(c.tag)}", n)
       else c.tag.toInt
-    case c: Constant if Semantics.caseOnBuiltins => constantCaseIndex(c, branches)
-    case other => throw new MachineError(s"case on ${describe(other)}")
-
-  private def constantCaseIndex(c: Constant, n: Int): Int = c match
-    case Constant.Integer(i) => integerCaseIndex(i, n)
-    case Constant.Bool(b)    =>
-      val index = if b then 1 else 0
-      if n == 0 || n > 2 || index >= n then throw noBranch(s"boolean $b", n) else index
-    case Constant.Unit =>
-      if n == 1 then 0 else throw noBranch("unit", n)
-    case Constant.List(_, xs) =>
-      if n == 0 || n > 2 then throw noBranch("a list", n)
-      else if xs.nonEmpty then 0
-      else if n < 2 then throw noBranch("the empty list", n)
-      else 1
-    case Constant.Pair(_, _) =>
-      if n == 1 then 0 else throw noBranch("a pair", n)
-    case Constant.Data(d) if Semantics.caseOnData =>
-      d match
-        case Data.Constr(tag, _) if tag >= 0 && tag < n => tag.toInt
-        case _                                          => throw noBranch("data", n)
-    case other => throw new MachineError(s"case on constant of type ${other.tpe}")
+    case _ if !Semantics.caseOnBuiltins       => throw fail("case on a builtin value before PV11")
+    case Constant.Integer(i)                  => integerCaseIndex(i, n)
+    case Constant.Bool(b) if n == 1 || n == 2 =>
+      if b && n == 1 then throw noBranch("True", n) else if b then 1 else 0
+    case Constant.Unit if n == 1                            => 0
+    case _: Constant.Pair | _: ConstrPair if n == 1         => 0
+    case _: Constant.List | _: DataList if n == 1 || n == 2 =>
+      if !nullList(scrut) then 0 else if n == 2 then 1 else throw noBranch("the empty list", n)
+    case Constant.Data(Data.Constr(tag, _)) if Semantics.caseOnData && tag >= 0 && tag < n =>
+      tag.toInt
+    case other => throw fail(s"case on ${other.getClass.getSimpleName} with $n branches")
 
   /** The values a `case` branch is applied to, in order. */
   def caseFields(scrut: AnyRef): Array[AnyRef] = scrut match
-    case c: ConstrV                => c.fields
-    case Constant.List(t, x :: xs) => Array(x, Constant.List(t, xs))
-    case Constant.Pair(a, b)       => Array(a, b)
-    case Constant.Data(Data.Constr(_, fields)) if Semantics.caseOnData =>
-      Array(Constant.List(DefaultUni.Data, fields.toScalaList.map(Constant.Data(_))))
-    case _ => Empty
+    case c: ConstrV                                         => c.fields
+    case _: Constant.List | _: DataList if !nullList(scrut) =>
+      Array(headList(scrut), tailList(scrut))
+    case _: Constant.Pair | _: ConstrPair => Array(fstPair(scrut), sndPair(scrut))
+    case Constant.Data(Data.Constr(_, fields)) if Semantics.caseOnData => Array(DataList(fields))
+    case _                                                             => Empty
 
   def integerCaseIndex(i: BigInt, n: Int): Int =
     if i >= 0 && i < n then i.toInt else throw noBranch(s"integer $i", n)

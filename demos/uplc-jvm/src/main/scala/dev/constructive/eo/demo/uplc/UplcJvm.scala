@@ -4,17 +4,19 @@ import scala.util.Try
 
 import dev.constructive.eo.optics.{BijectionIso, Iso}
 import io.bullet.borer.Cbor
+import org.objectweb.asm.ClassWriter
+import org.objectweb.asm.tree.ClassNode
 
 /** A UPLC → JVM bytecode compiler as ONE eo optic.
   *
   * {{{
   *   S = Array[Byte]   flat-encoded UPLC program
   *   A = TypedProgram  the program read back as a typed, Scala-like expression
-  *   B = JvmProgram    JVM-shaped code: static methods, slots, explicit boxing
+  *   B = ClassNode     JVM bytecode, as ASM's in-memory class
   *   T = Array[Byte]   a class file
   * }}}
   *
-  * `get` decodes and types (S ⇒ A), `reverseGet` emits a class file (B ⇒ T), and the compiler is
+  * `get` decodes and types (S ⇒ A), `reverseGet` writes a class file (B ⇒ T), and the compiler is
   * `iso.modify(Lower.lower)`: the optic fixes the two ends, the lowering is the function you run
   * through it. Swap in another `A ⇒ B` — an optimiser before `Lower.lower`, an instrumenting
   * lowering — and the ends stay put.
@@ -25,11 +27,20 @@ import io.bullet.borer.Cbor
   */
 object UplcJvm:
 
-  val iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, JvmProgram] =
-    Iso[Array[Byte], Array[Byte], TypedProgram, JvmProgram](
+  val iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode] =
+    Iso[Array[Byte], Array[Byte], TypedProgram, ClassNode](
       flat => Typer.typeProgram(SourceProgram.decode(flat)),
-      program => Emit.classFile(program),
+      classFile,
     )
+
+  /** ASM writes the class and computes its stack map frames. Every reference type generated code
+    * merges is the same on both paths or `Object`, so no class is loaded to find a common one.
+    */
+  private def classFile(node: ClassNode): Array[Byte] =
+    val writer = new ClassWriter(ClassWriter.COMPUTE_FRAMES):
+      override def getCommonSuperClass(a: String, b: String): String = "java/lang/Object"
+    node.accept(writer)
+    writer.toByteArray
 
   /** Flat UPLC ⇒ class file. Defined on well-formed flat programs; use [[compile]] otherwise. */
   val translate: Array[Byte] => Array[Byte] = iso.modify(Lower.lower)
@@ -43,7 +54,7 @@ object UplcJvm:
       classFile => classFile,
     )
 
-  val onChain: BijectionIso[Array[Byte], Array[Byte], TypedProgram, JvmProgram] =
+  val onChain: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode] =
     cborScript.andThen(iso)
 
   /** Checked entry point for bytes of unknown provenance. Scalus' flat decoder throws on malformed

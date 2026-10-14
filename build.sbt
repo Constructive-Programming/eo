@@ -1168,7 +1168,7 @@ lazy val benchmarks: Project = project
 
 // -------------------------------------------------------------------
 // Demo: a UPLC (Cardano Plutus Core) → JVM bytecode compiler whose spine is
-// one eo `Iso[Array[Byte], Array[Byte], TypedProgram, JvmProgram]` — flat UPLC in,
+// one eo `Iso[Array[Byte], Array[Byte], TypedProgram, ClassNode]` — flat UPLC in,
 // class file out, `iso.modify(Lower.lower)` is the translator. Correctness
 // is differential: every program runs through the generated class AND the
 // Scalus CEK machine, and the two results must agree. Unpublished and OUT of
@@ -1176,9 +1176,10 @@ lazy val benchmarks: Project = project
 // -------------------------------------------------------------------
 lazy val ScalusVersion = "1.3.0"
 lazy val scalus = "org.scalus" %% "scalus" % ScalusVersion
-// Class-file generation one level above ASM: code is written against variables and
-// method names; Cojen Maker resolves overloads, allocates locals and computes stack maps.
-lazy val cojenMaker = "org.cojen" % "cojen-maker" % "2.8.4"
+// B is ASM's own in-memory class (asm-tree); asm-commons' InstructionAdapter writes it.
+lazy val AsmVersion = "9.11"
+lazy val asmCommons = "org.ow2.asm" % "asm-commons" % AsmVersion
+lazy val asmUtil = "org.ow2.asm" % "asm-util" % AsmVersion
 
 lazy val demoUplcJvm: Project = project
   .in(file("demos/uplc-jvm"))
@@ -1191,7 +1192,9 @@ lazy val demoUplcJvm: Project = project
     name := "cats-eo-demo-uplc-jvm",
     publish / skip := true,
     libraryDependencies += scalus,
-    libraryDependencies += cojenMaker,
+    libraryDependencies += asmCommons,
+    // Textifier: the walkthrough prints B as bytecode.
+    libraryDependencies += asmUtil % Test,
     libraryDependencies += discipline % Test,
   )
 

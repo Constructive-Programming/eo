@@ -48,11 +48,12 @@ object Contexts:
       scriptInfo = ScriptInfo.SpendingScript(ownRef, POption.Some(datum)),
     ).toData
 
-/** A validator together with the script context of a transaction it accepts. */
-final case class Scenario(name: String, script: PlutusV3[?], context: Data)
+/** A validator, the script context of a transaction, and whether the validator must accept it. */
+final case class Scenario(name: String, script: PlutusV3[?], context: Data, accepts: Boolean = true)
 
 object Scenarios:
   import CompiledValidators.*
+  import Contexts.spending as tx
   import Parties.*
 
   def fib(n: Int): BigInt =
@@ -60,48 +61,44 @@ object Scenarios:
 
   /** The Fibonacci puzzle solved for `n`: `n` levels of integer recursion. */
   def fibonacciAt(n: Int): Scenario =
-    Scenario(s"fibonacci($n)", fibonacci, Contexts.spending(fib(n).toData, BigInt(n).toData))
+    Scenario(s"fibonacci($n)", fibonacci, tx(fib(n).toData, BigInt(n).toData))
 
-  private val secret = ByteString.fromString("open sesame")
-  private val htlcSecret = ByteString.fromString("htlc secret")
-  private val timeout = 1_800_000_000_000L
+  private def bytes(s: String) = ByteString.fromString(s)
+  private val (owner, hello, unit) = (alice.toData, "Hello, World!".toData, Data.unit)
+  private val (secret, htlcSecret) = (bytes("open sesame"), bytes("htlc secret"))
+  private val image = (Builtins.sha2_256(secret), bob.hash).toData
+  private val (deadline, timeout) = (1_700_000_000_000L, 1_800_000_000_000L)
+  private val (lock, locked) = (Lock(carol, deadline).toData, Interval.after(deadline - 1))
+  private val quorum = Quorum(PList(alice, bob, carol), 2).toData
+  private val contract = Contract(alice, bob, Builtins.sha2_256(htlcSecret), timeout).toData
+  private val (claim, refund) = (HtlcAction.Claim(htlcSecret).toData, HtlcAction.Refund.toData)
+  private val guess = HtlcAction.Claim(bytes("guess")).toData
+  private val (inTime, late) = (Interval.before(timeout - 1), Interval.before(timeout + 1))
+  private val (after, early) = (Interval.after(timeout + 1), Interval.after(timeout - 1))
 
-  /** One accepting transaction per validator. */
-  lazy val accepting: List[Scenario] = List(
-    Scenario(
-      "helloOwner",
-      helloOwner,
-      Contexts.spending(alice.toData, "Hello, World!".toData, List(alice)),
-    ),
-    Scenario(
-      "preimage",
-      preimage,
-      Contexts.spending((Builtins.sha2_256(secret), bob.hash).toData, secret.toData, List(bob)),
-    ),
-    Scenario(
-      "timeLock",
-      timeLock,
-      Contexts.spending(
-        Lock(carol, 1_700_000_000_000L).toData,
-        Data.unit,
-        List(carol),
-        Interval.after(1_700_000_000_001L),
-      ),
-    ),
-    Scenario(
-      "multisig",
-      multisig,
-      Contexts.spending(Quorum(PList(alice, bob, carol), 2).toData, Data.unit, List(alice, carol)),
-    ),
+  /** Transactions the validators must accept or reject. */
+  lazy val all: List[Scenario] = List(
+    Scenario("helloOwner", helloOwner, tx(owner, hello, List(alice))),
+    Scenario("helloOwner: not signed", helloOwner, tx(owner, hello, List(bob)), false),
+    Scenario("helloOwner: wrong greeting", helloOwner, tx(owner, "Hi".toData, List(alice)), false),
+    Scenario("preimage", preimage, tx(image, secret.toData, List(bob))),
+    Scenario("preimage: wrong", preimage, tx(image, bytes("barley").toData, List(bob)), false),
+    Scenario("preimage: not signed", preimage, tx(image, secret.toData, List(alice)), false),
+    Scenario("timeLock", timeLock, tx(lock, unit, List(carol), Interval.after(deadline))),
+    Scenario("timeLock: too early", timeLock, tx(lock, unit, List(carol), locked), false),
+    Scenario("timeLock: no lower bound", timeLock, tx(lock, unit, List(carol)), false),
+    Scenario("multisig", multisig, tx(quorum, unit, List(alice, carol))),
+    Scenario("multisig: three signers", multisig, tx(quorum, unit, List(carol, bob, alice))),
+    Scenario("multisig: one signer", multisig, tx(quorum, unit, List(bob)), false),
     fibonacciAt(30).copy(name = "fibonacci"),
-    Scenario(
-      "htlc",
-      htlc,
-      Contexts.spending(
-        Contract(alice, bob, Builtins.sha2_256(htlcSecret), timeout).toData,
-        HtlcAction.Claim(htlcSecret).toData,
-        List(bob),
-        Interval.before(timeout - 1),
-      ),
-    ),
+    fibonacciAt(400), // an 84-digit answer, 400 frames deep
+    Scenario("fibonacci: wrong", fibonacci, tx((fib(30) + 1).toData, BigInt(30).toData), false),
+    Scenario("htlc", htlc, tx(contract, claim, List(bob), inTime)),
+    Scenario("htlc: claim too late", htlc, tx(contract, claim, List(bob), late), false),
+    Scenario("htlc: wrong preimage", htlc, tx(contract, guess, List(bob), inTime), false),
+    Scenario("htlc: refund", htlc, tx(contract, refund, List(alice), after)),
+    Scenario("htlc: refund too early", htlc, tx(contract, refund, List(alice), early), false),
   )
+
+  /** One accepting transaction per validator: what the walkthrough and the benchmarks run. */
+  lazy val accepting: List[Scenario] = all.filter(_.accepts).distinctBy(_.script)

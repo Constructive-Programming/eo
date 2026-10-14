@@ -1,11 +1,11 @@
 package dev.constructive.eo.demo.uplc
 
+import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 
-import java.util.IdentityHashMap
 import scalus.uplc.{DeBruijnedProgram, Term}
 
-/** A decoded flat UPLC program — Scalus' own `Term` tree — with a PRE-ORDER numbering of its nodes.
+/** A decoded flat UPLC program — Scalus' own `Term` tree — numbered in PRE-ORDER.
   *
   * The numbering is the contract between compile time and run time. The compiler stamps node ids
   * into the typed expression (A) and from there into the generated class; the runtime re-decodes
@@ -17,22 +17,27 @@ import scalus.uplc.{DeBruijnedProgram, Term}
   * Every node gets an id: the node itself first, then its children left to right (`LamAbs` body;
   * `Apply` function then argument; `Constr` arguments; `Case` scrutinee then branches). A lambda
   * chain `λx.λy.b` therefore occupies consecutive ids — the inner lambda of a chain rooted at `o`
-  * is `o + 1`, which partial applications rely on. `Term` compares structurally, so [[id]] goes by
-  * object identity: the decoder builds every node afresh.
+  * is `o + 1`, which partial applications rely on — and a node's next sibling comes right after its
+  * subtree.
   */
 final class SourceProgram private (
     val flat: Array[Byte],
     val nodes: IArray[Term],
     val depths: IArray[Int],
-    ids: IdentityHashMap[Term, Integer],
+    sizes: IArray[Int],
 ):
 
-  def root: Term = nodes(0)
+  /** The ids of node `n`'s children, in order. */
+  def children(n: Int): List[Int] =
+    val count = nodes(n) match
+      case _: Term.LamAbs | _: Term.Force | _: Term.Delay => 1
+      case _: Term.Apply                                  => 2
+      case Term.Constr(_, args, _)                        => args.size
+      case Term.Case(_, cases, _)                         => 1 + cases.size
+      case _                                              => 0
+    List.iterate(n + 1, count)(c => c + sizes(c))
 
-  /** The pre-order id of a node of this program. */
-  def id(node: Term): Int = ids.get(node).nn
-
-  private val captureCache = mutable.HashMap.empty[Int, IArray[Int]]
+  private val captureCache = TrieMap.empty[Int, IArray[Int]]
 
   /** The variables a closure created at node `origin` must capture, in capture-array order.
     *
@@ -42,13 +47,10 @@ final class SourceProgram private (
     * the capture array) and run time (which reads it back while discharging) both ask this one
     * function, so the two can never disagree on the layout.
     */
-  def captures(origin: Int): IArray[Int] =
-    captureCache.synchronized {
-      captureCache.getOrElseUpdate(
-        origin,
-        IArray.from(FreeVars.of(nodes(origin)).filter(_ <= depths(origin))),
-      )
-    }
+  def captures(origin: Int): IArray[Int] = captureCache.getOrElseUpdate(
+    origin,
+    IArray.from(FreeVars.of(nodes(origin)).filter(_ <= depths(origin)))
+  )
 
 object SourceProgram:
 
@@ -56,29 +58,30 @@ object SourceProgram:
     * cannot vouch for their bytes go through [[UplcJvm.compile]], the one place that converts it.
     */
   def decode(flat: Array[Byte]): SourceProgram =
-    val nodes = mutable.ArrayBuffer.empty[Term]
-    val depths = mutable.ArrayBuffer.empty[Int]
-    val ids = new IdentityHashMap[Term, Integer]
+    // Every node takes at least its 4-bit tag in the flat encoding: a bound on the node count.
+    val bound = flat.length * 2 + 1
+    val (nodes, depths, sizes) =
+      (new Array[Term](bound), new Array[Int](bound), new Array[Int](bound))
 
-    def number(term: Term, depth: Int): Unit =
-      ids.put(term, nodes.length)
-      nodes += term
-      depths += depth
-      term match
-        case Term.LamAbs(_, body, _) => number(body, depth + 1)
-        case Term.Apply(fn, arg, _)  =>
-          number(fn, depth)
-          number(arg, depth)
-        case Term.Force(body, _)        => number(body, depth)
-        case Term.Delay(body, _)        => number(body, depth)
-        case Term.Constr(_, args, _)    => args.foreach(number(_, depth))
+    /** Numbers `term` and its subtree from `id` on; returns the next free id. */
+    def number(term: Term, depth: Int, id: Int): Int =
+      nodes(id) = term
+      depths(id) = depth
+      val next = term match
+        case Term.LamAbs(_, body, _)    => number(body, depth + 1, id + 1)
+        case Term.Apply(fn, arg, _)     => number(arg, depth, number(fn, depth, id + 1))
+        case Term.Force(body, _)        => number(body, depth, id + 1)
+        case Term.Delay(body, _)        => number(body, depth, id + 1)
+        case Term.Constr(_, args, _)    => args.foldLeft(id + 1)((i, a) => number(a, depth, i))
         case Term.Case(scrut, cases, _) =>
-          number(scrut, depth)
-          cases.foreach(number(_, depth))
-        case _: Term.Var | _: Term.Const | _: Term.Builtin | _: Term.Error => ()
+          cases.foldLeft(number(scrut, depth, id + 1))((i, c) => number(c, depth, i))
+        case _: Term.Var | _: Term.Const | _: Term.Builtin | _: Term.Error => id + 1
+      sizes(id) = next - id
+      next
 
-    number(DeBruijnedProgram.fromFlatEncoded(flat).term, 0)
-    new SourceProgram(flat.clone(), IArray.from(nodes), IArray.from(depths), ids)
+    val n = number(DeBruijnedProgram.fromFlatEncoded(flat).term, 0, 0)
+    def first[A](a: Array[A]) = IArray.unsafeFromArray(a.take(n))
+    new SourceProgram(flat.clone(), first(nodes), first(depths), first(sizes))
 
 /** Free de Bruijn indices of a term, relative to the term's own position, ascending. */
 object FreeVars:

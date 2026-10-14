@@ -17,7 +17,7 @@ like this:
 |---|---|---|
 | `S` | `Array[Byte]` | a flat-encoded UPLC program |
 | `A` | `TypedProgram` | the program read back as a typed, Scala-like expression |
-| `B` | `JvmProgram` | JVM-shaped code: static methods, local slots, explicit boxing |
+| `B` | `ClassNode` | the bytecode, as [ASM](https://asm.ow2.io)'s in-memory class |
 | `T` | `Array[Byte]` | one self-contained class file |
 
 and `modify(f) = reverseGet ∘ f ∘ get` is a compiler whenever `f: A => B` is a
@@ -26,7 +26,7 @@ lowering:
 ```scala
 import dev.constructive.eo.demo.uplc.*
 
-UplcJvm.iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, JvmProgram]
+UplcJvm.iso: BijectionIso[Array[Byte], Array[Byte], TypedProgram, ClassNode]
 
 val translate: Array[Byte] => Array[Byte] = UplcJvm.iso.modify(Lower.lower)
 
@@ -36,7 +36,7 @@ Exec.validate(translate(script), scriptContext)   // Right(traces) | Left(reason
 Three things follow from the shape.
 
 **The ends are fixed; the middle is a function.** Decoding and typing live in
-`get`, bytecode emission in `reverseGet`. Anything `TypedProgram => JvmProgram`
+`get`, writing the class file in `reverseGet`. Anything `TypedProgram => ClassNode`
 can run through the optic, so an optimisation pass is a function composed in
 front of the lowering — `iso.modify(optimise andThen Lower.lower)` — and
 neither end changes.
@@ -64,7 +64,7 @@ every program in its test-suite ([Correctness](#correctness-the-cek-machine-as-o
 <div class="uplc-roundtrip" style="max-width: 780px; margin: 1.5em auto;">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" width="100%" role="img" aria-labelledby="uplc-rt-title uplc-rt-desc" style="font-family: inherit;">
 <title id="uplc-rt-title">The UPLC to JVM round trip</title>
-<desc id="uplc-rt-desc">Top row, the optic: flat UPLC bytes go through iso.get to a typed expression, through Lower.lower to JVM-shaped code, and through iso.reverseGet to a class file. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
+<desc id="uplc-rt-desc">Top row, the optic: flat UPLC bytes go through iso.get to a typed expression, through Lower.lower to bytecode (an ASM ClassNode), and through iso.reverseGet to a class file. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
 <defs><marker id="uplc-rt-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--primary-color);"/></marker></defs>
 <rect x="6" y="24" width="768" height="100" rx="14" style="fill: none; stroke: var(--primary-medium); stroke-dasharray: 6 5;"/>
 <text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">one eo Iso · the compiler is iso.modify(Lower.lower)</text>
@@ -76,8 +76,8 @@ every program in its test-suite ([Correctness](#correctness-the-cek-machine-as-o
 <text x="280" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">A · typed expr</text>
 <text x="280" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">TypedProgram</text>
 <rect x="400" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
-<text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">B · JVM code</text>
-<text x="470" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">JvmProgram</text>
+<text x="470" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">B · bytecode</text>
+<text x="470" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">ClassNode</text>
 <rect x="620" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="690" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">T · class file</text>
 <text x="690" y="88" text-anchor="middle" style="fill: var(--text-color); font-size: 12px;">Array[Byte]</text>
@@ -115,11 +115,11 @@ every program in its test-suite ([Correctness](#correctness-the-cek-machine-as-o
 </svg>
 </div>
 
-The listings in this section are printed, verbatim, by the demo's walkthrough —
-all but the bytecode, which is `javap -c` on the class file it writes:
+The listings in this section are printed, verbatim, by the demo's walkthrough
+(give it a directory and it also writes the class file there, for `javap`):
 
 ```sh
-sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo <dir-for-the-class-file>"
+sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo [dir-for-the-class-file]"
 ```
 
 ### Forth: bytes to a typed expression (`get`)
@@ -150,9 +150,12 @@ records them as what they mean:
 - **builtin calls** — a builtin applied to exactly its forces and arguments;
 - **direct calls** — of `let`-bound functions and of `let`-bound, already forced
   builtins;
-- **multi-argument calls** — `case (constr 0 a1 … an) [f]`, the shape the
+- **recursion** — `let f = λself … in … [f f] …`, the knot Scalus ties for a
+  recursive function: when `f` and `self` are only ever applied to themselves,
+  `self` always holds the function, and its calls are direct calls too;
+- **multi-argument calls** — `case (constr k a1 … an) [… f …]`, the shape the
   Scalus compiler gives a call with several arguments (one `case` step applies
-  them all);
+  them all), when `f` is a lambda or a known function;
 - **`force (delay t)`** — just `t`.
 
 Each rewrite is exact under the CEK machine's evaluation order: it only removes
@@ -163,7 +166,10 @@ dynamic application and runs exactly as the machine would run it.
 **Hybrid typing.** UPLC is untyped, yet most of a program's scalars are provable
 locally — constants, typed builtin results, `let`s of those, branches that
 agree. A type is a Scalus `DefaultUni`, and a builtin's signature is Scalus' own
-`TypeScheme` for it. Integers, booleans, bytestrings and strings get Scala types
+`TypeScheme` for it, instantiated at its arguments' types — `fstPair` of the
+`pair integer (list data)` that `unConstrData` returns is an `integer`, so the
+`case` that matches a constructor tag on it compiles to a JVM switch. Integers,
+booleans, bytestrings and strings get Scala types
 (`BigInt`, `Boolean`, `ByteString`, `String`) and an unboxed JVM
 representation. Everything else — functions, constructors, `Data`,
 whatever flows through a lambda parameter — is a `Value`: a boxed Scalus
@@ -189,7 +195,8 @@ val v4: Value = {
   val v7: Value = unConstrData(headList(dropList(2, v6)))
   fstPair(v7) match
     case 0 => error()(3)
-    case 1 => if equalsInteger(v4(unIData(headList(tailList(v6))), 0, 1), unIData({
+    case 1 => if equalsInteger(Constr0(unIData(headList(tailList(v6))), 0, 1) match
+        case 0 => v4, unIData({
         val v8: Value = unConstrData(headList(tailList(sndPair(v7))))
         fstPair(v8) match
           case 0 => headList(sndPair(v8))
@@ -202,63 +209,64 @@ val v4: Value = {
     case 5 => error()
 ```
 
-The self-recursive helper `v4` is plain `if … then … else v4(v4, …)`; the
-`unConstrData` / `sndPair` / `headList` chains are the script context being
-decoded.
+The self-recursive helper `v4` is plain `if … then … else v4(v4, …)`, and its
+recursive call is a direct JVM call; the `unConstrData` / `sndPair` /
+`headList` chains are the script context being decoded, and the `match`es on
+`fstPair` are switches on constructor tags. The one call into `v4` goes through
+a value the typer cannot see into (`v4(v4)`, a partial application), so it stays
+a dynamic `case` — fields first, then the branch — exactly as the machine runs
+it.
 
 ### Down: lowering (`A ⇒ B`)
 
-`Lower.lower` is the function the optic is run with. It makes the JVM decisions:
+`Lower.lower` is the function the optic is run with. It writes bytecode
+straight into ASM's tree (`ClassNode`, with asm-commons' `InstructionAdapter`)
+and makes the JVM decisions on the way:
 
 - **Closure conversion.** Each lambda chain or `delay` becomes a static method;
   a closure captures exactly its free variables, in an order fixed by the
   *source* program, so the runtime can read the layout back.
 - **Representation.** Typed values stay in unboxed locals and on the operand
   stack; boxing happens only where typed code meets dynamic code.
-- **Fast paths.** Integer, bytestring and string builtins with a typed form
-  become direct static calls on unboxed operands.
+- **Direct calls.** A saturated builtin is a plain call of the function Scalus'
+  own `CardanoBuiltins` wraps (`scalus.uplc.builtin.Builtins`), on unboxed
+  operands where its signature allows; calls of known functions are
+  `invokestatic`s of their body methods.
 - **Method size.** Once a method has inlined enough code, the next `let` body
   moves to a method of its own (the JVM caps a method at 64 KB of bytecode).
 
-For the small program, B is one method; `KU` is the class's table of unboxed
-constants, indexed by UPLC node:
+For the small program, B is one method, as ASM prints it; `K` is the class's
+table of constants, indexed by UPLC node:
 
 ```
-entry():
-  s0: BigInt = KU[14]: BigInt
-  s1: BigInt = multiplyInteger(s0, s0)
-  box(addInteger(s0, s1))
+    GETSTATIC dev/constructive/eo/demo/uplc/generated/UplcProgram.K : [Ljava/lang/Object;
+    BIPUSH 14
+    AALOAD
+    INVOKESTATIC dev/constructive/eo/demo/uplc/runtime/Rt.unInt (Ljava/lang/Object;)Lscala/math/BigInt;
+    ASTORE 1
+    GETSTATIC scalus/uplc/builtin/Builtins$.MODULE$ : Lscalus/uplc/builtin/Builtins$;
+    ALOAD 1
+    ALOAD 1
+    INVOKEVIRTUAL scalus/uplc/builtin/AbstractBuiltins.multiplyInteger (Lscala/math/BigInt;Lscala/math/BigInt;)Lscala/math/BigInt;
+    ASTORE 2
+    GETSTATIC scalus/uplc/builtin/Builtins$.MODULE$ : Lscalus/uplc/builtin/Builtins$;
+    ALOAD 1
+    ALOAD 2
+    INVOKEVIRTUAL scalus/uplc/builtin/AbstractBuiltins.addInteger (Lscala/math/BigInt;Lscala/math/BigInt;)Lscala/math/BigInt;
+    INVOKESTATIC dev/constructive/eo/demo/uplc/runtime/Rt.boxInt (Lscala/math/BigInt;)Ljava/lang/Object;
+    ARETURN
 ```
 
-### Back: JVM code to a class file (`reverseGet`)
+The constant is unboxed once, the arithmetic is Scalus' own, and the one box is
+at the result.
 
-`iso.reverseGet` writes one class file with
-[Cojen Maker](https://github.com/cojen/Maker): the emitter writes each B node
-as a variable and calls runtime methods by name, and the library picks the
-overload, decides what lives in a local and what stays on the operand stack, and
-computes the stack maps. The class has a static method per lambda chain and
-`delay`, a switch per call arity for closure dispatch, and the flat program
-itself, embedded as Base64 string constants. Here is the small program's `entry`
-method from `javap -c` (constant-pool references shortened, comments added):
+### Back: bytecode to a class file (`reverseGet`)
 
-```
-private static java.lang.Object entry();
-   0: getstatic     KU                  // the class's unboxed constants
-   3: bipush        14                  // the constant at UPLC node 14
-   5: aaload
-   6: checkcast     scala/math/BigInt
-   9: astore_0                          // v0 = 6
-  10: aload_0
-  11: aload_0
-  12: invokestatic  Rt.multiplyInteger  // (BigInt, BigInt) => BigInt
-  15: aload_0                           // v1 = v0 * v0 never needs a local
-  16: swap
-  17: invokestatic  Rt.addInteger       // (BigInt, BigInt) => BigInt
-  20: invokestatic  Rt.box              // the one box, at the result
-  23: areturn
-```
-
-The integers never leave their unboxed form until the result is returned.
+`iso.reverseGet` hands the `ClassNode` to ASM's `ClassWriter`, which computes
+the stack map frames and serialises it. The class has a static method per lambda
+chain and `delay`, a switch per call arity for closure dispatch, and the flat
+program itself, embedded as Base64 string constants and re-decoded by the static
+initialiser.
 
 ### And back again: values to UPLC terms
 
@@ -282,10 +290,10 @@ CEK machine:     (lam i0 (con integer 5))
 
 The demo pins one semantics (`Semantics.scala`): Plutus V3 at protocol version
 11, builtin semantics variant E — the configuration Scalus 1.3.0 runs the Plutus
-conformance suite under. Its runtime delegates builtins without a typed fast
-path to Scalus' own implementations; the five that hand back one of their
-arguments untouched (`ifThenElse`, `chooseList`, `chooseUnit`, `chooseData`,
-`trace`) run natively, since those arguments may be closures.
+conformance suite under. Builtins without a direct implementation, and builtins
+used as values, run Scalus' own CEK meanings (`BuiltinRuntime`); a meaning that
+hands back one of its arguments (`ifThenElse`, `chooseList`, …) hands back the
+closure or constructor it was given.
 
 `sbt demoUplcJvm/test` checks the commuting square on:
 
@@ -318,7 +326,7 @@ accept it before anything is timed):
 Average time per operation in **µs (lower is better)**, error = 99.9 %
 confidence half-width; allocation per operation from `-prof gc`
 (`gc.alloc.rate.norm`). Measured on a 4-vCPU Intel Xeon (2.1 GHz) container,
-OpenJDK 21.0.12, Scalus 1.3.0, Cojen Maker 2.8.4; three forks, 5 × 1 s measurement after 3 × 1 s
+OpenJDK 21.0.12, Scalus 1.3.0, ASM 9.11; three forks, 5 × 1 s measurement after 3 × 1 s
 warm-up (5 × 2 s for the Fibonacci scaling runs, whose slow operations took
 longer to reach steady state). A shared container is not a quiet benchmark
 machine: read the ratios, not the absolute values.
@@ -327,54 +335,59 @@ machine: read the ratios, not the absolute values.
 
 | validator | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 4.70 ± 0.24 | 1.49 ± 0.09 | **3.2×** | 13.2 KB | 5.4 KB |
-| `preimage` | 6.44 ± 0.25 | 2.19 ± 0.18 | **2.9×** | 17.8 KB | 7.5 KB |
-| `timeLock` | 6.16 ± 0.30 | 2.21 ± 0.13 | **2.8×** | 17.7 KB | 7.8 KB |
-| `multisig` | 13.4 ± 1.0 | 3.93 ± 0.25 | **3.4×** | 37.4 KB | 13.1 KB |
-| `fibonacci` | 30.6 ± 1.7 | 1.52 ± 0.07 | **20.1×** | 76.9 KB | 5.4 KB |
-| `htlc` | 8.41 ± 0.54 | 3.20 ± 0.16 | **2.6×** | 23.0 KB | 10.5 KB |
+| `helloOwner` | 5.01 ± 0.23 | 0.32 ± 0.01 | **15.7×** | 13.3 KB | 1.0 KB |
+| `preimage` | 7.11 ± 0.56 | 0.63 ± 0.04 | **11.3×** | 17.8 KB | 1.7 KB |
+| `timeLock` | 6.96 ± 0.67 | 0.33 ± 0.02 | **20.9×** | 17.7 KB | 0.9 KB |
+| `multisig` | 14.6 ± 0.9 | 1.07 ± 0.10 | **13.6×** | 37.4 KB | 2.7 KB |
+| `fibonacci` | 34.2 ± 2.0 | 0.54 ± 0.03 | **63.2×** | 76.8 KB | 1.7 KB |
+| `htlc` | 9.27 ± 0.85 | 1.16 ± 0.05 | **8.0×** | 23.0 KB | 2.9 KB |
 
 Most validators spend their time decoding the script context — `unConstrData`,
-`headList`, `sndPair` and friends. Those builtins run the same Scalus code in
-both evaluators, so compilation saves only the interpretation *around* them:
-**2.6–3.4×**, with 2–3× less allocation. Where the work is the script's own
-logic, interpretation is most of the cost, and typed fast paths and direct calls
-remove it: the Fibonacci puzzle (`n = 30`) validates **~20×** faster and
-allocates 14× less.
+`headList`, `sndPair` and friends. The CEK machine runs each one as a builtin
+meaning over CEK values, and `unConstrData` turns a constructor's whole field
+list into constants. The generated class calls the functions those meanings
+wrap directly, reads `Data` lazily — only the fields a script touches become
+constants — and matches constructor tags with JVM switches: **8–21×** faster,
+with 8–20× less allocation. Where the work is the script's own logic,
+interpretation is nearly all of the cost: the Fibonacci puzzle (`n = 30`), a
+self-recursive function compiled to direct calls on unboxed integers, validates
+**~63×** faster. Against the demo's first, raw-ASM version (same harness, an
+earlier run), validation is **2.9–7.1×** faster.
 
 ### Scaling with the work: the Fibonacci puzzle
 
 | `n` | CEK machine (µs) | generated class (µs) | speed-up | CEK alloc/op | class alloc/op |
 |--:|--:|--:|--:|--:|--:|
-| 10 | 12.5 ± 0.5 | 1.08 ± 0.06 | **11.6×** | 31.8 KB | 3.8 KB |
-| 100 | 89.5 ± 4.8 | 3.45 ± 0.10 | **25.9×** | 235.1 KB | 12.2 KB |
-| 1000 | 976.8 ± 73.9 | 52.1 ± 2.2 | **18.8×** | 2,502.3 KB | 185.6 KB |
+| 10 | 15.3 ± 1.6 | 0.27 ± 0.02 | **56.7×** | 31.8 KB | 0.9 KB |
+| 100 | 106.0 ± 5.4 | 2.03 ± 0.15 | **52.3×** | 235.2 KB | 5.8 KB |
+| 1000 | 1,045.1 ± 45.2 | 49.8 ± 3.4 | **21.0×** | 2,356.0 KB | 143.9 KB |
 
-The speed-up grows from 12× to 26× as fixed per-validation costs (building the
-script's closures, decoding the context) are amortised over more recursion. At
-`n = 1000` the integers reach ~700 bits; `BigInt` arithmetic — identical in both
-evaluators — takes a larger share of the time, and the speed-up settles at ~19×.
+The generated code does almost nothing but arithmetic, so the speed-up stays
+above 50× until the integers grow: at `n = 1000` they reach ~700 bits, `BigInt`
+addition — identical in both evaluators — is most of the time, and the speed-up
+settles at ~21×.
 
 ### What translation costs
 
 | validator | flat UPLC (S) | class file (T) | translate (µs) | translate + load (µs) | break-even (validations) |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 147 B | 5,158 B | 220.4 ± 24.3 | 767.8 ± 97.7 | 239 |
-| `preimage` | 184 B | 5,640 B | 292.8 ± 31.2 | 944.0 ± 99.1 | 222 |
-| `timeLock` | 181 B | 6,110 B | 352.0 ± 41.0 | 950.6 ± 130.4 | 241 |
-| `multisig` | 200 B | 6,446 B | 341.9 ± 74.9 | 997.0 ± 103.4 | 106 |
-| `fibonacci` | 124 B | 4,423 B | 162.3 ± 22.8 | 681.4 ± 112.8 | 23 |
-| `htlc` | 307 B | 9,859 B | 584.8 ± 50.6 | 1,343.0 ± 76.8 | 258 |
+| `helloOwner` | 147 B | 4,565 B | 80.8 ± 9.9 | 380.8 ± 58.7 | 81 |
+| `preimage` | 184 B | 5,035 B | 124.3 ± 44.1 | 468.3 ± 64.5 | 72 |
+| `timeLock` | 181 B | 5,109 B | 113.5 ± 52.3 | 431.6 ± 47.9 | 65 |
+| `multisig` | 200 B | 6,238 B | 148.3 ± 13.3 | 628.4 ± 47.6 | 46 |
+| `fibonacci` | 124 B | 4,347 B | 68.9 ± 6.5 | 337.1 ± 45.1 | 10 |
+| `htlc` | 307 B | 6,666 B | 172.2 ± 16.6 | 666.2 ± 79.6 | 82 |
 
 `translate` is the optic (`iso.modify(Lower.lower)`), measured warm;
 `translate + load` adds defining the class, verifying it, and running its static
-initialiser, which re-decodes the embedded program. Loading is two thirds of the
-total. Translating costs roughly 3× what it did with a raw-ASM emitter twice the
-size: Cojen Maker's conveniences (resolving calls by reflection, allocating
-locals) are paid at translation time, once per script. The break-even column
-divides `translate + load` by the time each validation saves: a script must be
-validated **~25–260 times** before compiling it pays for itself. That fits
-scripts that run over and over — a node re-validating the same reference
+initialiser, which re-decodes the embedded program. Loading is three quarters of
+the total. Most of `translate` is ASM's `ClassWriter` computing stack map frames;
+lowering straight into ASM's tree keeps the rest small, and translation costs
+what the demo's first, raw-ASM emitter did — about a third of what a version
+built on a higher-level bytecode library (Cojen Maker) cost. The break-even
+column divides `translate + load` by the time each validation saves: a script
+must be validated **~10–80 times** before compiling it pays for itself. That
+fits scripts that run over and over — a node re-validating the same reference
 scripts, an emulator, a test-suite — rather than one-off evaluation.
 
 Reproduce with `sbt "demoUplcJvmBench/Jmh/run -prof gc"`.

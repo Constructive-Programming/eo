@@ -1,214 +1,463 @@
 package dev.constructive.eo.demo.uplc
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
+import dev.constructive.eo.demo.uplc.runtime.{Dispatch, ProgramInfo}
+import java.util.Base64
+import org.objectweb.asm.Opcodes.*
+import org.objectweb.asm.commons.InstructionAdapter
+import org.objectweb.asm.tree.ClassNode
+import org.objectweb.asm.{Label, MethodVisitor, Type}
+import scalus.uplc.builtin.ByteString
 import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
-/** A ⇒ B: lowers the typed expression to JVM-shaped code — the `f` in `iso.modify(f)`.
+/** How generated code holds a value. `Obj` is the uniform boxed representation every UPLC value can
+  * take — a Scalus `Constant`, or a runtime closure / thunk / partial builtin / constructor; the
+  * others are unboxed, the JVM classes Scalus' own builtins compute with.
+  */
+enum Rep(val jvm: Class[?]):
+  case Obj extends Rep(classOf[AnyRef])
+  case Int extends Rep(classOf[BigInt])
+  case Bool extends Rep(classOf[Boolean])
+  case Bytes extends Rep(classOf[ByteString])
+  case Str extends Rep(classOf[String])
+  case Data extends Rep(classOf[scalus.uplc.builtin.Data])
+
+  val asm: Type = Type.getType(jvm)
+
+  /** The runtime's conversions from and to the boxed representation, `Rt.box<Rep>` / `Rt.un<Rep>`.
+    */
+  lazy val (box, un) = (s"box$this", s"un$this")
+
+object Rep:
+
+  def of(ty: Ty): Rep = ty match
+    case Some(DefaultUni.Integer)    => Int
+    case Some(DefaultUni.Bool)       => Bool
+    case Some(DefaultUni.ByteString) => Bytes
+    case Some(DefaultUni.String)     => Str
+    case Some(DefaultUni.Data)       => Data
+    case _                           => Obj
+
+  def of(jvm: Class[?]): Option[Rep] = values.find(_.jvm == jvm)
+
+/** A ⇒ B: lowers the typed expression to JVM bytecode — the `f` in `iso.modify(f)`. B is ASM's own
+  * in-memory class, `ClassNode`:
+  *
+  * {{{
+  * public final class UplcProgram implements runtime.Dispatch {
+  *   static final ProgramInfo INFO;   // the flat program, embedded and re-decoded at class init
+  *   static final Object[] K;         // its constants, by node id
+  *   static final UplcProgram INSTANCE;
+  *   public Object run();                               // the program
+  *   private static Object m<i>(Object[] env, Object…); // one per lambda chain / delay
+  *   public Object call0/1/2/N(int id, Object[] env, …) // closure dispatch: switch on id
+  * }
+  * }}}
   *
   *   - Closure conversion. Every materialised lambda chain / `delay` becomes a static method plus a
-  *     capture array holding exactly its free variables, in [[SourceProgram.captures]] order. The
-  *     runtime reads the same order back to discharge closures, so the layout is fixed by the
-  *     source, not by this pass.
-  *   - Representation selection. Typed values stay unboxed (`BigInt`, `boolean`, `ByteString`,
-  *     `String`) in locals and on the stack and are boxed only where they meet dynamic code;
-  *     builtins with a typed fast path become direct static calls.
-  *   - Local numbering. `let` binders live in numbered locals of their method.
+  *     capture array holding exactly its free variables, in [[SourceProgram.captures]] order — the
+  *     order the runtime reads back to discharge closures.
+  *   - Representation. Typed values stay unboxed in locals and on the stack and are boxed only
+  *     where they meet dynamic code. A saturated builtin with a direct implementation
+  *     ([[Semantics.direct]]) is a plain call on its unboxed arguments.
+  *   - Method size. Once a method has inlined enough code, the next `let` body moves to a method of
+  *     its own: the JVM caps a method at 64 KB of bytecode.
   */
 object Lower:
 
-  def lower(program: TypedProgram): JvmProgram = new Lowering(program.source).run(program.body)
+  val ClassName = "dev/constructive/eo/demo/uplc/generated/UplcProgram"
 
-  /** Builtins with a typed fast path: those the runtime's `Rt` defines a method for, under the
-    * builtin's UPLC name, on the unboxed representations of the builtin's (Scalus) type.
-    */
-  val fastPaths: Set[DefaultFun] =
-    val defined = runtime.Rt.getClass.getMethods.iterator.map(_.getName).toSet
-    DefaultFun.values.iterator.filter(f => defined(Semantics.name(f))).toSet
+  def lower(program: TypedProgram): ClassNode = new Lowering(program.source).run(program.body)
 
+  // Descriptors and internal names, made once: ASM hashes every string it is handed.
+  private[uplc] val Obj = Rep.Obj.asm
+  private[uplc] val Objs = Type.getType(classOf[Array[AnyRef]])
+  private[uplc] val Info = Type.getType(classOf[ProgramInfo])
+  private[uplc] val Builtins = Type.getType(Semantics.Builtins.getClass)
+
+  private[uplc] val (self, objs, objName, info) =
+    (s"L$ClassName;", Objs.getDescriptor, Obj.getInternalName, Info.getInternalName)
+
+  private[uplc] val (builtins, builtinsModule) = (Builtins.getInternalName, Builtins.getDescriptor)
+  private[uplc] val Rt = "dev/constructive/eo/demo/uplc/runtime/Rt"
+
+  /** `Rt`'s entry points, name ⇒ descriptor (each name is unique). */
+  private[uplc] val rt = java.util.HashMap[String, String]()
+  Class.forName(Rt.replace('/', '.')).getMethods.foreach(m => rt.put(m.getName, desc(m)))
+
+  private def desc(m: java.lang.reflect.Method) = Type.getMethodDescriptor(m)
+
+  /** A builtin's direct implementation (see [[Semantics.direct]]), as generated code calls it. */
+  final case class Direct(owner: String, name: String, desc: String, args: List[Rep], result: Rep)
+
+  private[uplc] val direct: IArray[Option[Direct]] = IArray.from(DefaultFun.values.map { f =>
+    Semantics.direct(f).map { m =>
+      val reps = m.getParameterTypes.toList.map(Rep.of(_).get)
+      val owner = Type.getInternalName(m.getDeclaringClass)
+      Direct(owner, m.getName, desc(m), reps, Rep.of(m.getReturnType).get)
+    }
+  })
+
+  /** `m<id>(Object[] env, Object × arity)`. */
+  private[uplc] val descriptors = IArray.tabulate(Typer.MaxChain + 1)(n =>
+    Type.getMethodDescriptor(Obj, (Objs +: Seq.fill(n)(Obj))*)
+  )
+
+/** Where a variable lives in the method being written. */
 private enum Loc:
-  case InLocal(slot: Int, rep: Rep)
-  case InEnv(index: Int)
+  case Slot(slot: Int, rep: Rep)
+  case Env(index: Int)
+
+  /** A pure value (a builtin, maybe forced): computed where it is read, never if it is not. */
+  case Pure(value: Expr)
 
   /** Bound in the program but not captured by this method — never referenced from it. */
   case Absent
 
-/** Local numbering for one method, which also counts the expression nodes inlined into it. */
-final private class Frame(private var next: Int):
-
+/** One method being written: its next free local slot, and how many expression nodes it has inlined
+  * so far. Every representation fits one slot.
+  */
+final private class Gen(mv: MethodVisitor, var next: Int) extends InstructionAdapter(ASM9, mv):
   var size: Int = 0
 
-  def alloc(): Int =
-    val slot = next
+  /** Pops the top of the stack into a fresh local. */
+  def local(t: Type): Int =
+    store(next, t)
     next += 1
-    slot
+    next - 1
 
 final private class Lowering(source: SourceProgram):
 
-  /** Expression nodes one method may inline before the next `let` body moves to a method of its
-    * own. The JVM caps a method at 64 KB of bytecode; long `let` chains — the shape compilers give
-    * a script's top-level definitions — would otherwise blow through it.
-    */
+  import Lower.*
+
+  /** Expression nodes one method may inline before the next `let` body moves to a method. */
   private val OutlineAfter = 1500
 
-  private val methods = mutable.ArrayBuffer.empty[Option[JvmMethod]]
-  private val lambdaMethods = mutable.HashMap.empty[Int, Int]
+  private val cls = new ClassNode
+  private val closures = mutable.ArrayBuffer.empty[(Int, Int)] // (method id, arity; 0 = delay)
+  private val lambdaMethods = mutable.HashMap.empty[Int, Int] // origin -> method id
 
-  private def reserve(): Int =
-    methods += None
-    methods.size - 1
-
-  def run(body: Expr): JvmProgram =
-    val entry = reserve()
-    val code = coerce(expr(body, Vector.empty, new Frame(0)), Rep.Obj)
-    methods(entry) = Some(JvmMethod(entry, MethodKind.Entry, code))
-    JvmProgram(source, methods.iterator.flatten.toVector)
-
-  private def load(scope: Vector[Loc], index: Int): Code = scope(scope.size - index) match
-    case Loc.InLocal(slot, rep) => Code.Local(slot, rep)
-    case Loc.InEnv(k)           => Code.Captured(k)
-    case Loc.Absent             =>
-      // Captures are the free variables of the source term, and every variable a nested
-      // closure needs is free in its parent too — so this is unreachable.
-      throw new IllegalStateException(s"variable $index is not captured")
-
-  /** Converts between representations. Mismatched scalars go through a box so that an ill-typed
-    * program fails at run time with the same evaluation failure the CEK machine reports.
-    */
-  private def coerce(code: Code, to: Rep): Code =
-    if code.rep == to then code
-    else
-      code match
-        case Code.Fail(reason, _)       => Code.Fail(reason, to)
-        case Code.If(c, t, f, _)        => Code.If(c, coerce(t, to), coerce(f, to), to)
-        case Code.Bind(slot, rhs, body) => Code.Bind(slot, rhs, coerce(body, to))
-        case _ if to == Rep.Obj         => Code.Box(code, code.rep)
-        case _ if code.rep == Rep.Obj   => Code.Unbox(code, to)
-        case _                          => Code.Unbox(Code.Box(code, code.rep), to)
-
-  private def obj(e: Expr, scope: Vector[Loc], frame: Frame): Code =
-    coerce(expr(e, scope, frame), Rep.Obj)
-
-  private def as(e: Expr, rep: Rep, scope: Vector[Loc], frame: Frame): Code =
-    coerce(expr(e, scope, frame), rep)
-
-  private def expr(e: Expr, scope: Vector[Loc], frame: Frame): Code =
-    frame.size += 1
-    node(e, scope, frame)
-
-  private def node(e: Expr, scope: Vector[Loc], frame: Frame): Code = e match
-    case Expr.Ref(i, _)     => load(scope, i)
-    case Expr.Unbound(i)    => Code.Fail(s"open term: variable $i is not bound", Rep.Obj)
-    case Expr.Fail          => Code.Fail("error", Rep.Obj)
-    case Expr.BuiltinRef(f) => Code.BuiltinValue(f)
-
-    case Expr.Lit(_, Constant.Bool(b)) => Code.BoolLit(b)
-    case Expr.Lit(node, value)         => Code.Literal(node, Rep.of(Some(value.tpe)))
-
-    case Expr.Lambda(origin, params, body) => makeLambda(origin, params.size, body, scope)
-    case Expr.Delayed(origin, body)        => makeThunk(origin, body, scope)
-
-    case Expr.Let(origin, bindings, body, _) =>
-      // Right-hand sides see the outer scope only, and run in order.
-      val rhss = bindings.map(b => expr(b.rhs, scope, frame))
-      if frame.size > OutlineAfter then
-        // The body becomes the body method of the let's own lambda, called directly.
-        val (loads, inner) = closureScope(origin, scope)
-        val id = reserve()
-        val params = Vector.tabulate[Loc](rhss.size)(p => Loc.InLocal(1 + p, Rep.Obj))
-        val code = coerce(expr(body, inner ++ params, new Frame(1 + rhss.size)), Rep.Obj)
-        methods(id) = Some(JvmMethod(id, MethodKind.LambdaBody(origin, rhss.size), code))
-        Code.CallBody(id, loads, rhss.map(coerce(_, Rep.Obj)).toVector)
-      else
-        val bound = rhss.map(rhs => (frame.alloc(), rhs))
-        val inner = scope ++ bound.map((slot, rhs) => Loc.InLocal(slot, rhs.rep))
-        bound.foldRight(expr(body, inner, frame)) {
-          case ((slot, rhs), acc) =>
-            Code.Bind(slot, rhs, acc)
-        }
-
-    case Expr.Apply(fn, arg)   => Code.Apply(obj(fn, scope, frame), obj(arg, scope, frame))
-    case Expr.Spread(args, fn) =>
-      Code.Spread(args.map(obj(_, scope, frame)).toVector, obj(fn, scope, frame))
-    case Expr.Force(body) => Code.Force(obj(body, scope, frame))
-
-    case Expr.CallKnown(fn, origin, args) =>
-      Code.Invoke(
-        lambdaMethods(origin),
-        load(scope, fn.index),
-        args.map(obj(_, scope, frame)).toVector
-      )
-
-    case Expr.Call(fun, args, _) if Lower.fastPaths(fun) =>
-      val (argTys, result) = Semantics.signature(fun)
-      val ops = args.zip(argTys).map((a, t) => as(a, Rep.of(t), scope, frame))
-      Code.Prim(fun, ops.toVector, Rep.of(result))
-    case Expr.Call(fun, args, _) => Code.Delegate(fun, args.map(obj(_, scope, frame)).toVector)
-
-    case Expr.Choose(fun, scrut, branches, ty) =>
-      val rep = Rep.of(ty)
-      val arms = branches.map(as(_, rep, scope, frame)).toVector
-      if fun == DefaultFun.IfThenElse && scrut.ty.contains(DefaultUni.Bool) then
-        Code.If(as(scrut, Rep.Bool, scope, frame), arms(0), arms(1), rep)
-      else Code.Choose(fun, obj(scrut, scope, frame), arms, rep)
-
-    case Expr.Construct(tag, args) => Code.Construct(tag, args.map(obj(_, scope, frame)).toVector)
-
-    case Expr.Match(scrut, branches, ty) =>
-      if Semantics.caseOnBuiltins && scrut.ty.contains(DefaultUni.Bool) then
-        val rep = Rep.of(ty)
-        val cond = as(scrut, Rep.Bool, scope, frame)
-        branches.map(as(_, rep, scope, frame)) match
-          case List(whenFalse, whenTrue) => Code.If(cond, whenTrue, whenFalse, rep)
-          case List(whenFalse)           =>
-            Code.If(cond, Code.Fail("case on True needs a second branch", rep), whenFalse, rep)
-          case _ =>
-            Code.Bind(
-              frame.alloc(),
-              cond,
-              Code.Fail("case on a boolean needs 1 or 2 branches", rep)
-            )
-      else if Semantics.caseOnBuiltins && scrut.ty.contains(DefaultUni.Integer) then
-        val rep = Rep.of(ty)
-        Code.IntSwitch(
-          as(scrut, Rep.Int, scope, frame),
-          branches.map(as(_, rep, scope, frame)).toVector,
-          rep,
-        )
-      else
-        val s = obj(scrut, scope, frame)
-        val arms = branches.map {
-          case Expr.Lambda(origin, params, body) =>
-            Arm.Direct(makeLambda(origin, params.size, body, scope))
-          case other => Arm.Value(obj(other, scope, frame))
-        }
-        Code.CaseOf(s, arms.toVector)
-
-  /** The capture loads for a closure rooted at `origin`, and the scope its body sees them in. */
-  private def closureScope(origin: Int, scope: Vector[Loc]): (Vector[Code], Vector[Loc]) =
-    val captures = source.captures(origin)
-    if source.depths(origin) != scope.size then
-      throw new IllegalStateException(
-        s"node $origin: scope depth ${scope.size} != source depth ${source.depths(origin)}"
-      )
-    val loads = captures.toVector.map(j => coerce(load(scope, j), Rep.Obj))
-    val inner = captures.zipWithIndex.foldLeft(Vector.fill[Loc](scope.size)(Loc.Absent)) {
-      case (acc, (j, k)) => acc.updated(scope.size - j, Loc.InEnv(k))
+  def run(program: Expr): ClassNode =
+    val dispatch = Array(Type.getInternalName(classOf[Dispatch]))
+    cls.visit(V17, ACC_PUBLIC | ACC_FINAL | ACC_SUPER, ClassName, null, objName, dispatch)
+    for (name, desc) <- List("INFO" -> Info.getDescriptor, "K" -> objs, "INSTANCE" -> self) do
+      cls.visitField(ACC_PUBLIC | ACC_STATIC | ACC_FINAL, name, desc, null, null)
+    method(ACC_PUBLIC, "<init>", "()V") { g ?=>
+      g.visitVarInsn(ALOAD, 0)
+      g.invokespecial(objName, "<init>", "()V", false)
     }
-    (loads, inner)
+    method(ACC_STATIC, "<clinit>", "()V")(staticInit)
+    method(ACC_PUBLIC, "run", Type.getMethodDescriptor(Obj))(genAs(program, Rep.Obj, Vector.empty))
+    for (name, arity) <- List("call0" -> 0, "call1" -> 1, "call2" -> 2, "callN" -> -1) do
+      val targets = closures.filter((_, a) => if arity < 0 then a > 0 else a == arity).toMap
+      val extra = if arity < 0 then List(Objs) else List.fill(arity)(Obj)
+      method(ACC_PUBLIC, name, Type.getMethodDescriptor(Obj, Type.INT_TYPE :: Objs :: extra*)) {
+        g ?=>
+          // callK(int id, Object[] env, …): a switch from method id to closure body.
+          g.load(1, Type.INT_TYPE)
+          switch(targets.keys.toVector.sorted) { id =>
+            g.load(2, Objs)
+            if arity >= 0 then (1 to arity).foreach(i => g.load(2 + i, Obj))
+            else (0 until targets(id)).foreach(element(g.load(3, Objs), _))
+            invokeBody(id, targets(id))
+          }
+      }
+    cls
 
-  private def makeLambda(origin: Int, arity: Int, body: Expr, scope: Vector[Loc]): Code.MakeLambda =
-    val (loads, inner) = closureScope(origin, scope)
-    val id = reserve()
-    lambdaMethods(origin) = id
-    val params = Vector.tabulate[Loc](arity)(p => Loc.InLocal(1 + p, Rep.Obj))
-    val code = coerce(expr(body, inner ++ params, new Frame(1 + arity)), Rep.Obj)
-    methods(id) = Some(JvmMethod(id, MethodKind.LambdaBody(origin, arity), code))
-    Code.MakeLambda(id, origin, arity, loads)
+  /** Writes a method whose first free local slot is `next`. */
+  private def method(access: Int, name: String, desc: String, next: Int = 1)(body: Gen ?=> Unit) =
+    val g = Gen(cls.visitMethod(access, name, desc, null, null), next)
+    g.visitCode()
+    body(using g)
+    g.visitInsn(if desc.endsWith("V") then RETURN else ARETURN)
+    g.visitMaxs(0, 0)
+    g.visitEnd()
 
-  private def makeThunk(origin: Int, body: Expr, scope: Vector[Loc]): Code =
-    val (loads, inner) = closureScope(origin, scope)
-    val id = reserve()
-    val code = coerce(expr(body, inner, new Frame(1)), Rep.Obj)
-    methods(id) = Some(JvmMethod(id, MethodKind.ThunkBody(origin), code))
-    Code.MakeThunk(id, origin, loads)
+  /** Loads the embedded program and its constants (Base64: one constant-pool byte per char), and
+    * creates `INSTANCE`.
+    */
+  private def staticInit(using g: Gen): Unit =
+    objects(Base64.getEncoder.encodeToString(source.flat).grouped(65535).toSeq)(g.aconst(_))
+    g.invokestatic(info, "fromChunks", Type.getMethodDescriptor(Info, Objs), false)
+    g.dup()
+    g.putstatic(ClassName, "INFO", Info.getDescriptor)
+    g.invokevirtual(info, "constants", Type.getMethodDescriptor(Objs), false)
+    g.putstatic(ClassName, "K", objs)
+    g.visitTypeInsn(NEW, ClassName)
+    g.dup()
+    g.invokespecial(ClassName, "<init>", "()V", false)
+    g.putstatic(ClassName, "INSTANCE", self)
+
+  private def element(array: => Unit, i: Int)(using g: Gen): Unit =
+    array
+    g.iconst(i)
+    g.visitInsn(AALOAD)
+
+  /** An `Object[]` of `items`, evaluated in order. */
+  private def objects[A](items: Iterable[A])(item: A => Unit)(using g: Gen): Unit =
+    g.iconst(items.size)
+    g.visitTypeInsn(ANEWARRAY, objName)
+    items.iterator.zipWithIndex.foreach { (a, i) =>
+      g.dup()
+      g.iconst(i)
+      item(a)
+      g.visitInsn(AASTORE)
+    }
+
+  private def call(name: String)(using g: Gen): Unit = g.invokestatic(Rt, name, rt.get(name), false)
+
+  /** A runtime call whose result is a boxed value. */
+  private def obj(name: String)(using Gen): Rep =
+    call(name)
+    Rep.Obj
+
+  private def invokeBody(id: Int, arity: Int)(using g: Gen): Unit =
+    g.invokestatic(ClassName, cls.methods.get(id).name, descriptors(arity), false)
+
+  private def fail(reason: String)(using g: Gen): Rep =
+    g.aconst(reason)
+    call("fail")
+    g.athrow()
+    Rep.Obj
+
+  /** Converts between representations. Mismatched scalars go through a box, so an ill-typed program
+    * fails at run time, as on the CEK machine.
+    */
+  private def convert(from: Rep, to: Rep)(using Gen): Unit =
+    if from != to then
+      if from != Rep.Obj then call(from.box)
+      if to != Rep.Obj then call(to.un)
+
+  private def load(scope: Vector[Loc], index: Int)(using g: Gen): Rep =
+    scope(scope.size - index) match
+      case Loc.Slot(slot, rep) =>
+        g.load(slot, rep.asm)
+        rep
+      case Loc.Env(k) =>
+        element(g.visitVarInsn(ALOAD, 0), k)
+        Rep.Obj
+      case Loc.Pure(value) => gen(value, Vector.empty)
+      // Captures are the free variables of the source term, and every variable a nested closure
+      // needs is free in its parent too — so this is unreachable.
+      case Loc.Absent => throw new IllegalStateException(s"variable $index is not captured")
+
+  private def values(es: Seq[Expr], scope: Vector[Loc])(using Gen): Unit =
+    objects(es)(genAs(_, Rep.Obj, scope))
+
+  /** The capture array for a closure rooted at `origin`. */
+  private def env(origin: Int, scope: Vector[Loc])(using Gen): Unit =
+    val captures = source.captures(origin)
+    if captures.isEmpty then call("noCaptures")
+    else objects(captures.toSeq)(j => convert(load(scope, j), Rep.Obj))
+
+  /** Writes the body method of a closure rooted at `origin` with `arity` parameters (a `delay` has
+    * none), registered with the dispatchers when it is a `closure`, and returns its id. The body
+    * sees exactly the captured variables, then the parameters.
+    */
+  private def outline(origin: Int, arity: Int, e: Expr, scope: Vector[Loc], closure: Boolean): Int =
+    val inner =
+      source.captures(origin).zipWithIndex.foldLeft(Vector.fill[Loc](scope.size)(Loc.Absent)) {
+        case (acc, (j, k)) => acc.updated(scope.size - j, Loc.Env(k))
+      } ++ (1 to arity).map(Loc.Slot(_, Rep.Obj))
+    val id = cls.methods.size
+    if closure then
+      closures += ((id, arity))
+      lambdaMethods(origin) = id // before the body: a recursive body calls itself directly
+    method(ACC_PRIVATE | ACC_STATIC, s"m$id", descriptors(arity), arity + 1)(
+      genAs(e, Rep.Obj, inner)
+    )
+    id
+
+  private def closure(id: Int, origin: Int, arity: Int, scope: Vector[Loc])(using g: Gen): Rep =
+    g.getstatic(ClassName, "INSTANCE", self)
+    g.iconst(id)
+    g.iconst(origin)
+    g.iconst(arity)
+    env(origin, scope)
+    obj("closure")
+
+  /** Emits `e` in representation `rep`. */
+  private def genAs(e: Expr, rep: Rep, scope: Vector[Loc])(using g: Gen): Unit = e match
+    case Expr.Let(origin, bindings, body, _) if g.size > OutlineAfter =>
+      // The body becomes the body method of the let's own lambda, called directly.
+      env(origin, scope)
+      bindings.foreach(b => genAs(b.rhs, Rep.Obj, scope))
+      invokeBody(outline(origin, bindings.size, body, scope, closure = false), bindings.size)
+      convert(Rep.Obj, rep)
+    case Expr.Let(_, bindings, body, _) =>
+      // Right-hand sides see the outer scope only, and run in order.
+      val bound = bindings.map { b =>
+        if pure(b.rhs, 0) then Loc.Pure(b.rhs)
+        else
+          val r = Rep.of(b.rhs.ty)
+          genAs(b.rhs, r, scope)
+          Loc.Slot(g.local(r.asm), r)
+      }
+      genAs(body, rep, scope ++ bound)
+
+    case Expr.Choose(DefaultFun.IfThenElse, cond, List(t, f), _)
+        if cond.ty.contains(DefaultUni.Bool) =>
+      genAs(cond, Rep.Bool, scope)
+      branch(genAs(t, rep, scope), genAs(f, rep, scope))
+    case Expr.Choose(fun, scrut, branches, _) =>
+      g.iconst(fun.ordinal)
+      genAs(scrut, Rep.Obj, scope)
+      g.iconst(branches.size)
+      call("chooseIndex")
+      switch(branches.indices)(i => genAs(branches(i), rep, scope))
+
+    case Expr.Match(scrut, branches, _) if scalar(scrut, DefaultUni.Bool) =>
+      genAs(scrut, Rep.Bool, scope)
+      branches match
+        case List(f, t) => branch(genAs(t, rep, scope), genAs(f, rep, scope))
+        case List(f)    =>
+          branch(fail("case on True needs a second branch"): Unit, genAs(f, rep, scope))
+        case _ => fail("case on a boolean needs 1 or 2 branches"): Unit
+    case Expr.Match(scrut, branches, _) if scalar(scrut, DefaultUni.Integer) =>
+      genAs(scrut, Rep.Int, scope)
+      g.iconst(branches.size)
+      call("integerCaseIndex")
+      switch(branches.indices)(i => genAs(branches(i), rep, scope))
+
+    case _ => convert(gen(e, scope), rep)
+
+  /** A builtin forced no more often than it takes type arguments: nothing to evaluate or fail. */
+  @tailrec
+  private def pure(e: Expr, forces: Int): Boolean = e match
+    case Expr.Force(inner)  => pure(inner, forces + 1)
+    case Expr.BuiltinRef(f) => forces <= Semantics.scheme(f).numTypeVars
+    case _                  => false
+
+  /** PV11 casing on a known scalar compiles to a JVM branch or switch. */
+  private def scalar(scrut: Expr, uni: DefaultUni): Boolean =
+    Semantics.caseOnBuiltins && scrut.ty.contains(uni)
+
+  /** An `if` on the boolean on the stack. */
+  private def branch(whenTrue: => Unit, whenFalse: => Unit)(using g: Gen): Unit =
+    val (otherwise, end) = (new Label, new Label)
+    g.ifeq(otherwise)
+    whenTrue
+    g.goTo(end)
+    g.mark(otherwise)
+    whenFalse
+    g.mark(end)
+
+  /** A switch on the int on the stack, one arm per key (ascending). The runtime only ever produces
+    * one of the keys, so the last arm doubles as the default; with no keys it never returns.
+    */
+  private def switch(keys: Seq[Int])(arm: Int => Unit)(using g: Gen): Unit =
+    val (labels, end) = (keys.map(_ => new Label).toArray, new Label)
+    if keys.isEmpty then
+      g.pop()
+      fail("no branches")
+    else g.lookupswitch(labels.last, keys.toArray, labels)
+    keys.lazyZip(labels).foreach { (k, l) =>
+      g.mark(l)
+      arm(k)
+      g.goTo(end)
+    }
+    g.mark(end)
+
+  /** Emits `e` in its natural representation and returns it. */
+  private def gen(e: Expr, scope: Vector[Loc])(using g: Gen): Rep =
+    g.size += 1
+    e match
+      case Expr.Ref(i, _)  => load(scope, i)
+      case Expr.Unbound(i) => fail(s"open term: variable $i is not bound")
+      case Expr.Fail       => fail("error")
+
+      case Expr.Lit(_, Constant.Bool(b)) =>
+        g.iconst(if b then 1 else 0)
+        Rep.Bool
+      case Expr.Lit(node, _) =>
+        // Constants live boxed in the class's table, and are unboxed where a typed use reads them.
+        element(g.getstatic(ClassName, "K", objs), node)
+        Rep.Obj
+
+      case Expr.Lambda(origin, params, body) =>
+        val id = outline(origin, params.size, body, scope, closure = true)
+        closure(id, origin, params.size, scope)
+      case Expr.Delayed(origin, body) =>
+        closure(outline(origin, 0, body, scope, closure = true), origin, 0, scope)
+
+      case Expr.Apply(fn, arg) =>
+        genAs(fn, Rep.Obj, scope)
+        genAs(arg, Rep.Obj, scope)
+        obj("apply")
+      case Expr.Force(body) =>
+        genAs(body, Rep.Obj, scope)
+        obj("force")
+      case Expr.CallKnown(fn, origin, args) =>
+        convert(load(scope, fn.index), Rep.Obj)
+        call("envOf")
+        args.foreach(genAs(_, Rep.Obj, scope))
+        invokeBody(lambdaMethods(origin), args.size)
+        Rep.Obj
+
+      case Expr.BuiltinRef(fun) =>
+        g.iconst(fun.ordinal)
+        obj("builtin")
+      case Expr.Call(fun, args, _) =>
+        direct(fun.ordinal) match
+          case Some(d) =>
+            // Outside `Rt`, a direct implementation is a method of Scalus' `Builtins` object.
+            if d.owner != Rt then g.getstatic(builtins, "MODULE$", builtinsModule)
+            args.lazyZip(d.args).foreach(genAs(_, _, scope))
+            if d.owner == Rt then g.invokestatic(Rt, d.name, d.desc, false)
+            else g.invokevirtual(d.owner, d.name, d.desc, false)
+            d.result
+          case None =>
+            g.iconst(fun.ordinal)
+            values(args, scope)
+            obj("call")
+
+      case Expr.Construct(tag, args) =>
+        g.lconst(tag)
+        values(args, scope)
+        obj("construct")
+
+      case Expr.Match(scrut, branches, _)
+          if !scalar(scrut, DefaultUni.Bool) && !scalar(scrut, DefaultUni.Integer) =>
+        caseOf(scrut, branches, scope)
+      case _ =>
+        val rep = Rep.of(e.ty)
+        genAs(e, rep, scope)
+        rep
+
+  /** A dynamic `case`: the runtime picks the branch and hands it the scrutinee's fields. A branch
+    * that is a lambda chain of the right arity is called directly.
+    */
+  private def caseOf(scrut: Expr, branches: List[Expr], scope: Vector[Loc])(using g: Gen): Rep =
+    genAs(scrut, Rep.Obj, scope)
+    g.dup()
+    call("caseFields")
+    val fields = g.local(Objs)
+    g.iconst(branches.size)
+    call("caseIndex")
+    switch(branches.indices) { i =>
+      branches(i) match
+        case Expr.Lambda(origin, params, lambdaBody) =>
+          val arity = params.size
+          val id = outline(origin, arity, lambdaBody, scope, closure = true)
+          val (generic, end) = (new Label, new Label)
+          g.load(fields, Objs)
+          g.arraylength()
+          g.iconst(arity)
+          g.ificmpne(generic)
+          env(origin, scope)
+          (0 until arity).foreach(element(g.load(fields, Objs), _))
+          invokeBody(id, arity)
+          g.goTo(end)
+          g.mark(generic)
+          closure(id, origin, arity, scope)
+          g.load(fields, Objs)
+          call("applyAll")
+          g.mark(end)
+        case other =>
+          genAs(other, Rep.Obj, scope)
+          g.load(fields, Objs)
+          call("applyAll")
+    }
+    Rep.Obj

@@ -1,6 +1,6 @@
 package dev.constructive.eo.demo.uplc
 
-import scalus.uplc.{Constant, DefaultFun, DefaultUni, TypeScheme}
+import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
 /** A static type reconstructed for an untyped UPLC term — the "hybrid" in hybrid typing: the Plutus
   * builtin type the typer could prove locally (constants, saturated builtins with a monomorphic
@@ -12,10 +12,6 @@ import scalus.uplc.{Constant, DefaultFun, DefaultUni, TypeScheme}
 type Ty = Option[DefaultUni]
 
 object Ty:
-
-  def of(t: TypeScheme): Ty = t match
-    case TypeScheme.Type(uni) => Some(uni)
-    case _                    => None
 
   /** What the branches of a conditional agree on. A branch that can only fail does not widen its
     * siblings.
@@ -58,9 +54,6 @@ enum Expr:
 
   /** Dynamic application of an arbitrary function value. */
   case Apply(fn: Expr, arg: Expr)
-
-  /** `case (constr k a1 … an) [… fn …]`: evaluate the arguments, then `fn`, then apply. */
-  case Spread(args: List[Expr], fn: Expr)
 
   /** Saturated call of a `let`-bound lambda chain (UPLC node `origin`): no closure dispatch. */
   case CallKnown(fn: Ref, origin: Int, args: List[Expr])
@@ -155,7 +148,6 @@ object Expr:
 
     case Delayed(_, body)     => s"Lazy(${render(body, depth, indent)})"
     case Apply(fn, arg)       => s"${render(fn, depth, indent)}(${render(arg, depth, indent)})"
-    case Spread(as, fn)       => s"${render(fn, depth, indent)}(${args(as, depth, indent)})"
     case CallKnown(fn, _, as) => s"${render(fn, depth, indent)}(${args(as, depth, indent)})"
     case Force(body)          => s"${render(body, depth, indent)}.force"
     case Call(fun, as, _)     => s"${Semantics.name(fun)}(${args(as, depth, indent)})"

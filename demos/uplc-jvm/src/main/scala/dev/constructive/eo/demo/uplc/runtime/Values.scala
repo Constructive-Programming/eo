@@ -1,20 +1,21 @@
 package dev.constructive.eo.demo.uplc.runtime
 
+import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.uplc.builtin.Data
 import scalus.uplc.{DefaultFun, TypeScheme}
 
 /** Implemented by every generated class. Closures carry the instance plus a method id; the four
-  * `call` arities are `lookupswitch`es over the class's closure bodies.
+  * `call` arities are switches over the class's closure bodies.
   */
 trait Dispatch:
   def run(): AnyRef
-  def info(): ProgramInfo
   def call0(id: Int, env: Array[AnyRef]): AnyRef
   def call1(id: Int, env: Array[AnyRef], a: AnyRef): AnyRef
   def call2(id: Int, env: Array[AnyRef], a: AnyRef, b: AnyRef): AnyRef
   def callN(id: Int, env: Array[AnyRef], args: Array[AnyRef]): AnyRef
 
 // Runtime values. A UPLC value is one of: a Scalus `Constant` (boxed scalar or structured
-// constant), or one of the four classes below.
+// constant), or one of the classes below.
 
 /** A lambda chain of `arity` parameters rooted at source node `origin`, with `applied` of them
   * already supplied (a partial application of a curried chain is still one object).
@@ -43,3 +44,9 @@ final class Partial(
 
 /** `constr tag fields`. */
 final class ConstrV(val tag: Long, val fields: Array[AnyRef])
+
+/** A `list data` read straight off a `Data` value: an element becomes a constant only when read. */
+final case class DataList(elems: PList[Data])
+
+/** The `pair integer (list data)` `unConstrData` returns, before anyone takes it apart. */
+final case class ConstrPair(tag: BigInt, fields: PList[Data])

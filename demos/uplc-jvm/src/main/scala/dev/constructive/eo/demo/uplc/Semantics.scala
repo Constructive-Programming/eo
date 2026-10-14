@@ -2,10 +2,11 @@ package dev.constructive.eo.demo.uplc
 
 import scala.annotation.tailrec
 
+import java.lang.reflect.Method
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.builtin.platform
 import scalus.uplc.eval.PlutusVM
-import scalus.uplc.{BuiltinRuntime, CardanoBuiltins, DefaultFun, TypeScheme}
+import scalus.uplc.{BuiltinRuntime, CardanoBuiltins, DefaultFun, DefaultUni, TypeScheme}
 
 /** The single Plutus semantics this demo targets — Plutus V3 at protocol version 11 ("van Rossem"),
   * builtin semantics variant E, the same configuration Scalus 1.3.0 runs the Plutus conformance
@@ -39,14 +40,46 @@ object Semantics:
     */
   def scheme(fun: DefaultFun): TypeScheme = runtime(fun).typeScheme
 
-  /** The argument types and the result type of a builtin, past its forces. */
-  def signature(fun: DefaultFun): (List[Ty], Ty) =
+  /** The type of a builtin's saturated result, given what is known of its arguments: matching them
+    * against the scheme binds its type variables (`fstPair` of a `pair integer (list data)` is an
+    * `integer`).
+    */
+  def result(fun: DefaultFun, args: List[Ty]): Ty =
+    def bind(s: TypeScheme, t: DefaultUni, vars: Map[String, DefaultUni]): Map[String, DefaultUni] =
+      (s, t) match
+        case (TypeScheme.TVar(a), _)                        => vars.updated(a, t)
+        case (TypeScheme.App(f, x), DefaultUni.Apply(g, y)) => bind(x, y, bind(f, g, vars))
+        case _                                              => vars
+    def subst(s: TypeScheme, vars: Map[String, DefaultUni]): Ty = s match
+      case TypeScheme.Type(uni) => Some(uni)
+      case TypeScheme.TVar(a)   => vars.get(a)
+      case TypeScheme.App(f, x) => subst(f, vars).zip(subst(x, vars)).map(DefaultUni.Apply(_, _))
+      case _                    => None
     @tailrec
-    def go(t: TypeScheme, args: List[Ty]): (List[Ty], Ty) = t match
-      case TypeScheme.All(_, rest)     => go(rest, args)
-      case TypeScheme.Arrow(arg, rest) => go(rest, Ty.of(arg) :: args)
-      case result                      => (args.reverse, Ty.of(result))
-    go(scheme(fun), Nil)
+    def go(s: TypeScheme, args: List[Ty], vars: Map[String, DefaultUni]): Ty = (s, args) match
+      case (TypeScheme.All(_, rest), _)         => go(rest, args, vars)
+      case (TypeScheme.Arrow(p, rest), a :: as) => go(rest, as, a.fold(vars)(bind(p, _, vars)))
+      case _                                    => subst(s, vars)
+    go(scheme(fun), args, Map.empty)
+
+  /** Scalus' plain implementations of the builtins — the functions its CEK meanings wrap. */
+  val Builtins: scalus.uplc.builtin.Builtins = scalus.uplc.builtin.Builtins
+
+  /** A builtin's direct implementation, if it has one: a method of the builtin's name on the
+    * runtime's `Rt` or else on [[Builtins]], taking one parameter per argument, each — like its
+    * result — in a representation generated code has. Generated code calls it instead of the CEK
+    * meaning, on unboxed values where the signature allows. `shiftByteString` and
+    * `rotateByteString` keep their meanings, which add variant-E range checks to the functions.
+    */
+  def direct(fun: DefaultFun): Option[Method] =
+    def on(c: Class[?]) = c
+      .getMethods
+      .find(m =>
+        m.getName == name(fun) && m.getParameterCount == scheme(fun).arity &&
+          (m.getReturnType +: m.getParameterTypes).forall(Rep.of(_).isDefined)
+      )
+    if fun == DefaultFun.ShiftByteString || fun == DefaultFun.RotateByteString then None
+    else on(Class.forName("dev.constructive.eo.demo.uplc.runtime.Rt")).orElse(on(Builtins.getClass))
 
   /** The UPLC spelling of a builtin (`addInteger`); Scalus' enum cases are capitalised. */
   def name(fun: DefaultFun): String =

@@ -1,6 +1,10 @@
 package dev.constructive.eo.demo.uplc
 
-import dev.constructive.eo.demo.uplc.validators.CompiledValidators
+import scala.jdk.CollectionConverters.*
+
+import dev.constructive.eo.demo.uplc.validators.{CompiledValidators, Scenarios}
+import org.objectweb.asm.Opcodes
+import org.objectweb.asm.tree.{JumpInsnNode, MethodInsnNode}
 import org.specs2.mutable.Specification
 import scalus.uplc.Program
 
@@ -10,35 +14,13 @@ class OpticSpec extends Specification:
   private def flat(uplc: String): Array[Byte] =
     Program.parseUplc(s"(program 1.1.0 $uplc)").fold(e => sys.error(e), _.flatEncoded)
 
-  /** Every node of lowered code, depth first. */
-  private def nodes(program: JvmProgram): Vector[Code] =
-    def go(c: Code): Vector[Code] = c +: (c match
-      case Code.Box(x, _)               => go(x)
-      case Code.Unbox(x, _)             => go(x)
-      case Code.Bind(_, rhs, body)      => go(rhs) ++ go(body)
-      case Code.If(c0, t, f, _)         => go(c0) ++ go(t) ++ go(f)
-      case Code.IntSwitch(s, cs, _)     => go(s) ++ cs.flatMap(go)
-      case Code.MakeLambda(_, _, _, cs) => cs.flatMap(go)
-      case Code.MakeThunk(_, _, cs)     => cs.flatMap(go)
-      case Code.Apply(f, a)             => go(f) ++ go(a)
-      case Code.Force(x)                => go(x)
-      case Code.Invoke(_, f, as)        => go(f) ++ as.flatMap(go)
-      case Code.CallBody(_, cs, as)     => cs.flatMap(go) ++ as.flatMap(go)
-      case Code.Spread(as, f)           => as.flatMap(go) ++ go(f)
-      case Code.Prim(_, as, _)          => as.flatMap(go)
-      case Code.Delegate(_, as)         => as.flatMap(go)
-      case Code.Choose(_, s, bs, _)     => go(s) ++ bs.flatMap(go)
-      case Code.Construct(_, as)        => as.flatMap(go)
-      case Code.CaseOf(s, arms)         =>
-        go(s) ++ arms.flatMap {
-          case Arm.Value(v)  => go(v)
-          case Arm.Direct(l) => go(l)
-        }
-      case _ => Vector.empty)
-    program.methods.flatMap(m => go(m.body))
-
-  private def lowered(flatProgram: Array[Byte]): JvmProgram =
-    Lower.lower(UplcJvm.iso.get(flatProgram))
+  /** Every method call in the lowered class, as `Owner.name`. */
+  private def calls(flatProgram: Array[Byte]): Vector[String] =
+    val methods = Lower.lower(UplcJvm.iso.get(flatProgram)).methods.asScala.toVector
+    methods.flatMap(_.instructions.iterator.asScala.collect {
+      case m: MethodInsnNode                              => s"${m.owner.split('/').last}.${m.name}"
+      case j: JumpInsnNode if j.getOpcode == Opcodes.IFEQ => "if"
+    })
 
   "the optic" >> {
     "translate is iso.modify(Lower.lower): get, lower, reverseGet" >> {
@@ -60,45 +42,30 @@ class OpticSpec extends Specification:
   }
 
   "hybrid typing" >> {
-    "keeps let-bound arithmetic unboxed end to end (one box, at the result)" >> {
-      val code = nodes(
-        lowered(
-          flat(
-            "[(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)]"
-          )
+    "keeps let-bound arithmetic unboxed end to end (the constant read once, one box at the result)" >> {
+      val code = calls(
+        flat(
+          "[(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)]"
         )
       )
-      (code.count(_.isInstanceOf[Code.Prim]) must beEqualTo(2))
-        .and(code.count(_.isInstanceOf[Code.Box]) must beEqualTo(1))
-        .and(code.count(_.isInstanceOf[Code.Unbox]) must beEqualTo(0))
+      (code.filter(_.startsWith("AbstractBuiltins.")) must beEqualTo(
+        Vector("AbstractBuiltins.multiplyInteger", "AbstractBuiltins.addInteger")
+      ))
+        .and(code.count(_.startsWith("Rt.box")) must beEqualTo(1))
+        .and(code.filter(_.startsWith("Rt.un")) must beEqualTo(Vector("Rt.unInt")))
     }
     "turns forced ifThenElse over delays into a JVM branch on a primitive boolean" >> {
-      val code = nodes(
-        lowered(
-          flat(
-            "(force [(force (builtin ifThenElse)) [(builtin lessThanInteger) (con integer 1) (con integer 2)] (delay (con integer 1)) (delay (con integer 2))])"
-          )
+      val code = calls(
+        flat(
+          "(force [(force (builtin ifThenElse)) [(builtin lessThanInteger) (con integer 1) (con integer 2)] (delay (con integer 1)) (delay (con integer 2))])"
         )
       )
-      (code.collect { case i: Code.If => i } must haveSize(1))
-        .and(code.count(_.isInstanceOf[Code.MakeThunk]) must beEqualTo(0))
+      (code.count(_ == "if") must beEqualTo(1)).and(code.count(_ == "Rt.closure") must beEqualTo(0))
     }
-    "finds typed fast paths, direct calls and fused branches in Scalus-compiled validators" >> {
-      val validators = List(
-        CompiledValidators.helloOwner,
-        CompiledValidators.preimage,
-        CompiledValidators.timeLock,
-        CompiledValidators.multisig,
-        CompiledValidators.fibonacci,
-        CompiledValidators.htlc,
-      )
-      val code = validators.flatMap(v => nodes(lowered(v.program.flatEncoded)))
-      (code.count(_.isInstanceOf[Code.Prim]) must beGreaterThan(0))
-        .and(code.count(_.isInstanceOf[Code.Invoke]) must beGreaterThan(0))
-        .and(
-          code.count(c =>
-            c.isInstanceOf[Code.If] || c.isInstanceOf[Code.Choose]
-          ) must beGreaterThan(0)
-        )
+    "finds direct builtin calls, direct closure calls and branches in Scalus-compiled validators" >> {
+      val code = Scenarios.accepting.flatMap(s => calls(s.script.program.flatEncoded))
+      (code.count(_.startsWith("AbstractBuiltins.")) must beGreaterThan(0))
+        .and(code.count(_ == "Rt.envOf") must beGreaterThan(0))
+        .and(code.count(c => c == "if" || c == "Rt.chooseIndex") must beGreaterThan(0))
     }
   }
