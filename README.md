@@ -139,6 +139,9 @@ for cats typeclasses.
 - ZIO integration: <https://eo.constructive.dev/integrations/zio.html>
 - Kyo integration (Records, kyo-schema bridge): <https://eo.constructive.dev/integrations/kyo.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
+- Demo — a UPLC (Cardano Plutus Core) → JVM bytecode compiler built as one
+  eo `Iso`, checked against the Scalus CEK machine:
+  [`demos/uplc-jvm`](./demos/uplc-jvm/README.md)
 - Benchmarks vs Monocle: [`BENCHMARKS.md`](./BENCHMARKS.md) (generated
   each sweep; B/op is the comparable metric, ns/op is directional)
 - Composition gap analysis (research):
