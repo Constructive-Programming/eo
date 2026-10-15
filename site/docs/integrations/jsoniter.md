@@ -447,6 +447,11 @@ per-element reassembly, no Composer hop required.
 | Edit deeply through `[*]` on the wire                 | Phase-3 (not yet shipped); fall through to eo-circe today |
 | Chain a JSON traversal with a Scala collection traversal | `JsoniterTraversal[A].andThen(Traversal.each[F, A])` |
 
+For eo-jsoniter in a streaming service, see the
+[gRPC stream triage demo](../demos/grpc-filter.md): an fs2 filter that
+classifies and filters 64-field messages straight off a socket, reading three
+values per message instead of decoding it.
+
 For the full failure-mode matrix (decode failures silently dropping
 to Miss, malformed JSON, length-changing splice mechanics) see the
 [`JsoniterPrismSpec`](https://github.com/Constructive-Programming/eo/blob/main/jsoniter/src/test/scala/dev/constructive/eo/jsoniter/JsoniterPrismSpec.scala),
