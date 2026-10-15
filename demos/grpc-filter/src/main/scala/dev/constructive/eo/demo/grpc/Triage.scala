@@ -84,7 +84,7 @@ object Triage:
       verdict: Array[Byte] => Verdict,
       tally: Ref[F, Tally]
   ): Pipe[F, Byte, Byte] =
-    _.through(GrpcFrames.decode())
+    _.through(GrpcFrames.splitFrames())
       .chunks
       .evalMap { messages =>
         Async[F].delay(messages.map(message => (message, verdict(message)))).timed.flatMap {
@@ -93,4 +93,4 @@ object Triage:
         }
       }
       .unchunks
-      .through(GrpcFrames.encode)
+      .through(GrpcFrames.joinFrames)

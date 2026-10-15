@@ -23,16 +23,16 @@ and drops everything else.
 
 To decide, the filter needs the kind and one or two values of the
 kind's own. The usual way decodes the whole issue to read them: 64 fields,
-lists, nested objects, about 9 KB of objects per 3.8 KB message. This filter
+lists, nested objects, about 8.5 KB of objects per 4 KB message. This filter
 reads them where they are, in the bytes, with eo-jsoniter's prisms. It never
 builds an `Issue`, and it forwards the messages it keeps exactly as they came.
 
 ```
 upstream service ──TCP──▶ filter ──TCP──▶ downstream service
                            │
-   bytes ─ GrpcFrames.decode ─▶ message ─ Wire.detail ⇀ DetailJson ─ Policy.keep ─▶ keep?
-                                                                                      │
-   bytes ◀─ GrpcFrames.encode ◀─ the kept messages, byte for byte ◀───────────────────┘
+   bytes ─ GrpcFrames.splitFrames ─▶ message ─ Wire.detail ⇀ DetailJson ─ Policy.keep ─▶ keep?
+                                                                                           │
+   bytes ◀─ GrpcFrames.joinFrames ◀─ the kept messages, byte for byte ◀────────────────────┘
 ```
 
 ## The stream
@@ -44,16 +44,16 @@ integer, then the message (the *Length-Prefixed-Message* of the
 gRPC is not tied to protobuf: a service can carry JSON (`application/grpc+json`),
 and this one does.
 
-`GrpcFrames` holds the framing as two fs2 pipes over raw bytes. `decode` cuts
+`GrpcFrames` holds the framing as two fs2 pipes over raw bytes. `splitFrames` cuts
 messages out of the bytes in whatever pieces the socket reads them, and fails
 the stream on a compressed frame (no message encoding is negotiated here), on a
 message over gRPC's default 4 MiB limit, or on bytes that end inside a frame.
-`encode` frames messages again.
+`joinFrames` frames messages again, without copying them.
 
 ```scala
 socketBytes                                   // Stream[F, Byte], as the socket reads it
-  .through(GrpcFrames.decode())               // Stream[F, Array[Byte]]: one per message
-  .through(GrpcFrames.encode)                 // Stream[F, Byte]: the same frames again
+  .through(GrpcFrames.splitFrames())               // Stream[F, Array[Byte]]: one per message
+  .through(GrpcFrames.joinFrames)                 // Stream[F, Byte]: the same frames again
 ```
 
 The demo puts these frames straight on TCP rather than inside HTTP/2 streams:
@@ -87,10 +87,27 @@ final case class Service(name: String, tier: Tier, region: String)   // detail �
 ```
 
 jsoniter-scala writes a `Detail` as an object whose first field, `"type"`, names
-its case: `{"type":"Incident","severity":"Sev1",…}`. The generator (`Issues`) is
-deterministic. A third of its issues are of each kind, and their text includes
-what JSON must escape (quotes, backslashes, line breaks) and non-ASCII text. A
-message is 2.4 to 5.6 KB, 3.8 KB on average.
+its case: `{"type":"Incident","severity":"Sev1",…}`.
+
+The issues come from ScalaCheck generators that
+[scalacheck-derived](https://github.com/martinhh/scalacheck-derived) derives
+from the model, one per case class and enum, from its fields and cases:
+
+```scala
+object Issues:
+  given Arbitrary[String] = /* words; one in twenty is something JSON must escape, or non-ASCII */
+  given Arbitrary[Double] = Arbitrary(Gen.choose(0.0, 1e6))      // JSON has no NaN or infinities
+  given Arbitrary[Module] = Arbitrary(Gen.oneOf(modules))
+  given Arbitrary[Votes] = Arbitrary(Gen.choose(0, 200).map(Votes(_)))
+  given Arbitrary[Detail] = deriveArbitrary
+  given Arbitrary[Issue] = deriveArbitrary
+```
+
+Only the leaves are written by hand, so a field added to the model is generated
+without touching the generators. A third of the issues are of each kind. The
+stream draws them at size 7: up to seven words in a text and seven elements in
+a list, which makes a message 2.6 to 5.9 KB, 4.1 KB on average. The property
+tests draw them at every size from 2 to 40.
 
 ## Reading without decoding
 
@@ -200,7 +217,7 @@ message, and the baseline drops it for that reason.
 
 ```scala
 def filter[F[_]: Async](verdict: Array[Byte] => Verdict, tally: Ref[F, Tally]): Pipe[F, Byte, Byte] =
-  _.through(GrpcFrames.decode())
+  _.through(GrpcFrames.splitFrames())
     .chunks
     .evalMap { messages =>
       Async[F].delay(messages.map(message => (message, verdict(message)))).timed.flatMap {
@@ -209,7 +226,7 @@ def filter[F[_]: Async](verdict: Array[Byte] => Verdict, tally: Ref[F, Tally]): 
       }
     }
     .unchunks
-    .through(GrpcFrames.encode)
+    .through(GrpcFrames.joinFrames)
 ```
 
 `Net` puts it between two sockets. The upstream service streams frames to
@@ -225,18 +242,18 @@ interface, once with each filter (after an untimed run of each to warm the JIT
 compiler up):
 
 ```
-eo-jsoniter optics: 200000 messages, 754.9 MB in 2.09 s:
-  96 k messages/s, 362 MB/s
-  judging them took 6.3 µs per message; the rest is sockets and framing
+eo-jsoniter optics: 200000 messages, 813.3 MB in 2.21 s:
+  91 k messages/s, 368 MB/s
+  judging them took 7.1 µs per message; the rest is sockets and framing
   kind            seen      kept
-  Bug            70507      9571
-  Incident       68168      9374
-  Request        61325      8978
+  Bug            66199      8205
+  Incident       63289     10745
+  Request        70512     12500
   none               0         0
-  downstream received 27923 messages (27923 kept); 27923 decode as issues, and the policy keeps 27923 of them
-full decode (baseline): 200000 messages, 754.9 MB in 3.72 s:
-  54 k messages/s, 203 MB/s
-  judging them took 14.3 µs per message; the rest is sockets and framing
+  downstream received 31450 messages (31450 kept); 31450 decode as issues, and the policy keeps 31450 of them
+full decode (baseline): 200000 messages, 813.3 MB in 4.16 s:
+  48 k messages/s, 196 MB/s
+  judging them took 16.8 µs per message; the rest is sockets and framing
   …
 ```
 
@@ -247,7 +264,7 @@ full decode (baseline): 200000 messages, 754.9 MB in 3.72 s:
 | suite | checks |
 |---|---|
 | `GrpcFramesSpec` | any messages, framed and cut into arbitrary pieces, decode back whole; the frame layout; the size limit (unsigned lengths included); compressed frames and truncated bytes fail the stream |
-| `TriageSpec` | the optics judge 3 000 messages exactly as decoding does, under the default policy and under 100 random ones, every kind both kept and dropped; the slice `Wire.detail` hands out is the detail's own JSON; pretty-printed JSON is read the same; an unknown kind, a missing `detail` and bytes that aren't JSON are dropped as unclassified |
+| `TriageSpec` | the optics judge every message exactly as decoding does: 3 000 issues the size the stream's are, under the default policy and under 100 random ones, and 500 random issues of every size under random policies, every kind both kept and dropped; the slice `Wire.detail` hands out is the detail's own JSON; pretty-printed JSON is read the same; an unknown kind, a missing `detail` and bytes that aren't JSON are dropped as unclassified |
 | `TriageSpec` (laws) | `Model`'s optics pass cats-eo-laws' `OptionalTests` |
 | `PipelineSpec` | the whole filter, in memory with the bytes cut at random, and over real sockets: it forwards exactly the messages the decoded issues say to keep, byte for byte and in order, and its tally adds up; a malformed frame fails it |
 
@@ -275,15 +292,15 @@ same message with `detail` moved to the front.
 
 | layout | `decode` | `optics` | `detail` | speed-up | allocation |
 |---|--:|--:|--:|--:|--:|
-| late | 10 133 ± 363 ns, 9 359 B | 4 584 ± 329 ns, 700 B | 3 837 ± 271 ns, 382 B | 2.2× | 13× less |
-| first | 10 468 ± 620 ns, 9 353 B | 1 247 ± 79 ns, 684 B | 809 ± 85 ns, 411 B | 8.4× | 14× less |
+| late | 13 833 ± 620 ns, 8 557 B | 5 929 ± 450 ns, 705 B | 5 371 ± 219 ns, 367 B | 2.3× | 12× less |
+| first | 13 403 ± 707 ns, 8 548 B | 1 207 ± 78 ns, 664 B | 711 ± 63 ns, 431 B | 11× | 13× less |
 
 Decoding reads every byte, wherever `detail` is. The scan reads the bytes in
 front of `detail`, so its cost depends on where the producer puts the field:
-in the codec's own layout, more than four fifths of the optics' time is the
-scan past the 60 fields in front of `detail`. It skips them at about the speed of
+in the codec's own layout, nine tenths of the optics' time is the scan past
+the 60 fields in front of `detail`. It skips them at about the speed of
 jsoniter-scala's own `skip`. What it saves either way is the building: 700
-bytes allocated per message instead of 9.4 KB.
+bytes allocated per message instead of 8.6 KB.
 
 ### The whole filter
 
@@ -293,12 +310,12 @@ ones framed again.
 
 | judge | per message | allocation |
 |---|--:|--:|
-| `decode` | 13 589 ± 1 243 ns | 14 726 B |
-| `optics` | 7 136 ± 415 ns | 6 092 B |
+| `decode` | 17 695 ± 845 ns | 13 917 B |
+| `optics` | 8 911 ± 449 ns | 6 001 B |
 
-1.9× faster, with 2.4× less allocation. The pipe adds 2.5 to 3.5 µs and 5.4 KB
-per message either way. Most of that is copying each message out of the
-socket's chunks into an array of its own (3.8 KB), because a `JsoniterPrism`
+2.0× faster, with 2.3× less allocation. The pipe adds 3 to 4 µs and 5.3 KB per
+message either way. Most of that is copying each message out of the
+socket's chunks into an array of its own (4 KB), because a `JsoniterPrism`
 reads a whole `Array[Byte]`.
 
 ## Limits

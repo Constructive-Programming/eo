@@ -9,9 +9,9 @@ byte for byte.
 ```
 upstream service ──TCP──▶ filter ──TCP──▶ downstream service
                            │
-   bytes ─ GrpcFrames.decode ─▶ message ─ Wire.detail ⇀ DetailJson ─ Policy.keep ─▶ keep?
-                                                                                      │
-   bytes ◀─ GrpcFrames.encode ◀─ the kept messages, byte for byte ◀───────────────────┘
+   bytes ─ GrpcFrames.splitFrames ─▶ message ─ Wire.detail ⇀ DetailJson ─ Policy.keep ─▶ keep?
+                                                                                           │
+   bytes ◀─ GrpcFrames.joinFrames ◀─ the kept messages, byte for byte ◀────────────────────┘
 ```
 
 Each message is an `Issue` with 64 fields. The 61st, `detail`, is one of three
@@ -61,11 +61,11 @@ both judge every message alike.
 | file | what it is |
 |---|---|
 | `Issue.scala` | the message model and its jsoniter-scala codecs |
-| `Issues.scala` | a deterministic generator of issues |
+| `Issues.scala` | ScalaCheck generators for issues, derived from the model by scalacheck-derived |
 | `Wire.scala` | eo-jsoniter optics over a message's bytes |
 | `Model.scala` | the same foci on a decoded `Detail` (eo-generics) |
 | `Policy.scala` | which issues to keep, written against `CanGetOption` |
-| `GrpcFrames.scala` | gRPC's Length-Prefixed-Message framing as fs2 pipes |
+| `GrpcFrames.scala` | gRPC's Length-Prefixed-Message framing as fs2 pipes: `splitFrames`, `joinFrames` |
 | `Triage.scala` | a message's verdict, both ways; the filter pipe; its tally |
 | `Net.scala` | the upstream service, the filter and the downstream service on TCP sockets |
 | `Demo.scala` | runs the three on loopback, with each filter |
@@ -76,12 +76,12 @@ JMH (`demos/grpc-filter-bench`) on a 4-vCPU 2.1 GHz Xeon container, JDK 21:
 
 | per message | full decode | eo-jsoniter optics |
 |---|--:|--:|
-| judging one message | 10.1 µs, 9 359 B | 4.6 µs, 700 B |
-| … with `detail` first in the message | 10.5 µs, 9 353 B | 1.2 µs, 684 B |
-| the whole filter pipe, in memory | 13.6 µs, 14 726 B | 7.1 µs, 6 092 B |
+| judging one message | 13.8 µs, 8 557 B | 5.9 µs, 705 B |
+| … with `detail` first in the message | 13.4 µs, 8 548 B | 1.2 µs, 664 B |
+| the whole filter pipe, in memory | 17.7 µs, 13 917 B | 8.9 µs, 6 001 B |
 
-Over loopback sockets, `sbt "demoGrpcFilter/run 200000"` filters 96 k
-messages/s with the optics and 54 k with full decoding.
+Over loopback sockets, `sbt "demoGrpcFilter/run 200000"` filters 91 k
+messages/s with the optics and 48 k with full decoding.
 
 The scan through a message costs most of the optics' time. It reads the bytes
 in front of the focused field, so it depends on where the producer puts that

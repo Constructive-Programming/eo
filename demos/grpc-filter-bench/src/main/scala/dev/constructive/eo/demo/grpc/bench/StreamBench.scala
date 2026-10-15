@@ -31,7 +31,7 @@ class StreamBench:
   private val pieces: Vector[Chunk[Byte]] =
     val framed = Stream
       .emits(Issues(seed = 7).take(StreamBench.Messages).map(writeToArray(_)).toSeq)
-      .through(GrpcFrames.encode)
+      .through(GrpcFrames.joinFrames)
       .compile
       .to(Array)
     framed.grouped(256 * 1024).map(Chunk.array(_)).toVector

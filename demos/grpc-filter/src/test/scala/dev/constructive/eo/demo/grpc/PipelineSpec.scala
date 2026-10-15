@@ -43,14 +43,14 @@ class PipelineSpec extends Specification with ScalaCheck:
   "in memory, however the bytes are cut, the filter forwards exactly the kept messages" >>
     Prop
       .forAll(Gen.nonEmptyListOf(Gen.choose(1, 20_000))) { sizes =>
-        val bytes = Stream.emits(upstream).through(GrpcFrames.encode).compile.to(Array)
+        val bytes = Stream.emits(upstream).through(GrpcFrames.joinFrames).compile.to(Array)
         val (tally, out) = run(Ref.of[IO, Tally](Tally.empty).flatMap { tally =>
           Stream
             .emits(GrpcFramesSpec.pieces(bytes, sizes))
             .flatMap(Stream.chunk)
             .covary[IO]
             .through(Triage.filter(Triage.optics(policy), tally))
-            .through(GrpcFrames.decode())
+            .through(GrpcFrames.splitFrames())
             .map(_.toList)
             .compile
             .toVector

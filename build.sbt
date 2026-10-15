@@ -1243,6 +1243,9 @@ lazy val demoUplcJvmBench: Project = project
 // -------------------------------------------------------------------
 lazy val Fs2Version = "3.14.0"
 lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
+// Arbitrary / Cogen derivation from Scala 3 mirrors: the demo's issues are drawn from generators
+// derived from the model.
+lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.10.0"
 
 lazy val demoGrpcFilter: Project = project
   .in(file("demos/grpc-filter"))
@@ -1260,6 +1263,10 @@ lazy val demoGrpcFilter: Project = project
     libraryDependencies += fs2Io,
     // The message model's codecs: the source encodes whole messages, the baseline decodes them.
     libraryDependencies += jsoniterMacros,
+    // The stream's issues come from ScalaCheck generators derived from the model, in main code:
+    // the demo's upstream service and the benchmarks draw from them too.
+    libraryDependencies += scalacheck,
+    libraryDependencies += scalacheckDerived,
     libraryDependencies += discipline % Test,
     Compile / run / fork := true,
   )

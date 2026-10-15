@@ -21,13 +21,13 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
       .emits(chunks)
       .flatMap(Stream.chunk)
       .covary[Fallible]
-      .through(GrpcFrames.decode(max))
+      .through(GrpcFrames.splitFrames(max))
       .compile
       .toList
       .map(_.map(_.toList))
 
   def framed(messages: List[Array[Byte]]): Array[Byte] =
-    Stream.emits(messages).through(GrpcFrames.encode).compile.to(Array)
+    Stream.emits(messages).through(GrpcFrames.joinFrames).compile.to(Array)
 
   def malformed(bytes: Int*)(reason: String) =
     decode(List(Chunk.array(bytes.map(_.toByte).toArray)), max = 10) must beLeft(
@@ -48,11 +48,11 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
 
   "no bytes, no messages; an empty message is a message" >> {
     decode(Nil) must beRight(Nil)
-    decode(List(Chunk.array(GrpcFrames.frame(Array.emptyByteArray)))) must beRight(List(Nil))
+    decode(List(GrpcFrames.frame(Array.emptyByteArray))) must beRight(List(Nil))
   }
 
   "a message at the size limit passes; one byte more fails the stream" >> {
-    decode(List(Chunk.array(GrpcFrames.frame(new Array[Byte](10)))), max = 10) must beRight
+    decode(List(GrpcFrames.frame(new Array[Byte](10))), max = 10) must beRight
     malformed(0, 0, 0, 0, 11)("a 11-byte message: over 10")
   }
 

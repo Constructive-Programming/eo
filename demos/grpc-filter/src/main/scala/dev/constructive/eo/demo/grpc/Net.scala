@@ -49,7 +49,7 @@ object Net:
       server
         .accept
         .map(client =>
-          messages.through(GrpcFrames.encode).through(client.writes) ++
+          messages.through(GrpcFrames.joinFrames).through(client.writes) ++
             Stream.exec(client.endOfOutput)
         )
         .parJoinUnbounded
@@ -69,7 +69,7 @@ object Net:
       server
         .accept
         .head
-        .flatMap(reads(_).through(GrpcFrames.decode()))
+        .flatMap(reads(_).through(GrpcFrames.splitFrames()))
         .fold(z)(f)
         .compile
         .lastOrError

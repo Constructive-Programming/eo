@@ -1,8 +1,8 @@
 package dev.constructive.eo.demo.grpc
 
-import scala.annotation.tailrec
 import scala.util.control.NoStackTrace
 
+import cats.syntax.all.*
 import fs2.{Chunk, Pipe, Pull, RaiseThrowable, Stream}
 
 /** gRPC's message framing, as fs2 pipes over raw bytes. The gRPC over HTTP/2 spec frames each
@@ -29,7 +29,7 @@ object GrpcFrames:
     * compressed message (no message encoding is negotiated here), on one longer than
     * `maxMessageBytes`, or when the bytes end inside a frame.
     */
-  def decode[F[_]: RaiseThrowable](
+  def splitFrames[F[_]: RaiseThrowable](
       maxMessageBytes: Int = DefaultMaxMessageBytes
   ): Pipe[F, Byte, Array[Byte]] =
     def go(buffered: Chunk[Byte], rest: Stream[F, Byte]): Pull[F, Array[Byte], Unit] =
@@ -44,44 +44,42 @@ object GrpcFrames:
           }
     in => go(Chunk.empty, in).stream
 
-  /** Messages → their frames, uncompressed, one chunk of bytes per chunk of messages. */
-  def encode[F[_]]: Pipe[F, Array[Byte], Byte] =
-    _.mapChunks(messages => Chunk.array(frames(messages)))
+  /** Messages → their frames, uncompressed. The messages' bytes are not copied. */
+  def joinFrames[F[_]]: Pipe[F, Array[Byte], Byte] =
+    _.mapChunks(_.flatMap(frame))
 
-  /** One message's frame. */
-  def frame(message: Array[Byte]): Array[Byte] = frames(Chunk.singleton(message))
+  /** One message's frame: not compressed, its length, the message. */
+  def frame(message: Array[Byte]): Chunk[Byte] =
+    val length = message.length
+    Chunk(0, length >>> 24, length >>> 16, length >>> 8, length).map(_.toByte) ++
+      Chunk.array(message)
 
   /** Every whole frame at the front of `bytes`, as messages, and the bytes after them. */
   private def split(
       bytes: Chunk[Byte],
       maxMessageBytes: Int,
   ): Either[String, (Chunk[Array[Byte]], Chunk[Byte])] =
-    @tailrec def loop(
-        rest: Chunk[Byte],
-        messages: List[Array[Byte]],
-    ): Either[String, (Chunk[Array[Byte]], Chunk[Byte])] =
-      def done = Right((Chunk.from(messages.reverse), rest))
-      if rest.size < HeaderBytes then done
-      else
-        val length = (1 to 4).foldLeft(0L)((n, i) => n << 8 | (rest(i) & 0xffL))
-        if rest(0) != 0 then Left(s"compressed flag ${rest(0)}: no message encoding negotiated")
-        else if length > maxMessageBytes then Left(s"a $length-byte message: over $maxMessageBytes")
-        else if rest.size - HeaderBytes < length then done
-        else
-          val (message, next) = rest.drop(HeaderBytes).splitAt(length.toInt)
-          loop(next, message.toArray :: messages)
-    loop(bytes, Nil)
-
-  private def frames(messages: Chunk[Array[Byte]]): Array[Byte] =
-    val out = new Array[Byte](messages.foldLeft(0)(_ + HeaderBytes + _.length))
-    messages.foldLeft(0) { (at, message) =>
-      val length = message.length
-      out(at) = 0
-      out(at + 1) = (length >>> 24).toByte
-      out(at + 2) = (length >>> 16).toByte
-      out(at + 3) = (length >>> 8).toByte
-      out(at + 4) = length.toByte
-      System.arraycopy(message, 0, out, at + HeaderBytes, length)
-      at + HeaderBytes + length
+    (List.empty[Array[Byte]], bytes).tailRecM { (messages, rest) =>
+      unframe(rest, maxMessageBytes).map {
+        case Some((message, next)) => Left((message :: messages, next))
+        case None                  => Right((Chunk.from(messages.reverse), rest))
+      }
     }
-    out
+
+  /** The message in the frame at the front of `bytes`, and the bytes after it; `None` until the
+    * whole frame is there.
+    */
+  private def unframe(
+      bytes: Chunk[Byte],
+      maxMessageBytes: Int,
+  ): Either[String, Option[(Array[Byte], Chunk[Byte])]] =
+    if bytes.size < HeaderBytes then Right(None)
+    else
+      val length = (1 to 4).foldLeft(0L)((n, i) => n << 8 | (bytes(i) & 0xffL))
+      if bytes(0) != 0 then Left(s"compressed flag ${bytes(0)}: no message encoding negotiated")
+      else if length > maxMessageBytes then Left(s"a $length-byte message: over $maxMessageBytes")
+      else
+        Right(Option.when(bytes.size - HeaderBytes >= length) {
+          val (message, rest) = bytes.drop(HeaderBytes).splitAt(length.toInt)
+          (message.toArray, rest)
+        })

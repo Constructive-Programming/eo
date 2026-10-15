@@ -1,13 +1,13 @@
 package dev.constructive.eo.demo.grpc
 
 import scala.language.implicitConversions
-import scala.util.Random
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray, WriterConfig}
 import dev.constructive.eo.laws.OptionalLaws
 import dev.constructive.eo.laws.discipline.OptionalTests
 import dev.constructive.eo.optics.Optic.*
-import org.scalacheck.{Arbitrary, Cogen, Gen, Prop}
+import io.github.martinhh.derived.scalacheck.{deriveArbitrary, deriveCogen}
+import org.scalacheck.{Arbitrary, Cogen, Prop}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
@@ -15,26 +15,29 @@ import org.typelevel.discipline.specs2.mutable.Discipline
 /** Differential: reading a message through the optics must judge it exactly as decoding it does. */
 class TriageSpec extends Specification with ScalaCheck with Discipline:
 
+  import Issues.given
+
   private val issues = Issues(seed = 11).take(3000).toVector
   private val messages = issues.map(writeToArray(_))
 
   private def agree(policy: Policy)(message: Array[Byte]) =
     Triage.optics(policy)(message) === Triage.decoding(policy)(message)
 
-  private val policies =
-    for
-      urgent <- Gen.someOf(Severity.values.toSeq)
-      tiers <- Gen.someOf(Tier.values.toSeq)
-      modules <- Gen.someOf(Issues.modules)
-      plans <- Gen.someOf(Plan.values.toSeq)
-      minVotes <- Gen.choose(0, 210)
-    yield Policy(urgent.toSet, tiers.toSet, modules.toSet, plans.toSet, Votes(minVotes))
+  // Derived like the issues: any sets of severities, tiers, modules and plans, any vote threshold.
+  given Arbitrary[Policy] = deriveArbitrary
 
   "an issue has 64 fields" >> (issues.head.productArity === 64)
 
   "the optics judge every message as decoding it does" >> {
-    "under the default policy" >> forall(messages)(agree(Policy.default))
-    "under any policy" >> Prop.forAll(policies)(policy => forall(messages.take(300))(agree(policy)))
+    "under the default policy, on 3 000 issues the size the stream's are" >>
+      forall(messages)(agree(Policy.default))
+    "under any policy, on 300 of them" >>
+      Prop.forAll((policy: Policy) => forall(messages.take(300))(agree(policy)))
+    // From size 2 up: below that the derived enums have no case left to draw.
+    "under any policy, on any issue of any size" >>
+      Prop
+        .forAll((policy: Policy, issue: Issue) => agree(policy)(writeToArray(issue)))
+        .set(minTestsOk = 500, minSize = 2, maxSize = 40)
   }
 
   "every kind is both kept and dropped, so every branch of the policy is exercised" >> {
@@ -77,15 +80,12 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
   }
 
   // The model's optics, which the baseline and these tests read through, are lawful.
-  given Arbitrary[Detail] = Arbitrary(Arbitrary.arbitrary[Long].map(s => Issues.detail(Random(s))))
-  given Arbitrary[Severity] = Arbitrary(Gen.oneOf(Severity.values.toSeq))
-  given Arbitrary[Tier] = Arbitrary(Gen.oneOf(Tier.values.toSeq))
-  given Arbitrary[Plan] = Arbitrary(Gen.oneOf(Plan.values.toSeq))
-  given Arbitrary[Module] = Arbitrary(Gen.oneOf(Issues.modules))
-  given Arbitrary[Votes] = Arbitrary(Gen.choose(0, 300).map(Votes(_)))
-  given Cogen[Severity] = Cogen[Int].contramap(_.ordinal)
-  given Cogen[Tier] = Cogen[Int].contramap(_.ordinal)
-  given Cogen[Plan] = Cogen[Int].contramap(_.ordinal)
+  given Arbitrary[Severity] = deriveArbitrary
+  given Arbitrary[Tier] = deriveArbitrary
+  given Arbitrary[Plan] = deriveArbitrary
+  given Cogen[Severity] = deriveCogen
+  given Cogen[Tier] = deriveCogen
+  given Cogen[Plan] = deriveCogen
   given Cogen[Module] = Cogen[String].contramap(_.name)
   given Cogen[Votes] = Cogen[Int].contramap(_.count)
 
