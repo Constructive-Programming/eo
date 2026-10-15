@@ -20,7 +20,7 @@ import scalus.uplc.{Constant, Term}
 class ValidatorSpec extends Specification:
 
   private def check(s: Scenario): Result =
-    val classFile = UplcJvm.toBytecode.get(Oracle.script(s.script.program))
+    val classFile = Oracle.classFile(Oracle.script(s.script.program))
     val verdict = Oracle.compare(Oracle.script(s.script.program $ s.context))
     // CIP-117: a V3 script validates iff it evaluates to unit.
     val oracleAccepts = verdict match

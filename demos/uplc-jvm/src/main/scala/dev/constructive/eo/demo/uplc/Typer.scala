@@ -2,6 +2,7 @@ package dev.constructive.eo.demo.uplc
 
 import scala.annotation.tailrec
 
+import dev.constructive.eo.demo.uplc.Step.{all, Done}
 import scalus.uplc.{DefaultFun, DefaultUni, Term}
 
 /** `UplcJvm.toTyped.get`: reads a decoded UPLC program back as a typed, Scala-like [[Expr]],
@@ -12,6 +13,8 @@ import scalus.uplc.{DefaultFun, DefaultUni, Term}
   * branch that is immediately forced, partially applying a builtin that is immediately saturated).
   * Effects keep their order; anything the typer does not recognise stays a dynamic `Apply` /
   * `Force` and is executed exactly as the machine would.
+  *
+  * The walk is made of [[Step]]s: however deep a program nests, the JVM stack stays shallow.
   */
 object Typer:
 
@@ -21,7 +24,7 @@ object Typer:
   val MaxChain = 200
 
   def typeProgram(source: SourceProgram): TypedProgram =
-    TypedProgram(source.script, new Typing(source).expr(0, Vector.empty))(source)
+    TypedProgram(source.script, new Typing(source).expr(0, Vector.empty).value)(source)
 
 /** What a binder is statically known to hold. */
 private enum Known:
@@ -45,6 +48,8 @@ final private class Typing(source: SourceProgram):
 
   import source.{children, nodes}
 
+  private val walk = new Walk
+
   private val Param = Binder(None, Known.Unknown)
 
   /** Builtins that return one of their arguments after the first unchanged: over delayed branches,
@@ -56,16 +61,21 @@ final private class Typing(source: SourceProgram):
   private def lookup(scope: Vector[Binder], index: Int): Option[Binder] =
     if index >= 1 && index <= scope.size then Some(scope(scope.size - index)) else None
 
-  def expr(n: Int, scope: Vector[Binder]): Expr = nodes(n) match
+  def expr(n: Int, scope: Vector[Binder]): Step[Expr] = nodes(n) match
     case Term.Var(name, _) =>
-      lookup(scope, name.index).fold(Expr.Unbound(name.index))(b => Expr.Ref(name.index, b.ty))
+      Done(
+        lookup(scope, name.index).fold(Expr.Unbound(name.index))(b => Expr.Ref(name.index, b.ty))
+      )
+    case Term.Const(value, _) => Done(Expr.Lit(n, value))
+    case Term.Builtin(fun, _) => Done(Expr.BuiltinRef(fun))
+    case Term.Error(_)        => Done(Expr.Fail)
+    case _                    => walk.nested(compound(n, scope))
+
+  private def compound(n: Int, scope: Vector[Binder]): Step[Expr] = nodes(n) match
     case _: Term.LamAbs         => lambda(n, scope, recursive = false)
-    case _: Term.Delay          => Expr.Delayed(n, expr(n + 1, scope))
-    case Term.Const(value, _)   => Expr.Lit(n, value)
-    case Term.Builtin(fun, _)   => Expr.BuiltinRef(fun)
-    case Term.Error(_)          => Expr.Fail
+    case _: Term.Delay          => expr(n + 1, scope).map(Expr.Delayed(n, _))
     case Term.Constr(tag, _, _) =>
-      strict(children(n).map(expr(_, scope)))(Expr.Construct(tag.value, _))
+      all(children(n))(expr(_, scope)).map(strict(_)(Expr.Construct(tag.value, _)))
     case Term.Case(scrut, _, _) =>
       val s :: branches = children(n): @unchecked
       scrut match
@@ -77,12 +87,12 @@ final private class Typing(source: SourceProgram):
               applies(branches(tag.value.toInt), fields.size, scope) =>
           application(branches(tag.value.toInt), children(s).map(Link.Arg(_)), scope)
         case _ =>
-          val e = expr(s, scope)
-          val bs = branches.map(expr(_, scope))
-          // Only a case on a known scalar passes no arguments to its branch, so only then is the
-          // branch's own type the result type.
-          val scalar = e.ty.exists(t => t == DefaultUni.Bool || t == DefaultUni.Integer)
-          Expr.Match(e, bs, if Semantics.caseOnBuiltins && scalar then Ty.join(bs) else None)
+          for e <- expr(s, scope); bs <- all(branches)(expr(_, scope))
+          yield
+            // Only a case on a known scalar passes no arguments to its branch, so only then is the
+            // branch's own type the result type.
+            val scalar = e.ty.exists(t => t == DefaultUni.Bool || t == DefaultUni.Integer)
+            Expr.Match(e, bs, if Semantics.caseOnBuiltins && scalar then Ty.join(bs) else None)
     case _ =>
       val (head, links) = spine(n, Nil)
       application(head, links, scope)
@@ -103,49 +113,54 @@ final private class Typing(source: SourceProgram):
     go(n, Nil)
 
   /** A lambda chain. When `recursive`, its first parameter is known to hold the chain itself. */
-  private def lambda(n: Int, scope: Vector[Binder], recursive: Boolean): Expr =
+  private def lambda(n: Int, scope: Vector[Binder], recursive: Boolean): Step[Expr] =
     val (params, body) = chain(n)
     val first = if recursive then Binder(None, Known.Lambda(n, params.size)) else Param
-    Expr.Lambda(n, params, expr(body, scope ++ (first +: Vector.fill(params.size - 1)(Param))))
+    expr(body, scope ++ (first +: Vector.fill(params.size - 1)(Param)))
+      .map(Expr.Lambda(n, params, _))
 
   /** Every occurrence of variable `i` in `t` applies it to itself — `[i i …]`, or
     * `case (constr 0 [i …]) [i]` — so the closure it names never escapes anywhere else.
     */
-  private def selfApplied(t: Term, i: Int): Boolean = t match
-    case Term.Apply(Term.Var(f, _), Term.Var(a, _), _) if f.index == i && a.index == i => true
-    case Term.Case(Term.Constr(tag, Term.Var(a, _) :: args, _), List(Term.Var(f, _)), _)
-        if tag.value == 0 && a.index == i && f.index == i =>
-      args.forall(selfApplied(_, i))
-    case Term.Var(v, _)          => v.index != i
-    case Term.LamAbs(_, b, _)    => selfApplied(b, i + 1)
-    case Term.Apply(f, a, _)     => selfApplied(f, i) && selfApplied(a, i)
-    case Term.Force(b, _)        => selfApplied(b, i)
-    case Term.Delay(b, _)        => selfApplied(b, i)
-    case Term.Constr(_, args, _) => args.forall(selfApplied(_, i))
-    case Term.Case(s, cases, _)  => selfApplied(s, i) && cases.forall(selfApplied(_, i))
-    case _                       => true
+  private def selfApplied(t: Term, i: Int): Boolean =
+    @tailrec
+    def go(todo: List[(Term, Int)]): Boolean = todo match
+      case Nil            => true
+      case (t, i) :: rest =>
+        t match
+          case Term.Apply(Term.Var(f, _), Term.Var(a, _), _) if f.index == i && a.index == i =>
+            go(rest)
+          case Term.Case(Term.Constr(tag, Term.Var(a, _) :: args, _), List(Term.Var(f, _)), _)
+              if tag.value == 0 && a.index == i && f.index == i =>
+            go(args.map((_, i)) ::: rest)
+          case Term.Var(v, _)       => if v.index == i then false else go(rest)
+          case Term.LamAbs(_, b, _) => go((b, i + 1) :: rest)
+          case other                => go(SourceProgram.subterms(other).map((_, i)) ::: rest)
+    go(List((t, i)))
 
-  private def application(head: Int, links: List[Link], scope: Vector[Binder]): Expr =
-    nodes(head) match
+  private def application(head: Int, links: List[Link], scope: Vector[Binder]): Step[Expr] =
+    walk.nested(nodes(head) match
       case Term.Builtin(fun, _) => builtinSpine(fun, links, scope)
 
       case _: Term.LamAbs =>
         val args = leading(links)
         val (params, _) = chain(head)
         val bound = math.min(args.size, params.size)
-        if bound == 0 then rest(expr(head, scope), links, scope)
+        if bound == 0 then expr(head, scope).flatMap(rest(_, links, scope))
         else
           // (λx1…λxk. body) a1 … am  ⇒  let x1 = a1 … xj = aj in <the rest of the chain>
-          val rhss = args.take(bound).zipWithIndex.map { (a, j) =>
-            // let x = λself … in … [x x] …: a recursive function, tied by self-application. When
-            // both x and self are only ever applied to themselves, self always holds the chain.
-            val recursive = nodes(a).isInstanceOf[Term.LamAbs] &&
-              selfApplied(nodes(head + bound), bound - j) && selfApplied(nodes(a + 1), 1)
-            if recursive then lambda(a, scope, recursive) else expr(a, scope)
-          }
-          val inner = expr(head + bound, scope ++ rhss.map(r => Binder(r.ty, known(r))))
-          val bindings = params.take(bound).zip(rhss).map(Binding.apply)
-          rest(Expr.Let(head, bindings, inner, inner.ty), links.drop(bound), scope)
+          for
+            rhss <- all(args.take(bound).zipWithIndex) { (a, j) =>
+              // let x = λself … in … [x x] …: a recursive function, tied by self-application. When
+              // both x and self are only ever applied to themselves, self always holds the chain.
+              val recursive = nodes(a).isInstanceOf[Term.LamAbs] &&
+                selfApplied(nodes(head + bound), bound - j) && selfApplied(nodes(a + 1), 1)
+              if recursive then lambda(a, scope, recursive) else expr(a, scope)
+            }
+            inner <- expr(head + bound, scope ++ rhss.map(r => Binder(r.ty, known(r))))
+            bindings = params.take(bound).zip(rhss).map(Binding.apply)
+            let <- rest(Expr.Let(head, bindings, inner, inner.ty), links.drop(bound), scope)
+          yield let
 
       // force (delay t)  ⇒  t
       case _: Term.Delay if links.headOption.contains(Link.Frc) =>
@@ -155,15 +170,20 @@ final private class Typing(source: SourceProgram):
       case Term.Var(name, _) =>
         lookup(scope, name.index).map(_.known) match
           case Some(Known.Lambda(origin, arity)) if leading(links).size >= arity =>
-            val args = links.take(arity).collect { case Link.Arg(a) => expr(a, scope) }
-            val call = Expr.CallKnown(Expr.Ref(name.index, None), origin, args)
-            rest(call, links.drop(arity), scope)
+            all(links.take(arity).collect { case Link.Arg(a) => a })(expr(_, scope)).flatMap {
+              args =>
+                rest(
+                  Expr.CallKnown(Expr.Ref(name.index, None), origin, args),
+                  links.drop(arity),
+                  scope
+                )
+            }
           // Builtin values are pure: re-deriving the forced builtin at the call is unobservable.
           case Some(Known.Builtin(fun, forces)) if links.nonEmpty =>
             builtinSpine(fun, List.fill(forces)(Link.Frc) ++ links, scope)
-          case _ => rest(expr(head, scope), links, scope)
+          case _ => expr(head, scope).flatMap(rest(_, links, scope))
 
-      case _ => rest(expr(head, scope), links, scope)
+      case _ => expr(head, scope).flatMap(rest(_, links, scope)))
 
   /** The arguments at the front of a spine, before any force. */
   private def leading(links: List[Link]): List[Int] =
@@ -200,14 +220,17 @@ final private class Typing(source: SourceProgram):
   /** Applies the remaining links dynamically, in order. A function that can only fail is evaluated
     * before anything it is applied to, which then never runs.
     */
-  private def rest(acc: Expr, links: List[Link], scope: Vector[Binder]): Expr =
-    links.foldLeft(acc) {
-      case (f, _) if f.fails => f
-      case (f, Link.Arg(a))  => Expr.Apply(f, expr(a, scope))
-      case (f, Link.Frc)     => Expr.Force(f)
+  private def rest(acc: Expr, links: List[Link], scope: Vector[Binder]): Step[Expr] =
+    links.foldLeft(Done(acc)) { (fn, link) =>
+      fn.flatMap { f =>
+        link match
+          case _ if f.fails => Done(f)
+          case Link.Arg(a)  => expr(a, scope).map(Expr.Apply(f, _))
+          case Link.Frc     => Done(Expr.Force(f))
+      }
     }
 
-  private def builtinSpine(fun: DefaultFun, links: List[Link], scope: Vector[Binder]): Expr =
+  private def builtinSpine(fun: DefaultFun, links: List[Link], scope: Vector[Binder]): Step[Expr] =
     val scheme = Semantics.scheme(fun)
     val forces = scheme.numTypeVars
     val steps = forces + scheme.arity
@@ -224,14 +247,18 @@ final private class Typing(source: SourceProgram):
       val delayed = args.drop(1).filter(nodes(_).isInstanceOf[Term.Delay])
       // force (ifThenElse c (delay a) (delay b))  ⇒  if c then a else b
       if selectors(fun) && after.headOption.contains(Link.Frc) && delayed.size == args.size - 1 then
-        val branches = delayed.map(d => expr(d + 1, scope))
-        val choose = Expr.Choose(fun, expr(args.head, scope), branches, Ty.join(branches))
-        rest(choose, after.tail, scope)
+        for
+          scrut <- expr(args.head, scope)
+          branches <- all(delayed)(d => expr(d + 1, scope))
+          choose <- rest(Expr.Choose(fun, scrut, branches, Ty.join(branches)), after.tail, scope)
+        yield choose
       else
-        val call = strict(args.map(expr(_, scope))) { es =>
-          val ty =
-            if fun == DefaultFun.IfThenElse then Ty.join(es.drop(1))
-            else Semantics.result(fun, es.map(_.ty))
-          Expr.Call(fun, es, ty)
+        all(args)(expr(_, scope)).flatMap { es =>
+          val call = strict(es) { es =>
+            val ty =
+              if fun == DefaultFun.IfThenElse then Ty.join(es.drop(1))
+              else Semantics.result(fun, es.map(_.ty))
+            Expr.Call(fun, es, ty)
+          }
+          rest(call, after, scope)
         }
-        rest(call, after, scope)

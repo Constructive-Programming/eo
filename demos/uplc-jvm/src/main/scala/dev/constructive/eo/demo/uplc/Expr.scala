@@ -1,5 +1,7 @@
 package dev.constructive.eo.demo.uplc
 
+import scala.annotation.tailrec
+
 import scalus.compiler.sir.PrettyPrinter
 import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
@@ -32,7 +34,14 @@ object Ty:
   */
 final case class TypedProgram private[uplc] (script: CborScript, body: Expr)(
     val source: SourceProgram
-)
+):
+
+  // The body is a function of the script; comparing two deep trees would recurse.
+  override def equals(that: Any): Boolean = that match
+    case t: TypedProgram => t.script == script
+    case _               => false
+
+  override def hashCode: Int = script.hashCode
 
 final case class Binding(name: String, rhs: Expr)
 
@@ -96,7 +105,7 @@ enum Expr:
     case _                                                                       => false
 
   /** Can only fail: `error`, an unbound variable, or a `let` whose body is one of those. */
-  def fails: Boolean = this match
+  @tailrec final def fails: Boolean = this match
     case Fail | Unbound(_)  => true
     case Let(_, _, body, _) => body.fails
     case _                  => false

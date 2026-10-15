@@ -1,9 +1,9 @@
 package dev.constructive.eo.demo.uplc
 
 import scala.collection.concurrent.TrieMap
-import scala.collection.mutable
+import scala.collection.immutable.SortedSet
 
-import scalus.uplc.{DeBruijnedProgram, Term}
+import scalus.uplc.Term
 
 /** A decoded script — Scalus' own `Term` tree — numbered in PRE-ORDER.
   *
@@ -44,7 +44,15 @@ final class SourceProgram private (
     */
   def captures(origin: Int): IArray[Int] = captureCache.getOrElseUpdate(
     origin,
-    IArray.from(FreeVars.of(nodes(origin)).filter(_ <= depths(origin)))
+    // The node's subtree is the ids from `origin` on; a variable there is free in the node when its
+    // index reaches past the binders between the two.
+    IArray.from((origin until origin + sizes(origin)).foldLeft(SortedSet.empty[Int]) { (free, n) =>
+      nodes(n) match
+        case Term.Var(name, _) =>
+          val index = name.index - (depths(n) - depths(origin))
+          if index >= 1 && index <= depths(origin) then free + index else free
+        case _ => free
+    })
   )
 
 object SourceProgram:
@@ -53,12 +61,16 @@ object SourceProgram:
     // A subtree's nodes, binder depths and subtree sizes in pre-order, ahead of the `count` nodes
     // after it: a right fold over the children.
     type Numbered = (List[Term], List[Int], List[Int], Int)
-    def number(term: Term, depth: Int, rest: Numbered): Numbered =
+    val walk = new Walk
+    def number(term: Term, depth: Int, rest: Numbered): Step[Numbered] = walk.nested {
       val inner = if term.isInstanceOf[Term.LamAbs] then depth + 1 else depth
-      val (ns, ds, ss, count) = subterms(term).foldRight(rest)(number(_, inner, _))
-      (term :: ns, depth :: ds, (count - rest._4 + 1) :: ss, count + 1)
-    val (nodes, depths, sizes, _) =
-      number(DeBruijnedProgram.fromCbor(script.bytes).term, 0, (Nil, Nil, Nil, 0))
+      subterms(term)
+        .foldRight(Step.Done(rest): Step[Numbered])((t, acc) => acc.flatMap(number(t, inner, _)))
+        .map((ns, ds, ss, count) =>
+          (term :: ns, depth :: ds, (count - rest._4 + 1) :: ss, count + 1)
+        )
+    }
+    val (nodes, depths, sizes, _) = number(script.program.term, 0, (Nil, Nil, Nil, 0)).value
     new SourceProgram(script, IArray.from(nodes), IArray.from(depths), IArray.from(sizes))
 
   /** A term's immediate subterms, in the order they are numbered. */
@@ -70,16 +82,3 @@ object SourceProgram:
     case Term.Constr(_, args, _)                                       => args
     case Term.Case(scrut, cases, _)                                    => scrut :: cases
     case _: Term.Var | _: Term.Const | _: Term.Builtin | _: Term.Error => Nil
-
-/** Free de Bruijn indices of a term, relative to the term's own position, ascending. */
-object FreeVars:
-
-  // Into one mutable set: an immutable set per subterm makes translation slower.
-  def of(term: Term): Vector[Int] =
-    val acc = mutable.TreeSet.empty[Int]
-    def go(t: Term, binders: Int): Unit = t match
-      case Term.Var(name, _)       => if name.index > binders then acc += name.index - binders
-      case Term.LamAbs(_, body, _) => go(body, binders + 1)
-      case _                       => SourceProgram.subterms(t).foreach(go(_, binders))
-    go(term, 0)
-    acc.toVector

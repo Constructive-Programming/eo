@@ -7,7 +7,7 @@
 > contracts run in — to JVM class files, checked against the
 > [Scalus](https://scalus.org) CEK machine on every program it compiles.
 
-## The idea: a compiler is a chain of isos
+## The idea: a compiler is a chain of optics
 
 A compiler is usually a function: script in, class file out. It becomes an
 isomorphism as soon as its output remembers its input. Here every stage keeps
@@ -15,9 +15,14 @@ the script it came from — the typed program holds its source, and the class
 embeds the script in its constants — so every arrow can be walked back:
 
 ```
-CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
+CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript
            toTyped        lowering   compiling
 ```
+
+The first two arrows are isos. The last is a prism, because the JVM has limits
+a program can exceed: a method holds at most 64 KB of bytecode and a class at
+most 65 535 constants, so a class can be too large for a class file — and then
+there is none.
 
 | type | what it is |
 |---|---|
@@ -28,32 +33,41 @@ CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
 
 `CborScript` and `JvmClassScript` are opaque types over Scalus' `ByteString`, so
 the two byte encodings can't be swapped by accident, and the round-trip laws can
-compare them with `==`. The optics a caller wants all start at the script, and
-are compositions of the stages with `andThen`:
+compare them with `==`. None of the four types hands out what it holds — their
+`bytes` and `tree` are copies — so a value cannot change after the compiler made
+or checked it, and the way back always works. The optics a caller wants all
+start at the script, and are compositions of the stages with `andThen`; an iso
+followed by a prism is a prism:
 
 ```scala
 import dev.constructive.eo.demo.uplc.*
 
 val toTyped: Iso[CborScript, TypedProgram] = UplcJvm.toTyped
 val toJvmClass: Iso[CborScript, JvmClass] = UplcJvm.toTyped.andThen(UplcJvm.lowering)
-val toBytecode: Iso[CborScript, JvmClassScript] = toJvmClass.andThen(UplcJvm.compiling)
+val toBytecode = toJvmClass.andThen(UplcJvm.compiling)  // CborScript ⇀ JvmClassScript
 
 val script = CborScript.of(validator.program)  // or CborScript.parse(onChainBytes)
-val compiled = toBytecode.get(script)           // the compiler
-toBytecode.reverseGet(compiled) == script       // the class hands its script back
-Exec.validate(compiled, scriptContext)          // Right(traces) | Left(reason)
+val compiled = toBytecode.getOption(script)     // the compiler; None: too large for a class file
+compiled.map(toBytecode.reverseGet)             // Some(script): the class hands its script back
+compiled.map(Exec.validate(_, scriptContext))   // Some(Right(traces) | Left(reason))
 ```
+
+`UplcJvm.compile(toJvmClass.get(script))` is the same compiler, with the limit a
+class exceeds as a `Left`.
 
 Two properties follow from the shape, and the suite checks both.
 
-**The laws hold.** Each optic is a lawful iso on what the compiler produces:
-there and back is the identity, both ways — `reverseGet(get(s)) == s`, and
-`get(reverseGet(a)) == a` for every `a` the compiler made. The suite checks
-`toTyped` and `toBytecode` with cats-eo's own `IsoTests`, and checks the round trips
-on every program it compiles, the 943 conformance programs included.
+**The laws hold.** `toTyped` and `toJvmClass` are lawful isos on what the
+compiler produces: there and back is the identity, both ways —
+`reverseGet(get(s)) == s`, and `get(reverseGet(a)) == a` for every `a` the
+compiler made. `toBytecode` is a lawful prism: `getOption(reverseGet(c)) ==
+Some(c)` for every class file `c`, and a script that compiles comes back out of
+its class file. The suite checks `toTyped` with cats-eo's own `IsoTests` and
+`toBytecode` with its `PrismTests`, and checks the round trips on every program
+it compiles, the 943 conformance programs included.
 
 **The square commutes.** The semantic property is the one a round trip can't
-see: *running `toBytecode.get(s)` gives what a reference evaluator gives for
+see: *running `toBytecode.getOption(s)` gives what a reference evaluator gives for
 `s`*. The demo checks exactly that, against the Scalus CEK machine, for every
 program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)).
 
@@ -62,10 +76,10 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 <div class="uplc-roundtrip" style="max-width: 780px; margin: 1.5em auto;">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" width="100%" role="img" aria-labelledby="uplc-rt-title uplc-rt-desc" style="font-family: inherit;">
 <title id="uplc-rt-title">The UPLC to JVM round trip</title>
-<desc id="uplc-rt-desc">Top row, the optics: a script goes through toTyped to a typed expression, through lowering to its JVM class in memory, and through compiling to a class file; each arrow is an iso, walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
+<desc id="uplc-rt-desc">Top row, the optics: a script goes through toTyped to a typed expression, through lowering to its JVM class in memory, and through compiling to a class file; the first two arrows are isos and the last a prism, each walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
 <defs><marker id="uplc-rt-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--primary-color);"/></marker></defs>
 <rect x="6" y="24" width="768" height="100" rx="14" style="fill: none; stroke: var(--primary-medium); stroke-dasharray: 6 5;"/>
-<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo isos · CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript</text>
+<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo optics · CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript</text>
 <g style="font-size: 14px;">
 <rect x="20" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="90" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">script</text>
@@ -263,9 +277,11 @@ at the result.
 
 ### To a class file, and back (`compiling`)
 
-`compiling.get` (`UplcJvm.compile`) hands the class's tree to ASM's
-`ClassWriter`, which computes the stack map frames and serialises it;
-`compiling.reverseGet` (`UplcJvm.decompile`) is ASM's `ClassReader`.
+`compiling.getOption` (`UplcJvm.compile`) hands the class's tree to ASM's
+`ClassWriter`, which computes the stack map frames and serialises it — unless a
+method is over 64 KB or the class over 65 535 constants, when `getOption` is
+`None` and `compile` says which; `compiling.reverseGet` (`UplcJvm.decompile`)
+is ASM's `ClassReader`.
 The class has a static method per lambda chain and `delay`, a switch per call
 arity for closure dispatch, and the script, re-decoded by the static initialiser.
 A class file survives being read and written again byte for byte because the
@@ -274,7 +290,7 @@ is never applied, and a call whose argument can only fail after nothing but
 values is that failure — so ASM has no dead code to blank out:
 
 ```
-compiling.get: 1844 bytes of class file
+compiling.getOption: 1844 bytes of class file
 and back — toBytecode.reverseGet(that) == script: true
 ```
 
@@ -314,7 +330,8 @@ file survives ASM reading and writing it again — on:
 | Plutus conformance | the [`plutus-conformance`](https://github.com/IntersectMBO/plutus/tree/1.63.0.0/plutus-conformance) UPLC evaluation cases, plutus `1.63.0.0` (vendored) | **943 / 943** evaluation cases agree; 55 parser-only tests and 1 program with no flat encoding skipped |
 | validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and compiled with the context applied |
 | compiler paths | one hand-written program per path, error paths included, a 20 000-deep `let` chain | all agree |
-| iso laws | cats-eo-laws' `IsoTests` for `toTyped` and `toBytecode`, over every validator and a program whose value is a closure | both laws hold, both ways |
+| optic laws | cats-eo-laws' `IsoTests` for `toTyped` and `PrismTests` for `toBytecode`, over every validator, a program whose value is a closure, and one too large for a class file | all laws hold |
+| stack safety | programs nested 100 000 deep — `force (delay …)`, builtin calls, lambdas — typed, lowered and compiled on a 1 MB stack | no overflow: a class file, or the JVM limit the class exceeds |
 
 The JVM's own verifier checks every generated class as it is loaded, and each
 conformance case's `.expected` file pins whether it should succeed or fail — so
@@ -394,24 +411,27 @@ settles at ~22×.
 
 | validator | script | class file | translate (µs) | translate + load (µs) | break-even (validations) |
 |---|--:|--:|--:|--:|--:|
-| `helloOwner` | 149 B | 4,560 B | 81.0 ± 5.4 | 344.6 ± 43.8 | 81 |
-| `preimage` | 186 B | 5,026 B | 99.8 ± 6.9 | 415.5 ± 52.0 | 72 |
-| `timeLock` | 183 B | 5,100 B | 97.6 ± 5.0 | 413.9 ± 39.2 | 68 |
-| `multisig` | 202 B | 6,233 B | 136.2 ± 11.0 | 569.1 ± 47.3 | 46 |
-| `fibonacci` | 126 B | 4,342 B | 65.9 ± 4.0 | 314.6 ± 32.8 | 10 |
-| `htlc` | 310 B | 6,665 B | 168.9 ± 10.0 | 622.4 ± 48.2 | 85 |
+| `helloOwner` | 149 B | 4,560 B | 95.8 ± 7.6 | 487.6 ± 125.5 | 114 |
+| `preimage` | 186 B | 5,026 B | 130.1 ± 18.0 | 592.6 ± 90.2 | 103 |
+| `timeLock` | 183 B | 5,100 B | 126.7 ± 12.8 | 517.9 ± 71.6 | 84 |
+| `multisig` | 202 B | 6,233 B | 175.1 ± 15.9 | 678.9 ± 80.5 | 55 |
+| `fibonacci` | 126 B | 4,342 B | 81.6 ± 7.7 | 387.9 ± 57.5 | 13 |
+| `htlc` | 310 B | 6,665 B | 221.9 ± 22.3 | 792.9 ± 166.2 | 108 |
 
-`translate` is `toBytecode.get`, measured warm; `translate + load` adds defining
+Translation was measured again once compiling became stack safe ([Limits](#limits)), in a later
+session on the same kind of container; there, the version before measured 80–186 µs, so stack
+safety costs 13–19% of `translate`. `translate` is `toBytecode.getOption`, measured warm; `translate + load` adds defining
 the class, verifying it, and running its static initialiser, which re-decodes the
 embedded script. Loading is three quarters of
 the total. Most of `translate` is ASM's `ClassWriter` computing stack map frames;
 lowering straight into ASM's tree keeps the rest small, and translation costs
-about what the demo's first, raw-ASM emitter did — about a third of
-what a version built on a higher-level bytecode library (Cojen Maker) cost.
+about 15% more than the demo's first, raw-ASM emitter did — the price of stack
+safety — and about 40% of what a version built on a higher-level bytecode
+library (Cojen Maker) cost.
 Decoding the script is a few microseconds of it: the numbering is a pure fold
 over Scalus' `Term` tree, 2–3× slower than writing into arrays, and paid once
 per class. The break-even column divides `translate + load` by the time each
-validation saves: a script must be validated **~10–85 times** before compiling
+validation saves in the first table: a script must be validated **~13–115 times** before compiling
 it pays for itself. That
 fits scripts that run over and over — a node re-validating the same reference
 scripts, an emulator, a test-suite — rather than one-off evaluation.
@@ -434,10 +454,17 @@ Reproduce with `sbt "demoUplcJvmBench/Jmh/run -prof gc"`.
   are not, so an out-of-budget script — which the ledger rejects — is accepted
   here. Metering the same machine-step costs the CEK machine charges is the
   natural next step.
-- **The JVM stack.** Generated code recurses on the JVM stack where the CEK
+- **The JVM stack.** Compiling cannot overflow it, however deep the program:
+  decoding, typing and lowering make plain calls while they are shallow, and
+  from 128 calls deep they continue on the heap, through `cats.Eval`
+  (trampolining every node instead made translation twice as slow). Scalus' flat decoder
+  and encoder, which reading and writing a script go through, do recurse: on a
+  1 MB stack they overflow between 2 000 and 20 000 levels deep, depending on
+  how warm the JIT is. Generated code recurses on the JVM stack where the CEK
   machine uses the heap; `Exec` runs evaluations on a thread with a 512 MB stack.
 - **Method splitting** happens at `let` boundaries only — the shape compilers
-  produce — not inside one huge expression.
+  produce — not inside one huge expression. A class that still exceeds a JVM
+  limit has no class file: that is why `compiling` is a prism.
 
 Scalus has its own experimental JIT (`scalus-uplc-jit-compiler`, built on Scala 3
 staging). This demo is independent of it; its point is the shape — one optic

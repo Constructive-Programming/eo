@@ -114,6 +114,7 @@ class CompilerSpec extends Specification:
     val chain =
       (1 to 20000).foldLeft[Term](x)((body, _) => Term.Apply(Term.LamAbs("x", body), next))
     val program = Term.Apply(Term.LamAbs("x", chain), Term.Const(Constant.Integer(0)))
+    // Compiling is stack safe; Scalus' flat encoder and decoder, which the harness runs, recurse.
     Exec.onLargeStack(agrees(program, Some("(con integer 20000)")))
   }
 

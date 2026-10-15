@@ -9,7 +9,8 @@ import scalus.uplc.{DeBruijnedProgram, Program}
 
 // What the compiler's optics focus on, besides the typed program. The two byte encodings at its ends
 // are Scalus' `ByteString` underneath — bytes with value equality, so the optics' round-trip laws
-// can compare them with `==`.
+// can compare them with `==`. None of the three hands out what it holds, only copies: a value
+// cannot change after the compiler made or checked it, so the way back always works.
 
 /** A Plutus script as the ledger stores it: the flat-encoded program, wrapped in a CBOR bytestring.
   * Every value is well formed: [[CborScript.of]] encoded it, or [[CborScript.parse]] checked it.
@@ -31,16 +32,19 @@ object CborScript:
     * that becomes a value.
     */
   def parse(cbor: Array[Byte]): Either[String, CborScript] =
-    Try(DeBruijnedProgram.fromCbor(cbor)).toEither match
+    val script = ByteString.fromArray(cbor) // checked after copying: the caller keeps `cbor`
+    Try(DeBruijnedProgram.fromCbor(script.bytes)).toEither match
       case Left(e)  => Left(s"not a CBOR-wrapped flat UPLC script: ${e.getMessage}")
-      case Right(_) => Right(ByteString.fromArray(cbor))
+      case Right(_) => Right(script)
 
   /** The script back from the string constants [[asConstants]] stored it in. */
   private[uplc] def fromConstants(constants: Iterable[String]): CborScript =
     ByteString.fromArray(Base64.getDecoder.decode(constants.mkString))
 
   extension (script: CborScript)
-    def bytes: Array[Byte] = script.bytes
+    def bytes: Array[Byte] = script.bytes.clone
+
+    private[uplc] def program: DeBruijnedProgram = DeBruijnedProgram.fromCbor(script.bytes)
 
     /** The script as class-file string constants. A compiled class carries the script it was
       * compiled from — that is how `lowering` walks back, and what the runtime re-decodes to turn
@@ -60,7 +64,7 @@ object JvmClassScript:
 
   private[uplc] def apply(classFile: Array[Byte]): JvmClassScript = ByteString.fromArray(classFile)
 
-  extension (classFile: JvmClassScript) def bytes: Array[Byte] = classFile.bytes
+  extension (classFile: JvmClassScript) def bytes: Array[Byte] = classFile.bytes.clone
 
 /** A script's JVM class in memory — ASM's class tree, as the compiler builds it or as ASM reads it
   * back from the class file ([[UplcJvm.decompile]]). Only those two make one, so it always embeds
@@ -72,7 +76,12 @@ object JvmClass:
 
   private[uplc] def apply(tree: ClassNode): JvmClass = tree
 
-  /** ASM's tree, to read — printing or inspecting the bytecode; the optics assume it is not
-    * changed.
-    */
-  extension (cls: JvmClass) def tree: ClassNode = cls
+  extension (cls: JvmClass)
+
+    /** A copy of ASM's tree, to inspect or print the bytecode. */
+    def tree: ClassNode =
+      val copy = new ClassNode
+      cls.accept(copy)
+      copy
+
+    private[uplc] def node: ClassNode = cls

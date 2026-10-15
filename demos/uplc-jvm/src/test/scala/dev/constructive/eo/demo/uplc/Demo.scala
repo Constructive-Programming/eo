@@ -26,8 +26,8 @@ object Demo:
     println(s"\ntoTyped.get:\n${typed.body.show}")
     val cls = UplcJvm.lowering.get(typed)
     println(s"\nlowering.get, the method `run`:\n${bytecode(cls, "run")}")
-    val classFile = UplcJvm.compiling.get(cls)
-    println(s"\ncompiling.get: ${classFile.bytes.length} bytes of class file")
+    val classFile = Oracle.classFile(script)
+    println(s"\ncompiling.getOption: ${classFile.bytes.length} bytes of class file")
     println(
       s"and back — toBytecode.reverseGet(that) == script: ${UplcJvm.toBytecode.reverseGet(classFile) == script}"
     )
@@ -39,7 +39,7 @@ object Demo:
     // A program whose value is a closure: it comes back as a term, captures substituted.
     val closure = "[(lam x (lam y x)) (con integer 5)]"
     section("A closure comes back as a term", closure)
-    compare(parse(closure), UplcJvm.toBytecode.get(parse(closure)))
+    compare(parse(closure), Oracle.classFile(parse(closure)))
 
     section("A Scalus-compiled validator, read back (Fibonacci)", "")
     val fib = Oracle.script(CompiledValidators.fibonacci.program)
@@ -58,7 +58,7 @@ object Demo:
   private def shape(script: CborScript): String =
     val cls = UplcJvm.toJvmClass.get(script)
     val bodies = cls.tree.methods.asScala.count(_.name.startsWith("m"))
-    val classFile = UplcJvm.compiling.get(cls).bytes.length
+    val classFile = Oracle.classFile(script).bytes.length
     f"script ${script.bytes.length}%4d bytes   class: $bodies%2d closure bodies   class file ${classFile}%5d bytes"
 
   /** One method of a class, as ASM prints bytecode. */

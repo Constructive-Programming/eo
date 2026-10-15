@@ -1,4 +1,4 @@
-# UPLC → JVM bytecode, as eo isos
+# UPLC → JVM bytecode, as eo optics
 
 A compiler from Untyped Plutus Core (UPLC, the language Cardano smart contracts
 run in) to JVM class files, built from cats-eo optics. Correctness is
@@ -12,18 +12,20 @@ val script = CborScript.of(program)            // or CborScript.parse(bytes): Ei
 
 UplcJvm.toTyped: Iso[CborScript, TypedProgram]  // the program as a typed, Scala-like expression
 UplcJvm.toJvmClass: Iso[CborScript, JvmClass]   // its JVM class, in memory (ASM's class tree)
-UplcJvm.toBytecode: Iso[CborScript, JvmClassScript]
+UplcJvm.toBytecode                              // a prism, CborScript ⇀ JvmClassScript
 
-val classFile = UplcJvm.toBytecode.get(script)  // the compiler
-UplcJvm.toBytecode.reverseGet(classFile)        // == script: the class carries its script
-Exec.validate(classFile, scriptContext)         // Right(traces) | Left(reason), CIP-117
+UplcJvm.toBytecode.getOption(script) match      // the compiler
+  case Some(classFile) =>
+    UplcJvm.toBytecode.reverseGet(classFile)    // == script: the class carries its script
+    Exec.validate(classFile, scriptContext)     // Right(traces) | Left(reason), CIP-117
+  case None => // the class does not fit in a class file; UplcJvm.compile says why
 ```
 
 The three optics a caller wants all start at the script as the ledger stores it,
 and each is a chain of the compiler's stages:
 
 ```
-CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
+CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript
            toTyped        lowering   compiling
 ```
 
@@ -35,12 +37,19 @@ CborScript ≅ TypedProgram ≅ JvmClass ≅ JvmClassScript
 | `JvmClassScript` | a class file the compiler wrote (opaque, over Scalus' `ByteString`) |
 
 Every stage keeps the script it came from: a typed program its source, a class
-the script itself, embedded in its constants. So each arrow can be walked back,
-and each optic is a lawful iso on what the compiler produces — there and back is
-the identity, both ways. The suite checks those laws with cats-eo's own
-`IsoTests`, and checks the round trips on every program it compiles. The other
-property that matters is the commuting square: *running `toBytecode.get(s)`
-gives what the CEK machine gives for `s`*.
+the script itself, embedded in its constants. So each arrow can be walked back.
+`toTyped` and `lowering` are lawful isos on what the compiler produces — there
+and back is the identity, both ways. `compiling` is a prism: the JVM caps a
+method at 64 KB of bytecode and a class at 65 535 constants, so a class can be
+too large for a class file, and then there is none (`UplcJvm.compile` says which
+limit, as a `Left`); every class file there is walks back to its class. So the
+compiler, `toBytecode`, is a prism too. The suite checks those laws with
+cats-eo's own `IsoTests` and `PrismTests`, and checks the round trips on every
+program it compiles. None of the four types hands out what it holds — `bytes`
+and `tree` are copies — so a value cannot change after the compiler made or
+checked it, and the way back always works. The other property that matters is
+the commuting square: *running `toBytecode.getOption(s)` gives what the CEK
+machine gives for `s`*.
 
 ## Pipeline
 
@@ -82,9 +91,16 @@ CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram
   dispatch, and the script as Base64 string constants — what
   `lowering.reverseGet` reads back.
 - **`compiling`** is ASM's `ClassWriter` (`UplcJvm.compile`, which computes the
-  stack map frames) one way and `ClassReader` (`UplcJvm.decompile`) the other. A class file survives being read and written
+  stack map frames, or says the class is too large) one way and `ClassReader`
+  (`UplcJvm.decompile`) the other. A class file survives being read and written
   again byte for byte, because the generated code has no unreachable
   instructions: an expression that can only fail is never followed by code.
+- **Stack safety.** Compiling cannot overflow the JVM stack, however deep the
+  program. Decoding, typing and lowering are walks of `Step`s (`Step.scala`):
+  plain calls while a walk is shallow; from 128 calls deep, the rest runs on
+  the heap, from `cats.Eval`'s loop. A program nested 100 000 deep compiles on
+  a thread's default 1 MB stack, and a shallow one pays next to nothing for
+  it.
 - **Runtime** (`runtime/`): closures, partial builtins, constructors, `case`
   dispatch (including PV11 casing on builtin values), discharge. A saturated
   builtin is a plain JVM call of the function Scalus' own `CardanoBuiltins`
@@ -122,8 +138,11 @@ again (`compiling`).
   applied.
 - **`CompilerSpec`** — one hand-written program per compilation path, error
   paths included, plus a 20 000-deep `let` chain.
-- **`OpticSpec`** — the iso laws of `toTyped` and `toBytecode`, with cats-eo-laws'
-  `IsoTests`, and evidence that hybrid typing fires on real validator code.
+- **`OpticSpec`** — the iso laws of `toTyped` and the prism laws of
+  `toBytecode`, with cats-eo-laws' `IsoTests` and `PrismTests` (a program too
+  large for a class file among the scripts); that scripts, classes and class
+  files hand out copies; programs nested 100 000 deep compiled on a 1 MB stack;
+  and evidence that hybrid typing fires on real validator code.
 
 The JVM's bytecode verifier checks every generated class when `Exec.load`
 defines it.
@@ -141,6 +160,13 @@ defines it.
   inlining from the Scala library measured slower — see `build.sbt`).
 - Results and failures are compared; **execution budgets are not metered**.
   Out-of-budget rejections, which the ledger applies, are a natural next step.
+- Methods are split at `let` boundaries only — the shape compilers produce —
+  not inside one huge expression. A class that still exceeds a JVM limit has no
+  class file: `toBytecode.getOption` is `None`.
+- Compiling is stack safe, but Scalus' flat decoder and encoder, which
+  `CborScript.parse`, `CborScript.of` and `toTyped` call, recurse: on a 1 MB
+  stack they overflow between 2 000 and 20 000 levels deep, depending on how
+  warm the JIT is.
 - Generated code recurses on the JVM stack where the CEK machine uses the heap,
   so `Exec` runs evaluations on a thread with a 512 MB stack.
 - Traces are collected (`Result.logs`) but not compared.

@@ -13,6 +13,10 @@ import scalus.uplc.{Constant, DeBruijnedProgram, Program, Term}
 /** A validator's script: it has a flat encoding, or the setup fails. */
 def script(program: Program): CborScript = CborScript.of(program).fold(sys.error, identity)
 
+/** Its class file: it fits in one, or the setup fails. */
+def classFile(script: CborScript): JvmClassScript =
+  UplcJvm.compile(UplcJvm.toJvmClass.get(script)).fold(sys.error, identity)
+
 /** Shared state: one accepting transaction, ready for both evaluators.
   *
   *   - `cek` — Scalus' CEK machine evaluating the script applied to its context, the way the ledger
@@ -32,7 +36,7 @@ abstract class ScriptState:
   def prepare(): Unit =
     val s = scenario
     applied = (s.script.program $ s.context).deBruijnedProgram
-    val classFile = UplcJvm.toBytecode.get(script(s.script.program))
+    val classFile = bench.classFile(script(s.script.program))
     compiled = Exec.load(classFile)
     context = Constant.Data(s.context)
     // Both evaluators must accept the transaction, or the timings compare different work.
@@ -93,6 +97,7 @@ class TranslateBench:
   def prepare(): Unit =
     script = bench.script(Scenarios.accepting.find(_.name == validator).get.script.program)
 
-  @Benchmark def translate: JvmClassScript = UplcJvm.toBytecode.get(script)
+  @Benchmark def translate: Option[JvmClassScript] = UplcJvm.toBytecode.getOption(script)
 
-  @Benchmark def translateAndLoad: Dispatch = Exec.load(UplcJvm.toBytecode.get(script))
+  @Benchmark def translateAndLoad: Option[Dispatch] =
+    UplcJvm.toBytecode.getOption(script).map(Exec.load)

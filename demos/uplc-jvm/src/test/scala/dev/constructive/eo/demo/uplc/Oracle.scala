@@ -22,6 +22,10 @@ object Oracle:
     val flat = ProgramFlatCodec.unsafeEncodeFlat(Program((1, 1, 0), term))
     CborScript.parse(Cbor.encode(flat).toByteArray).fold(sys.error, identity)
 
+  /** A script's class file; a program too large for one fails the test. */
+  def classFile(script: CborScript): JvmClassScript =
+    UplcJvm.compile(UplcJvm.toJvmClass.get(script)).fold(sys.error, identity)
+
   /** What the Scalus CEK machine makes of a script (then applied to `args`). */
   def cek(script: CborScript, args: Seq[Constant] = Nil): Either[String, Term] =
     val program = DeBruijnedProgram.fromCbor(script.bytes)
@@ -47,13 +51,15 @@ object Oracle:
     * JVM's verifier rejects fails the comparison with a `VerifyError`.
     */
   def compare(script: CborScript, args: Seq[Constant] = Nil): Verdict =
-    val classFile = UplcJvm.toBytecode.get(script)
-    // The optics' laws, on every program: the script comes back out of its class, and the class
-    // file survives ASM reading it and writing it again.
-    if UplcJvm.toBytecode.reverseGet(classFile) != script ||
-      UplcJvm.compile(UplcJvm.decompile(classFile)) != classFile
-    then Verdict.Disagree("the class file does not round-trip")
-    else compare(classFile, script, args)
+    UplcJvm.compile(UplcJvm.toJvmClass.get(script)) match
+      case Left(tooLarge) => Verdict.Disagree(s"no class file: $tooLarge")
+      // The optics' laws, on every program: the script comes back out of its class, and the class
+      // file survives ASM reading it and writing it again.
+      case Right(classFile) =>
+        if UplcJvm.toBytecode.reverseGet(classFile) != script ||
+          UplcJvm.compile(UplcJvm.decompile(classFile)) != Right(classFile)
+        then Verdict.Disagree("the class file does not round-trip")
+        else compare(classFile, script, args)
 
   private def compare(classFile: JvmClassScript, script: CborScript, args: Seq[Constant]) =
     (Exec.run(classFile, args), cek(script, args)) match
