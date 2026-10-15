@@ -8,7 +8,7 @@ import org.objectweb.asm.util.{Textifier, TraceMethodVisitor}
 import scalus.uplc.eval.Result
 import scalus.uplc.{DeBruijn, DeBruijnedProgram}
 
-/** The round trip, stage by stage — what the docs page (`site/docs/demos/uplc-jvm.md`) shows.
+/** The round trip, stage by stage — what the docs page (`site/docs/cookbook/uplc-jvm.md`) shows.
   *
   * {{{sbt "demoUplcJvm/Test/runMain dev.constructive.eo.demo.uplc.Demo [dir-for-the-class-file]"}}}
   *

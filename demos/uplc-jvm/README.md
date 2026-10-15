@@ -197,7 +197,7 @@ class file there for `javap`.
 library's nightly sweep): the CEK machine against the generated class for every
 validator, the Fibonacci puzzle at growing `n`, and what translation itself
 costs. The numbers and how they were taken are on the
-[docs page](../../site/docs/demos/uplc-jvm.md#benchmarks).
+[docs page](../../site/docs/cookbook/uplc-jvm.md#benchmarks).
 
 ```sh
 sbt "demoUplcJvmBench/Jmh/run -prof gc"

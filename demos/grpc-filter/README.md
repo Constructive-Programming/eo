@@ -91,7 +91,7 @@ field.
 
 The frames travel on plain TCP, not inside HTTP/2 streams. So there are no
 headers, trailers or status codes, and no compression: a compressed frame
-fails the stream. See [the docs page](../../site/docs/demos/grpc-filter.md) for
+fails the stream. See [the docs page](../../site/docs/cookbook/grpc-filter.md) for
 the details.
 
 ## Running it

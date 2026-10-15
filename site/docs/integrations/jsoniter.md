@@ -448,7 +448,7 @@ per-element reassembly, no Composer hop required.
 | Chain a JSON traversal with a Scala collection traversal | `JsoniterTraversal[A].andThen(Traversal.each[F, A])` |
 
 For eo-jsoniter in a streaming service, see the
-[gRPC stream triage demo](../demos/grpc-filter.md): an fs2 filter that
+[allocation-free stream triage demo](../cookbook/grpc-filter.md): an fs2 filter that
 classifies and filters 64-field messages straight off a socket, reading three
 values per message instead of decoding it.
 

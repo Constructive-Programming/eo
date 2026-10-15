@@ -1,4 +1,4 @@
-# gRPC stream triage
+# Allocation-free stream triage demo
 
 > **A demo, not a module.** The code lives in
 > [`demos/grpc-filter`](https://github.com/Constructive-Programming/eo/tree/main/demos/grpc-filter)

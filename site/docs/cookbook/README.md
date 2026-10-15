@@ -17,6 +17,18 @@ best:
    into type definitions: the optic pins *where*, the effect type
    decides *what happens* — abort, accumulate, audit, defer.
 
+Two demos open the section: whole programs, with their own tests and
+benchmarks, that put these recipes to work.
+
+- **[Allocation-free stream triage](grpc-filter.md)** — an fs2 filter
+  that classifies and filters a gRPC stream of 64-field JSON messages
+  straight off a socket, reading the few values it needs with
+  eo-jsoniter instead of decoding each message.
+- **[Blockchain smart contract compilation](uplc-jvm.md)** — a compiler
+  from Cardano's Plutus Core to JVM class files, built as a chain of
+  lawful prisms and an iso, and checked against the reference
+  evaluator on every program.
+
 The framing follows Hansen — *We Need More Optics*
 (<https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468>) and
 Penner — *Optics By Example*
