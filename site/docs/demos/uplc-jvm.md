@@ -15,14 +15,21 @@ the script it came from — the typed program holds its source, and the class
 embeds the script in its constants — so every arrow can be walked back:
 
 ```
-CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript
+CborScript ⇀ TypedProgram ≅ JvmClass ⇀ JvmClassScript
            toTyped        lowering   compiling
 ```
 
-The first two arrows are isos. The last is a prism, because the JVM has limits
-a program can exceed: a method holds at most 64 KB of bytecode and a class at
-most 65 535 constants, so a class can be too large for a class file — and then
-there is none.
+The middle arrow is an iso. The other two are prisms — each walks back from
+everything it reaches, but not every value has somewhere to go:
+
+- **`toTyped`.** A script declares the Plutus Core version it is written in,
+  and the bytes can name any version; Scalus decodes them all. The ledger takes
+  only the versions Plutus V3 has at protocol version 11 — 1.0.0 and 1.1.0,
+  which adds `constr` and `case` — so a script of any other version has no
+  typed program.
+- **`compiling`.** The JVM has limits a program can exceed: a method holds at
+  most 64 KB of bytecode and a class at most 65 535 constants, so a class can be
+  too large for a class file — and then there is none.
 
 | type | what it is |
 |---|---|
@@ -36,35 +43,33 @@ the two byte encodings can't be swapped by accident, and the round-trip laws can
 compare them with `==`. None of the four types hands out what it holds — their
 `bytes` and `tree` are copies — so a value cannot change after the compiler made
 or checked it, and the way back always works. The optics a caller wants all
-start at the script, and are compositions of the stages with `andThen`; an iso
-followed by a prism is a prism:
+start at the script, and are compositions of the stages with `andThen` — a
+prism, an iso and a prism make a prism:
 
 ```scala
 import dev.constructive.eo.demo.uplc.*
 
-val toTyped: Iso[CborScript, TypedProgram] = UplcJvm.toTyped
-val toJvmClass: Iso[CborScript, JvmClass] = UplcJvm.toTyped.andThen(UplcJvm.lowering)
-val toBytecode = toJvmClass.andThen(UplcJvm.compiling)  // CborScript ⇀ JvmClassScript
+val toTyped = UplcJvm.toTyped                            // CborScript ⇀ TypedProgram
+val toJvmClass = UplcJvm.toTyped.andThen(UplcJvm.lowering) // CborScript ⇀ JvmClass
+val toBytecode = toJvmClass.andThen(UplcJvm.compiling)    // CborScript ⇀ JvmClassScript
 
 val script = CborScript.of(validator.program)  // or CborScript.parse(onChainBytes)
-val compiled = toBytecode.getOption(script)     // the compiler; None: too large for a class file
+val compiled = toBytecode.getOption(script)     // the compiler; None: no class file
 compiled.map(toBytecode.reverseGet)             // Some(script): the class hands its script back
 compiled.map(Exec.validate(_, scriptContext))   // Some(Right(traces) | Left(reason))
 ```
 
-`UplcJvm.compile(toJvmClass.get(script))` is the same compiler, with the limit a
-class exceeds as a `Left`.
+`toJvmClass.getOption(script).map(UplcJvm.compile)` is the same compiler, with
+the limit a class exceeds as a `Left`.
 
 Two properties follow from the shape, and the suite checks both.
 
-**The laws hold.** `toTyped` and `toJvmClass` are lawful isos on what the
-compiler produces: there and back is the identity, both ways —
-`reverseGet(get(s)) == s`, and `get(reverseGet(a)) == a` for every `a` the
-compiler made. `toBytecode` is a lawful prism: `getOption(reverseGet(c)) ==
-Some(c)` for every class file `c`, and a script that compiles comes back out of
-its class file. The suite checks `toTyped` with cats-eo's own `IsoTests` and
-`toBytecode` with its `PrismTests`, and checks the round trips on every program
-it compiles, the 943 conformance programs included.
+**The laws hold.** `lowering` is a lawful iso on what the compiler produces:
+there and back is the identity, both ways. `toTyped` and `toBytecode` are lawful
+prisms: `getOption(reverseGet(a)) == Some(a)` for every typed program or class
+file `a`, and a script that gets there comes back out. The suite checks both
+with cats-eo's own `PrismTests`, and checks the round trips on every program it
+compiles, the 943 conformance programs included.
 
 **The square commutes.** The semantic property is the one a round trip can't
 see: *running `toBytecode.getOption(s)` gives what a reference evaluator gives for
@@ -76,10 +81,10 @@ program in its test-suite ([Correctness](#correctness-the-cek-machine-as-oracle)
 <div class="uplc-roundtrip" style="max-width: 780px; margin: 1.5em auto;">
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 320" width="100%" role="img" aria-labelledby="uplc-rt-title uplc-rt-desc" style="font-family: inherit;">
 <title id="uplc-rt-title">The UPLC to JVM round trip</title>
-<desc id="uplc-rt-desc">Top row, the optics: a script goes through toTyped to a typed expression, through lowering to its JVM class in memory, and through compiling to a class file; the first two arrows are isos and the last a prism, each walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
+<desc id="uplc-rt-desc">Top row, the optics: a script goes through toTyped to a typed expression, through lowering to its JVM class in memory, and through compiling to a class file; the middle arrow is an iso and the other two prisms, each walked back by reverseGet. Bottom row, the check: the class file is loaded and run, its value is discharged back to a UPLC term, and that term must be alpha-equivalent to the term the Scalus CEK machine computes from the same bytes.</desc>
 <defs><marker id="uplc-rt-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill: var(--primary-color);"/></marker></defs>
 <rect x="6" y="24" width="768" height="100" rx="14" style="fill: none; stroke: var(--primary-medium); stroke-dasharray: 6 5;"/>
-<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo optics · CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript</text>
+<text x="18" y="16" style="fill: var(--primary-color); font-size: 13px; font-weight: 600;">eo optics · CborScript ⇀ TypedProgram ≅ JvmClass ⇀ JvmClassScript</text>
 <g style="font-size: 14px;">
 <rect x="20" y="40" width="140" height="68" rx="8" style="fill: var(--component-area-bg); stroke: var(--component-border);"/>
 <text x="90" y="66" text-anchor="middle" style="fill: var(--text-color); font-weight: 600;">script</text>
@@ -144,8 +149,9 @@ arrives as:
 (program 1.1.0 [(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)])
 ```
 
-`toTyped.get` decodes the script into Scalus' own `Term` tree and reads it back
-as a typed, Scala-like expression; `toTyped.reverseGet` is the script it was
+`toTyped.getOption` checks the script's Plutus Core version, decodes it into
+Scalus' own `Term` tree and reads it back as a typed, Scala-like expression;
+`toTyped.reverseGet` is the script it was
 read from:
 
 ```scala
@@ -330,7 +336,7 @@ file survives ASM reading and writing it again — on:
 | Plutus conformance | the [`plutus-conformance`](https://github.com/IntersectMBO/plutus/tree/1.63.0.0/plutus-conformance) UPLC evaluation cases, plutus `1.63.0.0` (vendored) | **943 / 943** evaluation cases agree; 55 parser-only tests and 1 program with no flat encoding skipped |
 | validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and compiled with the context applied |
 | compiler paths | one hand-written program per path, error paths included, a 20 000-deep `let` chain | all agree |
-| optic laws | cats-eo-laws' `IsoTests` for `toTyped` and `PrismTests` for `toBytecode`, over every validator, a program whose value is a closure, and one too large for a class file | all laws hold |
+| optic laws | cats-eo-laws' `PrismTests` for `toTyped` and `toBytecode`, over every validator, a program whose value is a closure, a script of an unknown Plutus Core version, and a program too large for a class file | all laws hold |
 | stack safety | programs nested 100 000 deep — `force (delay …)`, builtin calls, lambdas — typed, lowered and compiled on a 1 MB stack | no overflow: a class file, or the JVM limit the class exceeds |
 
 The JVM's own verifier checks every generated class as it is loaded, and each

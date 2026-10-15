@@ -21,6 +21,7 @@ import scalus.uplc.Term
   */
 final class SourceProgram private (
     val script: CborScript,
+    val version: (Int, Int, Int),
     val nodes: IArray[Term],
     val depths: IArray[Int],
     sizes: IArray[Int],
@@ -70,8 +71,15 @@ object SourceProgram:
           (term :: ns, depth :: ds, (count - rest._4 + 1) :: ss, count + 1)
         )
     }
-    val (nodes, depths, sizes, _) = number(script.program.term, 0, (Nil, Nil, Nil, 0)).value
-    new SourceProgram(script, IArray.from(nodes), IArray.from(depths), IArray.from(sizes))
+    val program = script.program
+    val (nodes, depths, sizes, _) = number(program.term, 0, (Nil, Nil, Nil, 0)).value
+    new SourceProgram(
+      script,
+      program.version,
+      IArray.from(nodes),
+      IArray.from(depths),
+      IArray.from(sizes),
+    )
 
   /** A term's immediate subterms, in the order they are numbered. */
   def subterms(term: Term): List[Term] = term match

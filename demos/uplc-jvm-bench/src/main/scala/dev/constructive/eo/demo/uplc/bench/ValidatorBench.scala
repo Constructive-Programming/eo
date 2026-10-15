@@ -13,9 +13,9 @@ import scalus.uplc.{Constant, DeBruijnedProgram, Program, Term}
 /** A validator's script: it has a flat encoding, or the setup fails. */
 def script(program: Program): CborScript = CborScript.of(program).fold(sys.error, identity)
 
-/** Its class file: it fits in one, or the setup fails. */
+/** Its class file: it has one, or the setup fails. */
 def classFile(script: CborScript): JvmClassScript =
-  UplcJvm.compile(UplcJvm.toJvmClass.get(script)).fold(sys.error, identity)
+  UplcJvm.toBytecode.getOption(script).getOrElse(sys.error("no class file"))
 
 /** Shared state: one accepting transaction, ready for both evaluators.
   *

@@ -22,9 +22,16 @@ object Oracle:
     val flat = ProgramFlatCodec.unsafeEncodeFlat(Program((1, 1, 0), term))
     CborScript.parse(Cbor.encode(flat).toByteArray).fold(sys.error, identity)
 
-  /** A script's class file; a program too large for one fails the test. */
+  /** A script's typed program, JVM class and class file. A script of an unknown Plutus Core
+    * version, or one too large for a class file, fails the test.
+    */
+  def typed(script: CborScript): TypedProgram =
+    UplcJvm.toTyped.getOption(script).getOrElse(sys.error("an unknown Plutus Core version"))
+
+  def jvmClass(script: CborScript): JvmClass = UplcJvm.lowering.get(typed(script))
+
   def classFile(script: CborScript): JvmClassScript =
-    UplcJvm.compile(UplcJvm.toJvmClass.get(script)).fold(sys.error, identity)
+    UplcJvm.compile(jvmClass(script)).fold(sys.error, identity)
 
   /** What the Scalus CEK machine makes of a script (then applied to `args`). */
   def cek(script: CborScript, args: Seq[Constant] = Nil): Either[String, Term] =
@@ -51,8 +58,12 @@ object Oracle:
     * JVM's verifier rejects fails the comparison with a `VerifyError`.
     */
   def compare(script: CborScript, args: Seq[Constant] = Nil): Verdict =
-    UplcJvm.compile(UplcJvm.toJvmClass.get(script)) match
-      case Left(tooLarge) => Verdict.Disagree(s"no class file: $tooLarge")
+    UplcJvm
+      .toJvmClass
+      .getOption(script)
+      .toRight("an unknown Plutus Core version")
+      .flatMap(UplcJvm.compile) match
+      case Left(why) => Verdict.Disagree(s"no class file: $why")
       // The optics' laws, on every program: the script comes back out of its class, and the class
       // file survives ASM reading it and writing it again.
       case Right(classFile) =>

@@ -10,22 +10,22 @@ import dev.constructive.eo.demo.uplc.*
 
 val script = CborScript.of(program)            // or CborScript.parse(bytes): Either[String, CborScript]
 
-UplcJvm.toTyped: Iso[CborScript, TypedProgram]  // the program as a typed, Scala-like expression
-UplcJvm.toJvmClass: Iso[CborScript, JvmClass]   // its JVM class, in memory (ASM's class tree)
-UplcJvm.toBytecode                              // a prism, CborScript ⇀ JvmClassScript
+UplcJvm.toTyped     // CborScript ⇀ TypedProgram: the program as a typed, Scala-like expression
+UplcJvm.toJvmClass  // CborScript ⇀ JvmClass: its JVM class, in memory (ASM's class tree)
+UplcJvm.toBytecode  // CborScript ⇀ JvmClassScript: its class file
 
 UplcJvm.toBytecode.getOption(script) match      // the compiler
   case Some(classFile) =>
     UplcJvm.toBytecode.reverseGet(classFile)    // == script: the class carries its script
     Exec.validate(classFile, scriptContext)     // Right(traces) | Left(reason), CIP-117
-  case None => // the class does not fit in a class file; UplcJvm.compile says why
+  case None => // a Plutus Core version the compiler does not know, or a class too large for a file
 ```
 
 The three optics a caller wants all start at the script as the ledger stores it,
-and each is a chain of the compiler's stages:
+and each is a chain of the compiler's stages — all three prisms:
 
 ```
-CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript
+CborScript ⇀ TypedProgram ≅ JvmClass ⇀ JvmClassScript
            toTyped        lowering   compiling
 ```
 
@@ -38,14 +38,20 @@ CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript
 
 Every stage keeps the script it came from: a typed program its source, a class
 the script itself, embedded in its constants. So each arrow can be walked back.
-`toTyped` and `lowering` are lawful isos on what the compiler produces — there
-and back is the identity, both ways. `compiling` is a prism: the JVM caps a
-method at 64 KB of bytecode and a class at 65 535 constants, so a class can be
-too large for a class file, and then there is none (`UplcJvm.compile` says which
-limit, as a `Left`); every class file there is walks back to its class. So the
-compiler, `toBytecode`, is a prism too. The suite checks those laws with
-cats-eo's own `IsoTests` and `PrismTests`, and checks the round trips on every
-program it compiles. None of the four types hands out what it holds — `bytes`
+`lowering` is a lawful iso on what the compiler produces — there and back is the
+identity, both ways. The other two are prisms, total on the way back:
+
+- `toTyped`: a script can declare any Plutus Core version, and Scalus decodes
+  them all; the ledger only takes the ones Plutus V3 has at protocol version 11,
+  1.0.0 and 1.1.0 (`Semantics.versions`). A script of another version has no
+  typed program.
+- `compiling`: the JVM caps a method at 64 KB of bytecode and a class at 65 535
+  constants, so a class can be too large for a class file, and then there is
+  none (`UplcJvm.compile` says which limit, as a `Left`).
+
+So the compiler, `toBytecode`, is a prism too. The suite checks the prism laws
+with cats-eo's own `PrismTests`, and the round trips on every program it
+compiles. None of the four types hands out what it holds — `bytes`
 and `tree` are copies — so a value cannot change after the compiler made or
 checked it, and the way back always works. The other property that matters is
 the commuting square: *running `toBytecode.getOption(s)` gives what the CEK
@@ -64,7 +70,7 @@ CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram
   run time: a closure carries only its node id; the class embeds the script
   and re-decodes it, so a result can be *discharged* back to a UPLC term
   exactly as the CEK machine does.
-- **`Typer`** (`toTyped.get`) recognises what UPLC compilers emit for constructs UPLC
+- **`Typer`** (`toTyped.getOption`) recognises what UPLC compilers emit for constructs UPLC
   lacks, using rewrites that are exact under CEK evaluation order: `let`
   (immediately applied lambda chains), `if` (forced `ifThenElse` over delayed
   branches, and the other selector builtins), saturated builtin calls, direct
@@ -138,8 +144,8 @@ again (`compiling`).
   applied.
 - **`CompilerSpec`** — one hand-written program per compilation path, error
   paths included, plus a 20 000-deep `let` chain.
-- **`OpticSpec`** — the iso laws of `toTyped` and the prism laws of
-  `toBytecode`, with cats-eo-laws' `IsoTests` and `PrismTests` (a program too
+- **`OpticSpec`** — the prism laws of `toTyped` and `toBytecode`, with
+  cats-eo-laws' `PrismTests` (a script of an unknown version and a program too
   large for a class file among the scripts); that scripts, classes and class
   files hand out copies; programs nested 100 000 deep compiled on a 1 MB stack;
   and evidence that hybrid typing fires on real validator code.

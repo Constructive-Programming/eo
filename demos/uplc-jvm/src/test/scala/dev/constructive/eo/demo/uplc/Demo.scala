@@ -22,8 +22,8 @@ object Demo:
       "[(lam x [(lam y [(builtin addInteger) x y]) [(builtin multiplyInteger) x x]]) (con integer 6)]"
     section("A small program, all the way round", letArithmetic)
     val script = parse(letArithmetic)
-    val typed = UplcJvm.toTyped.get(script)
-    println(s"\ntoTyped.get:\n${typed.body.show}")
+    val typed = Oracle.typed(script)
+    println(s"\ntoTyped.getOption:\n${typed.body.show}")
     val cls = UplcJvm.lowering.get(typed)
     println(s"\nlowering.get, the method `run`:\n${bytecode(cls, "run")}")
     val classFile = Oracle.classFile(script)
@@ -43,7 +43,7 @@ object Demo:
 
     section("A Scalus-compiled validator, read back (Fibonacci)", "")
     val fib = Oracle.script(CompiledValidators.fibonacci.program)
-    println(s"${fib.bytes.length} bytes of script\n\n${UplcJvm.toTyped.get(fib).body.show}")
+    println(s"${fib.bytes.length} bytes of script\n\n${Oracle.typed(fib).body.show}")
     println(s"\n${shape(fib)}")
 
     section("Every validator", "")
@@ -56,7 +56,7 @@ object Demo:
 
   /** Sizes: script bytes, closure body methods in the class, class-file bytes. */
   private def shape(script: CborScript): String =
-    val cls = UplcJvm.toJvmClass.get(script)
+    val cls = Oracle.jvmClass(script)
     val bodies = cls.tree.methods.asScala.count(_.name.startsWith("m"))
     val classFile = Oracle.classFile(script).bytes.length
     f"script ${script.bytes.length}%4d bytes   class: $bodies%2d closure bodies   class file ${classFile}%5d bytes"

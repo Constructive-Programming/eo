@@ -5,7 +5,7 @@ import scala.annotation.tailrec
 import dev.constructive.eo.demo.uplc.Step.{all, Done}
 import scalus.uplc.{DefaultFun, DefaultUni, Term}
 
-/** `UplcJvm.toTyped.get`: reads a decoded UPLC program back as a typed, Scala-like [[Expr]],
+/** `UplcJvm.toTyped`'s way in: reads a decoded UPLC program back as a typed, Scala-like [[Expr]],
   * walking it by node id.
   *
   * Every rewrite here is an exact equivalence under the CEK machine's evaluation order — they only

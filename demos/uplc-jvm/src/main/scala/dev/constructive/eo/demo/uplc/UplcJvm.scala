@@ -8,31 +8,42 @@ import org.objectweb.asm.{ClassReader, ClassTooLargeException, ClassWriter, Meth
   * it:
   *
   * {{{
-  *   CborScript ≅ TypedProgram ≅ JvmClass ⇀ JvmClassScript
+  *   CborScript ⇀ TypedProgram ≅ JvmClass ⇀ JvmClassScript
   *              toTyped        lowering   compiling
   * }}}
   *
   * Every stage keeps the script it came from — a typed program its source, a class the script
-  * itself, embedded in its constants — so every arrow can be walked back. The first two are lawful
-  * isos: going there and back is the identity, both ways. The last is a prism: a class can be too
-  * large for a class file, and then there is none; every class file there is walks back to its
-  * class. So [[toBytecode]], the compiler, is a prism too: `toBytecode.getOption` compiles, and
-  * `toBytecode.reverseGet` hands back the script a class file was compiled from.
+  * itself, embedded in its constants — so every arrow can be walked back. `lowering` is a lawful
+  * iso: going there and back is the identity, both ways. The other two are prisms, total on the way
+  * back. A script may declare a Plutus Core version these semantics do not know
+  * ([[Semantics.versions]]): then it has no typed program. A class can be too large for a class
+  * file: then it has none. So the compiler, [[toBytecode]], is a prism too: `toBytecode.getOption`
+  * compiles, and `toBytecode.reverseGet` hands back the script a class file was compiled from.
   */
 object UplcJvm:
 
-  /** Script ≅ typed expression: decode and type; back, the script the program was read from. */
-  val toTyped: Iso[CborScript, TypedProgram] =
-    Iso(script => Typer.typeProgram(SourceProgram.decode(script)), _.script)
+  /** Script ⇀ typed expression: decode and type a script of a known Plutus Core version; back, the
+    * script the program was read from.
+    */
+  val toTyped = Prism[CborScript, TypedProgram](
+    script =>
+      val source = SourceProgram.decode(script)
+      Either.cond(Semantics.versions(source.version), Typer.typeProgram(source), script)
+    ,
+    _.script,
+  )
 
-  /** Typed expression ≅ JVM class: lower; back, type the script the class embeds. */
+  /** Typed expression ≅ JVM class: lower; back, type the script the class embeds — of a known
+    * version, as only a typed program is lowered.
+    */
   val lowering: Iso[TypedProgram, JvmClass] =
-    Iso(Lower.lower, cls => toTyped.get(Lower.script(cls)))
+    Iso(Lower.lower, cls => Typer.typeProgram(SourceProgram.decode(Lower.script(cls))))
 
   /** JVM class ⇀ class file: [[compile]] when the class fits in one; back, [[decompile]]. */
   val compiling = Prism[JvmClass, JvmClassScript](cls => compile(cls).left.map(_ => cls), decompile)
 
-  val toJvmClass: Iso[CborScript, JvmClass] = toTyped.andThen(lowering)
+  /** Script ⇀ JVM class. */
+  val toJvmClass = toTyped.andThen(lowering)
 
   /** The compiler, and its inverse on the class files it writes. */
   val toBytecode = toJvmClass.andThen(compiling)

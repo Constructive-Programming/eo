@@ -18,6 +18,13 @@ object Semantics:
 
   val protocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
 
+  /** The Plutus Core versions a script may declare: those Plutus V3 has at [[protocolVersion]]
+    * (`plcVersionsIntroducedIn` in plutus-ledger-api). A version only gates syntax — 1.1.0 adds
+    * `constr` and `case`, which Scalus' codec refuses below it — but the ledger rejects a script of
+    * any other version when it decodes it, and so does the compiler.
+    */
+  val versions: Set[(Int, Int, Int)] = Set((1, 0, 0), (1, 1, 0))
+
   /** The oracle: Scalus' CEK machine, configured for [[protocolVersion]]. */
   lazy val vm: PlutusVM = PlutusVM.makePlutusV3VM(protocolVersion)
 
