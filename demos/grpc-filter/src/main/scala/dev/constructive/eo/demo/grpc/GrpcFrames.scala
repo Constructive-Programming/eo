@@ -63,10 +63,7 @@ object GrpcFrames:
       def done = Right((Chunk.from(messages.reverse), rest))
       if rest.size < HeaderBytes then done
       else
-        val length =
-          (rest(1) & 0xffL) << 24 | (rest(2) & 0xffL) << 16 | (rest(3) & 0xffL) << 8 | (rest(
-            4
-          ) & 0xffL)
+        val length = (1 to 4).foldLeft(0L)((n, i) => n << 8 | (rest(i) & 0xffL))
         if rest(0) != 0 then Left(s"compressed flag ${rest(0)}: no message encoding negotiated")
         else if length > maxMessageBytes then Left(s"a $length-byte message: over $maxMessageBytes")
         else if rest.size - HeaderBytes < length then done
