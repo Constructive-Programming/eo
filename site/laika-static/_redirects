@@ -1,0 +1,5 @@
+# Cloudflare Pages redirects for pages that moved: the cookbook was one page and is now a
+# section, and the demos moved into it.
+/cookbook.html /cookbook/index.html 301
+/demos/uplc-jvm.html /cookbook/uplc-jvm.html 301
+/demos/grpc-filter.html /cookbook/grpc-filter.html 301

@@ -198,7 +198,7 @@ re-encode — or, with [eo-circe](integrations/circe.md) / [eo-avro](integration
 form in place and never fully decode at all.
 
 Put together, that turns a request handler into a short pipeline. The
-**persist-and-stamp** recipe ([Cookbook → Effect threading](cookbook.md)) is the
+**persist-and-stamp** recipe ([Cookbook → Effect threading](cookbook/effect-threading.md#persist-and-stamp-decode-free)) is the
 canonical shape — decode a PUT body into a domain object, store it effectfully,
 stamp the database-assigned id back on with a derived id-lens, and re-encode the
 result: the whole handler reads as `decode → store → stamp → encode`.
@@ -332,7 +332,7 @@ The derived instance also backs `Plated.everywhere[S]` — a composable
 `Modify` that lifts any downstream optic to *every* depth, so
 `everywhere[S].andThen(prism).modify(f)` rewrites that focus across the
 whole tree. See [Optics → Modify](optics.md#modify) and the
-[Cookbook recipe](cookbook.md).
+[Cookbook recipe](cookbook/navigating-structures.md#visit-across-whole-trees).
 
 ```scala
 import dev.constructive.eo.generics.plate
@@ -353,7 +353,7 @@ Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(
 ```
 
 Works on enums, sealed hierarchies, and recursive case classes. See
-the [cookbook Plated recipe](cookbook.md) for a worked, runnable
+the [cookbook Plated recipe](cookbook/navigating-structures.md#visit-across-whole-trees) for a worked, runnable
 example. (The block above is illustrative — the `new` the macro
 emits for an enum case can't run inside this page's doc sandbox;
 the cookbook runs the same derivation against a package-level

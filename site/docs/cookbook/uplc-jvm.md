@@ -1,4 +1,4 @@
-# UPLC → JVM bytecode
+# Blockchain smart contract compilation demo
 
 > **A demo, not a module.** The code lives in
 > [`demos/uplc-jvm`](https://github.com/Constructive-Programming/eo/tree/main/demos/uplc-jvm)

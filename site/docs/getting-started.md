@@ -116,7 +116,7 @@ capability contracts across modules. Deep dive:
 - If you want the per-family tour with the kind of optic you'd
   reach for in each situation, read [Optics reference](optics.md).
 - If you'd rather start from a task — "edit one branch",
-  "batch-load nested IDs" — the [Cookbook](cookbook.md) opens with
+  "batch-load nested IDs" — the [Cookbook](cookbook/README.md) opens with
   a task index that maps straight to runnable recipes.
 - If you're coming from Monocle, jump to
   [Migrating from Monocle](migration-from-monocle.md).

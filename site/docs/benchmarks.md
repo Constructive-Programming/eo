@@ -34,7 +34,7 @@ table, and for the ratios everywhere, the signal holds.
 > sub-nanosecond truth. See [Reproducing](#reproducing) and
 > [`benchmarks/README.md`](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md).
 
-The [UPLC → JVM demo](demos/uplc-jvm.md) has its own JMH suite — the Scalus CEK
+The [blockchain smart contract compilation demo](cookbook/uplc-jvm.md) has its own JMH suite — the Scalus CEK
 machine against the class files the demo compiles — reported on its page, not
 here.
 

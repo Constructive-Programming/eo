@@ -390,4 +390,4 @@ own residual label before reconstructing the outer structure. Indexed
 
 For variable-shape containers and aggregations, see [MultiFocus](multifocus.md).
 For the surrounding optic families, see the [Optics reference](optics.md#indexed);
-for task-oriented examples, see the [Cookbook](cookbook.md).
+for task-oriented examples, see the [Cookbook](cookbook/README.md).

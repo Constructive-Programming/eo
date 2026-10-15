@@ -138,7 +138,7 @@ for cats typeclasses.
 - jsoniter-scala integration: <https://eo.constructive.dev/integrations/jsoniter.html>
 - ZIO integration: <https://eo.constructive.dev/integrations/zio.html>
 - Kyo integration (Records, kyo-schema bridge): <https://eo.constructive.dev/integrations/kyo.html>
-- Cookbook (recipes): <https://eo.constructive.dev/cookbook.html>
+- Cookbook (recipes): <https://eo.constructive.dev/cookbook/index.html>
 - Demo — a UPLC (Cardano Plutus Core) → JVM bytecode compiler built as one
   eo `Iso`, checked against the Scalus CEK machine:
   [`demos/uplc-jvm`](./demos/uplc-jvm/README.md)

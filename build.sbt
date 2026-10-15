@@ -68,6 +68,8 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoUplcJvm/scalafmtCheckAll",
       "demoUplcJvmValidators/scalafmtCheckAll",
       "demoUplcJvmBench/scalafmtCheckAll",
+      "demoGrpcFilter/scalafmtCheckAll",
+      "demoGrpcFilterBench/scalafmtCheckAll",
     ),
     name = Some("Check formatting"),
   ),
@@ -77,6 +79,8 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoUplcJvm/scalafixAll --check",
       "demoUplcJvmValidators/scalafixAll --check",
       "demoUplcJvmBench/scalafixAll --check",
+      "demoGrpcFilter/scalafixAll --check",
+      "demoGrpcFilterBench/scalafixAll --check",
     ),
     name = Some("Check scalafix"),
   ),
@@ -88,6 +92,10 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("demoUplcJvm/test", "demoUplcJvmBench/Jmh/compile"),
   name = Some("Test UPLC → JVM demo (differential vs Scalus CEK)"),
+)
+ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
+  List("demoGrpcFilter/test", "demoGrpcFilterBench/Jmh/compile"),
+  name = Some("Test gRPC filter demo (eo-jsoniter + fs2)"),
 )
 
 // -------------------------------------------------------------------
@@ -986,7 +994,7 @@ lazy val docs: Project = project
     mdocExtraArguments ++= Seq(
       "--scalac-options",
       // 120s: the 60s budget still tripped intermittently inside cold-JVM
-      // pre-commit hook sessions (cookbook.md avro fences on a loaded box).
+      // pre-commit hook sessions (the cookbook's avro fences on a loaded box).
       // The `s` suffix is required — kindlings' DurationPattern rejects a bare
       // integer and silently reverts to the 5s default (see the ThisBuild
       // scalacOptions comment above).
@@ -1222,6 +1230,57 @@ lazy val demoUplcJvmBench: Project = project
   .settings(commonSettings *)
   .settings(
     name := "cats-eo-demo-uplc-jvm-bench",
+    publish / skip := true,
+  )
+
+// -------------------------------------------------------------------
+// Demo: triage a gRPC stream of JSON messages straight off a socket with
+// eo-jsoniter optics and fs2 — every message is classified and filtered by
+// reading only the few leaves the policy needs, never decoding the 64-field
+// message, and kept messages are forwarded byte for byte. Unpublished and OUT
+// of the root aggregate (CI runs it as its own step); run with
+// `sbt demoGrpcFilter/test` or `sbt demoGrpcFilter/run`.
+// -------------------------------------------------------------------
+lazy val Fs2Version = "3.14.0"
+lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
+// Arbitrary / Cogen derivation from Scala 3 mirrors: the demo's issues are drawn from generators
+// derived from the model.
+lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.10.0"
+
+lazy val demoGrpcFilter: Project = project
+  .in(file("demos/grpc-filter"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics"),
+    LocalProject("jsoniterIntegration"),
+    // OptionalTests: the model's optics are checked against the library's own rule set.
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-demo-grpc-filter",
+    publish / skip := true,
+    libraryDependencies += fs2Io,
+    // The message model's codecs: the source encodes whole messages, the baseline decodes them.
+    libraryDependencies += jsoniterMacros,
+    // The stream's issues come from ScalaCheck generators derived from the model, in main code:
+    // the demo's upstream service and the benchmarks draw from them too.
+    libraryDependencies += scalacheck,
+    libraryDependencies += scalacheckDerived,
+    libraryDependencies += discipline % Test,
+    Compile / run / fork := true,
+  )
+
+// JMH for the gRPC filter demo: full decode against eo-jsoniter triage, per message and per
+// stream. Results are reported on the demo's docs page, like the UPLC demo's.
+// Run with `sbt "demoGrpcFilterBench/Jmh/run -prof gc"`.
+lazy val demoGrpcFilterBench: Project = project
+  .in(file("demos/grpc-filter-bench"))
+  .enablePlugins(JmhPlugin)
+  .dependsOn(LocalProject("demoGrpcFilter"))
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-demo-grpc-filter-bench",
     publish / skip := true,
   )
 
