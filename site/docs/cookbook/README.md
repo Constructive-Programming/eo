@@ -34,9 +34,7 @@ The framing follows Hansen — *We Need More Optics*
 Penner — *Optics By Example*
 (<https://leanpub.com/optics-by-example/>). These are worked
 examples, not a tutorial — for the optic families themselves see the
-[Optics reference](../optics.md). Every fence is compiled by mdoc
-against the current library version, and every recipe cites its
-source.
+[Optics reference](../optics.md). Every recipe cites its source.
 
 If you arrive with a task rather than an optic in mind, start here:
 
