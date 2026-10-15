@@ -994,7 +994,7 @@ lazy val docs: Project = project
     mdocExtraArguments ++= Seq(
       "--scalac-options",
       // 120s: the 60s budget still tripped intermittently inside cold-JVM
-      // pre-commit hook sessions (cookbook.md avro fences on a loaded box).
+      // pre-commit hook sessions (the cookbook's avro fences on a loaded box).
       // The `s` suffix is required — kindlings' DurationPattern rejects a bare
       // integer and silently reverts to the 5s default (see the ThisBuild
       // scalacOptions comment above).

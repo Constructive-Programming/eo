@@ -113,7 +113,7 @@ library's core habit: [Capabilities](capabilities.md).
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.
-- [Cookbook](cookbook.md) — common patterns: option fields,
+- [Cookbook](cookbook/README.md) — common patterns: option fields,
   composed Lens/Optional, multi-focus modify, JSON path edits, and
   `Plated` + `everywhere` — one optic applied at every depth of a
   tree, AST, or JSON document.

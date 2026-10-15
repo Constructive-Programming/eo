@@ -277,7 +277,7 @@ reads on a worklist, `rewrite` trampolined through `cats.Eval`.
 cats-eo also exposes `everywhere[S]` as a composable `Modify` —
 `everywhere.andThen(prism).modify(f)` applies an ordinary optic at
 every depth, a combinator Monocle's Plated chooses not to expose.
-See the [cookbook recipe](cookbook.md).
+See the [cookbook recipe](cookbook/navigating-structures.md#visit-across-whole-trees).
 
 ## Cheat sheet
 

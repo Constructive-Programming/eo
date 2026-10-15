@@ -1029,7 +1029,7 @@ For edits that recurse through every nested record rather than
 sitting at a fixed path — redact a field in every sub-record,
 rewrite a value at any depth — `Plated[IndexedRecord]` (from
 `dev.constructive.eo.avro.given`) makes the record tree a recursive
-self-traversal. The [`Plated`](../cookbook.md) combinators
+self-traversal. The [`Plated`](../cookbook/navigating-structures.md#visit-across-whole-trees) combinators
 (`transform`, `rewrite`, `children`, `universe`) then walk it,
 stack-safely. The immediate children of a record are its
 directly-record-valued fields; records nested inside array / map /
@@ -1040,7 +1040,7 @@ Avro mirror of [`Plated[Json]`](circe.md).
 `Modify` you can `.andThen` a Lens / Prism onto so a single `.modify`
 rewrites that focus at every depth — composing exactly as it does for
 [`Plated[Json]`](circe.md). See the circe page and the
-[cookbook recipe](../cookbook.md) for the runnable `everywhere.andThen(...)`
+[cookbook recipe](../cookbook/navigating-structures.md#visit-across-whole-trees) for the runnable `everywhere.andThen(...)`
 shape.
 
 ## When to reach for which
@@ -1064,7 +1064,7 @@ shape.
 | Render an Avro record as circe `Json`                      | `AvroJson.record(schema)` — `eo.avro.circe`        |
 
 For the Kafka end-to-end recipe (read bytes, modify, re-emit),
-see the [Cookbook → Serdes free pipes](../cookbook.md#serdes-free-pipes).
+see the [Cookbook → Serdes free pipes](../cookbook/decoupling.md#serdes-free-pipes).
 For the full failure-mode matrix and the per-case behaviour
 specs, see
 [`AvroPrismSpec`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/test/scala/dev/constructive/eo/avro/AvroPrismSpec.scala)

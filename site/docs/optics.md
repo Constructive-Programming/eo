@@ -348,7 +348,7 @@ typeclasses `F` admits (`.modify` for `Functor`, `.foldMap` for
 
 See the [MultiFocus reference](multifocus.md) for the full
 typeclass-gated capability matrix and composability profile; the
-[Cookbook](cookbook.md) ships runnable recipes for the Grate,
+[Cookbook](cookbook/navigating-structures.md) ships runnable recipes for the Grate,
 Kaleidoscope, and PowerSeries shapes.
 
 ### PowerSeries
@@ -367,7 +367,7 @@ sweep sizes 4 / 32 / 256 / 1024).
 / `everywhere` — rides this same `MultiFocus[PSVec]` carrier via
 `Traversal.selfChildren`; it's a typeclass over the carrier, not a new
 family node. See [Generics → `plate[S]`](generics.md), the
-[Cookbook](cookbook.md), and the [Modify section](#modify) for
+[Cookbook](cookbook/navigating-structures.md#visit-across-whole-trees), and the [Modify section](#modify) for
 `everywhere`.
 
 ```scala mdoc:silent
@@ -408,7 +408,7 @@ every focus to a single value with `.collectMap` (Functor-broadcast)
 or `.collectList` (List cartesian). Reach for it when you want to read
 the foci out as one summary rather than rewrite them in place. See
 [MultiFocus reference](multifocus.md) and
-[Cookbook → Recipe B](cookbook.md).
+[Cookbook → Recipe B](cookbook/navigating-structures.md#compute-aggregations).
 
 `collectList` supplies a singleton **focus vector** with observed
 context, not a guaranteed singleton source. Shape/count-coupled
@@ -610,7 +610,7 @@ everyLeaf.modify(_ + 1)(Tree.Branch(Tree.Leaf(1), Tree.Branch(Tree.Leaf(2), Tree
 `ModifyF` (Lens / Prism / Optional / Modify), and the `.modify` runs
 bottom-up, stack-safe to any depth. For the read side (every sub-term
 as a list) use `Plated.universe`; for the full worked Prism-composition
-recipe see the [Cookbook](cookbook.md), and for the macro that derives
+recipe see the [Cookbook](cookbook/navigating-structures.md#visit-across-whole-trees), and for the macro that derives
 the `Plated` see [Generics → `plate[S]`](generics.md).
 
 ### Review

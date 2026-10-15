@@ -441,7 +441,7 @@ every field named `ssn` at any depth, uppercase every string,
 round every number. `Plated[Json]` makes `Json` a recursive
 self-traversal — the immediate children of a node are an array's
 elements or an object's field values — so the
-[`Plated`](../cookbook.md) combinators walk the whole document:
+[`Plated`](../cookbook/navigating-structures.md#visit-across-whole-trees) combinators walk the whole document:
 
 ```scala mdoc:silent
 import dev.constructive.eo.circe.given
@@ -486,7 +486,7 @@ everyString.modify(_.toUpperCase)(doc).noSpacesSortKeys
 to any depth (`transform` / `everywhere` on a call-stack/heap-machine
 hybrid, `universe` on a worklist, `rewrite` trampolined through
 `cats.Eval` so even a long re-fire chain won't overflow), so a deep
-document is safe. See the [cookbook Plated recipe](../cookbook.md) for the
+document is safe. See the [cookbook Plated recipe](../cookbook/navigating-structures.md#visit-across-whole-trees) for the
 data-type side of the same API.
 
 ## Working Json-first — migrating a Decoder-materialised model

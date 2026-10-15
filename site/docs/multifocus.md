@@ -185,7 +185,7 @@ inner, without introducing a generic Glass Composer bridge.
 
 ## Worked examples
 
-The [Cookbook](cookbook.md) shows container aggregation, batch-relative
+The [Cookbook](cookbook/navigating-structures.md#compute-aggregations) shows container aggregation, batch-relative
 rewrites, and an `Indexed` environment-to-path example. For chains that
 continue through collections, use `Traversal.each` / `pEach`, including
 `Lens → each → Lens` and recursive `Plated` traversals.

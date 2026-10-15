@@ -1,0 +1,2 @@
+# Cloudflare Pages redirects. The cookbook was one page and is now a section of pages.
+/cookbook.html /cookbook/index.html 301
