@@ -27,6 +27,7 @@ class PipelineSpec extends Specification with ScalaCheck:
       .getBytes("UTF-8")
 
   private val upstream = messages :+ task
+  private val upstreamBytes = GrpcFramesSpec.join(upstream)
 
   /** What the filter must forward: the messages the decoded issues say to keep, as they are. */
   private val expected = upstream.filter(Triage.decoding(policy)(_).keep).map(_.toList)
@@ -43,10 +44,9 @@ class PipelineSpec extends Specification with ScalaCheck:
   "in memory, however the bytes are cut, the filter forwards exactly the kept messages" >>
     Prop
       .forAll(Gen.nonEmptyListOf(Gen.choose(1, 20_000))) { sizes =>
-        val bytes = Stream.emits(upstream).through(GrpcFrames.joinFrames).compile.to(Array)
         val (tally, out) = run(Ref.of[IO, Tally](Tally.empty).flatMap { tally =>
           Stream
-            .emits(GrpcFramesSpec.pieces(bytes, sizes))
+            .emits(GrpcFramesSpec.pieces(upstreamBytes, sizes))
             .flatMap(Stream.chunk)
             .covary[IO]
             .through(Triage.filter(Triage.optics(policy), tally))
