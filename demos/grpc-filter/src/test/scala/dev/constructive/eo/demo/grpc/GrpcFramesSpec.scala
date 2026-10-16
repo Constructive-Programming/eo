@@ -11,9 +11,10 @@ import org.specs2.mutable.Specification
 /** gRPC framing over bytes that arrive in arbitrary pieces. */
 class GrpcFramesSpec extends Specification with ScalaCheck:
 
-  import GrpcFramesSpec.pieces
+  import GrpcFramesSpec.{join, pieces}
 
-  def decode(
+  /** Bytes, in pieces, through [[GrpcFrames.splitFrames]]: the messages, or the failure. */
+  def split(
       chunks: List[Chunk[Byte]],
       max: Int = GrpcFrames.DefaultMaxMessageBytes,
   ): Either[Throwable, List[List[Byte]]] =
@@ -26,11 +27,8 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
       .toList
       .map(_.map(_.toList))
 
-  def framed(messages: List[Array[Byte]]): Array[Byte] =
-    Stream.emits(messages).through(GrpcFrames.joinFrames).compile.to(Array)
-
   def malformed(bytes: Int*)(reason: String) =
-    decode(List(Chunk.array(bytes.map(_.toByte).toArray)), max = 10) must beLeft(
+    split(List(Chunk.array(bytes.map(_.toByte).toArray)), max = 10) must beLeft(
       GrpcFrames.Malformed(reason)
     )
 
@@ -39,7 +37,7 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
 
   "messages come back whole however the bytes are cut" >> Prop.forAll(messages, sizes) {
     (messages, sizes) =>
-      decode(pieces(framed(messages), sizes)) must beRight(messages.map(_.toList))
+      split(pieces(join(messages), sizes)) must beRight(messages.map(_.toList))
   }
 
   "a frame is a zero, the length big-endian, then the message" >> {
@@ -47,12 +45,12 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
   }
 
   "no bytes, no messages; an empty message is a message" >> {
-    decode(Nil) must beRight(Nil)
-    decode(List(GrpcFrames.frame(Array.emptyByteArray))) must beRight(List(Nil))
+    split(Nil) must beRight(Nil)
+    split(List(GrpcFrames.frame(Array.emptyByteArray))) must beRight(List(Nil))
   }
 
   "a message at the size limit passes; one byte more fails the stream" >> {
-    decode(List(GrpcFrames.frame(new Array[Byte](10))), max = 10) must beRight
+    split(List(GrpcFrames.frame(new Array[Byte](10))), max = 10) must beRight
     malformed(0, 0, 0, 0, 11)("a 11-byte message: over 10")
   }
 
@@ -69,6 +67,10 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
   }
 
 object GrpcFramesSpec:
+
+  /** Messages through [[GrpcFrames.joinFrames]]: their frames, back to back. */
+  def join(messages: Seq[Array[Byte]]): Array[Byte] =
+    Stream.emits(messages).through(GrpcFrames.joinFrames).compile.to(Array)
 
   /** `bytes` in pieces of `sizes` (cycled), as a socket might deliver them. */
   def pieces(bytes: Array[Byte], sizes: List[Int]): List[Chunk[Byte]] =

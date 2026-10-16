@@ -51,9 +51,9 @@ message over gRPC's default 4 MiB limit, or on bytes that end inside a frame.
 `joinFrames` frames messages again, without copying them.
 
 ```scala
-socketBytes                                   // Stream[F, Byte], as the socket reads it
-  .through(GrpcFrames.splitFrames())               // Stream[F, Array[Byte]]: one per message
-  .through(GrpcFrames.joinFrames)                 // Stream[F, Byte]: the same frames again
+socketBytes                           // Stream[F, Byte], as the socket reads it
+  .through(GrpcFrames.splitFrames())  // Stream[F, Array[Byte]]: one per message
+  .through(GrpcFrames.joinFrames)     // Stream[F, Byte]: the same frames again
 ```
 
 The demo puts these frames straight on TCP rather than inside HTTP/2 streams:
@@ -263,7 +263,7 @@ full decode (baseline): 200000 messages, 813.3 MB in 4.16 s:
 
 | suite | checks |
 |---|---|
-| `GrpcFramesSpec` | any messages, framed and cut into arbitrary pieces, decode back whole; the frame layout; the size limit (unsigned lengths included); compressed frames and truncated bytes fail the stream |
+| `GrpcFramesSpec` | any messages, joined into frames and cut into arbitrary pieces, split back whole; the frame layout; the size limit (unsigned lengths included); compressed frames and truncated bytes fail the stream |
 | `TriageSpec` | the optics judge every message exactly as decoding does: 3 000 issues the size the stream's are, under the default policy and under 100 random ones, and 500 random issues of every size under random policies, every kind both kept and dropped; the slice `Wire.detail` hands out is the detail's own JSON; pretty-printed JSON is read the same; an unknown kind, a missing `detail` and bytes that aren't JSON are dropped as unclassified |
 | `TriageSpec` (laws) | `Model`'s optics pass cats-eo-laws' `OptionalTests` |
 | `PipelineSpec` | the whole filter, in memory with the bytes cut at random, and over real sockets: it forwards exactly the messages the decoded issues say to keep, byte for byte and in order, and its tally adds up; a malformed frame fails it |

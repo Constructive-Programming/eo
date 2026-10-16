@@ -19,7 +19,7 @@ object GrpcFrames:
   /** gRPC's default limit on a received message: 4 MiB. */
   val DefaultMaxMessageBytes: Int = 4 * 1024 * 1024
 
-  /** The bytes are not gRPC frames this decoder can read. It fails the stream, like the socket
+  /** The bytes are not gRPC frames [[splitFrames]] can split. It fails the stream, like the socket
     * errors around it: a gRPC peer answers a malformed frame by ending the call.
     */
   final case class Malformed(reason: String) extends RuntimeException(reason) with NoStackTrace
