@@ -2,18 +2,18 @@ package dev.constructive.eo
 
 import cats.data.State
 import cats.kernel.laws.IsEq
-import cats.laws.TraverseLaws
 import cats.laws.discipline.TraverseTests
 import cats.{Eq, Traverse}
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.Laws
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 import optics.Traversal
 import optics.Optic.*
-import data.PSVec
+import data.{MultiFocus, PSVec}
+import laws.eo.ModifyAListLaws
+import laws.eo.discipline.ModifyAListTests
 
 /** Laws for the hand-written `Traverse[PSVec]` — the instance every `Traversal.each(...).modifyA`
   * (and every other `MultiFocus[PSVec]` `.modifyA` / `.all`) runs through.
@@ -22,18 +22,16 @@ import data.PSVec
   * that resumes a continuation more than once handed every resumption the same array and the last
   * writer won — `List(1, 2, 3)` under `a => List(a, -a)` gave 8 copies of `List(-1, -2, -3)`. cats'
   * own `TraverseTests` only admits `CommutativeApplicative` effects (`Option`, `Id`, …), which are
-  * single-shot; it caught the bug only through its parallel-composition law (the product of two
-  * effects resumes each continuation once per component). So the second rule set re-states cats'
-  * `TraverseLaws` with the multi-shot `List` / `Vector` as effects, adds differential checks
-  * against cats' `Traverse[List]` / `Traverse[Vector]` (eager `List`, depth-first `LazyList`) and a
-  * re-run check (`State`), and the last block checks the optic surface (`Traversal.each`, alone and
-  * composed) the same way.
+  * single-shot; it caught the bug only through its parallel-composition law. The multi-shot laws
+  * now live in the shared kit (`ForgetfulTraverseTests.forgetfulTraverseMultiShot`, D2
+  * `ModifyAListTests`); this spec runs them over every PSVec variant and adds what is
+  * PSVec-specific: the depth-first (`LazyList`) and re-run (`State`) effects that reach the
+  * buffer's copy paths.
   */
-class PSVecTraverseLawsSpec extends Specification with Discipline:
+class PSVecTraverseLawsSpec extends Specification with CheckAllHelpers:
 
   // Small vectors on purpose: a multi-shot effect's result size is the PRODUCT of the per-element
-  // effect sizes, so `n` elements under a 0..3-wide effect is up to 4^n branches (and the
-  // sequential-composition law nests two such effects).
+  // effect sizes, so `n` elements under a 0..3-wide effect is up to 4^n branches.
   private val smallInts: Gen[List[Int]] =
     Gen.choose(0, 5).flatMap(Gen.listOfN(_, Gen.choose(-9, 9)))
 
@@ -57,6 +55,8 @@ class PSVecTraverseLawsSpec extends Specification with Discipline:
   // PSVec equality is value-based across variants, so `==` is a lawful Eq.
   private given eqPSVec[A]: Eq[PSVec[A]] = Eq.fromUniversalEquals
 
+  private val vecs: Gen[PSVec[Int]] = psvecOf(smallInts, Gen.choose(-9, 9))
+
   // ----- cats' discipline rule set (commutative effects only) --------------
 
   checkAll(
@@ -64,48 +64,46 @@ class PSVecTraverseLawsSpec extends Specification with Discipline:
     TraverseTests[PSVec].traverse[Int, Int, Int, Int, Option, Option],
   )
 
-  // ----- the same laws under multi-shot effects ----------------------------
+  // ----- eo's ForgetfulTraverse laws over every PSVec variant ---------------
 
-  // Bounded-width effects: each focus fans out to 0..3 branches (0 exercises the empty-product
-  // short-circuit, 1 the single-shot path, 2..3 the multi-shot path the bug lived in).
-  private def width[F[_]](mk: List[Int] => F[Int]): Gen[Int => F[Int]] =
-    Gen.function1(Gen.choose(0, 3).flatMap(Gen.listOfN(_, Gen.choose(-9, 9))).map(mk))
+  // The generic multi-shot laws (Nested / Tuple2K composition, agreement with Traverse[List]) are
+  // registered for MultiFocus[PSVec] in OpticsLawsSpec too, but on a dense 3-slot Slice only.
+  private given arbMultiFocusPSVec: Arbitrary[MultiFocus[PSVec][Int, Int]] =
+    Arbitrary(Arbitrary.arbitrary[Int].flatMap(x => vecs.map(MultiFocus(x, _))))
 
-  private val listF: Gen[Int => List[Int]] = width(identity)
-  private val vectorF: Gen[Int => Vector[Int]] = width(_.toVector)
-  private val vecs: Gen[PSVec[Int]] = psvecOf(smallInts, Gen.choose(-9, 9))
+  checkAllForgetfulTraverseFor[MultiFocus[PSVec], Int, Int](
+    "ForgetfulTraverse[MultiFocus[PSVec]] on Empty / Single / Slice / offset Slice"
+  )
+
+  // `each ∘ each` reassembles every branch through `mfAssocPSVec.composeFrom`'s offset slices.
+  locally {
+    given Arbitrary[List[List[Int]]] = Arbitrary(
+      Gen
+        .choose(0, 3)
+        .flatMap(Gen.listOfN(_, Gen.choose(0, 2).flatMap(Gen.listOfN(_, Gen.choose(-9, 9)))))
+    )
+    checkAll(
+      "(each ∘ each) modifyA[List] ≡ cartesian traverse",
+      new ModifyAListTests[List[List[Int]], Int, MultiFocus[PSVec]]:
+        val laws = new ModifyAListLaws[List[List[Int]], Int, MultiFocus[PSVec]]:
+          val optic = Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int])
+      .modifyAList,
+    )
+  }
+
+  // ----- PSVec-specific: depth-first and re-run effects ----------------------
+
+  // Each focus fans out to 0..3 branches.
+  private val listF: Gen[Int => List[Int]] =
+    Gen.function1(Gen.choose(0, 3).flatMap(Gen.listOfN(_, Gen.choose(-9, 9))))
 
   private def holds[A](e: IsEq[A]): Prop =
     Prop(e.lhs == e.rhs) :| s"lhs = ${e.lhs}\nrhs = ${e.rhs}"
 
-  private object multiShot extends Laws:
-    private val L = TraverseLaws[PSVec]
+  private object effects extends Laws:
 
-    def rules: RuleSet = new DefaultRuleSet(
-      "traverse under multi-shot and re-run effects",
-      None,
-      "traverse identity (List)" -> forAll(vecs)(fa =>
-        // `traverseIdentity` is stated over `Id`; the multi-shot analogue is that `pure`
-        // continuations (one branch each) rebuild the input exactly.
-        holds(IsEq(Traverse[PSVec].traverse(fa)(a => List(a)), List(fa)))
-      ),
-      "traverse sequential composition (List then Vector)" -> forAll(vecs, listF, vectorF)(
-        (fa, f, g) => holds(L.traverseSequentialComposition[Int, Int, Int, List, Vector](fa, f, g))
-      ),
-      "traverse parallel composition (List, Vector)" -> forAll(vecs, listF, vectorF)((fa, f, g) =>
-        holds(L.traverseParallelComposition[Int, Int, List, Vector](fa, f, g))
-      ),
-      "traverseTap (List)" -> forAll(vecs, listF)((fa, f) =>
-        holds(L.traverseTap[Int, Int, List](fa, f))
-      ),
-      "agrees with Traverse[List] (G = List)" -> forAll(vecs, listF)((fa, f) =>
-        holds(
-          IsEq(
-            Traverse[PSVec].traverse(fa)(f).map(_.toList),
-            Traverse[List].traverse(fa.toList)(f),
-          )
-        )
-      ),
+    def rules: RuleSet = new SimpleRuleSet(
+      "traverse under depth-first and re-run effects",
       // LazyList forces branches depth-first, so a later branch at index `i` meets a buffer whose
       // first branch has ALREADY run on past `i` — the frozen-prefix copy, not the in-step one.
       "agrees with Traverse[List] (G = LazyList, depth-first)" -> forAll(vecs, listF)((fa, f) =>
@@ -130,52 +128,9 @@ class PSVecTraverseLawsSpec extends Specification with Discipline:
           )
         )
       ),
-      "agrees with Traverse[Vector] (G = Vector)" -> forAll(vecs, vectorF)((fa, f) =>
-        holds(
-          IsEq(
-            Traverse[PSVec].traverse(fa)(f).map(_.iterator.to(Vector)),
-            Traverse[Vector].traverse(fa.iterator.to(Vector))(f),
-          )
-        )
-      ),
     )
 
-  checkAll("Traverse[PSVec]", multiShot.rules)
-
-  // ----- the optic surface: modifyA through Traversal.each -----------------
-
-  private val nested: Gen[List[List[Int]]] =
-    Gen
-      .choose(0, 3)
-      .flatMap(Gen.listOfN(_, Gen.choose(0, 2).flatMap(Gen.listOfN(_, Gen.choose(-9, 9)))))
-
-  private object eachModifyA extends Laws:
-    private val listEach = Traversal.each[List, Int]
-    private val vectorEach = Traversal.each[Vector, Int]
-    private val nestedEach = Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int])
-
-    def rules: RuleSet = new DefaultRuleSet(
-      "Traversal.each(...).modifyA agrees with cats' traverse",
-      None,
-      "each[List].modifyA[List]" -> forAll(smallInts, listF)((xs, f) =>
-        holds(IsEq(listEach.modifyA[List](f)(xs), Traverse[List].traverse(xs)(f)))
-      ),
-      "each[Vector].modifyA[Vector]" -> forAll(smallInts, vectorF)((xs, f) =>
-        val v = xs.toVector
-        holds(IsEq(vectorEach.modifyA[Vector](f)(v), Traverse[Vector].traverse(v)(f)))
-      ),
-      // `each ∘ each` reassembles every branch through `mfAssocPSVec.composeFrom`'s offset slices.
-      "(each ∘ each).modifyA[List]" -> forAll(nested, listF)((xss, f) =>
-        holds(
-          IsEq(
-            nestedEach.modifyA[List](f)(xss),
-            Traverse[List].traverse(xss)(Traverse[List].traverse(_)(f)),
-          )
-        )
-      ),
-    )
-
-  checkAll("Traversal.each", eachModifyA.rules)
+  checkAll("Traverse[PSVec]", effects.rules)
 
   "each[List].modifyA[List] returns every combination, not one shared result" >> {
     // The reported case: 2^3 DISTINCT sign patterns, in cats' order.

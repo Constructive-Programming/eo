@@ -64,16 +64,21 @@ trait CheckAllHelpers extends Discipline:
       .forgetfulFunctor,
     )
 
-  /** Runs `ForgetfulTraverseTests` for carrier `F` against the supplied Arbitrary evidence. */
+  /** Runs `ForgetfulTraverseTests` (identity + the multi-shot composition / agreement laws) for
+    * carrier `F` against the supplied Arbitrary/Cogen evidence.
+    */
   def checkAllForgetfulTraverseFor[F[_, _], X, A](name: String)(using
       Arbitrary[F[X, A]],
+      Arbitrary[A],
+      Cogen[A],
       ForgetfulTraverse[F, Applicative],
+      ForgetfulFold[F],
   ): Fragment =
     checkAll(
       name,
       new ForgetfulTraverseTests[F, X, A]:
         val laws = new ForgetfulTraverseLaws[F, X, A] {}
-      .forgetfulTraverse,
+      .forgetfulTraverseMultiShot,
     )
 
   // ===== MultiFocus over a Functor-bearing F =====
