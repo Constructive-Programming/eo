@@ -151,7 +151,10 @@ class ChimneyBench extends JmhDefaults:
 
   @Benchmark def eoGetterRead: String = viewCity.get(user)
   @Benchmark def chimneyGetterRead: String = viewT.transform(user).address.city
-  @Benchmark def handGetterRead: String = user.address.city
+
+  // Hand-written conversion too: build the view, then read it — the same work as the other two.
+  @Benchmark def handGetterRead: String =
+    ChUserView(user.name, ChAddressView(user.address.city, user.address.street)).address.city
 
   // ==== edit a domain field on the DTO (Codec → prism ∘ lens) ================================
 
@@ -162,10 +165,8 @@ class ChimneyBench extends JmhDefaults:
       case Some(a) => accountT.transform(a.copy(owner = a.owner.toUpperCase))
       case None    => dto
 
-  @Benchmark def handCodecModify: ChAccountDto =
-    ChCents.from(dto.balance) match
-      case Some(_) => dto.copy(owner = dto.owner.toUpperCase)
-      case None    => dto
+  // Decode to the domain, edit there, encode back — what the codec round trip does.
+  @Benchmark def handCodecModify: ChAccountDto = handEditOwner(dto)
 
   // ==== decode, then read a field, keeping the errors (ResultFold) ===========================
 
@@ -174,8 +175,7 @@ class ChimneyBench extends JmhDefaults:
   @Benchmark def chimneyResultFoldRead: Either[partial.Result.Errors, String] =
     accountPT.transform(dto).map(_.owner).asEither
 
-  @Benchmark def handResultFoldRead: Either[String, String] =
-    ChCents.from(dto.balance).map(_ => dto.owner).toRight("negative amount")
+  @Benchmark def handResultFoldRead: Either[String, String] = handDecode(dto).map(_.owner)
 
   // ==== patch a nested part (optic.patch) ====================================================
 
@@ -214,10 +214,7 @@ class ChimneyBench extends JmhDefaults:
       case Some(a) => accountT.transform(a.copy(owner = a.owner.toUpperCase))
       case None    => badDto
 
-  @Benchmark def handCodecModifyMiss: ChAccountDto =
-    ChCents.from(badDto.balance) match
-      case Some(_) => badDto.copy(owner = badDto.owner.toUpperCase)
-      case None    => badDto
+  @Benchmark def handCodecModifyMiss: ChAccountDto = handEditOwner(badDto)
 
   @Benchmark def eoResultFoldReadMiss: Either[partial.Result.Errors, String] =
     decodedOwner.either(badDto)
@@ -225,8 +222,17 @@ class ChimneyBench extends JmhDefaults:
   @Benchmark def chimneyResultFoldReadMiss: Either[partial.Result.Errors, String] =
     accountPT.transform(badDto).map(_.owner).asEither
 
-  @Benchmark def handResultFoldReadMiss: Either[String, String] =
-    ChCents.from(badDto.balance).map(_ => badDto.owner).toRight("negative amount")
+  @Benchmark def handResultFoldReadMiss: Either[String, String] = handDecode(badDto).map(_.owner)
+
+  // Hand-written codec: decode the DTO into the domain (failing on a negative balance), encode it
+  // back. The hand rows run the same conversions as the chimney and eo rows.
+  private def handDecode(d: ChAccountDto): Either[String, ChAccount] =
+    ChCents.from(d.balance).map(ChAccount(d.owner, _)).toRight("negative amount")
+
+  private def handEditOwner(d: ChAccountDto): ChAccountDto =
+    handDecode(d) match
+      case Right(a) => ChAccountDto(a.owner.toUpperCase, a.balance.value)
+      case Left(_)  => d
 
   // Hand-written error-accumulating traversal (repricing ×2 as it goes): every failure collected,
   // like chimney's.

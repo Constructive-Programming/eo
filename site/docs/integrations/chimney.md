@@ -240,8 +240,10 @@ through this module (**eo-chimney**), with **chimney** alone (the same
 transformers, built once; `map`, `copy` or the
 `into…withFieldComputed` DSL where the job needs more than one
 transformation), and **hand**-written with neither library. All three
-compute the same value, and optics and transformers are built once,
-outside the measured call. The rows marked "…" run the same operation
+compute the same value, including the intermediate values: the
+hand-written code builds the same view, domain value or DTO the other
+two do. Optics and transformers are built once, outside the measured
+call. The rows marked "…" run the same operation
 on inputs that fail.
 
 | Scenario | eo-chimney B/op | chimney B/op | hand B/op | eo ns/op | chimney ns/op | hand ns/op |
@@ -253,11 +255,11 @@ on inputs that fail.
 | `transformImage` — edit a field, return the view | 96 | 152 | 96 | 28 | 38 | 24 |
 | `transformImagePartial` — edit, then validate | 120 | 96 | 64 | 30 | 24 | 12 |
 | … the edit fails validation | 184 | 144 | 0 | 48 | 34 | 1 |
-| `Chimney.getter` ∘ two lenses — read a field | 48 | 0 | 0 | 17 | 1 | 1 |
-| `Chimney.prism` ∘ lens — edit a DTO field | 152 | 128 | 72 | 39 | 37 | 20 |
-| … the DTO doesn't decode | 160 | 72 | 0 | 40 | 18 | 1 |
-| `ResultFold` ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 25 | 19 | 3 |
-| … the DTO doesn't decode | 160 | 160 | 16 | 37 | 39 | 3 |
+| `Chimney.getter` ∘ two lenses — read a field | 48 | 0 | 0 | 22 | 1 | 1 |
+| `Chimney.prism` ∘ lens — edit a DTO field | 152 | 128 | 72 | 47 | 49 | 21 |
+| … the DTO doesn't decode | 160 | 72 | 0 | 39 | 20 | 1 |
+| `ResultFold` ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 24 | 21 | 3 |
+| … the DTO doesn't decode | 160 | 160 | 16 | 36 | 35 | 3 |
 | `lens.patch` — patch a nested part | 48 | 48 | 48 | 11 | 10 | 9 |
 
 One run per row (JDK 25, `-i 5 -wi 3 -f 3 -prof gc`) on a shared 4-vCPU
@@ -278,7 +280,7 @@ What the numbers say:
   transform).
 - **Editing a DTO through a `Codec` decodes once.** The prism ∘ lens
   composition keeps the decoded value for the write instead of
-  decoding again (240 → 152 B, 59 → 39 ns against the module's first
+  decoding again (240 → 152 B per edit against the module's first
   version).
 - **On a miss the gap to chimney is chimney's own errors.** Every
   object allocated on the "DTO doesn't decode" rows is a chimney error
