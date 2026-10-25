@@ -220,7 +220,11 @@ classpath, and it can be upgraded independently of the cluster. In Spark 4.0 the
 - Shown: struct lens (composed), guarded `Optional` (also composed twice), plan-time miss,
   `Mirror`-derived encoders, the collapsed optimized plan, and the JDK matrix.
 
-**Phase 1 — Pure-value optics.** `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
+**Phase 1 — Pure-value optics.** *1a DONE:* `Schemas` (`DataType` tree — `struct`/`array`/`map`
+prisms, `field`/`nullable`/`element`/`mapKey`/`mapValue` navigation, `Plated[DataType]`; not named
+`DataTypes`, which is Spark's own Java factory) and `Rows` (`field[A]`/`at[A]` by `ClassTag`,
+`Plated[Row]`), checked with Optional / Seam / Navigation / Prism / Plated rule sets. *1b next:*
+`VariantVal` (binary rewrite via `VariantBuilder`). Original scope: `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
 kit, `VariantVal` kit. Laws via the existing `cats-eo-laws` rule sets. No session needed.
 
 **Phase 2 — `Col[A]` + total optics.** The opaque `Col`; struct `Lens`; array/map `Modify`;
