@@ -1,9 +1,10 @@
 ---
 title: "feat: cats-eo-spark — Spark operations as eo optic constructions"
 type: feat
-status: proposed
+status: active
 date: 2026-10-25
 revised: 2026-10-25
+phase0: docs/research/2026-10-25-eo-spark-phase0-spike.md
 ---
 
 # cats-eo-spark — Spark operations as eo optic constructions
@@ -44,6 +45,24 @@ Spark's nested-data story is stringly typed and asymmetric:
   `aggregate`), which do not compose with struct access in any first-class way.
 - Spark 4's `VARIANT` type (`parse_json`, `variant_get`, `try_variant_get`) is a JSON-like tree,
   the same problem eo already solves for circe, jsoniter, zio-json and kyo-schema.
+
+## Phase 0 outcome (2026-10-25)
+
+GO. Spike write-up: [`docs/research/2026-10-25-eo-spark-phase0-spike.md`](../research/2026-10-25-eo-spark-phase0-spike.md).
+What changed in this plan as a result:
+
+- **Runtime is Spark Connect only.** Since Scala 3.8 the stdlib is compiled by Scala 3, and
+  Spark's Scala 2 runtime reflection (`ScalaReflection`, the session-companion lookup) cannot
+  initialise on it. Spark Classic therefore cannot run in a Scala 3.9 JVM. The Connect client can,
+  and the engine runs server-side on the 2.13 stdlib. The `spark-sql-api` target stands; "Classic
+  in-process" is gone (upstream-blocked).
+- **Encoders:** case classes encode as `TransformingEncoder[T, Row]` over a `RowEncoder`, decoded
+  through the `Mirror`. Spark's `ProductEncoder` decode path initialises `ScalaReflection`.
+- **Tests:** client-only test classpath, and a Connect server child JVM from the classpath-only
+  Scala 2.13 project `sparkConnectServer`.
+- Confirmed: no new carrier. The guarded `Optional` and plan-time misses are core `Optional`, and
+  Catalyst removes the row-struct wrapper and folds the per-row guard into `withField`'s own NULL
+  check.
 
 ## Requirements Trace
 
@@ -123,7 +142,7 @@ following the core rule.
 | `select(exprs*)` / `withColumn` / `drop` | `Lens` on the row-struct (see Lifting) | `Tuple2` | Yes |
 | `groupBy(...).agg(...)` / window functions | `Getter` / `Fold` → consumer | — | Read-only |
 | `join`, `union`, `repartition`, `cache`, read / write, actions | **not optics**: capability-taking consumers / plain API | — | n/a |
-| `ds.map(f)` with an eager optic | eager bridge `ds.mapThrough(o)(f)` (needs `Encoder`) | eager twin | Yes. Escape hatch: leaves Catalyst, and needs closure upload under Connect |
+| `ds.map(f)` with an eager optic | eager bridge `ds.mapThrough(o)(f)` (needs `Encoder`) | eager twin | Yes. Escape hatch: leaves Catalyst and needs closure upload. **Deferred after Phase 0:** the server would have to run Scala 3 closures on the 2.13 stdlib |
 | `DataType` / `StructType` trees | `Plated[DataType]`, field `Lens` / `At` | core | Yes (plain values) |
 | `Row` (untyped) | `field(name)` `Optional`, `Plated[Row]` (the DynamicValues-kit pattern) | `Affine` | Yes |
 | `VariantVal` (eager) | constructor prisms + `field` / `at` / `each` / `Plated` (circe playbook) | core | Yes |
@@ -154,22 +173,22 @@ classpath, and it can be upgraded independently of the cluster. In Spark 4.0 the
   client. So our own encoder derivation (answer 3) serves both.
 - The eager bridge (`ds.map` + eager optic) is the one part that is worse under Connect, because
   closures must be uploaded as artifacts. It stays a documented escape hatch.
-- **Tests** use an in-process Classic `SparkSession` (`spark-sql` `% Test`), which is fast and
-  needs no server. There is also one **Connect smoke suite** (an in-process
-  `SparkConnectService` from `spark-connect` `% Test`, client from `spark-connect-client-jvm`
-  `% Test`) that re-runs the differential properties over gRPC. It proves that the same optics
-  serialize. Phase 0 checks the exact module split (`Column`, `functions` and `AgnosticEncoders`
-  in `sql/api`) against the pinned 4.x minor.
+- **Tests** (revised by Phase 0) run the Connect client in the test JVM against a Connect server
+  child JVM (Classic engine, `local[1]`) launched from the classpath-only Scala 2.13 project
+  `sparkConnectServer`. An in-process Classic session is impossible on Scala 3.8+'s stdlib (see
+  Phase 0 outcome). The module split is confirmed for 4.2.0: `Column`, `functions`, `Dataset`,
+  `Encoder` and `AgnosticEncoders` are all in `spark-sql-api`.
 
 ## Key Technical Decisions
 
 1. **Spark 4.x only, consumed via `CrossVersion.for3Use2_13`.** Spark publishes only `_2.13`
    artifacts. Exclude `_2.13` copies of anything we also pull as `_3` (`scala-xml`,
    `scala-parser-combinators`, `scala-collection-compat`, json4s' transitive deps) and fail on
-   mixed suffixes. Phase 0 must prove that Scala 3.9's Scala-3-compiled stdlib runs Spark's
-   2.13 bytecode, and on which JDKs (Spark 4.x lists 17/21; check 25, the primary lane).
-2. **Own `AgnosticEncoder` derivation** from `Mirror`s via Hearth (already the `generics`
-   dependency): `ProductEncoder`, primitives, `OptionEncoder`, collections, enums/sealed traits.
+   mixed suffixes. *Phase 0:* the Connect client runs on Scala 3.9's stdlib on JDK 17/21/25.
+   Spark Classic does not (Scala 2 runtime reflection), so the runtime is Connect.
+2. **Own `AgnosticEncoder` derivation** from `Mirror`s (Hearth where macros help): primitives,
+   `OptionEncoder`, collections, enums/sealed traits. Case classes are
+   `TransformingEncoder[T, Row]` over a `RowEncoder`, never `ProductEncoder` (Phase 0).
    Needed for `Dataset[T]`, the eager bridge, and for the macro to know which schema positions
    are nullable (decision 3 above).
 3. **Partiality in the complement over core `Affine`**, as described above. No new carriers.
@@ -187,27 +206,19 @@ classpath, and it can be upgraded independently of the cluster. In Spark 4.0 the
    `(using CanModify[Col[S], Col[String]])`. Non-optic Dataset ops are consumers taking the
    capability for the key they read
    (`joinOn(using CanGet[Col[L], Col[K]], CanGet[Col[R], Col[K]])`).
-7. **Packaging: in the root aggregate.** Main dependency `spark-sql-api` `% Provided`, so it
-   compiles with everyone else at little cost. Spark tests need a forked JVM with Spark's
-   `--add-opens` list (`Test / fork := true`) and one shared `SparkSession` per JVM. If Spark
-   cannot run on JDK 25 at the pinned minor, the module still **compiles** in every lane
-   (bytecode targets 17). The 25 lane then excludes `spark/test` the way the kyo module is gated
-   by JVM (`kyoBuildActive`), rather than dropping the module from the aggregate. Usual
-   `-opt-inline:dev.constructive.eo.**`. Explicit nulls stay on, with `.nn` at Java-API
-   boundaries.
+7. **Packaging: in the root aggregate** (done in Phase 0). Main dependency `spark-sql-api`
+   `% Provided`. Tests fork a JVM with Spark's `--add-opens` list (plus
+   `--sun-misc-unsafe-memory-access=allow` on JDK ≥ 23), share one Connect session, and start
+   one server child JVM per run (about 25 s). All three CI JDK lanes run the suite. Usual
+   `-opt-inline:dev.constructive.eo.**`. Explicit nulls stay on.
 
 ## Implementation Units
 
-**Phase 0 — Spike (go/no-go, time-boxed).**
-- `spark/` sbt project in the aggregate: `spark-sql-api` `% Provided`, plus
-  `spark-sql` / `spark-connect` / `spark-connect-client-jvm` `% Test`, all `for3Use2_13`; a forked
-  test JVM; a shared Classic session fixture.
-- Prove: Scala 3.9 + Spark 2.13 runtime on 17/21/25; one `AgnosticEncoder` derived for a nested
-  case class; one `withField` lens composed twice with `explain(true)` showing the collapsed plan;
-  the same expression sent through an in-process Connect server; an `Affine` optic with a guard
-  in the complement, composed twice.
-- Output: `docs/research/2026-10-xx-eo-spark-spike.md` (classpath, JDK matrix, `sql/api` module
-  split).
+**Phase 0 — Spike. DONE (GO), see the Phase 0 outcome above.**
+- `spark/` in the aggregate: `spark-sql-api` `% Provided`, `spark-connect-client-jvm` `% Test`,
+  a Connect server child JVM from `sparkConnectServer` (Scala 2.13).
+- Shown: struct lens (composed), guarded `Optional` (also composed twice), plan-time miss,
+  `Mirror`-derived encoders, the collapsed optimized plan, and the JDK matrix.
 
 **Phase 1 — Pure-value optics.** `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
 kit, `VariantVal` kit. Laws via the existing `cats-eo-laws` rule sets. No session needed.
@@ -244,8 +255,11 @@ MiMa baseline.
 
 ## Risks
 
-- **Classpath:** Scala 3 stdlib vs Spark's 2.13 expectations, suffix conflicts, JDK 25. Phase 0
-  is the gate.
+- **Upstream:** Spark Classic on Scala 3.8+ is blocked by eager `scala-reflect` initialisation.
+  If users need Classic, the fix is upstream (a lazy `ScalaReflection.universe`) or a Scala 3
+  Spark build. Typed UDFs / the eager bridge likely hit the same wall server-side.
+- **Fat-client classpath:** the Connect client shades the whole `spark-sql-api`. Users must not
+  also put the unshaded `spark-sql-api` + Arrow next to it. Document this on the docs page.
 - **Encoder internals:** `AgnosticEncoders` is semi-internal, so pin the Spark minor and run CI
   over the supported 4.x minors.
 - **Guard nesting:** deep `when(...)` chains from composed partial optics may defeat codegen on
@@ -256,7 +270,7 @@ MiMa baseline.
 ## Resolved
 
 1. Spark 4.x only.
-2. Target the shared `spark-sql-api` (Classic + Connect from one artifact). Connect is covered
-   by a smoke suite.
+2. Target the shared `spark-sql-api`. After Phase 0, Connect is the only runtime that works on
+   Scala 3.9 and the whole suite runs on it.
 3. Own `AgnosticEncoder` derivation.
 4. In the root aggregate.

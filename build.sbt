@@ -509,6 +509,22 @@ val kyoBuildActive: Boolean =
     .get("java.specification.version")
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
+// Apache Spark 4.x publishes ONLY `_2.13` artifacts (no Scala 3 build), so
+// every Spark dependency is consumed through `CrossVersion.for3Use2_13`.
+// `cats-eo-spark` compiles against the shared `spark-sql-api` alone — the
+// Column / functions / Dataset / Encoder / AgnosticEncoders surface common
+// to Spark Classic and Spark Connect — and leaves it `Provided`: clusters
+// and Connect clients supply their own Spark. The specs run on the Connect
+// client (Test-only) against a server JVM — see `sparkIntegration`.
+val ApacheSpark = "org.apache.spark"
+val SparkVersion = "4.2.0"
+
+lazy val sparkSqlApi =
+  (ApacheSpark %% "spark-sql-api" % SparkVersion).cross(CrossVersion.for3Use2_13)
+
+lazy val sparkConnectClient =
+  (ApacheSpark %% "spark-connect-client-jvm" % SparkVersion).cross(CrossVersion.for3Use2_13)
+
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
@@ -597,6 +613,7 @@ lazy val root: Project = project
       avroIntegration,
       jsoniterIntegration,
       zioIntegration,
+      sparkIntegration,
       schemes,
       schemesLaws,
     ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
@@ -868,6 +885,107 @@ lazy val zioIntegration: Project = project
     libraryDependencies += zioSchemaJson % Test,
     libraryDependencies += discipline % Test,
     libraryDependencies += catsLaws % Test,
+  )
+
+// Spark integration: optics over Spark's symbolic `Column` expressions.
+// A typed column is a plain Scala value, so a struct-field lens is an
+// ordinary core `Lens[Col[S], Col[A]]` (`getField` / `withField`) and a
+// per-row partial focus is a core `Optional` whose rebuild is guarded by
+// `when(present, ...)` — no new carrier. Compiles against `spark-sql-api`
+// only; see docs/plans/2026-10-25-001-feat-eo-spark-module-plan.md.
+//
+// RUNTIME = SPARK CONNECT. Spark Classic cannot run in a JVM whose stdlib is
+// Scala 3.8+'s (Scala-3-compiled) `scala-library`: Catalyst initialises
+// Scala 2 runtime reflection (`ScalaReflection`, the session-companion
+// lookup), which dies with "class Array does not have a member apply". The
+// Connect CLIENT never touches it, so the specs run the client in-process and
+// the Classic engine in a separate server JVM on the genuine 2.13 stdlib
+// (`sparkConnectServer` below; findings in
+// docs/research/2026-10-25-eo-spark-phase0-spike.md).
+lazy val sparkIntegration: Project = project
+  .in(file("spark"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-spark",
+    libraryDependencies += cats,
+    libraryDependencies += sparkSqlApi % Provided,
+    libraryDependencies += sparkConnectClient % Test,
+    libraryDependencies += discipline % Test,
+    // The specs start a Spark Connect server as a child process (see
+    // `Sessions` in the test sources): hand them its 2.13 classpath and the
+    // JVM flags Spark needs. Forked so the properties reach the test JVM,
+    // which needs the same flags itself (the client's Arrow allocator
+    // reflects into java.nio).
+    Test / fork := true,
+    // The Connect client is a SHADED fat jar that carries every spark-sql-api
+    // class, wired to its own shaded Arrow / netty. The Provided
+    // `spark-sql-api` jar holds the same classes wired to UNshaded Arrow
+    // (whose netty its POM excludes): next to the client they collide
+    // (`NoClassDefFoundError: io/netty/buffer/AbstractByteBuf`). The specs
+    // run on the client alone, so drop the duplicates from the Test classpath.
+    Test / dependencyClasspath ~= (_.filterNot { f =>
+      val n = f.data.getName
+      n.startsWith("spark-sql-api_") || n.startsWith("arrow-")
+    }),
+    Test / javaOptions ++= sparkJvmOptions ++ Seq(
+      "-Xmx1g",
+      s"-Deo.spark.connect.classpath=${(sparkConnectServer / Runtime / fullClasspath).value.files.mkString(java.io.File.pathSeparator)}",
+      s"-Deo.spark.connect.jvmOptions=${sparkJvmOptions.mkString(" ")}",
+      s"-Deo.spark.connect.log=${(target.value / "spark-connect-server.log").getAbsolutePath}",
+    ),
+  )
+
+// The JDK internals Spark reflects on — the list Spark's own launcher passes
+// (`JavaModuleOptions` in spark-launcher).
+lazy val sparkJvmOptions = Seq(
+  "-XX:+IgnoreUnrecognizedVMOptions",
+  "--add-opens=java.base/java.lang=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+  "--add-opens=java.base/java.io=ALL-UNNAMED",
+  "--add-opens=java.base/java.net=ALL-UNNAMED",
+  "--add-opens=java.base/java.nio=ALL-UNNAMED",
+  "--add-opens=java.base/java.util=ALL-UNNAMED",
+  "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+  "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+  "--add-opens=java.base/jdk.internal.ref=ALL-UNNAMED",
+  "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED",
+  "--add-opens=java.base/sun.nio.cs=ALL-UNNAMED",
+  "--add-opens=java.base/sun.security.action=ALL-UNNAMED",
+  "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED",
+  "--enable-native-access=ALL-UNNAMED",
+  "-Djdk.reflect.useDirectMethodHandle=false",
+  "-Dio.netty.tryReflectionSetAccessible=true",
+) ++ (
+  // JDK 24+ denies `sun.misc.Unsafe` memory access by default, and the
+  // (shaded) netty under Arrow then cannot address direct buffers. JDK < 23
+  // rejects the flag outright (IgnoreUnrecognizedVMOptions covers `-XX` only).
+  if (
+    sys
+      .props
+      .get("java.specification.version")
+      .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 23)
+  )
+    Seq("--sun-misc-unsafe-memory-access=allow")
+  else Seq.empty
+)
+
+// Classpath-only Scala 2.13 project: the Spark Connect server (Classic engine)
+// the spark specs launch as a child JVM. No sources, never published, not in
+// the root aggregate — `sparkIntegration / Test` pulls its classpath.
+lazy val sparkConnectServer: Project = project
+  .in(file("spark-connect-server"))
+  .settings(
+    scalaVersion := "2.13.18",
+    crossScalaVersions := Seq("2.13.18"),
+    publish / skip := true,
+    mimaPreviousArtifacts := Set.empty,
+    libraryDependencies += ApacheSpark %% "spark-connect" % SparkVersion,
   )
 
 // Kyo DI integration, mirror of `zioIntegration` at kyo-prelude's
