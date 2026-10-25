@@ -1,8 +1,8 @@
 package dev.constructive.eo.jsoniter
 
-import java.nio.charset.StandardCharsets
-
 import scala.annotation.tailrec
+
+import java.nio.charset.StandardCharsets
 
 /** A JSON document held as a '''slice''' of a byte array: `length` bytes of `array` from `offset`
   * on. The source of the slice faces [[JsoniterPrism.onSlice]] and [[JsoniterTraversal.onSlice]],
