@@ -8,7 +8,9 @@ arrives *encoded* — circe `Json`, Avro records, raw JSON bytes —
 start from the integrations ([circe](integrations/circe.md),
 [Avro](integrations/avro.md), [jsoniter](integrations/jsoniter.md)):
 the same optic surface applies there, with no decode/re-encode
-round trip, and the habits below carry over unchanged.
+round trip, and the habits below carry over unchanged. For values
+that must satisfy a constraint, the [Iron](integrations/iron.md)
+integration turns each Iron refinement into a prism.
 
 ## Install
 
