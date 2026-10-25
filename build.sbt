@@ -995,6 +995,10 @@ lazy val sparkBench: Project = project
   .settings(
     name := "cats-eo-spark-bench",
     publish / skip := true,
+    // JMH's sources are generated from bytecode, so they need no annotation processing — and the
+    // `compile->test` classpath carries a processor that claims none of JMH's annotations, which
+    // CI's `-Xlint:all -Werror` turns into a failure.
+    Jmh / javacOptions += "-proc:none",
     // the Connect client shades spark-sql-api + Arrow: drop the unshaded copies (see sparkIntegration)
     Compile / dependencyClasspath ~= (_.filterNot { f =>
       val n = f.data.getName
