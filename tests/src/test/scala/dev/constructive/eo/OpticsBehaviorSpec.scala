@@ -128,22 +128,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     getterOk && composeOk && l1Ok.and(l2Ok) && curriedOk && nestedOk && isoRevOk && prismOk
   }
 
-  // ----- Traversal/foldMap/modifyA shorthand --------------------------
+  // ----- Traversal/foldMap shorthand + morph[Affine] --------------------
 
-  // covers: Traversal.each.foldMap totals the list under Monoid[Int],
-  // Traversal.each.modifyA short-circuits on None, Lens morphed into an Affine
-  // behaves like the original Lens
-  "Traversal.each: foldMap totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
+  // covers: Traversal.each.foldMap totals the list under Monoid[Int], Lens morphed into an Affine
+  // behaves like the original Lens (modifyA is law-checked: D1–D3 in EoSpecificLawsSpec)
+  "Traversal.each: foldMap totals + morph[Affine] preserves Lens behaviour" >> {
     val t: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
       Traversal.each[List, Int]
     val sumOk = forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
-
-    val positivesDoubled: Int => Option[Int] =
-      a => if a > 0 then Some(a * 2) else None
-    val mAOk =
-      (t.modifyA[Option](positivesDoubled)(List(1, 2, 3)) == Some(List(2, 4, 6))) &&
-        (t.modifyA[Option](positivesDoubled)(List(1, -2, 3)) == None) &&
-        (t.modifyA[Option](positivesDoubled)(Nil) == Some(Nil))
 
     val l: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens.first[Int, String]
@@ -152,7 +144,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val morphOk =
       forAll((pair: (Int, String), a: Int) => asAffine.modify(_ => a)(pair) == l.replace(a)(pair))
 
-    sumOk && morphOk && mAOk
+    sumOk && morphOk
   }
 
   // ----- Fold ---------------------------------------------------------

@@ -368,11 +368,13 @@ val Ziverge = "dev.zio"
 val GetKyo = "io.getkyo"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
-// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, and so far only
-// in `zioIntegration`: the zio module hand-writes `Traverse[Chunk]` / `Traverse[NonEmptyChunk]`
-// adapters (zio ships no cats instances), and `TraverseTraversal` reassembles foci through
-// `Functor.map` while collecting them in fold order — so map/traverse coherence is load-bearing for
-// write correctness, not just hygiene. Law-check the instances rather than eyeball them.
+// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, in `tests` and
+// `zioIntegration`, wherever eo hand-writes a cats instance: `tests` law-checks core's
+// `Traverse[PSVec]` (the instance every `Traversal.each(...).modifyA` runs through), the zio module
+// its `Traverse[Chunk]` / `Traverse[NonEmptyChunk]` adapters (zio ships no cats instances), where
+// `TraverseTraversal` reassembles foci through `Functor.map` while collecting them in fold order —
+// so map/traverse coherence is load-bearing for write correctness, not just hygiene. Law-check the
+// instances rather than eyeball them.
 lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
@@ -515,6 +517,10 @@ lazy val chimneyCore = "io.scalaland" %% "chimney" % "2.1.0"
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
+// Iron refined types. A runtime-checked refinement `A :| C` is a lawful Prism `A ⇀ A :| C`, so
+// the integration module ships constructors only — no carrier, no givens.
+lazy val iron = "io.github.iltotore" %% "iron" % "3.4.1"
+
 lazy val commonSettings = Seq(
   // Main code is checked against `.scalafix-main.conf` (the shared rules + main-only bans such as
   // `.modify(identity)`); Test scopes stay on `.scalafix.conf`. `laws` / `schemesLaws` opt back out:
@@ -606,6 +612,7 @@ lazy val root: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      ironIntegration,
       zioIntegration,
       chimneyIntegration,
       schemes,
@@ -656,6 +663,8 @@ lazy val tests: Project = project
     name := "cats-eo-tests",
     publish / skip := true,
     libraryDependencies += discipline % Test,
+    // cats' own Traverse laws for the hand-written `Traverse[PSVec]` (PSVecTraverseLawsSpec).
+    libraryDependencies += catsLaws % Test,
     // circe-core powers the CRUD round-trip example specs
     // (examples/CrudRoundtrip*), which drive derived optics through a
     // circe Json AST.
@@ -856,6 +865,26 @@ lazy val jsoniterIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
+// Iron integration: every runtime-checkable refinement (`RuntimeConstraint[A, C]`) becomes a lawful
+// `Prism[A, A :| C]` — `getOption` tests the constraint, `reverseGet` forgets it. Same for Iron's
+// `RefinedType` newtypes (`IronPrism.refined[T]`) and whole containers (`IronPrism.all`). Built on
+// the stock `MendTearPrism`, so every fused composition (Lens → Optional, Traversal → filtering
+// Traversal) comes for free.
+lazy val ironIntegration: Project = project
+  .in(file("iron"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-iron",
+    libraryDependencies += cats,
+    libraryDependencies += iron,
+    libraryDependencies += discipline % Test,
+  )
+
 // ZIO DI integration: optics into `ZEnvironment` (each tagged service
 // is a lawful Lens slot), capability-driven focus ops on `Ref`, and
 // `ZLayer` projection (derive a sub-service layer from an aggregate
@@ -956,6 +985,7 @@ lazy val docs: Project = project
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
+    LocalProject("ironIntegration"),
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
     LocalProject("chimneyIntegration"),
@@ -1014,6 +1044,9 @@ lazy val docs: Project = project
     libraryDependencies += zioSchemaJson,
     libraryDependencies += zioJson,
     libraryDependencies += zioPrelude,
+    // fs2 (and, through it, cats-effect) for the "Streaming with fs2"
+    // cookbook page — docs-only: no published module depends on fs2.
+    libraryDependencies += fs2Core,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
@@ -1149,6 +1182,7 @@ lazy val unidocs: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      ironIntegration,
       chimneyIntegration,
     ),
   )
@@ -1281,6 +1315,8 @@ lazy val demoUplcJvmBench: Project = project
 // -------------------------------------------------------------------
 lazy val Fs2Version = "3.14.0"
 lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
+// fs2-core alone (it brings cats-effect): the docs' "Streaming with fs2" cookbook page.
+lazy val fs2Core = "co.fs2" %% "fs2-core" % Fs2Version
 // Arbitrary / Cogen derivation from Scala 3 mirrors: the demo's issues are drawn from generators
 // derived from the model.
 lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.10.0"
@@ -1387,6 +1423,7 @@ addCommandAlias(
     "project circeIntegration; stryker; " +
     "project avroIntegration; stryker; " +
     "project jsoniterIntegration; stryker; " +
+    "project ironIntegration; stryker; " +
     "project zioIntegration; stryker; " +
     "project kyoIntegration; stryker; " +
     "project chimneyIntegration; stryker; " +

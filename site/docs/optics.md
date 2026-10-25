@@ -234,6 +234,11 @@ circleP.modify(c => Shape.Circle(c.r * 2))(Shape.Square(2.0))
 For auto-derivation on enums / sealed traits / union types see
 `prism[S, A]` in [Generics](generics.md).
 
+A runtime-checked refinement is a prism too: `A ⇀ A :| C` tests the
+constraint on the way in and forgets it on the way out. The
+[Iron integration](integrations/iron.md) builds one for every Iron
+constraint (`IronPrism[Int, Positive]`, `Age.prism`).
+
 Composed with a traversal in either direction, a prism *filters*:
 `traversal.andThen(prism)` visits only the elements that match, and
 `prism.andThen(traversal)` walks the inner structure only when the

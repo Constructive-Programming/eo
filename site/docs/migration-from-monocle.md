@@ -294,6 +294,7 @@ See the [cookbook recipe](cookbook/navigating-structures.md#visit-across-whole-t
 | `.at(k)` (`At`)                                    | `.andThen(At[K, V](k))` — a total `Lens` to `Option[V]`: `Some` upserts, `None` deletes. Objects with `apply`, not typeclasses — nothing to instance |
 | `Prism[S, A](_.some)(identity)`                    | `Prism.optional[S, A](_.some, identity)`            |
 | `GenPrism[S, A]`                                   | `prism[S, A]` (from `dev.constructive.eo.generics`)                  |
+| refined-type prisms (`monocle-refined`, over the Scala 2 refined library) | `IronPrism[A, C]` / `Age.prism` over [Iron](https://github.com/Iltotore/iron) refinements (from `cats-eo-iron`); see [Iron integration](integrations/iron.md) |
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
 | `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A](getOrModify, rg)`             |
 | `optional.getOption` used as a read-only view      | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold(optic.getOption)` — a standalone read-only 0-or-1 family, `T = Unit` forbids `.modify` |
