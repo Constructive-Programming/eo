@@ -17,7 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   all-or-nothing, in place. All three build the stock `MendTearPrism`, so Lens → Optional and
   Traversal → filtering-Traversal composition come for free. The `.prism` extension (import
   `dev.constructive.eo.iron.prism`) builds the same Prism from a `RuntimeConstraint[A, C]` or an
-  Iron `Constraint[A, C]` instance. Additive.
+  Iron `Constraint[A, C]` instance, and from a `RefinedType` / `RefinedSubtype` companion
+  (`Age.prism` = `IronPrism.refined[Age]`). Additive.
 - **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
   `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
   The carrier remains in `data/Glass.scala`; no compatibility alias is provided.

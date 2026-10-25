@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package iron
 
-import io.github.iltotore.iron.{:|, Constraint, RuntimeConstraint}
+import io.github.iltotore.iron.{:|, Constraint, RefinedSubtype, RefinedType, RuntimeConstraint}
 
 import optics.MendTearPrism
 
@@ -31,3 +31,23 @@ extension [A, C](inline c: Constraint[A, C])
 
   inline def prism: MendTearPrism[A, A, A :| C, A :| C] =
     IronPrism(using RuntimeConstraint.derived(using c))
+
+/** `.prism` on a `RefinedType` companion: given `object Age extends RefinedType[Int, Positive]`,
+  * `Age.prism` is the Prism `Int ⇀ Age` — the same as `IronPrism.refined[Age]`.
+  *
+  * @group Constructors
+  */
+extension [A, C](companion: RefinedType[A, C])
+
+  def prism: MendTearPrism[A, A, companion.T, companion.T] =
+    IronPrism.newtype[A, C, companion.T](companion.rtc)
+
+/** `.prism` on a `RefinedSubtype` companion: the Prism `A ⇀ T`, as for `RefinedType`. Iron's two
+  * newtype flavours share no public supertype, hence the twin.
+  *
+  * @group Constructors
+  */
+extension [A, C](companion: RefinedSubtype[A, C])
+
+  def prism: MendTearPrism[A, A, companion.T, companion.T] =
+    IronPrism.newtype[A, C, companion.T](companion.rtc)

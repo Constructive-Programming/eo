@@ -53,15 +53,20 @@ object IronPrism:
 
   /** The Prism `BaseType ⇀ T` for an Iron `RefinedType` / `RefinedSubtype` newtype `T` — given
     * `object Age extends RefinedType[Int, Positive]; type Age = Age.T`, `IronPrism.refined[Age]`
-    * focuses the `Int`s that are valid ages.
+    * focuses the `Int`s that are valid ages. From the companion itself, `Age.prism` is the same.
     *
     * @group Constructors
     */
   def refined[T](using m: RefinedType.Mirror[T]): MendTearPrism[m.BaseType, m.BaseType, T, T] =
-    val rtc = m.ops.rtc
-    Prism[m.BaseType, T](
+    newtype[m.BaseType, m.ConstraintType, T](m.ops.rtc)
+
+  /** The newtype prism behind [[refined]] and the companion `.prism` extensions: `T` is a
+    * `RefinedType` / `RefinedSubtype` newtype over `A :| C`, hence erased to `A`.
+    */
+  private[iron] def newtype[A, C, T](rtc: RuntimeConstraint[A, C]): MendTearPrism[A, A, T, T] =
+    Prism[A, T](
       a => if rtc.test(a) then Right(a.asInstanceOf[T]) else Left(a),
-      _.asInstanceOf[m.BaseType],
+      _.asInstanceOf[A],
     )
 
   /** All-or-nothing Prism `F[A] ⇀ F[A :| C]`: hits only when EVERY element satisfies `C`, and then

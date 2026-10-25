@@ -116,6 +116,13 @@ ageP.getOption(30)
 ageP.getOption(0)
 ```
 
+With `import dev.constructive.eo.iron.prism` (above), the companion
+itself gives the same Prism:
+
+```scala mdoc
+Age.prism.getOption(30)
+```
+
 ## Whole containers
 
 `IronPrism.all[F, A, C]` is all-or-nothing over any `Foldable`: it
