@@ -11,7 +11,8 @@ import compose.ReadCompose
 import data.Affine
 import optics.{Getter, Optic, PickFold}
 
-/** Every `ResultFold` miss is `Miss(())` — one shared instance serves all (the [[PickFold]] trick).
+/** Every `ResultFold` miss is `Miss(())` — one shared instance serves all (the
+  * [[dev.constructive.eo.optics.PickFold]] trick).
   */
 private val resultFoldMiss: Affine.Miss[(Unit, Unit)] = new Affine.Miss(())
 
@@ -19,8 +20,9 @@ private val resultFoldMiss: Affine.Miss[(Unit, Unit)] = new Affine.Miss(())
   * `PartialTransformer[S, A]` becomes in eo (see [[Chimney.resultFold]] / `.toResultFold`).
   *
   * It is an ordinary affine fold to the rest of eo — `Optic[S, Unit, A, Unit, Affine]`, the
-  * [[PickFold]] shape, so `.getOption`, `.foldMap` and every read-only composition work — plus
-  * [[result]], which says WHY a read missed: the `Errors`, with chimney's field paths.
+  * [[dev.constructive.eo.optics.PickFold]] shape, so `.getOption`, `.foldMap` and every read-only
+  * composition work — plus [[result]], which says WHY a read missed: the `Errors`, with chimney's
+  * field paths.
   *
   * '''Composition keeps the errors''' when the inner reads a single focus:
   *   - `andThen(ResultFold)` — `flatMap`s the results (an inner miss contributes its own errors);
@@ -55,7 +57,7 @@ final class ResultFold[S, A](val result: S => partial.Result[A])
   /** The focus or the errors, as an `Either` — `result(s).asEither`. */
   def either(s: S): Either[partial.Result.Errors, A] = result(s).asEither
 
-  /** The error-free view: a plain [[PickFold]] with the same hits. */
+  /** The error-free view: a plain [[dev.constructive.eo.optics.PickFold]] with the same hits. */
   def affineFold: PickFold[S, A] = new PickFold(getOption)
 
   /** Fused `ResultFold.andThen(ResultFold)` — `flatMap`s the results, so both sides' errors
