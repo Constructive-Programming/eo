@@ -1,39 +1,54 @@
 // MiMa setup — binary-compatibility checking, wired transitively
 // through sbt-typelevel-ci-release.
 //
-// MiMa is currently DISABLED across the still-evolving 0.x line:
-// every minor so far has been a deliberate breaking release, and
-// cats-eo-avro has no published baseline anyway. Breaking-change
-// history, newest first:
+// MiMa is ON from 1.0.0. There is no `tlMimaPreviousVersions` override
+// here: sbt-typelevel's default computes the previous versions from git
+// tags — every earlier non-prerelease `vX.Y.Z` tag that early-semver says
+// the current version must stay binary-compatible with (same major, and
+// major > 0). So 1.0.0 itself compares against nothing (every earlier tag
+// is 0.x), and every later 1.x release is checked against 1.0.0 and each
+// 1.x release after it. `mimaReportBinaryIssues` runs in CI.
 //
-//   Unreleased: `Optional` becomes a sealed abstract class with an
+// Exception: `cats-eo-kyo` is EXPERIMENTAL and opts out
+// (`kyoIntegration / tlMimaPreviousVersions := Set.empty` in build.sbt):
+// it builds on kyo 1.0.0-RC7, a release candidate. Lift that override once
+// kyo 1.0.0 final ships.
+//
+// When a 1.x change trips MiMa, the default answer is: don't make it on
+// 1.x. Accompany a genuinely internal change with a justified
+// ProblemFilter, e.g.
+//
+//   ThisBuild / mimaBinaryIssueFilters ++= Seq(
+//     ProblemFilters.exclude[MissingClassProblem]("dev.constructive.eo.internal.Foo"),
+//   )
+//
+// Only exclude symbols that are genuinely internal (`private` or
+// `private[pkg]`); exclusions on the public API are binary-compat
+// breakage and belong in a major version bump instead.
+//
+// History. MiMa was disabled across the 0.x line: every 0.x minor was a
+// deliberate breaking release, kept here for reference, newest first.
+//
+//   1.0.0 (breaking vs 0.18; the changes listed for 0.19 before 1.0 was
+//         chosen, which was never released, ship here):
+//         (a) `Optional` becomes a sealed abstract class with an
 //         existential intermediate (`type M`, `X = (T, M)`) so every write
 //         tears its source once; `new Optional(...)` is gone (use
 //         `Optional.apply`) and `getOrModify` / `reverseGet` are methods
 //         instead of constructor vals (source-compatible for callers,
 //         binary-breaking).
-//   Unreleased: remove the legacy MultiFocus Function1 Grate kernel, tuple /
-//         representable factories, zip / zipWith, and Direct bridge, together
-//         with RepresentativeIndex. Indexed is the fixed-index replacement;
-//         composition addresses the full product grid, not the old diagonal.
-//         Source- and binary-breaking for callers of the removed APIs. Container
-//         MultiFocus and Traversal APIs are retained.
-//
-//   0.19: the `Iso → MultiFocus[Function1[X0, *]]` bridge
-//         (`forgetful2multifocusFunction1`) now requires
-//         `data.RepresentativeIndex[X0]` — the index its product's own `from`
-//         reads a bundle at, where a `null` sentinel used to stand in. `Int` /
-//         `Boolean` / `Unit` / singleton indices resolve off the companion
-//         (unchanged call sites), any other index type needs a local `given`
-//         or `RepresentativeIndex.at(v)`, and an uninhabited index type no
-//         longer bridges (source-breaking for direct references to the given,
-//         and for chains over an index type with no instance).
-//   0.19: core `MultiFocus.representableAt` removed — the `repr0` argument
-//         never reached the built optic (the factory tabulates pointwise, so
-//         the index is a read-time argument, not a property of the optic),
-//         and `MultiFocus.representable` already built the identical carrier.
-//         Read a position with the `.at(i)` extension instead (source- and
-//         binary-breaking for direct callers; the replacement is one line).
+//         (b) the legacy MultiFocus Function1 Grate kernel is removed —
+//         tuple / representable / representableAt factories, zip /
+//         zipWith, the Direct bridge (`forgetful2multifocusFunction1`) and
+//         the short-lived `RepresentativeIndex` witness. Indexed is the
+//         fixed-index replacement; its composition addresses the full
+//         product grid, not the old diagonal. Source- and binary-breaking
+//         for callers of the removed APIs. Container MultiFocus and
+//         Traversal APIs are retained.
+//         (c) `Optic.all` returns `List[A]` (every focus) instead of
+//         `List[F[X, A]]` (binary-breaking descriptor change).
+//         (d) built with Scala 3.9.0: the TASTy is 28.9, so downstream
+//         compilers older than 3.9 cannot read it.
 //   0.17: (a) jsoniter's string-path constructors keep the failure in the type
 //         — `JsoniterPrism.fromPath` / `JsoniterTraversal.fromPath` return
 //         `Either[String, _]`, the throwing `fromPath` is gone, and
@@ -61,16 +76,3 @@
 //         enclosing path (namespace) — a wire-format break vs 0.5.x.
 //   Earlier: 0.2.0 JsonPrism → Affine `Optional` #31, 0.3.0 avro
 //   field-naming #35, 0.4.0 additive #37/#38, 0.5.0 Confluent surface #41.
-//
-// Re-enable once the API is stable: set this to the published baseline
-// line, and accompany every subsequent binary-breaking change with a
-// justified ProblemFilter, e.g.
-//
-//   ThisBuild / mimaBinaryIssueFilters ++= Seq(
-//     ProblemFilters.exclude[MissingClassProblem]("dev.constructive.eo.internal.Foo"),
-//   )
-//
-// Only exclude symbols that are genuinely internal (`private` or
-// `private[pkg]`); exclusions on the public API are binary-compat
-// breakage and belong in a version bump instead.
-ThisBuild / tlMimaPreviousVersions := Set.empty

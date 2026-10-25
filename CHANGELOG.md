@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-25
+
+**Binary-breaking: recompile against this release.** 1.0.0 changes public shapes that 0.18.x
+call sites were compiled against: `Optional` is a sealed abstract class whose `getOrModify` /
+`reverseGet` are methods (no longer constructor `val`s), `Optic.all` returns `List[A]`, and the
+legacy MultiFocus Grate API is removed (all under Changed and Removed). eo's `inline` methods
+splice their bodies into YOUR bytecode, so a jar built against 0.18.x keeps calling the old
+members and fails at runtime (`NoSuchMethodError` and friends) against 1.0.0, even where the
+source still compiles unchanged. Rebuild everything that depends on cats-eo. 1.0.0 is also built
+with Scala 3.9.0, whose TASTy (28.9) older compilers cannot read: **downstream builds need Scala
+3.9.x or later.**
+
+**What 1.0.0 means: binary compatibility from here on.** MiMa now checks every published module
+on every build, so each later 1.x release stays binary-compatible with 1.0.0; breaking changes
+wait for 2.0. One exception: **`cats-eo-kyo` is experimental.** It builds on kyo `1.0.0-RC7`, a
+release candidate, so it is still published but excluded from the MiMa check and may change in
+any 1.x release; the exclusion lifts once kyo 1.0.0 final ships (see the
+[Kyo integration](https://eo.constructive.dev/integrations/kyo.html) page). The 0.x releases made
+no compatibility promise.
+
 ### Added
 
 - **iron: new `cats-eo-iron` module** — [Iron](https://github.com/Iltotore/iron) refined types as
@@ -70,8 +90,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `JsonSlice(chunk.toByteBuffer)`, `Wire.detail` is `JsoniterPrism.inPlace[Issue].field(_.detail).raw`
   with `DetailJson` an opaque `JsonSlice`, the leaf prisms are in place too, and `joinFrames`
   takes `Chunk[Byte]`.
+- **laws: multi-shot `ForgetfulTraverse` laws and D2 `modifyA[List]` (#145).** Every
+  `ForgetfulTraverse` / `modifyA` law used to run under a single-shot effect (`Id`, `Const`), so
+  none could notice a carrier that shares state across an effect's continuations (the PSVec bug
+  under Fixed). `ForgetfulTraverseLaws` gains sequential composition (`Nested[List, Option]`),
+  parallel composition (`Tuple2K[List, Vector]`) and `traverseMultiShotAgreesWithFoci`
+  (`traverse[List]` agrees with cats' `Traverse[List]` over the carrier's foci), in a new
+  `forgetfulTraverseMultiShot` rule set (its parent, `forgetfulTraverse`, is unchanged).
+  `ModifyAListLaws` / `ModifyAListTests` (D2) state `modifyA[List] ==` cats' cartesian traverse
+  over the foci. Multi-shot results grow as `2^n` in the foci, so their generators draw at
+  ScalaCheck size 8. Additive; downstream suites opt in by registering the new rule sets.
+- **docs: [Streaming with fs2](https://eo.constructive.dev/cookbook/streaming-fs2.html) cookbook
+  page (#142).** Why there is no `cats-eo-fs2` module: the pipes it would ship are one-liners
+  over fs2's own combinators. Keeping prism matches (written against `CanGetOption`), effectful
+  modify with `evalMap` + `modifyA` (and why `Stream` as the `Applicative` gives a cartesian
+  product), routing on a prism's `Either` with `broadcastThrough`, and a `zoomPipe` that runs a
+  `Pipe` on one field (correct only for one-to-one, in-order pipes). No published module depends
+  on fs2.
+- **demos: two worked programs built from eo optics, each with a cookbook page.**
+  [Blockchain smart contract compilation](https://eo.constructive.dev/cookbook/uplc-jvm.html)
+  (#132) compiles UPLC (Cardano Plutus Core) to JVM bytecode as a chain of lawful prisms and an
+  iso, checked differentially against the Scalus CEK machine.
+  [Allocation-free stream triage](https://eo.constructive.dev/cookbook/grpc-filter.html) (#133)
+  filters a gRPC stream of JSON messages read as raw bytes with eo-jsoniter prisms, without
+  decoding them. Demos are not published.
 
 ### Changed
+
+- **`cats-eo-kyo` is experimental.** It is published as before, but outside the 1.x
+  binary-compatibility promise while it builds on kyo `1.0.0-RC7` (see the lead paragraph).
+- **Toolchain and dependencies (#122, #149).** Built with Scala 3.9.0 (was 3.8.4; downstream
+  needs 3.9.x, see above), which kyo `1.0.0-RC7` requires. Runtime dependency bumps:
+  jsoniter-scala `2.38.17` → `2.41.2`, kyo-prelude / kyo-schema `1.0.0-RC6` → `1.0.0-RC7`, zio
+  `2.1.24` → `2.1.26`, zio-prelude `1.0.0-RC41` → `1.0.0-RC48`, vulcan (`Optional`) `1.13.0` →
+  `1.14.1`, and scalacheck `1.19.0` → `1.20.0` in `cats-eo-laws`.
 
 - **core: `Optional` tears its source once per write** (breaking). `Optional` is now a sealed
   abstract class with an existential intermediate `type M` (`X = (T, M)`): a hit keeps what the
@@ -123,6 +175,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **core: `PSVec`'s `Traverse` no longer shares one result array across `G`'s continuations
+  (#145).** `PSVec.pSVecTraverse.traverse` seeded `G.pure(new Array[Any](n))` and wrote into
+  that one array from every `G.map2` continuation. Any `Applicative` that resumes a continuation
+  more than once (`List`, `Vector`, `LazyList`, `Chain`, an fs2 `Stream`, a product effect such as
+  `Tuple2K`, a re-run `State` or `IO` value) handed every branch the same array, so the last
+  writer won: `Traversal.each[List, Int].modifyA[List](a => List(a, -a))(List(1, 2, 3))` gave 8
+  copies of `List(-1, -2, -3)`. Results still land in one pre-sized array, now allocated inside
+  the first element's continuation (fresh per branch and per run) with a claim frontier: the
+  first writer at an index writes in place, any later one copies the prefix into its own buffer.
+  Single-shot effects cost the same as before; multi-shot effects pay one prefix copy per extra
+  branch. Every `modifyA` over a PSVec-backed traversal (`Traversal.each`, `MultiFocus[PSVec]`)
+  was affected. The new multi-shot laws under Added pin it.
 - **core: `MultiFocus[List].collectList` preserves observed context.**
   It passes a singleton focus vector to reconstruction instead of an
   invented leftover. This is not a guarantee of a singleton reconstructed
@@ -1145,7 +1209,8 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/Constructive-Programming/eo/compare/v0.18.0...v1.0.0
 [0.18.0]: https://github.com/Constructive-Programming/eo/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Constructive-Programming/eo/compare/v0.15.1...v0.16.0

@@ -36,11 +36,11 @@ libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.18.0" // JDK 25
+libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.18.0" // JDK 25; experimental
 libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "0.18.0"
 ```
 
-Requires Scala 3.8.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
+Requires Scala 3.9.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
 which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 
 ## 60-second tour
@@ -139,7 +139,8 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   `Record.iso` / `Record.lens` for kyo Records, and the optional
   kyo-schema bridge: `Focus` → optics, codec byte-face prisms, and
   optics over the untyped `Structure.Value` tree (`cats-eo-kyo`,
-  JDK 25).
+  JDK 25). **Experimental**: built on kyo 1.0.0-RC7, so it is outside
+  the 1.x binary-compatibility promise until kyo 1.0.0 final ships.
 - [chimney integration](https://eo.constructive.dev/integrations/chimney.html) —
   chimney's derived conversions as optics: `Transformer` → `Getter`,
   `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → a fold into
@@ -174,11 +175,13 @@ for cats typeclasses.
 
 ## Project status
 
-`0.1.0` is the first public release. Binary compatibility is guaranteed
-within the `0.1.x` series via MiMa starting at `0.1.1` (the `0.1.0`
-publish has no prior version to compare against). Pre-`1.0`, expect
-surface refinements as we learn from real users; each non-bugfix release
-will list breaking changes in [`CHANGELOG.md`](./CHANGELOG.md).
+`1.0.0` is the first stable release. From here on, binary compatibility
+is checked by MiMa across the whole `1.x` series: every `1.x` release is
+binary-compatible with `1.0.0`. The exception is `cats-eo-kyo`, which is
+**experimental** and outside that check while it builds on a kyo release
+candidate; the exclusion lifts once kyo 1.0.0 final ships. The `0.x`
+releases made no compatibility promise. Every release lists its changes
+in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## License
 
