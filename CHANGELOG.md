@@ -20,6 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `X = Unit` aliases; general glasses retain residual context.
   Unit-context composition normalization and generic classical-family
   bridges remain open; no top-level Grate companion is provided.
+- **jsoniter: read JSON from a slice of a byte array, in place.** `JsonSlice(bytes, offset,
+  length)` is a view (nothing copied; equal by content; fails fast with
+  `IndexOutOfBoundsException` on a range outside the array). `JsoniterPrism#onSlice` /
+  `JsoniterTraversal#onSlice` re-source a drilled optic on it — `JsoniterSlicePrism[A]`
+  (`Optic[JsonSlice, JsonSlice, A, A, Affine]`) and `JsoniterSliceTraversal[A]` — scanning and
+  decoding the slice where it lies via jsoniter-scala's `readFromSubArray`. A write that splices
+  returns a slice over a fresh array holding only the slice's bytes; a miss returns the input
+  slice. The whole-array optics are unchanged, now the `(0, length)` case of the same ranged
+  scan (`JsonPathScanner.find` / `findAll` gain `(bytes, from, until, path)` overloads).
+- **demos/grpc-filter: messages are judged where they lie in the socket's chunks.**
+  `GrpcFrames.splitFrames` emits `Chunk.ArraySlice[Byte]` views (only a message straddling two
+  reads is copied), `Wire.detail` reads them through `.onSlice`, and `joinFrames` takes
+  `Chunk[Byte]`.
 
 ### Fixed
 

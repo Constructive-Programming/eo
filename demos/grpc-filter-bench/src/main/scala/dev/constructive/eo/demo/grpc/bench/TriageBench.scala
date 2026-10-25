@@ -3,7 +3,8 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray}
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, readFromSubArray, writeToArray}
+import dev.constructive.eo.jsoniter.JsonSlice
 import dev.constructive.eo.optics.Optic.*
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.concurrent.TimeUnit
@@ -34,7 +35,7 @@ class TriageBench:
   var layout: String = uninitialized
 
   private val policy = Policy.default
-  private var messages: Array[Array[Byte]] = uninitialized
+  private var messages: Array[JsonSlice] = uninitialized
 
   @Setup def prepare(): Unit =
     val issues = Issues(seed = 7).take(TriageBench.Pool).toArray
@@ -42,18 +43,21 @@ class TriageBench:
       val message = writeToArray(issue)
       val laidOut = if layout == "first" then detailFirst(message) else message
       require(readFromArray[Issue](laidOut) == issue, "the layout changed the message")
-      laidOut
+      JsonSlice(laidOut)
     }
 
   /** The message with `detail` moved to the front: the same JSON object, its fields reordered. */
   private def detailFirst(message: Array[Byte]): Array[Byte] =
     val json = new String(message, UTF_8)
-    val detail = s"\"detail\":${new String(Wire.detail.getOption(message).get.bytes, UTF_8)}"
+    val detail =
+      s"\"detail\":${new String(Wire.detail.getOption(JsonSlice(message)).get.bytes, UTF_8)}"
     s"{$detail,${json.drop(1).replace(s",$detail", "")}".getBytes(UTF_8)
 
   @Benchmark def decode(bh: Blackhole): Unit =
     import Model.given
-    messages.foreach(m => bh.consume(policy.keep(readFromArray[Issue](m).detail)))
+    messages.foreach(m =>
+      bh.consume(policy.keep(readFromSubArray[Issue](m.array, m.offset, m.until).detail))
+    )
 
   @Benchmark def optics(bh: Blackhole): Unit =
     import Wire.given

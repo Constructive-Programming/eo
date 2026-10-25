@@ -42,6 +42,10 @@ import dev.constructive.eo.optics.Traversal
   * success (`from` is total by type). Pinned by `JsoniterTraversalWriteSpec`; the carrier-level fix
   * is `docs/research/2026-09-22-exception-audit.md` (class C), tracked as issue #117.
   *
+  * A document inside a larger buffer is read in place through the slice face,
+  * [[JsoniterTraversal.onSlice]]: the same traversal over a [[JsonSlice]], nothing copied. This
+  * traversal's whole-array splice is the `(0, length)` case of the slice face's.
+  *
   * Typed drilling continues past the wildcard, mirroring eo-circe's `JsonTraversal`:
   * `JsoniterPrism[Basket].field(_.items).each.field(_.price)` focuses `price` of every element.
   * Each step is compile-time checked against the case-class schema and appends to the path.
@@ -68,15 +72,16 @@ final class JsoniterTraversal[A] private[jsoniter] (
     val foci = pair.foci
     if spans.isEmpty || spans.length != foci.length then bytes
     else
-      // Encode each focus; an element whose encode throws keeps its original bytes.
-      val reps = List.newBuilder[(JsonPathScanner.Span, Array[Byte])]
-      var i = 0
-      spans.foreach { span =>
-        try reps += ((span, writeToArray(foci(i))(using codec)))
-        catch case scala.util.control.NonFatal(_) => ()
-        i += 1
-      }
-      JsoniterTraversal.spliceAll(bytes, reps.result())
+      // The whole array is the `(0, length)` case of the ranged splice the slice face uses.
+      JsoniterTraversal.spliceAll(bytes, 0, bytes.length, JsoniterTraversal.encodeAll(spans, foci))
+
+  /** Re-source this traversal on a [[JsonSlice]]: same path, same foci, but the JSON document is a
+    * range of a larger byte array, read in place. Same write rule as [[JsoniterPrism.onSlice]]: a
+    * write that splices returns a slice over a FRESH array holding only the slice's bytes (offset
+    * 0); one that changes nothing (no foci) hands back the input slice itself. See
+    * [[JsoniterSliceTraversal]].
+    */
+  def onSlice: JsoniterSliceTraversal[A] = new JsoniterSliceTraversal[A](steps)
 
   /** Dynamic field sugar — `itemsT.price` lowers to `itemsT.field(_.price)`. */
   transparent inline def selectDynamic(inline name: String): Any =
@@ -148,12 +153,30 @@ object JsoniterTraversal:
     transparent inline def at(i: Int): Any =
       ${ JsoniterPrismMacro.atTraversalImpl[A]('o, 'i) }
 
+  /** Encode each focus, paired with its span; an element whose encode throws is left out, so it
+    * keeps its original bytes (see the class doc). `spans` and `foci` are 1:1.
+    */
+  private[jsoniter] def encodeAll[A](
+      spans: List[JsonPathScanner.Span],
+      foci: PSVec[A],
+  )(using codec: JsonValueCodec[A]): List[(JsonPathScanner.Span, Array[Byte])] =
+    val reps = List.newBuilder[(JsonPathScanner.Span, Array[Byte])]
+    @tailrec def loop(rest: List[JsonPathScanner.Span], i: Int): Unit =
+      rest match
+        case span :: tail =>
+          try reps += ((span, writeToArray(foci(i))(using codec)))
+          catch case scala.util.control.NonFatal(_) => ()
+          loop(tail, i + 1)
+        case Nil => ()
+    loop(spans, 0)
+    reps.result()
+
   /** Decode every span via the codec into a single `Array[Any]`, tight-packing only on partial
     * decode failure. A span whose decode throws is dropped together with its slot so spans↔foci
     * stay 1:1 for the write side. Returns the kept spans paired with the packed foci. `spans` must
     * be non-empty.
     */
-  private def decodeSpans[A](
+  private[jsoniter] def decodeSpans[A](
       bytes: Array[Byte],
       spans: List[JsonPathScanner.Span],
   )(using codec: JsonValueCodec[A]): (List[JsonPathScanner.Span], PSVec[A]) =
@@ -182,19 +205,22 @@ object JsoniterTraversal:
         PSVec.unsafeWrap[A](tight)
     (keptSpans.result(), psv)
 
-  /** One-pass multi-span splice: `replacements` are (span, encodedValue) pairs sorted by span start
-    * (document order, guaranteed by [[JsonPathScanner.findAll]]) and non-overlapping.
+  /** One-pass multi-span splice of the document in `bytes[from, until)` into a fresh array:
+    * `replacements` are (span, encodedValue) pairs sorted by span start (document order, guaranteed
+    * by [[JsonPathScanner.findAll]]), non-overlapping, and inside the range.
     */
-  private def spliceAll(
+  private[jsoniter] def spliceAll(
       bytes: Array[Byte],
+      from: Int,
+      until: Int,
       replacements: List[(JsonPathScanner.Span, Array[Byte])],
   ): Array[Byte] =
-    var total = bytes.length
+    var total = until - from
     replacements.foreach { (span, enc) =>
       total += enc.length - (span.end - span.start)
     }
     val out = new Array[Byte](total)
-    var src = 0
+    var src = from
     var dst = 0
     replacements.foreach { (span, enc) =>
       val pre = span.start - src
@@ -204,7 +230,44 @@ object JsoniterTraversal:
       dst += enc.length
       src = span.end
     }
-    System.arraycopy(bytes, src, out, dst, bytes.length - src)
+    System.arraycopy(bytes, src, out, dst, until - src)
     out
 
 end JsoniterTraversal
+
+/** A [[JsoniterTraversal]] whose JSON document is a [[JsonSlice]] — a range of a larger byte array,
+  * read in place. Obtained from [[JsoniterTraversal.onSlice]] (drill first, then take the slice
+  * face); same path, same codec, same laws and write-side rules as the traversal it came from, with
+  * slices compared by content.
+  *
+  *   - `type X = (JsonSlice, List[JsonPathScanner.Span])` — the source slice + each kept focus's
+  *     ABSOLUTE span in its array.
+  *   - `to` scans `slice.array` from `slice.offset` to `slice.until` and decodes every span in
+  *     place. Nothing outside the slice is read, and nothing is copied.
+  *   - `from` splices every focus into a FRESH array holding only the slice's bytes, returned as a
+  *     slice at offset 0; the source array is never written. No foci (or a span/foci mismatch)
+  *     returns the input slice itself.
+  *
+  * @group Optics
+  */
+final class JsoniterSliceTraversal[A] private[jsoniter] (
+    private[jsoniter] val steps: List[PathStep]
+)(using codec: JsonValueCodec[A])
+    extends Traversal[JsonSlice, JsonSlice, A, A]:
+
+  type X = (JsonSlice, List[JsonPathScanner.Span])
+
+  def to(slice: JsonSlice): MultiFocus[PSVec][X, A] =
+    val spans = JsonPathScanner.findAll(slice.array, slice.offset, slice.until, steps)
+    if spans.isEmpty then MultiFocus((slice, spans), PSVec.empty[A])
+    else
+      val (keptSpans, psv) = JsoniterTraversal.decodeSpans[A](slice.array, spans)
+      MultiFocus((slice, keptSpans), psv)
+
+  def from(pair: MultiFocus[PSVec][X, A]): JsonSlice =
+    val (slice, spans) = pair.context
+    val foci = pair.foci
+    if spans.isEmpty || spans.length != foci.length then slice
+    else
+      val reps = JsoniterTraversal.encodeAll(spans, foci)
+      JsonSlice(JsoniterTraversal.spliceAll(slice.array, slice.offset, slice.until, reps))

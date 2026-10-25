@@ -364,6 +364,87 @@ are written, so a partially applied write still reports success. Read
 first (`foldMap` / `getAll`) when you need to know which elements were
 really there.
 
+## Reading a slice of a larger buffer
+
+A JSON document often arrives inside a bigger byte array: one network
+read holding several messages, a framed log segment, a memory-mapped
+file. `.onSlice` re-sources a prism or a traversal on a `JsonSlice` —
+`length` bytes of an array from `offset` on — and reads the document
+where it lies, with nothing copied before the scan. Drill first, then
+take the slice face:
+
+```scala mdoc:silent
+import dev.constructive.eo.jsoniter.JsonSlice
+
+// Two documents back to back in one buffer, as a single read might deliver them.
+val other  = """{"payload":{"user":{"id":7}}}""".getBytes("UTF-8")
+val buffer = other ++ sample
+```
+
+```scala mdoc
+val second = JsonSlice(buffer, other.length, sample.length)
+
+idP.onSlice.foldMap(identity[Long])(second)
+emailP.onSlice.foldMap(identity[String])(second)
+```
+
+The scan never reads outside the slice, and the focus decodes through
+jsoniter-scala's `readFromSubArray`, so the bytes around it can be
+anything. Writes never touch the buffer either. A write that splices
+returns a slice over a **fresh** array holding only the slice's bytes,
+with the new focus spliced in (offset 0). A write that changes nothing
+(a miss) hands back the input slice itself:
+
+```scala mdoc
+val written = idP.onSlice.replace(99L)(second)
+(written.offset, written.length == written.array.length)
+
+absentP.onSlice.replace(99L)(second) eq second
+
+new String(buffer, "UTF-8") == new String(other ++ sample, "UTF-8")  // untouched
+```
+
+`JsoniterTraversal` has the same face:
+
+```scala mdoc
+val carts = JsonSlice("xx".getBytes("UTF-8") ++ cart, 2, cart.length)
+
+itemsT.onSlice.foldMap(identity[Long])(carts)
+```
+
+Some ground rules:
+
+- **A slice is a view.** `JsonSlice(bytes, offset, length)` copies
+  nothing, and the optics read the array as it is when they run, so
+  don't change the bytes while a slice of them is in use.
+  `JsonSlice(bytes)` is the whole array.
+- **Equality is by content**: two slices are equal when they hold the
+  same bytes, wherever they sit. A slice reads and writes exactly like
+  the same bytes copied out into an array of their own — the
+  whole-array `JsoniterPrism` / `JsoniterTraversal` run the same scan
+  and splice over `(0, length)` — and the laws (with their
+  canonical-re-encoding caveat) hold on slices as they do on arrays.
+- **A range outside the array fails fast**: `JsonSlice(bytes, offset,
+  length)` throws `IndexOutOfBoundsException` at construction when
+  `offset` or `length` is negative or `offset + length > bytes.length`
+  — the contract of `Arrays.copyOfRange`, `ByteBuffer.wrap` and
+  `readFromSubArray`. Offsets are your arithmetic over an array you
+  hold, so a wrong one is a bug at the call site; no optic ever runs on
+  one.
+- **Why a view type, not `(array, offset, length)` arguments**: an optic
+  has one source type. The slice face is an ordinary
+  `Optic[JsonSlice, JsonSlice, A, A, Affine]` (a `MultiFocus[PSVec]`
+  traversal for `JsoniterTraversal`), so `CanGetOption[JsonSlice, A]`
+  and the rest of the capability surface derive from it as from any
+  other optic.
+
+eo-jsoniter has no streaming dependency. From an fs2 `Chunk[Byte]`,
+`chunk.toArraySlice` gives the array, offset and length — without
+copying when the chunk is one array slice, as a socket read is:
+`JsonSlice(s.values, s.offset, s.length)`. The
+[stream triage demo](../cookbook/grpc-filter.md) judges every message
+that way.
+
 ## JSONPath subset
 
 The accepted grammar is deliberately small:
@@ -412,6 +493,8 @@ cons-cell.
 This module ships zero new carriers. `JsoniterPrism` is an
 `Optic[Array[Byte], Array[Byte], A, A, Affine]`; `JsoniterTraversal`
 is an `Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]`.
+Their [slice faces](#reading-a-slice-of-a-larger-buffer) are the same
+carriers over `JsonSlice` instead of `Array[Byte]`.
 The standard cats-eo extensions on those carriers light up
 automatically:
 
@@ -443,6 +526,7 @@ per-element reassembly, no Composer hop required.
 | Replace a `JsonCodecMaker` model with bytes + optics  | [migration recipe](#migrating-a-jsoncodecmaker-model-optics-as-evidence) |
 | Write one scalar back into a JSON byte buffer         | `JsoniterPrism.fromPath[A]("$.path")` → `.replace(b)(bytes)` |
 | Sum / count over an array on the wire                 | `JsoniterTraversal.fromPath[A]("$.path[*]")` → `.foldMap(...)` |
+| Read a document in place from a larger buffer (no copy) | `prism.onSlice` / `traversal.onSlice` over `JsonSlice(bytes, offset, length)` |
 | Drill into dynamic shapes (no codec for surrounding)  | eo-circe `codecPrism[…]` — different module |
 | Edit deeply through `[*]` on the wire                 | Phase-3 (not yet shipped); fall through to eo-circe today |
 | Chain a JSON traversal with a Scala collection traversal | `JsoniterTraversal[A].andThen(Traversal.each[F, A])` |

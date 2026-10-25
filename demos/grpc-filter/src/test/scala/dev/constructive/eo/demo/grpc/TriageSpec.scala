@@ -3,6 +3,7 @@ package dev.constructive.eo.demo.grpc
 import scala.language.implicitConversions
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray, WriterConfig}
+import dev.constructive.eo.jsoniter.JsonSlice
 import dev.constructive.eo.laws.OptionalLaws
 import dev.constructive.eo.laws.discipline.OptionalTests
 import dev.constructive.eo.optics.Optic.*
@@ -21,7 +22,7 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
   private val messages = issues.map(writeToArray(_))
 
   private def agree(policy: Policy)(message: Array[Byte]) =
-    Triage.optics(policy)(message) === Triage.decoding(policy)(message)
+    Triage.optics(policy)(JsonSlice(message)) === Triage.decoding(policy)(JsonSlice(message))
 
   // Derived like the issues: any sets of severities, tiers, modules and plans, any vote threshold.
   given Arbitrary[Policy] = deriveArbitrary
@@ -41,7 +42,7 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
   }
 
   "every kind is both kept and dropped, so every branch of the policy is exercised" >> {
-    val verdicts = messages.map(Triage.optics(Policy.default))
+    val verdicts = messages.map(m => Triage.optics(Policy.default)(JsonSlice(m)))
     forall(Kind.values.toSeq) { kind =>
       verdicts.filter(_.kind.contains(kind)).map(_.keep).distinct must contain(exactly(true, false))
     }
@@ -49,9 +50,24 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
 
   "the detail the optics slice out is the detail's own JSON" >>
     forall(issues.zip(messages)) { (issue, message) =>
-      Wire.detail.getOption(message).map(d => readFromArray[Detail](d.bytes)) must beSome(
+      Wire
+        .detail
+        .getOption(JsonSlice(message))
+        .map(d => readFromArray[Detail](d.bytes)) must beSome(
         issue.detail
       )
+    }
+
+  "a message read in place, between its neighbours' bytes, is judged as the message alone" >>
+    forall(1 until 300) { i =>
+      val (before, message, after) = (messages(i - 1), messages(i), messages(i + 1))
+      val inPlace = JsonSlice(before ++ message ++ after, before.length, message.length)
+      (Triage.optics(Policy.default)(inPlace) === Triage.optics(Policy.default)(JsonSlice(message)))
+        .and(
+          Triage.decoding(Policy.default)(inPlace) === Triage.decoding(Policy.default)(
+            JsonSlice(message)
+          )
+        )
     }
 
   "whitespace between the tokens changes nothing" >> {
@@ -62,7 +78,7 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
   "messages the policy can't judge are dropped, unclassified" >> {
     val request = messages(issues.indexWhere(_.detail.isInstanceOf[Detail.Request]))
     def edited(from: String, to: String) =
-      new String(request, "UTF-8").replace(from, to).getBytes("UTF-8")
+      JsonSlice(new String(request, "UTF-8").replace(from, to).getBytes("UTF-8"))
     val unclassified = Verdict(None, keep = false)
     "a kind from a newer producer: the optics read on, a decoder rejects the message" >> {
       val task = edited("\"type\":\"Request\"", "\"type\":\"Task\"")
@@ -73,7 +89,7 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
       Triage.optics(Policy.default)(edited("\"detail\":", "\"derail\":")) === unclassified
     }
     "not JSON" >> {
-      val junk = "{\"id\":".getBytes("UTF-8")
+      val junk = JsonSlice("{\"id\":".getBytes("UTF-8"))
       Triage.optics(Policy.default)(junk) === unclassified
       Triage.decoding(Policy.default)(junk) === unclassified
     }

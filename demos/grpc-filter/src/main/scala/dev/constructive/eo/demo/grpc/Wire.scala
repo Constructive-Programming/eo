@@ -3,8 +3,9 @@ package dev.constructive.eo.demo.grpc
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.Affine
-import dev.constructive.eo.jsoniter.JsoniterPrism
+import dev.constructive.eo.jsoniter.{JsonSlice, JsoniterPrism}
 import dev.constructive.eo.optics.Optic
+import fs2.Chunk
 
 /** A read-write optic whose focus may be missing: eo-jsoniter's prisms, and [[Model]]'s chains of a
   * prism and lenses.
@@ -40,8 +41,14 @@ object Wire:
   private given JsonValueCodec[Customer] = JsonCodecMaker.make
   private given JsonValueCodec[Contract] = JsonCodecMaker.make
 
-  /** Message ⇀ its detail's bytes, copied verbatim; nothing decoded. */
-  val detail: Focus[Array[Byte], DetailJson] = JsoniterPrism[Issue].field(_.detail).raw
+  /** A message as the optics read it: a view of its bytes where they lie, nothing copied. */
+  def json(message: Chunk.ArraySlice[Byte]): JsonSlice =
+    JsonSlice(message.values, message.offset, message.length)
+
+  /** Message ⇀ its detail's bytes, copied verbatim; nothing decoded. The message itself is read in
+    * place, as a slice of whatever array holds it (`.onSlice`).
+    */
+  val detail: Focus[JsonSlice, DetailJson] = JsoniterPrism[Issue].field(_.detail).raw.onSlice
 
   /** Which kind of issue: the `"type"` field that names `Detail`'s case. */
   given kind: Focus[DetailJson, Kind] =

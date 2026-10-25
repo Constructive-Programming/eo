@@ -14,5 +14,8 @@ package dev.constructive.eo
   *   // → Array[Byte] with .address.street upper-cased —
   *   //   no Person ever materialised, only the String leaf decoded.
   * }}}
+  *
+  * A document that sits inside a larger buffer is read in place, without copying it out first:
+  * `streetP.onSlice.getOption(JsonSlice(buffer, offset, length))`.
   */
 package object jsoniter
