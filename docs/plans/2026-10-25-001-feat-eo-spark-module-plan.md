@@ -1,7 +1,7 @@
 ---
 title: "feat: cats-eo-spark — Spark operations as eo optic constructions"
 type: feat
-status: active
+status: completed
 date: 2026-10-25
 revised: 2026-10-25
 phase0: docs/research/2026-10-25-eo-spark-phase0-spike.md
@@ -306,7 +306,12 @@ start a Connect server. That is a follow-up. Original scope:
 - JMH (`spark-bench/`, outside `benchmarks/` like the demo benches): symbolic vs `ds.map` vs
   hand-written `withField`.
 
-**Phase 7 — Docs.** Site page (catalogue + lawfulness caveats + "Classic or Connect"), a
+**Phase 7 — Docs.** *DONE:* `site/docs/integrations/spark.md`. Its fences RUN where no session is needed: they print the
+`Column` expressions the optics build and exercise the value kits. Session-bound snippets are
+`compile-only`. The cookbook recipe `site/docs/cookbook/spark-nested-rewrite.md` normalizes a field
+four levels deep through an `Option`, in a Parquet table. The docs project depends on
+`sparkIntegration` plus `spark-sql-api`, and the Connect client is deliberately left off its
+classpath. MiMa needs nothing: it is disabled build-wide. Original scope: Site page (catalogue + lawfulness caveats + "Classic or Connect"), a
 cookbook recipe ("rewrite a field 5 levels deep in a Parquet table"), CLAUDE.md module row,
 MiMa baseline.
 

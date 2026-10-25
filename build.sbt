@@ -1076,6 +1076,7 @@ lazy val docs: Project = project
     LocalProject("jsoniterIntegration"),
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    LocalProject("sparkIntegration"),
     LocalProject("laws"),
     LocalProject("schemes"),
   )
@@ -1131,6 +1132,10 @@ lazy val docs: Project = project
     libraryDependencies += zioSchemaJson,
     libraryDependencies += zioJson,
     libraryDependencies += zioPrelude,
+    // spark-sql-api is `Provided` on sparkIntegration; surface it so spark.md's
+    // fences build (and print) Column expressions and run the value kits. No
+    // session is needed for either.
+    libraryDependencies += sparkSqlApi,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
