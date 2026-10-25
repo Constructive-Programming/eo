@@ -142,7 +142,7 @@ following the core rule.
 | `select(exprs*)` / `withColumn` / `drop` | `Lens` on the row-struct (see Lifting) | `Tuple2` | Yes |
 | `groupBy(...).agg(...)` / window functions | `Getter` / `Fold` → consumer | — | Read-only |
 | `join`, `union`, `repartition`, `cache`, read / write, actions | **not optics**: capability-taking consumers / plain API | — | n/a |
-| `ds.map(f)` with an eager optic | eager bridge `ds.mapThrough(o)(f)` (needs `Encoder`) | eager twin | Yes. Escape hatch: leaves Catalyst and needs closure upload. **Deferred after Phase 0:** the server would have to run Scala 3 closures on the 2.13 stdlib |
+| `ds.map(f)` with an eager optic | eager bridge `ds.mapThrough(o)(f)` (needs `Encoder`) | eager twin | Yes. Escape hatch: leaves Catalyst. Works since Phase 5 once the session has the Scala 3 runtime and the app's classes (`ScalaRuntime.addTo`); optics are `Serializable` |
 | `DataType` / `StructType` trees | `Plated[DataType]`, field `Lens` / `At` | core | Yes (plain values) |
 | `Row` (untyped) | `field(name)` `Optional`, `Plated[Row]` (the DynamicValues-kit pattern) | `Affine` | Yes |
 | `VariantVal` (eager) | constructor prisms + `field` / `at` / `each` / `Plated` (circe playbook) | core | Yes |
@@ -265,7 +265,19 @@ scope: The `AgnosticEncoder` derivation;
 `col[S](_.a.b.c)` emitting a Lens or a guarded `Affine` Optional per nullability; pairing with the
 eager generics optics.
 
-**Phase 5 — Consumers + eager bridge.** Capability-taking `joinOn` and grouping helpers;
+**Phase 5 — Consumers + eager bridge.** *DONE:* `DatasetOptics.filterHits` / `joinOn` (inner equi-join, keys read through `CanGet`) /
+`groupAggregate` / `explodeAll`, and the eager bridge `mapThrough` (typed `Dataset.map` through an eager
+optic).
+
+**This revises Phase 0's "deferred":** Scala 3 closures DO run server-side once the session has the Scala 3
+runtime, cats, cats-eo and the application's classes as artifacts (`ScalaRuntime.addTo`; class directories
+via the Connect client's `REPLClassDirMonitor` in development). Two requirements fell out:
+- **Optics must be serializable.** The one change to `core`: `trait Optic … extends Serializable`.
+- **Bridge lambdas must be defined where the server can load their implementing class**, e.g. a top-level
+  object, not a test class.
+
+Tuples now encode like case classes, because Spark's tuple `ProductEncoder` needs the dead reflection.
+`rowCol` binds columns through `ds.col`, so join conditions stay unambiguous. Original scope: Capability-taking `joinOn` and grouping helpers;
 `ds.mapThrough(eagerOptic)(f)` and the effectful `modifyA` path via `mapPartitions`, marked as
 leaving Catalyst.
 

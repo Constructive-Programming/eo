@@ -42,10 +42,14 @@ import compose.*
   * @tparam F
   *   two-argument carrier; capabilities scale with the typeclasses `F` admits.
   *
+  * '''Serializable.''' Every optic is `java.io.Serializable` (its fields are functions, which Scala
+  * compiles as serializable lambdas), so an optic captured by a closure can be shipped to another
+  * JVM — e.g. inside a Spark `Dataset.map` (`cats-eo-spark`'s eager bridge).
+  *
   * @see
   *   [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Modify]], [[Traversal]], [[Getter]], [[Fold]]
   */
-trait Optic[S, T, A, B, F[_, _]]:
+trait Optic[S, T, A, B, F[_, _]] extends Serializable:
   self =>
 
   /** Existential leftover carried alongside the focus — the type-level witness the carrier uses to

@@ -72,6 +72,23 @@ object SparkEncoders:
       nullable = true,
     )
 
+  /** Tuples encode like case classes (fields `_1`, `_2`), not as Spark's tuple `ProductEncoder`,
+    * whose decode needs the same dead `ScalaReflection` (see the scaladoc above).
+    */
+  given [A, B](using a: AgnosticEncoder[A], b: AgnosticEncoder[B]): AgnosticEncoder[(A, B)] =
+    tuple2(a, b)
+
+  /** The encoder of `(A, B)` from its components' encoders. */
+  def tuple2[A, B](a: AgnosticEncoder[A], b: AgnosticEncoder[B]): AgnosticEncoder[(A, B)] =
+    product(
+      ClassTag(classOf[(?, ?)]),
+      List(
+        EncoderField("_1", a, a.nullable, Metadata.empty, None, None),
+        EncoderField("_2", b, b.nullable, Metadata.empty, None, None),
+      ),
+      summon[Mirror.ProductOf[(A, B)]],
+    )
+
   /** Encoder for a top-level case class: one struct field per constructor parameter, named by the
     * parameter, nullable exactly when the field's own encoder is.
     */
