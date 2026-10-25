@@ -36,7 +36,8 @@ import optics.{MendTearPrism, Prism}
   * The constructors return the stock [[optics.MendTearPrism]], so every fused composition and
   * capability mixin of the core Prism applies unchanged. Like every Prism, a miss is a silent
   * pass-through on write; when the reason matters, Iron's own `refineEither` carries the
-  * constraint's message.
+  * constraint's message. The `.prism` extension (`import dev.constructive.eo.iron.prism`) builds
+  * the same Prism from a `RuntimeConstraint` or `Constraint` instance.
   */
 object IronPrism:
 

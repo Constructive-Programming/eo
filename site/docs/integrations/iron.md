@@ -45,6 +45,29 @@ test passes it again, and forgetting a refinement gives back the very
 value that was refined. The module's spec runs `cats-eo-laws`'
 `PrismTests` on every constructor.
 
+### From a constraint instance
+
+When you hold the constraint itself — a `RuntimeConstraint[A, C]`, or
+one of Iron's `Constraint` givens — `.prism` gives the same Prism:
+
+```scala mdoc:silent
+import io.github.iltotore.iron.constraint.string.Alphanumeric
+import dev.constructive.eo.iron.prism
+
+val positiveInt: RuntimeConstraint[Int, Positive] = summon
+val alphanumeric = summon[Constraint[String, Alphanumeric]].prism
+```
+
+```scala mdoc
+positiveInt.prism.getOption(-1)
+alphanumeric.getOption("abc123")
+alphanumeric.getOption("not ok!")
+```
+
+The `Constraint` form is inline, like Iron's own
+`RuntimeConstraint.derived`, so its receiver must be a statically known
+instance such as a `summon`.
+
 ## Composing
 
 A refinement is usually a property of one field. Compose it after the
