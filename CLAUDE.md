@@ -346,7 +346,12 @@ that the caller never uses:
   the concrete class a fused overload.
 
 Beyond the scalafix `DisableSyntax` bans in `.scalafix.conf` (no `return`,
-no XML, no `finalize`):
+no XML, no `finalize`) — and, for main code only, `.scalafix-main.conf`'s ban on
+`.modify(identity)` (it writes back what it read: dead work, or an idiom hiding the real
+operation). `commonSettings` points every project's `Compile / scalafixConfig` at
+`.scalafix-main.conf`, which `include`s `.scalafix.conf`; `Test` scopes and the `laws` /
+`schemesLaws` modules (whose `src/main` is law code — `modify(identity)` IS the identity law)
+stay on `.scalafix.conf`:
 
 - **No `while` loops.** Write a tail-recursive `@tailrec` function instead —
   it compiles to the same loop bytecode (no perf or stack cost) while keeping

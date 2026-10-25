@@ -516,6 +516,13 @@ lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
 lazy val commonSettings = Seq(
+  // Main code is checked against `.scalafix-main.conf` (the shared rules + main-only bans such as
+  // `.modify(identity)`); Test scopes stay on `.scalafix.conf`. `laws` / `schemesLaws` opt back out:
+  // their `src/main` is law code, where `modify(identity)` is the identity law.
+  Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix-main.conf"),
+  // Explicit, not inherited: `Test` extends `Compile`, so leaving it unset would hand specs the
+  // main-only bans.
+  Test / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
   // from the current git tag (`tlBaseVersion` above gives the
   // untagged snapshot prefix).
@@ -631,6 +638,7 @@ lazy val laws: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-laws",
+    Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
@@ -694,6 +702,7 @@ lazy val schemesLaws: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-schemes-laws",
+    Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
