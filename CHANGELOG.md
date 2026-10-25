@@ -20,19 +20,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `X = Unit` aliases; general glasses retain residual context.
   Unit-context composition normalization and generic classical-family
   bridges remain open; no top-level Grate companion is provided.
-- **jsoniter: read JSON from a slice of a byte array, in place.** `JsonSlice(bytes, offset,
+- **jsoniter: read JSON in place from a slice of a byte array.** `JsonSlice(bytes, offset,
   length)` is a view (nothing copied; equal by content; fails fast with
-  `IndexOutOfBoundsException` on a range outside the array). `JsoniterPrism#onSlice` /
-  `JsoniterTraversal#onSlice` re-source a drilled optic on it — `JsoniterSlicePrism[A]`
-  (`Optic[JsonSlice, JsonSlice, A, A, Affine]`) and `JsoniterSliceTraversal[A]` — scanning and
-  decoding the slice where it lies via jsoniter-scala's `readFromSubArray`. A write that splices
-  returns a slice over a fresh array holding only the slice's bytes; a miss returns the input
-  slice. The whole-array optics are unchanged, now the `(0, length)` case of the same ranged
-  scan (`JsonPathScanner.find` / `findAll` gain `(bytes, from, until, path)` overloads).
-- **demos/grpc-filter: messages are judged where they lie in the socket's chunks.**
-  `GrpcFrames.splitFrames` emits `Chunk.ArraySlice[Byte]` views (only a message straddling two
-  reads is copied), `Wire.detail` reads them through `.onSlice`, and `joinFrames` takes
-  `Chunk[Byte]`.
+  `IndexOutOfBoundsException` on a range outside the array); `bytes.jsonSlice(offset, length)` is
+  the same as a method, and `JsonSlice(buf: ByteBuffer)` wraps a heap buffer's array without
+  copying (a direct or read-only buffer is copied once), leaving the buffer's position alone.
+  `JsoniterPrism.inPlace[A]` (the root), `JsoniterPrism#inPlace` and `JsoniterTraversal#inPlace`
+  give `JsoniterInPlacePrism[A]` (`Optic[JsonSlice, JsonSlice, A, A, Affine]`) and
+  `JsoniterInPlaceTraversal[A]`, scanning and decoding the slice where it lies via
+  jsoniter-scala's `readFromSubArray`. They drill with the same macro-checked `field` / `at` /
+  `each` / Dynamic surface as the whole-array optics (one shared `JsoniterPath` builder), so
+  `.inPlace` can go anywhere in a chain, and `.raw` on an in-place prism focuses a `JsonSlice`
+  VIEW of the focused bytes (the whole-array `.raw` still copies them), composing into further
+  in-place optics with plain `andThen`. No copy is made: don't mutate the array while a slice is
+  in use, and a slice keeps its whole array reachable (`toArray` to keep one). Writes never
+  mutate the source: a write that splices returns a slice over a fresh array holding only the
+  slice's bytes; a miss returns the input slice. The whole-array optics are unchanged, now the
+  `(0, length)` case of the same ranged scan (`JsonPathScanner.find` / `findAll` gain
+  `(bytes, from, until, path)` overloads).
+- **demos/grpc-filter: messages are judged where they lie in the socket's chunks, and their
+  details where they lie in the message.** `GrpcFrames.splitFrames` emits `Chunk.ArraySlice[Byte]`
+  views (only a message straddling two reads is copied), `Wire.json` wraps one as
+  `JsonSlice(chunk.toByteBuffer)`, `Wire.detail` is `JsoniterPrism.inPlace[Issue].field(_.detail).raw`
+  with `DetailJson` an opaque `JsonSlice`, the leaf prisms are in place too, and `joinFrames`
+  takes `Chunk[Byte]`.
 
 ### Fixed
 

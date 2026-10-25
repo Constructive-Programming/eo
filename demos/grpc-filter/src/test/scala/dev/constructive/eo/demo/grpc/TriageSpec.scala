@@ -8,7 +8,7 @@ import dev.constructive.eo.laws.OptionalLaws
 import dev.constructive.eo.laws.discipline.OptionalTests
 import dev.constructive.eo.optics.Optic.*
 import io.github.martinhh.derived.scalacheck.{deriveArbitrary, deriveCogen}
-import org.scalacheck.{Arbitrary, Cogen, Prop}
+import org.scalacheck.{Arbitrary, Cogen, Gen, Prop}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
@@ -20,6 +20,11 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
 
   private val issues = Issues(seed = 11).take(3000).toVector
   private val messages = issues.map(writeToArray(_))
+
+  /** Message `i`, read in place between its neighbours' bytes. */
+  private def between(i: Int): JsonSlice =
+    val (before, message, after) = (messages(i - 1), messages(i), messages(i + 1))
+    JsonSlice(before ++ message ++ after, before.length, message.length)
 
   private def agree(policy: Policy)(message: Array[Byte]) =
     Triage.optics(policy)(JsonSlice(message)) === Triage.decoding(policy)(JsonSlice(message))
@@ -58,10 +63,35 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
       )
     }
 
+  "the detail is a view of the message's own array, not a copy: it sees the array change" >>
+    forall(messages.take(300)) { message =>
+      val array = message.clone
+      val detail = Wire.detail.getOption(JsonSlice(array))
+      val kept = detail.map(_.bytes) // a copy, in an array of its own
+      java.util.Arrays.fill(array, '0'.toByte)
+      (detail.map(_.bytes.forall(_ == '0')) must beSome(true))
+        .and(kept.map(_.exists(_ != '0')) must beSome(true))
+    }
+
+  "`detail andThen severity` is one optic from a message to its severity, with plain `andThen`" >> {
+    val severityOf: Focus[JsonSlice, Severity] = Wire.detail.andThen(Wire.severity)
+    val bumped = Severity.values.last
+    forall(issues.zip(messages)) { (issue, message) =>
+      val slice = JsonSlice(message)
+      issue.detail match
+        case incident: Detail.Incident =>
+          val written = Issue.decode(severityOf.replace(bumped)(slice))
+          (severityOf.getOption(slice) must beSome(incident.severity))
+            .and(written.map(_.detail) must beSome(incident.copy(severity = bumped): Detail))
+            .and((written.map(_.copy(detail = incident)) == Some(issue)) must beTrue)
+        // The leaf trusts the classification, but another kind has no `severity` to find.
+        case _ => severityOf.getOption(slice) must beNone
+    }
+  }
+
   "a message read in place, between its neighbours' bytes, is judged as the message alone" >>
     forall(1 until 300) { i =>
-      val (before, message, after) = (messages(i - 1), messages(i), messages(i + 1))
-      val inPlace = JsonSlice(before ++ message ++ after, before.length, message.length)
+      val (message, inPlace) = (messages(i), between(i))
       (Triage.optics(Policy.default)(inPlace) === Triage.optics(Policy.default)(JsonSlice(message)))
         .and(
           Triage.decoding(Policy.default)(inPlace) === Triage.decoding(Policy.default)(
@@ -119,3 +149,17 @@ class TriageSpec extends Specification with ScalaCheck with Discipline:
   optional("module", Model.module)
   optional("plan", Model.plan)
   optional("votes", Model.votes)
+
+  // So is the wire's chain from a message to a leaf, read in place between its neighbours' bytes.
+  // Severities drawn directly: the derived enum generator can't draw at size 0, where a property
+  // starts, and these foci are leaves.
+  checkAll(
+    "Wire.detail.andThen(Wire.severity)",
+    new OptionalTests[JsonSlice, Severity]:
+      val laws = new OptionalLaws[JsonSlice, Severity]:
+        val optional = Wire.detail.andThen(Wire.severity)
+    .optional(using
+      Arbitrary(Gen.choose(1, messages.size - 2).map(between)),
+      Arbitrary(Gen.oneOf(Severity.values.toSeq)),
+    ),
+  )

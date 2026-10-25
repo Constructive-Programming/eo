@@ -22,11 +22,11 @@ import dev.constructive.eo.optics.Optic
   *     elsewhere and use a prism for the one or two fields on the hot path.
   *   - '''Replace the materialised model''' (optics-as-evidence): the wire `Array[Byte]` IS the
   *     data structure. Instead of `JsonCodecMaker.make[Whole]` + decoding the whole document, hold
-  *     the bytes and read/write individual fields through [[JsoniterPrism.apply]] /
-  *     [[JsoniterPrism.field]] with leaf codecs only. Consuming code then follows the standard
-  *     doctrine — consume via capability, construct via optic — leaving the CARRIER generic:
-  *     signatures demand `CanGetOption[T, WhatYouWant]` (or `CanModify` / `CanFold`), never naming
-  *     the optic or the wire format,
+  *     the bytes and read/write individual fields through [[JsoniterPrism.apply]] / `.field` with
+  *     leaf codecs only. Consuming code then follows the standard doctrine — consume via
+  *     capability, construct via optic — leaving the CARRIER generic: signatures demand
+  *     `CanGetOption[T, WhatYouWant]` (or `CanModify` / `CanFold`), never naming the optic or the
+  *     wire format,
   *     {{{
   *     def validateId[T](idCarrier: T)(using CanGetOption[T, Id]): Boolean
   *     }}}
@@ -63,11 +63,12 @@ import dev.constructive.eo.optics.Optic
   * val allT    = JsoniterPrism[Basket].field(_.items).each   // JsoniterTraversal
   * }}}
   *
-  * '''Slices.''' A document inside a larger buffer (one network read holding several messages, say)
-  * is read in place through the slice face: `prism.onSlice` is the same prism over a [[JsonSlice]]
-  * — `JsonSlice(bytes, offset, length)`, a view, nothing copied — with the same laws. This prism's
-  * whole-array scan and splice are the `(0, length)` case of the slice face's. See
-  * [[JsoniterPrism.onSlice]] for what writes on a slice return.
+  * '''In place.''' A document inside a larger buffer (one network read holding several messages,
+  * say) is read where it lies by the in-place face: `prism.inPlace` — or
+  * `JsoniterPrism.inPlace[A]`, to drill from there — is the same prism over a [[JsonSlice]]
+  * (`JsonSlice(bytes, offset, length)`, a view, nothing copied), with the same laws. This prism's
+  * whole-array scan and splice are the `(0, length)` case of the in-place face's. See
+  * [[JsoniterInPlacePrism]] for what not copying asks of the caller, and what writes return.
   *
   * Each drilled step needs a `JsonValueCodec` for its focus type in scope (derive leaf codecs via
   * `JsonCodecMaker.make` from `jsoniter-scala-macros`, which callers add themselves). To skip
@@ -99,7 +100,7 @@ final class JsoniterPrism[A] private[jsoniter] (
     private[jsoniter] val steps: List[PathStep]
 )(using codec: JsonValueCodec[A])
     extends Optic[Array[Byte], Array[Byte], A, A, Affine],
-      Dynamic:
+      JsoniterPrismPath[A, JsoniterPrism, JsoniterTraversal]:
 
   type X = (Array[Byte], (Array[Byte], Int, Int))
 
@@ -125,31 +126,36 @@ final class JsoniterPrism[A] private[jsoniter] (
     * spliced verbatim on write (`writeRawVal`). No typed decode ever runs. The seam for
     * format-level consumers that transform the slice as a document of its own — e.g. the avro
     * bridge's structural `.avro` face (`dev.constructive.eo.avro.jsoniter`).
+    *
+    * The focus is a '''copy''' of the span, in an array of its own. The in-place face's `.raw`
+    * ([[JsoniterInPlacePrism.raw]]) focuses a [[JsonSlice]] view of the span instead.
     */
   def raw: JsoniterPrism[Array[Byte]] =
     new JsoniterPrism[Array[Byte]](steps)(using JsoniterPrism.rawCodec)
 
-  /** Dynamic field sugar — `JsoniterPrism[Person].name` lowers to
-    * `JsoniterPrism[Person].field(_.name)`. Compile-time checked against `A`'s case fields; the
-    * field's `JsonValueCodec` is summoned at the call site.
-    */
-  transparent inline def selectDynamic(inline name: String): Any =
-    ${ JsoniterPrismMacro.selectFieldImpl[A]('{ this }, 'name) }
-
-  /** Re-source this prism on a [[JsonSlice]]: same path, same focus, but the JSON document is a
-    * range of a larger byte array, read in place — nothing is copied before the scan. Drill first,
-    * then take the slice face: `JsoniterPrism[Person].field(_.age).onSlice`.
+  /** This prism, reading its document '''in place''': same path, same focus, but the source is a
+    * [[JsonSlice]] — a range of a larger byte array — scanned and decoded where it lies.
+    * `JsoniterPrism[Person].field(_.age).inPlace` is the same optic as
+    * `JsoniterPrism.inPlace[Person].field(_.age)`: drill before or after.
     *
-    * Reads never look outside the slice. A write that splices (a `Hit`) returns a slice over a
-    * '''fresh''' array holding only the slice's bytes, with the new focus spliced in (offset 0);
-    * the bytes around the slice in the source array are neither copied nor touched. A write that
-    * changes nothing (a `Miss`) hands back the input slice itself. See [[JsoniterSlicePrism]].
+    * '''No copy is made''': the optic reads, and with `.raw` focuses, the caller's array where it
+    * lies. So:
+    *
+    *   - '''Don't mutate the array''' while the slice, or anything read from it, is in use.
+    *   - A slice, and any slice focus (`.raw`), keeps the '''whole''' underlying array reachable:
+    *     call [[JsonSlice.toArray]] for anything kept long-term.
+    *   - '''Writes never mutate the source.''' A write that splices returns a slice over a
+    *     '''fresh''' array holding only the slice's bytes, the new focus spliced in (offset 0); one
+    *     that changes nothing (a miss) hands back the input slice itself.
+    *
+    * See [[JsoniterInPlacePrism]].
     */
-  def onSlice: JsoniterSlicePrism[A] = new JsoniterSlicePrism[A](steps)
+  def inPlace: JsoniterInPlacePrism[A] = new JsoniterInPlacePrism[A](steps, InPlaceFocus.typed)
 
-  // The whole array is the `(0, length)` case of the ranged scan and splice the slice face uses.
+  // The whole array is the `(0, length)` case of the ranged scan and splice the in-place face uses.
   private def scan(bytes: Array[Byte]): Affine[X, A] =
-    JsoniterPrism.scanRange[A, Affine[X, A]](bytes, 0, bytes.length, steps, codec)(
+    JsoniterPrism.scanRange[A, Affine[X, A]](bytes, 0, bytes.length, steps)(
+      (start, end) => readFromSubArray(bytes, start, end)(using codec),
       new Affine.Miss[X](bytes),
       (start, end, a) => new Affine.Hit[X, A]((bytes, start, end), a),
     )
@@ -161,49 +167,45 @@ final class JsoniterPrism[A] private[jsoniter] (
         // `.replace` arrives baked into h.b — encode it via the codec, then memcpy
         // src[0, start) ++ encoded ++ src[end, src.length) into a fresh buffer.
         val (src, start, end) = h.snd
-        JsoniterPrism.spliceRange(src, 0, src.length, start, end, writeToArray(h.b)(using codec))
+        val encoded = writeToArray(h.b)(using codec)
+        JsoniterPrism.spliceRange(src, 0, src.length, start, end, encoded, 0, encoded.length)
       case m: Affine.Miss[X] => m.fst
 
-  // ---- Path widening (used by the macro extensions) ----------------
+  // ---- Path building (for the JsoniterPath macros) ----------------
 
-  /** Extend the path by a field step. Used by [[JsoniterPrism.field]] / `selectDynamic`. */
-  private[jsoniter] def widenField[B](name: String)(using JsonValueCodec[B]): JsoniterPrism[B] =
-    new JsoniterPrism[B](steps :+ PathStep.Field(name))
+  private[jsoniter] def withSteps[B](steps: List[PathStep])(using
+      JsonValueCodec[B]
+  ): JsoniterPrism[B] =
+    new JsoniterPrism[B](steps)
 
-  /** Extend by an array-index step. Used by [[JsoniterPrism.at]]. */
-  private[jsoniter] def widenIndex[B](i: Int)(using JsonValueCodec[B]): JsoniterPrism[B] =
-    new JsoniterPrism[B](steps :+ PathStep.Index(i))
-
-  /** Hand off as a [[JsoniterTraversal]] over the iterated element type. Used by
-    * [[JsoniterPrism.each]].
-    */
   private[jsoniter] def toTraversal[B](using JsonValueCodec[B]): JsoniterTraversal[B] =
     new JsoniterTraversal[B](steps :+ PathStep.Wildcard)
 
 object JsoniterPrism:
 
-  /** Scan the document in `bytes[from, until)` for `steps` and decode the focused span via `codec`:
-    * `hit(start, end, value)` with the span's absolute positions, or `miss` when the path doesn't
-    * resolve or the span doesn't decode. Inline, so the whole-array prism and its slice face share
-    * one body (and the one decode `catch`) without a call or a closure between them.
+  /** Scan the document in `bytes[from, until)` for `steps` and read the focused span with `decode`
+    * (which may throw): `hit(start, end, value)` with the span's absolute positions, or `miss` when
+    * the path doesn't resolve or the span doesn't decode. Inline, so the whole-array prism and its
+    * in-place face share one body (and the one decode `catch`) without a call or a closure between
+    * them.
     */
   private[jsoniter] inline def scanRange[A, R](
       bytes: Array[Byte],
       from: Int,
       until: Int,
       steps: List[PathStep],
-      codec: JsonValueCodec[A],
-  )(inline miss: R, inline hit: (Int, Int, A) => R): R =
+  )(inline decode: (Int, Int) => A, inline miss: R, inline hit: (Int, Int, A) => R): R =
     val span = JsonPathScanner.find(bytes, from, until, steps)
     if !span.isHit then miss
     else
       try
-        val a = readFromSubArray(bytes, span.start, span.end)(using codec)
+        val a = decode(span.start, span.end)
         hit(span.start, span.end, a)
       catch case scala.util.control.NonFatal(_) => miss
 
-  /** `src[from, start) ++ encoded ++ src[end, until)` in a fresh array: the document in
-    * `src[from, until)` with its `[start, end)` span replaced. Three `arraycopy`s.
+  /** `src[from, start) ++ enc[encFrom, encFrom + encLength) ++ src[end, until)` in a fresh array:
+    * the document in `src[from, until)` with its `[start, end)` span replaced by the encoded focus.
+    * Three `arraycopy`s.
     */
   private[jsoniter] def spliceRange(
       src: Array[Byte],
@@ -211,14 +213,16 @@ object JsoniterPrism:
       until: Int,
       start: Int,
       end: Int,
-      encoded: Array[Byte],
+      enc: Array[Byte],
+      encFrom: Int,
+      encLength: Int,
   ): Array[Byte] =
     val head = start - from
     val tail = until - end
-    val out = new Array[Byte](head + encoded.length + tail)
+    val out = new Array[Byte](head + encLength + tail)
     System.arraycopy(src, from, out, 0, head)
-    System.arraycopy(encoded, 0, out, head, encoded.length)
-    System.arraycopy(src, end, out, head + encoded.length, tail)
+    System.arraycopy(enc, encFrom, out, head, encLength)
+    System.arraycopy(src, end, out, head + encLength, tail)
     out
 
   /** Raw-slice codec behind [[JsoniterPrism.raw]]: decode captures the focused value's encoded
@@ -239,6 +243,20 @@ object JsoniterPrism:
     */
   def apply[A](using JsonValueCodec[A]): JsoniterPrism[A] =
     fromSteps(Nil)
+
+  /** The root prism, reading its document '''in place''' — `JsoniterPrism[A].inPlace`, a
+    * `Prism[JsonSlice, A]` to drill from: `JsoniterPrism.inPlace[Issue].field(_.detail).raw`.
+    *
+    * '''No copy is made''': the optic reads, and with `.raw` focuses, the caller's array where it
+    * lies. Don't mutate the array while the slice or anything read from it is in use; a slice, and
+    * any slice focus, keeps the whole underlying array reachable (call [[JsonSlice.toArray]] for
+    * anything kept long-term); writes never mutate the source, but return a slice over a fresh
+    * array. See [[JsoniterInPlacePrism]].
+    *
+    * @group Optics
+    */
+  def inPlace[A](using JsonValueCodec[A]): JsoniterInPlacePrism[A] =
+    fromSteps[A](Nil).inPlace
 
   /** Build a read-write Prism over a JSON byte buffer at the given JSONPath — the ONLY string-path
     * constructor, and it keeps the failure in the type. An unparseable path, or one carrying a
@@ -282,30 +300,23 @@ object JsoniterPrism:
   ): JsoniterPrism[A] =
     new JsoniterPrism[A](steps)
 
-  /** `.field(_.x)` — drill via selector lambda, compile-time checked against `A`'s case fields. */
-  extension [A](o: JsoniterPrism[A])
-
-    transparent inline def field[B](
-        inline selector: A => B
-    )(using codecB: JsonValueCodec[B]): JsoniterPrism[B] =
-      ${ JsoniterPrismMacro.fieldImpl[A, B]('o, 'selector, 'codecB) }
-
-  /** `.at(i)` — drill into the i-th array element. */
-  extension [A](o: JsoniterPrism[A])
-
-    transparent inline def at(i: Int): Any =
-      ${ JsoniterPrismMacro.atImpl[A]('o, 'i) }
-
-  /** `.each` — split into a [[JsoniterTraversal]] over the iterated array. */
-  extension [A](o: JsoniterPrism[A])
-
-    transparent inline def each: Any =
-      ${ JsoniterPrismMacro.eachImpl[A]('o) }
-
-/** A [[JsoniterPrism]] whose JSON document is a [[JsonSlice]] — a range of a larger byte array,
-  * read in place. Obtained from [[JsoniterPrism.onSlice]] (drill first, then take the slice face);
-  * same path, same codec, and the same '''Laws & preconditions''' as the prism it came from, with
-  * slices compared by content.
+/** A [[JsoniterPrism]] that reads its document '''in place''': the source is a [[JsonSlice]], a
+  * range of a larger byte array, scanned and decoded where it lies. Made by `prism.inPlace`, or at
+  * the root by [[JsoniterPrism.inPlace]] to drill from there with the same `.field` / `.at` /
+  * `.each` / Dynamic surface ([[JsoniterPrismPath]]). Same path, same codec, and the same '''Laws &
+  * preconditions''' as the whole-array prism, with slices compared by content.
+  *
+  * '''No copy is made.''' The optic reads the caller's array where it lies, and `.raw` focuses a
+  * view of it. So:
+  *
+  *   - '''Don't mutate the array''' while the slice, or anything read from it (a `.raw` focus), is
+  *     in use: the optic reads the bytes as they are when it runs.
+  *   - A slice, and any slice focus, keeps the '''whole''' underlying array reachable, however few
+  *     bytes it covers. Call [[JsonSlice.toArray]] for anything kept long-term.
+  *   - '''Writes never mutate the source.''' A write that splices (a `Hit`) returns a slice over a
+  *     '''fresh''' array holding only the slice's bytes — `array[offset, start) ++ encoded ++
+  *     array[end, until)` — at offset 0; the bytes around the slice are neither copied nor touched.
+  *     A write that changes nothing (a `Miss`) hands back the input slice itself.
   *
   * Carrier: [[dev.constructive.eo.data.Affine]]. Shape `Optic[JsonSlice, JsonSlice, A, A, Affine]`:
   *
@@ -313,19 +324,18 @@ object JsoniterPrism:
   *     pass-through; Hit carries it with the focused span's ABSOLUTE `[start, end)` in its array.
   *   - `to` scans `slice.array` from `slice.offset` to `slice.until` and decodes the span via
   *     `readFromSubArray`. Nothing outside the slice is read, and nothing is copied.
-  *   - `from` on a Hit encodes the new focus and splices it into a FRESH array holding only the
-  *     slice's bytes — `array[offset, start) ++ encoded ++ array[end, until)` — returned as a slice
-  *     at offset 0. The source array is never written. A Miss returns the input slice itself.
+  *   - `from` on a Hit encodes the new focus and splices it in, as above.
   *
   * The whole-array [[JsoniterPrism]] runs the same scan and splice over `(0, length)`, so a slice
   * reads and writes exactly like the same bytes copied out.
   *
   * @group Optics
   */
-final class JsoniterSlicePrism[A] private[jsoniter] (
-    private[jsoniter] val steps: List[PathStep]
-)(using codec: JsonValueCodec[A])
-    extends Optic[JsonSlice, JsonSlice, A, A, Affine]:
+final class JsoniterInPlacePrism[A] private[jsoniter] (
+    private[jsoniter] val steps: List[PathStep],
+    focus: InPlaceFocus[A],
+) extends Optic[JsonSlice, JsonSlice, A, A, Affine],
+      JsoniterPrismPath[A, JsoniterInPlacePrism, JsoniterInPlaceTraversal]:
 
   type X = (JsonSlice, (JsonSlice, Int, Int))
 
@@ -336,10 +346,34 @@ final class JsoniterSlicePrism[A] private[jsoniter] (
   /** Encode `a` standalone, as a slice over an array of its own. Lawful only for the ROOT prism, as
     * [[JsoniterPrism.reverseGet]] is.
     */
-  def reverseGet(a: A): JsonSlice = JsonSlice(writeToArray(a)(using codec))
+  def reverseGet(a: A): JsonSlice = focus.standalone(a)
+
+  /** Re-focus on the '''raw encoded span''', as a [[JsonSlice]]: same path, same scan, but the
+    * focus is the focused value's own JSON bytes — a '''view''' of them where they lie in the
+    * source array, not a copy (the whole-array [[JsoniterPrism.raw]] copies them out). No typed
+    * decode runs. The span is checked to be one well-formed JSON value (jsoniter-scala's `skip`,
+    * which allocates nothing), so a malformed one misses, as it does for `JsoniterPrism.raw`.
+    *
+    * The focus is a slice of the '''source''' array, under the rules above: don't mutate the array
+    * while it's in use, and it keeps the whole array reachable (`.toArray` to keep it). It is the
+    * source of further in-place optics, through ordinary `andThen`:
+    * `JsoniterPrism.inPlace[Issue].field(_.detail).raw.andThen(severityP)`, with
+    * `severityP = JsoniterPrism.inPlace[Detail].field(_.severity)`, is one
+    * `Optic[JsonSlice, JsonSlice, Severity, Severity, Affine]`, nothing copied on the way down.
+    *
+    * '''Writing''' through it splices the new focus's bytes '''verbatim''' — no re-encoding and no
+    * validation, as `JsoniterPrism.raw` writes — into a fresh array, by the write rule above:
+    * neither the source array nor the new focus's own array is changed. A composed write (`(raw
+    * andThen severityP).replace(s)`) re-encodes only the leaf: the inner prism splices it into a
+    * fresh copy of the focused span, and this one splices that into a fresh copy of the document.
+    */
+  def raw: JsoniterInPlacePrism[JsonSlice] =
+    new JsoniterInPlacePrism[JsonSlice](steps, InPlaceFocus.raw)
 
   private def scan(slice: JsonSlice): Affine[X, A] =
-    JsoniterPrism.scanRange[A, Affine[X, A]](slice.array, slice.offset, slice.until, steps, codec)(
+    val bytes = slice.array
+    JsoniterPrism.scanRange[A, Affine[X, A]](bytes, slice.offset, slice.until, steps)(
+      (start, end) => focus.read(bytes, start, end),
       new Affine.Miss[X](slice),
       (start, end, a) => new Affine.Hit[X, A]((slice, start, end), a),
     )
@@ -348,6 +382,66 @@ final class JsoniterSlicePrism[A] private[jsoniter] (
     aff match
       case h: Affine.Hit[X, A] =>
         val (src, start, end) = h.snd
-        val encoded = writeToArray(h.b)(using codec)
-        JsonSlice(JsoniterPrism.spliceRange(src.array, src.offset, src.until, start, end, encoded))
+        val enc = focus.encode(h.b)
+        JsonSlice(
+          JsoniterPrism.spliceRange(
+            src.array,
+            src.offset,
+            src.until,
+            start,
+            end,
+            enc.array,
+            enc.offset,
+            enc.length,
+          )
+        )
       case m: Affine.Miss[X] => m.fst
+
+  // ---- Path building (for the JsoniterPath macros) ----------------
+
+  private[jsoniter] def withSteps[B](steps: List[PathStep])(using
+      JsonValueCodec[B]
+  ): JsoniterInPlacePrism[B] =
+    new JsoniterInPlacePrism[B](steps, InPlaceFocus.typed[B])
+
+  private[jsoniter] def toTraversal[B](using JsonValueCodec[B]): JsoniterInPlaceTraversal[B] =
+    new JsoniterInPlaceTraversal[B](steps :+ PathStep.Wildcard)
+
+/** How a [[JsoniterInPlacePrism]] reads its focus out of a span and writes one back: decoded
+  * through a codec, or (`.raw`) the span itself, as a view.
+  */
+sealed abstract private[jsoniter] class InPlaceFocus[A]:
+
+  /** The focus in `bytes[start, end)`. Throws when the span doesn't decode: the scan's one `catch`
+    * makes that a miss.
+    */
+  def read(bytes: Array[Byte], start: Int, end: Int): A
+
+  /** `a`'s JSON, to splice in. May be a view of `a`'s own bytes: the splice copies them. */
+  def encode(a: A): JsonSlice
+
+  /** `a`'s JSON, in an array of its own. */
+  def standalone(a: A): JsonSlice
+
+private[jsoniter] object InPlaceFocus:
+
+  /** Decode and encode through `codec`. */
+  def typed[A](using codec: JsonValueCodec[A]): InPlaceFocus[A] = new InPlaceFocus[A]:
+    def read(bytes: Array[Byte], start: Int, end: Int): A =
+      readFromSubArray(bytes, start, end)(using codec)
+    def encode(a: A): JsonSlice = JsonSlice(writeToArray(a)(using codec))
+    def standalone(a: A): JsonSlice = encode(a)
+
+  /** The span itself, once checked to be one well-formed JSON value; written back verbatim. */
+  val raw: InPlaceFocus[JsonSlice] = new InPlaceFocus[JsonSlice]:
+    def read(bytes: Array[Byte], start: Int, end: Int): JsonSlice =
+      readFromSubArray(bytes, start, end)(using skipCodec)
+      JsonSlice.unchecked(bytes, start, end - start)
+    def encode(a: JsonSlice): JsonSlice = a
+    def standalone(a: JsonSlice): JsonSlice = JsonSlice(a.toArray)
+
+  /** Checks that a span holds one JSON value and nothing after it, allocating nothing: skips it. */
+  private val skipCodec: JsonValueCodec[Unit] = new JsonValueCodec[Unit]:
+    def decodeValue(in: JsonReader, default: Unit): Unit = in.skip()
+    def encodeValue(x: Unit, out: JsonWriter): Unit = out.writeNull()
+    def nullValue: Unit = ()
