@@ -84,18 +84,17 @@ object Optional:
 
     override def reverseGet(s: S, b: B): T = write(s, b)
 
-    override def modify(f: A => B): S => T =
-      s =>
-        read(s) match
-          case Right(a) => write(s, f(a))
-          case Left(t)  => t
+    override def modifyAt(s: S, f: A => B): T =
+      read(s) match
+        case Right(a) => write(s, f(a))
+        case Left(t)  => t
 
   /** A fused composition's optic: each operation supplied by the composing overload, every one of
-    * them tearing the source once.
+    * them tearing the source once (`modify` as the two-argument [[Optional.modifyAt]] kernel).
     */
   final private[optics] class Fused[S, T, A, B, M0](
       read: S => Either[T, A],
-      write: (A => B) => S => T,
+      write: (S, A => B) => T,
       keep: S => Affine[(T, M0), A],
       restore: (M0, B) => T,
   ) extends Optional[S, T, A, B]:
@@ -103,12 +102,12 @@ object Optional:
     def getOrModify(s: S): Either[T, A] = read(s)
     def to(s: S): Affine[X, A] = keep(s)
     def rebuild(m: M0, b: B): T = restore(m, b)
-    override def modify(f: A => B): S => T = write(f)
+    override def modifyAt(s: S, f: A => B): T = write(s, f)
 
   /** Build a fused composition from its four single-tear operations (see [[Fused]]). */
   private[optics] def fused[S, T, A, B, M0](
       getOrModify: S => Either[T, A],
-      modify: (A => B) => S => T,
+      modify: (S, A => B) => T,
       to: S => Affine[(T, M0), A],
       rebuild: (M0, B) => T,
   ): Optional[S, T, A, B] =
@@ -149,14 +148,20 @@ sealed abstract class Optional[S, T, A, B]
   /** Write `b` back from what a hit kept — never re-reads `S`. */
   def rebuild(m: M, b: B): T
 
-  /** One tear, then rebuild. Fused compositions override it with a kernel that allocates no carrier
-    * at all (`outer.modify(inner.modify(f))`).
+  /** One tear, then rebuild: the write behind [[modify]] / `replace`, taking the source directly so
+    * a `modify(f)(s)` call site allocates no `S => T` closure (`modify` is `inline`). Fused
+    * compositions override it with a kernel that builds no carrier at all.
     */
-  def modify(f: A => B): S => T =
-    s =>
-      to(s) match
-        case h: Affine.Hit[X, A] => rebuild(h.snd, f(h.b))
-        case m: Affine.Miss[X]   => m.fst
+  def modifyAt(s: S, f: A => B): T =
+    to(s) match
+      case h: Affine.Hit[X, A] => rebuild(h.snd, f(h.b))
+      case m: Affine.Miss[X]   => m.fst
+
+  /** `inline`, like `GetReplaceLens.modify`: `optional.modify(f)(s)` reduces to `modifyAt(s, f)`.
+    */
+  inline def modify(f: A => B): S => T = s => modifyAt(s, f)
+
+  override inline def replace(b: B): S => T = s => modifyAt(s, _ => b)
 
   final def from(a: Affine[X, B]): T =
     a match
@@ -192,7 +197,7 @@ sealed abstract class Optional[S, T, A, B]
             inner.getOrModify(h.b) match
               case Left(b)      => Left(rebuild(h.snd, b))
               case r @ Right(_) => r.widenLeft[T],
-      modify = f => modify(inner.modify(f)),
+      modify = (s, f) => modifyAt(s, a => inner.modifyAt(a, f)),
       to = s =>
         to(s) match
           case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
@@ -209,7 +214,7 @@ sealed abstract class Optional[S, T, A, B]
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
     Optional.fused[S, T, C, D, (M, A)](
       getOrModify = s => getOrModify(s).map(inner.get),
-      modify = f => modify(a => inner.enplace(a, f(inner.get(a)))),
+      modify = (s, f) => modifyAt(s, a => inner.enplace(a, f(inner.get(a)))),
       to = s =>
         to(s) match
           case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
@@ -229,7 +234,7 @@ sealed abstract class Optional[S, T, A, B]
             inner.tear(h.b) match
               case Left(b)      => Left(rebuild(h.snd, b))
               case r @ Right(_) => r.widenLeft[T],
-      modify = f => modify(inner.modify(f)),
+      modify = (s, f) => modifyAt(s, inner.modify(f)),
       to = s =>
         to(s) match
           case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
@@ -244,7 +249,7 @@ sealed abstract class Optional[S, T, A, B]
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): Optional[S, T, C, D] =
     Optional.fused[S, T, C, D, M](
       getOrModify = s => getOrModify(s).map(inner.get),
-      modify = f => modify(a => inner.reverseGet(f(inner.get(a)))),
+      modify = (s, f) => modifyAt(s, a => inner.reverseGet(f(inner.get(a)))),
       to = s =>
         to(s) match
           case m: Affine.Miss[X]   => new Affine.Miss(m.fst)

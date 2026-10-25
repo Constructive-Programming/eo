@@ -237,44 +237,58 @@ are not carried over.
 
 `ChimneyBench` (in `benchmarks/`) runs every scenario three ways:
 through this module (**eo-chimney**), with **chimney** alone (the same
-transformers, built once; the `into…withFieldComputed` DSL where a
-field override is needed), and **hand**-written with neither library.
-All three compute the same value. Optics and transformers are built
-once, outside the measured call, and only the success paths are
-measured.
+transformers, built once; `map`, `copy` or the
+`into…withFieldComputed` DSL where the job needs more than one
+transformation), and **hand**-written with neither library. All three
+compute the same value, and optics and transformers are built once,
+outside the measured call. The rows marked "…" run the same operation
+on inputs that fail.
 
 | Scenario | eo-chimney B/op | chimney B/op | hand B/op | eo ns/op | chimney ns/op | hand ns/op |
 |---|---:|---:|---:|---:|---:|---:|
-| `transformFocus` — retype 64 list elements | 3,616 | 3,072 | 3,072 | 1043 | 847 | 725 |
-| `transformFocusPartial` — same, partially | 11,432 | 3,184 | 4,624 | 3019 | 962 | 928 |
-| `transformImage` — edit a field, return the view | 96 | 152 | 96 | 29 | 37 | 25 |
-| `transformImagePartial` — edit, then validate | 120 | 96 | 64 | 29 | 22 | 12 |
-| `Chimney.getter` ∘ two lenses — read a field | 80 | 0 | 0 | 19 | 1 | 1 |
-| `Chimney.prism` ∘ lens — edit a DTO field | 240 | 128 | 72 | 58 | 47 | 19 |
-| `ResultFold` ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 24 | 19 | 3 |
-| `lens.patch` — patch a nested part | 48 | 48 | 48 | 10 | 23 | 10 |
+| `transformFocus` — reprice ×2 and retype 64 list elements | 5,464 | 6,144 | 3,072 | 1527 | 1442 | 3719 |
+| `transformFocusPartial` — same, validating | 5,592 | 6,256 | 4,624 | 1607 | 1685 | 972 |
+| … half the elements invalid | 7,317 | 10,616 | 3,088 | 1724 | 2421 | 644 |
+| `transformFocus` — write a view through a derived lens | 48 | 48 | 48 | 12 | 10 | 10 |
+| `transformImage` — edit a field, return the view | 96 | 152 | 96 | 28 | 38 | 24 |
+| `transformImagePartial` — edit, then validate | 120 | 96 | 64 | 30 | 24 | 12 |
+| … the edit fails validation | 184 | 144 | 0 | 48 | 34 | 1 |
+| `Chimney.getter` ∘ two lenses — read a field | 48 | 0 | 0 | 17 | 1 | 1 |
+| `Chimney.prism` ∘ lens — edit a DTO field | 152 | 128 | 72 | 39 | 37 | 20 |
+| … the DTO doesn't decode | 160 | 72 | 0 | 40 | 18 | 1 |
+| `ResultFold` ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 25 | 19 | 3 |
+| … the DTO doesn't decode | 160 | 160 | 16 | 37 | 39 | 3 |
+| `lens.patch` — patch a nested part | 48 | 48 | 48 | 11 | 10 | 9 |
 
-One local run (JDK 25, `-i 5 -wi 3 -f 1 -prof gc`) on a shared 4-vCPU
+One run per row (JDK 25, `-i 5 -wi 3 -f 3 -prof gc`) on a shared 4-vCPU
 machine. As on the [benchmarks page](../benchmarks.md), allocation
 (B/op) is the figure to compare; nanoseconds only show the direction,
-and several of these error bars are as wide as the number itself.
+and several error bars are as wide as the number itself.
 
 What the numbers say:
 
-- **`transformImage` allocates no more than the hand-written code**,
-  and less than chimney's DSL. `transformFocus` and
-  `transformImagePartial` cost a little more than chimney alone.
-- **`transformFocusPartial` costs about 3.5× chimney's allocation**
-  (and is about 3× slower). It runs through the optic's generic
-  `modifyA` with an error-accumulating `partial.Result` applicative,
-  which allocates per element. For a plain collection, chimney's own
-  `transformIntoPartial` is the faster route; the eo version earns its
-  cost where chimney cannot reach, such as foci picked out by a prism
-  or a nested traversal.
-- **Convert-then-read allocates where chimney alone does not.** The JIT
-  removes chimney's whole conversion when only one field is read, but
-  the eo chain's lenses build intermediate tuples (80 B). Reading a
-  field this way is a convenience, not a fast path.
+- **`transformFocus` / `transformFocusPartial` allocate less than
+  chimney alone.** They reprice and retype in one pass where chimney
+  alone needs a `map` and then a transform; on failing input the
+  partial version allocates about 30% less than chimney's own error
+  collection.
+- **`transformImage` matches hand-written code; `transformImagePartial`
+  costs 24–40 B more than chimney alone** (the generic optic's carrier
+  value around the edit, against chimney's plain `copy` then
+  transform).
+- **Editing a DTO through a `Codec` decodes once.** The prism ∘ lens
+  composition keeps the decoded value for the write instead of
+  decoding again (240 → 152 B, 59 → 39 ns against the module's first
+  version).
+- **On a miss the gap to chimney is chimney's own errors.** Every
+  object allocated on the "DTO doesn't decode" rows is a chimney error
+  value. Called directly, the JIT can remove part of that error chain;
+  one call deeper, through the optic, it doesn't.
+- **Convert-then-read still allocates the converted value.** The lenses
+  now read directly (80 → 48 B), and the remaining 48 B is chimney's
+  `UserView` + `AddressView`. The JIT removes those when chimney is
+  called alone and only one field is read, but not through the optic
+  chain. Reading a field this way is a convenience, not a fast path.
 
 Reproduce with:
 

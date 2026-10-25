@@ -103,7 +103,7 @@ final class BijectionIso[S, T, A, B](
         inner.getOrModify(get(s)) match
           case Left(b)      => Left(reverseGet(b))
           case r @ Right(_) => r.widenLeft[T],
-      modify = f => s => reverseGet(inner.modify(f)(get(s))),
+      modify = (s, f) => reverseGet(inner.modifyAt(get(s), f)),
       to = s =>
         inner.to(get(s)) match
           case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, inner.M)](reverseGet(mi.fst))

@@ -186,11 +186,10 @@ final class MendTearPrism[S, T, A, B](
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
     Optional.fused[S, T, C, D, A](
       getOrModify = s => tear(s).map(inner.get),
-      modify = f =>
-        s =>
-          tear(s) match
-            case Right(a) => mend(inner.enplace(a, f(inner.get(a))))
-            case Left(t)  => t,
+      modify = (s, f) =>
+        tear(s) match
+          case Right(a) => mend(inner.enplace(a, f(inner.get(a))))
+          case Left(t)  => t,
       to = s =>
         tear(s) match
           case Right(a) => new Affine.Hit[(T, A), C](a, inner.get(a))
@@ -206,11 +205,10 @@ final class MendTearPrism[S, T, A, B](
   def andThen[C, D, XI](inner: SplitCombineLens[A, B, C, D, XI]): Optional[S, T, C, D] =
     Optional.fused[S, T, C, D, XI](
       getOrModify = s => tear(s).map(inner.get),
-      modify = f =>
-        s =>
-          tear(s) match
-            case Right(a) => mend(inner.modify(f)(a))
-            case Left(t)  => t,
+      modify = (s, f) =>
+        tear(s) match
+          case Right(a) => mend(inner.modify(f)(a))
+          case Left(t)  => t,
       to = s =>
         tear(s) match
           case Right(a) =>
@@ -230,11 +228,10 @@ final class MendTearPrism[S, T, A, B](
             inner.getOrModify(a) match
               case Left(b)      => Left(mend(b))
               case r @ Right(_) => r.widenLeft[T],
-      modify = f =>
-        s =>
-          tear(s) match
-            case Right(a) => mend(inner.modify(f)(a))
-            case Left(t)  => t,
+      modify = (s, f) =>
+        tear(s) match
+          case Right(a) => mend(inner.modifyAt(a, f))
+          case Left(t)  => t,
       to = s =>
         tear(s) match
           case Left(t)  => new Affine.Miss[(T, inner.M)](t)
@@ -346,11 +343,10 @@ final class PickMendPrism[S, A, B](
         pick(s) match
           case Some(a) => Right(inner.get(a))
           case None    => Left(s),
-      modify = f =>
-        s =>
-          pick(s) match
-            case Some(a) => mend(inner.enplace(a, f(inner.get(a))))
-            case None    => s,
+      modify = (s, f) =>
+        pick(s) match
+          case Some(a) => mend(inner.enplace(a, f(inner.get(a))))
+          case None    => s,
       to = s =>
         pick(s) match
           case Some(a) => new Affine.Hit[(S, A), C](a, inner.get(a))
@@ -368,11 +364,10 @@ final class PickMendPrism[S, A, B](
         pick(s) match
           case Some(a) => Right(inner.get(a))
           case None    => Left(s),
-      modify = f =>
-        s =>
-          pick(s) match
-            case Some(a) => mend(inner.modify(f)(a))
-            case None    => s,
+      modify = (s, f) =>
+        pick(s) match
+          case Some(a) => mend(inner.modify(f)(a))
+          case None    => s,
       to = s =>
         pick(s) match
           case Some(a) =>

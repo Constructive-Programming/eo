@@ -50,7 +50,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `getOption`, `foldMap`) build nothing a write would need. `Optional.apply(getOrModify,
   reverseGet)` keeps its meaning (`M = S`). Breaking: `new Optional(...)` no longer compiles —
   use `Optional.apply` — and `getOrModify` / `reverseGet` are methods, not constructor `val`s
-  (calls are unchanged; binary-incompatible).
+  (calls are unchanged; binary-incompatible). `modify` / `replace` are now `inline`, forwarding to
+  a new two-argument `modifyAt(s, f)`, so `optional.modify(f)(s)` allocates no closure (24 B less
+  per `modify` in `OptionalBench`).
 - **core: read-only compositions read through an optic's direct `get` / `getOption`.**
   `Getter` / `AffineFold` ∘ a lens (and the other `ReadCompose` collapses) used to read the
   lens through its carrier `to(s)`, building and discarding the `(complement, focus)` tuple a

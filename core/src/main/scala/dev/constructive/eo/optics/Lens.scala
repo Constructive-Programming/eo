@@ -155,7 +155,7 @@ class GetReplaceLens[S, T, A, B](
         inner.tear(get(s)) match
           case Left(b)      => Left(enplace(s, b))
           case r @ Right(_) => r.widenLeft[T],
-      modify = f => s => enplace(s, inner.modify(f)(get(s))),
+      modify = (s, f) => enplace(s, inner.modify(f)(get(s))),
       to = s =>
         inner.tear(get(s)) match
           case Left(b)  => new Affine.Miss[(T, S)](enplace(s, b))
@@ -175,12 +175,11 @@ class GetReplaceLens[S, T, A, B](
         inner.pick(a) match
           case Some(c) => Right(c)
           case None    => Left(enplace(s, ev(a))),
-      modify = f =>
-        s =>
-          val a = get(s)
-          inner.pick(a) match
-            case Some(c) => enplace(s, ev(inner.mend(f(c))))
-            case None    => enplace(s, ev(a)),
+      modify = (s, f) =>
+        val a = get(s)
+        inner.pick(a) match
+          case Some(c) => enplace(s, ev(inner.mend(f(c))))
+          case None    => enplace(s, ev(a)),
       to = s =>
         val a = get(s)
         inner.pick(a) match
@@ -205,7 +204,7 @@ class GetReplaceLens[S, T, A, B](
         inner.getOrModify(get(s)) match
           case Left(b)      => Left(enplace(s, b))
           case r @ Right(_) => r.widenLeft[T],
-      modify = f => s => enplace(s, inner.modify(f)(get(s))),
+      modify = (s, f) => enplace(s, inner.modifyAt(get(s), f)),
       to = s =>
         inner.to(get(s)) match
           case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, (S, inner.M))](enplace(s, mi.fst))
