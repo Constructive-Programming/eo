@@ -1164,6 +1164,8 @@ lazy val benchmarks: Project = project
     // only), so kyo's inline `.eval` machinery expands fine here.
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    // ChimneyBench: cats-eo-chimney vs plain chimney vs hand-written transforms.
+    LocalProject("chimneyIntegration"),
   )
   .settings(commonSettings *)
   .settings(

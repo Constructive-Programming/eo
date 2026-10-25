@@ -56,9 +56,10 @@ MODULE_BENCHES = {
         "OrderJsoniterBench",
     ],
     "schemes/": ["SchemesBench"],
-    "generics/": ["GenericsBench"],
+    "generics/": ["GenericsBench", "ChimneyBench"],
     "zio/": ["ZioDiBench"],
     "kyo/": ["KyoDiBench"],
+    "chimney/": ["ChimneyBench"],
 }
 
 FULL_TRIGGERS = ("core/", "benchmarks/", "build.sbt", "project/")
