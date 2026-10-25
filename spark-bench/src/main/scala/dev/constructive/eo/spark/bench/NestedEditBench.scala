@@ -1,14 +1,12 @@
 package dev.constructive.eo.spark
 package bench
 
+import dev.constructive.eo.CanModify
 import java.util.concurrent.TimeUnit
-
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.functions.{col, concat, hash, lit, struct, sum, upper}
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.openjdk.jmh.annotations.*
-
-import dev.constructive.eo.CanModify
 
 case class BAddress(street: String, zip: Int)
 case class BPerson(name: String, address: BAddress)
@@ -77,7 +75,10 @@ class NestedEditBench:
   @Benchmark
   def handWritten(): Long =
     checksum(
-      people.select(col("name"), col("address").withField("street", upper(col("address.street"))).as("address"))
+      people.select(
+        col("name"),
+        col("address").withField("street", upper(col("address.street"))).as("address")
+      )
     )
 
   @Benchmark
