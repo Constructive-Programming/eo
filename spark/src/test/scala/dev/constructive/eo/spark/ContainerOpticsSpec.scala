@@ -135,3 +135,50 @@ class ContainerOpticsSpec extends Specification:
         .and(ds.foldAll[Int, Long](n => Col(sum(n.column))) === orders.map(_.items.size.toLong).sum)
     }
   }
+
+case class Leaves(
+    b: Byte,
+    s: Short,
+    f: Float,
+    bin: List[Byte],
+    big: BigInt,
+    dec: BigDecimal,
+    day: java.time.LocalDate,
+    at: java.time.Instant,
+)
+
+class LeafEncodersSpec extends Specification:
+
+  import SparkEncoders.given
+
+  private given AgnosticEncoder[Leaves] = SparkEncoders.derived
+
+  private lazy val spark: SparkSession = Sessions.connect
+
+  "the leaf encoders" should {
+    "round-trip every covered leaf type through Spark Connect" >> {
+      val values = List(
+        Leaves(
+          1.toByte,
+          2.toShort,
+          1.5f,
+          List[Byte](1, 2, 3),
+          BigInt("123456789012345678901234567890"),
+          BigDecimal("12345.678901234567890123"),
+          java.time.LocalDate.of(2026, 10, 25),
+          java.time.Instant.parse("2026-10-25T12:00:00.123456Z"),
+        ),
+        Leaves(
+          (-1).toByte,
+          0.toShort,
+          -0.25f,
+          Nil,
+          BigInt(0),
+          BigDecimal("0.5"),
+          java.time.LocalDate.of(1970, 1, 1),
+          java.time.Instant.EPOCH,
+        ),
+      )
+      spark.createDataset(values).collect().toList === values
+    }
+  }

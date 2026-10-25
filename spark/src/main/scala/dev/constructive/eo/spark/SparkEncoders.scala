@@ -17,8 +17,10 @@ import org.apache.spark.sql.types.Metadata
   * Connect share — in place of Spark's `TypeTag`-based `Encoders.product`, which Scala 3 cannot
   * call. An `AgnosticEncoder[T]` IS an `org.apache.spark.sql.Encoder[T]`.
   *
-  * Covered: primitives, `String`, `Option`, `List` / `Vector` / `Seq`, `Map`, and top-level case
-  * classes (no outer pointer).
+  * Covered: primitives, `String`, `Array[Byte]`, `BigInt` / `BigDecimal`, `java.time` `LocalDate` /
+  * `Instant` / `LocalDateTime`, `Option`, `List` / `Vector` / `Seq`, `Map`, and top-level case
+  * classes (no outer pointer). Sum types (enums / sealed traits) have no Spark struct encoding and
+  * are deliberately not derived.
   *
   * A case class is NOT a Spark `ProductEncoder`: decoding one makes the Connect client look its
   * constructor up through `ScalaReflection`, whose initialiser builds the Scala 2
@@ -38,6 +40,18 @@ object SparkEncoders:
   given AgnosticEncoder[Long] = PrimitiveLongEncoder
   given AgnosticEncoder[Double] = PrimitiveDoubleEncoder
   given AgnosticEncoder[String] = StringEncoder
+  given AgnosticEncoder[Byte] = PrimitiveByteEncoder
+  given AgnosticEncoder[Short] = PrimitiveShortEncoder
+  given AgnosticEncoder[Float] = PrimitiveFloatEncoder
+  given AgnosticEncoder[Array[Byte]] = BinaryEncoder
+  given AgnosticEncoder[BigInt] = ScalaBigIntEncoder
+
+  /** `DECIMAL(38, 18)`, Spark's default for Scala `BigDecimal`. */
+  given AgnosticEncoder[BigDecimal] = DEFAULT_SCALA_DECIMAL_ENCODER
+
+  given AgnosticEncoder[java.time.LocalDate] = LocalDateEncoder(false)
+  given AgnosticEncoder[java.time.Instant] = InstantEncoder(false)
+  given AgnosticEncoder[java.time.LocalDateTime] = LocalDateTimeEncoder
 
   given [A](using e: AgnosticEncoder[A]): AgnosticEncoder[Option[A]] = OptionEncoder(e)
 

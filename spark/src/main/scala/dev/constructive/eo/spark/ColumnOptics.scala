@@ -222,3 +222,20 @@ object ColumnOptics:
     */
   def variantGet[A](path: String, targetType: String): Getter[Col[VariantVal], Col[A]] =
     Getter[Col[VariantVal], Col[A]](v => Col(functions.try_variant_get(v.column, path, targetType)))
+
+  // ---- Selector paths ---------------------------------------------------------------------------
+
+  /** The optic for a selector path, SYMBOLIC and EAGER at once — see [[ColumnPath]].
+    *
+    * {{{
+    * val street = ColumnOptics.path[Person](_.address.street)  // ColumnPath.Total: Lens + Lens
+    * val zip    = ColumnOptics.path[Person](_.work.get.zip)    // ColumnPath.Partial: Optional + Optional
+    * ds.editRows(street.symbolic.modify(s => Col(upper(s.column))))
+    * people.map(street.eager.modify(_.toUpperCase))
+    * }}}
+    *
+    * Every hop must be a case field of its receiver, or `.get` on an `Option` field (the nullable
+    * step); anything else is a compile error.
+    */
+  transparent inline def path[S](inline selector: S => Any): ColumnPath[S, ?] =
+    ${ ColumnPathMacro.impl[S]('selector) }
