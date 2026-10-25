@@ -116,6 +116,19 @@ class ChimneyLawsSpec extends Specification with Discipline:
   // A patch is a write with no read, so the Modify laws (which need `A = B`) don't apply; these
   // are the write-only laws that do: replace is idempotent, and the stored optic agrees with the
   // one-off `.patch`.
+  // transformImage only post-composes the write side, so on hits and misses alike it must equal
+  // "write with the original optic, then transform".
+  "transformImage" should {
+    val owner = Chimney.prism[Account, AccountDto].andThen(lens[Account](_.owner))
+    val toRecord = summon[io.scalaland.chimney.Transformer[AccountDto, AccountRecord]]
+
+    "be the original write followed by the transformer" in forAll {
+      (dto: AccountDto, f: String => String) =>
+        owner.transformImage[AccountRecord].modify(f)(dto) ==
+          toRecord.transform(owner.modify(f)(dto))
+    }
+  }
+
   "patch" should {
     val customer = lens[Order](_.customer)
     val contact = customer.andThen(Chimney.patching[Customer, ContactPatch])

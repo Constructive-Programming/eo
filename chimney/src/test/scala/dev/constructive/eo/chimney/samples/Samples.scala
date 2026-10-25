@@ -64,3 +64,7 @@ final case class Line[P](sku: String, price: P)
 enum Shape:
   case Circle(radius: Double)
   case Square(side: Double)
+
+// --- transformImage: what a write hands back, in another shape --------------------------------
+
+final case class AccountRecord(balance: Long, owner: String)

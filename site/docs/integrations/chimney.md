@@ -7,7 +7,7 @@ different jobs. chimney turns a whole `S` into a `T`; eo points at one
 part of a structure and reads or writes it. This module turns chimney's
 derived values into eo optics, so a chain can convert first and then
 keep going into fields of the target. It also lets eo run chimney
-conversions and patches at a focus.
+conversions and patches at a focus, or on what an optic writes back.
 
 ```scala
 libraryDependencies += "dev.constructive" %% "cats-eo-chimney" % "@VERSION@"
@@ -181,6 +181,34 @@ prices.transformFocusPartial(List(RawPrice(-1), RawPrice(5), RawPrice(-2)))
 
 Each error's path is relative to its focus, because chimney does not
 know where the optic was pointing.
+
+## Change the result type
+
+`optic.transformImage[U]` works on the other side of the optic. It
+runs chimney's `Transformer[T, U]` on whatever the optic writes back,
+so every write returns a `U` instead of a `T`. Reads are unchanged.
+Here a lens edits a `User` and returns the public view:
+
+```scala mdoc
+lens[User](_.name).transformImage[UserView].modify(_.toUpperCase)(ada)
+```
+
+A prism or optional that misses still returns a `U`: the unchanged
+value, transformed. `transformImagePartial[U]` does the same with a
+`PartialTransformer[T, U]`, so a write returns the `U` or the errors
+from converting into it — edit the DTO, then validate it into the
+domain:
+
+```scala mdoc
+val balance = lens[AccountDto](_.balance).transformImagePartial[Account]
+
+balance.modify(_ + 1)(AccountDto("ada", 120L)).asOption
+balance.modify(_ - 200)(AccountDto("ada", 120L)).asErrorPathMessageStrings.toList
+```
+
+Both return a generic `Optic`, so `.modify`, `.replace` and
+`.reverseGet` keep working, but the concrete optic's fused fast paths
+are not carried over.
 
 ## Notes
 

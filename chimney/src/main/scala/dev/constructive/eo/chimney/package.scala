@@ -88,6 +88,29 @@ extension [S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using
   inline def transformFocusPartial(using pt: PartialTransformer[A, B]): S => partial.Result[T] =
     o.modifyA(a => pt.transform(a))(using resultApplicative)
 
+extension [S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])
+
+  /** Change the result type: run chimney's `Transformer[T, U]` on whatever the optic writes back,
+    * turning its `S => T` side into `S => U` — the outer counterpart of [[transformFocus]]. Every
+    * write lands in `U`: `lens[User](_.name).transformImage[UserView].modify(_.trim)(user)` edits a
+    * field and hands back the view. A miss (Prism / Optional) still produces a `U` — the untouched
+    * `T`, transformed. The focus side (`S`, `A`, `B`) is unchanged, so reads are the original
+    * optic's. chimney derives the `Transformer` when none is in scope.
+    *
+    * Core's `Optic.outerProfunctor.rmap` with a chimney transformer: the result is a generic
+    * `Optic` (the concrete class's fused overloads don't survive the remap).
+    */
+  def transformImage[U](using t: Transformer[T, U]): Optic[S, U, A, B, F] =
+    Optic.outerProfunctor[A, B, F].rmap(o)(t.transform)
+
+  /** [[transformImage]] for a `PartialTransformer[T, U]`: every write hands back the `U` or the
+    * errors of turning the written `T` into one — "edit the DTO, then validate it into the domain".
+    */
+  def transformImagePartial[U](using
+      pt: PartialTransformer[T, U]
+  ): Optic[S, partial.Result[U], A, B, F] =
+    Optic.outerProfunctor[A, B, F].rmap(o)(pt.transform(_))
+
 /** Error-accumulating `Applicative[partial.Result]` for [[transformFocusPartial]]. Private — the
   * public cats instance belongs to chimney-cats; this one only drives `modifyA`.
   */

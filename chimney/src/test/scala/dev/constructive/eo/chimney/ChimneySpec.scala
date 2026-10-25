@@ -150,3 +150,31 @@ class ChimneySpec extends Specification:
       )
     }
   }
+
+  "transformImage / transformImagePartial" should {
+    "hand a write back as the target type" in {
+      lens[User](_.name).transformImage[UserView].modify(_.toUpperCase)(user) ===
+        UserView("ADA", AddressView("London", "1 Analytical St"))
+    }
+
+    "keep reads on the original optic" in {
+      lens[User](_.name).transformImage[UserView].get(user) === "Ada"
+    }
+
+    "transform a prism's miss too" in {
+      val owner = Chimney
+        .prism[Account, AccountDto]
+        .andThen(lens[Account](_.owner))
+        .transformImage[AccountRecord]
+      (owner.modify(_.toUpperCase)(good) === AccountRecord(120L, "ADA")).and(
+        owner.modify(_.toUpperCase)(bad) === AccountRecord(-5L, "bob")
+      )
+    }
+
+    "validate the written value with a PartialTransformer" in {
+      val balance = lens[AccountDto](_.balance).transformImagePartial[Account]
+      (balance.modify(_ + 1)(good).asOption.map(_.balance.value) === Some(121L)).and(
+        paths(balance.modify(_ - 200)(good)) === List("balance" -> "negative amount: -80")
+      )
+    }
+  }
