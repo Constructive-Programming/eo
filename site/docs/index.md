@@ -110,6 +110,9 @@ library's core habit: [Capabilities](capabilities.md).
   `Array[Byte]` JSON via jsoniter-scala codecs. Read at
   ~50 ns/op (16× eo-circe), write via splice at ~100 ns/op (14×
   eo-circe).
+- [Iron integration](integrations/iron.md) — `IronPrism`: every
+  runtime-checked Iron refinement `A :| C` as a lawful Prism, for
+  plain constraints, `RefinedType` newtypes, and whole containers.
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.

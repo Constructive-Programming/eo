@@ -512,6 +512,10 @@ val kyoBuildActive: Boolean =
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
+// Iron refined types. A runtime-checked refinement `A :| C` is a lawful Prism `A ⇀ A :| C`, so
+// the integration module ships constructors only — no carrier, no givens.
+lazy val iron = "io.github.iltotore" %% "iron" % "3.4.1"
+
 lazy val commonSettings = Seq(
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
   // from the current git tag (`tlBaseVersion` above gives the
@@ -596,6 +600,7 @@ lazy val root: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      ironIntegration,
       zioIntegration,
       schemes,
       schemesLaws,
@@ -843,6 +848,26 @@ lazy val jsoniterIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
+// Iron integration: every runtime-checkable refinement (`RuntimeConstraint[A, C]`) becomes a lawful
+// `Prism[A, A :| C]` — `getOption` tests the constraint, `reverseGet` forgets it. Same for Iron's
+// `RefinedType` newtypes (`IronPrism.refined[T]`) and whole containers (`IronPrism.all`). Built on
+// the stock `MendTearPrism`, so every fused composition (Lens → Optional, Traversal → filtering
+// Traversal) comes for free.
+lazy val ironIntegration: Project = project
+  .in(file("iron"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-iron",
+    libraryDependencies += cats,
+    libraryDependencies += iron,
+    libraryDependencies += discipline % Test,
+  )
+
 // ZIO DI integration: optics into `ZEnvironment` (each tagged service
 // is a lawful Lens slot), capability-driven focus ops on `Ref`, and
 // `ZLayer` projection (derive a sub-service layer from an aggregate
@@ -922,6 +947,7 @@ lazy val docs: Project = project
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
+    LocalProject("ironIntegration"),
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
     LocalProject("laws"),
@@ -1114,6 +1140,7 @@ lazy val unidocs: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      ironIntegration,
     ),
   )
 
@@ -1349,6 +1376,7 @@ addCommandAlias(
     "project circeIntegration; stryker; " +
     "project avroIntegration; stryker; " +
     "project jsoniterIntegration; stryker; " +
+    "project ironIntegration; stryker; " +
     "project zioIntegration; stryker; " +
     "project kyoIntegration; stryker; " +
     "project root",
