@@ -113,6 +113,12 @@ library's core habit: [Capabilities](capabilities.md).
 - [Iron integration](integrations/iron.md) — `IronPrism`: every
   runtime-checked Iron refinement `A :| C` as a lawful Prism, for
   plain constraints, `RefinedType` newtypes, and whole containers.
+- [chimney integration](integrations/chimney.md) — chimney's derived
+  conversions as optics: convert with a `Transformer` / `Iso` /
+  `Codec`, then keep going into the target's fields; a fold into
+  chimney's result keeps its errors; `.patch` runs chimney at an optic's focus,
+  and `.transformFocus` / `.transformImage` build optics written with,
+  or returning, another type.
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.

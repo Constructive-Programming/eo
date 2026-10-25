@@ -11,6 +11,17 @@ parameterised over a carrier `F[_, _]` unifies every optic family;
 cross-family composition goes through `Composer[F, G]` bridges instead
 of N&sup2; hand-written `.andThen` overloads.
 
+## Design principle: no unnecessary work
+
+An optic should cost no more than the code you would write by hand.
+Every operation should do the least work its result needs: a read
+shouldn't build what only a write needs, a composed optic shouldn't
+repeat a step, and a miss should stop early instead of computing
+what it then throws away. Where the generic machinery does more, the
+concrete optic classes carry fused paths that don't, and the
+benchmarks (allocation per call included) hold them to it. A path
+that does extra work is treated as a bug to fix.
+
 ## Install
 
 ```scala
@@ -26,6 +37,7 @@ libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.18.0" // JDK 25
+libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "0.18.0"
 ```
 
 Requires Scala 3.8.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
@@ -128,6 +140,13 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   kyo-schema bridge: `Focus` → optics, codec byte-face prisms, and
   optics over the untyped `Structure.Value` tree (`cats-eo-kyo`,
   JDK 25).
+- [chimney integration](https://eo.constructive.dev/integrations/chimney.html) —
+  chimney's derived conversions as optics: `Transformer` → `Getter`,
+  `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → a fold into
+  chimney's result (a read that keeps chimney's errors), `Patcher` → write-only
+  `Modify`, plus `.patch` to run chimney at an optic's focus and
+  `.transformFocus` / `.transformImage` to build optics written with,
+  or returning, another type (`cats-eo-chimney`).
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do

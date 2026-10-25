@@ -80,6 +80,7 @@ MUTATION_MODULES = [
     ("jsoniter", "jsoniter", "Mutates clean end to end (0 compile errors): the old `PathParser.parseField` 64 KB method-size caveat no longer reproduces."),
     ("iron", "iron", ""),
     ("zio", "zio", ""),
+    ("chimney", "chimney", ""),
     ("kyo", "kyo", "The no-coverage block is all `RecordIsoMacro`: quoted-macro code that expands at compile time, so like `generics` its mutants leave no runtime footprint. The covered score is the one that reads the hand-written optics."),
 ]
 

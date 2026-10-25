@@ -511,6 +511,9 @@ val kyoBuildActive: Boolean =
     .get("java.specification.version")
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
+// chimney 2.x is built on hearth (like eo-generics) and published for Scala 3.9.0.
+lazy val chimneyCore = "io.scalaland" %% "chimney" % "2.1.0"
+
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
@@ -519,6 +522,13 @@ lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 lazy val iron = "io.github.iltotore" %% "iron" % "3.4.1"
 
 lazy val commonSettings = Seq(
+  // Main code is checked against `.scalafix-main.conf` (the shared rules + main-only bans such as
+  // `.modify(identity)`); Test scopes stay on `.scalafix.conf`. `laws` / `schemesLaws` opt back out:
+  // their `src/main` is law code, where `modify(identity)` is the identity law.
+  Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix-main.conf"),
+  // Explicit, not inherited: `Test` extends `Compile`, so leaving it unset would hand specs the
+  // main-only bans.
+  Test / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
   // from the current git tag (`tlBaseVersion` above gives the
   // untagged snapshot prefix).
@@ -604,6 +614,7 @@ lazy val root: Project = project
       jsoniterIntegration,
       ironIntegration,
       zioIntegration,
+      chimneyIntegration,
       schemes,
       schemesLaws,
     ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
@@ -634,6 +645,7 @@ lazy val laws: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-laws",
+    Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
@@ -699,6 +711,7 @@ lazy val schemesLaws: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-schemes-laws",
+    Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
@@ -899,6 +912,27 @@ lazy val zioIntegration: Project = project
     libraryDependencies += catsLaws % Test,
   )
 
+// chimney integration: chimney's derived transformations as eo optics — `Transformer` → Getter,
+// chimney `Iso` → Iso, `Codec` → Prism, `PartialTransformer` → `ResultFold` (an affine fold whose
+// miss keeps chimney's errors), `Patcher` → write-only Modify — plus `.patch` / `.transformFocus`
+// running chimney at an eo optic's focus. eo-generics is Test-only: callers compose the bridges
+// with whichever eo optics they like, derived or hand-written.
+lazy val chimneyIntegration: Project = project
+  .in(file("chimney"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics") % Test,
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-chimney",
+    libraryDependencies += cats,
+    libraryDependencies += chimneyCore,
+    libraryDependencies += discipline % Test,
+  )
+
 // Kyo DI integration, mirror of `zioIntegration` at kyo-prelude's
 // seams: `TypeMap` slots are lawful lenses (the ZEnvironment analog),
 // `Env.focus` routes reads through `CanGet`, `Var` gets the same
@@ -954,6 +988,7 @@ lazy val docs: Project = project
     LocalProject("ironIntegration"),
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    LocalProject("chimneyIntegration"),
     LocalProject("laws"),
     LocalProject("schemes"),
   )
@@ -1148,6 +1183,7 @@ lazy val unidocs: Project = project
       avroIntegration,
       jsoniterIntegration,
       ironIntegration,
+      chimneyIntegration,
     ),
   )
 
@@ -1171,6 +1207,8 @@ lazy val benchmarks: Project = project
     // only), so kyo's inline `.eval` machinery expands fine here.
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    // ChimneyBench: cats-eo-chimney vs plain chimney vs hand-written transforms.
+    LocalProject("chimneyIntegration"),
   )
   .settings(commonSettings *)
   .settings(
@@ -1388,5 +1426,6 @@ addCommandAlias(
     "project ironIntegration; stryker; " +
     "project zioIntegration; stryker; " +
     "project kyoIntegration; stryker; " +
+    "project chimneyIntegration; stryker; " +
     "project root",
 )

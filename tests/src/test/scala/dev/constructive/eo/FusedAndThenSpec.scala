@@ -12,10 +12,13 @@ import data.PSVec
 import optics.{
   BijectionIso,
   GetReplaceLens,
+  Getter,
   Lens,
   MendTearPrism,
+  Optic,
   Optional,
   PickMendPrism,
+  SplitCombineLens,
   Traversal
 }
 
@@ -268,4 +271,110 @@ class FusedAndThenSpec extends Specification:
       .and(agree(headTail, Nil: List[Int])(_.mkString("-"), _ => true))
 
     eachOk.and(chainOk).and(scOk).and(nestedOk).and(selfOk)
+  }
+
+  // covers: MendTearPrism / PickMendPrism .andThen(SplitCombineLens) and PickMendPrism
+  // .andThen(GetReplaceLens) land in the concrete Optional (hit read / hit write / miss
+  // pass-through), and read-only collapses through a lens read its direct `get` — the lens below
+  // fails loudly if its split ever runs on a read.
+  "Prism ∘ lens fusions, and read collapses that skip the lens split" >> {
+    val pairLens: SplitCombineLens[(Int, String), (Int, String), Int, Int, String] =
+      Lens.first[Int, String]
+
+    val mt: Optional[Int, Int, Int, Int] =
+      new MendTearPrism[Int, Int, (Int, String), (Int, String)](
+        n => if n >= 0 then Right((n, "t")) else Left(n),
+        _._1,
+      ).andThen(pairLens)
+
+    val pm: Optional[Int, Int, Int, Int] =
+      new PickMendPrism[Int, (Int, String), (Int, String)](
+        n => Option.when(n >= 0)((n, "t")),
+        _._1,
+      ).andThen(pairLens)
+
+    val pmGrl: Optional[Inner, Inner, Int, Int] =
+      new PickMendPrism[Inner, Inner, Inner](i => Option.when(i.n >= 0)(i), identity)
+        .andThen(innerLens)
+
+    val fusedOk = (mt.getOption(4) === Some(4))
+      .and(mt.modify(_ + 1)(4) === 5)
+      .and(mt.modify(_ + 1)(-3) === -3)
+      .and(pm.getOption(-1) === None)
+      .and(pm.modify(_ * 10)(2) === 20)
+      .and(pmGrl.modify(_ + 1)(Inner(1, "a")) === Inner(2, "a"))
+      .and(pmGrl.modify(_ + 1)(Inner(-1, "a")) === Inner(-1, "a"))
+
+    val noSplit: SplitCombineLens[(Int, String), (Int, String), Int, Int, String] =
+      new SplitCombineLens[(Int, String), (Int, String), Int, Int, String](
+        _._1,
+        _ => sys.error("a read-only composite must not split the lens"),
+        (x, n) => (n, x),
+      )
+    val readOk = (Getter[Inner, (Int, String)](i => (i.n, i.tag))
+      .andThen(noSplit)
+      .get(
+        Inner(3, "x")
+      ) === 3).and(
+      optics
+        .AffineFold[Int, (Int, String)](n => Option.when(n > 0)((n, "y")))
+        .andThen(noSplit)
+        .getOption(5) === Some(5)
+    )
+
+    fusedOk.and(readOk)
+  }
+
+  // covers: every fused composition that lands in Optional tears its source ONCE per write —
+  // member `modify` / `replace` AND the generic carrier route (`to` / `from` via the `Optic`
+  // extension) — including a nested Optional chain, which re-tore once per level before.
+  "Fused Optionals tear the source once per write" >> {
+    final class Counter:
+      var n = 0
+      def tick[X](x: X): X = { n += 1; x }
+
+    def tearsPer(build: Counter => Optic[Int, Int, Int, Int, data.Affine])(
+        run: Optic[Int, Int, Int, Int, data.Affine] => Int => Int
+    ): Int =
+      val c = new Counter
+      val o = build(c)
+      run(o)(4)
+      c.n
+
+    def mt(c: Counter): MendTearPrism[Int, Int, Int, Int] =
+      new MendTearPrism[Int, Int, Int, Int](
+        n => c.tick(if n >= 0 then Right(n) else Left(n)),
+        identity
+      )
+    def pm(c: Counter): PickMendPrism[Int, Int, Int] =
+      new PickMendPrism[Int, Int, Int](n => c.tick(Option.when(n >= 0)(n)), identity)
+    def opt(c: Counter): Optional[Int, Int, Int, Int] =
+      Optional[Int, Int, Int, Int](n => c.tick(if n >= 0 then Right(n) else Left(n)), (_, n) => n)
+    val idLens = new GetReplaceLens[Int, Int, Int, Int](identity, (_, n) => n)
+    val pairLens = Lens.first[Int, Unit]
+    val intPair = new BijectionIso[Int, Int, (Int, Unit), (Int, Unit)]((_, ()), _._1)
+    val idIso = new BijectionIso[Int, Int, Int, Int](identity, identity)
+
+    val builds: List[(String, Counter => Optic[Int, Int, Int, Int, data.Affine])] = List(
+      "MendTear ∘ GetReplaceLens" -> (c => mt(c).andThen(idLens)),
+      "MendTear ∘ SplitCombineLens" -> (c => mt(c).andThen(intPair).andThen(pairLens)),
+      "MendTear ∘ Optional" -> (c => mt(c).andThen(opt(new Counter))),
+      "PickMend ∘ GetReplaceLens" -> (c => pm(c).andThen(idLens)),
+      "PickMend ∘ SplitCombineLens" -> (c => pm(c).andThen(intPair).andThen(pairLens)),
+      "Optional ∘ Optional ∘ Optional" -> (c =>
+        opt(c).andThen(opt(new Counter)).andThen(opt(new Counter))
+      ),
+      "Optional ∘ GetReplaceLens" -> (c => opt(c).andThen(idLens)),
+      "Optional ∘ Iso" -> (c => opt(c).andThen(idIso)),
+      "Lens ∘ Optional" -> (c => idLens.andThen(opt(c))),
+      "Iso ∘ Optional" -> (c => idIso.andThen(opt(c))),
+    )
+
+    val counts = builds.map { (name, b) =>
+      val member = tearsPer(b)(o => o.asInstanceOf[Optional[Int, Int, Int, Int]].modify(_ + 1))
+      val replace = tearsPer(b)(o => o.asInstanceOf[Optional[Int, Int, Int, Int]].replace(9))
+      val generic = tearsPer(b)(o => o.modify(_ + 1))
+      name -> (member, replace, generic)
+    }
+    counts must contain(allOf(counts.map((n, _) => n -> (1, 1, 1))*))
   }

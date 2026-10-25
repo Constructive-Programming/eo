@@ -19,6 +19,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dev.constructive.eo.iron.prism`) builds the same Prism from a `RuntimeConstraint[A, C]` or an
   Iron `Constraint[A, C]` instance, and from a `RefinedType` / `RefinedSubtype` companion
   (`Age.prism` = `IronPrism.refined[Age]`). Additive.
+- **`cats-eo-chimney`: chimney integration module.** chimney 2.1.0's derived conversions become
+  eo optics, so a chain can convert and then keep navigating with eo-generics' lenses:
+  `Chimney.getter` (`Transformer` → `Getter`), `Chimney.iso` (chimney `Iso` → eo `Iso`),
+  `Chimney.prism` (`Codec[Domain, Dto]` → a prism from `Dto` to `Domain`), `Chimney.resultFold`
+  (`PartialTransformer` → a core `ForgetFold[S, PartialResult, T]`, a fold into chimney's
+  result that keeps its `partial.Result.Errors` through single-focus composition), and
+  `Chimney.patching`
+  (`Patcher[A, P]` → `Modify[A, A, Unit, P]`), each with a `.toX` extension for hand-configured
+  chimney values. The other direction runs chimney at an eo focus: `optic.patch(p)`,
+  `optic.transformFocus[C]` / `transformFocusPartial[C]` (a `Transformer[C, B]` /
+  `PartialTransformer[C, B]` on the write side: an optic written with a `C` — works on derived
+  monomorphic lenses; errors accumulate across a Traversal's foci), and on the result side `optic.transformImage[U]`
+  / `transformImagePartial[U]` (a `Transformer[T, U]` / `PartialTransformer[T, U]` run on what
+  the optic writes back, so every write returns a `U`).
+  `ChimneyBench` compares every bridge against plain chimney and hand-written code; the results
+  table is on the chimney integration page.
 - **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
   `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
   The carrier remains in `data/Glass.scala`; no compatibility alias is provided.
@@ -30,6 +46,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `X = Unit` aliases; general glasses retain residual context.
   Unit-context composition normalization and generic classical-family
   bridges remain open; no top-level Grate companion is provided.
+
+### Changed
+
+- **core: `Optional` tears its source once per write** (breaking). `Optional` is now a sealed
+  abstract class with an existential intermediate `type M` (`X = (T, M)`): a hit keeps what the
+  read computed, and the write rebuilds from it (`rebuild(m, b)`) instead of re-running the
+  read. Every fused composition that lands in `Optional` — prism ∘ lens, `Optional ∘ Optional /
+  Lens / Prism / Iso`, `Lens ∘ Prism / Optional`, `Iso ∘ Optional` — previously re-ran its
+  outer `getOrModify` (a prism's `tear`, e.g. a decode) inside `reverseGet`, so every `modify` /
+  `replace` read the source twice and a left-nested chain re-read once per level. `modify`,
+  `replace` and the generic `to` / `from` route now tear once; reads (`getOrModify`,
+  `getOption`, `foldMap`) build nothing a write would need. `Optional.apply(getOrModify,
+  reverseGet)` keeps its meaning (`M = S`). Breaking: `new Optional(...)` no longer compiles —
+  use `Optional.apply` — and `getOrModify` / `reverseGet` are methods, not constructor `val`s
+  (calls are unchanged; binary-incompatible). `modify` / `replace` are now `inline`, forwarding to
+  a new two-argument `modifyAt(s, f)`, so `optional.modify(f)(s)` allocates no closure (24 B less
+  per `modify` in `OptionalBench`).
+- **core: a fold stays in its container through a single-focus inner.** `ForgetFold[S, F, A]
+  .andThen` a lens / iso / `Getter` now gives `ForgetFold[S, F, C]` when `F` has a cats `Functor`,
+  and `.andThen` a prism / optional / `AffineFold` does too when `F` has a cats `FunctorFilter`
+  (an inner miss is `F`'s empty). Before, every such composition collapsed to
+  `ForgetFold[S, List, C]`, so a fold into `Option` or `Either[E, *]` lost its container (and an
+  `Either` its `Left`). Source-breaking where a composed fold's type was written out as `List`;
+  multi-focus inners and containers without the instances still give the `List` fold.
+- **core: read-only compositions read through an optic's direct `get` / `getOption`.**
+  `Getter` / `AffineFold` ∘ a lens (and the other `ReadCompose` collapses) used to read the
+  lens through its carrier `to(s)`, building and discarding the `(complement, focus)` tuple a
+  split-combine lens (eo-generics' `lens[S](_.field)`) splits into; every concrete total /
+  partial class now reads directly.
+- **core: fused prism ∘ derived lens.** `MendTearPrism` / `PickMendPrism` `.andThen` a
+  `SplitCombineLens`, and `PickMendPrism.andThen(GetReplaceLens)`, compose into a concrete
+  `Optional` instead of the generic `Morph` route.
+- **chimney: `transformFocus` / `transformFocusPartial` return optics.** Like `transformImage`,
+  they now build a new optic (`Optic[S, T, A, C]` / `Optic[S, partial.Result[T], A, C]`) written
+  with a `C`, instead of running the transformer once as an `S => T`, so an edit made in one
+  type is written in another (`pEach[List, RawPrice, Price].transformFocus[RawPrice]
+  .modify(reprice)` reprices and retypes in one write). The partial one's write is a single pass: every written
+  `C` maps to `B | Null` with the errors collected on the side, and the original optic rebuilds
+  only when nothing failed (instead of `modifyA` with a per-element `partial.Result`
+  applicative), so its write never sees a failed focus.
 
 ### Fixed
 

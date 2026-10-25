@@ -154,7 +154,7 @@ jobs:
           # behind). These are sbt PROJECT IDS, which differ from the directory
           # names the generator globs.
           for p in generics schemes schemesLaws circeIntegration avroIntegration \
-                   jsoniterIntegration ironIntegration zioIntegration kyoIntegration; do
+                   jsoniterIntegration ironIntegration zioIntegration kyoIntegration chimneyIntegration; do
             echo "::group::stryker $p"
             sbt -batch "set ThisBuild/tlFatalWarnings := false" "project $p" stryker \
               || echo "::warning title=stryker::mutation run failed for $p (see log / quality-assurance.md notes)"
