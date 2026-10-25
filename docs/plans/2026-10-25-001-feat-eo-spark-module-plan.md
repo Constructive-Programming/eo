@@ -241,7 +241,16 @@ reflection), so these are `TransformingEncoder`s over the reflection-free `immut
 to one projection with one `transform`. Original scope: The opaque `Col`; struct `Lens`; array/map `Modify`;
 aggregate `Getter`s; `Dataset` row-struct lifting (`focus(o).get/modify/replace`).
 
-**Phase 3 — Partial optics on `Affine`.** Guarded-complement `Optional` / `Prism` / `At` /
+**Phase 3 — Partial optics on `Affine`.** *DONE:* `ColumnOptics.key` / `atKey` (map entries: in-place `transform_values`, At-shaped
+create / update / delete), `index` (array position), `cast` (`try_cast`), `json` (`from_json` /
+`to_json`), `parseJson` (`try_parse_json`) and the read-only `variantGet` (`try_variant_get`; Spark
+has no variant update). All are guarded core `Optional`s / `Getter`s, with no new carrier.
+
+The differential spec caught one real hazard. In its default PERMISSIVE mode `from_json` decodes
+malformed or non-object input to a struct of NULL fields rather than NULL, so a naive presence
+test would rewrite `"not json"` as `{}`. `json` therefore decodes with a reserved corrupt-record
+column, counts a row as present only when that column is NULL, and takes a `StructType` only.
+Original scope: Guarded-complement `Optional` / `Prism` / `At` /
 `Index` (nullable fields, map keys, array indices, `try_cast`, `from_json`, variant reads); static
 misses from schema checks.
 
