@@ -21,13 +21,15 @@ import optics.Traversal
   *     DSL (`into…withFieldComputed`) where a field override is needed;
   *   - `hand*` — what you would write with neither library.
   *
-  * The headline is the transform quartet — `transformFocus` / `transformFocusPartial` (retype every
-  * focus of a 64-element list) and `transformImage` / `transformImagePartial` (edit a field, hand
-  * the result back as another type). The bridge scenarios after it (convert-then-read, edit through
-  * a `Codec`, read with errors, patch a nested part) cover the rest of the module.
+  * The headline is the transform quartet — `transformFocus` / `transformFocusPartial` (optics that
+  * write a different focus type: reprice and retype every focus of a 64-element list in one write,
+  * and write a view through a derived lens) and `transformImage` / `transformImagePartial` (edit a
+  * field, hand the result back as another type). The bridge scenarios after it (convert-then-read,
+  * edit through a `Codec`, read with errors, patch a nested part) cover the rest of the module.
   *
-  * Only the success paths are measured: a failed chimney transformation builds an error chain and
-  * would measure that instead of the transform.
+  * The `…Failing` / `…Miss` rows run the same operations on inputs that fail (half the list
+  * elements invalid; a DTO whose balance doesn't decode), so the cost of collecting chimney's
+  * errors — or of passing a miss through — shows next to the success path.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -40,6 +42,11 @@ class ChimneyBench extends JmhDefaults:
   private val raws: List[ChRawPrice] = List.tabulate(64)(i => ChRawPrice(i.toLong * 100))
   private val user = ChUser("Ada", 36, ChAddress("1 Analytical St", "London"))
   private val dto = ChAccountDto("ada", 120L)
+  private val badDto = ChAccountDto("bob", -5L)
+
+  private val rawsHalfBad: List[ChRawPrice] =
+    List.tabulate(64)(i => ChRawPrice(if i % 2 == 0 then i.toLong * 100 else -1L))
+
   private val order = ChOrder(1L, ChCustomer("Ada", "ada@old", "000"))
   private val contact = ChContactPatch("ada@new", "111")
 
@@ -60,6 +67,7 @@ class ChimneyBench extends JmhDefaults:
       .buildTransformer
 
   private val viewT: Transformer[ChUser, ChUserView] = Transformer.derive
+  private given viewToAddressT: Transformer[ChAddressView, ChAddress] = Transformer.derive
   private val accountPT: PartialTransformer[ChAccountDto, ChAccount] = PartialTransformer.derive
   private val accountT: Transformer[ChAccount, ChAccountDto] = Transformer.derive
   private val contactP: Patcher[ChCustomer, ChContactPatch] = Patcher.derive
@@ -67,8 +75,14 @@ class ChimneyBench extends JmhDefaults:
   // ---- eo-chimney optics, built once -------------------------------------------------------
 
   private val prices = Traversal.pEach[List, ChRawPrice, ChPrice]
-  private val eoTransformFocusFn = prices.transformFocus
-  private val eoTransformFocusPartialFn = prices.transformFocusPartial
+  // transformFocus[ChRawPrice]: the traversal reads ChRawPrice and is written with ChRawPrice too,
+  // which the transformer turns into the ChPrice the traversal stores — reprice and retype in one
+  // write.
+  private val repricePrices = prices.transformFocus[ChRawPrice]
+  private val repricePricesPartial = prices.transformFocusPartial[ChRawPrice]
+  private val reprice: ChRawPrice => ChRawPrice = r => ChRawPrice(r.cents * 2)
+  private val addressAsView = lens[ChUser](_.address).transformFocus[ChAddressView]
+  private val view = ChAddressView("Paris", "2 Rue")
   private val nameToView = lens[ChUser](_.name).transformImage[ChUserView](using viewT)
 
   private val balanceToAccount =
@@ -87,17 +101,27 @@ class ChimneyBench extends JmhDefaults:
 
   // ==== the quartet: transformFocus ==========================================================
 
-  @Benchmark def eoTransformFocus: List[ChPrice] = eoTransformFocusFn(raws)
-  @Benchmark def chimneyTransformFocus: List[ChPrice] = pricesT.transform(raws)
-  @Benchmark def handTransformFocus: List[ChPrice] = raws.map(r => ChPrice(r.cents))
+  @Benchmark def eoTransformFocus: List[ChPrice] = repricePrices.modify(reprice)(raws)
+  @Benchmark def chimneyTransformFocus: List[ChPrice] = pricesT.transform(raws.map(reprice))
+  @Benchmark def handTransformFocus: List[ChPrice] = raws.map(r => ChPrice(r.cents * 2))
+
+  // ==== transformFocus as a write: put a view where a derived lens expects the domain type ====
+
+  @Benchmark def eoTransformFocusWrite: ChUser = addressAsView.replace(view)(user)
+
+  @Benchmark def chimneyTransformFocusWrite: ChUser =
+    user.copy(address = viewToAddressT.transform(view))
+
+  @Benchmark def handTransformFocusWrite: ChUser =
+    user.copy(address = ChAddress(view.street, view.city))
 
   // ==== the quartet: transformFocusPartial ===================================================
 
   @Benchmark def eoTransformFocusPartial: partial.Result[List[ChPrice]] =
-    eoTransformFocusPartialFn(raws)
+    repricePricesPartial.modify(reprice)(raws)
 
   @Benchmark def chimneyTransformFocusPartial: partial.Result[List[ChPrice]] =
-    pricesPT.transform(raws)
+    pricesPT.transform(raws.map(reprice))
 
   @Benchmark def handTransformFocusPartial: Either[List[String], List[ChPrice]] =
     handPrices(raws, Nil, Nil)
@@ -163,7 +187,49 @@ class ChimneyBench extends JmhDefaults:
   @Benchmark def handPatch: ChOrder =
     order.copy(customer = order.customer.copy(email = contact.email, phone = contact.phone))
 
-  // Hand-written error-accumulating traversal: every failure collected, like chimney's.
+  // ==== failure paths ========================================================================
+
+  @Benchmark def eoTransformFocusPartialFailing: partial.Result[List[ChPrice]] =
+    repricePricesPartial.modify(reprice)(rawsHalfBad)
+
+  @Benchmark def chimneyTransformFocusPartialFailing: partial.Result[List[ChPrice]] =
+    pricesPT.transform(rawsHalfBad.map(reprice))
+
+  @Benchmark def handTransformFocusPartialFailing: Either[List[String], List[ChPrice]] =
+    handPrices(rawsHalfBad, Nil, Nil)
+
+  @Benchmark def eoTransformImagePartialFailing: partial.Result[ChAccount] =
+    balanceToAccount.modify(_ - 200)(dto)
+
+  @Benchmark def chimneyTransformImagePartialFailing: partial.Result[ChAccount] =
+    accountPT.transform(dto.copy(balance = dto.balance - 200))
+
+  @Benchmark def handTransformImagePartialFailing: Option[ChAccount] =
+    ChCents.from(dto.balance - 200).map(ChAccount(dto.owner, _))
+
+  @Benchmark def eoCodecModifyMiss: ChAccountDto = dtoOwner.modify(_.toUpperCase)(badDto)
+
+  @Benchmark def chimneyCodecModifyMiss: ChAccountDto =
+    accountPT.transform(badDto).asOption match
+      case Some(a) => accountT.transform(a.copy(owner = a.owner.toUpperCase))
+      case None    => badDto
+
+  @Benchmark def handCodecModifyMiss: ChAccountDto =
+    ChCents.from(badDto.balance) match
+      case Some(_) => badDto.copy(owner = badDto.owner.toUpperCase)
+      case None    => badDto
+
+  @Benchmark def eoResultFoldReadMiss: Either[partial.Result.Errors, String] =
+    decodedOwner.either(badDto)
+
+  @Benchmark def chimneyResultFoldReadMiss: Either[partial.Result.Errors, String] =
+    accountPT.transform(badDto).map(_.owner).asEither
+
+  @Benchmark def handResultFoldReadMiss: Either[String, String] =
+    ChCents.from(badDto.balance).map(_ => badDto.owner).toRight("negative amount")
+
+  // Hand-written error-accumulating traversal (repricing ×2 as it goes): every failure collected,
+  // like chimney's.
   @tailrec
   private def handPrices(
       rest: List[ChRawPrice],
@@ -172,7 +238,7 @@ class ChimneyBench extends JmhDefaults:
   ): Either[List[String], List[ChPrice]] =
     rest match
       case r :: tail =>
-        if r.cents >= 0 then handPrices(tail, ChPrice(r.cents) :: ok, errors)
+        if r.cents >= 0 then handPrices(tail, ChPrice(r.cents * 2) :: ok, errors)
         else handPrices(tail, ok, "negative price" :: errors)
       case Nil =>
         if errors.isEmpty then Right(ok.reverse) else Left(errors.reverse)
