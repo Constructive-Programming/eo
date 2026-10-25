@@ -231,7 +231,14 @@ structural equality. A Connect spec round-trips a `parse_json` value: we edit it
 `variant_get` reads the edit back. Original scope: `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
 kit, `VariantVal` kit. Laws via the existing `cats-eo-laws` rule sets. No session needed.
 
-**Phase 2 — `Col[A]` + total optics.** The opaque `Col`; struct `Lens`; array/map `Modify`;
+**Phase 2 — `Col[A]` + total optics.** *DONE:* `ColumnOptics.each` / `values` (`Modify` via
+`transform` / `transform_values`), `aggregate` / `size` / `exists` / `forall` (`Getter`s), and
+`DatasetOptics` (`rowCol`, `editRows`, plus `modifyAll` / `replaceAll` / `getAll` / `foldAll`
+consumed through `CanModify` / `CanGet`). Encoders gained `List` / `Vector` / `Seq` / `Map`. Spark
+decodes Scala collections by resolving companions through `currentMirror` (the same dead
+reflection), so these are `TransformingEncoder`s over the reflection-free `immutable.ArraySeq` /
+`java.util.Map` paths. Differential and plan-shape specs: a composed element-wise edit compiles
+to one projection with one `transform`. Original scope: The opaque `Col`; struct `Lens`; array/map `Modify`;
 aggregate `Getter`s; `Dataset` row-struct lifting (`focus(o).get/modify/replace`).
 
 **Phase 3 — Partial optics on `Affine`.** Guarded-complement `Optional` / `Prism` / `At` /
