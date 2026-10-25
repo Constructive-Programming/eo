@@ -110,6 +110,11 @@ library's core habit: [Capabilities](capabilities.md).
   `Array[Byte]` JSON via jsoniter-scala codecs. Read at
   ~50 ns/op (16× eo-circe), write via splice at ~100 ns/op (14×
   eo-circe).
+- [chimney integration](integrations/chimney.md) — chimney's derived
+  conversions as optics: convert with a `Transformer` / `Iso` /
+  `Codec`, then keep going into the target's fields; `ResultFold`
+  keeps chimney's errors; `.patch` / `.transformFocus` run chimney at
+  an optic's focus.
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.

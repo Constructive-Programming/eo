@@ -25,6 +25,7 @@ libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.18.0" // JDK 25
+libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "0.18.0"
 ```
 
 Requires Scala 3.8.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
@@ -123,6 +124,12 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   kyo-schema bridge: `Focus` → optics, codec byte-face prisms, and
   optics over the untyped `Structure.Value` tree (`cats-eo-kyo`,
   JDK 25).
+- [chimney integration](https://eo.constructive.dev/integrations/chimney.html) —
+  chimney's derived conversions as optics: `Transformer` → `Getter`,
+  `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → `ResultFold`
+  (a read that keeps chimney's errors), `Patcher` → write-only
+  `Modify`, plus `.patch` / `.transformFocus` to run chimney at an
+  optic's focus (`cats-eo-chimney`).
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do

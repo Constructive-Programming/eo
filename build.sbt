@@ -509,6 +509,9 @@ val kyoBuildActive: Boolean =
     .get("java.specification.version")
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
+// chimney 2.x is built on hearth (like eo-generics) and published for Scala 3.9.0.
+lazy val chimneyCore = "io.scalaland" %% "chimney" % "2.1.0"
+
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
@@ -597,6 +600,7 @@ lazy val root: Project = project
       avroIntegration,
       jsoniterIntegration,
       zioIntegration,
+      chimneyIntegration,
       schemes,
       schemesLaws,
     ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
@@ -870,6 +874,27 @@ lazy val zioIntegration: Project = project
     libraryDependencies += catsLaws % Test,
   )
 
+// chimney integration: chimney's derived transformations as eo optics — `Transformer` → Getter,
+// chimney `Iso` → Iso, `Codec` → Prism, `PartialTransformer` → `ResultFold` (an affine fold whose
+// miss keeps chimney's errors), `Patcher` → write-only Modify — plus `.patch` / `.transformFocus`
+// running chimney at an eo optic's focus. eo-generics is Test-only: callers compose the bridges
+// with whichever eo optics they like, derived or hand-written.
+lazy val chimneyIntegration: Project = project
+  .in(file("chimney"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics") % Test,
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-chimney",
+    libraryDependencies += cats,
+    libraryDependencies += chimneyCore,
+    libraryDependencies += discipline % Test,
+  )
+
 // Kyo DI integration, mirror of `zioIntegration` at kyo-prelude's
 // seams: `TypeMap` slots are lawful lenses (the ZEnvironment analog),
 // `Env.focus` routes reads through `CanGet`, `Var` gets the same
@@ -924,6 +949,7 @@ lazy val docs: Project = project
     LocalProject("jsoniterIntegration"),
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    LocalProject("chimneyIntegration"),
     LocalProject("laws"),
     LocalProject("schemes"),
   )
@@ -1114,6 +1140,7 @@ lazy val unidocs: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      chimneyIntegration,
     ),
   )
 
@@ -1351,5 +1378,6 @@ addCommandAlias(
     "project jsoniterIntegration; stryker; " +
     "project zioIntegration; stryker; " +
     "project kyoIntegration; stryker; " +
+    "project chimneyIntegration; stryker; " +
     "project root",
 )

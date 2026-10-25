@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`cats-eo-chimney`: chimney integration module.** chimney 2.1.0's derived conversions become
+  eo optics, so a chain can convert and then keep navigating with eo-generics' lenses:
+  `Chimney.getter` (`Transformer` → `Getter`), `Chimney.iso` (chimney `Iso` → eo `Iso`),
+  `Chimney.prism` (`Codec[Domain, Dto]` → a prism from `Dto` to `Domain`), `Chimney.resultFold`
+  (`PartialTransformer` → the new `ResultFold`, an affine fold whose miss keeps chimney's
+  `partial.Result.Errors` through single-focus composition), and `Chimney.patching`
+  (`Patcher[A, P]` → `Modify[A, A, Unit, P]`), each with a `.toX` extension for hand-configured
+  chimney values. The other direction runs chimney at an eo focus: `optic.patch(p)`,
+  `optic.transformFocus` (type-changing, for polymorphic optics) and `optic.transformFocusPartial`
+  (errors accumulate across a Traversal's foci).
+
 - **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
   `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
   The carrier remains in `data/Glass.scala`; no compatibility alias is provided.
