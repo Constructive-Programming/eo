@@ -82,7 +82,14 @@ final class ResultFold[S, A](val result: S => partial.Result[A])
   def andThen[C, IT, IB, FI[_, _]](inner: Optic[A, IT, C, IB, FI])(using
       step: ResultFold.Step[FI]
   ): ResultFold[S, C] =
-    new ResultFold(s => result(s).flatMap(a => step.read(inner.to(a))))
+    // The inner's own `get` / `getOption` when it carries one — skips the carrier value `to`
+    // builds (a split-combine lens's `(complement, focus)` tuple), as core's `ReadCompose` does.
+    val read: A => partial.Result[C] = inner match
+      case g: CanGet[A @unchecked, C @unchecked]       => a => partial.Result.Value(g.get(a))
+      case g: CanGetOption[A @unchecked, C @unchecked] =>
+        a => partial.Result.fromOption(g.getOption(a))
+      case _ => a => step.read(inner.to(a))
+    new ResultFold(s => result(s).flatMap(read))
 
   /** Override of the trait's read-only-inner overload, re-homed here so it shares an owner with
     * `andThenSingle` above — see `Getter`'s twin override for the ambiguity rationale. Read-only

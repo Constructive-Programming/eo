@@ -1,6 +1,8 @@
 package dev.constructive.eo
 package chimney
 
+import scala.annotation.unused
+
 import _root_.io.scalaland.chimney.{
   partial,
   Codec,
@@ -68,34 +70,76 @@ extension [S, T, A, F[_, _]](o: Optic[S, T, A, A, F])(using FF: ForgetfulFunctor
 
 extension [S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using FF: ForgetfulFunctor[F])
 
-  /** Change the focus type in place: run chimney's `Transformer[A, B]` at the focus, turning the
-    * `S` into a `T` — `Traversal.pEach[List, RawPrice, Price].transformFocus(order.prices)`. Needs
-    * a polymorphic optic (`T` differs from `S`): eo-generics' derived lenses are monomorphic, so
-    * reach for the core `p*` constructors (`Lens.pLens`, `Prism.pPrism`, `Traversal.pEach`,
-    * `Traversal.first`/`second`, …). chimney derives the `Transformer` when none is in scope.
+  /** Change the type you write at the focus: the new optic accepts a `C` and runs chimney's
+    * `Transformer[C, B]` to turn it into the `B` this optic writes back. Reads, the source and the
+    * result are unchanged — `Optic[S, T, A, C]` — so the focus reads as an `A` and is written as a
+    * `C`: `lens[User](_.address).transformFocus[AddressView].replace(view)(user)` writes a view
+    * where the lens expects an `Address`. Works on monomorphic optics (eo-generics' lenses); on a
+    * polymorphic one (`Traversal.pEach[List, RawPrice, Price]`), `transformFocus[RawPrice]` lets an
+    * edit of the `RawPrice` it reads be written back as a `Price` (`.modify(r => RawPrice(r.cents *
+    * 2))` reprices and retypes in one write). The write-side counterpart of [[transformImage]],
+    * which changes `T`; together they give `Optic[S, U, A, C]`. chimney derives the `Transformer`
+    * when none is in scope.
+    *
+    * A generic `Optic`, like `Optic.innerProfunctor.lmap` — but `to` is the original optic's own,
+    * so reads don't pay a carrier `map` they never use; only `from` maps the written `C`s.
     */
-  inline def transformFocus(using t: Transformer[A, B]): S => T =
-    o.modify(t.transform)
+  def transformFocus[C](using t: Transformer[C, B]): Optic[S, T, A, C, F] =
+    new Optic[S, T, A, C, F]:
+      type X = o.X
+      def to(s: S): F[X, A] = o.to(s)
+      def from(fc: F[X, C]): T = o.from(FF.map(fc, t.transform))
 
 extension [S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(using
-    FT: ForgetfulTraverse[F, Applicative]
+    FF: ForgetfulFunctor[F],
+    @unused FT: ForgetfulTraverse[F, Applicative],
 )
 
-  /** [[transformFocus]] for a `PartialTransformer`: the new `T`, or the errors of every focus that
-    * failed (all of them — errors accumulate across a Traversal's foci). The error paths are
-    * relative to each focus: chimney does not know where the optic pointed.
+  /** [[transformFocus]] for a `PartialTransformer[C, B]`: write a `C`, and get back the new `T` or
+    * the errors of every written `C` that didn't convert (all of them — errors accumulate across a
+    * Traversal's foci) — `Optic[S, partial.Result[T], A, C]`. The error paths are relative to each
+    * focus: chimney does not know where the optic pointed.
+    *
+    * One pass, no per-focus `partial.Result` plumbing: the carrier's `map` converts every written
+    * `C` to `B | Null` — a failing one records its errors on the side and leaves `null` — and only
+    * if none failed does this optic's `from` rebuild the `T`, at which point every slot holds a
+    * real `B`. On any failure the mapped carrier is dropped and the errors returned: the underlying
+    * optic's write path never sees a `null`. The `ForgetfulTraverse` gate (otherwise unused) keeps
+    * this to carriers whose `map` runs eagerly, so every error is in before `from` is decided.
     */
-  inline def transformFocusPartial(using pt: PartialTransformer[A, B]): S => partial.Result[T] =
-    o.modifyA(a => pt.transform(a))(using resultApplicative)
+  def transformFocusPartial[C](using
+      pt: PartialTransformer[C, B]
+  ): Optic[S, partial.Result[T], A, C, F] =
+    new Optic[S, partial.Result[T], A, C, F]:
+      type X = o.X
+      def to(s: S): F[X, A] = o.to(s)
+
+      def from(fc: F[X, C]): partial.Result[T] =
+        var errors: partial.Result.Errors | Null = null
+        val mapped: F[X, B | Null] = FF.map(
+          fc,
+          c =>
+            pt.transform(c) match
+              case partial.Result.Value(b)  => b
+              case e: partial.Result.Errors =>
+                errors = errors match
+                  case null                        => e
+                  case prev: partial.Result.Errors => partial.Result.Errors.merge(prev, e)
+                null,
+        )
+        errors match
+          // No write failed, so every `B | Null` slot holds a `B`: the one place the union narrows.
+          case null => partial.Result.Value(o.from(mapped.asInstanceOf[F[X, B]]))
+          case e: partial.Result.Errors => e
 
 extension [S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])
 
   /** Change the result type: run chimney's `Transformer[T, U]` on whatever the optic writes back,
-    * turning its `S => T` side into `S => U` — the outer counterpart of [[transformFocus]]. Every
-    * write lands in `U`: `lens[User](_.name).transformImage[UserView].modify(_.trim)(user)` edits a
-    * field and hands back the view. A miss (Prism / Optional) still produces a `U` — the untouched
-    * `T`, transformed. The focus side (`S`, `A`, `B`) is unchanged, so reads are the original
-    * optic's. chimney derives the `Transformer` when none is in scope.
+    * turning its `S => T` side into `S => U` — the result-side counterpart of [[transformFocus]].
+    * Every write lands in `U`: `lens[User](_.name).transformImage[UserView].modify(_.trim)(user)`
+    * edits a field and hands back the view. A miss (Prism / Optional) still produces a `U` — the
+    * untouched `T`, transformed. The focus side (`S`, `A`, `B`) is unchanged, so reads are the
+    * original optic's. chimney derives the `Transformer` when none is in scope.
     *
     * Core's `Optic.outerProfunctor.rmap` with a chimney transformer: the result is a generic
     * `Optic` (the concrete class's fused overloads don't survive the remap).
@@ -110,14 +154,3 @@ extension [S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])
       pt: PartialTransformer[T, U]
   ): Optic[S, partial.Result[U], A, B, F] =
     Optic.outerProfunctor[A, B, F].rmap(o)(pt.transform(_))
-
-/** Error-accumulating `Applicative[partial.Result]` for [[transformFocusPartial]]. Private — the
-  * public cats instance belongs to chimney-cats; this one only drives `modifyA`.
-  */
-private val resultApplicative: Applicative[partial.Result] = new Applicative[partial.Result]:
-  def pure[A](a: A): partial.Result[A] = partial.Result.Value(a)
-
-  def ap[A, B](ff: partial.Result[A => B])(fa: partial.Result[A]): partial.Result[B] =
-    partial.Result.map2(ff, fa, (f: A => B, a: A) => f(a), failFast = false)
-
-  override def map[A, B](fa: partial.Result[A])(f: A => B): partial.Result[B] = fa.map(f)

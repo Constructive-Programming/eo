@@ -129,6 +129,20 @@ class ChimneyLawsSpec extends Specification with Discipline:
     }
   }
 
+  // transformFocus only pre-composes the write side with the transformer, so writing a C must
+  // equal converting it and writing the B with the original optic.
+  "transformFocus" should {
+    val address = lens[User](_.address)
+    val fromView = summon[io.scalaland.chimney.Transformer[AddressView, Address]]
+
+    "be the transformer followed by the original write" in forAll {
+      (u: User, street: String, city: String) =>
+        val v = AddressView(city, street)
+        val viaFocus = address.transformFocus[AddressView].replace(v)(u)
+        viaFocus == address.replace(fromView.transform(v))(u)
+    }
+  }
+
   "patch" should {
     val customer = lens[Order](_.customer)
     val contact = customer.andThen(Chimney.patching[Customer, ContactPatch])

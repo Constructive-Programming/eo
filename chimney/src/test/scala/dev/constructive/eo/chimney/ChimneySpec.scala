@@ -130,8 +130,25 @@ class ChimneySpec extends Specification:
   "transformFocus / transformFocusPartial (option 4)" should {
     val raws = List(RawPrice(100), RawPrice(250))
 
-    "retype every focus of a polymorphic Traversal" in {
-      Traversal.pEach[List, RawPrice, Price].transformFocus(raws) === List(Price(100), Price(250))
+    "write the focus as another type through a monomorphic lens" in {
+      val address = lens[User](_.address).transformFocus[AddressView]
+      (address.replace(AddressView("Paris", "2 Rue"))(user) ===
+        user.copy(address = Address("2 Rue", "Paris"))).and(
+        address.modify(a => AddressView(a.city.toUpperCase, a.street))(user).address.city ===
+          "LONDON"
+      )
+    }
+
+    "keep reads on the original optic" in {
+      lens[User](_.address).transformFocus[AddressView].get(user) === user.address
+    }
+
+    "write every focus of a polymorphic Traversal as the type it reads" in {
+      // Reads RawPrice, writes Price; transformFocus[RawPrice] lets a RawPrice edit be written.
+      Traversal
+        .pEach[List, RawPrice, Price]
+        .transformFocus[RawPrice]
+        .modify(r => RawPrice(r.cents * 2))(raws) === List(Price(200), Price(500))
     }
 
     "retype a field through a polymorphic lens" in {
@@ -139,14 +156,40 @@ class ChimneySpec extends Specification:
         _.price,
         (l, p) => Line(l.sku, p),
       )
-      price.transformFocus(Line("sku-1", RawPrice(9))) === Line("sku-1", Price(9))
+      price
+        .transformFocus[RawPrice]
+        .modify(r => RawPrice(r.cents + 1))(
+          Line("sku-1", RawPrice(9))
+        ) === Line("sku-1", Price(10))
     }
 
-    "collect every focus's errors" in {
-      val prices = Traversal.pEach[List, RawPrice, Price].transformFocusPartial
-      (prices(raws).asOption === Some(List(Price(100), Price(250)))).and(
-        paths(prices(List(RawPrice(-1), RawPrice(5), RawPrice(-2)))) ===
-          List("" -> "negative price: -1", "" -> "negative price: -2")
+    "compose with transformImage into a fully retyped write side" in {
+      val viewAddress =
+        lens[User](_.address).transformFocus[AddressView].transformImage[UserView]
+      viewAddress.replace(AddressView("Paris", "2 Rue"))(user) ===
+        UserView("Ada", AddressView("Paris", "2 Rue"))
+    }
+
+    "never hand a failing write to the optic's own write" in {
+      // This write reads the B it is given: a null placeholder would throw here.
+      val inspecting = Lens.pLens[Line[RawPrice], Line[Price], RawPrice, Price](
+        _.price,
+        (l, p) => Line(l.sku, Price(p.cents.abs)),
+      )
+      val price = inspecting.transformFocusPartial[RawPrice]
+      val line = Line("sku", RawPrice(1))
+      (price.replace(RawPrice(7))(line).asOption === Some(Line("sku", Price(7)))).and(
+        paths(price.replace(RawPrice(-7))(line)) === List("" -> "negative price: -7")
+      )
+    }
+
+    "collect every written focus's errors" in {
+      val prices = Traversal.pEach[List, RawPrice, Price].transformFocusPartial[RawPrice]
+      val discount = (r: RawPrice) => RawPrice(r.cents - 150)
+      (prices.modify(r => RawPrice(r.cents * 2))(raws).asOption ===
+        Some(List(Price(200), Price(500)))).and(
+        paths(prices.modify(discount)(raws ++ raws)) ===
+          List("" -> "negative price: -50", "" -> "negative price: -50")
       )
     }
   }

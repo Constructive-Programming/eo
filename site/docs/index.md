@@ -113,8 +113,9 @@ library's core habit: [Capabilities](capabilities.md).
 - [chimney integration](integrations/chimney.md) — chimney's derived
   conversions as optics: convert with a `Transformer` / `Iso` /
   `Codec`, then keep going into the target's fields; `ResultFold`
-  keeps chimney's errors; `.patch` / `.transformFocus` run chimney at
-  an optic's focus.
+  keeps chimney's errors; `.patch` runs chimney at an optic's focus,
+  and `.transformFocus` / `.transformImage` build optics written with,
+  or returning, another type.
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
   cats-eo universe.

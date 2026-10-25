@@ -149,14 +149,29 @@ contact.replace(ContactPatch("e", "p"))(order)
 If the optic misses (a prism or optional), the value passes through
 unchanged. A `Traversal` patches every focus.
 
-## Change a focus's type
+## Change the focus's write type
 
-`optic.transformFocus` runs chimney's `Transformer[A, B]` at the
-focus and turns an `S` into a `T`. The optic must be able to change
-the type of its focus (`T` different from `S`). eo-generics' derived
-lenses can't do that, so use the core polymorphic constructors:
-`Traversal.pEach`, `Lens.pLens`, `Prism.pPrism`, `Traversal.first` /
-`second`, and so on.
+`optic.transformFocus[C]` returns a new optic that is written with a
+`C` instead of the `B` the original optic writes. chimney's
+`Transformer[C, B]` turns each written `C` into a `B`. Reads are
+unchanged: the new optic is an `Optic[S, T, A, C]`, so the focus still
+reads as an `A`. This works on eo-generics' derived lenses, which keep
+one type for reading and writing; here a lens to an `Address` is
+written with an `AddressView`:
+
+```scala mdoc
+val addressAsView = lens[User](_.address).transformFocus[AddressView]
+
+addressAsView.replace(AddressView("Paris", "2 Rue"))(ada)
+addressAsView.get(ada)
+```
+
+On an optic that can change its focus type (`Traversal.pEach`,
+`Lens.pLens`, `Prism.pPrism`, `Traversal.first` / `second`, …),
+`transformFocus` lets an edit be made in the type the optic reads.
+The `Traversal` below reads `RawPrice`s and writes `Price`s;
+`transformFocus[RawPrice]` lets it be written with `RawPrice`s, so one
+write reprices every element and converts it:
 
 ```scala mdoc:silent
 import dev.constructive.eo.optics.Traversal
@@ -165,16 +180,20 @@ val prices = Traversal.pEach[List, RawPrice, Price]
 ```
 
 ```scala mdoc
-prices.transformFocus(List(RawPrice(100), RawPrice(250)))
+prices.transformFocus[RawPrice].modify(r => RawPrice(r.cents * 2))(List(RawPrice(100), RawPrice(250)))
 ```
 
-`transformFocusPartial` does the same with a `PartialTransformer`. It
-returns the new `T`, or the errors from every focus that failed;
-across a `Traversal`'s foci the errors accumulate rather than stopping
-at the first one:
+`transformFocusPartial[C]` does the same with a
+`PartialTransformer[C, B]`. A write returns the new `T`, or the errors
+from every written value that didn't convert; across a `Traversal`'s
+foci the errors accumulate rather than stopping at the first one. The
+original optic's own write runs only when every value converted, so it
+never sees a failed one:
 
 ```scala mdoc
-prices.transformFocusPartial(List(RawPrice(-1), RawPrice(5), RawPrice(-2)))
+prices
+  .transformFocusPartial[RawPrice]
+  .modify(r => RawPrice(r.cents - 150))(List(RawPrice(100), RawPrice(250), RawPrice(120)))
   .asErrorPathMessageStrings
   .toList
 ```
@@ -184,9 +203,13 @@ know where the optic was pointing.
 
 ## Change the result type
 
-`optic.transformImage[U]` works on the other side of the optic. It
-runs chimney's `Transformer[T, U]` on whatever the optic writes back,
-so every write returns a `U` instead of a `T`. Reads are unchanged.
+`optic.transformImage[U]` changes the other write-side type: the
+result. It runs chimney's `Transformer[T, U]` on whatever the optic
+writes back, so every write returns a `U` instead of a `T`. Reads are
+unchanged. Combined with `transformFocus`, both write-side types
+change: `lens[User](_.address).transformFocus[AddressView]
+.transformImage[UserView]` is written with an `AddressView` and
+returns a `UserView`.
 Here a lens edits a `User` and returns the public view:
 
 ```scala mdoc
@@ -261,11 +284,13 @@ sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -prof gc .*ChimneyBench.*"
 
 ## Notes
 
-- **Field-type changes inside a case class.** chimney already handles
-  these on its own. Put a `Transformer[A, B]` in scope and
-  `s.transformInto[T]` uses it for that field. `transformFocus` is for
-  the cases chimney cannot reach by itself: containers, sum-type
-  branches, and anywhere else an eo optic points.
+- **Converting a whole value.** When the goal is a new type for the
+  whole structure, chimney does that on its own: put a
+  `Transformer[A, B]` in scope and `s.transformInto[T]` uses it for
+  that field. `transformFocus` and `transformImage` are for keeping an
+  optic and changing what it is written with or what it hands back,
+  wherever the optic points: containers, sum-type branches, nested
+  fields.
 - **Dependencies.** chimney 2.x is built on the same macro library as
   eo-generics ([hearth](https://github.com/MateuszKubuszok/hearth)), so
   both use it on one classpath.

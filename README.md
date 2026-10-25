@@ -139,8 +139,9 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   chimney's derived conversions as optics: `Transformer` → `Getter`,
   `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → `ResultFold`
   (a read that keeps chimney's errors), `Patcher` → write-only
-  `Modify`, plus `.patch` / `.transformFocus` to run chimney at an
-  optic's focus (`cats-eo-chimney`).
+  `Modify`, plus `.patch` to run chimney at an optic's focus and
+  `.transformFocus` / `.transformImage` to build optics written with,
+  or returning, another type (`cats-eo-chimney`).
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do
