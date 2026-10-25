@@ -17,6 +17,7 @@ import laws.eo.{
   LensComposeLaws,
   ModifyAConstLaws,
   ModifyAIdLaws,
+  ModifyAListLaws,
   OptionalComposeLaws,
   PrismComposeLaws,
   PutIsReverseGetLaws,
@@ -29,6 +30,7 @@ import laws.eo.discipline.{
   LensComposeTests,
   ModifyAConstTests,
   ModifyAIdTests,
+  ModifyAListTests,
   OptionalComposeTests,
   PrismComposeTests,
   PutIsReverseGetTests,
@@ -134,6 +136,26 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
       val laws = new ModifyAIdLaws[List[Int], Int, MultiFocus[PSVec]]:
         val optic = listTraversal
     .modifyAId,
+  )
+
+  // =============== D2 — modifyA at List ≡ cartesian traverse ========
+
+  checkAll(
+    "Traversal.each modifyA[List] ≡ cartesian traverse; all round-trips",
+    new ModifyAListTests[List[Int], Int, MultiFocus[PSVec]]:
+
+      val laws = new ModifyAListLaws[List[Int], Int, MultiFocus[PSVec]]:
+        val optic = listTraversal
+    .modifyAList,
+  )
+
+  checkAll(
+    "MultiFocus.apply[List] modifyA[List] ≡ cartesian traverse; all round-trips",
+    new ModifyAListTests[List[Int], Int, MultiFocus[List]]:
+
+      val laws = new ModifyAListLaws[List[Int], Int, MultiFocus[List]]:
+        val optic = MultiFocus.apply[List, Int]
+    .modifyAList,
   )
 
   // =============== D3 — modifyA at Const ≡ foldMap =================
