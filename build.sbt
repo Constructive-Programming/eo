@@ -1319,7 +1319,7 @@ lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
 lazy val fs2Core = "co.fs2" %% "fs2-core" % Fs2Version
 // Arbitrary / Cogen derivation from Scala 3 mirrors: the demo's issues are drawn from generators
 // derived from the model.
-lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.10.0"
+lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.11.0"
 
 lazy val demoGrpcFilter: Project = project
   .in(file("demos/grpc-filter"))
