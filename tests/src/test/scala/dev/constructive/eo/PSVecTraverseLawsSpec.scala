@@ -1,10 +1,10 @@
 package dev.constructive.eo
 
-import cats.{Eq, Traverse}
 import cats.data.State
 import cats.kernel.laws.IsEq
 import cats.laws.TraverseLaws
 import cats.laws.discipline.TraverseTests
+import cats.{Eq, Traverse}
 import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen, Prop}
 import org.specs2.mutable.Specification
