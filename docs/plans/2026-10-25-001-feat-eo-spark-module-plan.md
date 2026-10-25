@@ -281,7 +281,21 @@ Tuples now encode like case classes, because Spark's tuple `ProductEncoder` need
 `ds.mapThrough(eagerOptic)(f)` and the effectful `modifyA` path via `mapPartitions`, marked as
 leaving Catalyst.
 
-**Phase 6 — Verification + benchmarks.**
+**Phase 6 — Verification + benchmarks.** *DONE:* the verification pieces landed with each phase (laws on eager twins, differential specs,
+plan-shape tests). Phase 6 adds `sparkBench` (`spark-bench/`, JMH, outside the aggregate; CI compiles
+it). One nested edit (upper-case `address.street`) over a cached 200 000-row server-side Dataset,
+forced by a checksum aggregate, with a local Connect server on JDK 25 (`-wi 2 -i 5 -f 1`):
+
+| Benchmark | ms/op |
+|---|---:|
+| `handWritten` (`withField` by hand) | 51.8 ± 19.5 |
+| `symbolic` (`ColumnOptics.path`) | 56.6 ± 22.3 |
+| `eagerMap` (`mapThrough`, eager twin) | 289.0 ± 28.3 |
+
+The symbolic optic is within noise of the hand-written projection, as expected: the plan-shape specs
+already show the same optimized plan. The eager bridge is about 5× slower: it decodes every row, runs the
+closure, and re-encodes. Mutation testing (`mutationAll`) still skips the module: every mutant run would
+start a Connect server. That is a follow-up. Original scope:
 - Laws on every eager twin (`LensTests`, `OptionalTests`, `PrismTests`, `FoldTests`).
 - The differential property, per optic and per composed chain, batched as one Dataset per
   property:

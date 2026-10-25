@@ -125,6 +125,14 @@ object Sessions:
     (dirs ++ classpathDirs).distinct.foreach(d => session.addArtifact(jarOf(d)))
     session
 
+  /** Upload the classes of `classes` (their jar, or their class directory packed into one), for
+    * code outside this classpath view — e.g. a JMH fork — whose closures run on the server.
+    */
+  def ship(session: SparkSession, classes: Class[?]*): Unit =
+    classes.flatMap(ScalaRuntime.locationOf).distinct.foreach { loc =>
+      session.addArtifact(if loc.endsWith(".jar") then loc else jarOf(loc))
+    }
+
   /** Pack a class directory into a temporary jar, for `addArtifact`. */
   private def jarOf(dir: String): String =
     val root = java.nio.file.Paths.get(dir)
