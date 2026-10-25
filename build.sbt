@@ -368,11 +368,13 @@ val Ziverge = "dev.zio"
 val GetKyo = "io.getkyo"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
-// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, and so far only
-// in `zioIntegration`: the zio module hand-writes `Traverse[Chunk]` / `Traverse[NonEmptyChunk]`
-// adapters (zio ships no cats instances), and `TraverseTraversal` reassembles foci through
-// `Functor.map` while collecting them in fold order — so map/traverse coherence is load-bearing for
-// write correctness, not just hygiene. Law-check the instances rather than eyeball them.
+// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, in `tests` and
+// `zioIntegration`, wherever eo hand-writes a cats instance: `tests` law-checks core's
+// `Traverse[PSVec]` (the instance every `Traversal.each(...).modifyA` runs through), the zio module
+// its `Traverse[Chunk]` / `Traverse[NonEmptyChunk]` adapters (zio ships no cats instances), where
+// `TraverseTraversal` reassembles foci through `Functor.map` while collecting them in fold order —
+// so map/traverse coherence is load-bearing for write correctness, not just hygiene. Law-check the
+// instances rather than eyeball them.
 lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
@@ -644,6 +646,8 @@ lazy val tests: Project = project
     name := "cats-eo-tests",
     publish / skip := true,
     libraryDependencies += discipline % Test,
+    // cats' own Traverse laws for the hand-written `Traverse[PSVec]` (PSVecTraverseLawsSpec).
+    libraryDependencies += catsLaws % Test,
     // circe-core powers the CRUD round-trip example specs
     // (examples/CrudRoundtrip*), which drive derived optics through a
     // circe Json AST.
