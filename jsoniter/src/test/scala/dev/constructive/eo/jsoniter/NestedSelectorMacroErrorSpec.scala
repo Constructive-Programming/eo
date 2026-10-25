@@ -77,6 +77,42 @@ class NestedSelectorMacroErrorSpec extends Specification:
       .and(anyMatches(msgs, "Known fields: inner, y") must beTrue)
   }
 
+  "the in-place optics drill through the same checked macros" >> {
+    val nested = typeCheckErrors("""
+        import dev.constructive.eo.jsoniter.{JsoniterPrism, NsOuter}
+        import dev.constructive.eo.jsoniter.NsCodecs.given
+        JsoniterPrism.inPlace[NsOuter].field(_.inner.y)
+      """).map(_.message)
+    val pastEach = typeCheckErrors("""
+        import dev.constructive.eo.jsoniter.{JsoniterPrism, NsBasket}
+        import dev.constructive.eo.jsoniter.NsCodecs.given
+        JsoniterPrism.inPlace[NsBasket].items.each.field(_.x.length)
+      """).map(_.message)
+    val notAField = typeCheckErrors("""
+        import dev.constructive.eo.jsoniter.{JsoniterPrism, NsOuter}
+        import dev.constructive.eo.jsoniter.NsCodecs.given
+        JsoniterPrism.inPlace[NsOuter].derivedTag
+      """).map(_.message)
+    val notIterable = typeCheckErrors("""
+        import dev.constructive.eo.jsoniter.{JsoniterPrism, NsOuter}
+        import dev.constructive.eo.jsoniter.NsCodecs.given
+        JsoniterPrism.inPlace[NsOuter].field(_.y).each
+      """).map(_.message)
+    val bytes = writeToArray(NsOuter(NsInner("INNER_X", "INNER_Y"), "OUTER_Y"))
+
+    (anyMatches(nested, "JsoniterPrism.field") must beTrue)
+      .and(anyMatches(nested, "Nested paths") must beTrue)
+      .and(anyMatches(pastEach, "JsoniterTraversal.field") must beTrue)
+      .and(anyMatches(notAField, "JsoniterPrism selectDynamic") must beTrue)
+      .and(anyMatches(notAField, "has no case field named 'derivedTag'") must beTrue)
+      // A failed `.each` extension falls back to the Dynamic sugar, which reports it.
+      .and(anyMatches(notIterable, "no case field named 'each'") must beTrue)
+      .and(
+        JsoniterPrism.inPlace[NsOuter].field(_.inner).field(_.y).getOption(JsonSlice(bytes))
+          must beSome("INNER_Y")
+      )
+  }
+
   "the CHAINED form is what actually reaches the inner field" >> {
     val bytes = writeToArray(NsOuter(NsInner("INNER_X", "INNER_Y"), "OUTER_Y"))
 

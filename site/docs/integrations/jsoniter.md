@@ -364,6 +364,154 @@ are written, so a partially applied write still reports success. Read
 first (`foldMap` / `getAll`) when you need to know which elements were
 really there.
 
+## Reading in place from a larger buffer
+
+A JSON document often arrives inside a bigger byte array: one network
+read holding several messages, a framed log segment, a memory-mapped
+file. `.inPlace` turns a prism or a traversal into the same optic over
+a `JsonSlice` — `length` bytes of an array from `offset` on — which
+reads the document where it lies, with nothing copied before the scan:
+
+```scala mdoc:silent
+import dev.constructive.eo.jsoniter.{JsonSlice, jsonSlice}
+
+// Two documents back to back in one buffer, as a single read might deliver them.
+val other  = """{"payload":{"user":{"id":7}}}""".getBytes("UTF-8")
+val buffer = other ++ sample
+```
+
+```scala mdoc
+val second = JsonSlice(buffer, other.length, sample.length)
+
+idP.inPlace.foldMap(identity[Long])(second)
+emailP.inPlace.foldMap(identity[String])(second)
+```
+
+**No copy is made**, and that is a contract, not a detail:
+
+- **Don't mutate the array** while a slice of it, or anything read
+  from one, is in use: the optics read the bytes as they are when they
+  run.
+- **A slice keeps the whole array reachable**, however few bytes it
+  covers — a 300-byte slice of a 256 KiB read pins the 256 KiB. Call
+  `.toArray` on anything you keep long-term.
+- **Writes never mutate the source.** A write that splices returns a
+  slice over a **fresh** array holding only the slice's bytes, with the
+  new focus spliced in (offset 0). A write that changes nothing (a
+  miss) hands back the input slice itself:
+
+```scala mdoc
+val written = idP.inPlace.replace(99L)(second)
+(written.offset, written.length == written.array.length)
+
+absentP.inPlace.replace(99L)(second) eq second
+
+new String(buffer, "UTF-8") == new String(other ++ sample, "UTF-8")  // untouched
+```
+
+The scan never reads outside the slice, and the focus decodes through
+jsoniter-scala's `readFromSubArray`, so the bytes around it can be
+anything.
+
+### Drilling in place
+
+`.inPlace` can go anywhere in a chain. `JsoniterPrism.inPlace[A]` is
+the root prism over a slice, and the in-place optics drill with the
+same `.field(_.x)` / `.at(i)` / `.each` / `.x` surface, checked against
+the schema by the same macros. Drill first and take `.inPlace` last,
+or take it first and drill: it is the same optic.
+
+```scala mdoc
+val people = "...".getBytes("UTF-8") ++ aliceBytes
+val alices = people.jsonSlice(3, aliceBytes.length)   // (offset, length)
+
+JsoniterPrism.inPlace[Person].address.street.foldMap(identity[String])(alices)
+JsoniterPrism[Person].address.street.inPlace.foldMap(identity[String])(alices)
+
+val carts = JsonSlice("xx".getBytes("UTF-8") ++ cart, 2, cart.length)
+itemsT.inPlace.foldMap(identity[Long])(carts)
+```
+
+### `.raw` in place: a view of the focused bytes
+
+On the whole-array prism, `.raw` focuses the focused value's own JSON
+bytes as a **copy**, an `Array[Byte]`. On an in-place prism it focuses a
+`JsonSlice`: a **view** of those bytes where they lie in the source
+array, nothing copied. That makes it the source of further in-place
+optics, through ordinary `andThen`:
+
+```scala mdoc
+val addressJson = JsoniterPrism.inPlace[Person].field(_.address).raw
+val zipOfAddress = JsoniterPrism.inPlace[Address].field(_.zip).field(_.code)
+
+val zipCode = addressJson.andThen(zipOfAddress)   // one Optic[JsonSlice, JsonSlice, Int, Int, Affine]
+
+zipCode.foldMap(identity[Int])(alices)
+addressJson.headOption(alices).map(_.array eq people)  // the focus shares the source array
+new String(zipCode.replace(54321)(alices).toArray, "UTF-8")
+```
+
+A raw focus is under the same rules as any slice (don't mutate the
+array under it; `.toArray` to keep it). Writing through it splices the
+new focus slice's bytes **verbatim** — no re-encoding and no
+validation, as the whole-array `.raw` writes — into a fresh array, so
+neither the source array nor the new focus's own array changes. A
+composed write re-encodes only the leaf: the inner prism splices it
+into a fresh copy of the focused span, and the outer one splices that
+into a fresh copy of the document. The Optional laws hold for it, and
+for the composed chain (pinned by `JsonSliceSpec`).
+
+### Making slices
+
+- `JsonSlice(bytes, offset, length)` — a view of a range;
+  `JsonSlice(bytes)` — the whole array; `bytes.jsonSlice(offset,
+  length)` — the same as a method on the array (`(offset, length)`, as
+  `JsonSlice.apply` takes them). There is deliberately no implicit
+  conversion from `Array[Byte]`: a slice shares its array, so taking
+  one is spelled out.
+- `JsonSlice(buf: java.nio.ByteBuffer)` — the bytes between the
+  buffer's position and limit, leaving its position alone. A heap
+  buffer with an accessible array is **not copied** (a view of
+  `array()` from `arrayOffset() + position()`); a **direct** or
+  **read-only** buffer has no array to share, so its bytes are
+  **copied once**.
+
+```scala mdoc
+val heap = java.nio.ByteBuffer.wrap(buffer, other.length, sample.length)
+JsonSlice(heap) == second
+JsonSlice(heap).array eq buffer                       // a view
+JsonSlice(heap.asReadOnlyBuffer()).array eq buffer    // a copy
+```
+
+Some ground rules:
+
+- **Equality is by content**: two slices are equal when they hold the
+  same bytes, wherever they sit. A slice reads and writes exactly like
+  the same bytes copied out into an array of their own — the
+  whole-array `JsoniterPrism` / `JsoniterTraversal` run the same scan
+  and splice over `(0, length)` — and the laws (with their
+  canonical-re-encoding caveat) hold on slices as they do on arrays.
+- **A range outside the array fails fast**: `JsonSlice(bytes, offset,
+  length)` (and `jsonSlice`) throws `IndexOutOfBoundsException` at
+  construction when `offset` or `length` is negative or
+  `offset + length > bytes.length` — the contract of
+  `Arrays.copyOfRange`, `ByteBuffer.wrap` and `readFromSubArray`.
+  Offsets are your arithmetic over an array you hold, so a wrong one is
+  a bug at the call site; no optic ever runs on one.
+- **Why a view type, not `(array, offset, length)` arguments**: an optic
+  has one source type. An in-place prism is an ordinary
+  `Optic[JsonSlice, JsonSlice, A, A, Affine]` (a `MultiFocus[PSVec]`
+  traversal for `JsoniterTraversal`), so `CanGetOption[JsonSlice, A]`
+  and the rest of the capability surface derive from it as from any
+  other optic.
+
+eo-jsoniter has no streaming dependency. From an fs2 `Chunk[Byte]`,
+`JsonSlice(chunk.toByteBuffer)` reads it in place when the chunk is one
+array slice, as a socket read is (fs2 wraps the slice's own array), and
+copies it once otherwise. The
+[stream triage demo](../cookbook/grpc-filter.md) judges every message
+that way.
+
 ## JSONPath subset
 
 The accepted grammar is deliberately small:
@@ -412,6 +560,8 @@ cons-cell.
 This module ships zero new carriers. `JsoniterPrism` is an
 `Optic[Array[Byte], Array[Byte], A, A, Affine]`; `JsoniterTraversal`
 is an `Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]`.
+Their [in-place faces](#reading-in-place-from-a-larger-buffer) are the
+same carriers over `JsonSlice` instead of `Array[Byte]`.
 The standard cats-eo extensions on those carriers light up
 automatically:
 
@@ -443,6 +593,7 @@ per-element reassembly, no Composer hop required.
 | Replace a `JsonCodecMaker` model with bytes + optics  | [migration recipe](#migrating-a-jsoncodecmaker-model-optics-as-evidence) |
 | Write one scalar back into a JSON byte buffer         | `JsoniterPrism.fromPath[A]("$.path")` → `.replace(b)(bytes)` |
 | Sum / count over an array on the wire                 | `JsoniterTraversal.fromPath[A]("$.path[*]")` → `.foldMap(...)` |
+| Read a document in place from a larger buffer (no copy) | `JsoniterPrism.inPlace[A]…`, `prism.inPlace`, `traversal.inPlace` over `JsonSlice(…)` |
 | Drill into dynamic shapes (no codec for surrounding)  | eo-circe `codecPrism[…]` — different module |
 | Edit deeply through `[*]` on the wire                 | Phase-3 (not yet shipped); fall through to eo-circe today |
 | Chain a JSON traversal with a Scala collection traversal | `JsoniterTraversal[A].andThen(Traversal.each[F, A])` |
