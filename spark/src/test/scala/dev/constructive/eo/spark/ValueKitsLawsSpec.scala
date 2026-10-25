@@ -4,6 +4,7 @@ package spark
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.*
+import org.apache.spark.unsafe.types.VariantVal
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
@@ -86,6 +87,41 @@ object ValueKitsFixtures:
   private def schemaOf(r: Row): DataType = (r.schema: StructType | Null) match
     case s: StructType => s
     case null          => StructType(Array.empty[StructField])
+
+  // ---- Variants ----------------------------------------------------------
+
+  private val genScalar: Gen[VariantVal] = Gen.oneOf(
+    Gen.alphaStr.map(s => Variants.string.reverseGet(s.take(6))),
+    Gen.choose(-100000L, 100000L).map(Variants.long.reverseGet),
+    Gen.choose(-1e6, 1e6).map(Variants.double.reverseGet),
+    Gen.oneOf(true, false).map(Variants.boolean.reverseGet),
+    Gen.const(Variants.nullValue),
+  )
+
+  /** Built with the kit's own (canonical) constructors; objects carry "f" only sometimes and arrays
+    * vary in length, so `field` / `at` misses are generated.
+    */
+  private def genVariant(depth: Int): Gen[VariantVal] =
+    if depth <= 0 then genScalar
+    else
+      Gen.frequency(
+        3 -> genScalar,
+        2 -> Gen.lzy(
+          for
+            withF <- Gen.oneOf(true, false)
+            n <- Gen.choose(0, 2)
+            vs <- Gen.listOfN(n + 1, genVariant(depth - 1))
+          yield Variants.obj(vs.zipWithIndex.map { (v, i) =>
+            (if withF && i == 0 then "f" else s"k$i") -> v
+          }*)
+        ),
+        2 -> Gen.lzy(
+          Gen.choose(0, 3).flatMap(n => Gen.listOfN(n, genVariant(depth - 1))).map(Variants.arr(_*))
+        ),
+      )
+
+  given Arbitrary[VariantVal] = Arbitrary(Gen.sized(d => genVariant(math.min(d, 3))))
+  given Cogen[VariantVal] = Cogen[String].contramap(_.toJson(java.time.ZoneOffset.UTC))
 
   given Arbitrary[Row] = Arbitrary(genRow(2))
   given Cogen[Row] = Cogen[String].contramap(_.toString)
@@ -248,5 +284,86 @@ class ValueKitsLawsSpec extends Specification with Discipline:
     "Plated[Row]",
     new PlatedTests[Row]:
       val laws = new PlatedLaws[Row] {}
+    .plated,
+  )
+
+  // ---- Variants --------------------------------------------------------------
+
+  import Variants.platedVariant
+
+  private def eqV: (VariantVal, VariantVal) => Boolean = _ == _
+
+  checkAll(
+    "Optional[VariantVal] via field",
+    new OptionalTests[VariantVal, VariantVal]:
+      val laws = new OptionalLaws[VariantVal, VariantVal]:
+        val optional = Variants.field("f")
+    .optional,
+  )
+
+  checkAll(
+    "Seam[VariantVal] via field",
+    new SeamTests[VariantVal, VariantVal]:
+      val laws = new SeamLaws[VariantVal, VariantVal]:
+        val optic = Variants.field("f")
+        val eqv = eqV
+    .seam,
+  )
+
+  checkAll(
+    "Navigation[VariantVal] via field",
+    new NavigationTests[VariantVal, VariantVal]:
+      val laws = new NavigationLaws[VariantVal, VariantVal]:
+        val navigation = Variants.field("f")
+        val eqv = eqV
+    .navigation,
+  )
+
+  checkAll(
+    "Seam[VariantVal] via at",
+    new SeamTests[VariantVal, VariantVal]:
+      val laws = new SeamLaws[VariantVal, VariantVal]:
+        val optic = Variants.at(0)
+        val eqv = eqV
+    .seam,
+  )
+
+  checkAll(
+    "Navigation[VariantVal] via at",
+    new NavigationTests[VariantVal, VariantVal]:
+      val laws = new NavigationLaws[VariantVal, VariantVal]:
+        val navigation = Variants.at(0)
+        val eqv = eqV
+    .navigation,
+  )
+
+  checkAll(
+    "Prism[VariantVal, String] via string",
+    new PrismTests[VariantVal, String]:
+      val laws = new PrismLaws[VariantVal, String]:
+        val prism = Variants.string
+    .prism,
+  )
+
+  checkAll(
+    "Prism[VariantVal, Long] via long",
+    new PrismTests[VariantVal, Long]:
+      val laws = new PrismLaws[VariantVal, Long]:
+        val prism = Variants.long
+    .prism,
+  )
+
+  checkAll(
+    "Prism[VariantVal, Double] via double",
+    new PrismTests[VariantVal, Double]:
+      val laws = new PrismLaws[VariantVal, Double]:
+        val prism = Variants.double
+    .prism,
+  )
+
+  checkAll(
+    "Plated[VariantVal]",
+    new PlatedTests[VariantVal]:
+      val laws = new PlatedLaws[VariantVal] {}
     .plated,
   )

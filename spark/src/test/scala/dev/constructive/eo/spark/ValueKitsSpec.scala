@@ -4,6 +4,7 @@ package spark
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.types.*
+import org.apache.spark.unsafe.types.VariantVal
 import org.scalacheck.Gen
 import org.scalacheck.rng.Seed
 import org.specs2.mutable.Specification
@@ -93,5 +94,39 @@ class ValueKitsSpec extends Specification:
       val rows = sample(summon[org.scalacheck.Arbitrary[Row]].arbitrary)
       val hits = rows.count(Rows.field[Int]("f").getOption(_).isDefined)
       (hits must be_>(50)).and(rows.size - hits must be_>(50))
+    }
+  }
+
+  "Variants" should {
+
+    val doc = Variants.obj(
+      "name" -> Variants.string.reverseGet("eo"),
+      "tags" -> Variants.arr(Variants.long.reverseGet(1L), Variants.long.reverseGet(2L)),
+    )
+
+    "encode one logical value one way, whatever the key order" >> {
+      val a = Variants.obj("b" -> Variants.nullValue, "a" -> Variants.boolean.reverseGet(true))
+      val b = Variants.obj("a" -> Variants.boolean.reverseGet(true), "b" -> Variants.nullValue)
+      (a === b).and(Variants.canonical(a) === a)
+    }
+
+    "drill, rewrite every element, and keep siblings" >> {
+      val doubled = Variants.field("tags").andThen(Variants.each).andThen(Variants.long)
+      val out = doubled.modify(_ * 2)(doc)
+      (Variants.field("tags").andThen(Variants.at(1)).andThen(Variants.long).getOption(out) ===
+        Some(4L))
+        .and(Variants.field("name").andThen(Variants.string).getOption(out) === Some("eo"))
+    }
+
+    "pass writes through misses without inventing nodes" >> {
+      (Variants.field("nope").replace(Variants.nullValue)(doc) === doc)
+        .and(Variants.at(5).replace(Variants.nullValue)(doc) === doc)
+        .and(Variants.string.getOption(doc) must beNone)
+    }
+
+    "generate both hits and misses for the drilled law optics" >> {
+      val vs = sample(summon[org.scalacheck.Arbitrary[VariantVal]].arbitrary)
+      val hits = vs.count(Variants.field("f").getOption(_).isDefined)
+      (hits must be_>(25)).and(vs.size - hits must be_>(25))
     }
   }

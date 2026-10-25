@@ -223,8 +223,12 @@ classpath, and it can be upgraded independently of the cluster. In Spark 4.0 the
 **Phase 1 — Pure-value optics.** *1a DONE:* `Schemas` (`DataType` tree — `struct`/`array`/`map`
 prisms, `field`/`nullable`/`element`/`mapKey`/`mapValue` navigation, `Plated[DataType]`; not named
 `DataTypes`, which is Spark's own Java factory) and `Rows` (`field[A]`/`at[A]` by `ClassTag`,
-`Plated[Row]`), checked with Optional / Seam / Navigation / Prism / Plated rule sets. *1b next:*
-`VariantVal` (binary rewrite via `VariantBuilder`). Original scope: `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
+`Plated[Row]`), checked with Optional / Seam / Navigation / Prism / Plated rule sets. *1b DONE:*
+`Variants` over `VariantVal` — scalar prisms, `field` / `at` / `each`, `Plated`, `obj` / `arr` /
+`nullValue` constructors. Every value handed out or written is re-encoded through `VariantBuilder`
+in a canonical form (keys added in sorted order, depth-first), so `VariantVal`'s byte equality is
+structural equality. A Connect spec round-trips a `parse_json` value: we edit it and Spark's
+`variant_get` reads the edit back. Original scope: `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
 kit, `VariantVal` kit. Laws via the existing `cats-eo-laws` rule sets. No session needed.
 
 **Phase 2 — `Col[A]` + total optics.** The opaque `Col`; struct `Lens`; array/map `Modify`;
