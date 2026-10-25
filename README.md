@@ -11,6 +11,17 @@ parameterised over a carrier `F[_, _]` unifies every optic family;
 cross-family composition goes through `Composer[F, G]` bridges instead
 of N&sup2; hand-written `.andThen` overloads.
 
+## Design principle: no unnecessary work
+
+An optic should cost no more than the code you would write by hand.
+Every operation should do the least work its result needs: a read
+shouldn't build what only a write needs, a composed optic shouldn't
+repeat a step, and a miss should stop early instead of computing
+what it then throws away. Where the generic machinery does more, the
+concrete optic classes carry fused paths that don't, and the
+benchmarks (allocation per call included) hold them to it. A path
+that does extra work is treated as a bug to fix.
+
 ## Install
 
 ```scala

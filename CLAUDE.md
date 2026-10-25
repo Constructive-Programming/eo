@@ -323,6 +323,28 @@ parameterised ADT). Independent of `cats-eo-laws` at runtime.
 
 ## Code conventions
 
+**Key principle: avoid unnecessary work.** An optic should cost no more than
+the hand-written code it replaces. Every operation does the least work its
+result needs — before writing or reviewing a code path, ask what it computes
+that the caller never uses:
+
+- **A read never pays for a write.** Read-only paths use an optic's direct
+  `get` / `getOption`, not its carrier `to(s)`, whose leftover exists only so
+  `from` can rebuild (a split-combine lens's `(complement, focus)` tuple is
+  built and thrown away on every read otherwise). `ReadCompose` does this.
+- **Run each step once.** A composite must not repeat its outer step's work:
+  no `reverseGet` that re-runs a `tear` / decode the read already did, no
+  second traversal to finish what the first pass could have collected.
+- **Stop early.** A miss passes through without building anything; a failed
+  validation returns its errors without rebuilding the structure it would
+  discard (`transformFocusPartial` maps the foci, then calls `from` only if
+  nothing failed).
+- **Measure it.** A new fused path or bridge gets a benchmark row next to the
+  hand-written equivalent, and B/op (allocation per call) is the figure that
+  must not regress. Generic `Morph` / `AssociativeFunctor` routes are the
+  fallback, not the destination: when a common composition lands there, give
+  the concrete class a fused overload.
+
 Beyond the scalafix `DisableSyntax` bans in `.scalafix.conf` (no `return`,
 no XML, no `finalize`):
 
