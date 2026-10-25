@@ -5,8 +5,8 @@ import cats.effect.{Async, Ref, Resource}
 import cats.syntax.all.*
 import com.comcast.ip4s.*
 import dev.constructive.eo.jsoniter.JsonSlice
-import fs2.{Chunk, Stream}
 import fs2.io.net.{Network, Socket}
+import fs2.{Chunk, Stream}
 
 /** What the downstream service received: messages and bytes, how many decoded as issues, and how
   * many of those the policy keeps when it reads the decoded issue.
