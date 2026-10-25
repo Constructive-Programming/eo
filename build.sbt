@@ -979,6 +979,9 @@ lazy val docs: Project = project
     libraryDependencies += zioSchemaJson,
     libraryDependencies += zioJson,
     libraryDependencies += zioPrelude,
+    // fs2 (and, through it, cats-effect) for the "Streaming with fs2"
+    // cookbook page — docs-only: no published module depends on fs2.
+    libraryDependencies += fs2Core,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
@@ -1243,6 +1246,8 @@ lazy val demoUplcJvmBench: Project = project
 // -------------------------------------------------------------------
 lazy val Fs2Version = "3.14.0"
 lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
+// fs2-core alone (it brings cats-effect): the docs' "Streaming with fs2" cookbook page.
+lazy val fs2Core = "co.fs2" %% "fs2-core" % Fs2Version
 // Arbitrary / Cogen derivation from Scala 3 mirrors: the demo's issues are drawn from generators
 // derived from the model.
 lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.10.0"
