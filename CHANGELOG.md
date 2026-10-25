@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **iron: new `cats-eo-iron` module** — [Iron](https://github.com/Iltotore/iron) refined types as
+  optics. `IronPrism[A, C]` turns any runtime-checkable refinement (`RuntimeConstraint[A, C]`, which
+  Iron derives from every `Constraint`) into the lawful Prism `A ⇀ A :| C`: `getOption` tests the
+  constraint, `reverseGet` forgets it. `IronPrism.refined[T]` does the same for `RefinedType` /
+  `RefinedSubtype` newtypes, and `IronPrism.all[F, A, C]` refines a whole `Foldable` container
+  all-or-nothing, in place. All three build the stock `MendTearPrism`, so Lens → Optional and
+  Traversal → filtering-Traversal composition come for free. The `.prism` extension (import
+  `dev.constructive.eo.iron.prism`) builds the same Prism from a `RuntimeConstraint[A, C]` or an
+  Iron `Constraint[A, C]` instance, and from a `RefinedType` / `RefinedSubtype` companion
+  (`Age.prism` = `IronPrism.refined[Age]`). Additive.
 - **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
   `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
   The carrier remains in `data/Glass.scala`; no compatibility alias is provided.

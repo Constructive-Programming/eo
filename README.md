@@ -23,6 +23,7 @@ libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "0.18.0" %
 libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.18.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.18.0"
 libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.18.0" // JDK 25
 ```
@@ -106,6 +107,10 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
 - [`JsoniterPrism`](https://eo.constructive.dev/integrations/jsoniter.html) —
   AST-free JSON-bytes optic over jsoniter-scala, with the same cursor
   sugar and `Ior` failure surface as `JsonPrism`.
+- [`IronPrism`](https://eo.constructive.dev/integrations/iron.html) —
+  Iron refined types as lawful prisms: every runtime-checked
+  refinement `A :| C` is a `Prism` `A ⇀ A :| C`, plus `RefinedType`
+  newtypes and all-or-nothing container refinement (`cats-eo-iron`).
 - [Recursion schemes](https://eo.constructive.dev/schemes.html) —
   cata / ana / hylo and the full typed zoo (para, apo, histo, futu,
   zygo, …) as composable optics (`cats-eo-schemes`, laws in
@@ -136,6 +141,7 @@ for cats typeclasses.
 - circe integration: <https://eo.constructive.dev/integrations/circe.html>
 - Avro integration: <https://eo.constructive.dev/integrations/avro.html>
 - jsoniter-scala integration: <https://eo.constructive.dev/integrations/jsoniter.html>
+- Iron integration (refined types as prisms): <https://eo.constructive.dev/integrations/iron.html>
 - ZIO integration: <https://eo.constructive.dev/integrations/zio.html>
 - Kyo integration (Records, kyo-schema bridge): <https://eo.constructive.dev/integrations/kyo.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook/index.html>
