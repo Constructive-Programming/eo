@@ -9,7 +9,7 @@ import _root_.io.scalaland.chimney.{
   Transformer,
 }
 
-import optics.{BijectionIso, Getter, Modify, PickMendPrism}
+import optics.{BijectionIso, ForgetFold, Getter, Modify, PickMendPrism}
 
 /** Constructors that turn chimney's derived transformations into eo optics. Each one summons (or,
   * for chimney's `Iso` / `Codec`, derives) the chimney value and hands it to the matching `.toX`
@@ -19,13 +19,13 @@ import optics.{BijectionIso, Getter, Modify, PickMendPrism}
   * Constructors, not givens: several lawful optics can share an `(S, A)` pair, so the caller
   * declares the one it wants (the cats-eo doctrine for every bridge).
   *
-  * | chimney                    | eo optic                                  | writes? |
-  * |:---------------------------|:------------------------------------------|:--------|
-  * | `Transformer[S, T]`        | `Getter[S, T]`                            | no      |
-  * | `Iso[A, B]`                | `Iso[A, B]` (`BijectionIso`)              | yes     |
-  * | `Codec[Domain, Dto]`       | `Prism` from `Dto` to `Domain`            | yes     |
-  * | `PartialTransformer[S, T]` | [[ResultFold]]`[S, T]` (keeps the errors) | no      |
-  * | `Patcher[A, P]`            | `Modify[A, A, Unit, P]` (`replace(p)`)    | yes     |
+  * | chimney                    | eo optic                                             | writes? |
+  * |:---------------------------|:-----------------------------------------------------|:--------|
+  * | `Transformer[S, T]`        | `Getter[S, T]`                                       | no      |
+  * | `Iso[A, B]`                | `Iso[A, B]` (`BijectionIso`)                         | yes     |
+  * | `Codec[Domain, Dto]`       | `Prism` from `Dto` to `Domain`                       | yes     |
+  * | `PartialTransformer[S, T]` | `ForgetFold[S, PartialResult, T]` (keeps the errors) | no      |
+  * | `Patcher[A, P]`            | `Modify[A, A, Unit, P]` (`replace(p)`)               | yes     |
   */
 object Chimney:
 
@@ -60,13 +60,13 @@ object Chimney:
   inline def prism[Domain, Dto]: PickMendPrism[Dto, Domain, Domain] =
     Codec.derive[Domain, Dto].toPrism
 
-  /** A `PartialTransformer[S, T]` as a [[ResultFold]] — a read that may fail, keeping chimney's
-    * errors (with their field paths) on the miss. chimney derives the transformer when none is in
-    * scope.
+  /** A `PartialTransformer[S, T]` as a fold into its [[PartialResult]] — a read that may fail,
+    * keeping chimney's errors (with their field paths) on the miss. chimney derives the transformer
+    * when none is in scope.
     *
     * @group Constructors
     */
-  def resultFold[S, T](using pt: PartialTransformer[S, T]): ResultFold[S, T] =
+  def resultFold[S, T](using pt: PartialTransformer[S, T]): ForgetFold[S, PartialResult, T] =
     pt.toResultFold()
 
   /** A `Patcher[A, P]` as a write-only optic: `replace(p)` patches an `A` with `p`. Compose it

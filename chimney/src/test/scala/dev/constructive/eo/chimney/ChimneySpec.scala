@@ -72,11 +72,11 @@ class ChimneySpec extends Specification:
         .and(paths(owner.result(bad)) === List("balance" -> "negative amount: -5"))
     }
 
-    "keep the errors through a Getter, a ResultFold and a prism" in {
+    "keep the errors through a Getter and another result fold" in {
       val cents = decode.andThen(Getter[Account, Long](_.balance.value))
-      val positive = ResultFold[Long, Long](l =>
+      val positive = PartialTransformer[Long, Long](l =>
         if l > 0 then partial.Result.Value(l) else partial.Result.fromErrorString("zero")
-      )
+      ).toResultFold()
       val zero = AccountDto("z", 0L)
       (cents.andThen(positive).getOption(good) === Some(120L))
         .and(paths(cents.andThen(positive).result(zero)) === List("" -> "zero"))
@@ -87,9 +87,9 @@ class ChimneySpec extends Specification:
 
     "turn an inner prism / AffineFold miss into chimney's empty-value error" in {
       val square = prism[Shape, Shape.Square]
-      val shapes = ResultFold[Int, Shape](n =>
+      val shapes = PartialTransformer[Int, Shape](n =>
         partial.Result.Value(if n > 0 then Shape.Square(n.toDouble) else Shape.Circle(1.0))
-      )
+      ).toResultFold()
       val big = AffineFold[Shape.Square, Double](sq => Option.when(sq.side > 10)(sq.side))
       (shapes.andThen(square).getOption(2) === Some(Shape.Square(2.0)))
         .and(shapes.andThen(square).result(-1) must beAnInstanceOf[partial.Result.Errors])

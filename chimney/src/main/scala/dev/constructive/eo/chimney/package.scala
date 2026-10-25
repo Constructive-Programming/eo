@@ -14,7 +14,7 @@ import _root_.io.scalaland.chimney.{
 import cats.Applicative
 
 import forgetful.{ForgetfulFunctor, ForgetfulTraverse}
-import optics.{BijectionIso, Getter, Iso, Modify, Optic, PickMendPrism, Prism}
+import optics.{BijectionIso, ForgetFold, Getter, Iso, Modify, Optic, PickMendPrism, Prism}
 
 // chimney → eo: each chimney value as the eo optic it already is. `Chimney.*` summons / derives
 // the chimney value and calls these.
@@ -42,11 +42,12 @@ extension [Domain, Dto](c: Codec[Domain, Dto])
 
 extension [S, T](pt: PartialTransformer[S, T])
 
-  /** This partial transformer as a [[ResultFold]]. `failFast = true` stops at the first error, as
-    * chimney's `transformFailFast` does. See [[Chimney.resultFold]].
+  /** This partial transformer as a fold into its result — a `ForgetFold[S, PartialResult, T]` that
+    * keeps chimney's errors through composition (see [[PartialResult]]). `failFast = true` stops at
+    * the first error, as chimney's `transformFailFast` does. See [[Chimney.resultFold]].
     */
-  def toResultFold(failFast: Boolean = false): ResultFold[S, T] =
-    new ResultFold(pt.transform(_, failFast))
+  def toResultFold(failFast: Boolean = false): ForgetFold[S, PartialResult, T] =
+    new ForgetFold[S, PartialResult, T](s => PartialResult(pt.transform(s, failFast)))
 
 extension [A, P](p: Patcher[A, P])
 

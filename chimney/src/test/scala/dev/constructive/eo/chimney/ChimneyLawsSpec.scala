@@ -98,7 +98,7 @@ class ChimneyLawsSpec extends Specification with Discipline:
     .optional,
   )
 
-  "ResultFold" should {
+  "Chimney.resultFold" should {
     val decode = Chimney.resultFold[AccountDto, Account]
 
     "agree with its error-free view and its foldMap" in forAll { (dto: AccountDto) =>

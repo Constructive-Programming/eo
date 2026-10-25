@@ -137,8 +137,8 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   JDK 25).
 - [chimney integration](https://eo.constructive.dev/integrations/chimney.html) —
   chimney's derived conversions as optics: `Transformer` → `Getter`,
-  `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → `ResultFold`
-  (a read that keeps chimney's errors), `Patcher` → write-only
+  `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → a fold into
+  chimney's result (a read that keeps chimney's errors), `Patcher` → write-only
   `Modify`, plus `.patch` to run chimney at an optic's focus and
   `.transformFocus` / `.transformImage` to build optics written with,
   or returning, another type (`cats-eo-chimney`).

@@ -59,7 +59,7 @@ object Price:
 
 final case class Line[P](sku: String, price: P)
 
-// --- ResultFold ∘ prism: a sum type --------------------------------------------------------------
+// --- result fold ∘ prism: a sum type --------------------------------------------------------------
 
 enum Shape:
   case Circle(radius: Double)

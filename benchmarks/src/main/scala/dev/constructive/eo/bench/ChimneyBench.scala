@@ -168,7 +168,7 @@ class ChimneyBench extends JmhDefaults:
   // Decode to the domain, edit there, encode back — what the codec round trip does.
   @Benchmark def handCodecModify: ChAccountDto = handEditOwner(dto)
 
-  // ==== decode, then read a field, keeping the errors (ResultFold) ===========================
+  // ==== decode, then read a field, keeping the errors (resultFold) ===========================
 
   @Benchmark def eoResultFoldRead: Either[partial.Result.Errors, String] = decodedOwner.either(dto)
 

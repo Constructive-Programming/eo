@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   eo optics, so a chain can convert and then keep navigating with eo-generics' lenses:
   `Chimney.getter` (`Transformer` → `Getter`), `Chimney.iso` (chimney `Iso` → eo `Iso`),
   `Chimney.prism` (`Codec[Domain, Dto]` → a prism from `Dto` to `Domain`), `Chimney.resultFold`
-  (`PartialTransformer` → the new `ResultFold`, an affine fold whose miss keeps chimney's
-  `partial.Result.Errors` through single-focus composition), and `Chimney.patching`
+  (`PartialTransformer` → a core `ForgetFold[S, PartialResult, T]`, a fold into chimney's
+  result that keeps its `partial.Result.Errors` through single-focus composition), and
+  `Chimney.patching`
   (`Patcher[A, P]` → `Modify[A, A, Unit, P]`), each with a `.toX` extension for hand-configured
   chimney values. The other direction runs chimney at an eo focus: `optic.patch(p)`,
   `optic.transformFocus[C]` / `transformFocusPartial[C]` (a `Transformer[C, B]` /
@@ -53,6 +54,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (calls are unchanged; binary-incompatible). `modify` / `replace` are now `inline`, forwarding to
   a new two-argument `modifyAt(s, f)`, so `optional.modify(f)(s)` allocates no closure (24 B less
   per `modify` in `OptionalBench`).
+- **core: a fold stays in its container through a single-focus inner.** `ForgetFold[S, F, A]
+  .andThen` a lens / iso / `Getter` now gives `ForgetFold[S, F, C]` when `F` has a cats `Functor`,
+  and `.andThen` a prism / optional / `AffineFold` does too when `F` has a cats `FunctorFilter`
+  (an inner miss is `F`'s empty). Before, every such composition collapsed to
+  `ForgetFold[S, List, C]`, so a fold into `Option` or `Either[E, *]` lost its container (and an
+  `Either` its `Left`). Source-breaking where a composed fold's type was written out as `List`;
+  multi-focus inners and containers without the instances still give the `List` fold.
 - **core: read-only compositions read through an optic's direct `get` / `getOption`.**
   `Getter` / `AffineFold` ∘ a lens (and the other `ReadCompose` collapses) used to read the
   lens through its carrier `to(s)`, building and discarding the `(complement, focus)` tuple a

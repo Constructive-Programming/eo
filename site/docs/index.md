@@ -112,8 +112,8 @@ library's core habit: [Capabilities](capabilities.md).
   eo-circe).
 - [chimney integration](integrations/chimney.md) — chimney's derived
   conversions as optics: convert with a `Transformer` / `Iso` /
-  `Codec`, then keep going into the target's fields; `ResultFold`
-  keeps chimney's errors; `.patch` runs chimney at an optic's focus,
+  `Codec`, then keep going into the target's fields; a fold into
+  chimney's result keeps its errors; `.patch` runs chimney at an optic's focus,
   and `.transformFocus` / `.transformImage` build optics written with,
   or returning, another type.
 - [Extensibility](extensibility.md) — how to ship a custom optic

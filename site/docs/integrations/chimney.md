@@ -22,7 +22,7 @@ dependency; the examples below use it for field lenses, so add
 | `Transformer[S, T]`          | `Getter[S, T]`                 | no      |
 | `Iso[A, B]`                  | `Iso[A, B]`                    | yes     |
 | `Codec[Domain, Dto]`         | prism from `Dto` to `Domain`   | yes     |
-| `PartialTransformer[S, T]`   | `ResultFold[S, T]`             | no      |
+| `PartialTransformer[S, T]`   | `ForgetFold[S, PartialResult, T]` | no   |
 | `Patcher[A, P]`              | `Modify[A, A, Unit, P]`        | yes     |
 
 `Chimney.getter` / `iso` / `prism` / `resultFold` / `patching`
@@ -92,14 +92,16 @@ encode after decode must return the DTO. Check your own instances with
 cats-eo-laws' `IsoTests` and `PrismTests`, as this module's own specs
 do.
 
-## Read with errors: `ResultFold`
+## Read with errors: a fold into the result
 
-A `PartialTransformer[S, T]` becomes a `ResultFold[S, T]`. This is a
-read-only optic with at most one focus, like `AffineFold`. The
-difference is what happens on a miss: it keeps chimney's errors,
-including the path of each failing field. `.result(s)` returns the
-`partial.Result`, `.either(s)` an `Either`, and `.getOption(s)` the
-focus without the errors:
+A `PartialTransformer[S, T]` becomes a core `ForgetFold` whose
+container is chimney's result: a `ForgetFold[S, PartialResult, T]`.
+(`PartialResult` is chimney's own `partial.Result` under another name,
+so it can carry the cats instances the fold uses; at runtime it is the
+same value.) It reads at most one focus, like `AffineFold`, but on a
+miss it keeps chimney's errors, including the path of each failing
+field. `.result(s)` returns the `partial.Result`, `.either(s)` an
+`Either`, and `.getOption(s)` the focus without the errors:
 
 ```scala mdoc
 val decode = Chimney.resultFold[AccountDto, Account]
@@ -107,10 +109,12 @@ val decode = Chimney.resultFold[AccountDto, Account]
 decode.result(AccountDto("bob", -5L)).asErrorPathMessageStrings.toList
 ```
 
-The errors survive composition with a single-focus optic. `andThen`
-with a lens, iso, `Getter` or another `ResultFold` keeps the outer
-errors. `andThen` with a prism, optional or `AffineFold` turns an
-inner miss into chimney's empty-value error:
+The errors survive composition with a single-focus optic, because a
+core fold stays in its container when the container allows it. `andThen`
+with a lens, iso or `Getter` maps the result. `andThen` with a prism,
+optional or `AffineFold` maps it too, an inner miss becoming chimney's
+empty-value error. `andThen` with another result fold combines both
+sides' errors:
 
 ```scala mdoc
 val decodedOwner = decode.andThen(lens[Account](_.owner))
@@ -119,10 +123,15 @@ decodedOwner.either(AccountDto("ada", 120L))
 decodedOwner.either(AccountDto("bob", -5L)).left.map(_.asErrorPathMessageStrings.toList)
 ```
 
-A `Traversal` or `Fold` has many foci, so there is no single result
-whose errors could be kept. To compose with one, start from
-`.affineFold`, the version without errors. `.toResultFold(failFast =
-true)` stops at the first error, as chimney's `transformFailFast` does.
+The same holds for any core fold whose container has the matching cats
+instance: a fold into `Option` or `Either[E, *]` stays one through a
+lens.
+
+A `Traversal` or a fold over a collection has many foci, so there is no
+single result whose errors could be kept; composing with one gives a
+`List` fold. To compose without the errors, start from `.affineFold`.
+`.toResultFold(failFast = true)` stops at the first error, as chimney's
+`transformFailFast` does.
 
 ## Patch a nested part
 
@@ -258,7 +267,7 @@ on inputs that fail.
 | `Chimney.getter` ∘ two lenses — read a field | 48 | 0 | 0 | 22 | 1 | 1 |
 | `Chimney.prism` ∘ lens — edit a DTO field | 152 | 128 | 72 | 47 | 49 | 21 |
 | … the DTO doesn't decode | 160 | 72 | 0 | 39 | 20 | 1 |
-| `ResultFold` ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 24 | 21 | 3 |
+| result fold ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 24 | 21 | 3 |
 | … the DTO doesn't decode | 160 | 160 | 16 | 36 | 35 | 3 |
 | `lens.patch` — patch a nested part | 48 | 48 | 48 | 11 | 10 | 9 |
 

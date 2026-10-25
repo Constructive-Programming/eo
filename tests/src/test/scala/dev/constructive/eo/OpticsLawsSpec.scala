@@ -13,6 +13,7 @@ import org.specs2.mutable.Specification
 import optics.{
   AffineFold,
   Fold,
+  ForgetFold,
   Getter,
   Iso,
   Lens,
@@ -27,6 +28,7 @@ import optics.{
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 import laws.{
   AffineFoldLaws,
+  FoldLaws,
   GetterLaws,
   IsoLaws,
   LensLaws,
@@ -37,6 +39,7 @@ import laws.{
 }
 import laws.discipline.{
   AffineFoldTests,
+  FoldTests,
   GetterTests,
   IsoTests,
   LensTests,
@@ -260,6 +263,63 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
           .andThen(Lens.first[Int, String])
     .affineFold,
   )
+
+  // ----- Folds that stay in their container through a single-focus inner -----
+  //
+  // `Fold[F] ∘ lens` maps inside F (cats Functor); `Fold[F] ∘ prism` mapFilters inside F (cats
+  // FunctorFilter). The composite keeps F's type — `Option` stays `Option`, `Either[String, *]`
+  // keeps its `Left` — and must still be a lawful fold that reads exactly what the carrier read
+  // does.
+
+  private val pairs: ForgetFold[Option[(Int, String)], Option, (Int, String)] =
+    new ForgetFold[Option[(Int, String)], Option, (Int, String)](identity)
+
+  private val checked
+      : ForgetFold[Either[String, (Int, String)], [x] =>> Either[String, x], (Int, String)] =
+    new ForgetFold[Either[String, (Int, String)], [x] =>> Either[String, x], (Int, String)](
+      identity
+    )
+
+  private val positiveFirst =
+    Prism.optional[(Int, String), Int](p => Option.when(p._1 > 0)(p._1), n => (n, "made"))
+
+  checkAll(
+    "Fold[Option] ∘ SplitCombineLens — stays an Option fold",
+    new FoldTests[Option[(Int, String)], Int, Forget[Option]]:
+      val laws = new FoldLaws[Option[(Int, String)], Int, Forget[Option]]:
+        val fold: ForgetFold[Option[(Int, String)], Option, Int] =
+          pairs.andThen(Lens.first[Int, String])
+    .fold,
+  )
+
+  checkAll(
+    "Fold[Option] ∘ PickMendPrism — mapFilter inside Option",
+    new FoldTests[Option[(Int, String)], Int, Forget[Option]]:
+      val laws = new FoldLaws[Option[(Int, String)], Int, Forget[Option]]:
+        val fold: ForgetFold[Option[(Int, String)], Option, Int] = pairs.andThen(positiveFirst)
+    .fold,
+  )
+
+  "container-keeping fold compositions read what the carrier read does" >> {
+    val viaLens = pairs.andThen(Lens.first[Int, String])
+    val viaPrism = pairs.andThen(positiveFirst)
+    val eitherLens: ForgetFold[Either[String, (Int, String)], [x] =>> Either[String, x], Int] =
+      checked.andThen(Lens.first[Int, String])
+    val optionOk = forAll { (o: Option[(Int, String)]) =>
+      viaLens.read(o) == o.map(_._1) && viaPrism.read(o) == o.map(_._1).filter(_ > 0)
+    }
+    val eitherOk = forAll { (e: Either[String, (Int, String)]) =>
+      eitherLens.read(e) == e.map(_._1)
+    }
+    // No FunctorFilter for Either[String, *] (no empty without an error value): a prism inner
+    // falls back to the List fold, as before.
+    val eitherPrism: ForgetFold[Either[String, (Int, String)], List, Int] =
+      checked.andThen(positiveFirst)
+    val fallbackOk = forAll { (e: Either[String, (Int, String)]) =>
+      eitherPrism.read(e) == e.toOption.map(_._1).filter(_ > 0).toList
+    }
+    optionOk && eitherOk && fallbackOk
+  }
 
   "direct-read collapses agree with the carrier read" >> {
     forAll { (o: Option[(Int, String)]) =>
