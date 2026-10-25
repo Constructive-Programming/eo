@@ -412,7 +412,7 @@ lazy val circe = Circe %% "circe-core" % "0.14.16"
 // vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.2 pin
 // below wins on the compile classpath, and as an Optional dep vulcan forces
 // nothing downstream anyway.
-lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.0"
+lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.1"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
