@@ -50,8 +50,6 @@ abstract class ModifyAListTests[S, A, F[_, _]] extends Laws:
       "modifyA at List ≡ cartesian traverse",
       "modifyA[List] == Traverse[List] over the foci" ->
         forAll(ss, MultiShot.fn[A, List](identity))(laws.modifyAListIsCartesian(_, _)),
-      "all(s).map(from) == List(s)" ->
-        forAll(ss)(laws.allIsToRoundTrip(_)),
     )
 
 /** Discipline `RuleSet` for [[ModifyAConstLaws]]. */

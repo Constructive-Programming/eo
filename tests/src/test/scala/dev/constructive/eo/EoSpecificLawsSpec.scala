@@ -141,7 +141,7 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   // =============== D2 — modifyA at List ≡ cartesian traverse ========
 
   checkAll(
-    "Traversal.each modifyA[List] ≡ cartesian traverse; all round-trips",
+    "Traversal.each modifyA[List] ≡ cartesian traverse",
     new ModifyAListTests[List[Int], Int, MultiFocus[PSVec]]:
 
       val laws = new ModifyAListLaws[List[Int], Int, MultiFocus[PSVec]]:
@@ -150,7 +150,7 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   )
 
   checkAll(
-    "MultiFocus.apply[List] modifyA[List] ≡ cartesian traverse; all round-trips",
+    "MultiFocus.apply[List] modifyA[List] ≡ cartesian traverse",
     new ModifyAListTests[List[Int], Int, MultiFocus[List]]:
 
       val laws = new ModifyAListLaws[List[Int], Int, MultiFocus[List]]:
@@ -169,12 +169,24 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     .modifyAConst,
   )
 
-  // =============== E1 — foldMap Monoid homomorphism ================
+  // =============== E1 + E2 — foldMap homomorphism; all ≡ foldMap(List(_))
 
-  // covers: foldMap homomorphism on Traversal (MultiFocus[PSVec] carrier)
+  // covers: foldMap homomorphism and `.all` on Traversal (MultiFocus[PSVec] carrier)
   checkAllFoldMapHomomorphismFor[List[Int], Int, MultiFocus[PSVec]](
-    "Traversal.each.foldMap is a Monoid[Int] homomorphism",
+    "Traversal.each.foldMap is a Monoid[Int] homomorphism; all ≡ foldMap(List(_))",
     listTraversal,
+  )
+
+  // covers: foldMap homomorphism and `.all` on MultiFocus[List]
+  checkAllFoldMapHomomorphismFor[List[Int], Int, MultiFocus[List]](
+    "MultiFocus.apply[List].foldMap is a Monoid[Int] homomorphism; all ≡ foldMap(List(_))",
+    MultiFocus.apply[List, Int],
+  )
+
+  // covers: foldMap homomorphism and `.all` on Iso (Direct carrier — `.all` needs only a fold)
+  checkAllFoldMapHomomorphismFor[Int, Int, Direct](
+    "Iso.foldMap is a Monoid[Int] homomorphism; all ≡ foldMap(List(_))",
+    doubleIso,
   )
 
   // =============== H3 — put ≡ reverseGet ∘ pure ====================

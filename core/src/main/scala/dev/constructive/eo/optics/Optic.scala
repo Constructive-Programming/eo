@@ -127,7 +127,7 @@ trait Optic[S, T, A, B, F[_, _]]:
     self.reverse.andThen(o)
 
 /** Companion for [[Optic]]. Hosts the profunctor instances and the capability-gated extension
-  * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.modifyA`, `.all`, `.reverseGet`,
+  * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.all`, `.modifyA`, `.reverseGet`,
   * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen` (carrier-morphing plus the
   * read-only / AffineFold / Modify / Review / Unfold collapses), `.readOnly`, `.cross`, `.morph`,
   * `.headOption`, `.length`, `.exists`. Adding a new carrier means supplying the typeclass
@@ -375,8 +375,8 @@ object Optic:
     inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
       s => FT.traverse(o.to(s), f)(using G).map(o.from)
 
-  /** Effectful modify over any `Applicative[G]`; unlike [[modifyF]] this variant also exposes
-    * [[all]], which collects every visited focus via `Applicative[List]`.
+  /** Effectful modify over any `Applicative[G]` — the [[modifyF]] counterpart for carriers whose
+    * traversal needs `pure` / `ap` as well as `map` (a miss branch, or several foci).
     *
     * @group Operations
     */
@@ -386,12 +386,6 @@ object Optic:
 
     inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
       s => FT.traverse(o.to(s), f)(using G).map(o.from)
-
-    /** Every visited focus, still inside its carrier (`List[F[o.X, A]]`) — the raw-optic
-      * counterpart of the carrier-free `CanFold.foci`.
-      */
-    inline def all(s: S): List[F[o.X, A]] =
-      FT.traverse(o.to(s), List(_))(using Applicative[List])
 
   /** `foldMap` over the focus — the primary consumption path for [[Fold]] and any other carrier
     * with a `ForgetfulFold[F]` instance. Combines every focus through `Monoid[M]`.
@@ -404,6 +398,16 @@ object Optic:
 
     inline def foldMap[M: Monoid](f: A => M): S => M =
       s => FF.foldMap(f, o.to(s))
+
+    /** Every focus, in traversal order — the raw-optic alias of `CanFold.foci`, i.e.
+      * `foldMap(List(_))(s)`. Exactly one element for a Lens / Iso / Getter, at most one for a
+      * Prism / Optional (empty on a miss), every visited focus for a Traversal or Fold, so
+      * `Traversal.each[List, Int].all(xs) == xs`.
+      *
+      * @group Operations
+      */
+    inline def all(s: S): List[A] =
+      FF.foldMap[o.X, A, List[A]](List(_), o.to(s))
 
     /** First focus visible through the optic, if any. Available on any carrier admitting
       * `ForgetfulFold[F]` — `Forget[F]` (Fold), `MultiFocus[F]` (Traversal), `Affine` (Optional /

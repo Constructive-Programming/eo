@@ -16,7 +16,7 @@ import laws.eo.ModifyAListLaws
 import laws.eo.discipline.ModifyAListTests
 
 /** Laws for the hand-written `Traverse[PSVec]` — the instance every `Traversal.each(...).modifyA`
-  * (and every other `MultiFocus[PSVec]` `.modifyA` / `.all`) runs through.
+  * (and every other `MultiFocus[PSVec]` `.modifyA`) runs through.
   *
   * The original bug: `traverse` threaded ONE mutable result array through `G.map2`, so any effect
   * that resumes a continuation more than once handed every resumption the same array and the last
@@ -88,6 +88,10 @@ class PSVecTraverseLawsSpec extends Specification with CheckAllHelpers:
         val laws = new ModifyAListLaws[List[List[Int]], Int, MultiFocus[PSVec]]:
           val optic = Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int])
       .modifyAList,
+    )
+    checkAllFoldMapHomomorphismFor[List[List[Int]], Int, MultiFocus[PSVec]](
+      "(each ∘ each) foldMap homomorphism; all ≡ foldMap(List(_))",
+      Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int]),
     )
   }
 

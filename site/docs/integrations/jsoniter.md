@@ -565,18 +565,18 @@ same carriers over `JsonSlice` instead of `Array[Byte]`.
 The standard cats-eo extensions on those carriers light up
 automatically:
 
-| On `Optic[..., Affine]`        | Lights up via                             |
-|--------------------------------|-------------------------------------------|
-| `.foldMap` / `.headOption`     | `ForgetfulFold[Affine]`                   |
-| `.modify` / `.replace`         | `ForgetfulFunctor[Affine]`                |
-| `.modifyA` / `.all`            | `ForgetfulTraverse[Affine, Applicative]`  |
-| `.andThen` (same-carrier)      | `AssociativeFunctor[Affine, _, _]`        |
+| On `Optic[..., Affine]`             | Lights up via                             |
+|-------------------------------------|-------------------------------------------|
+| `.foldMap` / `.headOption` / `.all` | `ForgetfulFold[Affine]`                   |
+| `.modify` / `.replace`              | `ForgetfulFunctor[Affine]`                |
+| `.modifyA`                          | `ForgetfulTraverse[Affine, Applicative]`  |
+| `.andThen` (same-carrier)           | `AssociativeFunctor[Affine, _, _]`        |
 
-| On `Optic[..., MultiFocus[PSVec]]` | Lights up via                       |
-|------------------------------------|-------------------------------------|
-| `.foldMap` / `.length` / `.exists` | `mfFold[PSVec]`                     |
-| `.modify` / `.replace`             | `mfFunctor[PSVec]`                  |
-| `.andThen` (same-carrier)          | `mfAssocPSVec`                      |
+| On `Optic[..., MultiFocus[PSVec]]`          | Lights up via                       |
+|---------------------------------------------|-------------------------------------|
+| `.foldMap` / `.all` / `.length` / `.exists` | `mfFold[PSVec]`                     |
+| `.modify` / `.replace`                      | `mfFunctor[PSVec]`                  |
+| `.andThen` (same-carrier)                   | `mfAssocPSVec`                      |
 
 So `JsoniterTraversal[A].andThen(Traversal.each[List, A])` — chaining
 a JSON-byte traversal with the classical Scala-collection traversal

@@ -361,7 +361,7 @@ Kaleidoscope, and PowerSeries shapes.
 `MultiFocus[PSVec]` — the `Traversal.each` / `Traversal.pEach`
 carrier. Map, fold, or traverse every element of a collection, and
 keep composing past the traversal with `.andThen`. Supports `.modify`
-/ `.replace` (`Functor`), `.foldMap` (`Foldable`), `.modifyA` / `.all`
+/ `.replace` (`Functor`), `.foldMap` / `.all` (`Foldable`), `.modifyA`
 (`Traverse`), and downstream `.andThen` via `mfAssocPSVec`. Overhead
 over a naive `copy`/`map` runs ~2-3× for dense chains and ~5× for the
 Prism miss-branch shape, amortising down as the collection grows (the

@@ -37,8 +37,8 @@ type Forget[F[_]] = [X, A] =>> ForgetK[F, X, A]
   *
   * {{{
   *   F: Functor      →  ForgetfulFunctor[Forget[F]]              →  .modify / .replace
-  *   F: Foldable     →  ForgetfulFold[Forget[F]]                 →  .foldMap
-  *   F: Traverse     →  ForgetfulTraverse[Forget[F], Applicative] →  .modifyA, .all
+  *   F: Foldable     →  ForgetfulFold[Forget[F]]                 →  .foldMap, .all
+  *   F: Traverse     →  ForgetfulTraverse[Forget[F], Applicative] →  .modifyA
   *   F: Applicative  →  ForgetfulApplicative[Forget[F]]          →  .put
   *   F: Monad        →  AssociativeFunctor[Forget[F], _, _]      →  same-carrier .andThen
   *                                                                  (algebraic-lens shape)
