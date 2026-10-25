@@ -267,8 +267,8 @@ on inputs that fail.
 | `Chimney.getter` ∘ two lenses — read a field | 48 | 0 | 0 | 22 | 1 | 1 |
 | `Chimney.prism` ∘ lens — edit a DTO field | 152 | 128 | 72 | 47 | 49 | 21 |
 | … the DTO doesn't decode | 160 | 72 | 0 | 39 | 20 | 1 |
-| result fold ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 24 | 21 | 3 |
-| … the DTO doesn't decode | 160 | 160 | 16 | 36 | 35 | 3 |
+| result fold ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 26 | 18 | 3 |
+| … the DTO doesn't decode | 160 | 160 | 16 | 37 | 34 | 3 |
 | `lens.patch` — patch a nested part | 48 | 48 | 48 | 11 | 10 | 9 |
 
 One run per row (JDK 25, `-i 5 -wi 3 -f 3 -prof gc`) on a shared 4-vCPU
