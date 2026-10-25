@@ -3,7 +3,7 @@ package optics
 
 import cats.Monoid
 
-import data.Direct
+import data.{Affine, Direct}
 
 /** Monomorphic `Iso` — an alias for the CONCRETE [[BijectionIso]], not for the generic
   * `Optic[S, S, A, A, Direct]`. Because it names the concrete class, ascribing
@@ -98,12 +98,15 @@ final class BijectionIso[S, T, A, B](
 
   /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
+    Optional.fused[S, T, C, D, inner.M](
       getOrModify = s =>
         inner.getOrModify(get(s)) match
           case Left(b)      => Left(reverseGet(b))
           case r @ Right(_) => r.widenLeft[T],
-      reverseGet = (s, d) =>
-        val newB = inner.reverseGet(get(s), d)
-        reverseGet(newB),
+      modify = f => s => reverseGet(inner.modify(f)(get(s))),
+      to = s =>
+        inner.to(get(s)) match
+          case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, inner.M)](reverseGet(mi.fst))
+          case hi: Affine.Hit[inner.X, C] => new Affine.Hit[(T, inner.M), C](hi.snd, hi.b),
+      rebuild = (mi, d) => reverseGet(inner.rebuild(mi, d)),
     )

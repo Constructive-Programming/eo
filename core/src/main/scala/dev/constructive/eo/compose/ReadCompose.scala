@@ -59,7 +59,9 @@ object ReadCompose extends LowPriorityReadCompose:
         outer: Optic[S, T, A, B, F],
         inner: Optic[A, V, C, D, G],
     ): Getter[S, C] =
-      Getter(s => AI.get(inner.to(AO.get(outer.to(s)))))
+      val ro = totalRead(outer, AO)
+      val ri = totalRead(inner, AI)
+      Getter(s => ri(ro(s)))
 
   /** total ∘ partial → [[optics.PickFold]]. @group Instances */
   given totalPartial[F[_, _], G[_, _]](using
@@ -72,7 +74,9 @@ object ReadCompose extends LowPriorityReadCompose:
         outer: Optic[S, T, A, B, F],
         inner: Optic[A, V, C, D, G],
     ): PickFold[S, C] =
-      PickFold(s => PI.getOption(inner.to(AO.get(outer.to(s)))))
+      val ro = totalRead(outer, AO)
+      val ri = partialRead(inner, PI)
+      PickFold(s => ri(ro(s)))
 
   /** partial ∘ total → [[optics.PickFold]]. @group Instances */
   given partialTotal[F[_, _], G[_, _]](using
@@ -85,7 +89,9 @@ object ReadCompose extends LowPriorityReadCompose:
         outer: Optic[S, T, A, B, F],
         inner: Optic[A, V, C, D, G],
     ): PickFold[S, C] =
-      PickFold(s => PO.getOption(outer.to(s)).map(a => AI.get(inner.to(a))))
+      val ro = partialRead(outer, PO)
+      val ri = totalRead(inner, AI)
+      PickFold(s => ro(s).map(ri))
 
   /** partial ∘ partial → [[optics.PickFold]]. @group Instances */
   given partialPartial[F[_, _], G[_, _]](using
@@ -98,9 +104,33 @@ object ReadCompose extends LowPriorityReadCompose:
         outer: Optic[S, T, A, B, F],
         inner: Optic[A, V, C, D, G],
     ): PickFold[S, C] =
-      PickFold(s => PO.getOption(outer.to(s)).flatMap(a => PI.getOption(inner.to(a))))
+      val ro = partialRead(outer, PO)
+      val ri = partialRead(inner, PI)
+      PickFold(s => ro(s).flatMap(ri))
 
 /** Low-priority drawer for [[ReadCompose]] — the many-fold fallback. */
+/** The total read of `o`, resolved once at composition time: its own `get` when it carries one
+  * ([[CanGet]] — every concrete total class: `Getter`, `BijectionIso`, `GetReplaceLens`,
+  * `SplitCombineLens`, …), else the carrier read `acc.get(o.to(s))`. The direct `get` skips the
+  * carrier value `to` builds — for a split-combine lens (eo-generics' `lens[S](_.field)`) that is a
+  * `(complement, focus)` tuple per read, which a read-only composite immediately throws away.
+  */
+private def totalRead[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F], acc: Accessor[F]): S => A =
+  o match
+    case g: CanGet[S @unchecked, A @unchecked] => g.get
+    case _                                     => s => acc.get(o.to(s))
+
+/** [[totalRead]]'s partial twin: `o`'s own `getOption` when it is a [[CanGetOption]], else the
+  * carrier read.
+  */
+private def partialRead[S, T, A, B, F[_, _]](
+    o: Optic[S, T, A, B, F],
+    acc: PartialAccessor[F],
+): S => Option[A] =
+  o match
+    case g: CanGetOption[S @unchecked, A @unchecked] => g.getOption
+    case _                                           => s => acc.getOption(o.to(s))
+
 trait LowPriorityReadCompose:
 
   /** Anything foldable ∘ anything foldable → [[optics.ForgetFold]] over `List`. Fires only when no

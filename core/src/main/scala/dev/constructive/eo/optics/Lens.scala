@@ -3,6 +3,8 @@ package optics
 
 import cats.Monoid
 
+import data.Affine
+
 /** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. "A
   * `Lens[S, A]`" is prose shorthand for `Optic[S, S, A, A, Tuple2]`: there is deliberately NO
   * `type Lens[S, A]` alias to ascribe (`Lens` is only this constructor object). The reason is
@@ -148,12 +150,17 @@ class GetReplaceLens[S, T, A, B](
     * cross-carrier `Morph.bothViaAffine`.
     */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
+    Optional.fused[S, T, C, D, S](
       getOrModify = s =>
         inner.tear(get(s)) match
           case Left(b)      => Left(enplace(s, b))
           case r @ Right(_) => r.widenLeft[T],
-      reverseGet = (s, d) => enplace(s, inner.mend(d)),
+      modify = f => s => enplace(s, inner.modify(f)(get(s))),
+      to = s =>
+        inner.tear(get(s)) match
+          case Left(b)  => new Affine.Miss[(T, S)](enplace(s, b))
+          case Right(c) => new Affine.Hit[(T, S), C](s, c),
+      rebuild = (s, d) => enplace(s, inner.mend(d)),
     )
 
   /** Fused `Lens.andThen(Prism)` — Option-fast-path inner (PickMend). Mono inner required for type
@@ -162,12 +169,24 @@ class GetReplaceLens[S, T, A, B](
   def andThen[C, D](inner: PickMendPrism[A, C, D])(using
       ev: A =:= B
   ): Optional[S, T, C, D] =
-    new Optional(
+    Optional.fused[S, T, C, D, S](
       getOrModify = s =>
-        inner.pick(get(s)) match
+        val a = get(s)
+        inner.pick(a) match
           case Some(c) => Right(c)
-          case None    => Left(enplace(s, ev(get(s)))),
-      reverseGet = (s, d) => enplace(s, ev(inner.mend(d))),
+          case None    => Left(enplace(s, ev(a))),
+      modify = f =>
+        s =>
+          val a = get(s)
+          inner.pick(a) match
+            case Some(c) => enplace(s, ev(inner.mend(f(c))))
+            case None    => enplace(s, ev(a)),
+      to = s =>
+        val a = get(s)
+        inner.pick(a) match
+          case Some(c) => new Affine.Hit[(T, S), C](s, c)
+          case None    => new Affine.Miss[(T, S)](enplace(s, ev(a))),
+      rebuild = (s, d) => enplace(s, ev(inner.mend(d))),
     )
 
   /** Fused `Lens.andThen(Traversal)` — lifts this lens through the same `tuple2multifocusPSVec`
@@ -181,14 +200,18 @@ class GetReplaceLens[S, T, A, B](
 
   /** Fused `Lens.andThen(Optional)` — outer always hits, inner may miss. Result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    new Optional(
+    Optional.fused[S, T, C, D, (S, inner.M)](
       getOrModify = s =>
         inner.getOrModify(get(s)) match
           case Left(b)      => Left(enplace(s, b))
           case r @ Right(_) => r.widenLeft[T],
-      reverseGet = (s, d) =>
-        val newB = inner.reverseGet(get(s), d)
-        enplace(s, newB),
+      modify = f => s => enplace(s, inner.modify(f)(get(s))),
+      to = s =>
+        inner.to(get(s)) match
+          case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, (S, inner.M))](enplace(s, mi.fst))
+          case hi: Affine.Hit[inner.X, C] =>
+            new Affine.Hit[(T, (S, inner.M)), C]((s, hi.snd), hi.b),
+      rebuild = (m, d) => enplace(m._1, inner.rebuild(m._2, d)),
     )
 
 /** Polymorphic split-combine lens — splitter `S => (XA, A)` + combiner `(XA, B) => T`, surfacing

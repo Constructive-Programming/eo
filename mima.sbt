@@ -6,6 +6,12 @@
 // cats-eo-avro has no published baseline anyway. Breaking-change
 // history, newest first:
 //
+//   Unreleased: `Optional` becomes a sealed abstract class with an
+//         existential intermediate (`type M`, `X = (T, M)`) so every write
+//         tears its source once; `new Optional(...)` is gone (use
+//         `Optional.apply`) and `getOrModify` / `reverseGet` are methods
+//         instead of constructor vals (source-compatible for callers,
+//         binary-breaking).
 //   Unreleased: remove the legacy MultiFocus Function1 Grate kernel, tuple /
 //         representable factories, zip / zipWith, and Direct bridge, together
 //         with RepresentativeIndex. Indexed is the fixed-index replacement;

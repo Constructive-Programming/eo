@@ -201,6 +201,74 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     .getter,
   )
 
+  // ----- Fused prism ∘ lens, and read-only collapses through a lens's direct `get` -----
+  //
+  // Every fused prism ∘ lens overload lands in `Optional`, so each must satisfy the Optional
+  // laws; a Getter / AffineFold ∘ split-combine lens reads through the lens's own `get` instead
+  // of its `(complement, focus)` split, which must read exactly what the carrier read does.
+
+  private val somePairPick = Prism.optional[Option[(Int, String)], (Int, String)](identity, Some(_))
+
+  private val somePairTear =
+    Prism[Option[(Int, String)], (Int, String)](o => o.toRight(o), Some(_))
+
+  private val firstReplace =
+    Lens[(Int, String), Int](_._1, (p, n) => p.copy(_1 = n))
+
+  checkAll(
+    "Optional — PickMendPrism ∘ SplitCombineLens (fused)",
+    new OptionalTests[Option[(Int, String)], Int]:
+      val laws = new OptionalLaws[Option[(Int, String)], Int]:
+        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
+          somePairPick.andThen(Lens.first[Int, String])
+    .optional,
+  )
+
+  checkAll(
+    "Optional — PickMendPrism ∘ GetReplaceLens (fused)",
+    new OptionalTests[Option[(Int, String)], Int]:
+      val laws = new OptionalLaws[Option[(Int, String)], Int]:
+        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
+          somePairPick.andThen(firstReplace)
+    .optional,
+  )
+
+  checkAll(
+    "Optional — MendTearPrism ∘ SplitCombineLens (fused)",
+    new OptionalTests[Option[(Int, String)], Int]:
+      val laws = new OptionalLaws[Option[(Int, String)], Int]:
+        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
+          somePairTear.andThen(Lens.first[Int, String])
+    .optional,
+  )
+
+  checkAll(
+    "Getter ∘ SplitCombineLens — direct-read collapse",
+    new GetterTests[((Int, String), Boolean), Int]:
+      val laws = new GetterLaws[((Int, String), Boolean), Int]:
+        val getter =
+          Getter[((Int, String), Boolean), (Int, String)](_._1).andThen(Lens.first[Int, String])
+        val reference = (p: ((Int, String), Boolean)) => p._1._1
+    .getter,
+  )
+
+  checkAll(
+    "AffineFold ∘ SplitCombineLens — direct-read collapse",
+    new AffineFoldTests[Option[(Int, String)], Int]:
+      val laws = new AffineFoldLaws[Option[(Int, String)], Int]:
+        val af = AffineFold[Option[(Int, String)], (Int, String)](identity)
+          .andThen(Lens.first[Int, String])
+    .affineFold,
+  )
+
+  "direct-read collapses agree with the carrier read" >> {
+    forAll { (o: Option[(Int, String)]) =>
+      AffineFold[Option[(Int, String)], (Int, String)](identity)
+        .andThen(Lens.first[Int, String])
+        .getOption(o) == o.map(_._1)
+    }
+  }
+
   val lengthGetter: Optic[String, Unit, Int, Unit, Direct] =
     Getter[String, Int](_.length)
 
