@@ -110,6 +110,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `C` maps to `B | Null` with the errors collected on the side, and the original optic rebuilds
   only when nothing failed (instead of `modifyA` with a per-element `partial.Result`
   applicative), so its write never sees a failed focus.
+- **core: `Optic.all` lists every focus** (breaking). `optic.all(s)` now returns `List[A]`, every
+  focus in traversal order: the raw-optic alias of `CanFold.foci`, i.e. `foldMap(List(_))(s)`
+  (`Traversal.each[List, Int].all(List(1, 2, 3)) == List(1, 2, 3)`). Before, it was
+  `traverse(to(s), List(_))`, which always returned the single whole carrier, `List(to(s))`:
+  never the foci its doc promised. It now needs only a `ForgetfulFold` carrier instead of
+  `ForgetfulTraverse[F, Applicative]`, so Iso / Getter (`Direct`) and folds / traversals over a
+  merely `Foldable` container gain it; no carrier loses it. Breaking: the return type changes
+  from `List[F[X, A]]` to `List[A]`. Laws: `ModifyAListLaws.allIsToRoundTrip` is replaced by
+  E2 `FoldMapHomomorphismLaws.allIsFoci` (`all(s) == foldMap(List(_))(s)`), run by the
+  `foldMapHomomorphism` rule set on every fold-capable carrier.
 
 ### Fixed
 

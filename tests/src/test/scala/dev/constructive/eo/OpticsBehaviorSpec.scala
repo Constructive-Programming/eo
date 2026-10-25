@@ -1023,7 +1023,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     optOk.and(lensOk).and(prismOk).and(isoOk)
   }
 
-  // ----- ForgetfulFold surface: foldMap / headOption / length / exists -----
+  // ----- ForgetfulFold surface: foldMap / all / headOption / length / exists -----
   //
   // ONE property, TWO receiver shapes, one independent oracle (the expected focus
   // List supplied per row). `extAgrees` holds the optic as the BARE `Optic[…]` — the
@@ -1041,14 +1041,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   no-focus-satisfies class: k = 10 (elements are 0..9), or the empty fold n = 0.
   // Carrier rows carried over from the example block this replaces: Tuple2 (Lens, one
   //   focus), Either (Prism, hit and miss), MultiFocus[PSVec], Forget[List].
-  "ForgetfulFold surface: foldMap / headOption / length / exists agree with the foci" >> {
+  "ForgetfulFold surface: foldMap / all / headOption / length / exists agree with the foci" >> {
     def extAgrees[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(
         s: S,
         expected: List[A],
         p: A => Boolean,
     )(using ForgetfulFold[F]): Boolean =
       val foci: List[A] = o.foldMap[List[A]](a => List(a))(s)
-      foci == expected && o.headOption(s) == expected.headOption &&
+      foci == expected && o.all(s) == expected && o.headOption(s) == expected.headOption &&
       o.length(s) == expected.length && o.exists(p)(s) == expected.exists(p)
 
     def cfAgrees[S, A](cf: CanFold[S, A])(s: S, expected: List[A], p: A => Boolean): Boolean =

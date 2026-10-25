@@ -19,7 +19,10 @@ import org.openjdk.jmh.annotations.*
   *     an explicit post-order stack machine / worklist on the heap).
   *   - `m*` — Monocle `monocle.function.Plated.universe` / `.transform` over a hand-written
   *     `Plated` instance.
-  *   - `visitor*` — the hand-rolled recursive collector / rebuild you'd write without optics.
+  *   - `visitor*` — the hand-rolled recursive collector / rebuild you'd write without optics. The
+  *     visitors allocate no per-node closures (the JSON one is a `Json.Folder`, not `fold` with
+  *     capturing lambdas): C2 escape analysis would elide a run-dependent share of those, making
+  *     B/op bimodal across JVMs on identical code (see `PlatedTrees.visitJson`).
   *
   * Subjects (all sized by `n`, so a row reads across at equal node counts):
   *

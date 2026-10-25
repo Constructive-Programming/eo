@@ -671,26 +671,25 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     }
   }
 
-  // ----- FoldMap homomorphism on Lens / Prism / Optional ---------
+  // ----- FoldMap homomorphism + all ≡ foldMap(List(_)) on Lens / Prism / Optional
   //
-  // The ForgetfulFold instances for Tuple2 / Either / Affine in
-  // core/src/main/scala/eo/ForgetfulFold.scala are only reachable
-  // through an optic-level fold. These checkAll blocks wire the
-  // EO-specific FoldMapHomomorphismLaws against the tuple / prism /
-  // optional fixtures already declared above.
-  // covers: foldMap homomorphism on Lens (Tuple2 carrier)
+  // The ForgetfulFold instances for Tuple2 / Either / Affine are only
+  // reachable through an optic-level fold. These checkAll blocks wire the
+  // EO-specific FoldMapHomomorphismLaws (E1, plus E2 `allIsFoci`) against
+  // the tuple / prism / optional fixtures already declared above.
+  // covers: foldMap homomorphism and `.all` on Lens (Tuple2 carrier)
   checkAllFoldMapHomomorphismFor[(Int, String), Int, Tuple2](
     "Lens foldMap homomorphism (Tuple2 carrier)",
     firstLens,
   )
 
-  // covers: foldMap homomorphism on Prism (Either carrier)
+  // covers: foldMap homomorphism and `.all` on Prism (Either carrier)
   checkAllFoldMapHomomorphismFor[Int, Int, Either](
     "Prism foldMap homomorphism (Either carrier)",
     evenPrism,
   )
 
-  // covers: foldMap homomorphism on Optional (Affine carrier)
+  // covers: foldMap homomorphism and `.all` on Optional (Affine carrier)
   checkAllFoldMapHomomorphismFor[(Int, List[Int]), Int, Affine](
     "Optional foldMap homomorphism (Affine carrier)",
     headOptional,

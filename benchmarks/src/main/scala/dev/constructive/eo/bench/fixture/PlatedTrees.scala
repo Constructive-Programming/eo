@@ -9,7 +9,7 @@ import cats.instances.vector.given
 import cats.{Applicative, Traverse}
 import dev.constructive.eo.generics.plate
 import dev.constructive.eo.optics.Plated as EoPlated
-import io.circe.Json
+import io.circe.{Json, JsonNumber, JsonObject}
 import monocle.function.Plated as MPlated
 import monocle.{PTraversal, Traversal as MTraversal}
 
@@ -125,17 +125,46 @@ object PlatedTrees:
       case Bin.Node(l, r) => Bin.Node(visitTransformBin(f)(l), visitTransformBin(f)(r))
       case leaf: Bin.Leaf => leaf)
 
+  // The JSON walk is a classic visitor too: circe's own `Json.Folder` (double dispatch through
+  // `foldWith`), ONE instance per call, indexed `@tailrec` loops over the children. It used to be
+  // `x.fold(..., arr => arr.foreach(go), obj => obj.values.foreach(go))`, which allocates two
+  // capturing closures per node; C2 escape analysis scalar-replaced a run-dependent share of them,
+  // so its B/op was bimodal per JVM on identical code (~295 K / ~524 K at n=4096, 885 K with
+  // `-XX:-DoEscapeAnalysis`) and the `-f 1` PR benchmark reported phantom ±78% swings. Without
+  // per-node closures there is nothing left for escape analysis to elide: what remains is the
+  // result list itself, so the allocation is deterministic.
   def visitJson(j: Json): List[Json] =
-    val buf = scala.collection.mutable.ListBuffer.empty[Json]
-    def go(x: Json): Unit =
+    val visitor = new JsonVisitor
+    visitor.visit(j)
+    visitor.result
+
+  final private class JsonVisitor extends Json.Folder[Unit]:
+    private val buf = scala.collection.mutable.ListBuffer.empty[Json]
+
+    def result: List[Json] = buf.toList
+
+    def visit(x: Json): Unit =
       buf += x
-      x.fold(
-        (),
-        _ => (),
-        _ => (),
-        _ => (),
-        arr => arr.foreach(go),
-        obj => obj.values.foreach(go),
-      )
-    go(j)
-    buf.toList
+      x.foldWith(this)
+
+    def onNull: Unit = ()
+    def onBoolean(value: Boolean): Unit = ()
+    def onNumber(value: JsonNumber): Unit = ()
+    def onString(value: String): Unit = ()
+
+    def onArray(value: Vector[Json]): Unit =
+      @tailrec def loop(i: Int): Unit =
+        if i < value.length then
+          visit(value(i))
+          loop(i + 1)
+      loop(0)
+
+    // Object fields need an iterator (circe exposes no indexed access); the benchmark's subject is
+    // all arrays and strings, so this path never runs there.
+    def onObject(value: JsonObject): Unit =
+      val it = value.values.iterator
+      @tailrec def loop(): Unit =
+        if it.hasNext then
+          visit(it.next())
+          loop()
+      loop()

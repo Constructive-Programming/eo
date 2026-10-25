@@ -16,8 +16,7 @@ import optics.Optic.*
 //       effectful update to plain update.
 //   D2. `modifyA[List]` ≡ cats' cartesian `Traverse[List]` over the
 //       foci — the multi-shot applicative runs every continuation once
-//       per branch, which D1 / D3 (one result per call) cannot see; and
-//       `all(s)`, the `List(_)` traverse, is the single carrier `to(s)`.
+//       per branch, which D1 / D3 (one result per call) cannot see.
 //   D3. `modifyA[Const[M, *]]` ≡ `foldMap` — the Const applicative
 //       collapses effectful update to a monoidal fold (this is the
 //       van Laarhoven-style phantom-write trick).
@@ -36,9 +35,7 @@ trait ModifyAIdLaws[S, A, F[_, _]]:
     val viaModify: S = optic.modify(f)(s)
     viaModifyA == viaModify
 
-/** D2 — `optic.modifyA[List]` is cats' cartesian product over the foci, and `optic.all` is the
-  * one-branch traverse that `from` maps back to `s`.
-  */
+/** D2 — `optic.modifyA[List]` is cats' cartesian product over the foci. */
 trait ModifyAListLaws[S, A, F[_, _]]:
   /** The optic under test. */
   def optic: Optic[S, S, A, A, F]
@@ -59,11 +56,6 @@ trait ModifyAListLaws[S, A, F[_, _]]:
     val refill: List[A] => S = bs => optic.modifyA[Refill](pop)(s).runA(bs).value
     val foci = optic.foldMap(List(_))(s)
     optic.modifyA[List](f)(s) == Traverse[List].traverse(foci)(f).map(refill)
-
-  /** `all(s).map(from) == List(s)` — one branch, holding `to(s)`. */
-  def allIsToRoundTrip(s: S)(using ForgetfulTraverse[F, Applicative]): Boolean =
-    val o = optic
-    o.all(s).map(o.from) == List(s)
 
 /** D3 — `optic.modifyA[Const[M, *]]` is pointwise equal to `optic.foldMap` on the same function,
   * with `M = Int` (additive).

@@ -21,7 +21,8 @@ private case class Person(name: String, phones: List[Phone])
   * fast-path), the Iso bridge (`forgetful2multifocus`), and the ModifyF widening
   * (`multifocus2modify`). Plus the .collect universal in its two derivations. `.modify` /
   * `.modifyA` / `.all` across F are law-checked in `tests/` (`ForgetfulFunctor` /
-  * `ForgetfulTraverse` per carrier in OpticsLawsSpec, D2 `ModifyAListTests` in EoSpecificLawsSpec).
+  * `ForgetfulTraverse` per carrier in OpticsLawsSpec, D2 `ModifyAListTests` and E2 `allIsFoci` in
+  * EoSpecificLawsSpec).
   */
 class MultiFocusSpec extends Specification with ScalaCheck:
 
