@@ -210,6 +210,55 @@ Both return a generic `Optic`, so `.modify`, `.replace` and
 `.reverseGet` keep working, but the concrete optic's fused fast paths
 are not carried over.
 
+## Performance
+
+`ChimneyBench` (in `benchmarks/`) runs every scenario three ways:
+through this module (**eo-chimney**), with **chimney** alone (the same
+transformers, built once; the `into…withFieldComputed` DSL where a
+field override is needed), and **hand**-written with neither library.
+All three compute the same value. Optics and transformers are built
+once, outside the measured call, and only the success paths are
+measured.
+
+| Scenario | eo-chimney B/op | chimney B/op | hand B/op | eo ns/op | chimney ns/op | hand ns/op |
+|---|---:|---:|---:|---:|---:|---:|
+| `transformFocus` — retype 64 list elements | 3,616 | 3,072 | 3,072 | 1043 | 847 | 725 |
+| `transformFocusPartial` — same, partially | 11,432 | 3,184 | 4,624 | 3019 | 962 | 928 |
+| `transformImage` — edit a field, return the view | 96 | 152 | 96 | 29 | 37 | 25 |
+| `transformImagePartial` — edit, then validate | 120 | 96 | 64 | 29 | 22 | 12 |
+| `Chimney.getter` ∘ two lenses — read a field | 80 | 0 | 0 | 19 | 1 | 1 |
+| `Chimney.prism` ∘ lens — edit a DTO field | 240 | 128 | 72 | 58 | 47 | 19 |
+| `ResultFold` ∘ lens — decode, read, keep errors | 96 | 72 | 16 | 24 | 19 | 3 |
+| `lens.patch` — patch a nested part | 48 | 48 | 48 | 10 | 23 | 10 |
+
+One local run (JDK 25, `-i 5 -wi 3 -f 1 -prof gc`) on a shared 4-vCPU
+machine. As on the [benchmarks page](../benchmarks.md), allocation
+(B/op) is the figure to compare; nanoseconds only show the direction,
+and several of these error bars are as wide as the number itself.
+
+What the numbers say:
+
+- **`transformImage` allocates no more than the hand-written code**,
+  and less than chimney's DSL. `transformFocus` and
+  `transformImagePartial` cost a little more than chimney alone.
+- **`transformFocusPartial` costs about 3.5× chimney's allocation**
+  (and is about 3× slower). It runs through the optic's generic
+  `modifyA` with an error-accumulating `partial.Result` applicative,
+  which allocates per element. For a plain collection, chimney's own
+  `transformIntoPartial` is the faster route; the eo version earns its
+  cost where chimney cannot reach, such as foci picked out by a prism
+  or a nested traversal.
+- **Convert-then-read allocates where chimney alone does not.** The JIT
+  removes chimney's whole conversion when only one field is read, but
+  the eo chain's lenses build intermediate tuples (80 B). Reading a
+  field this way is a convenience, not a fast path.
+
+Reproduce with:
+
+```sh
+sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -prof gc .*ChimneyBench.*"
+```
+
 ## Notes
 
 - **Field-type changes inside a case class.** chimney already handles

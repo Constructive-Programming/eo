@@ -33,6 +33,7 @@ final case class ChRawPrice(cents: Long)
 final case class ChPrice(cents: Long)
 
 object ChPrice:
+
   given PartialTransformer[ChRawPrice, ChPrice] =
     PartialTransformer(r =>
       if r.cents >= 0 then partial.Result.Value(ChPrice(r.cents))

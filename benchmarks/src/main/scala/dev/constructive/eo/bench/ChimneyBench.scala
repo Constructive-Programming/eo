@@ -17,14 +17,14 @@ import optics.Traversal
 /** `cats-eo-chimney` vs plain chimney vs hand-written code, one row triple per scenario:
   *
   *   - `eo*` — the cats-eo-chimney bridge, optics built once in fields;
-  *   - `chimney*` — the same job with chimney alone (no eo), transformers built once in fields,
-  *     the DSL (`into…withFieldComputed`) where a field override is needed;
+  *   - `chimney*` — the same job with chimney alone (no eo), transformers built once in fields, the
+  *     DSL (`into…withFieldComputed`) where a field override is needed;
   *   - `hand*` — what you would write with neither library.
   *
-  * The headline is the transform quartet — `transformFocus` / `transformFocusPartial` (retype
-  * every focus of a 64-element list) and `transformImage` / `transformImagePartial` (edit a field,
-  * hand the result back as another type). The bridge scenarios after it (convert-then-read, edit
-  * through a `Codec`, read with errors, patch a nested part) cover the rest of the module.
+  * The headline is the transform quartet — `transformFocus` / `transformFocusPartial` (retype every
+  * focus of a 64-element list) and `transformImage` / `transformImagePartial` (edit a field, hand
+  * the result back as another type). The bridge scenarios after it (convert-then-read, edit through
+  * a `Codec`, read with errors, patch a nested part) cover the rest of the module.
   *
   * Only the success paths are measured: a failed chimney transformation builds an error chain and
   * would measure that instead of the transform.
@@ -48,13 +48,17 @@ class ChimneyBench extends JmhDefaults:
   // Givens, so the eo extensions below summon these very instances (the two sides share them).
   private given priceT: Transformer[ChRawPrice, ChPrice] = Transformer.derive
   private val pricesT: Transformer[List[ChRawPrice], List[ChPrice]] = Transformer.derive
-  private given pricePT: PartialTransformer[ChRawPrice, ChPrice] = ChPrice.given_PartialTransformer_ChRawPrice_ChPrice
+
+  private given pricePT: PartialTransformer[ChRawPrice, ChPrice] =
+    ChPrice.given_PartialTransformer_ChRawPrice_ChPrice
+
   // Both a total and a partial element transformer are in scope: tell chimney to use the partial.
   private val pricesPT: PartialTransformer[List[ChRawPrice], List[ChPrice]] =
     PartialTransformer
       .define[List[ChRawPrice], List[ChPrice]]
       .enableImplicitConflictResolution(PreferPartialTransformer)
       .buildTransformer
+
   private val viewT: Transformer[ChUser, ChUserView] = Transformer.derive
   private val accountPT: PartialTransformer[ChAccountDto, ChAccount] = PartialTransformer.derive
   private val accountT: Transformer[ChAccount, ChAccountDto] = Transformer.derive

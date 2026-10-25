@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (errors accumulate across a Traversal's foci), and on the result side `optic.transformImage[U]`
   / `transformImagePartial[U]` (a `Transformer[T, U]` / `PartialTransformer[T, U]` run on what
   the optic writes back, so every write returns a `U`).
+  `ChimneyBench` compares every bridge against plain chimney and hand-written code; the results
+  table is on the chimney integration page.
 
 - **core: `optics.Indexed`** (trait and companion in `optics/Indexed.scala`), an `Optic` over
   `GlassF[I] = [X, A] =>> (context: X, values: I => A)`.
