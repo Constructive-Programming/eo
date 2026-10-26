@@ -201,9 +201,14 @@ The cost, for one nested edit over a cached 200 000-row Dataset (local Connect s
 
 | | ms/op |
 |---|---:|
-| hand-written `withField` | 51.8 ± 19.5 |
-| `ColumnOptics.path` (symbolic) | 56.6 ± 22.3 |
-| `mapThrough` (eager bridge) | 289.0 ± 28.3 |
+| hand-written `withField` | 107.0 ± 5.4 |
+| `ColumnOptics.path` (symbolic) | 106.4 ± 12.2 |
+| `mapThrough` (eager bridge) | 187.6 ± 10.9 |
+| `Dataset.map` with a hand-written `copy` | 188.7 ± 11.3 |
+| `Dataset.map(identity)` | 174.2 ± 11.7 |
+
+The bridge costs what any typed `Dataset.map` costs: every row is decoded to JVM objects and
+re-encoded. The optic itself adds nothing measurable.
 
 ## Spark's own values: schemas, rows and variants
 

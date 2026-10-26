@@ -113,11 +113,16 @@ object ColumnPath:
       case Nil                    => a
       case Field(_, i, m) :: rest =>
         val p = s.asInstanceOf[Product]
-        m.fromProduct(Tuple.fromArray(Array.tabulate[Object](p.productArity) { j =>
-          (if j == i then set(p.productElement(j), rest, a) else p.productElement(j))
-            .asInstanceOf[Object]
-        }))
+        m.fromProduct(Replaced(p, i, set(p.productElement(i), rest, a)))
       case Some :: rest =>
         s.asInstanceOf[Option[Any]] match
           case scala.Some(v) => scala.Some(set(v, rest, a))
           case scala.None    => scala.None
+
+  /** `p` with element `i` replaced by `v`, as the `Product` a `Mirror` rebuilds from: no array and
+    * no tuple copy per level (the eager bridge runs this once per row and level).
+    */
+  final private class Replaced(p: Product, i: Int, v: Any) extends Product:
+    def productArity: Int = p.productArity
+    def productElement(j: Int): Any = if j == i then v else p.productElement(j)
+    def canEqual(that: Any): Boolean = false

@@ -14,14 +14,21 @@ case class BPerson(name: String, address: BAddress)
 /** Bridge functions in a top-level object, so the server can load their implementing class. */
 object BenchFns:
   val upperCase: String => String = _.toUpperCase
+  val identityP: BPerson => BPerson = p => p
 
-/** One nested edit — upper-case `address.street` — three ways, each forced by a checksum aggregate
-  * over the edited rows, against a cached server-side Dataset (Spark Connect, local server JVM):
+  val handEdit: BPerson => BPerson =
+    p => p.copy(address = p.address.copy(street = p.address.street.toUpperCase))
+
+/** One nested edit — upper-case `address.street` — several ways, each forced by a checksum
+  * aggregate over the edited rows, against a cached server-side Dataset (Spark Connect, local
+  * server JVM):
   *
   *   - `symbolic`: `ColumnOptics.path[BPerson](_.address.street)` lifted with `editRows`;
   *   - `handWritten`: the same projection spelled with `withField` directly — the baseline the
   *     optic should match;
-  *   - `eagerMap`: `mapThrough` with the eager twin — decode, Scala closure, re-encode.
+  *   - `eagerMap`: `mapThrough` with the eager twin — decode, Scala closure, re-encode;
+  *   - `handMap` / `identityMap`: the same typed `Dataset.map` with a hand-written `copy` / with
+  *     `identity` — what the bridge costs without eo, and what the object round trip alone costs.
   */
 @State(Scope.Benchmark)
 @BenchmarkMode(Array(Mode.AverageTime))
@@ -85,3 +92,11 @@ class NestedEditBench:
   def eagerMap(): Long =
     given CanModify[BPerson, String] = street.eager
     checksum(people.mapThrough[String](BenchFns.upperCase))
+
+  @Benchmark
+  def identityMap(): Long =
+    checksum(people.map(BenchFns.identityP)(using summon[AgnosticEncoder[BPerson]]))
+
+  @Benchmark
+  def handMap(): Long =
+    checksum(people.map(BenchFns.handEdit)(using summon[AgnosticEncoder[BPerson]]))

@@ -60,5 +60,5 @@ assert(country.eager.getOption(sample.copy(customer = Customer("c2", None))) == 
 
 **When the edit isn't expressible as a column expression** (an arbitrary Scala function, say),
 `orders.mapThrough(f)(using country.eager)` runs the eager optic inside a typed `Dataset.map`. That
-leaves the optimizer and costs about 5× on the benchmark; see the
+leaves the optimizer and costs about 1.75× on the benchmark (the cost of any typed `Dataset.map`); see the
 [Spark integration page](../integrations/spark.md#the-eager-bridge).
