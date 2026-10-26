@@ -10,6 +10,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.*
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.Metadata
 
 /** Scala 3 derivation of Spark's `AgnosticEncoder`s — the encoder layer Spark Classic and Spark
@@ -119,7 +120,8 @@ object SparkEncoders:
   final private class Tuple2Codec[A, B] extends Codec[(A, B), Row]:
 
     def encode(in: (A, B)): Row =
-      if (in: (A, B) | Null) == null then null.asInstanceOf[Row] else Row(in._1, in._2)
+      if (in: (A, B) | Null) == null then null.asInstanceOf[Row]
+      else new GenericRow(Array[Any](in._1, in._2))
 
     def decode(out: Row): (A, B) =
       if (out: Row | Null) == null then null.asInstanceOf[(A, B)]
