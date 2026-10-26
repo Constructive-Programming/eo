@@ -20,9 +20,10 @@ import optics.{GetReplaceLens, Lens, Optional}
   *     [[ColumnOptics.guarded]] optic whose presence test is "every `Option` prefix is non-NULL".
   *
   * Symbolic writes are ONE `withField` with the dotted path; eager writes rebuild each level
-  * through its `Mirror` (no reflection, works for every case class).
+  * through its `Mirror` (no reflection, works for every case class). `Serializable` — like every
+  * optic — so the eager half can travel inside a server-side `Dataset.map`.
   */
-sealed trait ColumnPath[S, A]:
+sealed trait ColumnPath[S, A] extends Serializable:
   /** Field names along the path (the `.get` markers dropped). */
   def names: List[String]
 

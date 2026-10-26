@@ -156,3 +156,20 @@ Spark 4.2 documents Java 17/21/25 support (25 ≥ 25.0.3).
   aggregate), `sparkJvmOptions`, `sparkConnectServer`.
 - `spark/src/main/.../{Col, ColumnOptics, SparkEncoders}.scala`
 - `spark/src/test/.../{Fixtures, ColumnOpticsSpec}.scala`
+
+## Update (Phase 5): the eager bridge works
+
+§8.1 said typed UDFs would "likely hit the same wall". They don't, once the session carries the right
+artifacts. A typed `Dataset.map` with Scala 3 closures over eo-encoded case classes runs on the 2.13
+server when the session has all of these:
+- `scala3-library`;
+- the Scala-3-compiled `scala-library` 3.9;
+- cats-core and cats-kernel;
+- cats-eo;
+- the application's classes.
+
+`ScalaRuntime.addTo` uploads the jars. Class directories go through `REPLClassDirMonitor`. Two
+constraints:
+- **Everything captured must serialize.** Core's `Optic` is now `Serializable`.
+- **A lambda is serialized as a reference to its implementing class**, so it must live where the server can
+  load it. A lambda written inside a specs2 class drags specs2 along.

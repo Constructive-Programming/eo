@@ -10,6 +10,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.*
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.types.Metadata
 
 /** Scala 3 derivation of Spark's `AgnosticEncoder`s — the encoder layer Spark Classic and Spark
@@ -72,6 +73,16 @@ object SparkEncoders:
       nullable = true,
     )
 
+  /** Tuples encode like case classes (fields `_1`, `_2`), not as Spark's tuple `ProductEncoder`,
+    * whose decode needs the same dead `ScalaReflection` (see the scaladoc above).
+    */
+  given [A, B](using a: AgnosticEncoder[A], b: AgnosticEncoder[B]): AgnosticEncoder[(A, B)] =
+    tuple2(a, b)
+
+  /** The encoder of `(A, B)` from its components' encoders. */
+  def tuple2[A, B](a: AgnosticEncoder[A], b: AgnosticEncoder[B]): AgnosticEncoder[(A, B)] =
+    product[(A, B)](ClassTag(classOf[(?, ?)]), List("_1" -> a, "_2" -> b), Tuple2Codec[A, B]())
+
   /** Encoder for a top-level case class: one struct field per constructor parameter, named by the
     * parameter, nullable exactly when the field's own encoder is. Every field type needs an
     * `AgnosticEncoder` in scope.
@@ -104,6 +115,17 @@ object SparkEncoders:
       () => SeqCodec[C, A](f),
       nullable = true,
     )
+
+  /** `(A, B)` ↔ its `Row` of two fields; NULL passes through. */
+  final private class Tuple2Codec[A, B] extends Codec[(A, B), Row]:
+
+    def encode(in: (A, B)): Row =
+      if (in: (A, B) | Null) == null then null.asInstanceOf[Row]
+      else new GenericRow(Array[Any](in._1, in._2))
+
+    def decode(out: Row): (A, B) =
+      if (out: Row | Null) == null then null.asInstanceOf[(A, B)]
+      else (out.get(0).asInstanceOf[A], out.get(1).asInstanceOf[B])
 
   /** A Scala collection ↔ the `ArraySeq` Spark decodes without reflection; NULL passes through. */
   final private class SeqCodec[C <: Iterable[A], A](f: Factory[A, C]) extends Codec[C, ArraySeq[A]]:

@@ -109,7 +109,7 @@ object Sessions:
     val server = startServer(port)
     sys.addShutdownHook(server.destroy())
     awaitPort(port, server, deadline = System.nanoTime() + 180L * 1000_000_000L)
-    org
+    val session = org
       .apache
       .spark
       .sql
@@ -118,6 +118,41 @@ object Sessions:
       .builder()
       .remote(s"sc://localhost:$port")
       .getOrCreate()
+    // The eager bridge ships Scala 3 closures: upload the runtime jars, and the compiled class
+    // directories (eo's and the specs') packed into jars ONCE. (`REPLClassDirMonitor` would re-upload
+    // every class before each query, and concurrent examples then collide on the server.)
+    val dirs = ScalaRuntime.addTo(session, classpathJars.filter(_.contains("scala3-library"))*)
+    (dirs ++ classpathDirs).distinct.foreach(d => session.addArtifact(jarOf(d)))
+    session
+
+  /** Pack a class directory into a temporary jar, for `addArtifact`. */
+  private def jarOf(dir: String): String =
+    val root = java.nio.file.Paths.get(dir)
+    val jar = java.nio.file.Files.createTempFile("eo-spark-classes-", ".jar")
+    scala
+      .util
+      .Using
+      .resource(new java.util.jar.JarOutputStream(java.nio.file.Files.newOutputStream(jar))) {
+        out =>
+          scala.util.Using.resource(java.nio.file.Files.walk(root)) { paths =>
+            paths.filter(java.nio.file.Files.isRegularFile(_)).forEach { f =>
+              out.putNextEntry(
+                new java.util.jar.JarEntry(root.relativize(f).toString.replace('\\', '/'))
+              )
+              java.nio.file.Files.copy(f, out)
+              out.closeEntry()
+            }
+          }
+      }
+    jar.toFile.deleteOnExit()
+    jar.toString
+
+  private def classpath: List[String] =
+    prop("java.class.path").split(java.io.File.pathSeparator).nn.toList.map(_.nn)
+
+  private def classpathJars: List[String] = classpath.filter(_.endsWith(".jar"))
+
+  private def classpathDirs: List[String] = classpath.filter(p => new java.io.File(p).isDirectory)
 
   private def prop(key: String): String =
     sys.props.getOrElse(key, sys.error(s"$key not set — run the spark specs through sbt")).nn
