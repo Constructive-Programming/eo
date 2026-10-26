@@ -7,8 +7,9 @@ val scala3Version = "3.9.0"
 // fields below are ThisBuild-scoped so every published sub-module
 // inherits them.
 
-// Breaking-change history per 0.x minor lives in mima.sbt.
-ThisBuild / tlBaseVersion := "0.18"
+// 1.x is binary-compatible (MiMa-checked from 1.0.0; see mima.sbt, which
+// also keeps the 0.x breaking-change history).
+ThisBuild / tlBaseVersion := "1.0"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -964,6 +965,13 @@ lazy val kyoIntegration: Project = project
     // kyo 1.0.0-RC5+ is Java-25-only bytecode, so this artifact honestly
     // targets 25 too (the ThisBuild floor stays 17 for every other module).
     tlJdkRelease := Some(25),
+    // EXPERIMENTAL: no binary-compatibility promise. cats-eo-kyo builds on
+    // kyo 1.0.0-RC7, a release candidate whose own API and bytecode still
+    // move between RCs, so this module is excluded from the 1.x MiMa check
+    // (every other published module is checked against 1.0.0). Lift this
+    // override — let sbt-typelevel compute the previous versions again —
+    // once kyo 1.0.0 final ships and the module is rebuilt on it.
+    tlMimaPreviousVersions := Set.empty,
     libraryDependencies += cats,
     libraryDependencies += kyoPrelude,
     libraryDependencies += kyoSchema % Optional,

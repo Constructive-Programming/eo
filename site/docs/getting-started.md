@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
 )
 ```
 
-Requires Scala 3.8.x on JDK 17 or JDK 21.
+Requires Scala 3.9.x on JDK 17, 21, or 25 (`cats-eo-kyo` needs JDK 25).
 
 ## Define
 
