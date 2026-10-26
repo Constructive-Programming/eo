@@ -7,6 +7,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.*
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
+import org.apache.spark.sql.types.Metadata
 
 /** Scala 3 derivation of Spark's `AgnosticEncoder`s — the encoder layer Spark Classic and Spark
   * Connect share — in place of Spark's `TypeTag`-based `Encoders.product`, which Scala 3 cannot
@@ -38,21 +39,21 @@ object SparkEncoders:
   inline def derived[T]: AgnosticEncoder[T] = ${ SparkEncodersMacro.derivedImpl[T] }
 
   /** The case-class encoder the macro emits: a `TransformingEncoder` over a `RowEncoder` of the
-    * fields, through `encode` (field reads) and `decode` (a constructor call).
+    * fields, through `encode` (field reads) and `decode` (a constructor call). It builds Spark's
+    * `EncoderField`s here rather than in the expansion: their Scala 2 existential
+    * `AgnosticEncoder[_]` raises a compatibility warning wherever a macro constructs one.
     */
   @publicInBinary
   private[spark] def product[T](
       ct: ClassTag[T],
-      fields: List[EncoderField],
+      fields: List[(String, AgnosticEncoder[?])],
       encode: T => Row,
       decode: Row => T,
   ): AgnosticEncoder[T] =
-    TransformingEncoder[T, Row](
-      ct,
-      RowEncoder(fields),
-      () => ProductCodec(encode, decode),
-      nullable = true,
-    )
+    val row = RowEncoder(fields.map { (name, e) =>
+      EncoderField(name, e, e.nullable, Metadata.empty, None, None)
+    })
+    TransformingEncoder[T, Row](ct, row, () => ProductCodec(encode, decode), nullable = true)
 
   /** One level of a case class ↔ its `Row` of field values. Nested case classes are already decoded
     * by their own field encoders, so the row holds the final field values. A NULL struct travels

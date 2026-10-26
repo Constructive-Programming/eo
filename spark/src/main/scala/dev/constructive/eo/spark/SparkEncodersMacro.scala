@@ -7,8 +7,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.EncoderField
-import org.apache.spark.sql.types.Metadata
 
 /** Quoted-macro implementation behind [[SparkEncoders.derived]]. */
 object SparkEncodersMacro:
@@ -33,16 +31,14 @@ final private class HearthEncoderMacro(q: Quotes) extends _root_.hearth.MacroCom
     val tTpe = TypeRepr.of[T]
     val names: List[String] = cc.caseFields.map(_.name)
 
-    // One struct field per constructor parameter, named by the parameter, nullable exactly when
-    // the field's own encoder is.
-    val fields: List[Expr[EncoderField]] = tTpe.typeSymbol.caseFields.map { f =>
+    // One struct field per constructor parameter, named by the parameter.
+    val fields: List[Expr[(String, AgnosticEncoder[?])]] = tTpe.typeSymbol.caseFields.map { f =>
       tTpe.memberType(f).asType match
         case '[a] =>
           val e = QuotedExpr.summon[AgnosticEncoder[a]].getOrElse {
             fail[T](s"no AgnosticEncoder[${Type.prettyPrint[a]}] for field '${f.name}'")
           }
-          val name = scala.quoted.Expr(f.name)
-          '{ EncoderField($name, $e, $e.nullable, Metadata.empty, None, None) }
+          '{ (${ QuotedExpr(f.name) }, $e) }
     }
 
     val classTag = QuotedExpr.summon[ClassTag[T]].getOrElse(fail[T]("no ClassTag"))
