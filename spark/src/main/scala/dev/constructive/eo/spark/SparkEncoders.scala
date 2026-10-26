@@ -1,10 +1,9 @@
 package dev.constructive.eo
 package spark
 
+import scala.annotation.publicInBinary
 import scala.collection.Factory
 import scala.collection.immutable.ArraySeq
-import scala.compiletime.{constValueTuple, erasedValue, summonInline}
-import scala.deriving.Mirror
 import scala.jdk.CollectionConverters.*
 import scala.reflect.ClassTag
 
@@ -26,7 +25,8 @@ import org.apache.spark.sql.types.Metadata
   * constructor up through `ScalaReflection`, whose initialiser builds the Scala 2
   * runtime-reflection universe — which cannot start on Scala 3.8+'s stdlib ("class Array does not
   * have a member apply"). Instead it is a `TransformingEncoder` over a `RowEncoder` of its fields,
-  * and the codec rebuilds the value through its `Mirror`: same schema, no reflection.
+  * and the codec calls its constructor directly: same schema, no reflection. The derivation is a
+  * Hearth macro (`SparkEncodersMacro`), as eo-generics' are.
   *
   * Collections dodge the same trap: Spark decodes a Scala `Iterable` / `Map` by resolving the
   * collection's companion through `currentMirror`. Its two reflection-free paths are
@@ -80,34 +80,29 @@ object SparkEncoders:
 
   /** The encoder of `(A, B)` from its components' encoders. */
   def tuple2[A, B](a: AgnosticEncoder[A], b: AgnosticEncoder[B]): AgnosticEncoder[(A, B)] =
-    product(
-      ClassTag(classOf[(?, ?)]),
-      List(
-        EncoderField("_1", a, a.nullable, Metadata.empty, None, None),
-        EncoderField("_2", b, b.nullable, Metadata.empty, None, None),
-      ),
-      summon[Mirror.ProductOf[(A, B)]],
-    )
+    product[(A, B)](ClassTag(classOf[(?, ?)]), List("_1" -> a, "_2" -> b), Tuple2Codec[A, B]())
 
   /** Encoder for a top-level case class: one struct field per constructor parameter, named by the
-    * parameter, nullable exactly when the field's own encoder is.
+    * parameter, nullable exactly when the field's own encoder is. Every field type needs an
+    * `AgnosticEncoder` in scope.
     */
-  inline def derived[T <: Product](using
-      m: Mirror.ProductOf[T],
-      ct: ClassTag[T]
-  ): AgnosticEncoder[T] =
-    val names = constValueTuple[m.MirroredElemLabels].productIterator.map(_.toString).toList
-    val fields = names.zip(encoders[m.MirroredElemTypes]).map { (n, e) =>
-      EncoderField(n, e, e.nullable, Metadata.empty, None, None)
-    }
-    product(ct, fields, m)
+  inline def derived[T]: AgnosticEncoder[T] = ${ SparkEncodersMacro.derivedImpl[T] }
 
-  private def product[T](
+  /** The case-class encoder the macro emits: a `TransformingEncoder` over a `RowEncoder` of the
+    * fields, through `codec`. It builds Spark's `EncoderField`s here rather than in the expansion:
+    * their Scala 2 existential `AgnosticEncoder[_]` raises a compatibility warning wherever a macro
+    * constructs one.
+    */
+  @publicInBinary
+  private[spark] def product[T](
       ct: ClassTag[T],
-      fields: List[EncoderField],
-      m: Mirror.ProductOf[T],
+      fields: List[(String, AgnosticEncoder[?])],
+      codec: Codec[T, Row],
   ): AgnosticEncoder[T] =
-    TransformingEncoder[T, Row](ct, RowEncoder(fields), () => ProductCodec(m), nullable = true)
+    val row = RowEncoder(fields.map { (name, e) =>
+      EncoderField(name, e, e.nullable, Metadata.empty, None, None)
+    })
+    TransformingEncoder[T, Row](ct, row, () => codec, nullable = true)
 
   private def sequence[C <: Iterable[A], A](e: AgnosticEncoder[A])(using
       f: Factory[A, C],
@@ -120,29 +115,15 @@ object SparkEncoders:
       nullable = true,
     )
 
-  private inline def encoders[Ts <: Tuple]: List[AgnosticEncoder[?]] =
-    inline erasedValue[Ts] match
-      case _: EmptyTuple => Nil
-      case _: (t *: ts)  => summonInline[AgnosticEncoder[t]] :: encoders[ts]
+  /** `(A, B)` ↔ its `Row` of two fields; NULL passes through. */
+  final private class Tuple2Codec[A, B] extends Codec[(A, B), Row]:
 
-  /** One level of a case class ↔ its `Row` of field values. Nested case classes are already decoded
-    * by their own field encoders, so the row holds the final field values. A NULL struct travels
-    * through the codec as `null` both ways (Spark's NULL, not a missed optic focus).
-    */
-  final private class ProductCodec[T](m: Mirror.ProductOf[T]) extends Codec[T, Row]:
+    def encode(in: (A, B)): Row =
+      if (in: (A, B) | Null) == null then null.asInstanceOf[Row] else Row(in._1, in._2)
 
-    def encode(in: T): Row = (in: Any) match
-      case p: Product => Row.fromSeq(p.productIterator.toSeq)
-      case _          => null.asInstanceOf[Row]
-
-    def decode(out: Row): T = (out: Row | Null) match
-      case null   => null.asInstanceOf[T]
-      case r: Row => m.fromProduct(RowProduct(r))
-
-  final private class RowProduct(row: Row) extends Product:
-    def productArity: Int = row.length
-    def productElement(n: Int): Any = row.get(n)
-    def canEqual(that: Any): Boolean = false
+    def decode(out: Row): (A, B) =
+      if (out: Row | Null) == null then null.asInstanceOf[(A, B)]
+      else (out.get(0).asInstanceOf[A], out.get(1).asInstanceOf[B])
 
   /** A Scala collection ↔ the `ArraySeq` Spark decodes without reflection; NULL passes through. */
   final private class SeqCodec[C <: Iterable[A], A](f: Factory[A, C]) extends Codec[C, ArraySeq[A]]:

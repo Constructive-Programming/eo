@@ -913,6 +913,8 @@ lazy val sparkIntegration: Project = project
   .settings(
     name := "cats-eo-spark",
     libraryDependencies += cats,
+    // `SparkEncoders.derived` is a Hearth macro, as eo-generics' derivations are.
+    libraryDependencies += hearth,
     libraryDependencies += sparkSqlApi % Provided,
     libraryDependencies += sparkConnectClient % Test,
     libraryDependencies += discipline % Test,
