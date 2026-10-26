@@ -7,6 +7,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
+import org.apache.spark.sql.catalyst.expressions.GenericRow
 
 /** Quoted-macro implementation behind [[SparkEncoders.derived]]. */
 object SparkEncodersMacro:
@@ -52,15 +53,18 @@ final private class HearthEncoderMacro(q: Quotes) extends _root_.hearth.MacroCom
         new Codec[T, Row]:
           def encode(in: T): Row =
             if (in: T | Null) == null then null.asInstanceOf[Row]
-            else Row.fromSeq(${ reads(cc, '{ in }) })
+            else new GenericRow(Array[Any](${ reads(cc, '{ in }) }*))
           def decode(out: Row): T =
             if (out: Row | Null) == null then null.asInstanceOf[T] else ${ construct(cc, '{ out }) }
       )
     }
 
-  /** The field values of `in`, declaration order. */
-  private def reads[T: Type](cc: CaseClass[T], in: Expr[T]): Expr[List[Any]] =
-    QuotedExpr.ofList(cc.caseFieldValuesAt(in).values.toList.map { v =>
+  /** The field values of `in`, declaration order, as literal varargs: `Array[Any](a, b, …)` then
+    * compiles to one array store per field. (`Row.fromSeq` would copy a `Seq` through an
+    * `ArrayBuilder` on every row — half the server's CPU in the eager bridge benchmark.)
+    */
+  private def reads[T: Type](cc: CaseClass[T], in: Expr[T]): Expr[Seq[Any]] =
+    Varargs(cc.caseFieldValuesAt(in).values.toList.map { v =>
       import v.{Underlying as F, value as fe}
       '{ $fe: Any }
     })
