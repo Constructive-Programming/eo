@@ -37,12 +37,14 @@ def keep[D](detail: D)(using
 ): Boolean
 ```
 
-With `Wire`'s givens it reads a detail's bytes:
+With `Wire`'s givens it reads a detail's bytes where they lie: the message is a
+`JsonSlice` of the socket's read, and the detail a `JsonSlice` of the message,
+neither copied:
 
 ```scala
-val detail: Focus[Array[Byte], Wire.DetailJson] = JsoniterPrism[Issue].field(_.detail).raw
+val detail: Focus[JsonSlice, Wire.DetailJson] = JsoniterPrism.inPlace[Issue].field(_.detail).raw
 given tier: Focus[DetailJson, Tier] =
-  JsoniterPrism[Detail.Incident].field(_.impact).field(_.service).field(_.tier)
+  JsoniterPrism.inPlace[Detail.Incident].field(_.impact).field(_.service).field(_.tier)
 ```
 
 With `Model`'s, a decoded `Detail`, through eo-generics' prisms and lenses:

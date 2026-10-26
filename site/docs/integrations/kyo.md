@@ -29,6 +29,14 @@ applications alike.
 libraryDependencies += "dev.constructive" %% "cats-eo-kyo" % "@VERSION@"
 ```
 
+**Experimental.** `cats-eo-kyo` is published with every release but sits
+outside eo's 1.x binary-compatibility promise: it builds on kyo
+`1.0.0-RC7`, a release candidate, so its API and bytecode can change in
+any 1.x release, and MiMa does not check it. Every other eo module is
+MiMa-checked across 1.x. The exclusion lifts once kyo 1.0.0 final ships
+and the module is rebuilt on it. It also needs JDK 25 (see
+[JDK requirement](#jdk-requirement)).
+
 ## Which direction are you integrating?
 
 The module is a two-way adapter; pick the row that matches what you
@@ -253,8 +261,8 @@ pull kyo-schema transitively; add it (and a codec artifact, here json)
 yourself:
 
 ```scala
-libraryDependencies += "io.getkyo" %% "kyo-schema" % "1.0.0-RC6"
-libraryDependencies += "io.getkyo" %% "kyo-schema-json" % "1.0.0-RC6"
+libraryDependencies += "io.getkyo" %% "kyo-schema" % "1.0.0-RC7"
+libraryDependencies += "io.getkyo" %% "kyo-schema-json" % "1.0.0-RC7"
 ```
 
 ### Focus bridge

@@ -10,9 +10,9 @@ import optics.Optic
   * the primary surface of Fold and Traversal).
   *
   * `foldMap` is the kernel; `headOption` / `length` / `exists` / `foci` ride on it. `foci` is the
-  * carrier-free counterpart of the raw-optic `all` extension (which returns foci still inside their
-  * carrier, `List[F[X, A]]`). Prefer this trait in consuming signatures; see [[CanGet]] for the
-  * doctrine and the coherence rule.
+  * carrier-free spelling of the raw-optic `all` extension: both are `foldMap(List(_))`, every focus
+  * in traversal order. Prefer this trait in consuming signatures; see [[CanGet]] for the doctrine
+  * and the coherence rule.
   */
 trait CanFold[S, A]:
   def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M

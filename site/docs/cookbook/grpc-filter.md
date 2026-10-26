@@ -48,11 +48,14 @@ and this one does.
 messages out of the bytes in whatever pieces the socket reads them, and fails
 the stream on a compressed frame (no message encoding is negotiated here), on a
 message over gRPC's default 4 MiB limit, or on bytes that end inside a frame.
-`joinFrames` frames messages again, without copying them.
+Each message it hands out is a view of the socket read it arrived in (an fs2
+`Chunk.ArraySlice`), not a copy; only a message that straddles two reads is
+copied into an array of its own. `joinFrames` frames messages again, without
+copying them either.
 
 ```scala
 socketBytes                           // Stream[F, Byte], as the socket reads it
-  .through(GrpcFrames.splitFrames())  // Stream[F, Array[Byte]]: one per message
+  .through(GrpcFrames.splitFrames())  // Stream[F, Chunk.ArraySlice[Byte]]: one view per message
   .through(GrpcFrames.joinFrames)     // Stream[F, Byte]: the same frames again
 ```
 
@@ -116,31 +119,51 @@ path and decodes only what it focuses:
 
 ```scala
 object Wire:
-  opaque type DetailJson = Array[Byte]     // a detail's own JSON, sliced out of a message
+  opaque type DetailJson = JsonSlice       // a detail's own JSON, where it lies in the message
 
-  // Message ⇀ its detail's bytes: one scan, past the 60 fields in front; nothing decoded.
-  val detail: Focus[Array[Byte], DetailJson] = JsoniterPrism[Issue].field(_.detail).raw
+  // A message where it lies in the socket's read: a view, nothing copied.
+  def json(message: Chunk.ArraySlice[Byte]): JsonSlice = JsonSlice(message.toByteBuffer)
 
-  given kind: Focus[DetailJson, Kind] = /* JsoniterPrism.fromPath[Kind]("$.type") */
-  given severity: Focus[DetailJson, Severity] = JsoniterPrism[Detail.Incident].field(_.severity)
+  // Message ⇀ its detail's bytes: one scan, in place, past the 60 fields in front; nothing decoded.
+  val detail: Focus[JsonSlice, DetailJson] = JsoniterPrism.inPlace[Issue].field(_.detail).raw
+
+  given kind: Focus[DetailJson, Kind] = /* JsoniterPrism.fromPath[Kind]("$.type"), .inPlace */
+  given severity: Focus[DetailJson, Severity] =
+    JsoniterPrism.inPlace[Detail.Incident].field(_.severity)
   given tier: Focus[DetailJson, Tier] =
-    JsoniterPrism[Detail.Incident].field(_.impact).field(_.service).field(_.tier)
+    JsoniterPrism.inPlace[Detail.Incident].field(_.impact).field(_.service).field(_.tier)
   given module: Focus[DetailJson, Module] =
-    JsoniterPrism[Detail.Bug].field(_.trace).field(_.frames).at(0).field(_.module)
+    JsoniterPrism.inPlace[Detail.Bug].field(_.trace).field(_.frames).at(0).field(_.module)
   given plan: Focus[DetailJson, Plan] =
-    JsoniterPrism[Detail.Request].field(_.requester).field(_.contract).field(_.plan)
-  given votes: Focus[DetailJson, Votes] = JsoniterPrism[Detail.Request].field(_.votes)
+    JsoniterPrism.inPlace[Detail.Request].field(_.requester).field(_.contract).field(_.plan)
+  given votes: Focus[DetailJson, Votes] = JsoniterPrism.inPlace[Detail.Request].field(_.votes)
 ```
 
 Reading takes two steps. `detail` scans the message once and hands out the
-detail's own bytes, a few hundred of them (`.raw` focuses the encoded slice
-rather than a decoded value). The other optics read the policy's leaves from
-that slice: a kind, an enum, a number. `DetailJson` is an opaque type, so the
-detail's optics can't be pointed at a whole message by mistake.
+detail's own bytes, a few hundred of them (`.raw` focuses the encoded value
+rather than a decoded one). Every optic here reads in place:
+`JsoniterPrism.inPlace` points a prism at a `JsonSlice`, a range of an array,
+so the message is never copied out of the socket's read to be judged
+(`JsonSlice(chunk.toByteBuffer)` wraps the read's own array: fs2 hands an
+array slice's array to the buffer as it is). On an in-place prism `.raw`
+focuses a `JsonSlice` too, a view of the detail's bytes where they lie in the
+message, so the detail isn't copied out either. The other optics read the
+policy's leaves from that view: a kind, an enum, a number. `DetailJson` is an
+opaque type, so the detail's optics can't be pointed at a whole message by
+mistake.
+
+Nothing copied means the views share the read's array: the filter judges a
+message and forwards it before the next read, and keeps nothing (`bytes`
+copies a detail out, for the tests). The two steps also compose with plain
+`andThen`, into one optic from a message to a leaf, still copying nothing:
+
+```scala
+val severityOf: Focus[JsonSlice, Severity] = Wire.detail.andThen(Wire.severity)
+```
 
 The paths are typed: `.field(_.impact)` is checked against the model when
 `Wire` compiles, so renaming a field breaks the build, not the filter. Each
-case's paths start from that case's own root, `JsoniterPrism[Detail.Incident]`,
+case's paths start from that case's own root, `JsoniterPrism.inPlace[Detail.Incident]`,
 because the detail's JSON is that case's JSON plus its `"type"`. Only the
 kind's path is a string: `"type"` is the codec's tag, not a field of the model.
 
@@ -195,18 +218,21 @@ which check that both readers judge every message alike. That is what
 never names the optic or the format it reads.
 
 ```scala
-def optics(policy: Policy)(message: Array[Byte]): Verdict =
+def optics(policy: Policy)(message: JsonSlice): Verdict =
   import Wire.given
   Wire.detail.getOption(message) match
     case Some(detail) => Verdict(Wire.kind.getOption(detail), policy.keep(detail))
     case None         => Verdict(None, keep = false)
 
-def decoding(policy: Policy)(message: Array[Byte]): Verdict =
+def decoding(policy: Policy)(message: JsonSlice): Verdict =
   import Model.given
   Issue.decode(message).map(_.detail) match
     case Some(detail) => Verdict(Some(Kind.of(detail)), policy.keep(detail))
     case None         => Verdict(None, keep = false)
 ```
+
+Both read the message in place: `Issue.decode` decodes it with jsoniter-scala's
+`readFromSubArray`, so the baseline doesn't copy it out either.
 
 A message of a kind the demo doesn't know, from a newer producer say, has no
 kind: the policy drops it, and the tally counts it as unclassified. The optics
@@ -216,11 +242,11 @@ message, and the baseline drops it for that reason.
 ## The filter
 
 ```scala
-def filter[F[_]: Async](verdict: Array[Byte] => Verdict, tally: Ref[F, Tally]): Pipe[F, Byte, Byte] =
+def filter[F[_]: Async](verdict: JsonSlice => Verdict, tally: Ref[F, Tally]): Pipe[F, Byte, Byte] =
   _.through(GrpcFrames.splitFrames())
     .chunks
     .evalMap { messages =>
-      Async[F].delay(messages.map(message => (message, verdict(message)))).timed.flatMap {
+      Async[F].delay(messages.map(message => (message, verdict(Wire.json(message))))).timed.flatMap {
         (took, judged) =>
           tally.update(_.add(judged, took)).as(judged.collect { case (m, Verdict(_, true)) => m })
       }
@@ -263,9 +289,9 @@ full decode (baseline): 200000 messages, 813.3 MB in 4.16 s:
 
 | suite | checks |
 |---|---|
-| `GrpcFramesSpec` | any messages, joined into frames and cut into arbitrary pieces, split back whole; the frame layout; the size limit (unsigned lengths included); compressed frames and truncated bytes fail the stream |
-| `TriageSpec` | the optics judge every message exactly as decoding does: 3 000 issues the size the stream's are, under the default policy and under 100 random ones, and 500 random issues of every size under random policies, every kind both kept and dropped; the slice `Wire.detail` hands out is the detail's own JSON; pretty-printed JSON is read the same; an unknown kind, a missing `detail` and bytes that aren't JSON are dropped as unclassified |
-| `TriageSpec` (laws) | `Model`'s optics pass cats-eo-laws' `OptionalTests` |
+| `GrpcFramesSpec` | any messages, joined into frames and cut into arbitrary pieces, split back whole; the frame layout; the size limit (unsigned lengths included); compressed frames and truncated bytes fail the stream; a message inside one chunk is a view of it, nothing copied, also after one that straddles chunks |
+| `TriageSpec` | the optics judge every message exactly as decoding does: 3 000 issues the size the stream's are, under the default policy and under 100 random ones, and 500 random issues of every size under random policies, every kind both kept and dropped; a message read in place, between its neighbours' bytes, is judged as the message alone; the slice `Wire.detail` hands out is the detail's own JSON, and a view of the message's array, not a copy; `Wire.detail.andThen(Wire.severity)` reads and writes a message's severity; pretty-printed JSON is read the same; an unknown kind, a missing `detail` and bytes that aren't JSON are dropped as unclassified |
+| `TriageSpec` (laws) | `Model`'s optics, and the wire's `Wire.detail.andThen(Wire.severity)` on messages read in place, pass cats-eo-laws' `OptionalTests` |
 | `PipelineSpec` | the whole filter, in memory with the bytes cut at random, and over real sockets: it forwards exactly the messages the decoded issues say to keep, byte for byte and in order, and its tally adds up; a malformed frame fails it |
 
 ## Benchmarks
@@ -302,21 +328,49 @@ the 60 fields in front of `detail`. It skips them at about the speed of
 jsoniter-scala's own `skip`. What it saves either way is the building: 700
 bytes allocated per message instead of 8.6 KB.
 
+Since `.raw` became a view of the message (`JsoniterPrism.inPlace`), the
+detail isn't copied out of it either, and the optics allocate less still.
+Allocation per message in short runs of the code before and after that
+change, in one session (see the notes under the next table):
+
+| layout | `decode` | `optics` before → after | `detail` before → after |
+|---|--:|--:|--:|
+| late | 8 363 B | 600 → 417 B | 351 → 40 B |
+| first | 8 363 B | 664 → 353 B | 375 → 104 B |
+
+Slicing out the detail now allocates next to nothing; what `optics` still
+allocates is reading the leaves.
+
 ### The whole filter
 
 `StreamBench` runs the filter's pipe in memory: 1 024 messages' frames,
 arriving in 256 KiB pieces, are cut into messages, judged, tallied and the kept
 ones framed again.
 
-| judge | per message | allocation |
-|---|--:|--:|
-| `decode` | 17 695 ± 845 ns | 13 917 B |
-| `optics` | 8 911 ± 449 ns | 6 001 B |
+| judge | per message | allocation | read in place¹ | detail in place too² |
+|---|--:|--:|--:|--:|
+| `decode` | 17 695 ± 845 ns | 13 917 B | 9 228 B | 9 254 B |
+| `optics` | 8 911 ± 449 ns | 6 001 B | 1 505 B | 1 375 B |
 
-2.0× faster, with 2.3× less allocation. The pipe adds 3 to 4 µs and 5.3 KB per
-message either way. Most of that is copying each message out of the
-socket's chunks into an array of its own (4 KB), because a `JsoniterPrism`
-reads a whole `Array[Byte]`.
+2.0× faster, with 2.3× less allocation, when each message was copied out of
+the socket's chunks into an array of its own (4 KB): the pipe added 3 to 4 µs
+and 5.3 KB per message either way, most of it that copy. Now `splitFrames`
+hands out views of the chunks and both judges read a message where it lies
+(`.inPlace` for the optics, `readFromSubArray` for the decoder), and the
+third column shows the copy gone: 4.5 to 4.7 KB less per message. The last
+column is with the detail read where it lies in the message too (`.raw` on an
+in-place prism is a view): 130 B less again for the optics, so they now
+allocate 6.7× less than decoding. (The view of each message is now built
+through `JsonSlice(chunk.toByteBuffer)`; the buffer it wraps costs nothing
+measurable, 1 375 B against 1 370 B building the slice from the chunk's
+array, offset and length by hand.)
+
+¹ ² Short runs (`-i 3 -wi 2 -f 1 -prof gc`: one fork, three measurements, on
+a busy shared container, JDK 25), of the code before (¹) and after (²) `.raw`
+became a view, in one session. Allocation per message is deterministic and
+was steady to ±30 B; the runs' times were noise (errors as large as the
+scores) and are not quoted. The first two columns are the full run described
+above, from before either change.
 
 ## Limits
 
@@ -326,8 +380,9 @@ reads a whole `Array[Byte]`.
 - **The scan's cost follows the layout.** A field late in a large message
   costs most of a read through the message. An optic only saves the reading
   past the field and the building of what it doesn't focus.
-- **Copies.** Each message is copied out of the socket's chunks, and `.raw`
-  copies the detail's bytes, since eo-jsoniter's optics read a whole array.
+- **Copies.** A message is read where it lies in the socket's read, except one
+  that straddles two reads (about one in 64 at 256 KiB a read), which is copied
+  into an array of its own. The detail is read where it lies in the message.
 - **Leaf optics trust the classification.** They don't check the kind
   themselves; the policy classifies first.
 

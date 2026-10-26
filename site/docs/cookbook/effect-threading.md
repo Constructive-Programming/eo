@@ -104,11 +104,13 @@ lineAmounts.modifyA[Audit](a =>
 ```
 
 The same slot takes `IO` (each focus becomes an effect to
-sequence), `Eval` (defer the whole rewrite), or an fs2 `Stream` —
-the article's original `systemVerifier` pipes every focus of a
-traversal through a verification stream with `.modifyF`, and its
-shape is exactly the three calls above with a fancier `G`. The
-domain types never learn any of this is happening.
+sequence) or `Eval` (defer the whole rewrite). The article's
+original `systemVerifier` pipes the foci through a verification
+fs2 `Stream`; mind that `Stream` itself as `G` combines a
+traversal's foci as a cartesian product —
+[Streaming with fs2](streaming-fs2.md#effectful-modify-in-a-stream)
+shows the warning and the shapes that work. The domain types never
+learn any of this is happening.
 
 **Source:** Hansen — *We Need More Optics*, The Startup,
 <https://medium.com/swlh/we-need-more-optics-8ddf1d2d9468> ("What

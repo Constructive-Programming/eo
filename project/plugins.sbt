@@ -35,8 +35,8 @@ addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")
 // signs artifacts with the configured GPG key, and publishes on
 // `v*` tag push. Brings MiMa in through its transitive
 // `sbt-typelevel-mima` dependency so binary-compat checks run on
-// every CI build from 0.1.1 onward (0.1.0 has no previous version
-// to compare against; see `mima.sbt`).
+// every CI build across 1.x (1.0.0 has no previous 1.x version to
+// compare against; 0.x was unchecked; see `mima.sbt`).
 addSbtPlugin("org.typelevel" % "sbt-typelevel-ci-release" % "0.8.7")
 
 // `sbt-typelevel-settings` contributes the curated scalac flag set
