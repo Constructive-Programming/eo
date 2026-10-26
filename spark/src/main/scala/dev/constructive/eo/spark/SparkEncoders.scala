@@ -39,30 +39,17 @@ object SparkEncoders:
   inline def derived[T]: AgnosticEncoder[T] = ${ SparkEncodersMacro.derivedImpl[T] }
 
   /** The case-class encoder the macro emits: a `TransformingEncoder` over a `RowEncoder` of the
-    * fields, through `encode` (field reads) and `decode` (a constructor call). It builds Spark's
-    * `EncoderField`s here rather than in the expansion: their Scala 2 existential
-    * `AgnosticEncoder[_]` raises a compatibility warning wherever a macro constructs one.
+    * fields, through `codec`. It builds Spark's `EncoderField`s here rather than in the expansion:
+    * their Scala 2 existential `AgnosticEncoder[_]` raises a compatibility warning wherever a macro
+    * constructs one.
     */
   @publicInBinary
   private[spark] def product[T](
       ct: ClassTag[T],
       fields: List[(String, AgnosticEncoder[?])],
-      encode: T => Row,
-      decode: Row => T,
+      codec: Codec[T, Row],
   ): AgnosticEncoder[T] =
     val row = RowEncoder(fields.map { (name, e) =>
       EncoderField(name, e, e.nullable, Metadata.empty, None, None)
     })
-    TransformingEncoder[T, Row](ct, row, () => ProductCodec(encode, decode), nullable = true)
-
-  /** One level of a case class ↔ its `Row` of field values. Nested case classes are already decoded
-    * by their own field encoders, so the row holds the final field values. A NULL struct travels
-    * through the codec as `null` both ways (Spark's NULL, not a missed optic focus).
-    */
-  final private class ProductCodec[T](enc: T => Row, dec: Row => T) extends Codec[T, Row]:
-
-    def encode(in: T): Row =
-      if (in: T | Null) == null then null.asInstanceOf[Row] else enc(in)
-
-    def decode(out: Row): T =
-      if (out: Row | Null) == null then null.asInstanceOf[T] else dec(out)
+    TransformingEncoder[T, Row](ct, row, () => codec, nullable = true)
