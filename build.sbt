@@ -7,8 +7,9 @@ val scala3Version = "3.9.0"
 // fields below are ThisBuild-scoped so every published sub-module
 // inherits them.
 
-// Breaking-change history per 0.x minor lives in mima.sbt.
-ThisBuild / tlBaseVersion := "0.18"
+// 1.x is binary-compatible (MiMa-checked from 1.0.0; see mima.sbt, which
+// also keeps the 0.x breaking-change history).
+ThisBuild / tlBaseVersion := "1.0"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -368,11 +369,13 @@ val Ziverge = "dev.zio"
 val GetKyo = "io.getkyo"
 
 lazy val cats = Typelevel %% "cats-core" % "2.13.0"
-// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, and so far only
-// in `zioIntegration`: the zio module hand-writes `Traverse[Chunk]` / `Traverse[NonEmptyChunk]`
-// adapters (zio ships no cats instances), and `TraverseTraversal` reassembles foci through
-// `Functor.map` while collecting them in fold order — so map/traverse coherence is load-bearing for
-// write correctness, not just hygiene. Law-check the instances rather than eyeball them.
+// cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, in `tests` and
+// `zioIntegration`, wherever eo hand-writes a cats instance: `tests` law-checks core's
+// `Traverse[PSVec]` (the instance every `Traversal.each(...).modifyA` runs through), the zio module
+// its `Traverse[Chunk]` / `Traverse[NonEmptyChunk]` adapters (zio ships no cats instances), where
+// `TraverseTraversal` reassembles foci through `Functor.map` while collecting them in fold order —
+// so map/traverse coherence is load-bearing for write correctness, not just hygiene. Law-check the
+// instances rather than eyeball them.
 lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
 lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
 lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
@@ -412,7 +415,7 @@ lazy val circe = Circe %% "circe-core" % "0.14.16"
 // vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.2 pin
 // below wins on the compile classpath, and as an Optional dep vulcan forces
 // nothing downstream anyway.
-lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.0"
+lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.1"
 lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
 // Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
@@ -509,6 +512,9 @@ val kyoBuildActive: Boolean =
     .get("java.specification.version")
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
+// chimney 2.x is built on hearth (like eo-generics) and published for Scala 3.9.0.
+lazy val chimneyCore = "io.scalaland" %% "chimney" % "2.1.0"
+
 // Apache Spark 4.x publishes ONLY `_2.13` artifacts (no Scala 3 build), so
 // every Spark dependency is consumed through `CrossVersion.for3Use2_13`.
 // `cats-eo-spark` compiles against the shared `spark-sql-api` alone — the
@@ -528,7 +534,18 @@ lazy val sparkConnectClient =
 lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
 lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
 
+// Iron refined types. A runtime-checked refinement `A :| C` is a lawful Prism `A ⇀ A :| C`, so
+// the integration module ships constructors only — no carrier, no givens.
+lazy val iron = "io.github.iltotore" %% "iron" % "3.4.1"
+
 lazy val commonSettings = Seq(
+  // Main code is checked against `.scalafix-main.conf` (the shared rules + main-only bans such as
+  // `.modify(identity)`); Test scopes stay on `.scalafix.conf`. `laws` / `schemesLaws` opt back out:
+  // their `src/main` is law code, where `modify(identity)` is the identity law.
+  Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix-main.conf"),
+  // Explicit, not inherited: `Test` extends `Compile`, so leaving it unset would hand specs the
+  // main-only bans.
+  Test / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
   // `version` is NOT set here — sbt-typelevel-ci-release derives it
   // from the current git tag (`tlBaseVersion` above gives the
   // untagged snapshot prefix).
@@ -612,7 +629,9 @@ lazy val root: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      ironIntegration,
       zioIntegration,
+      chimneyIntegration,
       sparkIntegration,
       schemes,
       schemesLaws,
@@ -644,6 +663,7 @@ lazy val laws: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-laws",
+    Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
@@ -661,6 +681,8 @@ lazy val tests: Project = project
     name := "cats-eo-tests",
     publish / skip := true,
     libraryDependencies += discipline % Test,
+    // cats' own Traverse laws for the hand-written `Traverse[PSVec]` (PSVecTraverseLawsSpec).
+    libraryDependencies += catsLaws % Test,
     // circe-core powers the CRUD round-trip example specs
     // (examples/CrudRoundtrip*), which drive derived optics through a
     // circe Json AST.
@@ -707,6 +729,7 @@ lazy val schemesLaws: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-schemes-laws",
+    Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats,
     libraryDependencies += disciplineCore,
     libraryDependencies += scalacheck,
@@ -860,6 +883,26 @@ lazy val jsoniterIntegration: Project = project
     libraryDependencies += discipline % Test,
   )
 
+// Iron integration: every runtime-checkable refinement (`RuntimeConstraint[A, C]`) becomes a lawful
+// `Prism[A, A :| C]` — `getOption` tests the constraint, `reverseGet` forgets it. Same for Iron's
+// `RefinedType` newtypes (`IronPrism.refined[T]`) and whole containers (`IronPrism.all`). Built on
+// the stock `MendTearPrism`, so every fused composition (Lens → Optional, Traversal → filtering
+// Traversal) comes for free.
+lazy val ironIntegration: Project = project
+  .in(file("iron"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-iron",
+    libraryDependencies += cats,
+    libraryDependencies += iron,
+    libraryDependencies += discipline % Test,
+  )
+
 // ZIO DI integration: optics into `ZEnvironment` (each tagged service
 // is a lawful Lens slot), capability-driven focus ops on `Ref`, and
 // `ZLayer` projection (derive a sub-service layer from an aggregate
@@ -887,6 +930,27 @@ lazy val zioIntegration: Project = project
     libraryDependencies += catsLaws % Test,
   )
 
+// chimney integration: chimney's derived transformations as eo optics — `Transformer` → Getter,
+// chimney `Iso` → Iso, `Codec` → Prism, `PartialTransformer` → `ResultFold` (an affine fold whose
+// miss keeps chimney's errors), `Patcher` → write-only Modify — plus `.patch` / `.transformFocus`
+// running chimney at an eo optic's focus. eo-generics is Test-only: callers compose the bridges
+// with whichever eo optics they like, derived or hand-written.
+lazy val chimneyIntegration: Project = project
+  .in(file("chimney"))
+  .dependsOn(
+    LocalProject("core"),
+    LocalProject("generics") % Test,
+    LocalProject("laws") % Test,
+  )
+  .settings(commonSettings *)
+  .settings(scala3LibrarySettings *)
+  .settings(
+    name := "cats-eo-chimney",
+    libraryDependencies += cats,
+    libraryDependencies += chimneyCore,
+    libraryDependencies += discipline % Test,
+  )
+
 // Spark integration: optics over Spark's symbolic `Column` expressions.
 // A typed column is a plain Scala value, so a struct-field lens is an
 // ordinary core `Lens[Col[S], Col[A]]` (`getField` / `withField`) and a
@@ -912,6 +976,8 @@ lazy val sparkIntegration: Project = project
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-spark",
+    // New after 1.0.0: MiMa has no earlier artifact of this module to compare against.
+    tlVersionIntroduced := Map("3" -> "1.1.0"),
     libraryDependencies += cats,
     // `SparkEncoders.derived` is a Hearth macro, as eo-generics' derivations are.
     libraryDependencies += hearth,
@@ -1021,6 +1087,13 @@ lazy val kyoIntegration: Project = project
     // kyo 1.0.0-RC5+ is Java-25-only bytecode, so this artifact honestly
     // targets 25 too (the ThisBuild floor stays 17 for every other module).
     tlJdkRelease := Some(25),
+    // EXPERIMENTAL: no binary-compatibility promise. cats-eo-kyo builds on
+    // kyo 1.0.0-RC7, a release candidate whose own API and bytecode still
+    // move between RCs, so this module is excluded from the 1.x MiMa check
+    // (every other published module is checked against 1.0.0). Lift this
+    // override — let sbt-typelevel compute the previous versions again —
+    // once kyo 1.0.0 final ships and the module is rebuilt on it.
+    tlMimaPreviousVersions := Set.empty,
     libraryDependencies += cats,
     libraryDependencies += kyoPrelude,
     libraryDependencies += kyoSchema % Optional,
@@ -1042,8 +1115,10 @@ lazy val docs: Project = project
     LocalProject("circeIntegration"),
     LocalProject("avroIntegration"),
     LocalProject("jsoniterIntegration"),
+    LocalProject("ironIntegration"),
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    LocalProject("chimneyIntegration"),
     LocalProject("laws"),
     LocalProject("schemes"),
   )
@@ -1099,6 +1174,9 @@ lazy val docs: Project = project
     libraryDependencies += zioSchemaJson,
     libraryDependencies += zioJson,
     libraryDependencies += zioPrelude,
+    // fs2 (and, through it, cats-effect) for the "Streaming with fs2"
+    // cookbook page — docs-only: no published module depends on fs2.
+    libraryDependencies += fs2Core,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
@@ -1234,6 +1312,8 @@ lazy val unidocs: Project = project
       circeIntegration,
       avroIntegration,
       jsoniterIntegration,
+      ironIntegration,
+      chimneyIntegration,
     ),
   )
 
@@ -1257,6 +1337,8 @@ lazy val benchmarks: Project = project
     // only), so kyo's inline `.eval` machinery expands fine here.
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
+    // ChimneyBench: cats-eo-chimney vs plain chimney vs hand-written transforms.
+    LocalProject("chimneyIntegration"),
   )
   .settings(commonSettings *)
   .settings(
@@ -1363,9 +1445,11 @@ lazy val demoUplcJvmBench: Project = project
 // -------------------------------------------------------------------
 lazy val Fs2Version = "3.14.0"
 lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
+// fs2-core alone (it brings cats-effect): the docs' "Streaming with fs2" cookbook page.
+lazy val fs2Core = "co.fs2" %% "fs2-core" % Fs2Version
 // Arbitrary / Cogen derivation from Scala 3 mirrors: the demo's issues are drawn from generators
 // derived from the model.
-lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.10.0"
+lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.11.0"
 
 lazy val demoGrpcFilter: Project = project
   .in(file("demos/grpc-filter"))
@@ -1469,7 +1553,9 @@ addCommandAlias(
     "project circeIntegration; stryker; " +
     "project avroIntegration; stryker; " +
     "project jsoniterIntegration; stryker; " +
+    "project ironIntegration; stryker; " +
     "project zioIntegration; stryker; " +
     "project kyoIntegration; stryker; " +
+    "project chimneyIntegration; stryker; " +
     "project root",
 )

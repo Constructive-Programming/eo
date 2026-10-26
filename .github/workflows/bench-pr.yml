@@ -46,7 +46,12 @@ env:
   # PlatedBench.visitorUniverseJson n=4096 across identical-source runs;
   # pinning took the same A/A to ±0.0%. Forks don't fix it (measured: -f 3
   # unpinned still ±11-41% — it is per-invocation environment state, not
-  # per-fork sampling noise).
+  # per-fork sampling noise). The swing left after pinning was not TLAB at
+  # all: that visitor allocated capturing closures per node, and C2 escape
+  # analysis eliminated a run-dependent share of them (per-fork B/op
+  # bimodal at ~295 K / ~524 K; 885 K with -XX:-DoEscapeAnalysis). Fixed in
+  # the benchmark itself (closure-free `PlatedTrees.visitJson`: ~197 K on
+  # every fork, with or without escape analysis).
   JMH_PROFILE: "pr:-i3-wi2-f1-t1-gc-rt1g"
   JMH_FLAGS: "-i 3 -wi 2 -f 1 -t 1 -foe true -prof gc -rf json -jvmArgsAppend -XX:-ResizeTLAB -jvmArgsAppend -Xms1g -jvmArgsAppend -Xmx1g"
 

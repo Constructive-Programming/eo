@@ -128,22 +128,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     getterOk && composeOk && l1Ok.and(l2Ok) && curriedOk && nestedOk && isoRevOk && prismOk
   }
 
-  // ----- Traversal/foldMap/modifyA shorthand --------------------------
+  // ----- Traversal/foldMap shorthand + morph[Affine] --------------------
 
-  // covers: Traversal.each.foldMap totals the list under Monoid[Int],
-  // Traversal.each.modifyA short-circuits on None, Lens morphed into an Affine
-  // behaves like the original Lens
-  "Traversal.each: foldMap totals + modifyA short-circuits + morph[Affine] preserves Lens behaviour" >> {
+  // covers: Traversal.each.foldMap totals the list under Monoid[Int], Lens morphed into an Affine
+  // behaves like the original Lens (modifyA is law-checked: D1–D3 in EoSpecificLawsSpec)
+  "Traversal.each: foldMap totals + morph[Affine] preserves Lens behaviour" >> {
     val t: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
       Traversal.each[List, Int]
     val sumOk = forAll((xs: List[Int]) => t.foldMap(identity[Int])(xs) == xs.sum)
-
-    val positivesDoubled: Int => Option[Int] =
-      a => if a > 0 then Some(a * 2) else None
-    val mAOk =
-      (t.modifyA[Option](positivesDoubled)(List(1, 2, 3)) == Some(List(2, 4, 6))) &&
-        (t.modifyA[Option](positivesDoubled)(List(1, -2, 3)) == None) &&
-        (t.modifyA[Option](positivesDoubled)(Nil) == Some(Nil))
 
     val l: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
       Lens.first[Int, String]
@@ -152,7 +144,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     val morphOk =
       forAll((pair: (Int, String), a: Int) => asAffine.modify(_ => a)(pair) == l.replace(a)(pair))
 
-    sumOk && morphOk && mAOk
+    sumOk && morphOk
   }
 
   // ----- Fold ---------------------------------------------------------
@@ -1031,7 +1023,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
     optOk.and(lensOk).and(prismOk).and(isoOk)
   }
 
-  // ----- ForgetfulFold surface: foldMap / headOption / length / exists -----
+  // ----- ForgetfulFold surface: foldMap / all / headOption / length / exists -----
   //
   // ONE property, TWO receiver shapes, one independent oracle (the expected focus
   // List supplied per row). `extAgrees` holds the optic as the BARE `Optic[…]` — the
@@ -1049,14 +1041,14 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   //   no-focus-satisfies class: k = 10 (elements are 0..9), or the empty fold n = 0.
   // Carrier rows carried over from the example block this replaces: Tuple2 (Lens, one
   //   focus), Either (Prism, hit and miss), MultiFocus[PSVec], Forget[List].
-  "ForgetfulFold surface: foldMap / headOption / length / exists agree with the foci" >> {
+  "ForgetfulFold surface: foldMap / all / headOption / length / exists agree with the foci" >> {
     def extAgrees[S, T, A, B, F[_, _]](o: Optic[S, T, A, B, F])(
         s: S,
         expected: List[A],
         p: A => Boolean,
     )(using ForgetfulFold[F]): Boolean =
       val foci: List[A] = o.foldMap[List[A]](a => List(a))(s)
-      foci == expected && o.headOption(s) == expected.headOption &&
+      foci == expected && o.all(s) == expected && o.headOption(s) == expected.headOption &&
       o.length(s) == expected.length && o.exists(p)(s) == expected.exists(p)
 
     def cfAgrees[S, A](cf: CanFold[S, A])(s: S, expected: List[A], p: A => Boolean): Boolean =

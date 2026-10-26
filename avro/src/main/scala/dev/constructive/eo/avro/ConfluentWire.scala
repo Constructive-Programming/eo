@@ -209,7 +209,7 @@ object ConfluentWire:
   def resolving[A](readSchema: Schema, frameId: Int, threadLocalStorage: Boolean = true)(using
       codec: AvroCodec[A]
   ): Optic[Array[Byte], AvroBridge.BridgedBytes, A, A, Affine] =
-    new Optional[Array[Byte], AvroBridge.BridgedBytes, A, A](
+    Optional[Array[Byte], AvroBridge.BridgedBytes, A, A](
       getOrModify = framed =>
         strip(framed).flatMap(f =>
           AvroCodec.decodeResolvedValue[A](f.body, readSchema, threadLocalStorage)

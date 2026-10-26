@@ -2,12 +2,8 @@ package dev.constructive.eo
 
 import scala.language.implicitConversions
 
-import cats.data.Chain
 import cats.instances.list.given
-import cats.instances.option.given
-import cats.instances.vector.given
 import dev.constructive.eo.compose.*
-import org.scalacheck.Prop.forAll
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 
@@ -21,10 +17,12 @@ private case class Phone(isMobile: Boolean, number: String)
 private case class Person(name: String, phones: List[Phone])
 
 /** Spike-scope spec for the unified `MultiFocus[F]` carrier — pins down the load-bearing slice the
-  * spike claims to deliver: `.modify` (Functor[F]), `.modifyA` (Traverse[F]), same-carrier
-  * `.andThen` (Lens → MultiFocus → Lens with singleton fast-path), the Iso bridge
-  * (`forgetful2multifocus`), and the ModifyF widening (`multifocus2modify`). Plus the .collect
-  * universal in its two derivations.
+  * spike claims to deliver: same-carrier `.andThen` (Lens → MultiFocus → Lens with singleton
+  * fast-path), the Iso bridge (`forgetful2multifocus`), and the ModifyF widening
+  * (`multifocus2modify`). Plus the .collect universal in its two derivations. `.modify` /
+  * `.modifyA` / `.all` across F are law-checked in `tests/` (`ForgetfulFunctor` /
+  * `ForgetfulTraverse` per carrier in OpticsLawsSpec, D2 `ModifyAListTests` and E2 `allIsFoci` in
+  * EoSpecificLawsSpec).
   */
 class MultiFocusSpec extends Specification with ScalaCheck:
 
@@ -63,33 +61,6 @@ class MultiFocusSpec extends Specification with ScalaCheck:
     val singleOk = sumSingle(List(1, 2, 3)) == List(6)
 
     mapOk && singleOk
-  }
-
-  // ----- Functor + Traverse capability ----------------------------------
-  // covers: ForgetfulFunctor[MultiFocus[F]] (.modify), ForgetfulTraverse[MultiFocus[F]]
-  // (.modifyA, .all) on multiple F-instances.
-  "MultiFocus.apply[F, A].modify / .modifyA across F in {List, Option, Vector, Chain}" >> {
-    val kList = MultiFocus.apply[List, Int]
-    val kOpt = MultiFocus.apply[Option, Int]
-    val kVec = MultiFocus.apply[Vector, Int]
-    val kChain = MultiFocus.apply[Chain, Int]
-
-    val modList = forAll { (xs: List[Int]) => kList.modify(_ + 1)(xs) == xs.map(_ + 1) }
-    val modOpt = forAll { (x: Option[Int]) => kOpt.modify(_ + 1)(x) == x.map(_ + 1) }
-    val modVec = forAll { (xs: Vector[Int]) => kVec.modify(_ + 1)(xs) == xs.map(_ + 1) }
-    val modChain = forAll { (xs: List[Int]) =>
-      val ch = Chain.fromSeq(xs)
-      kChain.modify(_ + 1)(ch) == Chain.fromSeq(xs.map(_ + 1))
-    }
-
-    // .modifyA — Traverse[F] path with Applicative[Option] effect.
-    val modA = forAll { (xs: List[Int]) =>
-      val res: Option[List[Int]] = kList.modifyA[Option](i => if i >= 0 then Some(i) else None)(xs)
-      if xs.forall(_ >= 0) then res == Some(xs)
-      else res == None
-    }
-
-    modList && modOpt && modVec && modChain && modA
   }
 
   // ----- Composer bridges: Direct → MultiFocus[List] + MultiFocus[List] → ModifyF ----

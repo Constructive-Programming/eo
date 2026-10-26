@@ -5,6 +5,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import cats.effect.syntax.all.*
 import cats.effect.{Async, Ref}
 import cats.syntax.all.*
+import dev.constructive.eo.jsoniter.JsonSlice
 import dev.constructive.eo.optics.Optic.*
 import fs2.{Chunk, Pipe}
 
@@ -30,13 +31,13 @@ final case class Tally(
   def keptMessages: Long = kept.values.sum
 
   /** A chunk of messages, their verdicts, and how long they took. */
-  def add(judged: Chunk[(Array[Byte], Verdict)], took: FiniteDuration): Tally =
+  def add(judged: Chunk[(Chunk[Byte], Verdict)], took: FiniteDuration): Tally =
     judged.foldLeft(copy(judging = judging + took)) {
       case (tally, (message, verdict)) =>
         def bump(counts: Map[Kind, Long], kind: Kind) = counts.updated(kind, counts(kind) + 1)
         tally.copy(
           messages = tally.messages + 1,
-          bytes = tally.bytes + message.length,
+          bytes = tally.bytes + message.size,
           seen = verdict.kind.fold(tally.seen)(bump(tally.seen, _)),
           kept = verdict.kind.filter(_ => verdict.keep).fold(tally.kept)(bump(tally.kept, _)),
           unclassified = tally.unclassified + verdict.kind.fold(1L)(_ => 0L),
@@ -58,9 +59,10 @@ object Tally:
 object Triage:
 
   /** A message's verdict, read through [[Wire]]'s optics: one scan of the message for its `detail`,
-    * then the few leaves the policy wants from the detail's bytes. Nothing else is decoded.
+    * then the few leaves the policy wants from the detail's bytes. Nothing else is decoded, and the
+    * message is read where it lies.
     */
-  def optics(policy: Policy)(message: Array[Byte]): Verdict =
+  def optics(policy: Policy)(message: JsonSlice): Verdict =
     import Wire.given
     Wire.detail.getOption(message) match
       case Some(detail) => Verdict(Wire.kind.getOption(detail), policy.keep(detail))
@@ -70,7 +72,7 @@ object Triage:
     * about its `Detail` through [[Model]]'s optics. A message that doesn't decode (a kind this
     * model doesn't know fails the whole message) has no kind and is dropped.
     */
-  def decoding(policy: Policy)(message: Array[Byte]): Verdict =
+  def decoding(policy: Policy)(message: JsonSlice): Verdict =
     import Model.given
     Issue.decode(message).map(_.detail) match
       case Some(detail) => Verdict(Some(Kind.of(detail)), policy.keep(detail))
@@ -78,19 +80,22 @@ object Triage:
 
   /** The filter: raw bytes of gRPC frames in; the frames of the messages `verdict` keeps out, each
     * message forwarded byte for byte. Every chunk of verdicts, and how long it took, goes into
-    * `tally`.
+    * `tally`. Messages are judged and forwarded where they lie in the incoming chunks: none is
+    * copied, except one that straddles two chunks.
     */
   def filter[F[_]: Async](
-      verdict: Array[Byte] => Verdict,
+      verdict: JsonSlice => Verdict,
       tally: Ref[F, Tally]
   ): Pipe[F, Byte, Byte] =
     _.through(GrpcFrames.splitFrames())
       .chunks
       .evalMap { messages =>
-        Async[F].delay(messages.map(message => (message, verdict(message)))).timed.flatMap {
-          (took, judged) =>
+        Async[F]
+          .delay(messages.map(message => (message, verdict(Wire.json(message)))))
+          .timed
+          .flatMap { (took, judged) =>
             tally.update(_.add(judged, took)).as(judged.collect { case (m, Verdict(_, true)) => m })
-        }
+          }
       }
       .unchunks
       .through(GrpcFrames.joinFrames)

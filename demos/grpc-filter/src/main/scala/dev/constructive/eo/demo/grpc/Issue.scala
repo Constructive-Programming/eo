@@ -3,12 +3,13 @@ package dev.constructive.eo.demo.grpc
 import scala.util.control.NonFatal
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{
-  readFromArray,
+  readFromSubArray,
   JsonReader,
   JsonValueCodec,
   JsonWriter
 }
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
+import dev.constructive.eo.jsoniter.JsonSlice
 
 /** One message of the stream: an issue, as an issue tracker publishes it. 64 fields. The 61st,
   * `detail`, is one of three kinds of issue, each with its own fields, nested up to three objects
@@ -90,8 +91,8 @@ object Issue:
   /** The whole message decoded, if it decodes. jsoniter-scala reports bytes that don't decode by
     * throwing: this is the one place that becomes a value.
     */
-  def decode(message: Array[Byte]): Option[Issue] =
-    try Some(readFromArray[Issue](message))
+  def decode(message: JsonSlice): Option[Issue] =
+    try Some(readFromSubArray[Issue](message.array, message.offset, message.until))
     catch case NonFatal(_) => None
 
 /** The three kinds of issue. On the wire, `"type"` names the case: jsoniter-scala writes it as the
