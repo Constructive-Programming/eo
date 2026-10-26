@@ -11,10 +11,9 @@ import optics.Optic
   * The `MultiFocus[PSVec]` carrier carries the right `ForgetfulFunctor` instance to drive the
   * modify-side laws.
   *
-  * We deliberately do NOT port `getAll` / `headOption` here — EO's `Optic.all` returns the whole
-  * container wrapped in a single-element list (cartesian-product semantics from
-  * `traverse(List(_))`), not the individual elements, so Monocle's phrasing of those laws would not
-  * be testing what the name suggests.
+  * Monocle's `getAll` / `headOption` laws are not restated here: EO's `Optic.all` (Monocle's
+  * `getAll`) is `foldMap(List(_))` for every fold-capable carrier, pinned once by E2 `allIsFoci` in
+  * `eo.FoldMapHomomorphismLaws`, and `headOption` rides on the same `foldMap`.
   */
 trait TraversalLaws[T[_], A](using val FT: Functor[T]):
   /** The optic under test. */

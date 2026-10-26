@@ -5,6 +5,7 @@ import scala.concurrent.duration.FiniteDuration
 import cats.effect.{ExitCode, IO, IOApp}
 import cats.syntax.all.*
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
+import dev.constructive.eo.jsoniter.JsonSlice
 import fs2.Stream
 
 /** Runs the three parties on the loopback interface: once with the filter reading messages through
@@ -27,7 +28,7 @@ object Demo extends IOApp:
       "full decode (baseline)" -> Triage.decoding(policy),
     )
 
-    def once(count: Int, name: String, verdict: Array[Byte] => Verdict): IO[String] =
+    def once(count: Int, name: String, verdict: JsonSlice => Verdict): IO[String] =
       val messages = Stream.emits(pool).repeat.take(count.toLong).covary[IO]
       (Net.source(messages), Net.sink[IO, Received](Received.empty)(_.add(_, policy))).tupled.use {
         case (upstream, (downstream, received)) =>

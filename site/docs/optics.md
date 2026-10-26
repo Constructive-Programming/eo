@@ -234,6 +234,11 @@ circleP.modify(c => Shape.Circle(c.r * 2))(Shape.Square(2.0))
 For auto-derivation on enums / sealed traits / union types see
 `prism[S, A]` in [Generics](generics.md).
 
+A runtime-checked refinement is a prism too: `A ⇀ A :| C` tests the
+constraint on the way in and forgets it on the way out. The
+[Iron integration](integrations/iron.md) builds one for every Iron
+constraint (`IronPrism[Int, Positive]`, `Age.prism`).
+
 Composed with a traversal in either direction, a prism *filters*:
 `traversal.andThen(prism)` visits only the elements that match, and
 `prism.andThen(traversal)` walks the inner structure only when the
@@ -356,7 +361,7 @@ Kaleidoscope, and PowerSeries shapes.
 `MultiFocus[PSVec]` — the `Traversal.each` / `Traversal.pEach`
 carrier. Map, fold, or traverse every element of a collection, and
 keep composing past the traversal with `.andThen`. Supports `.modify`
-/ `.replace` (`Functor`), `.foldMap` (`Foldable`), `.modifyA` / `.all`
+/ `.replace` (`Functor`), `.foldMap` / `.all` (`Foldable`), `.modifyA`
 (`Traverse`), and downstream `.andThen` via `mfAssocPSVec`. Overhead
 over a naive `copy`/`map` runs ~2-3× for dense chains and ~5× for the
 Prism miss-branch shape, amortising down as the collection grows (the

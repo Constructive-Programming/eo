@@ -3,6 +3,8 @@ package optics
 
 import cats.Monoid
 
+import data.Affine
+
 /** Constructors for `Prism` — the partial single-focus optic, backed by `Either`. "A `Prism[S, A]`"
   * is prose shorthand for `Optic[S, S, A, A, Either]`: there is deliberately NO `type Prism[S, A]`
   * alias to ascribe (`Prism` is only this constructor object) — TWO concrete classes back the
@@ -143,25 +145,6 @@ final class MendTearPrism[S, T, A, B](
       mend = d => mend(innerMend(d)),
     )
 
-  /** Shared kernel for `MendTearPrism` ∘ {Lens, Optional} — produces `Optional`. Outer-miss
-    * surfaces as `Left(t)`; on hit, `innerHit` decides between focus-arrived (`Right(c)`) or
-    * inner-miss-needs-outer-lift (encoded by the caller).
-    */
-  private inline def fuseToOptional[C, D](
-      innerHit: A => Either[T, C],
-      innerWrite: (A, D) => B,
-  ): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        tear(s) match
-          case l @ Left(_) => l.widenRight[C]
-          case Right(a)    => innerHit(a),
-      reverseGet = (s, d) =>
-        tear(s) match
-          case Left(t)  => t
-          case Right(a) => mend(innerWrite(a, d)),
-    )
-
   /** Fused `Prism.andThen(Prism)` — composed tear + `mend = outer.mend ∘ inner.mend`, no nested
     * Either wrappers. Picked when both sides are statically `MendTearPrism`. `inline` so a deep
     * prism chain splices distinct lambdas per level, under C2's recursive-inline cap (see
@@ -201,19 +184,62 @@ final class MendTearPrism[S, T, A, B](
 
   /** Fused `Prism.andThen(Lens)` — prism may miss, lens focuses on hit. Result is `Optional`. */
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
-    fuseToOptional(
-      innerHit = a => Right(inner.get(a)),
-      innerWrite = (a, d) => inner.enplace(a, d),
+    Optional.fused[S, T, C, D, A](
+      getOrModify = s => tear(s).map(inner.get),
+      modify = (s, f) =>
+        tear(s) match
+          case Right(a) => mend(inner.enplace(a, f(inner.get(a))))
+          case Left(t)  => t,
+      to = s =>
+        tear(s) match
+          case Right(a) => new Affine.Hit[(T, A), C](a, inner.get(a))
+          case Left(t)  => new Affine.Miss[(T, A)](t),
+      rebuild = (a, d) => mend(inner.enplace(a, d)),
+    )
+
+  /** Fused `Prism.andThen(SplitCombineLens)` — the eo-generics `lens[S](_.field)` shape. Without it
+    * a prism ∘ derived lens falls back to the generic `Morph` route (both sides lifted into
+    * `Affine`, composed through `AssociativeFunctor`). Reads use the lens's direct `get`; writes
+    * split once. Result is `Optional`.
+    */
+  def andThen[C, D, XI](inner: SplitCombineLens[A, B, C, D, XI]): Optional[S, T, C, D] =
+    Optional.fused[S, T, C, D, XI](
+      getOrModify = s => tear(s).map(inner.get),
+      modify = (s, f) =>
+        tear(s) match
+          case Right(a) => mend(inner.modify(f)(a))
+          case Left(t)  => t,
+      to = s =>
+        tear(s) match
+          case Right(a) =>
+            val (xi, c) = inner.split(a)
+            new Affine.Hit[(T, XI), C](xi, c)
+          case Left(t) => new Affine.Miss[(T, XI)](t),
+      rebuild = (xi, d) => mend(inner.combine(xi, d)),
     )
 
   /** Fused `Prism.andThen(Optional)` — nested partial focuses. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    fuseToOptional(
-      innerHit = a =>
-        inner.getOrModify(a) match
-          case Left(b)      => Left(mend(b))
-          case r @ Right(_) => r.widenLeft[T],
-      innerWrite = (a, d) => inner.reverseGet(a, d),
+    Optional.fused[S, T, C, D, inner.M](
+      getOrModify = s =>
+        tear(s) match
+          case l @ Left(_) => l.widenRight[C]
+          case Right(a)    =>
+            inner.getOrModify(a) match
+              case Left(b)      => Left(mend(b))
+              case r @ Right(_) => r.widenLeft[T],
+      modify = (s, f) =>
+        tear(s) match
+          case Right(a) => mend(inner.modifyAt(a, f))
+          case Left(t)  => t,
+      to = s =>
+        tear(s) match
+          case Left(t)  => new Affine.Miss[(T, inner.M)](t)
+          case Right(a) =>
+            inner.to(a) match
+              case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, inner.M)](mend(mi.fst))
+              case hi: Affine.Hit[inner.X, C] => new Affine.Hit[(T, inner.M), C](hi.snd, hi.b),
+      rebuild = (mi, d) => mend(inner.rebuild(mi, d)),
     )
 
   /** Fused `Prism.andThen(Traversal)` — a prism MISS contributes zero foci (so writes pass the
@@ -306,6 +332,49 @@ final class PickMendPrism[S, A, B](
     new PickMendPrism(
       pick = s => pick(s).map(inner.get),
       mend = d => mend(inner.reverseGet(d)),
+    )
+
+  /** Fused `PickMend.andThen(Lens)` — the [[MendTearPrism.andThen(inner:GetReplaceLens)]] twin: the
+    * write rebuilds from the picked `A` rather than picking again.
+    */
+  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, S, C, D] =
+    Optional.fused[S, S, C, D, A](
+      getOrModify = s =>
+        pick(s) match
+          case Some(a) => Right(inner.get(a))
+          case None    => Left(s),
+      modify = (s, f) =>
+        pick(s) match
+          case Some(a) => mend(inner.enplace(a, f(inner.get(a))))
+          case None    => s,
+      to = s =>
+        pick(s) match
+          case Some(a) => new Affine.Hit[(S, A), C](a, inner.get(a))
+          case None    => new Affine.Miss[(S, A)](s),
+      rebuild = (a, d) => mend(inner.enplace(a, d)),
+    )
+
+  /** Fused `PickMend.andThen(SplitCombineLens)` — the eo-generics `lens[S](_.field)` shape; see
+    * [[MendTearPrism.andThen(inner:SplitCombineLens)]]. A chimney `Codec` prism decodes once per
+    * write: the decoded value is what the write rebuilds from.
+    */
+  def andThen[C, D, XI](inner: SplitCombineLens[A, B, C, D, XI]): Optional[S, S, C, D] =
+    Optional.fused[S, S, C, D, XI](
+      getOrModify = s =>
+        pick(s) match
+          case Some(a) => Right(inner.get(a))
+          case None    => Left(s),
+      modify = (s, f) =>
+        pick(s) match
+          case Some(a) => mend(inner.modify(f)(a))
+          case None    => s,
+      to = s =>
+        pick(s) match
+          case Some(a) =>
+            val (xi, c) = inner.split(a)
+            new Affine.Hit[(S, XI), C](xi, c)
+          case None => new Affine.Miss[(S, XI)](s),
+      rebuild = (xi, d) => mend(inner.combine(xi, d)),
     )
 
   /** Fused `PickMend.andThen(Traversal)` — the [[MendTearPrism.andThen(Traversal)]] twin: a miss is

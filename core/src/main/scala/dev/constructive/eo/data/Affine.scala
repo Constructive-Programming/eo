@@ -108,8 +108,9 @@ object Affine:
       case m: Miss[X]   => m
       case h: Hit[X, A] => new Hit[X, B](h.snd, f(h.b))
 
-  /** `ForgetfulFold[Affine]` — miss empty, hit runs `f` on the focus. Carrier-owned (like [[map]] /
-    * [[traverse]]), so it resolves through Affine's companion with no import.
+  /** `ForgetfulFold[Affine]` — miss empty, hit runs `f` on the focus. Unlocks `.foldMap` / `.all`.
+    * Carrier-owned (like [[map]] / [[traverse]]), so it resolves through Affine's companion with no
+    * import.
     *
     * @group Instances
     */
@@ -120,8 +121,7 @@ object Affine:
       case h: Hit[X, A] => f(h.b)
 
   /** `ForgetfulTraverse[Affine, Applicative]` — lifts a focus-level `A => G[B]` into an
-    * `Affine[X, A] => G[Affine[X, B]]`. Unlocks `.modifyA` / `.all` / `.modifyF` on Affine- carrier
-    * optics.
+    * `Affine[X, A] => G[Affine[X, B]]`. Unlocks `.modifyA` on Affine-carrier optics.
     *
     * @group Instances
     */

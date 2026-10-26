@@ -24,15 +24,17 @@ object GrpcFrames:
     */
   final case class Malformed(reason: String) extends RuntimeException(reason) with NoStackTrace
 
-  /** Raw bytes → one array per message: the message's bytes, uncompressed, without its header.
-    * Messages may straddle the incoming chunks any way at all. Fails with [[Malformed]] on a
-    * compressed message (no message encoding is negotiated here), on one longer than
-    * `maxMessageBytes`, or when the bytes end inside a frame.
+  /** Raw bytes → one contiguous slice per message: the message's bytes, uncompressed, without its
+    * header. A message inside one of the incoming chunks is a view of that chunk's array, nothing
+    * copied; only one that straddles chunks is copied into an array of its own. Messages may
+    * straddle the incoming chunks any way at all. Fails with [[Malformed]] on a compressed message
+    * (no message encoding is negotiated here), on one longer than `maxMessageBytes`, or when the
+    * bytes end inside a frame.
     */
   def splitFrames[F[_]: RaiseThrowable](
       maxMessageBytes: Int = DefaultMaxMessageBytes
-  ): Pipe[F, Byte, Array[Byte]] =
-    def go(buffered: Chunk[Byte], rest: Stream[F, Byte]): Pull[F, Array[Byte], Unit] =
+  ): Pipe[F, Byte, Chunk.ArraySlice[Byte]] =
+    def go(buffered: Chunk[Byte], rest: Stream[F, Byte]): Pull[F, Chunk.ArraySlice[Byte], Unit] =
       split(buffered, maxMessageBytes) match
         case Left(reason)            => Pull.raiseError[F](Malformed(reason))
         case Right((messages, left)) =>
@@ -45,21 +47,20 @@ object GrpcFrames:
     in => go(Chunk.empty, in).stream
 
   /** Messages → their frames, uncompressed. The messages' bytes are not copied. */
-  def joinFrames[F[_]]: Pipe[F, Array[Byte], Byte] =
+  def joinFrames[F[_]]: Pipe[F, Chunk[Byte], Byte] =
     _.mapChunks(_.flatMap(frame))
 
   /** One message's frame: not compressed, its length, the message. */
-  def frame(message: Array[Byte]): Chunk[Byte] =
-    val length = message.length
-    Chunk(0, length >>> 24, length >>> 16, length >>> 8, length).map(_.toByte) ++
-      Chunk.array(message)
+  def frame(message: Chunk[Byte]): Chunk[Byte] =
+    val length = message.size
+    Chunk(0, length >>> 24, length >>> 16, length >>> 8, length).map(_.toByte) ++ message
 
   /** Every whole frame at the front of `bytes`, as messages, and the bytes after them. */
   private def split(
       bytes: Chunk[Byte],
       maxMessageBytes: Int,
-  ): Either[String, (Chunk[Array[Byte]], Chunk[Byte])] =
-    (List.empty[Array[Byte]], bytes).tailRecM { (messages, rest) =>
+  ): Either[String, (Chunk[Chunk.ArraySlice[Byte]], Chunk[Byte])] =
+    (List.empty[Chunk.ArraySlice[Byte]], bytes).tailRecM { (messages, rest) =>
       unframe(rest, maxMessageBytes).map {
         case Some((message, next)) => Left((message :: messages, next))
         case None                  => Right((Chunk.from(messages.reverse), rest))
@@ -72,7 +73,7 @@ object GrpcFrames:
   private def unframe(
       bytes: Chunk[Byte],
       maxMessageBytes: Int,
-  ): Either[String, Option[(Array[Byte], Chunk[Byte])]] =
+  ): Either[String, Option[(Chunk.ArraySlice[Byte], Chunk[Byte])]] =
     if bytes.size < HeaderBytes then Right(None)
     else
       val length = (1 to 4).foldLeft(0L)((n, i) => n << 8 | (bytes(i) & 0xffL))
@@ -81,5 +82,14 @@ object GrpcFrames:
       else
         Right(Option.when(bytes.size - HeaderBytes >= length) {
           val (message, rest) = bytes.drop(HeaderBytes).splitAt(length.toInt)
-          (message.toArray, rest)
+          (unwrap(message).toArraySlice, unwrap(rest))
         })
+
+  /** A queue of one chunk, as that chunk. Cutting a frame that straddles two chunks off a queue of
+    * them leaves a queue of one, and `toArraySlice` copies a queue's bytes even then: unwrapped,
+    * the messages after the straddling one stay views of their chunk.
+    */
+  private def unwrap(bytes: Chunk[Byte]): Chunk[Byte] =
+    bytes match
+      case queue: Chunk.Queue[Byte @unchecked] if queue.chunks.size == 1 => queue.chunks.head
+      case other                                                         => other

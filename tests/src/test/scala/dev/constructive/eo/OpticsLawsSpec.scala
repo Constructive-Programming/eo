@@ -13,6 +13,7 @@ import org.specs2.mutable.Specification
 import optics.{
   AffineFold,
   Fold,
+  ForgetFold,
   Getter,
   Iso,
   Lens,
@@ -27,6 +28,7 @@ import optics.{
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 import laws.{
   AffineFoldLaws,
+  FoldLaws,
   GetterLaws,
   IsoLaws,
   LensLaws,
@@ -37,6 +39,7 @@ import laws.{
 }
 import laws.discipline.{
   AffineFoldTests,
+  FoldTests,
   GetterTests,
   IsoTests,
   LensTests,
@@ -200,6 +203,131 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
         val reference = (p: (Int, String)) => p._1
     .getter,
   )
+
+  // ----- Fused prism ∘ lens, and read-only collapses through a lens's direct `get` -----
+  //
+  // Every fused prism ∘ lens overload lands in `Optional`, so each must satisfy the Optional
+  // laws; a Getter / AffineFold ∘ split-combine lens reads through the lens's own `get` instead
+  // of its `(complement, focus)` split, which must read exactly what the carrier read does.
+
+  private val somePairPick = Prism.optional[Option[(Int, String)], (Int, String)](identity, Some(_))
+
+  private val somePairTear =
+    Prism[Option[(Int, String)], (Int, String)](o => o.toRight(o), Some(_))
+
+  private val firstReplace =
+    Lens[(Int, String), Int](_._1, (p, n) => p.copy(_1 = n))
+
+  checkAll(
+    "Optional — PickMendPrism ∘ SplitCombineLens (fused)",
+    new OptionalTests[Option[(Int, String)], Int]:
+      val laws = new OptionalLaws[Option[(Int, String)], Int]:
+        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
+          somePairPick.andThen(Lens.first[Int, String])
+    .optional,
+  )
+
+  checkAll(
+    "Optional — PickMendPrism ∘ GetReplaceLens (fused)",
+    new OptionalTests[Option[(Int, String)], Int]:
+      val laws = new OptionalLaws[Option[(Int, String)], Int]:
+        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
+          somePairPick.andThen(firstReplace)
+    .optional,
+  )
+
+  checkAll(
+    "Optional — MendTearPrism ∘ SplitCombineLens (fused)",
+    new OptionalTests[Option[(Int, String)], Int]:
+      val laws = new OptionalLaws[Option[(Int, String)], Int]:
+        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
+          somePairTear.andThen(Lens.first[Int, String])
+    .optional,
+  )
+
+  checkAll(
+    "Getter ∘ SplitCombineLens — direct-read collapse",
+    new GetterTests[((Int, String), Boolean), Int]:
+      val laws = new GetterLaws[((Int, String), Boolean), Int]:
+        val getter =
+          Getter[((Int, String), Boolean), (Int, String)](_._1).andThen(Lens.first[Int, String])
+        val reference = (p: ((Int, String), Boolean)) => p._1._1
+    .getter,
+  )
+
+  checkAll(
+    "AffineFold ∘ SplitCombineLens — direct-read collapse",
+    new AffineFoldTests[Option[(Int, String)], Int]:
+      val laws = new AffineFoldLaws[Option[(Int, String)], Int]:
+        val af = AffineFold[Option[(Int, String)], (Int, String)](identity)
+          .andThen(Lens.first[Int, String])
+    .affineFold,
+  )
+
+  // ----- Folds that stay in their container through a single-focus inner -----
+  //
+  // `Fold[F] ∘ lens` maps inside F (cats Functor); `Fold[F] ∘ prism` mapFilters inside F (cats
+  // FunctorFilter). The composite keeps F's type — `Option` stays `Option`, `Either[String, *]`
+  // keeps its `Left` — and must still be a lawful fold that reads exactly what the carrier read
+  // does.
+
+  private val pairs: ForgetFold[Option[(Int, String)], Option, (Int, String)] =
+    new ForgetFold[Option[(Int, String)], Option, (Int, String)](identity)
+
+  private val checked
+      : ForgetFold[Either[String, (Int, String)], [x] =>> Either[String, x], (Int, String)] =
+    new ForgetFold[Either[String, (Int, String)], [x] =>> Either[String, x], (Int, String)](
+      identity
+    )
+
+  private val positiveFirst =
+    Prism.optional[(Int, String), Int](p => Option.when(p._1 > 0)(p._1), n => (n, "made"))
+
+  checkAll(
+    "Fold[Option] ∘ SplitCombineLens — stays an Option fold",
+    new FoldTests[Option[(Int, String)], Int, Forget[Option]]:
+      val laws = new FoldLaws[Option[(Int, String)], Int, Forget[Option]]:
+        val fold: ForgetFold[Option[(Int, String)], Option, Int] =
+          pairs.andThen(Lens.first[Int, String])
+    .fold,
+  )
+
+  checkAll(
+    "Fold[Option] ∘ PickMendPrism — mapFilter inside Option",
+    new FoldTests[Option[(Int, String)], Int, Forget[Option]]:
+      val laws = new FoldLaws[Option[(Int, String)], Int, Forget[Option]]:
+        val fold: ForgetFold[Option[(Int, String)], Option, Int] = pairs.andThen(positiveFirst)
+    .fold,
+  )
+
+  "container-keeping fold compositions read what the carrier read does" >> {
+    val viaLens = pairs.andThen(Lens.first[Int, String])
+    val viaPrism = pairs.andThen(positiveFirst)
+    val eitherLens: ForgetFold[Either[String, (Int, String)], [x] =>> Either[String, x], Int] =
+      checked.andThen(Lens.first[Int, String])
+    val optionOk = forAll { (o: Option[(Int, String)]) =>
+      viaLens.read(o) == o.map(_._1) && viaPrism.read(o) == o.map(_._1).filter(_ > 0)
+    }
+    val eitherOk = forAll { (e: Either[String, (Int, String)]) =>
+      eitherLens.read(e) == e.map(_._1)
+    }
+    // No FunctorFilter for Either[String, *] (no empty without an error value): a prism inner
+    // falls back to the List fold, as before.
+    val eitherPrism: ForgetFold[Either[String, (Int, String)], List, Int] =
+      checked.andThen(positiveFirst)
+    val fallbackOk = forAll { (e: Either[String, (Int, String)]) =>
+      eitherPrism.read(e) == e.toOption.map(_._1).filter(_ > 0).toList
+    }
+    optionOk && eitherOk && fallbackOk
+  }
+
+  "direct-read collapses agree with the carrier read" >> {
+    forAll { (o: Option[(Int, String)]) =>
+      AffineFold[Option[(Int, String)], (Int, String)](identity)
+        .andThen(Lens.first[Int, String])
+        .getOption(o) == o.map(_._1)
+    }
+  }
 
   val lengthGetter: Optic[String, Unit, Int, Unit, Direct] =
     Getter[String, Int](_.length)
@@ -543,26 +671,25 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
     }
   }
 
-  // ----- FoldMap homomorphism on Lens / Prism / Optional ---------
+  // ----- FoldMap homomorphism + all ≡ foldMap(List(_)) on Lens / Prism / Optional
   //
-  // The ForgetfulFold instances for Tuple2 / Either / Affine in
-  // core/src/main/scala/eo/ForgetfulFold.scala are only reachable
-  // through an optic-level fold. These checkAll blocks wire the
-  // EO-specific FoldMapHomomorphismLaws against the tuple / prism /
-  // optional fixtures already declared above.
-  // covers: foldMap homomorphism on Lens (Tuple2 carrier)
+  // The ForgetfulFold instances for Tuple2 / Either / Affine are only
+  // reachable through an optic-level fold. These checkAll blocks wire the
+  // EO-specific FoldMapHomomorphismLaws (E1, plus E2 `allIsFoci`) against
+  // the tuple / prism / optional fixtures already declared above.
+  // covers: foldMap homomorphism and `.all` on Lens (Tuple2 carrier)
   checkAllFoldMapHomomorphismFor[(Int, String), Int, Tuple2](
     "Lens foldMap homomorphism (Tuple2 carrier)",
     firstLens,
   )
 
-  // covers: foldMap homomorphism on Prism (Either carrier)
+  // covers: foldMap homomorphism and `.all` on Prism (Either carrier)
   checkAllFoldMapHomomorphismFor[Int, Int, Either](
     "Prism foldMap homomorphism (Either carrier)",
     evenPrism,
   )
 
-  // covers: foldMap homomorphism on Optional (Affine carrier)
+  // covers: foldMap homomorphism and `.all` on Optional (Affine carrier)
   checkAllFoldMapHomomorphismFor[(Int, List[Int]), Int, Affine](
     "Optional foldMap homomorphism (Affine carrier)",
     headOptional,

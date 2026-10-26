@@ -4,20 +4,21 @@ import cats.effect.syntax.all.*
 import cats.effect.{Async, Ref, Resource}
 import cats.syntax.all.*
 import com.comcast.ip4s.*
-import fs2.Stream
+import dev.constructive.eo.jsoniter.JsonSlice
 import fs2.io.net.{Network, Socket}
+import fs2.{Chunk, Stream}
 
 /** What the downstream service received: messages and bytes, how many decoded as issues, and how
   * many of those the policy keeps when it reads the decoded issue.
   */
 final case class Received(messages: Long, bytes: Long, issues: Long, kept: Long):
 
-  def add(message: Array[Byte], policy: Policy): Received =
+  def add(message: Chunk.ArraySlice[Byte], policy: Policy): Received =
     import Model.given
-    val detail = Issue.decode(message).map(_.detail)
+    val detail = Issue.decode(Wire.json(message)).map(_.detail)
     Received(
       messages + 1,
-      bytes + message.length,
+      bytes + message.size,
       issues + detail.size,
       kept + detail.count(policy.keep(_)),
     )
@@ -49,7 +50,7 @@ object Net:
       server
         .accept
         .map(client =>
-          messages.through(GrpcFrames.joinFrames).through(client.writes) ++
+          messages.map(Chunk.array(_)).through(GrpcFrames.joinFrames).through(client.writes) ++
             Stream.exec(client.endOfOutput)
         )
         .parJoinUnbounded
@@ -63,7 +64,7 @@ object Net:
     * Gives the address it listens on, and the result once the client is done.
     */
   def sink[F[_]: {Network, Async}, A](z: A)(
-      f: (A, Array[Byte]) => A
+      f: (A, Chunk.ArraySlice[Byte]) => A
   ): Resource[F, (GenSocketAddress, F[A])] =
     Network[F].bind(loopback).flatMap { server =>
       server
@@ -85,7 +86,7 @@ object Net:
   def filter[F[_]: {Network, Async}](
       upstream: GenSocketAddress,
       downstream: GenSocketAddress,
-      verdict: Array[Byte] => Verdict,
+      verdict: JsonSlice => Verdict,
   ): F[Tally] =
     (Network[F].connect(upstream), Network[F].connect(downstream)).tupled.use { (in, out) =>
       Ref.of[F, Tally](Tally.empty).flatMap { tally =>
