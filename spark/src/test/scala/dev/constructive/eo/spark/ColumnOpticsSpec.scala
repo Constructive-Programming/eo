@@ -1,8 +1,10 @@
 package dev.constructive.eo
 package spark
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions.{lit, upper}
+import org.apache.spark.sql.functions.{col, lit, parse_json, upper, variant_get}
+import org.apache.spark.sql.types.{StructField, StructType, VariantType}
+import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.unsafe.types.VariantVal
 import org.specs2.mutable.Specification
 
 import Fixtures.*
@@ -73,6 +75,31 @@ class ColumnOpticsSpec extends Specification:
         )
         .and(plan must not(contain("named_struct(name")))
         .and(plan must contain("LocalRelation"))
+    }
+
+    "edit a VARIANT collected from Spark and hand Spark back valid bytes" >> {
+      val collected = spark
+        .range(1)
+        .select(parse_json(lit("""{"a":{"b":5,"z":"keep"},"c":[1,2]}""")).as("v"))
+        .collect()
+        .head
+        .getAs[VariantVal](0)
+      val b = Variants.field("a").andThen(Variants.field("b")).andThen(Variants.long)
+      val edited = b.modify(_ + 1)(collected)
+      val back = spark.createDataFrame(
+        java.util.List.of(Row(edited)),
+        StructType(Array(StructField("v", VariantType))),
+      )
+      val read = back
+        .select(
+          variant_get(col("v"), "$.a.b", "int"),
+          variant_get(col("v"), "$.a.z", "string"),
+          variant_get(col("v"), "$.c[1]", "int"),
+        )
+        .collect()
+        .head
+      (b.getOption(collected) === Some(5L))
+        .and((read.getInt(0), read.getString(1), read.getInt(2)) === ((6, "keep", 2)))
     }
 
     "fold the per-row guard into the struct rebuild's own NULL check" >> {

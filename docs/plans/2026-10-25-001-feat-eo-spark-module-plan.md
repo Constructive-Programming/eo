@@ -221,10 +221,25 @@ classpath, and it can be upgraded independently of the cluster. In Spark 4.0 the
 - Shown: struct lens (composed), guarded `Optional` (also composed twice), plan-time miss,
   `Mirror`-derived encoders, the collapsed optimized plan, and the JDK matrix.
 
-**Phase 1 — Pure-value optics.** `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
+**Phase 1 — Pure-value optics.** *1a DONE:* `Schemas` (`DataType` tree — `struct`/`array`/`map`
+prisms, `field`/`nullable`/`element`/`mapKey`/`mapValue` navigation, `Plated[DataType]`; not named
+`DataTypes`, which is Spark's own Java factory) and `Rows` (`field[A]`/`at[A]` by `ClassTag`,
+`Plated[Row]`), checked with Optional / Seam / Navigation / Prism / Plated rule sets. *1b DONE:*
+`Variants` over `VariantVal` — scalar prisms, `field` / `at` / `each`, `Plated`, `obj` / `arr` /
+`nullValue` constructors. Every value handed out or written is re-encoded through `VariantBuilder`
+in a canonical form (keys added in sorted order, depth-first), so `VariantVal`'s byte equality is
+structural equality. A Connect spec round-trips a `parse_json` value: we edit it and Spark's
+`variant_get` reads the edit back. Original scope: `Plated[DataType]`, `StructType` field `Lens` / `At`, `Row`
 kit, `VariantVal` kit. Laws via the existing `cats-eo-laws` rule sets. No session needed.
 
-**Phase 2 — `Col[A]` + total optics.** The opaque `Col`; struct `Lens`; array/map `Modify`;
+**Phase 2 — `Col[A]` + total optics.** *DONE:* `ColumnOptics.each` / `values` (`Modify` via
+`transform` / `transform_values`), `aggregate` / `size` / `exists` / `forall` (`Getter`s), and
+`DatasetOptics` (`rowCol`, `editRows`, plus `modifyAll` / `replaceAll` / `getAll` / `foldAll`
+consumed through `CanModify` / `CanGet`). Encoders gained `List` / `Vector` / `Seq` / `Map`. Spark
+decodes Scala collections by resolving companions through `currentMirror` (the same dead
+reflection), so these are `TransformingEncoder`s over the reflection-free `immutable.ArraySeq` /
+`java.util.Map` paths. Differential and plan-shape specs: a composed element-wise edit compiles
+to one projection with one `transform`. Original scope: The opaque `Col`; struct `Lens`; array/map `Modify`;
 aggregate `Getter`s; `Dataset` row-struct lifting (`focus(o).get/modify/replace`).
 
 **Phase 3 — Partial optics on `Affine`.** Guarded-complement `Optional` / `Prism` / `At` /
