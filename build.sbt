@@ -1161,6 +1161,7 @@ lazy val docs: Project = project
     LocalProject("zioIntegration"),
     LocalProject("kyoIntegration"),
     LocalProject("chimneyIntegration"),
+    LocalProject("sparkIntegration"),
     LocalProject("laws"),
     LocalProject("schemes"),
   )
@@ -1219,6 +1220,10 @@ lazy val docs: Project = project
     // fs2 (and, through it, cats-effect) for the "Streaming with fs2"
     // cookbook page — docs-only: no published module depends on fs2.
     libraryDependencies += fs2Core,
+    // spark-sql-api is `Provided` on sparkIntegration; surface it so spark.md's
+    // fences build (and print) Column expressions and run the value kits. No
+    // session is needed for either.
+    libraryDependencies += sparkSqlApi,
     // Point mdoc at the sub-project's own `docs/` directory. The
     // plugin's default resolves to the ROOT `docs/` directory,
     // which already contains internal notes (`plans/`,
