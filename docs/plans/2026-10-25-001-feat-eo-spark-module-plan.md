@@ -255,7 +255,14 @@ Original scope: Guarded-complement `Optional` / `Prism` / `At` /
 `Index` (nullable fields, map keys, array indices, `try_cast`, `from_json`, variant reads); static
 misses from schema checks.
 
-**Phase 4 — Encoders + selector macro + twins.** The `AgnosticEncoder` derivation;
+**Phase 4 — Encoders + selector macro + twins.** *DONE:* `ColumnOptics.path[S](_.a.b)` (macro, `ColumnPath`) gives the symbolic optic and its eager
+twin from one selector, with `.get` on an `Option` marking a nullable step. With no `.get` both halves
+are Lenses (`Total`); otherwise both are Optionals (`Partial`), and the symbolic presence test ANDs
+`isNotNull` over every `Option` prefix. Symbolic writes are one dotted `withField`. Eager writes rebuild
+each level through its `Mirror` (no reflection), so the eager half needs no generics dependency.
+Encoders gained `Byte` / `Short` / `Float` / `Array[Byte]` / `BigInt` / `BigDecimal` / `LocalDate` /
+`Instant` / `LocalDateTime`. Sum types have no Spark struct encoding and are not derived. Original
+scope: The `AgnosticEncoder` derivation;
 `col[S](_.a.b.c)` emitting a Lens or a guarded `Affine` Optional per nullability; pairing with the
 eager generics optics.
 
