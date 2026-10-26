@@ -70,8 +70,9 @@ extension methods.
 ² no derived given — these two need `T`-side evidence over the optic's existential `X`, so
 they are constructed explicitly: `CanPlace.from(myLens)`.
 
-`CanFold.foci` returns the plain `List[A]` of visited foci — the carrier-free counterpart of
-the raw-optic `all` extension (which returns `List[F[X, A]]`).
+`CanFold.foci` returns the plain `List[A]` of visited foci, in traversal order. On a raw
+`Optic` the same operation is spelled `all` — an alias of `foci`, available on any carrier
+with a `ForgetfulFold` instance.
 
 ## Coherence: one optic given per `(S, A)`
 

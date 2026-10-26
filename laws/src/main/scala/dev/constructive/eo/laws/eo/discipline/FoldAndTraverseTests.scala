@@ -13,7 +13,7 @@ abstract class FoldMapHomomorphismTests[S, A, F[_, _]] extends Laws:
   /** Laws under test. */
   def laws: FoldMapHomomorphismLaws[S, A, F]
 
-  /** The "foldMap is a Monoid homomorphism" rule set. */
+  /** The "foldMap is a Monoid homomorphism" rule set, plus E2 — `all` is `foldMap(List(_))`. */
   def foldMapHomomorphism(using
       Arbitrary[S],
       Cogen[A],
@@ -25,4 +25,6 @@ abstract class FoldMapHomomorphismTests[S, A, F[_, _]] extends Laws:
         forAll((s: S, f: A => Int, g: A => Int) => laws.foldMapHomomorphism(s, f, g)),
       "foldMap(_ => mempty) == mempty" ->
         forAll((s: S) => laws.foldMapEmpty(s)),
+      "all(s) == foldMap(List(_))(s)" ->
+        forAll((s: S) => laws.allIsFoci(s)),
     )

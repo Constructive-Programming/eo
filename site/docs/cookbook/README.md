@@ -17,6 +17,10 @@ best:
    into type definitions: the optic pins *where*, the effect type
    decides *what happens* — abort, accumulate, audit, defer.
 
+A fourth page applies them to streams: **[Streaming with fs2](streaming-fs2.md)**
+— filter, rewrite and route the elements of an fs2 stream with optics and
+fs2's own combinators, no extra module.
+
 Two demos open the section: whole programs, with their own tests and
 benchmarks, that put these recipes to work.
 
@@ -56,6 +60,10 @@ If you arrive with a task rather than an optic in mind, start here:
 | swap abort / accumulate / audit without touching the optic  | [Structure orthogonal to effects](effect-threading.md#structure-orthogonal-to-effects) |
 | batch N+1 lookups through one traversal                     | [Batch-load nested IDs](effect-threading.md#batch-load-nested-ids) |
 | stamp an effect's result back into the entity               | [Persist-and-stamp decode free](effect-threading.md#persist-and-stamp-decode-free) |
+| keep only one kind of element in an fs2 stream              | [Keep matches with a prism](streaming-fs2.md#keep-matches-with-a-prism) |
+| rewrite a field of every stream element with an effect      | [Effectful modify in a stream](streaming-fs2.md#effectful-modify-in-a-stream) |
+| send each kind of element to its own pipe                   | [Route by prism](streaming-fs2.md#route-by-prism) |
+| run an existing pipe on one field of each element           | [Run a pipe on one field](streaming-fs2.md#run-a-pipe-on-one-field) |
 
 ## Further reading
 

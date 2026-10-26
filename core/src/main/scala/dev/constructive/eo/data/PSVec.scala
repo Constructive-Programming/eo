@@ -146,9 +146,28 @@ object PSVec:
 
     override def size[A](fa: PSVec[A]): Long = fa.length.toLong
 
-  /** `cats.Traverse` — the instance Traversal's `.modifyA` / `.all` route through when the carrier
-    * is `MultiFocus[PSVec]`. Effects run left-to-right in index order, results land in one
-    * pre-sized backing array threaded through `G.map2` (no per-element vector rebuild).
+  /** `cats.Traverse` — the instance Traversal's `.modifyA` routes through when the carrier is
+    * `MultiFocus[PSVec]`. Effects run left-to-right in index order; results land in one pre-sized
+    * backing array (a [[TraverseBuf]]) threaded through `G.map2`.
+    *
+    * That array must not be blindly shared: `G` may resume a continuation more than once — a
+    * multi-shot effect (`List`, `Vector`, `Chain`, `LazyList`, fs2 `Stream`, …) once per branch, a
+    * product effect (`Tuple2K`, cats' parallel-composition law) once per component, a re-runnable
+    * effect (`IO`, `State`, `Kleisli`, …) once per run. Two rules keep every resumption apart:
+    *
+    *   - The buffer is allocated INSIDE the first element's continuation, not in a `G.pure` seed,
+    *     so every branch of `f(fa(0))` and every run of the returned `G` starts its own buffer (no
+    *     shared seed — which is also what makes two concurrent runs of one `IO` safe).
+    *   - Later continuations CLAIM their slot ([[TraverseBuf.put]]): the first writer at `i` writes
+    *     in place, every further writer at `i` copies the prefix `[0, i)` — frozen, since slots are
+    *     only ever written at the claim frontier — into a buffer of its own.
+    *
+    * Single-shot effects (`Option`, `Either`, `Id`, `Eval`, `IO`, `Validated`, …) thus pay what a
+    * shared array costs (one array plus one small buffer object, no per-element structure), and
+    * multi-shot effects pay one prefix copy per extra branch, bounded by the size of the result
+    * they build anyway. The claim is a plain field, not a CAS (a CAS measured ~2× slower here): it
+    * assumes no single run of `G` resumes continuations on one intermediate value from two threads
+    * at once, which nothing that re-evaluates its inputs (`IO`, fs2, `Kleisli`) does.
     *
     * @group Instances
     */
@@ -158,21 +177,15 @@ object PSVec:
       val G = Applicative[G]
       val n = fa.length
       if n == 0 then G.pure(PSVec.empty[B])
+      else if n == 1 then G.map(f(fa.head))(PSVec.singleton[B])
       else
-        @tailrec def loop(i: Int, acc: G[Array[Any]]): G[Array[Any]] =
+        @tailrec def loop(i: Int, acc: G[TraverseBuf]): G[TraverseBuf] =
           if i < n then
             val idx = i
-            val gb = f(fa(idx))
-            loop(
-              i + 1,
-              G.map2(acc, gb) { (a, b) =>
-                a(idx) = b
-                a
-              },
-            )
+            loop(i + 1, G.map2(acc, f(fa(idx)))((buf, b) => buf.put(idx, b)))
           else acc
-        val acc = loop(0, G.pure(new Array[Any](n)))
-        G.map(acc)(arr => PSVec.unsafeWrap[B](arr))
+        val first = G.map(f(fa.head))(b0 => new TraverseBuf(n, b0))
+        G.map(loop(1, first))(buf => PSVec.unsafeWrap[B](buf.arr))
 
     def foldLeft[A, B](fa: PSVec[A], b: B)(f: (B, A) => B): B =
       pSVecFoldable.foldLeft(fa, b)(f)
@@ -314,3 +327,31 @@ object PSVec:
         val buf = new ObjArrBuilder(16)
         Foldable[T].foldLeft(ta, ())((_, a) => { buf.append(a); () })
         buf.freezeAsPSVec[A]
+
+/** Append-only result buffer for [[PSVec.pSVecTraverse]]. `claimed` is the number of slots written
+  * so far; slots are written only at that frontier, so the prefix `[0, claimed)` never changes once
+  * written. A writer at `i` that finds `claimed == i` owns the buffer and writes in place; one that
+  * finds `claimed > i` (a further branch of a multi-shot effect, the other half of a product
+  * effect, a re-run that met a shared intermediate) copies the frozen prefix `[0, i)` into a fresh
+  * buffer instead of overwriting the first writer's slot.
+  */
+final private[data] class TraverseBuf private (val arr: Array[Any], private var claimed: Int):
+
+  /** A fresh buffer of length `n` (≥ 1) holding `b0` at slot 0. */
+  def this(n: Int, b0: Any) =
+    this(new Array[Any](n), 1)
+    arr(0) = b0
+
+  /** Write `b` at `idx` (≥ 1) — in place when `idx` is this buffer's claim frontier (first writer),
+    * otherwise into a fresh buffer holding a copy of the frozen prefix `[0, idx)`.
+    */
+  def put(idx: Int, b: Any): TraverseBuf =
+    if claimed == idx then
+      claimed = idx + 1
+      arr(idx) = b
+      this
+    else
+      val fresh = new TraverseBuf(new Array[Any](arr.length), idx + 1)
+      System.arraycopy(arr, 0, fresh.arr, 0, idx)
+      fresh.arr(idx) = b
+      fresh

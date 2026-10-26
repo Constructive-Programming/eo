@@ -41,16 +41,34 @@ class GrpcFramesSpec extends Specification with ScalaCheck:
   }
 
   "a frame is a zero, the length big-endian, then the message" >> {
-    GrpcFrames.frame(Array[Byte](7, 8, 9)).toList === List[Byte](0, 0, 0, 0, 3, 7, 8, 9)
+    GrpcFrames.frame(Chunk.array(Array[Byte](7, 8, 9))).toList === List[Byte](0, 0, 0, 0, 3, 7, 8,
+      9)
+  }
+
+  "a message inside one chunk is a view of that chunk's array, also after one that straddles" >> {
+    val messages = List("first", "second", "third").map(_.getBytes("UTF-8"))
+    val framed = join(messages)
+    // The first chunk ends inside the first message; the other two lie inside the second chunk.
+    val (head, tail) = framed.splitAt(7)
+    val out = Stream
+      .emits(List(Chunk.array(head), Chunk.array(tail)))
+      .flatMap(Stream.chunk)
+      .through(GrpcFrames.splitFrames[Fallible]())
+      .compile
+      .toList
+      .toOption
+      .get
+    (out.map(m => new String(m.toArray, "UTF-8")) === List("first", "second", "third"))
+      .and(out.tail.forall(_.values eq tail) must beTrue)
   }
 
   "no bytes, no messages; an empty message is a message" >> {
     split(Nil) must beRight(Nil)
-    split(List(GrpcFrames.frame(Array.emptyByteArray))) must beRight(List(Nil))
+    split(List(GrpcFrames.frame(Chunk.empty))) must beRight(List(Nil))
   }
 
   "a message at the size limit passes; one byte more fails the stream" >> {
-    split(List(GrpcFrames.frame(new Array[Byte](10))), max = 10) must beRight
+    split(List(GrpcFrames.frame(Chunk.array(new Array[Byte](10)))), max = 10) must beRight
     malformed(0, 0, 0, 0, 11)("a 11-byte message: over 10")
   }
 
@@ -70,7 +88,7 @@ object GrpcFramesSpec:
 
   /** Messages through [[GrpcFrames.joinFrames]]: their frames, back to back. */
   def join(messages: Seq[Array[Byte]]): Array[Byte] =
-    Stream.emits(messages).through(GrpcFrames.joinFrames).compile.to(Array)
+    Stream.emits(messages.map(Chunk.array(_))).through(GrpcFrames.joinFrames).compile.to(Array)
 
   /** `bytes` in pieces of `sizes` (cycled), as a socket might deliver them. */
   def pieces(bytes: Array[Byte], sizes: List[Int]): List[Chunk[Byte]] =

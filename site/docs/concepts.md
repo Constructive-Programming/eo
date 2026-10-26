@@ -88,8 +88,8 @@ instances provide:
 | `ReverseAccessor[F]`                 | `.reverseGet(b)`                          |
 | `ForgetfulFunctor[F]`                | `.modify(f)`, `.replace(b)`               |
 | `ForgetfulApplicative[F]`            | `.put(f)`                                 |
-| `ForgetfulTraverse[F, Applicative]`  | `.modifyA[G]`, `.all(s)`                  |
-| `ForgetfulFold[F]`                   | `.foldMap[M](f)`                          |
+| `ForgetfulTraverse[F, Applicative]`  | `.modifyA[G]`                             |
+| `ForgetfulFold[F]`                   | `.foldMap[M](f)`, `.all(s)`               |
 | `AssociativeFunctor[F, X, Y]`        | `.andThen(other)` under the same `F`      |
 | `Composer[F, G]`                     | cross-carrier `.andThen` bridge `F → G`   |
 | `Morph[F, G]`                        | picks the morph direction for `.andThen`  |
