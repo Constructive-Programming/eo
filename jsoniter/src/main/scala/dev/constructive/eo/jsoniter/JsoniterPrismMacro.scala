@@ -5,59 +5,39 @@ import scala.quoted.*
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import dev.constructive.eo.generics.MacroSelectors
 
-/** Macros backing `JsoniterPrism.field(_.fieldName)`, `selectDynamic`, `at(i)`, `each` and their
-  * `JsoniterTraversal` counterparts. Extracts the field name from the selector AST (same pattern as
-  * eo-circe's `JsonPrismMacro`) and emits a `widenField` / `widenIndex` / `toTraversal` call. The
+/** Macros backing the [[JsoniterPath]] builder — `.field(_.fieldName)`, `selectDynamic`, `at(i)`
+  * and `each` — for every eo-jsoniter optic: the whole-array `JsoniterPrism` / `JsoniterTraversal`
+  * and their in-place faces. Extracts the field name from the selector AST (same pattern as
+  * eo-circe's `JsonPrismMacro`) and emits a `widenField` / `widenIndex` / `toTraversal` call on the
+  * builder, which builds the next optic of the builder's own kind (`P`, or `T` for `.each`). The
   * single divergence from the circe macro: one `JsonValueCodec[B]` summon instead of the
   * `Encoder[B]` / `Decoder[B]` pair.
   *
   * {{{
   *   val streetP: JsoniterPrism[String] =
   *     JsoniterPrism[Person].field(_.address).field(_.street)
+  *   val streetIn: JsoniterInPlacePrism[String] =
+  *     JsoniterPrism.inPlace[Person].field(_.address).field(_.street)
   * }}}
   */
 object JsoniterPrismMacro:
 
-  /** Child `JsoniterPrism[B]` from `parent: JsoniterPrism[A]` via a `(_.field)` selector. */
-  def fieldImpl[A: Type, B: Type](
-      parent: Expr[JsoniterPrism[A]],
+  /** Child `P[B]` from `parent` via a `(_.field)` selector. */
+  def fieldImpl[A: Type, B: Type, P[_]: Type](
+      parent: Expr[JsoniterPath[A, P]],
       selector: Expr[A => B],
       codecB: Expr[JsonValueCodec[B]],
-  )(using q: Quotes): Expr[JsoniterPrism[B]] =
-    '{ $parent.widenField[B](${ Expr(fieldName("JsoniterPrism.field", selector)) })(using $codecB) }
-
-  /** Traversal counterpart to [[fieldImpl]]. */
-  def fieldTraversalImpl[A: Type, B: Type](
-      parent: Expr[JsoniterTraversal[A]],
-      selector: Expr[A => B],
-      codecB: Expr[JsonValueCodec[B]],
-  )(using q: Quotes): Expr[JsoniterTraversal[B]] =
-    '{
-      $parent.widenField[B](${ Expr(fieldName("JsoniterTraversal.field", selector)) })(using
-        $codecB
-      )
-    }
+  )(using q: Quotes): Expr[P[B]] =
+    '{ $parent.widenField[B](${ Expr(fieldName(who[P]("field"), selector)) })(using $codecB) }
 
   /** Drives `JsoniterPrism[Person].address`. Looks the field up on `A`'s schema, summons its codec,
     * emits `widenField`. Returns `Expr[Any]` so `transparent inline` refines per call site.
     */
-  def selectFieldImpl[A: Type](
-      parent: Expr[JsoniterPrism[A]],
+  def selectFieldImpl[A: Type, P[_]: Type](
+      parent: Expr[JsoniterPath[A, P]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
-    selectDynamicCommon[A]("JsoniterPrism selectDynamic", nameE) {
-      [b] => (
-          name: String,
-          codec: Expr[JsonValueCodec[b]],
-      ) => '{ $parent.widenField[b](${ Expr(name) })(using $codec) }
-    }
-
-  /** Traversal counterpart to [[selectFieldImpl]]. */
-  def selectFieldTraversalImpl[A: Type](
-      parent: Expr[JsoniterTraversal[A]],
-      nameE: Expr[String],
-  )(using q: Quotes): Expr[Any] =
-    selectDynamicCommon[A]("JsoniterTraversal selectDynamic", nameE) {
+    selectDynamicCommon[A](who[P]("selectDynamic", " "), nameE) {
       [b] => (
           name: String,
           codec: Expr[JsonValueCodec[b]],
@@ -65,32 +45,32 @@ object JsoniterPrismMacro:
     }
 
   /** `.at(i)` — verifies `A <: Iterable`, summons the element codec, emits `widenIndex`. */
-  def atImpl[A: Type](
-      parent: Expr[JsoniterPrism[A]],
+  def atImpl[A: Type, P[_]: Type](
+      parent: Expr[JsoniterPath[A, P]],
       iE: Expr[Int],
   )(using q: Quotes): Expr[Any] =
-    elementWise[A]("JsoniterPrism.at") { [b] => (codec: Expr[JsonValueCodec[b]]) =>
-      '{ $parent.widenIndex[b]($iE)(using $codec) }
-    }
-
-  /** Traversal counterpart to [[atImpl]]. */
-  def atTraversalImpl[A: Type](
-      parent: Expr[JsoniterTraversal[A]],
-      iE: Expr[Int],
-  )(using q: Quotes): Expr[Any] =
-    elementWise[A]("JsoniterTraversal.at") { [b] => (codec: Expr[JsonValueCodec[b]]) =>
+    elementWise[A](who[P]("at")) { [b] => (codec: Expr[JsonValueCodec[b]]) =>
       '{ $parent.widenIndex[b]($iE)(using $codec) }
     }
 
   /** `.each` — emits `toTraversal[B]` over `A`'s element type. */
-  def eachImpl[A: Type](
-      parent: Expr[JsoniterPrism[A]]
+  def eachImpl[A: Type, T[_]: Type](
+      parent: Expr[JsoniterPrismPath[A, ?, T]]
   )(using q: Quotes): Expr[Any] =
     elementWise[A]("JsoniterPrism.each") { [b] => (codec: Expr[JsonValueCodec[b]]) =>
       '{ $parent.toTraversal[b](using $codec) }
     }
 
   // ---- shared helpers -------------------------------------------------
+
+  /** The name diagnostics give the optic being drilled: `JsoniterPrism.field`, or
+    * `JsoniterTraversal selectDynamic` — the whole-array optic's name, also for its in-place face,
+    * which drills exactly as it does.
+    */
+  private def who[P[_]: Type](step: String, sep: String = ".")(using q: Quotes): String =
+    import quotes.reflect.*
+    val traversal = TypeRepr.of[P].typeSymbol.name.endsWith("Traversal")
+    s"${if traversal then "JsoniterTraversal" else "JsoniterPrism"}$sep$step"
 
   /** Extract the single-field selector name or abort with a `who`-tagged error. */
   private def fieldName[A: Type, B: Type](

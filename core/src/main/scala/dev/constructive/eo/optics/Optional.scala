@@ -42,7 +42,7 @@ object Optional:
       getOrModify: S => Either[T, A],
       reverseGet: ((S, B)) => T,
   ): Optional[S, T, A, B] =
-    new Optional[S, T, A, B](getOrModify, (s, b) => reverseGet((s, b)))
+    new Optional.FromFunctions[S, T, A, B](getOrModify, (s, b) => reverseGet((s, b)))
 
   /** Read-only Optional — `T = Unit` rules out `.modify` / `.replace`. Delegates to
     * [[AffineFold.apply]]; see [[PickFold]] for the specialised `X = (Unit, Unit)` shape and its
@@ -66,103 +66,193 @@ object Optional:
   def selectReadOnly[A](p: A => Boolean): PickFold[A, A] =
     AffineFold.select(p)
 
-/** Concrete Optic subclass for `Optional.apply` — stores `getOrModify` / `reverseGet` directly so
-  * the fused `.andThen` overloads can skip the generic `AssociativeFunctor[Affine]` round-trip
-  * whenever the other side is also a known subclass.
+  /** [[Optional.apply]]'s optic: the user's `getOrModify` and `reverseGet`, with `M = S`. */
+  final private[optics] class FromFunctions[S, T, A, B](
+      read: S => Either[T, A],
+      write: (S, B) => T,
+  ) extends Optional[S, T, A, B]:
+    type M = S
+
+    def getOrModify(s: S): Either[T, A] = read(s)
+
+    def to(s: S): Affine[X, A] =
+      read(s) match
+        case Right(a) => new Affine.Hit[X, A](s, a)
+        case Left(t)  => new Affine.Miss[X](t)
+
+    def rebuild(m: S, b: B): T = write(m, b)
+
+    override def reverseGet(s: S, b: B): T = write(s, b)
+
+    override def modifyAt(s: S, f: A => B): T =
+      read(s) match
+        case Right(a) => write(s, f(a))
+        case Left(t)  => t
+
+  /** A fused composition's optic: each operation supplied by the composing overload, every one of
+    * them tearing the source once (`modify` as the two-argument [[Optional.modifyAt]] kernel).
+    */
+  final private[optics] class Fused[S, T, A, B, M0](
+      read: S => Either[T, A],
+      write: (S, A => B) => T,
+      keep: S => Affine[(T, M0), A],
+      restore: (M0, B) => T,
+  ) extends Optional[S, T, A, B]:
+    type M = M0
+    def getOrModify(s: S): Either[T, A] = read(s)
+    def to(s: S): Affine[X, A] = keep(s)
+    def rebuild(m: M0, b: B): T = restore(m, b)
+    override def modifyAt(s: S, f: A => B): T = write(s, f)
+
+  /** Build a fused composition from its four single-tear operations (see [[Fused]]). */
+  private[optics] def fused[S, T, A, B, M0](
+      getOrModify: S => Either[T, A],
+      modify: (S, A => B) => T,
+      to: S => Affine[(T, M0), A],
+      rebuild: (M0, B) => T,
+  ): Optional[S, T, A, B] =
+    new Fused(getOrModify, modify, to, rebuild)
+
+/** The conditionally-present single-focus optic over the `Affine` carrier. Every operation tears
+  * the source ONCE: [[getOrModify]] / [[getOption]] / [[foldMap]] read without building anything a
+  * write would need, [[modify]] / `replace` tear once and rebuild from what they tore, and the
+  * carrier pair [[to]] / [[from]] keeps what the read computed — the existential intermediate [[M]]
+  * — so a generic write through `to` / `from` never tears `S` a second time either.
+  *
+  * Two implementations, both private: [[Optional.apply]] (hand-written `getOrModify` +
+  * `reverseGet`; `M = S`, the source is all the user's `reverseGet` needs) and the fused
+  * compositions (`prism.andThen(lens)`, `optional.andThen(optional)`, …), whose `M` is whatever the
+  * outer step already produced — a prism ∘ lens keeps the decoded domain value, so writing back
+  * re-uses it instead of decoding again, and a nested chain keeps a tuple of its levels'
+  * intermediates.
+  *
+  * Fused `.andThen` overloads skip the generic `AssociativeFunctor[Affine]` round-trip whenever the
+  * other side is a known concrete class.
   */
-final class Optional[S, T, A, B](
-    val getOrModify: S => Either[T, A],
-    val reverseGet: (S, B) => T,
-) extends Optic[S, T, A, B, Affine],
+sealed abstract class Optional[S, T, A, B]
+    extends Optic[S, T, A, B, Affine],
       CanGetOption[S, A],
       CanModifyP[S, T, A, B],
       CanFold[S, A]:
-  type X = (T, S)
 
-  def to(s: S): Affine[X, A] =
-    getOrModify(s) match
-      case Right(a) => new Affine.Hit[X, A](s, a)
-      case Left(t)  => new Affine.Miss[X](t)
+  /** What a hit keeps for the write: the part of the read the rebuild needs. */
+  type M
+  type X = (T, M)
 
-  def from(a: Affine[X, B]): T =
-    a match
-      case h: Affine.Hit[X, B] => reverseGet(h.snd, h.b)
+  /** The read: `Right(a)` on a hit, `Left(t)` (the pass-through `T`) on a miss. */
+  def getOrModify(s: S): Either[T, A]
+
+  /** The carrier read: a hit keeps its intermediate `m` beside the focus, for [[rebuild]]. */
+  def to(s: S): Affine[X, A]
+
+  /** Write `b` back from what a hit kept — never re-reads `S`. */
+  def rebuild(m: M, b: B): T
+
+  /** One tear, then rebuild: the write behind [[modify]] / `replace`, taking the source directly so
+    * a `modify(f)(s)` call site allocates no `S => T` closure (`modify` is `inline`). Fused
+    * compositions override it with a kernel that builds no carrier at all.
+    */
+  def modifyAt(s: S, f: A => B): T =
+    to(s) match
+      case h: Affine.Hit[X, A] => rebuild(h.snd, f(h.b))
       case m: Affine.Miss[X]   => m.fst
 
-  /** Fused reads / writes — pattern-match `getOrModify` once, skipping the `Affine` carrier
-    * round-trip the generic extensions perform.
+  /** `inline`, like `GetReplaceLens.modify`: `optional.modify(f)(s)` reduces to `modifyAt(s, f)`.
     */
+  inline def modify(f: A => B): S => T = s => modifyAt(s, f)
+
+  override inline def replace(b: B): S => T = s => modifyAt(s, _ => b)
+
+  final def from(a: Affine[X, B]): T =
+    a match
+      case h: Affine.Hit[X, B] => rebuild(h.snd, h.b)
+      case m: Affine.Miss[X]   => m.fst
+
+  /** Write `b` back into `s`: one tear, then [[rebuild]]; a miss passes `s`'s `T` through.
+    * [[Optional.apply]]'s optics call the user's `reverseGet` directly instead.
+    */
+  def reverseGet(s: S, b: B): T =
+    to(s) match
+      case h: Affine.Hit[X, A] => rebuild(h.snd, b)
+      case m: Affine.Miss[X]   => m.fst
+
   def getOption(s: S): Option[A] = getOrModify(s).toOption
 
-  def modify(f: A => B): S => T =
-    s =>
-      getOrModify(s) match
-        case Right(a) => reverseGet(s, f(a))
-        case Left(t)  => t
-
-  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
+  def foldMap[F](f: A => F)(s: S)(using F: Monoid[F]): F =
     getOrModify(s) match
       case Right(a) => f(a)
-      case Left(_)  => M.empty
+      case Left(_)  => F.empty
 
-  /** Shared fused-andThen kernel for `Optional` outer. Outer-miss short-circuits; outer-hit threads
-    * through `innerHit` (read) and `innerWrite` (write). `inline` so call sites allocate the same
-    * single Optional a hand-fused compose would.
-    *
-    *   - `innerHit(s, a)` — given the original `s` and outer-hit focus `a`, returns either a final
-    *     `T` (inner-miss, lifted via outer.reverseGet) or a combined focus `C`.
-    *   - `innerWrite(a, d)` — given outer-hit focus `a` and write-back `d`, produces the `B` the
-    *     outer's reverseGet expects.
-    */
-  private inline def fuseToOptional[C, D](
-      innerHit: (S, A) => Either[T, C],
-      innerWrite: (A, D) => B,
-  ): Optional[S, T, C, D] =
-    new Optional(
-      getOrModify = s =>
-        getOrModify(s) match
-          case l @ Left(_) => l.widenRight[C]
-          case Right(a)    => innerHit(s, a),
-      reverseGet = (s, d) =>
-        getOrModify(s) match
-          case Left(t)  => t
-          case Right(a) => reverseGet(s, innerWrite(a, d)),
-    )
-
-  /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another. `inline` so a
-    * deep `optional.andThen(optional)…` chain splices distinct lambdas per level, under C2's
-    * recursive-inline cap (see [[Getter.andThen]]).
+  /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another. An inner miss
+    * lifts the inner's leftover back through the outer's [[rebuild]] (the outer's own intermediate,
+    * not a re-read). `inline` so a deep `optional.andThen(optional)…` chain splices distinct
+    * lambdas per level, under C2's recursive-inline cap (see [[Getter.andThen]]).
     */
   inline def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    fuseToOptional(
-      innerHit = (s, a) =>
-        inner.getOrModify(a) match
-          case Left(b)      => Left(reverseGet(s, b))
-          case r @ Right(_) => r.widenLeft[T],
-      innerWrite = (a, d) => inner.reverseGet(a, d),
+    Optional.fused[S, T, C, D, (M, inner.M)](
+      getOrModify = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => Left(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.getOrModify(h.b) match
+              case Left(b)      => Left(rebuild(h.snd, b))
+              case r @ Right(_) => r.widenLeft[T],
+      modify = (s, f) => modifyAt(s, a => inner.modifyAt(a, f)),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.to(h.b) match
+              case mi: Affine.Miss[inner.X]   => new Affine.Miss(rebuild(h.snd, mi.fst))
+              case hi: Affine.Hit[inner.X, C] => new Affine.Hit((h.snd, hi.snd), hi.b),
+      rebuild = (m, d) => rebuild(m._1, inner.rebuild(m._2, d)),
     )
 
-  /** Fused `Optional.andThen(Lens)` — always-present inner inside a partial outer. Stays partial.
+  /** Fused `Optional.andThen(Lens)` — always-present inner inside a partial outer. Stays partial;
+    * the write keeps the outer's intermediate and the outer focus the lens writes into.
     */
   def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
-    fuseToOptional(
-      innerHit = (_, a) => Right(inner.get(a)),
-      innerWrite = (a, d) => inner.enplace(a, d),
+    Optional.fused[S, T, C, D, (M, A)](
+      getOrModify = s => getOrModify(s).map(inner.get),
+      modify = (s, f) => modifyAt(s, a => inner.enplace(a, f(inner.get(a)))),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] => new Affine.Hit((h.snd, h.b), inner.get(h.b)),
+      rebuild = (m, d) => rebuild(m._1, inner.enplace(m._2, d)),
     )
 
-  /** Fused `Optional.andThen(Prism)` — outer Optional's hit fed into a Prism. */
+  /** Fused `Optional.andThen(Prism)` — outer Optional's hit fed into a Prism; an inner miss lifts
+    * the prism's leftover through the outer's [[rebuild]].
+    */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
-    fuseToOptional(
-      innerHit = (s, a) =>
-        inner.tear(a) match
-          case Left(b)      => Left(reverseGet(s, b))
-          case r @ Right(_) => r.widenLeft[T],
-      innerWrite = (_, d) => inner.mend(d),
+    Optional.fused[S, T, C, D, M](
+      getOrModify = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => Left(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.tear(h.b) match
+              case Left(b)      => Left(rebuild(h.snd, b))
+              case r @ Right(_) => r.widenLeft[T],
+      modify = (s, f) => modifyAt(s, inner.modify(f)),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.tear(h.b) match
+              case Left(b)  => new Affine.Miss(rebuild(h.snd, b))
+              case Right(c) => new Affine.Hit(h.snd, c),
+      rebuild = (m, d) => rebuild(m, inner.mend(d)),
     )
 
   /** Fused `Optional.andThen(Iso)` — iso is transparent; threads through the Optional's shape. */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): Optional[S, T, C, D] =
-    fuseToOptional(
-      innerHit = (_, a) => Right(inner.get(a)),
-      innerWrite = (_, d) => inner.reverseGet(d),
+    Optional.fused[S, T, C, D, M](
+      getOrModify = s => getOrModify(s).map(inner.get),
+      modify = (s, f) => modifyAt(s, a => inner.reverseGet(f(inner.get(a)))),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] => new Affine.Hit(h.snd, inner.get(h.b)),
+      rebuild = (m, d) => rebuild(m, inner.reverseGet(d)),
     )

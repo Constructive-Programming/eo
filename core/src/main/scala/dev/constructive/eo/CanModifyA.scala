@@ -10,9 +10,9 @@ import optics.Optic
   * [[forgetful.ForgetfulTraverse]]`[F, Applicative]` (Lens, Prism, Optional, Traversal, Fold).
   *
   * Prefer this trait in consuming signatures; the monomorphic [[CanModifyA]] alias covers the
-  * common case. For collecting the foci without effects, [[CanFold.foci]] is the carrier-free
-  * counterpart of the raw-optic `all` extension. See [[CanGet]] for the doctrine and the coherence
-  * rule.
+  * common case. For collecting the foci without effects, use [[CanFold.foci]] (the raw-optic
+  * spelling is the `all` extension, which needs only a fold). See [[CanGet]] for the doctrine and
+  * the coherence rule.
   */
 trait CanModifyAP[S, T, A, B]:
   def modifyA[G[_]](f: A => G[B])(using Applicative[G]): S => G[T]

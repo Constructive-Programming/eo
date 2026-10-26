@@ -7,6 +7,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Ref}
 import cats.syntax.all.*
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
+import dev.constructive.eo.jsoniter.JsonSlice
 import fs2.{Chunk, Stream}
 import org.scalacheck.{Gen, Prop}
 import org.specs2.ScalaCheck
@@ -30,7 +31,8 @@ class PipelineSpec extends Specification with ScalaCheck:
   private val upstreamBytes = GrpcFramesSpec.join(upstream)
 
   /** What the filter must forward: the messages the decoded issues say to keep, as they are. */
-  private val expected = upstream.filter(Triage.decoding(policy)(_).keep).map(_.toList)
+  private val expected =
+    upstream.filter(m => Triage.decoding(policy)(JsonSlice(m)).keep).map(_.toList)
 
   private def run[A](io: IO[A]): A = io.timeout(60.seconds).unsafeRunSync()
 
