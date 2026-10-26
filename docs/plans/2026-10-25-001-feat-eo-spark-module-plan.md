@@ -56,8 +56,9 @@ What changed in this plan as a result:
   initialise on it. Spark Classic therefore cannot run in a Scala 3.9 JVM. The Connect client can,
   and the engine runs server-side on the 2.13 stdlib. The `spark-sql-api` target stands; "Classic
   in-process" is gone (upstream-blocked).
-- **Encoders:** case classes encode as `TransformingEncoder[T, Row]` over a `RowEncoder`, decoded
-  through the `Mirror`. Spark's `ProductEncoder` decode path initialises `ScalaReflection`.
+- **Encoders:** case classes encode as `TransformingEncoder[T, Row]` over a `RowEncoder`, through
+  a codec the Hearth macro `SparkEncoders.derived` generates (field reads, a constructor call).
+  Spark's `ProductEncoder` decode path initialises `ScalaReflection`.
 - **Tests:** client-only test classpath, and a Connect server child JVM from the classpath-only
   Scala 2.13 project `sparkConnectServer`.
 - Confirmed: no new carrier. The guarded `Optional` and plan-time misses are core `Optional`, and

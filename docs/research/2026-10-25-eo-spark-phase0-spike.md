@@ -79,15 +79,16 @@ to us now, but `spark.api.mode=classic` is the working spelling.
 
 ## 4. Encoders: own derivation, and it has to avoid `ProductEncoder`
 
-`SparkEncoders.derived[T]` (Mirror-based, about 40 lines) produces `AgnosticEncoder`s, which ARE
-`Encoder`s and work for `createDataset` / `.as[T]`:
+`SparkEncoders.derived[T]` (a Hearth macro, like eo-generics' derivations) produces
+`AgnosticEncoder`s, which ARE `Encoder`s and work for `createDataset` / `.as[T]`:
 
 - primitives, `String`, `Option` map to the stock `AgnosticEncoders` leaves;
 - a case class is **not** a `ProductEncoder`. Decoding one makes the Connect client call
   `ScalaReflection.findConstructor` (§2). It is instead a `TransformingEncoder[T, Row]` over a
-  `RowEncoder` of its fields, with a codec that rebuilds `T` through `Mirror.fromProduct`. The
-  schema is the same and no reflection runs. NULL structs pass through the codec as `null` both
-  ways.
+  `RowEncoder` of its fields. The macro emits the codec: it reads the fields, and it rebuilds `T`
+  with a direct constructor call (Hearth's `CaseClass.construct`). The schema is the same and no
+  reflection runs. NULL structs pass through the codec as `null` both ways.
+  The spike first used `Mirror.fromProduct`; review moved it to Hearth.
 
 Phase 4 extends this (collections, maps, enums / sealed traits, decimals, dates) on the same
 `TransformingEncoder` pattern.
@@ -142,8 +143,8 @@ Spark 4.2 documents Java 17/21/25 support (25 ≥ 25.0.3).
    client to upload closures and the server to deserialize Scala 3 classes on the 2.13 stdlib,
    which is untested and likely to hit the same wall. Column optics, the actual product, are
    unaffected.
-2. **Encoders:** `TransformingEncoder` + `RowEncoder` + `Mirror` is the derivation strategy, not
-   `ProductEncoder`.
+2. **Encoders:** `TransformingEncoder` + `RowEncoder` + a Hearth-generated codec is the derivation
+   strategy, not `ProductEncoder`.
 3. **Test harness** as in §3. Any Spark-touching module in this build needs the same client-only
    classpath and server child process.
 4. **Mutation testing / coverage:** `mutationAll` does not include `sparkIntegration` yet. Add it
