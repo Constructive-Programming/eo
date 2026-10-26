@@ -71,6 +71,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoUplcJvmBench/scalafmtCheckAll",
       "demoGrpcFilter/scalafmtCheckAll",
       "demoGrpcFilterBench/scalafmtCheckAll",
+      "sparkBench/scalafmtCheckAll",
     ),
     name = Some("Check formatting"),
   ),
@@ -82,6 +83,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoUplcJvmBench/scalafixAll --check",
       "demoGrpcFilter/scalafixAll --check",
       "demoGrpcFilterBench/scalafixAll --check",
+      "sparkBench/scalafixAll --check",
     ),
     name = Some("Check scalafix"),
   ),
@@ -97,6 +99,10 @@ ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("demoGrpcFilter/test", "demoGrpcFilterBench/Jmh/compile"),
   name = Some("Test gRPC filter demo (eo-jsoniter + fs2)"),
+)
+ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
+  List("sparkBench/Jmh/compile"),
+  name = Some("Compile spark benchmarks"),
 )
 
 // -------------------------------------------------------------------
@@ -1046,6 +1052,38 @@ lazy val sparkJvmOptions = Seq(
     Seq("--sun-misc-unsafe-memory-access=allow")
   else Seq.empty
 )
+
+// JMH for the spark module: one nested edit three ways — the symbolic optic,
+// the same edit hand-written with `withField`, and the eager `Dataset.map`
+// bridge — over a cached server-side Dataset. Not in the root aggregate; CI
+// only compiles it. Reuses the spark specs' Connect fixture (`Sessions`), hence
+// the `compile->test` dependency and the same classpath / JVM-flag wiring.
+// Run with `sbt "sparkBench/Jmh/run -i 3 -wi 1 -f 1"`.
+lazy val sparkBench: Project = project
+  .in(file("spark-bench"))
+  .enablePlugins(JmhPlugin)
+  .dependsOn(LocalProject("sparkIntegration") % "compile->test")
+  .settings(commonSettings *)
+  .settings(
+    name := "cats-eo-spark-bench",
+    publish / skip := true,
+    // JMH's sources are generated from bytecode, so they need no annotation processing — and the
+    // `compile->test` classpath carries a processor that claims none of JMH's annotations, which
+    // CI's `-Xlint:all -Werror` turns into a failure.
+    Jmh / javacOptions += "-proc:none",
+    // the Connect client shades spark-sql-api + Arrow: drop the unshaded copies (see sparkIntegration)
+    Compile / dependencyClasspath ~= (_.filterNot { f =>
+      val n = f.data.getName
+      n.startsWith("spark-sql-api_") || n.startsWith("arrow-")
+    }),
+    Jmh / run / fork := true,
+    Jmh / run / javaOptions ++= sparkJvmOptions ++ Seq(
+      "-Xmx2g",
+      s"-Deo.spark.connect.classpath=${(sparkConnectServer / Runtime / fullClasspath).value.files.mkString(java.io.File.pathSeparator)}",
+      s"-Deo.spark.connect.jvmOptions=${sparkJvmOptions.mkString(" ")}",
+      s"-Deo.spark.connect.log=${(target.value / "spark-connect-server.log").getAbsolutePath}",
+    ),
+  )
 
 // Classpath-only Scala 2.13 project: the Spark Connect server (Classic engine)
 // the spark specs launch as a child JVM. No sources, never published, not in

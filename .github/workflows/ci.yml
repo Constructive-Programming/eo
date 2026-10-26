@@ -114,10 +114,10 @@ jobs:
         run: sbt +update
 
       - name: Check formatting
-        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck benchmarks/scalafmtCheck demoUplcJvm/scalafmtCheckAll demoUplcJvmValidators/scalafmtCheckAll demoUplcJvmBench/scalafmtCheckAll demoGrpcFilter/scalafmtCheckAll demoGrpcFilterBench/scalafmtCheckAll
+        run: sbt '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck benchmarks/scalafmtCheck demoUplcJvm/scalafmtCheckAll demoUplcJvmValidators/scalafmtCheckAll demoUplcJvmBench/scalafmtCheckAll demoGrpcFilter/scalafmtCheckAll demoGrpcFilterBench/scalafmtCheckAll sparkBench/scalafmtCheckAll
 
       - name: Check scalafix
-        run: sbt '++ ${{ matrix.scala }}' 'scalafixAll --check' 'demoUplcJvm/scalafixAll --check' 'demoUplcJvmValidators/scalafixAll --check' 'demoUplcJvmBench/scalafixAll --check' 'demoGrpcFilter/scalafixAll --check' 'demoGrpcFilterBench/scalafixAll --check'
+        run: sbt '++ ${{ matrix.scala }}' 'scalafixAll --check' 'demoUplcJvm/scalafixAll --check' 'demoUplcJvmValidators/scalafixAll --check' 'demoUplcJvmBench/scalafixAll --check' 'demoGrpcFilter/scalafixAll --check' 'demoGrpcFilterBench/scalafixAll --check' 'sparkBench/scalafixAll --check'
 
       - name: Check that workflows are up to date
         run: sbt githubWorkflowCheck
@@ -139,13 +139,16 @@ jobs:
       - name: Test gRPC filter demo (eo-jsoniter + fs2)
         run: sbt '++ ${{ matrix.scala }}' demoGrpcFilter/test demoGrpcFilterBench/Jmh/compile
 
+      - name: Compile spark benchmarks
+        run: sbt '++ ${{ matrix.scala }}' sparkBench/Jmh/compile
+
       - name: Make target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))
-        run: mkdir -p demos/grpc-filter/target jsoniter/target benchmarks/target spark/target kyo/target target demos/uplc-jvm-bench/target circe/target spark-connect-server/target zio/target unidocs/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target chimney/target iron/target core/target demos/uplc-jvm/target demos/grpc-filter-bench/target project/target
+        run: mkdir -p demos/grpc-filter/target jsoniter/target benchmarks/target spark/target kyo/target target demos/uplc-jvm-bench/target circe/target spark-connect-server/target zio/target unidocs/target spark-bench/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target chimney/target iron/target core/target demos/uplc-jvm/target demos/grpc-filter-bench/target project/target
 
       - name: Compress target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))
-        run: tar cf targets.tar demos/grpc-filter/target jsoniter/target benchmarks/target spark/target kyo/target target demos/uplc-jvm-bench/target circe/target spark-connect-server/target zio/target unidocs/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target chimney/target iron/target core/target demos/uplc-jvm/target demos/grpc-filter-bench/target project/target
+        run: tar cf targets.tar demos/grpc-filter/target jsoniter/target benchmarks/target spark/target kyo/target target demos/uplc-jvm-bench/target circe/target spark-connect-server/target zio/target unidocs/target spark-bench/target avro/target laws/target tests/target generics/target demos/uplc-jvm-validators/target schemes-laws/target schemes/target chimney/target iron/target core/target demos/uplc-jvm/target demos/grpc-filter-bench/target project/target
 
       - name: Upload target directories
         if: github.event_name != 'pull_request' && (startsWith(github.ref, 'refs/tags/v'))

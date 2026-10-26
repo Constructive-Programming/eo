@@ -282,7 +282,34 @@ Tuples now encode like case classes, because Spark's tuple `ProductEncoder` need
 `ds.mapThrough(eagerOptic)(f)` and the effectful `modifyA` path via `mapPartitions`, marked as
 leaving Catalyst.
 
-**Phase 6 — Verification + benchmarks.**
+**Phase 6 — Verification + benchmarks.** *DONE:* the verification pieces landed with each phase (laws on eager twins, differential specs,
+plan-shape tests). Phase 6 adds `sparkBench` (`spark-bench/`, JMH, outside the aggregate; CI compiles
+it). One nested edit (upper-case `address.street`) over a cached 200 000-row server-side Dataset,
+forced by a checksum aggregate, with a local Connect server on JDK 25 (`-wi 3 -i 5 -f 3`):
+
+| Benchmark | ms/op |
+|---|---:|
+| `handWritten` (`withField` by hand) | 107.0 ± 5.4 |
+| `symbolic` (`ColumnOptics.path`) | 106.4 ± 12.2 |
+| `eagerMap` (`mapThrough`, eager twin) | 187.6 ± 10.9 |
+| `handMap` (`Dataset.map` with a hand-written `copy`) | 188.7 ± 11.3 |
+| `identityMap` (`Dataset.map(identity)`) | 174.2 ± 11.7 |
+
+The symbolic optic is within noise of the hand-written projection, as expected: the plan-shape specs
+already show the same optimized plan. The eager bridge is about 1.75× slower, and all of that is the
+typed `Dataset.map` itself. It matches a hand-written `map`, and `map(identity)` already costs 1.6×.
+Every row is decoded to JVM objects (`UTF8String` → `String`, a generic row per struct level),
+handed to the closure, and re-encoded, outside whole-stage codegen.
+
+The first run measured the bridge at 5× (289 ms/op). A server-side JFR profile found that half of
+that was our own encoder. The generated codec built each row with `Row.fromSeq(List(...))`, which
+copies the list through an `ArrayBuilder` with a `ClassTag` lookup on every row. Building
+`new GenericRow(Array[Any](…))` instead halved the bridge. A smaller cost was the eager path's
+per-level `Array.tabulate` + `Tuple.fromArray` before the `Mirror`; it now passes a one-field
+`Replaced` view. To profile the server, pass
+`-Deo.spark.connect.jvmOptions="<sparkJvmOptions> -XX:StartFlightRecording=filename=…"` to
+`sparkBench / Jmh / run / javaOptions`. Mutation testing (`mutationAll`) still skips the module: every mutant run would
+start a Connect server. That is a follow-up. Original scope:
 - Laws on every eager twin (`LensTests`, `OptionalTests`, `PrismTests`, `FoldTests`).
 - The differential property, per optic and per composed chain, batched as one Dataset per
   property:
