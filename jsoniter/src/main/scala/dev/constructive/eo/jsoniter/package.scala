@@ -14,5 +14,10 @@ package dev.constructive.eo
   *   // → Array[Byte] with .address.street upper-cased —
   *   //   no Person ever materialised, only the String leaf decoded.
   * }}}
+  *
+  * A document that sits inside a larger buffer is read in place, without copying it out first:
+  * `streetP.inPlace.getOption(JsonSlice(buffer, offset, length))` — or drill in place from the
+  * start, `JsoniterPrism.inPlace[Person].address.street`. Nothing is copied, so the array must not
+  * change while the slice is in use, and a slice keeps the whole array reachable (see `JsonSlice`).
   */
 package object jsoniter

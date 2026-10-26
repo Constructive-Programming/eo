@@ -11,23 +11,36 @@ parameterised over a carrier `F[_, _]` unifies every optic family;
 cross-family composition goes through `Composer[F, G]` bridges instead
 of N&sup2; hand-written `.andThen` overloads.
 
+## Design principle: no unnecessary work
+
+An optic should cost no more than the code you would write by hand.
+Every operation should do the least work its result needs: a read
+shouldn't build what only a write needs, a composed optic shouldn't
+repeat a step, and a miss should stop early instead of computing
+what it then throws away. Where the generic machinery does more, the
+concrete optic classes carry fused paths that don't, and the
+benchmarks (allocation per call included) hold them to it. A path
+that does extra work is treated as a bug to fix.
+
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo" % "0.18.0"
+libraryDependencies += "dev.constructive" %% "cats-eo" % "1.0.0"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "0.18.0" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "0.18.0" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "0.18.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "0.18.0" // JDK 25
+libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "1.0.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "1.0.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "1.0.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "1.0.0" // JDK 25; experimental
+libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "1.0.0"
 ```
 
-Requires Scala 3.8.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
+Requires Scala 3.9.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
 which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 
 ## 60-second tour
@@ -106,6 +119,10 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
 - [`JsoniterPrism`](https://eo.constructive.dev/integrations/jsoniter.html) —
   AST-free JSON-bytes optic over jsoniter-scala, with the same cursor
   sugar and `Ior` failure surface as `JsonPrism`.
+- [`IronPrism`](https://eo.constructive.dev/integrations/iron.html) —
+  Iron refined types as lawful prisms: every runtime-checked
+  refinement `A :| C` is a `Prism` `A ⇀ A :| C`, plus `RefinedType`
+  newtypes and all-or-nothing container refinement (`cats-eo-iron`).
 - [Recursion schemes](https://eo.constructive.dev/schemes.html) —
   cata / ana / hylo and the full typed zoo (para, apo, histo, futu,
   zygo, …) as composable optics (`cats-eo-schemes`, laws in
@@ -122,7 +139,15 @@ personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
   `Record.iso` / `Record.lens` for kyo Records, and the optional
   kyo-schema bridge: `Focus` → optics, codec byte-face prisms, and
   optics over the untyped `Structure.Value` tree (`cats-eo-kyo`,
-  JDK 25).
+  JDK 25). **Experimental**: built on kyo 1.0.0-RC7, so it is outside
+  the 1.x binary-compatibility promise until kyo 1.0.0 final ships.
+- [chimney integration](https://eo.constructive.dev/integrations/chimney.html) —
+  chimney's derived conversions as optics: `Transformer` → `Getter`,
+  `Iso` → `Iso`, `Codec` → prism, `PartialTransformer` → a fold into
+  chimney's result (a read that keeps chimney's errors), `Patcher` → write-only
+  `Modify`, plus `.patch` to run chimney at an optic's focus and
+  `.transformFocus` / `.transformImage` to build optics written with,
+  or returning, another type (`cats-eo-chimney`).
 
 Every optic ships a discipline-checked law set in `cats-eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do
@@ -136,6 +161,7 @@ for cats typeclasses.
 - circe integration: <https://eo.constructive.dev/integrations/circe.html>
 - Avro integration: <https://eo.constructive.dev/integrations/avro.html>
 - jsoniter-scala integration: <https://eo.constructive.dev/integrations/jsoniter.html>
+- Iron integration (refined types as prisms): <https://eo.constructive.dev/integrations/iron.html>
 - ZIO integration: <https://eo.constructive.dev/integrations/zio.html>
 - Kyo integration (Records, kyo-schema bridge): <https://eo.constructive.dev/integrations/kyo.html>
 - Cookbook (recipes): <https://eo.constructive.dev/cookbook/index.html>
@@ -149,11 +175,13 @@ for cats typeclasses.
 
 ## Project status
 
-`0.1.0` is the first public release. Binary compatibility is guaranteed
-within the `0.1.x` series via MiMa starting at `0.1.1` (the `0.1.0`
-publish has no prior version to compare against). Pre-`1.0`, expect
-surface refinements as we learn from real users; each non-bugfix release
-will list breaking changes in [`CHANGELOG.md`](./CHANGELOG.md).
+`1.0.0` is the first stable release. From here on, binary compatibility
+is checked by MiMa across the whole `1.x` series: every `1.x` release is
+binary-compatible with `1.0.0`. The exception is `cats-eo-kyo`, which is
+**experimental** and outside that check while it builds on a kyo release
+candidate; the exclusion lifts once kyo 1.0.0 final ships. The `0.x`
+releases made no compatibility promise. Every release lists its changes
+in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ## License
 
