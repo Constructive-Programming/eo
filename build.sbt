@@ -641,6 +641,8 @@ lazy val root: Project = project
   .settings(
     name := "cats-eo-root",
     publish / skip := true,
+    // Never published, so there is no 1.0.0 artifact for MiMa to compare against.
+    mimaPreviousArtifacts := Set.empty,
   )
 
 lazy val core: Project = project
@@ -680,6 +682,8 @@ lazy val tests: Project = project
   .settings(
     name := "cats-eo-tests",
     publish / skip := true,
+    // Never published, so there is no 1.0.0 artifact for MiMa to compare against.
+    mimaPreviousArtifacts := Set.empty,
     libraryDependencies += discipline % Test,
     // cats' own Traverse laws for the hand-written `Traverse[PSVec]` (PSVecTraverseLawsSpec).
     libraryDependencies += catsLaws % Test,
