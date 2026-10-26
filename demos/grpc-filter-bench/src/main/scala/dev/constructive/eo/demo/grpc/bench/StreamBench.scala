@@ -6,6 +6,7 @@ import scala.compiletime.uninitialized
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Ref}
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
+import dev.constructive.eo.jsoniter.JsonSlice
 import fs2.{Chunk, Stream}
 import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
@@ -26,11 +27,13 @@ class StreamBench:
   @Param(Array("optics", "decode"))
   var judge: String = uninitialized
 
-  private var verdict: Array[Byte] => Verdict = uninitialized
+  private var verdict: JsonSlice => Verdict = uninitialized
 
   private val pieces: Vector[Chunk[Byte]] =
     val framed = Stream
-      .emits(Issues(seed = 7).take(StreamBench.Messages).map(writeToArray(_)).toSeq)
+      .emits(
+        Issues(seed = 7).take(StreamBench.Messages).map(i => Chunk.array(writeToArray(i))).toSeq
+      )
       .through(GrpcFrames.joinFrames)
       .compile
       .to(Array)

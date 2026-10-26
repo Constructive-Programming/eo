@@ -37,6 +37,10 @@ class CatsConstructorsSpec extends Specification:
       val f = summon[CanFold[List[Int], Int]]
       (f.length(List(1, 2, 3)) === 3).and(f.headOption(List(1, 2, 3)) === Some(1))
     }
+    "list every focus, in order, through the raw-optic `.all`" >> {
+      (Traversal.each[List, Int].all(List(1, 2, 3)) === List(1, 2, 3))
+        .and(Traversal.each[Option, Int].all(None) === Nil)
+    }
   }
 
   "Modify.functor" should {
