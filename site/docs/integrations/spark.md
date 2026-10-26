@@ -38,9 +38,10 @@ val spark: SparkSession =
 ```
 
 Two consequences:
-- **Encoders come from eo.** `SparkEncoders.derived` derives case-class encoders from the
-  `Mirror`. Spark's `Encoders.product` needs a Scala 2 `TypeTag`, and its `ProductEncoder`
-  decode path needs `ScalaReflection`.
+- **Encoders come from eo.** `SparkEncoders.derived` derives case-class encoders at compile
+  time (a [Hearth](https://scala-hearth.readthedocs.io/en/stable/) macro, like eo-generics').
+  Spark's `Encoders.product` needs a Scala 2 `TypeTag`, and its `ProductEncoder` decode path
+  needs `ScalaReflection`.
 - **Collections and tuples are covered too**, through paths Spark decodes without reflection.
 
 ```scala mdoc:silent
