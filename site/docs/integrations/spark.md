@@ -216,10 +216,10 @@ These kits need no session. `Schemas` covers the mutually recursive `DataType` /
 (it is not named `DataTypes`, because Spark has a Java factory of that name in
 `org.apache.spark.sql.types`). `Plated[DataType]` gives type-only whole-schema rewrites, and
 `Plated[Schemas.Node]` (`type Node = DataType | StructField`, derived by `generics.plate`) is a
-Multiplate over both sorts at once — so `Schemas.everyField` (`everywhereIn[Node, DataType] ∘
-structField`) rewrites every `StructField` at every nesting depth, `Plated.transform[Schemas.Node]`
-rewrites both `StructField`s and `DataType`s in one pass, and `Plated.transformM` runs effectful
-validation across the tree:
+[Multiplate](../generics.md#multiplate-families) over both sorts at once — so `Schemas.everyField`
+(`everywhereIn[Node, DataType] ∘ structField`) rewrites every `StructField` at every nesting
+depth, `Plated.transform[Schemas.Node]` rewrites both `StructField`s and `DataType`s in one
+pass, and `Plated.transformM` runs effectful validation across the tree:
 
 ```scala mdoc:silent
 import org.apache.spark.sql.types.*

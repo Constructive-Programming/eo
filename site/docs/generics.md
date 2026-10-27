@@ -330,11 +330,16 @@ circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
   focuses every field of type `S`, plus children inside `Option[S]`, `List[S]`,
   `Vector[S]`, `ArraySeq[S]`, `Seq[S]`, `Array[S]`, or any `F[S]` with a
   `cats.Traverse[F]` in scope. Fields of other types stay as leftover skeleton.
-- **Mutually recursive families** (`type Lang = Stm | Expr | Var | Typ`,
-  `plate[Lang]`): derives a multi-sorted plate (O'Connor 2011,
-  [*Functor is to Lens as Applicative is to Biplate: Introducing Multiplate*](https://arxiv.org/pdf/1103.2841),
-  §5) over a Scala 3 union of the family's types, descending into any direct or
-  container field whose element type is a member of `S`.
+- **Multiplate families** (`type Lang = Stm | Expr | Var | Typ`, `plate[Lang]`):
+  O'Connor's *Multiplate* (see [*Functor is to Lens as Applicative is to Biplate:
+  Introducing Multiplate*](https://arxiv.org/pdf/1103.2841), §5) — a multi-sorted
+  plate over a Scala 3 union of the family's types, descending into any direct or
+  container field whose element type is a member of `S`. See
+  [Multiplate families](#multiplate-families) below.
+
+A single-sorted `Plated[S]` is what the paper calls a self-`Biplate`: the
+children/rebuild coalgebra the paper proves isomorphic to the applicative
+multi-focus traversal (EO's `Traversal` / `.modifyA` side of the same value).
 
 The derived instance backs `Plated.everywhere[S]` (and `Plated.everywhereIn[S, T]`
 to keep a specific root sort `T <: S` on a union plate) — a composable `Modify`
@@ -361,10 +366,31 @@ Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(
 )
 ```
 
+### Multiplate families
+
+A Multiplate answers what no single-sorted plate can: in a mutually recursive
+family (`Stm` holds `Expr`s through `Var`s and back), `plate[Stm]` sees no child
+inside an `Expr`-typed field, and the paper's `Biplate`-per-pair alternative
+cannot rewrite two different child types in one traversal. In Scala 3 the whole
+family *is* a type — `type Lang = Stm | Expr | Var | Typ` — and `plate[Lang]`
+derives one `Plated[Lang]` whose children are every member-typed field across
+the union's branches, direct or container-wrapped. None of Haskell's supporting
+machinery transfers or is needed: the rank-3 `mkPlate` / `Projector` record
+exists to fake a product of coalgebras in a language without untagged sums, and
+the union derivation replaces it. `Plated.everywhereIn[Lang, Stm]` keeps the
+root sort (`Stm` in, `Stm` out) while walking the whole `Lang` tree; writing one
+member sort is a `prism[Lang, Member]` composed after it, whose miss branch is
+exactly the paper's `purePlate` pass-through.
+
+One honesty note: writes rebuild each slot at the member type it was declared
+with, so a `Lang => Lang` rule that swaps sorts (a `Var` into an `Expr` slot)
+k*eeps the original* rather than crashing — sort-preserving rewrites, which the
+law suite's `sameSort` hook pins for every union plate.
+
 For a mutually recursive family (`Stm` ⇄ `StmExpr` with `SBlock(ss: List[Stm])`
 and leaf `StmVar`), derive `Plated` once on the union and compose `everywhereIn`
-with a union `prism` — the prism's miss branch acts as O'Connor's `purePlate`
-(passing non-target sorts through untouched):
+with a union `prism` — the same move the paper's headline `rename` example
+makes, in one optic chain instead of a `Plate` record:
 
 ```scala mdoc:silent
 import dev.constructive.eo.docs.{Stm, StmExpr, StmLang, StmTyp, StmVar}
@@ -390,7 +416,8 @@ renameVarsInStm(block)
 
 Works on enums, sealed hierarchies, recursive case classes, and union types. See
 the [cookbook Plated recipe](cookbook/navigating-structures.md#visit-across-whole-trees) for a worked, runnable
-example.
+example, and the [Spark integration](integrations/spark.md)
+for a Multiplate over an existing carrier (`DataType | StructField`).
 
 ## Macro errors
 

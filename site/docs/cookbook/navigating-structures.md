@@ -113,8 +113,10 @@ over any lawful `Monad[M]`, stack-safely via `tailRecM`);
 immediate children); `rewrite` repeats an `Expr => Option[Expr]` rule
 to a fixpoint. `plate[S]` descends into direct `S` fields, containers
 (`Option[S]`, `List[S]`, `Vector[S]`, `ArraySeq[S]`, `Seq[S]`, `Array[S]`,
-or any `F[S]: Traverse`), and Scala 3 union types (`plate[Stm | Expr | Var]`)
-for mutually recursive ASTs via `Plated.everywhereIn` — leaving non-`S`
+or any `F[S]: Traverse`), and Scala 3 union types — `plate[Stm | Expr | Var]`,
+O'Connor's *Multiplate* (see
+[Generics → Multiplate families](../generics.md#multiplate-families)),
+rewritten at one root sort via `Plated.everywhereIn` — leaving non-`S`
 fields like `Lam`'s `bind: String` as skeleton. See
 [Generics → `plate[S]`](../generics.md).
 
