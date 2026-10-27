@@ -613,10 +613,16 @@ everyLeaf.modify(_ + 1)(Tree.Branch(Tree.Leaf(1), Tree.Branch(Tree.Leaf(2), Tree
 
 `everywhere` composes outward with any inner optic that bridges into
 `ModifyF` (Lens / Prism / Optional / Modify), and the `.modify` runs
-bottom-up, stack-safe to any depth. For the read side (every sub-term
-as a list) use `Plated.universe`; for the full worked Prism-composition
-recipe see the [Cookbook](cookbook/navigating-structures.md#visit-across-whole-trees), and for the macro that derives
-the `Plated` see [Generics → `plate[S]`](generics.md).
+bottom-up, stack-safe to any depth. When `S` is a multi-sorted union
+plate (`type Lang = Stm | Expr | Var | Typ`), `Plated.everywhereIn[Lang, Stm]`
+scopes the root to a specific member sort `Stm <: Lang` while walking
+the full union tree underneath. For effectful bottom-up rewrites over any
+lawful `Monad[M]` (`Option`, `Either`, `State`, `Eval`, …) use
+`Plated.transformM`; for the read side (every sub-term as a list) use
+`Plated.universe`; for the full worked Prism-composition recipe see the
+[Cookbook](cookbook/navigating-structures.md#visit-across-whole-trees),
+and for the macro that derives the `Plated` see
+[Generics → `plate[S]`](generics.md).
 
 ### Review
 
