@@ -9,8 +9,15 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-import laws.discipline.{NavigationTests, OptionalTests, PlatedTests, PrismTests, SeamTests}
-import laws.{NavigationLaws, OptionalLaws, PlatedLaws, PrismLaws, SeamLaws}
+import laws.discipline.{
+  LensTests,
+  NavigationTests,
+  OptionalTests,
+  PlatedTests,
+  PrismTests,
+  SeamTests
+}
+import laws.{LensLaws, NavigationLaws, OptionalLaws, PlatedLaws, PrismLaws, SeamLaws}
 
 object ValueKitsFixtures:
 
@@ -57,6 +64,26 @@ object ValueKitsFixtures:
 
   given Arbitrary[DataType] = Arbitrary(Gen.sized(d => genType(math.min(d, 3))))
   given Cogen[DataType] = Cogen[String].contramap(_.json)
+
+  private val genStructField: Gen[StructField] =
+    for
+      name <- Gen.oneOf("f", "k0", "k1")
+      dt <- Gen.sized(d => genType(math.min(d, 2)))
+      nl <- Gen.oneOf(true, false)
+    yield StructField(name, dt, nl)
+
+  given Arbitrary[StructField] = Arbitrary(genStructField)
+
+  given Cogen[StructField] =
+    Cogen[String].contramap(f => s"${f.name}:${f.nullable}:${f.dataType.json}")
+
+  given Arbitrary[Schemas.Node] =
+    Arbitrary(Gen.oneOf(summon[Arbitrary[DataType]].arbitrary, genStructField))
+
+  given Cogen[Schemas.Node] = Cogen[String].contramap {
+    case d: DataType    => s"D:${d.json}"
+    case f: StructField => s"F:${f.name}:${f.nullable}:${f.dataType.json}"
+  }
 
   // ---- Rows --------------------------------------------------------------
 
@@ -132,7 +159,7 @@ object ValueKitsFixtures:
   */
 class ValueKitsLawsSpec extends Specification with Discipline:
 
-  import Schemas.platedDataType
+  import Schemas.{platedDataType, platedNode}
   import Rows.platedRow
   import ValueKitsFixtures.given
 
@@ -231,6 +258,49 @@ class ValueKitsLawsSpec extends Specification with Discipline:
     "Plated[DataType]",
     new PlatedTests[DataType]:
       val laws = new PlatedLaws[DataType] {}
+    .plated,
+  )
+
+  checkAll(
+    "Lens[StructField, String] via fieldName",
+    new LensTests[StructField, String]:
+      val laws = new LensLaws[StructField, String]:
+        val lens = Schemas.fieldName
+    .lens,
+  )
+
+  checkAll(
+    "Lens[StructField, DataType] via fieldType",
+    new LensTests[StructField, DataType]:
+      val laws = new LensLaws[StructField, DataType]:
+        val lens = Schemas.fieldType
+    .lens,
+  )
+
+  checkAll(
+    "Lens[StructField, Boolean] via fieldNullable",
+    new LensTests[StructField, Boolean]:
+      val laws = new LensLaws[StructField, Boolean]:
+        val lens = Schemas.fieldNullable
+    .lens,
+  )
+
+  checkAll(
+    "Prism[Schemas.Node, StructField] via structField",
+    new PrismTests[Schemas.Node, StructField]:
+      val laws = new PrismLaws[Schemas.Node, StructField]:
+        val prism = Schemas.structField
+    .prism,
+  )
+
+  checkAll(
+    "Plated[Schemas.Node] (Multiplate: DataType | StructField)",
+    new PlatedTests[Schemas.Node]:
+      val laws = new PlatedLaws[Schemas.Node] {}
+      override def sameSort(x: Schemas.Node, a: Schemas.Node): Boolean = (x, a) match
+        case (_: DataType, _: DataType)       => true
+        case (_: StructField, _: StructField) => true
+        case _                                => false
     .plated,
   )
 

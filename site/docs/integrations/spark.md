@@ -212,21 +212,33 @@ re-encoded. The optic itself adds nothing measurable.
 
 ## Spark's own values: schemas, rows and variants
 
-These kits need no session. `Schemas` covers the `DataType` tree. It is not named `DataTypes`,
-because Spark has a Java factory of that name in `org.apache.spark.sql.types`. `Plated` gives
-whole-schema rewrites:
+These kits need no session. `Schemas` covers the mutually recursive `DataType` / `StructField` tree
+(it is not named `DataTypes`, because Spark has a Java factory of that name in
+`org.apache.spark.sql.types`). `Plated[DataType]` gives type-only whole-schema rewrites, and
+`Plated[Schemas.Node]` (`type Node = DataType | StructField`, derived by `generics.plate`) is a
+Multiplate over both sorts at once — so `Schemas.everyField` (`everywhereIn[Node, DataType] ∘
+structField`) rewrites every `StructField` at every nesting depth, `Plated.transform[Schemas.Node]`
+rewrites both `StructField`s and `DataType`s in one pass, and `Plated.transformM` runs effectful
+validation across the tree:
 
 ```scala mdoc:silent
 import org.apache.spark.sql.types.*
 import dev.constructive.eo.optics.Plated
-import Schemas.platedDataType
+import dev.constructive.eo.optics.Optic.*
+import Schemas.{platedDataType, platedNode}
 
-val schema: DataType = StructType.fromDDL("id INT, address STRUCT<zip: INT, street: STRING>")
+val schema: DataType = StructType.fromDDL("id INT NOT NULL, address STRUCT<zip: INT, street: STRING>")
 ```
 
 ```scala mdoc
 Schemas.field("address").andThen(Schemas.field("zip")).getOption(schema)
 Plated.transform[DataType] { case IntegerType => LongType; case t => t }(schema).simpleString
+Schemas.everyField.andThen(Schemas.fieldNullable).replace(true)(schema).simpleString
+Plated.transform[Schemas.Node] {
+  case f: StructField => f.copy(name = f.name.toUpperCase)
+  case IntegerType    => LongType
+  case other          => other
+}(schema).asInstanceOf[DataType].simpleString
 ```
 
 `Rows` gives typed `field[A]` / `at[A]` access into untyped `Row`s, keeping the schema on writes.
