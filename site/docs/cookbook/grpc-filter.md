@@ -182,19 +182,19 @@ final case class Policy(urgent: Set[Severity], tiers: Set[Tier], modules: Set[Mo
                         plans: Set[Plan], minVotes: Votes):
 
   def keep[D](detail: D)(using
-      kind: CanGetOption[D, Kind],
-      severity: CanGetOption[D, Severity],
-      tier: CanGetOption[D, Tier],
-      module: CanGetOption[D, Module],
-      plan: CanGetOption[D, Plan],
-      votes: CanGetOption[D, Votes],
+      CanGetOption[D, Kind],
+      CanGetOption[D, Severity],
+      CanGetOption[D, Tier],
+      CanGetOption[D, Module],
+      CanGetOption[D, Plan],
+      CanGetOption[D, Votes],
   ): Boolean =
-    kind.getOption(detail) match
+    detail.getOption[Kind] match
       case Some(Kind.Incident) =>
-        severity.getOption(detail).exists(urgent) && tier.getOption(detail).exists(tiers)
-      case Some(Kind.Bug)     => module.getOption(detail).exists(modules)
+        detail.getOption[Severity].exists(urgent) && detail.getOption[Tier].exists(tiers)
+      case Some(Kind.Bug)     => detail.getOption[Module].exists(modules)
       case Some(Kind.Request) =>
-        plan.getOption(detail).exists(plans) && votes.getOption(detail).exists(_.count >= minVotes.count)
+        detail.getOption[Plan].exists(plans) && detail.getOption[Votes].exists(_.count >= minVotes.count)
       case None => false
 ```
 

@@ -29,7 +29,9 @@ import optics.{GetReplaceLens, Lens, MendTearPrism, PickMendPrism, Prism}
   * drilling composes on the concrete hot path.
   */
 def service[R, A >: R](using Tag[A]) =
-  Lens[TypeMap[R], A](_.get[A], (tm, a) => tm.add(a))
+  Lens[TypeMap[R], A](TypeMap.get(_)[A], (tm, a) => tm.add(a))
+
+export _root_.kyo.TypeMap.get
 
 extension (@unused E: Env.type)
 

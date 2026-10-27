@@ -211,12 +211,13 @@ hand-written given:
 ```scala mdoc
 import dev.constructive.eo.zio.given
 
-def report[T](t: T)(using g: CanGet[T, Db]): String = g.get(t).url
-def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)
+def report[T](t: T)(using CanGet[T, Db]): String = t.get[Db].url
+def bump[T](t: T)(using CanModify[T, Int]): T = t.modify[Int](_ + 1)
 
 report(env)
 
 bump(Exit.succeed(41))
+Exit.succeed(41).modify[Int](_ + 1)
 
 bump(Exit.fail("boom"): Exit[String, Int])
 ```
