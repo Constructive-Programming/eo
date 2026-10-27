@@ -30,9 +30,9 @@ that matter. It is written once, against capabilities:
 
 ```scala
 def keep[D](detail: D)(using
-    kind: CanGetOption[D, Kind],
-    severity: CanGetOption[D, Severity],
-    tier: CanGetOption[D, Tier],
+    CanGetOption[D, Kind],
+    CanGetOption[D, Severity],
+    CanGetOption[D, Tier],
     // … module, plan, votes
 ): Boolean
 ```

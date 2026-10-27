@@ -27,3 +27,9 @@ object CanGet:
     */
   given [S, T, A, B, F[_, _]](using o: Optic[S, T, A, B, F], acc: Accessor[F]): CanGet[S, A] =
     s => o.get(s)
+
+export optics.Optic.get
+
+extension [S](s: S)
+  /** Read the `A` focus out of `s` via the [[CanGet]] instance in scope. */
+  inline def get[A](using cg: CanGet[S, A]): A = cg.get(s)

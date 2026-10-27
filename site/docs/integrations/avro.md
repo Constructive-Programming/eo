@@ -1005,8 +1005,8 @@ import dev.constructive.eo.avro.AvroPrism
 
 // Knows NOTHING about Avro, codecs, or Array[Byte] — only that a
 // String street can be rewritten inside a T.
-def upgradeStreet[T](t: T)(using cm: CanModify[T, String]): T =
-  cm.modify(_.toUpperCase)(t)
+def upgradeStreet[T](t: T)(using CanModify[T, String]): T =
+  t.modify[String](_.toUpperCase)
 
 // The drilled prism IS the capability evidence for T = Array[Byte]
 // (one optic given per (S, A) pair — the coherence rule applies):
@@ -1015,7 +1015,7 @@ given AvroPrism[String] = streetP
 
 ```scala mdoc
 upgradeStreet(incomingBytes).length   // T = Array[Byte]; no Person materialised
-streetP.record.getOptionUnsafe(upgradeStreet(incomingBytes))
+streetP.record.getOptionUnsafe(incomingBytes.modify[String](_.toUpperCase))
 ```
 
 And the same consumer serves the mode-1 materialised model

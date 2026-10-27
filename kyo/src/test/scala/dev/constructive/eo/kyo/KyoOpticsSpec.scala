@@ -2,6 +2,7 @@ package dev.constructive.eo
 package kyo
 
 import _root_.kyo.*
+import dev.constructive.eo.*
 import org.specs2.mutable.Specification
 
 import optics.Lens
@@ -65,7 +66,11 @@ class KyoOpticsSpec extends Specification:
     "serve generic capability-consuming code on TypeMap" >> {
       def prefix[T](t: T)(using g: CanGet[T, Metrics]): String = g.get(t).prefix
       def resize[T](t: T)(using m: CanModify[T, Db]): T = m.modify(_.copy(pool = 9))(t)
-      (prefix(tm) === "eo").and(resize(tm).get[Db].pool === 9)
+      (prefix(tm) === "eo")
+        .and(resize(tm).get[Db].pool === 9)
+        .and(db.get[String] === "jdbc:h2")
+        .and(db.modify[Int](_ + 1) === Db("jdbc:h2", 5))
+        .and(db.replace[Int](10) === Db("jdbc:h2", 10))
     }
     "serve Maybe and Result prisms, misses passing through" >> {
       def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)
