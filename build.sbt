@@ -980,6 +980,7 @@ lazy val sparkIntegration: Project = project
   .in(file("spark"))
   .dependsOn(
     LocalProject("core"),
+    LocalProject("generics"),
     LocalProject("laws") % Test,
   )
   .settings(commonSettings *)

@@ -3,7 +3,7 @@ package optics
 
 import scala.annotation.tailrec
 
-import cats.Eval
+import cats.{Eval, Monad}
 import java.util.ArrayDeque
 
 import data.{ModifyF, MultiFocus, PSVec}
@@ -182,6 +182,50 @@ object Plated:
   def everywhere[S](using P: Plated[S]): Optic[S, S, S, S, ModifyF] =
     Modify[S, S, S, S](g => s => transform(g)(s))
 
+  /** [[everywhere]] scoped to a member sort `T <: S` of a multi-sorted `Plated[S]` union (e.g.
+    * `everywhereIn[Lang, Stm]` or `everywhereIn[Schemas.Node, DataType]`): walks the whole `S` tree
+    * under a `T` root and returns the rebuilt `T`, provided downstream modifications are
+    * sort-preserving on `T` (as any `prism[S, Member]` composition is — a miss on non-`Member`
+    * nodes is `purePlate`'s identity pass-through from O'Connor 2011 §5.1).
+    */
+  def everywhereIn[S, T <: S](using P: Plated[S]): Optic[T, T, S, S, ModifyF] =
+    Modify[T, T, S, S](g => t => transform(g)(t).asInstanceOf[T])
+
+  /** Effectful bottom-up rewrite over any single-shot lawful `Monad[M]` — Haskell `lens`'s
+    * `transformM` and O'Connor's `mapFamilyM` (2011 §5.1–5.2), made stack-safe.
+    *
+    * Drives the post-order `ArrayDeque` heap machine through `M.tailRecM` (law-required to be
+    * stack-safe for every lawful `Monad[M]`), so neither the descent nor the post-order rebuild
+    * uses the JVM call stack: a 100k-deep spine completes without `StackOverflowError` under
+    * `Option`, `Either`, `Eval`, `State`, `Id`, etc., and short-circuiting monads (`Option`,
+    * `Either`) abort immediately on the first failing node without visiting the rest of the tree.
+    * Leaves apply `f` directly without allocating a `Frame` or calling `rebuild`.
+    */
+  def transformM[M[_], S](f: S => M[S])(root: S)(using M: Monad[M], P: Plated[S]): M[S] =
+    val rootKids = P.childrenVec(root)
+    if rootKids.isEmpty then f(root)
+    else
+      final class Frame(val node: S, val kids: PSVec[S], val out: Array[Any], var i: Int)
+      val stack = new ArrayDeque[Frame]()
+      stack.push(new Frame(root, rootKids, new Array[Any](rootKids.length), 0))
+      M.tailRecM[S, S](root) { last =>
+        val fr = stack.peek()
+        if fr.i > 0 then fr.out(fr.i - 1) = last
+        if fr.i < fr.kids.length then
+          val child = fr.kids(fr.i)
+          fr.i += 1
+          val cKids = P.childrenVec(child)
+          if cKids.isEmpty then M.map(f(child))(Left(_))
+          else
+            stack.push(new Frame(child, cKids, new Array[Any](cKids.length), 0))
+            M.pure(Left(child))
+        else
+          val _ = stack.pop()
+          val rebuilt = P.rebuild(fr.node, PSVec.unsafeWrap[S](fr.out))
+          if stack.isEmpty then M.map(f(rebuilt))(Right(_))
+          else M.map(f(rebuilt))(Left(_))
+      }
+
   /** Apply the rule everywhere, bottom-up, and keep re-firing on each rewritten sub-term until the
     * rule returns `None` at every node — Haskell `lens`'s `rewrite`. The caller owns termination (a
     * rule that always fires loops forever).
@@ -235,6 +279,10 @@ object Plated:
 
     /** [[Plated.transform]] over this optic — bottom-up rewrite of every sub-term. */
     def transformAll(f: S => S)(s: S): S = Plated.transform(f)(s)(using asPlated)
+
+    /** [[Plated.transformM]] over this optic — effectful bottom-up rewrite of every sub-term. */
+    def transformAllM[M[_]: Monad](f: S => M[S])(s: S): M[S] =
+      Plated.transformM(f)(s)(using summon[Monad[M]], asPlated)
 
     /** [[Plated.rewrite]] over this optic — bottom-up rewrite to a fixpoint. */
     def rewriteAll(f: S => Option[S])(s: S): S = Plated.rewrite(f)(s)(using asPlated)

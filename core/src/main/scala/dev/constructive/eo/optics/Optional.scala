@@ -222,6 +222,26 @@ sealed abstract class Optional[S, T, A, B]
       rebuild = (m, d) => rebuild(m._1, inner.enplace(m._2, d)),
     )
 
+  /** Fused `Optional.andThen(Lens)` — [[SplitCombineLens]] / [[SimpleLens]] (macro-lens) inner. */
+  def andThen[C, D, XI](inner: SplitCombineLens[A, B, C, D, XI]): Optional[S, T, C, D] =
+    Optional.fused[S, T, C, D, (M, XI)](
+      getOrModify = s => getOrModify(s).map(inner.get),
+      modify = (s, f) =>
+        modifyAt(
+          s,
+          a =>
+            val (xi, c) = inner.split(a)
+            inner.combine(xi, f(c)),
+        ),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] =>
+            val (xi, c) = inner.split(h.b)
+            new Affine.Hit((h.snd, xi), c),
+      rebuild = (m, d) => rebuild(m._1, inner.combine(m._2, d)),
+    )
+
   /** Fused `Optional.andThen(Prism)` — outer Optional's hit fed into a Prism; an inner miss lifts
     * the prism's leftover through the outer's [[rebuild]].
     */

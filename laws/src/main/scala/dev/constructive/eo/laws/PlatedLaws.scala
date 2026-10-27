@@ -37,3 +37,24 @@ trait PlatedLaws[S](using val P: Plated[S]):
   /** The number of immediate children equals the focus count the self-traversal reports. */
   def childrenLengthMatchesPlateLength(s: S): Boolean =
     Plated.children(s).length == P.plate.length(s)
+
+object PlatedLaws:
+
+  extension [S](laws: PlatedLaws[S])
+
+    /** Second CartesianStore coalgebra law (`fmap plate ∘ plate == duplicate ∘ plate`, O'Connor
+      * 2011 §3.2): modifying the immediate children twice in sequence equals one pass with the
+      * composed function. Catches a `rebuild` that reads stale child fields off `parent` instead of
+      * the supplied children vector, or permutes / drops modified children on a second pass — bugs
+      * that [[PlatedLaws.plateModifyIdentity]] alone cannot detect.
+      */
+    def plateComposeModify(s: S, f: S => S, g: S => S): Boolean =
+      import laws.P
+      P.plate.modify(g)(P.plate.modify(f)(s)) == P.plate.modify(f.andThen(g))(s)
+
+    /** `transformM` instantiated at `cats.Id` agrees with pure `transform` (O'Connor 2011 §5.1:
+      * `mapFamily` is `mapFamilyM` at `Id`).
+      */
+    def transformMIdConsistent(s: S, f: S => S): Boolean =
+      import laws.P
+      Plated.transformM[cats.Id, S](f)(s) == Plated.transform(f)(s)

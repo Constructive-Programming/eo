@@ -101,3 +101,31 @@ package object samples:
   // Wrapper around `NotACaseClass` so MacroErrorSpec can exercise
   // nested-path rejection: `_.inner.count` is a two-step selector.
   final case class NestedWrapper(inner: NotACaseClass)
+
+  // Container-children recursive ADT (Option + List + Vector) for `plate[Rose]`.
+  final case class Rose(
+      label: Int,
+      lead: Option[Rose],
+      children: List[Rose],
+      extra: Vector[Rose],
+  )
+
+  // O'Connor's (2011, §1 / §5.1) mutually recursive statement/expression AST.
+  final case class Var(name: String)
+
+  enum Typ:
+    case TInt, TFloat
+
+  enum Stm:
+    case SDecl(t: Typ, v: Var)
+    case SAss(v: Var, e: Expr)
+    case SBlock(ss: List[Stm])
+    case SReturn(e: Expr)
+
+  enum Expr:
+    case EStm(s: Stm)
+    case EAdd(e1: Expr, e2: Expr)
+    case EVar(v: Var)
+    case EInt(i: Int)
+
+  type Lang = Stm | Expr | Var | Typ
