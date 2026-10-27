@@ -142,16 +142,16 @@ type stays fully generic. This is the article's
 `implicit T: Traversal[T, DateTime]` move, with the carrier erased:
 
 ```scala mdoc:silent
-import dev.constructive.eo.{CanFold, CanModify}
+import dev.constructive.eo.*
 
 // Read-side contract: anything that can fold Doubles out of S —
 // Lens, Prism, Optional, Traversal, Fold, Iso all qualify.
-def total[S](s: S)(using o: CanFold[S, Double]): Double =
-  o.foldMap(identity)(s)
+def total[S](s: S)(using CanFold[S, Double]): Double =
+  s.foldMap[Double](identity)
 
 // Write-side contract: anything that can rewrite Doubles in place.
-def scale[S](k: Double)(using cm: CanModify[S, Double]): S => S =
-  cm.modify(_ * k)
+def scale[S](k: Double)(using CanModify[S, Double]): S => S =
+  _.modify[Double](_ * k)
 ```
 
 ```scala mdoc:silent
@@ -180,10 +180,12 @@ val inv = Invoice(5.0, List(Line("widgets", 10.0), Line("gadgets", 20.0)))
 total(inv)(using feeL)
 
 // The composed traversal is an anonymous Optic; bind it as a given
-// and both contracts derive from it.
+// and both contracts — plus the subject-first extensions — derive from it.
 given Optic[Invoice, Invoice, Double, Double, MultiFocus[PSVec]] = lineAmounts
 total(inv)
 scale(1.1)(inv)
+inv.modify[Double](_ * 1.1)
+inv.foci[Double]
 ```
 
 The trait ladder, weakest first: `CanFold` (`foldMap` /

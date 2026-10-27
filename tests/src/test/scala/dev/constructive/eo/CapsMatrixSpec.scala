@@ -98,10 +98,12 @@ class CapsMatrixSpec extends Specification:
       {
         given Optic[Person, Person, String, String, Tuple2] = drilled
         summon[CanGet[Person, String]].get(person) === drilled.get(person)
+        person.get[String] === "Main St"
       }
       {
         given Optic[Address, Unit, String, Unit, Direct] = streetGetter
         summon[CanGet[Address, String]].get(addr) === "Main St"
+        addr.get[String] === "Main St"
       }
     }
     "void: an Either-carrier optic cannot serve CanGet" >> {
@@ -129,10 +131,12 @@ class CapsMatrixSpec extends Specification:
       {
         given Optic[Option[Int], Option[Int], Int, Int, Either] = somePrism
         summon[CanGetOption[Option[Int], Int]].getOption(Some(3)) === Some(3)
+        (Some(3): Option[Int]).getOption[Int] === Some(3)
       }
       {
         given Optic[Address, Address, Int, Int, Affine] = zipOptional
         summon[CanGetOption[Address, Int]].getOption(addr) === Some(12345)
+        addr.getOption[Int] === Some(12345)
       }
     }
     "void: a Tuple2-carrier optic cannot serve CanGetOption" >> {
@@ -161,10 +165,12 @@ class CapsMatrixSpec extends Specification:
       {
         given Optic[Option[Int], Option[Int], Int, Int, Either] = somePrism
         summon[CanReverseGet[Option[Int], Int]].reverseGet(3) === Some(3)
+        3.reverseGet[Option[Int]] === Some(3)
       }
       {
         given Optic[Unit, Address, Unit, String, Direct] = addressReview
         summon[CanReverseGet[Address, String]].reverseGet("Elm") === Address("Elm", 0)
+        "Elm".reverseGet[Address] === Address("Elm", 0)
       }
     }
     "void: an Affine-carrier optic cannot serve CanReverseGet" >> {
@@ -204,11 +210,37 @@ class CapsMatrixSpec extends Specification:
         given Optic[Person, Person, String, String, Tuple2] = drilled
         summon[CanModify[Person, String]].modify(_.reverse)(person) ===
           drilled.modify(_.reverse)(person)
+        person.modify[String](_.reverse) === drilled.modify(_.reverse)(person)
+        person.replace[String]("Elm") === Person("Ada", Address("Elm", 12345))
       }
       {
         given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = eachTraversal
         summon[CanModify[List[Int], Int]].modify(_ + 1)(List(1, 2, 3)) === List(2, 3, 4)
+        val x: Int = 1
+        List(1, 2, 3).modify[Int](_ + x) === List(2, 3, 4)
+        List(1, 2, 3).replace[Int](0) === List(0, 0, 0)
       }
+    }
+    "extension: multiple (S, A) pairs on the same S disambiguate via [A]" >> {
+      given GetReplaceLens[Address, Address, String, String] = streetLens
+      given Optional[Address, Address, Int, Int] = zipOptional
+      val x: Int = 5
+      addr.modify[Int](_ + x) === Address("Main St", 12350)
+      addr.modify[String](_.toUpperCase) === Address("MAIN ST", 12345)
+      addr.replace[Int](99999) === Address("Main St", 99999)
+      addr.replace[String]("Oak Ave") === Address("Oak Ave", 12345)
+      addr.modifyP[Address, (String, Int), (String, Int)]((s, z) => (s.toUpperCase, z + 1))(using
+        pairIso
+      ) === Address("MAIN ST", 12346)
+      addr.replaceP[Address, (String, Int), (String, Int)](("Elm", 1))(using pairIso) ===
+        Address("Elm", 1)
+    }
+    "extension: coexists with import Optic.*" >> {
+      import dev.constructive.eo.*
+      import dev.constructive.eo.optics.Optic.*
+      given Optic[Person, Person, String, String, Tuple2] = drilled
+      val o: Optic[Person, Person, String, String, Tuple2] = drilled
+      person.modify[String](_.reverse) === o.modify(_.reverse)(person)
     }
     "doctrine: a generic consumer binds late through the alias" >> {
       def shout[T](using cm: CanModify[T, String]): T => T = cm.modify(_.toUpperCase)
@@ -240,10 +272,21 @@ class CapsMatrixSpec extends Specification:
       {
         given Optic[List[Int], Unit, Int, Unit, Forget[List]] = listFold
         summon[CanFold[List[Int], Int]].foldMap(identity)(List(1, 2, 3)) === 6
+        List(1, 2, 3).foldMap[Int](identity) === 6
       }
       {
         given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = eachTraversal
         summon[CanFold[List[Int], Int]].foci(List(1, 2, 3)) === List(1, 2, 3)
+        List(1, 2, 3).foci[Int] === List(1, 2, 3)
+      }
+      {
+        given GetReplaceLens[Address, Address, String, String] = streetLens
+        given Optional[Address, Address, Int, Int] = zipOptional
+        addr.foldMap[String](_.length) === 7
+        addr.headOption[String] === Some("Main St")
+        addr.length[String] === 1
+        addr.exists[Int](_ > 9999) === true
+        addr.foci[Int] === List(12345)
       }
     }
     "void: a ModifyF-carrier optic cannot serve CanFold" >> {
@@ -263,11 +306,13 @@ class CapsMatrixSpec extends Specification:
       {
         given Optic[Address, Address, (String, Int), (String, Int), Direct] = pairIso
         summon[CanPutP[Address, (String, Int), (String, Int)]]
-          .put((s, z) => (s.toUpperCase, z))(("main", 7)) === Address("MAIN", 7)
+          .put((s, z) => (s, z))(("main", 7)) === Address("main", 7)
+        ("main", 7).put[Address]((s, z) => (s.toUpperCase, z)) === Address("MAIN", 7)
       }
       {
         given Optic[Unit, Address, Unit, String, Direct] = addressReview
         summon[CanPutP[Address, Unit, String]].put(_ => "Elm")(()) === Address("Elm", 0)
+        ().putP[Address, String](_ => "Elm") === Address("Elm", 0)
       }
     }
     "void: a Tuple2-carrier optic cannot serve CanPutP" >> {
@@ -287,6 +332,10 @@ class CapsMatrixSpec extends Specification:
       val cm = summon[CanModifyF[Address, String]]
       // Id-functor round-trip through the S => G[T] shape
       cm.modifyF[[x] =>> x](_.toUpperCase)(addr) === Address("MAIN ST", 12345)
+      addr.modifyF[String](s => Option(s.toUpperCase)) === Some(Address("MAIN ST", 12345))
+      addr.modifyF[String][[x] =>> x](_.toUpperCase) === Address("MAIN ST", 12345)
+      addr.modifyFP[Address, String, String](s => Option(s.toUpperCase)) ===
+        Some(Address("MAIN ST", 12345))
     }
     "void: an Either-carrier optic cannot serve CanModifyFP" >> {
       typeChecks(
@@ -304,11 +353,17 @@ class CapsMatrixSpec extends Specification:
         given Optic[Address, Address, String, String, Tuple2] = streetLens
         summon[CanModifyA[Address, String]]
           .modifyA(s => Option(s.toUpperCase))(addr) === Some(Address("MAIN ST", 12345))
+        addr.modifyA[String](s => Option(s.toUpperCase)) === Some(Address("MAIN ST", 12345))
+        addr.modifyA[String][Option](s => Option(s.toUpperCase)) ===
+          Some(Address("MAIN ST", 12345))
+        addr.modifyAP[Address, String, String](s => Option(s.toUpperCase)) ===
+          Some(Address("MAIN ST", 12345))
       }
       {
         given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = eachTraversal
         summon[CanModifyA[List[Int], Int]]
           .modifyA(n => Option.when(n > 0)(n + 1))(List(1, 2)) === Some(List(2, 3))
+        List(1, 2).modifyA[Int](n => Option.when(n > 0)(n + 1)) === Some(List(2, 3))
       }
     }
     "void: a Direct-carrier optic cannot serve CanModifyAP (ForgetfulTraverse[Direct, *] is Invariant-only)" >> {
@@ -326,13 +381,15 @@ class CapsMatrixSpec extends Specification:
   "CanPlace / CanTransform (explicit constructors — no derived given by design)" >> {
     "CanPlace.from lifts a SimpleLens via its transformEvidence" >> {
       given SimpleLens[(String, Int), String, Int] = firstLens
-      val cp = CanPlace.from(firstLens)
-      cp.place("z")(("a", 1)) === (("z", 1))
-      cp.transfer[Int](_.toString)(("a", 1))(42) === (("42", 1))
+      given CanPlace[(String, Int), String] = CanPlace.from(firstLens)
+      ("a", 1).place[String]("z") === (("z", 1))
+      ("a", 1).transfer[String]((n: Int) => n.toString)(42) === (("42", 1))
+      ("a", 1).transfer[String][Int](_.toString)(42) === (("42", 1))
     }
     "CanTransform.from lifts a SimpleLens" >> {
       given SimpleLens[(String, Int), String, Int] = firstLens
-      val ct: CanTransform[(String, Int), String, String] = CanTransform.from(firstLens)
-      ct.transform(_.toUpperCase)(("a", 1)) === (("A", 1))
+      given CanTransform[(String, Int), String, String] = CanTransform.from(firstLens)
+      ("a", 1).transform[String](_.toUpperCase) === (("A", 1))
+      ("a", 1).transformP[String, String](_.toUpperCase) === (("A", 1))
     }
   }

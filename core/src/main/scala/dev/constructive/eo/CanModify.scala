@@ -32,3 +32,18 @@ object CanModifyP:
       ff: ForgetfulFunctor[F],
   ): CanModifyP[S, T, A, B] =
     f => o.modify(f)
+
+export optics.Optic.{modify, replace}
+
+extension [S](s: S)
+  /** Rewrite the `A` focus inside `s` via the [[CanModify]] instance in scope. */
+  inline def modify[A](f: A => A)(using cm: CanModify[S, A]): S = cm.modify(f)(s)
+
+  /** Overwrite the `A` focus inside `s` via the [[CanModify]] instance in scope. */
+  inline def replace[A](a: A)(using cm: CanModify[S, A]): S = cm.replace(a)(s)
+
+  /** Polymorphic counterpart to [[modify]] — allows focus and subject types to change. */
+  inline def modifyP[T, A, B](f: A => B)(using cm: CanModifyP[S, T, A, B]): T = cm.modify(f)(s)
+
+  /** Polymorphic counterpart to [[replace]] — allows focus and subject types to change. */
+  inline def replaceP[T, A, B](b: B)(using cm: CanModifyP[S, T, A, B]): T = cm.replace(b)(s)

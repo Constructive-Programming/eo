@@ -41,7 +41,7 @@ Current version: @VERSION@.
 ## Ergonomics
 
 ```scala mdoc:silent
-import dev.constructive.eo.CanModify
+import dev.constructive.eo.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
 
@@ -69,11 +69,17 @@ about `Person` or `Address` — it asks for proof that a `String` can
 be rewritten inside `T`, and any optic with that power is the proof:
 
 ```scala mdoc
-def shout[T](cm: CanModify[T, String]): T => T =
-  cm.modify(_.toUpperCase)
+def shout[T](using CanModify[T, String]): T => T =
+  _.modify[String](_.toUpperCase)
 
-shout(personName)(alice)
-shout(street)(alice)
+shout(using personName)(alice)
+shout(using street)(alice)
+
+locally {
+  given CanModify[Person, String] = street
+  alice.modify[String](_.toUpperCase)
+  alice.replace[String]("Broadway")
+}
 ```
 
 One generic function, two different paths — a plain lens or a

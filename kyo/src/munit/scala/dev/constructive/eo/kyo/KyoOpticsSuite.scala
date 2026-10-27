@@ -2,6 +2,7 @@ package dev.constructive.eo
 package kyo
 
 import _root_.kyo.*
+import dev.constructive.eo.*
 
 import optics.Lens
 
@@ -64,6 +65,9 @@ class KyoOpticsSuite extends munit.FunSuite:
     def resize[T](t: T)(using m: CanModify[T, Db]): T = m.modify(_.copy(pool = 9))(t)
     assertEquals(prefix(tm), "eo")
     assertEquals(resize(tm).get[Db].pool, 9)
+    assertEquals(db.get[String], "jdbc:h2")
+    assertEquals(db.modify[Int](_ + 1), Db("jdbc:h2", 5))
+    assertEquals(db.replace[Int](10), Db("jdbc:h2", 10))
   }
   test("automatic capability givens serve Maybe and Result prisms, misses passing through") {
     def bump[T](t: T)(using m: CanModify[T, Int]): T = m.modify(_ + 1)(t)

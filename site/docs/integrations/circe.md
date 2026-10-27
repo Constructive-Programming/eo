@@ -517,8 +517,8 @@ import dev.constructive.eo.*
 // generic T is what buys you: unit-testing the logic with a plain
 // case class + lens, and re-using the same function for the
 // materialised model, the Json, or any other T with the evidence.
-def widenStreet[T](t: T)(using cm: CanModify[T, String]): T =
-  cm.replace("Broadway")(t)
+def widenStreet[T](t: T)(using CanModify[T, String]): T =
+  t.replace[String]("Broadway")
 
 // The prism given IS the capability evidence for T = Json
 // (one optic given per (S, A) pair — the coherence rule applies):
@@ -527,6 +527,7 @@ given dev.constructive.eo.circe.JsonPrism[String] = streetP
 
 ```scala mdoc
 widenStreet(json).noSpacesSortKeys
+json.replace[String]("Broadway").noSpacesSortKeys
 ```
 
 The same consumer serves the mode-1 materialised model unchanged —
