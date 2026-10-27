@@ -6,12 +6,18 @@ import scala.language.implicitConversions
 import dev.constructive.eo.generics.samples.{
   Beacon,
   Employee,
+  Expr,
   LTree,
+  Lang,
   Person,
   Ping,
   Pong,
+  Rose,
   Shape,
-  Tree
+  Stm,
+  Tree,
+  Typ,
+  Var
 }
 import dev.constructive.eo.optics.Optic.*
 import org.scalacheck.Prop.forAll
@@ -429,5 +435,39 @@ class GenericsSpec extends Specification with ScalaCheck:
     given Plated[Person] = plate[Person]
     val productOk = Plated.children(Person("a", 1)).isEmpty
 
-    enumOk && productOk
+    // Container children (Option + List + Vector in one product)
+    given Plated[Rose] = plate[Rose]
+    val r = Rose(
+      1,
+      Some(Rose(2, None, Nil, Vector.empty)),
+      List(Rose(3, None, Nil, Vector(Rose(4, None, Nil, Vector.empty)))),
+      Vector(Rose(5, None, Nil, Vector.empty)),
+    )
+    val roseOk =
+      Plated.children(r).map(_.label) == List(2, 3, 5) &&
+        Plated.universe(r).map(_.label) == List(1, 2, 3, 4, 5) &&
+        Plated.transform[Rose](n => n.copy(label = n.label * 10))(r).label == 10
+
+    // Mutually recursive union Multiplate (O'Connor 2011 §5.1): Stm | Expr | Var | Typ
+    given Plated[Lang] = plate[Lang]
+    val prog: Stm = Stm.SBlock(
+      List(
+        Stm.SDecl(Typ.TInt, Var("x")),
+        Stm.SAss(
+          Var("x"),
+          Expr.EAdd(Expr.EVar(Var("y")), Expr.EStm(Stm.SReturn(Expr.EVar(Var("z"))))),
+        ),
+      )
+    )
+    val renameStm =
+      Plated
+        .everywhereIn[Lang, Stm]
+        .andThen(prism[Lang, Var])
+        .andThen(lens[Var](_.name))
+        .modify(v => (name = "_" + v.name))
+    val renamed = renameStm(prog)
+    val varsAfter = Plated.universe[Lang](renamed).collect { case Var(n) => n }
+    val multiplateOk = varsAfter == List("_x", "_x", "_y", "_z")
+
+    enumOk && productOk && roseOk && multiplateOk
   }
