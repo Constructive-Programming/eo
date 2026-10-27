@@ -371,7 +371,13 @@ sweep sizes 4 / 32 / 256 / 1024).
 `Plated` — the recursive self-traversal behind `transform` / `universe`
 / `everywhere` — rides this same `MultiFocus[PSVec]` carrier via
 `Traversal.selfChildren`; it's a typeclass over the carrier, not a new
-family node. See [Generics → `plate[S]`](generics.md), the
+family node. The pairing is the theorem O'Connor proved: this
+children+rebuild coalgebra (the paper's `Biplate`) is isomorphic to the
+applicative multi-focus traversal — EO's `.modifyA` over the carrier is
+the other half of that isomorphism — and `plate[Lang]` generalises it to a
+mutually recursive family (a *Multiplate*, see
+[Generics → Multiplate families](generics.md#multiplate-families)). See
+[Generics → `plate[S]`](generics.md), the
 [Cookbook](cookbook/navigating-structures.md#visit-across-whole-trees), and the [Modify section](#modify) for
 `everywhere`.
 
