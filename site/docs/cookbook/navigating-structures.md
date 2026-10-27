@@ -106,16 +106,23 @@ over the tree — and the step between them is one derivation plus
 one `.andThen`, not a rewrite. The `.modify` runs at every node,
 bottom-up and stack-safe to any depth (a million-node tree, or a
 100k-deep degenerate spine, won't overflow). When the rewrite is easier
-as a plain per-node function, `Plated.transform(f)` is the same engine;
+as a plain per-node function, `Plated.transform(f)` is the same engine
+(and `Plated.transformM(f)` runs an effectful `S => M[S]` bottom-up
+over any lawful `Monad[M]`, stack-safely via `tailRecM`);
 `Plated.universe` / `children` are the read side (every sub-term /
 immediate children); `rewrite` repeats an `Expr => Option[Expr]` rule
-to a fixpoint. The derivation follows the *exact self-type* rule —
-only `Expr`-typed fields are recursion points, so `Lam`'s
-`bind: String` stays a leaf. See [Generics → `plate[S]`](../generics.md).
+to a fixpoint. `plate[S]` descends into direct `S` fields, containers
+(`Option[S]`, `List[S]`, `Vector[S]`, `ArraySeq[S]`, `Seq[S]`, `Array[S]`,
+or any `F[S]: Traverse`), and Scala 3 union types (`plate[Stm | Expr | Var]`)
+for mutually recursive ASTs via `Plated.everywhereIn` — leaving non-`S`
+fields like `Lam`'s `bind: String` as skeleton. See
+[Generics → `plate[S]`](../generics.md).
 
 **Source:** Mitchell & Runciman — *Uniform Boilerplate and List
 Processing* (Uniplate),
 <https://ndmitchell.com/downloads/paper-uniform_boilerplate_and_list_processing-30_sep_2007.pdf>;
+O'Connor — *Functor is to Lens as Applicative is to Biplate:
+Introducing Multiplate*, <https://arxiv.org/pdf/1103.2841>;
 Haskell `lens` `Control.Lens.Plated`,
 <https://hackage.haskell.org/package/lens/docs/Control-Lens-Plated.html>.
 

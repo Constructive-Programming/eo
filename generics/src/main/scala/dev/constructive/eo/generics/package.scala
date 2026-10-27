@@ -81,10 +81,16 @@ package object generics:
   inline def prism[S, A <: S]: Optic[S, S, A, A, Either] =
     ${ PrismMacro.deriveImpl[S, A] }
 
-  /** Derive a [[dev.constructive.eo.optics.Plated]] for a recursive ADT — the immediate
-    * same-typed-children self-traversal that powers `transform` / `rewrite` / `children` /
-    * `universe`. Focuses every field whose type is exactly `S` across all cases; works on enums,
-    * sealed hierarchies, and recursive case classes.
+  /** Derive a [[dev.constructive.eo.optics.Plated]] for a recursive ADT or mutually recursive type
+    * family `S` — the immediate-children self-traversal that powers `transform` / `transformM` /
+    * `rewrite` / `children` / `universe` / `everywhere` / `everywhereIn`.
+    *
+    *   - '''Single-sorted ADTs''' (enums, sealed hierarchies, recursive case classes): focuses
+    *     every field of type `S`, plus children inside `Option[S]`, `List[S]`, `Vector[S]`,
+    *     `ArraySeq[S]`, `Seq[S]`, `Array[S]`, or any `F[S]` with a `cats.Traverse[F]` in scope.
+    *   - '''Mutually recursive families''' (`type Lang = Stm | Expr | Var | Typ`, `plate[Lang]`):
+    *     derives a multi-sorted plate (O'Connor 2011 §5) over the union's branches, descending into
+    *     any field (or container field) whose element type is a subtype of `S`.
     *
     * @group Constructors
     *

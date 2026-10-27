@@ -322,16 +322,25 @@ circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
 
 ## `plate[S]` — recursive self-traversal (`Plated`)
 
-`plate[S]` derives a `Plated[S]` — the immediate same-typed-children
-traversal behind `transform` / `rewrite` / `children` / `universe`
-over a recursive ADT. It focuses every field whose type is exactly
-`S` across all cases (the *exact self-type* rule); fields of other
-types stay as leftover skeleton.
+`plate[S]` derives a `Plated[S]` — the immediate-children traversal behind
+`transform` / `transformM` / `rewrite` / `children` / `universe` / `everywhere`
+/ `everywhereIn` over a recursive ADT or mutually recursive type family:
 
-The derived instance also backs `Plated.everywhere[S]` — a composable
-`Modify` that lifts any downstream optic to *every* depth, so
-`everywhere[S].andThen(prism).modify(f)` rewrites that focus across the
-whole tree. See [Optics → Modify](optics.md#modify) and the
+- **Single-sorted ADTs** (enums, sealed hierarchies, recursive case classes):
+  focuses every field of type `S`, plus children inside `Option[S]`, `List[S]`,
+  `Vector[S]`, `ArraySeq[S]`, `Seq[S]`, `Array[S]`, or any `F[S]` with a
+  `cats.Traverse[F]` in scope. Fields of other types stay as leftover skeleton.
+- **Mutually recursive families** (`type Lang = Stm | Expr | Var | Typ`,
+  `plate[Lang]`): derives a multi-sorted plate (O'Connor 2011,
+  [*Functor is to Lens as Applicative is to Biplate: Introducing Multiplate*](https://arxiv.org/pdf/1103.2841),
+  §5) over a Scala 3 union of the family's types, descending into any direct or
+  container field whose element type is a member of `S`.
+
+The derived instance backs `Plated.everywhere[S]` (and `Plated.everywhereIn[S, T]`
+to keep a specific root sort `T <: S` on a union plate) — a composable `Modify`
+that lifts any downstream optic to *every* depth, so
+`everywhere[S].andThen(prism).modify(f)` rewrites that focus across the whole
+tree. See [Optics → Modify](optics.md#modify) and the
 [Cookbook recipe](cookbook/navigating-structures.md#visit-across-whole-trees).
 
 ```scala
@@ -352,12 +361,36 @@ Plated.transform { case Expr.Var(n) => Expr.Var(n.toUpperCase); case e => e }(
 )
 ```
 
-Works on enums, sealed hierarchies, and recursive case classes. See
+For a mutually recursive family (`Stm` ⇄ `StmExpr` with `SBlock(ss: List[Stm])`
+and leaf `StmVar`), derive `Plated` once on the union and compose `everywhereIn`
+with a union `prism` — the prism's miss branch acts as O'Connor's `purePlate`
+(passing non-target sorts through untouched):
+
+```scala mdoc:silent
+import dev.constructive.eo.docs.{Stm, StmExpr, StmLang, StmTyp, StmVar}
+import dev.constructive.eo.generics.plate
+import dev.constructive.eo.optics.Plated
+
+given Plated[StmLang] = plate[StmLang]
+
+val renameVarsInStm =
+  Plated.everywhereIn[StmLang, Stm]
+    .andThen(prism[StmLang, StmVar])
+    .andThen(lens[StmVar](_.name))
+    .modify(v => (name = "_" + v.name))
+```
+
+```scala mdoc
+val block = Stm.SBlock(List(
+  Stm.SDecl(StmTyp.TInt, StmVar("x")),
+  Stm.SAss(StmVar("x"), StmExpr.EStm(Stm.SReturn(StmExpr.EVar(StmVar("y"))))),
+))
+renameVarsInStm(block)
+```
+
+Works on enums, sealed hierarchies, recursive case classes, and union types. See
 the [cookbook Plated recipe](cookbook/navigating-structures.md#visit-across-whole-trees) for a worked, runnable
-example. (The block above is illustrative — the `new` the macro
-emits for an enum case can't run inside this page's doc sandbox;
-the cookbook runs the same derivation against a package-level
-sample ADT instead.)
+example.
 
 ## Macro errors
 
