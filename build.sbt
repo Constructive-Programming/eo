@@ -1091,7 +1091,7 @@ lazy val sparkBench: Project = project
 lazy val sparkConnectServer: Project = project
   .in(file("spark-connect-server"))
   .settings(
-    scalaVersion := "2.13.18",
+    scalaVersion := "3.10.0",
     crossScalaVersions := Seq("2.13.18"),
     publish / skip := true,
     mimaPreviousArtifacts := Set.empty,
