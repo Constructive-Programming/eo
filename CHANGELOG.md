@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-03
+
 ### Added
 
 - **avro: schema defaults on the JSON → record bridges** (#156).
@@ -25,9 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and the miss contract hold unconditionally; `reverseGet ∘ getOption == identity` only for a
   document that spells out every default-carrying field) rather than quietly weakening the
   lawful one. Additive; `benchmarks/AvroJsonDefaultsBench` measures it — on a body that omits
-  nothing the lenient read costs +1.3% ns / +0.9% B/op (circe) and +0 B/op bit-for-bit
-  (jsoniter) against the strict read, and filling six defaults (one a nested record) costs
-  ~145 ns / 635 B/op (circe) and ~157 ns / 640 B/op (jsoniter).
+  nothing the lenient read costs the same as the strict one (+1.3% ns / +0.9% B/op on circe, +0
+  B/op bit-for-bit on jsoniter; local JMH run, `-prof gc`), and filling six defaults, one of them
+  a nested record, costs ~145 ns / 635 B/op (circe) and ~157 ns / 640 B/op (jsoniter).
 
 ## [1.0.0] - 2026-10-25
 
