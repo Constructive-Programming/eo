@@ -10,7 +10,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericDatumWriter, IndexedRecord}
+import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord, IndexedRecord}
 import org.apache.avro.io.EncoderFactory
 import org.apache.avro.util.Utf8
 import org.specs2.mutable.Specification
@@ -251,6 +251,78 @@ class AvroJsoniterSpec extends Specification:
         .and(
           prism.getOption(mutated(_.replace("\"by\":[0,-1]", "\"by\":[0,-1}"))) === None
         ) // bytes array closed with `}`
+    }
+  }
+
+  // ---- recordWithDefaults: the lenient streaming parse (issue #156) ----
+
+  val defaultsSchema: Schema = new Schema.Parser().parse(
+    """{"type":"record","name":"Defaults","fields":[
+      |  {"name":"id","type":"string"},
+      |  {"name":"note","type":["null","string"],"default":null},
+      |  {"name":"rank","type":"int","default":0}]}""".stripMargin
+  )
+
+  def bytes(json: String): Array[Byte] = json.getBytes(UTF_8)
+
+  "recordWithDefaults" should {
+    // covers: an ABSENT field with a declared default takes apache-avro's own resolved default;
+    //   an absent field WITHOUT one, an unknown key (refused by name in the key loop, before any
+    //   default is consulted), an explicit null under a non-nullable field and a present-but-invalid
+    //   value all still miss; the strict prism refuses every one of the same bodies; withDefaults
+    //   is the total bytes → bytes form, and normalising with it keeps the caller on the lawful
+    //   strict prism
+    "fill an absent field from the schema's default, and refuse what record refuses" in {
+      val lenient = AvroJsoniter.recordWithDefaults(defaultsSchema)
+      val strict = AvroJsoniter.record(defaultsSchema)
+      val body = bytes("""{"id":"a"}""")
+      val filled = """{"id":"a","note":null,"rank":0}"""
+      (lenient.getOption(body).map(r => str(lenient.reverseGet(r))) === Some(filled))
+        .and(lenient.getOption(bytes(filled)).map(r => str(lenient.reverseGet(r))) === Some(filled))
+        .and(strict.getOption(body) === None)
+        .and(lenient.getOption(bytes("""{"note":null}""")) === None) // id declares no default
+        .and(
+          lenient.getOption(bytes("""{"id":"a","zz":1}""")) === None
+        ) // unknown key, still a miss
+        .and(
+          lenient.getOption(bytes("""{"id":null,"note":null,"rank":0}""")) === None
+        ) // explicit null
+        .and(
+          lenient.getOption(bytes("""{"id":"a","note":null,"rank":"x"}""")) === None
+        ) // bad value
+        .and(str(AvroJsoniter.withDefaults(body, defaultsSchema)) === filled)
+        .and(
+          str(AvroJsoniter.withDefaults(bytes("""{"zz":1}"""), defaultsSchema)) === """{"zz":1}"""
+        )
+        .and(
+          strict
+            .getOption(AvroJsoniter.withDefaults(body, defaultsSchema))
+            .map(r => str(strict.reverseGet(r))) === Some(filled)
+        )
+    }
+
+    // covers: Avro's resolution is recursive — a nested record field that omits a defaulted field
+    //   of its own is filled too — and a container default is DEEP-COPIED, so two records parsed
+    //   from the same body never alias one mutable list
+    "fill nested record defaults recursively, without aliasing a container default" in {
+      val schema = new Schema.Parser().parse(
+        """{"type":"record","name":"Outer","fields":[
+          |  {"name":"inner","type":{"type":"record","name":"Inner","fields":[
+          |     {"name":"req","type":"string"},
+          |     {"name":"opt","type":"int","default":7}]}},
+          |  {"name":"tags","type":{"type":"array","items":"string"},"default":[]}]}""".stripMargin
+      )
+      val lenient = AvroJsoniter.recordWithDefaults(schema)
+      val body = bytes("""{"inner":{"req":"r"}}""")
+      val tagsOf = (r: IndexedRecord) =>
+        r.asInstanceOf[GenericRecord].get("tags").asInstanceOf[java.util.List[?]]
+      (lenient.getOption(body).map(r => str(lenient.reverseGet(r))) ===
+        Some("""{"inner":{"req":"r","opt":7},"tags":[]}"""))
+        .and {
+          val first = lenient.getOption(body).map(tagsOf)
+          val second = lenient.getOption(body).map(tagsOf)
+          (first.isDefined && second.isDefined && (first.get ne second.get)) must beTrue
+        }
     }
   }
 
