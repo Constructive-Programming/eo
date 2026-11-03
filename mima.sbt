@@ -1,3 +1,5 @@
+import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, ProblemFilters}
+
 // MiMa setup — binary-compatibility checking, wired transitively
 // through sbt-typelevel-ci-release.
 //
@@ -75,4 +77,25 @@
 //   0.6.0: kindlings 0.2.0 fully-qualifies derived Avro record names by
 //         enclosing path (namespace) — a wire-format break vs 0.5.x.
 //   Earlier: 0.2.0 JsonPrism → Affine `Optional` #31, 0.3.0 avro
-//   field-naming #35, 0.4.0 additive #37/#38, 0.5.0 Confluent surface #41.
+//         field-naming #35, 0.4.0 additive #37/#38, 0.5.0 Confluent surface #41.
+
+// Issue #156 (schema defaults on the JSON → record bridges) threads ONE `Boolean` through three
+// GENUINELY INTERNAL members — `AvroJson.jsonToValue`, `AvroJsoniter.parseSlice` and the
+// `AvroJsoniter.SchemaCodec` constructor — so their descriptors move. All three are single-module
+// implementation details (`private[circe]` / `private[jsoniter]` / a `final private class`), named
+// in no other module's package, so no caller outside `cats-eo-avro` can hold a reference to
+// either. The PUBLIC surface is untouched: `record`, `recordPrism`, `jsonToRecord`, the `.json` /
+// `.avro` faces and every diagonal keep their descriptors, and the new entry points
+// (`recordWithDefaults` / `withDefaults` / `jsonToRecordWithDefaults`) are additive. These
+// exclusions are per this file's own rule — internal symbols only.
+ThisBuild / mimaBinaryIssueFilters ++= Seq(
+  ProblemFilters.exclude[DirectMissingMethodProblem](
+    "dev.constructive.eo.avro.circe.AvroJson.jsonToValue"
+  ),
+  ProblemFilters.exclude[DirectMissingMethodProblem](
+    "dev.constructive.eo.avro.jsoniter.AvroJsoniter.parseSlice"
+  ),
+  ProblemFilters.exclude[DirectMissingMethodProblem](
+    "dev.constructive.eo.avro.jsoniter.AvroJsoniter#SchemaCodec.this"
+  ),
+)

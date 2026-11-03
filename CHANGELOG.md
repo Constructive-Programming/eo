@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **avro: schema defaults on the JSON → record bridges** (#156).
+  `AvroJson.recordWithDefaults(schema)` (circe) and
+  `AvroJsoniter.recordWithDefaults(schema)` (jsoniter) are the existing strict prisms with ONE
+  extra rule for an ABSENT field: a field the schema declares a `default` for takes
+  apache-avro's own resolved default (`GenericData.getDefaultValue`, deep-copied so two parsed
+  records never alias one mutable default) — the semantics `GenericRecordBuilder` implements.
+  A PRESENT field is parsed exactly as strictly, an absent field with no declared default is
+  still a miss, and an unknown key is still a miss. Defaults are resolved lazily, per absent
+  field, at parse time. `AvroJson.withDefaults(body, schema)` /
+  `AvroJsoniter.withDefaults(body, schema)` are the total `Json → Json` / JSON-bytes → JSON-bytes
+  forms of the same fill, for callers who normalise a body and stay on the lawful `record`.
+  `record` itself is unchanged and stays strict: a read that fills a default cannot reproduce
+  its input on re-render, so the lenient prism states its law boundary (`getOption ∘ reverseGet`
+  and the miss contract hold unconditionally; `reverseGet ∘ getOption == identity` only for a
+  document that spells out every default-carrying field) rather than quietly weakening the
+  lawful one. Additive; `benchmarks/AvroJsonDefaultsBench` measures it — on a body that omits
+  nothing the lenient read costs +1.3% ns / +0.9% B/op (circe) and +0 B/op bit-for-bit
+  (jsoniter) against the strict read, and filling six defaults (one a nested record) costs
+  ~145 ns / 635 B/op (circe) and ~157 ns / 640 B/op (jsoniter).
+
 ## [1.0.0] - 2026-10-25
 
 **Binary-breaking: recompile against this release.** 1.0.0 changes public shapes that 0.18.x

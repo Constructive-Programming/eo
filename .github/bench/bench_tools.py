@@ -44,6 +44,7 @@ MODULE_BENCHES = {
         "AvroBytesBench",
         "AvroEncodeRouteBench",
         "AvroJsonBridgeBench",
+        "AvroJsonDefaultsBench",
         "AvroVulcanBench",
         "OrderAvroBench",
         "ClickRecordBench",
@@ -51,6 +52,7 @@ MODULE_BENCHES = {
     "circe/": ["JsoniterBench", "OpticBuildBench", "OrderCirceBench", "PlatedBench"],
     "jsoniter/": [
         "AvroJsonBridgeBench",
+        "AvroJsonDefaultsBench",
         "JsoniterBench",
         "OrderAvroBench",
         "OrderJsoniterBench",

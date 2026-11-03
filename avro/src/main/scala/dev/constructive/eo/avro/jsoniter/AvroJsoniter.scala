@@ -28,6 +28,12 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   * runs through its `JsonWriter`) — add `com.github.plokhotnyuk.jsoniter-scala:jsoniter-scala-core`
   * to use this package.
   *
+  * The bidirectional entry point is [[record]], a lawful `Prism[JsoniterBytes, IndexedRecord]` per
+  * schema — `getOption` the strict schema-directed parse, `reverseGet` the total structural walk
+  * [[avroToJson]] — plus [[recordWithDefaults]] (the same prism with the schema's own defaults
+  * applied to '''absent''' fields) and [[withDefaults]] (the total `JsoniterBytes => JsoniterBytes`
+  * form of that fill, for callers who normalise a body and stay on the lawful [[record]]).
+  *
   * ==Rendering conventions (record → JSON bytes)==
   *
   * [[avroToJson]] mirrors `AvroJson.avroToJson` case for case, so the two bridges render
@@ -84,6 +90,16 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   * `int` schema where circe's `toInt` accepts it), and a duplicate object key misses (circe's
   * `JsonObject` silently de-duplicates before `AvroJson` ever sees it).
   *
+  * [[recordWithDefaults]] is the same walk with ONE extra rule for an ABSENT field: a field the
+  * schema declares a `default` for takes apache-avro's own resolved default — the Avro semantics
+  * `GenericRecordBuilder` implements. A PRESENT field is parsed exactly as strictly as before, an
+  * absent field with no declared default is still a miss, and an unknown key is still a miss (it is
+  * refused by name inside the key loop, before any default is looked up). Defaults are resolved
+  * lazily, per absent field, at parse time. The fill is deliberately NOT folded into [[record]]: a
+  * read that supplies a default no longer reproduces its input on re-render, which is the one thing
+  * a lawful prism must do. The lenient prism's law boundary is stated on [[recordWithDefaults]];
+  * [[withDefaults]] is the total `JsoniterBytes => JsoniterBytes` form of the same fill.
+  *
   * ==Non-goals (deliberate)==
   *
   * Same as `AvroJson`: the bridge sees only the '''runtime''' Avro value, never the logical type —
@@ -91,12 +107,14 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   *
   * @groupname prism Bidirectional prism (JSON bytes ↔ record)
   * @groupprio prism 0
+  * @groupname defaults Schema-defaulted reads
+  * @groupprio defaults 1
   * @groupname diagonal Codec diagonals (tearFrom / mendFrom of valuePrism)
-  * @groupprio diagonal 1
+  * @groupprio diagonal 2
   * @groupname base Structural walk
-  * @groupprio base 2
+  * @groupprio base 3
   * @groupname optic Read optic (Avro bytes → JSON bytes)
-  * @groupprio optic 3
+  * @groupprio optic 4
   */
 object AvroJsoniter:
 
@@ -115,13 +133,74 @@ object AvroJsoniter:
       avroToJson,
     )
 
+  /** [[record]] with the schema's own defaults applied to '''absent''' fields — the Avro semantics
+    * `GenericRecordBuilder.build()` and JSON decoding with schema resolution implement, and the
+    * AST-free twin of `AvroJson.recordWithDefaults`: a field the schema declares a `default` for
+    * resolves to that default, and only an absent field with no declared default is a miss.
+    *
+    * '''Law boundary, stated rather than glossed.''' `getOption ∘ reverseGet` and the miss contract
+    * (a miss surrenders the untouched JSON bytes) hold unconditionally. `reverseGet ∘ getOption` —
+    * the equation that makes a prism lawful — reproduces its input only for documents that spell
+    * out every default-carrying field: a body that omits one is rendered back with the default
+    * filled in, because that IS the record the parse produced. `modify(identity)` inherits the same
+    * boundary. Run no `PrismTests` on this optic; it is a normalising reader, not a lawful prism,
+    * and it exists because operator-facing bodies are written with only the fields that carry a
+    * value. [[record]] stays the strict, lawful prism; [[withDefaults]] is the total
+    * `JsoniterBytes => JsoniterBytes` form of the same fill.
+    *
+    * Everything else is unchanged from [[record]]: an unknown key is a miss (refused by name in the
+    * key loop, before any default is looked up), a PRESENT field is parsed exactly as strictly, and
+    * defaults are resolved lazily per absent field at parse time — a schema whose defaults are
+    * never needed never pays for them.
+    *
+    * @group defaults
+    */
+  def recordWithDefaults(
+      schema: Schema
+  ): MendTearPrism[JsoniterBytes, JsoniterBytes, IndexedRecord, IndexedRecord] =
+    Prism[Array[Byte], IndexedRecord](
+      json => jsonToRecordWithDefaults(json, schema).toRight(json),
+      avroToJson,
+    )
+
+  /** The total `JsoniterBytes => JsoniterBytes` form of [[recordWithDefaults]]'s fill: the document
+    * with every field the schema declares a default for present, rendered through the structural
+    * walk. A document the schema does not pin (unknown key, absent field without a default, value
+    * the field schema rejects) comes back '''unchanged''' — the fill is additive, so the strict
+    * [[record]] refuses exactly what it refused before, and a caller can normalise a body and stay
+    * on the lawful prism:
+    *
+    * {{{
+    *   AvroJsoniter.record(schema).getOption(AvroJsoniter.withDefaults(body, schema))
+    * }}}
+    *
+    * Equivalently `recordWithDefaults(schema).getOption(json).map(avroToJson).getOrElse(json)`,
+    * without constructing the optic per call. The rendered document is canonical (schema
+    * declaration order, defaults in place), which is what makes it a valid input for [[record]].
+    *
+    * @group defaults
+    */
+  def withDefaults(json: JsoniterBytes, schema: Schema): JsoniterBytes =
+    jsonToRecordWithDefaults(json, schema) match
+      case Some(record) => avroToJson(record)
+      case None         => json
+
   /** Strict schema-directed structural parse of a JSON document into a generic record —
     * [[record]]'s `getOption`. `None` on anything the schema does not pin; no typed case class and
     * no AST in the middle.
     * @group prism
     */
   def jsonToRecord(json: JsoniterBytes, schema: Schema): Option[IndexedRecord] =
-    parseSlice(json, schema) match
+    parseSlice(json, schema, defaults = false) match
+      case Some(r: IndexedRecord) => Some(r)
+      case _                      => None
+
+  /** [[recordWithDefaults]]'s read: the same parse, with an ABSENT field the schema declares a
+    * `default` for taking it. Everything else is refused exactly as [[jsonToRecord]] refuses it.
+    * @group defaults
+    */
+  def jsonToRecordWithDefaults(json: JsoniterBytes, schema: Schema): Option[IndexedRecord] =
+    parseSlice(json, schema, defaults = true) match
       case Some(r: IndexedRecord) => Some(r)
       case _                      => None
 
@@ -268,27 +347,33 @@ object AvroJsoniter:
     * `readFromArray` would hand the nested parse the OUTER call's thread-local reader, corrupting
     * its position.
     */
-  private[jsoniter] def parseSlice(json: Array[Byte], schema: Schema): Option[Any] =
-    try Some(readFromArrayReentrant[Any](json)(using new SchemaCodec(schema)))
+  private[jsoniter] def parseSlice(
+      json: Array[Byte],
+      schema: Schema,
+      defaults: Boolean
+  ): Option[Any] =
+    try Some(readFromArrayReentrant[Any](json)(using new SchemaCodec(schema, defaults)))
     catch case NonFatal(_) => None
 
   /** Schema-directed `JsonValueCodec` — the adapter that lets `readFromArray` drive the
     * [[readValue]] walk (and, symmetrically, `writeToArray` the [[writeValue]] walk).
     */
-  final private class SchemaCodec(schema: Schema) extends JsonValueCodec[Any]:
-    def decodeValue(in: JsonReader, default: Any): Any = readValue(in, schema)
+  final private class SchemaCodec(schema: Schema, defaults: Boolean) extends JsonValueCodec[Any]:
+    def decodeValue(in: JsonReader, default: Any): Any = readValue(in, schema, defaults)
     def encodeValue(value: Any, out: JsonWriter): Unit = writeValue(value, out)
     def nullValue: Any = null.asInstanceOf[Any]
 
   /** Schema-directed streaming inverse of [[writeValue]] — `in.decodeError` (an exception caught by
-    * [[parseSlice]]) is the strict miss.
+    * [[parseSlice]]) is the strict miss. `defaults` threads the absent-field rule through nested
+    * records, array / map elements and union branches — Avro's resolution is recursive, so a nested
+    * record that omits a defaulted field of its own is filled too.
     */
-  private def readValue(in: JsonReader, schema: Schema): Any =
+  private def readValue(in: JsonReader, schema: Schema, defaults: Boolean): Any =
     schema.getType match
-      case Schema.Type.RECORD => readRecord(in, schema)
-      case Schema.Type.UNION  => readUnion(in, schema)
-      case Schema.Type.ARRAY  => readArray(in, schema.getElementType)
-      case Schema.Type.MAP    => readMap(in, schema.getValueType)
+      case Schema.Type.RECORD => readRecord(in, schema, defaults)
+      case Schema.Type.UNION  => readUnion(in, schema, defaults)
+      case Schema.Type.ARRAY  => readArray(in, schema.getElementType, defaults)
+      case Schema.Type.MAP    => readMap(in, schema.getValueType, defaults)
       case Schema.Type.ENUM   =>
         // NB a null `default` makes jsoniter treat JSON null as a decode error — the strictness
         // we want (null only ever matches a NULL schema / union branch)
@@ -318,10 +403,16 @@ object AvroJsoniter:
 
   private def nullAny: Any = null.asInstanceOf[Any]
 
-  /** Strict exact-cover record parse: every key must be a schema field (any order), no duplicate,
-    * none missing.
+  /** Strict exact-cover record parse with `defaults = false`: every key must be a schema field (any
+    * order), no duplicate, none missing.
+    *
+    * With `defaults = true` a missing key is filled from the schema instead of refused — but only
+    * if the field declares a default, and only for keys that are ABSENT: an unknown key is already
+    * refused by name in the loop (before any default is consulted), a duplicate is still a miss,
+    * and a present key is parsed exactly as strictly. The fill therefore runs only on the lenient
+    * path's shortfall, one `hasDefaultValue` per unseen field, never per field.
     */
-  private def readRecord(in: JsonReader, schema: Schema): IndexedRecord =
+  private def readRecord(in: JsonReader, schema: Schema, defaults: Boolean): IndexedRecord =
     if !in.isNextToken('{'.toByte) then in.decodeError("expected JSON object")
     val fields = schema.getFields
     val rec = new GenericData.Record(schema)
@@ -331,7 +422,7 @@ object AvroJsoniter:
       if (field eq null) || seen(field.pos) then
         in.decodeError(s"not exactly the fields of ${schema.getFullName}")
       seen(field.pos) = true
-      rec.put(field.pos, readValue(in, field.schema))
+      rec.put(field.pos, readValue(in, field.schema, defaults))
       if in.isNextToken(','.toByte) then loop(count + 1) else count + 1
     val count =
       if in.isNextToken('}'.toByte) then 0
@@ -341,40 +432,72 @@ object AvroJsoniter:
         if !in.isCurrentToken('}'.toByte) then in.objectEndOrCommaError()
         n
     if count != fields.size then
-      in.decodeError(s"expected exactly the ${fields.size} fields of ${schema.getFullName}")
+      if !defaults then
+        in.decodeError(s"expected exactly the ${fields.size} fields of ${schema.getFullName}")
+      else
+        // one pass: refuse the first unseen field with no default, fill the rest
+        @tailrec def fill(i: Int): Unit =
+          if i != fields.size then
+            if !seen(i) then
+              val field = fields.get(i)
+              if !field.hasDefaultValue then
+                in.decodeError(s"no default for field ${field.name()} of ${schema.getFullName}")
+              rec.put(field.pos, defaultValueFor(field))
+            fill(i + 1)
+        fill(0)
     rec
+
+  /** The schema's default for an ABSENT field, as the generic runtime value the walk produces — the
+    * jsoniter twin of `AvroJson.defaultValueFor`, with the same contract: `hasDefaultValue` is
+    * checked by the caller first (apache-avro throws `AvroMissingFieldException` otherwise, and a
+    * miss here must stay a value), and the `deepCopy` keeps `GenericData.getDefaultValue`'s cached
+    * instance from being aliased by two parsed records. Unlike the AST walk, a throw here cannot
+    * escape: this runs inside [[parseSlice]]'s `catch NonFatal`, which downgrades it to a miss.
+    */
+  private def defaultValueFor(field: Schema.Field): Any =
+    genericData.deepCopy(field.schema, genericData.getDefaultValue(field))
+
+  /** apache-avro's singleton `GenericData` — the instance `GenericRecordBuilder` uses. Holds the
+    * default conversions, so a logical-type default resolves to the same runtime value the binary
+    * decode produces.
+    */
+  private val genericData: GenericData = GenericData.get()
 
   /** First branch that parses wins (mirrors `AvroJson`): the slice is captured raw ONCE, then each
     * branch attempts it on a fresh reader — a streaming reader cannot backtrack across branches.
     */
-  private def readUnion(in: JsonReader, schema: Schema): Any =
+  private def readUnion(in: JsonReader, schema: Schema, defaults: Boolean): Any =
     val raw = in.readRawValAsBytes()
-    schema.getTypes.asScala.iterator.map(parseSlice(raw, _)).collectFirst {
+    schema.getTypes.asScala.iterator.map(parseSlice(raw, _, defaults)).collectFirst {
       case Some(v) => v
     } match
       case Some(v) => v
       case None    => in.decodeError("no union branch parses")
 
-  private def readArray(in: JsonReader, elem: Schema): java.util.ArrayList[Any] =
+  private def readArray(in: JsonReader, elem: Schema, defaults: Boolean): java.util.ArrayList[Any] =
     if !in.isNextToken('['.toByte) then in.decodeError("expected JSON array")
     val list = new java.util.ArrayList[Any]()
     if in.isNextToken(']'.toByte) then list
     else
       in.rollbackToken()
       @tailrec def loop(): Unit =
-        list.add(readValue(in, elem))
+        list.add(readValue(in, elem, defaults))
         if in.isNextToken(','.toByte) then loop()
       loop()
       if in.isCurrentToken(']'.toByte) then list else in.arrayEndOrCommaError()
 
-  private def readMap(in: JsonReader, value: Schema): java.util.LinkedHashMap[String, Any] =
+  private def readMap(
+      in: JsonReader,
+      value: Schema,
+      defaults: Boolean
+  ): java.util.LinkedHashMap[String, Any] =
     if !in.isNextToken('{'.toByte) then in.decodeError("expected JSON object")
     val map = new java.util.LinkedHashMap[String, Any]()
     if in.isNextToken('}'.toByte) then map
     else
       in.rollbackToken()
       @tailrec def loop(): Unit =
-        map.put(in.readKeyAsString(), readValue(in, value))
+        map.put(in.readKeyAsString(), readValue(in, value, defaults))
         if in.isNextToken(','.toByte) then loop()
       loop()
       if in.isCurrentToken('}'.toByte) then map else in.objectEndOrCommaError()
@@ -483,7 +606,7 @@ final private class AvroSliceFace(
     rawPrism.to(json) match
       case m: Affine.Miss[X]             => new Affine.Miss[X](m.fst)
       case h: Affine.Hit[X, Array[Byte]] =>
-        AvroJsoniter.parseSlice(h.b, schema) match
+        AvroJsoniter.parseSlice(h.b, schema, defaults = false) match
           case Some(value) =>
             new Affine.Hit[X, AvroBytes](h.snd, AvroBinaryCursor.writeDatum(value, schema))
           case None => new Affine.Miss[X](h.snd._1)

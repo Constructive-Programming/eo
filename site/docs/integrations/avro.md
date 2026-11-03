@@ -933,6 +933,55 @@ Like vulcan above, circe is an `Optional` dependency of
 sub-package. A failing `io.circe` import at compile time means
 your build lacks that dependency, not that the module is broken.
 
+### Bodies that omit fields — `recordWithDefaults` / `withDefaults`
+
+Operator-facing bodies are written with only the fields that carry
+a value, so a field that declares an Avro default has to be
+omissible. `record` cannot supply one: it is a lawful prism, and a
+read that fills a default no longer reproduces its input on
+re-render. Two entry points own that flexibility instead:
+
+```scala mdoc
+import dev.constructive.eo.avro.circe.AvroJson
+import io.circe.Json
+import org.apache.avro.Schema
+
+val schema: Schema = new Schema.Parser().parse(
+  """{"type":"record","name":"Amendment","fields":[
+    |  {"name":"id","type":"string"},
+    |  {"name":"priority","type":"int","default":0}]}""".stripMargin
+)
+
+val body = Json.obj("id" -> Json.fromString("a-1"))
+
+AvroJson.record(schema).getOption(body)
+
+val lenient = AvroJson.recordWithDefaults(schema)
+lenient.getOption(body).map(lenient.reverseGet)
+
+AvroJson.record(schema).getOption(AvroJson.withDefaults(body, schema)).isDefined
+```
+
+`recordWithDefaults` is the same walk with ONE extra rule for an
+ABSENT field: apache-avro resolves the field's own default
+(`GenericData.getDefaultValue` — the value `GenericRecordBuilder`
+would put there), deep-copied so two parsed records never share one
+mutable default. A field that is PRESENT is parsed exactly as
+strictly, an absent field with no declared default is still a miss,
+and an unknown key is still a miss. Defaults are resolved lazily,
+per absent field, at parse time — a schema whose defaults are never
+needed never pays for them, and a body that omits nothing costs the
+same as the strict parse (`benchmarks`'
+`AvroJsonDefaultsBench` measures both bridges side by side).
+
+It is **not** a lawful prism, deliberately: `reverseGet ∘ getOption`
+reproduces its input only for a document that spells out every
+default-carrying field. `withDefaults` is the total `Json => Json`
+form of the same fill — normalise the body, then stay on the lawful
+`record`. The jsoniter twin
+(`dev.constructive.eo.avro.jsoniter.AvroJsoniter`) ships the same
+pair over JSON bytes.
+
 ## Ignoring failures (the `*Unsafe` escape hatch)
 
 For Kafka consumers and other hot-path call sites where the
@@ -1062,6 +1111,7 @@ shape.
 | Hand-written codec with divergent schema field order       | `.fieldNamed[B]("schema_name")`                    |
 | Slice / graft a field's raw encoding, decode-free          | `sliceBytes` / `graftBytes` (`ConfluentWire.graftGated` when framed) |
 | Render an Avro record as circe `Json`                      | `AvroJson.record(schema)` — `eo.avro.circe`        |
+| Parse a body that omits fields carrying an Avro default    | `AvroJson.recordWithDefaults(schema)` / `withDefaults` — `eo.avro.circe`, `eo.avro.jsoniter` |
 
 For the Kafka end-to-end recipe (read bytes, modify, re-emit),
 see the [Cookbook → Serdes free pipes](../cookbook/decoupling.md#serdes-free-pipes).

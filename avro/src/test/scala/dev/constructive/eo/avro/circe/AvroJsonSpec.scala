@@ -207,6 +207,75 @@ class AvroJsonSpec extends Specification with ScalaCheck:
       .and(envPrism.getOption(Json.fromString("not an object")) === None)
   }
 
+  // covers: the lenient prism (issue #156) — an ABSENT field with a declared default takes
+  //   apache-avro's own resolved default; an absent field WITHOUT one, an unknown key, an explicit
+  //   null under a non-nullable field and a present-but-invalid value all still miss; the strict
+  //   prism refuses every one of the same bodies; withDefaults is the total Json → Json form, and
+  //   normalising with it keeps the caller on the lawful strict prism
+  "recordWithDefaults: an absent field takes its Avro default" >> {
+    val schema = new Schema.Parser().parse(
+      """{"type":"record","name":"Probe","namespace":"dev.constructive.eo.avro.circe.test","fields":[
+        |  {"name":"id","type":"string"},
+        |  {"name":"note","type":["null","string"],"default":null},
+        |  {"name":"rank","type":"int","default":0}]}""".stripMargin
+    )
+    val lenient = AvroJson.recordWithDefaults(schema)
+    val strict = AvroJson.record(schema)
+    val body = Json.obj("id" -> Json.fromString("a"))
+    val filled = Json.obj(
+      "id" -> Json.fromString("a"),
+      "note" -> Json.Null,
+      "rank" -> Json.fromInt(0),
+    )
+    (lenient.getOption(body).map(lenient.reverseGet) === Some(filled))
+      .and(lenient.getOption(filled).map(lenient.reverseGet) === Some(filled))
+      .and(strict.getOption(body) === None)
+      .and(lenient.getOption(Json.obj("note" -> Json.Null)) === None) // id declares no default
+      .and(
+        lenient.getOption(body.mapObject(_.add("zz", Json.True))) === None
+      ) // unknown key, still a miss
+      .and(lenient.getOption(Json.obj("id" -> Json.Null)) === None) // explicit null, non-nullable
+      .and(
+        lenient.getOption(body.mapObject(_.add("rank", Json.fromString("x")))) === None
+      ) // bad value, no fallback
+      .and(AvroJson.withDefaults(body, schema) === filled)
+      .and(
+        AvroJson.withDefaults(Json.obj("zz" -> Json.True), schema) === Json.obj("zz" -> Json.True)
+      )
+      .and(
+        strict.getOption(AvroJson.withDefaults(body, schema)).map(strict.reverseGet) === Some(
+          filled
+        )
+      )
+  }
+
+  // covers: Avro's resolution is recursive — a nested record field that omits a defaulted field of
+  //   its own is filled too — and a container default is DEEP-COPIED, so two records parsed from
+  //   the same body never alias one mutable array (GenericData.getDefaultValue caches per Field)
+  "recordWithDefaults: nested defaults and no aliasing of a container default" >> {
+    val schema = new Schema.Parser().parse(
+      """{"type":"record","name":"Outer","namespace":"dev.constructive.eo.avro.circe.test","fields":[
+        |  {"name":"inner","type":{"type":"record","name":"Inner","fields":[
+        |     {"name":"req","type":"string"},
+        |     {"name":"opt","type":"int","default":7}]}},
+        |  {"name":"tags","type":{"type":"array","items":"string"},"default":[]}]}""".stripMargin
+    )
+    val lenient = AvroJson.recordWithDefaults(schema)
+    val body = Json.obj("inner" -> Json.obj("req" -> Json.fromString("r")))
+    val filled = Json.obj(
+      "inner" -> Json.obj("req" -> Json.fromString("r"), "opt" -> Json.fromInt(7)),
+      "tags" -> Json.arr(),
+    )
+    val tagsOf = (r: IndexedRecord) =>
+      r.asInstanceOf[GenericRecord].get("tags").asInstanceOf[java.util.List[?]]
+    (lenient.getOption(body).map(lenient.reverseGet) === Some(filled))
+      .and {
+        val first = lenient.getOption(body).map(tagsOf)
+        val second = lenient.getOption(body).map(tagsOf)
+        (first.isDefined && second.isDefined && (first.get ne second.get)) must beTrue
+      }
+  }
+
   // covers: enum symbol / fixed length / bytes shape, in BOTH directions and in every refusal —
   //   the render conventions (enum -> fromString, bytes and fixed -> arrays of signed byte ints),
   //   the prism round-trip back, and the three malformed leaves. One schema and one value: the
