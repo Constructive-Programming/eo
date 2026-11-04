@@ -982,6 +982,42 @@ form of the same fill — normalise the body, then stay on the lawful
 (`dev.constructive.eo.avro.jsoniter.AvroJsoniter`) ships the same
 pair over JSON bytes.
 
+### Omitted `Option[A]` fields — `absentAsNull`
+
+Avro has no implied default: a `["null", A]` field (the usual
+encoding of `Option[A]`) that declares no `"default": null` is
+required, and `recordWithDefaults` refuses a body that omits it,
+exactly as apache-avro's `GenericRecordBuilder` would. Producers
+that write `Option[A]` fields often leave `None` out entirely, so
+the lenient entry points take an opt-in `absentAsNull` flag: an
+absent field whose schema is `Option[A]`-shaped (a union of exactly
+two branches, one of them `null`, in either order) and declares no
+default reads as `null`.
+
+```scala mdoc
+val optionalSchema: Schema = new Schema.Parser().parse(
+  """{"type":"record","name":"Click","fields":[
+    |  {"name":"id","type":"string"},
+    |  {"name":"campaign","type":["null","string"]}]}""".stripMargin
+)
+
+val click = Json.obj("id" -> Json.fromString("c-1"))
+
+AvroJson.recordWithDefaults(optionalSchema).getOption(click)
+
+AvroJson.withDefaults(click, optionalSchema, absentAsNull = true)
+```
+
+A declared default still wins over `null`, a present field is
+parsed as strictly as before, and a non-nullable field without a
+default still misses. Any nullable field qualifies, not only
+`Option[A]`'s `["null", A]`: a bare `null` type and wider unions
+such as `["null", "string", "int"]` read as `null` too. The law
+boundary does not change:
+the omitted field renders back as an explicit `null`. The jsoniter
+twin has the same overloads (`recordWithDefaults(schema,
+absentAsNull)`, `withDefaults`, `jsonToRecordWithDefaults`).
+
 ## Ignoring failures (the `*Unsafe` escape hatch)
 
 For Kafka consumers and other hot-path call sites where the

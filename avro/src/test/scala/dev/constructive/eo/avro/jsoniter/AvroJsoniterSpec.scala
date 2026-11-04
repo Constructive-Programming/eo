@@ -324,6 +324,58 @@ class AvroJsoniterSpec extends Specification:
           (first.isDefined && second.isDefined && (first.get ne second.get)) must beTrue
         }
     }
+
+    // covers: absentAsNull — an absent nullable field with NO declared default reads as null,
+    //   (`null` first or second, a wider union, a bare null type) and in nested records too; a
+    //   declared default still wins;
+    //   a present value is untouched; a non-nullable field without a default still misses; the
+    //   one-argument overload keeps Avro's semantics (no implied null default)
+    "absentAsNull: read an absent nullable field without a default as null" in {
+      val schema = new Schema.Parser().parse(
+        """{"type":"record","name":"Nullable","fields":[
+          |  {"name":"id","type":"string"},
+          |  {"name":"a","type":["null","string"]},
+          |  {"name":"b","type":["string","null"]},
+          |  {"name":"tag","type":["string","null"],"default":"t"},
+          |  {"name":"inner","type":{"type":"record","name":"In","fields":[
+          |     {"name":"x","type":["null","int"]}]}}]}""".stripMargin
+      )
+      val lenient = AvroJsoniter.recordWithDefaults(schema, absentAsNull = true)
+      val body = bytes("""{"id":"a","inner":{}}""")
+      val filled = """{"id":"a","a":null,"b":null,"tag":"t","inner":{"x":null}}"""
+      // not only Option[A]: a wider union and a bare null type read as null too
+      def oneField(name: String, tpe: String): Schema = new Schema.Parser().parse(
+        s"""{"type":"record","name":"$name","fields":[
+           |  {"name":"id","type":"string"},{"name":"f","type":$tpe}]}""".stripMargin
+      )
+      val wide = oneField("Wide", """["null","string","int"]""")
+      val bare = oneField("Bare", "\"null\"")
+      (lenient.getOption(body).map(r => str(lenient.reverseGet(r))) === Some(filled))
+        .and(
+          lenient
+            .getOption(bytes("""{"id":"a","a":"v","inner":{"x":1}}"""))
+            .map(r => str(lenient.reverseGet(r))) ===
+            Some("""{"id":"a","a":"v","b":null,"tag":"t","inner":{"x":1}}""")
+        )
+        .and(lenient.getOption(bytes("""{"inner":{}}""")) === None) // id: not nullable
+        .and(AvroJsoniter.recordWithDefaults(schema).getOption(body) === None)
+        .and(AvroJsoniter.jsonToRecordWithDefaults(body, schema) === None)
+        .and(str(AvroJsoniter.withDefaults(body, schema, absentAsNull = true)) === filled)
+        .and(str(AvroJsoniter.withDefaults(body, schema)) === """{"id":"a","inner":{}}""")
+        .and(AvroJsoniter.record(schema).getOption(bytes(filled)).isDefined must beTrue)
+        .and(
+          AvroJsoniter
+            .recordWithDefaults(wide, absentAsNull = true)
+            .getOption(bytes("""{"id":"a"}"""))
+            .map(r => str(AvroJsoniter.avroToJson(r))) === Some("""{"id":"a","f":null}""")
+        )
+        .and(
+          AvroJsoniter
+            .recordWithDefaults(bare, absentAsNull = true)
+            .getOption(bytes("""{"id":"a"}"""))
+            .map(r => str(AvroJsoniter.avroToJson(r))) === Some("""{"id":"a","f":null}""")
+        )
+    }
   }
 
   // ---- .avro face: the drilled focus is the unit of conversion ----

@@ -5,6 +5,7 @@ import scala.annotation.tailrec
 import cats.Eq
 import dev.constructive.eo.data.PSVec
 import dev.constructive.eo.optics.Plated
+import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
 
 /** Cross-representation optics bridging native Scala types and their Apache Avro on-the-wire form.
@@ -125,5 +126,44 @@ package object avro:
         loop(i + 1, nextK)
     loop(0, 0)
     copy
+
+  /** How the JSON → record bridges treat a field the body OMITS (shared by `AvroJson` and
+    * `AvroJsoniter`): `Refuse` is the strict prism's miss, `Default` takes the schema's declared
+    * default, `DefaultOrNull` also resolves a nullable field with no declared default to `null`.
+    */
+  private[avro] enum AbsentField:
+    case Refuse, Default, DefaultOrNull
+
+    /** The fill for an absent `field` under this mode, as the generic runtime value the walks
+      * produce; `None` is the miss.
+      *
+      * A declared default is apache-avro's own resolution (`GenericData.getDefaultValue` encodes
+      * the default's JSON node to binary and decodes it back under the field schema, so logical
+      * types, unions and nested record defaults come back exactly as the binary path would produce
+      * them). It caches per `Field` and hands back the SAME instance on every call, hence the
+      * `deepCopy`: two parsed records must not alias one mutable array / map / record default. This
+      * is precisely what `GenericRecordBuilder` does, so the value is Avro's answer, not ours.
+      * `hasDefaultValue` is checked FIRST: `getDefaultValue` throws `AvroMissingFieldException` for
+      * a field without one, and a miss here must stay a value. The other throw (an IOException from
+      * the round trip) is unreachable for a schema that parsed: `Schema` validates every default at
+      * parse time.
+      *
+      * `DefaultOrNull` adds one rule Avro itself lacks: a nullable field (`Schema.isNullable` — a
+      * `null` type, or a union with a `null` branch in any position, `Option[A]`'s `["null", A]` as
+      * well as wider unions like `["null", "string", "int"]`) with no declared default reads as
+      * `null`.
+      */
+    def fill(field: Schema.Field): Option[Any] =
+      this match
+        case Refuse                     => None
+        case _ if field.hasDefaultValue =>
+          Some(genericData.deepCopy(field.schema, genericData.getDefaultValue(field)))
+        case DefaultOrNull if field.schema.isNullable => Some(null)
+        case _                                        => None
+
+  /** apache-avro's singleton `GenericData` — the instance `GenericRecordBuilder` uses; holds the
+    * default conversions, so a logical-type default resolves to the value the binary decode does.
+    */
+  private val genericData: GenericData = GenericData.get()
 
 end avro

@@ -3,7 +3,14 @@ package dev.constructive.eo.avro.circe
 import scala.jdk.CollectionConverters.*
 import scala.util.control.NonFatal
 
-import dev.constructive.eo.avro.{AvroBinaryCursor, AvroBytes, AvroCodec, AvroPrism, AvroTraversal}
+import dev.constructive.eo.avro.{
+  AbsentField,
+  AvroBinaryCursor,
+  AvroBytes,
+  AvroCodec,
+  AvroPrism,
+  AvroTraversal
+}
 import dev.constructive.eo.circe.JsonPrism
 import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
 import dev.constructive.eo.optics.{Getter, MendTearPrism, Optic, Prism}
@@ -126,7 +133,7 @@ object AvroJson:
     */
   def record(schema: Schema): MendTearPrism[Json, Json, IndexedRecord, IndexedRecord] =
     Prism[Json, IndexedRecord](
-      json => jsonToRecord(json, schema, defaults = false).toRight(json),
+      json => jsonToRecord(json, schema, AbsentField.Refuse).toRight(json),
       avroToJson,
     )
 
@@ -153,8 +160,25 @@ object AvroJson:
     * @group defaults
     */
   def recordWithDefaults(schema: Schema): MendTearPrism[Json, Json, IndexedRecord, IndexedRecord] =
+    recordWithDefaults(schema, absentAsNull = false)
+
+  /** [[recordWithDefaults]], optionally also accepting an absent NULLABLE field (a `null` type, or
+    * a union with a `null` branch in any position — `Option[A]`'s `["null", A]` or a wider union)
+    * that declares no default: with `absentAsNull = true` it reads as `null`, the way
+    * `Option[A]`-shaped producers routinely omit such a field. A declared default still wins; a
+    * non-nullable field without a default is still a miss. This goes beyond Avro's own resolution
+    * (apache-avro has no implied `null` default), hence opt-in. Same law boundary as
+    * [[recordWithDefaults]]: a body omitting such a field renders back with an explicit `null`.
+    *
+    * @group defaults
+    */
+  def recordWithDefaults(
+      schema: Schema,
+      absentAsNull: Boolean,
+  ): MendTearPrism[Json, Json, IndexedRecord, IndexedRecord] =
+    val absent = lenient(absentAsNull)
     Prism[Json, IndexedRecord](
-      json => jsonToRecord(json, schema, defaults = true).toRight(json),
+      json => jsonToRecord(json, schema, absent).toRight(json),
       avroToJson,
     )
 
@@ -176,9 +200,20 @@ object AvroJson:
     * @group defaults
     */
   def withDefaults(json: Json, schema: Schema): Json =
-    jsonToRecord(json, schema, defaults = true) match
+    withDefaults(json, schema, absentAsNull = false)
+
+  /** [[withDefaults]] with `recordWithDefaults(schema, absentAsNull)`'s `absentAsNull` rule: an
+    * absent `Option[A]`-shaped field with no declared default is rendered as `null`.
+    *
+    * @group defaults
+    */
+  def withDefaults(json: Json, schema: Schema, absentAsNull: Boolean): Json =
+    jsonToRecord(json, schema, lenient(absentAsNull)) match
       case Some(record) => avroToJson(record)
       case None         => json
+
+  private def lenient(absentAsNull: Boolean): AbsentField =
+    if absentAsNull then AbsentField.DefaultOrNull else AbsentField.Default
 
   /** The fundamental codec diagonal — every prism below is this one with its inputs pre-composed
     * via `MendTearPrism.tearFrom` / `mendFrom`. Tears an Avro '''generic runtime value''' into a
@@ -298,8 +333,8 @@ object AvroJson:
   // ---- Json → Avro (the prism's read side) ---------------------------
 
   /** Schema-guided parse of a JSON object into a generic record — [[record]]'s `getOption`
-    * (`defaults = false`) or [[recordWithDefaults]]'s (`defaults = true`). `None` on a non-object,
-    * a key set the schema does not cover, or any field value the field schema rejects.
+    * (`AbsentField.Refuse`) or [[recordWithDefaults]]'s (`Default` / `DefaultOrNull`). `None` on a
+    * non-object, a key set the schema does not cover, or any field value the field schema rejects.
     *
     * The two paths share the walk and differ only in the refusal rules, so the strict one keeps its
     * O(1) cover check and its allocation profile:
@@ -309,9 +344,9 @@ object AvroJson:
     *   - lenient: the cover may be a strict SUBSET, so the key set is checked by counting the
     *     fields the body spells out — `present != obj.size` means some key names no schema field (a
     *     field alias is not a claim: the walk looks names up canonically) — and an absent field
-    *     must carry a default.
+    *     must carry a default (or, under `DefaultOrNull`, be `Option[A]`-shaped).
     */
-  private def jsonToRecord(json: Json, schema: Schema, defaults: Boolean): Option[IndexedRecord] =
+  private def jsonToRecord(json: Json, schema: Schema, absent: AbsentField): Option[IndexedRecord] =
     json.asObject.flatMap { obj =>
       val fields = schema.getFields
       // strict: an exact cover is ONE comparison — same count plus every field present is the same
@@ -320,7 +355,7 @@ object AvroJson:
       // lenient: the cover may be a strict SUBSET, so the key set is checked by counting the fields
       //   the body spells out — `present != obj.size` means some key names no schema field. One
       //   counter threaded through the walk: no extra pass over the schema, no pre-scan of the body.
-      if !defaults && obj.size != fields.size then None
+      if absent == AbsentField.Refuse && obj.size != fields.size then None
       else
         var present = 0
         val rec = fields.asScala.foldLeft(Option(new GenericData.Record(schema))) { (acc, field) =>
@@ -328,57 +363,27 @@ object AvroJson:
             obj(field.name) match
               case Some(value) =>
                 present += 1
-                jsonToValue(value, field.schema, defaults).map { v => r.put(field.pos, v); r }
+                jsonToValue(value, field.schema, absent).map { v => r.put(field.pos, v); r }
               // absent: only the lenient path looks for a default, so the strict one never pays
               // for hasDefaultValue / getDefaultValue on a field the body omits
               case None =>
-                if defaults then defaultValueFor(field).map { v => r.put(field.pos, v); r }
-                else None
+                absent.fill(field).map { v => r.put(field.pos, v); r }
           }
         }
-        if defaults && present != obj.size then None else rec
+        if absent != AbsentField.Refuse && present != obj.size then None else rec
     }
 
-  /** The schema's default for an ABSENT field, as the generic runtime value the walk produces.
-    * `None` when the field declares no default — the lenient parse's miss.
-    *
-    * `GenericData.getDefaultValue` is apache-avro's own resolution: it encodes the default's JSON
-    * node to binary and decodes it back under the field schema, so logical types, unions and nested
-    * record defaults come back exactly as the binary path would produce them (a `string` default as
-    * `Utf8`, an `int` as `Integer`, a record default as a filled `GenericData.Record`). It caches
-    * per `Field` and hands back the SAME instance on every call, hence the `deepCopy`: two parsed
-    * records must not alias one mutable array / map / record default. This is precisely what
-    * `GenericRecordBuilder` does (`RecordBuilderBase.defaultValue`), so the value is Avro's answer,
-    * not ours.
-    *
-    * `hasDefaultValue` is checked FIRST: `getDefaultValue` throws `AvroMissingFieldException` for a
-    * field without one, and a miss here must stay a value, not an exception. The other throw
-    * (`AvroRuntimeException` wrapping an IOException from the encode / decode round trip) is
-    * unreachable for a schema that parsed: `Schema` validates every default with `isValidDefault`
-    * at parse time, so encoding it to binary and reading it back cannot fail.
-    */
-  private def defaultValueFor(field: Schema.Field): Option[Any] =
-    if field.hasDefaultValue then
-      Some(genericData.deepCopy(field.schema, genericData.getDefaultValue(field)))
-    else None
-
-  /** apache-avro's singleton `GenericData` — the instance `GenericRecordBuilder` and
-    * `Schema.compare`-based equality use. Holds the default conversions, so a logical-type default
-    * resolves to the same runtime value the binary decode produces.
-    */
-  private val genericData: GenericData = GenericData.get()
-
   /** Schema-directed inverse of [[valueToJson]]: `None` is the prism miss. `Some(null)` is a
-    * legitimate hit (a `null` schema / union branch). `defaults` threads the absent-field rule
+    * legitimate hit (a `null` schema / union branch). `absent` threads the absent-field rule
     * through nested records, array / map elements and union branches — Avro's resolution is
     * recursive, so a nested record that omits a defaulted field of its own is filled too.
     */
-  private[circe] def jsonToValue(json: Json, schema: Schema, defaults: Boolean): Option[Any] =
+  private[circe] def jsonToValue(json: Json, schema: Schema, absent: AbsentField): Option[Any] =
     schema.getType match
-      case Schema.Type.RECORD => jsonToRecord(json, schema, defaults)
+      case Schema.Type.RECORD => jsonToRecord(json, schema, absent)
       case Schema.Type.UNION  =>
         // first branch that parses wins; Json.Null only ever matches the NULL branch
-        schema.getTypes.asScala.iterator.map(jsonToValue(json, _, defaults)).collectFirst {
+        schema.getTypes.asScala.iterator.map(jsonToValue(json, _, absent)).collectFirst {
           case Some(v) =>
             v
         }
@@ -388,7 +393,7 @@ object AvroJson:
           .flatMap(
             _.foldLeft(Option(new java.util.ArrayList[Any]())) { (acc, elem) =>
               acc.flatMap(list =>
-                jsonToValue(elem, schema.getElementType, defaults).map { v => list.add(v); list }
+                jsonToValue(elem, schema.getElementType, absent).map { v => list.add(v); list }
               )
             }
           )
@@ -399,7 +404,7 @@ object AvroJson:
             _.toIterable.foldLeft(Option(new java.util.LinkedHashMap[String, Any]())) {
               case (acc, (key, value)) =>
                 acc.flatMap(map =>
-                  jsonToValue(value, schema.getValueType, defaults).map { v =>
+                  jsonToValue(value, schema.getValueType, absent).map { v =>
                     map.put(key, v); map
                   }
                 )
@@ -548,7 +553,7 @@ final private class JsonAvroFace(
     rawPrism.to(json) match
       case _: Affine.Miss[rawPrism.X]      => new Affine.Miss[X](json)
       case h: Affine.Hit[rawPrism.X, Json] =>
-        AvroJson.jsonToValue(h.b, schema, defaults = false) match
+        AvroJson.jsonToValue(h.b, schema, AbsentField.Refuse) match
           case Some(value) =>
             new Affine.Hit[X, AvroBytes]((h.b, h.snd), AvroBinaryCursor.writeDatum(value, schema))
           case None => new Affine.Miss[X](json)

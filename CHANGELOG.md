@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **avro: `absentAsNull` on the schema-defaulted JSON → record bridges.** New overloads
+  `AvroJson.recordWithDefaults(schema, absentAsNull)` / `withDefaults(json, schema, absentAsNull)`
+  and the jsoniter twins (`AvroJsoniter.recordWithDefaults`, `withDefaults`,
+  `jsonToRecordWithDefaults`). With `absentAsNull = true`, an ABSENT nullable field (a `null`
+  type, or a union with a `null` branch in any position — `Option[A]`'s `["null", A]` included)
+  that declares no `default` reads as `null`, the way `Option[A]`-shaped producers routinely
+  omit such a field. Avro itself has no implied `null` default, so the existing one-argument
+  forms keep apache-avro's semantics; a declared default still wins, a present field is parsed
+  as strictly as before, and a non-nullable field without a default still misses. Additive and
+  binary-compatible with 1.1.0.
+
+### Fixed
+
+- **build: `tlBaseVersion` is `1.1`.** The 1.1.0 release left it at `1.0`, behind the latest
+  tag, so sbt-typelevel refused to load the build on `main`.
+
 ## [1.1.0] - 2026-11-03
 
 ### Added
