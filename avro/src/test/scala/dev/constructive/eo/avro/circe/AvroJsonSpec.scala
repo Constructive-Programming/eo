@@ -249,6 +249,67 @@ class AvroJsonSpec extends Specification with ScalaCheck:
       )
   }
 
+  // covers: absentAsNull — an absent nullable field with NO declared default reads as null,
+  //   (`null` first or second, a wider union, a bare null type) and in nested records too; a
+  //   declared default still wins;
+  //   a present value is untouched; a non-nullable field without a default still misses; the
+  //   one-argument overloads keep Avro's semantics (no implied null default)
+  "recordWithDefaults(absentAsNull = true): an absent nullable field reads as null" >> {
+    val schema = new Schema.Parser().parse(
+      """{"type":"record","name":"Nullable","namespace":"dev.constructive.eo.avro.circe.test","fields":[
+        |  {"name":"id","type":"string"},
+        |  {"name":"a","type":["null","string"]},
+        |  {"name":"b","type":["string","null"]},
+        |  {"name":"tag","type":["string","null"],"default":"t"},
+        |  {"name":"inner","type":{"type":"record","name":"In","fields":[
+        |     {"name":"x","type":["null","int"]}]}}]}""".stripMargin
+    )
+    val lenient = AvroJson.recordWithDefaults(schema, absentAsNull = true)
+    val body = Json.obj("id" -> Json.fromString("a"), "inner" -> Json.obj())
+    val filled = Json.obj(
+      "id" -> Json.fromString("a"),
+      "a" -> Json.Null,
+      "b" -> Json.Null,
+      "tag" -> Json.fromString("t"),
+      "inner" -> Json.obj("x" -> Json.Null),
+    )
+    val withA = body.mapObject(_.add("a", Json.fromString("v")))
+    // not only Option[A]: a wider union and a bare null type read as null too
+    def oneField(name: String, tpe: String): Schema = new Schema.Parser().parse(
+      s"""{"type":"record","name":"$name","fields":[
+         |  {"name":"id","type":"string"},{"name":"f","type":$tpe}]}""".stripMargin
+    )
+    val wide = oneField("Wide", """["null","string","int"]""")
+    val bare = oneField("Bare", "\"null\"")
+    (lenient.getOption(body).map(lenient.reverseGet) === Some(filled))
+      .and(
+        lenient.getOption(withA).map(lenient.reverseGet) === Some(
+          filled.mapObject(_.add("a", Json.fromString("v")))
+        )
+      )
+      .and(lenient.getOption(Json.obj("inner" -> Json.obj())) === None) // id: not nullable
+      .and(AvroJson.recordWithDefaults(schema).getOption(body) === None)
+      .and(AvroJson.withDefaults(body, schema, absentAsNull = true) === filled)
+      .and(AvroJson.withDefaults(body, schema) === body)
+      .and(AvroJson.record(schema).getOption(filled).isDefined must beTrue)
+      .and(
+        AvroJson
+          .recordWithDefaults(wide, absentAsNull = true)
+          .getOption(Json.obj("id" -> Json.fromString("a")))
+          .map(AvroJson.avroToJson) === Some(
+          Json.obj("id" -> Json.fromString("a"), "f" -> Json.Null)
+        )
+      )
+      .and(
+        AvroJson
+          .recordWithDefaults(bare, absentAsNull = true)
+          .getOption(Json.obj("id" -> Json.fromString("a")))
+          .map(AvroJson.avroToJson) === Some(
+          Json.obj("id" -> Json.fromString("a"), "f" -> Json.Null)
+        )
+      )
+  }
+
   // covers: Avro's resolution is recursive — a nested record field that omits a defaulted field of
   //   its own is filled too — and a container default is DEEP-COPIED, so two records parsed from
   //   the same body never alias one mutable array (GenericData.getDefaultValue caches per Field)

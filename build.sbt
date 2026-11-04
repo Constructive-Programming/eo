@@ -9,7 +9,7 @@ val scala3Version = "3.9.0"
 
 // 1.x is binary-compatible (MiMa-checked from 1.0.0; see mima.sbt, which
 // also keeps the 0.x breaking-change history).
-ThisBuild / tlBaseVersion := "1.0"
+ThisBuild / tlBaseVersion := "1.1"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)

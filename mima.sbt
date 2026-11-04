@@ -1,4 +1,8 @@
-import com.typesafe.tools.mima.core.{DirectMissingMethodProblem, ProblemFilters}
+import com.typesafe.tools.mima.core.{
+  DirectMissingMethodProblem,
+  IncompatibleMethTypeProblem,
+  ProblemFilters,
+}
 
 // MiMa setup — binary-compatibility checking, wired transitively
 // through sbt-typelevel-ci-release.
@@ -96,6 +100,23 @@ ThisBuild / mimaBinaryIssueFilters ++= Seq(
     "dev.constructive.eo.avro.jsoniter.AvroJsoniter.parseSlice"
   ),
   ProblemFilters.exclude[DirectMissingMethodProblem](
+    "dev.constructive.eo.avro.jsoniter.AvroJsoniter#SchemaCodec.this"
+  ),
+)
+
+// `absentAsNull` (`Option[A]`-shaped fields omitted from the body read as `null`) widens that same internal
+// `Boolean` to the three-state `AbsentField` (`Refuse` / `Default` / `DefaultOrNull`), so the SAME
+// three internal descriptors move again, this time against 1.1.0. Public surface: the
+// `recordWithDefaults` / `withDefaults` / `jsonToRecordWithDefaults` one-argument forms keep their
+// descriptors and the `absentAsNull` overloads are additive.
+ThisBuild / mimaBinaryIssueFilters ++= Seq(
+  ProblemFilters.exclude[IncompatibleMethTypeProblem](
+    "dev.constructive.eo.avro.circe.AvroJson.jsonToValue"
+  ),
+  ProblemFilters.exclude[IncompatibleMethTypeProblem](
+    "dev.constructive.eo.avro.jsoniter.AvroJsoniter.parseSlice"
+  ),
+  ProblemFilters.exclude[IncompatibleMethTypeProblem](
     "dev.constructive.eo.avro.jsoniter.AvroJsoniter#SchemaCodec.this"
   ),
 )
