@@ -321,7 +321,7 @@ CEK machine:     (lam i0 (con integer 5))
 ## Correctness: the CEK machine as oracle
 
 The demo pins one semantics (`Semantics.scala`): Plutus V3 at protocol version
-11, builtin semantics variant E — the configuration Scalus 1.3.0 runs the Plutus
+11, builtin semantics variant E — the configuration Scalus 1.5.0 runs the Plutus
 conformance suite under. Builtins without a direct implementation, and builtins
 used as values, run Scalus' own CEK meanings (`BuiltinRuntime`); a meaning that
 hands back one of its arguments (`ifThenElse`, `chooseList`, …) hands back the

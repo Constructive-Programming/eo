@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-05
+
+### Changed
+
+- **Dependency bumps.** circe `0.14.16` → `0.14.17`, zio `2.1.26` → `2.1.27`, zio-schema
+  `1.7.5` → `1.9.0`, zio-json `0.7.44` → `1.1.1` (major; the `eo.zio.json` surface is
+  unchanged), jsoniter-scala `2.41.2` → `2.42.2`, hearth `0.4.2` → `0.4.3`, kindlings
+  `0.3.2` → `0.3.3` (all three derivations), Spark `4.2.0` → `4.3.0`, Scalus `1.3.0` →
+  `1.5.0` (demo only; the Plutus V3 / PV11 variant-E conformance suite still agrees), ASM
+  `9.11` → `9.11.1`, sbt `1.13.0` → `1.13.1`, scalafmt `3.11.1` → `3.11.5`. Scala stays
+  `3.9.0`: Scalus publishes no `scalus-plugin` for `3.10.x`, so the UPLC demo cannot move yet.
+
 ## [1.2.0] - 2026-11-05
 
 ### Added
@@ -1296,7 +1308,8 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/Constructive-Programming/eo/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/Constructive-Programming/eo/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/Constructive-Programming/eo/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/Constructive-Programming/eo/compare/v1.0.0...v1.1.0

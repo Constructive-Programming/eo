@@ -25,7 +25,7 @@ import org.specs2.mutable.Specification
   * '''builds''' the NamedTuple (kindlings' `AvroDecoderHandleAsNamedTupleRule`) blows up with
   * `wrong number of arguments at inlining … expected: 0, found: N` plus a secondary
   * `a reference to method decode_…$macro$N was used outside the scope where it was defined`. That
-  * `n < 23` branch is unchanged in hearth 0.4.2 — only arity '''>= 23''' gained a `Tuple.fromArray`
+  * `n < 23` branch is unchanged in hearth 0.4.3 — only arity '''>= 23''' gained a `Tuple.fromArray`
   * path — so the TupleN spelling stays mandatory at 2..22, permanently.
   *
   * Every other in-repo `.fields` spec hand-declares its own `AvroCodec[NamedTuple[…]]` given
@@ -143,12 +143,12 @@ class NamedTupleSpellingSpec extends Specification:
   // covers: at 23+ selectors there IS no `TupleN` spelling — `(A, …, A)` with 23 components IS
   //   the `*:` cons chain — so the TupleN spelling above cannot reach that far. This used to be
   //   a pinned FAILURE (hearth 0.4.0 emitted `new *:(args…)` and `*:` takes no value params).
-  //   hearth 0.4.2's `SyntheticNamedTupleConstructor` routes arity >= 23 through
+  //   hearth 0.4.3's `SyntheticNamedTupleConstructor` routes arity >= 23 through
   //   `Tuple.fromArray` instead, so the row is now the positive assertion its own note asked for.
   //   Still given-free, like every other row here — this is the auto-derivation path.
   //   The wide end of the surface (mixed field types, un-selected siblings, reference identity)
   //   is covered separately by `WideFieldsArityCeilingSpec`.
-  "`.fields` at arity 23: compiles and round-trips on hearth 0.4.2 (ceiling broken)" >> {
+  "`.fields` at arity 23: compiles and round-trips on hearth 0.4.3 (ceiling broken)" >> {
     val record = wide23Record
     val L = codecPrism[Wide23]
       .fields(
@@ -188,7 +188,7 @@ class NamedTupleSpellingSpec extends Specification:
         org.specs2.execute.Failure("expected Some(namedTuple)"): org.specs2.execute.Result
   }
 
-  // covers: hearth 0.4.2's fix is scoped to arity >= 23 ONLY — its `n < 23` branch still emits
+  // covers: hearth 0.4.3's fix is scoped to arity >= 23 ONLY — its `n < 23` branch still emits
   //   `new <Values-primary-constructor>(args…)`, which for a cons chain is the value-parameterless
   //   `new *:(a, b)`. So `MacroSelectors.tupleTypeOf`'s "TupleN at <= 22, cons fold above" split is
   //   a PERMANENT requirement of the hearth contract, not a workaround the bump makes redundant:

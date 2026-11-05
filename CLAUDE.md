@@ -4,7 +4,7 @@
 
 `cats-eo` — an Existential Optics library for Scala 3, built on top of
 [cats](https://typelevel.org/cats/). Scala `3.9.0` (the `scala3Version` pin in
-`build.sbt`) via sbt `1.13.0` (`project/build.properties`), runs on JDK 17, 21, or 25 — but the `kyo` module (and therefore the docs site) needs JDK 25; on older JVMs it drops out of the root aggregate.
+`build.sbt`) via sbt `1.13.1` (`project/build.properties`), runs on JDK 17, 21, or 25 — but the `kyo` module (and therefore the docs site) needs JDK 25; on older JVMs it drops out of the root aggregate.
 
 Human contributors: see [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the
 day-one bootstrap. This file is the parallel guide for AI agents.
@@ -257,7 +257,7 @@ Operator runbook: `.github/bench/README.md`.
 
 `generics/` is a separate sub-project that synthesises boilerplate
 optics at compile time, built on top of Mateusz Kubuszok's
-[`com.kubuszok:hearth_3:0.4.2`](https://github.com/MateuszKubuszok/hearth)
+[`com.kubuszok:hearth_3:0.4.3`](https://github.com/MateuszKubuszok/hearth)
 macro-commons library. Two entry points so far:
 
 ```scala

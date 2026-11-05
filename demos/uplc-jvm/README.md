@@ -121,7 +121,7 @@ CborScript ──decode──▶ SourceProgram ──Typer──▶ TypedProgram
 ## Correctness
 
 The semantics are pinned in `Semantics.scala`: Plutus V3 at protocol version 11
-("van Rossem"), builtin semantics variant E — the configuration Scalus 1.3.0
+("van Rossem"), builtin semantics variant E — the configuration Scalus 1.5.0
 runs the Plutus conformance suite under. The oracle and the generated code's
 runtime both read it from there.
 

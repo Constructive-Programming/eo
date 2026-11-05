@@ -14,7 +14,7 @@ expression. No row is ever decoded into a JVM object.
 libraryDependencies ++= Seq(
   "dev.constructive" %% "cats-eo-spark" % "@VERSION@",
   // Spark publishes Scala 2.13 artifacts only; Scala 3 consumes them like this:
-  ("org.apache.spark" %% "spark-connect-client-jvm" % "4.2.0").cross(CrossVersion.for3Use2_13),
+  ("org.apache.spark" %% "spark-connect-client-jvm" % "4.3.0").cross(CrossVersion.for3Use2_13),
 )
 ```
 

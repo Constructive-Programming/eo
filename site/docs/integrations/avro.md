@@ -45,7 +45,7 @@ full table.
 
 The codec backend is
 [kindlings-avro-derivation](https://github.com/MateuszKubuszok/kindlings-avro-derivation)
-0.3.2, which pins apache-avro 1.12.2. cats-eo-avro wraps the
+0.3.3, which pins apache-avro 1.12.2. cats-eo-avro wraps the
 kindlings `AvroEncoder[A]` / `AvroDecoder[A]` / `AvroSchemaFor[A]`
 triplet in a single [`AvroCodec[A]`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/main/scala/dev/constructive/eo/avro/AvroCodec.scala)
 typeclass so user code summons one thing per type.

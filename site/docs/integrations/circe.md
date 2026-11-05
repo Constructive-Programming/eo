@@ -177,7 +177,7 @@ already in scope from the first fence) does the job, given the
 dependency:
 
 ```scala
-libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "0.3.2"
+libraryDependencies += "com.kubuszok" %% "kindlings-circe-derivation" % "0.3.3"
 ```
 
 A hand-written codec works just as well. Miss it and the `.fields`

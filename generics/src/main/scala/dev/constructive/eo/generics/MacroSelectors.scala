@@ -161,7 +161,7 @@ object MacroSelectors:
     * '''is''' the cons chain — so the fallback is forced. hearth ≥ 0.4.2 handles exactly that range
     * through `Tuple.fromArray`; on hearth &lt; 0.4.2 the hazard survives there for consumers.
     *
-    * '''Both branches are load-bearing, permanently.''' hearth 0.4.2's fix is scoped to arity ≥ 23:
+    * '''Both branches are load-bearing, permanently.''' hearth 0.4.3's fix is scoped to arity ≥ 23:
     * its `case n if n < 23` arm still emits the primary-constructor call, so a cons chain below 23
     * fails exactly as it did on 0.4.0. Collapsing this to a uniform cons fold would therefore
     * re-break every `.fields` call of arity 2..22. `NamedTupleSpellingSpec` pins both directions.

@@ -10,7 +10,7 @@ import scalus.uplc.{BuiltinRuntime, CardanoBuiltins, DefaultFun, DefaultUni, Typ
 import scalus.utils.Utils
 
 /** The single Plutus semantics this demo targets — Plutus V3 at protocol version 11 ("van Rossem"),
-  * builtin semantics variant E, the same configuration Scalus 1.3.0 runs the Plutus conformance
+  * builtin semantics variant E, the same configuration Scalus 1.5.0 runs the Plutus conformance
   * suite under. The oracle VM and the generated code's runtime both read it from here, so they
   * cannot drift apart.
   */

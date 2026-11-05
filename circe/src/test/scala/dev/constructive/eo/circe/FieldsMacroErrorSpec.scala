@@ -111,7 +111,7 @@ class FieldsMacroErrorSpec extends Specification:
         e.message
           .contains(
             "(`import hearth.kindlings.circederivation.KindlingsCodecAsObject`,"
-              + " dependency `\"com.kubuszok\" %% \"kindlings-circe-derivation\" % \"0.3.2\"`),"
+              + " dependency `\"com.kubuszok\" %% \"kindlings-circe-derivation\" % \"0.3.3\"`),"
           )
     )
 
