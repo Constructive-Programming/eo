@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-05
+
 ### Added
 
 - **generics: Multiplate — `plate[S]` over containers and mutually recursive families** (#153).
@@ -1294,7 +1296,10 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Constructive-Programming/eo/compare/v1.1.1...v1.2.0
+[1.1.1]: https://github.com/Constructive-Programming/eo/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/Constructive-Programming/eo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Constructive-Programming/eo/compare/v0.18.0...v1.0.0
 [0.18.0]: https://github.com/Constructive-Programming/eo/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...v0.17.0
