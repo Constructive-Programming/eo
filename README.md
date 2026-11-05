@@ -25,19 +25,19 @@ that does extra work is treated as a bug to fix.
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo" % "1.1.1"
+libraryDependencies += "dev.constructive" %% "cats-eo" % "1.2.0"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "1.1.1" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "1.1.1" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "1.1.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "1.1.1" // JDK 25; experimental
-libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "1.1.1"
+libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "1.2.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "1.2.0" % Test
+libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "1.2.0"
+libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "1.2.0" // JDK 25; experimental
+libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "1.2.0"
 ```
 
 Requires Scala 3.9.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
