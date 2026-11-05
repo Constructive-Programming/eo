@@ -183,6 +183,8 @@ sealed abstract class Optional[S, T, A, B]
       case Right(a) => f(a)
       case Left(_)  => F.empty
 
+  // CPD-OFF — the fused `andThen` overloads share their signatures and the `Optional.fused(…)`
+  // call shape with each other and with Lens / Prism / Iso by design (one per inner optic type).
   /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another. An inner miss
     * lifts the inner's leftover back through the outer's [[rebuild]] (the outer's own intermediate,
     * not a re-read). `inline` so a deep `optional.andThen(optional)…` chain splices distinct
@@ -222,25 +224,12 @@ sealed abstract class Optional[S, T, A, B]
       rebuild = (m, d) => rebuild(m._1, inner.enplace(m._2, d)),
     )
 
-  /** Fused `Optional.andThen(Lens)` — [[SplitCombineLens]] / [[SimpleLens]] (macro-lens) inner. */
-  def andThen[C, D, XI](inner: SplitCombineLens[A, B, C, D, XI]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, (M, XI)](
-      getOrModify = s => getOrModify(s).map(inner.get),
-      modify = (s, f) =>
-        modifyAt(
-          s,
-          a =>
-            val (xi, c) = inner.split(a)
-            inner.combine(xi, f(c)),
-        ),
-      to = s =>
-        to(s) match
-          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
-          case h: Affine.Hit[X, A] =>
-            val (xi, c) = inner.split(h.b)
-            new Affine.Hit((h.snd, xi), c),
-      rebuild = (m, d) => rebuild(m._1, inner.combine(m._2, d)),
-    )
+  /** Fused `Optional.andThen(Lens)` for a [[SplitCombineLens]] / [[SimpleLens]] (macro-lens) inner:
+    * the lens viewed as a [[GetReplaceLens]] (write = combine its complement with the new focus),
+    * so it shares the fusion above.
+    */
+  def andThen[C, D, XI](lens: SplitCombineLens[A, B, C, D, XI]): Optional[S, T, C, D] =
+    andThen(new GetReplaceLens[A, B, C, D](lens.get, (a, d) => lens.combine(lens.split(a)._1, d)))
 
   /** Fused `Optional.andThen(Prism)` — outer Optional's hit fed into a Prism; an inner miss lifts
     * the prism's leftover through the outer's [[rebuild]].
@@ -276,3 +265,5 @@ sealed abstract class Optional[S, T, A, B]
           case h: Affine.Hit[X, A] => new Affine.Hit(h.snd, inner.get(h.b)),
       rebuild = (m, d) => rebuild(m, inner.reverseGet(d)),
     )
+
+  // CPD-ON

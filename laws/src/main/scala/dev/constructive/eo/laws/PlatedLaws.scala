@@ -55,6 +55,14 @@ object PlatedLaws:
     /** `transformM` instantiated at `cats.Id` agrees with pure `transform` (O'Connor 2011 §5.1:
       * `mapFamily` is `mapFamilyM` at `Id`).
       */
+    /** [[Plated.mapChildren]] (the one-level rewrite `transform` recurses through — generated as a
+      * direct match by `generics.plate`) agrees with modifying the immediate children through
+      * [[Plated.plate]].
+      */
+    def mapChildrenConsistent(s: S, g: S => S): Boolean =
+      import laws.P
+      P.mapChildren(s, g) == P.plate.modify(g)(s)
+
     def transformMIdConsistent(s: S, f: S => S): Boolean =
       import laws.P
       Plated.transformM[cats.Id, S](f)(s) == Plated.transform(f)(s)

@@ -87,6 +87,8 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
     ),
     name = Some("Check scalafix"),
   ),
+  // Copy-paste detection at 25 tokens, ratcheted on the change (project/Cpd.scala).
+  WorkflowStep.Sbt(List("cpdCheck"), name = Some("Check duplication (CPD)")),
 )
 
 // The UPLC → JVM demo sits outside the root aggregate (Scalus drags in JNI
@@ -626,6 +628,7 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
 
 lazy val root: Project = project
   .in(file("."))
+  .settings(Cpd.settings)
   .aggregate(
     (Seq[ProjectReference](
       core,

@@ -73,6 +73,14 @@ class OptionalBench extends JmhDefaults:
       .andThen(eoN1)
       .andThen(eoFlag)
 
+  // ---- Fused Optional ∘ macro lens (SplitCombineLens): order.lines.head.qty ----
+  // The `Optional.andThen(SplitCombineLens)` overload, against Monocle's composed Optional and the
+  // hand-written pattern match.
+
+  @Benchmark def eoModify_firstQty: Order = DomainOptics.eoFirstQty.modify(_ + 1)(order)
+  @Benchmark def mModify_firstQty: Order = DomainOptics.mFirstQty.modify(_ + 1)(order)
+  @Benchmark def handModify_firstQty: Order = DomainOptics.handFirstQty(_ + 1)(order)
+
   // ---- Depth 0 (leaf) -----------------------------------------------
 
   @Benchmark def eoModify_0: Nested0 = eoFlag.modify(_.toUpperCase)(leaf)

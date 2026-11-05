@@ -27,12 +27,15 @@ enum Bin:
   case Leaf(value: Int)
   case Node(left: Bin, right: Bin)
 
-// Container-bearing recursive ADT: Option + List + ArraySeq + Chain (via Traverse[Chain]).
+// Container-bearing recursive ADT: Option + List + Vector + ArraySeq + Seq + Chain (via Traverse[Chain]).
+// `seqChildren` is generated as a List: plate must rebuild a Seq field in its own collection type.
 final case class RoseNode(
     value: Int,
     optChild: Option[RoseNode],
     listChildren: List[RoseNode],
+    vecChildren: Vector[RoseNode],
     arrChildren: ArraySeq[RoseNode],
+    seqChildren: Seq[RoseNode],
     chainChildren: Chain[RoseNode],
 )
 
@@ -56,6 +59,16 @@ enum AstExpr:
 
 type AstLang = AstStm | AstExpr | AstVar | AstTyp
 
+// Single-sorted ADT whose children include a narrower member sort (`Fig.Dot`) — a direct slot and a
+// container slot, both on the rebuild-cursor path — so a sort-swapping write must keep the original.
+// An `Array` child field: the one container whose storage is mutable, so the in-place children
+// reuse in `transform` / `transformM` must work on a copy, never on the field itself.
+final case class ArrNode(v: Int, kids: Array[ArrNode])
+
+enum Fig:
+  case Dot(v: Int)
+  case Group(lead: Fig.Dot, dots: List[Fig.Dot], rest: Option[Fig])
+
 object PlatedFixtures:
 
   // Macro-derived self-traversals — exercised by the discipline laws below.
@@ -63,6 +76,8 @@ object PlatedFixtures:
   given platedBin: Plated[Bin] = plate[Bin]
   given platedRose: Plated[RoseNode] = plate[RoseNode]
   given platedLang: Plated[AstLang] = plate[AstLang]
+  given platedFig: Plated[Fig] = plate[Fig]
+  given platedArr: Plated[ArrNode] = plate[ArrNode]
 
   private def genExpr(depth: Int): Gen[Expr] =
     val leaf = Gen.alphaLowerStr.map(s => Expr.Var(if s.isEmpty then "x" else s))
@@ -97,7 +112,8 @@ object PlatedFixtures:
   given Arbitrary[Bin] = Arbitrary(Gen.sized(d => genBin(math.min(d, 8))))
 
   private def genRose(depth: Int): Gen[RoseNode] =
-    val leaf = Gen.choose(-50, 50).map(RoseNode(_, None, Nil, ArraySeq.empty, Chain.empty))
+    val leaf = Gen.choose(-50, 50).map(roseLeaf)
+    def kids = Gen.choose(0, 2).flatMap(Gen.listOfN(_, genRose(depth - 1)))
     if depth <= 0 then leaf
     else
       Gen.frequency(
@@ -106,14 +122,47 @@ object PlatedFixtures:
           for
             v <- Gen.choose(-50, 50)
             opt <- Gen.option(genRose(depth - 1))
-            lst <- Gen.choose(0, 2).flatMap(Gen.listOfN(_, genRose(depth - 1)))
-            arr <- Gen.choose(0, 2).flatMap(Gen.listOfN(_, genRose(depth - 1))).map(ArraySeq.from)
-            ch <- Gen.choose(0, 2).flatMap(Gen.listOfN(_, genRose(depth - 1))).map(Chain.fromSeq)
-          yield RoseNode(v, opt, lst, arr, ch)
+            lst <- kids
+            vec <- kids.map(_.toVector)
+            arr <- kids.map(ArraySeq.from)
+            sq <- kids
+            ch <- kids.map(Chain.fromSeq)
+          yield RoseNode(v, opt, lst, vec, arr, sq, ch)
         ),
       )
 
   given Arbitrary[RoseNode] = Arbitrary(Gen.sized(d => genRose(math.min(d, 3))))
+
+  def roseLeaf(v: Int): RoseNode =
+    RoseNode(v, None, Nil, Vector.empty, ArraySeq.empty, Nil, Chain.empty)
+
+  // ---- Bin helpers shared by the hand-built-plate and stack-safety tests ----
+
+  val binKids: Bin => List[Bin] = {
+    case Bin.Node(l, r) => List(l, r)
+    case Bin.Leaf(_)    => Nil
+  }
+
+  val binRebuild: (Bin, List[Bin]) => Bin = {
+    case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
+    case (leaf, _)                       => leaf
+  }
+
+  /** `Node(Node(Leaf(1), Leaf(2)), Leaf(3))`. */
+  val small: Bin = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
+
+  val foldAdjacent: Bin => Option[Bin] = {
+    case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
+    case _                                  => None
+  }
+
+  val incLeaf: Bin => Bin = { case Bin.Leaf(v) => Bin.Leaf(v + 1); case other => other }
+
+  /** A left-leaning spine of `n` nodes: `Node(…Node(Leaf(0), Leaf(0))…, Leaf(n - 1))`. */
+  def spine(n: Int): Bin =
+    @tailrec def go(deep: Bin, i: Int): Bin =
+      if i < n then go(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
+    go(Bin.Leaf(0), 0)
 
   private val genAstVar: Gen[AstVar] =
     Gen.oneOf("x", "y", "z", "count").map(AstVar(_))
@@ -156,7 +205,7 @@ object PlatedFixtures:
   */
 class PlatedSpec extends Specification with Discipline:
 
-  import PlatedFixtures.given
+  import PlatedFixtures.{*, given}
 
   // ----- Discipline laws on the *derived* plates (macro correctness lives here) -----
 
@@ -175,7 +224,7 @@ class PlatedSpec extends Specification with Discipline:
   )
 
   checkAll(
-    "Plated[RoseNode] (macro-derived: Option + List + ArraySeq + Chain[Traverse])",
+    "Plated[RoseNode] (macro-derived: Option + List + Vector + ArraySeq + Seq + Chain[Traverse])",
     new PlatedTests[RoseNode]:
       val laws = new PlatedLaws[RoseNode] {}
     .plated,
@@ -239,12 +288,7 @@ class PlatedSpec extends Specification with Discipline:
   // ----- Behaviour: rewrite re-fires to a fixpoint (bottom-up constant fold) -----
 
   "rewrite folds Node(Leaf,Leaf) repeatedly until a single total remains" >> {
-    val foldAdjacent: Bin => Option[Bin] = {
-      case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
-      case _                                  => None
-    }
-    val tree = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
-    Plated.rewrite(foldAdjacent)(tree) == Bin.Leaf(6)
+    Plated.rewrite(foldAdjacent)(small) == Bin.Leaf(6)
   }
 
   // ----- Behaviour: stack safety via the hand-built selfChildren + extension API -----
@@ -252,36 +296,15 @@ class PlatedSpec extends Specification with Discipline:
   "transform / universe are stack-safe on a 100k-deep tree (hand-built plate)" >> {
     // A hand-built plate via the List-shaped `Plated.fromChildren` convenience — no macro,
     // exercises the core constructor and the `.transformAll` / `.universeOf` extension surface.
-    val binPlate = Plated
-      .fromChildren[Bin](
-        {
-          case Bin.Node(l, r) => List(l, r)
-          case Bin.Leaf(_)    => Nil
-        },
-        {
-          case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
-          case (leaf, _)                       => leaf
-        },
-      )
-      .plate
+    val binPlate = Plated.fromChildren[Bin](binKids, binRebuild).plate
 
     val n = 100000
-    @tailrec def spine(deep: Bin, i: Int): Bin =
-      if i < n then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
-    val deep = spine(Bin.Leaf(0), 0)
+    val deep = spine(n)
 
     // Increment every leaf; must not blow the stack.
-    val bumped = binPlate.transformAll {
-      case Bin.Leaf(v) => Bin.Leaf(v + 1)
-      case node        => node
-    }(deep)
+    val bumped = binPlate.transformAll(incLeaf)(deep)
 
     // Exercise the remaining extension-API methods (`childrenOf`, `rewriteAll`) on a small tree.
-    val small = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
-    val foldAdjacent: Bin => Option[Bin] = {
-      case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
-      case _                                  => None
-    }
     val extrasOk =
       binPlate.childrenOf(small).length == 2 &&
         binPlate.rewriteAll(foldAdjacent)(small) == Bin.Leaf(6)
@@ -296,29 +319,11 @@ class PlatedSpec extends Specification with Discipline:
     // `rewrite` trampolines through `cats.Eval`, so neither the bottom-up *descent* over a deep
     // tree nor the *fixpoint re-firing* at a single node runs on the JVM call stack. Both of the
     // shapes below would overflow a naive call-stack implementation; both must complete here.
-    val binPlate = Plated
-      .fromChildren[Bin](
-        {
-          case Bin.Node(l, r) => List(l, r)
-          case Bin.Leaf(_)    => Nil
-        },
-        {
-          case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
-          case (leaf, _)                       => leaf
-        },
-      )
+    val binPlate = Plated.fromChildren[Bin](binKids, binRebuild)
 
     // Axis 1 — deep descent: a 100k-deep spine, folding Node(Leaf, Leaf) at every node up to a
     // single Leaf. Each fire re-processes only a shallow result, so this stresses the descent.
-    val n = 100000
-    @tailrec def spine(deep: Bin, i: Int): Bin =
-      if i <= n then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
-    val deep = spine(Bin.Leaf(0), 1)
-    val foldAdjacent: Bin => Option[Bin] = {
-      case Bin.Node(Bin.Leaf(a), Bin.Leaf(b)) => Some(Bin.Leaf(a + b))
-      case _                                  => None
-    }
-    val descentOk = Plated.rewrite(foldAdjacent)(deep)(using binPlate) match
+    val descentOk = Plated.rewrite(foldAdjacent)(spine(100000))(using binPlate) match
       case Bin.Leaf(_) => true
       case _           => false
 
@@ -364,32 +369,22 @@ class PlatedSpec extends Specification with Discipline:
   "rebuild fires only for non-leaf nodes, on both the recursive and machine-handoff paths" >> {
     var rebuildCount = 0
     val spyPlate: Plated[Bin] = Plated.fromChildren[Bin](
-      {
-        case Bin.Node(l, r) => List(l, r)
-        case Bin.Leaf(_)    => Nil
-      },
+      binKids,
       (parent, kids) =>
         rebuildCount += 1
-        (parent, kids) match
-          case (Bin.Node(_, _), l :: r :: Nil) => Bin.Node(l, r)
-          case (leaf, _)                       => leaf,
+        binRebuild(parent, kids),
     )
-    val bump: Bin => Bin = { case Bin.Leaf(v) => Bin.Leaf(v + 1); case n => n }
 
     // (a) shallow: Node(Node(Leaf,Leaf),Leaf) has exactly 2 internal nodes.
-    val shallow = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
     rebuildCount = 0
-    Plated.transform(bump)(shallow)(using spyPlate)
+    Plated.transform(incLeaf)(small)(using spyPlate)
     val shallowCount = rebuildCount
 
     // (b) deep: a 1500-deep left spine crosses transformRecursionLimit (512), handing the
     // rest to transformMachine. Exactly one Node per spine level, so the count is exact.
     val depth = 1500
-    @tailrec def spine(deep: Bin, i: Int): Bin =
-      if i < depth then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
-    val deep = spine(Bin.Leaf(0), 0)
     rebuildCount = 0
-    Plated.transform(bump)(deep)(using spyPlate)
+    Plated.transform(incLeaf)(spine(depth))(using spyPlate)
     val deepCount = rebuildCount
 
     (shallowCount must beEqualTo(2)).and(deepCount must beEqualTo(depth))
@@ -401,14 +396,10 @@ class PlatedSpec extends Specification with Discipline:
     // first step makes the left child negative and the second makes it positive again exposes the
     // stale-parent bug via `plateComposeModify`.
     val buggyPlate: Plated[Bin] = Plated.fromChildren[Bin](
-      {
-        case Bin.Node(l, r) => List(l, r)
-        case Bin.Leaf(_)    => Nil
-      },
+      binKids,
       {
         case (Bin.Node(_, oldR), (l @ Bin.Leaf(v)) :: _ :: Nil) if v < 0 => Bin.Node(l, oldR)
-        case (Bin.Node(_, _), l :: r :: Nil)                             => Bin.Node(l, r)
-        case (leaf, _)                                                   => leaf
+        case (parent, kids)                                              => binRebuild(parent, kids)
       },
     )
     val buggyLaws = new PlatedLaws[Bin](using buggyPlate) {}
@@ -419,6 +410,54 @@ class PlatedSpec extends Specification with Discipline:
     (buggyLaws.plateModifyIdentity(tree) must beTrue)
       .and(buggyLaws.transformIdentity(tree) must beTrue)
       .and(buggyLaws.plateComposeModify(tree, f, g) must beFalse)
+  }
+
+  "transform / transformM / universe never mutate the input's own child storage" >> {
+    val leafA = ArrNode(1, Array.empty)
+    val leafB = ArrNode(2, Array.empty)
+    val kids = Array(leafA, leafB)
+    val root = ArrNode(0, kids)
+    val bump: ArrNode => ArrNode = n => n.copy(v = n.v + 10)
+
+    val pure = Plated.transform(bump)(root)
+    val effectful = Plated.transformM[Option, ArrNode](n => Some(bump(n)))(root)
+    val all = Plated.universe(root)
+
+    (kids(0) must beTheSameAs(leafA))
+      .and(kids(1) must beTheSameAs(leafB))
+      .and(pure.kids.map(_.v).toList === List(11, 12))
+      .and(effectful.map(_.kids.map(_.v).toList) === Some(List(11, 12)))
+      .and(all.map(_.v) === List(0, 1, 2))
+  }
+
+  "sort-swapping writes keep the original in every slot kind; Seq slots keep their collection type" >> {
+    // Union plate: SBlock's List[AstStm] slot rejects an AstVar.
+    val block = AstStm.SBlock(List(AstStm.SAss(AstVar("x"), AstExpr.EInt(1))))
+    val unionKept = Plated[AstLang].plate.replace(AstVar("w"))(block)
+
+    // Single-sorted plate: Group's `lead: Fig.Dot` and `dots: List[Fig.Dot]` reject a Group, while
+    // the `rest: Option[Fig]` slot accepts it.
+    val g = new Fig.Group(Fig.Dot(1), List(Fig.Dot(2), Fig.Dot(3)), Some(Fig.Dot(4)))
+    val other = Fig.Group(Fig.Dot(0), Nil, None)
+    val figKept = Plated[Fig].plate.replace(other)(g)
+
+    // A List-backed `Seq` slot is rebuilt as a List, not converted to another Seq.
+    val rose = roseLeaf(0).copy(seqChildren = List(roseLeaf(0), roseLeaf(0)))
+    val seqKeepsList = Plated[RoseNode].plate.modify(_.copy(value = 1))(rose).seqChildren match
+      case l: List[RoseNode] => l.map(_.value) == List(1, 1)
+      case _                 => false
+
+    // Same through the generated mapChildren (transform's recursive path).
+    val unionKeptMap = Plated[AstLang].mapChildren(block, _ => AstVar("w"))
+    val figKeptMap = Plated[Fig].mapChildren(g, _ => other)
+
+    val figExpected = g.copy(rest = Some(other))
+
+    (unionKept === block)
+      .and(unionKeptMap === block)
+      .and(figKeptMap === figExpected)
+      .and(figKept === figExpected)
+      .and(seqKeepsList must beTrue)
   }
 
   "Multiplate (AstStm | AstExpr | AstVar | AstTyp): everywhereIn + single-pass multi-sort transform" >> {
@@ -467,7 +506,7 @@ class PlatedSpec extends Specification with Discipline:
   }
 
   "transformM / transformAllM: post-order effects, short-circuiting, and 100k-deep stack safety" >> {
-    val tree = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
+    val tree = small
 
     // (1) State monad: stamps each leaf with its visit index in left-to-right post-order.
     val stamped: (Int, Bin) = Plated
@@ -491,28 +530,25 @@ class PlatedSpec extends Specification with Discipline:
 
     // (3) 100k-deep spine stack safety + .transformAllM extension on a self-traversal optic.
     val n = 100000
-    @tailrec def spine(deep: Bin, i: Int): Bin =
-      if i < n then spine(Bin.Node(deep, Bin.Leaf(i)), i + 1) else deep
-    val deep = spine(Bin.Leaf(0), 0)
+    val deep = spine(n)
 
     val deepEither = Plated[Bin]
       .plate
-      .transformAllM[Either[String, *]] {
-        case Bin.Leaf(v) => Right(Bin.Leaf(v + 1))
-        case node        => Right(node)
-      }(deep)
+      .transformAllM[Either[String, *]](b => Right(incLeaf(b)))(deep)
     val deepFail = Plated.transformM[Either[String, *], Bin] {
       case Bin.Leaf(50000) => Left("deep stop")
       case other           => Right(other)
     }(deep)
-    val deepEval = Plated
-      .transformM[Eval, Bin] {
-        case Bin.Leaf(v) => Eval.now(Bin.Leaf(v + 1))
-        case node        => Eval.now(node)
-      }(deep)
-      .value
+    val deepEval = Plated.transformM[Eval, Bin](b => Eval.now(incLeaf(b)))(deep).value
 
-    stateOk && shortCircuitOk &&
+    // (4) 100k-WIDE node: each sibling's continuation nests inside the previous one's flatMap
+    // under a strict monad, so width must hand off to the heap machine just like depth.
+    val wide = roseLeaf(0).copy(listChildren = List.fill(n)(roseLeaf(0)))
+    val wideOk = Plated
+      .transformM[Either[String, *], RoseNode](r => Right(r.copy(value = r.value + 1)))(wide)
+      .map(r => r.value == 1 && r.listChildren.forall(_.value == 1)) == Right(true)
+
+    stateOk && shortCircuitOk && wideOk &&
     deepEither.map(Plated.universe(_).length) == Right(2 * n + 1) &&
     deepFail == Left("deep stop") &&
     Plated.universe(deepEval).length == (2 * n + 1)

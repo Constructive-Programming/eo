@@ -416,27 +416,28 @@ Three results:
   degenerate spine at depth ≳2048. EO clears the spine at every size here and at
   100k in the stack-safety test, so the deep rows compare EO against the visitor
   only.)
-- **`transform` sits within ~2–3× of the hand-written visitor and is stack-safe.**
+- **`transform` matches the hand-written visitor's allocation and is stack-safe.**
   It went from an
   `Eval` trampoline (was ~10× slower) to a **hybrid**: a direct call-stack
-  recursion (≈ a hand-written rebuild — no per-node heap `Frame`) while shallow,
-  handing any subtree past a depth bound to the heap-stack machine so a
-  degenerate spine still can't overflow. (`rewrite` keeps its own `cats.Eval`
-  trampoline — it stays stack-safe on *both* the descent and a long re-fire
-  chain, which a synchronous machine would put back on the call stack.) With
-  `childrenVec` / `rebuild` (no `to`/`from` tuple per node) and
-  leaves applied in place, allocation is ~80 B/node on `Expr` (visitor is 44)
-  and ~76 B/node on the deep spine (the heap-stack fallback the degenerate spine
-  takes at this size). Both paths sit within **~2–3×** of the bare visitor.
+  recursion while shallow, handing any subtree past a depth bound to the
+  heap-stack machine so a degenerate spine still can't overflow. (`rewrite`
+  keeps its own `cats.Eval` trampoline — it stays stack-safe on *both* the
+  descent and a long re-fire chain, which a synchronous machine would put back
+  on the call stack.) The recursive path is `f(mapChildren(node, rec))`, and a
+  `generics.plate[S]` instance generates `mapChildren` as one pattern match that
+  rebuilds the node straight from the rewritten children — the visitor's own
+  shape — so it allocates exactly what the visitor does (1.00× B/op on `Expr`
+  and on the shallow spine) and runs at **~1.3–1.45×** its time on `Expr`. The
+  deep spine past the depth bound takes the heap machine (one children array
+  and one frame per node): ~2.4× B/op, ~2.6× time.
+- **`universe` is within ~1.5× of the visitor's allocation** (result built
+  forwards in a `ListBuffer`, worklist on an array stack, one children array
+  per internal node), ~1.3–1.9× its time.
 
-The residual gap to the visitor is the **carrier materialisation**: even on the
-fast recursive path EO allocates a `PSVec` of children + an `out` array per
-internal node, where a hand visitor fuses extract-and-rebuild into one
-`new Node(go(l), go(r))` and allocates neither — plus the heap stack the deep
-fallback uses (so it never overflows; the visitor and Monocle both do on the
-spine). Closing the last ~2–3× would mean fusing the recursion into the `plate[S]`
-macro — but that emits a *function*, not an `Optic`, which would break the
-`.andThen` composition `everywhere` relies on, so it's deliberately not done.
+The residual time gap on the recursive path is dispatch, not allocation: the
+child function and `mapChildren` are interface calls where the visitor calls
+itself directly. The rest is the heap stack the deep fallback uses, so it
+never overflows; the visitor and Monocle both do on the spine.
 
 ## Reproducing
 

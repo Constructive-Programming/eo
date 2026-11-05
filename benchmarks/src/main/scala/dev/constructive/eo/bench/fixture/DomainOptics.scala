@@ -9,7 +9,8 @@ import dev.constructive.eo.optics.{
   Modify as EoModify,
   Optional as EoOptional
 }
-import monocle.{Getter as MGetter, Optional as MOptional, Setter as MSetter}
+import dev.constructive.eo.generics.lens
+import monocle.{Getter as MGetter, Lens as MLens, Optional as MOptional, Setter as MSetter}
 
 /** Canonical in-memory EO + Monocle optics over the decoded [[Order]], for the per-family
   * micro-benches that don't go through a byte/AST backend (`GetterBench`, `SetterBench`,
@@ -61,3 +62,22 @@ object DomainOptics:
 
   val eoLoyaltyAF: PickFold[Order, String] =
     AffineFold[Order, String](_.customer.loyaltyId)
+
+  // ---- Fused Optional ∘ macro lens: order.lines.head.qty ------------
+  // `Optional.andThen(SplitCombineLens)` (the macro lens) vs Monocle's composed Optional vs the
+  // hand-written match (`OptionalBench.*_firstQty`).
+
+  val eoFirstQty: EoOptional[Order, Order, Int, Int] =
+    EoOptional[Order, Order, LineItem, LineItem](
+      o => o.lines.headOption.toRight(o),
+      (o, l) => o.copy(lines = l :: o.lines.tail),
+    ).andThen(lens[LineItem](_.qty))
+
+  val mFirstQty: MOptional[Order, Int] =
+    MOptional[Order, LineItem](_.lines.headOption)(l => o => o.copy(lines = l :: o.lines.tail))
+      .andThen(MLens[LineItem, Int](_.qty)(q => l => l.copy(qty = q)))
+
+  def handFirstQty(f: Int => Int)(o: Order): Order =
+    o.lines match
+      case h :: t => o.copy(lines = h.copy(qty = f(h.qty)) :: t)
+      case Nil    => o

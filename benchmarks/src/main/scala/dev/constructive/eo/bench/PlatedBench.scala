@@ -99,3 +99,26 @@ class PlatedBench extends JmhDefaults:
 
   @Benchmark def eoTransformDeep: Bin = EoPlated.transform(bumpLeaf)(deep)
   @Benchmark def visitorTransformDeep: Bin = PlatedTrees.visitTransformBin(bumpLeaf)(deep)
+
+  // ===== transformM (effectful write, all-Right Either: the effect plumbing's own cost) =====
+  //
+  // Monocle's `transformM` recurses on the call stack, so — as for `universe` / `transform` — the
+  // deep spine compares EO against the hand visitor only.
+
+  val shoutExprM: Expr => Either[String, Expr] = e => Right(shoutExpr(e))
+  val bumpLeafM: Bin => Either[String, Bin] = b => Right(bumpLeaf(b))
+
+  @Benchmark def eoTransformMExpr: Either[String, Expr] =
+    EoPlated.transformM[Either[String, *], Expr](shoutExprM)(expr)
+
+  @Benchmark def mTransformMExpr: Either[String, Expr] =
+    MPlated.transformM[Expr, Either[String, *]](shoutExprM)(expr)
+
+  @Benchmark def visitorTransformMExpr: Either[String, Expr] =
+    PlatedTrees.visitTransformMExpr(shoutExprM)(expr)
+
+  @Benchmark def eoTransformMDeep: Either[String, Bin] =
+    EoPlated.transformM[Either[String, *], Bin](bumpLeafM)(deep)
+
+  @Benchmark def visitorTransformMDeep: Either[String, Bin] =
+    PlatedTrees.visitTransformMBin(bumpLeafM)(deep)

@@ -384,8 +384,13 @@ exactly the paper's `purePlate` pass-through.
 
 One honesty note: writes rebuild each slot at the member type it was declared
 with, so a `Lang => Lang` rule that swaps sorts (a `Var` into an `Expr` slot)
-k*eeps the original* rather than crashing — sort-preserving rewrites, which the
-law suite's `sameSort` hook pins for every union plate.
+*keeps the original* rather than crashing. That holds for every slot kind —
+direct fields and each element of an `Option` / `List` / `Vector` / `ArraySeq`
+/ `Seq` / `Array` / `Traverse` container — and for single-sorted plates whose
+fields hold a narrower member type (`dots: List[Shape.Dot]` under
+`plate[Shape]`). A sort-swapping write is a silent no-op on that slot, so the
+lawful contract is sort-preserving rewrites, which the law suite's `sameSort`
+hook pins for every union plate.
 
 For a mutually recursive family (`Stm` ⇄ `StmExpr` with `SBlock(ss: List[Stm])`
 and leaf `StmVar`), derive `Plated` once on the union and compose `everywhereIn`

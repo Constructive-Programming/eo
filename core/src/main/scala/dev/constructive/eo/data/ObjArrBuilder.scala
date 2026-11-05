@@ -25,6 +25,15 @@ final private[eo] class ObjArrBuilder(initialCapacity: Int = 16):
     arr(len) = x
     len += 1
 
+  /** Remove and return the last element, clearing its slot — stack use (`Plated.universe`'s
+    * worklist). Caller checks `size > 0` first.
+    */
+  def pop(): Any =
+    len -= 1
+    val x = arr(len)
+    arr(len) = null
+    x
+
   def appendAllFromPSVec[A](src: PSVec[A]): Unit =
     src match
       case PSVec.Empty        => ()

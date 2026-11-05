@@ -119,13 +119,6 @@ class MacroErrorSpec extends Specification:
     val dup3Ok =
       anyMatches(dup3, "duplicate field selector 'name'") && anyMatches(dup3, "positions 0, 1, 3")
 
-    val badUnionPlate = typeCheckErrors(
-      "import dev.constructive.eo.generics.plate; plate[Int | String]"
-    ).map(_.message)
-    val badUnionPlateOk =
-      anyMatches(badUnionPlate, "plate[") &&
-        anyMatches(badUnionPlate, "union has no case-class or enum branches")
-
     (emptyOk must beTrue)
       .and(notCaseOk must beTrue)
       .and(nonFieldP0Ok must beTrue)
@@ -134,5 +127,12 @@ class MacroErrorSpec extends Specification:
       .and(dup2Ok must beTrue)
       .and(nestedOk must beTrue)
       .and(dup3Ok must beTrue)
-      .and(badUnionPlateOk must beTrue)
+  }
+
+  "plate[S] on a union with no ADT branch is rejected with the plate prefix" >> {
+    val errors = typeCheckErrors(
+      "import dev.constructive.eo.generics.plate; plate[Int | String]"
+    ).map(_.message)
+    (anyMatches(errors, "plate[") must beTrue)
+      .and(anyMatches(errors, "union has no case-class or enum branches") must beTrue)
   }

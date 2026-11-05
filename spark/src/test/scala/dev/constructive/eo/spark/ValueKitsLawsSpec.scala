@@ -9,15 +9,8 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
-import laws.discipline.{
-  LensTests,
-  NavigationTests,
-  OptionalTests,
-  PlatedTests,
-  PrismTests,
-  SeamTests
-}
-import laws.{LensLaws, NavigationLaws, OptionalLaws, PlatedLaws, PrismLaws, SeamLaws}
+import laws.discipline.{NavigationTests, OptionalTests, PlatedTests, PrismTests, SeamTests}
+import laws.{NavigationLaws, OptionalLaws, PlatedLaws, PrismLaws, SeamLaws}
 
 object ValueKitsFixtures:
 
@@ -64,6 +57,15 @@ object ValueKitsFixtures:
 
   given Arbitrary[DataType] = Arbitrary(Gen.sized(d => genType(math.min(d, 3))))
   given Cogen[DataType] = Cogen[String].contramap(_.json)
+
+  given Arbitrary[Metadata] = Arbitrary(
+    Gen.oneOf(
+      Gen.const(Metadata.empty),
+      Gen.alphaLowerStr.map(v => new MetadataBuilder().putString("comment", v).build()),
+    )
+  )
+
+  given Cogen[Metadata] = Cogen[String].contramap(_.json)
 
   private val genStructField: Gen[StructField] =
     for
@@ -213,6 +215,24 @@ class ValueKitsLawsSpec extends Specification with Discipline:
   )
 
   checkAll(
+    "Navigation[DataType] via metadata",
+    new NavigationTests[DataType, Metadata]:
+      val laws = new NavigationLaws[DataType, Metadata]:
+        val navigation = Schemas.metadata("f")
+        val eqv = eqT
+    .navigation,
+  )
+
+  checkAll(
+    "Seam[DataType] via metadata",
+    new SeamTests[DataType, Metadata]:
+      val laws = new SeamLaws[DataType, Metadata]:
+        val optic = Schemas.metadata("f")
+        val eqv = eqT
+    .seam,
+  )
+
+  checkAll(
     "Seam[DataType] via element",
     new SeamTests[DataType, DataType]:
       val laws = new SeamLaws[DataType, DataType]:
@@ -263,24 +283,24 @@ class ValueKitsLawsSpec extends Specification with Discipline:
 
   checkAll(
     "Lens[StructField, String] via fieldName",
-    new LensTests[StructField, String]:
-      val laws = new LensLaws[StructField, String]:
+    new dev.constructive.eo.laws.discipline.LensTests[StructField, String]:
+      val laws = new dev.constructive.eo.laws.LensLaws[StructField, String]:
         val lens = Schemas.fieldName
     .lens,
   )
 
   checkAll(
     "Lens[StructField, DataType] via fieldType",
-    new LensTests[StructField, DataType]:
-      val laws = new LensLaws[StructField, DataType]:
+    new dev.constructive.eo.laws.discipline.LensTests[StructField, DataType]:
+      val laws = new dev.constructive.eo.laws.LensLaws[StructField, DataType]:
         val lens = Schemas.fieldType
     .lens,
   )
 
   checkAll(
     "Lens[StructField, Boolean] via fieldNullable",
-    new LensTests[StructField, Boolean]:
-      val laws = new LensLaws[StructField, Boolean]:
+    new dev.constructive.eo.laws.discipline.LensTests[StructField, Boolean]:
+      val laws = new dev.constructive.eo.laws.LensLaws[StructField, Boolean]:
         val lens = Schemas.fieldNullable
     .lens,
   )

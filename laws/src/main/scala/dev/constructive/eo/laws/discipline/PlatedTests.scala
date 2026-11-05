@@ -21,6 +21,12 @@ abstract class PlatedTests[S] extends Laws:
     val _ = (x, a)
     true
 
+  /** A sort-respecting rewrite: each node becomes the first of `as` of its own sort (or stays). */
+  private def choose(as: S*): S => S = x => as.find(sameSort(x, _)).getOrElse(x)
+
+  /** `h` on a pseudo-random subset of nodes (picked by hash, salted by `k`), identity elsewhere. */
+  private def gated(k: Int, h: S => S): S => S = x => if ((x.## ^ k) & 1) == 0 then h(x) else x
+
   /** The "Plated" rule set. */
   def plated(using Arbitrary[S]): RuleSet =
     new SimpleRuleSet(
@@ -29,28 +35,19 @@ abstract class PlatedTests[S] extends Laws:
         forAll((s: S) => laws.plateModifyIdentity(s)),
       "plate.modify(g) ∘ plate.modify(f) == plate.modify(f andThen g)" ->
         forAll { (s: S, a1: S, a2: S, k1: Int, k2: Int) =>
-          val pick1: S => S = x =>
-            if sameSort(x, a1) then a1
-            else if sameSort(x, a2) then a2
-            else if sameSort(x, s) then s
-            else x
-          val pick2: S => S = x =>
-            if sameSort(x, a2) then a2
-            else if sameSort(x, a1) then a1
-            else if sameSort(x, s) then s
-            else x
-          val f: S => S = x => if ((x.## ^ k1) & 1) == 0 then pick1(x) else x
-          val g: S => S = x => if ((x.## ^ k2) & 1) == 0 then pick2(x) else x
-          laws.plateComposeModify(s, f, g) &&
+          val pick1 = choose(a1, a2, s)
+          val pick2 = choose(a2, a1, s)
+          laws.plateComposeModify(s, gated(k1, pick1), gated(k2, pick2)) &&
           laws.plateComposeModify(s, pick1, pick2)
         },
+      "mapChildren(g) == plate.modify(g)" ->
+        forAll((s: S, a1: S, a2: S, k: Int) =>
+          laws.mapChildrenConsistent(s, gated(k, choose(a1, a2)))
+        ),
       "transform(identity) == identity" ->
         forAll((s: S) => laws.transformIdentity(s)),
       "transformM[Id](f) == transform(f)" ->
-        forAll { (s: S, a1: S, k1: Int) =>
-          val f: S => S = x => if ((x.## ^ k1) & 1) == 0 && sameSort(x, a1) then a1 else x
-          laws.transformMIdConsistent(s, f)
-        },
+        forAll((s: S, a1: S, k: Int) => laws.transformMIdConsistent(s, gated(k, choose(a1)))),
       "universe == self :: children.flatMap(universe)" ->
         forAll((s: S) => laws.universeDecomposition(s)),
       "children.length == plate.length" ->

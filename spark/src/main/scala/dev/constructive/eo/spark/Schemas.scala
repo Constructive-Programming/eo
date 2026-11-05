@@ -3,7 +3,7 @@ package spark
 
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, StructField, StructType}
 
-import data.{ModifyF, PSVec}
+import data.ModifyF
 import generics.{lens, plate, prism}
 import optics.Optic.*
 import optics.{Optic, Optional, PickMendPrism, Plated, Prism}
@@ -86,35 +86,21 @@ object Schemas:
   def metadata(name: String): Optional[DataType, DataType, Metadata, Metadata] =
     atNamedField(name, fieldMetadata)
 
-  /** An array's element type — `containsNull` survives writes. */
+  /** An array's element type — the derived [[array]] prism composed with the derived `elementType`
+    * lens, whose complement carries `containsNull` through writes.
+    */
   val element: Optional[DataType, DataType, DataType, DataType] =
-    Optional[DataType, DataType, DataType, DataType](
-      { case a: ArrayType => Right(a.elementType); case other => Left(other) },
-      (s, t) =>
-        s match
-          case a: ArrayType => a.copy(elementType = t)
-          case other        => other,
-    )
+    array.andThen(lens[ArrayType](_.elementType))
 
-  /** A map's key type. */
+  /** A map's key type — the derived [[map]] prism composed with the derived `keyType` lens. */
   val mapKey: Optional[DataType, DataType, DataType, DataType] =
-    Optional[DataType, DataType, DataType, DataType](
-      { case m: MapType => Right(m.keyType); case other => Left(other) },
-      (s, t) =>
-        s match
-          case m: MapType => m.copy(keyType = t)
-          case other      => other,
-    )
+    map.andThen(lens[MapType](_.keyType))
 
-  /** A map's value type — `valueContainsNull` survives writes. */
+  /** A map's value type — the derived [[map]] prism composed with the derived `valueType` lens,
+    * whose complement carries `valueContainsNull` through writes.
+    */
   val mapValue: Optional[DataType, DataType, DataType, DataType] =
-    Optional[DataType, DataType, DataType, DataType](
-      { case m: MapType => Right(m.valueType); case other => Left(other) },
-      (s, t) =>
-        s match
-          case m: MapType => m.copy(valueType = t)
-          case other      => other,
-    )
+    map.andThen(lens[MapType](_.valueType))
 
   /** Multiplate over the mutually recursive `DataType | StructField` tree, derived by
     * `generics.plate`: `StructType` steps into its `Array[StructField]`, each `StructField` into
@@ -137,7 +123,7 @@ object Schemas:
     * `DataType`-child branches (`ArrayType`, `MapType`, atomic leaves) to the macro-derived
     * [[platedNode]] and steps through [[fieldType]] on `StructType`.
     */
-  given platedDataType: Plated[DataType] = Plated.fromChildrenVec(children, rebuild)
+  given platedDataType: Plated[DataType] = Plated.fromChildrenArray(children, rebuild)
 
   private def atNamedField[A](
       name: String,
@@ -156,13 +142,17 @@ object Schemas:
           case other => other,
     )
 
-  private def children(t: DataType): PSVec[DataType] = t match
-    case s: StructType => PSVec.from(s.fields.iterator.map(_.dataType))
-    case other         => platedNode.childrenVec(other).asInstanceOf[PSVec[DataType]]
+  private def children(t: DataType): Array[Any] = t match
+    case s: StructType => Array.tabulate[Any](s.fields.length)(i => s.fields(i).dataType)
+    case other         => platedNode.childrenArray(other)
 
-  private def rebuild(t: DataType, cs: PSVec[DataType]): DataType = t match
+  private def rebuild(t: DataType, cs: Array[Any]): DataType = t match
     case s: StructType =>
-      StructType(Array.tabulate(s.fields.length)(i => fieldType.replace(cs(i))(s.fields(i))))
-    case other => platedNode.rebuild(other, cs).asInstanceOf[DataType]
+      StructType(
+        Array.tabulate(s.fields.length)(i =>
+          fieldType.replace(cs(i).asInstanceOf[DataType])(s.fields(i))
+        )
+      )
+    case other => platedNode.rebuildArray(other, cs).asInstanceOf[DataType]
 
 end Schemas

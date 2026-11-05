@@ -7,7 +7,7 @@ import scala.quoted.*
 import scala.reflect.ClassTag
 
 import cats.Traverse
-import dev.constructive.eo.data.{ObjArrBuilder, PSVec}
+import dev.constructive.eo.data.ObjArrBuilder
 import dev.constructive.eo.optics.Plated
 
 /** Compile-time derivation of a [[dev.constructive.eo.optics.Plated]] for a recursive ADT or
@@ -34,102 +34,88 @@ object PlateMacro:
   def deriveImpl[S: Type](using q: Quotes): Expr[Plated[S]] =
     new HearthPlateMacro(q).derivePlate[S]
 
-  /** Concatenate multiple per-field `PSVec[S]` slices into one freshly-allocated `PSVec[S]`. */
-  def concat[S](parts: Array[PSVec[S]]): PSVec[S] =
-    val buf = new ObjArrBuilder(8)
-    val n = parts.length
-    @tailrec def loop(i: Int): Unit =
-      if i < n then
-        buf.appendAllFromPSVec(parts(i))
-        loop(i + 1)
-    loop(0)
-    buf.freezeAsPSVec[S]
+  /** The children of a leaf. Shared: a zero-length array has nothing for a caller to mutate, so it
+    * satisfies `Plated.fromChildrenMap`'s fresh-array contract without allocating.
+    */
+  val NoChildren: Array[Any] = new Array[Any](0)
 
-  /** Pack a `Traverse[F]` container of child elements into a freshly-allocated `PSVec[S]`. */
-  def fromTraverse[F[_], S, E](fa: F[E])(using F: Traverse[F]): PSVec[S] =
+  /** Sentinel sort check for slots whose element type is a supertype of `S`: no per-child test. */
+  val AnyChild: Any => Boolean = _ => true
+
+  // ---- children: each child field's elements as a fresh array -----------------------------
+
+  /** Concatenate per-field children arrays into one freshly-allocated, exactly-sized array. */
+  def concat(parts: Array[Array[Any]]): Array[Any] =
+    val n = parts.length
+    @tailrec def total(i: Int, acc: Int): Int =
+      if i < n then total(i + 1, acc + parts(i).length) else acc
+    val size = total(0, 0)
+    if size == 0 then NoChildren
+    else
+      val out = new Array[Any](size)
+      @tailrec def copy(i: Int, at: Int): Unit =
+        if i < n then
+          val part = parts(i)
+          System.arraycopy(part, 0, out, at, part.length)
+          copy(i + 1, at + part.length)
+      copy(0, 0)
+      out
+
+  def fromOption(xs: Option[Any]): Array[Any] =
+    if xs.isEmpty then NoChildren else scala.Array[Any](xs.get)
+
+  /** A `List` field's children as a fresh, exactly-sized array (one length walk, one fill). */
+  def fromList(xs: List[Any]): Array[Any] =
+    if xs.isEmpty then NoChildren
+    else
+      val out = new Array[Any](xs.length)
+      @tailrec def fill(i: Int, rest: List[Any]): Unit =
+        if rest.nonEmpty then
+          out(i) = rest.head
+          fill(i + 1, rest.tail)
+      fill(0, xs)
+      out
+
+  /** Any other collection field's children as a fresh array (never the collection's own storage).
+    */
+  def fromIterable(xs: Iterable[Any]): Array[Any] =
+    if xs.isEmpty then NoChildren else xs.toArray[Any]
+
+  /** An `Array` field's children: a fresh copy, so callers may overwrite it in place. */
+  def fromArray(xs: Array[?]): Array[Any] =
+    if xs.length == 0 then NoChildren else Array.copyAs[Any](xs, xs.length)
+
+  /** A `Traverse[F]` container's children as a fresh array, in traversal order. */
+  def fromTraverse[F[_], E](fa: F[E])(using F: Traverse[F]): Array[Any] =
     val buf = new ObjArrBuilder(8)
     F.foldLeft(fa, ())((_, e) => { buf.append(e); () })
-    buf.freezeAsPSVec[S]
+    if buf.size == 0 then NoChildren else buf.freezeArr
 
-  /** Positional cursor over `PSVec[S]` used when reconstructing a product that carries container
-    * child fields (`Option`, `List`, `Vector`, `ArraySeq`, `Seq`, `Array`, or `F: Traverse`).
+  // ---- mapChildren: `g` over each child, guarded by the slot's sort check --------------------
+
+  /** `g` applied to one child of a slot whose element type `ok` tests: a result of the wrong sort
+    * keeps `orig`, so a sort-swapping rewrite can't smuggle an ill-typed value into the slot.
     */
-  final class RebuildCursor[S](val vec: PSVec[S]):
-    private var pos: Int = 0
+  def mapOne(orig: Any, g: Any => Any, ok: Any => Boolean): Any =
+    val x = g(orig)
+    if (ok eq AnyChild) || ok(x) then x else orig
 
-    def takeOne[E](): E =
-      val e = vec(pos).asInstanceOf[E]
-      pos += 1
-      e
+  def mapOption(xs: Option[Any], g: Any => Any, ok: Any => Boolean): Option[Any] =
+    if xs.isEmpty then xs else Some(mapOne(xs.get, g, ok))
 
-    def takeOption[E](orig: Option[E]): Option[E] =
-      if orig.isDefined then
-        val e = vec(pos).asInstanceOf[E]
-        pos += 1
-        Some(e)
-      else None
+  /** Any `Seq`-shaped field (`List`, `Vector`, `ArraySeq`, `Seq`): `map` rebuilds in `xs`'s own
+    * collection type, so a `List` stays a `List` and a `List`-backed `Seq` too.
+    */
+  def mapSeq(xs: scala.collection.Seq[Any], g: Any => Any, ok: Any => Boolean): Any =
+    if xs.isEmpty then xs else xs.map(mapOne(_, g, ok))
 
-    def takeList[E](orig: List[E]): List[E] =
-      val n = orig.length
-      if n == 0 then orig
-      else
-        val start = pos
-        pos += n
-        @tailrec def build(i: Int, acc: List[E]): List[E] =
-          if i >= start then build(i - 1, vec(i).asInstanceOf[E] :: acc)
-          else acc
-        build(start + n - 1, Nil)
+  def mapArray[E: ClassTag](xs: Array[E], g: Any => Any, ok: Any => Boolean): Array[E] =
+    if xs.length == 0 then xs else xs.map(e => mapOne(e, g, ok).asInstanceOf[E])
 
-    def takeVector[E](orig: Vector[E]): Vector[E] =
-      val n = orig.length
-      if n == 0 then orig
-      else
-        val start = pos
-        pos += n
-        Vector.tabulate(n)(i => vec(start + i).asInstanceOf[E])
-
-    def takeArraySeq[E](orig: ArraySeq[E]): ArraySeq[E] =
-      val n = orig.length
-      if n == 0 then orig
-      else
-        val start = pos
-        pos += n
-        val arr = new Array[Any](n)
-        @tailrec def fill(i: Int): Unit =
-          if i < n then
-            arr(i) = vec(start + i)
-            fill(i + 1)
-        fill(0)
-        ArraySeq.unsafeWrapArray(arr).asInstanceOf[ArraySeq[E]]
-
-    def takeSeq[E](orig: scala.collection.Seq[E]): IndexedSeq[E] =
-      val n = orig.length
-      if n == 0 then Vector.empty
-      else
-        val start = pos
-        pos += n
-        Vector.tabulate(n)(i => vec(start + i).asInstanceOf[E])
-
-    def takeArray[E: ClassTag](orig: Array[E]): Array[E] =
-      val n = orig.length
-      if n == 0 then orig
-      else
-        val out = new Array[E](n)
-        val start = pos
-        pos += n
-        @tailrec def fill(i: Int): Unit =
-          if i < n then
-            out(i) = vec(start + i).asInstanceOf[E]
-            fill(i + 1)
-        fill(0)
-        out
-
-    def takeTraverse[F[_], E](orig: F[E])(using F: Traverse[F]): F[E] =
-      F.map(orig) { _ =>
-        val e = vec(pos).asInstanceOf[E]
-        pos += 1
-        e
-      }
+  def mapTraverse[F[_], E](xs: F[E], g: Any => Any, ok: Any => Boolean)(using
+      F: Traverse[F]
+  ): F[E] =
+    F.map(xs)(e => mapOne(e, g, ok).asInstanceOf[E])
 
 final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommonsScala3(using q):
 
@@ -137,31 +123,66 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
   import _root_.hearth.fp.Id
   import _root_.hearth.fp.instances.*
 
-  private enum ChildFieldKind:
-    case Direct(elemTpe: TypeRepr)
-    case OptionField(elemTpe: TypeRepr)
-    case ListField(elemTpe: TypeRepr)
-    case VectorField(elemTpe: TypeRepr)
-    case ArraySeqField(elemTpe: TypeRepr)
-    case SeqField(elemTpe: TypeRepr)
-    case ArrayField(elemTpe: TypeRepr)
-    case TraverseField(tyconTpe: TypeRepr, elemTpe: TypeRepr)
+  private enum ChildFieldKind(val elemTpe: TypeRepr):
+    case Direct(e: TypeRepr) extends ChildFieldKind(e)
+    case OptionField(e: TypeRepr) extends ChildFieldKind(e)
+    case SeqField(e: TypeRepr, isList: Boolean) extends ChildFieldKind(e)
+    case ArrayField(e: TypeRepr) extends ChildFieldKind(e)
+    case TraverseField(tyconTpe: TypeRepr, e: TypeRepr) extends ChildFieldKind(e)
+
+  /** The two things a child field contributes: its elements as a fresh children array, and itself
+    * rebuilt with `g` applied to each element (given the slot's sort check). One table, so the
+    * children order and the `mapChildren` order can't drift apart.
+    */
+  final private case class FieldOps(
+      children: Expr[Array[Any]],
+      mapped: (Expr[Any => Any], Expr[Any => Boolean]) => Expr[Any],
+  )
+
+  /** What a branch of `S` generates: something for a product (case class / enum case with fields),
+    * something for a leaf (an object case, or a non-ADT union branch).
+    */
+  private trait BranchGen[R]:
+    def product[W: Type](b: Branch[W])(using Quotes): Expr[R]
+    def leaf[W: Type](w: Expr[W])(using Quotes): Expr[R]
+
+  /** A product branch: its case-class view and the value matched to it. */
+  private type Branch[W] = (CaseClass[W], Expr[W])
 
   def derivePlate[S](using Type[S]): Expr[Plated[S]] =
     val sTpe = TypeRepr.of[S]
     val unionBranches = flattenOrTypes(sTpe)
-    if unionBranches.sizeIs > 1 then deriveUnion[S](orderBranches(unionBranches), sTpe)
-    else
-      Enum.parse[S].toEither match
-        case Right(enumView) => deriveSum[S](enumView, sTpe)
-        case Left(_)         =>
-          CaseClass.parse[S].toEither match
-            case Right(cc)    => deriveProduct[S](cc, sTpe)
-            case Left(reason) =>
-              report.errorAndAbort(
-                s"plate[${Type.prettyPrint[S]}]: $reason — expected a case class, enum,"
-                  + " sealed hierarchy, or union type."
-              )
+    val isUnion = unionBranches.sizeIs > 1
+    val branches = orderBranches(unionBranches)
+    if isUnion then
+      if !branches.exists(b => b.asType match { case '[b] => isAdt[b] }) then
+        report.errorAndAbort(
+          s"plate[${Type.prettyPrint[S]}]: union has no case-class or enum branches."
+        )
+    else if !isAdt[S] then
+      report.errorAndAbort(
+        s"plate[${Type.prettyPrint[S]}]: expected a case class, enum, sealed hierarchy, or union type."
+      )
+
+    def dispatch[R: Type](s: Expr[S], gen: BranchGen[R])(using Quotes): Expr[R] =
+      if isUnion then unionChain[S, R](branches, s, gen) else branch[S, R](s, gen)
+
+    val childrenGen = new BranchGen[Array[Any]]:
+      def product[W: Type](b: Branch[W])(using Quotes) = productChildren[S, W](b._2, sTpe)
+      def leaf[W: Type](w: Expr[W])(using Quotes) = '{ PlateMacro.NoChildren }
+
+    def mapGen(g: Expr[S => S]) = new BranchGen[S]:
+      def product[W: Type](b: Branch[W])(using Quotes) =
+        '{ ${ mapFields[S, W](b._1, b._2, g, sTpe) }.asInstanceOf[S] }
+      def leaf[W: Type](w: Expr[W])(using Quotes) = '{ $w.asInstanceOf[S] }
+
+    val childrenExpr: Expr[S => Array[Any]] = '{ (s: S) => ${ dispatch('{ s }, childrenGen) } }
+    val mapChildrenExpr: Expr[(S, S => S) => S] =
+      '{ (s: S, g: S => S) => ${ dispatch('{ s }, mapGen('{ g })) } }
+    '{ Plated.fromChildrenMap[S]($childrenExpr, $mapChildrenExpr) }
+
+  private def isAdt[T: Type]: Boolean =
+    CaseClass.parse[T].toEither.isRight || Enum.parse[T].toEither.isRight
 
   private def flattenOrTypes(tpe: TypeRepr): List[TypeRepr] = tpe.dealias match
     case OrType(l, r) => flattenOrTypes(l) ++ flattenOrTypes(r)
@@ -187,179 +208,148 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
           topo(rest, acc :+ picked)
     topo(deduped, Nil)
 
-  // ---- union path (multi-sorted Multiplate) ----------------------------------
+  // ---- branch dispatch -----------------------------------------------------------------------
 
-  private def deriveUnion[S: Type](
+  /** A multi-sorted union (O'Connor 2011 §5): type-test each branch in subtype-first order; a value
+    * matching none is a leaf.
+    */
+  private def unionChain[S: Type, R: Type](
       branches: List[TypeRepr],
-      sTpe: TypeRepr,
-  ): Expr[Plated[S]] =
-    val hasAdtBranch = branches.exists { bTpe =>
-      bTpe.asType match
-        case '[b] => CaseClass.parse[b].toEither.isRight || Enum.parse[b].toEither.isRight
-    }
-    if !hasAdtBranch then
-      report.errorAndAbort(
-        s"plate[${Type.prettyPrint[S]}]: union has no case-class or enum branches."
-      )
-
-    val childrenExpr: Expr[S => PSVec[S]] =
-      '{ (s: S) => ${ unionChildrenChain[S](branches, '{ s }, sTpe) } }
-
-    val rebuildExpr: Expr[(S, PSVec[S]) => S] =
-      '{ (s: S, vec: PSVec[S]) => ${ unionRebuildChain[S](branches, '{ s }, '{ vec }, sTpe) } }
-
-    '{ Plated.fromChildrenVec[S]($childrenExpr, $rebuildExpr) }
-
-  private def unionChildrenChain[S: Type](
-      branches: List[TypeRepr],
-      sExpr: Expr[S],
-      sTpe: TypeRepr,
-  )(using Quotes): Expr[PSVec[S]] =
+      s: Expr[S],
+      gen: BranchGen[R],
+  )(using Quotes): Expr[R] =
     branches match
-      case Nil         => '{ PSVec.empty[S] }
-      case last :: Nil =>
-        last.asType match
-          case '[b] =>
-            '{
-              ($sExpr: Any) match
-                case v: (b @unchecked) => ${ branchChildren[S, b]('{ v }, sTpe) }
-                case _                 => PSVec.empty[S]
-            }
+      case Nil          => gen.leaf(s)
       case head :: tail =>
         head.asType match
           case '[b] =>
-            val elseBr = unionChildrenChain[S](tail, sExpr, sTpe)
+            val elseBr = unionChain[S, R](tail, s, gen)
             '{
-              ($sExpr: Any) match
-                case v: (b @unchecked) => ${ branchChildren[S, b]('{ v }, sTpe) }
+              ($s: Any) match
+                case v: (b @unchecked) => ${ branch[b, R]('{ v }, gen) }
                 case _                 => $elseBr
             }
 
-  private def unionRebuildChain[S: Type](
-      branches: List[TypeRepr],
-      sExpr: Expr[S],
-      vecExpr: Expr[PSVec[S]],
-      sTpe: TypeRepr,
-  )(using Quotes): Expr[S] =
-    branches match
-      case Nil         => sExpr
-      case last :: Nil =>
-        last.asType match
-          case '[b] =>
-            '{
-              ($sExpr: Any) match
-                case v: (b @unchecked) => ${ branchReconstruct[S, b]('{ v }, vecExpr, sTpe) }
-                case _                 => $sExpr
-            }
-      case head :: tail =>
-        head.asType match
-          case '[b] =>
-            val elseBr = unionRebuildChain[S](tail, sExpr, vecExpr, sTpe)
-            '{
-              ($sExpr: Any) match
-                case v: (b @unchecked) => ${ branchReconstruct[S, b]('{ v }, vecExpr, sTpe) }
-                case _                 => $elseBr
-            }
-
-  // ---- sum / enum path -------------------------------------------------------
-
-  private def deriveSum[S: Type](
-      enumView: Enum[S],
-      sTpe: TypeRepr,
-  ): Expr[Plated[S]] =
-    val childrenExpr: Expr[S => PSVec[S]] =
-      '{ (s: S) =>
-        ${
-          enumView
-            .matchOn[Id, PSVec[S]]('{ s }) { matched =>
-              import matched.{Underlying as V, value as vExpr}
-              branchChildren[S, V](vExpr, sTpe)
-            }
-            .getOrElse(
-              report.errorAndAbort(s"plate[${Type.prettyPrint[S]}]: matchOn produced no cases.")
-            )
-        }
-      }
-
-    val rebuildExpr: Expr[(S, PSVec[S]) => S] =
-      '{ (s: S, vec: PSVec[S]) =>
-        ${
-          enumView
-            .matchOn[Id, S]('{ s }) { matched =>
-              import matched.{Underlying as V, value as vExpr}
-              branchReconstruct[S, V](vExpr, '{ vec }, sTpe)
-            }
-            .getOrElse(
-              report.errorAndAbort(s"plate[${Type.prettyPrint[S]}]: matchOn produced no cases.")
-            )
-        }
-      }
-
-    '{ Plated.fromChildrenVec[S]($childrenExpr, $rebuildExpr) }
-
-  // ---- product / case-class path --------------------------------------------
-
-  private def deriveProduct[S: Type](
-      cc: CaseClass[S],
-      sTpe: TypeRepr,
-  ): Expr[Plated[S]] =
-    val childrenExpr: Expr[S => PSVec[S]] =
-      '{ (s: S) => ${ productChildrenVec[S, S]('{ s }, sTpe) } }
-
-    val rebuildExpr: Expr[(S, PSVec[S]) => S] =
-      '{ (s: S, vec: PSVec[S]) => ${ reconstructFields[S, S](cc, '{ s }, '{ vec }, sTpe) } }
-
-    '{ Plated.fromChildrenVec[S]($childrenExpr, $rebuildExpr) }
-
-  // ---- branch dispatch (product, nested sum, or leaf) ------------------------
-
-  private def branchChildren[S: Type, V: Type](
-      src: Expr[V],
-      sTpe: TypeRepr,
-  )(using Quotes): Expr[PSVec[S]] =
+  /** A product, a (nested) enum / sealed hierarchy matched case by case, or a leaf. */
+  private def branch[V: Type, R: Type](src: Expr[V], gen: BranchGen[R])(using Quotes): Expr[R] =
     CaseClass.parse[V].toEither match
-      case Right(_) =>
-        productChildrenVec[S, V](src, sTpe)
-      case Left(_) =>
+      case Right(cc) => gen.product((cc, src))
+      case Left(_)   =>
         Enum.parse[V].toEither match
           case Right(subEnum) =>
             subEnum
-              .matchOn[Id, PSVec[S]](src) { matched =>
+              .matchOn[Id, R](src) { matched =>
                 import matched.{Underlying as W, value as wExpr}
-                if TypeRepr.of[W] =:= TypeRepr.of[V] then '{ PSVec.empty[S] }
-                else branchChildren[S, W](wExpr, sTpe)
+                if TypeRepr.of[W] =:= TypeRepr.of[V] then gen.leaf(wExpr)
+                else branch[W, R](wExpr, gen)
               }
               .getOrElse(
                 report.errorAndAbort(s"plate[${Type.prettyPrint[V]}]: matchOn produced no cases.")
               )
-          case Left(_) =>
-            '{ PSVec.empty[S] }
+          case Left(_) => gen.leaf(src)
 
-  private def branchReconstruct[S: Type, V: Type](
+  // ---- one product ---------------------------------------------------------------------------
+
+  private def productChildren[S: Type, V: Type](src: Expr[V], sTpe: TypeRepr)(using
+      Quotes
+  ): Expr[Array[Any]] =
+    val fields = childFieldsOf[V](sTpe)
+    if fields.forall(_._2.isInstanceOf[ChildFieldKind.Direct]) then
+      val reads: List[Expr[Any]] = fields.map((name, _) => Select.unique(src.asTerm, name).asExpr)
+      reads match
+        case Nil => '{ PlateMacro.NoChildren }
+        case _   => '{ scala.Array[Any](${ Varargs(reads) }*) }
+    else
+      fields.map((name, kind) => fieldOps[S](Select.unique(src.asTerm, name), kind).children) match
+        case Nil         => '{ PlateMacro.NoChildren }
+        case part :: Nil => part
+        case parts       => '{ PlateMacro.concat(scala.Array[Array[Any]](${ Varargs(parts) }*)) }
+
+  /** `mapChildren` for one product: a leaf (no child fields) comes back as is; otherwise one
+    * constructor call (`new V(...)`, never `.copy`) whose child arguments are `g`'s guarded results
+    * and whose other arguments are read off `src`. Scala evaluates constructor arguments left to
+    * right, so `g` sees the children in declaration order — the order [[productChildren]] packs
+    * them, which `Plated.fromChildrenMap`'s array rebuild relies on.
+    */
+  private def mapFields[S: Type, V: Type](
+      cc: CaseClass[V],
       src: Expr[V],
-      vec: Expr[PSVec[S]],
+      g: Expr[S => S],
       sTpe: TypeRepr,
-  )(using Quotes): Expr[S] =
-    CaseClass.parse[V].toEither match
-      case Right(cc) =>
-        val built: Expr[V] = reconstructFields[S, V](cc, src, vec, sTpe)
-        '{ $built.asInstanceOf[S] }
-      case Left(_) =>
-        Enum.parse[V].toEither match
-          case Right(subEnum) =>
-            subEnum
-              .matchOn[Id, S](src) { matched =>
-                import matched.{Underlying as W, value as wExpr}
-                if TypeRepr.of[W] =:= TypeRepr.of[V] then '{ $wExpr.asInstanceOf[S] }
-                else branchReconstruct[S, W](wExpr, vec, sTpe)
-              }
+  )(using Quotes): Expr[V] =
+    val vTpe = TypeRepr.of[V]
+    val fieldMap: Map[String, ChildFieldKind] = childFieldsOf[V](sTpe).toMap
+    if fieldMap.isEmpty then src
+    else
+      '{
+        val gAny = $g.asInstanceOf[Any => Any]
+        ${
+          cc.construct[Id] { (param: Parameter) =>
+            val field = vTpe
+              .typeSymbol
+              .caseFields
+              .find(_.name == param.name)
               .getOrElse(
-                report.errorAndAbort(s"plate[${Type.prettyPrint[V]}]: matchOn produced no cases.")
+                report
+                  .errorAndAbort(s"plate: internal error — unexpected parameter '${param.name}'.")
               )
-          case Left(_) =>
-            '{ $src.asInstanceOf[S] }
+            vTpe.memberType(field).asType match
+              case '[p] =>
+                val raw = Select.unique(src.asTerm, param.name)
+                val arg: Expr[p] = fieldMap.get(param.name) match
+                  case Some(kind) =>
+                    val mapped =
+                      fieldOps[S](raw, kind).mapped('{ gAny }, sortCheck[S](kind.elemTpe))
+                    '{ $mapped.asInstanceOf[p] }
+                  case None => raw.asExprOf[p]
+                Existential[Expr, p](arg): Expr_??
+          }.getOrElse(
+            report.errorAndAbort(
+              s"plate[${Type.prettyPrint[V]}]: failed to call the primary constructor."
+            )
+          )
+        }
+      }
 
-  // ---- field classification & codegen ---------------------------------------
+  private def fieldOps[S: Type](raw: Term, kind: ChildFieldKind)(using Quotes): FieldOps =
+    kind match
+      case ChildFieldKind.Direct(_) =>
+        val x = raw.asExpr
+        FieldOps('{ scala.Array[Any]($x) }, (g, ok) => '{ PlateMacro.mapOne($x, $g, $ok) })
+      case ChildFieldKind.OptionField(_) =>
+        val xs = raw.asExprOf[Option[Any]]
+        FieldOps(
+          '{ PlateMacro.fromOption($xs) },
+          (g, ok) => '{ PlateMacro.mapOption($xs, $g, $ok) }
+        )
+      case ChildFieldKind.SeqField(_, isList) =>
+        val xs = raw.asExprOf[scala.collection.Seq[Any]]
+        val children =
+          if isList then '{ PlateMacro.fromList(${ raw.asExprOf[List[Any]] }) }
+          else '{ PlateMacro.fromIterable($xs) }
+        FieldOps(children, (g, ok) => '{ PlateMacro.mapSeq($xs, $g, $ok) })
+      case ChildFieldKind.ArrayField(elemTpe) =>
+        elemTpe.asType match
+          case '[e] =>
+            val xs = raw.asExprOf[Array[e]]
+            val ct = classTagFor[e]
+            FieldOps(
+              '{ PlateMacro.fromArray($xs) },
+              (g, ok) => '{ PlateMacro.mapArray[e]($xs, $g, $ok)(using $ct) },
+            )
+      case ChildFieldKind.TraverseField(tyconTpe, elemTpe) =>
+        (tyconTpe.asType, elemTpe.asType) match
+          case ('[type f[_]; f], '[e]) =>
+            val xs = raw.asExprOf[f[e]]
+            val trav = traverseFor[f](tyconTpe)
+            FieldOps(
+              '{ PlateMacro.fromTraverse[f, e]($xs)(using $trav) },
+              (g, ok) => '{ PlateMacro.mapTraverse[f, e]($xs, $g, $ok)(using $trav) },
+            )
+          case _ =>
+            report.errorAndAbort(s"plate: expected unary type constructor for ${tyconTpe.show}")
+
+  // ---- field classification ------------------------------------------------------------------
 
   private def isChildType(tpe: TypeRepr, sTpe: TypeRepr): Boolean =
     val w = tpe.widen.dealias
@@ -374,15 +364,8 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
           val sym = tycon.typeSymbol
           if sym == TypeRepr.of[Option[Any]].typeSymbol then
             Some(ChildFieldKind.OptionField(elemTpe))
-          else if sym == TypeRepr.of[List[Any]].typeSymbol then
-            Some(ChildFieldKind.ListField(elemTpe))
-          else if sym == TypeRepr.of[Vector[Any]].typeSymbol then
-            Some(ChildFieldKind.VectorField(elemTpe))
-          else if sym == TypeRepr.of[ArraySeq[Any]].typeSymbol then
-            Some(ChildFieldKind.ArraySeqField(elemTpe))
-          else if sym == TypeRepr.of[scala.collection.immutable.Seq[Any]].typeSymbol ||
-            sym == TypeRepr.of[scala.collection.Seq[Any]].typeSymbol
-          then Some(ChildFieldKind.SeqField(elemTpe))
+          else if seqTycons.contains(sym) then
+            Some(ChildFieldKind.SeqField(elemTpe, isList = sym == seqTycons.head))
           else if sym == TypeRepr.of[Array[Any]].typeSymbol then
             Some(ChildFieldKind.ArrayField(elemTpe))
           else
@@ -394,237 +377,49 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
               case _ => None
         case _ => None
 
+  /** Container type constructors handled as a `Seq` (`List` first: it gets an exact-size fill). */
+  private lazy val seqTycons: List[Symbol] = List(
+    TypeRepr.of[List[Any]].typeSymbol,
+    TypeRepr.of[Vector[Any]].typeSymbol,
+    TypeRepr.of[ArraySeq[Any]].typeSymbol,
+    TypeRepr.of[scala.collection.immutable.Seq[Any]].typeSymbol,
+    TypeRepr.of[scala.collection.Seq[Any]].typeSymbol,
+  )
+
   private def childFieldsOf[V: Type](sTpe: TypeRepr): List[(String, ChildFieldKind)] =
     val vTpe = TypeRepr.of[V]
     vTpe.typeSymbol.caseFields.flatMap { f =>
       classifyField(vTpe.memberType(f), sTpe).map(k => f.name -> k)
     }
 
-  private def fieldChildrenExpr[S: Type, V: Type](
-      src: Expr[V],
-      name: String,
-      kind: ChildFieldKind,
-  )(using Quotes): Expr[PSVec[S]] =
-    val rawTerm = Select.unique(src.asTerm, name)
-    kind match
-      case ChildFieldKind.Direct(_) =>
-        val e = rawTerm.asExprOf[S]
-        '{ PSVec.singleton[S]($e) }
-      case ChildFieldKind.OptionField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val opt = rawTerm.asExprOf[Option[e]]
-            '{
-              $opt match
-                case Some(x) => PSVec.singleton[S](x.asInstanceOf[S])
-                case None    => PSVec.empty[S]
-            }
-      case ChildFieldKind.ListField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val xs = rawTerm.asExprOf[List[e]]
-            '{ PSVec.from[e]($xs).asInstanceOf[PSVec[S]] }
-      case ChildFieldKind.VectorField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val xs = rawTerm.asExprOf[Vector[e]]
-            '{ PSVec.from[e]($xs.iterator).asInstanceOf[PSVec[S]] }
-      case ChildFieldKind.ArraySeqField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val xs = rawTerm.asExprOf[ArraySeq[e]]
-            '{ PSVec.from[e]($xs.iterator).asInstanceOf[PSVec[S]] }
-      case ChildFieldKind.SeqField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val xs = rawTerm.asExprOf[scala.collection.Seq[e]]
-            '{ PSVec.from[e]($xs.iterator).asInstanceOf[PSVec[S]] }
-      case ChildFieldKind.ArrayField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val arr = rawTerm.asExprOf[Array[e]]
-            '{ PSVec.from[e]($arr).asInstanceOf[PSVec[S]] }
-      case ChildFieldKind.TraverseField(tyconTpe, elemTpe) =>
-        (tyconTpe.asType, elemTpe.asType) match
-          case ('[type f[_]; f], '[e]) =>
-            val trav = scala
-              .quoted
-              .Expr
-              .summon[Traverse[f]]
-              .getOrElse(
-                report.errorAndAbort(s"plate: missing Traverse for ${tyconTpe.show}")
-              )
-            val fa = rawTerm.asExprOf[f[e]]
-            '{ PlateMacro.fromTraverse[f, S, e]($fa)(using $trav) }
-          case _ =>
-            report.errorAndAbort(s"plate: expected unary type constructor for ${tyconTpe.show}")
+  /** The `ClassTag` an `Array[e]` child field needs to be rebuilt, or a compile error. */
+  private def classTagFor[e: Type](using Quotes): Expr[ClassTag[e]] =
+    scala
+      .quoted
+      .Expr
+      .summon[ClassTag[e]]
+      .getOrElse(report.errorAndAbort(s"plate: missing ClassTag[${Type.prettyPrint[e]}]"))
 
-  private def productChildrenVec[S: Type, V: Type](
-      src: Expr[V],
-      sTpe: TypeRepr,
-  )(using Quotes): Expr[PSVec[S]] =
-    val fields = childFieldsOf[V](sTpe)
-    val allDirect = fields.forall(_._2.isInstanceOf[ChildFieldKind.Direct])
-    if allDirect then
-      val reads: List[Expr[S]] =
-        fields.map((name, _) => Select.unique(src.asTerm, name).asExprOf[S])
-      reads match
-        case Nil             => '{ PSVec.empty[S] }
-        case r :: Nil        => '{ PSVec.singleton[S]($r) }
-        case r0 :: r1 :: Nil => '{ PSVec.of[S]($r0, $r1) }
-        case _               =>
-          val anys: List[Expr[Any]] = reads
-          '{ PSVec.unsafeWrap[S](scala.Array[Any](${ Varargs(anys) }*)) }
-    else
-      fields match
-        case Nil                 => '{ PSVec.empty[S] }
-        case (name, kind) :: Nil => fieldChildrenExpr[S, V](src, name, kind)
-        case _                   =>
-          val parts: List[Expr[PSVec[S]]] =
-            fields.map((name, kind) => fieldChildrenExpr[S, V](src, name, kind))
-          '{ PlateMacro.concat[S](scala.Array[PSVec[S]](${ Varargs(parts) }*)) }
+  /** The `Traverse` a container child field `F[e]` is walked with, or a compile error. */
+  private def traverseFor[f[_]](
+      tyconTpe: TypeRepr
+  )(using Quotes, scala.quoted.Type[f]): Expr[Traverse[f]] =
+    scala
+      .quoted
+      .Expr
+      .summon[Traverse[f]]
+      .getOrElse(report.errorAndAbort(s"plate: missing Traverse for ${tyconTpe.show}"))
 
-  /** The constructor-threading core: route each declaration-order parameter to either the matching
-    * new child (by index on the fixed-arity path, or through [[PlateMacro.RebuildCursor]] when
-    * container fields are present) or the preserved skeleton field read off `src`.
+  /** The runtime sort test for a child slot of element type `elemTpe`: [[PlateMacro.AnyChild]] when
+    * every `S` fits (`S <: elemTpe`), else an instance test against the slot's element type.
     */
-  private def reconstructFields[S: Type, V: Type](
-      cc: CaseClass[V],
-      src: Expr[V],
-      vec: Expr[PSVec[S]],
-      sTpe: TypeRepr,
-  )(using Quotes): Expr[V] =
-    val vTpe = TypeRepr.of[V]
-    val nameToType: Map[String, TypeRepr] =
-      vTpe.typeSymbol.caseFields.map(f => f.name -> vTpe.memberType(f)).toMap
-    val fields: List[(String, ChildFieldKind)] = childFieldsOf[V](sTpe)
-    val allDirect = fields.forall(_._2.isInstanceOf[ChildFieldKind.Direct])
-
-    if allDirect then
-      val directNames: List[String] = fields.map(_._1)
-      val directTypes: List[TypeRepr] = fields.collect {
-        case (_, ChildFieldKind.Direct(t)) => t
-      }
-      val constructed: Id[Option[Expr[V]]] = cc.construct[Id] { (param: Parameter) =>
-        val selfIdx = directNames.indexOf(param.name)
-        if selfIdx >= 0 then
-          val idxExpr = scala.quoted.Expr(selfIdx)
-          val elemTpe = directTypes(selfIdx)
-          elemTpe.asType match
-            case '[e] =>
-              val rebuilt: Expr[e] =
-                if sTpe <:< elemTpe then '{ ${ vec }(${ idxExpr }).asInstanceOf[e] }
-                else
-                  val orig = Select.unique(src.asTerm, param.name).asExprOf[e]
-                  '{
-                    (${ vec }(${ idxExpr }): Any) match
-                      case typed: (e @unchecked) => typed
-                      case _                     => $orig
-                  }
-              Existential[Expr, e](rebuilt): Expr_??
-        else skeletonField[V](src, nameToType, param.name)
-      }
-      constructed.getOrElse(
-        report.errorAndAbort(
-          s"plate[${Type.prettyPrint[V]}]: failed to call the primary constructor."
-        )
-      )
+  private def sortCheck[S: Type](elemTpe: TypeRepr)(using Quotes): Expr[Any => Boolean] =
+    if TypeRepr.of[S] <:< elemTpe then '{ PlateMacro.AnyChild }
     else
-      val fieldMap: Map[String, ChildFieldKind] = fields.toMap
-      '{
-        val cur = new PlateMacro.RebuildCursor[S]($vec)
-        ${
-          val constructed: Id[Option[Expr[V]]] = cc.construct[Id] { (param: Parameter) =>
-            fieldMap.get(param.name) match
-              case Some(kind) =>
-                rebuildCursorParam[S, V](src, '{ cur }, param.name, kind, nameToType(param.name))
-              case None =>
-                skeletonField[V](src, nameToType, param.name)
+      elemTpe.asType match
+        case '[e] =>
+          '{ (x: Any) =>
+            x match
+              case _: (e @unchecked) => true
+              case _                 => false
           }
-          constructed.getOrElse(
-            report.errorAndAbort(
-              s"plate[${Type.prettyPrint[V]}]: failed to call the primary constructor."
-            )
-          )
-        }
-      }
-
-  private def skeletonField[V: Type](
-      src: Expr[V],
-      nameToType: Map[String, TypeRepr],
-      paramName: String,
-  )(using Quotes): Expr_?? =
-    val tpe = nameToType.getOrElse(
-      paramName,
-      report.errorAndAbort(s"plate: internal error — unexpected parameter '$paramName'."),
-    )
-    tpe.asType match
-      case '[t] =>
-        Existential[Expr, t](Select.unique(src.asTerm, paramName).asExprOf[t]): Expr_??
-
-  private def rebuildCursorParam[S: Type, V: Type](
-      src: Expr[V],
-      cur: Expr[PlateMacro.RebuildCursor[S]],
-      name: String,
-      kind: ChildFieldKind,
-      paramTpe: TypeRepr,
-  )(using Quotes): Expr_?? =
-    val rawOrig = Select.unique(src.asTerm, name)
-    kind match
-      case ChildFieldKind.Direct(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            Existential[Expr, e]('{ $cur.takeOne[e]() }): Expr_??
-      case ChildFieldKind.OptionField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val orig = rawOrig.asExprOf[Option[e]]
-            Existential[Expr, Option[e]]('{ $cur.takeOption[e]($orig) }): Expr_??
-      case ChildFieldKind.ListField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val orig = rawOrig.asExprOf[List[e]]
-            Existential[Expr, List[e]]('{ $cur.takeList[e]($orig) }): Expr_??
-      case ChildFieldKind.VectorField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val orig = rawOrig.asExprOf[Vector[e]]
-            Existential[Expr, Vector[e]]('{ $cur.takeVector[e]($orig) }): Expr_??
-      case ChildFieldKind.ArraySeqField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val orig = rawOrig.asExprOf[ArraySeq[e]]
-            Existential[Expr, ArraySeq[e]]('{ $cur.takeArraySeq[e]($orig) }): Expr_??
-      case ChildFieldKind.SeqField(elemTpe) =>
-        paramTpe.asType match
-          case '[p] =>
-            elemTpe.asType match
-              case '[e] =>
-                val orig = rawOrig.asExprOf[scala.collection.Seq[e]]
-                Existential[Expr, p]('{ $cur.takeSeq[e]($orig).asInstanceOf[p] }): Expr_??
-      case ChildFieldKind.ArrayField(elemTpe) =>
-        elemTpe.asType match
-          case '[e] =>
-            val ct = scala
-              .quoted
-              .Expr
-              .summon[ClassTag[e]]
-              .getOrElse(
-                report.errorAndAbort(s"plate: missing ClassTag[${Type.prettyPrint[e]}]")
-              )
-            val orig = rawOrig.asExprOf[Array[e]]
-            Existential[Expr, Array[e]]('{ $cur.takeArray[e]($orig)(using $ct) }): Expr_??
-      case ChildFieldKind.TraverseField(tyconTpe, elemTpe) =>
-        (tyconTpe.asType, elemTpe.asType) match
-          case ('[type f[_]; f], '[e]) =>
-            val trav = scala
-              .quoted
-              .Expr
-              .summon[Traverse[f]]
-              .getOrElse(
-                report.errorAndAbort(s"plate: missing Traverse for ${tyconTpe.show}")
-              )
-            val orig = rawOrig.asExprOf[f[e]]
-            Existential[Expr, f[e]]('{ $cur.takeTraverse[f, e]($orig)(using $trav) }): Expr_??
-          case _ =>
-            report.errorAndAbort(s"plate: expected unary type constructor for ${tyconTpe.show}")
