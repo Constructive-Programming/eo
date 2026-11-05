@@ -54,7 +54,9 @@ coalgebra fails by exhausting the heap (`OutOfMemoryError`), not by `StackOverfl
 The examples below use the circe `Plated[Json]` from `cats-eo-circe` as a concrete recursive
 `S` — but that is only an example convenience. `Plated[S]` is the **entire** requirement of the
 fold side, and any recursive type gets one: derive it with
-[`generics.plate[S]`](generics.md#plate-s-recursive-self-traversal-plated), hand-write it via
+[`generics.plate[S]`](generics.md#plate-s-recursive-self-traversal-plated) — including a
+mutually recursive family via a union `S` (a *Multiplate*,
+[`plate[Stm | Expr | Var]`](generics.md#multiplate-families)) — hand-write it via
 `Plated.fromChildrenVec`, or call `.asPlated` on an already-built self-traversal optic. There
 is no `Basis`-style auto-derivation to look for — that one instance is all the machinery.
 

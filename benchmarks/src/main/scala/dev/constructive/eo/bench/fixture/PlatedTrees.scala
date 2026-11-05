@@ -125,6 +125,21 @@ object PlatedTrees:
       case Bin.Node(l, r) => Bin.Node(visitTransformBin(f)(l), visitTransformBin(f)(r))
       case leaf: Bin.Leaf => leaf)
 
+  def visitTransformMExpr(f: Expr => Either[String, Expr])(e: Expr): Either[String, Expr] =
+    val rebuilt: Either[String, Expr] = e match
+      case Expr.App(a, b) =>
+        visitTransformMExpr(f)(a).flatMap(x => visitTransformMExpr(f)(b).map(Expr.App(x, _)))
+      case Expr.Lam(n, body) => visitTransformMExpr(f)(body).map(Expr.Lam(n, _))
+      case v: Expr.Var       => Right(v)
+    rebuilt.flatMap(f)
+
+  def visitTransformMBin(f: Bin => Either[String, Bin])(b: Bin): Either[String, Bin] =
+    val rebuilt: Either[String, Bin] = b match
+      case Bin.Node(l, r) =>
+        visitTransformMBin(f)(l).flatMap(x => visitTransformMBin(f)(r).map(Bin.Node(x, _)))
+      case leaf: Bin.Leaf => Right(leaf)
+    rebuilt.flatMap(f)
+
   // The JSON walk is a classic visitor too: circe's own `Json.Folder` (double dispatch through
   // `foldWith`), ONE instance per call, indexed `@tailrec` loops over the children. It used to be
   // `x.fold(..., arr => arr.foreach(go), obj => obj.values.foreach(go))`, which allocates two

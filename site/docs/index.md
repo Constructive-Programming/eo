@@ -98,8 +98,10 @@ library's core habit: [Capabilities](capabilities.md).
   tabulations use [Indexed](indexed.md).
 - [Indexed: Grates and Glasses](indexed.md) — environment-dependent
   settings, full-grid updates, and reconstruction that preserves row metadata.
-- [Generics](generics.md) — the `lens[S](_.field)` and
-  `prism[S, A]` macros, backed by Hearth.
+- [Generics](generics.md) — the `lens[S](_.field)`, `prism[S, A]`, and `plate[S]`
+  macros, backed by Hearth — `plate` covers container-wrapped children and,
+  over a union type (`plate[Stm | Expr | Var]`), a *Multiplate* for mutually
+  recursive families.
 - [Circe integration](integrations/circe.md) — `JsonPrism` / `JsonTraversal`,
   cursor-backed navigation into circe `Json` with no full decode.
 - [Avro integration](integrations/avro.md) — `AvroPrism` / `AvroTraversal`,

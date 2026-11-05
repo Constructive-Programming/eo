@@ -218,32 +218,34 @@ class OpticsLawsSpec extends Specification with CheckAllHelpers:
   private val firstReplace =
     Lens[(Int, String), Int](_._1, (p, n) => p.copy(_1 = n))
 
-  checkAll(
-    "Optional — PickMendPrism ∘ SplitCombineLens (fused)",
-    new OptionalTests[Option[(Int, String)], Int]:
-      val laws = new OptionalLaws[Option[(Int, String)], Int]:
-        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
-          somePairPick.andThen(Lens.first[Int, String])
-    .optional,
-  )
+  private type Pair = (Int, String)
 
-  checkAll(
-    "Optional — PickMendPrism ∘ GetReplaceLens (fused)",
-    new OptionalTests[Option[(Int, String)], Int]:
-      val laws = new OptionalLaws[Option[(Int, String)], Int]:
-        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
-          somePairPick.andThen(firstReplace)
-    .optional,
-  )
+  /** One fused `… ∘ lens` composite over `Option[Pair]`, checked against the Optional laws. */
+  private def fusedOptionalLaws(
+      name: String,
+      composite: Optional[Option[Pair], Option[Pair], Int, Int]
+  ) =
+    checkAll(
+      s"Optional — $name (fused)",
+      new OptionalTests[Option[Pair], Int]:
+        val laws = new OptionalLaws[Option[Pair], Int]:
+          val optional = composite
+      .optional,
+    )
 
-  checkAll(
-    "Optional — MendTearPrism ∘ SplitCombineLens (fused)",
-    new OptionalTests[Option[(Int, String)], Int]:
-      val laws = new OptionalLaws[Option[(Int, String)], Int]:
-        val optional: Optional[Option[(Int, String)], Option[(Int, String)], Int, Int] =
-          somePairTear.andThen(Lens.first[Int, String])
-    .optional,
+  private val somePairOpt =
+    Optional[Option[Pair], Option[Pair], Pair, Pair](o => o.toRight(o), (_, p) => Some(p))
+
+  fusedOptionalLaws(
+    "PickMendPrism ∘ SplitCombineLens",
+    somePairPick.andThen(Lens.first[Int, String])
   )
+  fusedOptionalLaws("PickMendPrism ∘ GetReplaceLens", somePairPick.andThen(firstReplace))
+  fusedOptionalLaws(
+    "MendTearPrism ∘ SplitCombineLens",
+    somePairTear.andThen(Lens.first[Int, String])
+  )
+  fusedOptionalLaws("Optional ∘ SplitCombineLens", somePairOpt.andThen(Lens.first[Int, String]))
 
   checkAll(
     "Getter ∘ SplitCombineLens — direct-read collapse",

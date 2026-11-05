@@ -128,3 +128,11 @@ class MacroErrorSpec extends Specification:
       .and(nestedOk must beTrue)
       .and(dup3Ok must beTrue)
   }
+
+  "plate[S] on a union with no ADT branch is rejected with the plate prefix" >> {
+    val errors = typeCheckErrors(
+      "import dev.constructive.eo.generics.plate; plate[Int | String]"
+    ).map(_.message)
+    (anyMatches(errors, "plate[") must beTrue)
+      .and(anyMatches(errors, "union has no case-class or enum branches") must beTrue)
+  }
