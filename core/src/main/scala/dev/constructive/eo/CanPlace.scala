@@ -17,6 +17,11 @@ trait CanPlace[T, B]:
 
 object CanPlace:
 
+  final class TransferOps[T, B](private val t: T) extends AnyVal:
+
+    inline def apply[C](f: C => B)(using cp: CanPlace[T, B]): C => T =
+      cp.transfer(f)(t)
+
   /** Lift an optic whose `T`-side evidence is available (e.g. a `SimpleLens`, whose companion
     * provides the `S => (X, A)` splitter as that evidence).
     */
@@ -25,3 +30,13 @@ object CanPlace:
       ev: T => F[o.X, B],
   ): CanPlace[T, B] =
     b => o.place(b)
+
+export optics.Optic.{place, transfer}
+
+extension [T](t: T)
+  /** Overwrite the `B` focus inside `t` via the [[CanPlace]] instance in scope. */
+  inline def place[B](b: B)(using cp: CanPlace[T, B]): T = cp.place(b)(t)
+
+  /** Lift `f: C => B` into a `C => T` writer on `t` via the [[CanPlace]] instance in scope. */
+  inline def transfer[B]: CanPlace.TransferOps[T, B] =
+    new CanPlace.TransferOps[T, B](t)

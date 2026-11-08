@@ -22,3 +22,9 @@ object CanGetOption:
       acc: PartialAccessor[F],
   ): CanGetOption[S, A] =
     s => o.getOption(s)
+
+export optics.Optic.getOption
+
+extension [S](s: S)
+  /** Read the optional `A` focus out of `s` via the [[CanGetOption]] instance in scope. */
+  inline def getOption[A](using cgo: CanGetOption[S, A]): Option[A] = cgo.getOption(s)

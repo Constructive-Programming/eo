@@ -24,8 +24,8 @@ import java.time.{Duration, Instant}
 
 // This function knows NOTHING about the shape of T — only that an
 // Instant can be rewritten inside it.
-def adjustTimes[T](delta: Duration)(using cm: CanModify[T, Instant]): T => T =
-  cm.modify(_.plus(delta))
+def adjustTimes[T](delta: Duration)(using CanModify[T, Instant]): T => T =
+  _.modify[Instant](_.plus(delta))
 
 // Each domain type supplies its own evidence — a derived lens
 // IS the capability, so the given can be declared at the
@@ -36,11 +36,74 @@ given CanModify[Meeting, Instant] = lens[Meeting](_.start)
 
 ```scala mdoc
 val shift = adjustTimes[Meeting](Duration.ofHours(1))
-shift(Meeting("standup", Instant.EPOCH))
+val standup = Meeting("standup", Instant.EPOCH)
+shift(standup)
 ```
 
 The module that defines `adjustTimes` never depends on `Meeting` — new types opt in by
 bringing an optic given (or passing one explicitly at the call site with `(using myLens)`).
+
+## Subject-first syntax
+
+Every capability trait ships `inline` extension methods directly on the subject `S` (or on
+the focus `B` / `A` for `CanReverseGet` / `CanPut`), parameterized by the target type `A` —
+including derived operations like `replace`, `headOption`, `length`, `exists`, `foci`, and
+`transfer`:
+
+```scala mdoc
+val delay = Duration.ofHours(1)
+standup.modify[Instant](_.plus(delay))
+standup.replace[Instant](Instant.EPOCH.plusSeconds(60))
+```
+
+### Why it matters: simplicity and multi-focus utility
+
+1. **No throwaway `using` names.** Without subject-first extensions, every consuming method has
+   to invent a local identifier (`using cm: CanModify[T, Instant]`) solely to flip the receiver
+   and write `cm.modify(f)(t)`. With the extension syntax, the `using` clause stays anonymous
+   evidence — `(using CanModify[T, Instant])` — and the body reads naturally off the value:
+   `t.modify[Instant](f)` or `t.replace[Instant](x)`.
+2. **Direct value operations when evidence is in scope.** At call sites where capability givens
+   are already in scope, you act on the value directly (`s.modify[A](_ + x)`, `s.replace[A](x)`,
+   `s.get[A]`) without naming an optic or calling `summon`.
+3. **Unambiguous multi-focus operations on the same `S`.** Because capabilities are keyed by
+   `(S, A)`, a single subject `S` routinely has several capability givens in scope at once — one
+   per focus type `A`. The receiver `s` pins `S` and the type argument `[A]` pins `A`, so a
+   function that coordinates several foci of the same generic `T` selects each capability inline
+   by its focus type:
+
+```scala mdoc:silent
+given CanGet[Meeting, String] = lens[Meeting](_.title)
+given CanGet[Meeting, Instant] = lens[Meeting](_.start)
+
+def reschedule[T](newTitle: String, delta: Duration)(t: T)(using
+    CanGet[T, String],
+    CanModify[T, Instant],
+): (String, T) =
+  (t.get[String], t.modify[Instant](_.plus(delta)))
+```
+
+```scala mdoc
+reschedule("retro", Duration.ofMinutes(30))(standup)
+```
+
+4. **Zero overhead.** Every extension is `inline` (the two-type-parameter operations `foldMap`,
+   `modifyF`, `modifyA`, and `transfer` route through `AnyVal` partially-applied wrappers with
+   `inline def apply`, so the second type parameter `M` / `G[_]` / `C` is inferred from the
+   lambda without boxing), expanding straight to the underlying capability call at compile time.
+
+| Capability | Subject-first extensions | Polymorphic variant |
+|---|---|---|
+| `CanGet[S, A]` | `s.get[A]` | — |
+| `CanGetOption[S, A]` | `s.getOption[A]` | — |
+| `CanReverseGet[T, B]` | `b.reverseGet[T]` | — |
+| `CanModify[S, A]` | `s.modify[A](f)`, `s.replace[A](a)` | `s.modifyP[T, A, B](f)`, `s.replaceP[T, A, B](b)` |
+| `CanFold[S, A]` | `s.foldMap[A](f)`, `s.headOption[A]`, `s.length[A]`, `s.exists[A](p)`, `s.foci[A]` | — |
+| `CanPut[T, A]` | `a.put[T](f)` | `a.putP[T, B](f)` |
+| `CanModifyF[S, A]` | `s.modifyF[A](f)` | `s.modifyFP[T, A, B](f)` |
+| `CanModifyA[S, A]` | `s.modifyA[A](f)` | `s.modifyAP[T, A, B](f)` |
+| `CanPlace[T, B]` | `t.place[B](b)`, `t.transfer[B](f)` | — |
+| `CanTransform[T, D, B]` | `t.transform[B](f)` | `t.transformP[D, B](f)` |
 
 ## The capability × family matrix
 
@@ -134,11 +197,13 @@ instance (the `Can*` traits are SAM-convertible):
 import dev.constructive.eo.*
 import dev.constructive.eo.optics.{Lens, Traversal}
 
-def bump[S](s: S)(using m: CanModify[S, Int]): S = m.modify(_ + 1)(s)
+def bump[S](s: S)(using CanModify[S, Int]): S = s.modify[Int](_ + 1)
 
 locally {
   given Traversal[List[Int], List[Int], Int, Int] = Traversal.each
   bump(List(1, 2, 3))
+  List(1, 2, 3).modify[Int](_ + 10)
+  List(1, 2, 3).replace[Int](0)
 }
 
 locally {

@@ -270,11 +270,11 @@ import dev.constructive.eo.*
 //                 any T with the evidence;
 //   - decoupling: the module defining these never depends on the wire
 //                 format, the codec choice, or this library's optics.
-def currentPlan[T](t: T)(using cg: CanGetOption[T, String]): Option[String] =
-  cg.getOption(t)
+def currentPlan[T](t: T)(using CanGetOption[T, String]): Option[String] =
+  t.getOption[String]
 
-def upgradePlan[T](t: T)(using cm: CanModify[T, String]): T =
-  cm.replace("pro")(t)
+def upgradePlan[T](t: T)(using CanModify[T, String]): T =
+  t.replace[String]("pro")
 
 // The prism given IS the capability evidence for T = Array[Byte]
 // (one optic given per (S, A) pair — the coherence rule applies):
@@ -300,6 +300,7 @@ given CanModify[User, String] = lens[User](_.plan)
 
 ```scala mdoc
 upgradePlan(User(7, "a@x.org", "free"))
+User(7, "a@x.org", "free").replace[String]("pro")
 ```
 
 The corners that trip a mechanical migration:

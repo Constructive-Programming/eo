@@ -125,8 +125,10 @@ concrete or composed — is the evidence:
 def render[S](s: S, g: Getter[S, Json]): Doc
 
 // cats-eo: the same contract as `using` evidence. A Lens, Iso, or
-// Getter IS a CanGet — pass it (or bind it as a given) directly.
-def render[S](s: S)(using g: CanGet[S, Json]): Doc
+// Getter IS a CanGet — pass it (or bind it as a given) directly,
+// and read through the subject-first `s.get[Json]` extension.
+def render[S](s: S)(using CanGet[S, Json]): Doc =
+  renderJson(s.get[Json])
 ```
 
 The translation table for parameter positions: `Getter` →

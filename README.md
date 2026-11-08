@@ -46,8 +46,8 @@ which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 ## 60-second tour
 
 ```scala
+import dev.constructive.eo.*
 import dev.constructive.eo.optics.Lens
-import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
 
 case class Address(street: String, zip: Int)
@@ -63,6 +63,11 @@ val alice = Person("Alice", Address("Main St", 12345))
 personStreet.get(alice)                       // "Main St"
 personStreet.replace("Broadway")(alice)       // address.street := "Broadway"
 personStreet.modify(_.toUpperCase)(alice)     // address.street := "MAIN ST"
+
+// Or consume via capability with subject-first syntax:
+given CanModify[Person, String] = personStreet
+alice.modify[String](_.toUpperCase)           // address.street := "MAIN ST"
+alice.replace[String]("Broadway")             // address.street := "Broadway"
 ```
 
 ## What's in cats-eo

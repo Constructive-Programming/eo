@@ -30,7 +30,7 @@ Requires Scala 3.9.x on JDK 17, 21, or 25 (`cats-eo-kyo` needs JDK 25).
 ## Define
 
 ```scala mdoc:silent
-import dev.constructive.eo.CanModify
+import dev.constructive.eo.*
 import dev.constructive.eo.generics.lens
 import dev.constructive.eo.docs.{Address, Person, Zip}
 ```
@@ -83,19 +83,32 @@ field (`name`). Move the rule behind a **capability** and the shape
 and field become the caller's business:
 
 ```scala mdoc
-def emphasized[T](using cm: CanModify[T, String]): T => T =
-  cm.modify(emphasize)
+def emphasized[T](using CanModify[T, String]): T => T =
+  _.modify[String](emphasize)
 ```
 
 The signature is the contract: "give me proof a String can be
-rewritten inside `T`, and I'll return the rewrite." Any optic that
-can modify — a lens, a composed path, a prism into one branch — is
-that proof — including the composed `streetL`, which stays a
-concrete lens through `.andThen`:
+rewritten inside `T`, and I'll return the rewrite." Notice that the
+`using` parameter doesn't even need a name — the subject-first
+`.modify[String]` extension summons `CanModify[T, String]` directly on
+the value. Any optic that can modify — a lens, a composed path, a prism
+into one branch — is that proof, including the composed `streetL`, which
+stays a concrete lens through `.andThen`:
 
 ```scala mdoc
 emphasized(using nameL)(alice)
 emphasized(using streetL)(alice)
+```
+
+When the optic is in scope as a `given`, `.modify[A]` and `.replace[A]`
+work straight on the domain value too:
+
+```scala mdoc
+locally {
+  given CanModify[Person, String] = streetL
+  alice.modify[String](emphasize)
+  alice.replace[String]("Broadway")
+}
 ```
 
 (An optic known only at the generic `Optic[…, F]` type — a

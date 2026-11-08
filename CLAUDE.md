@@ -372,9 +372,15 @@ stay on `.scalafix.conf`:
   *use* an optic take the weakest capability trait (`CanGet`, `CanGetOption`,
   `CanModify`, `CanFold`, … — top-level in `dev.constructive.eo`), never a
   concrete optic type; concrete types (`Lens`, `Prism`, `Getter`, …) are for
-  construction and composition. Keep ONE optic given per `(S, A)` pair in
-  scope — capabilities are keyed by their type params only, so two same-typed
-  foci need newtypes or explicit `(using myLens)` passing. A read-then-write
+  construction and composition. Every capability ships `inline` subject-first
+  extension methods parameterized by the target type (`s.get[A]`, `s.getOption[A]`,
+  `b.reverseGet[T]`, `s.modify[A](f)`, `s.replace[A](a)`, `s.foldMap[A](f)`,
+  `s.headOption[A]`, `s.length[A]`, `s.exists[A](p)`, `s.foci[A]`, `a.put[T](f)`,
+  `s.modifyF[A](f)`, `s.modifyA[A](f)`, `t.place[B](b)`, `t.transfer[B](f)`,
+  `t.transform[B](f)`, plus `*P` polymorphic variants), so consuming signatures can
+  take unnamed `using` evidence and act on `s` directly. Keep ONE optic given per
+  `(S, A)` pair in scope — capabilities are keyed by their type params only, so two
+  same-typed foci need newtypes or explicit `(using myLens)` passing. A read-then-write
   method demands one `CanModify`, not split `CanGet` + `CanModify` evidence
   (nothing ties two summons to the same optic).
 
