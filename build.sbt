@@ -416,7 +416,7 @@ lazy val cats = Def.setting(Typelevel %%% "cats-core" % "2.13.0")
 lazy val catsLaws = Def.setting(Typelevel %%% "cats-laws" % "2.13.0")
 lazy val disciplineCore = Def.setting(Typelevel %%% "discipline-core" % "1.7.0")
 // specs2 publishes for JVM and Scala.js ONLY (no Scala Native artifact), so `discipline-specs2` is the
-// JVM + JS test stack; Scala Native runs the munit twins below (see `nativeMunit`).
+// JVM + JS test stack (Scala Native runs munit + testkit sources only; see `platformSources`).
 lazy val discipline = Def.setting(Typelevel %%% "discipline-specs2" % "2.0.0")
 // munit / munit-scalacheck pinned ABOVE discipline-munit 2.0.0's own 1.0.0: that munit-scalacheck
 // fails Scala Native's interop phase against munit >= 1.1 ("wrong number of arguments ... expected 3").
@@ -685,22 +685,39 @@ lazy val scala3CrossMacroSettings = scala3CrossSettings ++ Seq(
 // only). Platform-specific code, if any ever appears, goes in `<module>/.jvm/src/...` etc. and is
 // picked up by `platformSources` below.
 //
-// Test stacks: specs2 (+ discipline-specs2) runs on JVM and Scala.js. specs2 has NO Scala Native
-// artifact, so Native cannot compile the shared specs: `nativeMunit` replaces the Native test
-// source set with `<module>/.native/src/test/scala` (munit + discipline-munit twins of the law
-// suites) and swaps the test dependencies.
+// Test sources are split by FRAMEWORK, not copied per platform. specs2 (+ discipline-specs2) has NO
+// Scala Native artifact, so:
+//   - `src/test/scala`    specs2 specs — JVM + Scala.js only;
+//   - `src/munit/scala`   munit suites — every platform (the only tests Native runs);
+//   - `src/testkit/scala` framework-free fixtures and law rule-set builders (scalacheck /
+//                         discipline-core only) that BOTH kinds of suite consume, so nothing is
+//                         written twice. A spec that has to run on Native is moved to munit or
+//                         has its fixtures lifted into the testkit; never duplicated.
+// `Test / unmanagedSourceDirectories` on Native is exactly testkit + munit.
+def moduleDir(base: File): File = base.getParentFile
+
 lazy val platformSources = Seq(
   Compile / unmanagedSourceDirectories += baseDirectory.value / "src" / "main" / "scala",
   Test / unmanagedSourceDirectories += baseDirectory.value / "src" / "test" / "scala",
+  Test / unmanagedSourceDirectories ++= Seq(
+    moduleDir(baseDirectory.value) / "src" / "testkit" / "scala",
+    moduleDir(baseDirectory.value) / "src" / "munit" / "scala",
+  ),
 )
 
-lazy val nativeMunit = Seq(
-  Test / unmanagedSourceDirectories := Seq(baseDirectory.value / "src" / "test" / "scala"),
+lazy val munitStack = Seq(
   libraryDependencies ++= Seq(
     munit.value % Test,
     munitScalacheck.value % Test,
-    disciplineMunit.value % Test
-  ),
+    disciplineMunit.value % Test,
+  )
+)
+
+lazy val nativeMunit = Seq(
+  Test / unmanagedSourceDirectories := Seq(
+    moduleDir(baseDirectory.value) / "src" / "testkit" / "scala",
+    moduleDir(baseDirectory.value) / "src" / "munit" / "scala",
+  )
 )
 
 // JS / Native first ship in 1.3.0, so there is no published baseline to compare with (MiMa would
@@ -718,7 +735,8 @@ def eoCrossBase(p: CrossProject): CrossProject =
     .jsSettings(newPlatform *)
     .nativeSettings(newPlatform *)
     .nativeSettings(nativeMunit *)
-    // specs2 stack: JVM + Scala.js (Native is on munit, above).
+    .settings(munitStack *)
+    // specs2 stack: JVM + Scala.js (Native has only the munit + testkit sources, above).
     .jvmSettings(libraryDependencies += discipline.value % Test)
     .jsSettings(libraryDependencies += discipline.value % Test)
 

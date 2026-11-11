@@ -55,8 +55,7 @@ sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/te
 - **Layout.** `CrossType.Pure`: the ordinary `<module>/src/{main,test}/scala` tree is SHARED by all
   platforms (no moved files); platform projects live in `<module>/.jvm`, `.js`, `.native` (their
   `target/` too — e.g. `core/.jvm/target`). Platform-only sources go in `<module>/.jvm/src/...` etc.
-  (wired by `platformSources`; today only `schemes/.jvm/src/test` and the `.native/src/test` munit
-  suites exist). Keep JDK-only code out of shared sources: the Scala.js / Native javalib lacks
+  (wired by `platformSources`; today only `schemes/.jvm/src/test` exists). Keep JDK-only code out of shared sources: the Scala.js / Native javalib lacks
   JDK 9+ APIs (`Arrays.equals(range)`, `Objects.checkFromIndexSize`, `ByteBuffer.get(int, byte[])`
   — `JsonSlice` hit all three) and `Thread.getStackTrace` is a stub.
 - **No `java.util.ArrayDeque` in shared code.** Scala.js 1.22's returns `null` from `peek()` on a
@@ -66,17 +65,23 @@ sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/te
   through `.jvmSettings` only. Everything else in `scala3LibrarySettings` is in
   `scala3CrossSettings`. Wiring lives in `eoCross` / `eoCrossBase` / `eoCrossMacro` (`tests` takes
   `eoCrossBase`: no library flags, as before). JVM-only modules still use `scala3LibrarySettings`.
-- **Test stacks.** specs2 + discipline-specs2 run on JVM and Scala.js. **specs2 has no Scala Native
-  artifact**, so on Native `nativeMunit` REPLACES the test source set with
-  `<module>/.native/src/test/scala` and uses munit 1.3.6 + munit-scalacheck 1.3.1 +
-  discipline-munit 2.0.0 (munit-scalacheck must stay above discipline-munit's own 1.0.0 — that one
-  fails Native's interop phase against munit ≥ 1.1). The Native suites are compact twins, NOT a
-  port: `laws` (Iso/Lens/Prism/Optional/Modify/Traversal/Getter law matrix), `generics` (derived
-  Lens + Prism), `schemesLaws` (hylo fusion law across `OnStackLimit`), `iron` (prism laws),
-  `jsoniter` (byte prism read/write + `JsonSlice` portability), `circe` (cursor prism), `zio` (service lens, Ref focus, `Traverse[Chunk]` laws), `chimney` (iso / prism / getter laws), `kyo` (TypeMap / Env / Var / Layer focus). The
-  `tests` module (≈580 examples: composition matrix, fused paths, Plated, PSVec, …) and the rest
-  of each module's specs run on JVM + JS only — a known Native gap; grow the twins, or port a spec
-  to munit, when a Native regression is a worry. Native tests link with the system clang.
+- **Test stacks — split by framework, never copied per platform.** specs2 + discipline-specs2 have
+  **no Scala Native artifact**, so each module's tests live in up to three shared dirs:
+  `src/test/scala` (specs2 — JVM + Scala.js only), `src/munit/scala` (munit + discipline-munit +
+  munit-scalacheck — EVERY platform, the only suites Native runs) and `src/testkit/scala`
+  (framework-free fixtures / generators / optic definitions both kinds read; scalacheck and core
+  only). On Native `Test / unmanagedSourceDirectories` is exactly testkit + munit (`nativeMunit`);
+  `munitStack` puts munit on every platform. A spec that must run on Native is MOVED to munit (full
+  conversion, not a subset) or has its fixtures lifted into the testkit — never duplicated (the CPD
+  gate would flag a copy). Moved so far: `HyloLawsSuite`, `ZioOpticsSuite`, `ChunksLawsSuite`,
+  `KyoOpticsSuite`, `ChimneyLawsSuite`, `GenericsSuite`, `IronPrismSuite`, `JsonPrismSuite`,
+  `JsoniterPrismSuite` / `JsoniterPrismWriteSuite` (+ `JsonSlicePortabilitySuite`, the JDK-9+
+  API replacements), and `tests`' `OpticLawsSuite` (base-family laws on the testkit's
+  `OpticFixtures`). Everything else (the ≈500-example composition / fused-path / carrier matrix in
+  `tests`, macro-error specs, the larger circe / jsoniter / zio-schema / kyo-schema specs) stays
+  specs2 and is a known Native gap. munit-scalacheck must stay above discipline-munit's own 1.0.0
+  (that one fails Native's interop phase against munit ≥ 1.1). Native tests link with the
+  system clang.
 - **MiMa.** JS / Native artifacts first ship in 1.3.0 (`newPlatform` empties `tlMimaPreviousVersions`), so they have no baseline until 1.3.0 exists — then switch it to `tlVersionIntroduced := Map("3" -> "1.3.0")`; JVM keeps the 1.0.0 / 1.1.x baselines. `tlBaseVersion` is 1.3 (the first cross-platform minor).
 - **JVM-only modules and why.** `avro` (Apache Avro is a Java library: reflection / `IndexedRecord`
   / `GenericData`, plus the Optional vulcan / jsoniter / circe bridges), `spark` (Spark has no

@@ -15,9 +15,7 @@ import optics.{
   Fold,
   ForgetFold,
   Getter,
-  Iso,
   Lens,
-  Modify,
   Optic,
   Optional,
   PickFold,
@@ -26,28 +24,8 @@ import optics.{
   Unfold
 }
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
-import laws.{
-  AffineFoldLaws,
-  FoldLaws,
-  GetterLaws,
-  IsoLaws,
-  LensLaws,
-  ModifyLaws,
-  OptionalLaws,
-  PrismLaws,
-  UnfoldLaws
-}
-import laws.discipline.{
-  AffineFoldTests,
-  FoldTests,
-  GetterTests,
-  IsoTests,
-  LensTests,
-  ModifyTests,
-  OptionalTests,
-  PrismTests,
-  UnfoldTests
-}
+import laws.{AffineFoldLaws, FoldLaws, GetterLaws, OptionalLaws, UnfoldLaws}
+import laws.discipline.{AffineFoldTests, FoldTests, GetterTests, OptionalTests, UnfoldTests}
 import laws.data.{AffineLaws, ModifyFLaws}
 import laws.data.discipline.{AffineTests, ModifyFTests}
 import laws.typeclass.AssociativeFunctorLaws
@@ -84,125 +62,9 @@ private given arbBinFInt: Arbitrary[BinF[Int]] =
   */
 class OpticsLawsSpec extends Specification with CheckAllHelpers:
 
-  // ----- Iso: tuple swap (Int, String) <-> (String, Int) ----------
-
-  val swapIso: Optic[(Int, String), (Int, String), (String, Int), (String, Int), Direct] =
-    Iso[(Int, String), (Int, String), (String, Int), (String, Int)](
-      _.swap,
-      _.swap,
-    )
-
-  checkAll(
-    "Iso[(Int,String), (String,Int)] — tuple swap",
-    new IsoTests[(Int, String), (String, Int)]:
-      val laws = new IsoLaws[(Int, String), (String, Int)]:
-        val iso = swapIso
-    .iso,
-  )
-
-  // ----- Lens: first / second on a pair --------------------------
-
-  val firstLens: Optic[(Int, String), (Int, String), Int, Int, Tuple2] =
-    Lens[(Int, String), Int](_._1, (s, a) => (a, s._2))
-
-  val secondLens: Optic[(Int, String), (Int, String), String, String, Tuple2] =
-    Lens[(Int, String), String](_._2, (s, a) => (s._1, a))
-
-  checkAll(
-    "Lens[(Int,String), Int] — first projection",
-    new LensTests[(Int, String), Int]:
-      val laws = new LensLaws[(Int, String), Int]:
-        val lens = firstLens
-    .lens,
-  )
-
-  checkAll(
-    "Lens[(Int,String), String] — second projection",
-    new LensTests[(Int, String), String]:
-      val laws = new LensLaws[(Int, String), String]:
-        val lens = secondLens
-    .lens,
-  )
-
-  // ----- Prism: even Int, isomorphic to its half ----------------
-  //
-  // getOrModify(n) = Right(n / 2) when n is even, else Left(n).
-  // reverseGet(k)  = k * 2.
-  //
-  // Domain is restricted to [-10000, 10000] so the doubling never
-  // overflows Int — the laws hold on the whole 32-bit range only if
-  // you switch to a wider carrier, which is more about Int's algebra
-  // than about the prism itself.
-
-  val evenPrism: Optic[Int, Int, Int, Int, Either] =
-    Prism[Int, Int](
-      n => if n % 2 == 0 then Right(n / 2) else Left(n),
-      k => k * 2,
-    )
-
-  locally {
-    given Arbitrary[Int] = Arbitrary(Gen.choose(-10000, 10000))
-    checkAll(
-      "Prism[Int, Int] — even values (Int domain restricted to ±10000)",
-      new PrismTests[Int, Int]:
-        val laws = new PrismLaws[Int, Int]:
-          val prism = evenPrism
-      .prism,
-    )
-  }
-
-  // ----- Optional: head of a non-empty pair (Int, List[Int]) -----
-  //
-  // getOrModify takes (h, hs) to Right(h); reverseGet(s, h') = (h', hs).
-
-  val headOptional: Optic[(Int, List[Int]), (Int, List[Int]), Int, Int, Affine] =
-    Optional[(Int, List[Int]), (Int, List[Int]), Int, Int](
-      { case (h, _) => Right(h) },
-      { case ((_, hs), h2) => (h2, hs) },
-    )
-
-  checkAll(
-    "Optional[(Int,List[Int]), Int] — head of non-empty pair",
-    new OptionalTests[(Int, List[Int]), Int]:
-      val laws = new OptionalLaws[(Int, List[Int]), Int]:
-        val optional = headOptional
-    .optional,
-  )
-
-  // ----- Modify: maps `f` over both sides of a pair --------------
-
-  val pairModify: Optic[(Int, Int), (Int, Int), Int, Int, data.ModifyF] =
-    Modify[(Int, Int), (Int, Int), Int, Int](f => { case (a, b) => (f(a), f(b)) })
-
-  checkAll(
-    "Modify[(Int,Int), Int] — both pair components",
-    new ModifyTests[(Int, Int), Int]:
-      val laws = new ModifyLaws[(Int, Int), Int]:
-        val modify = pairModify
-    .modify,
-  )
-
-  // ----- Traversal.each on List[Int] ------------------------------
-
-  val listTraversal: Optic[List[Int], List[Int], Int, Int, data.MultiFocus[PSVec]] =
-    Traversal.each[List, Int]
-
-  // covers: Traversal.each over List[Int]
-  checkAllTraversalFor[List, Int]("Traversal.each[List, Int]", listTraversal)
-
-  // ----- Getter: first projection and a synthetic one ------------
-
-  val firstGetter: Optic[(Int, String), Unit, Int, Unit, Direct] =
-    Getter[(Int, String), Int](_._1)
-
-  checkAll(
-    "Getter[(Int,String), Int] — first projection",
-    new GetterTests[(Int, String), Int]:
-      val laws = new GetterLaws[(Int, String), Int]:
-        val getter = firstGetter
-        val reference = (p: (Int, String)) => p._1
-    .getter,
-  )
+  // The base families (Iso / Lens / Prism / Optional / Modify / Traversal / Getter) are checked in
+  // the munit `OpticLawsSuite` (every platform) on these shared fixtures.
+  import OpticFixtures.*
 
   // ----- Fused prism ∘ lens, and read-only collapses through a lens's direct `get` -----
   //

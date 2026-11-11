@@ -12,6 +12,7 @@ import optics.Optic.* // cross, andThen, get
 import generics.plate
 import circe.platedJson
 import schemes.samples.{Expr, Wrapped}
+import SchemeFixtures.*
 
 class SchemesSpec extends Specification:
 
@@ -157,20 +158,10 @@ class SchemesSpec extends Specification:
   }
 
   "fused hylo is stack-safe at depth 10^6 (no intermediate S built)" >> {
-    val expandSpine: Int => PSVec[Int] =
-      n => if n <= 0 then PSVec.empty[Int] else PSVec.singleton(n - 1)
-    val depthAlg: (Int, PSVec[Int]) => Int = (n, rs) => if n <= 0 then 0 else rs(0) + 1
-    (Schemes.hylo(expandSpine, depthAlg).get(1_000_000) == 1_000_000) must beTrue
+    (Schemes.hylo(spineExpand, spineDepth).get(1_000_000) == 1_000_000) must beTrue
   }
 
   "ana's unfold loop is stack-safe (built S is O(depth) heap, not JVM stack)" >> {
-    val buildNegCoalg: Schemes.Coalg[Int, Expr] = n =>
-      if n <= 0 then (PSVec.empty[Int], (_: PSVec[Expr]) => Expr.Lit(0.0))
-      else (PSVec.singleton(n - 1), (ks: PSVec[Expr]) => Expr.Neg(ks(0)))
-    val deep: Expr = Schemes.ana(buildNegCoalg).reverseGet(100_000)
-    val depth: (Expr, PSVec[Int]) => Int = (node, kids) =>
-      node match
-        case Expr.Lit(_) => 0
-        case _           => kids(0) + 1
-    (Schemes.cata(depth).get(deep) == 100_000) must beTrue
+    val deep: Expr = Schemes.ana(negCoalg).reverseGet(100_000)
+    (Schemes.cata(negDepth).get(deep) == 100_000) must beTrue
   }
