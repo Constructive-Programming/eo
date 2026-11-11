@@ -68,4 +68,5 @@ class NativeJsoniterSuite extends munit.FunSuite:
     assertEquals(s, JsonSlice(doc))
     assertEquals(ro.position(), 0)
   }
+
 // CPD-ON

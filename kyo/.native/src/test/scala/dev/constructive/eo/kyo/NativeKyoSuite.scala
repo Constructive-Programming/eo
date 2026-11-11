@@ -54,4 +54,5 @@ class NativeKyoSuite extends munit.FunSuite:
     assertEquals(bump(Result.succeed(1): Result[String, Int]), Result.succeed(2))
     assertEquals(bump(Result.fail("e"): Result[String, Int]), Result.fail("e"))
   }
+
 // CPD-ON

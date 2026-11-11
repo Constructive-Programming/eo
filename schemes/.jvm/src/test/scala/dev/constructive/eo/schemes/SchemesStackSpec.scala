@@ -81,4 +81,5 @@ class SchemesStackSpec extends Specification:
         case _           => kids(0) + 1
     ((Schemes.cata(depthAlgProbed).get(e) == 50) && (maxD - minD >= 30)) must beTrue
   }
+
 // CPD-ON

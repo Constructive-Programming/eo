@@ -108,4 +108,5 @@ class NativeOpticLawsSuite extends munit.DisciplineSuite:
         val reference = (p: (Int, String)) => p._1
     .getter,
   )
+
 // CPD-ON

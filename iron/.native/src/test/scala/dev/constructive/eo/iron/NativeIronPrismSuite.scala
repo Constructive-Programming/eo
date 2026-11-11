@@ -23,4 +23,5 @@ class NativeIronPrismSuite extends munit.DisciplineSuite:
         val prism = IronPrism[Int, Positive]
     .prism,
   )
+
 // CPD-ON

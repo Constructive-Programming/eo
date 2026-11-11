@@ -78,4 +78,5 @@ class NativeZioSuite extends munit.DisciplineSuite:
         val traversal = Chunks.each[Int, Int]
     .traversal,
   )
+
 // CPD-ON

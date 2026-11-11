@@ -72,4 +72,5 @@ class NativeGenericsSuite extends ScalaCheckSuite:
         case Left(s2)  => s2 == s)
     }
   }
+
 // CPD-ON

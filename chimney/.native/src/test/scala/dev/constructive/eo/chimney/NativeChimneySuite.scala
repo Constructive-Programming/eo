@@ -77,4 +77,5 @@ class NativeChimneySuite extends munit.DisciplineSuite:
     assertEquals(decode.getOption(NAccountDto("b", -5L)), None)
     assert(decode.either(NAccountDto("b", -5L)).isLeft)
   }
+
 // CPD-ON

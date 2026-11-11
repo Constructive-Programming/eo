@@ -71,4 +71,5 @@ class NativeCirceSuite extends ScalaCheckSuite:
     )
     assertEquals(ageL.getOptionUnsafe("not json"), None)
   }
+
 // CPD-ON
