@@ -27,9 +27,9 @@ libraryDependencies ++= Seq(
 
 Requires Scala 3.9.x on JDK 17, 21, or 25 (`cats-eo-kyo` needs JDK 25).
 
-The core, laws, generics, schemes, circe, jsoniter and iron modules also ship for Scala.js and
-Scala Native; `%%%` selects the platform artifact (on the JVM it equals `%%`). The avro, zio, kyo,
-chimney and spark modules are JVM-only — keep `%%` for them.
+The core, laws, generics, schemes, circe, jsoniter, iron, zio, chimney and kyo modules also ship for Scala.js and
+Scala Native; `%%%` selects the platform artifact (on the JVM it equals `%%`). The avro and spark
+modules are JVM-only — keep `%%` for them.
 
 ## Define
 

@@ -11,7 +11,7 @@ val scala3Version = "3.9.0"
 
 // 1.x is binary-compatible (MiMa-checked from 1.0.0; see mima.sbt, which
 // also keeps the 0.x breaking-change history).
-ThisBuild / tlBaseVersion := "1.1"
+ThisBuild / tlBaseVersion := "1.2"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -512,7 +512,7 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 // zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `cats-eo-zio`
 // integrates with. Compile-scope there: the module's whole API names
 // ZIO types.
-lazy val zioCore = Ziverge %% "zio" % "2.1.26"
+lazy val zioCore = Def.setting(Ziverge %%% "zio" % "2.1.26")
 // zio-schema / zio-json / zio-prelude — Optional in `cats-eo-zio`: only
 // the `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages name
 // their types, callers who want a seam add its artifact themselves (the
@@ -521,11 +521,11 @@ lazy val zioCore = Ziverge %% "zio" % "2.1.26"
 // Derivation + the json codec artifact are test-only fuel (DeriveSchema
 // fixtures, a concrete BinaryCodec for the byte-face prisms).
 val ZioSchemaVersion = "1.7.5"
-lazy val zioSchema = Ziverge %% "zio-schema" % ZioSchemaVersion
-lazy val zioSchemaDerivation = Ziverge %% "zio-schema-derivation" % ZioSchemaVersion
-lazy val zioSchemaJson = Ziverge %% "zio-schema-json" % ZioSchemaVersion
-lazy val zioJson = Ziverge %% "zio-json" % "0.7.44"
-lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC48"
+lazy val zioSchema = Def.setting(Ziverge %%% "zio-schema" % ZioSchemaVersion)
+lazy val zioSchemaDerivation = Def.setting(Ziverge %%% "zio-schema-derivation" % ZioSchemaVersion)
+lazy val zioSchemaJson = Def.setting(Ziverge %%% "zio-schema-json" % ZioSchemaVersion)
+lazy val zioJson = Def.setting(Ziverge %%% "zio-json" % "0.7.44")
+lazy val zioPrelude = Def.setting(Ziverge %%% "zio-prelude" % "1.0.0-RC48")
 // kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
@@ -535,13 +535,13 @@ lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC48"
 // module therefore builds on a 25 toolchain (`tlJdkRelease := 25` there)
 // and drops out of the root aggregate on older JVMs — see `kyoBuildActive`.
 val KyoVersion = "1.0.0-RC7"
-lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
+lazy val kyoPrelude = Def.setting(GetKyo %%% "kyo-prelude" % KyoVersion)
 // kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
 // Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
 // its types, callers who want it add it themselves (avro/circe pattern).
 // The json codec artifact is test-only fuel for the byte-face prisms.
-lazy val kyoSchema = GetKyo %% "kyo-schema" % KyoVersion
-lazy val kyoSchemaJson = GetKyo %% "kyo-schema-json" % KyoVersion
+lazy val kyoSchema = Def.setting(GetKyo %%% "kyo-schema" % KyoVersion)
+lazy val kyoSchemaJson = Def.setting(GetKyo %%% "kyo-schema-json" % KyoVersion)
 
 // kyo requires a Java 25 runtime (see the KyoVersion note): on older JVMs
 // the kyo module leaves the aggregate entirely — `sbt test` / `compile` /
@@ -555,7 +555,7 @@ val kyoBuildActive: Boolean =
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
 // chimney 2.x is built on hearth (like eo-generics) and published for Scala 3.9.0.
-lazy val chimneyCore = "io.scalaland" %% "chimney" % "2.1.0"
+lazy val chimneyCore = Def.setting("io.scalaland" %%% "chimney" % "2.1.0")
 
 // Apache Spark 4.x publishes ONLY `_2.13` artifacts (no Scala 3 build), so
 // every Spark dependency is consumed through `CrossVersion.for3Use2_13`.
@@ -702,7 +702,7 @@ lazy val nativeMunit = Seq(
 )
 
 // New platforms ship from the next release on, so MiMa has no JS / Native baseline to compare with.
-lazy val newPlatform = Seq(tlVersionIntroduced := Map("3" -> "1.1.2"))
+lazy val newPlatform = Seq(tlVersionIntroduced := Map("3" -> "1.2.0"))
 
 // Shared wiring of every cross module: common + platform-neutral scalac flags everywhere, the
 // bytecode optimizer on the JVM only, Native on munit (see `nativeMunit`).
@@ -1000,24 +1000,21 @@ lazy val ironIntegration = eoCross(
 // service via `CanGet`). Consumes capabilities, constructs nothing new:
 // no new carrier — the service lens is a plain `GetReplaceLens`, so all
 // fused composition and the capability mixins come for free.
-lazy val zioIntegration: Project = project
-  .in(file("zio"))
-  .dependsOn(
-    core.jvm,
-    laws.jvm % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val zioIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("zio"))
+    .dependsOn(core, laws % Test)
+)
   .settings(
     name := "cats-eo-zio",
     libraryDependencies += cats.value,
-    libraryDependencies += zioCore,
-    libraryDependencies += zioSchema % Optional,
-    libraryDependencies += zioJson % Optional,
-    libraryDependencies += zioPrelude % Optional,
-    libraryDependencies += zioSchemaDerivation % Test,
-    libraryDependencies += zioSchemaJson % Test,
-    libraryDependencies += discipline.value % Test,
+    libraryDependencies += zioCore.value,
+    libraryDependencies += zioSchema.value % Optional,
+    libraryDependencies += zioJson.value % Optional,
+    libraryDependencies += zioPrelude.value % Optional,
+    libraryDependencies += zioSchemaDerivation.value % Test,
+    libraryDependencies += zioSchemaJson.value % Test,
     libraryDependencies += catsLaws.value % Test,
   )
 
@@ -1026,20 +1023,16 @@ lazy val zioIntegration: Project = project
 // miss keeps chimney's errors), `Patcher` → write-only Modify — plus `.patch` / `.transformFocus`
 // running chimney at an eo optic's focus. eo-generics is Test-only: callers compose the bridges
 // with whichever eo optics they like, derived or hand-written.
-lazy val chimneyIntegration: Project = project
-  .in(file("chimney"))
-  .dependsOn(
-    core.jvm,
-    generics.jvm % Test,
-    laws.jvm % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val chimneyIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("chimney"))
+    .dependsOn(core, generics % Test, laws % Test)
+)
   .settings(
     name := "cats-eo-chimney",
     libraryDependencies += cats.value,
-    libraryDependencies += chimneyCore,
-    libraryDependencies += discipline.value % Test,
+    libraryDependencies += chimneyCore.value,
   )
 
 // Spark integration: optics over Spark's symbolic `Column` expressions.
@@ -1185,43 +1178,25 @@ lazy val sparkConnectServer: Project = project
 // capability-driven focus ops as `zio.Ref`, and `Layer.focus` projects
 // an aggregate service into a sub-service layer (`Layer.from` is
 // CanGet-shaped). Depends on kyo-prelude ONLY — no kyo-core IO.
-lazy val kyoIntegration: Project = project
-  .in(file("kyo"))
-  .dependsOn(
-    core.jvm,
-    laws.jvm % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val kyoIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("kyo"))
+    .dependsOn(core, laws % Test)
+)
+  // kyo RC5+ ships Java-25-only bytecode: the JVM artifact targets 25, and every platform needs a
+  // JDK 25 compiler JVM to load kyo's macro classes (hence `kyoBuildActive` gates the whole module).
+  .jvmSettings(tlJdkRelease := Some(25))
   .settings(
     name := "cats-eo-kyo",
-    // Kyo's kernel is not explicit-nulls-clean: its `inline` machinery
-    // (Safepoint.eval passes a `null` Interceptor) re-typechecks inside
-    // OUR compilation units wherever a kyo inline def expands (`.eval`,
-    // `Env.run`, ...), and fails under `-Yexplicit-nulls`. Module-local
-    // opt-out; every other module keeps the flag.
     scalacOptions -= "-Yexplicit-nulls",
     Test / scalacOptions -= "-Yexplicit-nulls",
-    // Same phenomenon, different flag: kyo-schema's `Schema.derived` inline
-    // machinery re-typechecks its OWN sources inside our units and trips our
-    // -Werror on safe-init warnings kyo suppresses with flags we don't set.
-    // Silence by ORIGIN (kyo-schema source paths), keeping our code strict.
     scalacOptions += "-Wconf:src=kyo-schema/.*:s",
-    // kyo 1.0.0-RC5+ is Java-25-only bytecode, so this artifact honestly
-    // targets 25 too (the ThisBuild floor stays 17 for every other module).
-    tlJdkRelease := Some(25),
-    // EXPERIMENTAL: no binary-compatibility promise. cats-eo-kyo builds on
-    // kyo 1.0.0-RC7, a release candidate whose own API and bytecode still
-    // move between RCs, so this module is excluded from the 1.x MiMa check
-    // (every other published module is checked against 1.0.0). Lift this
-    // override — let sbt-typelevel compute the previous versions again —
-    // once kyo 1.0.0 final ships and the module is rebuilt on it.
     tlMimaPreviousVersions := Set.empty,
     libraryDependencies += cats.value,
-    libraryDependencies += kyoPrelude,
-    libraryDependencies += kyoSchema % Optional,
-    libraryDependencies += kyoSchemaJson % Test,
-    libraryDependencies += discipline.value % Test,
+    libraryDependencies += kyoPrelude.value,
+    libraryDependencies += kyoSchema.value % Optional,
+    libraryDependencies += kyoSchemaJson.value % Test,
   )
 
 // Docs site — Laika + mdoc via sbt-typelevel-site. Rooted at
@@ -1239,9 +1214,9 @@ lazy val docs: Project = project
     LocalProject("avroIntegration"),
     jsoniterIntegration.jvm,
     ironIntegration.jvm,
-    LocalProject("zioIntegration"),
-    LocalProject("kyoIntegration"),
-    LocalProject("chimneyIntegration"),
+    zioIntegration.jvm,
+    kyoIntegration.jvm,
+    chimneyIntegration.jvm,
     LocalProject("sparkIntegration"),
     laws.jvm,
     schemes.jvm,
@@ -1287,17 +1262,17 @@ lazy val docs: Project = project
     // kyo-schema is `Optional` on kyoIntegration (callers add it
     // themselves); surface it plus the json codec here so kyo.md can
     // document the `eo.kyo.schema` bridge against the live classpath.
-    libraryDependencies += kyoSchema,
-    libraryDependencies += kyoSchemaJson,
+    libraryDependencies += kyoSchema.value,
+    libraryDependencies += kyoSchemaJson.value,
     // Same for the zio side: zio-schema / zio-json / zio-prelude are
     // `Optional` on zioIntegration; surface them (plus derivation and
     // the json BinaryCodec artifact) so zio.md can document the
     // `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages.
-    libraryDependencies += zioSchema,
-    libraryDependencies += zioSchemaDerivation,
-    libraryDependencies += zioSchemaJson,
-    libraryDependencies += zioJson,
-    libraryDependencies += zioPrelude,
+    libraryDependencies += zioSchema.value,
+    libraryDependencies += zioSchemaDerivation.value,
+    libraryDependencies += zioSchemaJson.value,
+    libraryDependencies += zioJson.value,
+    libraryDependencies += zioPrelude.value,
     // fs2 (and, through it, cats-effect) for the "Streaming with fs2"
     // cookbook page — docs-only: no published module depends on fs2.
     libraryDependencies += fs2Core,
@@ -1441,7 +1416,7 @@ lazy val unidocs: Project = project
       avroIntegration,
       jsoniterIntegration.jvm,
       ironIntegration.jvm,
-      chimneyIntegration,
+      chimneyIntegration.jvm,
     ),
   )
 
@@ -1463,10 +1438,10 @@ lazy val benchmarks: Project = project
     // eo-composed access into ZEnvironment / TypeMap vs the hand-written
     // equivalent. benchmarks/ has no -Yexplicit-nulls (commonSettings
     // only), so kyo's inline `.eval` machinery expands fine here.
-    LocalProject("zioIntegration"),
-    LocalProject("kyoIntegration"),
+    zioIntegration.jvm,
+    kyoIntegration.jvm,
     // ChimneyBench: cats-eo-chimney vs plain chimney vs hand-written transforms.
-    LocalProject("chimneyIntegration"),
+    chimneyIntegration.jvm,
   )
   .settings(commonSettings *)
   .settings(
@@ -1682,8 +1657,8 @@ addCommandAlias(
     "project avroIntegration; stryker; " +
     "project jsoniterIntegrationJVM; stryker; " +
     "project ironIntegrationJVM; stryker; " +
-    "project zioIntegration; stryker; " +
-    "project kyoIntegration; stryker; " +
-    "project chimneyIntegration; stryker; " +
+    "project zioIntegrationJVM; stryker; " +
+    "project kyoIntegrationJVM; stryker; " +
+    "project chimneyIntegrationJVM; stryker; " +
     "project root",
 )

@@ -45,12 +45,11 @@ which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 
 ### Scala.js and Scala Native
 
-`cats-eo`, `-laws`, `-generics`, `-schemes`, `-schemes-laws`, `-circe`, `-jsoniter` and `-iron`
-are also published for Scala.js 1.x and Scala Native 0.5 — use `%%%` (as above) and sbt picks
+`cats-eo`, `-laws`, `-generics`, `-schemes`, `-schemes-laws`, `-circe`, `-jsoniter`, `-iron`,
+`-zio`, `-chimney` and `-kyo` are also published for Scala.js 1.x and Scala Native 0.5 — use `%%%` (as above) and sbt picks
 the artifact for your platform. `%%%` on a JVM project resolves exactly like `%%`. The other
-modules (`-avro`, `-zio`, `-kyo`, `-chimney`, `-spark`) are JVM-only because their dependencies
-(Apache Avro, ZIO, Kyo, chimney, Spark) have no Scala.js / Scala Native build, so keep `%%` for
-those.
+modules (`-avro`, `-spark`) are JVM-only because their dependencies (Apache Avro, Spark) have no
+Scala.js / Scala Native build, so keep `%%` for those.
 
 ## 60-second tour
 

@@ -46,8 +46,8 @@ and `sbt test` cover those on every platform; benchmarks and the demos must be i
 ### Platforms (JVM, Scala.js, Scala Native)
 
 Cross-built (`crossProject(JVMPlatform, JSPlatform, NativePlatform)`, `CrossType.Pure`):
-**`core`, `laws`, `tests`, `generics`, `schemes`, `schemesLaws`, `circe`, `jsoniter`, `iron`**.
-Project ids are `<id>JVM` / `<id>JS` / `<id>Native` (`coreJS`, `circeIntegrationNative`, …); the
+**`core`, `laws`, `tests`, `generics`, `schemes`, `schemesLaws`, `circe`, `jsoniter`, `iron`, `zio`, `chimney`, `kyo`** (all dependencies publish `_sjs1_3` / `_native0.5_3`; `kyo` still needs a JDK 25 build JVM on every platform, hence `kyoBuildActive`).
+Project ids are `<id>JVM` / `<id>JS` / `<id>Native` (`coreJS`, `circeIntegrationNative`, `zioIntegrationJS`, …); the
 sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/test`,
 `sbt rootNative/test`; plain `sbt test` runs all three). Deps are `%%%`; the dependency vals in
 `build.sbt` are `Def.setting`s, so a use is `libraryDependencies += cats.value`.
@@ -73,21 +73,17 @@ sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/te
   fails Native's interop phase against munit ≥ 1.1). The Native suites are compact twins, NOT a
   port: `laws` (Iso/Lens/Prism/Optional/Modify/Traversal/Getter law matrix), `generics` (derived
   Lens + Prism), `schemesLaws` (hylo fusion law across `OnStackLimit`), `iron` (prism laws),
-  `jsoniter` (byte prism read/write + `JsonSlice` portability), `circe` (cursor prism). The
+  `jsoniter` (byte prism read/write + `JsonSlice` portability), `circe` (cursor prism), `zio` (service lens, Ref focus, `Traverse[Chunk]` laws), `chimney` (iso / prism / getter laws), `kyo` (TypeMap / Env / Var / Layer focus). The
   `tests` module (≈580 examples: composition matrix, fused paths, Plated, PSVec, …) and the rest
   of each module's specs run on JVM + JS only — a known Native gap; grow the twins, or port a spec
   to munit, when a Native regression is a worry. Native tests link with the system clang.
-- **MiMa.** JS / Native artifacts first ship in the next release (`tlVersionIntroduced := 1.1.2`
-  via `newPlatform`), so they have no baseline; JVM keeps the 1.0.0 / 1.1.x baselines. Bump
-  `tlBaseVersion` to 1.2 when the first cross-platform release is cut.
+- **MiMa.** JS / Native artifacts first ship in 1.2.0 (`tlVersionIntroduced := 1.2.0`
+  via `newPlatform`), so they have no baseline; JVM keeps the 1.0.0 / 1.1.x baselines. `tlBaseVersion` is 1.2 (the first cross-platform minor).
 - **JVM-only modules and why.** `avro` (Apache Avro is a Java library: reflection / `IndexedRecord`
-  / `GenericData`, plus the Optional vulcan / jsoniter / circe bridges), `zio` (the module is ZIO 2
-  DI/STM; zio-schema derivation + zio-prelude are JVM-first and the JS/Native story is untested),
-  `chimney` (hearth-based, but its integration is exercised only on the JVM here — a candidate for
-  the next conversion), `spark` (Spark has no Scala.js / Native build and the specs need a Connect
-  server JVM), `kyo` (needs JDK 25 bytecode), `benchmarks` / `sparkBench` / the demos (JMH,
-  Scalus, ASM, fs2-io sockets — JVM by nature), `docs` / `unidocs` (mdoc over JVM classpaths).
-  They depend on the JVM projects (`core.jvm`, `laws.jvm`, …).
+  / `GenericData`, plus the Optional vulcan / jsoniter / circe bridges), `spark` (Spark has no
+  Scala.js / Native build and the specs need a Connect server JVM), `benchmarks` / `sparkBench` /
+  the demos (JMH, Scalus, ASM, fs2-io sockets — JVM by nature), `docs` / `unidocs` (mdoc over JVM
+  classpaths). They depend on the JVM projects (`core.jvm`, `laws.jvm`, …).
 - **Local worktrees.** In a git worktree whose common repo is bare-ish, sbt-git can die at load
   with `NoWorkTreeException`; an untracked `zz-local-worktree.sbt` with
   `ThisBuild / com.github.sbt.git.SbtGit.git.gitUncommittedChanges := false` works around it.
