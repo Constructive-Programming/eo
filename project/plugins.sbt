@@ -89,3 +89,9 @@ addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.22.0")
 addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
 addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "1.4.0")
 addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.4.0")
+
+// `sbt-cardinality` reports how many values each definition holds and how many implementations
+// each generic signature admits (`sbt cardinalityReport`, `cardinalityReportOf <path>…`,
+// `cardinalityReportSelected <qualified.method>…`; report at `<module>/target/cardinality/
+// report.txt`). The reduction workflow that reads it is `.claude/skills/cardinality-reduction/`.
+addSbtPlugin("dev.constructive" % "sbt-cardinality" % "0.0.4")
