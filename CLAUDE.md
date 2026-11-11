@@ -77,8 +77,7 @@ sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/te
   `tests` module (≈580 examples: composition matrix, fused paths, Plated, PSVec, …) and the rest
   of each module's specs run on JVM + JS only — a known Native gap; grow the twins, or port a spec
   to munit, when a Native regression is a worry. Native tests link with the system clang.
-- **MiMa.** JS / Native artifacts first ship in 1.2.0 (`tlVersionIntroduced := 1.2.0`
-  via `newPlatform`), so they have no baseline; JVM keeps the 1.0.0 / 1.1.x baselines. `tlBaseVersion` is 1.2 (the first cross-platform minor).
+- **MiMa.** JS / Native artifacts first ship in 1.2.0 (`newPlatform` empties `tlMimaPreviousVersions`), so they have no baseline until 1.2.0 exists — then switch it to `tlVersionIntroduced := Map("3" -> "1.2.0")`; JVM keeps the 1.0.0 / 1.1.x baselines. `tlBaseVersion` is 1.2 (the first cross-platform minor).
 - **JVM-only modules and why.** `avro` (Apache Avro is a Java library: reflection / `IndexedRecord`
   / `GenericData`, plus the Optional vulcan / jsoniter / circe bridges), `spark` (Spark has no
   Scala.js / Native build and the specs need a Connect server JVM), `benchmarks` / `sparkBench` /
