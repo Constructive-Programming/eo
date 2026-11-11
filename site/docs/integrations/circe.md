@@ -17,7 +17,7 @@ string-path API — for shapes unknown at compile time, stay on
 cursors or reach for `Plated[Json]` (below).
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-circe" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "cats-eo-circe" % "@VERSION@"
 ```
 
 ## Why this exists

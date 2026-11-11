@@ -1,18 +1,7 @@
 package dev.constructive.eo.nativetests
 
 import cats.instances.list.given
-import org.scalacheck.{Arbitrary, Gen}
-
 import dev.constructive.eo.data.{Affine, Direct, ModifyF, MultiFocus, PSVec}
-import dev.constructive.eo.laws.{
-  GetterLaws,
-  IsoLaws,
-  LensLaws,
-  ModifyLaws,
-  OptionalLaws,
-  PrismLaws,
-  TraversalLaws,
-}
 import dev.constructive.eo.laws.discipline.{
   GetterTests,
   IsoTests,
@@ -22,10 +11,20 @@ import dev.constructive.eo.laws.discipline.{
   PrismTests,
   TraversalTests,
 }
+import dev.constructive.eo.laws.{
+  GetterLaws,
+  IsoLaws,
+  LensLaws,
+  ModifyLaws,
+  OptionalLaws,
+  PrismLaws,
+  TraversalLaws,
+}
 import dev.constructive.eo.optics.{Getter, Iso, Lens, Modify, Optic, Optional, Prism, Traversal}
+import org.scalacheck.{Arbitrary, Gen}
 
-/** Scala Native twin of the core of `OpticsLawsSpec` (the `tests` module). specs2 publishes no Scala
-  * Native artifact, so the specs2 suites cannot compile there; this munit suite re-runs the
+/** Scala Native twin of the core of `OpticsLawsSpec` (the `tests` module). specs2 publishes no
+  * Scala Native artifact, so the specs2 suites cannot compile there; this munit suite re-runs the
   * discipline rule sets — which are framework-independent — on the Native build of core + laws.
   */
 class NativeOpticLawsSuite extends munit.DisciplineSuite:

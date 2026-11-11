@@ -62,11 +62,30 @@ ThisBuild / githubWorkflowIncludeClean := false
 // scalafix check runs via `--check` so any rule drift fails CI
 // without rewriting files; devs run `sbt scalafixAll` locally to
 // auto-fix.
+// Platform matrix (sbt-typelevel `tlCrossRootProject`): every build job runs ONE of `rootJVM` /
+// `rootJS` / `rootNative`, JS and Native on the primary JDK only. The checks below that name
+// JVM-only projects (demos, benchmarks, spark bench) run on the `rootJVM` leg alone.
+val jvmLeg = Some("matrix.project == 'rootJVM'")
+
+// Scala Native links with the system clang; make sure the runner has it (and libunwind).
+ThisBuild / githubWorkflowBuildPreamble += WorkflowStep.Run(
+  List("sudo apt-get update", "sudo apt-get install -y clang libunwind-dev"),
+  name = Some("Install Scala Native toolchain (clang)"),
+  cond = Some("matrix.project == 'rootNative'"),
+)
+
+// Run `sbt test` + `sbt doc` + scalafmt check on every PR. MiMa
+// is wired transitively through sbt-typelevel-ci-release. The
+// scalafix check runs via `--check` so any rule drift fails CI
+// without rewriting files; devs run `sbt scalafixAll` locally to
+// auto-fix.
 ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   WorkflowStep.Sbt(
+    List("scalafmtCheckAll", "scalafmtSbtCheck"),
+    name = Some("Check formatting"),
+  ),
+  WorkflowStep.Sbt(
     List(
-      "scalafmtCheckAll",
-      "scalafmtSbtCheck",
       "benchmarks/scalafmtCheck",
       "demoUplcJvm/scalafmtCheckAll",
       "demoUplcJvmValidators/scalafmtCheckAll",
@@ -75,11 +94,15 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoGrpcFilterBench/scalafmtCheckAll",
       "sparkBench/scalafmtCheckAll",
     ),
-    name = Some("Check formatting"),
+    name = Some("Check formatting (JVM-only projects)"),
+    cond = jvmLeg,
+  ),
+  WorkflowStep.Sbt(
+    List("scalafixAll --check"),
+    name = Some("Check scalafix"),
   ),
   WorkflowStep.Sbt(
     List(
-      "scalafixAll --check",
       "demoUplcJvm/scalafixAll --check",
       "demoUplcJvmValidators/scalafixAll --check",
       "demoUplcJvmBench/scalafixAll --check",
@@ -87,7 +110,8 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoGrpcFilterBench/scalafixAll --check",
       "sparkBench/scalafixAll --check",
     ),
-    name = Some("Check scalafix"),
+    name = Some("Check scalafix (JVM-only projects)"),
+    cond = jvmLeg,
   ),
 )
 
@@ -97,14 +121,17 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("demoUplcJvm/test", "demoUplcJvmBench/Jmh/compile"),
   name = Some("Test UPLC → JVM demo (differential vs Scalus CEK)"),
+  cond = jvmLeg,
 )
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("demoGrpcFilter/test", "demoGrpcFilterBench/Jmh/compile"),
   name = Some("Test gRPC filter demo (eo-jsoniter + fs2)"),
+  cond = jvmLeg,
 )
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("sparkBench/Jmh/compile"),
   name = Some("Compile spark benchmarks"),
+  cond = jvmLeg,
 )
 
 // -------------------------------------------------------------------
@@ -667,7 +694,11 @@ lazy val platformSources = Seq(
 
 lazy val nativeMunit = Seq(
   Test / unmanagedSourceDirectories := Seq(baseDirectory.value / "src" / "test" / "scala"),
-  libraryDependencies ++= Seq(munit.value % Test, munitScalacheck.value % Test, disciplineMunit.value % Test),
+  libraryDependencies ++= Seq(
+    munit.value % Test,
+    munitScalacheck.value % Test,
+    disciplineMunit.value % Test
+  ),
 )
 
 // New platforms ship from the next release on, so MiMa has no JS / Native baseline to compare with.
@@ -1602,12 +1633,12 @@ addCommandAlias("benchQuick", "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1")
 // re-evaluates the Laika docs settings, which OOMs on a small heap.
 // -------------------------------------------------------------------
 
-// Full cross-module statement/branch coverage. Root `test` exercises
-// every aggregated module's suite, so `coverageAggregate` rolls up a
-// complete per-package view.
+// Full cross-module statement/branch coverage on the JVM (`rootJVM`): the specs2 suites run there
+// in full, and scoverage's report is per-JVM-project. `rootJVM/test` exercises every JVM module's
+// suite, so `coverageAggregate` rolls up a complete per-package view.
 addCommandAlias(
   "coverageAll",
-  "set ThisBuild/tlFatalWarnings := false; clean; coverage; test; coverageReport; coverageAggregate",
+  "set ThisBuild/tlFatalWarnings := false; project rootJVM; clean; coverage; test; coverageReport; coverageAggregate; project root",
 )
 
 // Mutation testing across the published modules (tests/benchmarks/docs
@@ -1638,19 +1669,19 @@ addCommandAlias(
 addCommandAlias(
   "mutationAll",
   "set ThisBuild/tlFatalWarnings := false; " +
-    "set LocalProject(\"core\")/Test/definedTests ++= (LocalProject(\"tests\")/Test/definedTests).value; " +
-    "set LocalProject(\"core\")/Test/fullClasspath ++= (LocalProject(\"tests\")/Test/fullClasspath).value; " +
-    "set LocalProject(\"laws\")/Test/definedTests ++= (LocalProject(\"tests\")/Test/definedTests).value; " +
-    "set LocalProject(\"laws\")/Test/fullClasspath ++= (LocalProject(\"tests\")/Test/fullClasspath).value; " +
-    "project core; stryker; " +
-    "project laws; stryker; " +
-    "project generics; stryker; " +
-    "project schemes; stryker; " +
-    "project schemesLaws; stryker; " +
-    "project circeIntegration; stryker; " +
+    "set LocalProject(\"coreJVM\")/Test/definedTests ++= (LocalProject(\"testsJVM\")/Test/definedTests).value; " +
+    "set LocalProject(\"coreJVM\")/Test/fullClasspath ++= (LocalProject(\"testsJVM\")/Test/fullClasspath).value; " +
+    "set LocalProject(\"lawsJVM\")/Test/definedTests ++= (LocalProject(\"testsJVM\")/Test/definedTests).value; " +
+    "set LocalProject(\"lawsJVM\")/Test/fullClasspath ++= (LocalProject(\"testsJVM\")/Test/fullClasspath).value; " +
+    "project coreJVM; stryker; " +
+    "project lawsJVM; stryker; " +
+    "project genericsJVM; stryker; " +
+    "project schemesJVM; stryker; " +
+    "project schemesLawsJVM; stryker; " +
+    "project circeIntegrationJVM; stryker; " +
     "project avroIntegration; stryker; " +
-    "project jsoniterIntegration; stryker; " +
-    "project ironIntegration; stryker; " +
+    "project jsoniterIntegrationJVM; stryker; " +
+    "project ironIntegrationJVM; stryker; " +
     "project zioIntegration; stryker; " +
     "project kyoIntegration; stryker; " +
     "project chimneyIntegration; stryker; " +

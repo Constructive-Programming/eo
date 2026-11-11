@@ -218,7 +218,7 @@ The hylo law above is not just prose: it ships as a Discipline law in its own pu
 artifact, so you can pin your coalgebra / algebra pairs against it in your test suite:
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "@VERSION@" % Test
+libraryDependencies += "dev.constructive" %%% "cats-eo-schemes-laws" % "@VERSION@" % Test
 ```
 
 `dev.constructive.eo.schemes.laws.HyloLaws[Seed, S, A]` states the fusion contract:

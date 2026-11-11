@@ -19,7 +19,7 @@ or an entire request handler, becomes one clean expression instead of a nest of
 pipelines](#composing-derived-optics-into-pipelines) builds that up.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-generics" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "cats-eo-generics" % "@VERSION@"
 ```
 
 ```scala mdoc:silent

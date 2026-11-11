@@ -56,7 +56,8 @@ object Schemes:
   /** Engine for the *build* scheme ([[ana]]) and — via a per-node `(kids, combine)` bundling of
     * `expand` + `alg` — for the fused [[hylo]]. One [[Coalg]] call per node yields its children and
     * its combiner closure (stored in the frame on the heap path). On-stack fast path below
-    * [[OnStackLimit]], heap `ArrayBuffer` machine past it; stack-safe for any terminating coalgebra.
+    * [[OnStackLimit]], heap `ArrayBuffer` machine past it; stack-safe for any terminating
+    * coalgebra.
     */
   private def unfoldCoalg[N, R](coalg: Coalg[N, R]): N => R =
     n0 => unfoldCoalgRec(coalg, n0, 0)
@@ -80,9 +81,10 @@ object Schemes:
         loop(0)
         combine(PSVec.unsafeWrap[R](out))
 
-  /** Heap trampoline for [[unfoldCoalg]]: an explicit `ArrayBuffer`-backed stack post-order walk with each node's
-    * combiner closure stored in its frame. `enter` and the `@tailrec loop` driver share the one
-    * `stack` + `ret` cell; `loop`'s self-call stays in tail position for stack-safety.
+  /** Heap trampoline for [[unfoldCoalg]]: an explicit `ArrayBuffer`-backed stack post-order walk
+    * with each node's combiner closure stored in its frame. `enter` and the `@tailrec loop` driver
+    * share the one `stack` + `ret` cell; `loop`'s self-call stays in tail position for
+    * stack-safety.
     */
   private def unfoldCoalgHeap[N, R](coalg: Coalg[N, R], root: N): R =
     final class Frame(

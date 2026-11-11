@@ -64,11 +64,11 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           # Rewrites only the version literal in dependency lines like
-          #   libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "0.1.0" % Test
+          #   libraryDependencies += "dev.constructive" %%% "cats-eo-laws" % "0.1.0" % Test
           # (any `% Test` / trailing config survives). Prose mentions of
           # historical versions are deliberately left untouched.
           sed -E -i \
-            "s/(\"dev\.constructive\" *%% *\"cats-eo[a-z-]*\" *% *)\"[0-9][^\"]*\"/\1\"$VERSION\"/" \
+            "s/(\"dev\.constructive\" *%%%? *\"cats-eo[a-z-]*\" *% *)\"[0-9][^\"]*\"/\1\"$VERSION\"/" \
             README.md
           git diff --stat README.md
 

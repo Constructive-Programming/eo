@@ -68,7 +68,7 @@ are abstract classes you wire by overriding `laws` — there is no
 companion `apply`:
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
+libraryDependencies += "dev.constructive" %%% "cats-eo-laws" % "@VERSION@" % Test
 ```
 
 ```scala

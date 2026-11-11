@@ -8,7 +8,7 @@ partial conversion `A ⇀ A :| C` with a total way back — and that is
 exactly a Prism.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-iron" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "cats-eo-iron" % "@VERSION@"
 ```
 
 No carrier and no givens ship in this module: `IronPrism` builds the

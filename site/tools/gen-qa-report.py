@@ -213,8 +213,10 @@ def gen_grate() -> str:
 # coverage
 # --------------------------------------------------------------------------
 def find_scoverage_xml() -> str:
-    pat = os.path.join(ROOT, "target", "scala-*", "scoverage-report", "scoverage.xml")
-    hits = glob.glob(pat)
+    # `coverageAll` aggregates on `rootJVM` (base dir `.jvm`); the pre-cross-build layout was `target/`.
+    hits = []
+    for base in (".jvm/target", "target"):
+        hits += glob.glob(os.path.join(ROOT, base, "scala-*", "scoverage-report", "scoverage.xml"))
     return max(hits, key=os.path.getmtime) if hits else ""
 
 
@@ -258,8 +260,10 @@ def gen_coverage() -> str:
 # mutation
 # --------------------------------------------------------------------------
 def latest_report(module_dir: str) -> str:
-    pat = os.path.join(ROOT, module_dir, "target", "stryker4s-report", "*", "report.json")
-    hits = glob.glob(pat)
+    # cross modules (CrossType.Pure) keep the JVM project's target under `<dir>/.jvm/`.
+    hits = []
+    for base in (".jvm/target", "target"):
+        hits += glob.glob(os.path.join(ROOT, module_dir, base, "stryker4s-report", "*", "report.json"))
     return max(hits, key=os.path.getmtime) if hits else ""
 
 

@@ -371,7 +371,7 @@ full Traversal rule-set in one `checkAll` instead of hand-written
 round-trip tests:
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-laws" % "@VERSION@" % Test
+libraryDependencies += "dev.constructive" %%% "cats-eo-laws" % "@VERSION@" % Test
 ```
 
 ```scala
