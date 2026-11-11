@@ -1,6 +1,6 @@
 # cats-eo core — cardinality baseline, 2026-11-11
 #
-# Command:  sbt coreJVM/cardinalityReport   (sbt-cardinality 0.0.4; coreJS reports the same 1,844 lines)
+# Command:  sbt coreJVM/cardinalityReport   (sbt-cardinality 0.0.4 and 0.0.5 report it identically; coreJS too)
 # Source:   cats-eo e92a9296 (v1.3.0)
 # Summary:  697 signatures (211 finite · 59 ω · 427 ?); 151 definitions
 #           (52 with one value · 5 with more than one · 38 instantiation-dependent · 10 unresolved ·
