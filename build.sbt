@@ -389,7 +389,10 @@ lazy val disciplineCore = Def.setting(Typelevel %%% "discipline-core" % "1.7.0")
 // specs2 publishes for JVM and Scala.js ONLY (no Scala Native artifact), so `discipline-specs2` is the
 // JVM + JS test stack; Scala Native runs the munit twins below (see `nativeMunit`).
 lazy val discipline = Def.setting(Typelevel %%% "discipline-specs2" % "2.0.0")
-lazy val munit = Def.setting("org.scalameta" %%% "munit" % "1.1.1")
+// munit / munit-scalacheck pinned ABOVE discipline-munit 2.0.0's own 1.0.0: that munit-scalacheck
+// fails Scala Native's interop phase against munit >= 1.1 ("wrong number of arguments ... expected 3").
+lazy val munit = Def.setting("org.scalameta" %%% "munit" % "1.3.6")
+lazy val munitScalacheck = Def.setting("org.scalameta" %%% "munit-scalacheck" % "1.3.1")
 lazy val disciplineMunit = Def.setting(Typelevel %%% "discipline-munit" % "2.0.0")
 lazy val scalacheck = Def.setting(ScalaCheckOrg %%% "scalacheck" % "1.20.0")
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
@@ -664,7 +667,7 @@ lazy val platformSources = Seq(
 
 lazy val nativeMunit = Seq(
   Test / unmanagedSourceDirectories := Seq(baseDirectory.value / "src" / "test" / "scala"),
-  libraryDependencies ++= Seq(munit.value % Test, disciplineMunit.value % Test),
+  libraryDependencies ++= Seq(munit.value % Test, munitScalacheck.value % Test, disciplineMunit.value % Test),
 )
 
 // New platforms ship from the next release on, so MiMa has no JS / Native baseline to compare with.
@@ -672,10 +675,8 @@ lazy val newPlatform = Seq(tlVersionIntroduced := Map("3" -> "1.1.2"))
 
 // Shared wiring of every cross module: common + platform-neutral scalac flags everywhere, the
 // bytecode optimizer on the JVM only, Native on munit (see `nativeMunit`).
-def eoCross(p: CrossProject): CrossProject =
+def eoCrossBase(p: CrossProject): CrossProject =
   p.settings(commonSettings *)
-    .settings(scala3CrossSettings *)
-    .jvmSettings(scala3OptSettings *)
     .jvmSettings(platformSources *)
     .jsSettings(platformSources *)
     .nativeSettings(platformSources *)
@@ -685,6 +686,10 @@ def eoCross(p: CrossProject): CrossProject =
     // specs2 stack: JVM + Scala.js (Native is on munit, above).
     .jvmSettings(libraryDependencies += discipline.value % Test)
     .jsSettings(libraryDependencies += discipline.value % Test)
+
+// Published library modules: the base plus the library scalac flags (optimizer on the JVM only).
+def eoCross(p: CrossProject): CrossProject =
+  eoCrossBase(p).settings(scala3CrossSettings *).jvmSettings(scala3OptSettings *)
 
 def eoCrossMacro(p: CrossProject): CrossProject =
   eoCross(p).settings(scalacOptions += "-Xcheck-macros")
@@ -741,7 +746,7 @@ lazy val laws = eoCross(
     libraryDependencies += scalacheck.value,
   )
 
-lazy val tests = eoCross(
+lazy val tests = eoCrossBase(
   crossProject(JVMPlatform, JSPlatform, NativePlatform)
     .crossType(CrossType.Pure)
     .in(file("tests"))

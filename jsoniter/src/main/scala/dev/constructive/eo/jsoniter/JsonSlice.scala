@@ -41,8 +41,13 @@ final class JsonSlice private (val array: Array[Byte], val offset: Int, val leng
 
   override def equals(that: Any): Boolean = that match
     case s: JsonSlice =>
-      java.util.Arrays.equals(array, offset, until, s.array, s.offset, s.until)
+      length == s.length && sameBytes(array, offset, s.array, s.offset, length)
     case _ => false
+
+  // Portable range comparison: `Arrays.equals(a, from, to, b, from, to)` is Java 9+, which neither
+  // Scala.js' nor Scala Native's javalib carries.
+  @tailrec private def sameBytes(a: Array[Byte], i: Int, b: Array[Byte], j: Int, n: Int): Boolean =
+    n == 0 || (a(i) == b(j) && sameBytes(a, i + 1, b, j + 1, n - 1))
 
   override def hashCode: Int =
     @tailrec def loop(i: Int, h: Int): Int =
@@ -76,7 +81,12 @@ object JsonSlice:
     * @group Constructors
     */
   def apply(bytes: Array[Byte], offset: Int, length: Int): JsonSlice =
-    java.util.Objects.checkFromIndexSize(offset, length, bytes.length)
+    // `Objects.checkFromIndexSize` is Java 9+ (absent from the Scala.js / Native javalib); the same
+    // overflow-safe test, same exception type.
+    if offset < 0 || length < 0 || offset > bytes.length - length then
+      throw new IndexOutOfBoundsException(
+        s"Range [$offset, $offset + $length) out of bounds for length ${bytes.length}"
+      )
     new JsonSlice(bytes, offset, length)
 
   /** The whole of `bytes`, as a slice. Nothing is copied.
@@ -102,7 +112,7 @@ object JsonSlice:
     if buf.hasArray then new JsonSlice(buf.array, buf.arrayOffset + buf.position, length)
     else
       val out = new Array[Byte](length)
-      buf.get(buf.position, out) // absolute bulk get: the position doesn't move
+      buf.duplicate().get(out) // a duplicate's position moves, the caller's doesn't
       new JsonSlice(out, 0, length)
 
   /** A slice of a range the caller has already checked: a span the scanner found inside a slice. */

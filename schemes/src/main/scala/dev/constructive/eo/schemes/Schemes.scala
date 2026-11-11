@@ -2,8 +2,7 @@ package dev.constructive.eo
 package schemes
 
 import scala.annotation.tailrec
-
-import java.util.ArrayDeque
+import scala.collection.mutable.ArrayBuffer
 
 import data.PSVec
 import optics.{Getter, Plated, Review, Unfold}
@@ -33,7 +32,7 @@ import optics.{Getter, Plated, Review, Unfold}
   * already-folded children (paramorphism-flavored). The *build* scheme ([[ana]]) takes a [[Coalg]],
   * the canonical anamorphism shape: a seed yields its child seeds together with how to assemble the
   * node. Both run on one stack-safe engine: a `< 512`-deep on-stack fast path (no heap frames) that
-  * falls back, per deep subtree, to a heap `ArrayDeque` machine — the same hybrid as
+  * falls back, per deep subtree, to a heap `ArrayBuffer` machine — the same hybrid as
   * `Plated.transform`. Shallow trees pay no frame allocation; arbitrarily deep ones stay
   * stack-safe.
   */
@@ -57,7 +56,7 @@ object Schemes:
   /** Engine for the *build* scheme ([[ana]]) and — via a per-node `(kids, combine)` bundling of
     * `expand` + `alg` — for the fused [[hylo]]. One [[Coalg]] call per node yields its children and
     * its combiner closure (stored in the frame on the heap path). On-stack fast path below
-    * [[OnStackLimit]], heap `ArrayDeque` machine past it; stack-safe for any terminating coalgebra.
+    * [[OnStackLimit]], heap `ArrayBuffer` machine past it; stack-safe for any terminating coalgebra.
     */
   private def unfoldCoalg[N, R](coalg: Coalg[N, R]): N => R =
     n0 => unfoldCoalgRec(coalg, n0, 0)
@@ -81,7 +80,7 @@ object Schemes:
         loop(0)
         combine(PSVec.unsafeWrap[R](out))
 
-  /** Heap trampoline for [[unfoldCoalg]]: an explicit `ArrayDeque` post-order walk with each node's
+  /** Heap trampoline for [[unfoldCoalg]]: an explicit `ArrayBuffer`-backed stack post-order walk with each node's
     * combiner closure stored in its frame. `enter` and the `@tailrec loop` driver share the one
     * `stack` + `ret` cell; `loop`'s self-call stays in tail position for stack-safety.
     */
@@ -92,17 +91,19 @@ object Schemes:
         val out: Array[Any],
         var i: Int,
     )
-    val stack = new ArrayDeque[Frame]()
+    // ArrayBuffer, not java.util.ArrayDeque: Scala.js 1.22's ArrayDeque returns null from peek()
+    // on a non-empty deque once it has grown and wrapped (reproduced), so the machine would NPE.
+    val stack = new ArrayBuffer[Frame]()
     var ret: Any = null
     def enter(n: N): Unit =
       val (kids, combine) = coalg(n)
       if kids.isEmpty then ret = combine(PSVec.empty[R])
-      else stack.push(new Frame(combine, kids, new Array[Any](kids.length), 0))
+      else stack.append(new Frame(combine, kids, new Array[Any](kids.length), 0))
     enter(root)
     @tailrec def loop(): R =
       if stack.isEmpty then ret.asInstanceOf[R]
       else
-        val fr = stack.peek()
+        val fr = stack.last
         if fr.i > 0 then fr.out(fr.i - 1) = ret
         if fr.i < fr.kids.length then
           val child = fr.kids(fr.i)
@@ -110,7 +111,7 @@ object Schemes:
           enter(child)
         else
           ret = fr.combine(PSVec.unsafeWrap[R](fr.out))
-          val _ = stack.pop()
+          val _ = stack.dropRightInPlace(1)
         loop()
     loop()
 
@@ -159,17 +160,19 @@ object Schemes:
       root: S,
   ): A =
     final class Frame(val node: S, val arr: Array[Any], var i: Int)
-    val stack = new ArrayDeque[Frame]()
+    // ArrayBuffer, not java.util.ArrayDeque: Scala.js 1.22's ArrayDeque returns null from peek()
+    // on a non-empty deque once it has grown and wrapped (reproduced), so the machine would NPE.
+    val stack = new ArrayBuffer[Frame]()
     var ret: Any = null
     def enter(s: S): Unit =
       val arr = childrenOf(s)
       if arr.length == 0 then ret = alg(s, PSVec.empty[A])
-      else stack.push(new Frame(s, arr, 0))
+      else stack.append(new Frame(s, arr, 0))
     enter(root)
     @tailrec def loop(): A =
       if stack.isEmpty then ret.asInstanceOf[A]
       else
-        val fr = stack.peek()
+        val fr = stack.last
         if fr.i > 0 then fr.arr(fr.i - 1) = ret // overwrite the just-folded child's slot
         if fr.i < fr.arr.length then
           val child = fr.arr(fr.i).asInstanceOf[S]
@@ -177,7 +180,7 @@ object Schemes:
           enter(child)
         else
           ret = alg(fr.node, PSVec.unsafeWrap[A](fr.arr))
-          val _ = stack.pop()
+          val _ = stack.dropRightInPlace(1)
         loop()
     loop()
 
@@ -185,7 +188,7 @@ object Schemes:
     * node `S` (paramorphism-flavored) plus its already-folded children.
     *
     * Stack-safety contract: below the 512-frame on-stack limit the fold recurses directly on the
-    * JVM stack (no heap frames); past it, each deep subtree is handed to a heap `ArrayDeque`
+    * JVM stack (no heap frames); past it, each deep subtree is handed to a heap `ArrayBuffer`
     * machine — so any *finite* tree folds without `StackOverflowError`, at any depth, and a
     * `Plated` whose children never bottom out fails by exhausting the heap (`OutOfMemoryError`),
     * not the stack. Folds child results in place (see the private `foldInPlace` engine) so it
@@ -212,7 +215,7 @@ object Schemes:
     * by a [[Coalg]]. Materializing — the built `S` is `O(nodes)`.
     *
     * Stack-safety contract: below the 512-frame on-stack limit the unfold recurses directly on the
-    * JVM stack; past it, each deep subtree is handed to a heap `ArrayDeque` machine — so any
+    * JVM stack; past it, each deep subtree is handed to a heap `ArrayBuffer` machine — so any
     * ''terminating'' coalgebra builds without `StackOverflowError`, at any depth, and a
     * non-terminating one fails by exhausting the heap (`OutOfMemoryError`), not the stack.
     */
@@ -225,7 +228,7 @@ object Schemes:
     * law), but without materializing the structure.
     *
     * Stack-safety contract (same as [[cata]] / [[ana]]): on-stack recursion below the 512-frame
-    * limit, then a heap `ArrayDeque` machine per deep subtree — safe for any ''terminating''
+    * limit, then a heap `ArrayBuffer` machine per deep subtree — safe for any ''terminating''
     * `expand` at any depth; a non-terminating `expand` fails by exhausting the heap
     * (`OutOfMemoryError`), not by `StackOverflowError`.
     */

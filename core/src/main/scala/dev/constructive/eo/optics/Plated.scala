@@ -2,9 +2,9 @@ package dev.constructive.eo
 package optics
 
 import scala.annotation.tailrec
+import scala.collection.mutable.ArrayBuffer
 
 import cats.Eval
-import java.util.ArrayDeque
 
 import data.{ModifyF, MultiFocus, PSVec}
 
@@ -143,16 +143,18 @@ object Plated:
     */
   private def transformMachine[S](f: S => S)(root: S)(using P: Plated[S]): S =
     final class Frame(val node: S, val kids: PSVec[S], val out: Array[Any], var i: Int)
-    val stack = new ArrayDeque[Frame]()
+    // ArrayBuffer, not java.util.ArrayDeque: Scala.js 1.22's ArrayDeque returns null from peek()
+    // on a non-empty deque once it has grown and wrapped (reproduced), so the machine would NPE.
+    val stack = new ArrayBuffer[Frame]()
     var ret: S = root // overwritten before any read (only read once a child has completed)
     def enter(s: S): Unit =
       val kids = P.childrenVec(s)
       if kids.isEmpty then ret = f(s)
-      else stack.push(new Frame(s, kids, new Array[Any](kids.length), 0))
+      else stack.append(new Frame(s, kids, new Array[Any](kids.length), 0))
     enter(root)
     @tailrec def drive(): Unit =
       if !stack.isEmpty then
-        val fr = stack.peek()
+        val fr = stack.last
         if fr.i > 0 then fr.out(fr.i - 1) = ret // stash the child just finished
         if fr.i < fr.kids.length then
           val child = fr.kids(fr.i)
@@ -160,7 +162,7 @@ object Plated:
           enter(child)
         else
           ret = f(P.rebuild(fr.node, PSVec.unsafeWrap[S](fr.out)))
-          val _ = stack.pop()
+          val _ = stack.dropRightInPlace(1)
         drive()
     drive()
     ret
