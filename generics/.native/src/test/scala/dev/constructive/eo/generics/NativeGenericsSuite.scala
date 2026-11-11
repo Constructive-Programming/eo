@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package generics
 
@@ -70,3 +72,4 @@ class NativeGenericsSuite extends ScalaCheckSuite:
         case Left(s2)  => s2 == s)
     }
   }
+// CPD-ON

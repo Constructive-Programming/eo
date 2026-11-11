@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo.jsoniter
 
 import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
@@ -66,3 +68,4 @@ class NativeJsoniterSuite extends munit.FunSuite:
     assertEquals(s, JsonSlice(doc))
     assertEquals(ro.position(), 0)
   }
+// CPD-ON

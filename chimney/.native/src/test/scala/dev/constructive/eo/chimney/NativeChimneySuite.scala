@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package chimney
 
@@ -75,3 +77,4 @@ class NativeChimneySuite extends munit.DisciplineSuite:
     assertEquals(decode.getOption(NAccountDto("b", -5L)), None)
     assert(decode.either(NAccountDto("b", -5L)).isLeft)
   }
+// CPD-ON

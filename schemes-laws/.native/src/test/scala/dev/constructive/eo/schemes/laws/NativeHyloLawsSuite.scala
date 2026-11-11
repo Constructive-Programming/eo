@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package schemes
 package laws
@@ -47,3 +49,4 @@ class NativeHyloLawsSuite extends munit.DisciplineSuite:
           (n, rs) => if n <= 0 then 1.0 else rs(0) + rs(1)
     .hylo,
   )
+// CPD-ON

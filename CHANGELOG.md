@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-05
+
+### Added
+
+- **generics: Multiplate — `plate[S]` over containers and mutually recursive families** (#153).
+  `plate[S]` now descends into `Option` / `List` / `Vector` / `ArraySeq` / `Seq` / `Array` fields
+  and any `F[S]` with a `cats.Traverse[F]`, and derives one multi-sorted plate for a union of
+  member sorts (`type Lang = Stm | Expr | Var | Typ`; `plate[Lang]`, O'Connor 2011 §5). Every
+  slot — direct or container element — rebuilds at its declared member type: a sort-swapping
+  write keeps the original instead of storing an ill-typed value. Container slots keep their
+  collection type (a `List`-backed `Seq` stays a `List`).
+- **core: `Plated.transformM`, `Plated.everywhereIn`, `Plated#mapChildren`** (#153).
+  `transformM` is the effectful bottom-up rewrite (`lens`'s `transformM`, O'Connor's
+  `mapFamilyM`) — recursive through `M.flatMap` while shallow and narrow, a `tailRecM`-driven heap
+  machine past the depth / width budget, so it is stack-safe for any monad whose `tailRecM` is
+  (every cats instance). `everywhereIn[S, T <: S]` is `everywhere` rooted at one member sort of
+  a union plate. `mapChildren(s, g)` is the one-level rewrite (Uniplate's `descend`);
+  `generics.plate` generates it as a single match, which `transform` now recurses through.
+  Constructors `Plated.fromChildrenArray` / `fromChildrenMap` and member `rebuildArray` expose
+  the array-native path the combinators use. Fused `Optional.andThen(SplitCombineLens)` for
+  macro lenses.
+- **laws: two new `Plated` laws** (#153) — the second CartesianStore coalgebra law
+  (`plate.modify(g) ∘ plate.modify(f) == plate.modify(f andThen g)`, catching stale-parent
+  rebuilds) and `mapChildren(g) == plate.modify(g)`; plus `transformM[Id] == transform`.
+  `PlatedTests#sameSort` lets a multi-sorted plate restrict the generated replacements to
+  same-sort ones.
+- **spark: schema Multiplate** (#153) — `Schemas.Node = DataType | StructField` with
+  `platedNode` (derived by `generics.plate`), `everyField` (every `StructField` at every depth),
+  the `StructField` lenses `fieldName` / `fieldType` / `fieldNullable` / `fieldMetadata`, the
+  `dataType` / `structField` prisms, and `metadata(name)` navigation. `cats-eo-spark` now depends
+  on `cats-eo-generics`.
+- **build: `cpdCheck`** — PMD copy-paste detection at 25 tokens, run in CI and the pre-commit
+  hook next to scalafmt / scalafix. It fails on duplications touching lines changed since the
+  merge base with `origin/main` (`CPD_BASE` overrides); `// CPD-OFF` / `// CPD-ON` fence a
+  by-design repeat.
+
+### Changed
+
+- **core: `Plated` recursion is allocation-level with a hand-written visitor** (#153). On a
+  `generics.plate` instance, `transform` allocates exactly what a hand-written recursive visitor
+  does (1.00× B/op, ~1.3× its time; Monocle ~1.9×), `universe` is ~1.5× the visitor's allocation
+  (was ~3.5×), and the schemes `cata` halves its allocation. `PlatedBench` gains `transformM`
+  rows and `OptionalBench` a fused `Optional ∘ macro lens` row.
+
 ## [1.1.1] - 2026-11-04
 
 ### Added
@@ -21,7 +65,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   forms keep apache-avro's semantics; a declared default still wins, a present field is parsed
   as strictly as before, and a non-nullable field without a default still misses. Additive and
   binary-compatible with 1.1.0.
-
 ### Fixed
 
 - **build: `tlBaseVersion` is `1.1`.** The 1.1.0 release left it at `1.0`, behind the latest
@@ -1253,7 +1296,10 @@ JsonTraversal&times;Review corner). See:
   [`docs/research/2026-04-23-composition-gap-analysis.md`](docs/research/2026-04-23-composition-gap-analysis.md)
   &sect;7 (and the per-cell ledger in &sect;1.1 / &sect;3 / &sect;4).
 
-[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Constructive-Programming/eo/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Constructive-Programming/eo/compare/v1.1.1...v1.2.0
+[1.1.1]: https://github.com/Constructive-Programming/eo/compare/v1.1.0...v1.1.1
+[1.1.0]: https://github.com/Constructive-Programming/eo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Constructive-Programming/eo/compare/v0.18.0...v1.0.0
 [0.18.0]: https://github.com/Constructive-Programming/eo/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/Constructive-Programming/eo/compare/v0.16.0...v0.17.0

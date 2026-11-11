@@ -273,7 +273,7 @@ class FusedAndThenSpec extends Specification:
     eachOk.and(chainOk).and(scOk).and(nestedOk).and(selfOk)
   }
 
-  // covers: MendTearPrism / PickMendPrism .andThen(SplitCombineLens) and PickMendPrism
+  // covers: MendTearPrism / PickMendPrism / Optional .andThen(SplitCombineLens) and PickMendPrism
   // .andThen(GetReplaceLens) land in the concrete Optional (hit read / hit write / miss
   // pass-through), and read-only collapses through a lens read its direct `get` — the lens below
   // fails loudly if its split ever runs on a read.
@@ -281,11 +281,11 @@ class FusedAndThenSpec extends Specification:
     val pairLens: SplitCombineLens[(Int, String), (Int, String), Int, Int, String] =
       Lens.first[Int, String]
 
+    val tagNonNeg: Int => Either[Int, (Int, String)] =
+      n => if n >= 0 then Right((n, "t")) else Left(n)
+
     val mt: Optional[Int, Int, Int, Int] =
-      new MendTearPrism[Int, Int, (Int, String), (Int, String)](
-        n => if n >= 0 then Right((n, "t")) else Left(n),
-        _._1,
-      ).andThen(pairLens)
+      new MendTearPrism[Int, Int, (Int, String), (Int, String)](tagNonNeg, _._1).andThen(pairLens)
 
     val pm: Optional[Int, Int, Int, Int] =
       new PickMendPrism[Int, (Int, String), (Int, String)](
@@ -297,7 +297,17 @@ class FusedAndThenSpec extends Specification:
       new PickMendPrism[Inner, Inner, Inner](i => Option.when(i.n >= 0)(i), identity)
         .andThen(innerLens)
 
+    val opt: Optional[Int, Int, Int, Int] =
+      Optional[Int, Int, (Int, String), (Int, String)](tagNonNeg, (_, p) => p._1).andThen(pairLens)
+    val optGeneric: Optic[Int, Int, Int, Int, data.Affine] = opt
+
     val fusedOk = (mt.getOption(4) === Some(4))
+      .and(opt.getOption(4) === Some(4))
+      .and(opt.getOption(-3) === None)
+      .and(opt.modify(_ + 1)(4) === 5)
+      .and(opt.modify(_ + 1)(-3) === -3)
+      .and(optGeneric.modify(_ + 1)(4) === 5)
+      .and(optGeneric.modify(_ + 1)(-3) === -3)
       .and(mt.modify(_ + 1)(4) === 5)
       .and(mt.modify(_ + 1)(-3) === -3)
       .and(pm.getOption(-1) === None)
@@ -365,6 +375,7 @@ class FusedAndThenSpec extends Specification:
         opt(c).andThen(opt(new Counter)).andThen(opt(new Counter))
       ),
       "Optional ∘ GetReplaceLens" -> (c => opt(c).andThen(idLens)),
+      "Optional ∘ SplitCombineLens" -> (c => opt(c).andThen(intPair).andThen(pairLens)),
       "Optional ∘ Iso" -> (c => opt(c).andThen(idIso)),
       "Lens ∘ Optional" -> (c => idLens.andThen(opt(c))),
       "Iso ∘ Optional" -> (c => idIso.andThen(opt(c))),

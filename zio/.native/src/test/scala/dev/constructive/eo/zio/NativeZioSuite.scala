@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package zio
 
@@ -76,3 +78,4 @@ class NativeZioSuite extends munit.DisciplineSuite:
         val traversal = Chunks.each[Int, Int]
     .traversal,
   )
+// CPD-ON

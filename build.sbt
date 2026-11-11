@@ -11,7 +11,7 @@ val scala3Version = "3.9.0"
 
 // 1.x is binary-compatible (MiMa-checked from 1.0.0; see mima.sbt, which
 // also keeps the 0.x breaking-change history).
-ThisBuild / tlBaseVersion := "1.2"
+ThisBuild / tlBaseVersion := "1.3"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -113,6 +113,8 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
     name = Some("Check scalafix (JVM-only projects)"),
     cond = jvmLeg,
   ),
+  // Copy-paste detection at 25 tokens, ratcheted on the change (project/Cpd.scala).
+  WorkflowStep.Sbt(List("cpdCheck"), name = Some("Check duplication (CPD)")),
 )
 
 // The UPLC → JVM demo sits outside the root aggregate (Scalus drags in JNI
@@ -701,9 +703,9 @@ lazy val nativeMunit = Seq(
   ),
 )
 
-// JS / Native first ship in 1.2.0, so there is no published baseline to compare with (MiMa would
-// try to resolve `<module>_sjs1_3:1.2.0` itself). After 1.2.0 is out, replace this with
-// `tlVersionIntroduced := Map("3" -> "1.2.0")` so later releases are checked against it.
+// JS / Native first ship in 1.3.0, so there is no published baseline to compare with (MiMa would
+// try to resolve `<module>_sjs1_3:1.3.0` itself). After 1.3.0 is out, replace this with
+// `tlVersionIntroduced := Map("3" -> "1.3.0")` so later releases are checked against it.
 lazy val newPlatform = Seq(tlMimaPreviousVersions := Set.empty)
 
 // Shared wiring of every cross module: common + platform-neutral scalac flags everywhere, the
@@ -728,6 +730,7 @@ def eoCrossMacro(p: CrossProject): CrossProject =
   eoCross(p).settings(scalacOptions += "-Xcheck-macros")
 
 lazy val root = tlCrossRootProject
+  .settings(Cpd.settings)
   .aggregate(
     (Seq[CompositeProject](
       core,
@@ -1056,6 +1059,7 @@ lazy val sparkIntegration: Project = project
   .in(file("spark"))
   .dependsOn(
     core.jvm,
+    generics.jvm,
     laws.jvm % Test,
   )
   .settings(commonSettings *)

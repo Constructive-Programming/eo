@@ -18,7 +18,8 @@ import optics.Plated
 class ValueKitsSpec extends Specification:
 
   import ValueKitsFixtures.given
-  import Schemas.platedDataType
+  import Schemas.{platedDataType, platedNode}
+  import optics.Optic.*
 
   private val person = StructType(
     Array(
@@ -53,6 +54,38 @@ class ValueKitsSpec extends Specification:
       (widened.json must not(contain("\"integer\""))).and(
         Schemas.field("scores").andThen(Schemas.element).getOption(widened) === Some(LongType)
       )
+    }
+
+    "rewrite every StructField at every depth via everyField, and both sorts in one Multiplate pass" >> {
+      val allNullable =
+        Schemas.everyField.andThen(Schemas.fieldNullable).replace(true)(person)
+      val lowerAndWiden = Plated.transform[Schemas.Node] {
+        case f: StructField => f.copy(name = f.name.toUpperCase)
+        case IntegerType    => LongType
+        case other          => other
+      }(person)
+      val validatedOk = Plated.transformM[Either[String, *], Schemas.Node] {
+        case FloatType                        => Left("FloatType is disallowed")
+        case f: StructField if f.name.isEmpty => Left("empty field name")
+        case IntegerType                      => Right(LongType)
+        case other                            => Right(other)
+      }(person)
+      val validatedFail = Plated.transformM[Either[String, *], Schemas.Node] {
+        case StringType => Left("no strings")
+        case other      => Right(other)
+      }(person)
+
+      (Schemas.nullable("name").getOption(allNullable) === Some(true))
+        .and(
+          Schemas
+            .field("ADDRESS")
+            .andThen(Schemas.field("ZIP"))
+            .getOption(lowerAndWiden.asInstanceOf[DataType]) === Some(LongType)
+        )
+        .and(
+          validatedOk.map(_.asInstanceOf[DataType].json.contains("\"integer\"")) === Right(false)
+        )
+        .and(validatedFail === Left("no strings"))
     }
 
     "miss on the wrong node kind and on an absent field, passing writes through" >> {

@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package iron
 
@@ -21,3 +23,4 @@ class NativeIronPrismSuite extends munit.DisciplineSuite:
         val prism = IronPrism[Int, Positive]
     .prism,
   )
+// CPD-ON

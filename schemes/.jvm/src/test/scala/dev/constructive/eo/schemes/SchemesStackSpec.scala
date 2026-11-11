@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package schemes
 
@@ -79,3 +81,4 @@ class SchemesStackSpec extends Specification:
         case _           => kids(0) + 1
     ((Schemes.cata(depthAlgProbed).get(e) == 50) && (maxD - minD >= 30)) must beTrue
   }
+// CPD-ON

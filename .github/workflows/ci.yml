@@ -143,6 +143,9 @@ jobs:
         if: matrix.project == 'rootJVM'
         run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' 'demoUplcJvm/scalafixAll --check' 'demoUplcJvmValidators/scalafixAll --check' 'demoUplcJvmBench/scalafixAll --check' 'demoGrpcFilter/scalafixAll --check' 'demoGrpcFilterBench/scalafixAll --check' 'sparkBench/scalafixAll --check'
 
+      - name: Check duplication (CPD)
+        run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' cpdCheck
+
       - name: Check that workflows are up to date
         run: sbt githubWorkflowCheck
 

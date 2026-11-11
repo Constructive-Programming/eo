@@ -47,6 +47,26 @@ enum Expr:
   case App(f: Expr, x: Expr)
   case Lam(bind: String, body: Expr)
 
+// Mutually recursive AST (O'Connor 2011, §1 / §5.1) for Multiplate fences.
+final case class StmVar(name: String)
+
+enum StmTyp:
+  case TInt, TFloat
+
+enum Stm:
+  case SDecl(t: StmTyp, v: StmVar)
+  case SAss(v: StmVar, e: StmExpr)
+  case SBlock(ss: List[Stm])
+  case SReturn(e: StmExpr)
+
+enum StmExpr:
+  case EStm(s: Stm)
+  case EAdd(e1: StmExpr, e2: StmExpr)
+  case EVar(v: StmVar)
+  case EInt(i: Int)
+
+type StmLang = Stm | StmExpr | StmVar | StmTyp
+
 enum Result:
   case Ok(value: Int)
   case Err(reason: String)

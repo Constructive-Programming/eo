@@ -1,3 +1,5 @@
+// CPD-OFF: deliberate twin of a specs2 spec the platform cannot run (specs2 has no Scala Native
+// artifact / the original reads JVM-only stack traces) — duplication is the point.
 package dev.constructive.eo
 package kyo
 
@@ -52,3 +54,4 @@ class NativeKyoSuite extends munit.FunSuite:
     assertEquals(bump(Result.succeed(1): Result[String, Int]), Result.succeed(2))
     assertEquals(bump(Result.fail("e"): Result[String, Int]), Result.fail("e"))
   }
+// CPD-ON
