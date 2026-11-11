@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-11
+
+### Added
+
+- **Scala.js and Scala Native artifacts** (#162) for `cats-eo`, `cats-eo-laws`, `cats-eo-generics`,
+  `cats-eo-schemes`, `cats-eo-schemes-laws`, `cats-eo-circe`, `cats-eo-jsoniter`, `cats-eo-iron`,
+  `cats-eo-zio`, `cats-eo-chimney` and `cats-eo-kyo` (Scala.js 1.x, Scala Native 0.5). Depend on
+  them with `%%%`; on the JVM `%%%` resolves exactly like `%%`, so existing builds are unchanged.
+  `cats-eo-avro` and `cats-eo-spark` stay JVM-only (Apache Avro and Spark have no Scala.js / Scala
+  Native build). `cats-eo-kyo` still needs a JDK 25 build.
+
+### Changed
+
+- **CI** builds and tests a JVM / Scala.js / Scala Native matrix (`rootJVM` / `rootJS` /
+  `rootNative`). Native tests run the munit suites only: specs2 publishes no Scala Native artifact,
+  so tests are now split by framework — `src/test` (specs2, JVM + JS), `src/munit` (every
+  platform) and `src/testkit` (shared, framework-free fixtures). The remaining specs2 matrix is a
+  known Native gap.
+
+### Fixed
+
+- `JsonSlice` no longer relies on JDK 9+ APIs (`Arrays.equals` over a range,
+  `Objects.checkFromIndexSize`, absolute `ByteBuffer.get`) that Scala.js and Scala Native do not
+  provide. Behaviour on the JVM is unchanged.
+- The heap-stack machines in `Plated.transform` / `transformM` and the recursion schemes use an
+  `ArrayBuffer` stack instead of `java.util.ArrayDeque`, whose Scala.js implementation returns
+  `null` from `peek()` after growing.
+
 ## [1.2.0] - 2026-11-05
 
 ### Added
