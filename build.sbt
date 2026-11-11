@@ -720,10 +720,8 @@ lazy val nativeMunit = Seq(
   )
 )
 
-// JS / Native first ship in 1.3.0, so there is no published baseline to compare with (MiMa would
-// try to resolve `<module>_sjs1_3:1.3.0` itself). After 1.3.0 is out, replace this with
-// `tlVersionIntroduced := Map("3" -> "1.3.0")` so later releases are checked against it.
-lazy val newPlatform = Seq(tlMimaPreviousVersions := Set.empty)
+// JS / Native first shipped in 1.3.0: from the next release on, MiMa checks them against it.
+lazy val newPlatform = Seq(tlVersionIntroduced := Map("3" -> "1.3.0"))
 
 // Shared wiring of every cross module: common + platform-neutral scalac flags everywhere, the
 // bytecode optimizer on the JVM only, Native on munit (see `nativeMunit`).

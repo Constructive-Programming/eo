@@ -82,7 +82,9 @@ sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/te
   specs2 and is a known Native gap. munit-scalacheck must stay above discipline-munit's own 1.0.0
   (that one fails Native's interop phase against munit ≥ 1.1). Native tests link with the
   system clang.
-- **MiMa.** JS / Native artifacts first ship in 1.3.0 (`newPlatform` empties `tlMimaPreviousVersions`), so they have no baseline until 1.3.0 exists — then switch it to `tlVersionIntroduced := Map("3" -> "1.3.0")`; JVM keeps the 1.0.0 / 1.1.x baselines. `tlBaseVersion` is 1.3 (the first cross-platform minor).
+- **MiMa.** JS / Native artifacts first shipped in 1.3.0 (`newPlatform` sets
+  `tlVersionIntroduced := Map("3" -> "1.3.0")`), so releases after 1.3.0 are checked against it;
+  JVM keeps the 1.0.0 / 1.1.x / 1.2.x baselines. `tlBaseVersion` is 1.3.
 - **JVM-only modules and why.** `avro` (Apache Avro is a Java library: reflection / `IndexedRecord`
   / `GenericData`, plus the Optional vulcan / jsoniter / circe bridges), `spark` (Spark has no
   Scala.js / Native build and the specs need a Connect server JVM), `benchmarks` / `sparkBench` /
