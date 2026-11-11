@@ -135,16 +135,16 @@ jobs:
           # ThisBuild/strykerExcludedMutations (error-message / label noise).
           echo "::group::stryker core (with borrowed tests/ suite)"
           sbt -batch "set ThisBuild/tlFatalWarnings := false" \
-            'set LocalProject("core")/Test/definedTests ++= (LocalProject("tests")/Test/definedTests).value' \
-            'set LocalProject("core")/Test/fullClasspath ++= (LocalProject("tests")/Test/fullClasspath).value' \
-            "project core" stryker \
+            'set LocalProject("coreJVM")/Test/definedTests ++= (LocalProject("testsJVM")/Test/definedTests).value' \
+            'set LocalProject("coreJVM")/Test/fullClasspath ++= (LocalProject("testsJVM")/Test/fullClasspath).value' \
+            "project coreJVM" stryker \
             || echo "::warning title=stryker::mutation run failed for core (see log / quality-assurance.md notes)"
           echo "::endgroup::"
           echo "::group::stryker laws (with borrowed tests/ suite)"
           sbt -batch "set ThisBuild/tlFatalWarnings := false" \
-            'set LocalProject("laws")/Test/definedTests ++= (LocalProject("tests")/Test/definedTests).value' \
-            'set LocalProject("laws")/Test/fullClasspath ++= (LocalProject("tests")/Test/fullClasspath).value' \
-            "project laws" stryker \
+            'set LocalProject("lawsJVM")/Test/definedTests ++= (LocalProject("testsJVM")/Test/definedTests).value' \
+            'set LocalProject("lawsJVM")/Test/fullClasspath ++= (LocalProject("testsJVM")/Test/fullClasspath).value' \
+            "project lawsJVM" stryker \
             || echo "::warning title=stryker::mutation run failed for laws (see log / quality-assurance.md notes)"
           echo "::endgroup::"
           # Keep this list in step with the `mutationAll` alias in build.sbt and
@@ -153,8 +153,8 @@ jobs:
           # back to dashes (or, worse, keeps whatever a developer's local run left
           # behind). These are sbt PROJECT IDS, which differ from the directory
           # names the generator globs.
-          for p in generics schemes schemesLaws circeIntegration avroIntegration \
-                   jsoniterIntegration ironIntegration zioIntegration kyoIntegration chimneyIntegration; do
+          for p in genericsJVM schemesJVM schemesLawsJVM circeIntegrationJVM avroIntegration \
+                   jsoniterIntegrationJVM ironIntegrationJVM zioIntegrationJVM kyoIntegrationJVM chimneyIntegrationJVM; do
             echo "::group::stryker $p"
             sbt -batch "set ThisBuild/tlFatalWarnings := false" "project $p" stryker \
               || echo "::warning title=stryker::mutation run failed for $p (see log / quality-assurance.md notes)"

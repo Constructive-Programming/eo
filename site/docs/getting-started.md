@@ -18,14 +18,18 @@ Add the module(s) you need to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "dev.constructive" %% "cats-eo"          % "@VERSION@",
-  "dev.constructive" %% "cats-eo-generics" % "@VERSION@",  // optional: macro-derived optics
-  "dev.constructive" %% "cats-eo-circe"    % "@VERSION@",  // optional: JSON optics
-  "dev.constructive" %% "cats-eo-laws"     % "@VERSION@" % Test,
+  "dev.constructive" %%% "cats-eo"          % "@VERSION@",
+  "dev.constructive" %%% "cats-eo-generics" % "@VERSION@",  // optional: macro-derived optics
+  "dev.constructive" %%% "cats-eo-circe"    % "@VERSION@",  // optional: JSON optics
+  "dev.constructive" %%% "cats-eo-laws"     % "@VERSION@" % Test,
 )
 ```
 
 Requires Scala 3.9.x on JDK 17, 21, or 25 (`cats-eo-kyo` needs JDK 25).
+
+The core, laws, generics, schemes, circe, jsoniter, iron, zio, chimney and kyo modules also ship for Scala.js and
+Scala Native; `%%%` selects the platform artifact (on the JVM it equals `%%`). The avro and spark
+modules are JVM-only — keep `%%` for them.
 
 ## Define
 

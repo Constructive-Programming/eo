@@ -1,3 +1,5 @@
+import sbtcrossproject.CrossProject
+
 val scala3Version = "3.9.0"
 
 // ---- Publishing metadata -------------------------------------------
@@ -9,7 +11,7 @@ val scala3Version = "3.9.0"
 
 // 1.x is binary-compatible (MiMa-checked from 1.0.0; see mima.sbt, which
 // also keeps the 0.x breaking-change history).
-ThisBuild / tlBaseVersion := "1.2"
+ThisBuild / tlBaseVersion := "1.3"
 ThisBuild / organization := "dev.constructive"
 ThisBuild / organizationName := "Constructive"
 ThisBuild / startYear := Some(2025)
@@ -60,11 +62,30 @@ ThisBuild / githubWorkflowIncludeClean := false
 // scalafix check runs via `--check` so any rule drift fails CI
 // without rewriting files; devs run `sbt scalafixAll` locally to
 // auto-fix.
+// Platform matrix (sbt-typelevel `tlCrossRootProject`): every build job runs ONE of `rootJVM` /
+// `rootJS` / `rootNative`, JS and Native on the primary JDK only. The checks below that name
+// JVM-only projects (demos, benchmarks, spark bench) run on the `rootJVM` leg alone.
+val jvmLeg = Some("matrix.project == 'rootJVM'")
+
+// Scala Native links with the system clang; make sure the runner has it (and libunwind).
+ThisBuild / githubWorkflowBuildPreamble += WorkflowStep.Run(
+  List("sudo apt-get update", "sudo apt-get install -y clang libunwind-dev"),
+  name = Some("Install Scala Native toolchain (clang)"),
+  cond = Some("matrix.project == 'rootNative'"),
+)
+
+// Run `sbt test` + `sbt doc` + scalafmt check on every PR. MiMa
+// is wired transitively through sbt-typelevel-ci-release. The
+// scalafix check runs via `--check` so any rule drift fails CI
+// without rewriting files; devs run `sbt scalafixAll` locally to
+// auto-fix.
 ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   WorkflowStep.Sbt(
+    List("scalafmtCheckAll", "scalafmtSbtCheck"),
+    name = Some("Check formatting"),
+  ),
+  WorkflowStep.Sbt(
     List(
-      "scalafmtCheckAll",
-      "scalafmtSbtCheck",
       "benchmarks/scalafmtCheck",
       "demoUplcJvm/scalafmtCheckAll",
       "demoUplcJvmValidators/scalafmtCheckAll",
@@ -73,11 +94,15 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoGrpcFilterBench/scalafmtCheckAll",
       "sparkBench/scalafmtCheckAll",
     ),
-    name = Some("Check formatting"),
+    name = Some("Check formatting (JVM-only projects)"),
+    cond = jvmLeg,
+  ),
+  WorkflowStep.Sbt(
+    List("scalafixAll --check"),
+    name = Some("Check scalafix"),
   ),
   WorkflowStep.Sbt(
     List(
-      "scalafixAll --check",
       "demoUplcJvm/scalafixAll --check",
       "demoUplcJvmValidators/scalafixAll --check",
       "demoUplcJvmBench/scalafixAll --check",
@@ -85,7 +110,8 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
       "demoGrpcFilterBench/scalafixAll --check",
       "sparkBench/scalafixAll --check",
     ),
-    name = Some("Check scalafix"),
+    name = Some("Check scalafix (JVM-only projects)"),
+    cond = jvmLeg,
   ),
   // Copy-paste detection at 25 tokens, ratcheted on the change (project/Cpd.scala).
   WorkflowStep.Sbt(List("cpdCheck"), name = Some("Check duplication (CPD)")),
@@ -97,14 +123,17 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("demoUplcJvm/test", "demoUplcJvmBench/Jmh/compile"),
   name = Some("Test UPLC → JVM demo (differential vs Scalus CEK)"),
+  cond = jvmLeg,
 )
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("demoGrpcFilter/test", "demoGrpcFilterBench/Jmh/compile"),
   name = Some("Test gRPC filter demo (eo-jsoniter + fs2)"),
+  cond = jvmLeg,
 )
 ThisBuild / githubWorkflowBuild += WorkflowStep.Sbt(
   List("sparkBench/Jmh/compile"),
   name = Some("Compile spark benchmarks"),
+  cond = jvmLeg,
 )
 
 // -------------------------------------------------------------------
@@ -376,7 +405,7 @@ val Plokhotnyuk = "com.github.plokhotnyuk.jsoniter-scala"
 val Ziverge = "dev.zio"
 val GetKyo = "io.getkyo"
 
-lazy val cats = Typelevel %% "cats-core" % "2.13.0"
+lazy val cats = Def.setting(Typelevel %%% "cats-core" % "2.13.0")
 // cats-laws — discipline rule sets for the cats typeclasses themselves. Test-only, in `tests` and
 // `zioIntegration`, wherever eo hand-writes a cats instance: `tests` law-checks core's
 // `Traverse[PSVec]` (the instance every `Traversal.each(...).modifyA` runs through), the zio module
@@ -384,10 +413,17 @@ lazy val cats = Typelevel %% "cats-core" % "2.13.0"
 // `TraverseTraversal` reassembles foci through `Functor.map` while collecting them in fold order —
 // so map/traverse coherence is load-bearing for write correctness, not just hygiene. Law-check the
 // instances rather than eyeball them.
-lazy val catsLaws = Typelevel %% "cats-laws" % "2.13.0"
-lazy val disciplineCore = Typelevel %% "discipline-core" % "1.7.0"
-lazy val discipline = Typelevel %% "discipline-specs2" % "2.0.0"
-lazy val scalacheck = ScalaCheckOrg %% "scalacheck" % "1.20.0"
+lazy val catsLaws = Def.setting(Typelevel %%% "cats-laws" % "2.13.0")
+lazy val disciplineCore = Def.setting(Typelevel %%% "discipline-core" % "1.7.0")
+// specs2 publishes for JVM and Scala.js ONLY (no Scala Native artifact), so `discipline-specs2` is the
+// JVM + JS test stack (Scala Native runs munit + testkit sources only; see `platformSources`).
+lazy val discipline = Def.setting(Typelevel %%% "discipline-specs2" % "2.0.0")
+// munit / munit-scalacheck pinned ABOVE discipline-munit 2.0.0's own 1.0.0: that munit-scalacheck
+// fails Scala Native's interop phase against munit >= 1.1 ("wrong number of arguments ... expected 3").
+lazy val munit = Def.setting("org.scalameta" %%% "munit" % "1.3.6")
+lazy val munitScalacheck = Def.setting("org.scalameta" %%% "munit-scalacheck" % "1.3.1")
+lazy val disciplineMunit = Def.setting(Typelevel %%% "discipline-munit" % "2.0.0")
+lazy val scalacheck = Def.setting(ScalaCheckOrg %%% "scalacheck" % "1.20.0")
 lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
@@ -415,16 +451,16 @@ lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.10.0"
 // NamedTuple must be spelled as takes ZERO value params ("expected: 0, found: 23").
 // The `n < 23` boundary is why `MacroSelectors.tupleTypeOf` must KEEP spelling TupleN at
 // arity <= 22 and a cons chain only above it: a cons chain still fails below 23 on 0.4.2.
-lazy val hearth = Kubuszok %% "hearth" % "0.4.2"
-lazy val kindlingsCats = Kubuszok %% "kindlings-cats-derivation" % "0.3.2"
-lazy val kindlingsCirce = Kubuszok %% "kindlings-circe-derivation" % "0.3.2"
+lazy val hearth = Def.setting(Kubuszok %%% "hearth" % "0.4.2")
+lazy val kindlingsCats = Def.setting(Kubuszok %%% "kindlings-cats-derivation" % "0.3.2")
+lazy val kindlingsCirce = Def.setting(Kubuszok %%% "kindlings-circe-derivation" % "0.3.2")
 lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.2"
-lazy val circe = Circe %% "circe-core" % "0.14.16"
+lazy val circe = Def.setting(Circe %%% "circe-core" % "0.14.16")
 // vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.2 pin
 // below wins on the compile classpath, and as an Optional dep vulcan forces
 // nothing downstream anyway.
 lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.1"
-lazy val circeParser = Circe %% "circe-parser" % "0.14.16"
+lazy val circeParser = Def.setting(Circe %%% "circe-parser" % "0.14.16")
 // Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
@@ -478,7 +514,7 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 // zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `cats-eo-zio`
 // integrates with. Compile-scope there: the module's whole API names
 // ZIO types.
-lazy val zioCore = Ziverge %% "zio" % "2.1.26"
+lazy val zioCore = Def.setting(Ziverge %%% "zio" % "2.1.26")
 // zio-schema / zio-json / zio-prelude — Optional in `cats-eo-zio`: only
 // the `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages name
 // their types, callers who want a seam add its artifact themselves (the
@@ -487,11 +523,11 @@ lazy val zioCore = Ziverge %% "zio" % "2.1.26"
 // Derivation + the json codec artifact are test-only fuel (DeriveSchema
 // fixtures, a concrete BinaryCodec for the byte-face prisms).
 val ZioSchemaVersion = "1.7.5"
-lazy val zioSchema = Ziverge %% "zio-schema" % ZioSchemaVersion
-lazy val zioSchemaDerivation = Ziverge %% "zio-schema-derivation" % ZioSchemaVersion
-lazy val zioSchemaJson = Ziverge %% "zio-schema-json" % ZioSchemaVersion
-lazy val zioJson = Ziverge %% "zio-json" % "0.7.44"
-lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC48"
+lazy val zioSchema = Def.setting(Ziverge %%% "zio-schema" % ZioSchemaVersion)
+lazy val zioSchemaDerivation = Def.setting(Ziverge %%% "zio-schema-derivation" % ZioSchemaVersion)
+lazy val zioSchemaJson = Def.setting(Ziverge %%% "zio-schema-json" % ZioSchemaVersion)
+lazy val zioJson = Def.setting(Ziverge %%% "zio-json" % "0.7.44")
+lazy val zioPrelude = Def.setting(Ziverge %%% "zio-prelude" % "1.0.0-RC48")
 // kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
@@ -501,13 +537,13 @@ lazy val zioPrelude = Ziverge %% "zio-prelude" % "1.0.0-RC48"
 // module therefore builds on a 25 toolchain (`tlJdkRelease := 25` there)
 // and drops out of the root aggregate on older JVMs — see `kyoBuildActive`.
 val KyoVersion = "1.0.0-RC7"
-lazy val kyoPrelude = GetKyo %% "kyo-prelude" % KyoVersion
+lazy val kyoPrelude = Def.setting(GetKyo %%% "kyo-prelude" % KyoVersion)
 // kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
 // Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
 // its types, callers who want it add it themselves (avro/circe pattern).
 // The json codec artifact is test-only fuel for the byte-face prisms.
-lazy val kyoSchema = GetKyo %% "kyo-schema" % KyoVersion
-lazy val kyoSchemaJson = GetKyo %% "kyo-schema-json" % KyoVersion
+lazy val kyoSchema = Def.setting(GetKyo %%% "kyo-schema" % KyoVersion)
+lazy val kyoSchemaJson = Def.setting(GetKyo %%% "kyo-schema-json" % KyoVersion)
 
 // kyo requires a Java 25 runtime (see the KyoVersion note): on older JVMs
 // the kyo module leaves the aggregate entirely — `sbt test` / `compile` /
@@ -521,7 +557,7 @@ val kyoBuildActive: Boolean =
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
 // chimney 2.x is built on hearth (like eo-generics) and published for Scala 3.9.0.
-lazy val chimneyCore = "io.scalaland" %% "chimney" % "2.1.0"
+lazy val chimneyCore = Def.setting("io.scalaland" %%% "chimney" % "2.1.0")
 
 // Apache Spark 4.x publishes ONLY `_2.13` artifacts (no Scala 3 build), so
 // every Spark dependency is consumed through `CrossVersion.for3Use2_13`.
@@ -539,12 +575,12 @@ lazy val sparkSqlApi =
 lazy val sparkConnectClient =
   (ApacheSpark %% "spark-connect-client-jvm" % SparkVersion).cross(CrossVersion.for3Use2_13)
 
-lazy val jsoniterCore = Plokhotnyuk %% "jsoniter-scala-core" % "2.41.2"
-lazy val jsoniterMacros = Plokhotnyuk %% "jsoniter-scala-macros" % "2.41.2"
+lazy val jsoniterCore = Def.setting(Plokhotnyuk %%% "jsoniter-scala-core" % "2.41.2")
+lazy val jsoniterMacros = Def.setting(Plokhotnyuk %%% "jsoniter-scala-macros" % "2.41.2")
 
 // Iron refined types. A runtime-checked refinement `A :| C` is a lawful Prism `A ⇀ A :| C`, so
 // the integration module ships constructors only — no carrier, no givens.
-lazy val iron = "io.github.iltotore" %% "iron" % "3.4.1"
+lazy val iron = Def.setting("io.github.iltotore" %%% "iron" % "3.4.1")
 
 lazy val commonSettings = Seq(
   // Main code is checked against `.scalafix-main.conf` (the shared rules + main-only bans such as
@@ -602,10 +638,19 @@ lazy val commonSettings = Seq(
 // PSVec's leaf-structural equality, ...). Tracked for a later pass
 // once we decide how CanEqual should flow through the existential
 // optic hierarchy.
-lazy val scala3LibrarySettings = Seq(
+// JVM-backend-only flags. `-opt` / `-opt-inline` drive scalac's BYTECODE optimizer (GenBCode),
+// which the Scala.js and Scala Native backends never run, so cross modules apply these through
+// `.jvmSettings(scala3OptSettings *)` and nothing else.
+lazy val scala3OptSettings = Seq(
   scalacOptions ++= Seq(
     "-opt", // method-local JVM bytecode optimizer
     "-opt-inline:dev.constructive.eo.**", // inline across methods, from eo's own code only
+  )
+)
+
+// Platform-neutral half of the library flags (every cross module, on every platform).
+lazy val scala3CrossSettings = Seq(
+  scalacOptions ++= Seq(
     "-Yretain-trees", // downstream `inline def` / macros see our bodies
     "-Wsafe-init", // catch `val` init-order bugs in companion objects
     "-Yexplicit-nulls", // non-nullable reference types by default
@@ -619,6 +664,9 @@ lazy val scala3LibrarySettings = Seq(
   )
 )
 
+// JVM-only modules (avro, zio, chimney, spark, kyo, ...) take the whole set.
+lazy val scala3LibrarySettings = scala3OptSettings ++ scala3CrossSettings
+
 // Macro-bearing modules additionally enable `-Xcheck-macros` so
 // malformed quotes surface at macro-compile time rather than as NPEs
 // in downstream builds.
@@ -626,11 +674,83 @@ lazy val scala3MacroSettings = scala3LibrarySettings ++ Seq(
   scalacOptions += "-Xcheck-macros"
 )
 
-lazy val root: Project = project
-  .in(file("."))
+lazy val scala3CrossMacroSettings = scala3CrossSettings ++ Seq(
+  scalacOptions += "-Xcheck-macros"
+)
+
+// ---- Platforms ---------------------------------------------------------
+//
+// Cross modules use `CrossType.Pure`: the existing `<module>/src/...` tree is the SHARED source
+// (no file moves), the platform projects live in `<module>/.jvm`, `.js`, `.native` (target dirs
+// only). Platform-specific code, if any ever appears, goes in `<module>/.jvm/src/...` etc. and is
+// picked up by `platformSources` below.
+//
+// Test sources are split by FRAMEWORK, not copied per platform. specs2 (+ discipline-specs2) has NO
+// Scala Native artifact, so:
+//   - `src/test/scala`    specs2 specs — JVM + Scala.js only;
+//   - `src/munit/scala`   munit suites — every platform (the only tests Native runs);
+//   - `src/testkit/scala` framework-free fixtures and law rule-set builders (scalacheck /
+//                         discipline-core only) that BOTH kinds of suite consume, so nothing is
+//                         written twice. A spec that has to run on Native is moved to munit or
+//                         has its fixtures lifted into the testkit; never duplicated.
+// `Test / unmanagedSourceDirectories` on Native is exactly testkit + munit.
+def moduleDir(base: File): File = base.getParentFile
+
+lazy val platformSources = Seq(
+  Compile / unmanagedSourceDirectories += baseDirectory.value / "src" / "main" / "scala",
+  Test / unmanagedSourceDirectories += baseDirectory.value / "src" / "test" / "scala",
+  Test / unmanagedSourceDirectories ++= Seq(
+    moduleDir(baseDirectory.value) / "src" / "testkit" / "scala",
+    moduleDir(baseDirectory.value) / "src" / "munit" / "scala",
+  ),
+)
+
+lazy val munitStack = Seq(
+  libraryDependencies ++= Seq(
+    munit.value % Test,
+    munitScalacheck.value % Test,
+    disciplineMunit.value % Test,
+  )
+)
+
+lazy val nativeMunit = Seq(
+  Test / unmanagedSourceDirectories := Seq(
+    moduleDir(baseDirectory.value) / "src" / "testkit" / "scala",
+    moduleDir(baseDirectory.value) / "src" / "munit" / "scala",
+  )
+)
+
+// JS / Native first ship in 1.3.0, so there is no published baseline to compare with (MiMa would
+// try to resolve `<module>_sjs1_3:1.3.0` itself). After 1.3.0 is out, replace this with
+// `tlVersionIntroduced := Map("3" -> "1.3.0")` so later releases are checked against it.
+lazy val newPlatform = Seq(tlMimaPreviousVersions := Set.empty)
+
+// Shared wiring of every cross module: common + platform-neutral scalac flags everywhere, the
+// bytecode optimizer on the JVM only, Native on munit (see `nativeMunit`).
+def eoCrossBase(p: CrossProject): CrossProject =
+  p.settings(commonSettings *)
+    .jvmSettings(platformSources *)
+    .jsSettings(platformSources *)
+    .nativeSettings(platformSources *)
+    .jsSettings(newPlatform *)
+    .nativeSettings(newPlatform *)
+    .nativeSettings(nativeMunit *)
+    .settings(munitStack *)
+    // specs2 stack: JVM + Scala.js (Native has only the munit + testkit sources, above).
+    .jvmSettings(libraryDependencies += discipline.value % Test)
+    .jsSettings(libraryDependencies += discipline.value % Test)
+
+// Published library modules: the base plus the library scalac flags (optimizer on the JVM only).
+def eoCross(p: CrossProject): CrossProject =
+  eoCrossBase(p).settings(scala3CrossSettings *).jvmSettings(scala3OptSettings *)
+
+def eoCrossMacro(p: CrossProject): CrossProject =
+  eoCross(p).settings(scalacOptions += "-Xcheck-macros")
+
+lazy val root = tlCrossRootProject
   .settings(Cpd.settings)
   .aggregate(
-    (Seq[ProjectReference](
+    (Seq[CompositeProject](
       core,
       laws,
       tests,
@@ -644,7 +764,7 @@ lazy val root: Project = project
       sparkIntegration,
       schemes,
       schemesLaws,
-    ) ++ (if (kyoBuildActive) Seq[ProjectReference](kyoIntegration) else Seq.empty)) *
+    ) ++ (if (kyoBuildActive) Seq[CompositeProject](kyoIntegration) else Seq.empty)) *
   )
   .settings(commonSettings *)
   .settings(
@@ -654,59 +774,56 @@ lazy val root: Project = project
     mimaPreviousArtifacts := Set.empty,
   )
 
-lazy val core: Project = project
-  .in(file("core"))
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val core = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("core"))
+)
   .settings(
     name := "cats-eo",
-    libraryDependencies += cats,
-    // Minimal Test dep so core can run its own in-module smoke specs
-    // (currently just FoldSpec) without needing the cross-module
-    // `tests` project. The richer suites all live in cats-eo-tests.
-    libraryDependencies += discipline % Test,
+    libraryDependencies += cats.value,
+    // Core runs its own in-module smoke specs (currently just FoldSpec) on the specs2 stack
+    // eoCross adds; the richer suites all live in cats-eo-tests.
   )
 
-lazy val laws: Project = project
-  .in(file("laws"))
-  .dependsOn(LocalProject("core"))
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val laws = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("laws"))
+    .dependsOn(core)
+)
   .settings(
     name := "cats-eo-laws",
     Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
-    libraryDependencies += cats,
-    libraryDependencies += disciplineCore,
-    libraryDependencies += scalacheck,
+    libraryDependencies += cats.value,
+    libraryDependencies += disciplineCore.value,
+    libraryDependencies += scalacheck.value,
   )
 
-lazy val tests: Project = project
-  .in(file("tests"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("laws"),
-    LocalProject("generics") % Test,
-  )
-  .settings(commonSettings *)
+lazy val tests = eoCrossBase(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("tests"))
+    .dependsOn(core, laws, generics % Test)
+)
   .settings(
     name := "cats-eo-tests",
     publish / skip := true,
     // Never published, so there is no 1.0.0 artifact for MiMa to compare against.
     mimaPreviousArtifacts := Set.empty,
-    libraryDependencies += discipline % Test,
     // cats' own Traverse laws for the hand-written `Traverse[PSVec]` (PSVecTraverseLawsSpec).
-    libraryDependencies += catsLaws % Test,
+    libraryDependencies += catsLaws.value % Test,
     // circe-core powers the CRUD round-trip example specs
     // (examples/CrudRoundtrip*), which drive derived optics through a
     // circe Json AST.
-    libraryDependencies += circe % Test,
-    libraryDependencies += circeParser % Test,
+    libraryDependencies += circe.value % Test,
+    libraryDependencies += circeParser.value % Test,
     // Kubuszok's kindlings library provides Hearth-powered derivation
     // for cats typeclasses (Show / Eq / Monoid / ...) and circe codecs.
     // Used by the motivating CRUD round-trip example to keep the
     // typeclass boilerplate out of the way of the optics story.
-    libraryDependencies += kindlingsCats % Test,
-    libraryDependencies += kindlingsCirce % Test,
+    libraryDependencies += kindlingsCats.value % Test,
+    libraryDependencies += kindlingsCirce.value % Test,
   )
 
 // Recursion schemes as composable optics: `cata` (a Getter on Plated), `ana`
@@ -714,20 +831,16 @@ lazy val tests: Project = project
 // materializing `ana.cross(cata)` composition via core's `cross` combinator.
 // `core`-only main dependency; tests use generics' `plate[S]` and circe's
 // `platedJson`. See docs/plans/2026-06-09-001-feat-schemes-module-plan.md.
-lazy val schemes: Project = project
-  .in(file("schemes"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics") % Test,
-    LocalProject("circeIntegration") % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val schemes = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("schemes"))
+    .dependsOn(core, generics % Test, circeIntegration % Test)
+)
   .settings(
     name := "cats-eo-schemes",
-    libraryDependencies += cats,
-    libraryDependencies += discipline % Test,
-    libraryDependencies += scalacheck % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += scalacheck.value % Test,
   )
 
 // Discipline-style laws for the recursion-scheme module. Lives outside
@@ -735,34 +848,34 @@ lazy val schemes: Project = project
 // cata / ana / hylo) and `laws` sits upstream of `schemes` in the build
 // graph. First citizen is the hylo fusion law; more scheme laws are
 // expected to land here (para / apo / histo fusion, cata-compose, ...).
-lazy val schemesLaws: Project = project
-  .in(file("schemes-laws"))
-  .dependsOn(LocalProject("schemes"))
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val schemesLaws = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("schemes-laws"))
+    .dependsOn(schemes)
+)
   .settings(
     name := "cats-eo-schemes-laws",
     Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
-    libraryDependencies += cats,
-    libraryDependencies += disciplineCore,
-    libraryDependencies += scalacheck,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += disciplineCore.value,
+    libraryDependencies += scalacheck.value,
   )
 
 // Auto-derivation of optics for product / sum types via quoted macros,
 // built on Mateusz Kubuszok's `hearth` macro-commons library. Kept out
 // of `core` so agents that only want the hand-written optics don't
 // pull in a macro dep.
-lazy val generics: Project = project
-  .in(file("generics"))
-  .dependsOn(LocalProject("core"), LocalProject("laws") % Test)
-  .settings(commonSettings *)
-  .settings(scala3MacroSettings *)
+lazy val generics = eoCrossMacro(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("generics"))
+    .dependsOn(core, laws % Test)
+)
   .settings(
     name := "cats-eo-generics",
-    libraryDependencies += cats,
-    libraryDependencies += hearth,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += hearth.value,
     // The Hearth-quote-driven lens macro emits a `'{ (x, a) => ... }`
     // lambda whose `a` is only referenced from inside a nested splice,
     // which `-Wunused:explicits` can't follow across the quote/splice
@@ -778,25 +891,21 @@ lazy val generics: Project = project
 // lets you `transform` a JsonObject field in place without
 // round-tripping through S. Kept in its own module so projects that
 // only want the base library don't pull in circe.
-lazy val circeIntegration: Project = project
-  .in(file("circe"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics"),
-    LocalProject("laws") % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val circeIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("circe"))
+    .dependsOn(core, generics, laws % Test)
+)
   .settings(
     name := "cats-eo-circe",
-    libraryDependencies += cats,
-    libraryDependencies += circe,
+    libraryDependencies += cats.value,
+    libraryDependencies += circe.value,
     // Compile-scope: the `Json | String` overloads on JsonPrism /
     // JsonTraversal parse String inputs via io.circe.parser.parse
     // before proceeding with the Json path. Parse failures surface via JsonFailure.ParseFailed.
-    libraryDependencies += circeParser,
-    libraryDependencies += kindlingsCirce % Test,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += circeParser.value,
+    libraryDependencies += kindlingsCirce.value % Test,
   )
 
 // Cross-representation optics that bridge a native Scala source type
@@ -814,24 +923,24 @@ lazy val circeIntegration: Project = project
 lazy val avroIntegration: Project = project
   .in(file("avro"))
   .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics"),
+    core.jvm,
+    generics.jvm,
     // Optional: the `dev.constructive.eo.avro.jsoniter` sub-package extends `JsoniterPrism` with
     // the structural `.avro` face — its API surface *names* JsoniterPrism, so any caller already
     // depends on cats-eo-jsoniter directly. Optional keeps it off avro-only classpaths. (The
     // reverse dep would be a cycle — see the jsoniterIntegration comment.)
-    LocalProject("jsoniterIntegration") % Optional,
+    jsoniterIntegration.jvm % Optional,
     // Same doctrine for cats-eo-circe: the `dev.constructive.eo.avro.circe` cursor faces extend
     // `JsonPrism` with the structural `.avro` face — callers of it already depend on cats-eo-circe
     // directly. circe-core alone (below) still serves the AvroJson walk/prism surface.
-    LocalProject("circeIntegration") % Optional,
-    LocalProject("laws") % Test,
+    circeIntegration.jvm % Optional,
+    laws.jvm % Test,
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
   .settings(
     name := "cats-eo-avro",
-    libraryDependencies += cats,
+    libraryDependencies += cats.value,
     libraryDependencies += kindlingsAvro,
     // Pin apache-avro explicitly even though kindlings-avro-derivation
     // brings it transitively — the optic surface uses `IndexedRecord` /
@@ -842,7 +951,7 @@ lazy val avroIntegration: Project = project
     // Avro ↔ circe bridge, `AvroJson`) touches it, and its API surface *names* `io.circe.Json` —
     // so any caller already depends on circe directly to write the call site. Optional keeps it
     // off downstream classpaths; avro-only users never load the bridge's classfiles.
-    libraryDependencies += circe % Optional,
+    libraryDependencies += circe.value % Optional,
     // vulcan is Optional for the same reason: only `dev.constructive.eo.avro.vulcan` (the
     // vulcan.Codec → AvroCodec bridge, issue #73) touches it, and its API surface *names*
     // `vulcan.Codec` — callers already depend on vulcan directly.
@@ -854,11 +963,11 @@ lazy val avroIntegration: Project = project
     // the package scaladoc says so. Optional keeps it off every other consumer's classpath. (The
     // `.avro` face additionally names JsoniterPrism — covered by the jsoniterIntegration Optional
     // project dep above.)
-    libraryDependencies += jsoniterCore % Optional,
+    libraryDependencies += jsoniterCore.value % Optional,
     // jsoniter-scala-macros backs the cross-format bridge specs (JsonCodecMaker fixtures) that
     // live here because the reverse project dep would be a cycle.
-    libraryDependencies += jsoniterMacros % Test,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += jsoniterMacros.value % Test,
+    libraryDependencies += discipline.value % Test,
   )
 
 // Byte-cursor JSON optics over `Array[Byte]`, backed by
@@ -870,30 +979,25 @@ lazy val avroIntegration: Project = project
 // the path scanner walks raw bytes and the focus is decoded via
 // `JsonValueCodec[A]` only when the user reads it. avroIntegration is
 // Test-scoped for the cross-format Avro-bytes → JSON-bytes bridge spec.
-lazy val jsoniterIntegration: Project = project
-  .in(file("jsoniter"))
-  .dependsOn(
-    LocalProject("core"),
-    // MacroSelectors for the `.field(_.x)` / `.at` / `.each` cursor macros,
-    // same as circeIntegration.
-    LocalProject("generics"),
-    LocalProject("laws") % Test,
+lazy val jsoniterIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("jsoniter"))
     // NO dependency on avroIntegration in EITHER scope: avroIntegration depends on THIS module
     // (Optional, for the `dev.constructive.eo.avro.jsoniter` bridge faces), and sbt treats even a
     // Test-scoped back-reference as a project cycle. The cross-format bridge specs live in
     // avro/src/test instead.
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+    // MacroSelectors for the `.field(_.x)` / `.at` / `.each` cursor macros, same as circeIntegration.
+    .dependsOn(core, generics, laws % Test)
+)
   .settings(
     name := "cats-eo-jsoniter",
-    libraryDependencies += cats,
-    libraryDependencies += jsoniterCore,
+    libraryDependencies += cats.value,
+    libraryDependencies += jsoniterCore.value,
     // -macros is Test-scoped: the optic factory only needs
     // `JsonValueCodec[A]` evidence at the call site, and the spec
     // derives codecs for fixtures via JsonCodecMaker.make.
-    libraryDependencies += jsoniterMacros % Test,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += jsoniterMacros.value % Test,
   )
 
 // Iron integration: every runtime-checkable refinement (`RuntimeConstraint[A, C]`) becomes a lawful
@@ -901,19 +1005,16 @@ lazy val jsoniterIntegration: Project = project
 // `RefinedType` newtypes (`IronPrism.refined[T]`) and whole containers (`IronPrism.all`). Built on
 // the stock `MendTearPrism`, so every fused composition (Lens → Optional, Traversal → filtering
 // Traversal) comes for free.
-lazy val ironIntegration: Project = project
-  .in(file("iron"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("laws") % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val ironIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("iron"))
+    .dependsOn(core, laws % Test)
+)
   .settings(
     name := "cats-eo-iron",
-    libraryDependencies += cats,
-    libraryDependencies += iron,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += iron.value,
   )
 
 // ZIO DI integration: optics into `ZEnvironment` (each tagged service
@@ -922,25 +1023,22 @@ lazy val ironIntegration: Project = project
 // service via `CanGet`). Consumes capabilities, constructs nothing new:
 // no new carrier — the service lens is a plain `GetReplaceLens`, so all
 // fused composition and the capability mixins come for free.
-lazy val zioIntegration: Project = project
-  .in(file("zio"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("laws") % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val zioIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("zio"))
+    .dependsOn(core, laws % Test)
+)
   .settings(
     name := "cats-eo-zio",
-    libraryDependencies += cats,
-    libraryDependencies += zioCore,
-    libraryDependencies += zioSchema % Optional,
-    libraryDependencies += zioJson % Optional,
-    libraryDependencies += zioPrelude % Optional,
-    libraryDependencies += zioSchemaDerivation % Test,
-    libraryDependencies += zioSchemaJson % Test,
-    libraryDependencies += discipline % Test,
-    libraryDependencies += catsLaws % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += zioCore.value,
+    libraryDependencies += zioSchema.value % Optional,
+    libraryDependencies += zioJson.value % Optional,
+    libraryDependencies += zioPrelude.value % Optional,
+    libraryDependencies += zioSchemaDerivation.value % Test,
+    libraryDependencies += zioSchemaJson.value % Test,
+    libraryDependencies += catsLaws.value % Test,
   )
 
 // chimney integration: chimney's derived transformations as eo optics — `Transformer` → Getter,
@@ -948,20 +1046,16 @@ lazy val zioIntegration: Project = project
 // miss keeps chimney's errors), `Patcher` → write-only Modify — plus `.patch` / `.transformFocus`
 // running chimney at an eo optic's focus. eo-generics is Test-only: callers compose the bridges
 // with whichever eo optics they like, derived or hand-written.
-lazy val chimneyIntegration: Project = project
-  .in(file("chimney"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics") % Test,
-    LocalProject("laws") % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val chimneyIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("chimney"))
+    .dependsOn(core, generics % Test, laws % Test)
+)
   .settings(
     name := "cats-eo-chimney",
-    libraryDependencies += cats,
-    libraryDependencies += chimneyCore,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += chimneyCore.value,
   )
 
 // Spark integration: optics over Spark's symbolic `Column` expressions.
@@ -982,9 +1076,9 @@ lazy val chimneyIntegration: Project = project
 lazy val sparkIntegration: Project = project
   .in(file("spark"))
   .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics"),
-    LocalProject("laws") % Test,
+    core.jvm,
+    generics.jvm,
+    laws.jvm % Test,
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
@@ -992,12 +1086,12 @@ lazy val sparkIntegration: Project = project
     name := "cats-eo-spark",
     // New after 1.0.0: MiMa has no earlier artifact of this module to compare against.
     tlVersionIntroduced := Map("3" -> "1.1.0"),
-    libraryDependencies += cats,
+    libraryDependencies += cats.value,
     // `SparkEncoders.derived` is a Hearth macro, as eo-generics' derivations are.
-    libraryDependencies += hearth,
+    libraryDependencies += hearth.value,
     libraryDependencies += sparkSqlApi % Provided,
     libraryDependencies += sparkConnectClient % Test,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += discipline.value % Test,
     // The specs start a Spark Connect server as a child process (see
     // `Sessions` in the test sources): hand them its 2.13 classpath and the
     // JVM flags Spark needs. Forked so the properties reach the test JVM,
@@ -1108,43 +1202,25 @@ lazy val sparkConnectServer: Project = project
 // capability-driven focus ops as `zio.Ref`, and `Layer.focus` projects
 // an aggregate service into a sub-service layer (`Layer.from` is
 // CanGet-shaped). Depends on kyo-prelude ONLY — no kyo-core IO.
-lazy val kyoIntegration: Project = project
-  .in(file("kyo"))
-  .dependsOn(
-    LocalProject("core"),
-    LocalProject("laws") % Test,
-  )
-  .settings(commonSettings *)
-  .settings(scala3LibrarySettings *)
+lazy val kyoIntegration = eoCross(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("kyo"))
+    .dependsOn(core, laws % Test)
+)
+  // kyo RC5+ ships Java-25-only bytecode: the JVM artifact targets 25, and every platform needs a
+  // JDK 25 compiler JVM to load kyo's macro classes (hence `kyoBuildActive` gates the whole module).
+  .jvmSettings(tlJdkRelease := Some(25))
   .settings(
     name := "cats-eo-kyo",
-    // Kyo's kernel is not explicit-nulls-clean: its `inline` machinery
-    // (Safepoint.eval passes a `null` Interceptor) re-typechecks inside
-    // OUR compilation units wherever a kyo inline def expands (`.eval`,
-    // `Env.run`, ...), and fails under `-Yexplicit-nulls`. Module-local
-    // opt-out; every other module keeps the flag.
     scalacOptions -= "-Yexplicit-nulls",
     Test / scalacOptions -= "-Yexplicit-nulls",
-    // Same phenomenon, different flag: kyo-schema's `Schema.derived` inline
-    // machinery re-typechecks its OWN sources inside our units and trips our
-    // -Werror on safe-init warnings kyo suppresses with flags we don't set.
-    // Silence by ORIGIN (kyo-schema source paths), keeping our code strict.
     scalacOptions += "-Wconf:src=kyo-schema/.*:s",
-    // kyo 1.0.0-RC5+ is Java-25-only bytecode, so this artifact honestly
-    // targets 25 too (the ThisBuild floor stays 17 for every other module).
-    tlJdkRelease := Some(25),
-    // EXPERIMENTAL: no binary-compatibility promise. cats-eo-kyo builds on
-    // kyo 1.0.0-RC7, a release candidate whose own API and bytecode still
-    // move between RCs, so this module is excluded from the 1.x MiMa check
-    // (every other published module is checked against 1.0.0). Lift this
-    // override — let sbt-typelevel compute the previous versions again —
-    // once kyo 1.0.0 final ships and the module is rebuilt on it.
     tlMimaPreviousVersions := Set.empty,
-    libraryDependencies += cats,
-    libraryDependencies += kyoPrelude,
-    libraryDependencies += kyoSchema % Optional,
-    libraryDependencies += kyoSchemaJson % Test,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += cats.value,
+    libraryDependencies += kyoPrelude.value,
+    libraryDependencies += kyoSchema.value % Optional,
+    libraryDependencies += kyoSchemaJson.value % Test,
   )
 
 // Docs site — Laika + mdoc via sbt-typelevel-site. Rooted at
@@ -1156,18 +1232,18 @@ lazy val docs: Project = project
   .in(file("site"))
   .enablePlugins(TypelevelSitePlugin)
   .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics"),
-    LocalProject("circeIntegration"),
+    core.jvm,
+    generics.jvm,
+    circeIntegration.jvm,
     LocalProject("avroIntegration"),
-    LocalProject("jsoniterIntegration"),
-    LocalProject("ironIntegration"),
-    LocalProject("zioIntegration"),
-    LocalProject("kyoIntegration"),
-    LocalProject("chimneyIntegration"),
+    jsoniterIntegration.jvm,
+    ironIntegration.jvm,
+    zioIntegration.jvm,
+    kyoIntegration.jvm,
+    chimneyIntegration.jvm,
     LocalProject("sparkIntegration"),
-    LocalProject("laws"),
-    LocalProject("schemes"),
+    laws.jvm,
+    schemes.jvm,
   )
   .settings(commonSettings *)
   .settings(
@@ -1197,7 +1273,7 @@ lazy val docs: Project = project
     // kindlingsCirce is only in `circeIntegration`'s Test scope, so
     // docs examples that want circe Codec derivation need it
     // surfaced here as a Compile-scope dep.
-    libraryDependencies += kindlingsCirce,
+    libraryDependencies += kindlingsCirce.value,
     // kindlingsAvro is only in `avroIntegration`'s test/runtime path
     // through the codec triplet — surface it here so avro.md mdoc
     // blocks can summon `AvroEncoder.derived` / `AvroDecoder.derived`
@@ -1206,21 +1282,21 @@ lazy val docs: Project = project
     // jsoniter-scala-macros is `Test`-scoped on jsoniterIntegration; surface
     // it here so jsoniter.md mdoc blocks can derive `JsonValueCodec[A]` via
     // `JsonCodecMaker.make` against the live classpath.
-    libraryDependencies += jsoniterMacros,
+    libraryDependencies += jsoniterMacros.value,
     // kyo-schema is `Optional` on kyoIntegration (callers add it
     // themselves); surface it plus the json codec here so kyo.md can
     // document the `eo.kyo.schema` bridge against the live classpath.
-    libraryDependencies += kyoSchema,
-    libraryDependencies += kyoSchemaJson,
+    libraryDependencies += kyoSchema.value,
+    libraryDependencies += kyoSchemaJson.value,
     // Same for the zio side: zio-schema / zio-json / zio-prelude are
     // `Optional` on zioIntegration; surface them (plus derivation and
     // the json BinaryCodec artifact) so zio.md can document the
     // `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages.
-    libraryDependencies += zioSchema,
-    libraryDependencies += zioSchemaDerivation,
-    libraryDependencies += zioSchemaJson,
-    libraryDependencies += zioJson,
-    libraryDependencies += zioPrelude,
+    libraryDependencies += zioSchema.value,
+    libraryDependencies += zioSchemaDerivation.value,
+    libraryDependencies += zioSchemaJson.value,
+    libraryDependencies += zioJson.value,
+    libraryDependencies += zioPrelude.value,
     // fs2 (and, through it, cats-effect) for the "Streaming with fs2"
     // cookbook page — docs-only: no published module depends on fs2.
     libraryDependencies += fs2Core,
@@ -1356,15 +1432,15 @@ lazy val unidocs: Project = project
     // @group buckets render as sections in the merged tree too.
     ScalaUnidoc / unidoc / scalacOptions ++= Seq("-groups"),
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
-      core,
-      laws,
-      generics,
-      schemes,
-      circeIntegration,
+      core.jvm,
+      laws.jvm,
+      generics.jvm,
+      schemes.jvm,
+      circeIntegration.jvm,
       avroIntegration,
-      jsoniterIntegration,
-      ironIntegration,
-      chimneyIntegration,
+      jsoniterIntegration.jvm,
+      ironIntegration.jvm,
+      chimneyIntegration.jvm,
     ),
   )
 
@@ -1376,20 +1452,20 @@ lazy val benchmarks: Project = project
   .in(file("benchmarks"))
   .enablePlugins(JmhPlugin)
   .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics"),
-    LocalProject("schemes"),
-    LocalProject("circeIntegration"),
+    core.jvm,
+    generics.jvm,
+    schemes.jvm,
+    circeIntegration.jvm,
     LocalProject("avroIntegration"),
-    LocalProject("jsoniterIntegration"),
+    jsoniterIntegration.jvm,
     // DI-integration overhead benches (ZioDiBench / KyoDiBench):
     // eo-composed access into ZEnvironment / TypeMap vs the hand-written
     // equivalent. benchmarks/ has no -Yexplicit-nulls (commonSettings
     // only), so kyo's inline `.eval` machinery expands fine here.
-    LocalProject("zioIntegration"),
-    LocalProject("kyoIntegration"),
+    zioIntegration.jvm,
+    kyoIntegration.jvm,
     // ChimneyBench: cats-eo-chimney vs plain chimney vs hand-written transforms.
-    LocalProject("chimneyIntegration"),
+    chimneyIntegration.jvm,
   )
   .settings(commonSettings *)
   .settings(
@@ -1400,8 +1476,8 @@ lazy val benchmarks: Project = project
     libraryDependencies += drosteCore,
     // circe-parser for the Json round-trip benches; kindlings for the
     // Codec derivation used by the OrderCirceBench / JsoniterBench fixtures.
-    libraryDependencies += circeParser,
-    libraryDependencies += kindlingsCirce,
+    libraryDependencies += circeParser.value,
+    libraryDependencies += kindlingsCirce.value,
     // kindlings-avro-derivation for the OrderAvroBench fixture codecs;
     // cats-eo-avro itself is wired through the .dependsOn edge above so
     // AvroPrism / codecPrism are on the bench classpath.
@@ -1413,7 +1489,7 @@ lazy val benchmarks: Project = project
     // fixtures' JsonValueCodec[A] derivations. Compile-scope here so the
     // JMH class can `JsonCodecMaker.make` directly without a separate
     // codec module.
-    libraryDependencies += jsoniterMacros,
+    libraryDependencies += jsoniterMacros.value,
   )
 
 // -------------------------------------------------------------------
@@ -1434,9 +1510,9 @@ lazy val asmUtil = "org.ow2.asm" % "asm-util" % AsmVersion
 lazy val demoUplcJvm: Project = project
   .in(file("demos/uplc-jvm"))
   .dependsOn(
-    LocalProject("core"),
+    core.jvm,
     // IsoTests: the suite checks the optics' round-trip laws with the library's own rule set.
-    LocalProject("laws") % Test,
+    laws.jvm % Test,
     LocalProject("demoUplcJvmValidators") % Test,
   )
   .settings(commonSettings *)
@@ -1447,7 +1523,7 @@ lazy val demoUplcJvm: Project = project
     libraryDependencies += asmCommons,
     // Textifier: the walkthrough prints a JvmClass as bytecode.
     libraryDependencies += asmUtil % Test,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += discipline.value % Test,
     // Unpublished, so the optimizer may inline from anything on the classpath (Scalus, ASM,
     // cats, eo) — except Scala's own library: inlining it into the runtime makes `Rt.force` too
     // big for the JIT to inline, and the short validations ran 12-27% slower (measured with the
@@ -1505,11 +1581,11 @@ lazy val scalacheckDerived = "io.github.martinhh" %% "scalacheck-derived" % "0.1
 lazy val demoGrpcFilter: Project = project
   .in(file("demos/grpc-filter"))
   .dependsOn(
-    LocalProject("core"),
-    LocalProject("generics"),
-    LocalProject("jsoniterIntegration"),
+    core.jvm,
+    generics.jvm,
+    jsoniterIntegration.jvm,
     // OptionalTests: the model's optics are checked against the library's own rule set.
-    LocalProject("laws") % Test,
+    laws.jvm % Test,
   )
   .settings(commonSettings *)
   .settings(
@@ -1517,12 +1593,12 @@ lazy val demoGrpcFilter: Project = project
     publish / skip := true,
     libraryDependencies += fs2Io,
     // The message model's codecs: the source encodes whole messages, the baseline decodes them.
-    libraryDependencies += jsoniterMacros,
+    libraryDependencies += jsoniterMacros.value,
     // The stream's issues come from ScalaCheck generators derived from the model, in main code:
     // the demo's upstream service and the benchmarks draw from them too.
-    libraryDependencies += scalacheck,
+    libraryDependencies += scalacheck.value,
     libraryDependencies += scalacheckDerived,
-    libraryDependencies += discipline % Test,
+    libraryDependencies += discipline.value % Test,
     Compile / run / fork := true,
   )
 
@@ -1556,12 +1632,12 @@ addCommandAlias("benchQuick", "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1")
 // re-evaluates the Laika docs settings, which OOMs on a small heap.
 // -------------------------------------------------------------------
 
-// Full cross-module statement/branch coverage. Root `test` exercises
-// every aggregated module's suite, so `coverageAggregate` rolls up a
-// complete per-package view.
+// Full cross-module statement/branch coverage on the JVM (`rootJVM`): the specs2 suites run there
+// in full, and scoverage's report is per-JVM-project. `rootJVM/test` exercises every JVM module's
+// suite, so `coverageAggregate` rolls up a complete per-package view.
 addCommandAlias(
   "coverageAll",
-  "set ThisBuild/tlFatalWarnings := false; clean; coverage; test; coverageReport; coverageAggregate",
+  "set ThisBuild/tlFatalWarnings := false; project rootJVM; clean; coverage; test; coverageReport; coverageAggregate; project root",
 )
 
 // Mutation testing across the published modules (tests/benchmarks/docs
@@ -1592,21 +1668,21 @@ addCommandAlias(
 addCommandAlias(
   "mutationAll",
   "set ThisBuild/tlFatalWarnings := false; " +
-    "set LocalProject(\"core\")/Test/definedTests ++= (LocalProject(\"tests\")/Test/definedTests).value; " +
-    "set LocalProject(\"core\")/Test/fullClasspath ++= (LocalProject(\"tests\")/Test/fullClasspath).value; " +
-    "set LocalProject(\"laws\")/Test/definedTests ++= (LocalProject(\"tests\")/Test/definedTests).value; " +
-    "set LocalProject(\"laws\")/Test/fullClasspath ++= (LocalProject(\"tests\")/Test/fullClasspath).value; " +
-    "project core; stryker; " +
-    "project laws; stryker; " +
-    "project generics; stryker; " +
-    "project schemes; stryker; " +
-    "project schemesLaws; stryker; " +
-    "project circeIntegration; stryker; " +
+    "set LocalProject(\"coreJVM\")/Test/definedTests ++= (LocalProject(\"testsJVM\")/Test/definedTests).value; " +
+    "set LocalProject(\"coreJVM\")/Test/fullClasspath ++= (LocalProject(\"testsJVM\")/Test/fullClasspath).value; " +
+    "set LocalProject(\"lawsJVM\")/Test/definedTests ++= (LocalProject(\"testsJVM\")/Test/definedTests).value; " +
+    "set LocalProject(\"lawsJVM\")/Test/fullClasspath ++= (LocalProject(\"testsJVM\")/Test/fullClasspath).value; " +
+    "project coreJVM; stryker; " +
+    "project lawsJVM; stryker; " +
+    "project genericsJVM; stryker; " +
+    "project schemesJVM; stryker; " +
+    "project schemesLawsJVM; stryker; " +
+    "project circeIntegrationJVM; stryker; " +
     "project avroIntegration; stryker; " +
-    "project jsoniterIntegration; stryker; " +
-    "project ironIntegration; stryker; " +
-    "project zioIntegration; stryker; " +
-    "project kyoIntegration; stryker; " +
-    "project chimneyIntegration; stryker; " +
+    "project jsoniterIntegrationJVM; stryker; " +
+    "project ironIntegrationJVM; stryker; " +
+    "project zioIntegrationJVM; stryker; " +
+    "project kyoIntegrationJVM; stryker; " +
+    "project chimneyIntegrationJVM; stryker; " +
     "project root",
 )

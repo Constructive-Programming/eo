@@ -38,14 +38,67 @@ Test-only: `org.typelevel:discipline-specs2_3:2.0.0`.
 | `demoGrpcFilter` | `demos/grpc-filter/` | — (not published) | Demo: an fs2 filter on a gRPC stream read as raw bytes off a TCP socket — Length-Prefixed-Message frames (`GrpcFrames.splitFrames` / `joinFrames` pipes) of JSON `Issue`s (64 fields; the 61st, `detail`, a 3-case enum nested 3 objects deep). It classifies and filters every message with eo-jsoniter prisms WITHOUT decoding it (all IN PLACE, nothing copied: `splitFrames` hands out `Chunk.ArraySlice` views of the socket's reads, `Wire.json` = `JsonSlice(chunk.toByteBuffer)`; `Wire.detail` = `JsoniterPrism.inPlace[Issue].field(_.detail).raw` focuses the detail as a `JsonSlice` VIEW of the message — the opaque `DetailJson` — and typed per-case leaf prisms, `JsoniterPrism.inPlace[Detail.Incident].field(_.impact)…`, read it; `detail andThen severity` is one optic. Views share the read's array: judge, forward, keep nothing) and forwards kept frames byte for byte. `Policy.keep` is written ONCE against `CanGetOption` and runs on bytes (`Wire` givens) and on a decoded `Detail` (`Model` givens: eo-generics `prism`/`lens` chains, checked with `OptionalTests`); the differential tests compare the two on every message. Leaf prisms don't check the kind — the policy classifies first. `Wire.kind` is the one string path (`"type"` is the codec's tag, not a model field) and the one construction-time throw; `Issue.decode` the one catch of jsoniter-scala's throwing decode. `GrpcFrames.Malformed` fails the stream (compressed / oversized / truncated frames): no HTTP/2, no compression. Sockets are read 256 KiB at a time (`Net.reads`): fs2's 8 KiB `reads` was the loopback bottleneck. `Issues` = ScalaCheck generators DERIVED from the model by scalacheck-derived (only leaves hand-written: text, JSON-safe doubles, the opaque `Module` / `Votes`); `Issues(seed)` samples at `Issues.Size` (7, ~4 KB/message) with `Seed.slide` — consecutive `Seed.next` seeds draw overlapping, correlated values; derived sums shrink the size by one per level and fail at 0, so properties start at `minSize = 2`. Not in the root aggregate; CI runs `demoGrpcFilter/test` |
 | `demoGrpcFilterBench` | `demos/grpc-filter-bench/` | — (not published) | JMH for that demo: one message judged (full decode vs optics, with `detail` late as written or moved first) and the in-memory filter pipe. Numbers live on `site/docs/cookbook/grpc-filter.md` (the cookbook's "Allocation-free stream triage demo" page). CI only compiles it (`demoGrpcFilterBench/Jmh/compile`) |
 
-The root project aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
-`schemesLaws`, `circe`, `avro`, `jsoniter`, `iron`, `zio`, `chimney`, `spark`, and `kyo`. `sbt compile` and `sbt test`
-cover those; benchmarks and the demos must be invoked explicitly
+The root project (`tlCrossRootProject`) aggregates `core`, `laws`, `tests`, `generics`, `schemes`,
+`schemesLaws`, `circe`, `avro`, `jsoniter`, `iron`, `zio`, `chimney`, `spark`, and `kyo`. `sbt compile`
+and `sbt test` cover those on every platform; benchmarks and the demos must be invoked explicitly
 (see below; `sbt demoUplcJvm/test`, `sbt demoGrpcFilter/test`).
 
-Published modules compile with Scala 3's bytecode optimizer (`scala3LibrarySettings` in
-`build.sbt`): `-opt`, plus `-opt-inline:dev.constructive.eo.**` — the inliner may copy code
-only from eo's own packages, never from cats, the JDK or the Scala library, whose next
+### Platforms (JVM, Scala.js, Scala Native)
+
+Cross-built (`crossProject(JVMPlatform, JSPlatform, NativePlatform)`, `CrossType.Pure`):
+**`core`, `laws`, `tests`, `generics`, `schemes`, `schemesLaws`, `circe`, `jsoniter`, `iron`, `zio`, `chimney`, `kyo`** (all dependencies publish `_sjs1_3` / `_native0.5_3`; `kyo` still needs a JDK 25 build JVM on every platform, hence `kyoBuildActive`).
+Project ids are `<id>JVM` / `<id>JS` / `<id>Native` (`coreJS`, `circeIntegrationNative`, `zioIntegrationJS`, …); the
+sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/test`,
+`sbt rootNative/test`; plain `sbt test` runs all three). Deps are `%%%`; the dependency vals in
+`build.sbt` are `Def.setting`s, so a use is `libraryDependencies += cats.value`.
+
+- **Layout.** `CrossType.Pure`: the ordinary `<module>/src/{main,test}/scala` tree is SHARED by all
+  platforms (no moved files); platform projects live in `<module>/.jvm`, `.js`, `.native` (their
+  `target/` too — e.g. `core/.jvm/target`). Platform-only sources go in `<module>/.jvm/src/...` etc.
+  (wired by `platformSources`; today only `schemes/.jvm/src/test` exists). Keep JDK-only code out of shared sources: the Scala.js / Native javalib lacks
+  JDK 9+ APIs (`Arrays.equals(range)`, `Objects.checkFromIndexSize`, `ByteBuffer.get(int, byte[])`
+  — `JsonSlice` hit all three) and `Thread.getStackTrace` is a stub.
+- **No `java.util.ArrayDeque` in shared code.** Scala.js 1.22's returns `null` from `peek()` on a
+  non-empty deque once it has grown and wrapped (reproduced) — `Plated.transformMachine` and the
+  `Schemes` heap machines use `ArrayBuffer` stacks instead.
+- **Compiler flags.** `-opt` / `-opt-inline` are JVM-backend flags: `scala3OptSettings`, applied
+  through `.jvmSettings` only. Everything else in `scala3LibrarySettings` is in
+  `scala3CrossSettings`. Wiring lives in `eoCross` / `eoCrossBase` / `eoCrossMacro` (`tests` takes
+  `eoCrossBase`: no library flags, as before). JVM-only modules still use `scala3LibrarySettings`.
+- **Test stacks — split by framework, never copied per platform.** specs2 + discipline-specs2 have
+  **no Scala Native artifact**, so each module's tests live in up to three shared dirs:
+  `src/test/scala` (specs2 — JVM + Scala.js only), `src/munit/scala` (munit + discipline-munit +
+  munit-scalacheck — EVERY platform, the only suites Native runs) and `src/testkit/scala`
+  (framework-free fixtures / generators / optic definitions both kinds read; scalacheck and core
+  only). On Native `Test / unmanagedSourceDirectories` is exactly testkit + munit (`nativeMunit`);
+  `munitStack` puts munit on every platform. A spec that must run on Native is MOVED to munit (full
+  conversion, not a subset) or has its fixtures lifted into the testkit — never duplicated (the CPD
+  gate would flag a copy). Moved so far: `HyloLawsSuite`, `ZioOpticsSuite`, `ChunksLawsSuite`,
+  `KyoOpticsSuite`, `ChimneyLawsSuite`, `GenericsSuite`, `IronPrismSuite`, `JsonPrismSuite`,
+  `JsoniterPrismSuite` / `JsoniterPrismWriteSuite` (+ `JsonSlicePortabilitySuite`, the JDK-9+
+  API replacements), and `tests`' `OpticLawsSuite` (base-family laws on the testkit's
+  `OpticFixtures`). Everything else (the ≈500-example composition / fused-path / carrier matrix in
+  `tests`, macro-error specs, the larger circe / jsoniter / zio-schema / kyo-schema specs) stays
+  specs2 and is a known Native gap. munit-scalacheck must stay above discipline-munit's own 1.0.0
+  (that one fails Native's interop phase against munit ≥ 1.1). Native tests link with the
+  system clang.
+- **MiMa.** JS / Native artifacts first ship in 1.3.0 (`newPlatform` empties `tlMimaPreviousVersions`), so they have no baseline until 1.3.0 exists — then switch it to `tlVersionIntroduced := Map("3" -> "1.3.0")`; JVM keeps the 1.0.0 / 1.1.x baselines. `tlBaseVersion` is 1.3 (the first cross-platform minor).
+- **JVM-only modules and why.** `avro` (Apache Avro is a Java library: reflection / `IndexedRecord`
+  / `GenericData`, plus the Optional vulcan / jsoniter / circe bridges), `spark` (Spark has no
+  Scala.js / Native build and the specs need a Connect server JVM), `benchmarks` / `sparkBench` /
+  the demos (JMH, Scalus, ASM, fs2-io sockets — JVM by nature), `docs` / `unidocs` (mdoc over JVM
+  classpaths). They depend on the JVM projects (`core.jvm`, `laws.jvm`, …).
+- **Local worktrees.** In a git worktree whose common repo is bare-ish, sbt-git can die at load
+  with `NoWorkTreeException`; an untracked `zz-local-worktree.sbt` with
+  `ThisBuild / com.github.sbt.git.SbtGit.git.gitUncommittedChanges := false` works around it.
+- **CI.** The build matrix is `project: [rootJVM, rootJS, rootNative]` × JDKs (JS / Native on the
+  primary JDK only). Steps naming JVM-only projects (demos, spark bench, their format / scalafix
+  checks) are gated to `rootJVM`; the Native leg installs clang + libunwind. Regenerate with
+  `sbt githubWorkflowGenerate`.
+
+Published modules compile with Scala 3's bytecode optimizer (`scala3OptSettings` in `build.sbt`,
+JVM backend only — cross modules apply it via `.jvmSettings`): `-opt`, plus
+`-opt-inline:dev.constructive.eo.**` — the inliner may copy code only from eo's own packages, never from cats, the JDK or the Scala library, whose next
 releases would leave stale copies in our jars.
 
 ## Toolchain
@@ -77,8 +130,10 @@ boots the sbt version pinned in `project/build.properties`), `scala-runner
 ### Day-to-day commands
 
 ```sh
-sbt compile                           # full project compile
-sbt test                              # run all test suites (core, tests, generics)
+sbt compile                           # full project compile (every platform)
+sbt test                              # run all test suites, JVM + Scala.js + Scala Native
+sbt rootJVM/test                      # one platform: rootJVM | rootJS | rootNative
+sbt coreJS/test lawsNative/test       # one module on one platform: <id>JVM | <id>JS | <id>Native
 sbt "~compile"                        # watch compile
 scalafmt                              # format in place per .scalafmt.conf
 scalafmt --check                      # CI-style verify

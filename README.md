@@ -25,23 +25,31 @@ that does extra work is treated as a bug to fix.
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo" % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo" % "1.2.1"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %% "cats-eo-laws"         % "1.2.1" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-generics"     % "1.2.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes"      % "1.2.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-schemes-laws" % "1.2.1" % Test
-libraryDependencies += "dev.constructive" %% "cats-eo-circe"        % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-laws"         % "1.2.1" % Test
+libraryDependencies += "dev.constructive" %%% "cats-eo-generics"     % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-schemes"      % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-schemes-laws" % "1.2.1" % Test
+libraryDependencies += "dev.constructive" %%% "cats-eo-circe"        % "1.2.1"
 libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "1.2.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter"     % "1.2.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-iron"         % "1.2.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-zio"          % "1.2.1"
-libraryDependencies += "dev.constructive" %% "cats-eo-kyo"          % "1.2.1" // JDK 25; experimental
-libraryDependencies += "dev.constructive" %% "cats-eo-chimney"      % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-jsoniter"     % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-iron"         % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-zio"          % "1.2.1"
+libraryDependencies += "dev.constructive" %%% "cats-eo-kyo"          % "1.2.1" // JDK 25; experimental
+libraryDependencies += "dev.constructive" %%% "cats-eo-chimney"      % "1.2.1"
 ```
 
 Requires Scala 3.9.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
 which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
+
+### Scala.js and Scala Native
+
+`cats-eo`, `-laws`, `-generics`, `-schemes`, `-schemes-laws`, `-circe`, `-jsoniter`, `-iron`,
+`-zio`, `-chimney` and `-kyo` are also published for Scala.js 1.x and Scala Native 0.5 — use `%%%` (as above) and sbt picks
+the artifact for your platform. `%%%` on a JVM project resolves exactly like `%%`. The other
+modules (`-avro`, `-spark`) are JVM-only because their dependencies (Apache Avro, Spark) have no
+Scala.js / Scala Native build, so keep `%%` for those.
 
 ## 60-second tour
 

@@ -2,10 +2,9 @@ package dev.constructive.eo
 package optics
 
 import scala.annotation.tailrec
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import cats.{Eval, Monad}
-import java.util.ArrayDeque
 
 import data.{ModifyF, MultiFocus, ObjArrBuilder, PSVec}
 
@@ -233,19 +232,21 @@ object Plated:
     // The stack-safe fallback: a post-order walk on a heap stack of [[Frame]]s, so depth is
     // bounded by heap, not the call stack. Leaves are applied in place.
     def machine(start: S): S =
-      val stack = new ArrayDeque[Frame[S]]()
+      // ArrayBuffer, not java.util.ArrayDeque: Scala.js 1.22's ArrayDeque returns null from peek()
+      // on a non-empty deque once it has grown and wrapped (reproduced), so the machine would NPE.
+      val stack = new ArrayBuffer[Frame[S]]()
       var ret: S = start // overwritten before any read (only read once a child has completed)
       def enter(s: S): Unit =
         val kids = P.childrenArray(s)
-        if kids.length == 0 then ret = f(s) else stack.push(new Frame(s, kids))
+        if kids.length == 0 then ret = f(s) else stack.append(new Frame(s, kids))
       enter(start)
       @tailrec def drive(): Unit =
         if !stack.isEmpty then
-          val fr = stack.peek()
+          val fr = stack.last
           if fr.offer(ret) then enter(fr.next())
           else
             ret = f(fr.rebuilt)
-            val _ = stack.pop()
+            val _ = stack.dropRightInPlace(1)
           drive()
       drive()
       ret
@@ -283,15 +284,15 @@ object Plated:
     *
     * Hybrid, like [[transform]]: shallow, narrow subtrees recurse through `M.flatMap` (no per-node
     * heap frame, no `tailRecM` wrapper per step); a subtree too deep or too wide for the call stack
-    * goes to a post-order `ArrayDeque` heap machine driven through `M.tailRecM`, so neither the
-    * descent nor the post-order rebuild overflows — as long as `M.tailRecM` is itself stack-safe.
-    * That is a cats convention, not a law: every cats-provided instance honours it (`Option`,
-    * `Either`, `Eval`, `State`, `Id`, … all clear a 100k-deep spine without `StackOverflowError`),
-    * but a third-party `Monad` with a naive `tailRecM` will not. The single-shot requirement
-    * matters too: the machine's frames are mutable, so a monad that re-runs a continuation (`List`)
-    * is unsupported. Short-circuiting monads (`Option`, `Either`) abort immediately on the first
-    * failing node without visiting the rest of the tree. Leaves apply `f` directly without calling
-    * `rebuild`.
+    * goes to a post-order `ArrayBuffer`-stack heap machine driven through `M.tailRecM`, so neither
+    * the descent nor the post-order rebuild overflows — as long as `M.tailRecM` is itself
+    * stack-safe. That is a cats convention, not a law: every cats-provided instance honours it
+    * (`Option`, `Either`, `Eval`, `State`, `Id`, … all clear a 100k-deep spine without
+    * `StackOverflowError`), but a third-party `Monad` with a naive `tailRecM` will not. The
+    * single-shot requirement matters too: the machine's frames are mutable, so a monad that re-runs
+    * a continuation (`List`) is unsupported. Short-circuiting monads (`Option`, `Either`) abort
+    * immediately on the first failing node without visiting the rest of the tree. Leaves apply `f`
+    * directly without calling `rebuild`.
     */
   def transformM[M[_], S](f: S => M[S])(root: S)(using M: Monad[M], P: Plated[S]): M[S] =
     // Fast path: plain recursion through `M.flatMap`, no Frame / tailRecM wrappers. `budget`
@@ -318,19 +319,21 @@ object Plated:
     // The stack-safe fallback: [[transform]]'s heap machine, driven through `M.tailRecM` so
     // neither descent nor rebuild touches the call stack.
     def machine(start: S, startKids: Array[Any]): M[S] =
-      val stack = new ArrayDeque[Frame[S]]()
-      stack.push(new Frame(start, startKids))
+      // ArrayBuffer, not java.util.ArrayDeque: Scala.js 1.22's ArrayDeque returns null from peek()
+      // on a non-empty deque once it has grown and wrapped (reproduced), so the machine would NPE.
+      val stack = new ArrayBuffer[Frame[S]]()
+      stack.append(new Frame(start, startKids))
       M.tailRecM[S, S](start) { last =>
-        val fr = stack.peek()
+        val fr = stack.last
         if fr.offer(last) then
           val child = fr.next()
           val kids = P.childrenArray(child)
           if kids.length == 0 then M.map(f(child))(Left(_))
           else
-            stack.push(new Frame(child, kids))
+            stack.append(new Frame(child, kids))
             M.pure(Left(child))
         else
-          val _ = stack.pop()
+          val _ = stack.dropRightInPlace(1)
           val done = stack.isEmpty // read now: a lazy monad runs the map callback later
           M.map(f(fr.rebuilt))(r => if done then Right(r) else Left(r))
       }

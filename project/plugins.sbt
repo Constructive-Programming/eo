@@ -80,3 +80,12 @@ addSbtPlugin("com.github.xuwei-k" % "unused-code-plugin" % "0.5.5")
 // deploy-site.yml copies it into the Cloudflare Pages tree under
 // `/api/`.
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
+
+// Cross-platform builds: cats-eo ships JVM, Scala.js and Scala Native artifacts for the
+// modules whose dependencies publish for all three (see CLAUDE.md "Platforms").
+// sbt-typelevel already brings sbt-scalajs-crossproject / sbt-scala-native-crossproject
+// transitively; the platform plugins themselves are explicit.
+addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.22.0")
+addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
+addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "1.4.0")
+addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.4.0")

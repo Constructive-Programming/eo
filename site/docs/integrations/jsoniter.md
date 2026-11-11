@@ -9,7 +9,7 @@ the compile-time-checked [typed cursors](#typed-cursors)
 (`JsoniterPrism[S].field(_.x)`), mirroring eo-circe's surface.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-jsoniter" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "cats-eo-jsoniter" % "@VERSION@"
 ```
 
 ## Why this exists
