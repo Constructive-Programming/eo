@@ -67,12 +67,9 @@ ThisBuild / githubWorkflowIncludeClean := false
 // JVM-only projects (demos, benchmarks, spark bench) run on the `rootJVM` leg alone.
 val jvmLeg = Some("matrix.project == 'rootJVM'")
 
-// Scala Native links with the system clang; make sure the runner has it (and libunwind).
-ThisBuild / githubWorkflowBuildPreamble += WorkflowStep.Run(
-  List("sudo apt-get update", "sudo apt-get install -y clang libunwind-dev"),
-  name = Some("Install Scala Native toolchain (clang)"),
-  cond = Some("matrix.project == 'rootNative'"),
-)
+// Scala Native links with the system clang. No install step: the ubuntu-22.04 runner image ships
+// clang (13–15) and libstdc++ (gcc 12), and Scala Native vendors its own libunwind — as in
+// typelevel/cats' native lanes. An apt step only added a failure mode (Ubuntu mirror outages).
 
 // Run `sbt test` + `sbt doc` + scalafmt check on every PR. MiMa
 // is wired transitively through sbt-typelevel-ci-release. The

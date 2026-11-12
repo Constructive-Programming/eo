@@ -93,7 +93,7 @@ sbt-typelevel aggregates are `rootJVM` / `rootJS` / `rootNative` (`sbt rootJS/te
   `ThisBuild / com.github.sbt.git.SbtGit.git.gitUncommittedChanges := false` works around it.
 - **CI.** The build matrix is `project: [rootJVM, rootJS, rootNative]` × JDKs (JS / Native on the
   primary JDK only). Steps naming JVM-only projects (demos, spark bench, their format / scalafix
-  checks) are gated to `rootJVM`; the Native leg installs clang + libunwind. Regenerate with
+  checks) are gated to `rootJVM`; the Native leg installs nothing (the ubuntu-22.04 image ships clang + libstdc++, Scala Native vendors libunwind). Regenerate with
   `sbt githubWorkflowGenerate`.
 
 Published modules compile with Scala 3's bytecode optimizer (`scala3OptSettings` in `build.sbt`,

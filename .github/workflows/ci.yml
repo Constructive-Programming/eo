@@ -123,12 +123,6 @@ jobs:
         if: matrix.java == 'temurin@21' && steps.coursier-cache-temurin-21.outputs.cache-hit != 'true'
         run: sbt +update
 
-      - name: Install Scala Native toolchain (clang)
-        if: matrix.project == 'rootNative'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang libunwind-dev
-
       - name: Check formatting
         run: sbt 'project ${{ matrix.project }}' '++ ${{ matrix.scala }}' scalafmtCheckAll scalafmtSbtCheck
 
