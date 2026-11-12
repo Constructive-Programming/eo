@@ -94,4 +94,4 @@ addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.4.0")
 // each generic signature admits (`sbt cardinalityReport`, `cardinalityReportOf <path>…`,
 // `cardinalityReportSelected <qualified.method>…`; report at `<module>/target/cardinality/
 // report.txt`). The reduction workflow that reads it is `.claude/skills/cardinality-reduction/`.
-addSbtPlugin("dev.constructive" % "sbt-cardinality" % "0.0.5")
+addSbtPlugin("dev.constructive" % "sbt-cardinality" % "0.0.6")
