@@ -58,7 +58,7 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.7")
 // trailing comma. scalafix fully owns imports (sorting, grouping, and now
 // trailing commas), so scalafmt is set to `trailingCommas = keep`
 // (.scalafmt.conf) to stay out of import formatting — the two no longer fight.
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.9")
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.10")
 
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
