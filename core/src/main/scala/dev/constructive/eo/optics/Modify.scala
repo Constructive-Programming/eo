@@ -66,15 +66,14 @@ final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
   /** Fused `.replace` — constant-writer special case of [[modify]]. */
   override inline def replace(b: B): S => T = modifyFn(_ => b)
 
-  /** Fused `Modify.andThen(Modify)` — composes the writers directly:
-    * `modify(g) == outer.modify(inner.modify(g))`, skipping the generic
-    * `AssociativeFunctor[ModifyF]` (`assocModifyF`) round-trip and its per-hop `ModifyF` allocation
-    * + `asInstanceOf` threading. Scala's overload resolution picks this when both sides are
-    * statically `Modify`; mixed-carrier composition falls back to the inherited generic
-    * `Optic.andThen`.
+  /** Fused `Modify.andThen(…)` for any inner that can modify — another `Modify`, a lens, iso, prism
+    * or optional: the composite writer is `modifyFn(inner.modify(g))`, again a `Modify`, with no
+    * `ModifyF` carrier round-trip (`Plated.everywhere[Expr].andThen(varPrism)` is "every variable,
+    * rewritten"). Scala's overload resolution picks this whenever the inner is a `CanModifyP`; any
+    * other inner falls back to the generic `Optic.andThen`.
     *
     * `inline` so a deep `modify.andThen(modify)…` chain splices distinct writer lambdas per level,
     * staying under C2's recursive-inline cap (see [[Getter.andThen]]).
     */
-  inline def andThen[C, D](inner: Modify[A, B, C, D]): Modify[S, T, C, D] =
-    new Modify(cd => modifyFn(inner.modifyFn(cd)))
+  inline def andThen[C, D](inner: CanModifyP[A, B, C, D]): Modify[S, T, C, D] =
+    new Modify(g => modifyFn(inner.modify(g)))

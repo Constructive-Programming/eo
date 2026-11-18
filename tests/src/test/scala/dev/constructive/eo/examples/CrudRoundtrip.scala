@@ -11,10 +11,9 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.parser.decode as parseJson
 import io.circe.{Codec, Json}
 
-import optics.{Optic, Traversal}
+import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
 import generics.lens
-import data.{MultiFocus, PSVec}
 
 /** Domain model, mock services, optic declarations, and both handlers for the CRUD round-trip
   * showcase — the compile-time-heavy half of the example.
@@ -147,7 +146,7 @@ object CrudRoundtrip:
     * below. Kept as a plain Tuple2 lens and let the cross-carrier `.andThen` auto-morph it into the
     * PowerSeries carrier when composed into the traversal chain.
     */
-  val orderShippingZip: Optic[Order, Order, String, String, Tuple2] =
+  val orderShippingZip: Lens[Order, String] =
     lens[Order](_.shippingAddress).andThen(lens[Address](_.zipCode))
 
   /** Every `orders → shippingAddress → zipCode` in one composed optic.
@@ -157,7 +156,7 @@ object CrudRoundtrip:
     * extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on each hop. A single
     * `modifyF[Result]` then threads an `Either`-effectful validator through every leaf at once.
     */
-  val everyZip: Optic[User, User, String, String, MultiFocus[PSVec]] =
+  val everyZip: Traversal[User, User, String, String] =
     lens[User](_.orders)
       .andThen(Traversal.each[List, Order])
       .andThen(orderShippingZip)

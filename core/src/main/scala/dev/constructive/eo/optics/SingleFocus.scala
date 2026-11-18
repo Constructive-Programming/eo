@@ -25,3 +25,10 @@ trait SingleFocus[S, T, A, B, F[_, _], -C[_[_]]]
       br: Composer[F, MultiFocus[PSVec]]
   ): Traversal[S, T, C0, D] =
     Traversal.composed(br.to(this), inner)
+
+  /** Fused `andThen(Modify)`: the composite writer is this optic's own `modify` around the inner
+    * writer — a [[Modify]], with no `ModifyF` carrier round-trip (the generic writable ∘ `Modify`
+    * extension writes through the carrier on every call).
+    */
+  def andThen[C0, D](inner: Modify[A, B, C0, D]): Modify[S, T, C0, D] =
+    new Modify(g => modify(inner.modifyFn(g)))

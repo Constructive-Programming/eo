@@ -310,6 +310,26 @@ final class PickMendPrism[S, A, B](
       mend = d => mend(inner.reverseGet(d)),
     )
 
+  /** Fused `PickMend.andThen(Optional)` — nested partial focuses with the `Option`-shaped outer
+    * read; an inner miss lifts the inner's leftover through `mend`.
+    */
+  def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, S, C, D] =
+    Optional.fused(
+      getOrModify = s =>
+        pick(s) match
+          case None    => Left(s)
+          case Some(a) => Optional.liftMiss(inner.getOrModify(a))(mend),
+      modify = (s, f) =>
+        pick(s) match
+          case Some(a) => mend(inner.modifyAt(a, f))
+          case None    => s,
+      to = s =>
+        pick(s) match
+          case None    => new Affine.Miss[(S, inner.M)](s)
+          case Some(a) => Optional.liftTo(inner, a)(mend, identity),
+      rebuild = (mi, d) => mend(inner.rebuild(mi, d)),
+    )
+
   /** Fused `PickMend.andThen(Lens)` — the [[MendTearPrism.andThen(inner:PLens)]] twin: the write
     * rebuilds from the picked `A` rather than picking again.
     */

@@ -52,6 +52,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - the compositions share `inline` kernels (`Optional.liftMiss` / `liftTo` / `underTotal`), which
     expand to the same code as before; `Optional.fused` infers its type arguments.
   `SingleFocus[S, T, A, B, F, C]` replaces the `Writes` mixin.
+- **No more accidental generic composition.** A probe (the generic `andThen` entry points marked
+  deprecated for one full compile) found 115 call sites on the generic route; the accidental ones
+  are fixed:
+  - fused `Optional.andThen(PickMendPrism)`, `PickMendPrism.andThen(Optional)` and
+    `Iso.andThen(PickMendPrism)` — the untyped-tree kits' `field("x").andThen(str)` (zio-json,
+    zio-schema, kyo-schema, spark `Variants`) now composes fused;
+  - **BREAKING (types only):** eo-generics' `prism[S, A]` is declared `MendTearPrism[S, S, A, A]`
+    (it always built one), and `Plated.everywhere` / `everywhereIn` return `Modify`, so derived
+    prisms and `everywhere` keep their fused compositions;
+  - `Modify.andThen` takes any `CanModifyP` inner and every single-focus optic gets
+    `andThen(Modify)`, both writing straight through `modify` instead of the `ModifyF` carrier
+    (`Plated.everywhere[Expr].andThen(varName)`: 1.4x faster, 14% fewer bytes).
+  What remains generic is deliberate (laws, `Optic.reverse`, tests that pin the route) or outside
+  core's reach (circe / avro / jsoniter's own optic classes, `MultiFocus[F]` for a non-`PSVec`
+  `F`, and `Plated.plate`, whose typeclass API returns `Optic[…, MultiFocus[PSVec]]`).
 - **laws: `OpticUnderTest[S, A, F]`.** The optic-level law traits (`ModifyA*Laws`,
   `FoldMapHomomorphismLaws`, `MorphLaws`) extend this base instead of each declaring `optic`.
 

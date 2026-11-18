@@ -291,6 +291,38 @@ sealed abstract class Optional[S, T, A, B]
       rebuild = (m, d) => rebuild(m, inner.mend(d)),
     )
 
+  /** Fused `Optional.andThen(PickMendPrism)` — the untyped-tree kits' shape (`field("x")` then a
+    * scalar prism such as `str`). Like the `MendTearPrism` overload, but the inner reads through
+    * its `Option`-shaped `pick`, so no inner `Either` is built; an inner miss writes the outer
+    * focus back through the outer's [[rebuild]].
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): Optional[S, T, C, D] =
+    Optional.fused(
+      getOrModify = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => Left(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.pick(h.b) match
+              case Some(c) => Right(c)
+              case None    => Left(rebuild(h.snd, ev(h.b))),
+      modify = (s, f) =>
+        modifyAt(
+          s,
+          a =>
+            inner.pick(a) match
+              case Some(c) => ev(inner.mend(f(c)))
+              case None    => ev(a),
+        ),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.pick(h.b) match
+              case Some(c) => new Affine.Hit(h.snd, c)
+              case None    => new Affine.Miss(rebuild(h.snd, ev(h.b))),
+      rebuild = (m, d) => rebuild(m, ev(inner.mend(d))),
+    )
+
   /** Fused `Optional.andThen(Iso)` — iso is transparent; threads through the Optional's shape. */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): Optional[S, T, C, D] =
     Optional.fused(

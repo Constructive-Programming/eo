@@ -341,7 +341,7 @@ val nameAgeIso = lens[Person](_.name, _.age)
 enum Shape:
   case Circle(r: Double), Square(s: Double), Triangle(b: Double, h: Double)
 
-val circleP = prism[Shape, Shape.Circle]   // Optic[Shape, Shape, Shape.Circle, Shape.Circle, Either]
+val circleP = prism[Shape, Shape.Circle]   // MendTearPrism[Shape, Shape, Shape.Circle, Shape.Circle]
 val intP    = prism[Int | String, Int]     // Scala 3 union type works too
 
 // Recursive parameterised ADTs are also fine:

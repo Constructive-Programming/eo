@@ -101,6 +101,19 @@ final class BijectionIso[S, T, A, B](
       mend = d => reverseGet(inner.mend(d)),
     )
 
+  /** Fused `Iso.andThen(PickMendPrism)` — a monomorphic iso keeps the prism's `Option`-shaped fast
+    * path: the composite is again a [[PickMendPrism]], picking through `get` and mending through
+    * `reverseGet`, with no `Either` built.
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using
+      ev: A =:= B,
+      evT: T =:= S,
+  ): PickMendPrism[S, C, D] =
+    new PickMendPrism(
+      pick = s => inner.pick(get(s)),
+      mend = d => evT(reverseGet(ev(inner.mend(d)))),
+    )
+
   /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     Optional.underTotal(inner)(
