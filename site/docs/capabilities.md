@@ -1,7 +1,7 @@
 # Capabilities
 
 The capability traits — `CanGet`, `CanGetOption`, `CanReverseGet`, `CanModify`, `CanFold`,
-`CanPut`, `CanModifyF`, `CanModifyA`, `CanPlace`, `CanTransform` — are the **consuming
+`CanPut`, `CanModifyF`, `CanPlace`, `CanTransform` — are the **consuming
 surface** of cats-eo, living at the top of the package hierarchy (`dev.constructive.eo`)
 because they are how most code should *reference* optics:
 
@@ -88,7 +88,7 @@ reschedule("retro", Duration.ofMinutes(30))(standup)
 ```
 
 4. **Zero overhead.** Every extension is `inline` (the two-type-parameter operations `foldMap`,
-   `modifyF`, `modifyA`, and `transfer` route through `AnyVal` partially-applied wrappers with
+   `modifyF` and `transfer` route through `AnyVal` partially-applied wrappers with
    `inline def apply`, so the second type parameter `M` / `G[_]` / `C` is inferred from the
    lambda without boxing), expanding straight to the underlying capability call at compile time.
 
@@ -100,8 +100,7 @@ reschedule("retro", Duration.ofMinutes(30))(standup)
 | `CanModify[S, A]` | `s.modify[A](f)`, `s.replace[A](a)` | `s.modifyP[T, A, B](f)`, `s.replaceP[T, A, B](b)` |
 | `CanFold[S, A]` | `s.foldMap[A](f)`, `s.headOption[A]`, `s.length[A]`, `s.exists[A](p)`, `s.foci[A]` | — |
 | `CanPut[T, A]` | `a.put[T](f)` | `a.putP[T, B](f)` |
-| `CanModifyF[S, A]` | `s.modifyF[A](f)` | `s.modifyFP[T, A, B](f)` |
-| `CanModifyA[S, A]` | `s.modifyA[A](f)` | `s.modifyAP[T, A, B](f)` |
+| `CanModifyF[S, A, C]` | `s.modifyF[A](f)` | `s.modifyFP[T, A, B](f)` |
 | `CanPlace[T, B]` | `t.place[B](b)`, `t.transfer[B](f)` | — |
 | `CanTransform[T, D, B]` | `t.transform[B](f)` | `t.transformP[D, B](f)` |
 
@@ -123,15 +122,39 @@ extension methods.
 | `CanModify[S, A]`¹ | `modify`, `replace` | ● | ● | ● | ● | ○ | | | | | ● |
 | `CanFold[S, A]` | `foldMap`, `headOption`, `length`, `exists`, `foci` | ● | ● | ● | ● | ○ | ● | ● | ● | | |
 | `CanPut[T, A]`¹ | `put` | | ○ | | | | | | | ○ | |
-| `CanModifyF[S, A]`¹ | `modifyF` | ○ | | | | | | | | | |
-| `CanModifyA[S, A]`¹ | `modifyA` | ○ | | ○ | ○ | ○ | | | | | |
+| `CanModifyF[S, A, C]`¹ ³ | `modifyF` | ○ | ○ | ○ | ○ | ○ | | | | | ○ |
 | `CanPlace[T, B]` | `place`, `transfer` | ²| | | | | | | | | |
 | `CanTransform[T, D, B]` | `transform` | ² | | | | | | | | | |
 
 ● implemented by the concrete class (hot path) · ○ derived given (wrapper) ·
 ¹ monomorphic alias; the polymorphic trait carries a `P` suffix (`CanModifyP[S, T, A, B]`, …) ·
 ² no derived given — these two need `T`-side evidence over the optic's existential `X`, so
-they are constructed explicitly: `CanPlace.from(myLens)`.
+they are constructed explicitly: `CanPlace.from(myLens)`. ·
+³ `C` is the constraint the optic needs on the effect `G`, inferred from the carrier:
+`Functor` (Lens), `Invariant` (Iso), `Applicative` (Prism, Optional, Traversal),
+`Distributive` (Modify).
+
+### One effectful modify, gated by what the optic needs
+
+`CanModifyF[S, A, C]` is **contravariant** in `C`. A lens needs only `map` to rewrite its
+focus, so it derives `CanModifyF[S, A, Functor]`; a prism must hand back the untouched `S` on
+a miss (`pure`) and a traversal must combine its foci (`map2`), so they derive
+`CanModifyF[S, A, Applicative]`. Because `Applicative extends Functor`, contravariance makes
+`CanModifyF[S, A, Functor] <: CanModifyF[S, A, Applicative]` — a consumer names the effects
+it will use, and every optic that needs no more than that qualifies:
+
+```scala
+// Any optic that can be rewritten under an Applicative effect: lens, prism, traversal, …
+def bump[S](s: S)(using cm: CanModifyF[S, Int, Applicative]): Option[S] =
+  cm.modifyF[Option](n => Option(n + 1))(s)
+
+// Only optics that need no more than map: lenses and isos.
+def relabel[S, G[_]: Functor](s: S, f: String => G[String])(using CanModifyF[S, String, Functor]): G[S] =
+  s.modifyF[String](f)
+```
+
+At the call site `s.modifyF[A](f)` infers `C` from the optic in scope, so a lens accepts an
+effect that is only a `Functor`, while a prism asks for an `Applicative`.
 
 `CanFold.foci` returns the plain `List[A]` of visited foci, in traversal order. On a raw
 `Optic` the same operation is spelled `all` — an alias of `foci`, available on any carrier

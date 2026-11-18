@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — one effectful-modify capability.** `CanModifyFP[S, T, A, B, -C[_[_]]]` (alias
+  `CanModifyF[S, A, C]`) replaces both `CanModifyFP` / `CanModifyF` and `CanModifyAP` /
+  `CanModifyA`. `C` is the constraint the optic needs on the effect, inferred per carrier —
+  `Functor` for a Lens, `Invariant` for an Iso, `Applicative` for a Prism / Optional / Traversal,
+  `Distributive` for a Modify — and the trait is contravariant in it, so
+  `CanModifyF[S, A, Functor] <: CanModifyF[S, A, Applicative]`: a consumer asking for
+  `CanModifyF[S, A, Applicative]` accepts every one of those optics. Migration: `CanModifyA[S, A]`
+  → `CanModifyF[S, A, Applicative]`, `CanModifyF[S, A]` → `CanModifyF[S, A, Functor]`,
+  `s.modifyA[A](f)` → `s.modifyF[A](f)`. `Optic.modifyA` on raw optics is unchanged.
+- **BREAKING — `ForgetfulTraverse[F, -C[_[_]]]` is contravariant in `C`.** The duplicate
+  `ForgetfulTraverse.tupleFTraverseApplicative` instance is removed: `tupleFTraverse`
+  (`Functor`) now answers `Applicative` queries. As a side effect Iso / Getter (`Direct`-carrier)
+  optics now really get `modifyF` / `modifyA`, as `Direct`'s instance always documented.
+
 ## [1.3.0] - 2026-11-11
 
 ### Added

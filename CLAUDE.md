@@ -431,7 +431,9 @@ stay on `.scalafix.conf`:
   extension methods parameterized by the target type (`s.get[A]`, `s.getOption[A]`,
   `b.reverseGet[T]`, `s.modify[A](f)`, `s.replace[A](a)`, `s.foldMap[A](f)`,
   `s.headOption[A]`, `s.length[A]`, `s.exists[A](p)`, `s.foci[A]`, `a.put[T](f)`,
-  `s.modifyF[A](f)`, `s.modifyA[A](f)`, `t.place[B](b)`, `t.transfer[B](f)`,
+  `s.modifyF[A](f)` (one effectful modify: `CanModifyF[S, A, C]` is contravariant in the
+  effect gate `C`, inferred per carrier — `Functor` for a Lens, `Applicative` for a Prism /
+  Traversal), `t.place[B](b)`, `t.transfer[B](f)`,
   `t.transform[B](f)`, plus `*P` polymorphic variants), so consuming signatures can
   take unnamed `using` evidence and act on `s` directly. Keep ONE optic given per
   `(S, A)` pair in scope — capabilities are keyed by their type params only, so two

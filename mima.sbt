@@ -35,6 +35,16 @@ import com.typesafe.tools.mima.core.{
 // History. MiMa was disabled across the 0.x line: every 0.x minor was a
 // deliberate breaking release, kept here for reference, newest first.
 //
+//   2.0.0 (breaking vs 1.3): one effectful-modify capability.
+//         (a) `CanModifyAP` / `CanModifyA` and their `modifyA` / `modifyAP`
+//         subject-first extensions are removed; `CanModifyFP[S, T, A, B, -C[_[_]]]`
+//         (alias `CanModifyF[S, A, C]`) replaces both, contravariant in the
+//         effect gate `C` the carrier needs (Functor for a Lens, Applicative
+//         for a Prism / Optional / Traversal).
+//         (b) `ForgetfulTraverse[F, -C[_[_]]]` is contravariant in `C`; the
+//         duplicate `tupleFTraverseApplicative` instance is removed (the
+//         `Functor` instance now answers `Applicative` queries too).
+//
 //   1.0.0 (breaking vs 0.18; the changes listed for 0.19 before 1.0 was
 //         chosen, which was never released, ship here):
 //         (a) `Optional` becomes a sealed abstract class with an

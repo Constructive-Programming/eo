@@ -1,15 +1,19 @@
 package dev.constructive.eo
 package bench
 
+import cats.{Applicative, Functor}
 import cats.instances.list.given
+import cats.instances.option.given
+import cats.instances.vector.given
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.Forget
+import dev.constructive.eo.data.{Forget, MultiFocus, PSVec}
 import dev.constructive.eo.optics.{
   Fold as EoFold,
   ForgetFold,
   GetReplaceLens,
   Lens as EoLens,
-  Optic
+  Optic,
+  Traversal as EoTraversal,
 }
 import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
@@ -71,6 +75,19 @@ class CapsBench extends JmhDefaults:
   val idModifyDerived: CanModify[Order, Long] = summon
   val foldDerived: CanFold[List[Int], Int] = summon
 
+  // effectful modify: CanModifyF's gate is inferred per carrier — Functor (lens), Applicative
+  // (traversal); effect `Option`
+  val vec: Vector[Int] = Vector.range(0, 8)
+
+  val eoEach: Optic[Vector[Int], Vector[Int], Int, Int, MultiFocus[PSVec]] =
+    EoTraversal.each[Vector, Int]
+
+  given eachGeneric: Optic[Vector[Int], Vector[Int], Int, Int, MultiFocus[PSVec]] = eoEach
+  val idModifyFDerived: CanModifyF[Order, Long, Functor] = summon
+  val eachModifyFDerived: CanModifyF[Vector[Int], Int, Applicative] = summon
+  val bumpL: Long => Option[Long] = n => Some(n + 1)
+  val bumpI: Int => Option[Int] = n => Some(n + 1)
+
   // ---- get -----------------------------------------------------------
 
   @Benchmark def getDirect: Long = eoId.get(order)
@@ -99,3 +116,23 @@ class CapsBench extends JmhDefaults:
 
   @Benchmark def foldMapDerivedPerCall: Int =
     summon[CanFold[List[Int], Int]].foldMap(identity)(ints)
+
+  // ---- modifyF (lens: Functor gate; traversal: Applicative gate) ------
+
+  @Benchmark def modifyFDirect: Option[Order] = eoId.modifyF(bumpL)(order)
+  @Benchmark def modifyFDerivedHeld: Option[Order] = idModifyFDerived.modifyF(bumpL)(order)
+
+  @Benchmark def modifyFDerivedPerCall: Option[Order] =
+    summon[CanModifyF[Order, Long, Functor]].modifyF(bumpL)(order)
+
+  @Benchmark def modifyFExt: Option[Order] = order.modifyF[Long](bumpL)
+
+  @Benchmark def modifyFEachDirect: Option[Vector[Int]] = eoEach.modifyA(bumpI)(vec)
+
+  @Benchmark def modifyFEachDerivedHeld: Option[Vector[Int]] =
+    eachModifyFDerived.modifyF(bumpI)(vec)
+
+  @Benchmark def modifyFEachDerivedPerCall: Option[Vector[Int]] =
+    summon[CanModifyF[Vector[Int], Int, Applicative]].modifyF(bumpI)(vec)
+
+  @Benchmark def modifyFEachExt: Option[Vector[Int]] = vec.modifyF[Int](bumpI)

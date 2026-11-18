@@ -31,8 +31,6 @@ trait CanFold[S, A]:
 
 object CanFold:
 
-  // CPD-OFF — same partially-applied Ops + derived-given shape as CanModifyF / CanModifyA,
-  // one per capability by design.
   final class FoldMapOps[S, A](private val s: S) extends AnyVal:
 
     inline def apply[M](f: A => M)(using cf: CanFold[S, A], m: Monoid[M]): M =
@@ -46,8 +44,6 @@ object CanFold:
       ff: ForgetfulFold[F],
   ): CanFold[S, A] with
     def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = o.foldMap(f)(s)
-
-  // CPD-ON
 
 export optics.Optic.{exists, foldMap, headOption, length}
 

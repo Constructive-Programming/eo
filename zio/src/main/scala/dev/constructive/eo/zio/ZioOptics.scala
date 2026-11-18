@@ -74,7 +74,7 @@ extension [S](ref: Ref[S])
   def setFocus[A](a: A)(using m: CanModify[S, A])(using Trace): UIO[Unit] =
     ref.update(m.replace(a))
 
-/** Effectful focus rewrite inside a `Ref.Synchronized[S]` — `CanModifyA` routed through ZIO's own
+/** Effectful focus rewrite inside a `Ref.Synchronized[S]` — `CanModifyF` routed through ZIO's own
   * `updateZIO`, so the effect runs while the ref is held and the whole read-modify-write stays
   * atomic (that is exactly what `Ref.Synchronized` adds over `Ref`, which cannot host an effectful
   * update at all).
@@ -85,16 +85,17 @@ extension [S](ref: Ref[S])
   * note on effectful modify. What the module does own is this plumbing, which interop-cats cannot
   * give you.
   *
-  * `CanModifyA` is the affine/many-focus face, so this works for a lens, a prism (miss ⇒ the effect
-  * never runs), or a traversal (one effect per focus, sequenced left to right).
+  * Asking for `CanModifyF[S, A, Applicative]` admits every optic whose carrier traverses under
+  * `Applicative` or less, so this works for a lens, a prism (miss ⇒ the effect never runs), or a
+  * traversal (one effect per focus, sequenced left to right).
   */
 extension [S](ref: Ref.Synchronized[S])
 
   def updateFocusZIO[R, E, A](f: A => ZIO[R, E, A])(using
-      m: CanModifyA[S, A],
+      m: CanModifyF[S, A, Applicative],
       G: Applicative[[x] =>> ZIO[R, E, x]],
   )(using Trace): ZIO[R, E, Unit] =
-    ref.updateZIO(m.modifyA[[x] =>> ZIO[R, E, x]](f))
+    ref.updateZIO(m.modifyF[[x] =>> ZIO[R, E, x]](f))
 
 // ---- STM focus ops ------------------------------------------------------
 //
