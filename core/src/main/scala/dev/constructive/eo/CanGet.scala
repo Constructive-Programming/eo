@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import cats.Monoid
+
 import accessor.Accessor
 import optics.Optic
 
@@ -11,9 +13,14 @@ import optics.Optic
   * optic types belong where optics are constructed and composed. One optic given per `(S, A)` pair
   * should be in scope at a call site — capabilities follow ordinary typeclass coherence; newtype
   * same-typed foci apart rather than relying on implicit priority to pick between them.
+  *
+  * Every `CanGet` is a [[CanFold]] over its one focus: `foldMap(f)(s) = f(get(s))`. A query for
+  * `CanFold[S, A]` searches only `CanFold`'s companion, so the subtyping adds no ambiguity there.
   */
-trait CanGet[S, A]:
+trait CanGet[S, A] extends CanFold[S, A]:
   def get(s: S): A
+
+  def foldMap[M: Monoid](f: A => M)(s: S): M = f(get(s))
 
 object CanGet:
 

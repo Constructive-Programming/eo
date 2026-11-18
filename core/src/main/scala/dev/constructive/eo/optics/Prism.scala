@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.{Applicative, Functor, Monoid}
+import cats.{Applicative, Functor}
 
 import data.Affine
 
@@ -74,9 +74,6 @@ object Prism:
   def pOptional[S, A, B](getOption: S => Option[A], reverseGet: B => S) =
     PickMendPrism[S, A, B](getOption, reverseGet)
 
-// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
-// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
-// repeat across classes by design.
 /** Concrete Optic subclass storing `tear` (`getOrModify`) and `mend` (`reverseGet`) directly. The
   * fused-`andThen` overloads pattern-match once and skip the generic `AssociativeFunctor[Either]`
   * round-trip. All `Prism.*` constructors return this type.
@@ -87,9 +84,7 @@ final class MendTearPrism[S, T, A, B](
 ) extends Optic[S, T, A, B, Either],
       CanGetOption[S, A],
       CanReverseGet[T, B],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, Applicative],
-      CanFold[S, A]:
+      Writes[S, T, A, B, Applicative]:
   type X = T
   def to(s: S): Either[T, A] = tear(s)
 
@@ -104,6 +99,8 @@ final class MendTearPrism[S, T, A, B](
         case Right(a) => mend(f(a))
         case Left(t)  => t
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
   /** Fused effectful modify: a hit maps `mend` over the effect, a miss is `pure` of the untouched
     * `T`.
     */
@@ -122,11 +119,6 @@ final class MendTearPrism[S, T, A, B](
 
   inline def getOption(s: S): Option[A] = tear(s).toOption
   inline def reverseGet(b: B): T = mend(b)
-
-  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
-    tear(s) match
-      case Right(a) => f(a)
-      case Left(_)  => M.empty
 
   /** Pre-compose the tear's source: read from an `S1` that `f` turns into this prism's `S`. One
     * half of the contravariant (input-side) mapping pair — `T` and `A` stay fixed (map those by
@@ -270,9 +262,6 @@ final class MendTearPrism[S, T, A, B](
   def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
     Traversal.composed(data.MultiFocusK.either2multifocusPSVec.to(this), inner)
 
-// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
-// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
-// repeat across classes by design.
 /** Concrete Optic subclass for the `Option`-shaped Prism (`Prism.optional` / `Prism.pOptional`).
   * Stores `pick` and `mend` directly; the fused extensions pattern-match on `Option` so the hot
   * path never builds the intermediate `Either[S, A]` the generic `MendTearPrism` would.
@@ -283,9 +272,7 @@ final class PickMendPrism[S, A, B](
 ) extends Optic[S, S, A, B, Either],
       CanGetOption[S, A],
       CanReverseGet[S, B],
-      CanModifyP[S, S, A, B],
-      CanModifyFP[S, S, A, B, Applicative],
-      CanFold[S, A]:
+      Writes[S, S, A, B, Applicative]:
   type X = S
 
   def to(s: S): Either[S, A] =
@@ -304,6 +291,8 @@ final class PickMendPrism[S, A, B](
         case Some(a) => mend(f(a))
         case None    => s
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
   /** Fused effectful modify: a hit maps `mend` over the effect, a miss is `pure(s)`. */
   def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[S] =
     s =>
@@ -320,11 +309,6 @@ final class PickMendPrism[S, A, B](
 
   inline def getOption(s: S): Option[A] = pick(s)
   inline def reverseGet(b: B): S = mend(b)
-
-  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
-    pick(s) match
-      case Some(a) => f(a)
-      case None    => M.empty
 
   /** Fused `PickMend.andThen(PickMend)` — outer mono in focus; preserves the Option-fast-path shape
     * rather than materialising an intermediate Either. `inline` so a deep fast-path prism chain

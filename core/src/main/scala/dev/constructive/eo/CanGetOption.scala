@@ -1,5 +1,7 @@
 package dev.constructive.eo
 
+import cats.Monoid
+
 import accessor.PartialAccessor
 import optics.Optic
 
@@ -8,9 +10,17 @@ import optics.Optic
   *
   * Prefer this trait in consuming signatures; see [[CanGet]] for the doctrine and the one-optic-
   * given-per-`(S, A)` coherence rule.
+  *
+  * Every `CanGetOption` is a [[CanFold]] over its at-most-one focus (a miss folds to
+  * `Monoid.empty`).
   */
-trait CanGetOption[S, A]:
+trait CanGetOption[S, A] extends CanFold[S, A]:
   def getOption(s: S): Option[A]
+
+  def foldMap[M: Monoid](f: A => M)(s: S): M =
+    getOption(s) match
+      case Some(a) => f(a)
+      case None    => Monoid[M].empty
 
 object CanGetOption:
 

@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Applicative` for a Prism / Traversal, and now `Distributive` for a `Modify`, which had no raw
   effectful modify before. Migration: `optic.modifyA[G](f)` → `optic.modifyF[G](f)`. The D-series
   law classes keep their names (`ModifyAIdLaws`, `ModifyAListLaws`, `ModifyAConstLaws`).
+- **BREAKING — `CanGet` and `CanGetOption` extend `CanFold`.** A single-focus read is a fold over
+  that focus, so both capabilities now carry a default `foldMap` (and with it `headOption`,
+  `length`, `exists`, `foci`). Implementations that defined their own `foldMap` must mark it
+  `override`. The concrete optics drop their hand-written one-focus `foldMap`s.
+- **Lens classes share `LensCore`.** `GetReplaceLens` and `SplitCombineLens` (and so
+  `SimpleLens` / eo-generics lenses) extend one sealed `LensCore[S, T, A, B]` that owns `get`,
+  `enplace`, `modify`, `replace` and `modifyF`; a split-combine lens now exposes `enplace` too. The
+  concrete optics name their write capabilities through one `Writes[S, T, A, B, C]` mixin.
+- **laws: `OpticUnderTest[S, A, F]`.** The optic-level law traits (`ModifyA*Laws`,
+  `FoldMapHomomorphismLaws`, `MorphLaws`) extend this base instead of each declaring `optic`.
 
 ## [1.3.0] - 2026-11-11
 

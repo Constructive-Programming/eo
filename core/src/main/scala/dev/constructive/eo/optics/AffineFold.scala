@@ -3,8 +3,6 @@ package optics
 
 import scala.annotation.targetName
 
-import cats.Monoid
-
 import compose.*
 import data.Affine
 
@@ -39,14 +37,8 @@ private val pickFoldMiss: Affine.Miss[(Unit, Unit)] = new Affine.Miss(())
   */
 final class PickFold[S, A](val pick: S => Option[A])
     extends Optic[S, Unit, A, Unit, Affine],
-      CanGetOption[S, A],
-      CanFold[S, A]:
+      CanGetOption[S, A]:
   type X = (Unit, Unit)
-
-  def foldMap[M](f: A => M)(s: S)(using M: Monoid[M]): M =
-    pick(s) match
-      case Some(a) => f(a)
-      case None    => M.empty
 
   def to(s: S): Affine[X, A] =
     pick(s) match

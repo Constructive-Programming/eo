@@ -27,8 +27,8 @@ import data.{MultiFocus, PSVec}
   * `KindlingsEncoder.deriveAsObject timed out after 2000ms` flake). Behaviour is unchanged; this is
   * a compile-pressure split, not a logic change.
   *
-  * See [[CrudRoundtripHappyPathSpec]] / [[CrudRoundtripErrorPathSpec]] for the scenarios and the
-  * `handleWithOptics` vs `handleNaive` punchline.
+  * See [[CrudRoundtripSpec]] for the scenarios and the `handleWithOptics` vs `handleNaive`
+  * punchline.
   */
 object CrudRoundtrip:
 

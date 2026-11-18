@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.{Functor, Invariant, Monoid}
+import cats.{Functor, Invariant}
 
 import data.{Affine, Direct}
 
@@ -41,9 +41,6 @@ object Iso:
   def apply[S, T, A, B](f: S => A, g: B => T) =
     BijectionIso[S, T, A, B](f, g)
 
-// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
-// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
-// repeat across classes by design.
 /** Concrete Optic subclass for an isomorphism. Stores `get` / `reverseGet` directly so the hot path
   * skips the `Accessor[Direct]` / `ReverseAccessor[Direct]` typeclass dispatches the generic
   * extensions would perform — same storage shape as Monocle's `Iso`. Returned by [[Iso.apply]] so
@@ -55,15 +52,15 @@ final class BijectionIso[S, T, A, B](
 ) extends Optic[S, T, A, B, Direct],
       CanGet[S, A],
       CanReverseGet[T, B],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, Invariant],
-      CanFold[S, A]:
+      Writes[S, T, A, B, Invariant]:
   type X = Nothing
   def get(s: S): A = read(s)
   def reverseGet(b: B): T = build(b)
   def to(s: S): Direct[X, A] = Direct(read(s))
   def from(d: Direct[X, B]): T = build(d.value)
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
   inline def modify(f: A => B): S => T =
     s => reverseGet(f(get(s)))
 
@@ -75,8 +72,6 @@ final class BijectionIso[S, T, A, B](
   override inline def replace(b: B): S => T =
     val t = reverseGet(b)
     _ => t
-
-  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
   /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. `inline` so each
     * compose site splices distinct lambdas, keeping a deep `iso.andThen(iso)…` chain under C2's

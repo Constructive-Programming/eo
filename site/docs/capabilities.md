@@ -114,6 +114,13 @@ implement no capability directly — results of generic composition, and the con
 given** in each capability's companion instead — a thin wrapper delegating to the same
 extension methods.
 
+Reading one focus is folding it: `CanGet` and `CanGetOption` both extend `CanFold`, with a
+`foldMap` derived from `get` / `getOption` (a miss folds to `Monoid.empty`). So every
+single-focus optic serves `CanFold` through its read capability, and a consumer holding a
+`CanGet[S, A]` can call `foldMap`, `headOption`, `exists`, … on it. A query for
+`CanFold[S, A]` still searches only `CanFold`'s own companion, so the subtyping adds no
+ambiguity.
+
 | Capability | Operations | Lens | Iso | Prism | Optional | Traversal | Getter | AffineFold | Fold | Review | Modify |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `CanGet[S, A]` | `get` | ● | ● | | | | ● | | | | |

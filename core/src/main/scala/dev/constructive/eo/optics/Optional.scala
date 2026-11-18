@@ -113,9 +113,6 @@ object Optional:
   ): Optional[S, T, A, B] =
     new Fused(getOrModify, modify, to, rebuild)
 
-// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
-// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
-// repeat across classes by design.
 /** The conditionally-present single-focus optic over the `Affine` carrier. Every operation tears
   * the source ONCE: [[getOrModify]] / [[getOption]] / [[foldMap]] read without building anything a
   * write would need, [[modify]] / `replace` tear once and rebuild from what they tore, and the
@@ -135,9 +132,7 @@ object Optional:
 sealed abstract class Optional[S, T, A, B]
     extends Optic[S, T, A, B, Affine],
       CanGetOption[S, A],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, Applicative],
-      CanFold[S, A]:
+      Writes[S, T, A, B, Applicative]:
 
   /** What a hit keeps for the write: the part of the read the rebuild needs. */
   type M
@@ -165,6 +160,8 @@ sealed abstract class Optional[S, T, A, B]
     */
   inline def modify(f: A => B): S => T = s => modifyAt(s, f)
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
   /** Fused effectful modify: one `to`, a hit maps the rebuild over the effect, a miss is `pure`. */
   def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[T] =
     s =>
@@ -190,7 +187,7 @@ sealed abstract class Optional[S, T, A, B]
 
   def getOption(s: S): Option[A] = getOrModify(s).toOption
 
-  def foldMap[F](f: A => F)(s: S)(using F: Monoid[F]): F =
+  override def foldMap[F](f: A => F)(s: S)(using F: Monoid[F]): F =
     getOrModify(s) match
       case Right(a) => f(a)
       case Left(_)  => F.empty

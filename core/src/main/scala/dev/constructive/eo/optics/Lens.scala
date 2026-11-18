@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.{Functor, Monoid}
+import cats.Functor
 
 import data.Affine
 
@@ -95,41 +95,46 @@ object Lens:
       (a, b) => (a, b),
     )
 
-// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
-// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
-// repeat across classes by design.
-/** Concrete Optic subclass storing `get` and `enplace` directly, enabling the fused-`andThen`
-  * overloads below to bypass the `Tuple2` carrier entirely. Returned by every `Lens.*` constructor
-  * so hand-written lenses pick up the fused hot path automatically.
+/** The shared core of both concrete lens classes: a total read `get` plus the write `enplace`, from
+  * which every capability a lens has is one fused line — `get` (and `foldMap`, which [[CanGet]]
+  * derives from it), `modify` / `replace` and the `Functor`-gated `modifyF`. The two classes differ
+  * only in what they store and in their carrier view (`to` / `from`): [[GetReplaceLens]] keeps the
+  * whole source as the leftover, [[SplitCombineLens]] the complement its splitter returns.
   */
-class GetReplaceLens[S, T, A, B](
-    read: S => A,
-    val enplace: (S, B) => T,
-) extends Optic[S, T, A, B, Tuple2],
+sealed abstract class LensCore[S, T, A, B](read: S => A, val enplace: (S, B) => T)
+    extends Optic[S, T, A, B, Tuple2],
       CanGet[S, A],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, Functor],
-      CanFold[S, A]:
-  type X = S
+      Writes[S, T, A, B, Functor]:
   def get(s: S): A = read(s)
-  def to(s: S): (S, A) = (s, read(s))
-  def from(pair: (S, B)): T = enplace(pair._1, pair._2)
 
   override inline def replace(b: B): S => T = s => enplace(s, b)
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
   inline def modify(f: A => B): S => T =
     s => enplace(s, f(get(s)))
 
   /** Fused effectful modify — reads the focus and maps the write straight over the effect, no
-    * `(S, A)` carrier tuple and no `ForgetfulTraverse` hop. Makes the lens its own
+    * `(X, A)` carrier tuple and no `ForgetfulTraverse` hop. Makes the lens its own
     * `CanModifyF[…, Functor]`, so a capability call dispatches here rather than through the derived
     * wrapper.
     */
   def modifyF[G[_]](f: A => G[B])(using G: Functor[G] & Functor[G]): S => G[T] =
-    s => G.map(f(read(s)))(b => enplace(s, b))
+    s => G.map(f(get(s)))(b => enplace(s, b))
 
-  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
   // CPD-ON
+
+/** Concrete lens storing `get` and `enplace` directly, enabling the fused-`andThen` overloads below
+  * to bypass the `Tuple2` carrier entirely. Returned by every `Lens.*` constructor so hand-written
+  * lenses pick up the fused hot path automatically.
+  */
+class GetReplaceLens[S, T, A, B](
+    read: S => A,
+    enplace: (S, B) => T,
+) extends LensCore[S, T, A, B](read, enplace):
+  type X = S
+  def to(s: S): (S, A) = (s, get(s))
+  def from(pair: (S, B)): T = enplace(pair._1, pair._2)
 
   /** Fused `Lens.andThen(Lens)` — collapses into another `GetReplaceLens` directly on `get` /
     * `enplace`, skipping the generic `AssociativeFunctor[Tuple2]` round-trip. Scala's overload
@@ -226,46 +231,19 @@ class GetReplaceLens[S, T, A, B](
       rebuild = (m, d) => enplace(m._1, inner.rebuild(m._2, d)),
     )
 
-// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
-// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
-// repeat across classes by design.
 /** Polymorphic split-combine lens — splitter `S => (XA, A)` + combiner `(XA, B) => T`, surfacing
-  * the complement as `X = XA`. Does not ship `place` / `transfer` (would require a `T => (XA, B)`
-  * evidence that isn't recoverable when `T ≠ S`); callers route through the generic [[Optic]]
-  * extensions when the evidence is available.
+  * the complement as `X = XA`; a write splits once and combines. Does not ship `place` / `transfer`
+  * (would require a `T => (XA, B)` evidence that isn't recoverable when `T ≠ S`); callers route
+  * through the generic [[Optic]] extensions when the evidence is available.
   */
 class SplitCombineLens[S, T, A, B, XA](
     read: S => A,
     val split: S => (XA, A),
     val combine: (XA, B) => T,
-) extends Optic[S, T, A, B, Tuple2],
-      CanGet[S, A],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, Functor],
-      CanFold[S, A]:
+) extends LensCore[S, T, A, B](read, (s, b) => combine(split(s)._1, b)):
   type X = XA
-  def get(s: S): A = read(s)
   def to(s: S): (XA, A) = split(s)
   def from(pair: (XA, B)): T = combine(pair._1, pair._2)
-
-  inline def modify(f: A => B): S => T =
-    s =>
-      val (x, a) = to(s)
-      combine(x, f(a))
-
-  /** Fused effectful modify: one `split`, the write mapped straight over the effect. */
-  def modifyF[G[_]](f: A => G[B])(using G: Functor[G] & Functor[G]): S => G[T] =
-    s =>
-      val (x, a) = split(s)
-      G.map(f(a))(b => combine(x, b))
-  // CPD-ON
-
-  override inline def replace(b: B): S => T =
-    s =>
-      val (x, _) = to(s)
-      combine(x, b)
-
-  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
   /** Fused `SplitCombineLens.andThen(SplitCombineLens)` — pairs the two leftovers directly instead
     * of routing through the generic `AssociativeFunctor[Tuple2]`, so macro-derived lens chains

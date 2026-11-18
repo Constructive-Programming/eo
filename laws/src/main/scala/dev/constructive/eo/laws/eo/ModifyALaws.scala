@@ -6,7 +6,6 @@ import cats.data.{Const, State}
 import cats.{Applicative, Id, Traverse}
 import dev.constructive.eo.forgetful.*
 
-import optics.Optic
 import laws.discipline.internal.MultiShot
 import optics.Optic.*
 
@@ -22,12 +21,8 @@ import optics.Optic.*
 //       collapses effectful update to a monoidal fold (this is the
 //       van Laarhoven-style phantom-write trick).
 
-// CPD-OFF — each D-series law is its own trait (discipline rule sets pick them one by one), so
-// the optic-under-test header and law signature repeat by design, as in every law file.
 /** D1 — `optic.modifyF[Id]` is pointwise equal to `optic.modify`. */
-trait ModifyAIdLaws[S, A, F[_, _]]:
-  /** The optic under test. */
-  def optic: Optic[S, S, A, A, F]
+trait ModifyAIdLaws[S, A, F[_, _]] extends OpticUnderTest[S, A, F]:
 
   /** `modifyF[Id](f)(s) == modify(f)(s)`. */
   def modifyAIdIsModify(s: S, f: A => A)(using
@@ -39,9 +34,7 @@ trait ModifyAIdLaws[S, A, F[_, _]]:
     viaModifyA == viaModify
 
 /** D2 — `optic.modifyF[List]` is cats' cartesian product over the foci. */
-trait ModifyAListLaws[S, A, F[_, _]]:
-  /** The optic under test. */
-  def optic: Optic[S, S, A, A, F]
+trait ModifyAListLaws[S, A, F[_, _]] extends OpticUnderTest[S, A, F]:
 
   /** `modifyF[List](f)(s) == Traverse[List].traverse(foldMap(List(_))(s))(f).map(refill)`, where
     * `refill(bs)` writes the foci `bs` back into `s` in order (a single-shot `State` traverse).
@@ -57,9 +50,7 @@ trait ModifyAListLaws[S, A, F[_, _]]:
 /** D3 — `optic.modifyF[Const[M, *]]` is pointwise equal to `optic.foldMap` on the same function,
   * with `M = Int` (additive).
   */
-trait ModifyAConstLaws[S, A, F[_, _]]:
-  /** The optic under test. */
-  def optic: Optic[S, S, A, A, F]
+trait ModifyAConstLaws[S, A, F[_, _]] extends OpticUnderTest[S, A, F]:
 
   /** `modifyF[Const[Int, *]](Const(f(_)))(s).getConst == foldMap(f)(s)`. */
   def modifyAConstIsFoldMap(s: S, f: A => Int)(using
@@ -72,5 +63,3 @@ trait ModifyAConstLaws[S, A, F[_, _]]:
       optic.modifyF[ConstInt](a => Const(f(a)))(s).getConst
     val viaFoldMap: Int = optic.foldMap(f)(s)
     viaModifyA == viaFoldMap
-
-// CPD-ON

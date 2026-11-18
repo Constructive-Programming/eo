@@ -3,8 +3,6 @@ package optics
 
 import scala.annotation.targetName
 
-import cats.Monoid
-
 import compose.*
 import data.Direct
 
@@ -22,15 +20,10 @@ import data.Direct
   * [[BijectionIso]] / [[GetReplaceLens]]. Returned by [[Getter.apply]] so hand-written getters pick
   * up the fused path automatically.
   */
-final class Getter[S, A](read: S => A)
-    extends Optic[S, Unit, A, Unit, Direct],
-      CanGet[S, A],
-      CanFold[S, A]:
+final class Getter[S, A](read: S => A) extends Optic[S, Unit, A, Unit, Direct], CanGet[S, A]:
   type X = Nothing
 
   def get(s: S): A = read(s)
-
-  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
 
   def to(s: S): Direct[X, A] = Direct(read(s))
   def from(d: Direct[X, Unit]): Unit = ()
