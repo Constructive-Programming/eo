@@ -1,6 +1,6 @@
 package dev.constructive.eo.demo.grpc
 
-import dev.constructive.eo.CanGetOption
+import dev.constructive.eo.{getOption, CanGetOption}
 
 /** Which issues to keep: urgent incidents on the services that matter, bugs whose top stack frame
   * is in a watched module, and popular requests from customers on the plans that matter. Anything
@@ -19,20 +19,20 @@ final case class Policy(
 ):
 
   def keep[D](detail: D)(using
-      kind: CanGetOption[D, Kind],
-      severity: CanGetOption[D, Severity],
-      tier: CanGetOption[D, Tier],
-      module: CanGetOption[D, Module],
-      plan: CanGetOption[D, Plan],
-      votes: CanGetOption[D, Votes],
+      CanGetOption[D, Kind],
+      CanGetOption[D, Severity],
+      CanGetOption[D, Tier],
+      CanGetOption[D, Module],
+      CanGetOption[D, Plan],
+      CanGetOption[D, Votes],
   ): Boolean =
-    kind.getOption(detail) match
+    detail.getOption[Kind] match
       case Some(Kind.Incident) =>
-        severity.getOption(detail).exists(urgent) && tier.getOption(detail).exists(tiers)
-      case Some(Kind.Bug)     => module.getOption(detail).exists(modules)
+        detail.getOption[Severity].exists(urgent) && detail.getOption[Tier].exists(tiers)
+      case Some(Kind.Bug)     => detail.getOption[Module].exists(modules)
       case Some(Kind.Request) =>
-        plan.getOption(detail).exists(plans) && votes
-          .getOption(detail)
+        detail.getOption[Plan].exists(plans) && detail
+          .getOption[Votes]
           .exists(_.count >= minVotes.count)
       case None => false
 

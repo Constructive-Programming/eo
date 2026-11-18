@@ -22,3 +22,9 @@ object CanReverseGet:
       ra: ReverseAccessor[F],
   ): CanReverseGet[T, B] =
     b => o.reverseGet(b)
+
+export optics.Optic.reverseGet
+
+extension [B](b: B)
+  /** Build a `T` from `b` via the [[CanReverseGet]] instance in scope. */
+  inline def reverseGet[T](using crg: CanReverseGet[T, B]): T = crg.reverseGet(b)

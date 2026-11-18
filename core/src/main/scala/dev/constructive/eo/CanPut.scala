@@ -26,3 +26,12 @@ object CanPutP:
       fa: ForgetfulApplicative[F],
   ): CanPutP[T, A, B] =
     f => o.put(f)
+
+export optics.Optic.put
+
+extension [A](a: A)
+  /** Construct a `T` from `a`, running `f` at the focus, via the [[CanPut]] instance in scope. */
+  inline def put[T](f: A => A)(using cp: CanPut[T, A]): T = cp.put(f)(a)
+
+  /** Polymorphic counterpart to [[put]] — allows the focus type to change from `A` to `B`. */
+  inline def putP[T, B](f: A => B)(using cp: CanPutP[T, A, B]): T = cp.put(f)(a)

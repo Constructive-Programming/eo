@@ -12,7 +12,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import fs2.{Pipe, Pure, Stream}
 
-import dev.constructive.eo.{CanGet, CanGetOption, CanModify}
+import dev.constructive.eo.*
 import dev.constructive.eo.optics.Prism
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.generics.lens
@@ -56,13 +56,13 @@ one kind. A prism already knows how to recognise it, so filtering is
 import cats.syntax.functorFilter.*   // mapFilter, from fs2's FunctorFilter[Stream[F, *]]
 
 // Keep the FOCUS: the stream's element type narrows to A.
-def only[F[_], S, A](using p: CanGetOption[S, A]): Pipe[F, S, A] =
-  _.mapFilter(p.getOption)
+def only[F[_], S, A](using CanGetOption[S, A]): Pipe[F, S, A] =
+  _.mapFilter(_.getOption[A])
 
 // Keep the WHOLE ELEMENT when its focus passes a test: the element type,
 // and every byte of each kept element, stays as it came.
-def keepWhere[F[_], S, A](q: A => Boolean)(using p: CanGetOption[S, A]): Pipe[F, S, S] =
-  _.filter(s => p.getOption(s).exists(q))
+def keepWhere[F[_], S, A](q: A => Boolean)(using CanGetOption[S, A]): Pipe[F, S, S] =
+  _.filter(_.getOption[A].exists(q))
 ```
 
 ```scala mdoc
