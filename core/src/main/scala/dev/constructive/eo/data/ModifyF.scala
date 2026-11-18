@@ -8,6 +8,14 @@ import cats.syntax.functor.*
 import forgetful.*
 import compose.*
 
+/** An optic on the [[ModifyF]] carrier: the leftover is the source and `to` seeds the identity
+  * continuation, so only `from` (how a write lands) varies — [[optics.Modify]] and the
+  * `Composer[F, ModifyF]` coercions.
+  */
+trait ModifyFOptic[S, T, A, B] extends optics.Optic[S, T, A, B, ModifyF]:
+  type X = (S, A)
+  final def to(s: S): ModifyF[X, A] = ModifyF((s, identity[A]))
+
 /** Carrier for the `Modify` family — pairs a source `Fst[A]` with a continuation `Snd[A] => B`.
   *
   * Same-carrier composition (`modify.andThen(modify)`) ships via [[ModifyF.assocModifyF]] —
@@ -53,17 +61,13 @@ object ModifyF:
     ): G[ModifyF[X, C]] =
       D.tupleLeft(D.distribute(fa.modifier._2)(g), fa.modifier._1).map(ModifyF(_))
 
-  /** Shared skeleton for `Composer[F, ModifyF]` instances. Every carrier materialises a coerced
-    * Optic with the same `type X = (S, A)` shape and an identity `to` that seeds the ModifyF; only
-    * `applyWrite` differs per carrier.
+  /** Shared skeleton for `Composer[F, ModifyF]` instances: every carrier coerces to a
+    * [[ModifyFOptic]] whose write is `applyWrite`.
     */
-  private def coerceToModify[F[_, _], S, T, A, B](
+  private[data] def coerceToModify[F[_, _], S, T, A, B](
       applyWrite: (S, A => B) => T
   ): optics.Optic[S, T, A, B, ModifyF] =
-    new optics.Optic[S, T, A, B, ModifyF]:
-      type X = (S, A)
-      def to(s: S): ModifyF[X, A] = ModifyF((s, identity[A]))
-
+    new ModifyFOptic[S, T, A, B]:
       def from(sfxb: ModifyF[X, B]): T =
         val (s, f) = sfxb.modifier
         applyWrite(s, f)

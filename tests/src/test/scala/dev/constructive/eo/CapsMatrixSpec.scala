@@ -521,6 +521,17 @@ class CapsMatrixSpec extends Specification:
            CapsFixtures.addr.modifyF[String](s => Option(s))"""
       ) must beFalse
     }
+    "mixin: Modify serves CanModifyF[…, Distributive] directly and agrees with the carrier route" >> {
+      type Env[x] = Int => x
+      val f: String => Env[String] = str => n => str * n
+      val generic =
+        (streetModify: Optic[Address, Address, String, String, ModifyF]).modifyF(f)(addr)
+      ((streetModify: CanModifyF[Address, String, cats.Distributive]) must beTheSameAs(
+        streetModify
+      ))
+        .and(streetModify.modifyF(f)(addr)(2) === generic(2))
+        .and(streetModify.modifyF[Id](_.toUpperCase)(addr) === Address("MAIN ST", 12345))
+    }
     "derivation: a ModifyF-carrier optic serves a Distributive effect (Id)" >> {
       import AsOptic.streetModify.given
       addr.modifyF[String][Id, cats.Distributive](_.toUpperCase) === Address("MAIN ST", 12345)

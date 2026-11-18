@@ -138,3 +138,14 @@ class CapsBench extends JmhDefaults:
     summon[CanModifyF[Vector[Int], Int, Applicative]].modifyF(bumpI)(vec)
 
   @Benchmark def modifyFEachExt: Option[Vector[Int]] = vec.modifyF[Int](bumpI)
+
+  // Modify under its Distributive gate, at the reader effect `Int => *`: the fused member against
+  // the generic ModifyF carrier route (`ForgetfulTraverse[ModifyF, Distributive]`).
+  private val eoIdModify = DomainOptics.eoSetId
+
+  private val eoIdModifyGeneric: Optic[Order, Order, Long, Long, dev.constructive.eo.data.ModifyF] =
+    eoIdModify
+
+  private val shiftBy: Long => (Int => Long) = id => n => id + n
+  @Benchmark def modifyFModifyDirect: Order = eoIdModify.modifyF(shiftBy)(order)(1)
+  @Benchmark def modifyFModifyGeneric: Order = eoIdModifyGeneric.modifyF(shiftBy)(order)(1)

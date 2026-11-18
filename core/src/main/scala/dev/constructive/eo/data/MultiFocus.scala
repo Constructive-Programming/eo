@@ -815,13 +815,10 @@ object MultiFocusK:
   given multifocus2modify[F[_]: Functor]: Composer[MultiFocus[F], ModifyF] with
 
     def to[S, T, A, B](o: Optic[S, T, A, B, MultiFocus[F]]): Optic[S, T, A, B, ModifyF] =
-      new Optic[S, T, A, B, ModifyF]:
-        type X = (S, A)
-        def to(s: S): ModifyF[X, A] = ModifyF((s, identity[A]))
-        def from(sfxb: ModifyF[X, B]): T =
-          val (s, f) = sfxb.modifier
-          val (x, fa) = o.to(s)
-          o.from((x, Functor[F].map(fa)(f)))
+      ModifyF.coerceToModify[MultiFocus[F], S, T, A, B] { (s, f) =>
+        val (x, fa) = o.to(s)
+        o.from((x, Functor[F].map(fa)(f)))
+      }
 
   // F[A]-focus factories.
 

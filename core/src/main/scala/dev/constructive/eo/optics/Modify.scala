@@ -1,9 +1,10 @@
 package dev.constructive.eo
 package optics
 
-import cats.Functor
+import cats.instances.function.*
+import cats.{Distributive, Functor}
 
-import data.ModifyF
+import data.{ModifyF, ModifyFOptic}
 
 /** Constructor for `Modify` — write-only single-focus optic, backed by `ModifyF`. The caller
   * applies a function at the focus but cannot read it back; useful when observation would leak
@@ -52,11 +53,9 @@ object Modify:
   * automatically.
   */
 final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
-    extends Optic[S, T, A, B, ModifyF],
-      CanModifyP[S, T, A, B]:
-  type X = (S, A)
-
-  def to(s: S): ModifyF[X, A] = ModifyF(s, identity[A])
+    extends ModifyFOptic[S, T, A, B],
+      CanModifyP[S, T, A, B],
+      CanModifyFP[S, T, A, B, Distributive]:
 
   def from(s: ModifyF[X, B]): T = modifyFn(s.modifier._2)(s.modifier._1)
 
@@ -65,6 +64,13 @@ final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
 
   /** Fused `.replace` — constant-writer special case of [[modify]]. */
   override inline def replace(b: B): S => T = modifyFn(_ => b)
+
+  /** Fused effectful modify: `Distributive[G]` turns the per-focus `A => G[B]` into one
+    * `G[A => B]`, mapped once into the stored writer — no `ModifyF` carrier, no tuple, one `map`.
+    * Makes the modifier its own `CanModifyF[…, Distributive]`.
+    */
+  def modifyF[G[_]](f: A => G[B])(using G: Distributive[G] & Functor[G]): S => G[T] =
+    s => G.map(G.distribute[[x] =>> A => x, A, B](identity)(f))(g => modifyFn(g)(s))
 
   /** Fused `Modify.andThen(…)` for any inner that can modify — another `Modify`, a lens, iso, prism
     * or optional: the composite writer is `modifyFn(inner.modify(g))`, again a `Modify`, with no

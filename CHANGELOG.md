@@ -28,7 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **More fused compositions:** `Optional.andThen(PickMendPrism)` (the kits'
   `field("x").andThen(str)`), `PickMendPrism.andThen(Optional)`, `Iso.andThen(PickMendPrism)`;
   iso / optional ∘ traversal; `Modify.andThen` with any modifiable inner, and single-focus ∘
-  `Modify`. A lens chain stays in concrete classes instead of allocating per level (depth 6:
+  `Modify`. `Modify` implements `CanModifyF[…, Distributive]` directly (3.4 vs 13 ns, 40 vs
+  224 B/op through the generic carrier). A lens chain stays in concrete classes instead of allocating per level (depth 6:
   120 vs 528 B/op).
 - **laws:** the optic-level law traits extend `OpticUnderTest[S, A, F]`; the D-series classes keep
   their `ModifyA*` names.
