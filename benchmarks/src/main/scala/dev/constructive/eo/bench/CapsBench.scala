@@ -6,7 +6,7 @@ import cats.instances.list.given
 import cats.instances.option.given
 import cats.instances.vector.given
 import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.{Forget, MultiFocus, PSVec}
+import dev.constructive.eo.data.{Forget, ModifyF, MultiFocus, PSVec}
 import dev.constructive.eo.optics.{
   Fold as EoFold,
   ForgetFold,
@@ -143,7 +143,7 @@ class CapsBench extends JmhDefaults:
   // the generic ModifyF carrier route (`ForgetfulTraverse[ModifyF, Distributive]`).
   private val eoIdModify = DomainOptics.eoSetId
 
-  private val eoIdModifyGeneric: Optic[Order, Order, Long, Long, dev.constructive.eo.data.ModifyF] =
+  private val eoIdModifyGeneric: Optic[Order, Order, Long, Long, ModifyF] =
     eoIdModify
 
   private val shiftBy: Long => (Int => Long) = id => n => id + n
