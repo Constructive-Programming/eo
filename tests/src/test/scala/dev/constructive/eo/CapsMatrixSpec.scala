@@ -146,6 +146,12 @@ class CapsMatrixSpec extends Specification:
         .and(
           summon[Lens[Address, String] <:< CanGet[Address, String]](street).get(addr) === "Main St"
         )
+        .and {
+          // The fused overloads live on PLens, so composing through the alias stays fused.
+          val outer: Lens[Person, Address] = addressLens
+          val composed: GetReplaceLens[Person, Person, String, String] = outer.andThen(street)
+          composed.get(person) === "Main St"
+        }
     }
     "resolution: a concrete given resolves to the instance itself (no wrapper)" >> {
       given GetReplaceLens[Address, Address, String, String] = streetLens

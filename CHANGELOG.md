@@ -34,9 +34,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lens classes share `PLens`.** `GetReplaceLens` and `SplitCombineLens` (and so
   `SimpleLens` / eo-generics lenses) extend one sealed `PLens[S, T, A, B]` that owns `get`,
   `enplace`, `modify`, `replace` and `modifyF`; a split-combine lens now exposes `enplace` too. The
-  concrete optics name their write capabilities through one `Writes[S, T, A, B, C]` mixin.
+  concrete optics name their write capabilities through one mixin (now `SingleFocus`, below).
 - **`type Lens[S, A] = PLens[S, S, A, A]`.** A monomorphic lens can now be ascribed without
-  erasing it to the generic `Optic[S, S, A, A, Tuple2]`, like `Iso[S, A]`.
+  erasing it to the generic `Optic[S, S, A, A, Tuple2]`, like `Iso[S, A]`; the fused `andThen`
+  overloads live on `PLens`, so composing through the alias stays fused.
+- **The fused `andThen` matrix, re-measured and trimmed.** Every fused overload was benchmarked
+  against the generic `AssociativeFunctor` / `Morph` route it falls back to: per call they never
+  allocate more, and they keep a chain in concrete classes, where the generic route allocates per
+  level (lens∘lens depth 6: 120 vs 528 B/op). So all stay, with less code:
+  - the lens overloads moved from `GetReplaceLens` to `PLens`, so split-combine lenses
+    (`SimpleLens`, eo-generics' `lens[S](_.field)`) gain every fused composition, and the four
+    split-combine-only overloads (on `Optional`, `Traversal`, both prisms) are gone;
+  - the six traversal overloads collapse to two members: `Traversal.andThen` takes any concrete
+    single-focus inner (`Optic & CanFold`) through its `Composer`, and the new `SingleFocus` trait
+    (lens, iso, prism, optional) gives `andThen(Traversal)`. Iso and Optional gain fused traversal
+    composition;
+  - the compositions share `inline` kernels (`Optional.liftMiss` / `liftTo` / `underTotal`), which
+    expand to the same code as before; `Optional.fused` infers its type arguments.
+  `SingleFocus[S, T, A, B, F, C]` replaces the `Writes` mixin.
 - **laws: `OpticUnderTest[S, A, F]`.** The optic-level law traits (`ModifyA*Laws`,
   `FoldMapHomomorphismLaws`, `MorphLaws`) extend this base instead of each declaring `optic`.
 

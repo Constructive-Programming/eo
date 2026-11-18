@@ -5,6 +5,7 @@ import scala.collection.immutable.ArraySeq
 
 import cats.{Applicative, Bitraverse, Eval, Monoid, MonoidK, Traverse}
 
+import compose.Composer
 import data.{MultiFocus, MultiFocusK, PSVec}
 
 /** Concrete family class for `Traversal` — the many-focus optic on the `MultiFocus[PSVec]` carrier.
@@ -94,41 +95,18 @@ abstract class Traversal[S, T, A, B] extends Optic[S, T, A, B, MultiFocus[PSVec]
   def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
     Traversal.composed(this, inner)
 
-  /** Fused `Traversal.andThen(Lens)` — lifts the lens through the same `tuple2multifocusPSVec`
-    * bridge the `Morph`-routed generic extension uses, then composes on the shared carrier. See the
+  /** Fused `Traversal.andThen(…)` for any inner optic whose carrier bridges into the traversal's
+    * `MultiFocus[PSVec]` ([[IntoTraversal]]) — a lens, iso, prism or optional: the inner is lifted
+    * once (through the same bridge the `Morph`-routed generic extension uses) and composed on the
+    * shared carrier. A prism or optional inner is the FILTERING composition: each visited focus
+    * that misses contributes none and its element is rebuilt untouched from the inner's leftover
+    * (`traversal.andThen(circlePrism)` is "every element that is a Circle"). See the
     * `andThen(inner: Traversal)` overload for why the concrete return type matters.
     */
-  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Traversal[S, T, C, D] =
-    Traversal.composed(this, MultiFocusK.tuple2multifocusPSVec.to(inner))
-
-  /** Fused `Traversal.andThen(Lens)` — [[SplitCombineLens]] / [[SimpleLens]] (macro-lens) inner. */
-  def andThen[C, D, XI](inner: SplitCombineLens[A, B, C, D, XI]): Traversal[S, T, C, D] =
-    Traversal.composed(this, MultiFocusK.tuple2multifocusPSVec.to(inner))
-
-  /** Fused `Traversal.andThen(Prism)` — the FILTERING composition: each focus the traversal visits
-    * is passed through the prism, so hits contribute a focus and misses contribute none (their
-    * element is rebuilt untouched from the prism's leftover). `traversal.andThen(shapePrism)` is
-    * "every element that is a Circle", the everyday way to walk a heterogeneous collection.
-    *
-    * Mirror of [[MendTearPrism.andThen(Traversal)]]: same `either2multifocusPSVec` bridge, applied
-    * to the INNER side here, and the same reason for the concrete return type — see the
-    * `andThen(inner: Traversal)` overload.
-    */
-  def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Traversal[S, T, C, D] =
-    Traversal.composed(this, MultiFocusK.either2multifocusPSVec.to(inner))
-
-  /** Fused `Traversal.andThen(Prism)` — [[PickMendPrism]] (`Prism.optional`) inner, the shape the
-    * untyped-tree kits' constructor prisms have.
-    */
-  def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): Traversal[S, T, C, D] =
-    // `PickMendPrism[A, C, D]` IS an `Optic[A, A, C, D, Either]`, and `ev` says `A` is `B`, so the
-    // needed `Optic[A, B, …]` is the same value. `=:=` cannot substitute it for us: that would want
-    // `[x] =>> Optic[A, x, C, D, Either]` to be covariant in `x`, and `T` occurs in `from`'s result
-    // AND in the carrier's argument, so the lambda is invariant. Same erased-cast reasoning the
-    // sibling `MendTearPrism.andThen(PickMendPrism)` overload relies on.
-    val lifted = inner.asInstanceOf[Optic[A, B, C, D, Either]]
-    val _ = ev
-    Traversal.composed(this, MultiFocusK.either2multifocusPSVec.to(lifted))
+  def andThen[C, D, G[_, _]](inner: Optic[A, B, C, D, G] & CanFold[A, C])(using
+      br: Composer[G, MultiFocus[PSVec]]
+  ): Traversal[S, T, C, D] =
+    Traversal.composed(this, br.to(inner))
 
 /** Constructors for [[Traversal]]. Every constructor here — [[each]] / [[pEach]] / [[selfChildren]]
   * and the [[two]] / [[three]] / [[four]] fixed-arity variants — rides the `MultiFocus[PSVec]`

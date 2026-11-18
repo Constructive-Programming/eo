@@ -8,9 +8,8 @@ import data.Affine
 /** Monomorphic `Lens` — an alias for [[PLens]], the sealed base of both concrete lens classes
   * ([[GetReplaceLens]], [[SplitCombineLens]] / [[SimpleLens]]), not for the generic
   * `Optic[S, S, A, A, Tuple2]`. Ascribing `val ageL: Lens[Person, Int] = …` keeps the fused `get` /
-  * `modify` / `replace` / `modifyF` members and the capability mixins statically visible; only the
-  * per-class fused `andThen` overloads need the concrete class, so leave a `val` you will compose
-  * further un-ascribed.
+  * `modify` / `replace` / `modifyF` members, the fused `andThen` overloads (they live on `PLens`)
+  * and the capability mixins statically visible.
   */
 type Lens[S, A] = PLens[S, S, A, A]
 
@@ -106,9 +105,8 @@ object Lens:
   * whole source as the leftover, [[SplitCombineLens]] the complement its splitter returns.
   */
 sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
-    extends Optic[S, T, A, B, Tuple2],
-      CanGet[S, A],
-      Writes[S, T, A, B, Functor]:
+    extends SingleFocus[S, T, A, B, Tuple2, Functor],
+      CanGet[S, A]:
   def get(s: S): A = read(s)
 
   override inline def replace(b: B): S => T = s => enplace(s, b)
@@ -128,18 +126,11 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
 
   // CPD-ON
 
-/** Concrete lens storing `get` and `enplace` directly, enabling the fused-`andThen` overloads below
-  * to bypass the `Tuple2` carrier entirely. Returned by every `Lens.*` constructor so hand-written
-  * lenses pick up the fused hot path automatically.
-  */
-class GetReplaceLens[S, T, A, B](
-    read: S => A,
-    enplace: (S, B) => T,
-) extends PLens[S, T, A, B](read, enplace):
-  type X = S
-  def to(s: S): (S, A) = (s, get(s))
-  def from(pair: (S, B)): T = enplace(pair._1, pair._2)
-
+  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
+  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
+  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
+  // the `Optional.fused(…)` shape repeat across them by construction.
   /** Fused `Lens.andThen(Lens)` — collapses into another `GetReplaceLens` directly on `get` /
     * `enplace`, skipping the generic `AssociativeFunctor[Tuple2]` round-trip. Scala's overload
     * resolution picks this when both sides are statically `GetReplaceLens`; for mixed-shape
@@ -153,7 +144,7 @@ class GetReplaceLens[S, T, A, B](
     * one that matters for deep chains; the terminal mixed-carrier overloads below fire once and
     * stay plain `def` to avoid duplicating their larger bodies.
     */
-  inline def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
+  inline def andThen[C, D](inner: PLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
       read = s => inner.get(get(s)),
       enplace = (s, d) => enplace(s, inner.enplace(get(s), d)),
@@ -172,11 +163,8 @@ class GetReplaceLens[S, T, A, B](
     * cross-carrier `Morph.bothViaAffine`.
     */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, S](
-      getOrModify = s =>
-        inner.tear(get(s)) match
-          case Left(b)      => Left(enplace(s, b))
-          case r @ Right(_) => r.widenLeft[T],
+    Optional.fused(
+      getOrModify = s => Optional.liftMiss(inner.tear(get(s)))(b => enplace(s, b)),
       modify = (s, f) => enplace(s, inner.modify(f)(get(s))),
       to = s =>
         inner.tear(get(s)) match
@@ -191,7 +179,7 @@ class GetReplaceLens[S, T, A, B](
   def andThen[C, D](inner: PickMendPrism[A, C, D])(using
       ev: A =:= B
   ): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, S](
+    Optional.fused(
       getOrModify = s =>
         val a = get(s)
         inner.pick(a) match
@@ -210,30 +198,28 @@ class GetReplaceLens[S, T, A, B](
       rebuild = (s, d) => enplace(s, ev(inner.mend(d))),
     )
 
-  /** Fused `Lens.andThen(Traversal)` — lifts this lens through the same `tuple2multifocusPSVec`
-    * bridge the `Morph`-routed generic extension uses and composes on the `MultiFocus[PSVec]`
-    * carrier, returning the concrete [[Traversal]] class so the composite keeps Traversal's fused
-    * inline `modify` / `replace` / `foldMap` members (the generic extensions pay a per-call
-    * parameterized-given instantiation — see the [[Traversal]] scaladoc).
-    */
-  def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
-    Traversal.composed(data.MultiFocusK.tuple2multifocusPSVec.to(this), inner)
-
   /** Fused `Lens.andThen(Optional)` — outer always hits, inner may miss. Result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, (S, inner.M)](
-      getOrModify = s =>
-        inner.getOrModify(get(s)) match
-          case Left(b)      => Left(enplace(s, b))
-          case r @ Right(_) => r.widenLeft[T],
-      modify = (s, f) => enplace(s, inner.modifyAt(get(s), f)),
-      to = s =>
-        inner.to(get(s)) match
-          case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, (S, inner.M))](enplace(s, mi.fst))
-          case hi: Affine.Hit[inner.X, C] =>
-            new Affine.Hit[(T, (S, inner.M)), C]((s, hi.snd), hi.b),
-      rebuild = (m, d) => enplace(m._1, inner.rebuild(m._2, d)),
+    Optional.underTotal(inner)(
+      get,
+      enplace,
+      (s, m) => (s, m),
+      (m, d) => enplace(m._1, inner.rebuild(m._2, d))
     )
+
+  // CPD-ON
+
+/** Concrete lens storing `get` and `enplace` directly; the fused-`andThen` overloads on [[PLens]]
+  * bypass the `Tuple2` carrier entirely. Returned by every `Lens.*` constructor so hand-written
+  * lenses pick up the fused hot path automatically.
+  */
+class GetReplaceLens[S, T, A, B](
+    read: S => A,
+    enplace: (S, B) => T,
+) extends PLens[S, T, A, B](read, enplace):
+  type X = S
+  def to(s: S): (S, A) = (s, get(s))
+  def from(pair: (S, B)): T = enplace(pair._1, pair._2)
 
 /** Polymorphic split-combine lens — splitter `S => (XA, A)` + combiner `(XA, B) => T`, surfacing
   * the complement as `X = XA`; a write splits once and combines. Does not ship `place` / `transfer`
@@ -269,12 +255,6 @@ class SplitCombineLens[S, T, A, B, XA](
       ,
       combine = (x, d) => combine(x._1, inner.combine(x._2, d)),
     )
-
-  /** Fused `Lens.andThen(Traversal)` for the split-combine family — see
-    * [[GetReplaceLens.andThen(inner:Traversal)]].
-    */
-  def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
-    Traversal.composed(data.MultiFocusK.tuple2multifocusPSVec.to(this), inner)
 
 /** Monomorphic split-combine lens (`S = T`, `A = B`). The matched source / target lets the `to`
   * splitter double as the `T => (X, A)` evidence the mutation extensions need, so `place` /
