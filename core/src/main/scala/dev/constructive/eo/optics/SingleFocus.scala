@@ -4,15 +4,13 @@ package optics
 import compose.Composer
 import data.{MultiFocus, PSVec}
 
-/** The shared row of the concrete single-focus optics — lens, iso, prism, optional: plain modify
-  * ([[CanModifyP]]) and effectful modify ([[CanModifyFP]]) at the effect gate `C` the carrier needs
-  * (`Functor` for a lens, `Invariant` for an iso, `Applicative` for a prism or optional), and
-  * composition with a [[Traversal]].
+/** The shared row of the concrete single-focus optics — lens, iso, prism, optional: their write row
+  * ([[Writes]]) at the carrier's effect gate `C`, plus the compositions that need a single focus
+  * (with a [[Traversal]], with a [[Modify]]).
   */
 trait SingleFocus[S, T, A, B, F[_, _], -C[_[_]]]
     extends Optic[S, T, A, B, F],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, C]:
+      Writes[S, T, A, B, C]:
 
   /** Fused `andThen(Traversal)`: this optic lifted once onto `MultiFocus[PSVec]` through its
     * carrier's `Composer` and composed with the traversal, returning the concrete [[Traversal]] —

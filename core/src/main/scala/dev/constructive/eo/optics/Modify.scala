@@ -54,8 +54,7 @@ object Modify:
   */
 final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
     extends ModifyFOptic[S, T, A, B],
-      CanModifyP[S, T, A, B],
-      CanModifyFP[S, T, A, B, Distributive]:
+      Writes[S, T, A, B, Distributive]:
 
   def from(s: ModifyF[X, B]): T = modifyFn(s.modifier._2)(s.modifier._1)
 

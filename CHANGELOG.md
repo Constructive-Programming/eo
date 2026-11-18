@@ -24,7 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`PLens` and `type Lens[S, A] = PLens[S, S, A, A]`.** Both lens classes share the sealed
   `PLens`, which carries the fused `andThen` overloads: a lens ascribed as `Lens[S, A]` composes
   fused, and split-combine lenses (`SimpleLens`, eo-generics) gain every fused composition and
-  `enplace`. The concrete single-focus optics share a `SingleFocus` trait.
+  `enplace`. The concrete single-focus optics share a `SingleFocus` trait, and every concrete writer
+  (those plus `Modify`) names its write row through `Writes[S, T, A, B, C]`.
 - **More fused compositions:** `Optional.andThen(PickMendPrism)` (the kits'
   `field("x").andThen(str)`), `PickMendPrism.andThen(Optional)`, `Iso.andThen(PickMendPrism)`;
   iso / optional ∘ traversal; `Modify.andThen` with any modifiable inner, and single-focus ∘
