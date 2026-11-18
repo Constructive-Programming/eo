@@ -33,7 +33,7 @@ import optics.Optic.*
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, MultiFocusSingleton, PSVec}
 
 /** Non-law behavioural coverage for EO's optics: exercises the extension methods (`andThen`,
-  * `reverse`, `foldMap`, `modifyA`, `morph`), the Lens/Prism/Traversal alternative constructors,
+  * `reverse`, `foldMap`, `modifyF`, `morph`), the Lens/Prism/Traversal alternative constructors,
   * and `Getter`, all of which are never reached from the ported Monocle laws but still belong in
   * any honest description of what the library does.
   *
@@ -131,7 +131,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
   // ----- Traversal/foldMap shorthand + morph[Affine] --------------------
 
   // covers: Traversal.each.foldMap totals the list under Monoid[Int], Lens morphed into an Affine
-  // behaves like the original Lens (modifyA is law-checked: D1–D3 in EoSpecificLawsSpec)
+  // behaves like the original Lens (modifyF is law-checked: D1–D3 in EoSpecificLawsSpec)
   "Traversal.each: foldMap totals + morph[Affine] preserves Lens behaviour" >> {
     val t: Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] =
       Traversal.each[List, Int]
@@ -249,7 +249,7 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
 
   // covers: Optional.readOnly.foldMap folds the hit branch, returns empty on miss,
   //   Optional.selectReadOnly keeps values matching the predicate (4 even / 3 odd / 0 zero),
-  //   Optional.readOnly.modifyA lifts a hit-branch read under Applicative[Option];
+  //   Optional.readOnly.modifyF lifts a hit-branch read under Applicative[Option];
   //   AffineFold.apply hits on Some and misses on None,
   //   AffineFold.select keeps values matching the predicate,
   //   a writable optic's read-only view is `AffineFold(optic.getOption)` — for an Optional
@@ -264,10 +264,10 @@ class OpticsBehaviorSpec extends Specification with ScalaCheck:
       .and(evenSelectAF.foldMap(identity[Int])(3) === 0)
       .and(evenSelectAF.foldMap(identity[Int])(0) === 0)
 
-    // AffineFold is honestly one-way (B = Unit), so modifyA visits the focus producing G[Unit].
+    // AffineFold is honestly one-way (B = Unit), so modifyF visits the focus producing G[Unit].
     val mfo: Int => Option[Unit] = n => Option.when(n > 0)(())
-    val mAOk = (adultAge.modifyA[Option](mfo)(AdultPerson(20)) === Some(()))
-      .and(adultAge.modifyA[Option](mfo)(AdultPerson(15)) === Some(()))
+    val mAOk = (adultAge.modifyF[Option](mfo)(AdultPerson(20)) === Some(()))
+      .and(adultAge.modifyF[Option](mfo)(AdultPerson(15)) === Some(()))
 
     val applyOk = (adultAgeAF.getOption(AdultPerson(20)) === Some(20))
       .and(adultAgeAF.getOption(AdultPerson(15)) === None)

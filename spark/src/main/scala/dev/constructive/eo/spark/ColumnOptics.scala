@@ -65,7 +65,7 @@ object ColumnOptics:
   // A symbolic array cannot hand out its elements while the query is being BUILT (its length is a
   // per-row fact), so `MultiFocus`'s Traversal does not apply: element-wise writes are a core
   // `Modify` compiled to Spark's higher-order `transform` / `transform_values`, and element-wise
-  // reads are `Getter`s into one aggregate. An effectful `modifyA` cannot run inside a Spark
+  // reads are `Getter`s into one aggregate. An effectful `modifyF` cannot run inside a Spark
   // expression at all.
 
   /** Every element of an array column: `modify(f)` is `transform(array, f)`. NULL arrays stay NULL.

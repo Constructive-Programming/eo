@@ -155,7 +155,7 @@ object CrudRoundtrip:
     * This is the flagship cats-eo move: compose the outer Lens with a `Traversal.each` and then
     * with the inner nested Lens — no explicit `.morph` anywhere. The cross-carrier `andThen`
     * extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on each hop. A single
-    * `modifyA[Result]` then threads an `Either`-effectful validator through every leaf at once.
+    * `modifyF[Result]` then threads an `Either`-effectful validator through every leaf at once.
     */
   val everyZip: Optic[User, User, String, String, MultiFocus[PSVec]] =
     lens[User](_.orders)
@@ -194,18 +194,18 @@ object CrudRoundtrip:
   // =====================================================================
 
   /** Same behaviour as [[handleNaive]], written against the optic declarations above. Every
-    * validation step is a single `optic.modifyA[Result](f)` line — no `.copy(...)` shows up in the
+    * validation step is a single `optic.modifyF[Result](f)` line — no `.copy(...)` shows up in the
     * handler, and adding a new validated field is a one-liner (declare the lens, plug it in).
     *
-    * `modifyA` applies uniformly across Tuple2 (Lens) and PowerSeries (Traversal) carriers because
+    * `modifyF` applies uniformly across Tuple2 (Lens) and PowerSeries (Traversal) carriers because
     * both ship `ForgetfulTraverse[_, Applicative]` — and `Either[Problem, *]` is an `Applicative`.
     */
   def handleWithOptics(db: InMemoryDb, body: Json): Result[Long] =
     for
       user <- parseUser(body)
-      step1 <- userName.modifyA[Result](normalizeName)(user)
-      step2 <- userZip.modifyA[Result](validateZip)(step1)
-      step3 <- everyZip.modifyA[Result](validateZip)(step2)
+      step1 <- userName.modifyF[Result](normalizeName)(user)
+      step2 <- userZip.modifyF[Result](validateZip)(step1)
+      step3 <- everyZip.modifyF[Result](validateZip)(step2)
       id <- db.store(step3)
     yield id
 

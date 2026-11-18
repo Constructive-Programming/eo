@@ -347,7 +347,7 @@ treatment, with the read-only-direction story, lives in
 an `F`-shaped container of foci. It backs traversal and aggregation;
 the surface lights up by the
 typeclasses `F` admits (`.modify` for `Functor`, `.foldMap` for
-`Foldable`, `.modifyA` for `Traverse`,
+`Foldable`, `.modifyF` for `Traverse`,
 `.collectMap` / `.collectList` for aggregation, and same-carrier
 `.andThen`). The sub-shapes below are just different `F`s.
 
@@ -361,7 +361,7 @@ Kaleidoscope, and PowerSeries shapes.
 `MultiFocus[PSVec]` — the `Traversal.each` / `Traversal.pEach`
 carrier. Map, fold, or traverse every element of a collection, and
 keep composing past the traversal with `.andThen`. Supports `.modify`
-/ `.replace` (`Functor`), `.foldMap` / `.all` (`Foldable`), `.modifyA`
+/ `.replace` (`Functor`), `.foldMap` / `.all` (`Foldable`), `.modifyF`
 (`Traverse`), and downstream `.andThen` via `mfAssocPSVec`. Overhead
 over a naive `copy`/`map` runs ~2-3× for dense chains and ~5× for the
 Prism miss-branch shape, amortising down as the collection grows (the
@@ -373,7 +373,7 @@ sweep sizes 4 / 32 / 256 / 1024).
 `Traversal.selfChildren`; it's a typeclass over the carrier, not a new
 family node. The pairing is the theorem O'Connor proved: this
 children+rebuild coalgebra (the paper's `Biplate`) is isomorphic to the
-applicative multi-focus traversal — EO's `.modifyA` over the carrier is
+applicative multi-focus traversal — EO's `.modifyF` over the carrier is
 the other half of that isomorphism — and `plate[Lang]` generalises it to a
 mutually recursive family (a *Multiplate*, see
 [Generics → Multiplate families](generics.md#multiplate-families)). See
@@ -765,7 +765,7 @@ An `AffineFold[S, A]` is the read-only 0-or-1 focus shape: a
 partial projection with no write-back path. The shape is
 `Optic[S, Unit, A, Unit, Affine]` — both `T` and the back-focus
 `B` are pinned to `Unit`, which statically rules out `.modify` /
-`.replace` and leaves `.getOption`, `.foldMap`, and `.modifyA`
+`.replace` and leaves `.getOption`, `.foldMap`, and `.modifyF`
 (effectful read) as the surface. There is deliberately no
 `AffineFold[S, A]` type alias (one existed and was removed):
 constructors return the concrete `PickFold[S, A]` — whose fused

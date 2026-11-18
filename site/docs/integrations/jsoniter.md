@@ -570,7 +570,7 @@ automatically:
 |-------------------------------------|-------------------------------------------|
 | `.foldMap` / `.headOption` / `.all` | `ForgetfulFold[Affine]`                   |
 | `.modify` / `.replace`              | `ForgetfulFunctor[Affine]`                |
-| `.modifyA`                          | `ForgetfulTraverse[Affine, Applicative]`  |
+| `.modifyF`                          | `ForgetfulTraverse[Affine, Applicative]`  |
 | `.andThen` (same-carrier)           | `AssociativeFunctor[Affine, _, _]`        |
 
 | On `Optic[..., MultiFocus[PSVec]]`          | Lights up via                       |

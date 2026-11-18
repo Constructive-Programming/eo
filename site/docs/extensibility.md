@@ -18,7 +18,7 @@ trait Optic[S, T, A, B, F[_, _]]:
 Every built-in family — Lens, Prism, Iso, Optional, Modify,
 Traversal, Fold — is a concrete subclass that differs only in
 which carrier `F[_, _]` it picks. The operations (`.get`,
-`.modify`, `.modifyA`, `.foldMap`, `.andThen`, …) are
+`.modify`, `.modifyF`, `.foldMap`, `.andThen`, …) are
 extensions on `Optic` that dispatch through carrier-specific
 typeclasses (`Accessor[F]`, `ForgetfulFunctor[F]`,
 `ForgetfulTraverse[F, Applicative]`, `AssociativeFunctor[F, X,
@@ -35,7 +35,7 @@ From cheapest to heaviest:
 
 | Axis | What you write | What you get | Typical cost |
 |------|----------------|--------------|--------------|
-| 1. **New concrete subclass on an existing carrier** | `class MyOptic[...] extends Optic[S, T, A, B, F]` — your own `type X`, `to`, `from` | Every generic extension the carrier already supports (`.get` / `.modify` / `.modifyA` / `.foldMap`), plus `.andThen` with every optic family that shares `F` — and, via cross-carrier `Morph`, with every family whose carrier has a `Composer[F, G]` bridge | Minutes. Zero runtime overhead versus the built-in subclasses — same typeclass dispatch |
+| 1. **New concrete subclass on an existing carrier** | `class MyOptic[...] extends Optic[S, T, A, B, F]` — your own `type X`, `to`, `from` | Every generic extension the carrier already supports (`.get` / `.modify` / `.modifyF` / `.foldMap`), plus `.andThen` with every optic family that shares `F` — and, via cross-carrier `Morph`, with every family whose carrier has a `Composer[F, G]` bridge | Minutes. Zero runtime overhead versus the built-in subclasses — same typeclass dispatch |
 | 2. **Shadow generic extensions with fused class-level methods** | `inline def modify(f: A => B): S => T = …` on the concrete subclass | Callers who bind to the concrete type get the fused code; callers who bind to the generic `Optic` trait still route through the carrier. Both paths type-check — pick which one you need | Per hot-path method. Lets you skip the carrier round-trip without losing the trait contract |
 | 3. **New `Composer[F, G]` bridge** | A `given Composer[F, G]` that expresses an `Optic[…, F]` as an `Optic[…, G]` | `.andThen` between any optic in `F` and any optic in `G`, in either direction, via the stock `Morph` instances | Hours. You pick the direction of expression; `Morph` picks the direction of composition |
 | 4. **New carrier + full typeclass instance set** | A new `F[_, _]` plus `AssociativeFunctor[F, X, Y]` and whichever `Forgetful*` typeclasses the operations you want require | A new carrier that's a first-class citizen alongside `Tuple2` / `Either` / `Affine` / `MultiFocus[F]` | Days. Only when the existing carriers genuinely can't express your shape |

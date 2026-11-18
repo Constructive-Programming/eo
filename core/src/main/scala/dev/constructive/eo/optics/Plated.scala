@@ -360,7 +360,7 @@ object Plated:
     */
   def rewrite[S](f: S => Option[S])(s: S)(using P: Plated[S]): S =
     def step(x: S): Eval[S] = f(x).fold(Eval.now(x))(go)
-    def go(x: S): Eval[S] = Eval.defer(P.plate.modifyA[Eval](go)(x)).flatMap(step)
+    def go(x: S): Eval[S] = Eval.defer(P.plate.modifyF[Eval](go)(x)).flatMap(step)
     go(s).value
 
   /** The immediate sub-terms of `s` (one level down). Reads the plate's children vector directly.

@@ -65,8 +65,8 @@ object Direct:
 
     def pure[X, A](a: A): Direct[X, A] = a
 
-  /** Weakest constraint for Direct's `traverse` (`Invariant[G]`). Unlocks `.modifyF` / `.modifyA`
-    * on Iso / Getter.
+  /** Weakest constraint for Direct's `traverse` (`Invariant[G]`). Unlocks `.modifyF` on Iso /
+    * Getter.
     *
     * @group Instances
     */

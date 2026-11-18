@@ -28,7 +28,7 @@ import optics.Optic
   *   classifier shape — operation requirements:
   *   - `.modify` / `.replace` need `Functor[F]`.
   *   - `.foldMap` / `.all` need `Foldable[F]`.
-  *   - `.modifyA` needs `Traverse[F]`.
+  *   - `.modifyF` needs `Traverse[F]`.
   *   - `.collectMap` / `.collectWith` need `Functor[F]`; `collectList` is List-specific.
   *   - Same-carrier `.andThen` needs `Traverse[F] + MultiFocusFromList[F]`.
   *   - `fromPrismF` / `fromOptionalF` need `MonoidK[F]`.
@@ -166,7 +166,7 @@ object MultiFocusK:
   // NOTE: member signatures below are spelled `MultiFocus[F][X, A]`, not `(X, F[A])`. The two are
   // equal inside this file (the opaque is transparent here), but a `given … with` instance is
   // typed by its anonymous class, so the *written* member signatures are what inline extensions
-  // (`Optic.modify` / `.modifyA` / `.foldMap`, …) splice against at call sites — where only the
+  // (`Optic.modify` / `.modifyF` / `.foldMap`, …) splice against at call sites — where only the
   // opaque spelling typechecks.
 
   /** `ForgetfulFunctor[MultiFocus[F]]` via `Functor[F]` — maps every focus, leftover untouched.
@@ -190,7 +190,7 @@ object MultiFocusK:
       Foldable[F].foldMap(xa._2)(f)
 
   /** `ForgetfulTraverse[MultiFocus[F], Applicative]` via `Traverse[F]` — effectful rewrite of every
-    * focus in `F`'s traversal order. Unlocks `.modifyA`.
+    * focus in `F`'s traversal order. Unlocks `.modifyF`.
     *
     * @group Instances
     */

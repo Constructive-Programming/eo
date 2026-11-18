@@ -2,7 +2,8 @@ package dev.constructive.eo.laws.typeclass
 
 import cats.data.{Nested, State, Tuple2K}
 import cats.{Applicative, Id, Traverse}
-import dev.constructive.eo.forgetful.{ForgetfulFold, ForgetfulTraverse}
+import dev.constructive.eo.forgetful.*
+import dev.constructive.eo.laws.discipline.internal.MultiShot
 
 /** Law equations for any `ForgetfulTraverse[F, Applicative]` — cats' `Traverse` laws restated for
   * the two-parameter carrier, at fixed effects:
@@ -62,12 +63,7 @@ trait ForgetfulTraverseLaws[F[_, _], X, A]:
       FT: ForgetfulTraverse[F, Applicative],
       FF: ForgetfulFold[F],
   ): Boolean =
-    type Refill[Z] = State[List[A], Z]
-    val pop: A => Refill[A] = a =>
-      State {
-        case b :: rest => (rest, b)
-        case Nil       => (Nil, a)
-      }
-    val refill: List[A] => F[X, A] = bs => FT.traverse[X, A, A, Refill](fa, pop).runA(bs).value
+    val refill =
+      MultiShot.refill[A, F[X, A]](FT.traverse[X, A, A, [z] =>> State[List[A], z]](fa, _))
     val foci = FF.foldMap[X, A, List[A]](List(_), fa)
     FT.traverse[X, A, A, List](fa, f) == Traverse[List].traverse(foci)(f).map(refill)

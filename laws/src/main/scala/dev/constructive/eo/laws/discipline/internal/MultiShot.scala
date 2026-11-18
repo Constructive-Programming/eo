@@ -3,6 +3,7 @@ package laws
 package discipline
 package internal
 
+import cats.data.State
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 
 /** Generators for the laws that run a traverse under a MULTI-SHOT effect (`List`, `Vector`): an
@@ -29,3 +30,16 @@ private[laws] object MultiShot:
     Gen.function1[A, G[A]](
       Gen.frequency(1 -> 0, 3 -> 1, 6 -> 2).flatMap(Gen.listOfN(_, a.arbitrary)).map(mk)
     )
+
+  /** The write-back side of a multi-shot law: `refill(run)(bs)` writes the foci `bs` back in order,
+    * `run` being the traverse under test at a single-shot `State` effect. A short `bs` leaves the
+    * remaining foci unchanged.
+    */
+  def refill[A, R](run: (A => State[List[A], A]) => State[List[A], R]): List[A] => R =
+    bs =>
+      run(a =>
+        State {
+          case b :: rest => (rest, b)
+          case Nil       => (Nil, a)
+        }
+      ).runA(bs).value

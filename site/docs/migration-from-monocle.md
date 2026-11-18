@@ -244,7 +244,7 @@ express through other means or leave to dedicated libraries:
 ### Traversal carrier
 
 cats-eo's `Traversal.each[F, A]` / `pEach[F, A, B]` ride the
-`MultiFocus[PSVec]` carrier — `.modify`, `.foldMap`, `.modifyA`, and
+`MultiFocus[PSVec]` carrier — `.modify`, `.foldMap`, `.modifyF`, and
 downstream `.andThen` all supported. It pays a small constant factor
 over a hand-written `map` (see the
 [PowerSeries benchmark notes](https://github.com/Constructive-Programming/eo/blob/main/benchmarks/README.md#interpreting-powerseries-numbers))

@@ -17,11 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CanModifyF[S, A, Functor] <: CanModifyF[S, A, Applicative]`: a consumer asking for
   `CanModifyF[S, A, Applicative]` accepts every one of those optics. Migration: `CanModifyA[S, A]`
   → `CanModifyF[S, A, Applicative]`, `CanModifyF[S, A]` → `CanModifyF[S, A, Functor]`,
-  `s.modifyA[A](f)` → `s.modifyF[A](f)`. `Optic.modifyA` on raw optics is unchanged.
+  `s.modifyA[A](f)` → `s.modifyF[A](f)`.
 - **BREAKING — `ForgetfulTraverse[F, -C[_[_]]]` is contravariant in `C`.** The duplicate
   `ForgetfulTraverse.tupleFTraverseApplicative` instance is removed: `tupleFTraverse`
   (`Functor`) now answers `Applicative` queries. As a side effect Iso / Getter (`Direct`-carrier)
-  optics now really get `modifyF` / `modifyA`, as `Direct`'s instance always documented.
+  optics now really get `modifyF`, as `Direct`'s instance always documented.
+- **BREAKING — raw `Optic.modifyA` merged into `Optic.modifyF`.** One extension, gated on the
+  carrier's `ForgetfulTraverse[F, C]`, takes any effect with `C[G]`: `Functor` for a Lens,
+  `Applicative` for a Prism / Traversal, and now `Distributive` for a `Modify`, which had no raw
+  effectful modify before. Migration: `optic.modifyA[G](f)` → `optic.modifyF[G](f)`. The D-series
+  law classes keep their names (`ModifyAIdLaws`, `ModifyAListLaws`, `ModifyAConstLaws`).
 
 ## [1.3.0] - 2026-11-11
 

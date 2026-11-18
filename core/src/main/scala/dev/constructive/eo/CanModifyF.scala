@@ -1,7 +1,6 @@
 package dev.constructive.eo
 
 import cats.Functor
-import cats.syntax.functor.*
 
 import forgetful.ForgetfulTraverse
 import optics.Optic
@@ -36,6 +35,7 @@ object CanModifyFP:
     ): G[T] =
       cm.modifyF[G](f)(s)
 
+  // CPD-OFF — the capability wrapper restates `Optic.modifyF`'s signature to forward to it.
   /** Derive from any optic in scope whose carrier traverses. Each carrier has exactly one
     * [[forgetful.ForgetfulTraverse]] instance, so `C` is inferred as the weakest constraint that
     * carrier supports. Optic before gate in the same using clause — see [[CanGet]] for the SIP-64
@@ -47,9 +47,11 @@ object CanModifyFP:
   ): CanModifyFP[S, T, A, B, C] with
 
     def modifyF[G[_]](f: A => G[B])(using G: C[G] & Functor[G]): S => G[T] =
-      s => ft.traverse(o.to(s), f)(using G).map(o.from)
+      o.modifyF[G](f)
 
-export optics.Optic.{modifyA, modifyF}
+  // CPD-ON
+
+export optics.Optic.modifyF
 
 extension [S](s: S)
 

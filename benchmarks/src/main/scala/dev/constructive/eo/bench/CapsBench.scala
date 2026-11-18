@@ -129,7 +129,7 @@ class CapsBench extends JmhDefaults:
 
   @Benchmark def modifyFExt: Option[Order] = order.modifyF[Long](bumpL)
 
-  @Benchmark def modifyFEachDirect: Option[Vector[Int]] = eoEach.modifyA(bumpI)(vec)
+  @Benchmark def modifyFEachDirect: Option[Vector[Int]] = eoEach.modifyF(bumpI)(vec)
 
   @Benchmark def modifyFEachDerivedHeld: Option[Vector[Int]] =
     eachModifyFDerived.modifyF(bumpI)(vec)

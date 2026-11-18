@@ -1,3 +1,4 @@
+// CPD-OFF — the happy- and error-path halves of one showcase share their header.
 package dev.constructive.eo
 package examples
 
@@ -13,11 +14,12 @@ import CrudRoundtrip.*
   * result through a toy database, and replies with the new id.
   *
   * The punchline is [[CrudRoundtrip.handleWithOptics]]: every validation step is one line,
-  * `optic.modifyA[Result](validator)`. Compare with [[CrudRoundtrip.handleNaive]], whose order-list
+  * `optic.modifyF[Result](validator)`. Compare with [[CrudRoundtrip.handleNaive]], whose order-list
   * traversal writes the `copy(copy(copy(...)))` chain by hand. The error path lives in
   * [[CrudRoundtripErrorPathSpec]]; the model + optics + handlers in [[CrudRoundtrip]].
   */
 class CrudRoundtripHappyPathSpec extends Specification:
+  // CPD-ON
 
   "CRUD round-trip — happy path" should {
 

@@ -15,7 +15,7 @@ abstract class ModifyAIdTests[S, A, F[_, _]] extends Laws:
   /** Laws under test. */
   def laws: ModifyAIdLaws[S, A, F]
 
-  /** The "modifyA at Id ≡ modify" rule set. */
+  /** The "modifyF at Id ≡ modify" rule set. */
   def modifyAId(using
       Arbitrary[S],
       Arbitrary[A],
@@ -24,8 +24,8 @@ abstract class ModifyAIdTests[S, A, F[_, _]] extends Laws:
       ForgetfulTraverse[F, Applicative],
   ): RuleSet =
     new SimpleRuleSet(
-      "modifyA at Id ≡ modify",
-      "modifyA[Id] == modify" ->
+      "modifyF at Id ≡ modify",
+      "modifyF[Id] == modify" ->
         forAll((s: S, f: A => A) => laws.modifyAIdIsModify(s, f)),
     )
 
@@ -37,7 +37,7 @@ abstract class ModifyAListTests[S, A, F[_, _]] extends Laws:
   /** Laws under test. */
   def laws: ModifyAListLaws[S, A, F]
 
-  /** The "modifyA at List ≡ cartesian traverse" rule set. */
+  /** The "modifyF at List ≡ cartesian traverse" rule set. */
   def modifyAList(using
       Arbitrary[S],
       Arbitrary[A],
@@ -47,8 +47,8 @@ abstract class ModifyAListTests[S, A, F[_, _]] extends Laws:
   ): RuleSet =
     val ss = MultiShot.capped[S]
     new SimpleRuleSet(
-      "modifyA at List ≡ cartesian traverse",
-      "modifyA[List] == Traverse[List] over the foci" ->
+      "modifyF at List ≡ cartesian traverse",
+      "modifyF[List] == Traverse[List] over the foci" ->
         forAll(ss, MultiShot.fn[A, List](identity))(laws.modifyAListIsCartesian(_, _)),
     )
 
@@ -57,7 +57,7 @@ abstract class ModifyAConstTests[S, A, F[_, _]] extends Laws:
   /** Laws under test. */
   def laws: ModifyAConstLaws[S, A, F]
 
-  /** The "modifyA at Const[M,*] ≡ foldMap" rule set. */
+  /** The "modifyF at Const[M,*] ≡ foldMap" rule set. */
   def modifyAConst(using
       Arbitrary[S],
       Cogen[A],
@@ -65,7 +65,7 @@ abstract class ModifyAConstTests[S, A, F[_, _]] extends Laws:
       ForgetfulTraverse[F, Applicative],
   ): RuleSet =
     new SimpleRuleSet(
-      "modifyA at Const[M,*] ≡ foldMap",
-      "modifyA[Const[Int,*]].getConst == foldMap" ->
+      "modifyF at Const[M,*] ≡ foldMap",
+      "modifyF[Const[Int,*]].getConst == foldMap" ->
         forAll((s: S, f: A => Int) => laws.modifyAConstIsFoldMap(s, f)),
     )

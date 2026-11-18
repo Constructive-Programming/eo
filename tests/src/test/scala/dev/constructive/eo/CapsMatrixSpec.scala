@@ -360,7 +360,7 @@ class CapsMatrixSpec extends Specification:
           o: Optic[S, S, A, A, F] & CanModifyF[S, A, Applicative],
           f: A => Option[A],
       )(s: S)(using ForgetfulTraverse[F, Applicative]): Boolean =
-        o.modifyF(f)(s) == (o: Optic[S, S, A, A, F]).modifyA(f)(s)
+        o.modifyF(f)(s) == (o: Optic[S, S, A, A, F]).modifyF(f)(s)
       val inc: Int => Option[Int] = n => Option(n + 1)
       agrees(streetLens, s => Option(s.toUpperCase))(addr) must beTrue
       agrees(pairIso, p => Option((p._1.toUpperCase, p._2)))(addr) must beTrue

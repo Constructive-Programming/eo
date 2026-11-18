@@ -31,7 +31,6 @@ package object bench:
     headOption as _,
     length as _,
     modify as _,
-    modifyA as _,
     modifyF as _,
     place as _,
     put as _,
