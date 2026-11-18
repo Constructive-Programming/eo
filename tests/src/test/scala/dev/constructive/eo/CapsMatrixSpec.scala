@@ -205,6 +205,8 @@ class CapsMatrixSpec extends Specification:
       given Modify[Address, Address, String, String] = streetModify
       summon[CanModify[Address, String]] must beTheSameAs(streetModify)
     }
+    // CPD-OFF — the matrix checks every capability through parallel spellings (summoned
+    // instance, subject-first extension, polymorphic variant) on the same fixtures by design.
     "derivation: generic optic givens derive — incl. Traversal (anonymous Optic)" >> {
       {
         given Optic[Person, Person, String, String, Tuple2] = drilled
@@ -300,6 +302,8 @@ class CapsMatrixSpec extends Specification:
     }
   }
 
+  // CPD-ON
+
   // ------------------------------------------------------------- CanPut
   "CanPutP / CanPut" >> {
     "derivation: Direct-carrier optics (Iso, Review) derive — no mixin, wrapper route" >> {
@@ -327,6 +331,8 @@ class CapsMatrixSpec extends Specification:
 
   // --------------------------------------------------------- CanModifyF
   "CanModifyFP / CanModifyF" >> {
+    // CPD-OFF — the matrix checks every capability through parallel spellings (summoned
+    // instance, subject-first extension, polymorphic variant) on the same fixtures by design.
     "derivation: Tuple2 is the only carrier traversing under bare Functor" >> {
       given Optic[Address, Address, String, String, Tuple2] = streetLens
       val cm = summon[CanModifyF[Address, String]]
@@ -376,6 +382,8 @@ class CapsMatrixSpec extends Specification:
       ) must beFalse
     }
   }
+
+  // CPD-ON
 
   // ----------------------------------------------- CanPlace/CanTransform
   "CanPlace / CanTransform (explicit constructors — no derived given by design)" >> {

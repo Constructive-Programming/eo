@@ -20,6 +20,8 @@ type CanModifyF[S, A] = CanModifyFP[S, S, A, A]
 
 object CanModifyFP:
 
+  // CPD-OFF — CanModifyF and CanModifyA are deliberate Functor / Applicative twins: the
+  // partially-applied Ops classes and the derived given differ only in the gate typeclass.
   final class ModifyFOps[S, A](private val s: S) extends AnyVal:
 
     inline def apply[G[_]](f: A => G[A])(using cm: CanModifyF[S, A], F: Functor[G]): G[S] =
@@ -38,6 +40,8 @@ object CanModifyFP:
       ft: ForgetfulTraverse[F, Functor],
   ): CanModifyFP[S, T, A, B] with
     def modifyF[G[_]](f: A => G[B])(using Functor[G]): S => G[T] = o.modifyF(f)
+
+  // CPD-ON
 
 export optics.Optic.modifyF
 
