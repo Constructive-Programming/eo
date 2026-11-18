@@ -31,7 +31,7 @@ import dev.constructive.eo.optics.Traversal
   *
   * Composability: standard cats-eo extensions on `Optic[..., MultiFocus[PSVec]]` light up
   * automatically via `mfFold[PSVec]`, `mfFunctor[PSVec]`, `mfAssocPSVec`, etc. — `.foldMap`,
-  * `.modify`, `.headOption`, `.length`, `.exists`, `.modifyA`, same-carrier `.andThen` all work
+  * `.modify`, `.headOption`, `.length`, `.exists`, `.modifyF`, same-carrier `.andThen` all work
   * without anything new shipping in this module. Mirrors `dev.constructive.eo.avro.AvroTraversal`'s
   * byte-carried write semantics. `JsoniterPrism`'s '''Laws & preconditions''' apply verbatim: laws
   * hold up to canonical re-encoding of the focused slices, and writes need decodable current

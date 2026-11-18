@@ -146,7 +146,7 @@ object PSVec:
 
     override def size[A](fa: PSVec[A]): Long = fa.length.toLong
 
-  /** `cats.Traverse` — the instance Traversal's `.modifyA` routes through when the carrier is
+  /** `cats.Traverse` — the instance Traversal's `.modifyF` routes through when the carrier is
     * `MultiFocus[PSVec]`. Effects run left-to-right in index order; results land in one pre-sized
     * backing array (a [[TraverseBuf]]) threaded through `G.map2`.
     *

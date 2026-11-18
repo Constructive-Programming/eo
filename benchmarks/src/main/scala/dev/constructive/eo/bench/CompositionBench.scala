@@ -70,3 +70,63 @@ class CompositionBench extends JmhDefaults:
 
   // Uncomposed leaf Lens — the floor (no `.andThen` at all).
   @Benchmark def reuseLeaf: Nested0 = leafValue.modify(_ + 1)(leaf)
+
+  // ---- untyped-tree kit shape: field (Optional) ∘ scalar (PickMendPrism) ----
+  // `kitFused` is the concrete Optional ∘ PickMendPrism overload; `kitGeneric` the Morph route the
+  // kits took before it existed; `kitHand` the hand-written match.
+  import KitTree.*
+  private val kitFused = name.andThen(str)
+
+  private val kitGeneric =
+    (name: optics.Optic[V, V, V, V, data.Affine])
+      .andThen(str: optics.Optic[V, V, String, String, Either])
+
+  @Benchmark def kitFusedRead: Option[String] = kitFused.getOption(doc)
+  @Benchmark def kitGenericRead: Option[String] = kitGeneric.getOption(doc)
+  @Benchmark def kitFusedModify: V = kitFused.modify(_.toUpperCase)(doc)
+  @Benchmark def kitGenericModify: V = kitGeneric.modify(_.toUpperCase)(doc)
+  @Benchmark def kitHandModify: V = handShout(doc)
+
+/** A minimal untyped tree, shaped like the zio-json / kyo / spark-variant kits' values. */
+object KitTree:
+
+  enum V:
+    case Obj(fields: Map[String, V])
+    case Str(s: String)
+
+  val doc: V = V.Obj(Map("name" -> V.Str("ada"), "role" -> V.Str("eng")))
+
+  val name = dev
+    .constructive
+    .eo
+    .optics
+    .Optional[V, V, V, V](
+      {
+        case v @ V.Obj(fs) => fs.get("name").toRight(v)
+        case v             => Left(v)
+      },
+      {
+        case (V.Obj(fs), x) => V.Obj(fs.updated("name", x))
+        case (v, _)         => v
+      },
+    )
+
+  val str = dev
+    .constructive
+    .eo
+    .optics
+    .Prism
+    .optional[V, String](
+      {
+        case V.Str(s) => Some(s)
+        case _        => None
+      },
+      V.Str(_),
+    )
+
+  def handShout(v: V): V = v match
+    case V.Obj(fs) =>
+      fs.get("name") match
+        case Some(V.Str(s)) => V.Obj(fs.updated("name", V.Str(s.toUpperCase)))
+        case _              => v
+    case _ => v

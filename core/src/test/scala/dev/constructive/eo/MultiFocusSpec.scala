@@ -20,7 +20,7 @@ private case class Person(name: String, phones: List[Phone])
   * spike claims to deliver: same-carrier `.andThen` (Lens → MultiFocus → Lens with singleton
   * fast-path), the Iso bridge (`forgetful2multifocus`), and the ModifyF widening
   * (`multifocus2modify`). Plus the .collect universal in its two derivations. `.modify` /
-  * `.modifyA` / `.all` across F are law-checked in `tests/` (`ForgetfulFunctor` /
+  * `.modifyF` / `.all` across F are law-checked in `tests/` (`ForgetfulFunctor` /
   * `ForgetfulTraverse` per carrier in OpticsLawsSpec, D2 `ModifyAListTests` and E2 `allIsFoci` in
   * EoSpecificLawsSpec).
   */

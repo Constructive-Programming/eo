@@ -25,11 +25,21 @@ package dev.constructive.eo
 
 import scala.compiletime.testing.typeChecks
 
+import cats.{Applicative, Functor, Id, Invariant}
 import org.specs2.mutable.Specification
 
 import optics.*
 import optics.SimpleLens.transformEvidence
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
+import forgetful.ForgetfulTraverse
+
+/** A Functor that is NOT Applicative — what a Lens's `modifyF` must still accept. */
+final case class Box[A](a: A)
+
+object Box:
+
+  given cats.Functor[Box] with
+    def map[A, B](fa: Box[A])(f: A => B): Box[B] = Box(f(fa.a))
 
 object CapsFixtures:
   case class Address(street: String, zip: Int)
@@ -78,6 +88,44 @@ object CapsFixtures:
   val streetModify: Modify[Address, Address, String, String] =
     Modify[Address, Address, String, String](f => a => a.copy(street = f(a.street)))
 
+  /** Each fixture bound at its generic `Optic[…, F]` type, one given per object: a block imports
+    * `AsOptic.<name>.given` to take the derivation route instead of the mixin.
+    */
+  object AsOptic:
+
+    object drilled:
+      given Optic[Person, Person, String, String, Tuple2] = CapsFixtures.drilled
+
+    object streetGetter:
+      given Optic[Address, Unit, String, Unit, Direct] = CapsFixtures.streetGetter
+
+    object somePrism:
+      given Optic[Option[Int], Option[Int], Int, Int, Either] = CapsFixtures.somePrism
+
+    object zipOptional:
+      given Optic[Address, Address, Int, Int, Affine] = CapsFixtures.zipOptional
+
+    object addressReview:
+      given Optic[Unit, Address, Unit, String, Direct] = CapsFixtures.addressReview
+
+    object eachTraversal:
+      given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = CapsFixtures.eachTraversal
+
+    object listFold:
+      given Optic[List[Int], Unit, Int, Unit, Forget[List]] = CapsFixtures.listFold
+
+    object pairIso:
+      given Optic[Address, Address, (String, Int), (String, Int), Direct] = CapsFixtures.pairIso
+
+    object streetLens:
+      given Optic[Address, Address, String, String, Tuple2] = CapsFixtures.streetLens
+
+    object second:
+      given Optic[(String, Int), (String, Int), Int, Int, Tuple2] = Lens.second[String, Int]
+
+    object streetModify:
+      given Optic[Address, Address, String, String, ModifyF] = CapsFixtures.streetModify
+
 class CapsMatrixSpec extends Specification:
   import CapsFixtures.*
 
@@ -90,18 +138,33 @@ class CapsMatrixSpec extends Specification:
       (streetGetter: CanGet[Address, String]).get(addr) === "Main St"
       (drilled: CanGet[Person, String]).get(person) === "Main St"
     }
+    "alias: both lens classes ascribe to Lens[S, A] and keep their members" >> {
+      val street: Lens[Address, String] = streetLens
+      val first: Lens[(String, Int), String] = firstLens
+      (street.modify(_.toUpperCase)(addr) === Address("MAIN ST", 12345))
+        .and(first.replace("b")(("a", 1)) === (("b", 1)))
+        .and(
+          summon[Lens[Address, String] <:< CanGet[Address, String]](street).get(addr) === "Main St"
+        )
+        .and {
+          // The fused overloads live on PLens, so composing through the alias stays fused.
+          val outer: Lens[Person, Address] = addressLens
+          val composed: GetReplaceLens[Person, Person, String, String] = outer.andThen(street)
+          composed.get(person) === "Main St"
+        }
+    }
     "resolution: a concrete given resolves to the instance itself (no wrapper)" >> {
       given GetReplaceLens[Address, Address, String, String] = streetLens
       summon[CanGet[Address, String]] must beTheSameAs(streetLens)
     }
     "derivation: a generic Tuple2 / Direct optic given derives the capability" >> {
       {
-        given Optic[Person, Person, String, String, Tuple2] = drilled
+        import AsOptic.drilled.given
         summon[CanGet[Person, String]].get(person) === drilled.get(person)
         person.get[String] === "Main St"
       }
       {
-        given Optic[Address, Unit, String, Unit, Direct] = streetGetter
+        import AsOptic.streetGetter.given
         summon[CanGet[Address, String]].get(addr) === "Main St"
         addr.get[String] === "Main St"
       }
@@ -129,12 +192,12 @@ class CapsMatrixSpec extends Specification:
     }
     "derivation: generic Either / Affine optic givens derive" >> {
       {
-        given Optic[Option[Int], Option[Int], Int, Int, Either] = somePrism
+        import AsOptic.somePrism.given
         summon[CanGetOption[Option[Int], Int]].getOption(Some(3)) === Some(3)
         (Some(3): Option[Int]).getOption[Int] === Some(3)
       }
       {
-        given Optic[Address, Address, Int, Int, Affine] = zipOptional
+        import AsOptic.zipOptional.given
         summon[CanGetOption[Address, Int]].getOption(addr) === Some(12345)
         addr.getOption[Int] === Some(12345)
       }
@@ -163,12 +226,12 @@ class CapsMatrixSpec extends Specification:
     }
     "derivation: generic Either / Direct optic givens derive" >> {
       {
-        given Optic[Option[Int], Option[Int], Int, Int, Either] = somePrism
+        import AsOptic.somePrism.given
         summon[CanReverseGet[Option[Int], Int]].reverseGet(3) === Some(3)
         3.reverseGet[Option[Int]] === Some(3)
       }
       {
-        given Optic[Unit, Address, Unit, String, Direct] = addressReview
+        import AsOptic.addressReview.given
         summon[CanReverseGet[Address, String]].reverseGet("Elm") === Address("Elm", 0)
         "Elm".reverseGet[Address] === Address("Elm", 0)
       }
@@ -205,18 +268,16 @@ class CapsMatrixSpec extends Specification:
       given Modify[Address, Address, String, String] = streetModify
       summon[CanModify[Address, String]] must beTheSameAs(streetModify)
     }
-    // CPD-OFF — the matrix checks every capability through parallel spellings (summoned
-    // instance, subject-first extension, polymorphic variant) on the same fixtures by design.
     "derivation: generic optic givens derive — incl. Traversal (anonymous Optic)" >> {
       {
-        given Optic[Person, Person, String, String, Tuple2] = drilled
+        import AsOptic.drilled.given
         summon[CanModify[Person, String]].modify(_.reverse)(person) ===
           drilled.modify(_.reverse)(person)
         person.modify[String](_.reverse) === drilled.modify(_.reverse)(person)
         person.replace[String]("Elm") === Person("Ada", Address("Elm", 12345))
       }
       {
-        given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = eachTraversal
+        import AsOptic.eachTraversal.given
         summon[CanModify[List[Int], Int]].modify(_ + 1)(List(1, 2, 3)) === List(2, 3, 4)
         val x: Int = 1
         List(1, 2, 3).modify[Int](_ + x) === List(2, 3, 4)
@@ -240,7 +301,7 @@ class CapsMatrixSpec extends Specification:
     "extension: coexists with import Optic.*" >> {
       import dev.constructive.eo.*
       import dev.constructive.eo.optics.Optic.*
-      given Optic[Person, Person, String, String, Tuple2] = drilled
+      import AsOptic.drilled.given
       val o: Optic[Person, Person, String, String, Tuple2] = drilled
       person.modify[String](_.reverse) === o.modify(_.reverse)(person)
     }
@@ -272,12 +333,12 @@ class CapsMatrixSpec extends Specification:
     }
     "derivation: generic Forget / MultiFocus optic givens derive" >> {
       {
-        given Optic[List[Int], Unit, Int, Unit, Forget[List]] = listFold
+        import AsOptic.listFold.given
         summon[CanFold[List[Int], Int]].foldMap(identity)(List(1, 2, 3)) === 6
         List(1, 2, 3).foldMap[Int](identity) === 6
       }
       {
-        given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = eachTraversal
+        import AsOptic.eachTraversal.given
         summon[CanFold[List[Int], Int]].foci(List(1, 2, 3)) === List(1, 2, 3)
         List(1, 2, 3).foci[Int] === List(1, 2, 3)
       }
@@ -302,19 +363,17 @@ class CapsMatrixSpec extends Specification:
     }
   }
 
-  // CPD-ON
-
   // ------------------------------------------------------------- CanPut
   "CanPutP / CanPut" >> {
     "derivation: Direct-carrier optics (Iso, Review) derive — no mixin, wrapper route" >> {
       {
-        given Optic[Address, Address, (String, Int), (String, Int), Direct] = pairIso
+        import AsOptic.pairIso.given
         summon[CanPutP[Address, (String, Int), (String, Int)]]
           .put((s, z) => (s, z))(("main", 7)) === Address("main", 7)
         ("main", 7).put[Address]((s, z) => (s.toUpperCase, z)) === Address("MAIN", 7)
       }
       {
-        given Optic[Unit, Address, Unit, String, Direct] = addressReview
+        import AsOptic.addressReview.given
         summon[CanPutP[Address, Unit, String]].put(_ => "Elm")(()) === Address("Elm", 0)
         ().putP[Address, String](_ => "Elm") === Address("Elm", 0)
       }
@@ -330,60 +389,154 @@ class CapsMatrixSpec extends Specification:
   }
 
   // --------------------------------------------------------- CanModifyF
-  "CanModifyFP / CanModifyF" >> {
-    // CPD-OFF — the matrix checks every capability through parallel spellings (summoned
-    // instance, subject-first extension, polymorphic variant) on the same fixtures by design.
-    "derivation: Tuple2 is the only carrier traversing under bare Functor" >> {
-      given Optic[Address, Address, String, String, Tuple2] = streetLens
-      val cm = summon[CanModifyF[Address, String]]
-      // Id-functor round-trip through the S => G[T] shape
+  "CanModifyFP / CanModifyF (contravariant effect gate)" >> {
+    "mixin: Lens / Iso / Prism (both shapes) / Optional serve directly, at their own gate" >> {
+      ((streetLens: CanModifyF[Address, String, Functor]) must beTheSameAs(streetLens))
+        .and((pairIso: CanModifyF[Address, (String, Int), Invariant]) must beTheSameAs(pairIso))
+        .and((somePrism: CanModifyF[Option[Int], Int, Applicative]) must beTheSameAs(somePrism))
+        .and((pickPrism: CanModifyF[Option[Int], Int, Applicative]) must beTheSameAs(pickPrism))
+        .and((zipOptional: CanModifyF[Address, Int, Applicative]) must beTheSameAs(zipOptional))
+    }
+    "resolution: a concrete given is the instance itself (no wrapper), even at a wider gate" >> {
+      given GetReplaceLens[Address, Address, String, String] = streetLens
+      (summon[CanModifyF[Address, String, Functor]] must beTheSameAs(streetLens))
+        .and(summon[CanModifyF[Address, String, Applicative]] must beTheSameAs(streetLens))
+    }
+    "fused == generic: every mixin agrees with the carrier route on hit and miss" >> {
+      // One helper serves all five: contravariance lets the Functor (lens) and Invariant (iso)
+      // mixins stand in for CanModifyF[…, Applicative].
+      def agrees[S, A, F[_, _]](
+          o: Optic[S, S, A, A, F] & CanModifyF[S, A, Applicative],
+          f: A => Option[A],
+      )(s: S)(using ForgetfulTraverse[F, Applicative]): Boolean =
+        o.modifyF(f)(s) == (o: Optic[S, S, A, A, F]).modifyF(f)(s)
+      val inc: Int => Option[Int] = n => Option(n + 1)
+      agrees(streetLens, s => Option(s.toUpperCase))(addr) must beTrue
+      agrees(pairIso, p => Option((p._1.toUpperCase, p._2)))(addr) must beTrue
+      List(Option(1), None).forall(agrees(somePrism, inc)) must beTrue
+      List(Option(1), None).forall(agrees(pickPrism, inc)) must beTrue
+      List(addr, Address("Main St", -1)).forall(agrees(zipOptional, inc)) must beTrue
+    }
+    "derivation: Tuple2 infers the Functor gate — a Functor-only effect is accepted" >> {
+      import AsOptic.streetLens.given
+      val cm = summon[CanModifyF[Address, String, Functor]]
       cm.modifyF[[x] =>> x](_.toUpperCase)(addr) === Address("MAIN ST", 12345)
+      addr.modifyF[String](s => Box(s.toUpperCase)) === Box(Address("MAIN ST", 12345))
       addr.modifyF[String](s => Option(s.toUpperCase)) === Some(Address("MAIN ST", 12345))
-      addr.modifyF[String][[x] =>> x](_.toUpperCase) === Address("MAIN ST", 12345)
+      addr.modifyF[String][Id, Functor](_.toUpperCase) === Address("MAIN ST", 12345)
       addr.modifyFP[Address, String, String](s => Option(s.toUpperCase)) ===
         Some(Address("MAIN ST", 12345))
     }
-    "void: an Either-carrier optic cannot serve CanModifyFP" >> {
+    "derivation: a Direct-carrier optic (Iso) infers the Invariant gate" >> {
+      import AsOptic.pairIso.given
+      addr.modifyF[(String, Int)](p => Box((p._1.toUpperCase, p._2 + 1))) ===
+        Box(Address("MAIN ST", 12346))
+    }
+    "derivation: Either / Affine / MultiFocus infer the Applicative gate" >> {
+      {
+        import AsOptic.somePrism.given
+        Option(1).modifyF[Int](n => Option(n + 1)) === Some(Some(2))
+        Option.empty[Int].modifyF[Int](n => Option(n + 1)) === Some(None)
+      }
+      {
+        import AsOptic.zipOptional.given
+        addr.modifyF[Int](z => Option(z + 1)) === Some(Address("Main St", 12346))
+      }
+      {
+        import AsOptic.eachTraversal.given
+        summon[CanModifyF[List[Int], Int, Applicative]]
+          .modifyF(n => Option.when(n > 0)(n + 1))(List(1, 2)) === Some(List(2, 3))
+        List(1, 2).modifyF[Int](n => Option.when(n > 0)(n + 1)) === Some(List(2, 3))
+      }
+    }
+    "contravariance: a consumer asking for Applicative is served by lens AND prism" >> {
+      def bump[S](s: S)(using cm: CanModifyF[S, Int, Applicative]): Option[S] =
+        cm.modifyF[Option](n => Option(n + 1))(s)
+      val lensServed = {
+        import AsOptic.second.given
+        bump(("a", 1))
+      }
+      val prismServed = {
+        import AsOptic.somePrism.given
+        bump(Option(1))
+      }
+      (lensServed === Some(("a", 2))).and(prismServed === Some(Some(2)))
+    }
+    "consumer: the Functor gate passes a Functor-only effect through generic code" >> {
+      def relabel[S, G[_]: Functor](s: S, f: String => G[String])(using
+          CanModifyF[S, String, Functor]
+      ): G[S] = s.modifyF[String](f)
+      import AsOptic.streetLens.given
+      relabel(addr, s => Box(s.toUpperCase)) === Box(Address("MAIN ST", 12345))
+    }
+    "control: the void snippets below type-check once the effect is Applicative" >> {
+      (typeChecks(
+        """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
+           given Optic[Option[Int], Option[Int], Int, Int, Either] = CapsFixtures.somePrism
+           Option(1).modifyF[Int](n => Option(n + 1))"""
+      ) must beTrue)
+        .and(
+          typeChecks(
+            """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
+           import dev.constructive.eo.data.{MultiFocus, PSVec}
+           given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = CapsFixtures.eachTraversal
+           List(1, 2).modifyF[Int](n => Option(n + 1))"""
+          ) must beTrue
+        )
+        .and(
+          typeChecks(
+            """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
+           given Optic[Option[Int], Option[Int], Int, Int, Either] = CapsFixtures.somePrism
+           summon[CanModifyF[Option[Int], Int, cats.Applicative]]"""
+          ) must beTrue
+        )
+    }
+    "void: prism and traversal reject a Functor-only effect" >> {
+      (typeChecks(
+        """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
+           given Optic[Option[Int], Option[Int], Int, Int, Either] = CapsFixtures.somePrism
+           Option(1).modifyF[Int](n => Box(n + 1))"""
+      ) must beFalse).and(
+        typeChecks(
+          """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
+           import dev.constructive.eo.data.{MultiFocus, PSVec}
+           given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = CapsFixtures.eachTraversal
+           List(1, 2).modifyF[Int](n => Box(n + 1))"""
+        ) must beFalse
+      )
+    }
+    "void: a consumer asking for the Functor gate rejects a prism" >> {
       typeChecks(
         """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
            given Optic[Option[Int], Option[Int], Int, Int, Either] = CapsFixtures.somePrism
-           summon[CanModifyFP[Option[Int], Option[Int], Int, Int]]"""
+           summon[CanModifyF[Option[Int], Int, cats.Functor]]"""
       ) must beFalse
     }
-  }
-
-  // --------------------------------------------------------- CanModifyA
-  "CanModifyAP / CanModifyA" >> {
-    "derivation: Tuple2 / Either / Affine / MultiFocus carriers derive" >> {
-      {
-        given Optic[Address, Address, String, String, Tuple2] = streetLens
-        summon[CanModifyA[Address, String]]
-          .modifyA(s => Option(s.toUpperCase))(addr) === Some(Address("MAIN ST", 12345))
-        addr.modifyA[String](s => Option(s.toUpperCase)) === Some(Address("MAIN ST", 12345))
-        addr.modifyA[String][Option](s => Option(s.toUpperCase)) ===
-          Some(Address("MAIN ST", 12345))
-        addr.modifyAP[Address, String, String](s => Option(s.toUpperCase)) ===
-          Some(Address("MAIN ST", 12345))
-      }
-      {
-        given Optic[List[Int], List[Int], Int, Int, MultiFocus[PSVec]] = eachTraversal
-        summon[CanModifyA[List[Int], Int]]
-          .modifyA(n => Option.when(n > 0)(n + 1))(List(1, 2)) === Some(List(2, 3))
-        List(1, 2).modifyA[Int](n => Option.when(n > 0)(n + 1)) === Some(List(2, 3))
-      }
-    }
-    "void: a Direct-carrier optic cannot serve CanModifyAP (ForgetfulTraverse[Direct, *] is Invariant-only)" >> {
+    "void: a ModifyF-carrier optic needs Distributive — Option is not, so it is rejected" >> {
       typeChecks(
         """import dev.constructive.eo.*, dev.constructive.eo.optics.Optic
-           import dev.constructive.eo.data.Direct
-           given Optic[CapsFixtures.Address, CapsFixtures.Address, (String, Int), (String, Int), Direct] =
-             CapsFixtures.pairIso
-           summon[CanModifyAP[CapsFixtures.Address, CapsFixtures.Address, (String, Int), (String, Int)]]"""
+           import dev.constructive.eo.data.ModifyF
+           given Optic[CapsFixtures.Address, CapsFixtures.Address, String, String, ModifyF] =
+             CapsFixtures.streetModify
+           CapsFixtures.addr.modifyF[String](s => Option(s))"""
       ) must beFalse
     }
+    "mixin: Modify serves CanModifyF[…, Distributive] directly and agrees with the carrier route" >> {
+      type Env[x] = Int => x
+      val f: String => Env[String] = str => n => str * n
+      val generic =
+        (streetModify: Optic[Address, Address, String, String, ModifyF]).modifyF(f)(addr)
+      ((streetModify: CanModifyF[Address, String, cats.Distributive]) must beTheSameAs(
+        streetModify
+      ))
+        .and(streetModify.modifyF(f)(addr)(2) === generic(2))
+        .and(streetModify.modifyF[Id](_.toUpperCase)(addr) === Address("MAIN ST", 12345))
+    }
+    "derivation: a ModifyF-carrier optic serves a Distributive effect (Id)" >> {
+      import AsOptic.streetModify.given
+      addr.modifyF[String][Id, cats.Distributive](_.toUpperCase) === Address("MAIN ST", 12345)
+    }
   }
-
-  // CPD-ON
 
   // ----------------------------------------------- CanPlace/CanTransform
   "CanPlace / CanTransform (explicit constructors — no derived given by design)" >> {

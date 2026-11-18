@@ -121,7 +121,7 @@ object Affine:
       case h: Hit[X, A] => f(h.b)
 
   /** `ForgetfulTraverse[Affine, Applicative]` — lifts a focus-level `A => G[B]` into an
-    * `Affine[X, A] => G[Affine[X, B]]`. Unlocks `.modifyA` on Affine-carrier optics.
+    * `Affine[X, A] => G[Affine[X, B]]`. Unlocks `.modifyF` on Affine-carrier optics.
     *
     * @group Instances
     */

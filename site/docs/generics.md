@@ -339,7 +339,7 @@ circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
 
 A single-sorted `Plated[S]` is what the paper calls a self-`Biplate`: the
 children/rebuild coalgebra the paper proves isomorphic to the applicative
-multi-focus traversal (EO's `Traversal` / `.modifyA` side of the same value).
+multi-focus traversal (EO's `Traversal` / `.modifyF` side of the same value).
 
 The derived instance backs `Plated.everywhere[S]` (and `Plated.everywhereIn[S, T]`
 to keep a specific root sort `T <: S` on a union plate) — a composable `Modify`

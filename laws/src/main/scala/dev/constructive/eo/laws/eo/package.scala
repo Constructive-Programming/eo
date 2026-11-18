@@ -11,7 +11,7 @@ package dev.constructive.eo.laws
   *   - the per-family pair laws (`LensComposeLaws` / `IsoComposeLaws` / `PrismComposeLaws` /
   *     `OptionalComposeLaws`), which now delegate their shared members to the capability layer;
   *
-  * plus fold/traverse consistency, `modifyA` coherence, reverse/transform round-trips, and `Morph`
+  * plus fold/traverse consistency, `modifyF` coherence, reverse/transform round-trips, and `Morph`
   * faithfulness.
   */
 package object eo

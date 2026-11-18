@@ -6,7 +6,7 @@ import scala.compiletime.summonInline
 
 import cats.arrow.Profunctor
 import cats.syntax.functor.*
-import cats.{Applicative, Functor, Monoid}
+import cats.{Functor, Monoid}
 
 import accessor.*
 import forgetful.*
@@ -131,7 +131,7 @@ trait Optic[S, T, A, B, F[_, _]] extends Serializable:
     self.reverse.andThen(o)
 
 /** Companion for [[Optic]]. Hosts the profunctor instances and the capability-gated extension
-  * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.all`, `.modifyA`, `.reverseGet`,
+  * catalogue — `.get`, `.modify`, `.replace`, `.foldMap`, `.all`, `.modifyF`, `.reverseGet`,
   * `.getOption`, `.put`, `.transform`, `.place`, `.transfer`, `.andThen` (carrier-morphing plus the
   * read-only / AffineFold / Modify / Review / Unfold collapses), `.readOnly`, `.cross`, `.morph`,
   * `.headOption`, `.length`, `.exists`. Adding a new carrier means supplying the typeclass
@@ -367,28 +367,19 @@ object Optic:
     inline def put(f: A => B): A => T =
       a => o.from(FF.pure[o.X, B](f(a)))
 
-  /** Effectful modify over any `Functor[G]` — generalises [[modify]] to monadic / effectful `A =>
-    * G[B]` transformations.
+  /** Effectful modify — generalises [[modify]] to `A => G[B]`. The carrier's single
+    * `ForgetfulTraverse[F, C]` instance fixes the gate `C` (`Functor` for a Lens, `Invariant` for
+    * an Iso, `Applicative` for a Prism / Optional / Traversal, `Distributive` for a Modify), and
+    * `G` must satisfy it; `Functor[G]` is needed for the write-back `map`. The gate is
+    * contravariant, so an `Applicative` effect serves every carrier.
     *
     * @group Operations
     */
-  extension [S, T, A, B, F[_, _]](
+  extension [S, T, A, B, F[_, _], C[_[_]]](
       o: Optic[S, T, A, B, F]
-  )(using FT: ForgetfulTraverse[F, Functor])
+  )(using FT: ForgetfulTraverse[F, C])
 
-    inline def modifyF[G[_]](f: A => G[B])(using G: Functor[G]): S => G[T] =
-      s => FT.traverse(o.to(s), f)(using G).map(o.from)
-
-  /** Effectful modify over any `Applicative[G]` — the [[modifyF]] counterpart for carriers whose
-    * traversal needs `pure` / `ap` as well as `map` (a miss branch, or several foci).
-    *
-    * @group Operations
-    */
-  extension [S, T, A, B, F[_, _]](
-      o: Optic[S, T, A, B, F]
-  )(using FT: ForgetfulTraverse[F, Applicative])
-
-    inline def modifyA[G[_]](f: A => G[B])(using G: Applicative[G]): S => G[T] =
+    inline def modifyF[G[_]](f: A => G[B])(using G: C[G] & Functor[G]): S => G[T] =
       s => FT.traverse(o.to(s), f)(using G).map(o.from)
 
   /** `foldMap` over the focus — the primary consumption path for [[Fold]] and any other carrier

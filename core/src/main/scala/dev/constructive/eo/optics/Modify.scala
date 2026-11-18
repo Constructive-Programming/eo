@@ -1,9 +1,10 @@
 package dev.constructive.eo
 package optics
 
-import cats.Functor
+import cats.instances.function.*
+import cats.{Distributive, Functor}
 
-import data.ModifyF
+import data.{ModifyF, ModifyFOptic}
 
 /** Constructor for `Modify` — write-only single-focus optic, backed by `ModifyF`. The caller
   * applies a function at the focus but cannot read it back; useful when observation would leak
@@ -52,11 +53,8 @@ object Modify:
   * automatically.
   */
 final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
-    extends Optic[S, T, A, B, ModifyF],
-      CanModifyP[S, T, A, B]:
-  type X = (S, A)
-
-  def to(s: S): ModifyF[X, A] = ModifyF(s, identity[A])
+    extends ModifyFOptic[S, T, A, B],
+      Writes[S, T, A, B, Distributive]:
 
   def from(s: ModifyF[X, B]): T = modifyFn(s.modifier._2)(s.modifier._1)
 
@@ -66,15 +64,21 @@ final class Modify[S, T, A, B](val modifyFn: (A => B) => S => T)
   /** Fused `.replace` — constant-writer special case of [[modify]]. */
   override inline def replace(b: B): S => T = modifyFn(_ => b)
 
-  /** Fused `Modify.andThen(Modify)` — composes the writers directly:
-    * `modify(g) == outer.modify(inner.modify(g))`, skipping the generic
-    * `AssociativeFunctor[ModifyF]` (`assocModifyF`) round-trip and its per-hop `ModifyF` allocation
-    * + `asInstanceOf` threading. Scala's overload resolution picks this when both sides are
-    * statically `Modify`; mixed-carrier composition falls back to the inherited generic
-    * `Optic.andThen`.
+  /** Fused effectful modify: `Distributive[G]` turns the per-focus `A => G[B]` into one
+    * `G[A => B]`, mapped once into the stored writer — no `ModifyF` carrier, no tuple, one `map`.
+    * Makes the modifier its own `CanModifyF[…, Distributive]`.
+    */
+  def modifyF[G[_]](f: A => G[B])(using G: Distributive[G] & Functor[G]): S => G[T] =
+    s => G.map(G.distribute[[x] =>> A => x, A, B](identity)(f))(g => modifyFn(g)(s))
+
+  /** Fused `Modify.andThen(…)` for any inner that can modify — another `Modify`, a lens, iso, prism
+    * or optional: the composite writer is `modifyFn(inner.modify(g))`, again a `Modify`, with no
+    * `ModifyF` carrier round-trip (`Plated.everywhere[Expr].andThen(varPrism)` is "every variable,
+    * rewritten"). Scala's overload resolution picks this whenever the inner is a `CanModifyP`; any
+    * other inner falls back to the generic `Optic.andThen`.
     *
     * `inline` so a deep `modify.andThen(modify)…` chain splices distinct writer lambdas per level,
     * staying under C2's recursive-inline cap (see [[Getter.andThen]]).
     */
-  inline def andThen[C, D](inner: Modify[A, B, C, D]): Modify[S, T, C, D] =
-    new Modify(cd => modifyFn(inner.modifyFn(cd)))
+  inline def andThen[C, D](inner: CanModifyP[A, B, C, D]): Modify[S, T, C, D] =
+    new Modify(g => modifyFn(inner.modify(g)))

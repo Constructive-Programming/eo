@@ -17,10 +17,29 @@ package dev.constructive.eo
   */
 package object bench:
 
-  // Optic extensions (`.modify`, `.replace`, `.andThen`, `.morph`, …) need to be re-exported
-  // from the optics companion-object; an `export` brings each extension into the package's
-  // scope so bench files don't have to write `import dev.constructive.eo.optics.Optic.*`.
-  export dev.constructive.eo.optics.Optic.*
+  // Optic extensions (`.andThen`, `.morph`, …) need to be re-exported from the optics
+  // companion-object; an `export` brings each extension into the package's scope so bench files
+  // don't have to write `import dev.constructive.eo.optics.Optic.*`. The names the root package
+  // `dev.constructive.eo` already exports — overloaded there with the subject-first capability
+  // extensions (`s.get[A]`, `s.modifyF[A]`, …) — are excluded: re-exporting them here would
+  // shadow the outer overload set and hide the subject-first spellings from bench code.
+  export dev.constructive.eo.optics.Optic.{
+    exists as _,
+    foldMap as _,
+    get as _,
+    getOption as _,
+    headOption as _,
+    length as _,
+    modify as _,
+    modifyF as _,
+    place as _,
+    put as _,
+    replace as _,
+    reverseGet as _,
+    transfer as _,
+    transform as _,
+    *,
+  }
 
   // Renamed re-exports for the EO carriers used by every bench class.
   export dev.constructive.eo.optics.{

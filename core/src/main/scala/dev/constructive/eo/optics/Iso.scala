@@ -1,16 +1,16 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
+import cats.{Functor, Invariant}
 
 import data.{Affine, Direct}
 
 /** Monomorphic `Iso` — an alias for the CONCRETE [[BijectionIso]], not for the generic
   * `Optic[S, S, A, A, Direct]`. Because it names the concrete class, ascribing
   * `val nameI: Iso[Person, (String, Int)] = …` keeps code on the hot, fused paths — the fused
-  * compose overloads and capability mixins stay statically visible. This is the one family that CAN
-  * afford an alias: a single concrete class backs every Iso, where `Lens` / `Prism` each have two
-  * (which is why those stay prose shorthand — see [[Lens]]).
+  * compose overloads and capability mixins stay statically visible. [[Lens]] aliases its sealed
+  * base [[PLens]] the same way; `Prism` has two unrelated concrete classes and stays prose
+  * shorthand.
   */
 type Iso[S, A] = BijectionIso[S, S, A, A]
 
@@ -49,29 +49,37 @@ object Iso:
 final class BijectionIso[S, T, A, B](
     read: S => A,
     build: B => T,
-) extends Optic[S, T, A, B, Direct],
+) extends SingleFocus[S, T, A, B, Direct, Invariant],
       CanGet[S, A],
-      CanReverseGet[T, B],
-      CanModifyP[S, T, A, B],
-      CanFold[S, A]:
+      CanReverseGet[T, B]:
   type X = Nothing
   def get(s: S): A = read(s)
   def reverseGet(b: B): T = build(b)
   def to(s: S): Direct[X, A] = Direct(read(s))
   def from(d: Direct[X, B]): T = build(d.value)
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
   inline def modify(f: A => B): S => T =
     s => reverseGet(f(get(s)))
+
+  /** Fused effectful modify: read, then map `reverseGet` over the effect. */
+  def modifyF[G[_]](f: A => G[B])(using G: Invariant[G] & Functor[G]): S => G[T] =
+    s => G.map(f(read(s)))(build)
+  // CPD-ON
 
   override inline def replace(b: B): S => T =
     val t = reverseGet(b)
     _ => t
 
-  def foldMap[M](f: A => M)(s: S)(using Monoid[M]): M = f(read(s))
-
+  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
+  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
+  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
+  // the `Optional.fused(…)` shape repeat across them by construction.
   /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. `inline` so each
     * compose site splices distinct lambdas, keeping a deep `iso.andThen(iso)…` chain under C2's
-    * recursive-inline cap (see [[Getter.andThen]] / [[GetReplaceLens.andThen]]).
+    * recursive-inline cap (see [[Getter.andThen]] / [[PLens.andThen]]).
     */
   inline def andThen[C, D](inner: BijectionIso[A, B, C, D]): BijectionIso[S, T, C, D] =
     new BijectionIso(
@@ -80,7 +88,7 @@ final class BijectionIso[S, T, A, B](
     )
 
   /** Fused `Iso.andThen(Lens)` — threads the iso around the inner lens. */
-  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
+  def andThen[C, D](inner: PLens[A, B, C, D]): GetReplaceLens[S, T, C, D] =
     new GetReplaceLens(
       read = s => inner.get(get(s)),
       enplace = (s, d) => reverseGet(inner.enplace(get(s), d)),
@@ -89,24 +97,30 @@ final class BijectionIso[S, T, A, B](
   /** Fused `Iso.andThen(Prism)` — on inner miss, outer.reverseGet lifts the leftover. */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): MendTearPrism[S, T, C, D] =
     new MendTearPrism(
-      tear = s =>
-        inner.tear(get(s)) match
-          case Left(b)      => Left(reverseGet(b))
-          case r @ Right(_) => r.widenLeft[T],
+      tear = s => Optional.liftMiss(inner.tear(get(s)))(reverseGet),
       mend = d => reverseGet(inner.mend(d)),
+    )
+
+  /** Fused `Iso.andThen(PickMendPrism)` — a monomorphic iso keeps the prism's `Option`-shaped fast
+    * path: the composite is again a [[PickMendPrism]], picking through `get` and mending through
+    * `reverseGet`, with no `Either` built.
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using
+      ev: A =:= B,
+      evT: T =:= S,
+  ): PickMendPrism[S, C, D] =
+    new PickMendPrism(
+      pick = s => inner.pick(get(s)),
+      mend = d => evT(reverseGet(ev(inner.mend(d)))),
     )
 
   /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, inner.M](
-      getOrModify = s =>
-        inner.getOrModify(get(s)) match
-          case Left(b)      => Left(reverseGet(b))
-          case r @ Right(_) => r.widenLeft[T],
+    Optional.fused(
+      getOrModify = s => Optional.liftMiss(inner.getOrModify(get(s)))(reverseGet),
       modify = (s, f) => reverseGet(inner.modifyAt(get(s), f)),
-      to = s =>
-        inner.to(get(s)) match
-          case mi: Affine.Miss[inner.X]   => new Affine.Miss[(T, inner.M)](reverseGet(mi.fst))
-          case hi: Affine.Hit[inner.X, C] => new Affine.Hit[(T, inner.M), C](hi.snd, hi.b),
+      to = s => Optional.liftTo(inner, get(s))(reverseGet, identity),
       rebuild = (mi, d) => reverseGet(inner.rebuild(mi, d)),
     )
+
+  // CPD-ON

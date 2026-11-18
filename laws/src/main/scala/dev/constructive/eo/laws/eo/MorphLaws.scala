@@ -19,10 +19,7 @@ import optics.Optic
   * they failed, a user could not safely convert a `Lens` to an `Optional` or a `Getter` to a `Fold`
   * without changing observable behaviour.
   */
-trait MorphLaws[S, A, F[_, _], G[_, _]]:
-  /** The optic under test, at its original carrier `F`. */
-  def optic: Optic[S, S, A, A, F]
-
+trait MorphLaws[S, A, F[_, _], G[_, _]] extends OpticUnderTest[S, A, F]:
   /** The same optic reshaped to carrier `G` via `Optic.morph`. */
   def morphed: Optic[S, S, A, A, G]
 

@@ -81,7 +81,7 @@ forwarding the kept messages byte for byte, the `keepWhere` shape.
 ## Effectful modify in a stream
 
 **Why:** every element needs a field rewritten by an effect: a lookup, a
-call, a clock read. [Effect threading](effect-threading.md)'s `.modifyA`
+call, a clock read. [Effect threading](effect-threading.md)'s `.modifyF`
 already turns an `A => G[A]` into an `S => G[S]`; fs2's `evalMap` runs that
 for each element, in order:
 
@@ -97,18 +97,18 @@ val orders = Stream(Order(1, "USD", 100.0), Order(2, "USD", 20.0)).covary[IO]
 ```
 
 ```scala mdoc
-orders.evalMap(totalL.modifyA(toEur)).compile.toList.unsafeRunSync()
+orders.evalMap(totalL.modifyF(toEur)).compile.toList.unsafeRunSync()
 ```
 
-Any optic with `modifyA` fits the slot, a traversal included: the effect then
+Any optic with `modifyF` fits the slot, a traversal included: the effect then
 runs for each focus of each element.
 
 **Do not use `Stream` itself as the effect.** It is tempting to read
-"`.modifyA` takes any `Applicative`" and hand it `Stream`, hoping to check
+"`.modifyF` takes any `Applicative`" and hand it `Stream`, hoping to check
 or expand each focus with a little stream. fs2's `Applicative` for `Stream`
 comes from its `Monad` (`flatMap`), so combining the foci's streams gives
 **every combination** of their outputs, a cartesian product. This is the
-`Applicative` a traversal's `.modifyA` would combine its foci with, shown
+`Applicative` a traversal's `.modifyF` would combine its foci with, shown
 here on cats' own `traverse`:
 
 ```scala mdoc
@@ -211,7 +211,7 @@ key) puts each output on whichever element happens to be next.
 
 So reach for `zoomPipe` only for pipes that are one-to-one by construction.
 When the per-field work is really an `A => F[A]`, skip the pipe and modify
-in place: `_.evalMap(bonusL.modifyA(f))`, as in
+in place: `_.evalMap(bonusL.modifyF(f))`, as in
 [Effectful modify](#effectful-modify-in-a-stream), keeps each result with its
 element by construction. When the pipe filters, filter the whole element
 with the field instead (`keepWhere`).

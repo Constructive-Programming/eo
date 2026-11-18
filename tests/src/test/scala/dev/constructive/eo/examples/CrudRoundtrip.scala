@@ -11,10 +11,9 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.parser.decode as parseJson
 import io.circe.{Codec, Json}
 
-import optics.{Optic, Traversal}
+import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
 import generics.lens
-import data.{MultiFocus, PSVec}
 
 /** Domain model, mock services, optic declarations, and both handlers for the CRUD round-trip
   * showcase — the compile-time-heavy half of the example.
@@ -27,8 +26,8 @@ import data.{MultiFocus, PSVec}
   * `KindlingsEncoder.deriveAsObject timed out after 2000ms` flake). Behaviour is unchanged; this is
   * a compile-pressure split, not a logic change.
   *
-  * See [[CrudRoundtripHappyPathSpec]] / [[CrudRoundtripErrorPathSpec]] for the scenarios and the
-  * `handleWithOptics` vs `handleNaive` punchline.
+  * See [[CrudRoundtripSpec]] for the scenarios and the `handleWithOptics` vs `handleNaive`
+  * punchline.
   */
 object CrudRoundtrip:
 
@@ -147,7 +146,7 @@ object CrudRoundtrip:
     * below. Kept as a plain Tuple2 lens and let the cross-carrier `.andThen` auto-morph it into the
     * PowerSeries carrier when composed into the traversal chain.
     */
-  val orderShippingZip: Optic[Order, Order, String, String, Tuple2] =
+  val orderShippingZip: Lens[Order, String] =
     lens[Order](_.shippingAddress).andThen(lens[Address](_.zipCode))
 
   /** Every `orders → shippingAddress → zipCode` in one composed optic.
@@ -155,9 +154,9 @@ object CrudRoundtrip:
     * This is the flagship cats-eo move: compose the outer Lens with a `Traversal.each` and then
     * with the inner nested Lens — no explicit `.morph` anywhere. The cross-carrier `andThen`
     * extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on each hop. A single
-    * `modifyA[Result]` then threads an `Either`-effectful validator through every leaf at once.
+    * `modifyF[Result]` then threads an `Either`-effectful validator through every leaf at once.
     */
-  val everyZip: Optic[User, User, String, String, MultiFocus[PSVec]] =
+  val everyZip: Traversal[User, User, String, String] =
     lens[User](_.orders)
       .andThen(Traversal.each[List, Order])
       .andThen(orderShippingZip)
@@ -194,18 +193,18 @@ object CrudRoundtrip:
   // =====================================================================
 
   /** Same behaviour as [[handleNaive]], written against the optic declarations above. Every
-    * validation step is a single `optic.modifyA[Result](f)` line — no `.copy(...)` shows up in the
+    * validation step is a single `optic.modifyF[Result](f)` line — no `.copy(...)` shows up in the
     * handler, and adding a new validated field is a one-liner (declare the lens, plug it in).
     *
-    * `modifyA` applies uniformly across Tuple2 (Lens) and PowerSeries (Traversal) carriers because
+    * `modifyF` applies uniformly across Tuple2 (Lens) and PowerSeries (Traversal) carriers because
     * both ship `ForgetfulTraverse[_, Applicative]` — and `Either[Problem, *]` is an `Applicative`.
     */
   def handleWithOptics(db: InMemoryDb, body: Json): Result[Long] =
     for
       user <- parseUser(body)
-      step1 <- userName.modifyA[Result](normalizeName)(user)
-      step2 <- userZip.modifyA[Result](validateZip)(step1)
-      step3 <- everyZip.modifyA[Result](validateZip)(step2)
+      step1 <- userName.modifyF[Result](normalizeName)(user)
+      step2 <- userZip.modifyF[Result](validateZip)(step1)
+      step3 <- everyZip.modifyF[Result](validateZip)(step2)
       id <- db.store(step3)
     yield id
 

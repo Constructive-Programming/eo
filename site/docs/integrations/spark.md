@@ -131,7 +131,7 @@ would then rewrite `"not json"` as `{}`.
 
 A symbolic array has no elements to hand out while the query is being built, so element-wise
 writes are a core `Modify` (`transform`, `transform_values`) and element-wise reads are `Getter`s
-into one aggregate. An effectful `modifyA` cannot run inside a Spark expression at all.
+into one aggregate. An effectful `modifyF` cannot run inside a Spark expression at all.
 
 ```scala mdoc
 case class Item(sku: String, qty: Int, price: Double)

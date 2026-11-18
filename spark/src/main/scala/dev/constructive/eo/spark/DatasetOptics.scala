@@ -100,7 +100,7 @@ object DatasetOptics:
     // ---- Eager bridge -----------------------------------------------------------------------
 
     /** `modify(f)` through an EAGER optic on every decoded row — a typed `Dataset.map`. The escape
-      * hatch for edits a column expression cannot express (arbitrary Scala, `modifyA`-shaped
+      * hatch for edits a column expression cannot express (arbitrary Scala, `modifyF`-shaped
       * logic): it leaves Catalyst, decodes and re-encodes every row, and the closure (optic
       * included: optics are `Serializable`) runs on the server, so the session needs the Scala 3
       * runtime and the application's classes ([[ScalaRuntime.addTo]]). Prefer the symbolic

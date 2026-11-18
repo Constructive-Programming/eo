@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
+import cats.{Applicative, Functor, Monoid}
 
 import data.Affine
 
@@ -104,6 +104,27 @@ object Optional:
     def rebuild(m: M0, b: B): T = restore(m, b)
     override def modifyAt(s: S, f: A => B): T = write(s, f)
 
+  /** An inner read's miss leftover `b`, lifted into the outer's `T` by `back`; a hit passes
+    * through. The read side of every fused composition whose inner may miss. `inline` with an
+    * `inline` `back`, so each call site expands to the hand-written match.
+    */
+  private[optics] inline def liftMiss[B, T, C](e: Either[B, C])(inline back: B => T): Either[T, C] =
+    e match
+      case Left(b)      => Left(back(b))
+      case r @ Right(_) => r.widenLeft[T]
+
+  /** An inner Optional's carrier read at `a`: a miss's leftover lifted into the outer's `T` by
+    * `back`, a hit's intermediate kept as `keep(m)` — the `to` of every fused composition with an
+    * inner Optional.
+    */
+  private[optics] inline def liftTo[A, B, C, D, T, M](inner: Optional[A, B, C, D], a: A)(
+      inline back: B => T,
+      inline keep: inner.M => M,
+  ): Affine[(T, M), C] =
+    inner.to(a) match
+      case mi: Affine.Miss[inner.X]   => new Affine.Miss(back(mi.fst))
+      case hi: Affine.Hit[inner.X, C] => new Affine.Hit(keep(hi.snd), hi.b)
+
   /** Build a fused composition from its four single-tear operations (see [[Fused]]). */
   private[optics] def fused[S, T, A, B, M0](
       getOrModify: S => Either[T, A],
@@ -130,10 +151,8 @@ object Optional:
   * other side is a known concrete class.
   */
 sealed abstract class Optional[S, T, A, B]
-    extends Optic[S, T, A, B, Affine],
-      CanGetOption[S, A],
-      CanModifyP[S, T, A, B],
-      CanFold[S, A]:
+    extends SingleFocus[S, T, A, B, Affine, Applicative],
+      CanGetOption[S, A]:
 
   /** What a hit keeps for the write: the part of the read the rebuild needs. */
   type M
@@ -161,6 +180,16 @@ sealed abstract class Optional[S, T, A, B]
     */
   inline def modify(f: A => B): S => T = s => modifyAt(s, f)
 
+  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
+  // concrete optic that implements it.
+  /** Fused effectful modify: one `to`, a hit maps the rebuild over the effect, a miss is `pure`. */
+  def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[T] =
+    s =>
+      to(s) match
+        case h: Affine.Hit[X, A] => G.map(f(h.b))(b => rebuild(h.snd, b))
+        case m: Affine.Miss[X]   => G.pure(m.fst)
+  // CPD-ON
+
   override inline def replace(b: B): S => T = s => modifyAt(s, _ => b)
 
   final def from(a: Affine[X, B]): T =
@@ -178,43 +207,42 @@ sealed abstract class Optional[S, T, A, B]
 
   def getOption(s: S): Option[A] = getOrModify(s).toOption
 
-  def foldMap[F](f: A => F)(s: S)(using F: Monoid[F]): F =
+  override def foldMap[F](f: A => F)(s: S)(using F: Monoid[F]): F =
     getOrModify(s) match
       case Right(a) => f(a)
       case Left(_)  => F.empty
 
-  // CPD-OFF — the fused `andThen` overloads share their signatures and the `Optional.fused(…)`
-  // call shape with each other and with Lens / Prism / Iso by design (one per inner optic type).
+  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
+  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
+  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
+  // the `Optional.fused(…)` shape repeat across them by construction.
   /** Fused `Optional.andThen(Optional)` — two partial focuses compose into another. An inner miss
     * lifts the inner's leftover back through the outer's [[rebuild]] (the outer's own intermediate,
     * not a re-read). `inline` so a deep `optional.andThen(optional)…` chain splices distinct
     * lambdas per level, under C2's recursive-inline cap (see [[Getter.andThen]]).
     */
   inline def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, (M, inner.M)](
+    Optional.fused(
       getOrModify = s =>
         to(s) match
           case m: Affine.Miss[X]   => Left(m.fst)
           case h: Affine.Hit[X, A] =>
-            inner.getOrModify(h.b) match
-              case Left(b)      => Left(rebuild(h.snd, b))
-              case r @ Right(_) => r.widenLeft[T],
+            Optional.liftMiss(inner.getOrModify(h.b))(b => rebuild(h.snd, b)),
       modify = (s, f) => modifyAt(s, a => inner.modifyAt(a, f)),
       to = s =>
         to(s) match
           case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
           case h: Affine.Hit[X, A] =>
-            inner.to(h.b) match
-              case mi: Affine.Miss[inner.X]   => new Affine.Miss(rebuild(h.snd, mi.fst))
-              case hi: Affine.Hit[inner.X, C] => new Affine.Hit((h.snd, hi.snd), hi.b),
+            Optional.liftTo(inner, h.b)(rebuild(h.snd, _), (h.snd, _)),
       rebuild = (m, d) => rebuild(m._1, inner.rebuild(m._2, d)),
     )
 
   /** Fused `Optional.andThen(Lens)` — always-present inner inside a partial outer. Stays partial;
     * the write keeps the outer's intermediate and the outer focus the lens writes into.
     */
-  def andThen[C, D](inner: GetReplaceLens[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, (M, A)](
+  def andThen[C, D](inner: PLens[A, B, C, D]): Optional[S, T, C, D] =
+    Optional.fused(
       getOrModify = s => getOrModify(s).map(inner.get),
       modify = (s, f) => modifyAt(s, a => inner.enplace(a, f(inner.get(a)))),
       to = s =>
@@ -224,25 +252,16 @@ sealed abstract class Optional[S, T, A, B]
       rebuild = (m, d) => rebuild(m._1, inner.enplace(m._2, d)),
     )
 
-  /** Fused `Optional.andThen(Lens)` for a [[SplitCombineLens]] / [[SimpleLens]] (macro-lens) inner:
-    * the lens viewed as a [[GetReplaceLens]] (write = combine its complement with the new focus),
-    * so it shares the fusion above.
-    */
-  def andThen[C, D, XI](lens: SplitCombineLens[A, B, C, D, XI]): Optional[S, T, C, D] =
-    andThen(new GetReplaceLens[A, B, C, D](lens.get, (a, d) => lens.combine(lens.split(a)._1, d)))
-
   /** Fused `Optional.andThen(Prism)` — outer Optional's hit fed into a Prism; an inner miss lifts
     * the prism's leftover through the outer's [[rebuild]].
     */
   def andThen[C, D](inner: MendTearPrism[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, M](
+    Optional.fused(
       getOrModify = s =>
         to(s) match
           case m: Affine.Miss[X]   => Left(m.fst)
           case h: Affine.Hit[X, A] =>
-            inner.tear(h.b) match
-              case Left(b)      => Left(rebuild(h.snd, b))
-              case r @ Right(_) => r.widenLeft[T],
+            Optional.liftMiss(inner.tear(h.b))(b => rebuild(h.snd, b)),
       modify = (s, f) => modifyAt(s, inner.modify(f)),
       to = s =>
         to(s) match
@@ -254,9 +273,41 @@ sealed abstract class Optional[S, T, A, B]
       rebuild = (m, d) => rebuild(m, inner.mend(d)),
     )
 
+  /** Fused `Optional.andThen(PickMendPrism)` — the untyped-tree kits' shape (`field("x")` then a
+    * scalar prism such as `str`). Like the `MendTearPrism` overload, but the inner reads through
+    * its `Option`-shaped `pick`, so no inner `Either` is built; an inner miss writes the outer
+    * focus back through the outer's [[rebuild]].
+    */
+  def andThen[C, D](inner: PickMendPrism[A, C, D])(using ev: A =:= B): Optional[S, T, C, D] =
+    Optional.fused(
+      getOrModify = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => Left(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.pick(h.b) match
+              case Some(c) => Right(c)
+              case None    => Left(rebuild(h.snd, ev(h.b))),
+      modify = (s, f) =>
+        modifyAt(
+          s,
+          a =>
+            inner.pick(a) match
+              case Some(c) => ev(inner.mend(f(c)))
+              case None    => ev(a),
+        ),
+      to = s =>
+        to(s) match
+          case m: Affine.Miss[X]   => new Affine.Miss(m.fst)
+          case h: Affine.Hit[X, A] =>
+            inner.pick(h.b) match
+              case Some(c) => new Affine.Hit(h.snd, c)
+              case None    => new Affine.Miss(rebuild(h.snd, ev(h.b))),
+      rebuild = (m, d) => rebuild(m, ev(inner.mend(d))),
+    )
+
   /** Fused `Optional.andThen(Iso)` — iso is transparent; threads through the Optional's shape. */
   def andThen[C, D](inner: BijectionIso[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.fused[S, T, C, D, M](
+    Optional.fused(
       getOrModify = s => getOrModify(s).map(inner.get),
       modify = (s, f) => modifyAt(s, a => inner.reverseGet(f(inner.get(a)))),
       to = s =>

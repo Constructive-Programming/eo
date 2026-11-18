@@ -6,7 +6,7 @@ import scala.collection.mutable.{ArrayBuffer, ListBuffer}
 
 import cats.{Eval, Monad}
 
-import data.{ModifyF, MultiFocus, ObjArrBuilder, PSVec}
+import data.{MultiFocus, ObjArrBuilder, PSVec}
 
 /** A self-similar structure: a value of `S` whose immediate sub-terms are themselves `S`. The
   * single member [[plate]] is a `Traversal[S, S]` focusing those immediate children — the cats-eo
@@ -267,7 +267,7 @@ object Plated:
     * Prism / Optional / …), and the composite is `transform(inner.modify(_))` by the optic
     * composition law. For the read side — every sub-term as a list — use [[universe]].
     */
-  def everywhere[S](using P: Plated[S]): Optic[S, S, S, S, ModifyF] =
+  def everywhere[S](using P: Plated[S]): Modify[S, S, S, S] =
     Modify[S, S, S, S](g => s => transform(g)(s))
 
   /** [[everywhere]] scoped to a member sort `T <: S` of a multi-sorted `Plated[S]` union (e.g.
@@ -276,7 +276,7 @@ object Plated:
     * sort-preserving on `T` (as any `prism[S, Member]` composition is — a miss on non-`Member`
     * nodes is `purePlate`'s identity pass-through from O'Connor 2011 §5.1).
     */
-  def everywhereIn[S, T <: S](using P: Plated[S]): Optic[T, T, S, S, ModifyF] =
+  def everywhereIn[S, T <: S](using P: Plated[S]): Modify[T, T, S, S] =
     Modify[T, T, S, S](g => t => transform(g)(t).asInstanceOf[T])
 
   /** Effectful bottom-up rewrite over any single-shot lawful `Monad[M]` — Haskell `lens`'s
@@ -360,7 +360,7 @@ object Plated:
     */
   def rewrite[S](f: S => Option[S])(s: S)(using P: Plated[S]): S =
     def step(x: S): Eval[S] = f(x).fold(Eval.now(x))(go)
-    def go(x: S): Eval[S] = Eval.defer(P.plate.modifyA[Eval](go)(x)).flatMap(step)
+    def go(x: S): Eval[S] = Eval.defer(P.plate.modifyF[Eval](go)(x)).flatMap(step)
     go(s).value
 
   /** The immediate sub-terms of `s` (one level down). Reads the plate's children vector directly.

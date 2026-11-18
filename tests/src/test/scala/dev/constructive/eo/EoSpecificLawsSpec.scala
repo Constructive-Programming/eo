@@ -127,10 +127,10 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     .lensCompose,
   )
 
-  // =============== D1 — modifyA at Id ≡ modify =====================
+  // =============== D1 — modifyF at Id ≡ modify =====================
 
   checkAll(
-    "Traversal.each modifyA[Id] ≡ modify",
+    "Traversal.each modifyF[Id] ≡ modify",
     new ModifyAIdTests[List[Int], Int, MultiFocus[PSVec]]:
 
       val laws = new ModifyAIdLaws[List[Int], Int, MultiFocus[PSVec]]:
@@ -138,10 +138,10 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     .modifyAId,
   )
 
-  // =============== D2 — modifyA at List ≡ cartesian traverse ========
+  // =============== D2 — modifyF at List ≡ cartesian traverse ========
 
   checkAll(
-    "Traversal.each modifyA[List] ≡ cartesian traverse",
+    "Traversal.each modifyF[List] ≡ cartesian traverse",
     new ModifyAListTests[List[Int], Int, MultiFocus[PSVec]]:
 
       val laws = new ModifyAListLaws[List[Int], Int, MultiFocus[PSVec]]:
@@ -150,7 +150,7 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
   )
 
   checkAll(
-    "MultiFocus.apply[List] modifyA[List] ≡ cartesian traverse",
+    "MultiFocus.apply[List] modifyF[List] ≡ cartesian traverse",
     new ModifyAListTests[List[Int], Int, MultiFocus[List]]:
 
       val laws = new ModifyAListLaws[List[Int], Int, MultiFocus[List]]:
@@ -158,10 +158,10 @@ class EoSpecificLawsSpec extends Specification with CheckAllHelpers:
     .modifyAList,
   )
 
-  // =============== D3 — modifyA at Const ≡ foldMap =================
+  // =============== D3 — modifyF at Const ≡ foldMap =================
 
   checkAll(
-    "Traversal.each modifyA[Const[Int,*]].getConst ≡ foldMap",
+    "Traversal.each modifyF[Const[Int,*]].getConst ≡ foldMap",
     new ModifyAConstTests[List[Int], Int, MultiFocus[PSVec]]:
 
       val laws = new ModifyAConstLaws[List[Int], Int, MultiFocus[PSVec]]:

@@ -52,7 +52,7 @@ listMF.foldMap(identity[Int])(List(1, 2, 3, 4))
 
 `mfFold` supplies `ForgetfulFold`; this is a read-only aggregation.
 
-### `.modifyA` — `Traverse[F]`
+### `.modifyF` — `Traverse[F]`
 
 ```scala mdoc:silent
 def safeRecip(d: Double): Option[Double] =
@@ -61,8 +61,8 @@ val doubleMF = MultiFocus.apply[List, Double]
 ```
 
 ```scala mdoc
-doubleMF.modifyA[Option](safeRecip)(List(1.0, 2.0, 4.0))
-doubleMF.modifyA[Option](safeRecip)(List(1.0, 0.0, 4.0))
+doubleMF.modifyF[Option](safeRecip)(List(1.0, 2.0, 4.0))
+doubleMF.modifyF[Option](safeRecip)(List(1.0, 0.0, 4.0))
 ```
 
 `mfTraverse` supplies `ForgetfulTraverse[MultiFocus[F], Applicative]`.

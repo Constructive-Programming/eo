@@ -95,6 +95,25 @@ class PlatedBench extends JmhDefaults:
 
   @Benchmark def eoTransformExpr: Expr = EoPlated.transform(shoutExpr)(expr)
   @Benchmark def mTransformExpr: Expr = MPlated.transform(shoutExpr)(expr)
+
+  // The same rewrite as an optic: everywhere ∘ (Var prism ∘ name lens). `Generic` ascribes the
+  // pieces to `Optic[…, F]`, the route `everywhere` took before it returned the concrete `Modify`.
+  private val varName =
+    dev
+      .constructive
+      .eo
+      .generics
+      .prism[Expr, Expr.Var]
+      .andThen(dev.constructive.eo.optics.Lens[Expr.Var, String](_.name, (_, n) => Expr.Var(n)))
+
+  private val everyVarName = EoPlated.everywhere[Expr].andThen(varName)
+
+  private val everyVarNameGeneric =
+    (EoPlated.everywhere[Expr]: optics.Optic[Expr, Expr, Expr, Expr, data.ModifyF])
+      .andThen(varName: optics.Optic[Expr, Expr, String, String, data.Affine])
+
+  @Benchmark def eoEverywhereVarName: Expr = everyVarName.modify(_.toUpperCase)(expr)
+  @Benchmark def eoEverywhereVarNameGeneric: Expr = everyVarNameGeneric.modify(_.toUpperCase)(expr)
   @Benchmark def visitorTransformExpr: Expr = PlatedTrees.visitTransformExpr(shoutExpr)(expr)
 
   @Benchmark def eoTransformDeep: Bin = EoPlated.transform(bumpLeaf)(deep)

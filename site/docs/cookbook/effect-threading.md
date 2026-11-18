@@ -3,7 +3,7 @@
 Optics are great at turning a host language's control flow into
 just type definitions. The optic fixes *where* — which foci, at
 what depth; the effect type `G` you thread through `.modifyF` /
-`.modifyA` decides *what the control flow is*: abort on first
+`.modifyF` decides *what the control flow is*: abort on first
 failure, accumulate every failure, log alongside the rewrite, defer
 into `IO`. Swapping behaviours means swapping `G`, never touching
 the optic.
@@ -42,9 +42,10 @@ visitorAgeL.modifyF[Option](age =>
 )(Visitor("Alice", -1))
 ```
 
-`.modifyA[G]` is the `Applicative[G]` variant — reach for it
-when the chain has branching effects to combine (traversal +
-validation, for instance); the next recipe is exactly that.
+A lens asks only `Functor[G]` of the effect; a prism or traversal
+asks `Applicative[G]` through the same `.modifyF[G]`, because it has
+a miss or several foci to combine (traversal + validation, for
+instance); the next recipe is exactly that.
 `Witherable`-style filter-and-drop traversal is cross-referenced from
 [Penner — *Composable filters using Witherable optics*](https://chrispenner.ca/posts/witherable-optics);
 the carrier is deferred to a follow-up release.
@@ -58,7 +59,7 @@ generalised.
 decided by the effect type" — in its smallest honest form. Take the
 `lineAmounts` traversal from
 [Depend only on what's needed](decoupling.md#depend-only-on-what-s-needed)
-and thread three different `G`s through the *same* `.modifyA`. The
+and thread three different `G`s through the *same* `.modifyF`. The
 optic never changes; the control flow does:
 
 ```scala mdoc:silent
@@ -86,19 +87,19 @@ val badInv = Invoice(5.0, List(Line("widgets", -10.0), Line("gadgets", -20.0)))
 
 ```scala mdoc
 // G = Option: abort on the first bad focus — short-circuit control flow.
-lineAmounts.modifyA[Option](a =>
+lineAmounts.modifyF[Option](a =>
   if a > 0 then Some(a * 1.1) else None
 )(badInv)
 
 // G = ValidatedNel: visit EVERY focus, accumulate every failure —
 // same optic, same lambda shape, completely different control flow.
-lineAmounts.modifyA[Checked](a =>
+lineAmounts.modifyF[Checked](a =>
   if a > 0 then (a * 1.1).validNel else s"non-positive amount: $a".invalidNel
 )(badInv)
 
 // G = Writer: rewrite AND emit an audit line per focus — the effect
 // threads a log through the walk without touching the domain types.
-lineAmounts.modifyA[Audit](a =>
+lineAmounts.modifyF[Audit](a =>
   Writer(List(s"scaled $a"), a * 1.1)
 )(inv).run
 ```
@@ -119,7 +120,7 @@ to do is decided by the effect type").
 ## Batch-load nested IDs
 
 **Why:** every node in a structure carries an ID you need to
-resolve against a database, and the naive `.modifyA` fires one
+resolve against a database, and the naive `.modifyF` fires one
 query per node — the classic N+1. Use the same traversal twice:
 `foldMap` collects every ID in one pass, you issue a single batched
 query, then `.modify` distributes the results back. 100×–300×

@@ -3,10 +3,8 @@ package spark
 
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, Metadata, StructField, StructType}
 
-import data.ModifyF
 import generics.{lens, plate, prism}
-import optics.Optic.*
-import optics.{Optic, Optional, PickMendPrism, Plated, Prism}
+import optics.{MendTearPrism, Modify, Optional, PickMendPrism, Plated, Prism}
 
 /** Optics over Spark SCHEMAS — the mutually recursive `DataType` / `StructField` tree (`StructType`
   * / `ArrayType` / `MapType` nodes, `StructField` entries, atomic leaves). Plain values, no
@@ -42,11 +40,11 @@ object Schemas:
   type Node = DataType | StructField
 
   /** Prism onto the `DataType` branch of [[Node]]. */
-  val dataType: Optic[Node, Node, DataType, DataType, Either] =
+  val dataType: MendTearPrism[Node, Node, DataType, DataType] =
     prism[Node, DataType]
 
   /** Prism onto the `StructField` branch of [[Node]]. */
-  val structField: Optic[Node, Node, StructField, StructField, Either] =
+  val structField: MendTearPrism[Node, Node, StructField, StructField] =
     prism[Node, StructField]
 
   /** Lens onto a `StructField`'s `name`. */
@@ -115,7 +113,7 @@ object Schemas:
     * Compose with [[fieldNullable]], [[fieldName]], [[fieldMetadata]], or [[fieldType]] to rewrite
     * all fields across a schema in one pass.
     */
-  val everyField: Optic[DataType, DataType, StructField, StructField, ModifyF] =
+  val everyField: Modify[DataType, DataType, StructField, StructField] =
     Plated.everywhereIn[Node, DataType].andThen(structField)
 
   /** [[optics.Plated]] over `DataType` alone — immediate children are a struct's field types (1 hop

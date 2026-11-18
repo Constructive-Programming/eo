@@ -19,7 +19,6 @@ class ValueKitsSpec extends Specification:
 
   import ValueKitsFixtures.given
   import Schemas.{platedDataType, platedNode}
-  import optics.Optic.*
 
   private val person = StructType(
     Array(

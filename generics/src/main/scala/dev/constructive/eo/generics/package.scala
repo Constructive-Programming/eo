@@ -1,6 +1,6 @@
 package dev.constructive.eo
 
-import dev.constructive.eo.optics.{Optic, Plated}
+import dev.constructive.eo.optics.{MendTearPrism, Optic, Plated}
 
 /** Auto-derivation entry points for EO optics — Scala 3 quoted macros for Lens / Prism / Plated.
   * Scaffolds on Mateusz Kubuszok's [hearth](https://github.com/MateuszKubuszok/hearth)
@@ -78,7 +78,7 @@ package object generics:
     * val intP    = prism[Int | String, Int]
     *   }}}
     */
-  inline def prism[S, A <: S]: Optic[S, S, A, A, Either] =
+  inline def prism[S, A <: S]: MendTearPrism[S, S, A, A] =
     ${ PrismMacro.deriveImpl[S, A] }
 
   /** Derive a [[dev.constructive.eo.optics.Plated]] for a recursive ADT or mutually recursive type

@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING — one effectful modify.** `CanModifyF[S, A, C]` (polymorphic `CanModifyFP`) replaces
+  `CanModifyF` / `CanModifyA`, and raw `Optic.modifyF` replaces `Optic.modifyA`. `C` is the effect
+  constraint the carrier needs (`Functor` lens, `Invariant` iso, `Applicative` prism / optional /
+  traversal, `Distributive` modify); the capability is contravariant in it, so
+  `CanModifyF[S, A, Applicative]` accepts all of them. Migration: `CanModifyA[S, A]` →
+  `CanModifyF[S, A, Applicative]`, `CanModifyF[S, A]` → `CanModifyF[S, A, Functor]`, `modifyA` →
+  `modifyF`. `ForgetfulTraverse[F, -C]` is contravariant too (its duplicate `Tuple2` instance is
+  gone), so Iso / Getter now get `modifyF`.
+- **BREAKING — `CanGet` and `CanGetOption` extend `CanFold`** with a default `foldMap`; an
+  implementation that defines its own must mark it `override`.
+- **BREAKING (types only):** eo-generics' `prism[S, A]` returns `MendTearPrism[S, S, A, A]` and
+  `Plated.everywhere` / `everywhereIn` return `Modify`, so they keep their fused compositions.
+- **`PLens` and `type Lens[S, A] = PLens[S, S, A, A]`.** Both lens classes share the sealed
+  `PLens`, which carries the fused `andThen` overloads: a lens ascribed as `Lens[S, A]` composes
+  fused, and split-combine lenses (`SimpleLens`, eo-generics) gain every fused composition and
+  `enplace`. The concrete single-focus optics share a `SingleFocus` trait, and every concrete writer
+  (those plus `Modify`) names its write row through `Writes[S, T, A, B, C]`.
+- **More fused compositions:** `Optional.andThen(PickMendPrism)` (the kits'
+  `field("x").andThen(str)`), `PickMendPrism.andThen(Optional)`, `Iso.andThen(PickMendPrism)`;
+  iso / optional ∘ traversal; `Modify.andThen` with any modifiable inner, and single-focus ∘
+  `Modify`. `Modify` implements `CanModifyF[…, Distributive]` directly (3.4 vs 13 ns, 40 vs
+  224 B/op through the generic carrier). A lens chain stays in concrete classes instead of allocating per level (depth 6:
+  120 vs 528 B/op).
+- **laws:** the optic-level law traits extend `OpticUnderTest[S, A, F]`; the D-series classes keep
+  their `ModifyA*` names.
+
 ## [1.3.0] - 2026-11-11
 
 ### Added

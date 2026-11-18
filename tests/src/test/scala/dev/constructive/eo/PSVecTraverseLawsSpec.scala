@@ -15,8 +15,8 @@ import data.{MultiFocus, PSVec}
 import laws.eo.ModifyAListLaws
 import laws.eo.discipline.ModifyAListTests
 
-/** Laws for the hand-written `Traverse[PSVec]` — the instance every `Traversal.each(...).modifyA`
-  * (and every other `MultiFocus[PSVec]` `.modifyA`) runs through.
+/** Laws for the hand-written `Traverse[PSVec]` — the instance every `Traversal.each(...).modifyF`
+  * (and every other `MultiFocus[PSVec]` `.modifyF`) runs through.
   *
   * The original bug: `traverse` threaded ONE mutable result array through `G.map2`, so any effect
   * that resumes a continuation more than once handed every resumption the same array and the last
@@ -83,7 +83,7 @@ class PSVecTraverseLawsSpec extends Specification with CheckAllHelpers:
         .flatMap(Gen.listOfN(_, Gen.choose(0, 2).flatMap(Gen.listOfN(_, Gen.choose(-9, 9)))))
     )
     checkAll(
-      "(each ∘ each) modifyA[List] ≡ cartesian traverse",
+      "(each ∘ each) modifyF[List] ≡ cartesian traverse",
       new ModifyAListTests[List[List[Int]], Int, MultiFocus[PSVec]]:
         val laws = new ModifyAListLaws[List[List[Int]], Int, MultiFocus[PSVec]]:
           val optic = Traversal.each[List, List[Int]].andThen(Traversal.each[List, Int])
@@ -136,9 +136,9 @@ class PSVecTraverseLawsSpec extends Specification with CheckAllHelpers:
 
   checkAll("Traverse[PSVec]", effects.rules)
 
-  "each[List].modifyA[List] returns every combination, not one shared result" >> {
+  "each[List].modifyF[List] returns every combination, not one shared result" >> {
     // The reported case: 2^3 DISTINCT sign patterns, in cats' order.
-    val got = Traversal.each[List, Int].modifyA[List](a => List(a, -a))(List(1, 2, 3))
+    val got = Traversal.each[List, Int].modifyF[List](a => List(a, -a))(List(1, 2, 3))
     (got === Traverse[List].traverse(List(1, 2, 3))(a => List(a, -a)))
       .and(got.distinct.size === 8)
   }

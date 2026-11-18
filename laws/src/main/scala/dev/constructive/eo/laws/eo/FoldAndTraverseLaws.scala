@@ -4,7 +4,6 @@ package eo
 
 import dev.constructive.eo.forgetful.*
 
-import optics.Optic
 import optics.Optic.*
 
 // Fold family — the laws below pin down EO's `foldMap` and `all` on
@@ -19,9 +18,7 @@ import optics.Optic.*
   * additive `Monoid[Int]`, which is enough to witness the law); E2 — `optic.all` is the fold into
   * the free monoid, `foldMap(List(_))`.
   */
-trait FoldMapHomomorphismLaws[S, A, F[_, _]]:
-  /** The optic under test. */
-  def optic: Optic[S, S, A, A, F]
+trait FoldMapHomomorphismLaws[S, A, F[_, _]] extends OpticUnderTest[S, A, F]:
 
   /** `foldMap(f ⊕ g) == foldMap(f) ⊕ foldMap(g)` — tested at additive `Int`. */
   def foldMapHomomorphism(s: S, f: A => Int, g: A => Int)(using

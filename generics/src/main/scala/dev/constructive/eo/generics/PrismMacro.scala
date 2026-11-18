@@ -3,7 +3,7 @@ package generics
 
 import scala.quoted.*
 
-import dev.constructive.eo.optics.{Optic, Prism}
+import dev.constructive.eo.optics.{MendTearPrism, Prism}
 
 /** Compile-time derivation of a Prism from a sum / enum / union type `S` to a direct child
   * `A <: S`. Routes through Hearth's `Enum.parse[S]` (recognises sealed traits, Scala 3 enums, AND
@@ -25,7 +25,7 @@ object PrismMacro:
     */
   def deriveImpl[S: Type, A <: S: Type](using
       q: Quotes
-  ): Expr[Optic[S, S, A, A, Either]] =
+  ): Expr[MendTearPrism[S, S, A, A]] =
     new HearthPrismMacro(q).derivePrism[S, A]
 
 final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommonsScala3(using q):
@@ -37,7 +37,7 @@ final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommo
   def derivePrism[S, A <: S](using
       Type[S],
       Type[A],
-  ): Expr[Optic[S, S, A, A, Either]] =
+  ): Expr[MendTearPrism[S, S, A, A]] =
     Enum.parse[S].toEither match
       case Left(reason) =>
         report.errorAndAbort(
