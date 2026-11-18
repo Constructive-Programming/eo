@@ -116,11 +116,11 @@ final class BijectionIso[S, T, A, B](
 
   /** Fused `Iso.andThen(Optional)` — iso is transparent; result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.underTotal(inner)(
-      get,
-      (_, b) => reverseGet(b),
-      (_, m) => m,
-      (m, d) => reverseGet(inner.rebuild(m, d))
+    Optional.fused(
+      getOrModify = s => Optional.liftMiss(inner.getOrModify(get(s)))(reverseGet),
+      modify = (s, f) => reverseGet(inner.modifyAt(get(s), f)),
+      to = s => Optional.liftTo(inner, get(s))(reverseGet, identity),
+      rebuild = (mi, d) => reverseGet(inner.rebuild(mi, d)),
     )
 
   // CPD-ON

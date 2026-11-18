@@ -125,24 +125,6 @@ object Optional:
       case mi: Affine.Miss[inner.X]   => new Affine.Miss(back(mi.fst))
       case hi: Affine.Hit[inner.X, C] => new Affine.Hit(keep(hi.snd), hi.b)
 
-  /** Fused `outer ∘ inner` for a total outer (`read`, and `back` to write a `B` into an `S`) over
-    * an inner Optional: a hit keeps `keep(s, m)`, which `put` turns back into the outer's write.
-    * The shared body of `Lens.andThen(Optional)` and `Iso.andThen(Optional)`, which differ only in
-    * whether the write needs the source.
-    */
-  private[optics] inline def underTotal[S, T, A, B, C, D, M](inner: Optional[A, B, C, D])(
-      inline read: S => A,
-      inline back: (S, B) => T,
-      inline keep: (S, inner.M) => M,
-      inline put: (M, D) => T,
-  ): Optional[S, T, C, D] =
-    fused(
-      getOrModify = s => liftMiss(inner.getOrModify(read(s)))(back(s, _)),
-      modify = (s, f) => back(s, inner.modifyAt(read(s), f)),
-      to = s => liftTo(inner, read(s))(back(s, _), keep(s, _)),
-      rebuild = (m, d) => put(m, d),
-    )
-
   /** Build a fused composition from its four single-tear operations (see [[Fused]]). */
   private[optics] def fused[S, T, A, B, M0](
       getOrModify: S => Either[T, A],

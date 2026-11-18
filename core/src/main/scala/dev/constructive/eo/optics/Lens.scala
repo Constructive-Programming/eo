@@ -200,11 +200,11 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
 
   /** Fused `Lens.andThen(Optional)` — outer always hits, inner may miss. Result is `Optional`. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
-    Optional.underTotal(inner)(
-      get,
-      enplace,
-      (s, m) => (s, m),
-      (m, d) => enplace(m._1, inner.rebuild(m._2, d))
+    Optional.fused(
+      getOrModify = s => Optional.liftMiss(inner.getOrModify(get(s)))(b => enplace(s, b)),
+      modify = (s, f) => enplace(s, inner.modifyAt(get(s), f)),
+      to = s => Optional.liftTo(inner, get(s))(enplace(s, _), (s, _)),
+      rebuild = (m, d) => enplace(m._1, inner.rebuild(m._2, d)),
     )
 
   // CPD-ON

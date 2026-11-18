@@ -9,66 +9,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **BREAKING — one effectful-modify capability.** `CanModifyFP[S, T, A, B, -C[_[_]]]` (alias
-  `CanModifyF[S, A, C]`) replaces both `CanModifyFP` / `CanModifyF` and `CanModifyAP` /
-  `CanModifyA`. `C` is the constraint the optic needs on the effect, inferred per carrier —
-  `Functor` for a Lens, `Invariant` for an Iso, `Applicative` for a Prism / Optional / Traversal,
-  `Distributive` for a Modify — and the trait is contravariant in it, so
-  `CanModifyF[S, A, Functor] <: CanModifyF[S, A, Applicative]`: a consumer asking for
-  `CanModifyF[S, A, Applicative]` accepts every one of those optics. Migration: `CanModifyA[S, A]`
-  → `CanModifyF[S, A, Applicative]`, `CanModifyF[S, A]` → `CanModifyF[S, A, Functor]`,
-  `s.modifyA[A](f)` → `s.modifyF[A](f)`.
-- **BREAKING — `ForgetfulTraverse[F, -C[_[_]]]` is contravariant in `C`.** The duplicate
-  `ForgetfulTraverse.tupleFTraverseApplicative` instance is removed: `tupleFTraverse`
-  (`Functor`) now answers `Applicative` queries. As a side effect Iso / Getter (`Direct`-carrier)
-  optics now really get `modifyF`, as `Direct`'s instance always documented.
-- **BREAKING — raw `Optic.modifyA` merged into `Optic.modifyF`.** One extension, gated on the
-  carrier's `ForgetfulTraverse[F, C]`, takes any effect with `C[G]`: `Functor` for a Lens,
-  `Applicative` for a Prism / Traversal, and now `Distributive` for a `Modify`, which had no raw
-  effectful modify before. Migration: `optic.modifyA[G](f)` → `optic.modifyF[G](f)`. The D-series
-  law classes keep their names (`ModifyAIdLaws`, `ModifyAListLaws`, `ModifyAConstLaws`).
-- **BREAKING — `CanGet` and `CanGetOption` extend `CanFold`.** A single-focus read is a fold over
-  that focus, so both capabilities now carry a default `foldMap` (and with it `headOption`,
-  `length`, `exists`, `foci`). Implementations that defined their own `foldMap` must mark it
-  `override`. The concrete optics drop their hand-written one-focus `foldMap`s.
-- **Lens classes share `PLens`.** `GetReplaceLens` and `SplitCombineLens` (and so
-  `SimpleLens` / eo-generics lenses) extend one sealed `PLens[S, T, A, B]` that owns `get`,
-  `enplace`, `modify`, `replace` and `modifyF`; a split-combine lens now exposes `enplace` too. The
-  concrete optics name their write capabilities through one mixin (now `SingleFocus`, below).
-- **`type Lens[S, A] = PLens[S, S, A, A]`.** A monomorphic lens can now be ascribed without
-  erasing it to the generic `Optic[S, S, A, A, Tuple2]`, like `Iso[S, A]`; the fused `andThen`
-  overloads live on `PLens`, so composing through the alias stays fused.
-- **The fused `andThen` matrix, re-measured and trimmed.** Every fused overload was benchmarked
-  against the generic `AssociativeFunctor` / `Morph` route it falls back to: per call they never
-  allocate more, and they keep a chain in concrete classes, where the generic route allocates per
-  level (lens∘lens depth 6: 120 vs 528 B/op). So all stay, with less code:
-  - the lens overloads moved from `GetReplaceLens` to `PLens`, so split-combine lenses
-    (`SimpleLens`, eo-generics' `lens[S](_.field)`) gain every fused composition, and the four
-    split-combine-only overloads (on `Optional`, `Traversal`, both prisms) are gone;
-  - the six traversal overloads collapse to two members: `Traversal.andThen` takes any concrete
-    single-focus inner (`Optic & CanFold`) through its `Composer`, and the new `SingleFocus` trait
-    (lens, iso, prism, optional) gives `andThen(Traversal)`. Iso and Optional gain fused traversal
-    composition;
-  - the compositions share `inline` kernels (`Optional.liftMiss` / `liftTo` / `underTotal`), which
-    expand to the same code as before; `Optional.fused` infers its type arguments.
-  `SingleFocus[S, T, A, B, F, C]` replaces the `Writes` mixin.
-- **No more accidental generic composition.** A probe (the generic `andThen` entry points marked
-  deprecated for one full compile) found 115 call sites on the generic route; the accidental ones
-  are fixed:
-  - fused `Optional.andThen(PickMendPrism)`, `PickMendPrism.andThen(Optional)` and
-    `Iso.andThen(PickMendPrism)` — the untyped-tree kits' `field("x").andThen(str)` (zio-json,
-    zio-schema, kyo-schema, spark `Variants`) now composes fused;
-  - **BREAKING (types only):** eo-generics' `prism[S, A]` is declared `MendTearPrism[S, S, A, A]`
-    (it always built one), and `Plated.everywhere` / `everywhereIn` return `Modify`, so derived
-    prisms and `everywhere` keep their fused compositions;
-  - `Modify.andThen` takes any `CanModifyP` inner and every single-focus optic gets
-    `andThen(Modify)`, both writing straight through `modify` instead of the `ModifyF` carrier
-    (`Plated.everywhere[Expr].andThen(varName)`: 1.4x faster, 14% fewer bytes).
-  What remains generic is deliberate (laws, `Optic.reverse`, tests that pin the route) or outside
-  core's reach (circe / avro / jsoniter's own optic classes, `MultiFocus[F]` for a non-`PSVec`
-  `F`, and `Plated.plate`, whose typeclass API returns `Optic[…, MultiFocus[PSVec]]`).
-- **laws: `OpticUnderTest[S, A, F]`.** The optic-level law traits (`ModifyA*Laws`,
-  `FoldMapHomomorphismLaws`, `MorphLaws`) extend this base instead of each declaring `optic`.
+- **BREAKING — one effectful modify.** `CanModifyF[S, A, C]` (polymorphic `CanModifyFP`) replaces
+  `CanModifyF` / `CanModifyA`, and raw `Optic.modifyF` replaces `Optic.modifyA`. `C` is the effect
+  constraint the carrier needs (`Functor` lens, `Invariant` iso, `Applicative` prism / optional /
+  traversal, `Distributive` modify); the capability is contravariant in it, so
+  `CanModifyF[S, A, Applicative]` accepts all of them. Migration: `CanModifyA[S, A]` →
+  `CanModifyF[S, A, Applicative]`, `CanModifyF[S, A]` → `CanModifyF[S, A, Functor]`, `modifyA` →
+  `modifyF`. `ForgetfulTraverse[F, -C]` is contravariant too (its duplicate `Tuple2` instance is
+  gone), so Iso / Getter now get `modifyF`.
+- **BREAKING — `CanGet` and `CanGetOption` extend `CanFold`** with a default `foldMap`; an
+  implementation that defines its own must mark it `override`.
+- **BREAKING (types only):** eo-generics' `prism[S, A]` returns `MendTearPrism[S, S, A, A]` and
+  `Plated.everywhere` / `everywhereIn` return `Modify`, so they keep their fused compositions.
+- **`PLens` and `type Lens[S, A] = PLens[S, S, A, A]`.** Both lens classes share the sealed
+  `PLens`, which carries the fused `andThen` overloads: a lens ascribed as `Lens[S, A]` composes
+  fused, and split-combine lenses (`SimpleLens`, eo-generics) gain every fused composition and
+  `enplace`. The concrete single-focus optics share a `SingleFocus` trait.
+- **More fused compositions:** `Optional.andThen(PickMendPrism)` (the kits'
+  `field("x").andThen(str)`), `PickMendPrism.andThen(Optional)`, `Iso.andThen(PickMendPrism)`;
+  iso / optional ∘ traversal; `Modify.andThen` with any modifiable inner, and single-focus ∘
+  `Modify`. A lens chain stays in concrete classes instead of allocating per level (depth 6:
+  120 vs 528 B/op).
+- **laws:** the optic-level law traits extend `OpticUnderTest[S, A, F]`; the D-series classes keep
+  their `ModifyA*` names.
 
 ## [1.3.0] - 2026-11-11
 
