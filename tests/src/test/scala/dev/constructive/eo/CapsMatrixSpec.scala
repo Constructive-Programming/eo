@@ -138,6 +138,15 @@ class CapsMatrixSpec extends Specification:
       (streetGetter: CanGet[Address, String]).get(addr) === "Main St"
       (drilled: CanGet[Person, String]).get(person) === "Main St"
     }
+    "alias: both lens classes ascribe to Lens[S, A] and keep their members" >> {
+      val street: Lens[Address, String] = streetLens
+      val first: Lens[(String, Int), String] = firstLens
+      (street.modify(_.toUpperCase)(addr) === Address("MAIN ST", 12345))
+        .and(first.replace("b")(("a", 1)) === (("b", 1)))
+        .and(
+          summon[Lens[Address, String] <:< CanGet[Address, String]](street).get(addr) === "Main St"
+        )
+    }
     "resolution: a concrete given resolves to the instance itself (no wrapper)" >> {
       given GetReplaceLens[Address, Address, String, String] = streetLens
       summon[CanGet[Address, String]] must beTheSameAs(streetLens)

@@ -8,9 +8,9 @@ import data.{Affine, Direct}
 /** Monomorphic `Iso` — an alias for the CONCRETE [[BijectionIso]], not for the generic
   * `Optic[S, S, A, A, Direct]`. Because it names the concrete class, ascribing
   * `val nameI: Iso[Person, (String, Int)] = …` keeps code on the hot, fused paths — the fused
-  * compose overloads and capability mixins stay statically visible. This is the one family that CAN
-  * afford an alias: a single concrete class backs every Iso, where `Lens` / `Prism` each have two
-  * (which is why those stay prose shorthand — see [[Lens]]).
+  * compose overloads and capability mixins stay statically visible. [[Lens]] aliases its sealed
+  * base [[PLens]] the same way; `Prism` has two unrelated concrete classes and stays prose
+  * shorthand.
   */
 type Iso[S, A] = BijectionIso[S, S, A, A]
 

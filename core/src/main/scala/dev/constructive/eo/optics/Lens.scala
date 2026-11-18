@@ -5,17 +5,21 @@ import cats.Functor
 
 import data.Affine
 
-/** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. "A
-  * `Lens[S, A]`" is prose shorthand for `Optic[S, S, A, A, Tuple2]`: there is deliberately NO
-  * `type Lens[S, A]` alias to ascribe (`Lens` is only this constructor object). The reason is
-  * keeping code on the hot, fused paths: TWO concrete classes back this family — [[GetReplaceLens]]
-  * here, [[SimpleLens]] from [[first]] / [[second]] and the `eo-generics` macro — so an alias could
-  * only name the generic `Optic[S, S, A, A, Tuple2]`, and ascribing that erases the concrete class,
-  * dropping its fused compose overloads and capability mixins in favour of generic typeclass
-  * dispatch. (Contrast [[Iso]], whose single concrete class does get an alias.) So leave `val`s
-  * un-ascribed and let consuming signatures demand a capability (`CanGet[S, A]`, `CanModify[S, A]`,
-  * …) instead of a concrete optic type. A lens reads a field via `get(s)` and rewrites it via
-  * `modify` / `replace`. The `eo-generics` module's `lens[S](_.field)` macro derives both.
+/** Monomorphic `Lens` — an alias for [[PLens]], the sealed base of both concrete lens classes
+  * ([[GetReplaceLens]], [[SplitCombineLens]] / [[SimpleLens]]), not for the generic
+  * `Optic[S, S, A, A, Tuple2]`. Ascribing `val ageL: Lens[Person, Int] = …` keeps the fused `get` /
+  * `modify` / `replace` / `modifyF` members and the capability mixins statically visible; only the
+  * per-class fused `andThen` overloads need the concrete class, so leave a `val` you will compose
+  * further un-ascribed.
+  */
+type Lens[S, A] = PLens[S, S, A, A]
+
+/** Constructors for `Lens` — the always-present single-focus optic, backed by `Tuple2`. Every
+  * constructor returns a concrete subclass of [[PLens]] ([[GetReplaceLens]] here, [[SimpleLens]]
+  * from [[first]] / [[second]] and the `eo-generics` macro). Consuming signatures should still
+  * demand a capability (`CanGet[S, A]`, `CanModify[S, A]`, …) rather than a concrete optic type. A
+  * lens reads a field via `get(s)` and rewrites it via `modify` / `replace`. The `eo-generics`
+  * module's `lens[S](_.field)` macro derives both.
   */
 object Lens:
   import Function.uncurried
@@ -101,7 +105,7 @@ object Lens:
   * only in what they store and in their carrier view (`to` / `from`): [[GetReplaceLens]] keeps the
   * whole source as the leftover, [[SplitCombineLens]] the complement its splitter returns.
   */
-sealed abstract class LensCore[S, T, A, B](read: S => A, val enplace: (S, B) => T)
+sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
     extends Optic[S, T, A, B, Tuple2],
       CanGet[S, A],
       Writes[S, T, A, B, Functor]:
@@ -131,7 +135,7 @@ sealed abstract class LensCore[S, T, A, B](read: S => A, val enplace: (S, B) => 
 class GetReplaceLens[S, T, A, B](
     read: S => A,
     enplace: (S, B) => T,
-) extends LensCore[S, T, A, B](read, enplace):
+) extends PLens[S, T, A, B](read, enplace):
   type X = S
   def to(s: S): (S, A) = (s, get(s))
   def from(pair: (S, B)): T = enplace(pair._1, pair._2)
@@ -240,7 +244,7 @@ class SplitCombineLens[S, T, A, B, XA](
     read: S => A,
     val split: S => (XA, A),
     val combine: (XA, B) => T,
-) extends LensCore[S, T, A, B](read, (s, b) => combine(split(s)._1, b)):
+) extends PLens[S, T, A, B](read, (s, b) => combine(split(s)._1, b)):
   type X = XA
   def to(s: S): (XA, A) = split(s)
   def from(pair: (XA, B)): T = combine(pair._1, pair._2)
