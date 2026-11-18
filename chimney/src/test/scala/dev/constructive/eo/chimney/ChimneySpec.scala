@@ -5,7 +5,7 @@ import io.scalaland.chimney.{partial, PartialTransformer, Transformer}
 import org.specs2.mutable.Specification
 
 import generics.{lens, prism}
-import optics.{AffineFold, Getter, Lens, Traversal}
+import optics.{AffineFold, Getter, Iso, Lens, Traversal}
 import samples.*
 
 class ChimneySpec extends Specification:
@@ -16,6 +16,12 @@ class ChimneySpec extends Specification:
 
   def paths[A](r: partial.Result[A]): List[(String, String)] =
     r.asErrorPathMessageStrings.toList
+
+  /** A partial write of `RawPrice(7)` gives `ok`; one of `RawPrice(-7)` reports the sign error. */
+  def convertsSign[S, T](write: RawPrice => S => partial.Result[T], s: S, ok: T) =
+    (write(RawPrice(7))(s).asOption === Some(ok)).and(
+      paths(write(RawPrice(-7))(s)) === List("" -> "negative price: -7")
+    )
 
   "Chimney.getter (option 0)" should {
     "read a target field through eo-generics lenses" in {
@@ -177,10 +183,15 @@ class ChimneySpec extends Specification:
         (l, p) => Line(l.sku, Price(p.cents.abs)),
       )
       val price = inspecting.transformFocusPartial[RawPrice]
-      val line = Line("sku", RawPrice(1))
-      (price.replace(RawPrice(7))(line).asOption === Some(Line("sku", Price(7)))).and(
-        paths(price.replace(RawPrice(-7))(line)) === List("" -> "negative price: -7")
-      )
+      convertsSign(price.replace(_), Line("sku", RawPrice(1)), Line("sku", Price(7)))
+    }
+
+    "convert the write through an Iso (Direct carrier, since 2.0)" in {
+      // ForgetfulTraverse is contravariant in its gate, so Direct's Invariant instance answers
+      // this method's Applicative gate.
+      val price = Iso[Line[Price], Line[Price], Price, Price](_.price, Line("sku", _))
+        .transformFocusPartial[RawPrice]
+      convertsSign(price.replace(_), Line("sku", Price(1)), Line("sku", Price(7)))
     }
 
     "collect every written focus's errors" in {
