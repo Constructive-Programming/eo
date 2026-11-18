@@ -122,7 +122,7 @@ extension methods.
 | `CanModify[S, A]`¹ | `modify`, `replace` | ● | ● | ● | ● | ○ | | | | | ● |
 | `CanFold[S, A]` | `foldMap`, `headOption`, `length`, `exists`, `foci` | ● | ● | ● | ● | ○ | ● | ● | ● | | |
 | `CanPut[T, A]`¹ | `put` | | ○ | | | | | | | ○ | |
-| `CanModifyF[S, A, C]`¹ ³ | `modifyF` | ○ | ○ | ○ | ○ | ○ | | | | | ○ |
+| `CanModifyF[S, A, C]`¹ ³ | `modifyF` | ● | ● | ● | ● | ○ | | | | | ○ |
 | `CanPlace[T, B]` | `place`, `transfer` | ²| | | | | | | | | |
 | `CanTransform[T, D, B]` | `transform` | ² | | | | | | | | | |
 

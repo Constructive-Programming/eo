@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
+import cats.{Functor, Invariant, Monoid}
 
 import data.{Affine, Direct}
 
@@ -41,6 +41,9 @@ object Iso:
   def apply[S, T, A, B](f: S => A, g: B => T) =
     BijectionIso[S, T, A, B](f, g)
 
+// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
+// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
+// repeat across classes by design.
 /** Concrete Optic subclass for an isomorphism. Stores `get` / `reverseGet` directly so the hot path
   * skips the `Accessor[Direct]` / `ReverseAccessor[Direct]` typeclass dispatches the generic
   * extensions would perform — same storage shape as Monocle's `Iso`. Returned by [[Iso.apply]] so
@@ -53,6 +56,7 @@ final class BijectionIso[S, T, A, B](
       CanGet[S, A],
       CanReverseGet[T, B],
       CanModifyP[S, T, A, B],
+      CanModifyFP[S, T, A, B, Invariant],
       CanFold[S, A]:
   type X = Nothing
   def get(s: S): A = read(s)
@@ -62,6 +66,11 @@ final class BijectionIso[S, T, A, B](
 
   inline def modify(f: A => B): S => T =
     s => reverseGet(f(get(s)))
+
+  /** Fused effectful modify: read, then map `reverseGet` over the effect. */
+  def modifyF[G[_]](f: A => G[B])(using G: Invariant[G] & Functor[G]): S => G[T] =
+    s => G.map(f(read(s)))(build)
+  // CPD-ON
 
   override inline def replace(b: B): S => T =
     val t = reverseGet(b)

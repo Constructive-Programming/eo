@@ -25,12 +25,13 @@ package dev.constructive.eo
 
 import scala.compiletime.testing.typeChecks
 
-import cats.{Applicative, Functor, Id}
+import cats.{Applicative, Functor, Id, Invariant}
 import org.specs2.mutable.Specification
 
 import optics.*
 import optics.SimpleLens.transformEvidence
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
+import forgetful.ForgetfulTraverse
 
 /** A Functor that is NOT Applicative — what a Lens's `modifyF` must still accept. */
 final case class Box[A](a: A)
@@ -340,6 +341,33 @@ class CapsMatrixSpec extends Specification:
 
   // --------------------------------------------------------- CanModifyF
   "CanModifyFP / CanModifyF (contravariant effect gate)" >> {
+    "mixin: Lens / Iso / Prism (both shapes) / Optional serve directly, at their own gate" >> {
+      ((streetLens: CanModifyF[Address, String, Functor]) must beTheSameAs(streetLens))
+        .and((pairIso: CanModifyF[Address, (String, Int), Invariant]) must beTheSameAs(pairIso))
+        .and((somePrism: CanModifyF[Option[Int], Int, Applicative]) must beTheSameAs(somePrism))
+        .and((pickPrism: CanModifyF[Option[Int], Int, Applicative]) must beTheSameAs(pickPrism))
+        .and((zipOptional: CanModifyF[Address, Int, Applicative]) must beTheSameAs(zipOptional))
+    }
+    "resolution: a concrete given is the instance itself (no wrapper), even at a wider gate" >> {
+      given GetReplaceLens[Address, Address, String, String] = streetLens
+      (summon[CanModifyF[Address, String, Functor]] must beTheSameAs(streetLens))
+        .and(summon[CanModifyF[Address, String, Applicative]] must beTheSameAs(streetLens))
+    }
+    "fused == generic: every mixin agrees with the carrier route on hit and miss" >> {
+      // One helper serves all five: contravariance lets the Functor (lens) and Invariant (iso)
+      // mixins stand in for CanModifyF[…, Applicative].
+      def agrees[S, A, F[_, _]](
+          o: Optic[S, S, A, A, F] & CanModifyF[S, A, Applicative],
+          f: A => Option[A],
+      )(s: S)(using ForgetfulTraverse[F, Applicative]): Boolean =
+        o.modifyF(f)(s) == (o: Optic[S, S, A, A, F]).modifyA(f)(s)
+      val inc: Int => Option[Int] = n => Option(n + 1)
+      agrees(streetLens, s => Option(s.toUpperCase))(addr) must beTrue
+      agrees(pairIso, p => Option((p._1.toUpperCase, p._2)))(addr) must beTrue
+      List(Option(1), None).forall(agrees(somePrism, inc)) must beTrue
+      List(Option(1), None).forall(agrees(pickPrism, inc)) must beTrue
+      List(addr, Address("Main St", -1)).forall(agrees(zipOptional, inc)) must beTrue
+    }
     "derivation: Tuple2 infers the Functor gate — a Functor-only effect is accepted" >> {
       given Optic[Address, Address, String, String, Tuple2] = streetLens
       val cm = summon[CanModifyF[Address, String, Functor]]

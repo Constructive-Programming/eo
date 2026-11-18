@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
+import cats.{Applicative, Functor, Monoid}
 
 import data.Affine
 
@@ -113,6 +113,9 @@ object Optional:
   ): Optional[S, T, A, B] =
     new Fused(getOrModify, modify, to, rebuild)
 
+// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
+// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
+// repeat across classes by design.
 /** The conditionally-present single-focus optic over the `Affine` carrier. Every operation tears
   * the source ONCE: [[getOrModify]] / [[getOption]] / [[foldMap]] read without building anything a
   * write would need, [[modify]] / `replace` tear once and rebuild from what they tore, and the
@@ -133,6 +136,7 @@ sealed abstract class Optional[S, T, A, B]
     extends Optic[S, T, A, B, Affine],
       CanGetOption[S, A],
       CanModifyP[S, T, A, B],
+      CanModifyFP[S, T, A, B, Applicative],
       CanFold[S, A]:
 
   /** What a hit keeps for the write: the part of the read the rebuild needs. */
@@ -160,6 +164,14 @@ sealed abstract class Optional[S, T, A, B]
   /** `inline`, like `GetReplaceLens.modify`: `optional.modify(f)(s)` reduces to `modifyAt(s, f)`.
     */
   inline def modify(f: A => B): S => T = s => modifyAt(s, f)
+
+  /** Fused effectful modify: one `to`, a hit maps the rebuild over the effect, a miss is `pure`. */
+  def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[T] =
+    s =>
+      to(s) match
+        case h: Affine.Hit[X, A] => G.map(f(h.b))(b => rebuild(h.snd, b))
+        case m: Affine.Miss[X]   => G.pure(m.fst)
+  // CPD-ON
 
   override inline def replace(b: B): S => T = s => modifyAt(s, _ => b)
 

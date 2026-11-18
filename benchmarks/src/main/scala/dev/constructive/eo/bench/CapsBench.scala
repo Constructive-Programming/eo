@@ -84,6 +84,7 @@ class CapsBench extends JmhDefaults:
 
   given eachGeneric: Optic[Vector[Int], Vector[Int], Int, Int, MultiFocus[PSVec]] = eoEach
   val idModifyFDerived: CanModifyF[Order, Long, Functor] = summon
+  val idModifyFCap: CanModifyF[Order, Long, Functor] = eoId
   val eachModifyFDerived: CanModifyF[Vector[Int], Int, Applicative] = summon
   val bumpL: Long => Option[Long] = n => Some(n + 1)
   val bumpI: Int => Option[Int] = n => Some(n + 1)
@@ -120,6 +121,7 @@ class CapsBench extends JmhDefaults:
   // ---- modifyF (lens: Functor gate; traversal: Applicative gate) ------
 
   @Benchmark def modifyFDirect: Option[Order] = eoId.modifyF(bumpL)(order)
+  @Benchmark def modifyFCap: Option[Order] = idModifyFCap.modifyF(bumpL)(order)
   @Benchmark def modifyFDerivedHeld: Option[Order] = idModifyFDerived.modifyF(bumpL)(order)
 
   @Benchmark def modifyFDerivedPerCall: Option[Order] =

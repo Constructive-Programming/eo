@@ -1,7 +1,7 @@
 package dev.constructive.eo
 package optics
 
-import cats.Monoid
+import cats.{Applicative, Functor, Monoid}
 
 import data.Affine
 
@@ -74,6 +74,9 @@ object Prism:
   def pOptional[S, A, B](getOption: S => Option[A], reverseGet: B => S) =
     PickMendPrism[S, A, B](getOption, reverseGet)
 
+// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
+// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
+// repeat across classes by design.
 /** Concrete Optic subclass storing `tear` (`getOrModify`) and `mend` (`reverseGet`) directly. The
   * fused-`andThen` overloads pattern-match once and skip the generic `AssociativeFunctor[Either]`
   * round-trip. All `Prism.*` constructors return this type.
@@ -85,6 +88,7 @@ final class MendTearPrism[S, T, A, B](
       CanGetOption[S, A],
       CanReverseGet[T, B],
       CanModifyP[S, T, A, B],
+      CanModifyFP[S, T, A, B, Applicative],
       CanFold[S, A]:
   type X = T
   def to(s: S): Either[T, A] = tear(s)
@@ -99,6 +103,16 @@ final class MendTearPrism[S, T, A, B](
       tear(s) match
         case Right(a) => mend(f(a))
         case Left(t)  => t
+
+  /** Fused effectful modify: a hit maps `mend` over the effect, a miss is `pure` of the untouched
+    * `T`.
+    */
+  def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[T] =
+    s =>
+      tear(s) match
+        case Right(a) => G.map(f(a))(mend)
+        case Left(t)  => G.pure(t)
+  // CPD-ON
 
   override inline def replace(b: B): S => T =
     s =>
@@ -256,6 +270,9 @@ final class MendTearPrism[S, T, A, B](
   def andThen[C, D](inner: Traversal[A, B, C, D]): Traversal[S, T, C, D] =
     Traversal.composed(data.MultiFocusK.either2multifocusPSVec.to(this), inner)
 
+// CPD-OFF — every concrete optic mixes in its capabilities and implements each with its own fused
+// body (the capability matrix, site/docs/capabilities.md); the extends lists and member signatures
+// repeat across classes by design.
 /** Concrete Optic subclass for the `Option`-shaped Prism (`Prism.optional` / `Prism.pOptional`).
   * Stores `pick` and `mend` directly; the fused extensions pattern-match on `Option` so the hot
   * path never builds the intermediate `Either[S, A]` the generic `MendTearPrism` would.
@@ -267,6 +284,7 @@ final class PickMendPrism[S, A, B](
       CanGetOption[S, A],
       CanReverseGet[S, B],
       CanModifyP[S, S, A, B],
+      CanModifyFP[S, S, A, B, Applicative],
       CanFold[S, A]:
   type X = S
 
@@ -285,6 +303,14 @@ final class PickMendPrism[S, A, B](
       pick(s) match
         case Some(a) => mend(f(a))
         case None    => s
+
+  /** Fused effectful modify: a hit maps `mend` over the effect, a miss is `pure(s)`. */
+  def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[S] =
+    s =>
+      pick(s) match
+        case Some(a) => G.map(f(a))(mend)
+        case None    => G.pure(s)
+  // CPD-ON
 
   override inline def replace(b: B): S => S =
     s =>
