@@ -5,9 +5,7 @@ import scala.jdk.CollectionConverters.*
 import dev.constructive.eo.demo.uplc.Oracle.Verdict
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.{Files, Path, Paths}
-import org.specs2.execute.{Result, Skipped}
 import org.specs2.mutable.Specification
-import org.specs2.specification.core.Fragment
 import scalus.uplc.Program
 
 /** The Plutus conformance suite (vendored, see `plutus-conformance/SOURCE.md`) as a differential
@@ -17,6 +15,11 @@ import scalus.uplc.Program
   * The `.expected` files are used for one thing only: to check the comparison is not vacuous. A
   * case the suite expects to succeed must succeed on both sides, and one it expects to fail must
   * fail on both — so a broken harness cannot pass by having both evaluators fail everything.
+  *
+  * All ~1000 cases run inside ONE example. specs2 folds its execution `Action` chain recursively
+  * per fragment, and that many sibling fragments overflow the worker's stack (observed: a
+  * `StackOverflowError` in `ExecuteActions.runActionToFuture`); aggregating the results removes
+  * the depth while keeping every case — and every failure, with its path and detail — reported.
   */
 class ConformanceSpec extends Specification:
 
@@ -28,29 +31,31 @@ class ConformanceSpec extends Specification:
 
   private def read(p: Path): String = new String(Files.readAllBytes(p), UTF_8).trim
 
-  private def check(file: Path): Result =
+  /** `Left(failure detail)`, or `Right(Some(skip reason))` / `Right(None)` when it ran. */
+  private def check(file: Path): Either[String, Option[String]] =
     val expected = read(Paths.get(file.toString + ".expected"))
-    if expected == "parse error" then Skipped("a parser test, not an evaluation")
+    if expected == "parse error" then Right(Some("a parser test, not an evaluation"))
     else
       Program.parseUplc(read(file)) match
-        case Left(e)        => Skipped(s"Scalus cannot parse it: ${e.linesIterator.nextOption()}")
+        case Left(e)        => Right(Some(s"Scalus cannot parse it: ${e.linesIterator.nextOption()}"))
         case Right(program) =>
           CborScript.of(program) match
-            case Left(e)       => Skipped(e)
+            case Left(e)       => Right(Some(e))
             case Right(script) =>
               val expectFailure = expected == "evaluation failure"
               Oracle.compare(script) match
-                case Verdict.Disagree(detail)                => failure(detail)
+                case Verdict.Disagree(detail) => Left(detail)
                 case Verdict.BothSucceed(t) if expectFailure =>
-                  failure(s"both evaluators succeeded with ${t.show}, the suite expects failure")
+                  Left(s"both evaluators succeeded with ${t.show}, the suite expects failure")
                 case Verdict.BothFail(jvm, cek) if !expectFailure =>
-                  failure(
+                  Left(
                     s"both evaluators failed (JVM: $jvm; CEK: $cek), the suite expects $expected"
                   )
-                case _ => success
+                case _ => Right(None)
 
   s"Plutus conformance (${cases.size} UPLC evaluation cases): the JVM class agrees with the CEK machine" >> {
-    Fragment.foreach(cases)(file =>
-      root.relativize(file).toString.stripSuffix(".uplc") >> check(file)
-    )
+    val results = cases.map(file => (root.relativize(file).toString.stripSuffix(".uplc"), check(file)))
+    val failures = results.collect { case (name, Left(why)) => s"$name: $why" }
+    if failures.isEmpty then success
+    else failure(s"${failures.size} of ${cases.size} cases failed:\n${failures.mkString("\n")}")
   }

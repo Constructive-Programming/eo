@@ -58,13 +58,19 @@ addSbtPlugin("org.typelevel" % "sbt-typelevel-settings" % "0.8.7")
 // trailing comma. scalafix fully owns imports (sorting, grouping, and now
 // trailing commas), so scalafmt is set to `trailingCommas = keep`
 // (.scalafmt.conf) to stay out of import formatting — the two no longer fight.
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.9")
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.14.10")
 
 // `sbt-typelevel-site` drives the Laika-based docs site. Pairs the
 // mdoc-compiled markdown under `site/docs/` with the Helium theme
 // configured from build.sbt. Pinned to the same 0.8.5 family as
 // ci-release so they share plugin transitive versions.
 addSbtPlugin("org.typelevel" % "sbt-typelevel-site" % "0.8.7")
+
+// `sbt-typelevel-site` 0.8.7 pins sbt-mdoc 2.9.0; declaring 2.9.2 here keeps
+// the docs build on the latest mdoc (and its compiler-API fixes) regardless
+// of that transitive pin. Drop this line when sbt-typelevel ships a release
+// that already pins >= 2.9.2.
+addSbtPlugin("org.scalameta" % "sbt-mdoc" % "2.9.2")
 
 // `unused-code-plugin` from xuwei-k contributes the `WarnUnusedCode` /
 // `ErrorUnusedCode` / `RemoveUnusedCode` Scalafix `SyntacticRule`s,
@@ -85,7 +91,7 @@ addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
 // modules whose dependencies publish for all three (see CLAUDE.md "Platforms").
 // sbt-typelevel already brings sbt-scalajs-crossproject / sbt-scala-native-crossproject
 // transitively; the platform plugins themselves are explicit.
-addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.22.0")
+addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.23.0")
 addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
 addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "1.4.0")
 addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.4.0")

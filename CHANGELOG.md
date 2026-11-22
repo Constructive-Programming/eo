@@ -34,6 +34,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   120 vs 528 B/op).
 - **laws:** the optic-level law traits extend `OpticUnderTest[S, A, F]`; the D-series classes keep
   their `ModifyA*` names.
+- **Dependency and toolchain refresh.** sbt 1.13.1, scalafmt 3.11.5,
+  sbt-scalafix 0.14.10, sbt-scalajs 1.23.0 and sbt-mdoc 2.9.2 (declared
+  explicitly so the latest mdoc is used regardless of sbt-typelevel's pin).
+  Libraries: circe 0.14.17, jsoniter-scala 2.43.0, zio 2.1.27, zio-schema 1.9.2,
+  zio-json 1.1.3, zio-prelude 1.0.0-RC49, chimney 2.1.1, hearth 0.4.5,
+  kindlings 0.4.0, Apache Spark 4.3.0, Scalus 1.5.0, ASM 9.11.1 and fs2 3.16.0.
+  Scala stays on 3.9.0, the latest long-term-release line. Already-current pins
+  (cats 2.13.0, kyo 1.0.0-RC7, iron 3.4.1, vulcan 1.14.1, avro 1.12.2, the test
+  stack) are unchanged.
+
+### Fixed
+
+- The UPLC demo's Plutus conformance suite aggregates its ~1000 cases into one specs2 example.
+  specs2 folds its execution `Action` chain recursively per fragment, and that many sibling
+  fragments overflow the worker's stack; all cases (and any failure, with its path and detail)
+  are still checked and reported.
+- The sbt heap floor is raised to 8 GB (`.jvmopts`): at 4 GB the aggregate multi-platform
+  compile/test sweep and the Scala Native linker run out of heap.
 
 ## [1.3.0] - 2026-11-11
 

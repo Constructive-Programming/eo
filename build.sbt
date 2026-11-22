@@ -158,7 +158,7 @@ ThisBuild / scalafixDependencies +=
 ThisBuild / scalacOptions += "-Wunused:all"
 // Raise kindlings' per-derivation macro-expansion budget from its 5s default (which a loaded
 // machine intermittently trips: `derived timed out after 5000ms`) to 30s. One namespace per
-// kindlings module (circe / cats / avro derivation); read by kindlings 0.3.x's `DerivationTimeout`.
+// kindlings module (circe / cats / avro derivation); read by kindlings 0.4.x's `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
 //
 // THE UNIT SUFFIX IS LOAD-BEARING. `DerivationTimeout` parses the value with
@@ -425,16 +425,17 @@ lazy val monocle = Optics %% "monocle-core" % "3.3.0"
 // droste — the recursion-scheme baseline for the schemes benchmarks (pattern
 // functor + Fix encoding). Benchmark-only; never a published dependency.
 lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.10.0"
-// kindlings 0.3.x (all three) ship a configurable macro-expansion timeout
-// (`DerivationTimeout`, default 5s) and pull hearth 0.4.2 + kindlings-derivation-commons.
+// kindlings 0.4.x (all three) ship a configurable macro-expansion timeout
+// (`DerivationTimeout`, default 5s) and pull hearth 0.4.5 + kindlings-derivation-commons.
 // We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30s`
 // (see the `ThisBuild / scalacOptions` above) so a loaded CI runner stops tripping the
 // default budget (the recurring `deriveAsObject timed out` flake). The `s` is not
 // decoration: until this bump the build spelled the value `=30`, which kindlings'
 // DurationPattern rejects, so the budget silently stayed at the 5s default — the flake was
 // never actually mitigated. See the scalacOptions comment for the regex and the canary.
-// The setting keys and namespaces are unchanged at 0.3.2 (`DerivationTimeout` is
-// byte-identical to 0.3.0); 0.3.1 added an OPT-IN `<ns>.policy.enabled` key under the same
+// The setting keys and namespaces are unchanged at 0.4.0 (`DerivationTimeout`'s duration
+// regex and the `circeDerivation` namespace were re-checked against the 0.4.0 classfiles);
+// 0.3.1 added an OPT-IN `<ns>.policy.enabled` key under the same
 // namespace whose default (`always-allowed`) is exactly the 0.3.0 behaviour, so we set none.
 // NB kindlings fully-qualifies derived Avro record names (namespace = enclosing path) —
 // established in 0.2.0, unchanged in 0.3.x (re-verified against 0.3.2: derived schema text
@@ -447,17 +448,17 @@ lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.10.0"
 // underlying tuple type's primary constructor, which for the `*:` cons chain a >22-ary
 // NamedTuple must be spelled as takes ZERO value params ("expected: 0, found: 23").
 // The `n < 23` boundary is why `MacroSelectors.tupleTypeOf` must KEEP spelling TupleN at
-// arity <= 22 and a cons chain only above it: a cons chain still fails below 23 on 0.4.2.
-lazy val hearth = Def.setting(Kubuszok %%% "hearth" % "0.4.2")
-lazy val kindlingsCats = Def.setting(Kubuszok %%% "kindlings-cats-derivation" % "0.3.2")
-lazy val kindlingsCirce = Def.setting(Kubuszok %%% "kindlings-circe-derivation" % "0.3.2")
-lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.3.2"
-lazy val circe = Def.setting(Circe %%% "circe-core" % "0.14.16")
+// arity <= 22 and a cons chain only above it: a cons chain still fails below 23 on 0.4.x.
+lazy val hearth = Def.setting(Kubuszok %%% "hearth" % "0.4.5")
+lazy val kindlingsCats = Def.setting(Kubuszok %%% "kindlings-cats-derivation" % "0.4.0")
+lazy val kindlingsCirce = Def.setting(Kubuszok %%% "kindlings-circe-derivation" % "0.4.0")
+lazy val kindlingsAvro = Kubuszok %% "kindlings-avro-derivation" % "0.4.0"
+lazy val circe = Def.setting(Circe %%% "circe-core" % "0.14.17")
 // vulcan pins apache-avro 1.11.x transitively; our explicit avro 1.12.2 pin
 // below wins on the compile classpath, and as an Optional dep vulcan forces
 // nothing downstream anyway.
 lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.1"
-lazy val circeParser = Def.setting(Circe %%% "circe-parser" % "0.14.16")
+lazy val circeParser = Def.setting(Circe %%% "circe-parser" % "0.14.17")
 // Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
 // dependency reports. cats-eo-avro touches `IndexedRecord` /
@@ -511,20 +512,20 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 // zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `cats-eo-zio`
 // integrates with. Compile-scope there: the module's whole API names
 // ZIO types.
-lazy val zioCore = Def.setting(Ziverge %%% "zio" % "2.1.26")
+lazy val zioCore = Def.setting(Ziverge %%% "zio" % "2.1.27")
 // zio-schema / zio-json / zio-prelude — Optional in `cats-eo-zio`: only
 // the `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages name
 // their types, callers who want a seam add its artifact themselves (the
-// avro/circe/kyo-schema pattern). All three pin zio 2.1.19–2.1.21
-// transitively; the module's direct 2.1.24 wins within the 2.1.x line.
+// avro/circe/kyo-schema pattern). They pin zio 2.1.23–2.1.26 transitively;
+// the module's direct 2.1.27 wins within the 2.1.x line.
 // Derivation + the json codec artifact are test-only fuel (DeriveSchema
 // fixtures, a concrete BinaryCodec for the byte-face prisms).
-val ZioSchemaVersion = "1.7.5"
+val ZioSchemaVersion = "1.9.2"
 lazy val zioSchema = Def.setting(Ziverge %%% "zio-schema" % ZioSchemaVersion)
 lazy val zioSchemaDerivation = Def.setting(Ziverge %%% "zio-schema-derivation" % ZioSchemaVersion)
 lazy val zioSchemaJson = Def.setting(Ziverge %%% "zio-schema-json" % ZioSchemaVersion)
-lazy val zioJson = Def.setting(Ziverge %%% "zio-json" % "0.7.44")
-lazy val zioPrelude = Def.setting(Ziverge %%% "zio-prelude" % "1.0.0-RC48")
+lazy val zioJson = Def.setting(Ziverge %%% "zio-json" % "1.1.3")
+lazy val zioPrelude = Def.setting(Ziverge %%% "zio-prelude" % "1.0.0-RC49")
 // kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
 // kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
@@ -554,7 +555,7 @@ val kyoBuildActive: Boolean =
     .exists(v => scala.util.Try(v.toInt).getOrElse(0) >= 25)
 
 // chimney 2.x is built on hearth (like eo-generics) and published for Scala 3.9.0.
-lazy val chimneyCore = Def.setting("io.scalaland" %%% "chimney" % "2.1.0")
+lazy val chimneyCore = Def.setting("io.scalaland" %%% "chimney" % "2.1.1")
 
 // Apache Spark 4.x publishes ONLY `_2.13` artifacts (no Scala 3 build), so
 // every Spark dependency is consumed through `CrossVersion.for3Use2_13`.
@@ -564,7 +565,7 @@ lazy val chimneyCore = Def.setting("io.scalaland" %%% "chimney" % "2.1.0")
 // and Connect clients supply their own Spark. The specs run on the Connect
 // client (Test-only) against a server JVM — see `sparkIntegration`.
 val ApacheSpark = "org.apache.spark"
-val SparkVersion = "4.2.0"
+val SparkVersion = "4.3.0"
 
 lazy val sparkSqlApi =
   (ApacheSpark %% "spark-sql-api" % SparkVersion).cross(CrossVersion.for3Use2_13)
@@ -572,8 +573,8 @@ lazy val sparkSqlApi =
 lazy val sparkConnectClient =
   (ApacheSpark %% "spark-connect-client-jvm" % SparkVersion).cross(CrossVersion.for3Use2_13)
 
-lazy val jsoniterCore = Def.setting(Plokhotnyuk %%% "jsoniter-scala-core" % "2.41.2")
-lazy val jsoniterMacros = Def.setting(Plokhotnyuk %%% "jsoniter-scala-macros" % "2.41.2")
+lazy val jsoniterCore = Def.setting(Plokhotnyuk %%% "jsoniter-scala-core" % "2.43.0")
+lazy val jsoniterMacros = Def.setting(Plokhotnyuk %%% "jsoniter-scala-macros" % "2.43.0")
 
 // Iron refined types. A runtime-checked refinement `A :| C` is a lawful Prism `A ⇀ A :| C`, so
 // the integration module ships constructors only — no carrier, no givens.
@@ -1495,10 +1496,10 @@ lazy val benchmarks: Project = project
 // Scalus CEK machine, and the two results must agree. Unpublished and OUT of
 // the root aggregate (see the CI step above); run with `sbt demoUplcJvm/test`.
 // -------------------------------------------------------------------
-lazy val ScalusVersion = "1.3.0"
+lazy val ScalusVersion = "1.5.0"
 lazy val scalus = "org.scalus" %% "scalus" % ScalusVersion
 // JvmClass is ASM's own in-memory class (asm-tree); asm-commons' InstructionAdapter writes it.
-lazy val AsmVersion = "9.11"
+lazy val AsmVersion = "9.11.1"
 lazy val asmCommons = "org.ow2.asm" % "asm-commons" % AsmVersion
 lazy val asmUtil = "org.ow2.asm" % "asm-util" % AsmVersion
 
@@ -1565,7 +1566,7 @@ lazy val demoUplcJvmBench: Project = project
 // of the root aggregate (CI runs it as its own step); run with
 // `sbt demoGrpcFilter/test` or `sbt demoGrpcFilter/run`.
 // -------------------------------------------------------------------
-lazy val Fs2Version = "3.14.0"
+lazy val Fs2Version = "3.16.0"
 lazy val fs2Io = "co.fs2" %% "fs2-io" % Fs2Version
 // fs2-core alone (it brings cats-effect): the docs' "Streaming with fs2" cookbook page.
 lazy val fs2Core = "co.fs2" %% "fs2-core" % Fs2Version
