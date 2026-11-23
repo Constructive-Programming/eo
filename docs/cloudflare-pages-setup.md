@@ -96,7 +96,7 @@ jars once the Central Portal release lands — typically
 ```scala
 // build.sbt (inside the `docs` project's settings)
 ThisBuild / tlSiteApiUrl := Some(
-  url("https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/"),
+  url("https://javadoc.io/doc/dev.constructive/eo_3/latest/"),
 )
 ```
 

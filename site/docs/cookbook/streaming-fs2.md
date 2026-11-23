@@ -1,6 +1,6 @@
 # Streaming with fs2
 
-There is no `cats-eo-fs2` module, on purpose: once an optic is a value, most
+There is no `eo-fs2` module, on purpose: once an optic is a value, most
 of the pipes such a module would ship are one-liners over
 [fs2](https://fs2.io)'s own combinators. This page teaches those one-liners
 instead. The optic says *which part* of each element; fs2 decides

@@ -10,7 +10,7 @@ import bench.fixture.{DiDb, DiMetrics}
 import kyo.*
 import optics.Lens
 
-/** `cats-eo-kyo` overhead, two tiers:
+/** `eo-kyo` overhead, two tiers:
   *
   *   - '''TypeMap tier''' — eo's `service` lens (leaf and drilled) vs hand-written `tm.get` /
   *     `tm.add`. Pure map ops; the delta is the optic hop, same shape as ZioDiBench.

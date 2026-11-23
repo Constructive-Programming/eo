@@ -209,7 +209,7 @@ re-price every line); the fold is just the read-side escape. See
 [Generics → Multi-field Lens](../generics.md) for the full treatment
 of the NamedTuple focus.
 
-**Source:** cats-eo internal; fold framing from Penner — *Optics
+**Source:** eo internal; fold framing from Penner — *Optics
 By Example* ch. 7, <https://leanpub.com/optics-by-example/>.
 
 ## Compute aggregations
@@ -394,7 +394,7 @@ suite shows this edit is **flat in document size** — ~1.3 µs whether the reco
 is small or large — while the decode / `.copy` / re-encode path scales with the
 whole payload, so the gap grows from ~3× on a tiny record to ~160× on a large
 one. circe-optics' analogous `root.user.address.street` surface forces a full
-decode per level; cats-eo's cursor walk does not.
+decode per level; eo's cursor walk does not.
 
 The `*Unsafe` suffix opts out of the failure channel; the default
 `modify` returns `Ior[Chain[JsonFailure], Json]`, so a silent
@@ -402,7 +402,7 @@ no-op edit tells you which step refused — the
 [circe integration's failure flow](../integrations/circe.md#failure-flow)
 covers routing it.
 
-**Source:** cats-eo internal (`JsonPrism`); related to circe-optics'
+**Source:** eo internal (`JsonPrism`); related to circe-optics'
 `root.*` idiom <https://circe.github.io/circe/optics.html>.
 
 ### …and every element of a JSON array
@@ -431,4 +431,4 @@ Per-element failures to decode accumulate into
 [circe integration's failure flow](../integrations/circe.md#failure-flow)
 shows how to route the chain.
 
-**Source:** cats-eo internal (`JsonTraversal`).
+**Source:** eo internal (`JsonTraversal`).

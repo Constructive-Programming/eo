@@ -24,9 +24,9 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   * '''without''' a typed case class — and without a JSON AST — in the middle. The AST-free sibling
   * of `dev.constructive.eo.avro.circe.AvroJson`: same walks, same conventions both ways, but the
   * JSON side is `Array[Byte]` instead of `io.circe.Json`, so circe never touches the classpath.
-  * Lives inside `cats-eo-avro` with jsoniter-scala-core as an `Optional` dependency (the rendering
-  * runs through its `JsonWriter`) — add `com.github.plokhotnyuk.jsoniter-scala:jsoniter-scala-core`
-  * to use this package.
+  * Lives inside `eo-avro` with jsoniter-scala-core as an `Optional` dependency (the rendering runs
+  * through its `JsonWriter`) — add `com.github.plokhotnyuk.jsoniter-scala:jsoniter-scala-core` to
+  * use this package.
   *
   * The bidirectional entry point is [[record]], a lawful `Prism[JsoniterBytes, IndexedRecord]` per
   * schema — `getOption` the strict schema-directed parse, `reverseGet` the total structural walk

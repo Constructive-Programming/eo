@@ -15,7 +15,7 @@ import com.typesafe.tools.mima.core.{
 // is 0.x), and every later 1.x release is checked against 1.0.0 and each
 // 1.x release after it. `mimaReportBinaryIssues` runs in CI.
 //
-// Exception: `cats-eo-kyo` is EXPERIMENTAL and opts out
+// Exception: `eo-kyo` is EXPERIMENTAL and opts out
 // (`kyoIntegration / tlMimaPreviousVersions := Set.empty` in build.sbt):
 // it builds on kyo 1.0.0-RC7, a release candidate. Lift that override once
 // kyo 1.0.0 final ships.
@@ -75,7 +75,7 @@ import com.typesafe.tools.mima.core.{
 //         `codec(schema)` (source- and binary-breaking for direct callers;
 //         the opt-in given is unchanged).
 //   0.15: additive (kyo Record optics + kyo-schema bridge incl.
-//         Structure.Value optics), but cats-eo-kyo now REQUIRES JDK 25
+//         Structure.Value optics), but eo-kyo now REQUIRES JDK 25
 //         (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 //   0.13: `Affine` covariant in B; `Affine.Miss` drops its phantom B type
 //         parameter (now `Miss[A] <: Affine[A, Nothing]`) and `widenB` is
@@ -97,7 +97,7 @@ import com.typesafe.tools.mima.core.{
 // GENUINELY INTERNAL members — `AvroJson.jsonToValue`, `AvroJsoniter.parseSlice` and the
 // `AvroJsoniter.SchemaCodec` constructor — so their descriptors move. All three are single-module
 // implementation details (`private[circe]` / `private[jsoniter]` / a `final private class`), named
-// in no other module's package, so no caller outside `cats-eo-avro` can hold a reference to
+// in no other module's package, so no caller outside `eo-avro` can hold a reference to
 // either. The PUBLIC surface is untouched: `record`, `recordPrism`, `jsonToRecord`, the `.json` /
 // `.avro` faces and every diagonal keep their descriptors, and the new entry points
 // (`recordWithDefaults` / `withDefaults` / `jsonToRecordWithDefaults`) are additive. These

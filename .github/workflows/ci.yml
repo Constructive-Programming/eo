@@ -424,7 +424,7 @@ jobs:
       - name: Submit Dependencies
         uses: scalacenter/sbt-dependency-submission@v3
         with:
-          modules-ignore: cats-eo-root_3 cats-eo-docs_3 cats-eo-root_3 cats-eo-root_3
+          modules-ignore: eo-root_3 eo-docs_3 eo-root_3 eo-root_3
           configs-ignore: test scala-tool scala-doc-tool test-internal
 
   site:

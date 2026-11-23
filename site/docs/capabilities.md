@@ -2,7 +2,7 @@
 
 The capability traits — `CanGet`, `CanGetOption`, `CanReverseGet`, `CanModify`, `CanFold`,
 `CanPut`, `CanModifyF`, `CanPlace`, `CanTransform` — are the **consuming
-surface** of cats-eo, living at the top of the package hierarchy (`dev.constructive.eo`)
+surface** of eo, living at the top of the package hierarchy (`dev.constructive.eo`)
 because they are how most code should *reference* optics:
 
 > **Consume via capability, construct via optic.** A method that *uses* an optic takes the

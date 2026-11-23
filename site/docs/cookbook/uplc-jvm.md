@@ -68,7 +68,7 @@ Two properties follow from the shape, and the suite checks both.
 there and back is the identity, both ways. `toTyped` and `toBytecode` are lawful
 prisms: `getOption(reverseGet(a)) == Some(a)` for every typed program or class
 file `a`, and a script that gets there comes back out. The suite checks both
-with cats-eo's own `PrismTests`, and checks the round trips on every program it
+with eo's own `PrismTests`, and checks the round trips on every program it
 compiles, the 943 conformance programs included.
 
 **The square commutes.** The semantic property is the one a round trip can't
@@ -336,7 +336,7 @@ file survives ASM reading and writing it again — on:
 | Plutus conformance | the [`plutus-conformance`](https://github.com/IntersectMBO/plutus/tree/1.63.0.0/plutus-conformance) UPLC evaluation cases, plutus `1.63.0.0` (vendored) | **943 / 943** evaluation cases agree; 55 parser-only tests and 1 program with no flat encoding skipped |
 | validators | owner + greeting, hash preimage, time lock, 2-of-3 multisig, Fibonacci puzzle, HTLC — accepting *and* rejecting V3 transactions | **20 / 20** scenarios reach the CEK machine's verdict, both compiled once and applied at run time and compiled with the context applied |
 | compiler paths | one hand-written program per path, error paths included, a 20 000-deep `let` chain | all agree |
-| optic laws | cats-eo-laws' `PrismTests` for `toTyped` and `toBytecode`, over every validator, a program whose value is a closure, a script of an unknown Plutus Core version, and a program too large for a class file | all laws hold |
+| optic laws | eo-laws' `PrismTests` for `toTyped` and `toBytecode`, over every validator, a program whose value is a closure, a script of an unknown Plutus Core version, and a program too large for a class file | all laws hold |
 | stack safety | programs nested 100 000 deep — `force (delay …)`, builtin calls, lambdas — typed, lowered and compiled on a 1 MB stack | no overflow: a class file, or the JVM limit the class exceeds |
 
 The JVM's own verifier checks every generated class as it is loaded, and each

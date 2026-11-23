@@ -21,7 +21,7 @@ because ...").
    and read/write level) and identity (`Iso.id` composition) witnesses? Every
    carrier with `map` is a functor — is composition pinned? Fusion equalities
    the docs assert (`hylo` = `ana` then `cata`)? Naturality of carrier
-   transformations? Check what `cats-eo-laws` ships against what the
+   transformations? Check what `eo-laws` ships against what the
    structures claim, and list the gaps even when no test exists yet.
 4. **Behaviour specs asserting algebra.** `OpticsBehaviorSpec`-style examples
    that verify `composed.get == inner.get(outer.get(s))` ad-hoc are law
@@ -37,7 +37,7 @@ because ...").
    failure is reported verbatim either way — it means not-a-law OR an
    unlawful instance, and both findings go to the user.
 3. **Blast radius**: which existing registrations inherit it (predicted
-   kills), what clients gain, MiMa impact (`cats-eo-laws` is published —
+   kills), what clients gain, MiMa impact (`eo-laws` is published —
    adding concrete trait methods is normally compatible; verify with
    `mimaReportBinaryIssues`, vacuous before 0.1.1).
 

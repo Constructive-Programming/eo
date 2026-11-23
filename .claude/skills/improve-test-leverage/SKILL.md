@@ -1,12 +1,12 @@
 ---
 name: improve-test-leverage
-description: Orchestrates a coverage + mutation improvement cycle tuned to cats-eo's algebraic structure. Reads scoverage + stryker4s reports, triages surviving mutants, and drives every test artifact UP the promotion ladder (examples → property → law) so the suite kills more mutants with FEWER test lines. Phases live in phases/*.md, each with its own model assignment. Mandatory consolidation and law-scan phases close every run; law promotion is user-gated. Supports a measured eval-optimization loop ("loop" argument).
+description: Orchestrates a coverage + mutation improvement cycle tuned to eo's algebraic structure. Reads scoverage + stryker4s reports, triages surviving mutants, and drives every test artifact UP the promotion ladder (examples → property → law) so the suite kills more mutants with FEWER test lines. Phases live in phases/*.md, each with its own model assignment. Mandatory consolidation and law-scan phases close every run; law promotion is user-gated. Supports a measured eval-optimization loop ("loop" argument).
 model: sonnet
 ---
 
 # Improve Test Leverage
 
-The algebraic test-quality cycle for cats-eo. Instead of asking "which example
+The algebraic test-quality cycle for eo. Instead of asking "which example
 test kills this mutant?", it asks **"which law, registered against which
 instance, kills the largest family of mutants?"** — and then asks the harder
 question every run MUST answer: **"which existing tests does that make
@@ -22,7 +22,7 @@ stage 0   example test            (one input, one assertion)
 stage 1   property (forAll)       (one invariant over a generated domain)
 stage 2   ruleset registration    (checkAll — an existing law family applied
                                    to a new instance via CheckAllHelpers)
-stage 3   LAW in cats-eo-laws     (a new universal property, promoted through
+stage 3   LAW in eo-laws     (a new universal property, promoted through
                                    the user gate; ships to clients)
 ```
 

@@ -10,7 +10,7 @@ import bench.fixture.{DiDb, DiMetrics}
 import optics.Lens
 import zio.service
 
-/** `cats-eo-zio` overhead: eo's `ZEnvironment` service lens (leaf and drilled through a field lens)
+/** `eo-zio` overhead: eo's `ZEnvironment` service lens (leaf and drilled through a field lens)
   * vs the hand-written `env.get` / `env.update` equivalent. Both sides pay ZEnvironment's own map
   * machinery; the delta is the optic hop.
   *

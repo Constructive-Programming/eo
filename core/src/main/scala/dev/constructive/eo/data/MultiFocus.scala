@@ -595,7 +595,7 @@ object MultiFocusK:
     * `.headOption` / `.length` / `.exists` extension methods.
     *
     * Structurally this is the inverse of [[forget2multifocus]] — both Composer directions ship.
-    * That's normally banned by the cats-eo Morph resolution invariant (a bidirectional pair makes
+    * That's normally banned by the eo Morph resolution invariant (a bidirectional pair makes
     * `Morph[Forget[F], MultiFocus[F]]` ambiguous because both `leftToRight` and `rightToLeft`
     * fire). The Composer ships anyway because:
     *   1. The `from` side requires `T = Unit` (Forget loses the leftover, so it can't reconstruct a

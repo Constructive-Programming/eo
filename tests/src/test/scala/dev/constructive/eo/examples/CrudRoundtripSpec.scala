@@ -6,7 +6,7 @@ import org.specs2.mutable.Specification
 
 import CrudRoundtrip.*
 
-/** Motivating example for cats-eo — the "why this library exists" showcase.
+/** Motivating example for eo — the "why this library exists" showcase.
   *
   * Scenario: an HTTP endpoint receives a JSON user-update, runs effectful validation over specific
   * fields (including every `shippingAddress.zipCode` of every order the user owns), persists the

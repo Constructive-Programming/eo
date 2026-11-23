@@ -1,6 +1,6 @@
 # Getting started
 
-Don't worry about an abstraction tax: cats-eo turns deep, awkward read/modify code into a readable one-liner *and* runs at hand-written speed — matching or beating Monocle on the single-optic hot paths ([benchmarks](benchmarks.md)).
+Don't worry about an abstraction tax: eo turns deep, awkward read/modify code into a readable one-liner *and* runs at hand-written speed — matching or beating Monocle on the single-optic hot paths ([benchmarks](benchmarks.md)).
 
 Two ways in, depending on where your data lives. This page works on
 **in-memory values** — case classes and collections. If your data
@@ -18,14 +18,14 @@ Add the module(s) you need to your `build.sbt`:
 
 ```scala
 libraryDependencies ++= Seq(
-  "dev.constructive" %%% "cats-eo"          % "@VERSION@",
-  "dev.constructive" %%% "cats-eo-generics" % "@VERSION@",  // optional: macro-derived optics
-  "dev.constructive" %%% "cats-eo-circe"    % "@VERSION@",  // optional: JSON optics
-  "dev.constructive" %%% "cats-eo-laws"     % "@VERSION@" % Test,
+  "dev.constructive" %%% "eo"          % "@VERSION@",
+  "dev.constructive" %%% "eo-generics" % "@VERSION@",  // optional: macro-derived optics
+  "dev.constructive" %%% "eo-circe"    % "@VERSION@",  // optional: JSON optics
+  "dev.constructive" %%% "eo-laws"     % "@VERSION@" % Test,
 )
 ```
 
-Requires Scala 3.9.x on JDK 17, 21, or 25 (`cats-eo-kyo` needs JDK 25).
+Requires Scala 3.9.x on JDK 17, 21, or 25 (`eo-kyo` needs JDK 25).
 
 The core, laws, generics, schemes, circe, jsoniter, iron, zio, chimney and kyo modules also ship for Scala.js and
 Scala Native; `%%%` selects the platform artifact (on the JVM it equals `%%`). The avro and spark

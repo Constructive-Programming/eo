@@ -1,6 +1,6 @@
 # ZIO integration
 
-The `cats-eo-zio` module integrates eo's capability layer with
+The `eo-zio` module integrates eo's capability layer with
 [ZIO 2's dependency-injection model](https://zio.dev/reference/di/).
 No new carrier ships in this module — both ZIO's DI substrate and its
 wiring functions already have optic shapes:
@@ -31,7 +31,7 @@ avro/circe/kyo-schema pattern):
   error-accumulation optics.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-zio" % "@VERSION@"
+libraryDependencies += "dev.constructive" %% "eo-zio" % "@VERSION@"
 ```
 
 ## Which direction are you integrating?

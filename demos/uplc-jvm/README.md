@@ -1,7 +1,7 @@
 # UPLC → JVM bytecode, as eo optics
 
 A compiler from Untyped Plutus Core (UPLC, the language Cardano smart contracts
-run in) to JVM class files, built from cats-eo optics. Correctness is
+run in) to JVM class files, built from eo optics. Correctness is
 established differentially: every program runs through the generated class AND
 through the [Scalus](https://scalus.org) CEK machine, and the two must agree.
 
@@ -50,7 +50,7 @@ identity, both ways. The other two are prisms, total on the way back:
   none (`UplcJvm.compile` says which limit, as a `Left`).
 
 So the compiler, `toBytecode`, is a prism too. The suite checks the prism laws
-with cats-eo's own `PrismTests`, and the round trips on every program it
+with eo's own `PrismTests`, and the round trips on every program it
 compiles. None of the four types hands out what it holds — `bytes`
 and `tree` are copies — so a value cannot change after the compiler made or
 checked it, and the way back always works. The other property that matters is
@@ -145,7 +145,7 @@ again (`compiling`).
 - **`CompilerSpec`** — one hand-written program per compilation path, error
   paths included, plus a 20 000-deep `let` chain.
 - **`OpticSpec`** — the prism laws of `toTyped` and `toBytecode`, with
-  cats-eo-laws' `PrismTests` (a script of an unknown version and a program too
+  eo-laws' `PrismTests` (a script of an unknown version and a program too
   large for a class file among the scripts); that scripts, classes and class
   files hand out copies; programs nested 100 000 deep compiled on a 1 MB stack;
   and evidence that hybrid typing fires on real validator code.

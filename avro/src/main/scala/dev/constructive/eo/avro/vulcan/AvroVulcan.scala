@@ -31,9 +31,9 @@ import org.apache.avro.Schema
   *   - `decode` errors surface as `Left` via `AvroError.throwable`, matching [[AvroCodec]]'s
   *     structured-failure convention.
   *
-  * vulcan rides on `cats-eo-avro` as an `Optional` dependency (the `AvroJson` / circe pattern):
-  * this sub-package's API surface names `vulcan.Codec`, so any caller already depends on vulcan
-  * directly — `Optional` keeps it off downstream classpaths, and avro-only users never load these
+  * vulcan rides on `eo-avro` as an `Optional` dependency (the `AvroJson` / circe pattern): this
+  * sub-package's API surface names `vulcan.Codec`, so any caller already depends on vulcan directly
+  * — `Optional` keeps it off downstream classpaths, and avro-only users never load these
   * classfiles.
   */
 object AvroVulcan:

@@ -21,8 +21,8 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
 
 /** Structural Avro ↔ circe bridge: move between an Avro generic runtime value and a circe
   * [[io.circe.Json]] document '''without''' a typed case class in the middle. The Avro mirror of
-  * `dev.constructive.eo.circe`. Lives inside `cats-eo-avro` with circe as an `Optional` dependency
-  * — the API surface names `io.circe.Json`, so any caller already depends on circe directly; add
+  * `dev.constructive.eo.circe`. Lives inside `eo-avro` with circe as an `Optional` dependency — the
+  * API surface names `io.circe.Json`, so any caller already depends on circe directly; add
   * `circe-core` to use this package.
   *
   * The bidirectional entry points are [[record]], a lawful `Prism[Json, IndexedRecord]` per schema
@@ -110,7 +110,7 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   * `dev.constructive.eo.circe.JsonPrism`: the drilled focus itself converts — subtree ↔ Avro
   * binary, both directions the structural walks above. Same face family as
   * `dev.constructive.eo.avro.jsoniter`, landing on the AST instead of bytes; the `.avro` face is
-  * why `cats-eo-circe` is a second `Optional` dependency next to circe-core.
+  * why `eo-circe` is a second `Optional` dependency next to circe-core.
   *
   * @groupname prism Bidirectional prism (Json ↔ record)
   * @groupprio prism 0

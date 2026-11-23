@@ -2,7 +2,7 @@ addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.4.4")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 
 // `sbt-stryker4s` drives mutation testing. Mutation testing was
-// previously evaluated and dropped because cats-eo was almost entirely
+// previously evaluated and dropped because eo was almost entirely
 // type-level (a whole-project run found a single mutable runtime
 // expression). The `schemes` module's runtime machinery and core's
 // opaque-carrier dispatch changed that, so it's back — run on demand /
@@ -87,7 +87,7 @@ addSbtPlugin("com.github.xuwei-k" % "unused-code-plugin" % "0.5.5")
 // `/api/`.
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
 
-// Cross-platform builds: cats-eo ships JVM, Scala.js and Scala Native artifacts for the
+// Cross-platform builds: eo ships JVM, Scala.js and Scala Native artifacts for the
 // modules whose dependencies publish for all three (see CLAUDE.md "Platforms").
 // sbt-typelevel already brings sbt-scalajs-crossproject / sbt-scala-native-crossproject
 // transitively; the platform plugins themselves are explicit.

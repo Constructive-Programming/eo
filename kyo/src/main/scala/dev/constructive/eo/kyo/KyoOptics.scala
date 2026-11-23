@@ -10,7 +10,7 @@ import optics.{GetReplaceLens, Lens, MendTearPrism, PickMendPrism, Prism}
 /** Kyo dependency-injection integration (kyo-prelude only — Env / Var / Layer / TypeMap; no
   * kyo-core IO).
   *
-  * The same three seams as `cats-eo-zio`, at Kyo's names:
+  * The same three seams as `eo-zio`, at Kyo's names:
   *
   *   - [[service]] — a `TypeMap[R]` slot is a lawful Lens (`get[A]` / `add`), exactly like
   *     `ZEnvironment`: type-indexed maps are the DI substrate on both sides. Compose with field

@@ -13,8 +13,8 @@ import dev.constructive.eo.optics.Optic.*
   *   - path scanner over object/array/scalar/nested cases
   *   - decode-failure surfacing as `Affine.Miss`
   *   - `.foldMap` over the Affine carrier (read-only escape: hit decodes via the codec, miss
-  *     returns the Monoid identity), confirming the standard cats-eo extension methods light up
-  *     over `Optic[..., Affine]` without any new typeclass shipping
+  *     returns the Monoid identity), confirming the standard eo extension methods light up over
+  *     `Optic[..., Affine]` without any new typeclass shipping
   *   - parser error paths
   *
   * Phase 2 (read-write splice) is out of scope here; those tests live in a future

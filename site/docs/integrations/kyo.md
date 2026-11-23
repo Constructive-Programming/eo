@@ -1,6 +1,6 @@
 # Kyo integration
 
-The `cats-eo-kyo` module integrates eo with
+The `eo-kyo` module integrates eo with
 [Kyo's dependency management](https://getkyo.io/latest/kyo-prelude/)
 at the same three seams as [the ZIO module](zio.md) — the two systems'
 DI substrates are both type-indexed maps, and the integration surface
@@ -26,10 +26,10 @@ the module is usable from pure kyo-prelude programs and full kyo-core
 applications alike.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-kyo" % "@VERSION@"
+libraryDependencies += "dev.constructive" %% "eo-kyo" % "@VERSION@"
 ```
 
-**Experimental.** `cats-eo-kyo` is published with every release but sits
+**Experimental.** `eo-kyo` is published with every release but sits
 outside eo's 1.x binary-compatibility promise: it builds on kyo
 `1.0.0-RC7`, a release candidate, so its API and bytecode can change in
 any 1.x release, and MiMa does not check it. Every other eo module is
@@ -256,7 +256,7 @@ same-typed fields would collide.
 [kyo-schema](https://getkyo.io/latest/kyo-schema/) derives a `Schema[A]`
 carrying structure, validation, wire configuration, and codecs. The
 `dev.constructive.eo.kyo.schema` sub-package turns that machinery into
-eo optics. It is an **optional dependency** — `cats-eo-kyo` does not
+eo optics. It is an **optional dependency** — `eo-kyo` does not
 pull kyo-schema transitively; add it (and a codec artifact, here json)
 yourself:
 
@@ -415,7 +415,7 @@ so it keeps working whichever way upstream resolves it.
 
 kyo `1.0.0-RC5+` ships Java-25-only bytecode, and macros execute
 inside the compiler's JVM — so **compiling or running against
-`cats-eo-kyo` requires JDK 25**, unlike the rest of eo (JDK 17 floor).
+`eo-kyo` requires JDK 25**, unlike the rest of eo (JDK 17 floor).
 In this repo the kyo module drops out of the root aggregate on older
 JVMs and CI runs a dedicated 25 lane.
 
@@ -457,7 +457,7 @@ used (`.eval`, `Env.run`, …) and passes a `null` `Safepoint`
 interceptor, which fails to typecheck under that flag. This is a
 property of Kyo, not of this module — but it means projects enabling
 `-Yexplicit-nulls` cannot currently compile kyo call sites, with or
-without eo. (`cats-eo-kyo` itself opts out of the flag that the rest
+without eo. (`eo-kyo` itself opts out of the flag that the rest
 of the eo build carries.)
 
 ## Overhead

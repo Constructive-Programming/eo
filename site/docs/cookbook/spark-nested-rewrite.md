@@ -8,7 +8,7 @@ exactly as it is**.
 Plain Spark makes you rebuild each level by hand: a `withField` per struct, plus a
 `when(isnull(...))` for the optional one. Get a level wrong and you silently drop a field.
 
-With `cats-eo-spark` the path is one selector. The optic built from it compiles to the projection
+With `eo-spark` the path is one selector. The optic built from it compiles to the projection
 you would have written by hand. Catalyst removes the row wrapper and folds the NULL guard into
 `withField`'s own NULL check.
 

@@ -1,16 +1,16 @@
 ---
-name: cats-eo
-description: Use cats-eo (existential optics for Scala 3) to specify pinpointed read/write operations on nested case classes, JSON byte buffers, Avro records, or circe ASTs. One Optic[S, T, A, B, F] trait, several carriers, uniform .get/.modify/.replace/.foldMap/.andThen surface.
+name: eo
+description: Use eo (existential optics for Scala 3) to specify pinpointed read/write operations on nested case classes, JSON byte buffers, Avro records, or circe ASTs. One Optic[S, T, A, B, F] trait, several carriers, uniform .get/.modify/.replace/.foldMap/.andThen surface.
 ---
 
-# cats-eo skill
+# eo skill
 
-Fast-decision reference for an agent using cats-eo to get work done.
+Fast-decision reference for an agent using eo to get work done.
 Pair with `site/docs/optics.md` (full tour) and `CLAUDE.md` (toolchain).
 
-## What cats-eo is in one paragraph
+## What eo is in one paragraph
 
-cats-eo is an **existential optics** library for Scala 3. Every optic
+eo is an **existential optics** library for Scala 3. Every optic
 family (Lens, Prism, Iso, Optional, Traversal, Setter, Getter, Fold,
 AffineFold) is the same `Optic[S, T, A, B, F[_, _]]` trait
 parameterised by a *carrier* `F`. The carrier picks how the focus is
@@ -24,9 +24,9 @@ carrier-supplied.
 ```
 Source/target shape:
   Case classes (in-memory)      → core + generics
-  circe Json AST                → cats-eo-circe
-  Apache Avro IndexedRecord     → cats-eo-avro
-  Raw JSON Array[Byte]          → cats-eo-jsoniter
+  circe Json AST                → eo-circe
+  Apache Avro IndexedRecord     → eo-avro
+  Raw JSON Array[Byte]          → eo-jsoniter
   Scala collection (List, ...)  → core (Traversal.each)
 ```
 

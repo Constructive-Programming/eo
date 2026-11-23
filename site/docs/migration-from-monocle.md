@@ -3,15 +3,15 @@
 [Monocle](https://www.optics.dev/Monocle/) is a mature, elegant
 optics library and the reference point for optics on Scala. If it is
 serving you well, there is no urgency to move. This page is for the
-cases where you want what cats-eo optimises for — and a map of what
+cases where you want what eo optimises for — and a map of what
 changes (and what doesn't) when you do.
 
 ## Why migrate?
 
-cats-eo and Monocle care about different things. Monocle's design
+eo and Monocle care about different things. Monocle's design
 prizes a clean, minimal core: eight classic optics related by an
 inheritance hierarchy, so the library reads as beautifully as the
-code you write with it. cats-eo is built for **performance and
+code you write with it. eo is built for **performance and
 industrial application**, and it accepts internal complexity to get
 there. The library's own source is not the most elegant code you
 will ever read — existential carriers, fused composition overloads,
@@ -29,7 +29,7 @@ choices buys something at *your* call site:
   a hot path, this is the difference that pays for the migration.
 - **Stack safety.** Deep or degenerate structures are a fact of
   industrial data — a 100k-deep JSON spine, a recursive ADT from a
-  parser. cats-eo's recursive machinery (`Plated`, the recursion
+  parser. eo's recursive machinery (`Plated`, the recursion
   schemes) runs on heap-backed machines and is safe at depths where
   simple recursion overflows.
 - **Interoperability.** The same Lens / Prism / Traversal vocabulary
@@ -37,7 +37,7 @@ choices buys something at *your* call site:
   ASTs, Apache Avro records, and raw jsoniter byte buffers — read
   and edit encoded data without a decode/re-encode round trip. The
   Monocle ecosystem prefers to leave format-specific tooling to the
-  formats themselves; cats-eo treats it as part of the optics story.
+  formats themselves; eo treats it as part of the optics story.
 - **Compositional reach.** Every family composes with every other
   family through one `.andThen`, and the result is compiler-pinned:
   an 11-family [composition matrix](optics.md#composition-matrix)
@@ -50,7 +50,7 @@ choices buys something at *your* call site:
   pipelines.
 
 The trade is real in both directions: Monocle gives you a smaller,
-smoother surface; cats-eo gives you throughput, depth, and reach.
+smoother surface; eo gives you throughput, depth, and reach.
 
 ## What stays the same
 
@@ -62,13 +62,13 @@ Monocle's polymorphic `PLens` / `PPrism` / `PIso` shapes map onto
 eo's `pLens` / polymorphic constructors one-for-one.
 
 Law testing ports directly too. Monocle ships
-`monocle-law` with discipline rule-sets; `cats-eo-laws` follows the
+`monocle-law` with discipline rule-sets; `eo-laws` follows the
 same `checkAll` pattern, with one wiring difference: eo's `FooTests`
 are abstract classes you wire by overriding `laws` — there is no
 companion `apply`:
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo-laws" % "@VERSION@" % Test
+libraryDependencies += "dev.constructive" %%% "eo-laws" % "@VERSION@" % Test
 ```
 
 ```scala
@@ -85,7 +85,7 @@ checkAll(
 )
 ```
 
-`cats-eo-laws` ships law equations and rule-sets only — no
+`eo-laws` ships law equations and rule-sets only — no
 `Arbitrary`, `Cogen`, or `Eq` instances. The generators for your
 `S` and `A` come from your own ScalaCheck setup, exactly as they
 would for any other discipline suite.
@@ -113,7 +113,7 @@ structural comparison.
 
 Monocle's subtype hierarchy makes `Getter[S, A]` the natural
 parameter type for "any optic I can read through" — every Lens *is*
-a Getter, so the upcast is free. cats-eo has no subtype hierarchy,
+a Getter, so the upcast is free. eo has no subtype hierarchy,
 and there is nothing to search for in its place: the porting move
 for *signatures* is the [capability traits](capabilities.md). A
 method that consumes an optic asks for the weakest capability
@@ -124,7 +124,7 @@ concrete or composed — is the evidence:
 // Monocle: accept anything readable via the hierarchy upcast.
 def render[S](s: S, g: Getter[S, Json]): Doc
 
-// cats-eo: the same contract as `using` evidence. A Lens, Iso, or
+// eo: the same contract as `using` evidence. A Lens, Iso, or
 // Getter IS a CanGet — pass it (or bind it as a given) directly,
 // and read through the subject-first `s.get[Json]` extension.
 def render[S](s: S)(using CanGet[S, Json]): Doc =
@@ -147,7 +147,7 @@ Both libraries give you one `.andThen` across families, so that is
 not the difference. Monocle composes through its inheritance
 hierarchy: every optic *is* a weaker optic, so composition meets at
 the common ancestor — an elegant design, and it works because the
-hierarchy is closed and known up front. cats-eo chose not to have an
+hierarchy is closed and known up front. eo chose not to have an
 extension hierarchy at all, and *that* is what changes in practice:
 composition is driven by typeclass instances over the **carrier**
 (`AssociativeFunctor[F, X, Y]` for a shared carrier, a summoned
@@ -190,10 +190,10 @@ instances and inherits the cross-family bridges for free.
 
 Read-only collapse is common ground, not a difference: compose a
 chain that touches a Getter and both libraries land you on the
-read-only join — Monocle through its hierarchy, cats-eo through
+read-only join — Monocle through its hierarchy, eo through
 `ReadCompose` (`lens.andThen(getter)` → Getter,
 `prism.andThen(getter)` → AffineFold, `traversal.andThen(getter)` →
-Fold). Where cats-eo invests further is the **write side and
+Fold). Where eo invests further is the **write side and
 beyond**:
 
 - The build/write-only direction is fully populated — `Modify`
@@ -203,7 +203,7 @@ beyond**:
   planned next. The [composition matrix](optics.md#composition-matrix)
   pins how every pair behaves, including the cells that are void by
   design (`getter.andThen(modify)` — nothing to write through).
-- A preliminary integration with **recursion schemes**: cats-eo is
+- A preliminary integration with **recursion schemes**: eo is
   attempting to present recursion schemes as optics *themselves* —
   `cata` is a Getter, `ana` a Review, `hylo` a fused Getter — so that
   genuinely complex algorithms over trees and recursive data
@@ -218,7 +218,7 @@ That ambition is why the family roster below is as large as it is.
 
 ### A larger family space
 
-Beyond the classic eight, cats-eo ships families Monocle prefers to
+Beyond the classic eight, eo ships families Monocle prefers to
 express through other means or leave to dedicated libraries:
 
 - **AffineFold** — a standalone read-only 0-or-1 focus (where
@@ -243,7 +243,7 @@ express through other means or leave to dedicated libraries:
 
 ### Traversal carrier
 
-cats-eo's `Traversal.each[F, A]` / `pEach[F, A, B]` ride the
+eo's `Traversal.each[F, A]` / `pEach[F, A, B]` ride the
 `MultiFocus[PSVec]` carrier — `.modify`, `.foldMap`, `.modifyF`, and
 downstream `.andThen` all supported. It pays a small constant factor
 over a hand-written `map` (see the
@@ -254,7 +254,7 @@ and wins it back at composition depth.
 
 [circe-optics](https://github.com/circe/circe-optics) — the
 circe-maintained Monocle companion — gives you `JsonPath` optics
-over the `Json` AST, and it does that job well. cats-eo's
+over the `Json` AST, and it does that job well. eo's
 [circe integration](integrations/circe.md) covers the same AST
 territory and adds multi-field foci (`fields(_.a, _.b)` as a
 NamedTuple focus) and an **observable failure channel**: misses and
@@ -272,18 +272,18 @@ splice-writes on encoded data with no full decode/re-encode cycle.
 Monocle's `monocle.function.Plated` keeps its recursion simple and
 direct — which reads beautifully, but overflows the stack on
 degenerate spines (`transform` / `universe` on a deep chain; see the
-[benchmarks](benchmarks.md)). cats-eo's `Plated` trades that
+[benchmarks](benchmarks.md)). eo's `Plated` trades that
 simplicity for stack safety: it clears a 100k-deep spine —
 `transform` / `everywhere` on a call-stack/heap-machine hybrid, the
 reads on a worklist, `rewrite` trampolined through `cats.Eval`.
-cats-eo also exposes `everywhere[S]` as a composable `Modify` —
+eo also exposes `everywhere[S]` as a composable `Modify` —
 `everywhere.andThen(prism).modify(f)` applies an ordinary optic at
 every depth, a combinator Monocle's Plated chooses not to expose.
 See the [cookbook recipe](cookbook/navigating-structures.md#visit-across-whole-trees).
 
 ## Cheat sheet
 
-| Monocle                                            | cats-eo                                             |
+| Monocle                                            | eo                                             |
 |----------------------------------------------------|-----------------------------------------------------|
 | `Lens[S, A](get)(a => s => …)`                     | `Lens[S, A](get, (s, a) => …)`                      |
 | `PLens[S, T, A, B](get)(set)`                      | `Lens.pLens[S, T, A, B](get, enplace)` — every family has a polymorphic `pType` constructor |
@@ -296,7 +296,7 @@ See the [cookbook recipe](cookbook/navigating-structures.md#visit-across-whole-t
 | `.at(k)` (`At`)                                    | `.andThen(At[K, V](k))` — a total `Lens` to `Option[V]`: `Some` upserts, `None` deletes. Objects with `apply`, not typeclasses — nothing to instance |
 | `Prism[S, A](_.some)(identity)`                    | `Prism.optional[S, A](_.some, identity)`            |
 | `GenPrism[S, A]`                                   | `prism[S, A]` (from `dev.constructive.eo.generics`)                  |
-| refined-type prisms (`monocle-refined`, over the Scala 2 refined library) | `IronPrism[A, C]` / `Age.prism` over [Iron](https://github.com/Iltotore/iron) refinements (from `cats-eo-iron`); see [Iron integration](integrations/iron.md) |
+| refined-type prisms (`monocle-refined`, over the Scala 2 refined library) | `IronPrism[A, C]` / `Age.prism` over [Iron](https://github.com/Iltotore/iron) refinements (from `eo-iron`); see [Iron integration](integrations/iron.md) |
 | `Iso[S, A](f)(g)`                                  | `Iso[S, S, A, A](f, g)`                             |
 | `Optional[S, A](_.some)(a => s => …)`              | `Optional[S, S, A, A](getOrModify, rg)`             |
 | `optional.getOption` used as a read-only view      | `AffineFold(p => ...)` / `AffineFold.select(p)` / `AffineFold(optic.getOption)` — a standalone read-only 0-or-1 family, `T = Unit` forbids `.modify` |

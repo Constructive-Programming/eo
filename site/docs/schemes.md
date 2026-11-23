@@ -15,7 +15,7 @@
 > is *planned*, not shipped; until it lands, express recursive computations through these three
 > rather than hand-rolling your own recursion.
 
-`cats-eo-schemes` expresses the recursion schemes **as optics**, so they compose with the rest
+`eo-schemes` expresses the recursion schemes **as optics**, so they compose with the rest
 of the optic algebra rather than living in a separate world:
 
 | Scheme | Optic | Direction |
@@ -33,7 +33,7 @@ that is `Plated.transform` / `Plated.rewrite` in core.
 > `Basis`. The recursive type `S` is used directly, and `Plated[S]` is the one instance the
 > fold side needs:
 
-| droste / Matryoshka | `cats-eo-schemes` |
+| droste / Matryoshka | `eo-schemes` |
 |---------------------|-------------------|
 | `Fix[F]` / `Mu[F]` / `Nu[F]` | the recursive type `S` itself — no wrapper |
 | pattern functor `F[A]` | `PSVec[A]` — the (untyped) children vector |
@@ -51,7 +51,7 @@ trees never leave the fast path), then hands each deeper subtree to a heap `Arra
 machine; depths a hand-written recursion would overflow are fine, and a *non-terminating*
 coalgebra fails by exhausting the heap (`OutOfMemoryError`), not by `StackOverflowError`.
 
-The examples below use the circe `Plated[Json]` from `cats-eo-circe` as a concrete recursive
+The examples below use the circe `Plated[Json]` from `eo-circe` as a concrete recursive
 `S` — but that is only an example convenience. `Plated[S]` is the **entire** requirement of the
 fold side, and any recursive type gets one: derive it with
 [`generics.plate[S]`](generics.md#plate-s-recursive-self-traversal-plated) — including a
@@ -214,13 +214,13 @@ val sumBuilt = buildList.cross(Fold[List, Int])
 sumBuilt.foldMap[Int](identity)(4) // 1+2+3+4
 ```
 
-## Checking the hylo law — `cats-eo-schemes-laws`
+## Checking the hylo law — `eo-schemes-laws`
 
 The hylo law above is not just prose: it ships as a Discipline law in its own published
 artifact, so you can pin your coalgebra / algebra pairs against it in your test suite:
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo-schemes-laws" % "@VERSION@" % Test
+libraryDependencies += "dev.constructive" %%% "eo-schemes-laws" % "@VERSION@" % Test
 ```
 
 `dev.constructive.eo.schemes.laws.HyloLaws[Seed, S, A]` states the fusion contract:
@@ -228,7 +228,7 @@ libraryDependencies += "dev.constructive" %%% "cats-eo-schemes-laws" % "@VERSION
 expansion is *derived* from the coalgebra (`coalg(_)._1`) — so the only coherence an instance
 asserts is that its `fusedAlg` corresponds to its `alg` over the nodes the coalgebra builds;
 an incoherent pair fails the law, which is the point. The Discipline wrapper,
-`dev.constructive.eo.schemes.laws.discipline.HyloTests`, is wired like the core `cats-eo-laws`
+`dev.constructive.eo.schemes.laws.discipline.HyloTests`, is wired like the core `eo-laws`
 rule-sets: an abstract class whose `laws` member you override with a `HyloLaws` instance
 supplying your `coalg`, `alg`, and `fusedAlg`, then `checkAll` its `hylo` rule-set. You bring
 the `Arbitrary[Seed]` — the artifact ships no generators — and the seed generator should
@@ -236,6 +236,6 @@ straddle the engine's 512-frame on-stack depth limit so both the recursive fast 
 heap machine are exercised under the equality. The comparison uses `equals`, so pick a result
 type `A` with structural equality (any case class, enum, or primitive).
 
-The artifact is separate from `cats-eo-laws` because its laws quantify over `schemes` types.
+The artifact is separate from `eo-laws` because its laws quantify over `schemes` types.
 Hylo fusion is its only rule-set today; more scheme laws are expected to land there as the zoo
 grows.

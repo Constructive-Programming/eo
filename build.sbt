@@ -35,7 +35,7 @@ ThisBuild / developers := List(
 // no longer accepts `--release 8`, and our CI matrix tests 17 and 21 —
 // so 17 is the honest floor for every module EXCEPT `kyo`, which
 // overrides to 25 (kyo RC5+ is Java-25-only bytecode). Downstream
-// consumers on older JDKs must use `cats-eo 0.1.x`-era artifacts
+// consumers on older JDKs must use the pre-2.0 `0.1.x`-era artifacts
 // compiled with a pre-25 toolchain.
 ThisBuild / tlJdkRelease := Some(17)
 
@@ -186,7 +186,7 @@ ThisBuild / tlFatalWarnings := true
 // scans every module's Compile sources, then applies the rule in a
 // forked scalafix run); quality.yml runs it on every release tag as a
 // non-gating report. We use the WARN variant — never the
-// REMOVE / ERROR variant — because cats-eo's public optic
+// REMOVE / ERROR variant — because eo's public optic
 // constructors are intentionally part of the published API even when
 // no internal call site invokes them yet (downstream users are the
 // consumers).
@@ -219,7 +219,7 @@ ThisBuild / unusedCodeConfig ~= { c =>
 //   - reporters: console for the live log, html + json for the report
 //     artifacts the release workflow uploads and gen-qa-report.py reads.
 //   - thresholds/break = 0: stryker is a REPORT, never a CI gate. A low
-//     mutation score must not fail the build (most of cats-eo is
+//     mutation score must not fail the build (most of eo is
 //     type-level; see site/docs/quality-assurance.md for why).
 //   - StringLiteral mutants excluded everywhere: in this codebase string
 //     literals are error messages, vestigial-arm labels, and discipline
@@ -461,7 +461,7 @@ lazy val vulcan = "com.github.fd4s" %% "vulcan" % "1.14.1"
 lazy val circeParser = Def.setting(Circe %%% "circe-parser" % "0.14.17")
 // Pin apache-avro 1.12.2 explicitly even though kindlings-avro-derivation
 // brings it transitively — keeps the reachable runtime jar visible in
-// dependency reports. cats-eo-avro touches `IndexedRecord` /
+// dependency reports. eo-avro touches `IndexedRecord` /
 // `GenericData` / `Schema` directly on the hot path.
 // The version tracks what kindlings-avro-derivation 0.3.2 depends on (1.12.2;
 // 0.3.0 depended on 1.12.1). Keeping the old 1.12.1 here would have turned a
@@ -474,7 +474,7 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 //
 //  1. It never protected a consumer. sbt's `dependencyOverrides` is BUILD-LOCAL: it does not
 //     emit `<dependencyManagement>`, and the published POMs carry none (verified on all four of
-//     cats-eo, -avro, -circe, -generics). Anyone depending on `cats-eo-avro` resolved jackson
+//     eo, -avro, -circe, -generics). Anyone depending on `eo-avro` resolved jackson
 //     through avro's own parent BOM, so before this bump they got jackson-databind 2.20.0 — five
 //     OSV advisories, two HIGH — while eo's own CI compiled against the overridden 2.21.5 and
 //     `dependency-submission` reported that safe version. The override made the exposure
@@ -489,7 +489,7 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 //     alone while core/databind stayed frozen, splitting the BOM across two minors. That is the
 //     precise hazard the override existed to avoid.
 //  3. The commons-lang3 half was masking, not fixing. Dropping it moves this build 3.20.0 ->
-//     3.18.0, and 3.18.0 is what a consumer of `cats-eo-avro` resolves: commons-lang3 arrives
+//     3.18.0, and 3.18.0 is what a consumer of `eo-avro` resolves: commons-lang3 arrives
 //     via `avro -> commons-compress 1.28.0`, whose POM declares 3.18.0 outright, and
 //     avro-parent's `commons-lang3.version` 3.20.0 property manages only avro's OWN direct
 //     dependencies — it never reaches a consumer's resolution. 3.18.0 is the first release
@@ -509,11 +509,11 @@ lazy val avro = ApacheAvro % "avro" % "1.12.2"
 // directly from `Array[Byte]` without allocating a runtime AST. The
 // `-macros` artifact ships `JsonCodecMaker` so callers can derive a
 // `JsonValueCodec[A]` per focus type at compile time.
-// zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `cats-eo-zio`
+// zio — runtime + ZEnvironment/ZLayer/Ref, the DI surface `eo-zio`
 // integrates with. Compile-scope there: the module's whole API names
 // ZIO types.
 lazy val zioCore = Def.setting(Ziverge %%% "zio" % "2.1.27")
-// zio-schema / zio-json / zio-prelude — Optional in `cats-eo-zio`: only
+// zio-schema / zio-json / zio-prelude — Optional in `eo-zio`: only
 // the `eo.zio.schema` / `eo.zio.json` / `eo.zio.prelude` sub-packages name
 // their types, callers who want a seam add its artifact themselves (the
 // avro/circe/kyo-schema pattern). They pin zio 2.1.23–2.1.26 transitively;
@@ -528,7 +528,7 @@ lazy val zioJson = Def.setting(Ziverge %%% "zio-json" % "1.1.3")
 lazy val zioPrelude = Def.setting(Ziverge %%% "zio-prelude" % "1.0.0-RC49")
 // kyo-prelude — Kyo's dependency-light pure layer: Env / Var / Layer /
 // TypeMap all live here (kyo-data + kyo-kernel come transitively; no
-// kyo-core IO runtime). `cats-eo-kyo` deliberately depends on nothing
+// kyo-core IO runtime). `eo-kyo` deliberately depends on nothing
 // above it, matching Kyo's own module-granularity doctrine.
 // NB kyo 1.0.0-RC5+ ships Java 25 bytecode (class file 69) wholesale, so
 // kyo's macro classes can only LOAD in a JDK 25+ compiler JVM. The kyo
@@ -537,7 +537,7 @@ lazy val zioPrelude = Def.setting(Ziverge %%% "zio-prelude" % "1.0.0-RC49")
 val KyoVersion = "1.0.0-RC7"
 lazy val kyoPrelude = Def.setting(GetKyo %%% "kyo-prelude" % KyoVersion)
 // kyo-schema — schema-driven codecs/foci (kyo-data only; no kyo-core).
-// Optional in `cats-eo-kyo`: only the `eo.kyo.schema` sub-package names
+// Optional in `eo-kyo`: only the `eo.kyo.schema` sub-package names
 // its types, callers who want it add it themselves (avro/circe pattern).
 // The json codec artifact is test-only fuel for the byte-face prisms.
 lazy val kyoSchema = Def.setting(GetKyo %%% "kyo-schema" % KyoVersion)
@@ -559,7 +559,7 @@ lazy val chimneyCore = Def.setting("io.scalaland" %%% "chimney" % "2.1.1")
 
 // Apache Spark 4.x publishes ONLY `_2.13` artifacts (no Scala 3 build), so
 // every Spark dependency is consumed through `CrossVersion.for3Use2_13`.
-// `cats-eo-spark` compiles against the shared `spark-sql-api` alone — the
+// `eo-spark` compiles against the shared `spark-sql-api` alone — the
 // Column / functions / Dataset / Encoder / AgnosticEncoders surface common
 // to Spark Classic and Spark Connect — and leaves it `Provided`: clusters
 // and Connect clients supply their own Spark. The specs run on the Connect
@@ -602,7 +602,7 @@ lazy val commonSettings = Seq(
   // patterns reference our abstract enum cases ("the type test for
   // Problem.X cannot be checked at runtime"); we don't own that
   // library's code and the warning is a Hearth-side concern rather
-  // than a cats-eo bug.
+  // than an eo bug.
   Test / scalacOptions += "-Wconf:src=.*/cats-derivation/.*:silent",
   // NB no jackson / commons-lang3 `dependencyOverrides` here — see the comment above the `avro`
   // dependency for why the build now resolves avro's transitives exactly as consumers do.
@@ -764,7 +764,7 @@ lazy val root = tlCrossRootProject
   )
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-root",
+    name := "eo-root",
     publish / skip := true,
     // Never published, so there is no 1.0.0 artifact for MiMa to compare against.
     mimaPreviousArtifacts := Set.empty,
@@ -776,10 +776,10 @@ lazy val core = eoCross(
     .in(file("core"))
 )
   .settings(
-    name := "cats-eo",
+    name := "eo",
     libraryDependencies += cats.value,
     // Core runs its own in-module smoke specs (currently just FoldSpec) on the specs2 stack
-    // eoCross adds; the richer suites all live in cats-eo-tests.
+    // eoCross adds; the richer suites all live in eo-tests.
   )
 
 lazy val laws = eoCross(
@@ -789,7 +789,7 @@ lazy val laws = eoCross(
     .dependsOn(core)
 )
   .settings(
-    name := "cats-eo-laws",
+    name := "eo-laws",
     Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats.value,
     libraryDependencies += disciplineCore.value,
@@ -803,7 +803,7 @@ lazy val tests = eoCrossBase(
     .dependsOn(core, laws, generics % Test)
 )
   .settings(
-    name := "cats-eo-tests",
+    name := "eo-tests",
     publish / skip := true,
     // Never published, so there is no 1.0.0 artifact for MiMa to compare against.
     mimaPreviousArtifacts := Set.empty,
@@ -834,7 +834,7 @@ lazy val schemes = eoCross(
     .dependsOn(core, generics % Test, circeIntegration % Test)
 )
   .settings(
-    name := "cats-eo-schemes",
+    name := "eo-schemes",
     libraryDependencies += cats.value,
     libraryDependencies += scalacheck.value % Test,
   )
@@ -851,7 +851,7 @@ lazy val schemesLaws = eoCross(
     .dependsOn(schemes)
 )
   .settings(
-    name := "cats-eo-schemes-laws",
+    name := "eo-schemes-laws",
     Compile / scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix.conf"),
     libraryDependencies += cats.value,
     libraryDependencies += disciplineCore.value,
@@ -869,7 +869,7 @@ lazy val generics = eoCrossMacro(
     .dependsOn(core, laws % Test)
 )
   .settings(
-    name := "cats-eo-generics",
+    name := "eo-generics",
     libraryDependencies += cats.value,
     libraryDependencies += hearth.value,
     // The Hearth-quote-driven lens macro emits a `'{ (x, a) => ... }`
@@ -894,7 +894,7 @@ lazy val circeIntegration = eoCross(
     .dependsOn(core, generics, laws % Test)
 )
   .settings(
-    name := "cats-eo-circe",
+    name := "eo-circe",
     libraryDependencies += cats.value,
     libraryDependencies += circe.value,
     // Compile-scope: the `Json | String` overloads on JsonPrism /
@@ -912,7 +912,7 @@ lazy val circeIntegration = eoCross(
 // architecture decisions; built on Mateusz Kubuszok's
 // `kindlings-avro-derivation` for the codec surface (the
 // `AvroEncoder[A]` / `AvroDecoder[A]` / `AvroSchemaFor[A]` triplet,
-// macro-derived via Hearth). cats-eo-avro wraps the triplet in its own
+// macro-derived via Hearth). eo-avro wraps the triplet in its own
 // `AvroCodec[A]` shorthand so user code summons one thing per type.
 // Kept in its own module so projects that only want the base library
 // don't pull in kindlings / avro.
@@ -923,11 +923,11 @@ lazy val avroIntegration: Project = project
     generics.jvm,
     // Optional: the `dev.constructive.eo.avro.jsoniter` sub-package extends `JsoniterPrism` with
     // the structural `.avro` face — its API surface *names* JsoniterPrism, so any caller already
-    // depends on cats-eo-jsoniter directly. Optional keeps it off avro-only classpaths. (The
+    // depends on eo-jsoniter directly. Optional keeps it off avro-only classpaths. (The
     // reverse dep would be a cycle — see the jsoniterIntegration comment.)
     jsoniterIntegration.jvm % Optional,
-    // Same doctrine for cats-eo-circe: the `dev.constructive.eo.avro.circe` cursor faces extend
-    // `JsonPrism` with the structural `.avro` face — callers of it already depend on cats-eo-circe
+    // Same doctrine for eo-circe: the `dev.constructive.eo.avro.circe` cursor faces extend
+    // `JsonPrism` with the structural `.avro` face — callers of it already depend on eo-circe
     // directly. circe-core alone (below) still serves the AvroJson walk/prism surface.
     circeIntegration.jvm % Optional,
     laws.jvm % Test,
@@ -935,7 +935,7 @@ lazy val avroIntegration: Project = project
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
   .settings(
-    name := "cats-eo-avro",
+    name := "eo-avro",
     libraryDependencies += cats.value,
     libraryDependencies += kindlingsAvro,
     // Pin apache-avro explicitly even though kindlings-avro-derivation
@@ -987,7 +987,7 @@ lazy val jsoniterIntegration = eoCross(
     .dependsOn(core, generics, laws % Test)
 )
   .settings(
-    name := "cats-eo-jsoniter",
+    name := "eo-jsoniter",
     libraryDependencies += cats.value,
     libraryDependencies += jsoniterCore.value,
     // -macros is Test-scoped: the optic factory only needs
@@ -1008,7 +1008,7 @@ lazy val ironIntegration = eoCross(
     .dependsOn(core, laws % Test)
 )
   .settings(
-    name := "cats-eo-iron",
+    name := "eo-iron",
     libraryDependencies += cats.value,
     libraryDependencies += iron.value,
   )
@@ -1026,7 +1026,7 @@ lazy val zioIntegration = eoCross(
     .dependsOn(core, laws % Test)
 )
   .settings(
-    name := "cats-eo-zio",
+    name := "eo-zio",
     libraryDependencies += cats.value,
     libraryDependencies += zioCore.value,
     libraryDependencies += zioSchema.value % Optional,
@@ -1049,7 +1049,7 @@ lazy val chimneyIntegration = eoCross(
     .dependsOn(core, generics % Test, laws % Test)
 )
   .settings(
-    name := "cats-eo-chimney",
+    name := "eo-chimney",
     libraryDependencies += cats.value,
     libraryDependencies += chimneyCore.value,
   )
@@ -1079,7 +1079,7 @@ lazy val sparkIntegration: Project = project
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
   .settings(
-    name := "cats-eo-spark",
+    name := "eo-spark",
     // New after 1.0.0: MiMa has no earlier artifact of this module to compare against.
     tlVersionIntroduced := Map("3" -> "1.1.0"),
     libraryDependencies += cats.value,
@@ -1159,7 +1159,7 @@ lazy val sparkBench: Project = project
   .dependsOn(LocalProject("sparkIntegration") % "compile->test")
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-spark-bench",
+    name := "eo-spark-bench",
     publish / skip := true,
     // JMH's sources are generated from bytecode, so they need no annotation processing — and the
     // `compile->test` classpath carries a processor that claims none of JMH's annotations, which
@@ -1208,7 +1208,7 @@ lazy val kyoIntegration = eoCross(
   // JDK 25 compiler JVM to load kyo's macro classes (hence `kyoBuildActive` gates the whole module).
   .jvmSettings(tlJdkRelease := Some(25))
   .settings(
-    name := "cats-eo-kyo",
+    name := "eo-kyo",
     scalacOptions -= "-Yexplicit-nulls",
     Test / scalacOptions -= "-Yexplicit-nulls",
     scalacOptions += "-Wconf:src=kyo-schema/.*:s",
@@ -1243,7 +1243,7 @@ lazy val docs: Project = project
   )
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-docs",
+    name := "eo-docs",
     publish / skip := true,
     // Disable sbt-typelevel-site's default ci.yml "Publish site" step.
     // That step pushes the rendered site to a `gh-pages` branch via
@@ -1378,7 +1378,7 @@ lazy val docs: Project = project
           // Home link: project name as a text link to the docs root.
           // Helium's default home link (`DynamicHomeLink.default`)
           // expects a configured landing page; we don't have one.
-          homeLink = TextLink.internal(Path.Root / "index.md", "cats-eo"),
+          homeLink = TextLink.internal(Path.Root / "index.md", "eo"),
           // Right-side nav: constructive.dev favicon (back to brand
           // site) first, GitHub source link second. Order matters —
           // the auto-derived IconLink from scmInfo was suppressed
@@ -1422,7 +1422,7 @@ lazy val unidocs: Project = project
   .in(file("unidocs"))
   .enablePlugins(ScalaUnidocPlugin)
   .settings(
-    name := "cats-eo-api-docs",
+    name := "eo-api-docs",
     publish / skip := true,
     // Same `-groups` the per-module docs get (commonSettings), so
     // @group buckets render as sections in the merged tree too.
@@ -1460,12 +1460,12 @@ lazy val benchmarks: Project = project
     // only), so kyo's inline `.eval` machinery expands fine here.
     zioIntegration.jvm,
     kyoIntegration.jvm,
-    // ChimneyBench: cats-eo-chimney vs plain chimney vs hand-written transforms.
+    // ChimneyBench: eo-chimney vs plain chimney vs hand-written transforms.
     chimneyIntegration.jvm,
   )
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-benchmarks",
+    name := "eo-benchmarks",
     publish / skip := true,
     libraryDependencies += monocle,
     // droste — recursion-scheme baseline for SchemesBench.
@@ -1475,7 +1475,7 @@ lazy val benchmarks: Project = project
     libraryDependencies += circeParser.value,
     libraryDependencies += kindlingsCirce.value,
     // kindlings-avro-derivation for the OrderAvroBench fixture codecs;
-    // cats-eo-avro itself is wired through the .dependsOn edge above so
+    // eo-avro itself is wired through the .dependsOn edge above so
     // AvroPrism / codecPrism are on the bench classpath.
     libraryDependencies += kindlingsAvro,
     // vulcan for AvroVulcanBench — avro's Optional dep doesn't propagate
@@ -1513,7 +1513,7 @@ lazy val demoUplcJvm: Project = project
   )
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-demo-uplc-jvm",
+    name := "eo-demo-uplc-jvm",
     publish / skip := true,
     libraryDependencies += scalus,
     libraryDependencies += asmCommons,
@@ -1535,7 +1535,7 @@ lazy val demoUplcJvmValidators: Project = project
   .in(file("demos/uplc-jvm-validators"))
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-demo-uplc-jvm-validators",
+    name := "eo-demo-uplc-jvm-validators",
     publish / skip := true,
     libraryDependencies += scalus,
     addCompilerPlugin("org.scalus" % "scalus-plugin" % ScalusVersion cross CrossVersion.full),
@@ -1554,7 +1554,7 @@ lazy val demoUplcJvmBench: Project = project
   )
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-demo-uplc-jvm-bench",
+    name := "eo-demo-uplc-jvm-bench",
     publish / skip := true,
   )
 
@@ -1585,7 +1585,7 @@ lazy val demoGrpcFilter: Project = project
   )
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-demo-grpc-filter",
+    name := "eo-demo-grpc-filter",
     publish / skip := true,
     libraryDependencies += fs2Io,
     // The message model's codecs: the source encodes whole messages, the baseline decodes them.
@@ -1607,7 +1607,7 @@ lazy val demoGrpcFilterBench: Project = project
   .dependsOn(LocalProject("demoGrpcFilter"))
   .settings(commonSettings *)
   .settings(
-    name := "cats-eo-demo-grpc-filter-bench",
+    name := "eo-demo-grpc-filter-bench",
     publish / skip := true,
   )
 

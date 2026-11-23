@@ -2,7 +2,7 @@
 
 Writing a `Lens` or `Prism` by hand is mechanical, repetitive work — a getter, a
 setter that rebuilds the whole case class around one changed field, a pattern
-match per sum-type branch. `cats-eo-generics` writes all of it for you. Three
+match per sum-type branch. `eo-generics` writes all of it for you. Three
 macros — `lens`, `prism`, and `plate` — inspect your case classes and enums at
 **compile time** and emit the optic directly: no runtime reflection, no derivation
 typeclass to summon, no per-field wiring to keep in sync as the type evolves.
@@ -19,7 +19,7 @@ or an entire request handler, becomes one clean expression instead of a nest of
 pipelines](#composing-derived-optics-into-pipelines) builds that up.
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo-generics" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "eo-generics" % "@VERSION@"
 ```
 
 ```scala mdoc:silent
@@ -437,7 +437,7 @@ their input doesn't fit. Examples:
 - `lens[NonCaseClass](_.field)` — only works on case classes.
 
 See the [Scaladoc for
-`LensMacro`](https://javadoc.io/doc/dev.constructive/cats-eo-generics_3/latest/api/eo/generics/LensMacro$.html)
+`LensMacro`](https://javadoc.io/doc/dev.constructive/eo-generics_3/latest/api/eo/generics/LensMacro$.html)
 and
-[`PrismMacro`](https://javadoc.io/doc/dev.constructive/cats-eo-generics_3/latest/api/eo/generics/PrismMacro$.html)
+[`PrismMacro`](https://javadoc.io/doc/dev.constructive/eo-generics_3/latest/api/eo/generics/PrismMacro$.html)
 for the implementation details.

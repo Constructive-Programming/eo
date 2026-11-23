@@ -1,6 +1,6 @@
 # Iron integration
 
-The `cats-eo-iron` module turns [Iron](https://github.com/Iltotore/iron)
+The `eo-iron` module turns [Iron](https://github.com/Iltotore/iron)
 refined types into optics. Iron checks a refinement either at compile
 time (a literal is proven to satisfy the constraint) or at runtime
 (a value that arrives as data is tested). The runtime kind is a
@@ -8,7 +8,7 @@ partial conversion `A ⇀ A :| C` with a total way back — and that is
 exactly a Prism.
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo-iron" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "eo-iron" % "@VERSION@"
 ```
 
 No carrier and no givens ship in this module: `IronPrism` builds the
@@ -42,7 +42,7 @@ positive.reverseGet(7.refineUnsafe[Positive])
 
 Both Prism laws hold for any pure constraint: a value that passed the
 test passes it again, and forgetting a refinement gives back the very
-value that was refined. The module's spec runs `cats-eo-laws`'
+value that was refined. The module's spec runs `eo-laws`'
 `PrismTests` on every constructor.
 
 ### From a constraint instance

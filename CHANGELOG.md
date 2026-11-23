@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING — Maven coordinates renamed `cats-eo*` → `eo*`.** The project is now simply
+  `eo`: `dev.constructive:eo`, `:eo-laws`, `:eo-generics`, `:eo-schemes`, `:eo-schemes-laws`,
+  `:eo-circe`, `:eo-avro`, `:eo-jsoniter`, `:eo-iron`, `:eo-zio`, `:eo-chimney`, `:eo-spark`
+  and `:eo-kyo` (packages stay `dev.constructive.eo`).
 - **BREAKING — one effectful modify.** `CanModifyF[S, A, C]` (polymorphic `CanModifyFP`) replaces
   `CanModifyF` / `CanModifyA`, and raw `Optic.modifyF` replaces `Optic.modifyA`. `C` is the effect
   constraint the carrier needs (`Functor` lens, `Invariant` iso, `Applicative` prism / optional /

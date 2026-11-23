@@ -151,9 +151,9 @@ object CrudRoundtrip:
 
   /** Every `orders → shippingAddress → zipCode` in one composed optic.
     *
-    * This is the flagship cats-eo move: compose the outer Lens with a `Traversal.each` and then
-    * with the inner nested Lens — no explicit `.morph` anywhere. The cross-carrier `andThen`
-    * extension picks the `Composer[Tuple2, PowerSeries]` bridge automatically on each hop. A single
+    * This is the flagship eo move: compose the outer Lens with a `Traversal.each` and then with the
+    * inner nested Lens — no explicit `.morph` anywhere. The cross-carrier `andThen` extension picks
+    * the `Composer[Tuple2, PowerSeries]` bridge automatically on each hop. A single
     * `modifyF[Result]` then threads an `Either`-effectful validator through every leaf at once.
     */
   val everyZip: Traversal[User, User, String, String] =
@@ -165,8 +165,8 @@ object CrudRoundtrip:
   // Handler #1 — naive, no optics
   // =====================================================================
 
-  /** What you'd write today without cats-eo: a for-comprehension that destructures every nested
-    * field by hand and rebuilds the copy chain at each level. Every new validated field costs a
+  /** What you'd write today without eo: a for-comprehension that destructures every nested field by
+    * hand and rebuilds the copy chain at each level. Every new validated field costs a
     * `<- validate` line AND a `.copy(...)` line. The order loop is the worst offender — two nested
     * copies just to update one string.
     */
@@ -189,7 +189,7 @@ object CrudRoundtrip:
     yield id
 
   // =====================================================================
-  // Handler #2 — cats-eo optics
+  // Handler #2 — eo optics
   // =====================================================================
 
   /** Same behaviour as [[handleNaive]], written against the optic declarations above. Every

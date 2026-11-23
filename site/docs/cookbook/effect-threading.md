@@ -152,9 +152,9 @@ eachLeaf.modify(n => n.copy(label = byId(n.id).body))(nodes)
 ```
 
 The pattern generalises to trees, graphs, nested containers,
-anything with a `Traverse`. The two-pass idiom is what cats-eo's
+anything with a `Traverse`. The two-pass idiom is what eo's
 `foldMap` + `modify` pair already enables out of the box — no
-cats-eo-specific API to learn.
+eo-specific API to learn.
 
 **Source:** Penner — *Using traversals to batch database
 queries*, <https://chrispenner.ca/posts/traversals-for-batching>.

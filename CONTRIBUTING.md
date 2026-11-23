@@ -1,6 +1,6 @@
-# Contributing to cats-eo
+# Contributing to eo
 
-Thanks for your interest in cats-eo. This guide is the day-one starting
+Thanks for your interest in eo. This guide is the day-one starting
 point for human contributors. Companion guidance for AI-assisted
 contributions lives in [`CLAUDE.md`](./CLAUDE.md).
 
@@ -150,7 +150,7 @@ not counted against the target.
    `breaking-change`, `enhancement`, `bug`, `performance`,
    `documentation`).
 6. Watch the workflow; on success the artifacts appear at
-   `https://repo1.maven.org/maven2/dev/constructive/cats-eo_3/X.Y.Z/`.
+   `https://repo1.maven.org/maven2/dev/constructive/eo_3/X.Y.Z/`.
 
 Release-notes conventions: a binary-breaking release leads its
 changelog section with the recompile warning (inline-spliced call
