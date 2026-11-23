@@ -15,8 +15,8 @@ import org.openjdk.jmh.annotations.*
 /** `Plated` recursion — the read side (`universe`, enumerate every sub-term) and the write side
   * (`transform`, bottom-up rebuild) — measured three ways:
   *
-  *   - `eo*` — eo `Plated.universe` / `Plated.transform` (PSVec-native carrier, stack-safe via
-  *     an explicit post-order stack machine / worklist on the heap).
+  *   - `eo*` — eo `Plated.universe` / `Plated.transform` (PSVec-native carrier, stack-safe via an
+  *     explicit post-order stack machine / worklist on the heap).
   *   - `m*` — Monocle `monocle.function.Plated.universe` / `.transform` over a hand-written
   *     `Plated` instance.
   *   - `visitor*` — the hand-rolled recursive collector / rebuild you'd write without optics. The

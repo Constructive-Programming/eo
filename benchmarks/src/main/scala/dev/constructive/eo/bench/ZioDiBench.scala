@@ -10,8 +10,8 @@ import bench.fixture.{DiDb, DiMetrics}
 import optics.Lens
 import zio.service
 
-/** `eo-zio` overhead: eo's `ZEnvironment` service lens (leaf and drilled through a field lens)
-  * vs the hand-written `env.get` / `env.update` equivalent. Both sides pay ZEnvironment's own map
+/** `eo-zio` overhead: eo's `ZEnvironment` service lens (leaf and drilled through a field lens) vs
+  * the hand-written `env.get` / `env.update` equivalent. Both sides pay ZEnvironment's own map
   * machinery; the delta is the optic hop.
   *
   * The effectful surfaces (`Ref` focus ops, `focusLayer`) are deliberately not benched: they are
