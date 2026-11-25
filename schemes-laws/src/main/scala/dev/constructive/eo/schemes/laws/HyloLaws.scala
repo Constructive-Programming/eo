@@ -22,7 +22,7 @@ import optics.Plated
   *
   * More scheme laws are expected to land here as the zoo grows — para / apo / histo / futu fusion,
   * cata-compose (`cata(f) ∘ cata(g)` deforestation), ana-compose, and the `Plated`-coalgebra
-  * coherence (`childrenVec` deconstructs exactly what the coalgebra's builder constructs).
+  * coherence (`childrenView` deconstructs exactly what the coalgebra's builder constructs).
   */
 trait HyloLaws[Seed, S, A](using val P: Plated[S]):
 

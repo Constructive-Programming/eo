@@ -48,8 +48,9 @@ sealed trait PSVec[+B] extends IterableOnce[B]:
 
   inline def isEmpty: Boolean = length == 0
 
-  /** Materialise as a `List` — the read-side bridge for `Plated.children` / `universe` and the
-    * carriers (circe / avro) that reconstruct from an ordered sequence.
+  /** Materialise as a `List` — the default `Children.toList` bridge (derived instances share a
+    * single `List[S]` field instead) and the carriers (circe / avro) that reconstruct from an
+    * ordered sequence.
     */
   def toList: List[B] = iterator.toList
 
@@ -61,11 +62,11 @@ sealed trait PSVec[+B] extends IterableOnce[B]:
   def toAnyArray: Array[Any]
 
   /** Like [[toAnyArray]] but MAY share the backing array zero-copy when a dense Slice covers its
-    * full range. Callers MUST treat the result as immutable. Used by consumers that also won't
-    * mutate, e.g. [[optics.Traversal.pEach]]'s `from` → `ArraySeq.unsafeWrapArray`). Default is the
-    * safe copy; only `Slice` overrides to share.
+    * full range. Callers MUST treat the result as immutable. Internal: used by the core engines
+    * (e.g. [[optics.Traversal.pEach]]'s `from` → `ArraySeq.unsafeWrapArray`). Default is the safe
+    * copy; only `Slice` overrides to share.
     */
-  def unsafeShareableArray: Array[Any] = toAnyArray
+  private[eo] def unsafeShareableArray: Array[Any] = toAnyArray
 
   override def equals(that: Any): Boolean = that match
     case other: PSVec[?] =>
@@ -91,9 +92,9 @@ sealed trait PSVec[+B] extends IterableOnce[B]:
   override def toString(): String = toList.mkString("PSVec(", ", ", ")")
 
 /** Constructors for [[PSVec]] — the primary entry points are `empty`, `singleton`, and `unsafeWrap`
-  * (zero-copy from an `Array[Any]`). The three `Slice` / `Single` / `Empty` subclasses are internal
-  * to the `dev.constructive.eo.data` package and stable across release lines only at the aggregate
-  * `PSVec` supertype level.
+  * (zero-copy from an `Array[Any]`). The `Slice` / `Single` / `Empty` representation classes and
+  * `unsafeShareableArray` are `private[eo]`: the stable API is the aggregate `PSVec` type plus the
+  * constructors and read methods above.
   */
 object PSVec:
 
@@ -194,8 +195,10 @@ object PSVec:
         f: (A, Eval[B]) => Eval[B]
     ): Eval[B] = pSVecFoldable.foldRight(fa, lb)(f)
 
-  /** Zero-element shared singleton; Prism / Affine miss branches allocate nothing. */
-  case object Empty extends PSVec[Nothing]:
+  /** Zero-element shared singleton; Prism / Affine miss branches allocate nothing. Internal: use
+    * [[empty]].
+    */
+  private[eo] case object Empty extends PSVec[Nothing]:
     def length: Int = 0
 
     override val toAnyArray: Array[Any] = new Array[Any](0)
@@ -208,8 +211,10 @@ object PSVec:
 
     def slice(from: Int, until: Int): PSVec[Nothing] = Empty
 
-  /** Single-element vector — stores the element inline, no backing array. */
-  final class Single[+B](val b: B) extends PSVec[B]:
+  /** Single-element vector — stores the element inline, no backing array. Internal: use
+    * [[singleton]].
+    */
+  final private[eo] class Single[+B](val b: B) extends PSVec[B]:
     def length: Int = 1
 
     def apply(i: Int): B =
@@ -229,9 +234,9 @@ object PSVec:
       a
 
   /** Array-backed view with offset + length. [[slice]] is a pointer update over the shared backing
-    * array — the zero-copy reassembly path `mfAssocPSVec` depends on.
+    * array — the zero-copy reassembly path `mfAssocPSVec` depends on. Internal: use [[unsafeWrap]].
     */
-  final class Slice[+B] private[data] (
+  final private[eo] class Slice[+B] private[data] (
       private[data] val arr: Array[Any],
       private[data] val offset: Int,
       val length: Int,
@@ -252,7 +257,7 @@ object PSVec:
       System.arraycopy(arr, offset, a, 0, length)
       a
 
-    override def unsafeShareableArray: Array[Any] =
+    override private[eo] def unsafeShareableArray: Array[Any] =
       if offset == 0 && length == arr.length then arr
       else toAnyArray
 

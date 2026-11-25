@@ -116,6 +116,35 @@ object MacroSelectors:
         )
     }
 
+  /** Resolve single-hop selectors to `(position, fieldName)`, aborting on a nested path or an
+    * unknown field. Shared by the lens and `.fields` derivations; the `who` tag carries the
+    * caller's error-message prefix.
+    */
+  def resolveSingleHopSelectors(using
+      Quotes
+  )(
+      who: String,
+      selectors: List[Expr[Any]],
+      knownFields: List[String],
+      typeShown: String,
+  ): List[(Int, String)] =
+    import quotes.reflect.*
+    selectors.zipWithIndex.map { (sel, i) =>
+      val name = extractSingleFieldName(sel.asTerm).getOrElse {
+        report.errorAndAbort(
+          s"$who: selector at position $i must be a single-field"
+            + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
+            + s" Got: ${sel.asTerm.show}"
+        )
+      }
+      if !knownFields.contains(name) then
+        report.errorAndAbort(
+          s"$who: '$name' is not a field of $typeShown."
+            + s" Known fields: ${knownFields.mkString(", ")}."
+        )
+      (i, name)
+    }
+
   /** Validate a Dynamic-sugar literal field name against `A`'s case-class schema. Returns the field
     * name, its declaration index in `A`, and its widened TypeRepr; aborts with a `who`-tagged error
     * when the name isn't a compile-time literal or `A` has no such case field. Shared backbone of
@@ -220,21 +249,12 @@ object MacroSelectors:
     val knownFields: List[String] = caseFields.map(_.name)
 
     val resolved: List[(Int, String)] =
-      selectors.zipWithIndex.map { (sel, i) =>
-        val name = extractSingleFieldName(sel.asTerm).getOrElse {
-          report.errorAndAbort(
-            s"$who[${Type.show[A]}]: selector at position $i must be a single-field"
-              + " accessor like `_.fieldName`. Nested paths (e.g. `_.a.b`) are not yet supported."
-              + s" Got: ${sel.asTerm.show}"
-          )
-        }
-        if !knownFields.contains(name) then
-          report.errorAndAbort(
-            s"$who[${Type.show[A]}]: '$name' is not a field of ${Type.show[A]}."
-              + s" Known fields: ${knownFields.mkString(", ")}."
-          )
-        (i, name)
-      }
+      resolveSingleHopSelectors(
+        s"$who[${Type.show[A]}]",
+        selectors,
+        knownFields,
+        Type.show[A],
+      )
 
     reportDuplicateSelectors(s"$who[${Type.show[A]}]", resolved)
 

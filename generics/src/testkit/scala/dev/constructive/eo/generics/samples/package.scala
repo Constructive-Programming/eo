@@ -129,3 +129,22 @@ package object samples:
     case EInt(i: Int)
 
   type Lang = Stm | Expr | Var | Typ
+
+  // Issues #169 / #170 / #172: children through nested containers and holder records.
+  sealed trait PlateT
+  final case class PlateLeaf(n: Int) extends PlateT
+  final case class PlateMany(args: List[PlateT]) extends PlateT
+  final case class PlateMaybe(arg: Option[PlateT]) extends PlateT
+  final case class PlateOpt(args: Option[List[PlateT]]) extends PlateT
+  final case class PlateNested(args: List[List[PlateT]]) extends PlateT
+  final case class PlateSel(args: List[PlateT]) // a holder record, not a PlateT
+  final case class PlateCall(sel: PlateSel) extends PlateT
+  final case class PlatePair(head: PlateT, tail: List[PlateT]) extends PlateT
+
+  // Issue #171: an inferred-type `val` in the case class's own companion. Compiling this is the
+  // regression test (the macro used to force the companion and fail with a CyclicReference).
+  final case class CompanionLens(a: Int, b: String)
+
+  object CompanionLens:
+    val a = lens[CompanionLens](_.a)
+    val ab = lens[CompanionLens](_.a, _.b)

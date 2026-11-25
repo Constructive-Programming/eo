@@ -72,26 +72,19 @@ final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommon
       case Left(reason) =>
         report.errorAndAbort(s"lens[${Type.prettyPrint[S]}]: $reason")
       case Right(cc) =>
-        val knownFields: List[String] = cc.caseFields.map(_.name)
+        // `quotes.reflect`'s `caseFields` reads the class symbol directly; Hearth's
+        // `cc.caseFields` enumerates members through `Type.companionObject`, which forces the
+        // companion while a `val` in that companion is still having its type inferred (issue #171).
+        val knownFields: List[String] = TypeRepr.of[S].typeSymbol.caseFields.map(_.name)
 
         // Resolve every selector to a field name (position threaded through for error messages).
         val resolved: List[(Int, String)] =
-          selectors.zipWithIndex.map { (sel, i) =>
-            val name = MacroSelectors.extractSingleFieldName(sel.asTerm).getOrElse {
-              report.errorAndAbort(
-                s"lens[${Type.prettyPrint[S]}]: selector at position $i must be a"
-                  + " single-field accessor like `_.fieldName`. Nested paths (e.g."
-                  + " `_.a.b`) are not yet supported — chain two derivations instead:"
-                  + s" `lens[S](_.a).andThen(lens[A](_.b))`. Got: ${sel.asTerm.show}"
-              )
-            }
-            if !knownFields.contains(name) then
-              report.errorAndAbort(
-                s"lens[${Type.prettyPrint[S]}]: '$name' is not a field of "
-                  + s"${Type.prettyPrint[S]}. Known fields: ${knownFields.mkString(", ")}"
-              )
-            (i, name)
-          }
+          MacroSelectors.resolveSingleHopSelectors(
+            s"lens[${Type.prettyPrint[S]}]",
+            selectors,
+            knownFields,
+            Type.prettyPrint[S],
+          )
 
         // Duplicate selectors → compile error.
         MacroSelectors.reportDuplicateSelectors(s"lens[${Type.prettyPrint[S]}]", resolved)

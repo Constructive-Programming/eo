@@ -16,17 +16,18 @@ import data.{MultiFocus, ObjArrBuilder, PSVec}
   * [[Plated.children]], [[Plated.universe]]) build on `plate` to walk the *whole* tree. They are
   * **stack-safe** on deep trees: `transform` recurses on the call stack while shallow and falls
   * back to a heap-stack machine past a depth bound, `rewrite` trampolines through `cats.Eval`, and
-  * `universe` / `children` use an explicit worklist — a degenerate 100k-deep tree is fine.
+  * `universe` uses an explicit worklist — a degenerate 100k-deep tree is fine.
   *
-  * The children are carried as a `PSVec` (the `MultiFocus[PSVec]` carrier's focus vector), so the
-  * read path and the write path share one representation with no `List` round-trips — see
-  * [[childrenVec]]. The recursion combinators go one step lower: [[childrenArray]] hands them a
-  * fresh array per node, they overwrite each slot with the rewritten child, and [[rebuildArray]]
-  * rebuilds from that same array — one array per node, no wrappers.
+  * The public read is [[childrenView]], a reusable [[Children]] view (non-strict, `knownSize`,
+  * `toList`, `toAnyArray`). It stores the shape the node already holds — a `List` field is shared,
+  * a `List`-of-`List` is flattened lazily — and the common shapes allocate no wrapper. The
+  * recursion combinators go one step lower through the internal `childrenArray` / `rebuildArray`
+  * hooks: one fresh array per node, each slot overwritten with the rewritten child, then rebuilt
+  * from that same array.
   *
-  * Get an instance by hand via [[Plated.fromChildren]] / [[Plated.fromChildrenVec]], by deriving
-  * one with `dev.constructive.eo.generics.plate[S]`, or — when you have already built the
-  * self-traversal as an optic — by calling `.asPlated` on it (see the extension methods below).
+  * Get an instance by hand via [[Plated.fromChildren]], by deriving one with
+  * `dev.constructive.eo.generics.plate[S]`, or — when you have already built the self-traversal as
+  * an optic — by calling `.asPlated` on it (see the extension methods below).
   *
   * @see
   *   [[Traversal.selfChildren]] for the underlying carrier.
@@ -35,43 +36,33 @@ trait Plated[S]:
   /** The immediate-children self-traversal. */
   def plate: Optic[S, S, S, S, MultiFocus[PSVec]]
 
-  /** Immediate children as a `PSVec` — the representation both the read path ([[Plated.children]] /
-    * [[Plated.universe]]) and the write path ([[Plated.transform]] / [[Plated.rewrite]], through
-    * the carrier) share. Defaults to reading the carrier directly (`plate.to(s)._2`);
-    * [[Plated.fromChildren]] / [[Plated.fromChildrenVec]] (hence every `generics.plate[S]`-derived
-    * instance) override it to return the children with no tuple allocation. Either way nothing is
-    * converted to a `List` and back — that round-trip was the read/write hot-path tax.
+  /** The immediate children as a reusable, non-strict [[Children]] view — the one public
+    * representation. The default reads the carrier directly (`plate.to(s).foci`); derived instances
+    * and the `fromChildren*` constructors override it with the shape the node actually holds, so a
+    * single `List[S]` field is handed back as is. The engine's array and the old `PSVec` view are
+    * internal hooks below.
     */
-  def childrenVec(s: S): PSVec[S] = plate.to(s).foci
+  def childrenView(s: S): Children[S] = Children.fromPSVec(plate.to(s).foci)
 
-  /** The immediate children as a **fresh `Array[Any]` the caller may mutate in place**. The default
-    * copies (`childrenVec(s).toAnyArray`) so it is safe for any instance;
-    * [[Plated.fromChildrenVec]] overrides it to hand back the freshly-built backing array
-    * copy-free. The recursion-scheme `cata` engine folds each child's result into this array in
-    * place, reusing the one array instead of allocating a separate result accumulator per node.
-    */
-  def childrenArray(s: S): Array[Any] = childrenVec(s).toAnyArray
+  /** The carrier's focus vector. Internal: [[childrenView]] is the public read. */
+  private[eo] def childrenVec(s: S): PSVec[S] = plate.to(s).foci
 
-  /** Reassemble `parent` with `children` swapped in (same arity / order) — the write-path
-    * counterpart to [[childrenVec]]. Defaults to threading the carrier; [[Plated.fromChildren]] /
-    * [[Plated.fromChildrenVec]] (hence every `generics.plate[S]`-derived instance) override it with
-    * the raw rebuild function so [[Plated.transform]] rebuilds without allocating the carrier's
-    * `(x, PSVec)` tuple per node. On the default (`.asPlated`) path this and [[childrenVec]] each
-    * call `plate.to`, so a `transform` over a hand-built optic pays two `to` calls per internal
-    * node — derived / `fromChildrenVec` instances override both and pay none.
+  /** A **fresh `Array[Any]` the caller may mutate in place** — the cata engine's currency.
+    * Internal: derived instances override it with their fast array shape.
     */
-  def rebuild(parent: S, children: PSVec[S]): S =
+  private[eo] def childrenArray(s: S): Array[Any] = childrenView(s).toAnyArray
+
+  /** Reassemble `parent` with `children` swapped in (same arity / order) — the carrier's write
+    * path. Internal: the public write operations are [[Plated.mapChildren]] / [[Plated.transform]].
+    */
+  private[eo] def rebuild(parent: S, children: PSVec[S]): S =
     val p = plate // bind once so `p.X` is a single stable existential across `to` / `from`
     p.from(MultiFocus(p.to(parent).context, children))
 
-  /** [[rebuild]] from a children array — the array-native twin the recursion combinators pair with
-    * [[childrenArray]]: they read a node's children out of one fresh array, overwrite each slot
-    * with the rewritten child, and rebuild from that same array, so a node costs one array and no
-    * `PSVec` wrappers. The caller hands the array over and never touches it again. Defaults to
-    * wrapping it for [[rebuild]]; [[Plated.fromChildrenArray]] (hence every `generics.plate[S]`
-    * instance) rebuilds from it directly.
+  /** [[rebuild]] from a children array — the engine's fast rebuild. Internal; the derived
+    * `fromChildren` instance implements it from the node's own constructor.
     */
-  def rebuildArray(parent: S, children: Array[Any]): S =
+  private[eo] def rebuildArray(parent: S, children: Array[Any]): S =
     rebuild(parent, PSVec.unsafeWrap[S](children))
 
   /** `parent` with `g` applied to each immediate child, in order — Uniplate's `descend`, the
@@ -102,68 +93,109 @@ object Plated:
   /** Summon the instance. */
   def apply[S](using p: Plated[S]): Plated[S] = p
 
-  /** Build a [[Plated]] from an explicit children focus-vector view — the PSVec-native primitive.
-    * `children(s)` is the immediate sub-terms as a `PSVec`; `rebuild(s, vec)` reassembles `s` with
-    * that many children swapped in, same order. The hand-writing primitive for PSVec-shaped data
-    * (circe, avro, zio, kyo, spark rows); `generics.plate[S]` emits [[fromChildrenArray]] instead.
-    * It pays zero `List` conversion on either the read or the write path.
+  /** Build a [[Plated]] from the children view and a rebuild function — the public hand-writing
+    * entry point, and what `generics.plate[S]` emits (the four-argument overload adds the generated
+    * `mapChildren` / `rebuildArray` fast paths). `children(s)` must report the immediate children
+    * in the order `rebuild` expects; `rebuild(s, kids)` consumes `kids` once and reassembles `s`.
     */
-  def fromChildrenVec[S](childrenFn: S => PSVec[S], rebuildFn: (S, PSVec[S]) => S): Plated[S] =
+  // CPD-OFF — the three `fromChildren` overloads and the carrier constructors restate the same
+  // delegation per arity; extracting would not remove the per-signature type plumbing.
+  def fromChildren[S](
+      children: S => Children[S],
+      rebuildFn: (S, Children[S]) => S,
+  ): Plated[S] =
+    fromChildren(
+      children,
+      rebuildFn,
+      (parent, g) =>
+        val kids = children(parent).toList
+        if kids.isEmpty then parent
+        else rebuildFn(parent, Children.fromList(kids.map(g)))
+      ,
+      (parent, kids) => rebuildFn(parent, Children.fromArray(kids)),
+    )
+
+  /** As the two-argument [[fromChildren]], with the generated direct `mapChildren` and
+    * `rebuildArray` implementations — what `generics.plate[S]` emits.
+    */
+  def fromChildren[S](
+      children: S => Children[S],
+      rebuildFn: (S, Children[S]) => S,
+      mapChildrenFn: (S, S => S) => S,
+      rebuildArrayFn: (S, Array[Any]) => S,
+  ): Plated[S] =
+    fromChildren(
+      children,
+      rebuildFn,
+      mapChildrenFn,
+      rebuildArrayFn,
+      s => children(s).toAnyArray,
+    )
+
+  /** As the four-argument [[fromChildren]], with a direct `childrenArray` fast path — what
+    * `generics.plate[S]` emits for an all-direct product (one fresh array, no `Children` wrapper on
+    * the engine path).
+    */
+  def fromChildren[S](
+      children: S => Children[S],
+      rebuildFn: (S, Children[S]) => S,
+      mapChildrenFn: (S, S => S) => S,
+      rebuildArrayFn: (S, Array[Any]) => S,
+      childrenArrayFn: S => Array[Any],
+  ): Plated[S] =
+    new Plated[S]:
+      val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
+        Traversal.selfChildren(
+          s => Children.toPSVec(children(s)),
+          (s, vec) => rebuildFn(s, Children.fromPSVec(vec)),
+        )
+      override def childrenView(s: S): Children[S] = children(s)
+      override private[eo] def childrenArray(s: S): Array[Any] = childrenArrayFn(s)
+      override def mapChildren(parent: S, g: S => S): S = mapChildrenFn(parent, g)
+      override private[eo] def rebuildArray(parent: S, kids: Array[Any]): S =
+        rebuildArrayFn(parent, kids)
+
+  /** Internal: the PSVec-native carrier constructor (circe / avro / zio / kyo / spark rows). */
+  private[eo] def fromChildrenVec[S](
+      childrenFn: S => PSVec[S],
+      rebuildFn: (S, PSVec[S]) => S,
+  ): Plated[S] =
     new Plated[S]:
       val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
         Traversal.selfChildren(childrenFn, rebuildFn)
-      override def childrenVec(s: S): PSVec[S] = childrenFn(s)
+      override def childrenView(s: S): Children[S] = Children.fromPSVec(childrenFn(s))
+      override private[eo] def childrenVec(s: S): PSVec[S] = childrenFn(s)
       // `childrenFn` must return a *freshly-allocated* vector (every shipped instance does —
-      // circe / avro / zio / kyo / `fromChildren` go through
-      // `PSVec.from`, both fresh per call). `unsafeShareableArray` then hands back that
-      // backing array copy-free, and [[childrenArray]]'s contract lets the cata engine mutate it.
-      override def childrenArray(s: S): Array[Any] = childrenFn(s).unsafeShareableArray
-      override def rebuild(parent: S, kids: PSVec[S]): S = rebuildFn(parent, kids)
+      // circe / avro / zio / kyo go through `PSVec.from`, both fresh per call).
+      // `unsafeShareableArray` then hands back that backing array copy-free, and the cata engine
+      // may mutate it.
+      override private[eo] def childrenArray(s: S): Array[Any] =
+        childrenFn(s).unsafeShareableArray
+      override private[eo] def rebuild(parent: S, kids: PSVec[S]): S = rebuildFn(parent, kids)
 
-  /** Build a [[Plated]] from array-native children / rebuild functions — what `generics.plate[S]`
-    * emits. `childrenFn(s)` must return a freshly allocated array on every call (a shared
-    * zero-length array is fine: there is nothing to mutate), because [[Plated.childrenArray]] hands
-    * it to callers that overwrite it in place; `rebuildFn` must only read the array it is given.
-    * The recursion combinators then pay one array per node — no `PSVec` wrapper on either side.
+  /** Internal: the fresh-array carrier constructor (spark schemas). `childrenFn(s)` must return a
+    * newly allocated array on every call; the engine overwrites its slots in place.
     */
-  def fromChildrenArray[S](
+  private[eo] def fromChildrenArray[S](
       childrenFn: S => Array[Any],
       rebuildFn: (S, Array[Any]) => S,
   ): Plated[S] =
     new ArrayPlated[S](childrenFn, rebuildFn)
+  // CPD-ON
 
-  /** Build a [[Plated]] from a children array and a direct [[Plated.mapChildren]] — what
-    * `generics.plate[S]` emits. `childrenFn` follows [[fromChildrenArray]]'s fresh-array contract;
-    * `mapChildrenFn(s, g)` must call `g` once per child, in `childrenFn(s)`'s order, and rebuild
-    * `s` from the results. Array rebuild is derived from it — [[Plated.rebuildArray]] feeds the
-    * array's elements to `mapChildrenFn` in order — so the two can't disagree.
-    */
-  def fromChildrenMap[S](
-      childrenFn: S => Array[Any],
-      mapChildrenFn: (S, S => S) => S,
-  ): Plated[S] =
-    new ArrayPlated[S](childrenFn, (s, kids) => mapChildrenFn(s, new Feed[S](kids))):
-      override def mapChildren(parent: S, g: S => S): S = mapChildrenFn(parent, g)
+  private type ArrayChildrenFn[S] = S => Array[Any]
+  private type ArrayRebuildFn[S] = (S, Array[Any]) => S
 
-  /** The child function that rebuilds from an array: ignores the old child, hands back the next
-    * element. Single use — one per rebuild.
-    */
-  final private class Feed[S](kids: Array[Any]) extends (S => S):
-    private var i = 0
+  private class ArrayPlated[S](kidsOf: ArrayChildrenFn[S], build: ArrayRebuildFn[S])
+      extends Plated[S]:
+    override def childrenView(s: S): Children[S] = Children.fromOwnedArray(kidsOf(s))
+    override private[eo] def childrenVec(s: S): PSVec[S] = PSVec.unsafeWrap[S](kidsOf(s))
+    override private[eo] def childrenArray(s: S): Array[Any] = kidsOf(s)
 
-    def apply(old: S): S =
-      val next = kids(i)
-      i += 1
-      next.asInstanceOf[S]
+    override private[eo] def rebuild(parent: S, kids: PSVec[S]): S =
+      build(parent, kids.unsafeShareableArray)
 
-  private type ChildrenFn[S] = S => Array[Any]
-  private type RebuildFn[S] = (S, Array[Any]) => S
-
-  private class ArrayPlated[S](kidsOf: ChildrenFn[S], build: RebuildFn[S]) extends Plated[S]:
-    override def childrenVec(s: S): PSVec[S] = PSVec.unsafeWrap[S](kidsOf(s))
-    override def childrenArray(s: S): Array[Any] = kidsOf(s)
-    override def rebuild(parent: S, kids: PSVec[S]): S = build(parent, kids.unsafeShareableArray)
-    override def rebuildArray(parent: S, kids: Array[Any]): S = build(parent, kids)
+    override private[eo] def rebuildArray(parent: S, kids: Array[Any]): S = build(parent, kids)
 
     val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
       Traversal.selfChildren(childrenVec, rebuild)
@@ -185,17 +217,6 @@ object Plated:
       kids(i - 1).asInstanceOf[S]
 
     def rebuilt(using P: Plated[S]): S = P.rebuildArray(node, kids)
-
-  /** Build a [[Plated]] from a `List`-shaped children view — the ergonomic hand-writing entry point
-    * (`{ case Node(l, r) => List(l, r); … }`). Wraps the `List` into the PSVec-native
-    * [[fromChildrenVec]]; fine for hand-written plates, while the performance-critical derived
-    * instances avoid the wrap.
-    */
-  def fromChildren[S](children: S => List[S], rebuild: (S, List[S]) => S): Plated[S] =
-    fromChildrenVec(
-      s => PSVec.from(children(s)),
-      (s, vec) => rebuild(s, vec.toList),
-    )
 
   /** Largest call-stack recursion depth [[transform]] takes before handing a subtree to the heap
     * machine. Tree *depth*, not node count — a balanced tree of a billion nodes is ~30 deep, so it
@@ -363,10 +384,11 @@ object Plated:
     def go(x: S): Eval[S] = Eval.defer(P.plate.modifyF[Eval](go)(x)).flatMap(step)
     go(s).value
 
-  /** The immediate sub-terms of `s` (one level down). Reads the plate's children vector directly.
+  /** The immediate sub-terms of `s` (one level down). Reads the plate's [[Plated.childrenView]]
+    * directly; derived instances hand a single `List[S]` field back without copying it.
     */
   def children[S](s: S)(using P: Plated[S]): List[S] =
-    P.childrenVec(s).toList
+    P.childrenView(s).toList
 
   /** Every sub-term of `s`, `s` itself first, in pre-order. Stack-safe via an explicit worklist;
     * children are pushed straight off [[Plated.childrenArray]] (no per-node `List` or wrapper).
@@ -396,13 +418,14 @@ object Plated:
     */
   extension [S](self: Optic[S, S, S, S, MultiFocus[PSVec]])
 
-    /** Wrap this self-traversal as a [[Plated]] instance (carrier-default `childrenVec` /
-      * `rebuild`; a derived / [[Plated.fromChildrenVec]] instance is cheaper — see
-      * [[Plated.rebuild]]).
+    /** Wrap this self-traversal as a [[Plated]] instance (the default [[Plated.childrenView]] reads
+      * the carrier; a derived / [[Plated.fromChildren]] instance is cheaper).
       */
+    // CPD-OFF — the carrier field restates the self-traversal type by design.
     def asPlated: Plated[S] =
       new Plated[S]:
         val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = self
+    // CPD-ON
 
     /** [[Plated.transform]] over this optic — bottom-up rewrite of every sub-term. */
     def transformAll(f: S => S)(s: S): S = Plated.transform(f)(s)(using asPlated)

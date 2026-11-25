@@ -585,7 +585,7 @@ Because it's an ordinary Modify, the same `.andThen` you'd use to reach
 (by hand here; `plate[S]` from eo-generics derives it):
 
 ```scala mdoc:silent
-import dev.constructive.eo.optics.Plated
+import dev.constructive.eo.optics.{Children, Plated}
 
 enum Tree:
   case Leaf(n: Int)
@@ -593,13 +593,13 @@ enum Tree:
 
 given Plated[Tree] = Plated.fromChildren(
   {
-    case Tree.Branch(l, r) => List(l, r)
-    case Tree.Leaf(_)      => Nil
+    case Tree.Branch(l, r) => Children.fromList(List(l, r))
+    case Tree.Leaf(_)      => Children.empty
   },
-  {
-    case (Tree.Branch(_, _), l :: r :: Nil) => Tree.Branch(l, r)
-    case (leaf, _)                          => leaf
-  },
+  (tree, kids) =>
+    (tree, kids.toList) match
+      case (Tree.Branch(_, _), l :: r :: Nil) => Tree.Branch(l, r)
+      case (leaf, _)                          => leaf,
 )
 
 // A Modify that writes the Int in a Leaf; everywhere lifts it to all depths.
