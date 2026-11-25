@@ -158,23 +158,32 @@ ThisBuild / scalafixDependencies +=
 ThisBuild / scalacOptions += "-Wunused:all"
 // Raise kindlings' per-derivation macro-expansion budget from its 5s default (which a loaded
 // machine intermittently trips: `derived timed out after 5000ms`) to 30s. One namespace per
-// kindlings module (circe / cats / avro derivation); read by kindlings 0.4.x's `DerivationTimeout`.
+// kindlings module (circe / cats / avro derivation); read by kindlings' `DerivationTimeout`.
 // Comma-separated so Scala's `-Xmacro-settings` MultiStringSetting splits them.
 //
-// THE UNIT SUFFIX IS LOAD-BEARING. `DerivationTimeout` parses the value with
+// THE UNIT SUFFIX IS THIS BUILD'S POLICY, and it is load-bearing for a different reason than the
+// obvious one. `DerivationTimeout` accepts `<int><unit>`
 //   ^\s*(\d+)\s*(ms|millis|milliseconds|s|seconds?|m|minutes?)\s*$
-// and the call site is `settings.flatMap(parse).getOrElse(Default)`, so a BARE INTEGER does not
-// match, falls through silently, and leaves the 5s default in force — no warning, no error. This
-// build carried `timeout=30` (no unit) from the 0.3.0 pin onward and was therefore running on 5s
-// the whole time. Re-check with the canary after any kindlings bump: set one namespace to `1ms`
-// and confirm a derivation fails with `timed out after 1ms`; if it compiles, the key is dead
-// again.
+// but ALSO a bare `<int>`, read as SECONDS (`=500` is 500 seconds, not 500ms) — so `=30` was never
+// inert: it has meant 30s since at least kindlings 0.3.0. A value it cannot read at all is
+// REPORTED (`<ns>.timeout: unrecognized format ...`) and replaced by the 5s default, which is
+// fatal under this build's `-Werror`. The silent failure mode is the KEY, not the value: a
+// namespace kindlings no longer reads (renamed upstream, or typo'd) matches nothing, so every
+// derivation quietly runs on the 5s default.
+//
+// `sbt kindlingsTimeoutCanary` is the automated canary (issue #106). It reads these options, then
+// compiles a throwaway kindlings derivation per namespace with the values rewritten to `1ms` and
+// fails unless the compiler reports `timed out after 1ms` — so a renamed/dropped namespace fails
+// CI instead of silently reverting to 5s. It also rejects a value without a unit (the policy
+// above), requires all three namespaces to stay in the payload, and asserts an unrecognized value
+// is still reported. CI runs it in the `kindlings-timeout-canary` job of quality.yml.
 //
 // NB this reaches REGULAR compilation only — mdoc's fence compiler ignores the
 // -Xmacro-settings that arrive via mdoc.properties (verified: a 1ms canary never fires
 // through that route). Fences get the budget through mdoc's OWN --scalac-options CLI
 // argument instead (`mdocExtraArguments` on the docs project, same canary fires there),
 // and the heaviest doc derivations are additionally hosted in site/src compiled samples.
+// `sbt kindlingsTimeoutCanary` exercises THAT channel too, through mdoc's CLI.
 ThisBuild / scalacOptions +=
   "-Xmacro-settings:circeDerivation.timeout=30s,catsDerivation.timeout=30s,avroDerivation.timeout=30s"
 ThisBuild / tlFatalWarnings := true
@@ -429,10 +438,11 @@ lazy val drosteCore = "io.higherkindness" %% "droste-core" % "0.10.0"
 // (`DerivationTimeout`, default 5s) and pull hearth 0.4.5 + kindlings-derivation-commons.
 // We raise it to 30s via `-Xmacro-settings:{circe,cats,avro}Derivation.timeout=30s`
 // (see the `ThisBuild / scalacOptions` above) so a loaded CI runner stops tripping the
-// default budget (the recurring `deriveAsObject timed out` flake). The `s` is not
-// decoration: until this bump the build spelled the value `=30`, which kindlings'
-// DurationPattern rejects, so the budget silently stayed at the 5s default — the flake was
-// never actually mitigated. See the scalacOptions comment for the regex and the canary.
+// default budget (the recurring `deriveAsObject timed out` flake). The `s` is this build's
+// policy, not a kindlings requirement: `DerivationTimeout` also accepts a bare integer, as
+// SECONDS (`=30` is 30s, `=500` would be 500 seconds), and reports a value it cannot read
+// before falling back to 5s. A namespace kindlings does not read is the silent case; the
+// `sbt kindlingsTimeoutCanary` task pins that (see the scalacOptions comment).
 // The setting keys and namespaces are unchanged at 0.4.0 (`DerivationTimeout`'s duration
 // regex and the `circeDerivation` namespace were re-checked against the 0.4.0 classfiles);
 // 0.3.1 added an OPT-IN `<ns>.policy.enabled` key under the same
@@ -745,6 +755,22 @@ def eoCrossMacro(p: CrossProject): CrossProject =
 
 lazy val root = tlCrossRootProject
   .settings(Cpd.settings)
+  .settings(
+    // Automated kindlings macro-timeout canary (issue #106, project/KindlingsTimeoutCanary.scala):
+    // proves the `-Xmacro-settings:*Derivation.timeout` keys are LIVE on both channels — the
+    // build-wide scalacOptions payload above and the docs project's mdocExtraArguments — by
+    // compiling throwaway derivations at a 1ms budget. Run with `sbt kindlingsTimeoutCanary`;
+    // quality.yml runs it in its own job.
+    KindlingsTimeoutCanary.kindlingsTimeoutCanary := KindlingsTimeoutCanary.run(
+      streams.value.log,
+      (ThisBuild / baseDirectory).value,
+      (avroIntegration / Compile / scalacOptions).value,
+      (docs / mdocExtraArguments).value,
+      (docs / Compile / scalaInstance).value.allJars,
+      (docs / Compile / externalDependencyClasspath).value.map(_.data) ++
+        (tests.jvm / Test / externalDependencyClasspath).value.map(_.data),
+    )
+  )
   .aggregate(
     (Seq[CompositeProject](
       core,
@@ -1311,14 +1337,16 @@ lazy val docs: Project = project
     // this is the only channel that stops "timed out after 5000ms" fence
     // flakes on loaded machines — field-navigation macros (codecPrism)
     // summon kindlings derivations at expansion even when the doc ADTs
-    // themselves are hosted in compiled samples.
+    // themselves are hosted in compiled samples. `sbt kindlingsTimeoutCanary`
+    // runs a 1ms canary through THIS pair end-to-end (mdoc's CLI, real
+    // payload) and fails unless the fence compiler reports the timeout.
     mdocExtraArguments ++= Seq(
       "--scalac-options",
       // 120s: the 60s budget still tripped intermittently inside cold-JVM
       // pre-commit hook sessions (the cookbook's avro fences on a loaded box).
-      // The `s` suffix is required — kindlings' DurationPattern rejects a bare
-      // integer and silently reverts to the 5s default (see the ThisBuild
-      // scalacOptions comment above).
+      // The unit suffix is this build's policy — kindlings reads a bare integer
+      // as SECONDS (see the ThisBuild scalacOptions comment above), and the
+      // canary enforces the unit on this channel too.
       "-Xmacro-settings:circeDerivation.timeout=120s,catsDerivation.timeout=120s,avroDerivation.timeout=120s",
     ),
     // mdoc variable substitutions — site pages can reference

@@ -74,6 +74,51 @@ jobs:
       - name: Cost ratios (armed)
         run: sbt -batch -Deo.costGate=true "avroIntegration/testOnly *NominalResolutionCostSpec"
 
+  # The kindlings macro-timeout canary (issue #106). kindlings reads its per-derivation macro
+  # budget from `-Xmacro-settings:<namespace>.timeout=<duration>` and SILENTLY falls back to 5s
+  # when the value has no unit — this build shipped `timeout=30` for months and was running on 5s
+  # the whole time (fixed in #102). Nothing else fails if a kindlings bump renames a namespace or
+  # someone drops the unit again, so this job is the guard: it reads the real configured payloads
+  # out of sbt and compiles throwaway kindlings derivations with every value rewritten to `1ms`,
+  # failing unless the compiler reports `timed out after 1ms` — on BOTH channels (the build-wide
+  # scalacOptions payload and the docs project's mdocExtraArguments `--scalac-options` pair, run
+  # through mdoc's own CLI). It compiles nothing from this repo (jars only), so it is a couple of
+  # minutes, not a build sweep; `scripts/kindlings-timeout-canary.sh` is the same check locally.
+  #
+  # A SEPARATE JOB (like `cost`) so a broken kindlings timeout never costs a tag its coverage and
+  # mutation artifacts, and so the failure is named after the thing that broke.
+  kindlings-timeout-canary:
+    name: Kindlings macro-timeout canary
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      SBT_OPTS: "-Xmx4g -Xss8m -Dsbt.color=false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Setup Java (temurin@25)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Cache coursier + ivy + sbt boot
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/coursier
+            ~/.ivy2/cache
+            ~/.sbt
+          key: ${{ runner.os }}-sbt-${{ hashFiles('**/*.sbt', 'project/build.properties', 'project/**/*.scala') }}
+          restore-keys: |
+            ${{ runner.os }}-sbt-
+
+      - name: 1ms canary, scalacOptions + mdoc channels
+        run: scripts/kindlings-timeout-canary.sh -batch
+
   report:
     name: Coverage + mutation
     runs-on: ubuntu-22.04
