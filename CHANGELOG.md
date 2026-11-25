@@ -7,8 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **eo-generics `plate[S]` reaches nested containers and holder records.** `Option[List[S]]`,
+  `List[List[S]]`, and any composition of the supported containers now yield their `S` children,
+  and a product record that is not itself an `S` is looked through: its `S` positions become
+  children of the enclosing case and `mapChildren` rebuilds the record. `Plated.children` shares a
+  product's single `List[S]` field instead of copying it: the public read is `Plated.childrenView`,
+  an opaque `Children` view (identity for `List` / `Seq` / `Array` / `PSVec` / `Option`, wrappers
+  only for `Single` / `Concat` / `Flatten` / `Traverse`). `childrenVec` / `childrenArray` and
+  `fromChildrenVec` / `fromChildrenArray` are now internal (`private[eo]`); `childrenList` and
+  `fromChildrenMap` are gone (use `childrenView.toList` and `fromChildren`);
+  `Plated.fromChildren` takes `S => Children[S]`. (#169, #170, #172)
+
 ### Changed
 
+- **`PSVec`'s representation is internal.** `PSVec.Empty` / `Single` / `Slice` and
+  `unsafeShareableArray` are now `private[eo]`; the stable surface is the aggregate `PSVec` type
+  plus `empty` / `singleton` / `of` / `unsafeWrap` / `from` and `length` / `apply` / `head` /
+  `slice` / `iterator` / `toList` / `toAnyArray`. Mirrors `Children`: shapes are internal, the
+  read surface is not.
 - **BREAKING — one effectful modify.** `CanModifyF[S, A, C]` (polymorphic `CanModifyFP`) replaces
   `CanModifyF` / `CanModifyA`, and raw `Optic.modifyF` replaces `Optic.modifyA`. `C` is the effect
   constraint the carrier needs (`Functor` lens, `Invariant` iso, `Applicative` prism / optional /
@@ -46,6 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **eo-generics `lens[P](_.a)` works as an inferred-type `val` in `P`'s companion.** The macro no
+  longer forces the companion through Hearth's `CaseClass.caseFields` while the `val`'s type is
+  still being inferred, which raised `CyclicReference: Recursive value … needs type`. (#171)
 - The UPLC demo's Plutus conformance suite aggregates its ~1000 cases into one specs2 example.
   specs2 folds its execution `Action` chain recursively per fragment, and that many sibling
   fragments overflow the worker's stack; all cases (and any failure, with its path and detail)

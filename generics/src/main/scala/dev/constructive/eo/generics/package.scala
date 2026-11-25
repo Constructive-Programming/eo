@@ -88,6 +88,9 @@ package object generics:
     *   - '''Single-sorted ADTs''' (enums, sealed hierarchies, recursive case classes): focuses
     *     every field of type `S`, plus children inside `Option[S]`, `List[S]`, `Vector[S]`,
     *     `ArraySeq[S]`, `Seq[S]`, `Array[S]`, or any `F[S]` with a `cats.Traverse[F]` in scope.
+    *     Containers compose (`Option[List[S]]`, `List[List[S]]`, …), and a product record that is
+    *     not itself an `S` is looked through: its `S` positions become children of the enclosing
+    *     case, and `mapChildren` rebuilds the record.
     *   - '''Mutually recursive families''' (`type Lang = Stm | Expr | Var | Typ`, `plate[Lang]`):
     *     derives a multi-sorted plate (O'Connor 2011 §5) over the union's branches, descending into
     *     any field (or container field) whose element type is a subtype of `S`.

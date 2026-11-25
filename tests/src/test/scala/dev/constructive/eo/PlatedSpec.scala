@@ -1,5 +1,6 @@
 package dev.constructive.eo
 
+// CPD-OFF — shared test imports and the hoisted fixture ADTs repeat across plated specs.
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 
@@ -8,7 +9,7 @@ import cats.data.{Chain, State}
 import dev.constructive.eo.generics.{lens, plate, prism}
 import dev.constructive.eo.optics.Optic.* // .andThen / .modify
 import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
-import dev.constructive.eo.optics.{Lens, Plated, Prism}
+import dev.constructive.eo.optics.{Children, Lens, Plated, Prism}
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
@@ -26,6 +27,7 @@ enum Expr:
 enum Bin:
   case Leaf(value: Int)
   case Node(left: Bin, right: Bin)
+// CPD-ON
 
 // Container-bearing recursive ADT: Option + List + Vector + ArraySeq + Seq + Chain (via Traverse[Chain]).
 // `seqChildren` is generated as a List: plate must rebuild a Seq field in its own collection type.
@@ -148,6 +150,11 @@ object PlatedFixtures:
     case (leaf, _)                       => leaf
   }
 
+  val binChildren: Bin => Children[Bin] = bin => Children.fromList(binKids(bin))
+
+  val binRebuildChildren: (Bin, Children[Bin]) => Bin =
+    (parent, kids) => binRebuild(parent, kids.toList)
+
   /** `Node(Node(Leaf(1), Leaf(2)), Leaf(3))`. */
   val small: Bin = Bin.Node(Bin.Node(Bin.Leaf(1), Bin.Leaf(2)), Bin.Leaf(3))
 
@@ -263,6 +270,7 @@ class PlatedSpec extends Specification with Discipline:
     val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
     val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
 
+    // CPD-OFF — the same three-term rewrite is asserted for transform, plate and everywhere.
     // f -> F, the bound occurrence y -> Y, but the Lam binder "y" stays lowercase.
     val shout: Expr => Expr = {
       case Expr.Var(n) => Expr.Var(n.toUpperCase)
@@ -283,6 +291,7 @@ class PlatedSpec extends Specification with Discipline:
       Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
 
     transformOk && oneLevelOk && allDepthsOk
+    // CPD-ON
   }
 
   // ----- Behaviour: rewrite re-fires to a fixpoint (bottom-up constant fold) -----
@@ -296,7 +305,7 @@ class PlatedSpec extends Specification with Discipline:
   "transform / universe are stack-safe on a 100k-deep tree (hand-built plate)" >> {
     // A hand-built plate via the List-shaped `Plated.fromChildren` convenience — no macro,
     // exercises the core constructor and the `.transformAll` / `.universeOf` extension surface.
-    val binPlate = Plated.fromChildren[Bin](binKids, binRebuild).plate
+    val binPlate = Plated.fromChildren[Bin](binChildren, binRebuildChildren).plate
 
     val n = 100000
     val deep = spine(n)
@@ -319,7 +328,7 @@ class PlatedSpec extends Specification with Discipline:
     // `rewrite` trampolines through `cats.Eval`, so neither the bottom-up *descent* over a deep
     // tree nor the *fixpoint re-firing* at a single node runs on the JVM call stack. Both of the
     // shapes below would overflow a naive call-stack implementation; both must complete here.
-    val binPlate = Plated.fromChildren[Bin](binKids, binRebuild)
+    val binPlate = Plated.fromChildren[Bin](binChildren, binRebuildChildren)
 
     // Axis 1 — deep descent: a 100k-deep spine, folding Node(Leaf, Leaf) at every node up to a
     // single Leaf. Each fire re-processes only a shallow result, so this stresses the descent.
@@ -369,10 +378,10 @@ class PlatedSpec extends Specification with Discipline:
   "rebuild fires only for non-leaf nodes, on both the recursive and machine-handoff paths" >> {
     var rebuildCount = 0
     val spyPlate: Plated[Bin] = Plated.fromChildren[Bin](
-      binKids,
+      binChildren,
       (parent, kids) =>
         rebuildCount += 1
-        binRebuild(parent, kids),
+        binRebuild(parent, kids.toList),
     )
 
     // (a) shallow: Node(Node(Leaf,Leaf),Leaf) has exactly 2 internal nodes.
@@ -396,11 +405,11 @@ class PlatedSpec extends Specification with Discipline:
     // first step makes the left child negative and the second makes it positive again exposes the
     // stale-parent bug via `plateComposeModify`.
     val buggyPlate: Plated[Bin] = Plated.fromChildren[Bin](
-      binKids,
-      {
-        case (Bin.Node(_, oldR), (l @ Bin.Leaf(v)) :: _ :: Nil) if v < 0 => Bin.Node(l, oldR)
-        case (parent, kids)                                              => binRebuild(parent, kids)
-      },
+      binChildren,
+      (parent, kids) =>
+        (parent, kids.toList) match
+          case (Bin.Node(_, oldR), (l @ Bin.Leaf(v)) :: _ :: Nil) if v < 0 => Bin.Node(l, oldR)
+          case (p, ks)                                                     => binRebuild(p, ks),
     )
     val buggyLaws = new PlatedLaws[Bin](using buggyPlate) {}
     val tree = Bin.Node(Bin.Leaf(1), Bin.Leaf(2))

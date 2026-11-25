@@ -5,12 +5,22 @@ import scala.language.implicitConversions
 
 import dev.constructive.eo.generics.samples.{
   Beacon,
+  CompanionLens,
   Employee,
   Expr,
   LTree,
   Lang,
   Person,
   Ping,
+  PlateCall,
+  PlateLeaf,
+  PlateMany,
+  PlateMaybe,
+  PlateNested,
+  PlateOpt,
+  PlatePair,
+  PlateSel,
+  PlateT,
   Pong,
   Rose,
   Shape,
@@ -480,4 +490,53 @@ class GenericsSuite extends munit.ScalaCheckSuite:
     val multiplateOk = varsAfter == List("_x", "_x", "_y", "_z")
 
     enumOk && productOk && roseOk && multiplateOk
+  }
+
+  // covers: issue #170 — nested containers compose, so Option[List[S]] and List[List[S]] reach
+  //   their S children; issue #169 — a holder record's S positions become children of the
+  //   enclosing case and mapChildren rebuilds through the holder.
+  test("derived plate[S]: nested containers and holder records are reached") {
+    import dev.constructive.eo.optics.Plated
+
+    given Plated[PlateT] = plate[PlateT]
+    val two = List[PlateT](PlateLeaf(1), PlateLeaf(2))
+
+    assertEquals(Plated.children[PlateT](PlateMany(two)), two)
+    assertEquals(
+      Plated.children[PlateT](PlateMaybe(Some(PlateLeaf(1)))),
+      List[PlateT](PlateLeaf(1))
+    )
+    assertEquals(Plated.children[PlateT](PlateOpt(Some(two))), two)
+    assertEquals(Plated.children[PlateT](PlateNested(List(two))), two)
+    assertEquals(Plated.children[PlateT](PlateCall(PlateSel(two))), two)
+
+    val bump: PlateT => PlateT = {
+      case PlateLeaf(n) => PlateLeaf(n + 10)
+      case other        => other
+    }
+    assertEquals(
+      Plated[PlateT].mapChildren(PlateCall(PlateSel(two)), bump),
+      PlateCall(PlateSel(List[PlateT](PlateLeaf(11), PlateLeaf(12)))),
+    )
+    assertEquals(Plated.universe[PlateT](PlateOpt(Some(two))).length, 3)
+  }
+
+  // covers: issue #172 — a single List[S] child position is handed back as the field itself, and
+  //   one S plus one List[S] is `head :: tail`, not a rebuilt list.
+  test("derived plate[S]: a List child is shared, not copied") {
+    import dev.constructive.eo.optics.Plated
+
+    given Plated[PlateT] = plate[PlateT]
+    val two = List[PlateT](PlateLeaf(1), PlateLeaf(2))
+
+    assert(Plated.children[PlateT](PlateMany(two)) eq two)
+    val pairKids = Plated.children[PlateT](PlatePair(PlateLeaf(0), two))
+    assertEquals(pairKids, PlateLeaf(0) :: two)
+    assert(pairKids.tail eq two)
+  }
+
+  // covers: issue #171 — a lens as an inferred-type val in the case class's own companion.
+  test("lens derived in the companion with an inferred val type") {
+    assertEquals(CompanionLens.a.get(CompanionLens(1, "x")), 1)
+    assertEquals(CompanionLens.ab.get(CompanionLens(1, "x")), (a = 1, b = "x"))
   }

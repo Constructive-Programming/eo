@@ -329,7 +329,12 @@ circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
 - **Single-sorted ADTs** (enums, sealed hierarchies, recursive case classes):
   focuses every field of type `S`, plus children inside `Option[S]`, `List[S]`,
   `Vector[S]`, `ArraySeq[S]`, `Seq[S]`, `Array[S]`, or any `F[S]` with a
-  `cats.Traverse[F]` in scope. Fields of other types stay as leftover skeleton.
+  `cats.Traverse[F]` in scope. Containers compose (`Option[List[S]]`,
+  `List[List[S]]`, …), and a product record that is not itself an `S` is looked
+  through: the `S` positions inside it (at any depth, through further containers
+  and records) are children of the enclosing case, and `mapChildren` rebuilds the
+  record. Fields that reach no `S` stay as leftover skeleton. A recursive holder
+  record (one that reaches itself before reaching `S`) is not expanded further.
 - **Multiplate families** (`type Lang = Stm | Expr | Var | Typ`, `plate[Lang]`):
   O'Connor's *Multiplate* (see [*Functor is to Lens as Applicative is to Biplate:
   Introducing Multiplate*](https://arxiv.org/pdf/1103.2841), §5) — a multi-sorted
@@ -340,6 +345,14 @@ circleCoordsX.modify(_ + 10)(Shape2.Square(Coords(3, 4), 2.0))
 A single-sorted `Plated[S]` is what the paper calls a self-`Biplate`: the
 children/rebuild coalgebra the paper proves isomorphic to the applicative
 multi-focus traversal (EO's `Traversal` / `.modifyF` side of the same value).
+
+`Plated.children` hands a product's single `List[S]` child field back as the
+field itself (no copy), and a `S` field next to it as `head :: tail`, so a walk
+does not rebuild a list the node already holds. The non-strict form is
+`Plated.childrenView(s): Children[S]` — `iterator`, `knownSize`, `toList`,
+`toArray`, `toAnyArray`, `size`, `isEmpty` — whose common shapes (`List`, another
+`Seq`, `Array`, `PSVec`, `Option`) are stored as themselves. The old
+`childrenVec` / `childrenArray` hooks are internal.
 
 The derived instance backs `Plated.everywhere[S]` (and `Plated.everywhereIn[S, T]`
 to keep a specific root sort `T <: S` on a union plate) — a composable `Modify`
