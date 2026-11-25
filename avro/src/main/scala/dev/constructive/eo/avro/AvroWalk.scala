@@ -25,9 +25,8 @@ import org.apache.avro.generic.{GenericData, GenericEnumSymbol, GenericFixed, In
   *
   * Two entry points: [[walkPath]] — legacy `(Any, Vector[Any])` shape; [[walkPathArr]] — hot-path
   * entry storing parents in a pre-allocated `Array[Any]`. The latter eliminates `Right(...)`
-  * boxing, `Vector.:+`, and `Vector` materialisation; [[rebuildPathArr]] folds it backwards. The
-  * four `AvroFocus` hot paths (`modifyImpl` / `transformImpl` / `placeImpl` / `readImpl`) plus
-  * their Ior siblings use `walkPathArr`.
+  * boxing, `Vector.:+`, and `Vector` materialisation; [[rebuildPathArr]] folds it backwards.
+  * `AvroFocus`'s Ior paths and `navigateForWrite` use `walkPathArr`.
   */
 private[avro] object AvroWalk:
 

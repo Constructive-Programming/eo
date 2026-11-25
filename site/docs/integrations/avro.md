@@ -83,37 +83,38 @@ val alice   = Person("Alice", 30, Address("Main St", 12345))
 val record  = summon[AvroCodec[Person]].encode(alice).asInstanceOf[GenericRecord]
 val streetP = codecPrism[Person].address.street
 
-streetP.record.modifyUnsafe(_.toUpperCase)(record)
-  .asInstanceOf[GenericRecord].get("address")
+streetP.record.modify(_.toUpperCase)(record)
+  .map(_.asInstanceOf[GenericRecord].get("address"))
 ```
 
-On the record face the default `modify` returns
+On the record face `modify` returns
 `Ior[Chain[AvroFailure], IndexedRecord]` — failures are surfaced
 rather than silently swallowed, mirroring `JsonPrism`'s default
-surface. The `*Unsafe` variants ship the silent-pass-through hot
-path used by Kafka consumers that have measured and don't want
-the diagnostic allocation.
+surface. For an already-parsed `IndexedRecord`, `AvroRecordPrism`
+also extends `Optic[IndexedRecord, IndexedRecord, A, A, Affine]`,
+so `.getOption` and `.replace` (and capability-driven composition)
+work directly on the record without `Ior` wrapping.
 
 That split also covers a write whose NEW value cannot be encoded.
 `Optic.from` is total by type, so there is nowhere to put the failure:
-the silent tier (`replace`, `*Unsafe`) leaves the record unchanged and
-reports success, while the Ior tier carries it as
+the `Optic` seam (`replace`) leaves the record unchanged and reports
+success, while the Ior surface (`modify` / `place`) carries it as
 `AvroFailure.DecodeFailed` — the encode runs through the same
 decoder/encoder seam, so the case name is the seam's, not the codec's.
-If a write must not silently no-op, take the Ior tier and inspect the
-chain.
+If a write must not silently no-op, use the Ior surface and inspect
+the chain.
 
-Other operations (all the silent escape hatches):
+Other operations:
 
 ```scala mdoc
-streetP.record.getOptionUnsafe(record)
-streetP.record.placeUnsafe("Broadway")(record)
-  .asInstanceOf[GenericRecord].get("address")
-streetP.record.transformUnsafe(any => any)(record).getSchema.getName
+streetP.record.getOption(record)
+streetP.record.place("Broadway")(record)
+  .map(_.asInstanceOf[GenericRecord].get("address"))
+streetP.record.transform(any => any)(record).map(_.getSchema.getName)
 ```
 
-Forgiving semantics on the `*Unsafe` surface — missing paths leave
-the record unchanged:
+Missing paths surface as `Ior.Both(chain, inputRecord)` — the
+original record is preserved alongside the failure chain:
 
 ```scala mdoc
 import org.apache.avro.generic.GenericData
@@ -126,7 +127,7 @@ stump.put(stumpSchema.getField("name").pos, "Alice")
 stump.put(stumpSchema.getField("age").pos, 30)
 // `address` left null — the walker hits `NotARecord` at that step.
 
-streetP.record.modifyUnsafe(_.toUpperCase)(stump).asInstanceOf[GenericRecord].get("address")
+streetP.record.modify(_.toUpperCase)(stump).left.map(_.toList)
 ```
 
 ## Field navigation is by SCHEMA name — `.fieldNamed` is the escape hatch
@@ -198,9 +199,9 @@ val basketRec =
   summon[AvroCodec[Basket]].encode(basket).asInstanceOf[GenericRecord]
 val secondName = codecPrism[Basket].items.at(1).name
 
-secondName.record.getOptionUnsafe(basketRec)
-secondName.record.modifyUnsafe(_.toUpperCase)(basketRec)
-  .asInstanceOf[GenericRecord].get("items").toString
+secondName.record.getOption(basketRec)
+secondName.record.modify(_.toUpperCase)(basketRec)
+  .map(_.asInstanceOf[GenericRecord].get("items").toString)
 ```
 
 Out-of-range / negative / non-array positions surface as
@@ -225,14 +226,13 @@ flips to the record-carried Ior surface:
 ```scala mdoc
 val everyName = codecPrism[Basket].items.each.name
 
-everyName.record.modifyUnsafe(_.toUpperCase)(basketRec)
-  .asInstanceOf[GenericRecord].get("items").toString
-everyName.record.getAllUnsafe(basketRec)
+everyName.record.modify(_.toUpperCase)(basketRec)
+  .map(_.asInstanceOf[GenericRecord].get("items").toString)
+everyName.record.getAll(basketRec)
 ```
 
-Empty arrays and missing prefixes leave the record unchanged on
-the silent surface; on the record face's default Ior surface,
-prefix-walk failures land in `Ior.Left` (nothing to iterate) and
+On the record face's Ior surface, empty arrays return `Ior.Right`,
+prefix-walk failures land in `Ior.Left` (nothing to iterate), and
 per-element skips accumulate one `AvroFailure` per refused element
 into `Ior.Both(chain, partialRecord)`. Payloads whose arrays use
 the byte-sized (negative-count) block framing are readable as-is
@@ -312,8 +312,8 @@ val nameAge = codecPrism[Person].fields(_.name, _.age)
 
 nameAge
   .record
-  .modifyUnsafe(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(record)
-  .asInstanceOf[GenericRecord].get("name")
+  .modify(nt => (name = nt.name.toUpperCase, age = nt.age + 1))(record)
+  .map(_.asInstanceOf[GenericRecord].get("name"))
 ```
 
 Full-cover selection — spanning every field of `Person` — still
@@ -347,8 +347,8 @@ val txRec = summon[AvroCodec[Transaction]]
 
 val amountP = codecPrism[Transaction].field(_.amount).union[Long]
 
-amountP.record.modifyUnsafe(_ + 1L)(txRec)
-  .asInstanceOf[GenericRecord].get("amount")
+amountP.record.modify(_ + 1L)(txRec)
+  .map(_.asInstanceOf[GenericRecord].get("amount"))
 ```
 
 `.union[Branch]` works against `Option[A]` (`union<null, A>`),
@@ -627,12 +627,10 @@ the widened `(IndexedRecord | Array[Byte] | String) => _`
 signature is a supertype of the parsed-input shape, and the
 parse cost is zero when the input is already a record.
 
-On the `*Unsafe` surface, unparseable bytes / strings fall back
-to a synthetic empty record built from the reader schema —
-there's no meaningful "input unchanged" semantic for bytes that
-aren't Avro, and the whole point of `*Unsafe` is to drop failure
-detail. Callers who need parse diagnostics stay on the default
-Ior-bearing surface.
+Unparseable bytes / JSON strings surface as
+`Ior.Left(Chain(AvroFailure.BinaryParseFailed(_)))` /
+`Ior.Left(Chain(AvroFailure.JsonParseFailed(_)))` — no empty
+record is ever fabricated.
 
 ## Schema discipline — the byte walk trusts the reader schema absolutely
 
@@ -1018,31 +1016,6 @@ the omitted field renders back as an explicit `null`. The jsoniter
 twin has the same overloads (`recordWithDefaults(schema,
 absentAsNull)`, `withDefaults`, `jsonToRecordWithDefaults`).
 
-## Ignoring failures (the `*Unsafe` escape hatch)
-
-For Kafka consumers and other hot-path call sites where the
-caller has measured and knows they don't want the Ior
-allocation, every default method has a sibling `*Unsafe` variant
-that ships the silent-pass-through hot path:
-
-```scala mdoc
-val nameP = codecPrism[Person].field(_.name).record
-
-// Hot-path: silent pass-through on miss.
-nameP.modifyUnsafe(_.toUpperCase)(stump).asInstanceOf[GenericRecord].get("name")
-
-// Equivalent via the default surface:
-nameP
-  .modify(_.toUpperCase)(stump)
-  .getOrElse(stump)
-  .asInstanceOf[GenericRecord].get("name")
-```
-
-Both spellings produce the same record. The first pays nothing
-for diagnostics; the second gives an observable `Ior` at the
-price of one allocation. Pick the surface that matches the
-call-site budget — every prism / traversal class ships both.
-
 ## Surface summary
 
 `AvroPrism[A]` and `AvroTraversal[A]` themselves are the byte
@@ -1051,18 +1024,18 @@ and return `Array[Byte]`, silent pass-through on failure (plus
 `sliceBytes` / `graftBytes` on the prism for raw fragments). The
 Ior-bearing record surface lives behind `.record`:
 
-| Class                     | Default (Ior-bearing)                                                          | `*Unsafe` (silent)            |
-|---------------------------|--------------------------------------------------------------------------------|-------------------------------|
-| `AvroPrism[A].record`     | `modify(f): In => Ior[Chain[AvroFailure], IndexedRecord]`                      | `modifyUnsafe(f)`             |
-| `AvroPrism[A].record`     | `transform(f): In => Ior[...]`                                                 | `transformUnsafe(f)`          |
-| `AvroPrism[A].record`     | `place(a): In => Ior[...]`                                                     | `placeUnsafe(a)`              |
-| `AvroPrism[A].record`     | `transfer(f): In => C => Ior[...]`                                             | `transferUnsafe(f)`           |
-| `AvroPrism[A].record`     | `get(in): Ior[..., A]`                                                         | `getOptionUnsafe`             |
-| `AvroPrism[A].fields(…).record` | same five                                                                    | same five                     |
-| `AvroTraversal[A].record` | `modify(f) / transform(f) / place(a) / transfer(f) / getAll(in): Ior[...]`     | `modifyUnsafe / ... / getAllUnsafe` |
-| `AvroTraversal[A].fields(…).record` | same five                                                                | same five                     |
+| Class                               | Record face (Ior-bearing over `In`)                                       | Inherited `Optic` (over `IndexedRecord`) |
+|-------------------------------------|---------------------------------------------------------------------------|------------------------------------------|
+| `AvroPrism[A].record`               | `modify(f): In => Ior[Chain[AvroFailure], IndexedRecord]`                 | `getOption`, `replace`, capabilities     |
+| `AvroPrism[A].record`               | `transform(f): In => Ior[...]`                                            | —                                        |
+| `AvroPrism[A].record`               | `place(a): In => Ior[...]`                                                | —                                        |
+| `AvroPrism[A].record`               | `transfer(f): In => C => Ior[...]`                                        | —                                        |
+| `AvroPrism[A].record`               | `get(in): Ior[..., A]`                                                    | `getOption(rec): Option[A]`              |
+| `AvroPrism[A].fields(…).record`     | same five                                                                 | same                                     |
+| `AvroTraversal[A].record`           | `modify(f) / transform(f) / place(a) / transfer(f) / getAll(in): Ior[...]` | —                                       |
+| `AvroTraversal[A].fields(…).record` | same five                                                                 | —                                        |
 
-`In` = `IndexedRecord | Array[Byte] | String` everywhere.
+`In` = `IndexedRecord | Array[Byte] | String` on every Ior member.
 
 ## Migrating a codec-first model (optics-as-evidence)
 
@@ -1100,7 +1073,7 @@ given AvroPrism[String] = streetP
 
 ```scala mdoc
 upgradeStreet(incomingBytes).length   // T = Array[Byte]; no Person materialised
-streetP.record.getOptionUnsafe(incomingBytes.modify[String](_.toUpperCase))
+streetP.record.get(incomingBytes.modify[String](_.toUpperCase))
 ```
 
 And the same consumer serves the mode-1 materialised model
@@ -1138,9 +1111,9 @@ shape.
 | Read every element's focus                                 | `codecPrism[…].items.each.…` + `getAll`            |
 | Edit multiple fields atomically                            | `codecPrism[…].fields(_.a, _.b).modify(...)`       |
 | Resolve an `Option[A]` / sealed-trait branch               | `codecPrism[…].field(_.amount).union[A]`           |
-| Observe why a modify was a silent no-op                    | default Ior `.modify(...)` — inspect the chain     |
-| Edit Kafka payloads in place (binary in, binary out)       | `AvroPrism.modifyUnsafe(...)` on `Array[Byte]`     |
-| Parse + edit Avro JSON wire payloads                       | `AvroPrism.modify(...)` on `String`                |
+| Observe why a modify missed or failed                      | `.record.modify(...)` — inspect the `Ior` chain    |
+| Edit Kafka payloads in place (binary in, binary out)       | `AvroPrism.modify(...)` on `Array[Byte]`           |
+| Parse + edit Avro JSON wire payloads                       | `.record.modify(...)` on `String`                  |
 | Read a Confluent-framed topic into a typed `A`             | `ConfluentWire.reader[F, A](schemaById)`           |
 | Compose a byte optic over Confluent-framed payloads        | `ConfluentWire.confluent(...).andThen(codecPrism[…]...)` |
 | Migrate a payload between schema versions                  | `AvroBridge.between[A, B]` + `.modify`             |

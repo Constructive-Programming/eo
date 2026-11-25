@@ -89,32 +89,36 @@ class WideFieldsArityCeilingSpec extends Specification:
       )
       .record
 
-    val out = L.placeUnsafe(
-      (
-        f01 = "b01",
-        f02 = "b02",
-        f03 = "b03",
-        f04 = "b04",
-        f05 = "b05",
-        f06 = "b06",
-        f07 = "b07",
-        f08 = "b08",
-        f09 = "b09",
-        f10 = "b10",
-        f11 = "b11",
-        f12 = "b12",
-        f13 = "b13",
-        f14 = "b14",
-        f15 = "b15",
-        f16 = "b16",
-        f17 = "b17",
-        f18 = "b18",
-        f19 = "b19",
-        f20 = "b20",
-        f21 = "b21",
-        f22 = "b22",
-      )
-    )(record)
+    // CPD-OFF — 22-field Tuple22 vs 23-field TupleXXL arity-boundary fixtures; touched by *Unsafe removal (#101).
+    val out = L
+      .place(
+        (
+          f01 = "b01",
+          f02 = "b02",
+          f03 = "b03",
+          f04 = "b04",
+          f05 = "b05",
+          f06 = "b06",
+          f07 = "b07",
+          f08 = "b08",
+          f09 = "b09",
+          f10 = "b10",
+          f11 = "b11",
+          f12 = "b12",
+          f13 = "b13",
+          f14 = "b14",
+          f15 = "b15",
+          f16 = "b16",
+          f17 = "b17",
+          f18 = "b18",
+          f19 = "b19",
+          f20 = "b20",
+          f21 = "b21",
+          f22 = "b22",
+        )
+      )(record)
+      .toOption
+      .get
 
     val written = Seq(
       "f01" -> "b01",
@@ -142,7 +146,7 @@ class WideFieldsArityCeilingSpec extends Specification:
     )
     val untouched = Seq("f23", "f24", "f25")
 
-    val decoded = L.getOptionUnsafe(out)
+    val decoded = L.getOption(out)
     val read = decoded match
       case Some(nt) => Some((nt.f01, nt.f22))
       case None     => None
@@ -162,6 +166,7 @@ class WideFieldsArityCeilingSpec extends Specification:
       .and(untouched.forall(n => sameRef(wide25Schema, out, record, n)) === true)
       .and(focusClassName(decoded) === "scala.Tuple22")
       .and(read === Some(("b01", "b22")))
+    // CPD-ON
   }
 
   // ---- 23: the first newly-unlocked arity --------------------------------
@@ -206,33 +211,37 @@ class WideFieldsArityCeilingSpec extends Specification:
       )
       .record
 
-    val out = L.placeUnsafe(
-      (
-        f01 = "b01",
-        f02 = "b02",
-        f03 = "b03",
-        f04 = "b04",
-        f05 = "b05",
-        f06 = "b06",
-        f07 = "b07",
-        f08 = "b08",
-        f09 = "b09",
-        f10 = "b10",
-        f11 = "b11",
-        f12 = "b12",
-        f13 = "b13",
-        f14 = "b14",
-        f15 = "b15",
-        f16 = "b16",
-        f17 = "b17",
-        f18 = "b18",
-        f19 = "b19",
-        f20 = "b20",
-        f21 = "b21",
-        f22 = "b22",
-        f23 = "b23",
-      )
-    )(record)
+    // CPD-OFF — 23-field TupleXXL arity-boundary fixture; touched by *Unsafe removal (#101).
+    val out = L
+      .place(
+        (
+          f01 = "b01",
+          f02 = "b02",
+          f03 = "b03",
+          f04 = "b04",
+          f05 = "b05",
+          f06 = "b06",
+          f07 = "b07",
+          f08 = "b08",
+          f09 = "b09",
+          f10 = "b10",
+          f11 = "b11",
+          f12 = "b12",
+          f13 = "b13",
+          f14 = "b14",
+          f15 = "b15",
+          f16 = "b16",
+          f17 = "b17",
+          f18 = "b18",
+          f19 = "b19",
+          f20 = "b20",
+          f21 = "b21",
+          f22 = "b22",
+          f23 = "b23",
+        )
+      )(record)
+      .toOption
+      .get
 
     val written = Seq(
       "f01" -> "b01",
@@ -261,7 +270,7 @@ class WideFieldsArityCeilingSpec extends Specification:
     )
     val untouched = Seq("f24", "f25")
 
-    val decoded = L.getOptionUnsafe(out)
+    val decoded = L.getOption(out)
     val read = decoded match
       case Some(nt) => Some((nt.f01, nt.f23))
       case None     => None
@@ -280,6 +289,7 @@ class WideFieldsArityCeilingSpec extends Specification:
       .and(untouched.forall(n => sameRef(wide25Schema, out, record, n)) === true)
       .and(focusClassName(decoded) === "scala.runtime.TupleXXL")
       .and(read === Some(("b01", "b23")))
+    // CPD-ON
   }
 
   // ---- 40, mixed primitives: the boxing path under load ------------------
@@ -337,50 +347,53 @@ class WideFieldsArityCeilingSpec extends Specification:
       )
       .record
 
-    val out = L.placeUnsafe(
-      (
-        f01 = "b01",
-        f02 = 9002,
-        f03 = 7000000003L,
-        f04 = 4.25,
-        f05 = true,
-        f06 = "b06",
-        f07 = 9007,
-        f08 = 7000000008L,
-        f09 = 9.25,
-        f10 = false,
-        f11 = "b11",
-        f12 = 9012,
-        f13 = 7000000013L,
-        f14 = 14.25,
-        f15 = true,
-        f16 = "b16",
-        f17 = 9017,
-        f18 = 7000000018L,
-        f19 = 19.25,
-        f20 = false,
-        f21 = "b21",
-        f22 = 9022,
-        f23 = 7000000023L,
-        f24 = 24.25,
-        f25 = true,
-        f26 = "b26",
-        f27 = 9027,
-        f28 = 7000000028L,
-        f29 = 29.25,
-        f30 = false,
-        f31 = "b31",
-        f32 = 9032,
-        f33 = 7000000033L,
-        f34 = 34.25,
-        f35 = true,
-        f36 = "b36",
-        f37 = 9037,
-        f38 = 7000000038L,
-        f39 = 39.25,
-        f40 = false,
-      )
-    )(record)
+    val out = L
+      .place(
+        (
+          f01 = "b01",
+          f02 = 9002,
+          f03 = 7000000003L,
+          f04 = 4.25,
+          f05 = true,
+          f06 = "b06",
+          f07 = 9007,
+          f08 = 7000000008L,
+          f09 = 9.25,
+          f10 = false,
+          f11 = "b11",
+          f12 = 9012,
+          f13 = 7000000013L,
+          f14 = 14.25,
+          f15 = true,
+          f16 = "b16",
+          f17 = 9017,
+          f18 = 7000000018L,
+          f19 = 19.25,
+          f20 = false,
+          f21 = "b21",
+          f22 = 9022,
+          f23 = 7000000023L,
+          f24 = 24.25,
+          f25 = true,
+          f26 = "b26",
+          f27 = 9027,
+          f28 = 7000000028L,
+          f29 = 29.25,
+          f30 = false,
+          f31 = "b31",
+          f32 = 9032,
+          f33 = 7000000033L,
+          f34 = 34.25,
+          f35 = true,
+          f36 = "b36",
+          f37 = 9037,
+          f38 = 7000000038L,
+          f39 = 39.25,
+          f40 = false,
+        )
+      )(record)
+      .toOption
+      .get
 
     val written = Seq(
       "f01" -> "b01",
@@ -424,13 +437,15 @@ class WideFieldsArityCeilingSpec extends Specification:
       "f39" -> "39.25",
       "f40" -> "false",
     )
+    // CPD-OFF — 40-field Mixed42 arity-boundary fixture; touched by *Unsafe removal (#101).
     val untouched = Seq("f41", "f42")
 
-    val decoded = L.getOptionUnsafe(out)
+    val decoded = L.getOption(out)
     val read = decoded match
       case Some(nt) => Some((nt.f01, nt.f02, nt.f03, nt.f04, nt.f05, nt.f39))
       case None     => None
 
+    // CPD-ON
     (mismatches(mixed42Schema, out, written) === Nil)
       .and(
         mismatches(

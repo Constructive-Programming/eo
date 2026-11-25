@@ -32,7 +32,7 @@ class AvroUnionSpec extends Specification:
   //   None / null-branch on .union[Long].record.get surfaces UnionResolutionFailed with schema-declared
   //     alternatives ["null", "long"],
   //   None / null-branch on .modify yields Ior.Both(UnionResolutionFailed, originalRecord),
-  //   .getOptionUnsafe on the null-branch returns None silently
+  //   .getOption on the null-branch returns None silently
   "field(_.amount).union[Long]: Some round-trip + None branch surfaces UnionResolutionFailed" >> {
     val record1 = transactionRecord(Transaction("t-1", Some(42L)))
     val prism = codecPrism[Transaction].field(_.amount).union[Long].record
@@ -80,15 +80,15 @@ class AvroUnionSpec extends Specification:
           .Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
     val record4 = transactionRecord(Transaction("t-3", None))
-    val unsafeNoneOk = prism.getOptionUnsafe(record4) === None
+    val optNoneOk = prism.getOption(record4) === None
 
-    modifyOk.and(getSomeOk).and(getNoneOk).and(modifyNoneOk).and(unsafeNoneOk)
+    modifyOk.and(getSomeOk).and(getNoneOk).and(modifyNoneOk).and(optNoneOk)
   }
 
   // ---- Sealed-trait Payment union ---------------------------------
 
   // covers: sealed-trait .union[Cash] resolves the schema branch by full-name and modifies the
-  // amount field on the Cash record-alternative; getOptionUnsafe returns the Cash value;
+  // amount field on the Cash record-alternative; getOption returns the Cash value;
   // sealed-trait .union[Card] on a Cash-branch record surfaces UnionResolutionFailed with
   // PathStep.UnionBranch("Card");
   // macro emits the schema's getFullName as the branch identifier — "long" (lowercase) for
@@ -236,7 +236,7 @@ class AvroUnionSpec extends Specification:
 
     val modifyPingOk = pingPrism.modify(p => Ping(p.seq + 1L))(pingRec) match
       case Ior.Right(out) =>
-        codecPrism[Beacon].record.getOptionUnsafe(out.asInstanceOf[GenericRecord]) match
+        codecPrism[Beacon].record.getOption(out.asInstanceOf[GenericRecord]) match
           case Some(Beacon(_, Ping(seq))) => seq === 8L
           case other                      =>
             org

@@ -13,9 +13,8 @@ import org.specs2.mutable.Specification
   * produced by `AvroTraversal.fields(_.a, _.b, ...)` (Unit 6).
   *
   * Mirrors `dev.constructive.eo.circe.JsonFieldsTraversalSpec` block-for-block (five named cases):
-  * one happy-path block with default ↔ Unsafe parity + qty preserved, two atomicity blocks (single
-  * element + cross-element accumulation), one empty-array / missing-prefix block, and one place /
-  * placeUnsafe block.
+  * one happy-path block with qty preserved, two atomicity blocks (single element + cross-element
+  * accumulation), and one empty-array / missing-prefix / place block.
   */
 class AvroFieldsTraversalSpec extends Specification:
 
@@ -44,11 +43,10 @@ class AvroFieldsTraversalSpec extends Specification:
 
   // ---- Happy path --------------------------------------------------
 
-  // covers: modify (*Unsafe) upper-case name + double price on every element,
-  // modify (default) returns Ior.Right on happy path, leaves non-focused fields
-  // byte-identical (qty), getAll (default) returns every element's NamedTuple,
-  // *Unsafe agreement: modify === Ior.Right(modifyUnsafe) on happy inputs
-  "AvroFieldsTraversal happy path: modify+getAll, default↔Unsafe parity, qty preserved" >> {
+  // covers: modify (default) upper-cases name + doubles price on every element,
+  // returns Ior.Right on happy path, leaves non-focused fields byte-identical (qty),
+  // getAll returns every element's NamedTuple
+  "AvroFieldsTraversal happy path: modify+getAll, qty preserved" >> {
     val basket = Basket(
       "Alice",
       List(
@@ -71,14 +69,11 @@ class AvroFieldsTraversalSpec extends Specification:
       )
     )
 
+    // CPD-OFF — pre-existing mirror of JsonFieldsTraversalSpec; touched by *Unsafe removal (#101).
     val ior = codecPrism[Basket].items.each.fields(_.name, _.price).record.modify(f)(record)
-    val unsafe =
-      codecPrism[Basket].items.each.fields(_.name, _.price).record.modifyUnsafe(f)(record)
-    val parity = ior match
-      case Ior.Right(out) => recordsEqual(out, unsafe)
+    val correct = ior match
+      case Ior.Right(out) => recordsEqual(out, expected)
       case _              => false
-    val correct = recordsEqual(unsafe, expected)
-
     val getAll = codecPrism[Basket].items.each.fields(_.name, _.price).record.getAll(record)
     val getAllOk = getAll.toOption must beSome.which { vec =>
       (vec.length === 3)
@@ -88,13 +83,14 @@ class AvroFieldsTraversalSpec extends Specification:
         .and(vec(2).price === 3.0)
     }
 
-    // Sibling field qty preserved on the Unsafe surface.
-    val items = unsafe.asInstanceOf[org.apache.avro.generic.GenericRecord].get("items")
+    // Sibling field qty preserved.
+    val items = ior.toOption.get.asInstanceOf[org.apache.avro.generic.GenericRecord].get("items")
     val firstItem =
       items.asInstanceOf[JList[?]].get(0).asInstanceOf[IndexedRecord]
     val qtyOk = firstItem.get(firstItem.getSchema.getField("qty").pos) === 7
 
-    (parity === true).and(correct === true).and(getAllOk).and(qtyOk)
+    (correct === true).and(getAllOk).and(qtyOk)
+    // CPD-ON
   }
 
   // ---- Per-element atomicity (D4) ---------------------------------
@@ -173,9 +169,8 @@ class AvroFieldsTraversalSpec extends Specification:
   // modify returns Ior.Left (nothing to iterate)
   // covers: empty array — modify returns Ior.Right(record),
   //   missing prefix — modify returns Ior.Left (nothing to iterate);
-  //   place / placeUnsafe overwrite every element's focused fields with a constant
-  //   (default ↔ Unsafe parity)
-  "empty / missing prefix + place / placeUnsafe overwrites" >> {
+  //   place overwrites every element's focused fields with a constant
+  "empty / missing prefix + place overwrites" >> {
     val emptyB = Basket("Alice", List.empty)
     val emptyRec = basketRecord(emptyB)
     val emptyOk = codecPrism[Basket]
@@ -215,12 +210,6 @@ class AvroFieldsTraversalSpec extends Specification:
     )
     val place =
       codecPrism[Basket].items.each.fields(_.name, _.price).record.place(nt)(basketRecord(basket))
-    val placeUnsafe = codecPrism[Basket]
-      .items
-      .each
-      .fields(_.name, _.price)
-      .record
-      .placeUnsafe(nt)(basketRecord(basket))
     val placeOk = place match
       case Ior.Right(out) => recordsEqual(out, expectedZ)
       case _              => false
@@ -228,7 +217,6 @@ class AvroFieldsTraversalSpec extends Specification:
     (emptyOk === true)
       .and(missingOk)
       .and(placeOk === true)
-      .and(recordsEqual(placeUnsafe, expectedZ) === true)
   }
 
 end AvroFieldsTraversalSpec

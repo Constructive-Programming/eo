@@ -71,6 +71,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **eo-generics `lens[P](_.a)` works as an inferred-type `val` in `P`'s companion.** The macro no
   longer forces the companion through Hearth's `CaseClass.caseFields` while the `val`'s type is
   still being inferred, which raised `CyclicReference: Recursive value … needs type`. (#171)
+- **BREAKING (avro):** removed the `*Unsafe` escape-hatch surface (`modifyUnsafe`,
+  `transformUnsafe`, `placeUnsafe`, `transferUnsafe`, `getOptionUnsafe`, `getAllUnsafe`,
+  `sliceBytesUnsafe`, `graftBytesUnsafe`, plus `AvroCodec.parseInputUnsafe` and the stale
+  `AvroOpticOps.replace` shadow) — issue #101. `parseInputUnsafe` fabricated an empty
+  `GenericData.Record(schema)` on parse failure so `*Unsafe` writes silently erased data; use the
+  `Ior`-bearing `.record` methods (`modify` / `place` / `transform` / `transfer` / `get` /
+  `getAll`), `sliceBytes` / `graftBytes` (`Either`), or `AvroRecordPrism`'s inherited `Optic`
+  (`.getOption` / `.replace` on `IndexedRecord`) and byte-carried `AvroPrism` / `AvroTraversal`.
 - The UPLC demo's Plutus conformance suite aggregates its ~1000 cases into one specs2 example.
   specs2 folds its execution `Action` chain recursively per fragment, and that many sibling
   fragments overflow the worker's stack; all cases (and any failure, with its path and detail)

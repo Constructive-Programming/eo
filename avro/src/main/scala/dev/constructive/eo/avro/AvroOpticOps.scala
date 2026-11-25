@@ -13,9 +13,9 @@ import org.apache.avro.generic.IndexedRecord
   * small enough that a clean abstraction is cheaper to reach for once we have three concrete shapes
   * than to design upfront.
   *
-  * Concrete classes supply six per-record hooks (three Ior-bearing, three silent); the trait wires
-  * up the public surface in terms of those hooks plus the common [[AvroCodec.parseInputIor]] /
-  * [[AvroCodec.parseInputUnsafe]] dual-input shim.
+  * Concrete classes supply three per-record Ior-bearing hooks (`modifyIor` / `transformIor` /
+  * `placeIor`); the trait wires up the public surface in terms of those hooks plus the common
+  * [[AvroCodec.parseInputIor]] triple-input shim.
   */
 private[avro] trait AvroOpticOps[A]:
 
@@ -35,15 +35,6 @@ private[avro] trait AvroOpticOps[A]:
   ): Ior[Chain[AvroFailure], IndexedRecord]
 
   protected def placeIor(record: IndexedRecord, a: A): Ior[Chain[AvroFailure], IndexedRecord]
-
-  protected def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord
-
-  protected def transformImpl(
-      record: IndexedRecord,
-      f: IndexedRecord => IndexedRecord,
-  ): IndexedRecord
-
-  protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord
 
   // ---- Default (Ior-bearing) surface --------------------------------
 
@@ -82,41 +73,6 @@ private[avro] trait AvroOpticOps[A]:
       f: C => A
   ): (IndexedRecord | Array[Byte] | String) => C => Ior[Chain[AvroFailure], IndexedRecord] =
     input => c => AvroCodec.parseInputIor(input, rootSchema).flatMap(j => placeIor(j, f(c)))
-
-  /** Replace the focused value with `a`, rebuilding the record around it — silent tier (pair with
-    * [[place]] for Ior diagnostics).
-    *
-    * A trait MEMBER deliberately: without it, `.replace` on a record-carried optic resolves to the
-    * generic Either-carrier extension, which routes through `from(Right(a)) = reverseGet(a)` and
-    * reconstructs the focus STANDALONE — for any drilled optic that silently destroys every sibling
-    * field. This member shadows the extension with the sibling-preserving placeImpl walk.
-    */
-  def replace(a: A): (IndexedRecord | Array[Byte] | String) => IndexedRecord = placeUnsafe(a)
-
-  // NOTE: there is deliberately no bytes-in/bytes-out surface here. [[AvroPrism]] and
-  // [[AvroTraversal]] ARE the byte-carried optics — `.modify` / `.replace` / `.getOption` /
-  // `.foldMap` on them operate on `Array[Byte]` directly (locate + slice-decode + splice), so a
-  // parse→record→re-encode tier would be a second way to do the same thing.
-
-  // ---- *Unsafe (silent) escape hatches -------------------------------
-
-  /** Silent counterpart to [[modify]] — input pass-through on any failure. */
-  def modifyUnsafe(f: A => A): (IndexedRecord | Array[Byte] | String) => IndexedRecord =
-    input => modifyImpl(AvroCodec.parseInputUnsafe(input, rootSchema), f)
-
-  /** Silent counterpart to [[transform]]. */
-  def transformUnsafe(
-      f: IndexedRecord => IndexedRecord
-  ): (IndexedRecord | Array[Byte] | String) => IndexedRecord =
-    input => transformImpl(AvroCodec.parseInputUnsafe(input, rootSchema), f)
-
-  /** Silent counterpart to [[place]]. */
-  def placeUnsafe(a: A): (IndexedRecord | Array[Byte] | String) => IndexedRecord =
-    input => placeImpl(AvroCodec.parseInputUnsafe(input, rootSchema), a)
-
-  /** Silent counterpart to [[transfer]]. */
-  def transferUnsafe[C](f: C => A): (IndexedRecord | Array[Byte] | String) => C => IndexedRecord =
-    input => c => placeImpl(AvroCodec.parseInputUnsafe(input, rootSchema), f(c))
 
 end AvroOpticOps
 
