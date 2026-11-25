@@ -17,9 +17,9 @@ import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
-// CPD-ON
 
 import AvroSpecFixtures.Person
+// CPD-ON
 
 /** Issue #99 on the avro wire carrier: `.field(_.x)` checked against the CODEC's own accessor.
   *
