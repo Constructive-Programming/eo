@@ -5,7 +5,7 @@ package laws
 import org.scalacheck.{Arbitrary, Gen}
 
 import data.PSVec
-import optics.Plated
+import optics.{Children, Plated}
 import schemes.laws.discipline.HyloTests
 
 enum HyloExpr:
@@ -20,13 +20,13 @@ class HyloLawsSuite extends munit.DisciplineSuite:
 
   private given Plated[HyloExpr] = Plated.fromChildren(
     {
-      case HyloExpr.Add(l, r) => List(l, r)
-      case HyloExpr.Lit(_)    => Nil
+      case HyloExpr.Add(l, r) => Children.fromList(List(l, r))
+      case HyloExpr.Lit(_)    => Children.empty
     },
-    {
-      case (HyloExpr.Add(_, _), l :: r :: Nil) => HyloExpr.Add(l, r)
-      case (leaf, _)                           => leaf
-    },
+    (parent, kids) =>
+      (parent, kids.toList) match
+        case (HyloExpr.Add(_, _), l :: r :: Nil) => HyloExpr.Add(l, r)
+        case (leaf, _)                           => leaf,
   )
 
   private given Arbitrary[Int] = Arbitrary(

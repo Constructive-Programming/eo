@@ -42,11 +42,12 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   // semantic invariants live in one property, joined by &&.
 
   // covers: modify(identity) on valid Person record === Ior.Right(record),
-  //   modify(f) on valid record === Ior.Right(modifyUnsafe(f)) on the happy path,
+  //   modify(f) on valid record returns Ior.Right with updated fields,
   //   get(valid record) decodes to a NameAge whose name/age match the Person,
-  //   placeUnsafe-then-getOptionUnsafe round-trips the focus,
+  //   place-then-getOption round-trips the focus,
   //   two-step modify on disjoint fields == single .fields modify (composability bonus)
-  "AvroFieldsPrism default-Ior surface forAll: modify-id / parity / get / round-trip / compose" >> forAll {
+  // CPD-OFF — pre-existing mirror of AvroPrismLawsSpec / JsonFieldsPrismLawsSpec; touched by *Unsafe removal (#101).
+  "AvroFieldsPrism default-Ior surface forAll: modify-id / modify / get / round-trip / compose" >> forAll {
     (p: Person, suffix: String, newName: String, newAge: Int) =>
       val record = personRecord(p)
       val L = codecPrism[Person].fields(_.name, _.age).record
@@ -56,8 +57,9 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
         case Ior.Right(out) => recordsEqual(out, record)
         case _              => false
 
-      val parityOk = L.modify(f)(record) match
-        case Ior.Right(out) => recordsEqual(out, L.modifyUnsafe(f)(record))
+      val expectedMod = personRecord(p.copy(name = p.name + suffix))
+      val modOk = L.modify(f)(record) match
+        case Ior.Right(out) => recordsEqual(out, expectedMod)
         case _              => false
 
       val getOk = L.get(record) match
@@ -65,22 +67,21 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
         case _             => false
 
       val nt: NameAge = (name = newName, age = newAge)
-      val roundTripOk = L.getOptionUnsafe(L.placeUnsafe(nt)(record)) match
+      val roundTripOk = L.place(nt)(record).toOption.flatMap(L.getOption) match
         case Some(read) => read.name == newName && read.age == newAge
         case None       => false
 
       val nameL = codecPrism[Person].field(_.name).record
       val ageL = codecPrism[Person].field(_.age).record
       val stepByStep =
-        ageL.modifyUnsafe((i: Int) => i + 1)(
-          nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
-        )
-      val both = L.modifyUnsafe((nt: NameAge) =>
-        (name = nt.name.toUpperCase, age = nt.age + 1): NameAge
-      )(record)
-      val composeOk = recordsEqual(stepByStep, both)
+        nameL.modify((s: String) => s.toUpperCase)(record).flatMap(ageL.modify((i: Int) => i + 1))
+      val both =
+        L.modify((nt: NameAge) => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge)(record)
+      val composeOk = (stepByStep, both) match
+        case (Ior.Right(a), Ior.Right(b)) => recordsEqual(a, b)
+        case _                            => false
 
-      modIdOk && parityOk && getOk && roundTripOk && composeOk
+      modIdOk && modOk && getOk && roundTripOk && composeOk
   }
 
   // ---- Atomic-read miss surface (D4) ------------------------------
@@ -91,9 +92,8 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   //   one PathMissing per missing field — never assembles a partial NamedTuple,
   //   modify on a partial-miss record returns Ior.Both(chain, ORIGINAL record) — never
   //   Ior.Both(chain, partialNT-shaped),
-  //   modifyUnsafe on a partial-miss record returns the input record unchanged,
-  //   getOptionUnsafe on a partial-miss record returns None
-  "AvroFieldsPrism partial-miss surfaces (D4): get/modify/modifyUnsafe/getOptionUnsafe" >> {
+  //   getOption on a partial-miss record returns None
+  "AvroFieldsPrism partial-miss surfaces (D4): get/modify/getOption" >> {
     val ageOnly = ageOnlyRecord(30)
     val L = codecPrism[Person].fields(_.name, _.age).record
 
@@ -111,17 +111,15 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Both, got $other"): org.specs2.execute.Result
 
-    val unsafeMod = L.modifyUnsafe(identity[NameAge])(ageOnly)
-    val unsafeModOk = (unsafeMod eq ageOnly) === true
-    val unsafeGetOk = L.getOptionUnsafe(ageOnly) === None
+    val optGetOk = L.getOption(ageOnly) === None
 
-    getOk.and(modifyOk).and(unsafeModOk).and(unsafeGetOk)
+    getOk.and(modifyOk).and(optGetOk)
   }
 
-  // ---- .record.transform / transformUnsafe (AvroFocus.Fields.buildSubRecord) -----------
+  // ---- .record.transform (AvroFocus.Fields.buildSubRecord) -----------------------------
   //
   // Unlike modify/get (which route through the ATOMIC readFields — any missing selected field
-  // fails the whole read), transform/transformUnsafe project the sub-record via buildSubRecord,
+  // fails the whole read), transform projects the sub-record via buildSubRecord,
   // which is non-atomic: a missing selected field projects as `null` instead of failing.
 
   // covers: buildSubRecord's per-index projection loop — rewrite the projected NamedTuple
@@ -136,7 +134,7 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   //   which could not construct the macro's `*:`-spelled NamedTuple. Fixed at the source in
   //   `MacroSelectors.tupleTypeOf`; `NamedTupleSpellingSpec` carries two differently-shaped
   //   given-free expansions in one file as the standing witness.
-  "AvroFieldsPrism .record.transform / transformUnsafe: sub-record rewrite splices back, sibling survives" >> {
+  "AvroFieldsPrism .record.transform: sub-record rewrite splices back, sibling survives" >> {
     val record = personRecord(Person("alice", 30))
     val L = codecPrism[Person].fields(_.name, _.age).record
 
@@ -148,28 +146,19 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
       fresh.put(agePos, sub.get(agePos))
       fresh
 
-    val viaIor = L.transform(upperName)(record)
-    val viaUnsafe = L.transformUnsafe(upperName)(record)
-
-    val iorOk = viaIor match
+    L.transform(upperName)(record) match
       case Ior.Right(out) =>
         (out.get(personSchema.getField("name").pos).toString === "ALICE")
           .and(out.get(personSchema.getField("age").pos).asInstanceOf[Int] === 30)
       case other =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
-
-    val unsafeOk =
-      (viaUnsafe.get(personSchema.getField("name").pos).toString === "ALICE")
-        .and(viaUnsafe.get(personSchema.getField("age").pos).asInstanceOf[Int] === 30)
-
-    iorOk.and(unsafeOk)
   }
 
   // covers: buildSubRecord's missing-field branch (`if parentField == null then null`) — unlike
-  //   readFields (which Ior.Left/Ior.Both on ANY missing selected field), transformUnsafe's
+  //   readFields (which Ior.Left/Ior.Both on ANY missing selected field), transform's
   //   non-atomic projection succeeds even when a selected field is absent from the schema, and
   //   overlayFields silently drops the update for a field the parent schema doesn't have
-  "AvroFieldsPrism .record.transformUnsafe on a schema-drifted parent: missing field projects as null, present field still rewrites" >> {
+  "AvroFieldsPrism .record.transform on a schema-drifted parent: missing field projects as null, present field still rewrites" >> {
     val ageOnly = ageOnlyRecord(30)
     val L = codecPrism[Person].fields(_.name, _.age).record
 
@@ -181,9 +170,12 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
       fresh.put(agePos, sub.get(agePos).asInstanceOf[Integer].intValue + 1)
       fresh
 
-    val out = L.transformUnsafe(bumpAge)(ageOnly)
-    out.get(0).asInstanceOf[Integer].intValue === 31
+    L.transform(bumpAge)(ageOnly) match
+      case Ior.Right(out) => out.get(0).asInstanceOf[Integer].intValue === 31
+      case other          =>
+        org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
   }
+  // CPD-ON
 
   // ---- Helpers -----------------------------------------------------
 

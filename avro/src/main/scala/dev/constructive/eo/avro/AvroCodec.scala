@@ -2,10 +2,13 @@ package dev.constructive.eo.avro
 
 import scala.util.control.NonFatal
 
+// CPD-OFF — shared Avro import prologue across the module; dropping the unused `GenericData`
+// selector is not new duplication.
 import cats.data.{Chain, Ior}
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord, IndexedRecord}
+import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
+// CPD-ON
 import org.apache.avro.io.DecoderFactory
 
 /** A unified read/write/schema codec for Avro values, combining the kindlings-avro-derivation
@@ -197,24 +200,8 @@ object AvroCodec:
           case Right(r) => Ior.Right(r)
           case Left(t)  => Ior.Left(Chain.one(AvroFailure.JsonParseFailed(t)))
 
-  /** Resolve an `IndexedRecord | Array[Byte] | String` input, dropping failures — for the `*Unsafe`
-    * escape hatches. Bad bytes / bad JSON produce a synthetic empty record built from `schema`
-    * (positional slots zero-initialised).
-    */
-  private[avro] def parseInputUnsafe(
-      input: IndexedRecord | Array[Byte] | String,
-      schema: Schema,
-  ): IndexedRecord =
-    input match
-      case r: IndexedRecord => r
-      case bs: Array[Byte]  => decodeRecord(bs, schema).getOrElse(new GenericData.Record(schema))
-      case s: String        =>
-        decodeJsonString(s, schema) match
-          case Right(r) => r
-          case Left(_)  => new GenericData.Record(schema)
-
   /** Avro-JSON wire-format decode (Jackson-backed under the hood). Kept private — the public parse
-    * surface is [[parseInputIor]] / [[parseInputUnsafe]]; there's no bare JSON-record caller yet.
+    * surface is [[parseInputIor]]; there's no bare JSON-record caller yet.
     */
   private def decodeJsonString(s: String, schema: Schema): Either[Throwable, IndexedRecord] =
     try

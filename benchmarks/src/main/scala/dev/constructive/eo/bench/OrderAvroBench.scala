@@ -13,8 +13,7 @@ import org.openjdk.jmh.annotations.*
   * Unlike jsoniter, eo-avro's `[*]` traversal writes back, so avro carries the same two foci as the
   * circe bench — a depth-3 scalar and an array traversal. Three baselines per metric:
   *
-  *   - `eo*` — eo-avro `AvroPrism` / `AvroTraversal` walking the `IndexedRecord` (`*Unsafe` hot
-  *     path).
+  *   - `eo*` — eo-avro `AvroPrism` / `AvroTraversal` walking the `IndexedRecord`.
   *   - `naive*` — the kindlings codec round-trip (`decodeEither` → case-class `copy` → `encode`),
   *     which materialises the whole record. (No hand-optimized `native*` partial-walk is benched —
   *     that's exactly what eo-avro already is.)
@@ -50,7 +49,7 @@ class OrderAvroBench extends JmhDefaults:
   // ---- read scalar: customer.address.street -------------------------
 
   @Benchmark def eoReadStreet: Option[String] =
-    streetPrism.getOptionUnsafe(record)
+    streetPrism.getOption(record)
 
   @Benchmark def naiveReadStreet: String =
     codec.decodeEither(record).toOption.get.customer.address.street
@@ -61,7 +60,7 @@ class OrderAvroBench extends JmhDefaults:
   // ---- write scalar: customer.address.street ------------------------
 
   @Benchmark def eoModifyStreet: IndexedRecord =
-    streetPrism.modifyUnsafe(_.toUpperCase)(record)
+    streetPrism.modify(_.toUpperCase)(record).getOrElse(record)
 
   @Benchmark def naiveModifyStreet: IndexedRecord =
     val o = codec.decodeEither(record).toOption.get
@@ -81,7 +80,7 @@ class OrderAvroBench extends JmhDefaults:
   // ---- write array: lines[*].name -----------------------------------
 
   @Benchmark def eoModifyNames: IndexedRecord =
-    namesTraversal.modifyUnsafe(_.toUpperCase)(record)
+    namesTraversal.modify(_.toUpperCase)(record).getOrElse(record)
 
   @Benchmark def naiveModifyNames: IndexedRecord =
     val o = codec.decodeEither(record).toOption.get

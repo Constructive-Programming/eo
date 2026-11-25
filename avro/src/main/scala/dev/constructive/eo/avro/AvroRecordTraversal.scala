@@ -12,12 +12,10 @@ import org.apache.avro.generic.{GenericData, IndexedRecord}
   * root down to some array, then applies the focus update to every element of that array.
   *
   * Mirrors `dev.constructive.eo.circe.JsonTraversal` line-for-line: a traversal is "a prism applied
-  * per-element after a prefix walk". Two call-surface tiers (via `AvroOpticOps`):
-  *
-  *   - '''Default (Ior-bearing).''' `modify` / `transform` / `place` / `transfer` / `getAll`
-  *     accumulate per-element failures into the chain. Prefix-walk failures return `Ior.Left` —
-  *     nothing to iterate.
-  *   - '''`*Unsafe` (silent).''' Drops failures; preserves the silent forgiving semantics.
+  * per-element after a prefix walk". Exposes the Ior-bearing surface (via `AvroOpticOps`): `modify`
+  * / `transform` / `place` / `transfer` / `getAll` accumulate per-element failures into the chain
+  * over `IndexedRecord | Array[Byte] | String`; parse and prefix-walk failures return `Ior.Left` —
+  * nothing to iterate.
   *
   * Drilling (`.field` / `.at` / `.fields` / Dynamic selection) lives on [[AvroTraversal]] alone —
   * drill there, then flip with `.record` at the end. One drilling mechanism, two carriers.
@@ -38,29 +36,6 @@ final class AvroRecordTraversal[A] private[avro] (
     */
   def getAll(input: IndexedRecord | Array[Byte] | String): Ior[Chain[AvroFailure], Vector[A]] =
     AvroCodec.parseInputIor(input, rootSchemaCached).flatMap(getAllIor)
-
-  /** Silent counterpart to [[getAll]] — refusing elements are dropped; a whole-walk failure yields
-    * `Vector.empty`.
-    */
-  inline def getAllUnsafe(input: IndexedRecord | Array[Byte] | String): Vector[A] =
-    val record = AvroCodec.parseInputUnsafe(input, rootSchemaCached)
-    walkPrefixOpt(record).fold(Vector.empty[A])(_.flatMap {
-      case rec: IndexedRecord => focus.readImpl(rec)
-      case _                  => None
-    })
-
-  // ---- Prefix walks -------------------------------------------------
-
-  /** Walk the prefix and project the terminal as a `java.util.List` of element values. `None` on
-    * any walk failure or on a non-array terminal — the silent surface uses this directly.
-    */
-  private def walkPrefixOpt(record: IndexedRecord): Option[Vector[Any]] =
-    AvroWalk.walkPath(record, prefix).toOption.flatMap {
-      case (cur, _) =>
-        cur match
-          case lst: JList[?] => Some(toVector(lst))
-          case _             => None
-    }
 
   /** Walk the prefix with structured failure reporting; success projects the terminal as a
     * `java.util.List`-as-Vector plus the parents collected during the walk.
@@ -90,45 +65,6 @@ final class AvroRecordTraversal[A] private[avro] (
         loop(i + 1)
     loop(0)
     b.result()
-
-  // ---- *Unsafe surface — delegates to focus.modifyImpl etc. --------
-
-  override protected def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-    mapAtPrefix(record)(onRec(_)(focus.modifyImpl(_, f)))
-
-  override protected def transformImpl(
-      record: IndexedRecord,
-      f: IndexedRecord => IndexedRecord,
-  ): IndexedRecord =
-    mapAtPrefix(record)(onRec(_)(focus.transformImpl(_, f)))
-
-  override protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-    mapAtPrefix(record)(onRec(_)(focus.placeImpl(_, a)))
-
-  /** Walk the prefix, replace the focused array by mapping every element through `elemUpdate`. On
-    * prefix miss the input is returned unchanged. Element values that aren't [[IndexedRecord]] are
-    * left unchanged (the focus's per-record hooks expect a record to walk into).
-    */
-  private def mapAtPrefix(record: IndexedRecord)(elemUpdate: Any => Any): IndexedRecord =
-    AvroWalk.walkPath(record, prefix).toOption match
-      case None                 => record
-      case Some((cur, parents)) =>
-        cur match
-          case lst: JList[?] =>
-            val newList = replaceArrayContents(lst, toVector(lst).map(elemUpdate))
-            AvroWalk.rebuildRecord(parents, prefix, newList)
-          case _ => record
-
-  // The focus's per-record hooks expect an IndexedRecord. Per-element values inside an Avro array
-  // are runtime `Any` — when the focus is a Leaf with a non-empty suffix or a Fields focus, the
-  // element MUST be an IndexedRecord (the schema guarantees it for record-shaped element types).
-  // For the rare leaf-shaped element types (e.g. an array<string>) the silent surface preserves
-  // the element unchanged — the codec round-trip happens in the Ior path below.
-
-  private def onRec(elem: Any)(f: IndexedRecord => Any): Any =
-    elem match
-      case rec: IndexedRecord => f(rec)
-      case _                  => elem
 
   // ---- Default Ior surface — delegates to focus.modifyIor etc. -----
 

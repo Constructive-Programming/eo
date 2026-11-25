@@ -13,10 +13,9 @@ import org.specs2.mutable.Specification
   * cached reader schema.
   *
   * Mirrors `dev.constructive.eo.circe.StringInputSpec` block-for-block — one composite block per
-  * carrier (AvroPrism `.record` / fields-prism `.record` / AvroTraversal) covering happy-path,
-  * `Ior.Left(JsonParseFailed)` on bad input, and synthetic-empty-record / empty-vector fallbacks on
-  * the Unsafe surface; one extra block for record-input parity (the widened union still routes
-  * record input through the no-op arm).
+  * carrier (AvroPrism `.record` / fields-prism `.record` / AvroTraversal) covering happy-path and
+  * `Ior.Left(JsonParseFailed)` on bad input; one extra block for record-input parity (the widened
+  * union still routes record input through the no-op arm).
   *
   * '''Avro JSON wire format quirks.'''
   *   - For `Person(name, age)` the wire form is the unsurprising `{"name":"Alice","age":30}` (the
@@ -43,8 +42,7 @@ class StringInputSpec extends Specification:
   // covers: AvroPrism.record String-input — happy parse + modify (Ior.Right + structural record
   //   equality),
   //   .get round-trips on well-formed String, .place via Ior, .transfer via Ior,
-  //   bad-JSON surfaces Ior.Left(JsonParseFailed), modifyUnsafe on bad JSON returns synthetic
-  //   empty record under personSchema, getOptionUnsafe on bad JSON returns None;
+  //   bad-JSON surfaces Ior.Left(JsonParseFailed);
   //   fields-prism .record (multi-field NamedTuple focus) — happy parse + modify (Ior.Right),
   //   bad-JSON surfaces Ior.Left(JsonParseFailed) on the multi-field surface;
   //   IndexedRecord input still routes cleanly through the widened (record | bytes | String)
@@ -73,9 +71,6 @@ class StringInputSpec extends Specification:
       case Ior.Left(chain) =>
         (chain.length == 1L) && chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
       case _ => false
-    val unsafeBad = nameL.modifyUnsafe((s: String) => s.toUpperCase)(badStr)
-    val unsafeBadOk = unsafeBad.getSchema == personSchema
-    val unsafeNoneOk = nameL.getOptionUnsafe(badStr) == None
 
     val fp = codecPrism[Person].fields(_.name, _.age).record
     val fieldsExpected = personRecord(Person("ALICE", 31))
@@ -104,18 +99,16 @@ class StringInputSpec extends Specification:
       .and(placeOk === true)
       .and(transferOk === true)
       .and(badIorOk === true)
-      .and(unsafeBadOk === true)
-      .and(unsafeNoneOk === true)
       .and(fieldsOk === true)
       .and(fieldsBadOk === true)
       .and(parity === true)
       .and(recordOk === true)
   }
 
+  // CPD-OFF — pre-existing String-input specs2 Ior checks; touched by *Unsafe removal (#101).
   // covers: AvroTraversal String-input — happy parse + per-element modify (Ior.Right),
-  //   bad-JSON surfaces Ior.Left(JsonParseFailed),
-  //   getAllUnsafe on bad JSON returns Vector.empty
-  "AvroTraversal String-input: parse+modify + Ior.Left(JsonParseFailed) + getAllUnsafe-empty on bad input" >> {
+  //   bad-JSON surfaces Ior.Left(JsonParseFailed)
+  "AvroTraversal String-input: parse+modify + Ior.Left(JsonParseFailed)" >> {
     val basket = Basket("Alice", List(Order("a", 1.0, 1), Order("b", 2.0, 2)))
     val str =
       """{"owner":"Alice","items":[{"name":"a","price":1.0,"qty":1},{"name":"b","price":2.0,"qty":2}]}"""
@@ -134,16 +127,14 @@ class StringInputSpec extends Specification:
         chain.headOption.exists(_.isInstanceOf[AvroFailure.JsonParseFailed])
       case _ => false
 
-    val unsafeEmpty = codecPrism[Basket].items.each.name.record.getAllUnsafe("not json")
-    val unsafeEmptyOk = unsafeEmpty == Vector.empty
-
-    (modOk === true).and(badIorOk === true).and(unsafeEmptyOk === true)
+    (modOk === true).and(badIorOk === true)
   }
 
   /** Compare two records via apache-avro's structural compare; sidesteps the Eq-given import. */
   private def recordsEqual(a: IndexedRecord, b: IndexedRecord): Boolean =
     a.getSchema == b.getSchema &&
       GenericData.get().compare(a, b, a.getSchema) == 0
+  // CPD-ON
 
   // Suppress unused-import lints for GenericRecord / GenericData when assertions skip them.
   private val _ = (classOf[GenericRecord], GenericData.get())

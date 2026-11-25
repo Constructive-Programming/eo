@@ -57,7 +57,7 @@ class AvroBytesBench extends JmhDefaults:
     envelopeBytes = encodeEnvelope(inputEnvelope)
     outputBytes = encodeEnvelope(outputEnvelope)
     wideBytes = encodeWide(wideConversion)
-    clickFragment = clickPrism.sliceBytesUnsafe(envelopeBytes).get.bytes
+    clickFragment = clickPrism.sliceBytes(envelopeBytes).toOption.get.bytes
 
   // ---- envelope: read partnerId (scalar AFTER the mid-record union) --
 
@@ -113,8 +113,11 @@ class AvroBytesBench extends JmhDefaults:
     * and grafted into many outputs (or carried between services).
     */
   @Benchmark def eoGraftPayload: Array[Byte] =
-    clickPrism.graftBytesUnsafe(outputBytes, clickFragment)
+    clickPrism.graftBytes(outputBytes, clickFragment).getOrElse(outputBytes)
 
   /** Full slice + graft pipeline — both offset walks, still no decode. */
   @Benchmark def eoSliceGraftPayload: Array[Byte] =
-    clickPrism.graftBytesUnsafe(outputBytes, clickPrism.sliceBytesUnsafe(envelopeBytes).get.bytes)
+    clickPrism
+      .sliceBytes(envelopeBytes)
+      .flatMap(f => clickPrism.graftBytes(outputBytes, f.bytes))
+      .getOrElse(outputBytes)

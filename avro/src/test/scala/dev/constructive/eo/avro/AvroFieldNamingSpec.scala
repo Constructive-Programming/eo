@@ -89,7 +89,7 @@ class AvroFieldNamingSpec extends Specification:
 
   "record face and a nested descent resolve the same snake_case names" >> {
     val rec = clickCodec.encode(click).asInstanceOf[GenericRecord]
-    val bumped = codecPrism[Click].field(_.landingPageId).record.modifyUnsafe(_ + 1)(rec)
+    val bumped = codecPrism[Click].field(_.landingPageId).record.modify(_ + 1)(rec).getOrElse(rec)
     val evCodec = summon[AvroCodec[Event]]
     val ev = Event("e1", Meta(42, "hot"))
     val bytes = toBinary(evCodec.encode(ev).asInstanceOf[GenericRecord], evCodec.schema)

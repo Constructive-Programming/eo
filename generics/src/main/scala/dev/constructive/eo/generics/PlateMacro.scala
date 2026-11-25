@@ -7,8 +7,7 @@ import scala.quoted.*
 import scala.reflect.ClassTag
 
 import cats.Traverse
-import dev.constructive.eo.data.ObjArrBuilder
-import dev.constructive.eo.optics.Plated
+import dev.constructive.eo.optics.{Children, Plated}
 
 /** Compile-time derivation of a [[dev.constructive.eo.optics.Plated]] for a recursive ADT or
   * mutually recursive type family `S`.
@@ -16,7 +15,12 @@ import dev.constructive.eo.optics.Plated
   *   - '''Single-sorted ADTs''' (`enum Expr`, sealed hierarchies, recursive case classes): focuses
   *     every immediate child field of type `S`, plus children inside `Option[S]`, `List[S]`,
   *     `Vector[S]`, `ArraySeq[S]`, `Seq[S]`, `Array[S]`, or any `F[S]` with a `cats.Traverse[F]` in
-  *     scope (O'Connor 2011 §5.1, Figure 5).
+  *     scope (O'Connor 2011 §5.1, Figure 5). Containers compose, so `Option[List[S]]`,
+  *     `List[List[S]]`, … are reached too. A field whose type is a product record that is not
+  *     itself an `S` is looked through: the `S` positions inside the record (at any depth, through
+  *     further containers and records) become children of the enclosing case, and `mapChildren`
+  *     rebuilds the record. The children stay typed `S`, so no union and no runtime type tests are
+  *     needed.
   *   - '''Mutually recursive families / union types''' (`type Lang = Stm | Expr | Var | Typ`,
   *     `plate[Lang]`): derives a multi-sorted plate (O'Connor 2011 §5) over the union's branches,
   *     descending into any field (or container field) whose element type is a subtype of `S`.
@@ -25,71 +29,37 @@ import dev.constructive.eo.optics.Plated
   *
   * Reconstruction routes through `CaseClass.construct[Id]` (`new V(...)`, never `.copy`), so Scala
   * 3 enum cases reassemble uniformly.
+  *
+  * A recursive holder record (a record that reaches itself again before reaching `S`) is not
+  * expanded further: the repeated type is treated as a leaf, so such a field's deeper `S` positions
+  * stay out of the walk.
   */
+// CPD-OFF — the read (`childrenFocus`) and write (`mapFocus`) codegen mirror each supported
+// shape; the splices are type-dependent, so extracting the correspondence would only hide it.
 object PlateMacro:
 
   /** Quoted-macro implementation behind the top-level `plate[S]` (spliced directly by the package
-    * object) — see the object doc for supported field, container, and union shapes.
+    * object) — see the object doc for supported field, container, record, and union shapes.
     */
   def deriveImpl[S: Type](using q: Quotes): Expr[Plated[S]] =
     new HearthPlateMacro(q).derivePlate[S]
 
-  /** The children of a leaf. Shared: a zero-length array has nothing for a caller to mutate, so it
-    * satisfies `Plated.fromChildrenMap`'s fresh-array contract without allocating.
-    */
+  /** Shared zero-length array for a leaf's internal children array. */
   val NoChildren: Array[Any] = new Array[Any](0)
+
+  /** One-shot child source for the generated `rebuildArray`: `apply` ignores the old child and
+    * hands back the next rewritten element. One instance per rebuild, no iterator/lambda.
+    */
+  final class Feed[S](kids: Array[Any]) extends (S => S):
+    private var i = 0
+
+    def apply(old: S): S =
+      val next = kids(i)
+      i += 1
+      next.asInstanceOf[S]
 
   /** Sentinel sort check for slots whose element type is a supertype of `S`: no per-child test. */
   val AnyChild: Any => Boolean = _ => true
-
-  // ---- children: each child field's elements as a fresh array -----------------------------
-
-  /** Concatenate per-field children arrays into one freshly-allocated, exactly-sized array. */
-  def concat(parts: Array[Array[Any]]): Array[Any] =
-    val n = parts.length
-    @tailrec def total(i: Int, acc: Int): Int =
-      if i < n then total(i + 1, acc + parts(i).length) else acc
-    val size = total(0, 0)
-    if size == 0 then NoChildren
-    else
-      val out = new Array[Any](size)
-      @tailrec def copy(i: Int, at: Int): Unit =
-        if i < n then
-          val part = parts(i)
-          System.arraycopy(part, 0, out, at, part.length)
-          copy(i + 1, at + part.length)
-      copy(0, 0)
-      out
-
-  def fromOption(xs: Option[Any]): Array[Any] =
-    if xs.isEmpty then NoChildren else scala.Array[Any](xs.get)
-
-  /** A `List` field's children as a fresh, exactly-sized array (one length walk, one fill). */
-  def fromList(xs: List[Any]): Array[Any] =
-    if xs.isEmpty then NoChildren
-    else
-      val out = new Array[Any](xs.length)
-      @tailrec def fill(i: Int, rest: List[Any]): Unit =
-        if rest.nonEmpty then
-          out(i) = rest.head
-          fill(i + 1, rest.tail)
-      fill(0, xs)
-      out
-
-  /** Any other collection field's children as a fresh array (never the collection's own storage).
-    */
-  def fromIterable(xs: Iterable[Any]): Array[Any] =
-    if xs.isEmpty then NoChildren else xs.toArray[Any]
-
-  /** An `Array` field's children: a fresh copy, so callers may overwrite it in place. */
-  def fromArray(xs: Array[?]): Array[Any] =
-    if xs.length == 0 then NoChildren else Array.copyAs[Any](xs, xs.length)
-
-  /** A `Traverse[F]` container's children as a fresh array, in traversal order. */
-  def fromTraverse[F[_], E](fa: F[E])(using F: Traverse[F]): Array[Any] =
-    val buf = new ObjArrBuilder(8)
-    F.foldLeft(fa, ())((_, e) => { buf.append(e); () })
-    if buf.size == 0 then NoChildren else buf.freezeArr
 
   // ---- mapChildren: `g` over each child, guarded by the slot's sort check --------------------
 
@@ -123,21 +93,29 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
   import _root_.hearth.fp.Id
   import _root_.hearth.fp.instances.*
 
-  private enum ChildFieldKind(val elemTpe: TypeRepr):
-    case Direct(e: TypeRepr) extends ChildFieldKind(e)
-    case OptionField(e: TypeRepr) extends ChildFieldKind(e)
-    case SeqField(e: TypeRepr, isList: Boolean) extends ChildFieldKind(e)
-    case ArrayField(e: TypeRepr) extends ChildFieldKind(e)
-    case TraverseField(tyconTpe: TypeRepr, e: TypeRepr) extends ChildFieldKind(e)
-
-  /** The two things a child field contributes: its elements as a fresh children array, and itself
-    * rebuilt with `g` applied to each element (given the slot's sort check). One table, so the
-    * children order and the `mapChildren` order can't drift apart.
+  /** One field's path to the `S` positions it holds.
+    *
+    * `tpe` is the static type of the value at this level; `kind` says how to read its `S`
+    * descendants and how to rebuild it. Containers compose (`Option[List[S]]`), and a product
+    * record that is not itself an `S` is looked through (`Product`), so any stack of supported
+    * containers over a record over `S` is a child position.
     */
-  final private case class FieldOps(
-      children: Expr[Array[Any]],
-      mapped: (Expr[Any => Any], Expr[Any => Boolean]) => Expr[Any],
-  )
+  final private case class Focus(tpe: TypeRepr, kind: FocusKind)
+
+  private enum FocusKind:
+    /** The value itself is a child (a subtype of `S`). */
+    case Direct
+
+    /** `Option[elemTpe]` holding `inner`. */
+    case Opt(elemTpe: TypeRepr, inner: Focus)
+
+    /** A `Seq`-shaped container of `elemTpe` holding `inner`; `isList` preserves `List` sharing. */
+    case SeqOf(elemTpe: TypeRepr, isList: Boolean, inner: Focus)
+    case ArrayOf(elemTpe: TypeRepr, inner: Focus)
+    case TraverseOf(tyconTpe: TypeRepr, elemTpe: TypeRepr, inner: Focus)
+
+    /** A product record that is not an `S`, with the fields (declaration order) that reach `S`. */
+    case Product(fields: List[(String, Focus)])
 
   /** What a branch of `S` generates: something for a product (case class / enum case with fields),
     * something for a leaf (an object case, or a non-ADT union branch).
@@ -167,8 +145,13 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
     def dispatch[R: Type](s: Expr[S], gen: BranchGen[R])(using Quotes): Expr[R] =
       if isUnion then unionChain[S, R](branches, s, gen) else branch[S, R](s, gen)
 
-    val childrenGen = new BranchGen[Array[Any]]:
+    val childrenGen = new BranchGen[Children[S]]:
       def product[W: Type](b: Branch[W])(using Quotes) = productChildren[S, W](b._2, sTpe)
+      def leaf[W: Type](w: Expr[W])(using Quotes) = '{ Children.empty[S] }
+
+    val arrayGen = new BranchGen[Array[Any]]:
+      def product[W: Type](b: Branch[W])(using Quotes) =
+        productChildrenArray[S, W](b._2, sTpe)
       def leaf[W: Type](w: Expr[W])(using Quotes) = '{ PlateMacro.NoChildren }
 
     def mapGen(g: Expr[S => S]) = new BranchGen[S]:
@@ -176,10 +159,31 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
         '{ ${ mapFields[S, W](b._1, b._2, g, sTpe) }.asInstanceOf[S] }
       def leaf[W: Type](w: Expr[W])(using Quotes) = '{ $w.asInstanceOf[S] }
 
-    val childrenExpr: Expr[S => Array[Any]] = '{ (s: S) => ${ dispatch('{ s }, childrenGen) } }
+    val childrenExpr: Expr[S => Children[S]] =
+      '{ (s: S) => ${ dispatch('{ s }, childrenGen) } }
+    val childrenArrayExpr: Expr[S => Array[Any]] =
+      '{ (s: S) => ${ dispatch('{ s }, arrayGen) } }
     val mapChildrenExpr: Expr[(S, S => S) => S] =
       '{ (s: S, g: S => S) => ${ dispatch('{ s }, mapGen('{ g })) } }
-    '{ Plated.fromChildrenMap[S]($childrenExpr, $mapChildrenExpr) }
+    val rebuildExpr: Expr[(S, Children[S]) => S] =
+      '{ (s: S, kids: Children[S]) =>
+        val it = kids.iterator
+        ${ dispatch('{ s }, mapGen('{ (_: S) => it.next() })) }
+      }
+    val rebuildArrayExpr: Expr[(S, Array[Any]) => S] =
+      '{ (s: S, kids: Array[Any]) =>
+        val feed: S => S = new PlateMacro.Feed[S](kids)
+        ${ dispatch('{ s }, mapGen('{ feed })) }
+      }
+    '{
+      Plated.fromChildren[S](
+        $childrenExpr,
+        $rebuildExpr,
+        $mapChildrenExpr,
+        $rebuildArrayExpr,
+        $childrenArrayExpr,
+      )
+    }
 
   private def isAdt[T: Type]: Boolean =
     CaseClass.parse[T].toEither.isRight || Enum.parse[T].toEither.isRight
@@ -252,24 +256,48 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
 
   private def productChildren[S: Type, V: Type](src: Expr[V], sTpe: TypeRepr)(using
       Quotes
+  ): Expr[Children[S]] =
+    val fields = childFieldsOf[V](sTpe)
+    if fields.forall((_, f) => isDirect(f.kind)) then
+      // The node's children are exactly its direct fields: build one fresh array and let the
+      // engine take it over (identity view, no per-field wrappers).
+      val reads: List[Expr[Any]] = fields.map((name, _) => Select.unique(src.asTerm, name).asExpr)
+      reads match
+        case Nil => '{ Children.empty[S] }
+        case _   => '{ Children.fromOwnedArray[S](scala.Array[Any](${ Varargs(reads) }*)) }
+    else partsChildren[S](fields, src.asTerm)
+
+  private def partsChildren[S: Type](
+      fields: List[(String, Focus)],
+      holder: Term,
+  )(using Quotes): Expr[Children[S]] =
+    val parts = fields.map((name, f) => childrenFocus[S](f, Select.unique(holder, name)))
+    parts match
+      case Nil         => '{ Children.empty[S] }
+      case part :: Nil => part
+      case _           => parts.reduceRight((a, b) => '{ Children.concat[S]($a, $b) })
+
+  /** The engine's array view of one product: the direct-fields fast path builds one fresh array
+    * itself (the `childrenArray` contract), everything else materialises from [[partsChildren]].
+    */
+  private def productChildrenArray[S: Type, V: Type](src: Expr[V], sTpe: TypeRepr)(using
+      Quotes
   ): Expr[Array[Any]] =
     val fields = childFieldsOf[V](sTpe)
-    if fields.forall(_._2.isInstanceOf[ChildFieldKind.Direct]) then
+    if fields.forall((_, f) => isDirect(f.kind)) then
       val reads: List[Expr[Any]] = fields.map((name, _) => Select.unique(src.asTerm, name).asExpr)
       reads match
         case Nil => '{ PlateMacro.NoChildren }
         case _   => '{ scala.Array[Any](${ Varargs(reads) }*) }
     else
-      fields.map((name, kind) => fieldOps[S](Select.unique(src.asTerm, name), kind).children) match
-        case Nil         => '{ PlateMacro.NoChildren }
-        case part :: Nil => part
-        case parts       => '{ PlateMacro.concat(scala.Array[Array[Any]](${ Varargs(parts) }*)) }
+      val kids = partsChildren[S](fields, src.asTerm)
+      '{ Children.toAnyArray($kids) }
 
   /** `mapChildren` for one product: a leaf (no child fields) comes back as is; otherwise one
     * constructor call (`new V(...)`, never `.copy`) whose child arguments are `g`'s guarded results
     * and whose other arguments are read off `src`. Scala evaluates constructor arguments left to
     * right, so `g` sees the children in declaration order — the order [[productChildren]] packs
-    * them, which `Plated.fromChildrenMap`'s array rebuild relies on.
+    * them, which the generated `rebuildArray` fast path relies on.
     */
   private def mapFields[S: Type, V: Type](
       cc: CaseClass[V],
@@ -278,7 +306,7 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
       sTpe: TypeRepr,
   )(using Quotes): Expr[V] =
     val vTpe = TypeRepr.of[V]
-    val fieldMap: Map[String, ChildFieldKind] = childFieldsOf[V](sTpe).toMap
+    val fieldMap: Map[String, Focus] = childFieldsOf[V](sTpe).toMap
     if fieldMap.isEmpty then src
     else
       '{
@@ -297,10 +325,8 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
               case '[p] =>
                 val raw = Select.unique(src.asTerm, param.name)
                 val arg: Expr[p] = fieldMap.get(param.name) match
-                  case Some(kind) =>
-                    val mapped =
-                      fieldOps[S](raw, kind).mapped('{ gAny }, sortCheck[S](kind.elemTpe))
-                    '{ $mapped.asInstanceOf[p] }
+                  case Some(focus) =>
+                    '{ ${ mapFocus[S](focus, raw, '{ gAny }) }.asInstanceOf[p] }
                   case None => raw.asExprOf[p]
                 Existential[Expr, p](arg): Expr_??
           }.getOrElse(
@@ -311,71 +337,270 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
         }
       }
 
-  private def fieldOps[S: Type](raw: Term, kind: ChildFieldKind)(using Quotes): FieldOps =
-    kind match
-      case ChildFieldKind.Direct(_) =>
-        val x = raw.asExpr
-        FieldOps('{ scala.Array[Any]($x) }, (g, ok) => '{ PlateMacro.mapOne($x, $g, $ok) })
-      case ChildFieldKind.OptionField(_) =>
-        val xs = raw.asExprOf[Option[Any]]
-        FieldOps(
-          '{ PlateMacro.fromOption($xs) },
-          (g, ok) => '{ PlateMacro.mapOption($xs, $g, $ok) }
-        )
-      case ChildFieldKind.SeqField(_, isList) =>
-        val xs = raw.asExprOf[scala.collection.Seq[Any]]
-        val children =
-          if isList then '{ PlateMacro.fromList(${ raw.asExprOf[List[Any]] }) }
-          else '{ PlateMacro.fromIterable($xs) }
-        FieldOps(children, (g, ok) => '{ PlateMacro.mapSeq($xs, $g, $ok) })
-      case ChildFieldKind.ArrayField(elemTpe) =>
+  // ---- one field: children, map --------------------------------------------------------------
+
+  private def childrenFocus[S: Type](f: Focus, raw: Term)(using Quotes): Expr[Children[S]] =
+    f.kind match
+      case FocusKind.Direct =>
+        f.tpe.asType match
+          case '[t] => '{ Children.single[S]((${ raw.asExprOf[t] }).asInstanceOf[S]) }
+      case FocusKind.Opt(elemTpe, inner) =>
+        elemTpe.asType match
+          case '[e] =>
+            val xs = raw.asExprOf[Option[e]]
+            if isDirect(inner.kind) then '{ Children.fromOption[S]($xs.asInstanceOf[Option[S]]) }
+            else
+              '{
+                if $xs.isEmpty then Children.empty[S]
+                else ${ childrenFocus[S](inner, '{ $xs.get }.asTerm) }
+              }
+      case FocusKind.SeqOf(elemTpe, isList, inner) =>
+        elemTpe.asType match
+          case '[e] =>
+            if isDirect(inner.kind) then
+              if isList then '{ Children.fromList[S](${ raw.asExprOf[List[S]] }) }
+              else
+                '{
+                  Children.fromSeq[S](
+                    ${ raw.asExprOf[scala.collection.Seq[S]] }
+                  )
+                }
+            else if isList then
+              '{
+                Children.flattenList[e, S](${ raw.asExprOf[List[e]] })((x: e) =>
+                  ${ childrenFocus[S](inner, '{ x }.asTerm) }
+                )
+              }
+            else
+              '{
+                Children.flattenSeq[e, S](${ raw.asExprOf[scala.collection.Seq[e]] })((x: e) =>
+                  ${ childrenFocus[S](inner, '{ x }.asTerm) }
+                )
+              }
+      case FocusKind.ArrayOf(elemTpe, inner) =>
         elemTpe.asType match
           case '[e] =>
             val xs = raw.asExprOf[Array[e]]
-            val ct = classTagFor[e]
-            FieldOps(
-              '{ PlateMacro.fromArray($xs) },
-              (g, ok) => '{ PlateMacro.mapArray[e]($xs, $g, $ok)(using $ct) },
-            )
-      case ChildFieldKind.TraverseField(tyconTpe, elemTpe) =>
+            if isDirect(inner.kind) then '{ Children.fromArray[S]($xs) }
+            else
+              '{
+                Children.flattenArray[e, S]($xs)((x: e) =>
+                  ${ childrenFocus[S](inner, '{ x }.asTerm) }
+                )
+              }
+      case FocusKind.TraverseOf(tyconTpe, elemTpe, inner) =>
         (tyconTpe.asType, elemTpe.asType) match
           case ('[type f[_]; f], '[e]) =>
             val xs = raw.asExprOf[f[e]]
             val trav = traverseFor[f](tyconTpe)
-            FieldOps(
-              '{ PlateMacro.fromTraverse[f, e]($xs)(using $trav) },
-              (g, ok) => '{ PlateMacro.mapTraverse[f, e]($xs, $g, $ok)(using $trav) },
-            )
+            if isDirect(inner.kind) then
+              '{ Children.fromTraverse[f, e]($xs)(using $trav).asInstanceOf[Children[S]] }
+            else
+              '{
+                Children.flattenTraverse[f, e, S]($xs)((x: e) =>
+                  ${ childrenFocus[S](inner, '{ x }.asTerm) }
+                )(using $trav)
+              }
           case _ =>
             report.errorAndAbort(s"plate: expected unary type constructor for ${tyconTpe.show}")
+      case FocusKind.Product(fields) =>
+        f.tpe.asType match
+          case '[t] =>
+            val holder = raw.asExprOf[t]
+            '{
+              val h = $holder
+              ${ partsChildren[S](fields, '{ h }.asTerm) }
+            }
+
+  /** Rebuild one field: `g` over the `S` positions [[childrenFocus]] hands out, in the same order,
+    * leaving every other position of the field (and of any record it passes through) untouched.
+    */
+  private def mapFocus[S: Type](f: Focus, raw: Term, g: Expr[Any => Any])(using
+      Quotes
+  ): Expr[Any] =
+    f.kind match
+      case FocusKind.Direct =>
+        f.tpe.asType match
+          case '[t] =>
+            val x = raw.asExprOf[t]
+            '{ PlateMacro.mapOne($x, $g, ${ sortCheck[S](f.tpe) }) }
+      case FocusKind.Opt(elemTpe, inner) =>
+        elemTpe.asType match
+          case '[e] =>
+            val xs = raw.asExprOf[Option[e]]
+            if isDirect(inner.kind) then
+              '{
+                PlateMacro
+                  .mapOption($xs.asInstanceOf[Option[Any]], $g, ${ sortCheck[S](inner.tpe) })
+                  .asInstanceOf[Option[e]]
+              }
+            else
+              '{
+                val o = $xs
+                if o.isEmpty then o
+                else Some(${ mapFocus[S](inner, '{ o.get }.asTerm, g) }.asInstanceOf[e])
+              }
+      case FocusKind.SeqOf(elemTpe, _, inner) =>
+        elemTpe.asType match
+          case '[e] =>
+            if isDirect(inner.kind) then
+              '{
+                PlateMacro
+                  .mapSeq(
+                    ${ raw.asExprOf[scala.collection.Seq[e]] }
+                      .asInstanceOf[scala.collection.Seq[Any]],
+                    $g,
+                    ${ sortCheck[S](inner.tpe) },
+                  )
+                  .asInstanceOf[scala.collection.Seq[e]]
+              }
+            else
+              '{
+                ${ raw.asExprOf[scala.collection.Seq[e]] }
+                  .map(x => ${ mapFocus[S](inner, '{ x }.asTerm, g) }.asInstanceOf[e])
+              }
+      case FocusKind.ArrayOf(elemTpe, inner) =>
+        elemTpe.asType match
+          case '[e] =>
+            val xs = raw.asExprOf[Array[e]]
+            if isDirect(inner.kind) then
+              val ct = classTagFor[e]
+              '{
+                PlateMacro
+                  .mapArray[e]($xs, $g, ${ sortCheck[S](inner.tpe) })(using $ct)
+                  .asInstanceOf[Array[e]]
+              }
+            else
+              val ct = classTagFor[e]
+              '{
+                $xs.map(x => ${ mapFocus[S](inner, '{ x }.asTerm, g) }.asInstanceOf[e])(using $ct)
+              }
+      case FocusKind.TraverseOf(tyconTpe, elemTpe, inner) =>
+        (tyconTpe.asType, elemTpe.asType) match
+          case ('[type f[_]; f], '[e]) =>
+            val xs = raw.asExprOf[f[e]]
+            val trav = traverseFor[f](tyconTpe)
+            if isDirect(inner.kind) then
+              '{
+                PlateMacro
+                  .mapTraverse[f, e]($xs, $g, ${ sortCheck[S](inner.tpe) })(using $trav)
+                  .asInstanceOf[f[e]]
+              }
+            else
+              '{
+                $trav.map($xs)(x => ${ mapFocus[S](inner, '{ x }.asTerm, g) }.asInstanceOf[e])
+              }
+          case _ =>
+            report.errorAndAbort(s"plate: expected unary type constructor for ${tyconTpe.show}")
+      case FocusKind.Product(fields) =>
+        f.tpe.asType match
+          case '[t] =>
+            val src = raw.asExprOf[t]
+            CaseClass.parse[t].toEither match
+              case Right(cc) =>
+                '{
+                  val h = $src
+                  ${ constructHolder[S, t](cc, '{ h }.asTerm, fields, g) }
+                }
+              case Left(reason) =>
+                report.errorAndAbort(
+                  s"plate: cannot rebuild the holder record ${f.tpe.show}: $reason"
+                )
+
+  /** Rebuild a holder record from `src`, mapping the `S` positions its focus fields contain and
+    * keeping every other constructor argument as it is.
+    */
+  private def constructHolder[S: Type, T: Type](
+      cc: CaseClass[T],
+      src: Term,
+      fields: List[(String, Focus)],
+      g: Expr[Any => Any],
+  )(using Quotes): Expr[T] =
+    val tTpe = TypeRepr.of[T]
+    val fieldMap = fields.toMap
+    cc.construct[Id] { (param: Parameter) =>
+      val field = tTpe
+        .typeSymbol
+        .caseFields
+        .find(_.name == param.name)
+        .getOrElse(
+          report.errorAndAbort(s"plate: internal error — unexpected parameter '${param.name}'.")
+        )
+      tTpe.memberType(field).asType match
+        case '[p] =>
+          val raw = Select.unique(src, param.name)
+          val arg: Expr[p] = fieldMap.get(param.name) match
+            case Some(focus) => '{ ${ mapFocus[S](focus, raw, g) }.asInstanceOf[p] }
+            case None        => raw.asExprOf[p]
+          Existential[Expr, p](arg): Expr_??
+    }.getOrElse(
+      report.errorAndAbort(
+        s"plate[${Type.prettyPrint[T]}]: failed to call the primary constructor."
+      )
+    )
 
   // ---- field classification ------------------------------------------------------------------
+
+  private def isDirect(kind: FocusKind): Boolean = kind match
+    case FocusKind.Direct => true
+    case _                => false
 
   private def isChildType(tpe: TypeRepr, sTpe: TypeRepr): Boolean =
     val w = tpe.widen.dealias
     !(w =:= TypeRepr.of[Nothing]) && !(w =:= TypeRepr.of[Null]) && (w <:< sTpe)
 
-  private def classifyField(fTpe: TypeRepr, sTpe: TypeRepr): Option[ChildFieldKind] =
-    if isChildType(fTpe, sTpe) then Some(ChildFieldKind.Direct(fTpe.widen))
+  /** The path from a field's static type to its `S` positions, or `None` when it holds none. */
+  private def focusOf(fTpe: TypeRepr, sTpe: TypeRepr, visited: List[TypeRepr]): Option[Focus] =
+    val w = fTpe.widen.dealias
+    if isChildType(w, sTpe) then Some(Focus(w, FocusKind.Direct))
     else
-      fTpe.widen.dealias match
-        case AppliedType(tycon, List(elemRaw)) if isChildType(elemRaw, sTpe) =>
-          val elemTpe = elemRaw.widen
+      w match
+        case AppliedType(tycon, List(elemRaw)) =>
+          val elem = elemRaw.widen.dealias
           val sym = tycon.typeSymbol
           if sym == TypeRepr.of[Option[Any]].typeSymbol then
-            Some(ChildFieldKind.OptionField(elemTpe))
+            focusOf(elem, sTpe, visited).map(inner => Focus(w, FocusKind.Opt(elem, inner)))
           else if seqTycons.contains(sym) then
-            Some(ChildFieldKind.SeqField(elemTpe, isList = sym == seqTycons.head))
+            focusOf(elem, sTpe, visited).map(inner =>
+              Focus(w, FocusKind.SeqOf(elem, isList = sym == seqTycons.head, inner))
+            )
           else if sym == TypeRepr.of[Array[Any]].typeSymbol then
-            Some(ChildFieldKind.ArrayField(elemTpe))
-          else
-            tycon.asType match
-              case '[type f[_]; f] =>
-                scala.quoted.Expr.summon[Traverse[f]] match
-                  case Some(_) => Some(ChildFieldKind.TraverseField(tycon, elemTpe))
-                  case None    => None
-              case _ => None
+            focusOf(elem, sTpe, visited).map(inner => Focus(w, FocusKind.ArrayOf(elem, inner)))
+          else traverseFocus(w, tycon, elem, sTpe, visited).orElse(holderFocus(w, sTpe, visited))
+        case _ => holderFocus(w, sTpe, visited)
+
+  /** `F[elem]` for a unary constructor with a `Traverse[F]` instance in scope at the call site. */
+  private def traverseFocus(
+      w: TypeRepr,
+      tycon: TypeRepr,
+      elem: TypeRepr,
+      sTpe: TypeRepr,
+      visited: List[TypeRepr],
+  )(using Quotes): Option[Focus] =
+    focusOf(elem, sTpe, visited).flatMap { inner =>
+      tycon.asType match
+        case '[type f[_]; f] =>
+          scala.quoted.Expr.summon[Traverse[f]] match
+            case Some(_) => Some(Focus(w, FocusKind.TraverseOf(tycon, elem, inner)))
+            case None    => None
         case _ => None
+    }
+
+  /** A product record that is not itself an `S`: look through its case fields for `S` positions.
+    * `visited` stops a record that reaches itself again (that repeated field stays a leaf).
+    */
+  private def holderFocus(t: TypeRepr, sTpe: TypeRepr, visited: List[TypeRepr]): Option[Focus] =
+    val sym = t.typeSymbol
+    if sym.isNoSymbol || visited.exists(_ =:= t) || !sym.isClassDef then None
+    else
+      val fields = sym.caseFields
+      if fields.isEmpty then None
+      else
+        val nested = t :: visited
+        val focused = fields.flatMap { f =>
+          focusOf(t.memberType(f), sTpe, nested).map(k => f.name -> k)
+        }
+        if focused.isEmpty then None else Some(Focus(t, FocusKind.Product(focused)))
 
   /** Container type constructors handled as a `Seq` (`List` first: it gets an exact-size fill). */
   private lazy val seqTycons: List[Symbol] = List(
@@ -386,10 +611,10 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
     TypeRepr.of[scala.collection.Seq[Any]].typeSymbol,
   )
 
-  private def childFieldsOf[V: Type](sTpe: TypeRepr): List[(String, ChildFieldKind)] =
+  private def childFieldsOf[V: Type](sTpe: TypeRepr): List[(String, Focus)] =
     val vTpe = TypeRepr.of[V]
     vTpe.typeSymbol.caseFields.flatMap { f =>
-      classifyField(vTpe.memberType(f), sTpe).map(k => f.name -> k)
+      focusOf(vTpe.memberType(f), sTpe, Nil).map(k => f.name -> k)
     }
 
   /** The `ClassTag` an `Array[e]` child field needs to be rebuilt, or a compile error. */
@@ -423,3 +648,5 @@ final private class HearthPlateMacro(q: Quotes) extends _root_.hearth.MacroCommo
               case _: (e @unchecked) => true
               case _                 => false
           }
+
+// CPD-ON
