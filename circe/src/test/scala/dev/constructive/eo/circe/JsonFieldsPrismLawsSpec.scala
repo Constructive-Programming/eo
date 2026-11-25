@@ -2,8 +2,8 @@ package dev.constructive.eo.circe
 
 import cats.data.Ior
 import dev.constructive.eo.data.Affine
-import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests}
-import dev.constructive.eo.laws.{OptionalLaws, SeamLaws}
+import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests, TargetingTests}
+import dev.constructive.eo.laws.{OptionalLaws, SeamLaws, TargetingLaws}
 import dev.constructive.eo.optics.Optic
 import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.syntax.*
@@ -98,6 +98,27 @@ class JsonFieldsPrismLawsSpec extends Specification with Discipline with ScalaCh
           codecPrism[Person].fields(_.name, _.age)
         val eqv = (a: Json, b: Json) => a == b
     .seam(using arbPersonJson, summon[Arbitrary[NameAge]], summon[Cogen[NameAge]]),
+  )
+
+  // ---- discipline TargetingLaws: the EXTRINSIC reference -----------
+  //
+  // Everything above is intrinsic — it relates the prism to itself, so a `.field(_.name)` that
+  // resolved to the WRONG key would still be a lawful Optional onto that key. The reference here
+  // is circe's own whole-document decoder (`json.as[Person]`) and encoder, written without the
+  // prism, so a resolution mistake is a disagreement about WHICH key the focus is and fails.
+  checkAll(
+    "JsonPrism targeting — codecPrism[Person].field(_.name) targets circe's own name",
+    new TargetingTests[Json, String, Affine]:
+      val laws: TargetingLaws[Json, String, Affine] = new TargetingLaws[Json, String, Affine]:
+        val optic = codecPrism[Person].field(_.name)
+        def read(json: Json) = optic.getOption(json)
+        val refGet = (json: Json) => json.as[Person].toOption.map(_.name)
+        val refReplace = (json: Json, name: String) =>
+          json.as[Person].toOption match
+            case Some(p) => p.copy(name = name).asJson
+            case None    => json
+        val eqv = (a: Json, b: Json) => a == b
+    .targeting(using arbPersonJson, summon[Arbitrary[String]], summon[Cogen[String]]),
   )
 
   // ---- forAll properties on the default Ior surface ---------------

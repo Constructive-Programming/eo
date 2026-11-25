@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`laws.TargetingLaws` / `laws.ReadTargetingLaws`** (with `discipline.TargetingTests` /
+  `ReadTargetingTests`) — the first EXTRINSIC law family: the optic is checked against a reference
+  accessor supplied per carrier, so a resolution mechanism that lands on the wrong slot fails.
+  Every other family is intrinsic and passes a mis-targeted optic, which is lawful onto the slot it
+  did hit.
+
 ### Changed
 
 - **BREAKING — Maven coordinates renamed `cats-eo*` → `eo*`.** The project is now simply
