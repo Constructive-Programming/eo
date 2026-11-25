@@ -2,10 +2,16 @@ package dev.constructive.eo
 
 /** Law definitions for every optic family — one trait per shape (`LensLaws`, `PrismLaws`,
   * `IsoLaws`, `OptionalLaws`, `TraversalLaws`, `FoldLaws`, `GetterLaws`, `ModifyLaws`,
-  * `MultiFocusLaws`, `PlatedLaws`, `UnfoldLaws`, `SeamLaws`, …), each method one equation. Reusable
-  * by downstream projects; the ScalaCheck/specs2 bundles live in [[laws.discipline]], with
-  * eo-internal seam laws under [[laws.eo]], carrier laws under [[laws.data]] and typeclass laws
-  * under [[laws.typeclass]].
+  * `MultiFocusLaws`, `PlatedLaws`, `UnfoldLaws`, `SeamLaws`, `TargetingLaws`, …), each method one
+  * equation. Reusable by downstream projects; the ScalaCheck/specs2 bundles live in
+  * [[laws.discipline]], with eo-internal seam laws under [[laws.eo]], carrier laws under
+  * [[laws.data]] and typeclass laws under [[laws.typeclass]].
+  *
+  * Every family above is INTRINSIC — it relates the optic to itself, so an optic whose resolution
+  * mechanism landed on the wrong slot still passes (it is a lawful optic onto that slot).
+  * [[TargetingLaws]] / [[ReadTargetingLaws]] are the EXTRINSIC pair: they check the optic against a
+  * reference accessor supplied per carrier, which is the only way a mis-targeted `.field(...)` can
+  * fail.
   *
   * This module ships law equations and rule-sets ONLY — no `Arbitrary`, `Cogen`, or `Eq` instances.
   * Your suite supplies the generators for its own `S` / `A` types (and, for [[SeamLaws]], the

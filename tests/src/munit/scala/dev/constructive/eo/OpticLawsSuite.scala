@@ -3,7 +3,18 @@ package dev.constructive.eo
 import cats.instances.list.given
 import org.scalacheck.{Arbitrary, Gen}
 
-import laws.{GetterLaws, IsoLaws, LensLaws, ModifyLaws, OptionalLaws, PrismLaws, TraversalLaws}
+import data.{Affine, Direct}
+import laws.{
+  GetterLaws,
+  IsoLaws,
+  LensLaws,
+  ModifyLaws,
+  OptionalLaws,
+  PrismLaws,
+  ReadTargetingLaws,
+  TargetingLaws,
+  TraversalLaws,
+}
 import laws.discipline.{
   GetterTests,
   IsoTests,
@@ -11,6 +22,8 @@ import laws.discipline.{
   ModifyTests,
   OptionalTests,
   PrismTests,
+  ReadTargetingTests,
+  TargetingTests,
   TraversalTests,
 }
 import OpticFixtures.*
@@ -101,4 +114,46 @@ class OpticLawsSuite extends munit.DisciplineSuite:
         val getter = firstGetter
         val reference = (p: (Int, String)) => p._1
     .getter,
+  )
+
+  // ----- Targeting: agreement with the carrier's own accessor --------
+  //
+  // Every suite above is INTRINSIC: it relates the optic to itself, so a resolution mechanism
+  // aimed at the wrong slot passes it (a mis-targeted optic is a perfectly lawful optic onto the
+  // slot it did hit). These register the EXTRINSIC reference — the carrier's own projection and
+  // pair rebuild, written without the optic — so a disagreement about WHICH slot the focus is
+  // fails loudly.
+
+  checkAll(
+    "Targeting — Lens[(Int,String), Int] first projection",
+    new TargetingTests[(Int, String), Int, Tuple2]:
+      val laws = new TargetingLaws[(Int, String), Int, Tuple2]:
+        val optic = firstLens
+        def read(s: (Int, String)) = Some(optic.get(s))
+        val refGet = (s: (Int, String)) => Some(s._1)
+        val refReplace = (s: (Int, String), a: Int) => (a, s._2)
+        val eqv = (a: (Int, String), b: (Int, String)) => a == b
+    .targeting,
+  )
+
+  checkAll(
+    "Targeting — Optional[(Int,List[Int]), Int] head of non-empty pair",
+    new TargetingTests[(Int, List[Int]), Int, Affine]:
+      val laws = new TargetingLaws[(Int, List[Int]), Int, Affine]:
+        val optic = headOptional
+        def read(s: (Int, List[Int])) = optic.getOption(s)
+        val refGet = (s: (Int, List[Int])) => Some(s._1)
+        val refReplace = (s: (Int, List[Int]), a: Int) => (a, s._2)
+        val eqv = (a: (Int, List[Int]), b: (Int, List[Int])) => a == b
+    .targeting,
+  )
+
+  checkAll(
+    "ReadTargeting — Getter[(Int,String), Int] first projection",
+    new ReadTargetingTests[(Int, String), Int]:
+      val laws = new ReadTargetingLaws[(Int, String), Int, Direct]:
+        val optic = firstGetter
+        def read(s: (Int, String)) = Some(optic.get(s))
+        val refGet = (s: (Int, String)) => Some(s._1)
+    .readTargeting,
   )

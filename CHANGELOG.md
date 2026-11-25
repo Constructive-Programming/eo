@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+
+- **`laws.TargetingLaws` / `laws.ReadTargetingLaws`** (with `discipline.TargetingTests` /
+  `ReadTargetingTests`) — the first EXTRINSIC law family: the optic is checked against a reference
+  accessor supplied per carrier, so a resolution mechanism that lands on the wrong slot fails.
+  Every other family is intrinsic and passes a mis-targeted optic, which is lawful onto the slot it
+  did hit.
 - **eo-generics `plate[S]` reaches nested containers and holder records.** `Option[List[S]]`,
   `List[List[S]]`, and any composition of the supported containers now yield their `S` children,
   and a product record that is not itself an `S` is looked through: its `S` positions become

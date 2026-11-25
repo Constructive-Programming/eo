@@ -3,10 +3,10 @@ package dev.constructive.eo
 import cats.{Functor, Representable}
 import org.specs2.mutable.Specification
 
-import optics.{AffineFold, PickFold}
-import data.ModifyF
+import optics.{AffineFold, Lens, Optic, Optional, PickFold}
+import data.{Affine, ModifyF}
 import forgetful.ForgetfulFunctor
-import laws.AffineFoldLaws
+import laws.{AffineFoldLaws, LensLaws, OptionalLaws, TargetingLaws}
 import laws.data.ModifyFLaws
 
 /** Negative fixtures: deliberately UNLAWFUL instances asserted to FAIL specific laws.
@@ -25,6 +25,11 @@ import laws.data.ModifyFLaws
   * shape of a broken Indexed algebra (sample ONE written focus at a lead index, rebuild every
   * position from it), so the pointwise-tabulation property is known to discriminate that shape
   * rather than merely to pass.
+  *
+  * The final block is the #99 control, and it inverts the pattern: the fixtures there are LAWFUL
+  * and asserted to PASS their intrinsic law family, because the defect they carry — a resolution
+  * mechanism aimed at the wrong slot — is invisible to every intrinsic law. `TargetingLaws`, which
+  * compares the optic against an extrinsic reference accessor, must reject them.
   */
 class UnlawfulFixturesSpec extends Specification:
 
@@ -96,4 +101,72 @@ class UnlawfulFixturesSpec extends Specification:
     (lawful.from(lawful.to(source)) == source) must beTrue
     (leadSampling.modify((_, n) => n * 10)(source) == dupFunctor.map(source)(_ * 10)) must beFalse
     (lawful.modify((_, n) => n * 10)(source) == dupFunctor.map(source)(_ * 10)) must beTrue
+  }
+
+  // ---- #99: LAWFUL but MIS-TARGETED optics --------------------------------
+  //
+  // The discriminator for TargetingLaws. An optic whose resolution landed on the wrong slot is a
+  // perfect optic ONTO THAT SLOT: every intrinsic law family (get-put, put-get, put-put, modify
+  // identity / fusion, the seam round-trips) holds, so `LensTests` / `OptionalTests` cannot see
+  // the defect. Only the comparison against an extrinsic reference — what the carrier's own
+  // accessor says the focus is — can. Both fixtures below must keep the "lawful" half TRUE: if an
+  // intrinsic law ever starts rejecting them the control has stopped proving the gap.
+
+  "TargetingLaws rejects a lawful mis-targeted Lens that LensLaws accepts" >> {
+    // Reads and writes `y`; the carrier's own accessor says the focus is `x`. Lawful as a lens
+    // onto `y`, wrong as a lens onto `x`.
+    final case class Pt(x: Int, y: Int)
+    val misAimed: Optic[Pt, Pt, Int, Int, Tuple2] = Lens[Pt, Int](_.y, (p, a) => p.copy(y = a))
+    val intrinsic = new LensLaws[Pt, Int]:
+      val lens = misAimed
+    val targeting = new TargetingLaws[Pt, Int, Tuple2]:
+      val optic = misAimed
+      def read(s: Pt) = Some(optic.get(s))
+      val refGet = (s: Pt) => Some(s.x)
+      val refReplace = (s: Pt, a: Int) => s.copy(x = a)
+      val eqv = (a: Pt, b: Pt) => a == b
+
+    val sample = Pt(1, 2)
+    val lawful =
+      intrinsic.getReplace(sample) &&
+        intrinsic.replaceGet(sample, 9) &&
+        intrinsic.replaceIdempotent(sample, 9) &&
+        intrinsic.modifyIdentity(sample) &&
+        intrinsic.composeModify(sample, _ + 1, _ * 2) &&
+        intrinsic.consistentReplaceModify(sample, 9)
+
+    lawful must beTrue
+    targeting.readTargets(sample) must beFalse
+    targeting.writeTargets(sample, 9) must beFalse
+    targeting.modifyTargets(sample, _ + 1) must beFalse
+  }
+
+  "TargetingLaws rejects a lawful mis-targeted Optional that OptionalLaws accepts" >> {
+    // The partial-focus shape of the same defect: hits on `b`, the reference says `a`.
+    final case class Box(a: Int, b: Int)
+    val misAimed: Optic[Box, Box, Int, Int, Affine] =
+      Optional[Box, Box, Int, Int](
+        getOrModify = s => Right(s.b),
+        reverseGet = { case (s, v) => s.copy(b = v) },
+      )
+    val intrinsic = new OptionalLaws[Box, Int]:
+      val optional = misAimed
+    val targeting = new TargetingLaws[Box, Int, Affine]:
+      val optic = misAimed
+      def read(s: Box) = optic.getOption(s)
+      val refGet = (s: Box) => Some(s.a)
+      val refReplace = (s: Box, a: Int) => s.copy(a = a)
+      val eqv = (a: Box, b: Box) => a == b
+
+    val sample = Box(1, 2)
+    val lawful =
+      intrinsic.modifyIdentity(sample) &&
+        intrinsic.composeModify(sample, _ + 1, _ * 2) &&
+        intrinsic.consistentGetOptionModifyId(sample) &&
+        intrinsic.getOption(sample) == Some(2)
+
+    lawful must beTrue
+    (targeting.readTargets(sample) must beFalse)
+      .and(targeting.writeTargets(sample, 7) must beFalse)
+      .and(targeting.modifyTargets(sample, _ * 2) must beFalse)
   }
