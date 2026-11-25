@@ -1,30 +1,40 @@
 package dev.constructive.eo.avro.vulcan
 
+// CPD-OFF — the import block of every spec in this package; a spec header is not a code repeat.
 import scala.language.implicitConversions
 
 import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
-import dev.constructive.eo.avro.codecPrism
+import dev.constructive.eo.avro.{codecPrism, PathStep}
 import org.apache.avro.{LogicalTypes, Schema}
 import org.specs2.mutable.Specification
+// CPD-ON
 
 // ==============================================================================================
-// KNOWN LIMITATIONS, pinned as executable examples rather than prose. Every codec below is still
-// resolved to the WRONG schema field after issue #95's fix. They are not regressions — each one is
-// wrong on published 0.15.1 too — but the next change to this resolver has to look at them, and a
-// reader deciding whether to trust `.field(_.x)` against a hand-written codec deserves the exact
-// shapes spelled out.
+// THE RESIDUAL LEDGER, after issue #100's differential codec probe. Every codec below defeated
+// issue #95's name-then-position resolver, and the reason it did is the same in each case: names
+// and arity are INFERENCE, and these shapes carry no recoverable signal in either.
 //
-// Two distinct causes, and the distinction matters when choosing a follow-up mechanism:
+// The probe is measurement instead: it encodes two sentinels of the case class that differ in one
+// field and reads which schema slot actually moved. Cells that used to be pinned as WRONG are now
+// pinned as RIGHT, and the two that remain are pinned as UNCLOSEABLE — with the reason stated, so
+// nobody re-opens them looking for a better heuristic.
 //
-//   (1) NO NAME SIGNAL — the schema names are unrecoverable AND the field list is permuted, so the
-//       nominal rung abstains and position decides, wrongly. Reachable only by a differential probe
-//       of the codec itself (encode sentinels, observe which slot they land in) or an explicit
-//       declaration; no amount of name matching helps.
-//   (2) A MISLEADING NAME SIGNAL — a schema field BEARS a case field's name but HOLDS a different
-//       value (a derived public id, a stale legacy column). The name map is total and injective, so
-//       the resolver trusts it. Same verdict as 0.15.1, with one real cost: the corrupt value is
-//       now more PLAUSIBLE (`pub-REAL-ID` rather than a digest length).
+// What the probe closes (all asserted below):
+//
+//   (1) NO NAME SIGNAL — a field list renamed beyond recognition AND permuted (5a), two
+//       same-physical-type columns renamed and reversed (b2), and a PERMUTING hand-written rename,
+//       where position happened to be right and the name rung made it wrong.
+//   (2) A MISLEADING NAME SIGNAL — a schema field that BEARS a case field's name but HOLDS a
+//       different value: a derived public id (at1), a stale legacy column reached through the
+//       separator/case-insensitive rung (at2), and two columns normalising alike (at3). The name
+//       map is total and injective, so the old rung trusted it; the probe measures the slot instead.
+//
+// What it cannot close, and why (also asserted below): a field the codec NEVER WRITES. b6 drops `b`
+// and adds a computed column, `Tw` drops `tag` — no slot holds the value, so the probe finds no
+// slot whose content is the field's and abstains, and resolution falls back to position exactly as
+// before. That is not a gap in the probe: there is no column to aim at, and writing `b` into the
+// digest column would be worse than reading the digest.
 // ==============================================================================================
 
 // ---- b2: two same-physical-type columns, renamed AND reversed (cause 1) ------------------------
@@ -47,7 +57,8 @@ object Ev:
 
 // ---- b6: COMPENSATING arity — one case field dropped, one computed added (cause 1) -------------
 // 3 case fields, 3 schema fields, so no count discrepancy exists; the transform hides every name;
-// and position is wrong from the insertion point on.
+// and position is wrong from the insertion point on. `b` is genuinely not stored: no probe can
+// find a column that the codec never wrote.
 final case class Comp(a: String, b: String, c: String)
 
 object Comp:
@@ -62,7 +73,7 @@ object Comp:
 
 // ---- at1: a schema field literally named after a case field, holding something else (cause 2) --
 // `id` in the SCHEMA is a derived public identifier; the case field `id`'s real value is in
-// `raw_ident`. The map {id -> id, payload -> payload} is total and injective, so it is trusted.
+// `raw_ident`. The map {id -> id, payload -> payload} is total and injective, so it was trusted.
 final case class Doc(id: String, payload: String)
 
 object Doc:
@@ -90,7 +101,7 @@ object Acct:
     ).mapN((_, u, b) => Acct(u, b))
   }
 
-// ---- at3: TWO schema fields normalise alike — ambiguity is no signal, so position decides ------
+// ---- at3: TWO schema fields normalise alike — ambiguity is no signal, so position decided ------
 final case class Tw(userId: String, tag: String)
 
 object Tw:
@@ -102,74 +113,106 @@ object Tw:
     ).mapN((_, u) => Tw(u, "TAG-DEFAULT"))
   }
 
-/** The residual-risk ledger for issue #95's resolution change. Each example asserts what the
-  * shipped resolver ACTUALLY does on a shape it cannot resolve — so the limitation is a fact under
-  * test, not a claim in a doc comment.
+/** The residual-risk ledger for schema-field resolution, re-scored after issue #100.
+  *
+  * Each example asserts what the shipped resolver ACTUALLY does, so the claim in the docs is a fact
+  * under test. Read the header for which cells the differential probe closed and which two it
+  * provably cannot.
   */
 class ResolutionResidualSpec extends Specification:
 
   import DivergentCodecs.*
 
-  // ---- cause 1: no name signal, position decides and is wrong -------------------------------
+  /** The schema field a drilled prism will actually read, i.e. what resolution decided. */
+  private def resolved[A](optic: dev.constructive.eo.avro.AvroPrism[A]): String =
+    optic.path.last match
+      case PathStep.Field(name) => name
+      case other                => other.toString
 
-  "RESIDUAL 5a — a vulcan rename map PLUS a reorder still mis-targets" >> {
-    // {beta_name, alpha_name} vs {alpha, beta}: equal arity, no recoverable name, permuted.
+  // ---- cause 1: no name signal, closed by the probe ----------------------------------------
+
+  "CLOSED 5a — a vulcan rename map PLUS a reorder now resolves to the field's own column" >> {
+    // {beta_name, alpha_name} vs {alpha, beta}: equal arity, no recoverable name, permuted. Neither
+    // name nor position could see it; the probe sees the slot move.
     val bytes = encodeBytes(RPair("ALPHA0", "BETA0"))
-    codecPrism[RPair].field(_.alpha).getOption(bytes) must beSome("BETA0")
+    (codecPrism[RPair].field(_.alpha).getOption(bytes) must beSome("ALPHA0"))
+      .and(codecPrism[RPair].field(_.beta).getOption(bytes) must beSome("BETA0"))
+      .and(resolved(codecPrism[RPair].field(_.alpha)) === "alpha_name")
+      .and(resolved(codecPrism[RPair].field(_.beta)) === "beta_name")
   }
 
-  "RESIDUAL b2 — two same-physical-type columns, renamed and reversed, still mis-target" >> {
-    // `occurredAt` reads back the sequence number. A timestamp-millis logical type annotates the
-    // same physical `long`, so it cannot disambiguate either.
+  "CLOSED b2 — two same-physical-type columns, renamed and reversed, now resolve correctly" >> {
+    // A timestamp-millis logical type annotates the same physical `long`, so it still cannot
+    // disambiguate — the probe does not need it to.
     val bytes = encodeBytes(Ev(1700000000000L, 7L))
-    (codecPrism[Ev].field(_.occurredAt).getOption(bytes) must beSome(7L))
-      .and(codecPrism[Ev].field(_.seqNo).getOption(bytes) must beSome(1700000000000L))
+    (codecPrism[Ev].field(_.occurredAt).getOption(bytes) must beSome(1700000000000L))
+      .and(codecPrism[Ev].field(_.seqNo).getOption(bytes) must beSome(7L))
+      .and(resolved(codecPrism[Ev].field(_.occurredAt)) === "event_ts")
       .and(Ev.tsSchema.getLogicalType.getName === "timestamp-millis")
   }
 
-  "RESIDUAL b6 — compensating arity (one field dropped, one computed added) still mis-targets" >> {
-    // The field COUNTS agree, so nothing about the shape is suspicious; only `b` is wrong.
+  "RESIDUAL b6 — a field the codec never writes: the probe abstains and position decides" >> {
+    // The field COUNTS agree and `b` is not stored anywhere: `x_digest` moves when `b` changes, but
+    // it holds `a + "/" + b`, not `b`. No probe can aim at a column that does not exist, so the
+    // answer stays what it was — and `a` / `c`, which ARE stored, are confirmed correct.
     val bytes = encodeBytes(Comp("A0", "B0", "C0"))
     (codecPrism[Comp].field(_.a).getOption(bytes) must beSome("A0"))
       .and(codecPrism[Comp].field(_.b).getOption(bytes) must beSome("A0/B0"))
       .and(codecPrism[Comp].field(_.c).getOption(bytes) must beSome("C0"))
+      .and(resolved(codecPrism[Comp].field(_.a)) === "x_a")
+      // the only slot that moves with `b` — and it is the digest, not `b`
+      .and(resolved(codecPrism[Comp].field(_.b)) === "x_digest")
+      .and(resolved(codecPrism[Comp].field(_.c)) === "x_c")
   }
 
-  "RESIDUAL at3 — two schema fields normalising alike is ambiguity, so position decides" >> {
-    // `userId_` and `user_id` both normalise to `userid`. An ambiguous name signal is no signal:
-    // the nominal rung disqualifies itself rather than guessing, and position lands on the stale
-    // duplicate. A refusal here would be defensible; today it is silent.
+  "CLOSED at3 — two schema fields normalising alike now resolve to the live column" >> {
+    // `userId_` and `user_id` both normalise to `userid`. An ambiguous name signal is no signal —
+    // and the probe does not need one: only `user_id` holds `userId`'s value.
     val bytes = encodeBytes(Tw("U-REAL", "T0"))
-    codecPrism[Tw].field(_.userId).getOption(bytes) must beSome("STALE-DUP")
+    (codecPrism[Tw].field(_.userId).getOption(bytes) must beSome("U-REAL"))
+      .and(resolved(codecPrism[Tw].field(_.userId)) === "user_id")
   }
 
-  // ---- cause 2: a misleading name signal, trusted because the map is total -------------------
+  "RESIDUAL at3b — a DROPPED field (`tag`) still resolves by position, as before" >> {
+    // `tag` is written nowhere, so the probe abstains; position lands on `user_id`, which at least
+    // decodes. There is no correct answer to find.
+    val bytes = encodeBytes(Tw("U-REAL", "T0"))
+    (resolved(codecPrism[Tw].field(_.tag)) === "user_id")
+      .and(codecPrism[Tw].field(_.tag).getOption(bytes) must beSome("U-REAL"))
+  }
 
-  "RESIDUAL at1 — a schema field bearing a case field's name but holding a derived value" >> {
+  // ---- cause 2: a misleading name signal, closed by the probe ------------------------------
+
+  "CLOSED at1 — a schema field bearing a case field's name but holding a derived value" >> {
     // {digest, id, raw_ident, payload}: `id` is a public identifier, the case field's real value is
-    // in `raw_ident`. Wrong on 0.15.1 too (it read `digest`), but the wrong value is now PLAUSIBLE.
-    // Note `payload` is FIXED by the change — it read `id` before.
+    // in `raw_ident`. The name map is total and injective, so the old rung trusted it; the probe
+    // requires the slot to HOLD the field's value, which `id` does not.
     val bytes = encodeBytes(Doc("REAL-ID", "P0"))
-    (codecPrism[Doc].field(_.id).getOption(bytes) must beSome("pub-REAL-ID"))
+    (codecPrism[Doc].field(_.id).getOption(bytes) must beSome("REAL-ID"))
       .and(codecPrism[Doc].field(_.payload).getOption(bytes) must beSome("P0"))
+      .and(resolved(codecPrism[Doc].field(_.id)) === "raw_ident")
+      .and(resolved(codecPrism[Doc].field(_.payload)) === "payload")
   }
 
-  "RESIDUAL at2 — the same, reached through the separator/case-insensitive rung" >> {
+  "CLOSED at2 — the same, reached through the separator/case-insensitive rung" >> {
     // {USER_ID, user_ident, balance}: `USER_ID` normalises to `userid` and is a stale legacy copy.
     val bytes = encodeBytes(Acct("U-REAL", 10L))
-    (codecPrism[Acct].field(_.userId).getOption(bytes) must beSome("STALE-LEGACY"))
+    (codecPrism[Acct].field(_.userId).getOption(bytes) must beSome("U-REAL"))
       .and(codecPrism[Acct].field(_.balance).getOption(bytes) must beSome(10L))
+      .and(resolved(codecPrism[Acct].field(_.userId)) === "user_ident")
   }
 
-  // ---- the one deliberate BEHAVIOUR CHANGE ---------------------------------------------------
+  // ---- the retired behaviour change ---------------------------------------------------------
 
-  "REGRESSION (accepted) — a PERMUTING rename was right by position and is now wrong by name" >> {
-    // The codec writes case field `alpha` into the schema field literally NAMED "beta". No name
-    // transform can produce this shape — a transform is a function of the name alone — but a
-    // hand-written field list can, and this is the one place the change makes things worse.
+  "RETIRED REGRESSION — a PERMUTING rename is CORRECT again" >> {
+    // The codec writes case field `alpha` into the schema field literally NAMED "beta". Position
+    // happened to be right and the name rung made it wrong; the probe reads the slot, so both
+    // fields are right again. The one shape issue #95 made worse is now better than 0.15.1.
     val bytes = encodeBytes(PermPair("ALPHA0", "BETA0"))
-    (codecPrism[PermPair].field(_.alpha).getOption(bytes) must beSome("BETA0"))
-      .and(codecPrism[PermPair].field(_.beta).getOption(bytes) must beSome("ALPHA0"))
+    (resolved(codecPrism[PermPair].field(_.alpha)) === "beta")
+      .and(resolved(codecPrism[PermPair].field(_.beta)) === "alpha")
+      .and(codecPrism[PermPair].field(_.alpha).getOption(bytes) must beSome("ALPHA0"))
+      .and(codecPrism[PermPair].field(_.beta).getOption(bytes) must beSome("BETA0"))
   }
 
   // ---- and the hatch that reaches every one of them ------------------------------------------

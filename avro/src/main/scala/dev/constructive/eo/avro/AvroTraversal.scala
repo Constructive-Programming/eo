@@ -155,10 +155,17 @@ final class AvroTraversal[A] private[avro] (
 
   // ---- Path extension (used by field / at / selectDynamic macros) --
 
+  // CPD-OFF — see `AvroPrism`'s fence: the traversal's path-extension plumbing mirrors the prism's
+  // by design, parameter for parameter.
+  /** Extend the per-element suffix by a named field. `slots` is the ELEMENT type's
+    * sentinel-synthesiser ([[AvroProbe.Slots]]), BY NAME so a cached verdict never builds one; the
+    * probe resolves against the element record this traversal's prefix already points at.
+    */
   private[avro] def widenSuffix[B](
       scalaName: String,
       declIdx: Int,
       caseNames: List[String],
+      slots: => Option[AvroProbe.Slots[A]],
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
     widenSuffixStep[B](
       PathStep.Field(
@@ -168,6 +175,7 @@ final class AvroTraversal[A] private[avro] (
           declIdx,
           caseNames,
           "AvroTraversal.field",
+          parent => AvroProbe.fieldName(codec, codecB, slots, declIdx, parent),
         )
       )
     )
@@ -228,16 +236,26 @@ final class AvroTraversal[A] private[avro] (
       scalaNames: Array[String],
       declIdxs: Array[Int],
       caseNames: List[String],
+      slots: => Option[AvroProbe.Slots[A]],
   )(using codecB: AvroCodec[B]): AvroTraversal[B] =
     val parent = suffixParentRecord
     val resolved = Array.tabulate(scalaNames.length)(i =>
-      AvroWalk.fieldNameAt(parent, scalaNames(i), declIdxs(i), caseNames, "AvroTraversal.fields")
+      AvroWalk.fieldNameAt(
+        parent,
+        scalaNames(i),
+        declIdxs(i),
+        caseNames,
+        "AvroTraversal.fields",
+        _ => AvroProbe.fieldNameByChange(codec, slots, declIdxs(i), parent),
+      )
     )
     new AvroTraversal[B](
       prefix,
       new AvroFocus.Fields[B](suffix, resolved, codecB),
       rootSchemaCached,
     )
+
+  // CPD-ON
 
 end AvroTraversal
 

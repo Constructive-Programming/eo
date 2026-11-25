@@ -129,14 +129,39 @@ stump.put(stumpSchema.getField("age").pos, 30)
 streetP.record.modifyUnsafe(_.toUpperCase)(stump).asInstanceOf[GenericRecord].get("address")
 ```
 
-## Field navigation is by SCHEMA name — `.fieldNamed` is the escape hatch
+## Field navigation reads the CODEC — `.fieldNamed` is the escape hatch
 
 `.field(_.x)` — and equally `.fields(...)`, the dynamic sugar and
 the `.each.field` traversal siblings, which all share one resolver —
 maps the case-class field `x` to whatever schema field the codec
 actually emitted for it. Resolution happens once, at prism
 construction, off the cached schema, at zero per-operation cost, by
-two rungs:
+three rungs:
+
+0. **By differential probe of the codec.** The parent codec is
+   encoded twice — a baseline instance of the parent case class and
+   one that differs in exactly the field being resolved — and the two
+   records are diffed. The slot that moved **and holds that field's
+   own value** is the field's column. That is measurement rather than
+   inference, so it reaches the shapes the two rungs below cannot: a
+   field list that renames beyond recognition *and* reorders, two
+   same-physical-type columns renamed and reversed, and a schema
+   column that bears a case field's name while holding something else
+   (a derived public id, a stale legacy column). It runs first
+   because it is ground truth; the two rungs below are what answers
+   when it abstains.
+
+   Sentinels are synthesised for the standard Scala/Avro type space —
+   primitives, `String`, `Array[Byte]`, `ByteBuffer`, `BigDecimal`,
+   `UUID`, `java.time` values, options, collections, maps, `Either`,
+   nested case classes and enums. When a field's type has none (an
+   opaque or refined type, a recursive ADT) or the codec refuses the
+   sentinel (a validating encoder), the probe abstains and the next
+   two rungs answer exactly as they always did. The verdict is cached
+   per codec and case field, so a `def`-shaped optic pays one lookup,
+   not two encodes. `.fields(...)` uses the weaker "exactly one slot
+   moved" verdict, because it holds no per-field codec to compare a
+   slot against.
 
 1. **By name, all-or-nothing.** If every case field of the parent
    maps to a distinct schema field — exactly, or uniquely up to
@@ -160,22 +185,22 @@ reordered list all break it — and before the name rung existed
 every `.field(_.x)` from the divergence onward read and wrote the
 **wrong slot**, silently, on both faces.
 
-What the name rung still cannot see, and where you must reach for
-`.fieldNamed[B]("schema_name")` (which bypasses resolution entirely
-and is itself checked against the schema):
-
-- a field list that both renames beyond recognition **and**
-  reorders — equal arity, no name hit;
-- a schema column that *bears* a case field's name but *holds* a
-  different value (a derived public id, a stale legacy column);
-- two columns whose names normalise alike (`userId_` and
-  `user_id`), which is ambiguity, hence no signal.
+What nothing above can see is a field the codec **never writes**: no
+slot holds its value, so the probe finds no column and abstains, and
+position keeps its old answer (which may be a derived column that
+merely moves with the field, or a sibling). There is no column to aim
+at, and `.fieldNamed[B]("schema_name")` — which bypasses resolution
+entirely and is itself checked against the schema — cannot invent one
+either. Use the hatch for a column whose name you know, and the codec
+for everything else.
 
 Behaviour change in this release: a hand-written codec that
-*permutes* the Scala names (writes case field `a` into a schema
-field literally named `b`, and vice versa) resolved correctly by
-position and now resolves by name, i.e. wrongly. No name transform
-can produce that shape; a hand-written field list can.
+*permutes* the Scala names (writes case field `a` into a schema field
+literally named `b`, and vice versa) used to resolve correctly by
+position, then wrongly by name in the previous release, and now
+resolves correctly again — the probe reads the slot the value
+actually lands in. That shape is the one place the name rung made
+things worse than 0.15.1, and the probe is what retires it.
 
 Map keys are data, not schema-named fields — they keep their
 literal key.
@@ -1144,7 +1169,7 @@ shape.
 | Read a Confluent-framed topic into a typed `A`             | `ConfluentWire.reader[F, A](schemaById)`           |
 | Compose a byte optic over Confluent-framed payloads        | `ConfluentWire.confluent(...).andThen(codecPrism[…]...)` |
 | Migrate a payload between schema versions                  | `AvroBridge.between[A, B]` + `.modify`             |
-| Hand-written codec with divergent schema field order       | `.fieldNamed[B]("schema_name")`                    |
+| Hand-written codec with divergent schema field order       | `.field(_.x)` — the probe reads the codec; `.fieldNamed[B]("schema_name")` when it abstains |
 | Slice / graft a field's raw encoding, decode-free          | `sliceBytes` / `graftBytes` (`ConfluentWire.graftGated` when framed) |
 | Render an Avro record as circe `Json`                      | `AvroJson.record(schema)` — `eo.avro.circe`        |
 | Parse a body that omits fields carrying an Avro default    | `AvroJson.recordWithDefaults(schema)` / `withDefaults` — `eo.avro.circe`, `eo.avro.jsoniter` |

@@ -30,14 +30,18 @@ object AvroPrismMacro:
       )
     }
     MacroSelectors.requireCaseField[A]("AvroPrism.field", name)
+    val declIdx = declIndexOf[A](name)
 
+    // CPD-OFF — the `.field` emission: same four resolver arguments at every selector site.
     '{
       $parent.widenPath[B](
         ${ Expr(name) },
-        ${ Expr(declIndexOf[A](name)) },
+        ${ Expr(declIdx) },
         ${ Expr(caseNamesOf[A]) },
+        ${ slotsOf[A] },
       )(using $codecB)
     }
+  // CPD-ON
 
   /** Drives `codecPrism[Person].name`. Looks `name` up on `A`'s schema, summons `AvroCodec[B]`,
     * emits `widenPath`. Returns `Expr[Any]` so `transparent inline` refines per call site.
@@ -46,6 +50,7 @@ object AvroPrismMacro:
       parent: Expr[AvroPrism[A]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
+    // CPD-OFF — the dynamic-sugar call: same backbone and the same four resolver arguments as `.field`.
     selectDynamicCommon[A](
       "AvroPrism selectDynamic",
       nameE,
@@ -55,9 +60,11 @@ object AvroPrismMacro:
           ${ Expr(name) },
           ${ Expr(declIdx) },
           ${ Expr(caseNamesOf[A]) },
+          ${ slotsOf[A] },
         )(using $codecB)
       }
     }
+    // CPD-ON
 
   /** Macro for `.at(i)`. Verifies `A <: Iterable`, extracts the element type, summons the codec,
     * emits `widenPathIndex`.
@@ -216,14 +223,18 @@ object AvroPrismMacro:
       )
     }
     MacroSelectors.requireCaseField[A]("AvroTraversal.field", name)
+    val declIdx = declIndexOf[A](name)
 
+    // CPD-OFF — the `.field` emission: same four resolver arguments at every selector site.
     '{
       $parent.widenSuffix[B](
         ${ Expr(name) },
-        ${ Expr(declIndexOf[A](name)) },
+        ${ Expr(declIdx) },
         ${ Expr(caseNamesOf[A]) },
+        ${ slotsOf[A] },
       )(using $codecB)
     }
+  // CPD-ON
 
   /** Traversal counterpart to [[atImpl]] — extends the suffix by an array index. */
   def atTraversalImpl[A: Type](
@@ -240,6 +251,8 @@ object AvroPrismMacro:
         )
         '{ $parent.widenSuffixIndex[b]($iE)(using $codecB) }
 
+  // CPD-OFF — the two `.fields` emissions (prism / traversal) pass the same four resolver inputs to
+  // `toFieldsPrism` / `toFieldsTraversal`; the calls read alike by construction.
   /** `.fields(_.a, _.b, ...)` — multi-field focus. Validates arity ≥ 2, duplicate-ness, known
     * fields, non-nested. Synthesises an NT in SELECTOR order, summons `AvroCodec[NT]`, emits
     * `toFieldsPrism`. Mirrors `JsonPrismMacro.fieldsImpl`.
@@ -259,6 +272,7 @@ object AvroPrismMacro:
             $namesExpr,
             $declIdxsExpr,
             ${ Expr(caseNamesOf[A]) },
+            ${ slotsOf[A] },
           )(using $codecNT)
         }
     }
@@ -279,9 +293,12 @@ object AvroPrismMacro:
             $namesExpr,
             $declIdxsExpr,
             ${ Expr(caseNamesOf[A]) },
+            ${ slotsOf[A] },
           )(using $codecNT)
         }
     }
+
+  // CPD-ON
 
   /** Traversal counterpart to [[selectFieldImpl]] — drives Dynamic sugar by extending the suffix.
     */
@@ -289,6 +306,7 @@ object AvroPrismMacro:
       parent: Expr[AvroTraversal[A]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
+    // CPD-OFF — the dynamic-sugar call: same backbone and the same four resolver arguments as `.field`.
     selectDynamicCommon[A](
       "AvroTraversal selectDynamic",
       nameE,
@@ -298,9 +316,12 @@ object AvroPrismMacro:
           ${ Expr(name) },
           ${ Expr(declIdx) },
           ${ Expr(caseNamesOf[A]) },
+          ${ slotsOf[A] },
         )(using $codecB)
       }
+    // CPD-ON
     }
+    // CPD-ON
 
   /** Shared backbone for [[fieldsImpl]] / [[fieldsTraversalImpl]] — validation + SELECTOR-order
     * NamedTuple synthesis live in the shared `MacroSelectors.fieldsSelectorNT` (eo-generics); this
@@ -347,6 +368,22 @@ object AvroPrismMacro:
           s"$who: no given AvroCodec[${Type.show[b]}] in scope for field '$name' of ${Type.show[A]}."
         )
         emit[b](name, declIdx, codecB)
+
+  /** The parent's sentinel-synthesiser for the differential codec probe (issue #100), or `None`.
+    *
+    * `None` in two situations, both of them ordinary: the parent is not a case class (a NamedTuple
+    * parent has no case fields, so there is nothing to perturb), and the parent's case-field types
+    * have no [[AvroProbe]] chain — an opaque or refined field type, a recursive ADT, a type with no
+    * `Mirror` — which makes `Slots`'s all-or-nothing derivation drop out of implicit scope. Either
+    * way the probe abstains at the `widenPath` / `widenSuffix` call and resolution falls back to
+    * the name-then-position rule, which is the invariant this machinery must never break.
+    */
+  private def slotsOf[A: Type](using q: Quotes): Expr[Option[AvroProbe.Slots[A]]] =
+    if caseNamesOf[A].isEmpty then '{ None }
+    else
+      Expr.summon[AvroProbe.Slots[A]] match
+        case Some(slots) => '{ Some($slots) }
+        case None        => '{ None }
 
   /** Declaration index of case field `name` in `A` (`-1` when `A` isn't a case class / has no such
     * case field — a NamedTuple parent, say). Fed to the widen helpers so schema field names resolve

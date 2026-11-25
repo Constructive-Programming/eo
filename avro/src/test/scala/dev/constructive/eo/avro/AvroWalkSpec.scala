@@ -414,7 +414,15 @@ class AvroWalkSpec extends Specification:
   //   consulted, proving the -1 branch short-circuits before that)
   "AvroWalk.resolveFieldName: declIdx < 0 short-circuits to the literal scalaName" >> {
     val stringSchema = Schema.create(Schema.Type.STRING)
-    AvroWalk.resolveFieldName(stringSchema, Array.empty, "literalName", -1, Nil, "test") ===
+    AvroWalk.resolveFieldName(
+      stringSchema,
+      Array.empty,
+      "literalName",
+      -1,
+      Nil,
+      "test",
+      _ => None
+    ) ===
       "literalName"
   }
 
