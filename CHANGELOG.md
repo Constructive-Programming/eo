@@ -62,6 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   120 vs 528 B/op).
 - **laws:** the optic-level law traits extend `OpticUnderTest[S, A, F]`; the D-series classes keep
   their `ModifyA*` names.
+- **avro: `.field(_.x)` now reads the CODEC — a differential probe ahead of the name/position
+  rungs** (#100). At construction the parent codec encodes two sentinels of the case class that
+  differ in exactly the target field, and the slot that moved *and holds that field's value* is the
+  column. So a field list that renames beyond recognition AND reorders, two same-physical-type
+  columns renamed and reversed, and a column that bears a case field's name while holding a derived
+  value (a public id, a stale legacy column) all resolve correctly with no declaration — and the
+  permuting-rename regression the nominal rung introduced is retired. A field the codec never
+  writes, a type with no synthesisable sentinel (an opaque/refined type, a recursive ADT) and a
+  codec that rejects the sentinel all abstain to the previous name-then-position answer, so no
+  working call site is re-aimed. `AvroProbe` / `AvroProbe.Slots` are the (public) sentinel
+  synthesiser, extensible for opaque types; the verdict is cached per codec and case field, so the
+  probe is construction-time only.
 - **Dependency and toolchain refresh.** sbt 1.13.1, scalafmt 3.11.5,
   sbt-scalafix 0.14.10, sbt-scalajs 1.23.0 and sbt-mdoc 2.9.2 (declared
   explicitly so the latest mdoc is used regardless of sbt-typelevel's pin).

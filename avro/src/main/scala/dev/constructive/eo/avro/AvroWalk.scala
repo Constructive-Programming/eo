@@ -388,6 +388,8 @@ private[avro] object AvroWalk:
               case other             => Left(s"step $i: expected an array/map but found $other")
     loop(0, root)
 
+  // CPD-OFF — `resolveFieldName` and `fieldNameAt` take the same resolver inputs (and the same
+  // probe) so the path-shaped and record-shaped entry points cannot drift.
   /** The schema field name for the case-class field `scalaName` — declaration index `declIdx` among
     * the case fields `caseNames` — inside the record reached by [[schemaAt]]`(root, parentPath)`.
     * See [[fieldNameAt]] for the resolution rule.
@@ -397,6 +399,9 @@ private[avro] object AvroWalk:
     * mismatch (path miss, non-record parent, index past the schema's field count) throws LOUDLY —
     * never a silent miss — with the candidate names and a pointer at the `.fieldNamed` escape
     * hatch.
+    *
+    * `probe` is the DIFFERENTIAL PROBE (issue #100) — see [[fieldNameAt]] for what it is and why it
+    * is consulted first. A caller with no probe passes `_ => None`.
     */
   def resolveFieldName(
       root: Schema,
@@ -405,6 +410,7 @@ private[avro] object AvroWalk:
       declIdx: Int,
       caseNames: List[String],
       who: String,
+      probe: Schema => Option[String],
   ): String =
     if declIdx < 0 then scalaName
     else
@@ -415,14 +421,19 @@ private[avro] object AvroWalk:
               + " Navigate by explicit schema name with .fieldNamed(\"<name>\")."
           )
         case Right(parent) =>
-          fieldNameAt(parent, scalaName, declIdx, caseNames, who)
+          fieldNameAt(parent, scalaName, declIdx, caseNames, who, probe)
 
   /** Schema field name for case field `scalaName` (declaration index `declIdx` among `caseNames`)
     * in `record`, which must be a RECORD. Split out so [[AvroTraversal]] can resolve against an
     * element record it computed itself.
     *
-    * '''Two rungs, tried in order (issue #95).'''
+    * '''Two rungs, tried in order (issue #95), behind an optional PROBE (issue #100).'''
     *
+    *   0. PROBE, when the caller supplies one: [[AvroProbe.fieldName]] encodes two sentinels of the
+    *      parent case class through the parent codec and reads which schema slot the target case
+    *      field actually lands in. Ground truth rather than inference, so it is asked FIRST and its
+    *      answer is final; `None` (no synthesisable sentinel, a codec that refuses one, an ambiguous
+    *      diff) falls through to the rungs below unchanged.
     *   1. NOMINAL, all-or-nothing. If EVERY case field in `caseNames` maps to a DISTINCT schema
     *      field — exactly, or uniquely up to `_`/`-`/`.` and case — then the codec has told us the
     *      whole correspondence and `declIdx`'s answer is read off that map. Partial or colliding
@@ -439,20 +450,21 @@ private[avro] object AvroWalk:
     * schema field, a dropped one, a reordered hand-written or `vulcan.Codec` field list — where
     * position silently targets the wrong slot and produces valid wire bytes with wrong content.
     *
-    * '''Known residual''': a codec that both renames beyond recognition AND reorders (equal arity,
-    * no name hit) still resolves by position, and is still wrong — nothing about the names or the
-    * shape can see it. Use [[AvroPrism.fieldNamed]] there. Nothing SCHEMA-DERIVED can close it
-    * either — not the record's name, not its parsing fingerprint: the residual pair is two renamed,
-    * swapped columns of the same physical type within ONE record, so both candidate readings carry
-    * the same fullname and the same fingerprint by construction, and a schema-derived value sees
-    * only one of the two operands the comparison would need. The only mechanism that reaches this
-    * class is the differential codec probe (issue #100) — encoding a discriminating value through
-    * the codec and reading which slot moved.
+    * '''Residual class, and what closes it''': a codec that both renames beyond recognition AND
+    * reorders (equal arity, no name hit) resolves by position and is wrong — nothing about the
+    * names or the shape can see it. Nothing SCHEMA-DERIVED can either — not the record's name, not
+    * its parsing fingerprint: the residual pair is two renamed, swapped columns of the same physical
+    * type within ONE record, so both candidate readings carry the same fullname and the same
+    * fingerprint by construction. The only mechanism that reaches the class is the differential
+    * codec probe (issue #100, [[AvroProbe]]), which is why rung 0 exists; when the probe abstains —
+    * an unsynthesisable sentinel, a codec that refuses one — the residual returns and
+    * [[AvroPrism.fieldNamed]] is the escape hatch.
     *
-    * '''Known behaviour change''': a codec that PERMUTES the Scala names (writes case field `a`
-    * into a schema field literally named `b`, and vice versa) resolved correctly by position and
-    * now resolves by name, i.e. wrongly. No name transform can produce that shape — a transform is
-    * a function of the name alone — but a hand-written field list can.
+    * '''Retired behaviour change''': a codec that PERMUTES the Scala names (writes case field `a`
+    * into a schema field literally named `b`, and vice versa) resolved correctly by position, then
+    * wrongly by name once this rung shipped. No name transform can produce that shape — a transform
+    * is a function of the name alone — but a hand-written field list can, and rung 0 now reads the
+    * slot the value lands in, so the shape is correct again.
     */
   def fieldNameAt(
       record: Schema,
@@ -460,6 +472,7 @@ private[avro] object AvroWalk:
       declIdx: Int,
       caseNames: List[String],
       who: String,
+      probe: Schema => Option[String],
   ): String =
     if record.getType != Schema.Type.RECORD then
       throw new IllegalArgumentException(
@@ -468,18 +481,22 @@ private[avro] object AvroWalk:
       )
     else
       val fields = record.getFields
-      val nominal = totalNominalIndex(record, caseNames, declIdx)
-      if nominal >= 0 then fields.get(nominal).name
-      else if declIdx >= fields.size then
-        throw new IllegalArgumentException(
-          s"$who('$scalaName'): case field #$declIdx has no matching schema field —"
-            + s" record '${record.getFullName}' has ${fields.size} field(s): "
-            + fields.asScala.map(_.name).mkString(", ")
-            + s", none named '$scalaName'"
-            + ". For a reordered hand-written codec, navigate by explicit schema name with"
-            + " .fieldNamed(\"<name>\")."
-        )
-      else fields.get(declIdx).name
+      val probed = probe(record)
+      probed match
+        case Some(name) => name
+        case None       =>
+          val nominal = totalNominalIndex(record, caseNames, declIdx)
+          if nominal >= 0 then fields.get(nominal).name
+          else if declIdx >= fields.size then
+            throw new IllegalArgumentException(
+              s"$who('$scalaName'): case field #$declIdx has no matching schema field —"
+                + s" record '${record.getFullName}' has ${fields.size} field(s): "
+                + fields.asScala.map(_.name).mkString(", ")
+                + s", none named '$scalaName'"
+                + ". For a reordered hand-written codec, navigate by explicit schema name with"
+                + " .fieldNamed(\"<name>\")."
+            )
+          else fields.get(declIdx).name
 
   /** Validate an EXPLICIT schema field name — the `.fieldNamed` escape hatch — against the record
     * it will be looked up in, at CONSTRUCTION time. Without this a typo, or the Scala name passed
@@ -512,6 +529,8 @@ private[avro] object AvroWalk:
           + ". `.fieldNamed` takes the SCHEMA field name; for the case-class field name use"
           + " .field(_.x)."
       )
+
+  // CPD-ON
 
   /** ALL-OR-NOTHING nominal resolution: the schema-field position for the case field at `declIdx`,
     * or `-1` to abstain and let position decide.

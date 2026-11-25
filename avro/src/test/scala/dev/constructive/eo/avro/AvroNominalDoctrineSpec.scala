@@ -11,7 +11,10 @@ import org.specs2.mutable.Specification
   * `AvroWalk.fieldNameAt` resolves `.field(_.x)` by NAME when the whole case-field list maps to
   * DISTINCT schema fields (exact, else uniquely up to `_` / `-` / `.` and case), and abstains to
   * position otherwise. Four clauses — totality, injectivity, exact-beats-normalised, ambiguity ⇒
-  * abstain — and before this spec only totality was pinned. Issue #104 recorded the cost: an
+  * abstain — and before this spec only totality was pinned. This is the rung pair that runs when
+  * issue #100's differential probe (rung 0, `AvroProbe`) abstains; the probe's own contract is
+  * `vulcan.ResolutionProbeSpec`'s, and the two specs are complementary: this one pins what happens
+  * when the codec cannot be measured, that one pins when it can. Issue #104 recorded the cost: an
   * experimental alias rung silently re-aimed a case the rung gets right while every avro test
   * stayed green. A MIS-TARGETED optic satisfies get-put, put-get, put-put and modify fusion
   * perfectly, so no optic law family can see this; the contract is a naming contract on a
@@ -125,12 +128,15 @@ class AvroNominalDoctrineSpec extends Specification:
 
   private def observed(schema: Schema, caseNames: List[String], declIdx: Int): String =
     try
+      // No probe: this spec is the rung pair's own doctrine, i.e. exactly what answers when the
+      // differential probe abstains (issue #100).
       AvroWalk.fieldNameAt(
         schema,
         caseNames.lift(declIdx).getOrElse("?"),
         declIdx,
         caseNames,
         "test",
+        _ => None,
       )
     catch case NonFatal(e) => "throw:" + e.getClass.getSimpleName
 

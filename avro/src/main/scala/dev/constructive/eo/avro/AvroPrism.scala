@@ -42,12 +42,20 @@ import org.apache.avro.Schema
   *     drilled-prism given is the evidence that instantiates their `T` at `Array[Byte]`. See the
   *     docs page's migration recipe for the runnable shape.
   *
-  * '''Field navigation honours the SCHEMA field name (issues #35, #95).''' `.field(_.x)` — and
-  * equally `.fields(...)`, `selectDynamic` and the `.each.field` / `.each.fields` traversal
-  * siblings, which all share one resolver — maps the case-class field `x` to whatever schema field
-  * the codec actually emitted for it. Resolution happens ONCE, at prism construction, off the
-  * cached schema (zero per-operation cost), by two rungs:
+  * '''Field navigation reads the CODEC (issues #35, #95, #100).''' `.field(_.x)` — and equally
+  * `.fields(...)`, `selectDynamic` and the `.each.field` / `.each.fields` traversal siblings, which
+  * all share one resolver — maps the case-class field `x` to whatever schema field the codec
+  * actually emitted for it. Resolution happens ONCE, at prism construction, off the cached schema
+  * (zero per-operation cost), by three rungs:
   *
+  *   0. '''By DIFFERENTIAL PROBE of the codec''' ([[AvroProbe]]): encode a baseline parent instance
+  *      and one that differs in exactly this field, diff the records, and take the slot that moved
+  *      AND holds the field's own value. Measurement instead of inference, so it reaches what no
+  *      name or arity signal can: a field list renamed beyond recognition AND reordered, two
+  *      same-physical-type columns renamed and reversed, and a column that bears a case field's
+  *      name while holding something else (a derived public id, a stale legacy column). It runs
+  *      first because it is ground truth; `None` — no synthesisable sentinel, a codec that refuses
+  *      one, an ambiguous diff — falls through to the rungs below unchanged.
   *   1. '''By NAME, all-or-nothing.''' If EVERY case field of the parent maps to a DISTINCT schema
   *      field — exactly, or uniquely up to `_` / `-` / `.` and case — then the codec has named the
   *      whole correspondence and `x`'s answer is read off that map. Partial or colliding coverage
@@ -62,18 +70,16 @@ import org.apache.avro.Schema
   * '''The positional rung is only right when the codec's schema is positionally 1:1 with the case
   * class.''' Kindlings-derived codecs are, by construction. A hand-written or `vulcan.Codec` field
   * list need not be: a COMPUTED/derived schema column, a dropped field, or a reordered field list
-  * all break it. The name rung recovers most of that population; what it cannot recover is a field
-  * list that both renames beyond recognition AND reorders (equal arity, no name hit) — that
-  * resolves by position, silently, and is wrong. Two more shapes stay wrong for the same reason: a
-  * schema column that BEARS a case field's name but HOLDS a different value (a derived public id, a
-  * stale legacy column), and two columns whose names normalise alike. Navigate all of them with
-  * [[AvroPrism.fieldNamed]]`("schema_name")`, which bypasses resolution entirely and is itself
-  * checked against the schema; `ResolutionResidualSpec` pins each shape's exact behaviour.
+  * all break it. The probe and the name rung recover that population; what NOTHING recovers is a
+  * field the codec never writes — no slot holds its value, so the probe abstains and position keeps
+  * its old answer. `ResolutionResidualSpec` pins every one of those shapes, closed or not, as an
+  * executable example.
   *
-  * Behaviour change against 0.15.1, for the release notes: a hand-written codec that PERMUTES the
-  * Scala names (writes case field `a` into a schema field literally named `b`, and vice versa)
-  * resolved correctly by position and now resolves by name, i.e. wrongly. No name transform can
-  * produce that shape. Map keys are data, not schema-named fields, and keep their literal key.
+  * Behaviour change against the previous release: a hand-written codec that PERMUTES the Scala
+  * names (writes case field `a` into a schema field literally named `b`, and vice versa) resolved
+  * correctly by position, then wrongly by name once the nominal rung shipped, and now resolves
+  * correctly again — the probe reads the slot the value lands in. Map keys are data, not
+  * schema-named fields, and keep their literal key.
   *
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *
@@ -263,15 +269,25 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Path widening (used by macro extensions) ---------------------
 
+  // CPD-OFF — the path-extension plumbing is a MIRROR of `AvroTraversal`'s: one resolver entry, one
+  // step append, one Fields batch. The two classes deliberately read alike (same parameters, same
+  // order, same rules) so a change to one is obviously a change to the other.
   /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. `scalaName` is the
     * case-class field name, `declIdx` its declaration index and `caseNames` the parent's whole
     * case-field list; the actual schema field name (which may differ under a snake/custom transform
-    * or vulcan overrides) is resolved off the cached schema by the name-then-position rule — see
-    * [[AvroWalk.fieldNameAt]] (issues #35 and #95).
+    * or vulcan overrides) is resolved off the cached schema by the probe-then-name-then-position
+    * rule — see [[AvroWalk.fieldNameAt]] (issues #35, #95 and #100).
+    *
+    * `slots` is the parent's sentinel-synthesiser ([[AvroProbe.Slots]]), BY NAME so a codec whose
+    * verdict is already cached never builds one; it is absent — `None` — when the parent's case
+    * fields have a type the probe cannot synthesise, and the probe then abstains.
     */
-  private[avro] def widenPath[B](scalaName: String, declIdx: Int, caseNames: List[String])(using
-      codecB: AvroCodec[B]
-  ): AvroPrism[B] =
+  private[avro] def widenPath[B](
+      scalaName: String,
+      declIdx: Int,
+      caseNames: List[String],
+      slots: => Option[AvroProbe.Slots[A]],
+  )(using codecB: AvroCodec[B]): AvroPrism[B] =
     widenPathStep[B](
       PathStep.Field(
         AvroWalk.resolveFieldName(
@@ -281,6 +297,7 @@ final class AvroPrism[A] private[avro] (
           declIdx,
           caseNames,
           "AvroPrism.field",
+          parent => AvroProbe.fieldName(codec, codecB, slots, declIdx, parent),
         )
       )
     )
@@ -315,16 +332,25 @@ final class AvroPrism[A] private[avro] (
 
   /** Hand off as an `AvroPrism` whose focus is a Fields focus over the selected fields. Used by
     * `.fields`. `scalaNames` / `declIdxs` align 1:1 in selector order; each is resolved to the
-    * actual schema field name by position (issue #35) so the parent-record overlay hits under any
-    * codec name transform.
+    * actual schema field name by the probe, then by name, then by position (issues #35, #95, #100)
+    * so the parent-record overlay hits under any codec name transform.
+    *
+    * The probe here is the WEAKER variant — [[AvroProbe.fieldNameByChange]], which accepts a single
+    * moved slot — because a `.fields` call site holds the NamedTuple codec, not the selected
+    * fields' own codecs, so there is no expected value to compare a slot against.
     */
   private[avro] def toFieldsPrism[B](
       scalaNames: Array[String],
       declIdxs: Array[Int],
       caseNames: List[String],
+      slots: => Option[AvroProbe.Slots[A]],
   )(using codecB: AvroCodec[B]): AvroPrism[B] =
     new AvroPrism[B](
-      new AvroFocus.Fields[B](path, resolveFieldNames(scalaNames, declIdxs, caseNames), codecB),
+      new AvroFocus.Fields[B](
+        path,
+        resolveFieldNames(scalaNames, declIdxs, caseNames, slots),
+        codecB
+      ),
       rootSchemaCached,
     )
 
@@ -335,6 +361,7 @@ final class AvroPrism[A] private[avro] (
       scalaNames: Array[String],
       declIdxs: Array[Int],
       caseNames: List[String],
+      slots: => Option[AvroProbe.Slots[A]],
   ): Array[String] =
     Array.tabulate(scalaNames.length)(i =>
       AvroWalk.resolveFieldName(
@@ -344,8 +371,10 @@ final class AvroPrism[A] private[avro] (
         declIdxs(i),
         caseNames,
         "AvroPrism.fields",
+        parent => AvroProbe.fieldNameByChange(codec, slots, declIdxs(i), parent),
       )
     )
+  // CPD-ON
 
   /** Hand off as an `AvroTraversal[B]` over the iterated element type. Used by `.each`. */
   private[avro] def toTraversal[B](using codecB: AvroCodec[B]): AvroTraversal[B] =
