@@ -81,5 +81,5 @@ gh run watch                     # follow the publish workflow
 ```
 
 Artefacts appear on Central Portal under
-<https://central.sonatype.com/artifact/dev.constructive/cats-eo_3>
+<https://central.sonatype.com/artifact/dev.constructive/eo_3>
 within minutes of the workflow's `publish` job succeeding.

@@ -9,8 +9,8 @@ import org.apache.spark.sql.SparkSession
   *
   * The server runs on Spark's own Scala 2.13 stdlib. A Scala 3 closure needs, in the session's
   * artifacts: the Scala 3 runtime (`scala3-library`, and the Scala-3-compiled `scala-library` it
-  * links against), the libraries it calls (cats, cats-eo), and the application's own classes.
-  * Verified against Spark 4.2: with those uploaded, typed `map`s over eo-encoded case classes run
+  * links against), the libraries it calls (cats, eo), and the application's own classes. Verified
+  * against Spark 4.2: with those uploaded, typed `map`s over eo-encoded case classes run
   * server-side.
   */
 object ScalaRuntime:
@@ -22,7 +22,7 @@ object ScalaRuntime:
       .flatMap(cs => Option(cs.getLocation))
       .map(url => Paths.get(url.toURI).toString)
 
-  /** Where the Scala 3 runtime, cats (core + kernel), cats-eo and cats-eo-spark were loaded from.
+  /** Where the Scala 3 runtime, cats (core + kernel), eo and eo-spark were loaded from.
     */
   def locations: List[String] =
     List(
@@ -30,8 +30,8 @@ object ScalaRuntime:
       classOf[scala.Option[?]], // scala-library (Scala-3-compiled since 3.8)
       classOf[cats.Functor[?]], // cats-core
       classOf[cats.kernel.Monoid[?]], // cats-kernel
-      classOf[optics.Optic[?, ?, ?, ?, ?]], // cats-eo
-      classOf[Col.type], // cats-eo-spark
+      classOf[optics.Optic[?, ?, ?, ?, ?]], // eo
+      classOf[Col.type], // eo-spark
     ).flatMap(locationOf).distinct
 
   /** Upload every JAR among [[locations]] (plus `extraJars`) with `addArtifact`, returning the

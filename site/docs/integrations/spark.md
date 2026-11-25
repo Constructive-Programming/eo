@@ -1,6 +1,6 @@
 # Spark integration
 
-The `cats-eo-spark` module turns the Spark SQL operations that **are** optics into eo optic
+The `eo-spark` module turns the Spark SQL operations that **are** optics into eo optic
 constructions, so they compose with `andThen` and run through the usual `.get` / `.modify` /
 `.replace` / `.getOption` surface. The operations that are not optics (joins, grouping,
 `explode`) become **consumers** that read their keys through a capability.
@@ -12,7 +12,7 @@ expression. No row is ever decoded into a JVM object.
 
 ```scala
 libraryDependencies ++= Seq(
-  "dev.constructive" %% "cats-eo-spark" % "@VERSION@",
+  "dev.constructive" %% "eo-spark" % "@VERSION@",
   // Spark publishes Scala 2.13 artifacts only; Scala 3 consumes them like this:
   ("org.apache.spark" %% "spark-connect-client-jvm" % "4.2.0").cross(CrossVersion.for3Use2_13),
 )
@@ -176,7 +176,7 @@ values through `CanGet`.
 `mapThrough` runs an **eager** optic inside a typed `Dataset.map`. It is the escape hatch for
 edits a column expression cannot say. It leaves Catalyst, and the closure runs **on the server**,
 so the session needs:
-- the Scala 3 runtime, cats and cats-eo (`ScalaRuntime.addTo(spark)` uploads their jars);
+- the Scala 3 runtime, cats and eo (`ScalaRuntime.addTo(spark)` uploads their jars);
 - your application's classes.
 
 Optics are `Serializable`. Define bridge functions where the server can load their class, e.g. in

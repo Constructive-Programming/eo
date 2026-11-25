@@ -10,8 +10,8 @@ package dev.constructive
   * optic's phantom slots where soundness allows.
   *
   * '''Where things live.''' This core module is deliberately macro-free: auto-derivation ships in
-  * the SEPARATE `cats-eo-generics` artifact (`dev.constructive.eo.generics.{lens, prism, plate}`) —
-  * do not look for a `GenLens` / `Focus` equivalent here. Coming from Monocle: `Setter` is
+  * the SEPARATE `eo-generics` artifact (`dev.constructive.eo.generics.{lens, prism, plate}`) — do
+  * not look for a `GenLens` / `Focus` equivalent here. Coming from Monocle: `Setter` is
   * [[optics.Modify]] (`set` is `replace`), `Iso` / `Lens` / `Prism` / `Optional` / `Traversal` /
   * `Getter` / `Fold` keep their names, and `Each` / `Index` / `At` exist as plain constructor
   * OBJECTS, not a typeclass zoo — [[optics.Each]] is [[optics.Traversal.each]] under the

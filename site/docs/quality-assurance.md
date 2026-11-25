@@ -1,6 +1,6 @@
 # Quality Assurance
 
-`cats-eo` is mostly a *type-level* library: a large part of its correctness is
+`eo` is mostly a *type-level* library: a large part of its correctness is
 discharged by the compiler before any test runs. The quality signals it tracks
 reflect that, in roughly increasing cost-to-fool order:
 
@@ -11,8 +11,8 @@ reflect that, in roughly increasing cost-to-fool order:
 2. **Fixed-index footprint** — `Indexed` uses dedicated full-grid
    composition, not the classical carrier seams. Its pinned
    [footprint](#the-indexed-footprint) is separate.
-3. **Discipline law suites** — `cats-eo-laws` defines the optic and typeclass
-   laws; `cats-eo-tests` and the integration modules run them against concrete
+3. **Discipline law suites** — `eo-laws` defines the optic and typeclass
+   laws; `eo-tests` and the integration modules run them against concrete
    instances.
 4. **Statement / branch [coverage](#coverage)** (scoverage) — the project's
    primary runtime-quality signal. See the

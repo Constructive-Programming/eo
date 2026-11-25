@@ -1,8 +1,8 @@
-# `cats-eo` benchmarks
+# `eo` benchmarks
 
 A JMH harness with two layers:
 
-1. **Optic-overhead micro-benches** comparing `cats-eo` against
+1. **Optic-overhead micro-benches** comparing `eo` against
    [Monocle](https://www.optics.dev/Monocle/) on the operations both
    libraries implement (Lens / Prism / Iso / Traversal / Getter / Setter /
    Fold / Optional / AffineFold), plus EO-only carrier benches

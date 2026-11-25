@@ -18,8 +18,8 @@ import scalus.uplc.Program
   *
   * All ~1000 cases run inside ONE example. specs2 folds its execution `Action` chain recursively
   * per fragment, and that many sibling fragments overflow the worker's stack (observed: a
-  * `StackOverflowError` in `ExecuteActions.runActionToFuture`); aggregating the results removes
-  * the depth while keeping every case — and every failure, with its path and detail — reported.
+  * `StackOverflowError` in `ExecuteActions.runActionToFuture`); aggregating the results removes the
+  * depth while keeping every case — and every failure, with its path and detail — reported.
   */
 class ConformanceSpec extends Specification:
 
@@ -37,14 +37,14 @@ class ConformanceSpec extends Specification:
     if expected == "parse error" then Right(Some("a parser test, not an evaluation"))
     else
       Program.parseUplc(read(file)) match
-        case Left(e)        => Right(Some(s"Scalus cannot parse it: ${e.linesIterator.nextOption()}"))
+        case Left(e) => Right(Some(s"Scalus cannot parse it: ${e.linesIterator.nextOption()}"))
         case Right(program) =>
           CborScript.of(program) match
             case Left(e)       => Right(Some(e))
             case Right(script) =>
               val expectFailure = expected == "evaluation failure"
               Oracle.compare(script) match
-                case Verdict.Disagree(detail) => Left(detail)
+                case Verdict.Disagree(detail)                => Left(detail)
                 case Verdict.BothSucceed(t) if expectFailure =>
                   Left(s"both evaluators succeeded with ${t.show}, the suite expects failure")
                 case Verdict.BothFail(jvm, cek) if !expectFailure =>
@@ -54,7 +54,8 @@ class ConformanceSpec extends Specification:
                 case _ => Right(None)
 
   s"Plutus conformance (${cases.size} UPLC evaluation cases): the JVM class agrees with the CEK machine" >> {
-    val results = cases.map(file => (root.relativize(file).toString.stripSuffix(".uplc"), check(file)))
+    val results =
+      cases.map(file => (root.relativize(file).toString.stripSuffix(".uplc"), check(file)))
     val failures = results.collect { case (name, Left(why)) => s"$name: $why" }
     if failures.isEmpty then success
     else failure(s"${failures.size} of ${cases.size} cases failed:\n${failures.mkString("\n")}")

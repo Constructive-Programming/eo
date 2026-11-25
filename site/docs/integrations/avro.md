@@ -1,11 +1,11 @@
 # Avro integration
 
-The `cats-eo-avro` module adds two cursor-backed optics for
+The `eo-avro` module adds two cursor-backed optics for
 editing [Apache Avro](https://avro.apache.org/) records without
 paying the cost of a full decode / re-encode round-trip.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-avro" % "@VERSION@"
+libraryDependencies += "dev.constructive" %% "eo-avro" % "@VERSION@"
 ```
 
 ## Why this exists
@@ -45,7 +45,7 @@ full table.
 
 The codec backend is
 [kindlings-avro-derivation](https://github.com/MateuszKubuszok/kindlings-avro-derivation)
-0.3.2, which pins apache-avro 1.12.2. cats-eo-avro wraps the
+0.3.2, which pins apache-avro 1.12.2. eo-avro wraps the
 kindlings `AvroEncoder[A]` / `AvroDecoder[A]` / `AvroSchemaFor[A]`
 triplet in a single [`AvroCodec[A]`](https://github.com/Constructive-Programming/eo/blob/main/avro/src/main/scala/dev/constructive/eo/avro/AvroCodec.scala)
 typeclass so user code summons one thing per type.
@@ -331,7 +331,7 @@ NamedTuple on every element of an array — same shape as
 
 Avro's schema-driven `union<...>` types — including the standard
 `Option[A]` encoding as `union<null, A>` and sealed-trait sums —
-demand a per-branch resolution step. cats-eo-avro spells this as
+demand a per-branch resolution step. eo-avro spells this as
 `.union[Branch]`:
 
 ```scala mdoc:silent
@@ -907,7 +907,7 @@ to `_`/`-`/`.`/case): a codec that renames or drops a case
 field has no silent positional fallback here by design — keep
 the hand-built builder (or the codec) for that type.
 
-vulcan is an `Optional` dependency of `cats-eo-avro` — add it to
+vulcan is an `Optional` dependency of `eo-avro` — add it to
 your own build to use this sub-package; avro-only users never
 load it.
 
@@ -929,7 +929,7 @@ at runtime and renders as `Json.fromLong`, not the ISO-8601
 string a circe `Encoder[Instant]` would emit.
 
 Like vulcan above, circe is an `Optional` dependency of
-`cats-eo-avro` — add `circe-core` to your own build to use this
+`eo-avro` — add `circe-core` to your own build to use this
 sub-package. A failing `io.circe` import at compile time means
 your build lacks that dependency, not that the module is broken.
 

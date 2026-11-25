@@ -6,7 +6,7 @@ don't re-invent typeclass plumbing.
 
 ## The lever
 
-cats-eo's central trait is:
+eo's central trait is:
 
 ```scala
 trait Optic[S, T, A, B, F[_, _]]:
@@ -46,7 +46,7 @@ where you've measured a specific cost.
 
 ## Worked example: JsonPrism
 
-`cats-eo-circe` ships a `JsonPrism[A]` that edits a leaf inside
+`eo-circe` ships a `JsonPrism[A]` that edits a leaf inside
 circe's `Json` without decoding the enclosing record. It's a
 case study for axes 1 and 2 at their most productive.
 
@@ -97,7 +97,7 @@ Look at what's picked here and what's not.
   JsonPrism can `.andThen` an Optional inside the decoded
   value — the cross-carrier machinery handles both directions,
   without a single line of new `Composer` code in
-  `cats-eo-circe`.
+  `eo-circe`.
 - **Storage.** A `JsonFocus[A]` — either a `Leaf` (a flat
   `Array[PathStep]` root-to-leaf path) or a `Fields` (a parent
   path plus per-field codecs). The path is a cheap flat
@@ -192,7 +192,7 @@ of them.
 
 ### Why not `MultiFocus[PSVec]`
 
-cats-eo's generic multi-focus carrier is `MultiFocus[PSVec]`. You
+eo's generic multi-focus carrier is `MultiFocus[PSVec]`. You
 could express `codecPrism[Basket].items.each.name` as a
 `MultiFocus[PSVec]`-carrier optic — but that carrier pays per-element
 bookkeeping to support arbitrary downstream composition, and

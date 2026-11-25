@@ -1,11 +1,11 @@
-# cats-eo
+# eo
 
 [![CI](https://github.com/Constructive-Programming/eo/actions/workflows/ci.yml/badge.svg)](https://github.com/Constructive-Programming/eo/actions/workflows/ci.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/dev.constructive/cats-eo_3.svg)](https://central.sonatype.com/artifact/dev.constructive/cats-eo_3)
-[![Scaladoc](https://img.shields.io/maven-central/v/dev.constructive/cats-eo_3.svg?label=scaladoc&color=blue)](https://eo.constructive.dev/api/)
+[![Maven Central](https://img.shields.io/maven-central/v/dev.constructive/eo_3.svg)](https://central.sonatype.com/artifact/dev.constructive/eo_3)
+[![Scaladoc](https://img.shields.io/maven-central/v/dev.constructive/eo_3.svg?label=scaladoc&color=blue)](https://eo.constructive.dev/api/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](./LICENSE)
 
-`cats-eo` is an existential optics library for Scala 3, layered on
+`eo` is an existential optics library for Scala 3, layered on
 [cats](https://typelevel.org/cats/). One `Optic[S, T, A, B, F]` trait
 parameterised over a carrier `F[_, _]` unifies every optic family;
 cross-family composition goes through `Composer[F, G]` bridges instead
@@ -25,27 +25,27 @@ that does extra work is treated as a bug to fix.
 ## Install
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo" % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo" % "1.3.0"
 // Optional submodules:
-libraryDependencies += "dev.constructive" %%% "cats-eo-laws"         % "1.3.0" % Test
-libraryDependencies += "dev.constructive" %%% "cats-eo-generics"     % "1.3.0"
-libraryDependencies += "dev.constructive" %%% "cats-eo-schemes"      % "1.3.0"
-libraryDependencies += "dev.constructive" %%% "cats-eo-schemes-laws" % "1.3.0" % Test
-libraryDependencies += "dev.constructive" %%% "cats-eo-circe"        % "1.3.0"
-libraryDependencies += "dev.constructive" %% "cats-eo-avro"         % "1.3.0"
-libraryDependencies += "dev.constructive" %%% "cats-eo-jsoniter"     % "1.3.0"
-libraryDependencies += "dev.constructive" %%% "cats-eo-iron"         % "1.3.0"
-libraryDependencies += "dev.constructive" %%% "cats-eo-zio"          % "1.3.0"
-libraryDependencies += "dev.constructive" %%% "cats-eo-kyo"          % "1.3.0" // JDK 25; experimental
-libraryDependencies += "dev.constructive" %%% "cats-eo-chimney"      % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-laws"         % "1.3.0" % Test
+libraryDependencies += "dev.constructive" %%% "eo-generics"     % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-schemes"      % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-schemes-laws" % "1.3.0" % Test
+libraryDependencies += "dev.constructive" %%% "eo-circe"        % "1.3.0"
+libraryDependencies += "dev.constructive" %% "eo-avro"         % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-jsoniter"     % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-iron"         % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-zio"          % "1.3.0"
+libraryDependencies += "dev.constructive" %%% "eo-kyo"          % "1.3.0" // JDK 25; experimental
+libraryDependencies += "dev.constructive" %%% "eo-chimney"      % "1.3.0"
 ```
 
-Requires Scala 3.9.x on JDK 17, 21, or 25 — except `cats-eo-kyo`,
+Requires Scala 3.9.x on JDK 17, 21, or 25 — except `eo-kyo`,
 which requires JDK 25 (kyo 1.0.0-RC5+ ships Java-25-only bytecode).
 
 ### Scala.js and Scala Native
 
-`cats-eo`, `-laws`, `-generics`, `-schemes`, `-schemes-laws`, `-circe`, `-jsoniter`, `-iron`,
+`eo`, `-laws`, `-generics`, `-schemes`, `-schemes-laws`, `-circe`, `-jsoniter`, `-iron`,
 `-zio`, `-chimney` and `-kyo` are also published for Scala.js 1.x and Scala Native 0.5 — use `%%%` (as above) and sbt picks
 the artifact for your platform. `%%%` on a JVM project resolves exactly like `%%`. The other
 modules (`-avro`, `-spark`) are JVM-only because their dependencies (Apache Avro, Spark) have no
@@ -78,7 +78,7 @@ alice.modify[String](_.toUpperCase)           // address.street := "MAIN ST"
 alice.replace[String]("Broadway")             // address.street := "Broadway"
 ```
 
-## What's in cats-eo
+## What's in eo
 
 - [`Iso`](https://eo.constructive.dev/optics.html#iso) — a bijective
   one-focus optic; the carrier is `Forgetful`.
@@ -135,23 +135,23 @@ alice.replace[String]("Broadway")             // address.street := "Broadway"
 - [`IronPrism`](https://eo.constructive.dev/integrations/iron.html) —
   Iron refined types as lawful prisms: every runtime-checked
   refinement `A :| C` is a `Prism` `A ⇀ A :| C`, plus `RefinedType`
-  newtypes and all-or-nothing container refinement (`cats-eo-iron`).
+  newtypes and all-or-nothing container refinement (`eo-iron`).
 - [Recursion schemes](https://eo.constructive.dev/schemes.html) —
   cata / ana / hylo and the full typed zoo (para, apo, histo, futu,
-  zygo, …) as composable optics (`cats-eo-schemes`, laws in
-  `cats-eo-schemes-laws`).
+  zygo, …) as composable optics (`eo-schemes`, laws in
+  `eo-schemes-laws`).
 - [ZIO integration](https://eo.constructive.dev/integrations/zio.html) —
   `ZEnvironment` service lens, `Ref` / `TRef` / `TMap` focus ops,
   `ZLayer` projection through `CanGet`, `Chunk` element optics, and
   optional sub-packages for zio-schema (`AccessorBuilder` optics, the
   untyped `DynamicValue` kit, `BinaryCodec` byte faces), zio-json
   (AST optics + `JsonCursor` bridge), and zio-prelude (`ZValidation`)
-  (`cats-eo-zio`).
+  (`eo-zio`).
 - [Kyo integration](https://eo.constructive.dev/integrations/kyo.html) —
   `TypeMap` service lens, `Env` / `Layer` / `Var` focus ops,
   `Record.iso` / `Record.lens` for kyo Records, and the optional
   kyo-schema bridge: `Focus` → optics, codec byte-face prisms, and
-  optics over the untyped `Structure.Value` tree (`cats-eo-kyo`,
+  optics over the untyped `Structure.Value` tree (`eo-kyo`,
   JDK 25). **Experimental**: built on kyo 1.0.0-RC7, so it is outside
   the 1.x binary-compatibility promise until kyo 1.0.0 final ships.
 - [chimney integration](https://eo.constructive.dev/integrations/chimney.html) —
@@ -160,9 +160,9 @@ alice.replace[String]("Broadway")             // address.street := "Broadway"
   chimney's result (a read that keeps chimney's errors), `Patcher` → write-only
   `Modify`, plus `.patch` to run chimney at an optic's focus and
   `.transformFocus` / `.transformImage` to build optics written with,
-  or returning, another type (`cats-eo-chimney`).
+  or returning, another type (`eo-chimney`).
 
-Every optic ships a discipline-checked law set in `cats-eo-laws`, so
+Every optic ships a discipline-checked law set in `eo-laws`, so
 downstream projects can `checkAll` custom instances the same way they do
 for cats typeclasses.
 
@@ -190,7 +190,7 @@ for cats typeclasses.
 
 `1.0.0` is the first stable release. From here on, binary compatibility
 is checked by MiMa across the whole `1.x` series: every `1.x` release is
-binary-compatible with `1.0.0`. The exception is `cats-eo-kyo`, which is
+binary-compatible with `1.0.0`. The exception is `eo-kyo`, which is
 **experimental** and outside that check while it builds on a kyo release
 candidate; the exclusion lifts once kyo 1.0.0 final ships. The `0.x`
 releases made no compatibility promise. Every release lists its changes
@@ -207,10 +207,10 @@ Apache License 2.0. See [`LICENSE`](./LICENSE).
 - [Monocle](https://www.optics.dev/Monocle/) — the prior art the
   optic-family vocabulary descends from, and the benchmark baseline.
 - [Hearth](https://github.com/MateuszKubuszok/hearth) — the macro-commons
-  library that powers `cats-eo-generics`.
+  library that powers `eo-generics`.
 - [kindlings](https://github.com/MateuszKubuszok/kindlings) — the
-  Hearth-powered codec-derivation library backing `cats-eo-circe`
-  (kindlings-circe-derivation) and `cats-eo-avro`
+  Hearth-powered codec-derivation library backing `eo-circe`
+  (kindlings-circe-derivation) and `eo-avro`
   (kindlings-avro-derivation).
 - [discipline](https://github.com/typelevel/discipline) — the rule-set
-  harness behind `cats-eo-laws`.
+  harness behind `eo-laws`.

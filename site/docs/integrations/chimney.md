@@ -1,6 +1,6 @@
 # chimney integration
 
-The `cats-eo-chimney` module connects eo to
+The `eo-chimney` module connects eo to
 [chimney](https://chimney.readthedocs.io/), the Scala library that
 derives conversions between similar data types. The two tools do
 different jobs. chimney turns a whole `S` into a `T`; eo points at one
@@ -10,12 +10,12 @@ keep going into fields of the target. It also lets eo run chimney
 conversions and patches at a focus, or on what an optic writes back.
 
 ```scala
-libraryDependencies += "dev.constructive" %% "cats-eo-chimney" % "@VERSION@"
+libraryDependencies += "dev.constructive" %% "eo-chimney" % "@VERSION@"
 ```
 
 The module brings in chimney (2.1.0) itself. eo-generics is not a
 dependency; the examples below use it for field lenses, so add
-`cats-eo-generics` if you want the same.
+`eo-generics` if you want the same.
 
 | chimney value                | eo optic                       | Writes? |
 |------------------------------|--------------------------------|---------|
@@ -89,7 +89,7 @@ owner.modify(_.toUpperCase)(AccountDto("bob", -5L))
 These optics are lawful only if chimney's two directions really invert
 each other: decode after encode must return the domain value, and
 encode after decode must return the DTO. Check your own instances with
-cats-eo-laws' `IsoTests` and `PrismTests`, as this module's own specs
+eo-laws' `IsoTests` and `PrismTests`, as this module's own specs
 do.
 
 ## Read with errors: a fold into the result

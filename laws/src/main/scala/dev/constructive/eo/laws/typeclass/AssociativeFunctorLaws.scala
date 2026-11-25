@@ -14,7 +14,7 @@ import optics.Optic.*
   *   - A1 compose-modify distributes: `composed.modify(f)(s) == outer.modify(inner.modify(f))(s)`.
   *   - A2 compose-modify identity: a Cogen-free specialisation of A1.
   *
-  * Both require `ForgetfulFunctor[F]` (every cats-eo `AssociativeFunctor` carrier also ships one).
+  * Both require `ForgetfulFunctor[F]` (every eo `AssociativeFunctor` carrier also ships one).
   *
   * @tparam S
   *   outer source (mono S = T)

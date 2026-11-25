@@ -18,7 +18,7 @@ import org.apache.avro.io.EncoderFactory
   * the toy-record schemas and their derived codecs that every behaviour spec re-uses.
   *
   * Kindlings' `AvroEncoder` / `AvroDecoder` / `AvroSchemaFor` instances are summoned via
-  * `*.derived` per-typeclass; cats-eo-avro's [[AvroCodec]] wrapper picks them up through
+  * `*.derived` per-typeclass; eo-avro's [[AvroCodec]] wrapper picks them up through
   * [[AvroCodec.derived]] and exposes one combined typeclass to the prism layer.
   */
 object AvroSpecFixtures:

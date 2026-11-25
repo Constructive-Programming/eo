@@ -136,7 +136,10 @@ object Cpd {
   }
 
   /** Per file, the line numbers (in the working tree) added or changed since `base`; untracked
-    * files count as entirely new.
+    * files count as entirely new. Comment-only lines are skipped: CPD's tokens are code, so a doc
+    * comment reflow (a rename, a typo fix) cannot introduce duplication — but it can sit inside a
+    * pre-existing duplication's line span, and counting it would fail the ratchet for a pure
+    * documentation edit.
     */
   private def changedLines(root: File, base: String): Map[String, Set[Int]] = {
     val Hunk = """@@ -\S+ \+(\d+)(?:,(\d+))? @@.*""".r
@@ -145,7 +148,10 @@ object Cpd {
         case ((_, acc), line) if line.startsWith("+++ b/") => (Some(line.drop(6)), acc)
         case ((Some(file), acc), Hunk(start, count))       =>
           val n = Option(count).fold(1)(_.toInt)
-          val added = (start.toInt until start.toInt + n).toSet
+          val lines = IO.readLines(root / file)
+          val added = (start.toInt until start.toInt + n)
+            .filter(i => !isCommentLine(lines(i - 1)))
+            .toSet
           (Some(file), acc.updated(file, acc.getOrElse(file, Set.empty[Int]) ++ added))
         case (state, _) => state
       }
@@ -153,6 +159,15 @@ object Cpd {
     val untracked = git(root, "ls-files", "--others", "--exclude-standard", "--", "*.scala")
       .map(f => f -> (1 to IO.readLines(root / f).size).toSet)
     fromDiff ++ untracked
+  }
+
+  /** A line that carries no CPD token: a `//` line comment or the `*`-prefixed body of a block
+    * comment (scaladoc included). Scala has no expression that starts with `*`, so the check is
+    * exact.
+    */
+  private def isCommentLine(line: String): Boolean = {
+    val t = line.trim
+    t.startsWith("//") || t.startsWith("/*") || t.startsWith("*")
   }
 
   private def git(root: File, args: String*): Seq[String] =

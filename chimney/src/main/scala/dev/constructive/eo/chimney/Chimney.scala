@@ -17,7 +17,7 @@ import optics.{BijectionIso, ForgetFold, Getter, Modify, PickMendPrism}
   * hand-configured chimney value (`Transformer.define[…].withFieldRenamed(…).buildTransformer`).
   *
   * Constructors, not givens: several lawful optics can share an `(S, A)` pair, so the caller
-  * declares the one it wants (the cats-eo doctrine for every bridge).
+  * declares the one it wants (the eo doctrine for every bridge).
   *
   * | chimney                    | eo optic                                             | writes? |
   * |:---------------------------|:-----------------------------------------------------|:--------|
@@ -42,7 +42,7 @@ object Chimney:
 
   /** chimney's derived `Iso[A, B]` (two total transformers) as an eo `Iso` — writable, so a chain
     * through it can `modify` fields of `B` and land back in `A`. Lawful iff the two transformers
-    * round-trip; check it with cats-eo-laws' `IsoTests`.
+    * round-trip; check it with eo-laws' `IsoTests`.
     *
     * @group Constructors
     */
@@ -52,7 +52,7 @@ object Chimney:
   /** chimney's derived `Codec[Domain, Dto]` (total encode, partial decode) as an eo prism from the
     * `Dto` to the `Domain`: `getOption` decodes (a decode failure is a miss), `reverseGet` encodes.
     * Lawful iff decode∘encode is the identity on domain values and encode∘decode on the DTOs that
-    * decode; check it with cats-eo-laws' `PrismTests`. For WHY a decode failed, read through
+    * decode; check it with eo-laws' `PrismTests`. For WHY a decode failed, read through
     * `Chimney.resultFold[Dto, Domain]` instead.
     *
     * @group Constructors

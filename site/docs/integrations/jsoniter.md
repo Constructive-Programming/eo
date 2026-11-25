@@ -1,15 +1,15 @@
 # jsoniter integration
 
-The `cats-eo-jsoniter` module adds two cursor-backed optics for
+The `eo-jsoniter` module adds two cursor-backed optics for
 editing JSON byte streams without ever materialising an AST. They
 sit on top of [jsoniter-scala](https://github.com/plokhotnyuk/jsoniter-scala)
-and reuse the existing cats-eo carriers — no new carrier ships in
+and reuse the existing eo carriers — no new carrier ships in
 this module. Paths can be spelled as JSONPath strings or built with
 the compile-time-checked [typed cursors](#typed-cursors)
 (`JsoniterPrism[S].field(_.x)`), mirroring eo-circe's surface.
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo-jsoniter" % "@VERSION@"
+libraryDependencies += "dev.constructive" %%% "eo-jsoniter" % "@VERSION@"
 ```
 
 ## Why this exists
@@ -28,7 +28,7 @@ is 5–10× circe on parse-heavy workloads. The cost: every focus type
 needs a `JsonValueCodec[A]` in scope; dynamic-shape work isn't
 natural.
 
-cats-eo-jsoniter is the optic surface for that style. `JsoniterPrism`
+eo-jsoniter is the optic surface for that style. `JsoniterPrism`
 focuses a JSONPath inside a JSON byte buffer, decodes only when the
 user reads the focus, encodes-and-splices on write. `JsoniterTraversal`
 fans out over `[*]` array paths. The realistic comparison vs eo-circe
@@ -326,7 +326,7 @@ The corners that trip a mechanical migration:
 `JsoniterTraversal[A]` accepts wildcard paths (`[*]`) — fans out over
 every element of the focused array. Carrier is `MultiFocus[PSVec]`,
 the same carrier `Traversal.each` uses, so the surface composes
-uniformly with the rest of cats-eo's traversal machinery.
+uniformly with the rest of eo's traversal machinery.
 
 ```scala mdoc:silent
 import cats.instances.int.given
@@ -563,7 +563,7 @@ This module ships zero new carriers. `JsoniterPrism` is an
 is an `Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]`.
 Their [in-place faces](#reading-in-place-from-a-larger-buffer) are the
 same carriers over `JsonSlice` instead of `Array[Byte]`.
-The standard cats-eo extensions on those carriers light up
+The standard eo extensions on those carriers light up
 automatically:
 
 | On `Optic[..., Affine]`             | Lights up via                             |

@@ -7,9 +7,9 @@ import org.specs2.mutable.Specification
 import optics.Fold
 
 /** In-core smoke spec that pins down `Fold.select`'s predicate semantics. The fuller behaviour /
-  * law suites live in cats-eo-tests, but keeping this one-property spec in core lets `core/test`
-  * stand on its own and keeps the `Option(_).filter(p)` line in `Fold.select` exercised without
-  * needing the downstream test module.
+  * law suites live in eo-tests, but keeping this one-property spec in core lets `core/test` stand
+  * on its own and keeps the `Option(_).filter(p)` line in `Fold.select` exercised without needing
+  * the downstream test module.
   */
 class FoldSpec extends Specification with ScalaCheck:
 

@@ -14,9 +14,9 @@ import chimney.*
 import generics.lens
 import optics.Traversal
 
-/** `cats-eo-chimney` vs plain chimney vs hand-written code, one row triple per scenario:
+/** `eo-chimney` vs plain chimney vs hand-written code, one row triple per scenario:
   *
-  *   - `eo*` — the cats-eo-chimney bridge, optics built once in fields;
+  *   - `eo*` — the eo-chimney bridge, optics built once in fields;
   *   - `chimney*` — the same job with chimney alone (no eo), transformers built once in fields, the
   *     DSL (`into…withFieldComputed`) where a field override is needed;
   *   - `hand*` — what you would write with neither library.

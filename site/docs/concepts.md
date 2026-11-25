@@ -1,6 +1,6 @@
 # Concepts
 
-cats-eo unifies every optic family behind one trait:
+eo unifies every optic family behind one trait:
 
 ```scala
 trait Optic[S, T, A, B, F[_, _]]:
@@ -168,7 +168,7 @@ val mainStreet = wrappedMaybe.andThen(mainOnly)
 ```
 
 `Composer[Tuple2, Affine]` is one of the stdlib instances;
-[`dev.constructive.eo.data.Affine`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/data/Affine$.html)
+[`dev.constructive.eo.data.Affine`](https://javadoc.io/doc/dev.constructive/eo_3/latest/api/eo/data/Affine$.html)
 ships it. Other bridges: `Tuple2 → ModifyF`, `Tuple2 →
 MultiFocus[F]`, `Either → Affine`, `Either → MultiFocus[F]`,
 `Affine → MultiFocus[F]`, `Direct → Tuple2`, `Direct →
@@ -276,9 +276,9 @@ the carrier `F` and witness `X` as a plain value
 `(S => F[X, A], F[X, B] => T)` instead of quantifying over them,
 each optic is a concrete `trait` instance with a known carrier,
 and each family ships a concrete specialisation
-([`GetReplaceLens`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/optics/GetReplaceLens.html),
-[`MendTearPrism`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/optics/MendTearPrism.html),
-[`BijectionIso`](https://javadoc.io/doc/dev.constructive/cats-eo_3/latest/api/eo/optics/BijectionIso.html))
+([`GetReplaceLens`](https://javadoc.io/doc/dev.constructive/eo_3/latest/api/eo/optics/GetReplaceLens.html),
+[`MendTearPrism`](https://javadoc.io/doc/dev.constructive/eo_3/latest/api/eo/optics/MendTearPrism.html),
+[`BijectionIso`](https://javadoc.io/doc/dev.constructive/eo_3/latest/api/eo/optics/BijectionIso.html))
 that stores `get` / `replace` / `reverseGet` as plain fields and
 fuses its hot-path `modify`. The result is monomorphic call sites
 the JIT inlines, intermediate carrier values escape analysis can

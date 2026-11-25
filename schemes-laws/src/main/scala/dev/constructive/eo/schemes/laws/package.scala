@@ -1,9 +1,9 @@
 package dev.constructive.eo
 package schemes
 
-/** Law definitions for the recursion schemes in [[Schemes]] — separate from `cats-eo-laws` because
-  * these laws quantify over `schemes` types (`Schemes.Coalg`, `PSVec`, the fold machinery), which
-  * the core law module deliberately does not depend on. Same discipline pattern as
+/** Law definitions for the recursion schemes in [[Schemes]] — separate from `eo-laws` because these
+  * laws quantify over `schemes` types (`Schemes.Coalg`, `PSVec`, the fold machinery), which the
+  * core law module deliberately does not depend on. Same discipline pattern as
   * [[dev.constructive.eo.laws]]: one `*Laws` trait of law equations here, its ScalaCheck/specs2
   * `RuleSet` bundle under [[laws.discipline]], wired by overriding `laws` and `checkAll`-ed from
   * your suite with your own generators.

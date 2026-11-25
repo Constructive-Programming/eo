@@ -291,7 +291,7 @@ full decode (baseline): 200000 messages, 813.3 MB in 4.16 s:
 |---|---|
 | `GrpcFramesSpec` | any messages, joined into frames and cut into arbitrary pieces, split back whole; the frame layout; the size limit (unsigned lengths included); compressed frames and truncated bytes fail the stream; a message inside one chunk is a view of it, nothing copied, also after one that straddles chunks |
 | `TriageSpec` | the optics judge every message exactly as decoding does: 3 000 issues the size the stream's are, under the default policy and under 100 random ones, and 500 random issues of every size under random policies, every kind both kept and dropped; a message read in place, between its neighbours' bytes, is judged as the message alone; the slice `Wire.detail` hands out is the detail's own JSON, and a view of the message's array, not a copy; `Wire.detail.andThen(Wire.severity)` reads and writes a message's severity; pretty-printed JSON is read the same; an unknown kind, a missing `detail` and bytes that aren't JSON are dropped as unclassified |
-| `TriageSpec` (laws) | `Model`'s optics, and the wire's `Wire.detail.andThen(Wire.severity)` on messages read in place, pass cats-eo-laws' `OptionalTests` |
+| `TriageSpec` (laws) | `Model`'s optics, and the wire's `Wire.detail.andThen(Wire.severity)` on messages read in place, pass eo-laws' `OptionalTests` |
 | `PipelineSpec` | the whole filter, in memory with the bytes cut at random, and over real sockets: it forwards exactly the messages the decoded issues say to keep, byte for byte and in order, and its tally adds up; a malformed frame fails it |
 
 ## Benchmarks

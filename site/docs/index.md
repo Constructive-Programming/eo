@@ -1,4 +1,4 @@
-# cats-eo
+# eo
 
 An **existential optics** library for Scala 3, built on
 [cats](https://typelevel.org/cats/).
@@ -129,7 +129,7 @@ library's core habit: [Capabilities](capabilities.md).
   or returning, another type.
 - [Extensibility](extensibility.md) — how to ship a custom optic
   tuned for your domain's hot path without losing the rest of the
-  cats-eo universe.
+  eo universe.
 - [Cookbook](cookbook/README.md) — common patterns: option fields,
   composed Lens/Optional, multi-focus modify, JSON path edits, and
   `Plated` + `everywhere` — one optic applied at every depth of a

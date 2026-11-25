@@ -286,7 +286,7 @@ runtime, use the explicit-schema overload —
 `AvroPrism.codecPrism[OrderEvent](runtimeSchema)` — to bypass
 the kindlings-derived schema entirely.
 
-**Source:** cats-eo internal (`AvroPrism`'s byte-carried
+**Source:** eo internal (`AvroPrism`'s byte-carried
 default surface). Background framing on the streaming /
 Kafka use case lives in the
 [Avro integration intro](../integrations/avro.md#why-this-exists).
@@ -360,20 +360,20 @@ between two *Avro* payloads, prefer `sliceBytes` / `graftBytes`
 (no decode at all).
 
 **Source:** `AvroJsonBridgeSpec` (avro module, `eo.avro.jsoniter`) and
-`AvroJsonBridgeBench` (benchmarks) in cats-eo.
+`AvroJsonBridgeBench` (benchmarks) in eo.
 
 ## Re-usable laws for testing
 
 A decoupled boundary needs a tested contract. Composing optics
 means the combinators are already tested — what's left to check is
 *your* instances, the optic values your module publishes. The
-discipline suites that gate cats-eo's own carriers ship in
-`cats-eo-laws`, so a composed optic like `meetingTimes` gets the
+discipline suites that gate eo's own carriers ship in
+`eo-laws`, so a composed optic like `meetingTimes` gets the
 full Traversal rule-set in one `checkAll` instead of hand-written
 round-trip tests:
 
 ```scala
-libraryDependencies += "dev.constructive" %%% "cats-eo-laws" % "@VERSION@" % Test
+libraryDependencies += "dev.constructive" %%% "eo-laws" % "@VERSION@" % Test
 ```
 
 ```scala

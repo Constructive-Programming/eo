@@ -49,9 +49,9 @@ import dev.constructive.eo.optics.Optic
   *     splices into the source bytes at the recorded `[start, end)` span. Three `arraycopy`s into a
   *     fresh buffer; cost is O(src.length). Miss returns the original bytes unchanged.
   *
-  * Composability: the standard cats-eo extension methods on `Optic[..., Affine]` light up
-  * automatically — `.foldMap`, `.modify`, `.replace`, `.andThen`, etc. No new Composer /
-  * AssociativeFunctor needed; reuses the existing Affine machinery.
+  * Composability: the standard eo extension methods on `Optic[..., Affine]` light up automatically
+  * — `.foldMap`, `.modify`, `.replace`, `.andThen`, etc. No new Composer / AssociativeFunctor
+  * needed; reuses the existing Affine machinery.
   *
   * Typed drilling (compile-time checked against the case-class schema, mirroring eo-circe's
   * `JsonPrism` surface):

@@ -29,10 +29,10 @@ import dev.constructive.eo.optics.Traversal
   *     span↔foci length mismatch (an aggregate `from` after a shape-changing carrier op) passes the
   *     original bytes through unchanged, as does an empty focus set.
   *
-  * Composability: standard cats-eo extensions on `Optic[..., MultiFocus[PSVec]]` light up
-  * automatically via `mfFold[PSVec]`, `mfFunctor[PSVec]`, `mfAssocPSVec`, etc. — `.foldMap`,
-  * `.modify`, `.headOption`, `.length`, `.exists`, `.modifyF`, same-carrier `.andThen` all work
-  * without anything new shipping in this module. Mirrors `dev.constructive.eo.avro.AvroTraversal`'s
+  * Composability: standard eo extensions on `Optic[..., MultiFocus[PSVec]]` light up automatically
+  * via `mfFold[PSVec]`, `mfFunctor[PSVec]`, `mfAssocPSVec`, etc. — `.foldMap`, `.modify`,
+  * `.headOption`, `.length`, `.exists`, `.modifyF`, same-carrier `.andThen` all work without
+  * anything new shipping in this module. Mirrors `dev.constructive.eo.avro.AvroTraversal`'s
   * byte-carried write semantics. `JsoniterPrism`'s '''Laws & preconditions''' apply verbatim: laws
   * hold up to canonical re-encoding of the focused slices, and writes need decodable current
   * focuses.

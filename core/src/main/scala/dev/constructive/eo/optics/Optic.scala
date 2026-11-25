@@ -12,12 +12,12 @@ import accessor.*
 import forgetful.*
 import compose.*
 
-/** Existential encoding of a profunctor optic — the single trait behind every optic family in
-  * `cats-eo`. The optic is a pair of functions `(S => F[X, A], F[X, B] => T)` over a carrier
-  * `F[_, _]` and an existential `X` that threads the leftover information needed to rebuild `T`.
-  * Each family picks a different carrier (`Tuple2` for Lens, `Either` for Prism, `Affine` for
-  * Optional, …). Operations live in the companion as capability-gated extensions; each extension's
-  * `(using …)` clause names the typeclass on `F` that unlocks it.
+/** Existential encoding of a profunctor optic — the single trait behind every optic family in `eo`.
+  * The optic is a pair of functions `(S => F[X, A], F[X, B] => T)` over a carrier `F[_, _]` and an
+  * existential `X` that threads the leftover information needed to rebuild `T`. Each family picks a
+  * different carrier (`Tuple2` for Lens, `Either` for Prism, `Affine` for Optional, …). Operations
+  * live in the companion as capability-gated extensions; each extension's `(using …)` clause names
+  * the typeclass on `F` that unlocks it.
   *
   * '''Usage frame: construct via optic, consume via capability.''' Concrete optic types (`Lens`,
   * `Prism`, `Getter`, …) belong where optics are built and composed; a signature that *uses* an
@@ -44,7 +44,7 @@ import compose.*
   *
   * '''Serializable.''' Every optic is `java.io.Serializable` (its fields are functions, which Scala
   * compiles as serializable lambdas), so an optic captured by a closure can be shipped to another
-  * JVM — e.g. inside a Spark `Dataset.map` (`cats-eo-spark`'s eager bridge).
+  * JVM — e.g. inside a Spark `Dataset.map` (`eo-spark`'s eager bridge).
   *
   * @see
   *   [[Lens]], [[Prism]], [[Iso]], [[Optional]], [[Modify]], [[Traversal]], [[Getter]], [[Fold]]
@@ -205,10 +205,10 @@ object Optic:
         def from(xd: F[X, D]): T = o.from(F.map(xd, f))
 
   /** Cross-carrier `.andThen` — picks the direction via a summoned [[compose.Morph]] when the two
-    * optics' carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`),
-    * cats-eo ships no bidirectional Composer pairs, so at most one Morph applies per carrier pair.
-    * That one pair can make a `Forget[F]` ⇄ `MultiFocus[F]` chain ambiguous; it's resolved via the
-    * explicit `Composer[..].to(o)` form (see `multifocus2forget`).
+    * optics' carriers differ. With one exception (`forget2multifocus` / `multifocus2forget`), eo
+    * ships no bidirectional Composer pairs, so at most one Morph applies per carrier pair. That one
+    * pair can make a `Forget[F]` ⇄ `MultiFocus[F]` chain ambiguous; it's resolved via the explicit
+    * `Composer[..].to(o)` form (see `multifocus2forget`).
     *
     * @example
     *   {{{

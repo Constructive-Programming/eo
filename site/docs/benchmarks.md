@@ -48,8 +48,8 @@ across sweeps, and the latest full table is generated into
 For a single operation the hand-written baseline is direct field access
 (`order.id`) or a `copy` — sub-nanosecond, the floor any optic adds overhead
 over. The honest question these tables answer is *how little* an optic costs over
-that floor. `eo` is the cats-eo method; `Monocle` is the same operation in the
-other optics library, shown alongside as a reference point — the `ratio` column,
+that floor. `eo` is this library's method; `Monocle` is the same operation in
+the other optics library, shown alongside as a reference point — the `ratio` column,
 where present, is the two libraries head to head.
 
 **Lens** (`Tuple2` carrier) — shallow `order.id` and a depth-3 `customer.address.street`:
@@ -226,12 +226,12 @@ re-deriving the capability on every call of a generic method, costs ~0.35 ns ove
 The three integration benches share **one realistic `Order` document** — deep
 (`customer.address.street`, depth 3), wide (≥5 fields per level), and arrayed
 (`lines`) — so the JSON/Avro backends are directly comparable. Baselines per
-metric: `eo` (the cats-eo optic, plus the default `Ior`-bearing surface where it
+metric: `eo` (this library's optic, plus the default `Ior`-bearing surface where it
 differs), `naive` (`decode → copy → re-encode`), `monocle` (decode → Monocle
 optic → encode), and backend-specific honest comparators (circe's `hcursor` /
 `direct` AST edits; jsoniter's hand-rolled partial-scan `native`).
 
-**The thesis, in one line:** a pinpoint read/edit through cats-eo is *flat in
+**The thesis, in one line:** a pinpoint read/edit through eo is *flat in
 document size*, while decode-modify-encode is *linear* — so the advantage is
 small on tiny payloads and enormous on large ones. The exception is whole-array
 work, where every approach must visit every element.
@@ -386,7 +386,7 @@ wrapper. The full mechanics and the −59 %…−67 % optimisation history are i
 
 ## Plated recursion — read (`universe`) + write (`transform`) vs a hand visitor (and Monocle)
 
-`PlatedBench` measures cats-eo's `Plated` against the hand-written recursion
+`PlatedBench` measures eo's `Plated` against the hand-written recursion
 ("visitor") you'd write without optics — the baseline that matters — with
 Monocle's `monocle.function.Plated` alongside for reference, over three
 subjects: a normal-depth `Expr` tree, a degenerate deep `Bin` spine, and a

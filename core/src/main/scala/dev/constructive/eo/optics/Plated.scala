@@ -9,7 +9,7 @@ import cats.{Eval, Monad}
 import data.{MultiFocus, ObjArrBuilder, PSVec}
 
 /** A self-similar structure: a value of `S` whose immediate sub-terms are themselves `S`. The
-  * single member [[plate]] is a `Traversal[S, S]` focusing those immediate children — the cats-eo
+  * single member [[plate]] is a `Traversal[S, S]` focusing those immediate children — the eo
   * analogue of Haskell `lens`'s `Plated` class (`plate :: Traversal' a a`).
   *
   * The recursion combinators in the companion ([[Plated.transform]], [[Plated.rewrite]],
