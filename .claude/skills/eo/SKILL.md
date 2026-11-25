@@ -131,7 +131,7 @@ no filters / recursive descent.
 ```scala
 import dev.constructive.eo.avro.codecPrism
 val nameP = codecPrism[Person].name
-nameP.modifyUnsafe(_.toUpperCase)(record)
+nameP.modify(_.toUpperCase)(bytes)            // binary in-place; `.record.modify` for Ior
 ```
 
 ### A7. Cross-family compose

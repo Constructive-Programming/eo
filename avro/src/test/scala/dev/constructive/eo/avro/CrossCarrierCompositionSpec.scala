@@ -165,10 +165,10 @@ class CrossCarrierCompositionSpec extends Specification:
     s1.and(s2).and(s3)
   }
 
-  // covers: manual composition outer.modify(trav.modifyUnsafe(f)) works,
-  // manual composition with Ior unwrap, diagnostic case: traversal.modify directly
+  // covers: manual composition with Ior unwrap, diagnostic case: traversal.modify directly
   // observes chain failures
-  "(4) generics lens → AvroTraversal: manual composition (Unsafe + Ior unwrap + diagnostic)" >> {
+  // CPD-OFF — pre-existing Envelope/Basket manual-composition scaffolding; touched by *Unsafe removal (#101).
+  "(4) generics lens → AvroTraversal: manual composition (Ior unwrap + diagnostic)" >> {
     val outer = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
     val trav = codecPrism[Basket].items.each.name.record
 
@@ -178,17 +178,9 @@ class CrossCarrierCompositionSpec extends Specification:
       basket.copy(items = List(Order("X", 1.0, 1), Order("Y", 2.0, 2), Order("Z", 3.0, 3)))
     )
 
-    val unsafeOk = recordsEqual(
-      outer.modify(trav.modifyUnsafe((s: String) => s.toUpperCase))(env).payload,
-      expected,
-    )
-
     val iorOk = {
       val out = outer.modify { (r: IndexedRecord) =>
-        trav.modify((s: String) => s.toUpperCase)(r) match
-          case Ior.Right(v)   => v
-          case Ior.Both(_, v) => v
-          case Ior.Left(_)    => r
+        trav.modify((s: String) => s.toUpperCase)(r).getOrElse(r)
       }(env)
       recordsEqual(out.payload, expected)
     }
@@ -210,12 +202,12 @@ class CrossCarrierCompositionSpec extends Specification:
           case other                     => ko(s"expected NotARecord, got $other")
       case other => ko(s"expected Ior.Both, got $other")
 
-    (unsafeOk === true).and(iorOk === true).and(diagOk)
+    (iorOk === true).and(diagOk)
   }
 
-  // covers: manual composition happy path (Unsafe), manual composition default Ior,
+  // covers: manual composition default Ior,
   // diagnostic case: missing per-element field surfaces through direct .modify
-  "(5) generics lens → multi-field AvroTraversal: manual (Unsafe + Ior + per-elem diagnostic)" >> {
+  "(5) generics lens → multi-field AvroTraversal: manual (Ior + per-elem diagnostic)" >> {
     val outer = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
     val fieldsT = codecPrism[Basket].items.each.fields(_.name, _.price).record
 
@@ -224,27 +216,13 @@ class CrossCarrierCompositionSpec extends Specification:
     val expectedDoubled = basketRecord(
       basket.copy(items = List(Order("X", 2.0, 1), Order("Y", 4.0, 2)))
     )
-
-    val unsafeOk = recordsEqual(
-      outer
-        .modify(
-          fieldsT.modifyUnsafe(nt => (name = nt.name.toUpperCase, price = nt.price * 2): NamePrice)
-        )(env)
-        .payload,
-      expectedDoubled,
-    )
-
-    val expectedPrice = basketRecord(
-      basket.copy(items = List(Order("x", 2.0, 1), Order("y", 4.0, 2)))
-    )
     val iorOk = {
       val out = outer.modify { (r: IndexedRecord) =>
-        fieldsT.modify(nt => (name = nt.name, price = nt.price * 2): NamePrice)(r) match
-          case Ior.Right(v)   => v
-          case Ior.Both(_, v) => v
-          case Ior.Left(_)    => r
+        fieldsT
+          .modify(nt => (name = nt.name.toUpperCase, price = nt.price * 2): NamePrice)(r)
+          .getOrElse(r)
       }(env)
-      recordsEqual(out.payload, expectedPrice)
+      recordsEqual(out.payload, expectedDoubled)
     }
 
     // Diagnostic case: a basket whose first element is a record under a schema lacking `price`,
@@ -280,7 +258,7 @@ class CrossCarrierCompositionSpec extends Specification:
           c.toList.contains(AvroFailure.PathMissing(PathStep.Field("price"))) === true
         case other => ko(s"expected Ior.Both, got $other")
 
-    (unsafeOk === true).and(iorOk === true).and(diagOk)
+    (iorOk === true).and(diagOk)
   }
 
   /** Compare two records via apache-avro's structural compare. Mirrors the equivalent helpers in
@@ -291,6 +269,8 @@ class CrossCarrierCompositionSpec extends Specification:
   private def recordsEqual(a: IndexedRecord, b: IndexedRecord): Boolean =
     a.getSchema == b.getSchema &&
       GenericData.get().compare(a, b, a.getSchema) == 0
+
+  // CPD-ON
 
 end CrossCarrierCompositionSpec
 

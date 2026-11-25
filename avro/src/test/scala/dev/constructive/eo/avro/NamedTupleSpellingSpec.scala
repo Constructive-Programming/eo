@@ -54,7 +54,7 @@ class NamedTupleSpellingSpec extends Specification:
     val record = skuRecord(Sku("AB-1", "widget", "shelf 4"))
     val L = codecPrism[Sku].fields(_.code, _.label).record
 
-    val out = L.placeUnsafe((code = "CD-2", label = "gadget"))(record)
+    val out = L.place((code = "CD-2", label = "gadget"))(record).toOption.get
 
     val codePos = skuSchema.getField("code").pos
     val labelPos = skuSchema.getField("label").pos
@@ -73,7 +73,7 @@ class NamedTupleSpellingSpec extends Specification:
     val record = skuRecord(Sku("AB-1", "widget", "shelf 4"))
     val L = codecPrism[Sku].fields(_.code, _.label, _.note).record
 
-    val out = L.placeUnsafe((code = "CD-2", label = "gadget", note = "shelf 9"))(record)
+    val out = L.place((code = "CD-2", label = "gadget", note = "shelf 9"))(record).toOption.get
 
     (out.get(skuSchema.getField("code").pos).toString === "CD-2")
       .and(out.get(skuSchema.getField("label").pos).toString === "gadget")
@@ -86,7 +86,7 @@ class NamedTupleSpellingSpec extends Specification:
     val record = skuRecord(Sku("AB-1", "widget", "shelf 4"))
     val L = codecPrism[Sku].fields(_.code, _.label).record
 
-    L.getOptionUnsafe(record) match
+    L.getOption(record) match
       case Some(nt) => (nt.code === "AB-1").and(nt.label === "widget")
       case None     =>
         org.specs2.execute.Failure("expected Some(namedTuple)"): org.specs2.execute.Result
@@ -178,7 +178,7 @@ class NamedTupleSpellingSpec extends Specification:
       )
       .record
 
-    L.getOptionUnsafe(record) match
+    L.getOption(record) match
       case Some(nt) =>
         // `Tuple.fromArray` builds a TupleXXL, NOT a TupleN — the branch that fixed this.
         (nt.asInstanceOf[AnyRef].getClass.getName === "scala.runtime.TupleXXL")

@@ -16,8 +16,8 @@ import org.apache.avro.generic.{GenericData, IndexedRecord}
   *   2. Single- vs multi-focus — applied once at the root ([[AvroPrism]]) or per-element after a
   *      prefix walk ([[AvroTraversal]]).
   *
-  * Each focus exposes six per-record operations (three Ior-bearing default + three silent) plus two
-  * reads and two Optic-trait `to`-side hooks.
+  * Each focus exposes four per-record Ior-bearing operations (`modifyIor`, `transformIor`,
+  * `placeIor`, `readIor`) plus [[navigateForWrite]] for [[AvroRecordPrism]]'s `Optic` seam.
   */
 sealed abstract private[avro] class AvroFocus[A]:
 
@@ -64,12 +64,6 @@ sealed abstract private[avro] class AvroFocus[A]:
 
   def placeIor(record: IndexedRecord, a: A): Ior[Chain[AvroFailure], IndexedRecord]
   def readIor(record: IndexedRecord): Ior[Chain[AvroFailure], A]
-
-  // *Unsafe (silent) ops — input pass-through on any failure (read returns None).
-  def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord
-  def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord
-  def placeImpl(record: IndexedRecord, a: A): IndexedRecord
-  def readImpl(record: IndexedRecord): Option[A]
 
   /** Navigate + decode the focus in ONE walk, and capture a writer that places a new focus back
     * WITHOUT walking again — the writer closes over the walk this call already did (parents for a
@@ -128,44 +122,6 @@ private[avro] object AvroFocus:
                       .rebuildRecordArr(walked.parents, walked.parentsLen, path, codec.encode(b))
                   catch case NonFatal(_) => record
                 Right((a, writer))
-
-    def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      // One walk: reuse navigateForWrite's walk+decode+writer (the Optic seam's own machinery) so
-      // the silent modify can't drift from it. The captured writer already re-encodes, rebuilds,
-      // and falls back to `record` on a NonFatal encode/rebuild failure.
-      navigateForWrite(record) match
-        case Right((a, writer)) => writer(f(a))
-        case Left(_)            => record
-
-    def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
-      AvroWalk.walkPathArr(record, path) match
-        case Left(_)       => record
-        case Right(walked) =>
-          walked.cur match
-            case asRecord: IndexedRecord =>
-              AvroWalk
-                .rebuildRecordArr(walked.parents, walked.parentsLen, path, f(asRecord))
-            case _ => record
-
-    def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-      if path.length == 0 then
-        try
-          codec.encode(a) match
-            case asRec: IndexedRecord => asRec
-            case _                    => record
-        catch case NonFatal(_) => record
-      else
-        AvroWalk.walkPathArr(record, path) match
-          case Left(_)       => record
-          case Right(walked) =>
-            try
-              val encoded = codec.encode(a)
-              AvroWalk
-                .rebuildRecordArr(walked.parents, walked.parentsLen, path, encoded)
-            catch case NonFatal(_) => record
-
-    def readImpl(record: IndexedRecord): Option[A] =
-      AvroWalk.walkPathArr(record, path).toOption.flatMap(s => codec.decodeEither(s.cur).toOption)
 
     def modifyIor(record: IndexedRecord, f: A => A): Ior[Chain[AvroFailure], IndexedRecord] =
       AvroWalk.walkPathArr(record, path) match
@@ -355,36 +311,6 @@ private[avro] object AvroFocus:
     private def rebuild(newParent: IndexedRecord, walked: AvroWalk.WalkRes): IndexedRecord =
       AvroWalk
         .rebuildRecordArr(walked.parents, walked.parentsLen, parentPath, newParent)
-
-    def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-      // One walk: delegate to navigateForWrite (see the Leaf note). NB the *Ior* modify stays
-      // separate — it must surface readFields' accumulated PathMissing Chain, which
-      // navigateForWrite collapses to a single failure.
-      navigateForWrite(record) match
-        case Right((a, writer)) => writer(f(a))
-        case Left(_)            => record
-
-    def transformImpl(record: IndexedRecord, f: IndexedRecord => IndexedRecord): IndexedRecord =
-      walkParent(record) match
-        case Left(_)                 => record
-        case Right((parent, walked)) =>
-          try
-            val newSub = f(buildSubRecord(parent))
-            rebuild(overlayFields(parent, newSub), walked)
-          catch case NonFatal(_) => record
-
-    def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-      walkParent(record) match
-        case Left(_)                 => record
-        case Right((parent, walked)) =>
-          try rebuild(writeFields(parent, a), walked)
-          catch case NonFatal(_) => record
-
-    def readImpl(record: IndexedRecord): Option[A] =
-      walkParent(record).toOption.flatMap {
-        case (parent, _) =>
-          readFields(parent).toOption.flatMap(sub => codec.decodeEither(sub).toOption)
-      }
 
     def modifyIor(record: IndexedRecord, f: A => A): Ior[Chain[AvroFailure], IndexedRecord] =
       walkParent(record) match

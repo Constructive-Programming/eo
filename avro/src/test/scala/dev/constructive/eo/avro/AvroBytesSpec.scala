@@ -96,7 +96,7 @@ class AvroBytesSpec extends Specification with ScalaCheck:
   //   byte-for-byte; self-graft identity (prefix + slice + suffix == original);
   //   union-branch slice — branch index stripped (fragment re-encodes as the bare branch record),
   //   branch ordinal reported, self-graft identity (prefix + synthesized index + slice + suffix
-  //   == original); sliceBytesUnsafe parity on both shapes
+  //   == original)
   "sliceBytes: fragment fidelity + self-graft identity on scalar and union-branch focuses" >> {
     val e = WireEnvelope("env-1", 7L, Cash(100L), "keep-me")
     val bytes = toBinary(envelopeRecord(e), envelopeSchema)
@@ -112,18 +112,16 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .util
             .Arrays
             .equals(frag.bytes, toBinaryValue(java.lang.Long.valueOf(7L), frag.schema)) === true
+        // CPD-OFF — pre-existing specs2 match boilerplate across AvroBytesSpec; touched by *Unsafe removal (#101).
         val selfGraft = seqL.graftBytes(bytes, frag.bytes) match
           case Right(out) => Arrays.equals(out, bytes) === true
           case other      =>
             org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-        val unsafeParity =
-          seqL
-            .sliceBytesUnsafe(bytes)
-            .exists(f => Arrays.equals(f.bytes, frag.bytes)) === true
-        schemaOk.and(ordinalOk).and(fidelity).and(selfGraft).and(unsafeParity)
+        schemaOk.and(ordinalOk).and(fidelity).and(selfGraft)
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
+        // CPD-ON
     // ---- union-branch focus: payment.union[Cash] ----
     val cashL = codecPrism[WireEnvelope].field(_.payment).union[Cash]
     val paymentSchema = envelopeSchema.getField("payment").schema
@@ -171,7 +169,7 @@ class AvroBytesSpec extends Specification with ScalaCheck:
   // covers: cross-payload graft equals `.replace` of the decoded fragment byte-for-byte (the
   //   decode-free emit-path equivalence); mid-record graft preserves the fields AFTER the focused
   //   field (note survives); union-focused graft onto a DIFFERENT runtime branch synthesizes the
-  //   prism's branch index (Card → Cash switch); graftBytesUnsafe parity
+  //   prism's branch index (Card → Cash switch)
   "graftBytes: graft(output, slice(input)) ≡ replace(decode(fragment)) + union branch switching" >> {
     val input = WireEnvelope("in", 1L, Cash(100L), "in-note")
     val output = WireEnvelope("out", 2L, Card("4111"), "out-note")
@@ -190,28 +188,36 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // own `.replace` (which re-encodes index + value under the union schema).
     val expected = paymentL.replace(Cash(100L))(outputBytes)
 
-    val graftOk = cashL.graftBytes(outputBytes, frag.bytes) match
+    // CPD-OFF — pre-existing specs2 match boilerplate; touched by *Unsafe removal (#101).
+    val grafted = cashL.graftBytes(outputBytes, frag.bytes)
+    val graftOk = grafted match
       case Right(out) => Arrays.equals(out, expected) === true
       case other      =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
-    val unsafeOk =
-      Arrays.equals(cashL.graftBytesUnsafe(outputBytes, frag.bytes), expected) === true
 
     // Decode the grafted payload: payload switched, every other field (incl. the suffix field
     // `note`, AFTER the focused union) carries the OUTPUT's values.
     val decodedOk =
-      codecPrism[WireEnvelope].record.get(cashL.graftBytesUnsafe(outputBytes, frag.bytes)) match
-        case Ior.Right(env) => env === WireEnvelope("out", 2L, Cash(100L), "out-note")
-        case other          =>
-          org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
+      grafted.fold(
+        err => org.specs2.execute.Failure(s"expected Right, got $err"): org.specs2.execute.Result,
+        out =>
+          codecPrism[WireEnvelope].record.get(out) match
+            case Ior.Right(env) => env === WireEnvelope("out", 2L, Cash(100L), "out-note")
+            case other          =>
+              org
+                .specs2
+                .execute
+                .Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result,
+      )
+    // CPD-ON
 
-    graftOk.and(unsafeOk).and(decodedOk)
+    graftOk.and(decodedOk)
   }
 
   // ---- Failure paths ---------------------------------------------------
 
-  // covers: PathStep.Index in the prism path → UnsupportedSpanStep on slice AND graft (default
-  //   tier), input pass-through / None on the Unsafe tier; truncated bytes → BinaryParseFailed;
+  // covers: PathStep.Index in the prism path → UnsupportedSpanStep on slice AND graft;
+  //   truncated bytes → BinaryParseFailed;
   //   union-branch slice on the wrong runtime branch → UnionResolutionFailed (strict terminal);
   //   missing field in the root schema → PathMissing
   "sliceBytes/graftBytes failure paths: UnsupportedSpanStep, BinaryParseFailed, UnionResolutionFailed" >> {
@@ -229,8 +235,6 @@ class AvroBytesSpec extends Specification with ScalaCheck:
         failure === AvroFailure.UnsupportedSpanStep(PathStep.Index(0))
       case other =>
         org.specs2.execute.Failure(s"expected Left, got $other"): org.specs2.execute.Result
-    val indexUnsafeOk = (itemL.sliceBytesUnsafe(basketBytes) === None)
-      .and((itemL.graftBytesUnsafe(basketBytes, Array(0.toByte)) eq basketBytes) === true)
 
     val personBytes = toBinary(personRecord(Person("Alice", 30)), personSchema)
     val truncated = Arrays.copyOf(personBytes, personBytes.length - 1)
@@ -252,14 +256,12 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .execute
             .Failure(s"expected UnionResolutionFailed, got $other"): org.specs2.execute.Result
 
-    // Sibling strictTerminalUnion=true call sites (AvroPrism.to / .sliceBytesUnsafe) must refuse
+    // Sibling strictTerminalUnion=true call site (AvroPrism.to) must refuse
     // the same wrong-branch payload as sliceBytes above, not just the sliceBytes call site.
     val toMissOk =
       codecPrism[Transaction].field(_.amount).union[Long].to(noneBytes) match
         case _: Affine.Miss[?] => true
         case _                 => false
-    val sliceUnsafeMissOk =
-      codecPrism[Transaction].field(_.amount).union[Long].sliceBytesUnsafe(noneBytes) === None
 
     // PathMissing is schema-driven for the byte walker: the prism's ROOT schema must lack the
     // field (the walker never sees the record, only bytes + schema). `.field(_.name)` now resolves
@@ -301,12 +303,10 @@ class AvroBytesSpec extends Specification with ScalaCheck:
 
     indexSliceOk
       .and(indexGraftOk)
-      .and(indexUnsafeOk)
       .and(truncatedOk)
       .and(wrongBranchOk)
       .and(missingOk)
       .and(toMissOk === true)
-      .and(sliceUnsafeMissOk)
   }
 
   // ---- byte-carried traversal ------------------------------------------

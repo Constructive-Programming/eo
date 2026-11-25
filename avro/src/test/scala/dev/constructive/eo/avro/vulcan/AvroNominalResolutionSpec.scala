@@ -60,7 +60,7 @@ class AvroNominalResolutionSpec extends Specification:
 
   "the record face resolves through the same resolver, read and write" >> {
     val rec = summon[AvroCodec[Three]].encode(three).asInstanceOf[IndexedRecord]
-    val out = codecPrism[Three].field(_.b).record.modifyUnsafe(_ + "!")(rec)
+    val out = codecPrism[Three].field(_.b).record.modify(_ + "!")(rec).getOrElse(rec)
     (codecPrism[Three].field(_.b).record.getOption(rec) must beSome("B0"))
       .and(String.valueOf(out.asInstanceOf[GenericRecord].get("b")) === "B0!")
       .and(String.valueOf(out.asInstanceOf[GenericRecord].get("computed")) === "A0|B0")
@@ -94,7 +94,7 @@ class AvroNominalResolutionSpec extends Specification:
       .get("items")
       .asInstanceOf[java.util.List[GenericRecord]]
       .get(0)
-    (optic.record.getAllUnsafe(basketRec) === Vector("X0"))
+    (optic.record.getAll(basketRec) === cats.data.Ior.Right(Vector("X0")))
       .and(String.valueOf(item.get("x")) === "X0@")
       // the inner codec's derived slot `c` was written as "X0!" and must be untouched
       .and(String.valueOf(item.get("c")) === "X0!")

@@ -75,7 +75,7 @@ the throwable and returns the input unchanged.
 
 | Site | Behaviour on failure |
 |------|----------------------|
-| `avro/.../AvroFocus.scala` — 7 catches returning the input record: `:113`, `:126`, `:153`, `:162`, `:263`, `:371`, `:378` | `replace`/`modify` on a record focus returns the ORIGINAL record; the caller sees success. (5 further catches at `:42`, `:199`, `:212`, `:405`, `:414` return the input WITH an `Ior.Both` failure chain — same write result, but diagnosed.) |
+| `avro/.../AvroFocus.scala` — 3 catches returning the input record (`navigateForWrite` on `Leaf` + `Fields`; 4 more on the old `*Impl` silent tier were deleted with `*Unsafe` in issue #101) | `replace` on a record focus returns the ORIGINAL record; the caller sees success. (5 further catches on the `Ior` tier return the input WITH an `Ior.Both` failure chain — same write result, but diagnosed.) |
 | `avro/.../circe/AvroJson.scala:442`, `avro/.../jsoniter/AvroJsoniter.scala:499` | unparseable Avro bytes re-apply the retained subtree: document bytes unchanged, success reported |
 | `jsoniter/.../JsoniterTraversal.scala` (`encodeAll`, was `:71`; shared by the `inPlace` face since 2026-10-25) | a focus whose encode throws **keeps its original bytes** while the other foci are written — a partially applied write reported as success |
 | `jsoniter/.../JsoniterTraversal.scala` (`decodeSpans`), `JsoniterPrism.scala` (`scanRange`, was the root-prism `scan`; one inline body shared by the whole-array prism and its `inPlace` face since 2026-10-25, and by the in-place `.raw` focus, whose well-formedness check is a `readFromSubArray` of a `skip`-only codec) | a jsoniter decode throw downgrades to "no focus" |

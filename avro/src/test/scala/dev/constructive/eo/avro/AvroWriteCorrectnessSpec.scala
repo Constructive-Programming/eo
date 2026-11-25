@@ -1,7 +1,9 @@
 package dev.constructive.eo.avro
 
+// CPD-OFF — standard avro spec import prologue; adding `cats.data.Ior` is not new duplication.
 import scala.language.implicitConversions
 
+import cats.data.Ior
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic.*
 import dev.constructive.eo.optics.{Lens, Optic}
@@ -14,6 +16,7 @@ import org.scalacheck.Prop.forAll
 import org.scalacheck.{Arbitrary, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
+// CPD-ON
 
 /** Outer wrapper for the compose-through-a-lens regression — top-level so the hand-built
   * [[dev.constructive.eo.optics.Lens]] `.copy` works without an outer accessor.
@@ -130,7 +133,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
 
     val rec = personRecord(Person("Alice", 30))
     // The same codec DECODES fine — so the pass-through below is the ENCODE refusing, not a read miss.
-    val decodes = codecPrism[Person].field(_.name).record.getOptionUnsafe(rec)
+    val decodes = codecPrism[Person].field(_.name).record.getOption(rec)
     val silent = codecPrism[Person].field(_.name).record.replace("Bob")(rec)
     val ior = codecPrism[Person].field(_.name).record.place("Bob")(rec)
 
@@ -217,7 +220,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     val framingOk = Arrays.equals(blocked, canonical) === false
 
     val namesT = codecPrism[Basket].items.each.name
-    val readOk = namesT.record.getAllUnsafe(blocked) === Vector("tea", "mate")
+    val readOk = namesT.record.getAll(blocked) === Ior.Right(Vector("tea", "mate"))
     val out = namesT.modify(_.toUpperCase)(blocked)
     val writeOk = codecPrism[Basket].getOption(out) === Some(
       Basket("ann", List(Order("TEA", 2.5, 1), Order("MATE", 4.0, 2)))
@@ -242,7 +245,7 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     val out = namesT.modify(n => if n == "x" then "much-longer-name" else n)(blocked)
 
     val totalOk = codecPrism[BasketWithTotal].field(_.total).getOption(out) === Some(42)
-    val namesOk = namesT.record.getAllUnsafe(out) === Vector("much-longer-name", "y")
+    val namesOk = namesT.record.getAll(out) === Ior.Right(Vector("much-longer-name", "y"))
     totalOk.and(namesOk)
   }
 
@@ -319,7 +322,8 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
       .union[Email]
       .fields(_.user, _.domain)
       .record
-      .getOptionUnsafe(out)
+      .get(out)
+      .toOption
       .contains((user = "ALICE", domain = "example.com"))
     byteOk.and(recOk)
   }
@@ -334,11 +338,14 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
     val rec = ledgerRecord(ledger)
     val blocked = toBlockedBinary(rec, ledgerSchema)
+    // CPD-OFF — shares the `cashT` setup line with the framing block above; touched by *Unsafe removal (#101).
     val bytes = toBinary(rec, ledgerSchema)
     val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
-    val recordOut = cashT.record.modifyUnsafe(c => Cash(c.amount + 5L))(rec) match
-      case out: IndexedRecord =>
+    val recordOut = cashT.record.modify(c => Cash(c.amount + 5L))(rec) match
+      case Ior.Both(_, out) =>
         codecPrism[Ledger].getOption(toBinary(out.asInstanceOf[GenericRecord], ledgerSchema))
+      case _ => None
+    // CPD-ON
 
     // Read: only the Cash-branch elements fold in, in order.
     (cashT.foldMap(List(_))(blocked) === List(Cash(100L), Cash(250L)))

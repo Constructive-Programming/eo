@@ -164,11 +164,12 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   // properties (one per surface). The discipline `checkAll` PrismTests block above stays 1:1.
 
   // covers: AvroFieldsPrism modify(identity) on valid Person === Ior.Right(record),
-  //   modify(f) === Ior.Right(modifyUnsafe(f)) on the happy path,
+  //   modify(f) on valid record returns Ior.Right with updated fields,
   //   get(valid record) decodes to a NameAge whose name/age match the Person,
-  //   placeUnsafe-then-getOptionUnsafe round-trips the focus,
+  //   place-then-getOption round-trips the focus,
   //   two-step modify on disjoint fields == composed single .fields modify
-  "AvroFieldsPrism .fields default-Ior forAll: modify-id / parity / get / round-trip / compose" >> forAll {
+  // CPD-OFF — pre-existing mirror of AvroFieldsPrismSpec; updated in lockstep after removing *Unsafe.
+  "AvroFieldsPrism .fields default-Ior forAll: modify-id / modify / get / round-trip / compose" >> forAll {
     (p: Person, suffix: String, newName: String, newAge: Int) =>
       val record = personRecord(p)
       val L = codecPrism[Person].fields(_.name, _.age).record
@@ -178,8 +179,9 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
         case Ior.Right(out) => recordsEqual(out, record)
         case _              => false
 
-      val parityOk = L.modify(f)(record) match
-        case Ior.Right(out) => recordsEqual(out, L.modifyUnsafe(f)(record))
+      val expectedMod = personRecord(p.copy(name = p.name + suffix))
+      val modOk = L.modify(f)(record) match
+        case Ior.Right(out) => recordsEqual(out, expectedMod)
         case _              => false
 
       val getOk = L.get(record) match
@@ -187,23 +189,23 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
         case _             => false
 
       val nt: NameAge = (name = newName, age = newAge): NameAge
-      val roundTripOk = L.getOptionUnsafe(L.placeUnsafe(nt)(record)) match
+      val roundTripOk = L.place(nt)(record).toOption.flatMap(L.getOption) match
         case Some(read) => read.name == newName && read.age == newAge
         case None       => false
 
       val nameL = codecPrism[Person].field(_.name).record
       val ageL = codecPrism[Person].field(_.age).record
       val stepByStep =
-        ageL.modifyUnsafe((i: Int) => i + 1)(
-          nameL.modifyUnsafe((s: String) => s.toUpperCase)(record)
-        )
-      val both = L.modifyUnsafe((nt: NameAge) =>
-        (name = nt.name.toUpperCase, age = nt.age + 1): NameAge
-      )(record)
-      val composeOk = recordsEqual(stepByStep, both)
+        nameL.modify((s: String) => s.toUpperCase)(record).flatMap(ageL.modify((i: Int) => i + 1))
+      val both =
+        L.modify((nt: NameAge) => (name = nt.name.toUpperCase, age = nt.age + 1): NameAge)(record)
+      val composeOk = (stepByStep, both) match
+        case (Ior.Right(a), Ior.Right(b)) => recordsEqual(a, b)
+        case _                            => false
 
-      modIdOk && parityOk && getOk && roundTripOk && composeOk
+      modIdOk && modOk && getOk && roundTripOk && composeOk
   }
+  // CPD-ON
 
   // covers: AvroPrism .union[Long] get-then-place on the Some(long) branch round-trips the long,
   //   .union[Long] modify(identity) on the Some(long) branch is record-equivalent to the input,

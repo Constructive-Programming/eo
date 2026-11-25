@@ -22,14 +22,12 @@ import org.apache.avro.generic.IndexedRecord
   * `andThen` (the composite threads the writer end-to-end). Same carrier and law story as the byte
   * face; only the root full-cover prism is also a lawful Prism, and [[reverseGet]] stays for it.
   *
-  * Two call-surface tiers (via `AvroOpticOps`):
-  *
-  *   - Default Ior-bearing: `modify` / `get` etc. accumulate `Chain[AvroFailure]` on failure;
-  *     partial success surfaces as `Ior.Both(chain, inputRecord)`.
-  *   - `*Unsafe`: silent pass-through hot path.
-  *
-  * Triple-input shape `IndexedRecord | Array[Byte] | String` (where `String` is the Avro JSON wire
-  * format), decoding byte / JSON input under the cached root schema.
+  * Ior-bearing diagnostic surface (via `AvroOpticOps`): `modify` / `transform` / `place` /
+  * `transfer` / `get` accumulate `Chain[AvroFailure]` on failure over `IndexedRecord | Array[Byte]
+  * | String` (where `String` is the Avro JSON wire format); partial success surfaces as
+  * `Ior.Both(chain, inputRecord)`. For an already-parsed `IndexedRecord`, the inherited
+  * `Optic[IndexedRecord, IndexedRecord, A, A, Affine]` seam also provides `.getOption` / `.replace`
+  * and capability-driven composition.
   *
   * Drilling (`.field` / `.fields` / `.union` / `.at` / `.each` / Dynamic selection) lives on
   * [[AvroPrism]] alone — drill there, then flip with `.record` at the end. One drilling mechanism,
@@ -84,10 +82,6 @@ final class AvroRecordPrism[A] private[avro] (
       case _                  =>
         new org.apache.avro.generic.GenericData.Record(rootSchemaCached)
 
-  /** Silent counterpart to [[get]] — `None` on any failure. */
-  inline def getOptionUnsafe(input: IndexedRecord | Array[Byte] | String): Option[A] =
-    focus.readImpl(AvroCodec.parseInputUnsafe(input, rootSchemaCached))
-
   // ---- Per-record Ior-bearing hooks (delegate to focus) -------------
 
   override protected def modifyIor(
@@ -107,19 +101,5 @@ final class AvroRecordPrism[A] private[avro] (
       a: A,
   ): Ior[Chain[AvroFailure], IndexedRecord] =
     focus.placeIor(record, a)
-
-  // ---- Per-record silent (*Unsafe) hooks (delegate to focus) --------
-
-  override protected def modifyImpl(record: IndexedRecord, f: A => A): IndexedRecord =
-    focus.modifyImpl(record, f)
-
-  override protected def transformImpl(
-      record: IndexedRecord,
-      f: IndexedRecord => IndexedRecord,
-  ): IndexedRecord =
-    focus.transformImpl(record, f)
-
-  override protected def placeImpl(record: IndexedRecord, a: A): IndexedRecord =
-    focus.placeImpl(record, a)
 
 end AvroRecordPrism

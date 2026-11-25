@@ -215,7 +215,7 @@ class ResolutionFalsePositiveSpec extends Specification:
     )
     cell("fp1-record-read-clickId", "Some(C0)") {
       val rec = c.encode(v).asInstanceOf[GenericRecord]
-      codecPrism[FpClick].field(_.clickId).record.getOptionUnsafe(rec).toString
+      codecPrism[FpClick].field(_.clickId).record.getOption(rec).toString
     }
   }
 
@@ -315,17 +315,18 @@ class ResolutionFalsePositiveSpec extends Specification:
     // Map KEYS are data, not schema fields — `.fieldNamed` is the only way to address one, and the
     // existence check must carve them out entirely.
     cell("hatch-map-key-present", "Some(1)")(
-      codecPrism[Bag].field(_.tags).fieldNamed[Long]("t1").record.getOptionUnsafe(bagRec).toString
+      codecPrism[Bag].field(_.tags).fieldNamed[Long]("t1").record.getOption(bagRec).toString
     )
     cell("hatch-map-key-absent", "None")(
-      codecPrism[Bag].field(_.tags).fieldNamed[Long]("t9").record.getOptionUnsafe(bagRec).toString
+      codecPrism[Bag].field(_.tags).fieldNamed[Long]("t9").record.getOption(bagRec).toString
     )
     cell("hatch-map-key-write", "{t2=2, t1=9}") {
       val out = codecPrism[Bag]
         .field(_.tags)
         .fieldNamed[Long]("t1")
         .record
-        .placeUnsafe(9L)(bagRec)
+        .place(9L)(bagRec)
+        .getOrElse(bagRec)
         .asInstanceOf[GenericRecord]
       String.valueOf(out.get("tags"))
     }

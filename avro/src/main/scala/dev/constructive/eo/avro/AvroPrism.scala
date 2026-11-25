@@ -78,7 +78,7 @@ import org.apache.avro.Schema
   * Two sibling surfaces, one mechanism each (deliberately NOT duplicated here):
   *
   *   - [[record]] — the `IndexedRecord`-carried optic ([[AvroRecordPrism]]) with the Ior-bearing
-  *     diagnostic surface (`get` / `modify` / `place` / `transfer` + `*Unsafe`) over
+  *     diagnostic surface (`get` / `modify` / `transform` / `place` / `transfer`) over
   *     `IndexedRecord | Array[Byte] | String` input. Use it when you hold parsed records or need
   *     accumulated [[AvroFailure]] diagnostics.
   *   - [[sliceBytes]] / [[graftBytes]] — the encoded-fragment surface for hashing / shipping /
@@ -236,10 +236,6 @@ final class AvroPrism[A] private[avro] (
           )
         )
 
-  /** Silent counterpart to [[sliceBytes]] — `None` on any failure. */
-  def sliceBytesUnsafe(bytes: Array[Byte]): Option[AvroFragment] =
-    sliceBytes(bytes).toOption
-
   /** Graft an encoded fragment into a binary payload at the focused field — splice bytes in place
     * of the field's current encoding, decode-free: prefix copy + (when the prism focuses a union
     * branch: the zigzag-encoded index of the prism's focused branch, re-synthesised from the path —
@@ -264,12 +260,6 @@ final class AvroPrism[A] private[avro] (
     AvroBinaryCursor.locate(bytes, rootSchemaCached, path, strictTerminalUnion = false) match
       case Left(failure) => Left(failure)
       case Right(span)   => Right(AvroBinaryCursor.splice(bytes, span, fragment))
-
-  /** Silent counterpart to [[graftBytes]] — input bytes pass through unchanged on any failure. Same
-    * NO-SCHEMA-VALIDATION caveat as [[graftBytes]].
-    */
-  def graftBytesUnsafe(bytes: Array[Byte], fragment: Array[Byte]): Array[Byte] =
-    graftBytes(bytes, fragment).getOrElse(bytes)
 
   // ---- Path widening (used by macro extensions) ---------------------
 
