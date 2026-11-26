@@ -3,8 +3,8 @@ package laws
 
 import scala.language.implicitConversions
 
+import dev.constructive.eo.avro.vulcan.Comp
 import dev.constructive.eo.avro.vulcan.DivergentCodecs.encodeBytes
-import dev.constructive.eo.avro.vulcan.Ev
 import dev.constructive.eo.avro.vulcan.given
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.laws.discipline.TargetingTests
@@ -30,10 +30,11 @@ import AvroSpecFixtures.Person
   *
   *   - a POSITIVE discipline registration on a kindlings-derived (1:1) fixture, where both rungs
   *     agree and the optic really does target the codec's slot;
-  *   - a NEGATIVE control on `Ev`, the RESIDUAL b2 shape from `ResolutionResidualSpec`: the vulcan
-  *     field list renames AND reorders, so the resolver abstains to position and
-  *     `.field(_.occurredAt)` reads `seq_no`. That optic is intrinsically lawful ([[SeamLaws]]
-  *     passes on it) and fails [[TargetingLaws]] — the whole point of the ruleset.
+  *   - a NEGATIVE control on `Comp`, the RESIDUAL b6 shape from `ResolutionResidualSpec`: the codec
+  *     never stores `b`, so the probe abstains and position aims `.field(_.b)` at the `x_digest`
+  *     column. That optic is intrinsically lawful ([[SeamLaws]] passes on it) and fails
+  *     [[TargetingLaws]] — the whole point of the ruleset. (It was RESIDUAL b2 on `Ev` until the
+  *     differential probe, #100, closed that one.)
   *
   * `Array[Byte]` equality is not structural, so `Arrays.equals` is injected as the law's `eqv`.
   */
@@ -71,39 +72,40 @@ class AvroTargetingSpec extends Specification with Discipline with ScalaCheck:
     .targeting(using arbPersonBytes, summon[Arbitrary[String]], summon[Cogen[String]]),
   )
 
-  // ---- negative: RESIDUAL b2, lawful but mis-targeted ----------------------
+  // ---- negative: RESIDUAL b6, lawful but mis-targeted ----------------------
 
-  "RESIDUAL b2 — the mis-targeted field optic is intrinsically lawful yet fails TargetingLaws" >> {
-    // {seq_no, event_ts} vs {occurredAt, seqNo}: no name survives (`occurredAt` has no match, so
-    // the all-or-nothing name rung abstains) and the field list is reversed, so position decides
-    // and is wrong. `.field(_.occurredAt)` reads the sequence number.
-    val misAimed: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      codecPrism[Ev].field(_.occurredAt)
+  "RESIDUAL b6 — the mis-targeted field optic is intrinsically lawful yet fails TargetingLaws" >> {
+    // {x_a, x_digest, x_c}: the codec never stores `b` (it writes `a + "/" + b` into `x_digest`),
+    // so the probe has no column to find and abstains, and position lands `.field(_.b)` on the
+    // digest. The optic reads and writes that slot consistently, which is all the intrinsic laws
+    // can check.
+    val misAimed: Optic[Array[Byte], Array[Byte], String, String, Affine] =
+      codecPrism[Comp].field(_.b)
 
-    val bytes = encodeBytes(Ev(1700000000000L, 7L))
+    val bytes = encodeBytes(Comp("A0", "B0", "C0"))
 
     // Intrinsic laws hold — that is why no optic law family could see this.
-    val seam = new SeamLaws[Array[Byte], Long]:
+    val seam = new SeamLaws[Array[Byte], String]:
       val optic = misAimed
       val eqv = bytesEq
     val intrinsicallyLawful =
       seam.seamModifyIdentity(bytes) &&
-        seam.seamComposeModify(bytes, _ + 1, _ + 1) &&
-        seam.seamReplaceOverwrite(bytes, 5L, 6L)
+        seam.seamComposeModify(bytes, _ + "1", _ + "2") &&
+        seam.seamReplaceOverwrite(bytes, "X", "Y")
 
-    val targeting = new TargetingLaws[Array[Byte], Long, Affine]:
+    val targeting = new TargetingLaws[Array[Byte], String, Affine]:
       val optic = misAimed
       def read(bytes: Array[Byte]) = misAimed.getOption(bytes)
-      val refGet = (bytes: Array[Byte]) => decode[Ev](bytes).map(_.occurredAt)
-      val refReplace = (s: Array[Byte], occurredAt: Long) =>
-        decode[Ev](s) match
-          case Some(e) => encodeBytes(e.copy(occurredAt = occurredAt))
+      val refGet = (bytes: Array[Byte]) => decode[Comp](bytes).map(_.b)
+      val refReplace = (s: Array[Byte], b: String) =>
+        decode[Comp](s) match
+          case Some(c) => encodeBytes(c.copy(b = b))
           case None    => s
       val eqv = bytesEq
 
     intrinsicallyLawful must beTrue
-    (misAimed.getOption(bytes) must beSome(7L))
+    (misAimed.getOption(bytes) must beSome("A0/B0"))
       .and(targeting.readTargets(bytes) must beFalse)
-      .and(targeting.writeTargets(bytes, 42L) must beFalse)
-      .and(targeting.modifyTargets(bytes, _ + 1) must beFalse)
+      .and(targeting.writeTargets(bytes, "B1") must beFalse)
+      .and(targeting.modifyTargets(bytes, _ + "!") must beFalse)
   }
